@@ -46,11 +46,71 @@ Value cas_simplify(const std::vector<Value>& args) {
 }
 
 Value cas_differentiate(const std::vector<Value>& args) {
-    // SymbolicExpr 还没有暴露 differentiate 接口? 
-    // symbolic.hpp 里没有 differentiate 声明。
-    // 那暂时留空或者报错
-    std::cerr << "Error: differentiation not implemented in new Symbolic engine yet." << std::endl;
-    return Value();
+    if (args.size() < 2) {
+         std::cerr << "Usage: differentiate(expr, var)" << std::endl;
+         return Value();
+    }
+
+    auto expr = args[0].as_symbolic();
+    std::string var;
+    
+    if (args[1].is_string()) {
+        var = std::get<std::string>(args[1].data);
+    } else if (args[1].is_symbolic()) {
+        auto s = args[1].as_symbolic();
+        if (s->type == SymbolicExpr::Type::Variable) {
+            var = s->identifier;
+        } else {
+             std::cerr << "Error: differentiation variable must be a symbol." << std::endl;
+             return Value();
+        }
+    } else {
+        std::cerr << "Error: differentiation variable invalid." << std::endl;
+        return Value();
+    }
+    
+    if (!expr) return Value();
+    return Value(expr->differentiate(var));
+}
+
+Value cas_integrate(const std::vector<Value>& args) {
+     if (args.size() < 2) return Value();
+     auto expr = args[0].as_symbolic();
+     std::string var;
+     if (args[1].is_string()) var = std::get<std::string>(args[1].data);
+     else if (args[1].is_symbolic() && args[1].as_symbolic()->type == SymbolicExpr::Type::Variable) var = args[1].as_symbolic()->identifier;
+     else return Value();
+     
+     if (!expr) return Value();
+     return Value(SymbolicExpr::integral(expr, var));
+}
+
+Value cas_limit(const std::vector<Value>& args) {
+     if (args.size() < 3) return Value();
+     auto expr = args[0].as_symbolic();
+     std::string var;
+     if (args[1].is_string()) var = std::get<std::string>(args[1].data);
+     else if (args[1].is_symbolic() && args[1].as_symbolic()->type == SymbolicExpr::Type::Variable) var = args[1].as_symbolic()->identifier;
+     else return Value();
+     auto target = args[2].as_symbolic();
+     
+     if (!expr) return Value();
+     return Value(SymbolicExpr::limit_func(expr, var, target));
+}
+
+Value cas_solve(const std::vector<Value>& args) {
+     if (args.size() < 2) return Value();
+     auto expr = args[0].as_symbolic();
+     std::string var;
+     if (args[1].is_string()) var = std::get<std::string>(args[1].data);
+     else if (args[1].is_symbolic() && args[1].as_symbolic()->type == SymbolicExpr::Type::Variable) var = args[1].as_symbolic()->identifier;
+     else return Value();
+     
+     if (!expr) return Value();
+     auto solutions = SymbolicExpr::solve(expr, var);
+     if (solutions.empty()) return Value("No solution");
+     // Return first solution
+     return Value(solutions[0]);
 }
 
 Value cas_evaluate(const std::vector<Value>& args) {

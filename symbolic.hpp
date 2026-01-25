@@ -80,8 +80,20 @@ public:
         Add,         // 加法 +
         Subtract,    // 减法 -，未使用
         Infinity,      // 无限大（number_value 中的 int 决定是正或负）
-        Variable     // 变量 (如 π, e)
-
+        Variable,     // 变量 (如 π, e)
+        
+        // Trigonometric
+        Sin, Cos, Tan, Cot, Sec, Csc,
+        // Inverse Trigonometric
+        ArcSin, ArcCos, ArcTan,
+        // Hyperbolic
+        Sinh, Cosh, Tanh,
+        // Logarithmic
+        Ln, Log,
+        // Other
+        Abs, Fac,
+        // Calculus operators (symbolic representation)
+        Diff, Integral, Limit
     };
 	
 	/*
@@ -309,6 +321,45 @@ public:
         return expr;
     }
 
+    static std::shared_ptr<SymbolicExpr> sin(std::shared_ptr<SymbolicExpr> op) {
+        auto expr = std::make_shared<SymbolicExpr>(Type::Sin);
+        expr->operands.push_back(op);
+        return expr;
+    }
+
+    static std::shared_ptr<SymbolicExpr> cos(std::shared_ptr<SymbolicExpr> op) {
+        auto expr = std::make_shared<SymbolicExpr>(Type::Cos);
+        expr->operands.push_back(op);
+        return expr;
+    }
+
+    static std::shared_ptr<SymbolicExpr> tan(std::shared_ptr<SymbolicExpr> op) {
+        auto expr = std::make_shared<SymbolicExpr>(Type::Tan);
+        expr->operands.push_back(op);
+        return expr;
+    }
+
+    static std::shared_ptr<SymbolicExpr> ln(std::shared_ptr<SymbolicExpr> op) {
+        auto expr = std::make_shared<SymbolicExpr>(Type::Ln);
+        expr->operands.push_back(op);
+        return expr;
+    }
+
+    static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var) {
+        auto expr = std::make_shared<SymbolicExpr>(Type::Integral);
+        expr->operands.push_back(op);
+        expr->identifier = var;
+        return expr;
+    }
+
+    static std::shared_ptr<SymbolicExpr> limit_func(std::shared_ptr<SymbolicExpr> op, const std::string& var, std::shared_ptr<SymbolicExpr> target) {
+        auto expr = std::make_shared<SymbolicExpr>(Type::Limit);
+        expr->operands.push_back(op);
+        expr->operands.push_back(target);
+        expr->identifier = var;
+        return expr;
+    }
+
     // 变量构造函数
     static std::shared_ptr<SymbolicExpr> variable(const std::string& name) {
         auto expr = std::make_shared<SymbolicExpr>(Type::Variable);
@@ -318,6 +369,12 @@ public:
 
     // 化简表达式
     std::shared_ptr<SymbolicExpr> simplify() const;
+
+    // 对变量 var_name 求导
+    std::shared_ptr<SymbolicExpr> differentiate(const std::string& var_name) const;
+
+    // 求解方程 eq == 0，返回解集
+    static std::vector<std::shared_ptr<SymbolicExpr>> solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var_name);
 
     // 转换为字符串表示
     std::string to_string() const;

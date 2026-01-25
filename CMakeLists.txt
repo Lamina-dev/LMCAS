@@ -33,9 +33,9 @@ target_include_directories(lmcas PUBLIC
 target_link_libraries(lmcas PRIVATE LammpCore)
 
 # 测试程序
-add_executable(test_cas test_main.cpp)
+add_executable(test_cas tests/test_main.cpp)
 target_link_libraries(test_cas PRIVATE lmcas LammpCore)
 
-add_executable(test_bigint_debug test_bigint_debug.cpp)
+add_executable(test_bigint_debug tests/test_bigint_debug.cpp)
 target_link_libraries(test_bigint_debug PRIVATE lmcas LammpCore)
 
