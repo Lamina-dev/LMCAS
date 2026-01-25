@@ -59,6 +59,25 @@ static bool symbolic_equal(const std::shared_ptr<SymbolicExpr>& a, const std::sh
 	}
 }
 
+// Helper for matrix addition
+static std::shared_ptr<SymbolicExpr> add_matrices(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
+    if (a->operands.size() != b->operands.size()) return nullptr; // Dimension mismatch
+    if (a->operands.empty()) return a;
+    if (a->operands[0]->operands.size() != b->operands[0]->operands.size()) return nullptr;
+
+    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> res_mat;
+    for (size_t i = 0; i < a->operands.size(); ++i) {
+        std::vector<std::shared_ptr<SymbolicExpr>> row;
+        auto vec_a = a->operands[i];
+        auto vec_b = b->operands[i];
+        for (size_t j = 0; j < vec_a->operands.size(); ++j) {
+            row.push_back(SymbolicExpr::add(vec_a->operands[j], vec_b->operands[j])->simplify());
+        }
+        res_mat.push_back(row);
+    }
+    return SymbolicExpr::matrix(res_mat);
+}
+
 // 符号表达式的化简实现
 std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
 	// 添加“化简”标记，避免 simplify 重复调用导致效率降低（似乎暂时不可用？）
@@ -281,11 +300,66 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_sqrt() const {
     return SymbolicExpr::sqrt(simplified_operand);
 }
 
+static std::shared_ptr<SymbolicExpr> multiply_matrices(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
+    if (a->type == SymbolicExpr::Type::Matrix && b->type == SymbolicExpr::Type::Matrix) {
+        if (a->operands.empty() || b->operands.empty()) return nullptr;
+        
+        // Debug
+        // std::cerr << "Matrix Mul: " << a->operands.size() << "x" << a->operands[0]->operands.size() 
+        //           << " * " << b->operands.size() << "x" << b->operands[0]->operands.size() << std::endl;
+
+        size_t rowsA = a->operands.size();
+        size_t colsA = 0;
+        if (!a->operands[0]->operands.empty()) colsA = a->operands[0]->operands.size();
+        
+        size_t rowsB = b->operands.size();
+        size_t colsB = 0;
+        if(!b->operands.empty() && !b->operands[0]->operands.empty()) colsB = b->operands[0]->operands.size();
+        
+        if (colsA != rowsB) return nullptr;
+
+        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> res_mat;
+        res_mat.resize(rowsA);
+
+        for(size_t i=0; i<rowsA; ++i) {
+            for(size_t j=0; j<colsB; ++j) {
+                std::shared_ptr<SymbolicExpr> sum = SymbolicExpr::number(0);
+                for(size_t k=0; k<colsA; ++k) {
+                    auto term = SymbolicExpr::multiply(a->operands[i]->operands[k], b->operands[k]->operands[j]);
+                    sum = SymbolicExpr::add(sum, term);
+                }
+                auto sim = sum->simplify();
+                res_mat[i].push_back(sim);
+            }
+        }
+        return SymbolicExpr::matrix(res_mat);
+    }
+    auto scalar_mul = [](const std::shared_ptr<SymbolicExpr>& scalar, const std::shared_ptr<SymbolicExpr>& mat) {
+        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> res_mat;
+        for(const auto& row_vec : mat->operands) {
+             std::vector<std::shared_ptr<SymbolicExpr>> new_row;
+             for(const auto& elem : row_vec->operands) {
+                 new_row.push_back(SymbolicExpr::multiply(scalar, elem)->simplify());
+             }
+             res_mat.push_back(new_row);
+        }
+        return SymbolicExpr::matrix(res_mat);
+    };
+    if (a->type != SymbolicExpr::Type::Matrix && b->type == SymbolicExpr::Type::Matrix) return scalar_mul(a, b);
+    if (a->type == SymbolicExpr::Type::Matrix && b->type != SymbolicExpr::Type::Matrix) return scalar_mul(b, a);
+    return nullptr;
+}
+
 std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_multiply() const {
     if (operands.size() != 2) return std::make_shared<SymbolicExpr>(*this);
     
     auto left = operands[0]->simplify();
     auto right = operands[1]->simplify();
+
+    if (left->type == SymbolicExpr::Type::Matrix || right->type == SymbolicExpr::Type::Matrix) {
+         auto res = multiply_matrices(left, right);
+         if (res) return res;
+    }
     
 	// 检测未定式（例如 Inf * 0）并保留原始表达式以避免错误化简
 	auto is_zero = [](const std::shared_ptr<SymbolicExpr>& e)->bool {
@@ -1097,7 +1171,12 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_add() const {
 
     auto left = operands[0]->simplify();
     auto right = operands[1]->simplify();
-	
+
+    if (left->type == SymbolicExpr::Type::Matrix && right->type == SymbolicExpr::Type::Matrix) {
+        auto res = add_matrices(left, right);
+        if (res) return res;
+    }
+
 	if (left->type == SymbolicExpr::Type::Infinity) return left;
 	if (right->type == SymbolicExpr::Type::Infinity) return right;
 
@@ -1606,6 +1685,29 @@ std::string SymbolicExpr::to_string() const {
         case Type::Diff: return "diff(" + operands[0]->to_string() + ", " + identifier + ")";
         case Type::Integral: return "int(" + operands[0]->to_string() + ", " + identifier + ")";
         case Type::Limit: return "lim(" + operands[0]->to_string() + ", " + identifier + "->" + operands[1]->to_string() + ")";
+        
+        case Type::Matrix: {
+            std::string res = "[";
+            for (size_t i = 0; i < operands.size(); ++i) {
+                if (i > 0) res += ", ";
+                res += operands[i]->to_string();
+            }
+            res += "]";
+            return res;
+        }
+        case Type::Vector: {
+            std::string res = "[";
+            for (size_t i = 0; i < operands.size(); ++i) {
+                if (i > 0) res += ", ";
+                auto& op = operands[i];
+                const std::string lbrace = std::string("("), rbrace = std::string(")");
+                if ((op->type == SymbolicExpr::Type::Number && (op->convert_rational().get_denominator() == ::BigInt(1))) || op->type == SymbolicExpr::Type::Variable || op->type == SymbolicExpr::Type::Sqrt)
+                     res += op->to_string();
+                else res += op->to_string(); // Vector elements usually don't need outer parens unless complex
+            }
+            res += "]";
+            return res;
+        }
 
         default:
             return "Unknown";

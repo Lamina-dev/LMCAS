@@ -93,7 +93,11 @@ public:
         // Other
         Abs, Fac,
         // Calculus operators (symbolic representation)
-        Diff, Integral, Limit
+        Diff, Integral, Limit,
+
+        // Linear Algebra
+        Matrix, // Represents a matrix (list of rows)
+        Vector  // Represents a row (list of elements)
     };
 	
 	/*
@@ -358,6 +362,18 @@ public:
         expr->operands.push_back(target);
         expr->identifier = var;
         return expr;
+    }
+
+    static std::shared_ptr<SymbolicExpr> matrix(const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& elements) {
+        auto mat = std::make_shared<SymbolicExpr>(Type::Matrix);
+        for (const auto& row : elements) {
+            auto vec = std::make_shared<SymbolicExpr>(Type::Vector);
+            for (const auto& elem : row) {
+                vec->operands.push_back(elem);
+            }
+            mat->operands.push_back(vec);
+        }
+        return mat;
     }
 
     // 变量构造函数

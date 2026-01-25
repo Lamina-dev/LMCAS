@@ -210,6 +210,18 @@ public:
 		if (type == Type::Irrational) {
 			return as_irrational().to_symbolic();
 		}
+        if (type == Type::Matrix) {
+            const auto& mat = std::get<std::vector<std::vector<Value>>>(data);
+            std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> sym_mat;
+            for (const auto& row : mat) {
+                std::vector<std::shared_ptr<SymbolicExpr>> sym_row;
+                for (const auto& val : row) {
+                    sym_row.push_back(val.as_symbolic());
+                }
+                sym_mat.push_back(sym_row);
+            }
+            return SymbolicExpr::matrix(sym_mat);
+        }
 		return SymbolicExpr::number(0);
 	}
 
@@ -217,6 +229,7 @@ public:
 		if (type == Type::Symbolic) return true;
 		if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) return true;
 		if (type == Type::Irrational) return true;
+        if (type == Type::Matrix) return true;
 		return false;
 	}
 

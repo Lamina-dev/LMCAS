@@ -112,5 +112,66 @@ int main() {
     std::cout << "Solve returned." << std::endl;
     print_value(res8); // Expected: 3
 
+    // ==========================================
+    // Linear Algebra Tests
+    // ==========================================
+    std::cout << "\n=== Linear Algebra Tests ===" << std::endl;
+
+    // Test 9: Matrix Addition
+    // [1, 2]   [3, 4]   [4, 6]
+    // [3, 4] + [5, 6] = [8, 10]
+    
+    auto m1_row1 = std::vector<std::shared_ptr<SymbolicExpr>>{SymbolicExpr::number(1), SymbolicExpr::number(2)};
+    auto m1_row2 = std::vector<std::shared_ptr<SymbolicExpr>>{SymbolicExpr::number(3), SymbolicExpr::number(4)};
+    auto m1 = SymbolicExpr::matrix({m1_row1, m1_row2});
+
+    auto m2_row1 = std::vector<std::shared_ptr<SymbolicExpr>>{SymbolicExpr::number(3), SymbolicExpr::number(4)};
+    auto m2_row2 = std::vector<std::shared_ptr<SymbolicExpr>>{SymbolicExpr::number(5), SymbolicExpr::number(6)};
+    auto m2 = SymbolicExpr::matrix({m2_row1, m2_row2});
+
+    auto mat_add = SymbolicExpr::add(m1, m2);
+    std::cout << "[Test 9] Matrix Addition..." << std::endl;
+    std::cout << "M1 + M2" << std::endl;
+    
+    args[0] = Value(mat_add);
+    Value res9 = cas_simplify(args);
+    print_value(res9);
+
+    // Test 10: Matrix Multiplication
+    // [1, 2] * [2, 0] = [2+6, 0+8] = [8, 8]
+    // [3, 4]   [3, 4]   [6+12, 0+16] = [18, 16]
+    auto m3_row1 = std::vector<std::shared_ptr<SymbolicExpr>>{SymbolicExpr::number(2), SymbolicExpr::number(0)};
+    auto m3_row2 = std::vector<std::shared_ptr<SymbolicExpr>>{SymbolicExpr::number(3), SymbolicExpr::number(4)};
+    auto m3 = SymbolicExpr::matrix({m3_row1, m3_row2});
+
+    auto mat_mul = SymbolicExpr::multiply(m1, m3);
+    std::cout << "[Test 10] Matrix Multiplication..." << std::endl;
+    std::cout << "M1 * M3" << std::endl;
+    
+    args[0] = Value(mat_mul);
+    Value res10 = cas_simplify(args);
+    print_value(res10);
+
+    // Test 11: Symbolic Matrix Multiplication
+    // [a, b] * [x] = [ax + by]
+    // [c, d]   [y]   [cx + dy]
+    auto a = SymbolicExpr::variable("a");
+    auto b = SymbolicExpr::variable("b");
+    auto c = SymbolicExpr::variable("c");
+    auto d = SymbolicExpr::variable("d");
+    auto y_var = SymbolicExpr::variable("y"); // x is already defined
+    
+    /*
+    auto msym1 = SymbolicExpr::matrix({ {a, b}, {c, d} });
+    auto msym2 = SymbolicExpr::matrix({ {x}, {y_var} });
+    
+    auto mat_sym_mul = SymbolicExpr::multiply(msym1, msym2);
+    std::cout << "[Test 11] Symbolic Matrix Multiplication..." << std::endl;
+    
+    args[0] = Value(mat_sym_mul);
+    Value res11 = cas_simplify(args);
+    print_value(res11);
+    */
+
     return 0;
 }
