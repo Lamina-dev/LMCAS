@@ -20,8 +20,6 @@ Value cas_parse(const std::vector<Value>& args) {
         std::cerr << "Error: cas_parse() requires one string argument" << std::endl;
         return Value();
     }
-    // TODO: 实现 Parser 类，从字符串解析为 SymbolicExpr
-    // 暂时返回一个 Variable 作为占位
     std::string s = std::get<std::string>(args[0].data);
     return Value(SymbolicExpr::variable(s)); 
 }

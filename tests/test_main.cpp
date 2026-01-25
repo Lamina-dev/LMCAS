@@ -12,7 +12,6 @@ int main() {
     std::cout << "=== Testing LMCAS ===" << std::endl;
 
     // Test 1: Simplify 1 + 1
-    // Manually construct expression because parser is TODO
     // 1 + 1
     auto one = SymbolicExpr::number(1);
     auto expr1 = SymbolicExpr::add(one, one);
@@ -172,6 +171,27 @@ int main() {
     Value res11 = cas_simplify(args);
     print_value(res11);
     */
+
+    // Test 13: Logarithm
+    // log(x^2, x) -> 2
+    auto x_squared = SymbolicExpr::power(x, SymbolicExpr::number(2));
+    auto log_expr = SymbolicExpr::log(x_squared, x);
+    
+    std::cout << "[Test 13] Logarithm Simplify..." << std::endl;
+    args[0] = Value(log_expr);
+    Value res13 = cas_simplify(args);
+    // Debug print raw type
+    // std::cout << "Log simplification done. Result type: " << (int)res13.type << std::endl;
+    
+    // Manual to_string check
+    try {
+        std::string s = res13.to_string();
+        std::cout << "Result string: " << s << std::endl;
+    } catch (...) {
+        std::cout << "Exception in to_string" << std::endl;
+    }
+
+    print_value(res13); // Should be 2
 
     return 0;
 }

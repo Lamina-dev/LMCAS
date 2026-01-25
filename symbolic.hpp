@@ -349,6 +349,13 @@ public:
         return expr;
     }
 
+    static std::shared_ptr<SymbolicExpr> log(std::shared_ptr<SymbolicExpr> val, std::shared_ptr<SymbolicExpr> base) {
+        auto expr = std::make_shared<SymbolicExpr>(Type::Log);
+        expr->operands.push_back(val);
+        expr->operands.push_back(base);
+        return expr;
+    }
+
     static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var) {
         auto expr = std::make_shared<SymbolicExpr>(Type::Integral);
         expr->operands.push_back(op);

@@ -109,10 +109,35 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
 			case Type::Power:
 				return simplify_power();
 			
-			default:
-				return std::make_shared<SymbolicExpr>(*this);
-		}
-	};
+                        case Type::Log: {
+                                auto val = operands[0]->simplify();
+                                auto base = operands[1]->simplify();
+                                // log_b(x) -> ln(x)/ln(b)
+                                return SymbolicExpr::multiply(
+                                    SymbolicExpr::ln(val),
+                                    SymbolicExpr::power(SymbolicExpr::ln(base), SymbolicExpr::number(-1))
+                                )->simplify();
+                        }
+                        
+                        case Type::Ln: {
+                                auto val = operands[0]->simplify();
+                                if (val->is_number()) {
+                                    if (val->convert_rational() == ::Rational(1)) return SymbolicExpr::number(0);
+                                    // if (val->convert_rational() == ::Rational(e)) return 1; // Need constant e support
+                                }
+                                if (val->type == Type::Power) {
+                                    // ln(x^y) -> y*ln(x)
+                                    return SymbolicExpr::multiply(val->operands[1], SymbolicExpr::ln(val->operands[0]))->simplify();
+                                }
+                                // Return new node with simplified operand
+                                return SymbolicExpr::ln(val);
+                        }
+
+                        default:
+                                // TODO: Recursive simplify for other functions
+                                return std::make_shared<SymbolicExpr>(*this);
+                }
+        };
 	
 	auto res = intcall();
 	current_simplify_level--;
@@ -1681,6 +1706,7 @@ std::string SymbolicExpr::to_string() const {
         case Type::Cos: return "cos(" + operands[0]->to_string() + ")";
         case Type::Tan: return "tan(" + operands[0]->to_string() + ")";
         case Type::Ln:  return "ln(" + operands[0]->to_string() + ")";
+        case Type::Log: return "log_" + operands[1]->to_string() + "(" + operands[0]->to_string() + ")";
         
         case Type::Diff: return "diff(" + operands[0]->to_string() + ", " + identifier + ")";
         case Type::Integral: return "int(" + operands[0]->to_string() + ", " + identifier + ")";
@@ -1869,6 +1895,17 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate(const std::string& var
              // u'/u
              auto u = operands[0];
              return SymbolicExpr::multiply(u->differentiate(var_name), SymbolicExpr::power(u, SymbolicExpr::number(-1)))->simplify();
+        }
+
+        case Type::Log: {
+             // log_b(u) = ln(u) / ln(b)
+             // Differentiate the equivalent expression using chain rule/product rule logic already implemented
+             auto u = operands[0];
+             auto b = operands[1];
+             auto ln_u = SymbolicExpr::ln(u);
+             auto ln_b = SymbolicExpr::ln(b);
+             auto expr = SymbolicExpr::multiply(ln_u, SymbolicExpr::power(ln_b, SymbolicExpr::number(-1)));
+             return expr->differentiate(var_name);
         }
 
         default:
