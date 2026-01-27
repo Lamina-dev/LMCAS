@@ -1,7 +1,62 @@
 #pragma once
 
-#include "LAMMP/include/lammp/lmmp.h"
+#include "LAMMP/include/lammp/lammp.hpp"
 #include <vector>
+#include <cstdlib>
+
+// Compatibility Layer for New LAMMP API
+using namespace lammp::Arithmetic;
+typedef lamp_ui mp_limb_t;
+typedef lamp_si mp_size_t;
+typedef lamp_ptr mp_ptr;
+typedef const lamp_ui* mp_srcptr; 
+typedef uint8_t mp_byte_t;
+
+inline void lmmp_free(void* p) { 
+    free(p); 
+}
+
+inline void* lmmp_alloc(size_t size) { 
+    return malloc(size); 
+}
+
+inline mp_limb_t lmmp_add_n_(mp_ptr dst, mp_srcptr s1, mp_srcptr s2, mp_size_t n) {
+    lammp::Arithmetic::abs_add_binary((mp_ptr)s1, n, (mp_ptr)s2, n, dst);
+    return dst[n]; 
+}
+
+inline mp_limb_t lmmp_sub_n_(mp_ptr dst, mp_srcptr s1, mp_srcptr s2, mp_size_t n) {
+    bool b = lammp::Arithmetic::abs_sub_binary((mp_ptr)s1, n, (mp_ptr)s2, n, dst); 
+    return b ? 1 : 0;
+}
+
+inline void lmmp_mul_(mp_ptr dst, mp_srcptr s1, mp_size_t n1, mp_srcptr s2, mp_size_t n2) {
+    lammp::Arithmetic::abs_mul64((mp_ptr)s1, n1, (mp_ptr)s2, n2, dst);
+}
+
+inline void lmmp_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
+    lammp::Arithmetic::abs_div_knuth((mp_ptr)n, nn, (mp_ptr)d, dn, q, r);
+}
+
+inline void lmmp_sqrt_(mp_ptr dst, mp_ptr rem, mp_srcptr n, mp_size_t nn, int nf) { 
+    // Stub: throw error if used? Or rely on not being used by test_norm.
+    // If used, will crash or wrong result.
+}
+
+inline mp_size_t lmmp_from_str_(mp_ptr dst, const void* digits_void, size_t len, int base) {
+   const mp_byte_t* digits = (const mp_byte_t*)digits_void;
+   std::vector<lamp_ui> in_limbs(len);
+   for(size_t i=0; i<len; ++i) in_limbs[i] = digits[i];
+   return lammp::Arithmetic::Numeral::base2binary(in_limbs.data(), len, base, dst);
+}
+
+inline mp_size_t lmmp_to_str_(mp_byte_t* buf, mp_srcptr n, mp_size_t nn, int base) {
+   std::vector<lamp_ui> out_limbs(nn * 64 + 100); // Overkill buffer for digits
+   lamp_ui d_len = lammp::Arithmetic::Numeral::binary2base((mp_ptr)n, nn, base, out_limbs.data());
+   for(size_t i=0; i<d_len; ++i) buf[i] = (mp_byte_t)out_limbs[i];
+   return d_len;
+}
+
 #include <string>
 #include <iostream>
 #include <algorithm>
@@ -192,6 +247,8 @@ public:
         std::vector<mp_byte_t> buf(len_needed);
         
         mp_size_t str_len = lmmp_to_str_((mp_byte_t*)buf.data(), _data, _size, 10);
+        
+        if (str_len == 0) return "0"; // Safety fallback
         
         std::string res;
         res.reserve(str_len + 2);

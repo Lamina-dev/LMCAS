@@ -14,7 +14,10 @@ add_subdirectory(LAMMP)
 # LMCAS 库
 add_library(lmcas SHARED
     cas.cpp
-    symbolic.cpp
+    symbolic_core.cpp
+    symbolic_simplify.cpp
+    symbolic_calculus.cpp
+    symbolic_matrix.cpp
 )
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
@@ -41,4 +44,7 @@ target_link_libraries(test_bigint_debug PRIVATE lmcas LammpCore)
 
 add_executable(test_proof tests/test_proof.cpp)
 target_link_libraries(test_proof PRIVATE lmcas LammpCore)
+
+add_executable(test_norm tests/test_norm.cpp)
+target_link_libraries(test_norm PRIVATE lmcas LammpCore)
 

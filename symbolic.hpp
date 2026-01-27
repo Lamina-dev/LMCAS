@@ -97,8 +97,16 @@ public:
 
         // Linear Algebra
         Matrix, // Represents a matrix (list of rows)
-        Vector  // Represents a row (list of elements)
+        Vector,  // Represents a row (list of elements)
+        
     };
+
+    // Compare precedence for canonical ordering
+    // Returns -1 if this < other, 1 if this > other, 0 if equal
+    int compare(const std::shared_ptr<SymbolicExpr>& other) const;
+
+    // Expansion (distributive law, etc.)
+    std::shared_ptr<SymbolicExpr> expand() const;
 	
 	/*
 	哈希要保证的一些因素：
