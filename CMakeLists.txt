@@ -18,6 +18,7 @@ add_library(lmcas SHARED
     symbolic_simplify.cpp
     symbolic_calculus.cpp
     symbolic_matrix.cpp
+    symbolic_poly.cpp
 )
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
@@ -47,4 +48,11 @@ target_link_libraries(test_proof PRIVATE lmcas LammpCore)
 
 add_executable(test_norm tests/test_norm.cpp)
 target_link_libraries(test_norm PRIVATE lmcas LammpCore)
+
+add_executable(test_factor tests/test_factor.cpp)
+target_link_libraries(test_factor PRIVATE lmcas LammpCore)
+
+add_executable(test_arithmetic tests/test_arithmetic.cpp)
+target_link_libraries(test_arithmetic PRIVATE lmcas LammpCore)
+
 

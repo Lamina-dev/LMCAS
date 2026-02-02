@@ -1,70 +1,58 @@
 #pragma once
 
-#include "LAMMP/include/lammp/lammp.hpp"
+#ifndef _STATIC_ASSERT
+#define _STATIC_ASSERT(x) static_assert(x, #x)
+#endif
+
+#include "LAMMP/include/lammp/lmmp.h"
+#include "LAMMP/include/lammp/lmmpn.h"
 #include <vector>
 #include <cstdlib>
-
-// Compatibility Layer for New LAMMP API
-using namespace lammp::Arithmetic;
-typedef lamp_ui mp_limb_t;
-typedef lamp_si mp_size_t;
-typedef lamp_ptr mp_ptr;
-typedef const lamp_ui* mp_srcptr; 
-typedef uint8_t mp_byte_t;
-
-inline void lmmp_free(void* p) { 
-    free(p); 
-}
-
-inline void* lmmp_alloc(size_t size) { 
-    return malloc(size); 
-}
-
-inline mp_limb_t lmmp_add_n_(mp_ptr dst, mp_srcptr s1, mp_srcptr s2, mp_size_t n) {
-    lammp::Arithmetic::abs_add_binary((mp_ptr)s1, n, (mp_ptr)s2, n, dst);
-    return dst[n]; 
-}
-
-inline mp_limb_t lmmp_sub_n_(mp_ptr dst, mp_srcptr s1, mp_srcptr s2, mp_size_t n) {
-    bool b = lammp::Arithmetic::abs_sub_binary((mp_ptr)s1, n, (mp_ptr)s2, n, dst); 
-    return b ? 1 : 0;
-}
-
-inline void lmmp_mul_(mp_ptr dst, mp_srcptr s1, mp_size_t n1, mp_srcptr s2, mp_size_t n2) {
-    lammp::Arithmetic::abs_mul64((mp_ptr)s1, n1, (mp_ptr)s2, n2, dst);
-}
-
-inline void lmmp_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
-    lammp::Arithmetic::abs_div_knuth((mp_ptr)n, nn, (mp_ptr)d, dn, q, r);
-}
-
-inline void lmmp_sqrt_(mp_ptr dst, mp_ptr rem, mp_srcptr n, mp_size_t nn, int nf) { 
-    // Stub: throw error if used? Or rely on not being used by test_norm.
-    // If used, will crash or wrong result.
-}
-
-inline mp_size_t lmmp_from_str_(mp_ptr dst, const void* digits_void, size_t len, int base) {
-   const mp_byte_t* digits = (const mp_byte_t*)digits_void;
-   std::vector<lamp_ui> in_limbs(len);
-   for(size_t i=0; i<len; ++i) in_limbs[i] = digits[i];
-   return lammp::Arithmetic::Numeral::base2binary(in_limbs.data(), len, base, dst);
-}
-
-inline mp_size_t lmmp_to_str_(mp_byte_t* buf, mp_srcptr n, mp_size_t nn, int base) {
-   std::vector<lamp_ui> out_limbs(nn * 64 + 100); // Overkill buffer for digits
-   lamp_ui d_len = lammp::Arithmetic::Numeral::binary2base((mp_ptr)n, nn, base, out_limbs.data());
-   for(size_t i=0; i<d_len; ++i) buf[i] = (mp_byte_t)out_limbs[i];
-   return d_len;
-}
-
+#include <cstring>
 #include <string>
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
 #include <stdexcept>
-#include <cstring>
 #include <cmath>
-#include <limits> // for std::numeric_limits
+#include <limits>
+
+// Adapt to new LAMMP C API
+// Typedefs removed as they are in lmmp.h
+
+inline void bigint_free(void* p) { 
+    free(p); 
+}
+
+inline void* bigint_alloc(size_t size) { 
+    return malloc(size);
+}
+
+// Helpers for RLZ (Remove Leading Zeros)
+inline mp_size_t lmmp_rlz(mp_srcptr p, mp_size_t n) {
+    while (n > 0 && p[n-1] == 0) n--;
+    return n;
+}
+
+inline void bigint_mul_(mp_ptr dst, mp_srcptr numa, mp_size_t na, mp_srcptr numb, mp_size_t nb) {
+    ::lmmp_mul_(dst, numa, na, numb, nb);
+}
+
+inline void bigint_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
+    dn = lmmp_rlz(d, dn);
+    nn = lmmp_rlz(n, nn);
+    if (dn == 0) return; // Division by zero
+
+    if (nn < dn) {
+        if (q) q[0] = 0;
+        if (r) {
+            std::memcpy(r, n, nn * sizeof(mp_limb_t));
+            if (dn > nn) std::memset(r + nn, 0, (dn - nn) * sizeof(mp_limb_t));
+        }
+        return;
+    }
+    ::lmmp_div_(q, r, n, nn, d, dn);
+}
 
 class BigInt {
 public:
@@ -84,7 +72,7 @@ public:
     void realloc_to(mp_size_t new_alloc) {
         if (new_alloc <= _alloc) return;
         new_alloc = (new_alloc + 3) & ~3; // Align to 4
-        mp_ptr new_data = (mp_ptr)lmmp_alloc(new_alloc * sizeof(mp_limb_t));
+        mp_ptr new_data = (mp_ptr)bigint_alloc(new_alloc * sizeof(mp_limb_t));
         if (!new_data) throw std::bad_alloc();
         
         // Initialize new memory to zero
@@ -93,7 +81,7 @@ public:
         if (_size > 0 && _data) {
              std::memcpy(new_data, _data, _size * sizeof(mp_limb_t));
         }
-        if (_data) lmmp_free(_data);
+        if (_data) bigint_free(_data);
         _data = new_data;
         _alloc = new_alloc;
     }
@@ -121,7 +109,7 @@ public:
     BigInt() : _data(nullptr), _size(0), _alloc(0), _sign(ZERO), negative(false) {}
     
     ~BigInt() {
-        if (_data) lmmp_free(_data);
+        if (_data) bigint_free(_data);
     }
 
     BigInt(const BigInt& other) {
@@ -161,7 +149,7 @@ public:
     
     BigInt& operator=(BigInt&& other) noexcept {
         if (this != &other) {
-            if (_data) lmmp_free(_data);
+            if (_data) bigint_free(_data);
             _data = other._data;
             _size = other._size;
             _alloc = other._alloc;
@@ -496,9 +484,9 @@ public:
         // lmmp_mul_ handles unequal sizes: [dst, na+nb] = [a, na] * [b, nb]
         // Note: lmmp_mul_ expects 0 < nb <= na. Swap if needed.
         if (na >= nb) {
-            lmmp_mul_(res._data, _data, na, other._data, nb);
+            bigint_mul_(res._data, _data, na, other._data, nb);
         } else {
-            lmmp_mul_(res._data, other._data, nb, _data, na);
+            bigint_mul_(res._data, other._data, nb, _data, na);
         }
         
         res._size = na + nb;
@@ -528,7 +516,7 @@ public:
         // BUT here params are (mp_ptr dstq, mp_ptr dstr, mp_srcptr numa, ...) 
         // so numa is const.
         
-        lmmp_div_(q._data, r._data, _data, na, other._data, nb);
+        bigint_div_(q._data, r._data, _data, na, other._data, nb);
         
         q._size = na - nb + 1;
         q._sign = (_sign == other._sign) ? POSITIVE : NEGATIVE;
@@ -541,13 +529,16 @@ public:
         if (other._size == 0) throw std::runtime_error("Division by zero");
         if (_size < other._size) return *this; 
 
-        BigInt r;
+        BigInt q; // Dummy quotient buffer required by lmmp_div_
         mp_size_t na = _size;
         mp_size_t nb = other._size;
+        q.realloc_to(na - nb + 1);
+
+        BigInt r;
         r.realloc_to(nb);
         
-        // Pass NULL for quotient
-        lmmp_div_(nullptr, r._data, _data, na, other._data, nb);
+        // Pass q._data instead of nullptr
+        bigint_div_(q._data, r._data, _data, na, other._data, nb);
         
         r._size = nb;
         r._sign = _sign; // Remainder sign follows dividend
@@ -604,51 +595,23 @@ public:
     BigInt sqrt() const {
         if (_sign == NEGATIVE) throw std::domain_error("Sqrt of negative number");
         if (_size == 0) return BigInt(0);
+        if (*this == BigInt(1)) return BigInt(1);
         
-        BigInt res;
-        // Output size: (na + 1) / 2
-        mp_size_t res_size = (_size + 1) / 2 + 1; // +1 buffer
-        res.realloc_to(res_size);
+        // Newton's method
+        BigInt x = *this;
+        BigInt y = (x + BigInt(1)) / BigInt(2); // Initial guess smaller than x
         
-        // lmmp_sqrt_(mp_ptr dsts, mp_ptr dstr, mp_srcptr numa, mp_size_t na, mp_size_t nf)
-        // nf is precision factor, 0 for int sqrt?
-        // Doc says: [dsts] = floor(sqrt([numa] * B^(2*nf)))
-        // So use nf=0 for integer sqrt
-        
-        lmmp_sqrt_(res._data, nullptr, _data, _size, 0);
-        
-        res._size = res_size; 
-        res.normalize();
-        res._sign = POSITIVE;
-        res.negative = false;
-        return res;
+        while (y < x) {
+            x = y;
+            y = (x + *this / x) / BigInt(2);
+        }
+        return x;
     }
 
     bool is_perfect_square() const {
         if (_sign == NEGATIVE) return false;
         if (_size == 0) return true;
-        
-        // Calc sqrt, then square it to check ?? Expensive.
-        // Or look at dstr from lmmp_sqrt_
-        // lmmp_sqrt_ returns remainder if dstr is not null!
-        BigInt s, r;
-        mp_size_t res_size = (_size + 1) / 2 + 1;
-        s.realloc_to(res_size);
-        r.realloc_to(res_size + 2); // Remainder can be larger? 
-        // Remainder bounded by 2*sqrt(n)
-        
-        lmmp_sqrt_(s._data, r._data, _data, _size, 0);
-        
-        // If remainder r is zero, it's perfect square
-        // Check if r is zero from data
-        // We need to set r._size properly to check?
-        // lmmp functions don't set separate size return usually for array like this?
-        // Wait, lmmp_sqrt declares: [dstr, nf+na/2+1]
-        // We need to check all limbs of dstr
-        mp_size_t r_len = 0 + _size/2 + 1;
-        for(mp_size_t i=0; i<r_len; ++i) {
-            if (r._data[i] != 0) return false;
-        }
-        return true;
+        BigInt s = this->sqrt();
+        return (s * s) == *this;
     }
 };

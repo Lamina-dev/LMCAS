@@ -107,7 +107,10 @@ public:
 
     // Expansion (distributive law, etc.)
     std::shared_ptr<SymbolicExpr> expand() const;
-	
+
+    // Factorization (common factors, basic identities)
+    std::shared_ptr<SymbolicExpr> factor() const;
+
 	/*
 	哈希要保证的一些因素：
 	- 乘法交换律（乘法：奇数二进制位参与运算）

@@ -1,2 +1,5 @@
 dist*
 build*
+test*.exe
+out.txt
+/*.dll

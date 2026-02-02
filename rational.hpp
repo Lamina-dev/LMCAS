@@ -52,7 +52,7 @@ public:
     Rational(const BigInt& num) : numerator(num), denominator(1) {}
 
     Rational(const BigInt& num, const BigInt& den) : numerator(num), denominator(den) {
-        // simplify(); // Disable simplify to avoid crash
+        simplify(); 
     }
 
     Rational(int num) : numerator(num), denominator(1) {}
