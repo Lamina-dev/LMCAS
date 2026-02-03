@@ -21,6 +21,10 @@ jobs:
       with:
         submodules: recursive
 
+    - uses: glslang/setup-masm@v1.2
+      with:
+        vs-architecture: 'x64'
+
     - name: Configure CMake
       run: cmake -G "MinGW Makefiles" -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
