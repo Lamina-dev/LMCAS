@@ -145,6 +145,22 @@ public:
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations, 
         const std::vector<std::string>& vars);
 
+    // Calculus and Limits
+    // Calculate limit of this expression as var -> point
+    std::shared_ptr<SymbolicExpr> limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point) const;
+    
+    // Calculate indefinite integral with respect to var
+    std::shared_ptr<SymbolicExpr> integrate(const std::string& var) const;
+
+    // Helper to create divide (since it is usually multiply by power -1, but having a static helper is nice)
+    static std::shared_ptr<SymbolicExpr> divide(const std::shared_ptr<SymbolicExpr>& num, const std::shared_ptr<SymbolicExpr>& den);
+
+    // Helper to create integral node (symbolic representation)
+    static std::shared_ptr<SymbolicExpr> make_integral(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var);
+    
+    // Helper to create limit node (symbolic representation)
+    static std::shared_ptr<SymbolicExpr> make_limit(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, const std::shared_ptr<SymbolicExpr>& point);
+
     // Factorization (common factors, basic identities)
     std::shared_ptr<SymbolicExpr> factor() const;
 

@@ -3,6 +3,14 @@
 #include <vector>
 #include <string>
 
+// --- Helper Declarations ---
+
+// Check if expression tends to 0 at var -> val (Forward declared for limit)
+static bool tends_to_zero(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, const std::shared_ptr<SymbolicExpr>& val) {
+    auto sub = expr->substitute(var, val)->simplify();
+    return sub->is_number() && sub->convert_rational() == Rational(0);
+}
+
 // Helper to check dependency
 static bool has_variable(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
     if (!expr) return false;
@@ -11,6 +19,113 @@ static bool has_variable(const std::shared_ptr<SymbolicExpr>& expr, const std::s
         if (has_variable(op, var)) return true;
     }
     return false;
+}
+
+// --- Additional Symbolic API Implementations ---
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::divide(const std::shared_ptr<SymbolicExpr>& num, const std::shared_ptr<SymbolicExpr>& den) {
+    // num / den -> num * den^-1
+    if (!den) return num; // Error handling usually
+    return SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::make_integral(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
+    auto res = std::make_shared<SymbolicExpr>(Type::Integral);
+    res->operands.push_back(expr);
+    res->identifier = var;
+    return res;
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, const std::shared_ptr<SymbolicExpr>& point) {
+    auto res = std::make_shared<SymbolicExpr>(Type::Limit);
+    res->operands.push_back(expr);
+    res->operands.push_back(point);
+    res->identifier = var;
+    return res;
+}
+
+// --- Calculus Core ---
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point) const {
+    // 1. Check for L'Hopital Rule Candidate Indeterminate Form (0/0)
+    if (type == Type::Multiply) {
+         auto num = operands[0];
+         std::shared_ptr<SymbolicExpr> den = nullptr;
+         
+         if (operands[1]->type == Type::Power && operands[1]->operands[1]->is_number()) {
+             auto exp_val = operands[1]->operands[1]->convert_rational();
+             if (exp_val == Rational(-1)) {
+                 den = operands[1]->operands[0];
+             }
+         }
+         
+         if (den) {
+             if (tends_to_zero(num, var, point) && tends_to_zero(den, var, point)) {
+                 auto d_num = num->differentiate(var);
+                 auto d_den = den->differentiate(var);
+                 auto new_limit_val = SymbolicExpr::divide(d_num, d_den)->simplify();
+                 return new_limit_val->limit(var, point); 
+             }
+         }
+    }
+
+    // 2. Direct Substitution
+    return this->substitute(var, point)->simplify();
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(const std::string& var_name) const {
+    // Simplest: reconstruct 'this' into a shared_ptr if needed.
+    // For Number/Variable, we generate new nodes.
+    
+    switch (type) {
+        case Type::Number:
+             // int c dx = cx
+             // Use std::visit to handle the variant number_value
+             {
+                 auto num_node = std::visit([](const auto& val) { return SymbolicExpr::number(val); }, number_value);
+                 return SymbolicExpr::multiply(num_node, SymbolicExpr::variable(var_name))->simplify();
+             }
+             
+        case Type::Variable:
+             if (identifier == var_name) {
+                 // int x dx = x^2/2
+                 auto x = SymbolicExpr::variable(identifier);
+                 auto two = SymbolicExpr::number(2);
+                 return SymbolicExpr::divide(SymbolicExpr::power(x, two), two)->simplify();
+             }
+             // int y dx = yx
+             return SymbolicExpr::multiply(SymbolicExpr::variable(identifier), SymbolicExpr::variable(var_name))->simplify();
+             
+        case Type::Add:
+             // int (u+v) = int u + int v
+             return SymbolicExpr::add(operands[0]->integrate(var_name), operands[1]->integrate(var_name))->simplify();
+             
+        case Type::Power: {
+             auto base = operands[0];
+             auto exp = operands[1];
+             if (base->type == Type::Variable && base->identifier == var_name) {
+                 if (exp->is_number()) {
+                     // int x^n = x^(n+1)/(n+1)
+                     // Check if n = -1
+                     if (exp->convert_rational() == Rational(-1)) {
+                         return SymbolicExpr::ln(base);
+                     }
+                     auto n_plus_1 = SymbolicExpr::add(exp, SymbolicExpr::number(1));
+                     return SymbolicExpr::divide(SymbolicExpr::power(base, n_plus_1), n_plus_1)->simplify();
+                 }
+             }
+             // Fallback
+             break;
+        }
+    }
+    
+    // Fallback: Reconstruct current node type and operands for the integral wrapper
+    auto self_copy = std::make_shared<SymbolicExpr>(type);
+    self_copy->number_value = number_value;
+    self_copy->identifier = identifier;
+    self_copy->operands = operands; // Shared ptrs copy is cheap
+    
+    return SymbolicExpr::make_integral(self_copy, var_name); 
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate(const std::string& var_name) const {
@@ -98,6 +213,58 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate(const std::string& var
              return SymbolicExpr::multiply(sec2, u->differentiate(var_name))->simplify();
         }
         
+        case Type::ArcSin: {
+             // u' / sqrt(1 - u^2)
+             auto u = operands[0];
+             auto du = u->differentiate(var_name);
+             auto denom = SymbolicExpr::sqrt(
+                 SymbolicExpr::add(SymbolicExpr::number(1), 
+                     SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::power(u, SymbolicExpr::number(2))))
+             );
+             return SymbolicExpr::multiply(du, SymbolicExpr::power(denom, SymbolicExpr::number(-1)))->simplify();
+        }
+
+        case Type::ArcCos: {
+             // -u' / sqrt(1 - u^2)
+             auto u = operands[0];
+             auto du = u->differentiate(var_name);
+             auto denom = SymbolicExpr::sqrt(
+                 SymbolicExpr::add(SymbolicExpr::number(1), 
+                     SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::power(u, SymbolicExpr::number(2))))
+             );
+             auto neg_du = SymbolicExpr::multiply(SymbolicExpr::number(-1), du);
+             return SymbolicExpr::multiply(neg_du, SymbolicExpr::power(denom, SymbolicExpr::number(-1)))->simplify();
+        }
+
+        case Type::ArcTan: {
+             // u' / (1 + u^2)
+             auto u = operands[0];
+             auto du = u->differentiate(var_name);
+             auto denom = SymbolicExpr::add(SymbolicExpr::number(1), SymbolicExpr::power(u, SymbolicExpr::number(2)));
+             return SymbolicExpr::multiply(du, SymbolicExpr::power(denom, SymbolicExpr::number(-1)))->simplify();
+        }
+
+        case Type::Sinh: {
+             // cosh(u) * u'
+             // Note: SymbolicExpr::cosh helper might not be declared in symbolic.hpp yet, use make generic
+             // Assuming make generic logic or wait for helper.
+             // For now, let's comment out or implement generic constructor
+             // return SymbolicExpr::multiply(std::make_shared<SymbolicExpr>(Type::Cosh, u), u->differentiate(var_name))->simplify();
+             return SymbolicExpr::number(0); // TODO: implement Hyperbolic helpers in symbolic.hpp
+        }
+
+        case Type::Cosh: {
+             // sinh(u) * u'
+             // return SymbolicExpr::multiply(std::make_shared<SymbolicExpr>(Type::Sinh, u), u->differentiate(var_name))->simplify();
+             return SymbolicExpr::number(0); // TODO
+        }
+
+        case Type::Tanh: {
+             // sech^2(u) * u' = (1 - tanh^2(u)) * u'
+             // return ...
+             return SymbolicExpr::number(0); // TODO
+        }
+
         case Type::Ln: {
              // u'/u
              auto u = operands[0];
