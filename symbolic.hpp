@@ -118,6 +118,28 @@ public:
     // Polynomial Resultant
     static std::shared_ptr<SymbolicExpr> poly_resultant(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b, const std::string& var);
     
+    // Matrix Determinant
+    static std::shared_ptr<SymbolicExpr> determinant(const std::shared_ptr<SymbolicExpr>& mat);
+
+    // Matrix Transpose
+    static std::shared_ptr<SymbolicExpr> transpose(const std::shared_ptr<SymbolicExpr>& mat);
+
+    // Matrix Inverse
+    static std::shared_ptr<SymbolicExpr> inverse(const std::shared_ptr<SymbolicExpr>& mat);
+
+    // Matrix RREF (Gaussian Elimination)
+    static std::shared_ptr<SymbolicExpr> rref(const std::shared_ptr<SymbolicExpr>& mat);
+    
+    // Characteristic Polynomial
+    static std::shared_ptr<SymbolicExpr> charpoly(const std::shared_ptr<SymbolicExpr>& mat, const std::string& lambda);
+
+    // Eigenvalues (returns a list of values)
+    static std::shared_ptr<SymbolicExpr> eigenvalues(const std::shared_ptr<SymbolicExpr>& mat);
+
+    // Eigenvectors
+    // Returns a list of pairs: {eigenvalue, {eigenvector1, eigenvector2, ...}}
+    static std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr<SymbolicExpr>>>> eigenvectors(const std::shared_ptr<SymbolicExpr>& mat);
+
     // System solver (Equations list, Variables list) -> List of solutions (Map: var -> val)
     static std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> solve_system(
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations, 

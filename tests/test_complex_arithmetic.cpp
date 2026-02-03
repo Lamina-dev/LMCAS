@@ -1,36 +1,11 @@
-#include "symbolic.hpp"
-#include <iostream>
-#include <cassert>
-#include <vector>
+#include "test_common.hpp"
 
-int g_failures = 0;
-
-// Helper to print PASS/FAIL and track failure count
-void CHECK_EQ(const std::string& name, const std::string& actual, const std::string& expected) {
-    if (actual == expected) {
-        std::cout << "[PASS] " << name << std::endl;
-    } else {
-        std::cout << "[FAIL] " << name << " | Expected: " << expected << ", Got: " << actual << std::endl;
-        g_failures++;
-    }
-}
-
-void CHECK_CONTAINS(const std::string& name, const std::string& result, const std::vector<std::string>& tokens) {
-    bool ok = true;
-    for(const auto& t : tokens) {
-        if (result.find(t) == std::string::npos) {
-            ok = false; break;
-        }
-    }
-    if (ok) {
-        std::cout << "[PASS] " << name << std::endl;
-    } else {
-        std::cout << "[FAIL] " << name << " | Result: " << result << std::endl;
-        g_failures++;
-    }
-}
+// (Global failure counter and helpers are now in test_common.hpp)
+// We will adapt the test cases to use the new macros.
 
 int main() {
+    TEST_CASE("Complex Arithmetic");
+
     auto x = SymbolicExpr::variable("x");
     auto y = SymbolicExpr::variable("y");
     auto one = SymbolicExpr::number(1);
@@ -43,7 +18,7 @@ int main() {
         auto expr = SymbolicExpr::add(A, SymbolicExpr::multiply(SymbolicExpr::number(-1), B)); 
         
         auto expanded = expr->expand();
-        CHECK_CONTAINS("Diff Squares (4xy)", expanded->to_string(), {"4", "x", "y"});
+        EXPECT_CONTAINS(expanded->to_string(), {"4", "x", "y"}, "Diff Squares (4xy)");
     }
 
     // 2. Rational Coefficients: x/2 + x/3 = 5x/6
@@ -53,7 +28,7 @@ int main() {
         auto sum = SymbolicExpr::add(half_x, third_x);
         
         auto result = sum->simplify();
-        CHECK_EQ("Rational Coeffs", result->to_string(), "(5/6)*x");
+        EXPECT_EQ_EXPR_STR(result, "(5/6)*x", "Rational Coeffs");
     }
 
     // 3. Complex Polynomial: (x+1)^3 - x^3 - 1 = 3x^2 + 3x
@@ -65,7 +40,7 @@ int main() {
         auto poly = SymbolicExpr::add(SymbolicExpr::add(term1, term2), term3);
         auto res = poly->expand();
         
-        CHECK_CONTAINS("Cubic Cancel", res->simplify()->to_string(), {"3*x", "3*(x^2)"});
+        EXPECT_CONTAINS(res->simplify()->to_string(), {"3*x", "3*(x^2)"}, "Cubic Cancel");
     }
 
     // 4. Zero Cancellation: (x + 1) - (x + 1)
@@ -75,7 +50,7 @@ int main() {
         auto zero_expr = SymbolicExpr::add(p, neg_p);
         
         auto res = zero_expr->expand()->simplify();
-        CHECK_EQ("Zero Cancel", res->to_string(), "0");
+        EXPECT_EQ_EXPR_STR(res, "0", "Zero Cancel");
     }
     
     // 5. Nested Powers: (x^2)^3 -> x^6
@@ -83,7 +58,7 @@ int main() {
         auto p2 = SymbolicExpr::power(x, two);
         auto p6 = SymbolicExpr::power(p2, SymbolicExpr::number(3));
         auto res = p6->simplify();
-        CHECK_EQ("Nested Powers", res->to_string(), "x^6");
+        EXPECT_EQ_EXPR_STR(res, "x^6", "Nested Powers");
     }
 
     // 6. Debug 0+x
@@ -93,7 +68,7 @@ int main() {
         auto expr = SymbolicExpr::add(z, term);
         auto sim = expr->simplify();
         
-        CHECK_EQ("Identity Add (0+x)", sim->to_string(), "x");
+        EXPECT_EQ_EXPR_STR(sim, "x", "Identity Add (0+x)");
     }
 
     // 7. Debug 0 + x^2 + ...
@@ -103,8 +78,8 @@ int main() {
         sum = SymbolicExpr::add(sum, SymbolicExpr::variable("b"));
         auto sim = sum->simplify();
         // expect a+b
-        CHECK_CONTAINS("Identity Chain", sim->to_string(), {"a", "b"});
+        EXPECT_CONTAINS(sim->to_string(), {"a", "b"}, "Identity Chain");
     }
 
-    return g_failures > 0 ? 1 : 0;
+    return TEST_REPORT();
 }

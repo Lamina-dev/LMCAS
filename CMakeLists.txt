@@ -48,6 +48,15 @@ target_link_libraries(test_cas PRIVATE lmcas LammpCore)
 add_executable(test_bigint_debug tests/test_bigint_debug.cpp)
 target_link_libraries(test_bigint_debug PRIVATE lmcas LammpCore)
 
+add_executable(test_det tests/test_det.cpp)
+target_link_libraries(test_det PRIVATE lmcas LammpCore)
+
+add_executable(test_matrix_ops tests/test_matrix_ops.cpp)
+target_link_libraries(test_matrix_ops PRIVATE lmcas LammpCore)
+
+add_executable(test_solve tests/test_solve.cpp)
+target_link_libraries(test_solve PRIVATE lmcas LammpCore)
+
 add_executable(test_proof tests/test_proof.cpp)
 target_link_libraries(test_proof PRIVATE lmcas LammpCore)
 

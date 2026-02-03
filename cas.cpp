@@ -111,6 +111,35 @@ Value cas_solve(const std::vector<Value>& args) {
      return Value(solutions[0]);
 }
 
+Value cas_det(const std::vector<Value>& args) {
+     if (args.size() != 1) return Value();
+     auto expr = args[0].as_symbolic();
+     if (!expr) return Value();
+     
+     return Value(SymbolicExpr::determinant(expr));
+}
+
+Value cas_inverse(const std::vector<Value>& args) {
+     if (args.size() != 1) return Value();
+     auto expr = args[0].as_symbolic();
+     if (!expr) return Value();
+     return Value(SymbolicExpr::inverse(expr));
+}
+
+Value cas_transpose(const std::vector<Value>& args) {
+     if (args.size() != 1) return Value();
+     auto expr = args[0].as_symbolic();
+     if (!expr) return Value();
+     return Value(SymbolicExpr::transpose(expr));
+}
+
+Value cas_rref(const std::vector<Value>& args) {
+     if (args.size() != 1) return Value();
+     auto expr = args[0].as_symbolic();
+     if (!expr) return Value();
+     return Value(SymbolicExpr::rref(expr));
+}
+
 Value cas_evaluate(const std::vector<Value>& args) {
     if (args.size() < 1) {
         std::cerr << "Error: cas_evaluate() requires at least one argument" << std::endl;

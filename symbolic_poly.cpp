@@ -637,7 +637,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(const std::string& var_na
     return res->simplify(); 
 }
 
-std::shared_ptr<SymbolicExpr> solve_single_poly(const std::shared_ptr<SymbolicExpr>& eq, const std::string& var) {
+std::vector<std::shared_ptr<SymbolicExpr>> solve_single_poly(const std::shared_ptr<SymbolicExpr>& eq, const std::string& var) {
     auto poly = expr_to_poly(eq->expand(), var);
     int deg = poly_degree(poly);
     
@@ -645,7 +645,7 @@ std::shared_ptr<SymbolicExpr> solve_single_poly(const std::shared_ptr<SymbolicEx
         // ax + b = 0 => x = -b/a
         auto a = poly[1];
         auto b = poly.count(0) ? poly[0] : SymbolicExpr::number(0);
-        return SymbolicExpr::multiply(SymbolicExpr::multiply(b, SymbolicExpr::number(-1)), SymbolicExpr::power(a, SymbolicExpr::number(-1)))->simplify();
+        return {SymbolicExpr::multiply(SymbolicExpr::multiply(b, SymbolicExpr::number(-1)), SymbolicExpr::power(a, SymbolicExpr::number(-1)))->simplify()};
     }
     
     if (deg == 2) {
@@ -657,18 +657,25 @@ std::shared_ptr<SymbolicExpr> solve_single_poly(const std::shared_ptr<SymbolicEx
         auto delta = SymbolicExpr::add(SymbolicExpr::power(b, SymbolicExpr::number(2)), 
                      SymbolicExpr::multiply(SymbolicExpr::number(-4), SymbolicExpr::multiply(a, c)));
         
-        auto num = SymbolicExpr::add(SymbolicExpr::multiply(b, SymbolicExpr::number(-1)), SymbolicExpr::sqrt(delta));
         auto den = SymbolicExpr::multiply(SymbolicExpr::number(2), a);
-        return SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)))->simplify();
+        auto inv_den = SymbolicExpr::power(den, SymbolicExpr::number(-1));
+
+        // Root 1: (-b + sqrt(delta)) / 2a
+        auto num1 = SymbolicExpr::add(SymbolicExpr::multiply(b, SymbolicExpr::number(-1)), SymbolicExpr::sqrt(delta));
+        auto root1 = SymbolicExpr::multiply(num1, inv_den)->simplify();
+        
+        // Root 2: (-b - sqrt(delta)) / 2a
+        auto num2 = SymbolicExpr::add(SymbolicExpr::multiply(b, SymbolicExpr::number(-1)), SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::sqrt(delta)));
+        auto root2 = SymbolicExpr::multiply(num2, inv_den)->simplify();
+
+        return {root1, root2};
     }
     
-    return nullptr; 
+    return {}; 
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var) {
-    auto res = solve_single_poly(eq, var);
-    if (res) return {res};
-    return {};
+    return solve_single_poly(eq, var);
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b, const std::string& var) {
@@ -725,30 +732,225 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(const std::shared_ptr
     return res->simplify(); 
 }
 
+// 辅助：检查表达式是否依赖于某些变量
+static bool depends_on(const std::shared_ptr<SymbolicExpr>& expr, const std::vector<std::string>& vars) {
+    if (expr->type == SymbolicExpr::Type::Variable) {
+        for (const auto& v : vars) {
+            if (expr->identifier == v) return true;
+        }
+        return false;
+    }
+    for (const auto& op : expr->operands) {
+        if (depends_on(op, vars)) return true;
+    }
+    return false;
+}
+
 std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::solve_system(
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations, 
         const std::vector<std::string>& vars) {
-     
-     // 1. Try linear Gaussian Elimination
-     int m = equations.size();
-     int n = vars.size();
-     
-     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> matrix(m, std::vector<std::shared_ptr<SymbolicExpr>>(n + 1));
-     
-     for(int i=0; i<m; ++i) {
-         auto poly = expr_to_poly(equations[i]->expand(), "TEMP_ALL"); // Logic needs multivar extraction
-         // Manual extraction for var[j]
-         // Assuming linear: coeff of var[j] is constant
-         
-         // Simplified: Use diff to extract coeff? 
-         // Or just iterate terms and matching var
-         
-         // For speed, just implement 2x2 or 3x3 substitution implicitly
-         // Actually, let's just do substitution solver for general case
-         // Pick first eq, solve for var1, subst into others.
-     }
-     
-     // Substitution Solver Strategy
+
+    size_t m = equations.size();
+    size_t n = vars.size();
+
+    // 尝试构建线性方程组矩阵 [A|b]
+    // 方程形式： sum(a_ij * x_j) + C = 0
+    // 移项后： sum(a_ij * x_j) = -C
+    // 增广矩阵最后一列存 -C
+    
+    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> augmented_matrix(m);
+    bool is_linear = true;
+
+    for (size_t i = 0; i < m; ++i) {
+        // 先展开以分离项
+        auto eq = equations[i]->expand()->simplify(); // 确保 fully expanded
+        augmented_matrix[i].resize(n + 1, SymbolicExpr::number(0));
+        
+        // 收集所有加法项
+        std::vector<std::shared_ptr<SymbolicExpr>> terms;
+        auto collect_terms = [&](auto&& self, const std::shared_ptr<SymbolicExpr>& e) -> void {
+            if (e->type == Type::Add) {
+                for (const auto& op : e->operands) self(self, op);
+            } else {
+                terms.push_back(e);
+            }
+        };
+        collect_terms(collect_terms, eq);
+        
+        std::shared_ptr<SymbolicExpr> constant_part = SymbolicExpr::number(0);
+
+        for (const auto& term : terms) {
+            // 分析每一项包含的变量
+            std::vector<int> found_indices;
+            for (size_t j = 0; j < n; ++j) {
+                if (depends_on(term, {vars[j]})) {
+                    found_indices.push_back(j);
+                }
+            }
+            
+            if (found_indices.empty()) {
+                // 常数项
+                constant_part = SymbolicExpr::add(constant_part, term);
+            } else if (found_indices.size() == 1) {
+                // 只含有一个变量，检查线性性
+                int var_idx = found_indices[0];
+                std::string var_name = vars[var_idx];
+                
+                // 为了验证线性性，求导数。如果是线性项 c * x，导数为 c，且 c 不依赖于任何 vars
+                auto coeff = term->differentiate(var_name)->simplify();
+                
+                if (depends_on(coeff, vars)) {
+                    // 系数依赖于任何待解变量（包括 x 自身，例如 x^2 -> 2x），则非线性
+                    is_linear = false;
+                    break;
+                }
+                
+                // 还要检查是否真的是线性项。
+                // 比如 sin(x) 对 x 求导是 cos(x)，此时 depends_on(coeff, vars) 会为 true。
+                // 但如果 floor(x) 这种？ Cas 不支持。
+                // 还有一个特例： x * y (两个变量)，这里 found_indices.size() 会是 2，已经被上面排除了。
+                // 所以这里应该是安全的。
+                
+                augmented_matrix[i][var_idx] = SymbolicExpr::add(augmented_matrix[i][var_idx], coeff);
+            } else {
+                // 包含多个变量（如 x*y），非线性
+                is_linear = false;
+                break;
+            }
+        }
+        
+        if (!is_linear) break;
+        
+        // b = -constant
+        augmented_matrix[i][n] = SymbolicExpr::multiply(constant_part, SymbolicExpr::number(-1))->simplify();
+    }
+    
+    // 如果是线性，使用 RREF 求解
+    if (is_linear) {
+        // 化简矩阵中的每个元素
+        for(auto& row : augmented_matrix) {
+            for(auto& cell : row) cell = cell->simplify();
+        }
+
+        auto mat = SymbolicExpr::matrix(augmented_matrix);
+        // 使用 RREF
+        auto solved_mat_expr = SymbolicExpr::rref(mat);
+        
+        if (!solved_mat_expr || solved_mat_expr->type != Type::Matrix) return {};
+        
+        auto& solved_rows = solved_mat_expr->operands;
+        if (solved_rows.empty()) return {};
+
+        std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
+        
+        // 解析 RREF 结果 (Back substitution if not diagonal, but RREF should be mostly diagonal)
+        // RREF 形式：
+        // [1 0 2 | 5] -> x + 2z = 5 -> x = 5 - 2z
+        // [0 1 3 | 6] -> y + 3z = 6 -> y = 6 - 3z
+        // [0 0 0 | 0]
+        
+        // 识别 pivot 变量和自由变量
+        // 每一行寻找第一个非零元素（pivot）
+        // 如果 pivot 是 1，且该列其他为 0 (RREF定义)
+        
+        // 由于是符号计算，判断“非零”比较困难 (depends on simplify)。
+        // 假设 simplify 足够强，能把 0 化简为 Number(0)
+        
+        std::vector<int> pivot_col_for_row(m, -1);
+        std::vector<bool> is_free_var(n, true);
+        
+        for (size_t i = 0; i < solved_rows.size(); ++i) {
+            auto& row_vec = solved_rows[i]->operands;
+            for (size_t j = 0; j < n; ++j) {
+                // 检查是否非零
+                bool is_zero = false;
+                if (row_vec[j]->is_number()) {
+                    auto val = row_vec[j]->convert_rational();
+                    if (val == 0) is_zero = true;
+                }
+                
+                if (!is_zero) {
+                    pivot_col_for_row[i] = j;
+                    is_free_var[j] = false;
+                    
+                    // 检查无解情况: [0 0 ... 0 | 1]
+                    // 但这里 j < n，所以这是系数部分的非零
+                    // 如果整行系数部分都是 0，但最后部分非0，则无解
+                    break;
+                }
+            }
+            
+            // 检查无解
+            if (pivot_col_for_row[i] == -1) {
+                auto rhs = row_vec[n];
+                bool rhs_zero = false;
+                 if (rhs->is_number()) {
+                    auto val = rhs->convert_rational();
+                    if (val == 0) rhs_zero = true;
+                }
+                
+                if (!rhs_zero) {
+                    // 0 = non_zero -> 无解
+                    return {}; 
+                }
+            }
+        }
+        
+        // 构建解
+        // 对于自由变量，我们暂时无法用 "t" 表示返回一般解 (TODO)
+        // 目前如果存在自由变量，我们可能返回空，或者仅仅返回确定解的部分？
+        // 标准行为通常是返回参数化解。这里暂时只支持唯一解情况，或者若包含自由变量则返回部分绑定
+        
+        // 从下往上回代（RREF 其实不需要回代，直接移项即可）
+        for (int i = m - 1; i >= 0; --i) {
+            int p = pivot_col_for_row[i];
+            if (p == -1) continue;
+            
+            // x_p + sum(c_k * x_k) = rhs
+            // x_p = rhs - sum(c_k * x_k)
+            auto val = solved_rows[i]->operands[n];
+            
+            for (size_t j = p + 1; j < n; ++j) {
+                auto coeff = solved_rows[i]->operands[j];
+                bool is_zero = false;
+                if (coeff->is_number() && coeff->convert_rational() == 0) is_zero = true;
+                
+                if (!is_zero) {
+                    // 这是一个依赖自由变量的解
+                    // 如果 user 没有提供自由变量的值，结果将依赖于该变量
+                    // 我们可以保留变量名在表达式中
+                    auto term = SymbolicExpr::multiply(coeff, SymbolicExpr::variable(vars[j]));
+                    val = SymbolicExpr::add(val, SymbolicExpr::multiply(term, SymbolicExpr::number(-1)));
+                }
+            }
+            
+            // Pivot 系数归一化 (RREF 应该已经是 1，除非符号计算导致未能除尽)
+            auto pivot_val = solved_rows[i]->operands[p];
+            bool is_one = false;
+            if (pivot_val->is_number() && pivot_val->convert_rational() == 1) is_one = true;
+            
+            if (!is_one) {
+                val = SymbolicExpr::multiply(val, SymbolicExpr::power(pivot_val, SymbolicExpr::number(-1)));
+            }
+            
+            solution[vars[p]] = val->simplify();
+        }
+        
+        // 填充自由变量： x_k = x_k
+        // 这一步对于 CAS 很重要，告诉用户哪些是自由的
+        for (size_t j = 0; j < n; ++j) {
+            if (is_free_var[j]) {
+                // solution[vars[j]] = SymbolicExpr::variable(vars[j]); 
+                // 或者不放入 map，表示它是自由的
+            }
+        }
+        
+        std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> res;
+        res.push_back(solution);
+        return res;
+    }
+
+     // Substitution Solver Strategy (Fallback)
      std::vector<std::shared_ptr<SymbolicExpr>> current_eqs = equations;
      std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
      

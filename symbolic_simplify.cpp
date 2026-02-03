@@ -184,6 +184,12 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_multiply() const {
 	if (left->is_number() && left->convert_rational() == ::Rational(1)) return right;
 	if (right->is_number() && right->convert_rational() == ::Rational(1)) return left;
 
+    // Check for Matrix multiplication (Matrix*Matrix or Scalar*Matrix)
+    if (left->type == SymbolicExpr::Type::Matrix || right->type == SymbolicExpr::Type::Matrix) {
+        auto res = multiply_matrices(left, right);
+        if (res) return res;
+    }
+
 	/*
 	if (left->type == SymbolicExpr::Type::Add || right->type == SymbolicExpr::Type::Add) {
 		return SymbolicExpr::multiply(left, right)->expand();
@@ -547,6 +553,13 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_power() const {
 	}
 	
 	if (exponent->is_int() || exponent->is_big_int()) {
+		// (a*b)^n = a^n * b^n
+		if (base->type == SymbolicExpr::Type::Multiply) {
+			auto left = SymbolicExpr::power(base->operands[0], exponent);
+			auto right = SymbolicExpr::power(base->operands[1], exponent);
+			return SymbolicExpr::multiply(left, right)->simplify();
+		}
+
 		auto rconv = exponent->convert_rational();
 		if (rconv == ::Rational(0)) return SymbolicExpr::number(1);
 		if (rconv == ::Rational(1)) return std::make_shared<SymbolicExpr>(*base);
