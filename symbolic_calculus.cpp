@@ -192,7 +192,9 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_internal(
     return {};
 }
 
+/*
 std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var_name) {
-    // Assuming eq is an expression equal to 0
-    return solve_internal(eq, SymbolicExpr::number(0), var_name);
+    // Moved to symbolic_poly.cpp
+    return {};
 }
+*/

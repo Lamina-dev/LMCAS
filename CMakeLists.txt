@@ -56,3 +56,18 @@ add_executable(test_arithmetic tests/test_arithmetic.cpp)
 target_link_libraries(test_arithmetic PRIVATE lmcas LammpCore)
 
 
+add_executable(test_new_features tests/test_new_features.cpp)
+target_link_libraries(test_new_features PRIVATE lmcas LammpCore)
+
+add_executable(test_complex_arithmetic tests/test_complex_arithmetic.cpp)
+target_link_libraries(test_complex_arithmetic PRIVATE lmcas LammpCore)
+
+enable_testing()
+add_test(NAME TestCAS COMMAND test_cas)
+add_test(NAME TestBigIntDebug COMMAND test_bigint_debug)
+add_test(NAME TestProof COMMAND test_proof)
+add_test(NAME TestNorm COMMAND test_norm)
+add_test(NAME TestFactor COMMAND test_factor)
+add_test(NAME TestArithmetic COMMAND test_arithmetic)
+add_test(NAME TestNewFeatures COMMAND test_new_features)
+add_test(NAME TestComplexArithmetic COMMAND test_complex_arithmetic)

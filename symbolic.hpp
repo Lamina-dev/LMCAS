@@ -105,8 +105,23 @@ public:
     // Returns -1 if this < other, 1 if this > other, 0 if equal
     int compare(const std::shared_ptr<SymbolicExpr>& other) const;
 
+    // Generic Substitution
+    // Replace variable with an expression
+    std::shared_ptr<SymbolicExpr> substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const;
+
     // Expansion (distributive law, etc.)
     std::shared_ptr<SymbolicExpr> expand() const;
+
+    // Polynomial GCD
+    static std::shared_ptr<SymbolicExpr> poly_gcd(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
+
+    // Polynomial Resultant
+    static std::shared_ptr<SymbolicExpr> poly_resultant(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b, const std::string& var);
+    
+    // System solver (Equations list, Variables list) -> List of solutions (Map: var -> val)
+    static std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> solve_system(
+        const std::vector<std::shared_ptr<SymbolicExpr>>& equations, 
+        const std::vector<std::string>& vars);
 
     // Factorization (common factors, basic identities)
     std::shared_ptr<SymbolicExpr> factor() const;
@@ -415,6 +430,14 @@ public:
 
     // 检查是否为数字
     bool is_number() const { return type == Type::Number; }
+
+    bool get_number_value_is_zero() const {
+        if (!is_number()) return false;
+        if (std::holds_alternative<int>(number_value)) return std::get<int>(number_value) == 0;
+        if (std::holds_alternative<::BigInt>(number_value)) return std::get<::BigInt>(number_value).is_zero();
+        if (std::holds_alternative<::Rational>(number_value)) return std::get<::Rational>(number_value).is_zero();
+        return false;
+    }
 
     // 检查是否为大整数
     bool is_big_int() const { return is_number() && std::holds_alternative<::BigInt>(number_value); }

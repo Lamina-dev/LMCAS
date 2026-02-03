@@ -372,3 +372,422 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
 
     return current;
 }
+
+// ==========================================
+// Extension: Expansion, GCD, Solver
+// ==========================================
+
+// Helper for distributing sums: (a+b)*(c+d)
+static std::shared_ptr<SymbolicExpr> expand_distribute(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
+    std::function<void(const std::shared_ptr<SymbolicExpr>&, std::vector<std::shared_ptr<SymbolicExpr>>&)> collect_terms;
+    collect_terms = [&](const std::shared_ptr<SymbolicExpr>& e, std::vector<std::shared_ptr<SymbolicExpr>>& terms) {
+        if (e->type == SymbolicExpr::Type::Add) {
+            for(const auto& op : e->operands) collect_terms(op, terms);
+        } else {
+            terms.push_back(e);
+        }
+    };
+    
+    std::vector<std::shared_ptr<SymbolicExpr>> terms_a;
+    collect_terms(a, terms_a);
+    
+    std::vector<std::shared_ptr<SymbolicExpr>> terms_b;
+    collect_terms(b, terms_b);
+    
+    std::shared_ptr<SymbolicExpr> res = SymbolicExpr::number(0);
+    
+    // (a1...an) * (b1...bm) -> sum(ai * bj)
+    for(const auto& ta : terms_a) {
+        for(const auto& tb : terms_b) {
+            auto prod = SymbolicExpr::multiply(ta, tb); 
+            res = SymbolicExpr::add(res, prod); 
+        }
+    }
+    // simplify should flatten adds
+    auto sim = res->simplify();
+    return sim;
+}
+
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
+    // 1. Expand operands first
+    std::vector<std::shared_ptr<SymbolicExpr>> exp_ops;
+    for(const auto& op : operands) {
+        if(op) exp_ops.push_back(op->expand());
+    }
+
+    if (type == Type::Add) {
+        auto res = SymbolicExpr::number(0);
+        for(const auto& op : exp_ops) {
+            res = SymbolicExpr::add(res, op);
+        }
+        return res->simplify();
+    }
+    
+    if (type == Type::Multiply) {
+        if (exp_ops.empty()) return SymbolicExpr::number(1);
+        auto current = exp_ops[0];
+        for(size_t i=1; i<exp_ops.size(); ++i) {
+            auto next_op = exp_ops[i];
+            current = expand_distribute(current, next_op);
+        }
+        return current;
+    }
+    
+    if (type == Type::Power) {
+        auto base = exp_ops[0];
+        auto exp = exp_ops[1]; 
+        
+        if (exp->is_number()) {
+            Rational r = exp->convert_rational();
+            if (r.is_integer() && r > Rational(1) && r < Rational(20)) {
+                // (a+b)^n -> expand
+                long long n = (long long)r.to_double();
+                auto current = base;
+                for(int i=1; i<n; ++i) {
+                    current = expand_distribute(current, base);
+                }
+                return current;
+            }
+        }
+        return SymbolicExpr::power(base, exp);
+    }
+    
+    // Default: restructure
+    std::shared_ptr<SymbolicExpr> current = std::make_shared<SymbolicExpr>(type);
+    current->identifier = identifier;
+    current->number_value = number_value;
+    current->operands = exp_ops;
+    
+    return current; 
+}
+
+// ==========================================
+// Polynomial GCD
+// ==========================================
+
+using PolyMap = std::map<int, std::shared_ptr<SymbolicExpr>>;
+
+static PolyMap expr_to_poly(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
+    PolyMap poly;
+    
+    std::function<void(const std::shared_ptr<SymbolicExpr>&)> add_term;
+    add_term = [&](const std::shared_ptr<SymbolicExpr>& term) {
+        if (term->type == SymbolicExpr::Type::Add) {
+            for(const auto& op : term->operands) add_term(op);
+            return;
+        }
+
+        int deg = 0;
+        std::shared_ptr<SymbolicExpr> coeff = SymbolicExpr::number(1);
+        
+        // Decompose monomial term
+        std::function<void(const std::shared_ptr<SymbolicExpr>&)> analyze = 
+            [&](const std::shared_ptr<SymbolicExpr>& t) {
+            if (t->type == SymbolicExpr::Type::Multiply) {
+                for(auto& op : t->operands) analyze(op);
+            } else if (t->type == SymbolicExpr::Type::Power && 
+                       t->operands.size() == 2 &&
+                       t->operands[0]->type == SymbolicExpr::Type::Variable && 
+                       t->operands[0]->identifier == var && 
+                       t->operands[1]->is_number()) {
+                 Rational r = t->operands[1]->convert_rational();
+                 deg += (int)r.to_double();
+            } else if (t->type == SymbolicExpr::Type::Variable && t->identifier == var) {
+                deg += 1;
+            } else {
+                coeff = SymbolicExpr::multiply(coeff, t);
+            }
+        };
+        analyze(term);
+        
+        if (poly.find(deg) == poly.end()) poly[deg] = coeff;
+        else poly[deg] = SymbolicExpr::add(poly[deg], coeff);
+    };
+    
+    add_term(expr);
+    
+    for(auto& [d, c] : poly) c = c->simplify();
+    auto it = poly.begin();
+    while (it != poly.end()) {
+        if (it->second->is_number() && it->second->get_number_value_is_zero()) {
+            it = poly.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return poly;
+}
+
+static std::shared_ptr<SymbolicExpr> poly_to_expr(const PolyMap& poly, const std::string& var) {
+    if (poly.empty()) return SymbolicExpr::number(0);
+    std::shared_ptr<SymbolicExpr> res = SymbolicExpr::number(0);
+    auto x = SymbolicExpr::variable(var);
+    
+    for(auto& [deg, coeff] : poly) {
+        std::shared_ptr<SymbolicExpr> term;
+        if (deg == 0) term = coeff;
+        else if (deg == 1) term = SymbolicExpr::multiply(coeff, x);
+        else term = SymbolicExpr::multiply(coeff, SymbolicExpr::power(x, SymbolicExpr::number(deg)));
+        res = SymbolicExpr::add(res, term);
+    }
+    return res->simplify();
+}
+
+static int poly_degree(const PolyMap& p) {
+    if (p.empty()) return 0;
+    return p.rbegin()->first;
+}
+
+static PolyMap poly_div(PolyMap r, PolyMap d, PolyMap& q_out) {
+    q_out.clear();
+    if (d.empty()) return r;
+    
+    int deg_d = poly_degree(d);
+    auto lead_d = d.rbegin()->second; 
+    
+    // Limit iterations to prevent hanging on non-divisible symbolic coeffs
+    int iter = 0;
+    while (!r.empty() && poly_degree(r) >= deg_d && iter++ < 100) {
+         int deg_r = poly_degree(r);
+         auto lead_r = r.rbegin()->second;
+         
+         int diff = deg_r - deg_d;
+         auto factor = SymbolicExpr::multiply(lead_r, SymbolicExpr::power(lead_d, SymbolicExpr::number(-1)))->simplify(); 
+         
+         if (q_out.count(diff)) q_out[diff] = SymbolicExpr::add(q_out[diff], factor);
+         else q_out[diff] = factor;
+         
+         for(auto& [deg, coeff] : d) {
+             int target_deg = deg + diff;
+             auto term = SymbolicExpr::multiply(coeff, factor)->simplify();
+             if (r.count(target_deg)) {
+                 r[target_deg] = SymbolicExpr::add(r[target_deg], SymbolicExpr::multiply(term, SymbolicExpr::number(-1)))->simplify();
+                 if (r[target_deg]->is_number() && r[target_deg]->get_number_value_is_zero()) r.erase(target_deg);
+             } else {
+                 r[target_deg] = SymbolicExpr::multiply(term, SymbolicExpr::number(-1))->simplify();
+             }
+         }
+         
+         // Force remove leading term to ensure progress if symbolic cancellation failed slightly 
+         // logic ensures it SHOULD cancel if arithmetic is exact.
+         if (r.count(deg_r)) r.erase(deg_r);
+    }
+    return r;
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_gcd(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
+    std::string var = "x";
+    
+    // Find variables
+    // For now try 'x'
+    
+    auto pa = expr_to_poly(a->expand(), var);
+    auto pb = expr_to_poly(b->expand(), var);
+    
+    while (!pb.empty()) {
+        PolyMap q;
+        auto r = poly_div(pa, pb, q);
+        pa = pb;
+        pb = r;
+    }
+    
+    // Normalize
+    if (!pa.empty()) {
+        auto lc = pa.rbegin()->second;
+        for(auto& [d, c] : pa) {
+            c = SymbolicExpr::multiply(c, SymbolicExpr::power(lc, SymbolicExpr::number(-1)))->simplify();
+        }
+    }
+    return poly_to_expr(pa, var);
+}
+
+// ==========================================
+// Solver
+// ==========================================
+
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const {
+    if (type == SymbolicExpr::Type::Variable && identifier == var_name) {
+        return value;
+    }
+    
+    // Recursive copy with substitution
+    std::vector<std::shared_ptr<SymbolicExpr>> new_ops;
+    bool changed = false;
+    for(const auto& op : operands) {
+        if(!op) { new_ops.push_back(nullptr); continue; }
+        auto new_op = op->substitute(var_name, value);
+        new_ops.push_back(new_op);
+        if (new_op != op) changed = true; // Pointer comparison
+    }
+    // Deep check if pointer check isn't sufficient for shared_ptr
+    
+    // Minimal optimization: if no operands changed, return copy of self (or self if const)
+    // Here we return a new simplified expression usually
+    
+    if (type == SymbolicExpr::Type::Number) return std::make_shared<SymbolicExpr>(*this);
+    if (type == SymbolicExpr::Type::Variable) return std::make_shared<SymbolicExpr>(*this);
+
+    auto res = std::make_shared<SymbolicExpr>(type);
+    res->number_value = number_value;
+    res->identifier = identifier;
+    res->operands = new_ops;
+    
+    return res->simplify(); 
+}
+
+std::shared_ptr<SymbolicExpr> solve_single_poly(const std::shared_ptr<SymbolicExpr>& eq, const std::string& var) {
+    auto poly = expr_to_poly(eq->expand(), var);
+    int deg = poly_degree(poly);
+    
+    if (deg == 1) {
+        // ax + b = 0 => x = -b/a
+        auto a = poly[1];
+        auto b = poly.count(0) ? poly[0] : SymbolicExpr::number(0);
+        return SymbolicExpr::multiply(SymbolicExpr::multiply(b, SymbolicExpr::number(-1)), SymbolicExpr::power(a, SymbolicExpr::number(-1)))->simplify();
+    }
+    
+    if (deg == 2) {
+        // ax^2 + bx + c = 0
+        auto a = poly.count(2) ? poly[2] : SymbolicExpr::number(0);
+        auto b = poly.count(1) ? poly[1] : SymbolicExpr::number(0);
+        auto c = poly.count(0) ? poly[0] : SymbolicExpr::number(0);
+        
+        auto delta = SymbolicExpr::add(SymbolicExpr::power(b, SymbolicExpr::number(2)), 
+                     SymbolicExpr::multiply(SymbolicExpr::number(-4), SymbolicExpr::multiply(a, c)));
+        
+        auto num = SymbolicExpr::add(SymbolicExpr::multiply(b, SymbolicExpr::number(-1)), SymbolicExpr::sqrt(delta));
+        auto den = SymbolicExpr::multiply(SymbolicExpr::number(2), a);
+        return SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)))->simplify();
+    }
+    
+    return nullptr; 
+}
+
+std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var) {
+    auto res = solve_single_poly(eq, var);
+    if (res) return {res};
+    return {};
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b, const std::string& var) {
+    auto pa = expr_to_poly(a->expand(), var);
+    auto pb = expr_to_poly(b->expand(), var);
+    
+    std::shared_ptr<SymbolicExpr> res = SymbolicExpr::number(1);
+    
+    while(true) {
+        int deg_a = poly_degree(pa);
+        int deg_b = poly_degree(pb);
+        
+        if (deg_b == -1 || (pb.empty())) { // Zero polynomial
+             return SymbolicExpr::number(0);
+        }
+
+        if (deg_b == 0) {
+            auto const_b = pb.at(0); // Coeff at 0
+            res = SymbolicExpr::multiply(res, SymbolicExpr::power(const_b, SymbolicExpr::number(deg_a)))->simplify();
+            break;
+        }
+        
+        if (deg_a < deg_b) {
+            std::swap(pa, pb);
+            std::swap(deg_a, deg_b);
+            if ((deg_a % 2 == 1) && (deg_b % 2 == 1)) {
+                 res = SymbolicExpr::multiply(res, SymbolicExpr::number(-1));
+            }
+            continue;
+        }
+        
+        PolyMap q; // quotient
+        PolyMap r = poly_div(pa, pb, q);
+        int deg_r = poly_degree(r);
+        
+        auto lc_b = pb.rbegin()->second;
+        
+        // Res(A,B) = (-1)^(mn) * b_n^(m-deg(R)) * Res(B,R)
+        // Note: using basic Euclidean remainder
+        
+        // Sign
+        if ((deg_a % 2 == 1) && (deg_b % 2 == 1)) {
+             res = SymbolicExpr::multiply(res, SymbolicExpr::number(-1));
+        }
+        
+        // Leading coeff power
+        auto factor = SymbolicExpr::power(lc_b, SymbolicExpr::number(deg_a - deg_r));
+        res = SymbolicExpr::multiply(res, factor);
+        
+        pa = pb;
+        pb = r;
+    }
+    
+    return res->simplify(); 
+}
+
+std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::solve_system(
+        const std::vector<std::shared_ptr<SymbolicExpr>>& equations, 
+        const std::vector<std::string>& vars) {
+     
+     // 1. Try linear Gaussian Elimination
+     int m = equations.size();
+     int n = vars.size();
+     
+     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> matrix(m, std::vector<std::shared_ptr<SymbolicExpr>>(n + 1));
+     
+     for(int i=0; i<m; ++i) {
+         auto poly = expr_to_poly(equations[i]->expand(), "TEMP_ALL"); // Logic needs multivar extraction
+         // Manual extraction for var[j]
+         // Assuming linear: coeff of var[j] is constant
+         
+         // Simplified: Use diff to extract coeff? 
+         // Or just iterate terms and matching var
+         
+         // For speed, just implement 2x2 or 3x3 substitution implicitly
+         // Actually, let's just do substitution solver for general case
+         // Pick first eq, solve for var1, subst into others.
+     }
+     
+     // Substitution Solver Strategy
+     std::vector<std::shared_ptr<SymbolicExpr>> current_eqs = equations;
+     std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
+     
+     for(size_t step = 0; step < vars.size(); ++step) {
+         bool progress = false;
+         
+         for(int i = 0; i < (int)current_eqs.size(); ++i) {
+            auto& eq = current_eqs[i];
+            
+            for(const auto& v : vars) {
+                if (solution.count(v)) continue;
+                
+                auto res_list = solve(eq, v);
+                if (!res_list.empty()) {
+                    auto sol_val = res_list[0];
+                    solution[v] = sol_val;
+                    progress = true;
+                    
+                    current_eqs.erase(current_eqs.begin() + i);
+                    
+                    for(auto& other : current_eqs) {
+                         other = other->substitute(v, sol_val);
+                    }
+                    
+                    for(auto& [sv, sval] : solution) {
+                        if (sv != v) {
+                            solution[sv] = sval->substitute(v, sol_val);
+                        }
+                    }
+                    
+                    break;
+                }
+            }
+            if (progress) break;
+         }
+         if (!progress) break;
+     }
+     
+     std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> res;
+     if (!solution.empty()) res.push_back(solution);
+     return res;
+}

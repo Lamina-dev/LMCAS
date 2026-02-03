@@ -184,9 +184,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_multiply() const {
 	if (left->is_number() && left->convert_rational() == ::Rational(1)) return right;
 	if (right->is_number() && right->convert_rational() == ::Rational(1)) return left;
 
+	/*
 	if (left->type == SymbolicExpr::Type::Add || right->type == SymbolicExpr::Type::Add) {
 		return SymbolicExpr::multiply(left, right)->expand();
 	}
+	*/
 
 	std::vector<std::shared_ptr<SymbolicExpr>> terms;
 	::Rational coeff(1);
@@ -255,14 +257,21 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_multiply() const {
 	}
 	
 	std::shared_ptr<SymbolicExpr> result;
-	if (coeff != ::Rational(1) || merged.empty()) {
-		result = SymbolicExpr::number(coeff);
-	}
-	
-	for (const auto& t : merged) {
-		if (!result) result = t;
-		else result = SymbolicExpr::multiply(result, t);
-	}
+    
+    if (merged.empty()) {
+        result = SymbolicExpr::number(coeff);
+    } else {
+        // Build right-associative chain: t1 * (t2 * (...))
+        result = merged.back();
+        for (int i = (int)merged.size() - 2; i >= 0; --i) {
+            result = SymbolicExpr::multiply(merged[i], result);
+        }
+        
+        // Multiply by coeff at the top
+        if (coeff != ::Rational(1)) {
+            result = SymbolicExpr::multiply(SymbolicExpr::number(coeff), result);
+        }
+    }
 	
     auto return_res = result ? result : SymbolicExpr::number(1);
     return return_res;
@@ -339,7 +348,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_add() const {
              } else {
                  // Push current
                  if (curr_t->is_number() && curr_t->convert_rational() == ::Rational(1)) {
-                     merged.push_back(make_num_node(curr_c));
+                     if (curr_c != ::Rational(0)) {
+                         merged.push_back(make_num_node(curr_c));
+                     }
                  } else {
                      if (curr_c == ::Rational(0)) {
                          // Drop
@@ -608,42 +619,10 @@ static std::shared_ptr<SymbolicExpr> expand_power_integer(const std::shared_ptr<
     return distribute_multiply(base, rest);
 }
 
+/*
 std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
-    std::vector<std::shared_ptr<SymbolicExpr>> new_ops;
-    for (auto& op : operands) {
-        if (op) new_ops.push_back(op->expand());
-        else new_ops.push_back(nullptr);
-    }
-    
-    switch (type) {
-        case Type::Add: {
-            if (new_ops.size() == 2) {
-                 return SymbolicExpr::add(new_ops[0], new_ops[1])->simplify();
-            }
-            break;
-        }
-        case Type::Multiply: {
-            if (new_ops.size() == 2) {
-                return distribute_multiply(new_ops[0], new_ops[1])->simplify();
-            }
-            break;
-        }
-        case Type::Power: {
-             if (new_ops.size() >= 2 && new_ops[1]->is_number()) {
-                 auto exp_rat = new_ops[1]->convert_rational();
-                 if (exp_rat.get_denominator() == 1) {
-                     long long exp_val = exp_rat.get_numerator().to_int();
-                     if (exp_val > 0 && exp_val < 10) { // Safety limit: only expand small powers
-                         return expand_power_integer(new_ops[0], (int)exp_val)->simplify();
-                     }
-                 }
-             }
-             return SymbolicExpr::power(new_ops[0], new_ops[1])->simplify();
-        }
-        default: break;
-    }
-    
-    auto res = std::make_shared<SymbolicExpr>(*this);
-    res->operands = new_ops;
-    return res->simplify();
+    // Moved to symbolic_poly.cpp
+    return std::const_pointer_cast<SymbolicExpr>(shared_from_this());
 }
+*/
+
