@@ -632,6 +632,177 @@ static std::shared_ptr<SymbolicExpr> expand_power_integer(const std::shared_ptr<
     return distribute_multiply(base, rest);
 }
 
+// --- Trigonometric Simplifications ---
+
+// Helper: matches c * pi or pi * c or pi
+// Returns pair {bool matched, Rational c}
+static std::pair<bool, Rational> match_pi_multiple(const std::shared_ptr<SymbolicExpr>& expr) {
+    if (expr->type == SymbolicExpr::Type::Variable && (expr->identifier == "π" || expr->identifier == "pi")) {
+        return {true, Rational(1)};
+    }
+    
+    if (expr->type == SymbolicExpr::Type::Multiply && expr->operands.size() == 2) {
+        auto left = expr->operands[0];
+        auto right = expr->operands[1];
+        
+        bool left_is_pi = (left->type == SymbolicExpr::Type::Variable && (left->identifier == "π" || left->identifier == "pi"));
+        bool right_is_pi = (right->type == SymbolicExpr::Type::Variable && (right->identifier == "π" || right->identifier == "pi"));
+        
+        if (left_is_pi && right->is_number()) return {true, right->convert_rational()};
+        if (right_is_pi && left->is_number()) return {true, left->convert_rational()};
+    }
+    
+    return {false, Rational(0)};
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_sin() const {
+    auto arg = operands[0]->simplify();
+    
+    // sin(0) = 0
+    if (arg->is_number() && arg->convert_rational() == Rational(0)) return SymbolicExpr::number(0);
+    
+    // sin(-x) = -sin(x)
+    if (arg->type == SymbolicExpr::Type::Multiply && arg->operands.size() == 2) {
+        if (arg->operands[0]->is_number() && arg->operands[0]->convert_rational() == Rational(-1)) {
+            // sin(-u) -> -sin(u)
+            return SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::sin(arg->operands[1]))->simplify();
+        }
+    }
+    
+    // Check for k * pi
+    auto pi_match = match_pi_multiple(arg);
+    if (pi_match.first) {
+        Rational k = pi_match.second;
+        // sin(n * pi) = 0 for integer n
+        if (k.is_integer()) return SymbolicExpr::number(0);
+        
+        // sin( (2n+1)/2 * pi ) = (-1)^n
+        // k = n + 1/2 -> 2k = 2n + 1 an odd integer
+        Rational two_k = k * Rational(2);
+        if (two_k.is_integer()) {
+            BigInt bk = two_k.get_numerator(); // This is 2k
+            // Check if 2k is odd (not even)
+            bool is_even = (bk._size == 0) || !(bk._data[0] & 1);
+            if (!is_even) {
+                // n = (2k - 1) / 4 ?? No.
+                // Let 2k = m (odd). k = m/2.
+                // sin(m/2 * pi).
+                // m = 1 (pi/2) -> 1
+                // m = 3 (3pi/2) -> -1
+                // m = 5 -> 1
+                // Pattern: (m-1)/2 is even -> 1, odd -> -1 ?
+                // m=1 -> 0 -> 1. m=3 -> 1 -> -1.
+                // index = (m-1)/2. if index even -> 1.
+                
+                // We need m % 4.
+                // 1 % 4 = 1 -> 1
+                // 3 % 4 = 3 -> -1
+                // 5 % 4 = 1 -> 1
+                // -1 % 4 = -1 -> 3 -> -1
+                
+                BigInt m = bk;
+                long long m_ll = 0;
+                try { m_ll = std::stoll(m.to_string()); } catch(...) { return SymbolicExpr::sin(arg); } // Too big
+                
+                long long rem = m_ll % 4;
+                if (rem < 0) rem += 4;
+                
+                if (rem == 1) return SymbolicExpr::number(1);
+                if (rem == 3) return SymbolicExpr::number(-1);
+            }
+        }
+        
+        // Standard values: pi/6, pi/4, pi/3
+        // sin(pi/6) = 1/2
+        if (k == Rational(1, 6)) return SymbolicExpr::number(Rational(1, 2));
+        // sin(pi/4) = sqrt(2)/2
+        if (k == Rational(1, 4)) {
+            auto sq2 = SymbolicExpr::sqrt(SymbolicExpr::number(2));
+            return SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), sq2)->simplify();
+        }
+        // sin(pi/3) = sqrt(3)/2
+        if (k == Rational(1, 3)) {
+            auto sq3 = SymbolicExpr::sqrt(SymbolicExpr::number(3));
+            return SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), sq3)->simplify();
+        }
+    }
+
+    return SymbolicExpr::sin(arg);
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_cos() const {
+    auto arg = operands[0]->simplify();
+    
+    // cos(0) = 1
+    if (arg->is_number() && arg->convert_rational() == Rational(0)) return SymbolicExpr::number(1);
+    
+    // cos(-x) = cos(x)
+    if (arg->type == SymbolicExpr::Type::Multiply && arg->operands.size() == 2) {
+        if (arg->operands[0]->is_number() && arg->operands[0]->convert_rational() == Rational(-1)) {
+            return SymbolicExpr::cos(arg->operands[1])->simplify();
+        }
+    }
+    
+    auto pi_match = match_pi_multiple(arg);
+    if (pi_match.first) {
+        Rational k = pi_match.second;
+        // cos(pi) = -1, cos(2pi) = 1
+        if (k.is_integer()) {
+            BigInt num = k.get_numerator();
+            bool num_even = (num._size == 0 || !(num._data[0] & 1));
+            if (num_even) return SymbolicExpr::number(1);
+            else return SymbolicExpr::number(-1);
+        }
+        
+        // cos(pi/2 + n*pi) = 0
+        Rational two_k = k * Rational(2);
+        if (two_k.is_integer()) {
+            BigInt bk = two_k.get_numerator();
+            bool bk_even = (bk._size == 0 || !(bk._data[0] & 1));
+            if (!bk_even) return SymbolicExpr::number(0);
+        }
+        
+        // cos(pi/6) = sqrt(3)/2
+        if (k == Rational(1, 6)) {
+             auto sq3 = SymbolicExpr::sqrt(SymbolicExpr::number(3));
+             return SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), sq3)->simplify();
+        }
+        // cos(pi/4) = sqrt(2)/2
+        if (k == Rational(1, 4)) {
+             auto sq2 = SymbolicExpr::sqrt(SymbolicExpr::number(2));
+             return SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), sq2)->simplify();
+        }
+        // cos(pi/3) = 1/2
+        if (k == Rational(1, 3)) {
+             return SymbolicExpr::number(Rational(1, 2));
+        }
+    }
+
+    return SymbolicExpr::cos(arg);
+}
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_tan() const {
+    auto arg = operands[0]->simplify();
+    
+    if (arg->is_number() && arg->convert_rational() == Rational(0)) return SymbolicExpr::number(0);
+    
+    if (arg->type == SymbolicExpr::Type::Multiply && arg->operands.size() == 2) {
+        if (arg->operands[0]->is_number() && arg->operands[0]->convert_rational() == Rational(-1)) {
+             return SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::tan(arg->operands[1]))->simplify();
+        }
+    }
+    
+    // tan(pi/4) = 1
+    auto pi_match = match_pi_multiple(arg);
+    if (pi_match.first) {
+        Rational k = pi_match.second;
+        if (k == Rational(1, 4)) return SymbolicExpr::number(1);
+        if (k.is_integer()) return SymbolicExpr::number(0);
+    }
+    
+    return SymbolicExpr::tan(arg);
+}
+
 /*
 std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
     // Moved to symbolic_poly.cpp

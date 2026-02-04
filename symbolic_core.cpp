@@ -121,6 +121,10 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
                                 return SymbolicExpr::ln(val);
                         }
 
+                        case Type::Sin: return simplify_sin();
+                        case Type::Cos: return simplify_cos();
+                        case Type::Tan: return simplify_tan();
+
                         default:
                                 // TODO: Recursive simplify for other functions
                                 return std::make_shared<SymbolicExpr>(*this);

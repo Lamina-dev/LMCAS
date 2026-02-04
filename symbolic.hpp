@@ -531,4 +531,7 @@ private:
     std::shared_ptr<SymbolicExpr> simplify_multiply() const;
     std::shared_ptr<SymbolicExpr> simplify_add() const;
     std::shared_ptr<SymbolicExpr> simplify_power() const;
+    std::shared_ptr<SymbolicExpr> simplify_sin() const;
+    std::shared_ptr<SymbolicExpr> simplify_cos() const;
+    std::shared_ptr<SymbolicExpr> simplify_tan() const;
 };
