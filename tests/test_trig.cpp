@@ -1,5 +1,5 @@
 #include "test_common.hpp"
-#include "../symbolic.hpp"
+#include "symbolic.hpp"
 
 int main() {
     auto x = SymbolicExpr::variable("x");

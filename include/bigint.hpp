@@ -4,8 +4,8 @@
 #define _STATIC_ASSERT(x) static_assert(x, #x)
 #endif
 
-#include "LAMMP/include/lammp/lmmp.h"
-#include "LAMMP/include/lammp/lmmpn.h"
+#include "lammp/lmmp.h"
+#include "lammp/lmmpn.h"
 #include <vector>
 #include <cstdlib>
 #include <cstring>

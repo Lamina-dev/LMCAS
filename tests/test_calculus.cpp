@@ -1,5 +1,5 @@
 #include "test_common.hpp"
-#include "../symbolic.hpp"
+#include "symbolic.hpp"
 
 // 隐式依赖简化版的 symbolic.hpp
 // 测试新微积分功能的基本能力

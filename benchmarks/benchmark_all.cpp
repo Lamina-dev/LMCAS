@@ -5,8 +5,8 @@
 #include <string>
 #include <iomanip>
 
-#include "../symbolic.hpp"
-#include "../cas.hpp"
+#include "symbolic.hpp"
+#include "cas.hpp"
 
 // Simple Timer Class
 class Timer {

@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstdlib>
 #include <memory>
-#include "../symbolic.hpp"
+#include "symbolic.hpp"
 
 inline int g_failures = 0;
 

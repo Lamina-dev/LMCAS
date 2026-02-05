@@ -18,13 +18,13 @@ add_subdirectory(LAMMP)
 
 # LMCAS 库
 add_library(lmcas SHARED
-    cas.cpp
-    symbolic_core.cpp
-    symbolic_simplify.cpp
-    symbolic_simplify_ln.cpp
-    symbolic_calculus.cpp
-    symbolic_matrix.cpp
-    symbolic_poly.cpp
+    src/cas.cpp
+    src/symbolic_core.cpp
+    src/symbolic_simplify.cpp
+    src/symbolic_simplify_ln.cpp
+    src/symbolic_calculus.cpp
+    src/symbolic_matrix.cpp
+    src/symbolic_poly.cpp
 )
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
@@ -35,7 +35,7 @@ endif()
 
 # 包含路径
 target_include_directories(lmcas PUBLIC 
-    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/LAMMP/include
 )
 
