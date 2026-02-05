@@ -152,6 +152,12 @@ public:
     // Calculate indefinite integral with respect to var
     std::shared_ptr<SymbolicExpr> integrate(const std::string& var) const;
 
+    // Calculate Taylor/Maclaurin Series expansion
+    // var: variable to expand around
+    // point: point a in (x-a)^n (expression, e.g., number(0))
+    // order: maximum power n
+    std::shared_ptr<SymbolicExpr> series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order) const;
+
     // Helper to create divide (since it is usually multiply by power -1, but having a static helper is nice)
     static std::shared_ptr<SymbolicExpr> divide(const std::shared_ptr<SymbolicExpr>& num, const std::shared_ptr<SymbolicExpr>& den);
 

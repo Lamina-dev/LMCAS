@@ -72,10 +72,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
 	//if (already_simplified) return std::make_shared<SymbolicExpr>(*this);
 	
 	static int current_simplify_level = 0;
-	const int max_simplify_level = 30;
+	const int max_simplify_level = 200; // Increased limit for complex calculus
 	if (current_simplify_level > max_simplify_level) {
-		// 不用 err_stream
-		std::cerr << "[Warning] SymbolicExpr: reaching maximum simplifying depth\n";
+		// Stop recursion to prevent stack overflow and endless warnings
+		// err_stream << "[Warning] SymbolicExpr: Reaching maximum simplifying depth (" << max_simplify_level << "). Return unsimplified.\n";
+		return std::make_shared<SymbolicExpr>(*this);
 	}
 	current_simplify_level++;
 	

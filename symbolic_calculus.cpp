@@ -287,6 +287,75 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate(const std::string& var
     }
 }
 
+// ==========================================
+// Taylor/Maclaurin Series Expansion
+// ==========================================
+std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order) const {
+    if (order < 0) return SymbolicExpr::number(0);
+
+    // Initial term f(x)
+    std::shared_ptr<const SymbolicExpr> current_deriv_const = shared_from_this();
+    // We use a shared_ptr<SymbolicExpr> for the loop, but for the first iteration we need to start from 'this'.
+    // Since differentiate/simplify returns new mutable objects, we can just switch to mutable ptrs after first step,
+    // or cast 'this' to mutable (safe since we don't mutate the object itself).
+    std::shared_ptr<SymbolicExpr> current_deriv = std::const_pointer_cast<SymbolicExpr>(current_deriv_const);
+
+    // Result accumulator
+    std::shared_ptr<SymbolicExpr> result = SymbolicExpr::number(0);
+
+    // Precompute (x-a) term for efficiency
+    // If point is 0, it is just x.
+    std::shared_ptr<SymbolicExpr> x_minus_a;
+    if (point->is_number() && point->number_value == 0) {
+        x_minus_a = SymbolicExpr::variable(var);
+    } else {
+        auto neg_point = SymbolicExpr::multiply(point, SymbolicExpr::number(-1));
+        x_minus_a = SymbolicExpr::add(SymbolicExpr::variable(var), neg_point);
+    }
+
+    BigInt factorial = 1;
+    
+    for (int n = 0; n <= order; ++n) {
+        // Evaluate nth derivative at x = point
+        auto coeff = current_deriv->substitute(var, point)->simplify();
+
+        // Add term if coeff is not zero
+        if (!(coeff->is_number() && coeff->number_value == Rational(0))) {
+            std::shared_ptr<SymbolicExpr> term = coeff;
+            
+            // Divide by n!
+            if (factorial > BigInt(1)) {
+                 term = SymbolicExpr::divide(term, SymbolicExpr::number(factorial))->simplify();
+            }
+            
+            // Multiply by (x-a)^n
+            if (n > 0) {
+                std::shared_ptr<SymbolicExpr> poly_part;
+                if (n == 1) {
+                    poly_part = x_minus_a;
+                } else {
+                    poly_part = SymbolicExpr::power(x_minus_a, SymbolicExpr::number(n));
+                }
+                term = SymbolicExpr::multiply(term, poly_part);
+            }
+            
+            result = SymbolicExpr::add(result, term);
+        }
+
+        // Prepare next derivative (only if not last iteration)
+        if (n < order) {
+             current_deriv = current_deriv->differentiate(var)->simplify();
+             if (current_deriv->is_number() && current_deriv->number_value == Rational(0)) {
+                 // Derivative is zero, subsequent derivatives will be zero
+                 break; 
+             }
+             factorial = factorial * BigInt(n + 1);
+        }
+    }
+
+    return result->simplify();
+}
+
 // Solver implementation (basic)
 // Solves LHS = RHS for var
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_internal(

@@ -377,90 +377,196 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
 // Extension: Expansion, GCD, Solver
 // ==========================================
 
-// Helper for distributing sums: (a+b)*(c+d)
-static std::shared_ptr<SymbolicExpr> expand_distribute(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
-    std::function<void(const std::shared_ptr<SymbolicExpr>&, std::vector<std::shared_ptr<SymbolicExpr>>&)> collect_terms;
-    collect_terms = [&](const std::shared_ptr<SymbolicExpr>& e, std::vector<std::shared_ptr<SymbolicExpr>>& terms) {
-        if (e->type == SymbolicExpr::Type::Add) {
-            for(const auto& op : e->operands) collect_terms(op, terms);
-        } else {
-            terms.push_back(e);
+namespace {
+
+    // Fast Polynomial Expansion Implementation using distributed representation
+    // Monomial: Map of {Expr -> Exponent}
+    // Polynomial: Map of {Monomial -> Rational Coefficient}
+    
+    struct ExprLess {
+        bool operator()(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) const {
+            if (!a && !b) return false;
+            if (!a) return true;
+            if (!b) return false;
+            return a->compare(b) < 0; 
         }
     };
     
-    std::vector<std::shared_ptr<SymbolicExpr>> terms_a;
-    collect_terms(a, terms_a);
+    using Monomial = std::map<std::shared_ptr<SymbolicExpr>, int, ExprLess>;
+    using DistPolyMap = std::map<Monomial, Rational>;
     
-    std::vector<std::shared_ptr<SymbolicExpr>> terms_b;
-    collect_terms(b, terms_b);
-    
-    std::shared_ptr<SymbolicExpr> res = SymbolicExpr::number(0);
-    
-    // (a1...an) * (b1...bm) -> sum(ai * bj)
-    for(const auto& ta : terms_a) {
-        for(const auto& tb : terms_b) {
-            auto prod = SymbolicExpr::multiply(ta, tb); 
-            res = SymbolicExpr::add(res, prod); 
+    DistPolyMap poly_add(const DistPolyMap& a, const DistPolyMap& b) {
+        DistPolyMap res = a;
+        for (const auto& [m, c] : b) {
+            res[m] = res[m] + c;
         }
-    }
-    // simplify should flatten adds
-    auto sim = res->simplify();
-    return sim;
-}
-
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
-    // 1. Expand operands first
-    std::vector<std::shared_ptr<SymbolicExpr>> exp_ops;
-    for(const auto& op : operands) {
-        if(op) exp_ops.push_back(op->expand());
-    }
-
-    if (type == Type::Add) {
-        auto res = SymbolicExpr::number(0);
-        for(const auto& op : exp_ops) {
-            res = SymbolicExpr::add(res, op);
+        // Clean up zeros
+        for (auto it = res.begin(); it != res.end(); ) {
+            if (it->second == Rational(0)) it = res.erase(it);
+            else ++it;
         }
-        return res->simplify();
+        return res;
     }
     
-    if (type == Type::Multiply) {
-        if (exp_ops.empty()) return SymbolicExpr::number(1);
-        auto current = exp_ops[0];
-        for(size_t i=1; i<exp_ops.size(); ++i) {
-            auto next_op = exp_ops[i];
-            current = expand_distribute(current, next_op);
-        }
-        return current;
-    }
-    
-    if (type == Type::Power) {
-        auto base = exp_ops[0];
-        auto exp = exp_ops[1]; 
+    DistPolyMap poly_mul(const DistPolyMap& a, const DistPolyMap& b) {
+        DistPolyMap res;
+        if (a.empty() || b.empty()) return res;
         
-        if (exp->is_number()) {
-            Rational r = exp->convert_rational();
-            if (r.is_integer() && r > Rational(1) && r < Rational(20)) {
-                // (a+b)^n -> expand
-                long long n = (long long)r.to_double();
-                auto current = base;
-                for(int i=1; i<n; ++i) {
-                    current = expand_distribute(current, base);
+        for (const auto& [ma, ca] : a) {
+            for (const auto& [mb, cb] : b) {
+                Rational coef = ca * cb;
+                if (coef == Rational(0)) continue;
+                 
+                Monomial m_new = ma;
+                for (const auto& [base, exp] : mb) {
+                    m_new[base] += exp;
                 }
-                return current;
+                res[m_new] = res[m_new] + coef;
             }
         }
-        return SymbolicExpr::power(base, exp);
+        for (auto it = res.begin(); it != res.end(); ) {
+             if (it->second == Rational(0)) it = res.erase(it);
+             else ++it;
+        }
+        return res;
     }
     
-    // Default: restructure
-    std::shared_ptr<SymbolicExpr> current = std::make_shared<SymbolicExpr>(type);
-    current->identifier = identifier;
-    current->number_value = number_value;
-    current->operands = exp_ops;
+    DistPolyMap poly_pow(const DistPolyMap& base, int exp) {
+        if (exp == 0) {
+            DistPolyMap one;
+            one[{}] = Rational(1);
+            return one;
+        }
+        if (base.empty()) return base; // 0^n = 0
+        if (exp == 1) return base;
+        
+        DistPolyMap res;
+        res[{}] = Rational(1);
+        DistPolyMap a = base;
+        int n = exp;
+        while (n > 0) {
+            if (n & 1) res = poly_mul(res, a);
+            a = poly_mul(a, a);
+            n >>= 1;
+        }
+        return res;
+    }
     
-    return current; 
-}
+    DistPolyMap to_poly(const std::shared_ptr<SymbolicExpr>& e) {
+        DistPolyMap res;
+        if (!e) return res;
+    
+        if (e->type == SymbolicExpr::Type::Add) {
+            for (const auto& op : e->operands) {
+                res = poly_add(res, to_poly(op));
+            }
+        } else if (e->type == SymbolicExpr::Type::Multiply) {
+            res[{}] = Rational(1);
+            for (const auto& op : e->operands) {
+                res = poly_mul(res, to_poly(op));
+            }
+        } else if (e->is_number()) {
+            res[{}] = e->convert_rational();
+        } else if (e->type == SymbolicExpr::Type::Power && e->operands.size() > 1 && e->operands[1]->is_number()) {
+            Rational r = e->operands[1]->convert_rational();
+            if (r.is_integer() && r > Rational(0)) {
+                 // Optimization: if exponent helps expansion
+                 // We always expand integer powers in this mode
+                res = poly_pow(to_poly(e->operands[0]), (int)r.to_double());
+            } else {
+                Monomial m; m[e] = 1; res[m] = Rational(1);
+            }
+        } else {
+            Monomial m; m[e] = 1; res[m] = Rational(1);
+        }
+        return res;
+    }
+    
+    std::shared_ptr<SymbolicExpr> from_poly(const DistPolyMap& p) {
+        if (p.empty()) return SymbolicExpr::number(0);
+        
+        std::vector<std::shared_ptr<SymbolicExpr>> terms;
+        for (auto it = p.begin(); it != p.end(); ++it) {
+            const auto& mono = it->first;
+            const auto& coeff = it->second;
+            
+            std::vector<std::shared_ptr<SymbolicExpr>> factors;
+            
+            // Handle coefficient
+            if (coeff != Rational(1)) {
+                if (coeff.get_denominator() == BigInt(1)) {
+                     factors.push_back(SymbolicExpr::number(coeff.get_numerator()));
+                } else {
+                     auto num = SymbolicExpr::number(coeff.get_numerator());
+                     auto den = SymbolicExpr::number(coeff.get_denominator());
+                     factors.push_back(SymbolicExpr::divide(num, den));
+                }
+            }
+            
+            for (const auto& [base, exp] : mono) {
+                if (exp == 0) continue;
+                if (exp == 1) factors.push_back(base);
+                else factors.push_back(SymbolicExpr::power(base, SymbolicExpr::number(exp)));
+            }
+            
+            if (factors.empty()) {
+                terms.push_back(SymbolicExpr::number(1));
+            } else if (factors.size() == 1) {
+                terms.push_back(factors[0]);
+            } else {
+                // Multiply
+                std::shared_ptr<SymbolicExpr> term = factors[0];
+                for(size_t i=1; i<factors.size(); ++i) term = SymbolicExpr::multiply(term, factors[i]);
+                terms.push_back(term);
+            }
+        }
+        
+        if (terms.empty()) return SymbolicExpr::number(0);
+        std::shared_ptr<SymbolicExpr> final_expr = terms[0];
+        for(size_t i=1; i<terms.size(); ++i) final_expr = SymbolicExpr::add(final_expr, terms[i]);
+        
+        return final_expr;
+    }
+    
+    } // namespace
+    
+    std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
+        // 1. Expand operands first
+        std::vector<std::shared_ptr<SymbolicExpr>> exp_ops;
+        for(const auto& op : operands) {
+            if(op) exp_ops.push_back(op->expand());
+        }
+        
+        // Construct expanded node
+        std::shared_ptr<SymbolicExpr> current;
+        if (type == Type::Add) {
+            current = SymbolicExpr::number(0); 
+            for(const auto& op : exp_ops) current = SymbolicExpr::add(current, op);
+        } else if (type == Type::Multiply) {
+            if (exp_ops.empty()) current = SymbolicExpr::number(1);
+            else {
+                current = exp_ops[0];
+                for(size_t i=1; i<exp_ops.size(); ++i) current = SymbolicExpr::multiply(current, exp_ops[i]);
+            }
+        } else if (type == Type::Power) {
+            current = SymbolicExpr::power(exp_ops[0], exp_ops[1]);
+        } else {
+             // Create shallow copy with expanded ops
+             auto n = std::make_shared<SymbolicExpr>(type);
+             n->identifier = identifier;
+             n->number_value = number_value;
+             n->operands = exp_ops;
+             current = n;
+        }
+    
+        // 2. Apply fast polynomial expansion
+        if (type == Type::Add || type == Type::Multiply || (type == Type::Power && operands.size() > 1 && operands[1]->is_number() && operands[1]->convert_rational().is_integer())) {
+            // We pass 'current' which has expanded operands
+            return from_poly(to_poly(current));
+        }
+        
+        return current;
+    }
 
 // ==========================================
 // Polynomial GCD
