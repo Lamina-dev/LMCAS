@@ -108,19 +108,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
                                 )->simplify();
                         }
                         
-                        case Type::Ln: {
-                                auto val = operands[0]->simplify();
-                                if (val->is_number()) {
-                                    if (val->convert_rational() == ::Rational(1)) return SymbolicExpr::number(0);
-                                    // if (val->convert_rational() == ::Rational(e)) return 1; // Need constant e support
-                                }
-                                if (val->type == Type::Power) {
-                                    // ln(x^y) -> y*ln(x)
-                                    return SymbolicExpr::multiply(val->operands[1], SymbolicExpr::ln(val->operands[0]))->simplify();
-                                }
-                                // Return new node with simplified operand
-                                return SymbolicExpr::ln(val);
-                        }
+                        case Type::Ln:
+                                return simplify_ln();
 
                         case Type::Sin: return simplify_sin();
                         case Type::Cos: return simplify_cos();

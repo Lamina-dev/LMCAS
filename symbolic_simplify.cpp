@@ -585,7 +585,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_power() const {
 		// 防止死循环
 		if (rconv.get_denominator() == ::BigInt(1) && rconv.get_numerator() >= ::BigInt(-3) && rconv.get_numerator() < ::BigInt(-1)) {
 			// 转为倒数的情况
-			return SymbolicExpr::power(SymbolicExpr::power(base, SymbolicExpr::number(rconv.get_numerator())), SymbolicExpr::number(-1))->simplify();
+			return SymbolicExpr::power(SymbolicExpr::power(base, SymbolicExpr::number(rconv.get_numerator().Abs())), SymbolicExpr::number(-1))->simplify();
 		}
 		if (rconv.get_denominator() == ::BigInt(1) && rconv.get_numerator() > ::BigInt(1) && rconv.get_numerator() <= ::BigInt(4)) {
 			int exps = rconv.get_numerator().to_int();

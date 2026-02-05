@@ -306,7 +306,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const
     // Precompute (x-a) term for efficiency
     // If point is 0, it is just x.
     std::shared_ptr<SymbolicExpr> x_minus_a;
-    if (point->is_number() && point->number_value == 0) {
+    if (point->is_number() && point->convert_rational().is_zero()) {
         x_minus_a = SymbolicExpr::variable(var);
     } else {
         auto neg_point = SymbolicExpr::multiply(point, SymbolicExpr::number(-1));
@@ -320,7 +320,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const
         auto coeff = current_deriv->substitute(var, point)->simplify();
 
         // Add term if coeff is not zero
-        if (!(coeff->is_number() && coeff->number_value == Rational(0))) {
+        if (!(coeff->is_number() && coeff->convert_rational().is_zero())) {
             std::shared_ptr<SymbolicExpr> term = coeff;
             
             // Divide by n!
@@ -345,7 +345,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const
         // Prepare next derivative (only if not last iteration)
         if (n < order) {
              current_deriv = current_deriv->differentiate(var)->simplify();
-             if (current_deriv->is_number() && current_deriv->number_value == Rational(0)) {
+             if (current_deriv->is_number() && current_deriv->convert_rational().is_zero()) {
                  // Derivative is zero, subsequent derivatives will be zero
                  break; 
              }

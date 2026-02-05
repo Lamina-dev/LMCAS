@@ -21,6 +21,7 @@ add_library(lmcas SHARED
     cas.cpp
     symbolic_core.cpp
     symbolic_simplify.cpp
+    symbolic_simplify_ln.cpp
     symbolic_calculus.cpp
     symbolic_matrix.cpp
     symbolic_poly.cpp

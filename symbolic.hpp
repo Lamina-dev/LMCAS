@@ -69,7 +69,7 @@ inline std::ostream &debug_stream() {
 // 符号表达式系统
 // 支持精确的数学表达式，不进行数值近似
 
-class LAMINA_API SymbolicExpr {
+class LAMINA_API SymbolicExpr : public std::enable_shared_from_this<SymbolicExpr> {
 public:
     enum class Type {
         Number,      // 数字 (BigInt, Rational, int)
@@ -419,6 +419,11 @@ public:
         return expr;
     }
 
+    static std::shared_ptr<SymbolicExpr> exp(std::shared_ptr<SymbolicExpr> op) {
+        // e^x is represented as power(variable("e"), op)
+        return power(variable("e"), op);
+    }
+
     static std::shared_ptr<SymbolicExpr> log(std::shared_ptr<SymbolicExpr> val, std::shared_ptr<SymbolicExpr> base) {
         auto expr = std::make_shared<SymbolicExpr>(Type::Log);
         expr->operands.push_back(val);
@@ -540,4 +545,5 @@ private:
     std::shared_ptr<SymbolicExpr> simplify_sin() const;
     std::shared_ptr<SymbolicExpr> simplify_cos() const;
     std::shared_ptr<SymbolicExpr> simplify_tan() const;
+    std::shared_ptr<SymbolicExpr> simplify_ln() const;
 };
