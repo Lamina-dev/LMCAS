@@ -12,19 +12,6 @@ private:
     BigInt numerator;
     BigInt denominator;
 
-    // 求最大公约数
-    static BigInt gcd(const BigInt& a, const BigInt& b) {
-        BigInt abs_a = a.Abs();
-        BigInt abs_b = b.Abs();
-
-        while (abs_b) {
-            BigInt temp = abs_b;
-            abs_b = abs_a % abs_b;
-            abs_a = temp;
-        }
-        return abs_a;
-    }
-
     // 化简分数
     void simplify() {
         if (!denominator) {
@@ -38,7 +25,7 @@ private:
         }
 
         // 化简
-        BigInt g = gcd(numerator, denominator);
+        BigInt g = BigInt::gcd(numerator, denominator);
         if (g != 0 && g != 1) {
             numerator = numerator / g;
             denominator = denominator / g;

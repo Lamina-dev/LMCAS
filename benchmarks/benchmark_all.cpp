@@ -58,9 +58,26 @@ void bench_matrix_determinant(int n) {
 
 void bench_bigint_factorial() {
     Timer t("BigInt Factorial 1000!");
-    BigInt res = 1;
-    for(int i=1; i<=1000; ++i) {
-        res = res * BigInt(i);
+    BigInt res = BigInt::factorial(1000);
+}
+
+void bench_bigint_combinatorics() {
+    {
+        Timer t("BigInt nCr(5000, 2500)");
+        BigInt res = BigInt::nCr(5000, 2500);
+    }
+    {
+        Timer t("BigInt Multinomial(1000, {250, 250, 250, 250})");
+        std::vector<unsigned int> ks = {250, 250, 250, 250};
+        BigInt res = BigInt::multinomial(1000, ks);
+    }
+}
+
+void bench_bigint_power() {
+    {
+        Timer t("BigInt 3^10000");
+        BigInt base(3);
+        BigInt res = base.power(10000);
     }
 }
 
@@ -113,11 +130,29 @@ void bench_linear_system() {
     SymbolicExpr::solve_system({eq1, eq2, eq3}, {x, y, z});
 }
 
+void bench_bigint_gcd() {
+    Timer t("BigInt GCD (Fibonacci 2000)");
+    BigInt a = 0;
+    BigInt b = 1;
+    for(int i=0; i<2000; ++i) {
+        BigInt temp = b;
+        b = a + b;
+        a = temp;
+    }
+    
+    for(int i=0; i<100; ++i) {
+         BigInt::gcd(a, b);
+    }
+}
+
 int main() {
     std::cout << "Starting LMCAS Benchmarks..." << std::endl;
     std::cout << "========================================" << std::endl;
 
     bench_bigint_factorial();
+    bench_bigint_combinatorics();
+    bench_bigint_power();
+    bench_bigint_gcd();
     bench_symbolic_diff();
     bench_linear_system();
     bench_polynomial_expand(); 

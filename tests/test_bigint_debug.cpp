@@ -57,8 +57,29 @@ void test_rational_debug() {
     EXPECT_EQ_STR(r3.to_string(), "121932631112635269", "Rational Mult Large");
 }
 
+void test_gcd_logic() {
+    TEST_CASE("BigInt GCD Logic");
+    
+    BigInt two(2);
+    BigInt three(3);
+    BigInt twelve(12);
+    BigInt eighteen(18);
+    
+    EXPECT_EQ_STR(BigInt::gcd(twelve, eighteen).to_string(), "6", "gcd(12, 18)");
+    
+    BigInt c(101);
+    BigInt d(103);
+    EXPECT_EQ_STR(BigInt::gcd(c, d).to_string(), "1", "gcd(101, 103) - Coprime");
+    
+    BigInt zero(0);
+    EXPECT_EQ_STR(BigInt::gcd(zero, twelve).to_string(), "12", "gcd(0, 12)");
+    EXPECT_EQ_STR(BigInt::gcd(twelve, zero).to_string(), "12", "gcd(12, 0)");
+    EXPECT_EQ_STR(BigInt::gcd(zero, zero).to_string(), "0", "gcd(0, 0)");
+}
+
 int main() {
     try {
+        test_gcd_logic();
         test_bigint_strings();
         test_bigint_ops();
         test_rational_debug();
