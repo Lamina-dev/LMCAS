@@ -18,13 +18,8 @@ add_subdirectory(LAMMP)
 
 # LMCAS 库
 add_library(lmcas SHARED
-    src/cas.cpp
-    src/symbolic_core.cpp
-    src/symbolic_simplify.cpp
-    src/symbolic_simplify_ln.cpp
-    src/symbolic_calculus.cpp
-    src/symbolic_matrix.cpp
-    src/symbolic_poly.cpp
+    src/symbolic.cpp
+    src/print_visitor.cpp
 )
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
@@ -48,6 +43,15 @@ target_link_libraries(test_cas PRIVATE lmcas LammpCore)
 
 add_executable(test_bigint_debug tests/test_bigint_debug.cpp)
 target_link_libraries(test_bigint_debug PRIVATE lmcas LammpCore)
+
+add_executable(test_normalization tests/test_normalization.cpp)
+target_link_libraries(test_normalization PRIVATE lmcas LammpCore)
+
+add_executable(test_expand_debug tests/test_expand_debug.cpp)
+target_link_libraries(test_expand_debug PRIVATE lmcas LammpCore)
+
+add_executable(test_suite tests/test_suite.cpp)
+target_link_libraries(test_suite PRIVATE lmcas LammpCore)
 
 add_executable(test_det tests/test_det.cpp)
 target_link_libraries(test_det PRIVATE lmcas LammpCore)
@@ -85,6 +89,9 @@ target_link_libraries(test_trig PRIVATE lmcas LammpCore)
 
 add_executable(test_series tests/test_series.cpp)
 target_link_libraries(test_series PRIVATE lmcas LammpCore)
+
+add_executable(test_migration tests/test_migration.cpp)
+target_link_libraries(test_migration PRIVATE lmcas LammpCore)
 
 # --- Benchmarks ---
 add_executable(benchmark_all benchmarks/benchmark_all.cpp)

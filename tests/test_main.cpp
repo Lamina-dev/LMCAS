@@ -1,5 +1,5 @@
 #include "test_common.hpp"
-#include "cas.hpp"
+// #include "cas.hpp"
 #include "value.hpp"
 
 // Note: test_common.hpp defines global g_failures and test macros.

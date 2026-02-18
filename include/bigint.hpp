@@ -813,30 +813,24 @@ public:
         if (a.is_zero()) return b.Abs();
         if (b.is_zero()) return a.Abs();
         
-        BigInt u = a.Abs();
-        BigInt v = b.Abs();
+        BigInt abs_a = a.Abs();
+        BigInt abs_b = b.Abs();
         
-        // Binary GCD Algorithm (Stein's Algorithm)
-        mp_size_t u_zeros = u.trailing_zeros();
-        mp_size_t v_zeros = v.trailing_zeros();
-        mp_size_t k = (u_zeros < v_zeros) ? u_zeros : v_zeros;
+        BigInt res;
+        mp_size_t na = abs_a._size;
+        mp_size_t nb = abs_b._size;
         
-        u >>= u_zeros;
-        v >>= v_zeros;
+        // Allocate space for the result. Max size is min(na, nb).
+        mp_size_t min_n = (na < nb) ? na : nb;
+        res.realloc_to(min_n);
         
-        while (!v.is_zero()) {
-            if (u > v) {
-                // swap u, v
-                BigInt temp = u;
-                u = v;
-                v = temp;
-            }
-            v = v - u; 
-             if (!v.is_zero())
-                v >>= v.trailing_zeros();
-        }
+        // Use LAMMP's Lehmer GCD (generally faster than basecase)
+        res._size = lmmp_gcd_lehmer_(res._data, abs_a._data, na, abs_b._data, nb);
         
-        return u << k;
+        res._sign = POSITIVE;
+        res.negative = false;
+        res.normalize();
+        return res;
     }
 
     static BigInt lcm(const BigInt& a, const BigInt& b) {
