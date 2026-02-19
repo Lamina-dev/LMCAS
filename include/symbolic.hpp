@@ -137,6 +137,9 @@ public:
     // Expansion (distributive law, etc.)
     std::shared_ptr<SymbolicExpr> expand() const;
 
+    bool is_zero() const;
+    bool is_one() const;
+
     // Polynomial GCD
     static std::shared_ptr<SymbolicExpr> poly_gcd(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 

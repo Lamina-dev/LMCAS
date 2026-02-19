@@ -12,7 +12,7 @@ void print_expr(const std::string& label, SymbolicNode& node) {
     try {
         PrintVisitor pv;
         node.accept(pv);
-        std::cout << label << ": " << pv.get_string() << std::endl;
+        std::cout << label << ": " << pv.get_result() << std::endl;
     } catch (const std::exception& e) {
         std::cout << "Error printing " << label << ": " << e.what() << std::endl;
     }
@@ -93,6 +93,33 @@ int main() {
         else std::cout << "Normalization Done. Printing..." << std::endl;
         
         print_expr("Expr 4 Normalized", *norm4);
+
+        // 5. Test Inverse Cancellation (a * -2)^-1 * a * -2 -> 1
+        std::cout << "Testing Inverse Cancellation..." << std::endl;
+        auto var_a = std::make_shared<VariableNode>("a");
+        auto num_neg2 = std::make_shared<NumberNode>(BigInt(-2));
+        
+        // (a * -2)
+        std::vector<std::shared_ptr<SymbolicNode>> inner_ops;
+        inner_ops.push_back(var_a);
+        inner_ops.push_back(num_neg2);
+        auto inner_mul = std::make_shared<MultiplyNode>(inner_ops);
+        
+        // ^ -1
+        auto inv_inner = std::make_shared<PowerNode>(inner_mul, std::make_shared<NumberNode>(BigInt(-1)));
+        
+        // Full expr: a * inv_inner * -2
+        std::vector<std::shared_ptr<SymbolicNode>> full_ops;
+        full_ops.push_back(var_a);
+        full_ops.push_back(inv_inner);
+        full_ops.push_back(num_neg2);
+        
+        auto expr5 = std::make_shared<MultiplyNode>(full_ops);
+        print_expr("Expr 5 Original", *expr5);
+        auto norm5 = normalize(expr5);
+        print_expr("Expr 5 Normalized", *norm5);
+        if (norm5->is_one()) std::cout << "PASS: Cancellation successful" << std::endl;
+        else std::cout << "FAIL: Cancellation failed" << std::endl;
 
     } catch (const std::exception& e) {
         std::cout << "Exception: " << e.what() << std::endl;

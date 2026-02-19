@@ -3,7 +3,17 @@
 #include <string>
 #include "../symbolic_ast.hpp"
 
-class PrintVisitor : public SymbolicVisitor {
+#ifdef _WIN32
+#ifdef LAMINA_CORE_EXPORTS
+#define LAMINA_API __declspec(dllexport)
+#else
+#define LAMINA_API __declspec(dllimport)
+#endif
+#else
+#define LAMINA_API
+#endif
+
+class LAMINA_API PrintVisitor : public SymbolicVisitor {
 public:
     PrintVisitor() = default;
     
@@ -18,7 +28,8 @@ public:
     void visit(PowerNode& node) override;
     void visit(FunctionNode& node) override;
     void visit(MatrixNode& node) override;
-    
+    void visit(RelationalNode& node) override;
+
 private:
     std::stringstream buffer;
 };

@@ -77,18 +77,29 @@ void PrintVisitor::visit(FunctionNode& node) {
 
 void PrintVisitor::visit(MatrixNode& node) {
     buffer << "[";
-    for (size_t i = 0; i < node.elements.size(); ++i) {
+    for (size_t i = 0; i < node.rows; ++i) {
         buffer << "[";
-        for (size_t j = 0; j < node.elements[i].size(); ++j) {
-            node.elements[i][j]->accept(*this);
-            if (j < node.elements[i].size() - 1) {
+        for (size_t j = 0; j < node.cols; ++j) {
+            auto element = node.get(i, j);
+            if (element) {
+                element->accept(*this);
+            } else {
+                buffer << "0"; // Fallback if no element (shouldn't happen with get())
+            }
+            if (j < node.cols - 1) {
                 buffer << ", ";
             }
         }
         buffer << "]";
-        if (i < node.elements.size() - 1) {
+        if (i < node.rows - 1) {
             buffer << ", ";
         }
     }
     buffer << "]";
+}
+
+void PrintVisitor::visit(RelationalNode& node) {
+    node.left->accept(*this);
+    buffer << " " << RelationalNode::op_to_string(node.op) << " ";
+    node.right->accept(*this);
 }

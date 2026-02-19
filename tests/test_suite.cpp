@@ -19,7 +19,7 @@ void check(const std::string& name, const std::shared_ptr<SymbolicNode>& node, c
     
     PrintVisitor pv;
     node->accept(pv);
-    std::string result = pv.get_string();
+    std::string result = pv.get_result();
     
     if (!expected.empty() && result != expected) {
         std::cout << "[FAIL] " << name << ": Expected '" << expected << "', got '" << result << "'" << std::endl;

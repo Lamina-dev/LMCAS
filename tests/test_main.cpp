@@ -2,6 +2,37 @@
 // #include "cas.hpp"
 #include "value.hpp"
 
+// Helpers to replace old CAS interface
+Value cas_simplify(const std::vector<Value>& args) {
+    if (args.empty()) return Value(SymbolicExpr::number(0));
+    auto expr = args[0].as_symbolic();
+    if (!expr) return args[0];
+    return Value(expr->simplify());
+}
+
+Value cas_differentiate(const std::vector<Value>& args) {
+    if (args.size() < 2) return Value(SymbolicExpr::number(0));
+    auto expr = args[0].as_symbolic();
+    std::string var = args[1].to_string();
+    return Value(expr->differentiate(var));
+}
+
+Value cas_solve(const std::vector<Value>& args) {
+    if (args.size() < 2) return Value(); 
+    auto expr = args[0].as_symbolic();
+    std::string var = args[1].to_string();
+    
+    // SymbolicExpr::solve returns vector<shared_ptr<SymbolicExpr>>
+    auto solutions = SymbolicExpr::solve(expr, var);
+    
+    // Convert to Value (Array of values)
+    std::vector<Value> val_sols;
+    for (const auto& s : solutions) {
+        val_sols.push_back(Value(s));
+    }
+    return Value(val_sols);
+}
+
 // Note: test_common.hpp defines global g_failures and test macros.
 
 int main() {

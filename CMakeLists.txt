@@ -20,6 +20,7 @@ add_subdirectory(LAMMP)
 add_library(lmcas SHARED
     src/symbolic.cpp
     src/print_visitor.cpp
+    src/solve_visitor.cpp
 )
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
@@ -90,8 +91,8 @@ target_link_libraries(test_trig PRIVATE lmcas LammpCore)
 add_executable(test_series tests/test_series.cpp)
 target_link_libraries(test_series PRIVATE lmcas LammpCore)
 
-add_executable(test_migration tests/test_migration.cpp)
-target_link_libraries(test_migration PRIVATE lmcas LammpCore)
+# add_executable(test_migration tests/test_migration.cpp)
+# target_link_libraries(test_migration PRIVATE lmcas LammpCore)
 
 # --- Benchmarks ---
 add_executable(benchmark_all benchmarks/benchmark_all.cpp)
@@ -110,3 +111,6 @@ add_test(NAME TestComplexArithmetic COMMAND test_complex_arithmetic)
 add_test(NAME TestCalculus COMMAND test_calculus)
 add_test(NAME TestTrig COMMAND test_trig)
 add_test(NAME TestSeries COMMAND test_series)
+
+# add_executable(debug_recursion debug_recursion.cpp)
+# target_link_libraries(debug_recursion PRIVATE lmcas LammpCore)

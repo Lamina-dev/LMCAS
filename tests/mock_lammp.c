@@ -44,6 +44,12 @@ mp_size_t lmmp_pow_size_(mp_srcptr b, mp_size_t bn, unsigned long exp) {
     return 1;
 }
 
-void lmmp_pow_(mp_ptr r, mp_srcptr b, mp_size_t bn, unsigned long exp) {
-    // do nothing
+mp_size_t lmmp_pow_(mp_ptr dst, mp_size_t rn, mp_srcptr base, mp_size_t n, unsigned long exp) {
+    if (dst && rn > 0) dst[0] = 1; 
+    return 1;
+}
+
+mp_size_t lmmp_gcd_lehmer_(mp_ptr dst, mp_srcptr up, mp_size_t un, mp_srcptr vp, mp_size_t vn) {
+    if (dst) dst[0] = 1;
+    return 1;
 }

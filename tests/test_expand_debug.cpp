@@ -38,7 +38,7 @@ int main() {
         PrintVisitor pv;
         if(res1) {
             res1->accept(pv);
-            std::cout << "Result: " << pv.get_string() << std::endl;
+            std::cout << "Result: " << pv.get_result() << std::endl;
         } else {
             std::cout << "Result: NULL" << std::endl;
         }
@@ -59,7 +59,7 @@ int main() {
                 std::cout << "Result is AddNode with " << add->operands.size() << " operands." << std::endl;
             }
             res2->accept(pv2);
-            std::cout << "Result: " << pv2.get_string() << std::endl;
+            std::cout << "Result: " << pv2.get_result() << std::endl;
         } else {
             std::cout << "Result: NULL" << std::endl;
         }

@@ -20,6 +20,7 @@ class MultiplyNode;
 class PowerNode;
 class FunctionNode;
 class MatrixNode;
+class RelationalNode;
 
 // Helper to combine hash values (similar to boost::hash_combine)
 inline void hash_combine(std::size_t& seed, std::size_t value) {
@@ -90,6 +91,7 @@ public:
     virtual void visit(PowerNode& node) = 0;
     virtual void visit(FunctionNode& node) = 0;
     virtual void visit(MatrixNode& node) = 0;
+    virtual void visit(RelationalNode& node) {}
 };
 
 // Helper structs for using SymbolicNode in hash maps/sets
@@ -118,44 +120,14 @@ using NodeSet = std::unordered_set<std::shared_ptr<SymbolicNode>, NodeHash, Node
 
 class SymbolicFactory {
 public:
-    static std::shared_ptr<SymbolicNode> create_number(const ::BigInt& v) { return std::make_shared<NumberNode>(v); }
-    static std::shared_ptr<SymbolicNode> create_number(const ::Rational& v) { return std::make_shared<NumberNode>(v); }
-    static std::shared_ptr<SymbolicNode> create_number(double v) { return std::make_shared<NumberNode>(v); }
-    static std::shared_ptr<SymbolicNode> create_variable(const std::string& name) { return std::make_shared<VariableNode>(name); }
+    static std::shared_ptr<SymbolicNode> create_number(const ::BigInt& v);
+    static std::shared_ptr<SymbolicNode> create_number(const ::Rational& v);
+    static std::shared_ptr<SymbolicNode> create_number(double v);
+    static std::shared_ptr<SymbolicNode> create_variable(const std::string& name);
 
-    static std::shared_ptr<SymbolicNode> create_add(std::vector<std::shared_ptr<SymbolicNode>> ops) {
-        // Use AddNode constructor logic, but additionally we could merge terms here.
-        // For now, simply delegating to AddNode which flattens and sorts.
-        // Future optimization: merge x + x -> 2x here.
-        if (ops.empty()) return create_number(0.0);
-        if (ops.size() == 1) return ops[0];
-        
-        // Flatten first
-        std::vector<std::shared_ptr<SymbolicNode>> flat_ops;
-        flat_ops.reserve(ops.size());
-        for (const auto& op : ops) {
-            if (auto add = std::dynamic_pointer_cast<AddNode>(op)) {
-                flat_ops.insert(flat_ops.end(), add->operands.begin(), add->operands.end());
-            } else {
-                flat_ops.push_back(op);
-            }
-        }
-        
-        // Simple merge check (requires implementing is_same_term logic properly)
-        // ... (Omitting complex merge logic for brevity, relying on flattened AddNode)
-        
-        return std::make_shared<AddNode>(std::move(flat_ops));
-    }
+    static std::shared_ptr<SymbolicNode> create_add(std::vector<std::shared_ptr<SymbolicNode>> ops);
 
-    static std::shared_ptr<SymbolicNode> create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops) {
-        if (ops.empty()) return create_number(1.0);
-        if (ops.size() == 1) return ops[0];
-        // Flatten handled by MultiplyNode, but factory is the place for 0 * x -> 0 check
-        for (const auto& op : ops) {
-            if (op->is_zero()) return op; // 0 * anything = 0
-        }
-        return std::make_shared<MultiplyNode>(std::move(ops));
-    }
+    static std::shared_ptr<SymbolicNode> create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops);
 };
 
 class NumberNode : public SymbolicNode {
@@ -167,7 +139,8 @@ public:
     explicit NumberNode(double v) : value(v) {}
     explicit NumberNode(std::variant<BigInt, Rational, double> v) : value(std::move(v)) {}
     
-    int type_priority() const override { return 0; }
+    // Changing priority to 10 so numbers come last (e.g. x + 5 instead of 5 + x)
+    int type_priority() const override { return 10; }
 
 protected:
     std::size_t compute_hash() const override {
@@ -617,5 +590,94 @@ inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixN
         }
         return d;
     }
+}
+
+
+// ==========================================
+// Relational Node
+// ==========================================
+class RelationalNode : public SymbolicNode {
+public:
+    enum class Op { EQ, NEQ, LT, GT, LEQ, GEQ };
+    
+    std::shared_ptr<SymbolicNode> left;
+    std::shared_ptr<SymbolicNode> right;
+    Op op;
+
+    RelationalNode(std::shared_ptr<SymbolicNode> l, std::shared_ptr<SymbolicNode> r, Op o)
+        : left(std::move(l)), right(std::move(r)), op(o) {}
+
+    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<RelationalNode>(left->clone(), right->clone(), op);
+    }
+    
+    int type_priority() const override { return 100; } // Higher than Add/Mul
+
+    // Hash computation
+    std::size_t compute_hash() const override {
+        std::size_t h = std::hash<int>{}((int)op);
+        hash_combine(h, left->hash());
+        hash_combine(h, right->hash());
+        return h;
+    }
+
+    // Comparison for ordering
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const RelationalNode&>(other);
+        if (op != o.op) return (int)op < (int)o.op ? -1 : 1;
+        int cmp = left->compare(*o.left);
+        if (cmp != 0) return cmp;
+        return right->compare(*o.right);
+    }
+    
+    static std::string op_to_string(Op op) {
+        switch(op) {
+            case Op::EQ: return "=";
+            case Op::NEQ: return "!=";
+            case Op::LT: return "<";
+            case Op::GT: return ">";
+            case Op::LEQ: return "<=";
+            case Op::GEQ: return ">=";
+            default: return "?";
+        }
+    }
+};
+
+// ==========================================
+// Symbolic Factory Implementations
+// ==========================================
+
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::BigInt& v) { return std::make_shared<NumberNode>(v); }
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::Rational& v) { return std::make_shared<NumberNode>(v); }
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(double v) { return std::make_shared<NumberNode>(v); }
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_variable(const std::string& name) { return std::make_shared<VariableNode>(name); }
+
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_add(std::vector<std::shared_ptr<SymbolicNode>> ops) {
+    if (ops.empty()) return create_number(0.0);
+    if (ops.size() == 1) return ops[0];
+    
+    std::vector<std::shared_ptr<SymbolicNode>> flat_ops;
+    flat_ops.reserve(ops.size());
+    for (const auto& op : ops) {
+        if (auto add = std::dynamic_pointer_cast<AddNode>(op)) {
+            flat_ops.insert(flat_ops.end(), add->operands.begin(), add->operands.end());
+        } else {
+            flat_ops.push_back(op);
+        }
+    }
+    
+    return std::make_shared<AddNode>(std::move(flat_ops));
+}
+
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops) {
+    if (ops.empty()) return create_number(1.0);
+    if (ops.size() == 1) return ops[0];
+    
+    for (const auto& op : ops) {
+        if (op->is_zero()) return op; 
+    }
+    return std::make_shared<MultiplyNode>(std::move(ops));
 }
 
