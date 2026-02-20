@@ -403,7 +403,8 @@ public:
     
     std::shared_ptr<SymbolicExpr> simplify() const;
 
-    
+    std::shared_ptr<SymbolicExpr> simplify_trig() const;
+
     std::shared_ptr<SymbolicExpr> differentiate(const std::string& var_name) const;
 
 private:

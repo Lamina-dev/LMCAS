@@ -9,6 +9,7 @@
 #include "../include/visitors/normalization_visitor.hpp"
 #include "../include/visitors/differentiation_visitor.hpp"
 #include "../include/poly_utils.hpp"
+#include "../include/matcher.hpp"
 
 
 
@@ -368,6 +369,54 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
     NormalizationVisitor v;
     root->accept(v);
     return std::make_shared<SymbolicExpr>(v.get_result());
+}
+
+
+std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_trig() const {
+    auto res = simplify();
+    if (!res->root) return nullptr;
+
+    static lamina::RewriteEngine engine;
+    static bool init = false;
+    
+    if (!init) {
+        init = true;
+        using namespace lamina;
+        auto x_val = wildcard("x");
+        auto x = std::make_shared<SymbolicExpr>(x_val);
+        
+        // Rule: sin(x)^2 + cos(x)^2 -> 1
+        auto sinx = SymbolicExpr::sin(x);
+        auto cosx = SymbolicExpr::cos(x);
+        auto n2 = SymbolicExpr::number(2);
+        auto sin2 = SymbolicExpr::power(sinx, n2);
+        auto cos2 = SymbolicExpr::power(cosx, n2);
+        
+        // Match sin(x)^2 + cos(x)^2 -> 1
+        auto pat1 = SymbolicExpr::add(sin2, cos2);
+        engine.add_rule(Rule(*pat1, *SymbolicExpr::number(1), {"x"}));
+        
+        // Match cos(x)^2 + sin(x)^2 -> 1
+        auto pat2 = SymbolicExpr::add(cos2, sin2);
+        engine.add_rule(Rule(*pat2, *SymbolicExpr::number(1), {"x"}));
+
+        // Rule: sin(2*x) -> 2*sin(x)*cos(x)
+        auto two_x = SymbolicExpr::multiply(n2, x);
+        auto sin2x = SymbolicExpr::sin(two_x);
+        auto two_sin_cos = SymbolicExpr::multiply(n2, 
+            SymbolicExpr::multiply(sinx, cosx));
+        engine.add_rule(Rule(*sin2x, *two_sin_cos, {"x"}));
+        
+        // Rule: cos(2*x) -> cos(x)^2 - sin(x)^2
+        auto cos2x = SymbolicExpr::cos(two_x);
+        auto cos2_sub_sin2 = SymbolicExpr::add(cos2, 
+            SymbolicExpr::multiply(sin2, SymbolicExpr::number(-1)));
+        engine.add_rule(Rule(*cos2x, *cos2_sub_sin2, {"x"}));
+    }
+    
+    auto simplified = engine.apply(*res);
+    auto result_ptr = std::make_shared<SymbolicExpr>(simplified);
+    return result_ptr->simplify();
 }
 
 

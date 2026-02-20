@@ -122,6 +122,9 @@ add_executable(benchmark_all benchmarks/benchmark_all.cpp)
 target_link_libraries(benchmark_all PRIVATE lmcas LammpCore)
 target_compile_definitions(benchmark_all PRIVATE -D_SYMBOLIC_BENCHMARK)
 
+add_executable(test_trig_rewrite tests/test_trig_rewrite.cpp)
+target_link_libraries(test_trig_rewrite PRIVATE lmcas LammpCore)
+
 enable_testing()
 add_test(NAME TestCAS COMMAND test_cas)
 add_test(NAME TestBigIntDebug COMMAND test_bigint_debug)
@@ -133,6 +136,7 @@ add_test(NAME TestNewFeatures COMMAND test_new_features)
 add_test(NAME TestComplexArithmetic COMMAND test_complex_arithmetic)
 add_test(NAME TestCalculus COMMAND test_calculus)
 add_test(NAME TestTrig COMMAND test_trig)
+add_test(NAME TestTrigRewrite COMMAND test_trig_rewrite)
 add_test(NAME TestSeries COMMAND test_series)
 
 # add_executable(debug_recursion debug_recursion.cpp)
