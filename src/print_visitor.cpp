@@ -64,6 +64,7 @@ void PrintVisitor::visit(FunctionNode& node) {
         case FunctionNode::FuncType::Abs: buffer << "abs"; break;
         case FunctionNode::FuncType::Sqrt: buffer << "sqrt"; break;
         case FunctionNode::FuncType::Exp: buffer << "exp"; break;
+        case FunctionNode::FuncType::Calculus_Integral: buffer << "integral"; break;
     }
     buffer << "(";
     for (size_t i = 0; i < node.arguments.size(); ++i) {
@@ -84,7 +85,7 @@ void PrintVisitor::visit(MatrixNode& node) {
             if (element) {
                 element->accept(*this);
             } else {
-                buffer << "0"; // Fallback if no element (shouldn't happen with get())
+                buffer << "0"; 
             }
             if (j < node.cols - 1) {
                 buffer << ", ";

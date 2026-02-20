@@ -3,15 +3,15 @@
 #include <vector>
 #include <string>
 #include <variant>
-#include <algorithm> // for sort
-#include <typeindex> // for type_index
+#include <algorithm> 
+#include <typeindex> 
 #include <unordered_map>
 #include <unordered_set>
 #include "rational.hpp"
 #include "bigint.hpp"
 
 
-// Forward declarations
+
 class SymbolicVisitor;
 class NumberNode;
 class VariableNode;
@@ -22,22 +22,22 @@ class FunctionNode;
 class MatrixNode;
 class RelationalNode;
 
-// Helper to combine hash values (similar to boost::hash_combine)
+
 inline void hash_combine(std::size_t& seed, std::size_t value) {
     seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
-// Base class for all symbolic nodes
+
 class SymbolicNode {
 protected:
     mutable std::size_t cached_hash = 0;
     mutable bool hash_computed = false;
 
-    // Derived classes must implement this to calculate their hash
+    
     virtual std::size_t compute_hash() const = 0;
 
-    // Derived classes must implement this for strict weak ordering
-    // Returns -1 if this < other, 1 if this > other, 0 if equal
+    
+    
     virtual int compare_same_type(const SymbolicNode& other) const = 0;
 
 public:
@@ -46,8 +46,8 @@ public:
     
     virtual std::shared_ptr<SymbolicNode> clone() const = 0;
     
-    // Type priority for sorting different node types
-    // Order: Number < Variable < Function < Power < Product < Sum < Matrix
+    
+    
     virtual int type_priority() const = 0;
 
     std::size_t hash() const {
@@ -58,7 +58,7 @@ public:
         return cached_hash;
     }
 
-    // Generic comparison for canonical ordering
+    
     int compare(const SymbolicNode& other) const {
         if (type_priority() != other.type_priority()) {
             return type_priority() < other.type_priority() ? -1 : 1;
@@ -66,10 +66,10 @@ public:
         return compare_same_type(other);
     }
     
-    // Equality check based on structure and hash
+    
     bool equals(const SymbolicNode& other) const {
         if (this == &other) return true;
-        if (hash() != other.hash()) return false; // Fast fail
+        if (hash() != other.hash()) return false; 
         if (type_priority() != other.type_priority()) return false;
         return compare_same_type(other) == 0;
     }
@@ -79,7 +79,7 @@ public:
     virtual bool is_zero() const { return false; }
 };
 
-// Visitor Interface
+
 class SymbolicVisitor {
 public:
     virtual ~SymbolicVisitor() = default;
@@ -94,7 +94,7 @@ public:
     virtual void visit(RelationalNode& node) {}
 };
 
-// Helper structs for using SymbolicNode in hash maps/sets
+
 struct NodeHash {
     std::size_t operator()(const std::shared_ptr<SymbolicNode>& node) const {
         return node ? node->hash() : 0;
@@ -108,15 +108,15 @@ struct NodeEqual {
     }
 };
 
-// Standard Cache Map for Memoization / CSE
+
 template<typename T>
 using NodeMap = std::unordered_map<std::shared_ptr<SymbolicNode>, T, NodeHash, NodeEqual>;
 
 using NodeSet = std::unordered_set<std::shared_ptr<SymbolicNode>, NodeHash, NodeEqual>;
 
-// ==========================================
-// Symbolic Factory
-// ==========================================
+
+
+
 
 class SymbolicFactory {
 public:
@@ -128,6 +128,7 @@ public:
     static std::shared_ptr<SymbolicNode> create_add(std::vector<std::shared_ptr<SymbolicNode>> ops);
 
     static std::shared_ptr<SymbolicNode> create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops);
+    static std::shared_ptr<SymbolicNode> create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent);
 };
 
 class NumberNode : public SymbolicNode {
@@ -139,15 +140,15 @@ public:
     explicit NumberNode(double v) : value(v) {}
     explicit NumberNode(std::variant<BigInt, Rational, double> v) : value(std::move(v)) {}
     
-    // Changing priority to 10 so numbers come last (e.g. x + 5 instead of 5 + x)
+    
     int type_priority() const override { return 10; }
 
 protected:
     std::size_t compute_hash() const override {
-        // Unified hashing for different types if they represent the same value (e.g., 0.5 and 1/2)
-        // For simplicity in this prototype, we'll try to convert to double for hash if possible,
-        // or check for special cases.
-        // A robust implementation would normalize types (e.g. always use Rational if possible).
+        
+        
+        
+        
         
         if (std::holds_alternative<Rational>(value)) {
             const auto& r = std::get<Rational>(value);
@@ -157,9 +158,9 @@ protected:
             return std::hash<std::string>{}(b.to_string());
         } else {
              auto d = std::get<double>(value);
-             // Special case: check if double is effectively an integer
+             
              if (d == std::floor(d)) {
-                 // Warning: This hash might not match BigInt(d) perfectly without careful logic
+                 
              }
              return std::hash<double>{}(d);
         }
@@ -168,7 +169,7 @@ protected:
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const NumberNode&>(other);
         
-        // Helper to convert to double for mixed comparison (lossy but simple for now)
+        
         auto to_double = [](const std::variant<BigInt, Rational, double>& v) {
             if (std::holds_alternative<double>(v)) return std::get<double>(v);
             if (std::holds_alternative<Rational>(v)) return std::get<Rational>(v).to_double();
@@ -194,7 +195,7 @@ protected:
 public:
     void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
     std::shared_ptr<SymbolicNode> clone() const override {
-        // Implementation depends on variant copy, which is standard
+        
         if (std::holds_alternative<BigInt>(value)) return std::make_shared<NumberNode>(std::get<BigInt>(value));
         if (std::holds_alternative<Rational>(value)) return std::make_shared<NumberNode>(std::get<Rational>(value));
         return std::make_shared<NumberNode>(std::get<double>(value));
@@ -202,7 +203,7 @@ public:
     
     bool is_number() const override { return true; }
     bool is_zero() const override {
-        // Simplified check
+        
         if (std::holds_alternative<BigInt>(value)) return std::get<BigInt>(value) == BigInt(0);
         if (std::holds_alternative<Rational>(value)) return std::get<Rational>(value) == Rational(0);
         return std::get<double>(value) == 0.0;
@@ -242,7 +243,7 @@ public:
     std::vector<std::shared_ptr<SymbolicNode>> operands;
     
     explicit AddNode(std::vector<std::shared_ptr<SymbolicNode>> ops) {
-        // Flatten nested additions and sort operands
+        
         for (const auto& op : ops) {
             if (auto add = std::dynamic_pointer_cast<AddNode>(op)) {
                 operands.insert(operands.end(), add->operands.begin(), add->operands.end());
@@ -250,7 +251,7 @@ public:
                 operands.push_back(op);
             }
         }
-        // Canonical ordering for commutative operations
+        
         std::sort(operands.begin(), operands.end(), [](const auto& a, const auto& b) {
             return a->compare(*b) < 0;
         });
@@ -295,7 +296,7 @@ public:
     std::vector<std::shared_ptr<SymbolicNode>> operands;
     
     explicit MultiplyNode(std::vector<std::shared_ptr<SymbolicNode>> ops) {
-        // Flatten nested multiplications and sort operands
+        
         for (const auto& op : ops) {
             if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(op)) {
                 operands.insert(operands.end(), mul->operands.begin(), mul->operands.end());
@@ -303,7 +304,7 @@ public:
                 operands.push_back(op);
             }
         }
-        // Canonical ordering
+        
         std::sort(operands.begin(), operands.end(), [](const auto& a, const auto& b) {
             return a->compare(*b) < 0;
         });
@@ -383,7 +384,8 @@ public:
         ArcSin, ArcCos, ArcTan,
         Sinh, Cosh, Tanh,
         Ln, Log, Abs, Sqrt,
-        Exp
+        Exp,
+        Calculus_Integral
     };
     
     FuncType type;
@@ -431,7 +433,7 @@ public:
 
 #include <map>
 
-// ... existing code ...
+
 
 class MatrixNode : public SymbolicNode {
 public:
@@ -441,12 +443,12 @@ public:
     static std::variant<DenseStorage, SparseStorage> create_storage_from_grid(
         const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements);
 
-    // Storage
+    
     const std::variant<DenseStorage, SparseStorage> storage;
     const size_t rows;
     const size_t cols;
 
-    // Constructors
+    
     MatrixNode(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid) 
         : storage(create_storage_from_grid(grid, grid.size() * (grid.empty() ? 0 : grid[0].size()))),
           rows(grid.size()),
@@ -467,20 +469,20 @@ protected:
         hash_combine(seed, rows);
         hash_combine(seed, cols);
 
-        // Consistent hashing for both dense and sparse representations
-        // Only include non-zero elements in the hash
+        
+        
         if (std::holds_alternative<DenseStorage>(storage)) {
             const auto& dense = std::get<DenseStorage>(storage);
             for (size_t i = 0; i < dense.size(); ++i) {
                 if (dense[i] && !dense[i]->is_zero()) {
-                    hash_combine(seed, i); // Include index
+                    hash_combine(seed, i); 
                     hash_combine(seed, dense[i]->hash());
                 }
             }
         } else {
             const auto& sparse = std::get<SparseStorage>(storage);
             for (const auto& [idx, val] : sparse) {
-                // Sparse map already only contains non-zeros (hopefully)
+                
                 if (val && !val->is_zero()) {
                     hash_combine(seed, idx);
                     hash_combine(seed, val->hash());
@@ -495,18 +497,18 @@ protected:
         if (rows != o.rows) return rows < o.rows ? -1 : 1;
         if (cols != o.cols) return cols < o.cols ? -1 : 1;
 
-        // Slow but correct comparison
+        
         for (size_t r = 0; r < rows; ++r) {
             for (size_t c = 0; c < cols; ++c) {
                 auto v1 = this->get(r, c);
                 auto v2 = o.get(r, c);
-                // Handle nullptrs/zeros correctly
+                
                 bool z1 = !v1 || v1->is_zero();
                 bool z2 = !v2 || v2->is_zero();
                 
                 if (z1 && z2) continue;
-                if (z1) return -1; // 0 < non-zero
-                if (z2) return 1;  // non-zero > 0
+                if (z1) return -1; 
+                if (z2) return 1;  
                 
                 int cmp = v1->compare(*v2);
                 if (cmp != 0) return cmp;
@@ -517,7 +519,7 @@ protected:
 
 public:
     void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
-    // ... clone and get methods ...
+    
     std::shared_ptr<SymbolicNode> clone() const override {
         if (std::holds_alternative<DenseStorage>(storage)) {
             const auto& dense = std::get<DenseStorage>(storage);
@@ -552,10 +554,10 @@ public:
     bool is_sparse() const { return std::holds_alternative<SparseStorage>(storage); }
 
 private:
-   // Definition of create_storage_from_grid OUTSIDE or HERE properly
+   
 };
 
-// Out-of-line definition
+
 inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixNode::create_storage_from_grid(
     const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements) {
     
@@ -593,9 +595,9 @@ inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixN
 }
 
 
-// ==========================================
-// Relational Node
-// ==========================================
+
+
+
 class RelationalNode : public SymbolicNode {
 public:
     enum class Op { EQ, NEQ, LT, GT, LEQ, GEQ };
@@ -613,9 +615,9 @@ public:
         return std::make_shared<RelationalNode>(left->clone(), right->clone(), op);
     }
     
-    int type_priority() const override { return 100; } // Higher than Add/Mul
+    int type_priority() const override { return 100; } 
 
-    // Hash computation
+    
     std::size_t compute_hash() const override {
         std::size_t h = std::hash<int>{}((int)op);
         hash_combine(h, left->hash());
@@ -623,7 +625,7 @@ public:
         return h;
     }
 
-    // Comparison for ordering
+    
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const RelationalNode&>(other);
         if (op != o.op) return (int)op < (int)o.op ? -1 : 1;
@@ -645,9 +647,9 @@ public:
     }
 };
 
-// ==========================================
-// Symbolic Factory Implementations
-// ==========================================
+
+
+
 
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::BigInt& v) { return std::make_shared<NumberNode>(v); }
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::Rational& v) { return std::make_shared<NumberNode>(v); }
@@ -679,5 +681,10 @@ inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_multiply(std::vecto
         if (op->is_zero()) return op; 
     }
     return std::make_shared<MultiplyNode>(std::move(ops));
+}
+
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent) {
+    if (!base || !exponent) return nullptr;
+    return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
 }
 

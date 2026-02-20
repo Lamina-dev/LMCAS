@@ -3,8 +3,8 @@
 int main() {
     TEST_CASE("Matrix Determinant");
 
-    // 1. Identity 2x2
-    // [[1, 0], [0, 1]] -> 1*1 - 0*0 = 1
+    
+    
     {
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> m1_data = {
             {SymbolicExpr::number(1), SymbolicExpr::number(0)},
@@ -15,8 +15,8 @@ int main() {
         EXPECT_EQ_EXPR(det1, SymbolicExpr::number(1), "Det(I_2)");
     }
     
-    // 2. 2x2 Symbolic
-    // [[a, b], [c, d]] -> ad - bc
+    
+    
     {
         auto a = SymbolicExpr::variable("a");
         auto b = SymbolicExpr::variable("b");

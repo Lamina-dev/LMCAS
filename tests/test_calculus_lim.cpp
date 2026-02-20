@@ -6,30 +6,30 @@ int main() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::power(x, SymbolicExpr::number(2));
     
-    // 1. Integration
+    
     auto integrated = expr->integrate("x");
     std::cout << "int(x^2) = " << integrated->to_string() << "\n";
     
-    // 2. Limit Substitution
+    
     auto point = SymbolicExpr::number(2);
     auto lim = expr->limit("x", point);
     std::cout << "limit(x^2, x->2) = " << lim->to_string() << "\n";
 
-    // 3. Normalization
+    
     auto five = SymbolicExpr::number(5);
     auto sum = SymbolicExpr::add(five, x); 
     auto simple_sum = sum->simplify();
     std::cout << "5 + x simplified -> " << simple_sum->to_string() << "\n";
 
-    // 4. LHopital Components check
+    
     std::cout << "--- LHopital Check ---\n";
     auto four = SymbolicExpr::number(4);
     auto two = SymbolicExpr::number(2);
     auto neg_four = SymbolicExpr::multiply(four, SymbolicExpr::number(-1));
     auto neg_two = SymbolicExpr::multiply(two, SymbolicExpr::number(-1));
     
-    auto num = SymbolicExpr::add(expr, neg_four); // x^2 - 4
-    auto den = SymbolicExpr::add(x, neg_two); // x - 2
+    auto num = SymbolicExpr::add(expr, neg_four); 
+    auto den = SymbolicExpr::add(x, neg_two); 
     
     std::cout << "Num: " << num->to_string() << "\n";
     std::cout << "Den: " << den->to_string() << "\n";

@@ -42,15 +42,15 @@ public:
         std::vector<std::shared_ptr<SymbolicNode>> sum_terms;
         
         for (size_t i = 0; i < node.operands.size(); ++i) {
-            // Differentiate term i
+            
             node.operands[i]->accept(*this);
             auto d_term = result;
             
-            if (d_term->is_zero()) continue; // optimization
+            if (d_term->is_zero()) continue; 
             
             std::vector<std::shared_ptr<SymbolicNode>> prod_terms;
-            // Collect other terms and the differentiated term
-            // order: f1 * ... * fi' * ... * fn
+            
+            
             for (size_t j = 0; j < node.operands.size(); ++j) {
                 if (i == j) {
                     prod_terms.push_back(d_term);
@@ -69,8 +69,8 @@ public:
     }
 
     void visit(PowerNode& node) override {
-        // d(u^v) = u^v * (v*du/u + dv*ln(u))
-        // Common case: v is constant number n -> n * u^(n-1) * du
+        
+        
         
         node.base->accept(*this);
         auto du = result;
@@ -81,33 +81,33 @@ public:
         auto v = node.exponent;
 
         if (dv->is_zero()) {
-            // Power rule: d(u^n) = n * u^(n-1) * du
+            
             auto n = v;
-            // n - 1
+            
             auto n_minus_1 = SymbolicFactory::create_add({n, SymbolicFactory::create_number(-1.0)});
-            // u^(n-1)
+            
             auto u_pow = std::make_shared<PowerNode>(u, n_minus_1);
             
-            // Result: n * u^(n-1) * du
+            
             result = SymbolicFactory::create_multiply({n, u_pow, du});
         } else {
-            // Full Generalized Power Rule
-            // u^v * (v' * ln(u) + v * u' / u)
             
-            // ln(u)
+            
+            
+            
             auto ln_u = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, std::vector<std::shared_ptr<SymbolicNode>>{u});
             
-            // Term 1: v' * ln(u)
+            
             auto t1 = SymbolicFactory::create_multiply({dv, ln_u});
             
-            // Term 2: v * u' / u  = v * u' * u^-1
+            
             auto u_inv = std::make_shared<PowerNode>(u, SymbolicFactory::create_number(-1.0));
             auto t2 = SymbolicFactory::create_multiply({v, du, u_inv});
             
-            // (t1 + t2)
+            
             auto sum = SymbolicFactory::create_add({t1, t2});
             
-            // u^v * sum
+            
             auto u_pow_v = std::make_shared<PowerNode>(u, v);
             result = SymbolicFactory::create_multiply({u_pow_v, sum});
         }
@@ -131,28 +131,28 @@ public:
         std::shared_ptr<SymbolicNode> d_outer;
         
         switch (node.type) {
-            case FunctionNode::FuncType::Sin: // d(sin) = cos
+            case FunctionNode::FuncType::Sin: 
                 d_outer = std::make_shared<FunctionNode>(FunctionNode::FuncType::Cos, node.arguments);
                 break;
-            case FunctionNode::FuncType::Cos: // d(cos) = -sin
+            case FunctionNode::FuncType::Cos: 
                 d_outer = SymbolicFactory::create_multiply({
                     SymbolicFactory::create_number(-1.0),
                     std::make_shared<FunctionNode>(FunctionNode::FuncType::Sin, node.arguments)
                 });
                 break;
-            case FunctionNode::FuncType::Tan: // d(tan) = sec^2
+            case FunctionNode::FuncType::Tan: 
                 {
                     auto sec = std::make_shared<FunctionNode>(FunctionNode::FuncType::Sec, node.arguments);
                     d_outer = std::make_shared<PowerNode>(sec, SymbolicFactory::create_number(2.0));
                 }
                 break;
-            case FunctionNode::FuncType::Exp: // d(exp) = exp
+            case FunctionNode::FuncType::Exp: 
                  d_outer = std::make_shared<FunctionNode>(FunctionNode::FuncType::Exp, node.arguments);
                  break;
-            case FunctionNode::FuncType::Ln: // d(ln(x)) = 1/x
+            case FunctionNode::FuncType::Ln: 
                  d_outer = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(-1.0));
                  break;
-            case FunctionNode::FuncType::Sqrt: // d(sqrt(x)) = 1/(2sqrt(x)) = 0.5 * x^-0.5
+            case FunctionNode::FuncType::Sqrt: 
                  d_outer = SymbolicFactory::create_multiply({
                     SymbolicFactory::create_number(0.5),
                     std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(-0.5))
@@ -166,7 +166,7 @@ public:
     }
 
     void visit(MatrixNode& node) override {
-        // Differentiate element-wise
+        
         if (std::holds_alternative<MatrixNode::DenseStorage>(node.storage)) {
              const auto& dense = std::get<MatrixNode::DenseStorage>(node.storage);
              MatrixNode::DenseStorage new_dense;

@@ -1,9 +1,9 @@
 #include "test_common.hpp"
 
-// Manual equality check via subtraction
+
 bool symbolic_equal_check(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
     auto diff = SymbolicExpr::add(a, SymbolicExpr::multiply(SymbolicExpr::number(-1), b))->expand();
-    // Simplified result should be 0 or equivalent
+    
     auto simp = diff->simplify();
     return simp->is_number() && simp->convert_rational() == Rational(0);
 }
@@ -27,7 +27,7 @@ int main() {
     {
         auto e1 = SymbolicExpr::add(x, y)->simplify();
         auto e2 = SymbolicExpr::add(y, x)->simplify();
-        // Canonical sort: should be same string
+        
         EXPECT_EQ_STR(e1->to_string(), e2->to_string(), "x+y == y+x (string check)");
     }
 
@@ -45,7 +45,7 @@ int main() {
         auto pow = SymbolicExpr::power(sum, two);
         auto expanded = pow->expand();
         
-        // Manual construction of result: x^2 + 2x + 1
+        
         auto x2 = SymbolicExpr::power(x, two);
         auto twox = SymbolicExpr::multiply(two, x);
         auto expected = SymbolicExpr::add(SymbolicExpr::add(x2, twox), one)->simplify();

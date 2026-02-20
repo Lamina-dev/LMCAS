@@ -1,8 +1,8 @@
 #include "test_common.hpp"
-// #include "cas.hpp"
+
 #include "value.hpp"
 
-// Helpers to replace old CAS interface
+
 Value cas_simplify(const std::vector<Value>& args) {
     if (args.empty()) return Value(SymbolicExpr::number(0));
     auto expr = args[0].as_symbolic();
@@ -22,10 +22,10 @@ Value cas_solve(const std::vector<Value>& args) {
     auto expr = args[0].as_symbolic();
     std::string var = args[1].to_string();
     
-    // SymbolicExpr::solve returns vector<shared_ptr<SymbolicExpr>>
+    
     auto solutions = SymbolicExpr::solve(expr, var);
     
-    // Convert to Value (Array of values)
+    
     std::vector<Value> val_sols;
     for (const auto& s : solutions) {
         val_sols.push_back(Value(s));
@@ -33,7 +33,7 @@ Value cas_solve(const std::vector<Value>& args) {
     return Value(val_sols);
 }
 
-// Note: test_common.hpp defines global g_failures and test macros.
+
 
 int main() {
     auto x = SymbolicExpr::variable("x");
@@ -62,7 +62,7 @@ int main() {
         auto expr = SymbolicExpr::sqrt(eight);
         std::vector<Value> args = { Value(expr) };
         Value res = cas_simplify(args);
-        // Result is typically 2√2 or 2*sqrt(2)
+        
         std::string s = res.to_string();
         bool ok = (s.find("2") != std::string::npos) && (s.find("8") == std::string::npos);
         EXPECT_TRUE(ok, "sqrt(8) = 2*sqrt(2) (checks for 2 and no 8)");
@@ -79,13 +79,13 @@ int main() {
 
     TEST_CASE("Differentiation");
     {
-        // Diff x^2
+        
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
         std::vector<Value> args = { Value(x2), Value("x") };
         Value res = cas_differentiate(args);
         EXPECT_EQ_STR(res.to_string(), "2*x", "Diff x^2");
 
-        // Diff sin(x)
+        
         auto sin_x = SymbolicExpr::sin(x);
         args = { Value(sin_x), Value("x") };
         res = cas_differentiate(args);

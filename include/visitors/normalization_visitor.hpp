@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <iostream>
 
-// Comparator for map
+
 struct NodeCompare {
     bool operator()(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) const {
         if (!lhs && !rhs) return false;
@@ -16,7 +16,7 @@ struct NodeCompare {
     }
 };
 
-// Helper arithmetic functions
+
 inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
      if (std::holds_alternative<double>(a->value) || std::holds_alternative<double>(b->value)) {
          double v1 = std::holds_alternative<double>(a->value) ? std::get<double>(a->value) : 
@@ -34,7 +34,7 @@ inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>
          return std::make_shared<NumberNode>(r1 + r2);
      }
      
-     // Both BigInt
+     
      BigInt i1 = std::get<BigInt>(a->value);
      BigInt i2 = std::get<BigInt>(b->value);
      return std::make_shared<NumberNode>(i1 + i2);
@@ -57,7 +57,7 @@ inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<Number
          return std::make_shared<NumberNode>(r1 * r2);
      }
      
-     // Both BigInt
+     
      BigInt i1 = std::get<BigInt>(a->value);
      BigInt i2 = std::get<BigInt>(b->value);
      return std::make_shared<NumberNode>(i1 * i2);
@@ -72,12 +72,12 @@ public:
     }
 
     std::shared_ptr<SymbolicNode> expand_product(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) {
-        // Logging removed due to compilation error (no operator<< for shared_ptr<SymbolicNode>)
+        
         auto add_lhs = std::dynamic_pointer_cast<AddNode>(lhs);
         auto add_rhs = std::dynamic_pointer_cast<AddNode>(rhs);
 
         if (add_lhs && add_rhs) {
-            // (a+b)(c+d) = ac + ad + bc + bd
+            
             std::vector<std::shared_ptr<SymbolicNode>> new_terms;
             for (const auto& op1 : add_lhs->operands) {
                 for (const auto& op2 : add_rhs->operands) {
@@ -85,10 +85,10 @@ public:
                     new_terms.push_back(prod);
                 }
             }
-            // Result is an AddNode, already fully expanded by recursion
+            
             return std::make_shared<AddNode>(new_terms);
         } else if (add_lhs) {
-            // (a+b)c = ac + bc
+            
             std::vector<std::shared_ptr<SymbolicNode>> new_terms;
             for (const auto& op : add_lhs->operands) {
                  auto prod = expand_product(op, rhs);
@@ -96,7 +96,7 @@ public:
             }
             return std::make_shared<AddNode>(new_terms);
         } else if (add_rhs) {
-             // a(b+c) = ab + ac
+             
             std::vector<std::shared_ptr<SymbolicNode>> new_terms;
             for (const auto& op : add_rhs->operands) {
                  auto prod = expand_product(lhs, op);
@@ -105,17 +105,17 @@ public:
             return std::make_shared<AddNode>(new_terms);
         }
 
-        // No expansion needed, meaning neither is an AddNode.
-        // We perform the multiplication logic manually here to avoid creating a MultiplyNode 
-        // that would trigger visit(MultiplyNode) -> expand_product again.
+        
+        
+        
         
         std::shared_ptr<NumberNode> const_acc = std::make_shared<NumberNode>(BigInt(1));
         std::map<std::shared_ptr<SymbolicNode>, std::shared_ptr<NumberNode>, NodeCompare> bases;
         
-        // Helper to process a single factor
+        
         auto process_factor = [&](const std::shared_ptr<SymbolicNode>& factor) {
              if (auto num = std::dynamic_pointer_cast<NumberNode>(factor)) {
-                 if (num->is_zero()) return false; // zero result
+                 if (num->is_zero()) return false; 
                  const_acc = multiply_numbers(const_acc, num);
              } else {
                  std::shared_ptr<SymbolicNode> base = factor;
@@ -128,12 +128,12 @@ public:
                      } 
                  }
                  
-                 // If the base itself is a MultiplyNode, we should ideally flatten it,
-                 // but that requires expanding the power (e.g. (xy)^2 = x^2 y^2).
-                 // For now, treat (xy) as a base.
                  
-                 // However, check if 'factor' itself was a MultiplyNode that slipped through?
-                 // No, flatten_and_process handles top-level Multiply.
+                 
+                 
+                 
+                 
+                 
                  
                  auto it = bases.find(base);
                  if (it == bases.end()) {
@@ -145,8 +145,8 @@ public:
              return true;
         };
 
-        // Inputs could be MultiplyNodes themselves (if they came from partially reduced expressions)
-        // DFS flatten logic here if needed, but assuming expand_product is called with atoms or flat mults
+        
+        
         
         auto flatten_and_process = [&](const std::shared_ptr<SymbolicNode>& node) {
             if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
@@ -192,7 +192,7 @@ public:
     void visit(AddNode& node) override {
         std::vector<std::shared_ptr<SymbolicNode>> simplified_ops;
         
-        // Flatten
+        
         for (const auto& op : node.operands) {
             op->accept(*this);
             if (auto add = std::dynamic_pointer_cast<AddNode>(result)) {
@@ -213,7 +213,7 @@ public:
                 std::shared_ptr<NumberNode> coeff_part = std::make_shared<NumberNode>(BigInt(1));
 
                 if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(op)) {
-                    // Check for coefficient (NumberNode)
+                    
                     std::shared_ptr<NumberNode> coeff = nullptr;
                     int coeff_idx = -1;
                     
@@ -237,7 +237,7 @@ public:
                              for(int k=0; k<(int)mul->operands.size(); ++k) {
                                  if (k != coeff_idx) rest.push_back(mul->operands[k]);
                              }
-                             // Create standard MultiplyNode from rest (which sorts them)
+                             
                              term_part = std::make_shared<MultiplyNode>(rest);
                          }
                     }
@@ -285,31 +285,31 @@ public:
     }
 
     void visit(MultiplyNode& node) override {
-        // std::cout << "Visiting MultiplyNode..." << std::endl;
+        
         std::vector<std::shared_ptr<SymbolicNode>> sc;
-        // First pass: normalize operands and flatten
+        
         for (const auto& op : node.operands) {
             op->accept(*this);
             auto res = result;
             if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(res)) {
-                // If the normalized child is a MultiplyNode, flatten its operands
+                
                 sc.insert(sc.end(), mul->operands.begin(), mul->operands.end());
             } else {
                 sc.push_back(res);
             }
         }
 
-        // Check for expansion opportunity
-        bool has_add = false;
-        // If we strictly follow expansion, any AddNode triggers it.
-        // But (x)(y) -> xy, recursive call? No.
-        // What if expand_product returns a MultiplyNode?
-        // Wait, if expand_product returns a MultiplyNode, does visit(MultiplyNode) run on it?
-        // No! Because expand_product calls accept(*this) internally?
-        // NO! I removed accept(*this) calls inside expand_product for recursive calls!
-        // But expand_product Base Case returns a MultiplyNode or PowerNode.
         
-        // Let's verify expansion logic again.
+        bool has_add = false;
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
         for(const auto& op : sc) {
             if(std::dynamic_pointer_cast<AddNode>(op)) {
@@ -325,12 +325,114 @@ public:
             }
             std::shared_ptr<SymbolicNode> current = sc[0];
             for(size_t i=1; i<sc.size(); ++i) {
-                // Here is the recursive step that might cause issues if expand_product returns something unnormalized? 
-                // But expand_product is supposed to return normalized.
+                
+                
                 current = expand_product(current, sc[i]);
             }
-            // Result is fully expanded
+            
             result = current;
+            return;
+        }
+
+        
+        bool has_matrix = false;
+        for(const auto& op : sc) {
+            if (std::dynamic_pointer_cast<MatrixNode>(op)) { has_matrix = true; break; }
+            if (auto p = std::dynamic_pointer_cast<PowerNode>(op)) {
+                if (std::dynamic_pointer_cast<MatrixNode>(p->base)) { has_matrix = true; break; }
+            }
+        }
+
+        if (has_matrix) {
+            std::vector<std::shared_ptr<SymbolicNode>> new_ops;
+            std::shared_ptr<NumberNode> scalar_part = std::make_shared<NumberNode>(BigInt(1));
+            
+            for(const auto& op : sc) {
+                if (auto num = std::dynamic_pointer_cast<NumberNode>(op)) {
+                    scalar_part = multiply_numbers(scalar_part, num);
+                } else {
+                    new_ops.push_back(op);
+                }
+            }
+            
+            
+            
+            
+            std::vector<std::shared_ptr<SymbolicNode>> fused_ops;
+            if (!new_ops.empty()) fused_ops.push_back(new_ops[0]);
+            
+            for(size_t i=1; i<new_ops.size(); ++i) {
+                auto left = fused_ops.back();
+                auto right = new_ops[i];
+                
+                auto m_left = std::dynamic_pointer_cast<MatrixNode>(left);
+                auto m_right = std::dynamic_pointer_cast<MatrixNode>(right);
+                
+                if (m_left && m_right) {
+                    
+                    if (m_left->cols == m_right->rows) {
+                         
+                         if (std::holds_alternative<MatrixNode::DenseStorage>(m_left->storage) && 
+                             std::holds_alternative<MatrixNode::DenseStorage>(m_right->storage)) {
+                             
+                             const auto& d_l = std::get<MatrixNode::DenseStorage>(m_left->storage);
+                             const auto& d_r = std::get<MatrixNode::DenseStorage>(m_right->storage);
+                             
+                             size_t R = m_left->rows;
+                             size_t C = m_right->cols;
+                             size_t K = m_left->cols;
+
+                             
+                             MatrixNode::DenseStorage res_data;
+                             res_data.reserve(R*C);
+                             
+                             for(size_t r=0; r<R; ++r) {
+                                 for(size_t c=0; c<C; ++c) {
+                                     
+                                     std::vector<std::shared_ptr<SymbolicNode>> sum_ops;
+                                     for(size_t k=0; k<K; ++k) {
+                                         std::vector<std::shared_ptr<SymbolicNode>> prod_ops = {
+                                             d_l[r*K + k], d_r[k*C + c]
+                                         };
+                                         sum_ops.push_back(std::make_shared<MultiplyNode>(prod_ops));
+                                     }
+                                     
+                                     NormalizationVisitor elem_vis;
+                                     auto elem_node = std::make_shared<AddNode>(sum_ops);
+                                     elem_node->accept(elem_vis);
+                                     
+                                     auto res_val = elem_vis.get_result();
+                                     if (auto num = std::dynamic_pointer_cast<NumberNode>(res_val)) {
+                                         if (std::holds_alternative<double>(num->value)) {
+                                             double v = std::get<double>(num->value);
+                                             if (std::abs(v) < 1e-10) { 
+                                                 res_val = std::make_shared<NumberNode>(BigInt(0));
+                                             } else if (std::abs(v - 1.0) < 1e-10) {
+                                                 res_val = std::make_shared<NumberNode>(BigInt(1));
+                                             }
+                                         }
+                                     }
+                                     res_data.push_back(res_val);
+                                 }
+                             }
+                             
+                             fused_ops.pop_back();
+                             fused_ops.push_back(std::make_shared<MatrixNode>(R, C, res_data));
+                             continue;
+                         }
+                    }
+                }
+                fused_ops.push_back(right);
+            }
+            
+            if (!scalar_part->is_one()) {
+                fused_ops.insert(fused_ops.begin(), scalar_part);
+            }
+            
+            if (fused_ops.empty()) result = std::make_shared<NumberNode>(BigInt(1));
+            else if (fused_ops.size() == 1) result = fused_ops[0];
+            else result = std::make_shared<MultiplyNode>(fused_ops);
+            
             return;
         }
 
@@ -394,22 +496,42 @@ public:
                                       }
                                  } else if (exp_val == 0) {
                                       pow_val = std::make_shared<NumberNode>(BigInt(1));
-                                 } else if (exp_val > 0 && exp_val < 32) {
+                                 } else if (std::abs(exp_val) > 0 && std::abs(exp_val) < 64) { 
+                                      
+                                      long long abs_exp = std::abs(exp_val);
+                                      std::shared_ptr<NumberNode> base_pow_val = nullptr;
+
                                       if (std::holds_alternative<BigInt>(b_num->value)) {
                                           BigInt b = std::get<BigInt>(b_num->value);
                                           BigInt res(1);
-                                          for(int k=0;k<exp_val;++k) res = res * b;
-                                          pow_val = std::make_shared<NumberNode>(res);
+                                          for(int k=0;k<abs_exp;++k) res = res * b;
+                                          base_pow_val = std::make_shared<NumberNode>(res);
                                       } else if (std::holds_alternative<Rational>(b_num->value)) {
                                           Rational b = std::get<Rational>(b_num->value);
                                           Rational res(1);
-                                          for(int k=0;k<exp_val;++k) res = res * b;
-                                          pow_val = std::make_shared<NumberNode>(res);
+                                          for(int k=0;k<abs_exp;++k) res = res * b;
+                                          base_pow_val = std::make_shared<NumberNode>(res);
                                       } else if (std::holds_alternative<double>(b_num->value)) {
                                           double b = std::get<double>(b_num->value);
                                           double res = 1.0;
-                                          for(int k=0;k<exp_val;++k) res *= b;
-                                          pow_val = std::make_shared<NumberNode>(res);
+                                          for(int k=0;k<abs_exp;++k) res *= b;
+                                          base_pow_val = std::make_shared<NumberNode>(res);
+                                      }
+
+                                      if (base_pow_val) {
+                                          if (exp_val > 0) {
+                                              pow_val = base_pow_val;
+                                          } else {
+                                              
+                                              if (std::holds_alternative<BigInt>(base_pow_val->value)) {
+                                                  pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), std::get<BigInt>(base_pow_val->value)));
+                                              } else if (std::holds_alternative<Rational>(base_pow_val->value)) {
+                                                  Rational r = std::get<Rational>(base_pow_val->value);
+                                                  pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
+                                              } else if (std::holds_alternative<double>(base_pow_val->value)) {
+                                                  pow_val = std::make_shared<NumberNode>(1.0 / std::get<double>(base_pow_val->value));
+                                              }
+                                          }
                                       }
                                  }
                                  
@@ -418,10 +540,10 @@ public:
                                      is_number_power = true;
                                  }
                              } else if (exp_is_half) {
-                                 // Sqrt Simplification
+                                 
                                  std::shared_ptr<NumberNode> root_val = nullptr;
                                  if (std::holds_alternative<BigInt>(b_num->value)) {
-                                     // Try integer sqrt
+                                     
                                      double d = std::get<BigInt>(b_num->value).to_double();
                                      if (d >= 0) {
                                          double r = std::sqrt(d);
@@ -464,7 +586,7 @@ public:
         
         for (auto const& [base, exp] : bases) {
             if (exp->is_zero()) {
-                // x^0 = 1
+                
             } else if (exp->is_one()) {
                 final_ops.push_back(base);
             } else {
@@ -500,7 +622,7 @@ public:
             return;
         }
 
-        // Try to evaluate number power
+        
         if (auto b_num = std::dynamic_pointer_cast<NumberNode>(s_base)) {
             if (auto e_num = std::dynamic_pointer_cast<NumberNode>(s_exp)) {
                  long long exp_val = 0;
@@ -541,23 +663,43 @@ public:
                           }
                      } else if (exp_val == 0) {
                           pow_val = std::make_shared<NumberNode>(BigInt(1));
-                     } else if (exp_val > 0 && exp_val < 32) {
-                          if (std::holds_alternative<BigInt>(b_num->value)) {
-                              BigInt b = std::get<BigInt>(b_num->value);
-                              BigInt res(1);
-                              for(int k=0;k<exp_val;++k) res = res * b;
-                              pow_val = std::make_shared<NumberNode>(res);
-                          } else if (std::holds_alternative<Rational>(b_num->value)) {
-                              Rational b = std::get<Rational>(b_num->value);
-                              Rational res(1);
-                              for(int k=0;k<exp_val;++k) res = res * b;
-                              pow_val = std::make_shared<NumberNode>(res);
-                          } else if (std::holds_alternative<double>(b_num->value)) {
-                              double b = std::get<double>(b_num->value);
-                              double res = 1.0;
-                              for(int k=0;k<exp_val;++k) res *= b;
-                              pow_val = std::make_shared<NumberNode>(res);
-                          }
+                     } else if (std::abs(exp_val) > 0 && std::abs(exp_val) < 64) {
+                          
+                                      long long abs_exp = std::abs(exp_val);
+                                      std::shared_ptr<NumberNode> base_pow_val = nullptr;
+
+                                      if (std::holds_alternative<BigInt>(b_num->value)) {
+                                          BigInt b = std::get<BigInt>(b_num->value);
+                                          BigInt res(1);
+                                          for(int k=0;k<abs_exp;++k) res = res * b;
+                                          base_pow_val = std::make_shared<NumberNode>(res);
+                                      } else if (std::holds_alternative<Rational>(b_num->value)) {
+                                          Rational b = std::get<Rational>(b_num->value);
+                                          Rational res(1);
+                                          for(int k=0;k<abs_exp;++k) res = res * b;
+                                          base_pow_val = std::make_shared<NumberNode>(res);
+                                      } else if (std::holds_alternative<double>(b_num->value)) {
+                                          double b = std::get<double>(b_num->value);
+                                          double res = 1.0;
+                                          for(int k=0;k<abs_exp;++k) res *= b;
+                                          base_pow_val = std::make_shared<NumberNode>(res);
+                                      }
+
+                                      if (base_pow_val) {
+                                          if (exp_val > 0) {
+                                              pow_val = base_pow_val;
+                                          } else {
+                                              
+                                              if (std::holds_alternative<BigInt>(base_pow_val->value)) {
+                                                  pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), std::get<BigInt>(base_pow_val->value)));
+                                              } else if (std::holds_alternative<Rational>(base_pow_val->value)) {
+                                                  Rational r = std::get<Rational>(base_pow_val->value);
+                                                  pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
+                                              } else if (std::holds_alternative<double>(base_pow_val->value)) {
+                                                  pow_val = std::make_shared<NumberNode>(1.0 / std::get<double>(base_pow_val->value));
+                                              }
+                                          }
+                                      }
                      }
                      
                      if (pow_val) {
@@ -588,39 +730,39 @@ public:
             }
         }
         
-        // Distribution of power over product: (x * y)^n -> x^n * y^n
+        
         if (auto m_base = std::dynamic_pointer_cast<MultiplyNode>(s_base)) {
             std::vector<std::shared_ptr<SymbolicNode>> new_ops;
             for(auto& op : m_base->operands) {
-                // op^s_exp
-                auto term_pow = std::make_shared<PowerNode>(op, s_exp);
-                term_pow->accept(*this); // Normalize x^n
                 
-                // If result is MultiplyNode (e.g. op was x*y), flatten it
+                auto term_pow = std::make_shared<PowerNode>(op, s_exp);
+                term_pow->accept(*this); 
+                
+                
                 if (auto mul_res = std::dynamic_pointer_cast<MultiplyNode>(result)) {
                      new_ops.insert(new_ops.end(), mul_res->operands.begin(), mul_res->operands.end());
                 } else {
                      new_ops.push_back(result);
                 }
             }
-            // Now construct MultiplyNode and normalize it (combines terms)
+            
             auto final_mul = std::make_shared<MultiplyNode>(new_ops);
             final_mul->accept(*this);
             return;
         }
 
-        // Collapse nested powers: (x^a)^b -> x^(a*b)
+        
         if (auto p_base = std::dynamic_pointer_cast<PowerNode>(s_base)) {
-             // Calculate new exponent: a * b
+             
              std::vector<std::shared_ptr<SymbolicNode>> exp_ops;
              exp_ops.push_back(p_base->exponent);
              exp_ops.push_back(s_exp);
              
              auto mul_exp = std::make_shared<MultiplyNode>(exp_ops);
-             mul_exp->accept(*this); // Simplify a*b
+             mul_exp->accept(*this); 
              
              auto new_pow = std::make_shared<PowerNode>(p_base->base, result);
-             new_pow->accept(*this); // Simplify x^(new_exp)
+             new_pow->accept(*this); 
              return;
         }
 
@@ -663,7 +805,7 @@ public:
     }
 
     void visit(RelationalNode& node) override {
-        // Recursively normalize operands
+        
         std::shared_ptr<SymbolicNode> new_left = nullptr;
         std::shared_ptr<SymbolicNode> new_right = nullptr;
 
@@ -672,11 +814,11 @@ public:
             new_left = result;
         }
         if (node.right) {
-            // Need to be careful with result state. 
-            // result is member variable.
-            // Store previous result before call? No need if we assigned new_left already.
-            // But we must ensure 'result' is not overwritten by some side effect?
-            // visit() sets result. So we are good.
+            
+            
+            
+            
+            
             node.right->accept(*this);
             new_right = result;
         }

@@ -4,23 +4,23 @@
 #include <algorithm>
 #include <string>
 
-// Include necessary headers
+
 #include "../include/symbolic_ast.hpp"
 #include "../include/visitors/print_visitor.hpp"
 #include "../include/visitors/normalization_visitor.hpp"
 
-// Define main for debugging
+
 int main() {
     try {
         std::cout << "Starting Debug Expansion Test..." << std::endl;
         
-        // Setup (a+b)
+        
         auto a = std::make_shared<VariableNode>("a");
         auto b = std::make_shared<VariableNode>("b");
         std::vector<std::shared_ptr<SymbolicNode>> ab_ops = {a, b};
         auto a_plus_b = std::make_shared<AddNode>(std::move(ab_ops));
         
-        // Setup (c+d)
+        
         auto c = std::make_shared<VariableNode>("c");
         auto d = std::make_shared<VariableNode>("d");
         std::vector<std::shared_ptr<SymbolicNode>> cd_ops = {c, d};
@@ -30,8 +30,8 @@ int main() {
 
         NormalizationVisitor v;
         
-        // Test 1: Expand (a+b) * c
-        // Expect: ac + bc
+        
+        
         std::cout << "Test 1: (a+b)*c" << std::endl;
         auto res1 = v.expand_product(a_plus_b, c);
         
@@ -43,12 +43,12 @@ int main() {
             std::cout << "Result: NULL" << std::endl;
         }
 
-        // Test 2: Expand (a+b) * (c+d)
-        // Expect: ac + ad + bc + bd
-        std::cout << "Test 2: (a+b)*(c+d)" << std::endl;
-        // This simulates the call inside NormalizationVisitor::visit(MultiplyNode)
         
-        // We pass (a+b) as 'add', and (c+d) as 'term'.
+        
+        std::cout << "Test 2: (a+b)*(c+d)" << std::endl;
+        
+        
+        
         auto res2 = v.expand_product(a_plus_b, c_plus_d);
         std::cout << "Expansion returned." << std::endl;
         

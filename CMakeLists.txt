@@ -21,6 +21,9 @@ add_library(lmcas SHARED
     src/symbolic.cpp
     src/print_visitor.cpp
     src/solve_visitor.cpp
+    src/matcher.cpp
+    src/integration.cpp
+    src/solver.cpp
 )
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
@@ -75,6 +78,8 @@ target_link_libraries(test_factor PRIVATE lmcas LammpCore)
 add_executable(test_arithmetic tests/test_arithmetic.cpp)
 target_link_libraries(test_arithmetic PRIVATE lmcas LammpCore)
 
+add_executable(test_fraction tests/test_fraction.cpp)
+target_link_libraries(test_fraction PRIVATE lmcas LammpCore)
 
 add_executable(test_new_features tests/test_new_features.cpp)
 target_link_libraries(test_new_features PRIVATE lmcas LammpCore)
@@ -90,6 +95,24 @@ target_link_libraries(test_trig PRIVATE lmcas LammpCore)
 
 add_executable(test_series tests/test_series.cpp)
 target_link_libraries(test_series PRIVATE lmcas LammpCore)
+
+add_executable(test_matcher tests/test_matcher.cpp)
+target_link_libraries(test_matcher PRIVATE lmcas LammpCore)
+
+add_executable(test_poly_bridge tests/test_poly_bridge.cpp)
+target_link_libraries(test_poly_bridge PRIVATE lmcas LammpCore)
+
+add_executable(test_solve_poly tests/test_solve_visitor_poly.cpp)
+target_link_libraries(test_solve_poly PRIVATE lmcas LammpCore)
+
+add_executable(test_solver_linear tests/test_solver_linear.cpp)
+target_link_libraries(test_solver_linear PRIVATE lmcas LammpCore)
+
+add_executable(test_solver_poly tests/test_solver_poly.cpp)
+target_link_libraries(test_solver_poly PRIVATE lmcas LammpCore)
+
+add_executable(test_polynomial_gcd tests/test_polynomial_gcd.cpp)
+target_link_libraries(test_polynomial_gcd PRIVATE lmcas LammpCore)
 
 # add_executable(test_migration tests/test_migration.cpp)
 # target_link_libraries(test_migration PRIVATE lmcas LammpCore)

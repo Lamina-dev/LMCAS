@@ -7,7 +7,7 @@
 #include "../include/visitors/print_visitor.hpp"
 #include "../include/visitors/normalization_visitor.hpp"
 
-// Helper to print
+
 void print_expr(const std::string& label, SymbolicNode& node) {
     try {
         PrintVisitor pv;
@@ -28,8 +28,8 @@ int main() {
     try {
         std::cout << "Testing Normalization..." << std::endl;
 
-        // 1. Test Sorting & Constant Folding: 2 + x + 3 -> 5 + x
-        // Add(2, x, 3)
+        
+        
         std::vector<std::shared_ptr<SymbolicNode>> ops1;
         ops1.push_back(std::make_shared<NumberNode>(2.0));
         ops1.push_back(std::make_shared<VariableNode>("x"));
@@ -40,8 +40,8 @@ int main() {
         auto norm1 = normalize(expr1);
         print_expr("Expr 1 Normalized", *norm1);
 
-        // 2. Test Expansion: x * (y + 1) -> xy + x
-        // Mul(x, Add(y, 1))
+        
+        
         auto x = std::make_shared<VariableNode>("x");
         auto y = std::make_shared<VariableNode>("y");
         auto one = std::make_shared<NumberNode>(1.0);
@@ -60,7 +60,7 @@ int main() {
         auto norm2 = normalize(expr2);
         print_expr("Expr 2 Normalized", *norm2);
 
-        // 3. Test Zero Property: x * 0 -> 0
+        
         std::vector<std::shared_ptr<SymbolicNode>> zero_ops;
         zero_ops.push_back(x);
         zero_ops.push_back(std::make_shared<NumberNode>(0.0));
@@ -70,7 +70,7 @@ int main() {
         auto norm3 = normalize(expr3);
         print_expr("Expr 3 Normalized", *norm3);
         
-        // 4. Test Expansion 2: (a+b)*(c+d) -> ac + ad + bc + bd
+        
         auto a = std::make_shared<VariableNode>("a");
         auto b = std::make_shared<VariableNode>("b");
         auto c = std::make_shared<VariableNode>("c");
@@ -94,21 +94,21 @@ int main() {
         
         print_expr("Expr 4 Normalized", *norm4);
 
-        // 5. Test Inverse Cancellation (a * -2)^-1 * a * -2 -> 1
+        
         std::cout << "Testing Inverse Cancellation..." << std::endl;
         auto var_a = std::make_shared<VariableNode>("a");
         auto num_neg2 = std::make_shared<NumberNode>(BigInt(-2));
         
-        // (a * -2)
+        
         std::vector<std::shared_ptr<SymbolicNode>> inner_ops;
         inner_ops.push_back(var_a);
         inner_ops.push_back(num_neg2);
         auto inner_mul = std::make_shared<MultiplyNode>(inner_ops);
         
-        // ^ -1
+        
         auto inv_inner = std::make_shared<PowerNode>(inner_mul, std::make_shared<NumberNode>(BigInt(-1)));
         
-        // Full expr: a * inv_inner * -2
+        
         std::vector<std::shared_ptr<SymbolicNode>> full_ops;
         full_ops.push_back(var_a);
         full_ops.push_back(inv_inner);

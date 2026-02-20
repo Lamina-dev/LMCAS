@@ -1,7 +1,7 @@
 #include "test_common.hpp"
 
-// (Global failure counter and helpers are now in test_common.hpp)
-// We will adapt the test cases to use the new macros.
+
+
 
 int main() {
     TEST_CASE("Complex Arithmetic");
@@ -11,7 +11,7 @@ int main() {
     auto one = SymbolicExpr::number(1);
     auto two = SymbolicExpr::number(2);
     
-    // 1. (x+y)^2 - (x-y)^2 = 4xy
+    
     {
         auto A = SymbolicExpr::power(SymbolicExpr::add(x, y), two); 
         auto B = SymbolicExpr::power(SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), y)), two); 
@@ -21,7 +21,7 @@ int main() {
         EXPECT_CONTAINS(expanded->to_string(), {"4", "x", "y"}, "Diff Squares (4xy)");
     }
 
-    // 2. Rational Coefficients: x/2 + x/3 = 5x/6
+    
     {
         auto half_x = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), x);
         auto third_x = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 3)), x);
@@ -31,7 +31,7 @@ int main() {
         EXPECT_EQ_EXPR_STR(result, "(5/6)*x", "Rational Coeffs");
     }
 
-    // 3. Complex Polynomial: (x+1)^3 - x^3 - 1 = 3x^2 + 3x
+    
     {
         auto term1 = SymbolicExpr::power(SymbolicExpr::add(x, one), SymbolicExpr::number(3));
         auto term2 = SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::power(x, SymbolicExpr::number(3)));
@@ -43,7 +43,7 @@ int main() {
         EXPECT_CONTAINS(res->simplify()->to_string(), {"3*x", "3*(x^2)"}, "Cubic Cancel");
     }
 
-    // 4. Zero Cancellation: (x + 1) - (x + 1)
+    
     {
         auto p = SymbolicExpr::add(x, one);
         auto neg_p = SymbolicExpr::multiply(SymbolicExpr::number(-1), p);
@@ -53,7 +53,7 @@ int main() {
         EXPECT_EQ_EXPR_STR(res, "0", "Zero Cancel");
     }
     
-    // 5. Nested Powers: (x^2)^3 -> x^6
+    
     {
         auto p2 = SymbolicExpr::power(x, two);
         auto p6 = SymbolicExpr::power(p2, SymbolicExpr::number(3));
@@ -61,7 +61,7 @@ int main() {
         EXPECT_EQ_EXPR_STR(res, "x^6", "Nested Powers");
     }
 
-    // 6. Debug 0+x
+    
     {
         auto z = SymbolicExpr::number(0);
         auto term = SymbolicExpr::variable("x");
@@ -71,13 +71,13 @@ int main() {
         EXPECT_EQ_EXPR_STR(sim, "x", "Identity Add (0+x)");
     }
 
-    // 7. Debug 0 + x^2 + ...
+    
     {
         auto sum = SymbolicExpr::number(0);
         sum = SymbolicExpr::add(sum, SymbolicExpr::variable("a"));
         sum = SymbolicExpr::add(sum, SymbolicExpr::variable("b"));
         auto sim = sum->simplify();
-        // expect a+b
+        
         EXPECT_CONTAINS(sim->to_string(), {"a", "b"}, "Identity Chain");
     }
 

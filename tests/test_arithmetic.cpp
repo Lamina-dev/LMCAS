@@ -2,8 +2,8 @@
 #include "bigint.hpp"
 #include "rational.hpp"
 
-// Note: symbolic.hpp (included by test_common.hpp) likely includes bigint/rational or they are in scope.
-// If not, we include them above.
+
+
 
 void test_bigint() {
     TEST_CASE("BigInt Basic");
@@ -12,7 +12,7 @@ void test_bigint() {
     BigInt c(6);
 
     BigInt b2 = b * b;
-    // std::cout << "b^2 = " << b2.to_string() << std::endl;
+    
     EXPECT_EQ_STR(b2.to_string(), "25", "5^2 = 25");
 
     BigInt ac4 = BigInt(4) * a * c;
@@ -45,16 +45,16 @@ void test_rational() {
 
 void test_large_mul() {
     TEST_CASE("Large Multiplication");
-    // std::cout << "sizeof(mp_limb_t) = " << sizeof(mp_limb_t) << std::endl;
+    
     std::string s = "123456789123456789";
     BigInt a(s);
     BigInt b(s);
-    // std::cout << "a = " << a.to_string() << std::endl;
-    BigInt c = a * b;
-    // std::cout << "a*a = " << c.to_string() << std::endl;
     
-    // Check known result
-    // 123456789123456789 ^ 2 = 15241578780673678515622620750190521
+    BigInt c = a * b;
+    
+    
+    
+    
     std::string expected = "15241578780673678515622620750190521";
     EXPECT_EQ_STR(c.to_string(), expected, "Large Mul Check");
 }

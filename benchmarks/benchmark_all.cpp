@@ -6,9 +6,9 @@
 #include <iomanip>
 
 #include "symbolic.hpp"
-// #include "cas.hpp"
 
-// Simple Timer Class
+
+
 class Timer {
     std::string name;
     std::chrono::high_resolution_clock::time_point start;
@@ -29,13 +29,13 @@ void bench_polynomial_expand() {
     auto z = SymbolicExpr::variable("z");
     auto one = SymbolicExpr::number(1);
     
-    // (x+y+z+1)
+    
     auto base = SymbolicExpr::add(x, SymbolicExpr::add(y, SymbolicExpr::add(z, one)));
-    // ^8
+    
     auto expr = SymbolicExpr::power(base, SymbolicExpr::number(8));
     
     auto expanded = expr->expand();
-    // Do not print result to avoid I/O bottleneck
+    
 }
 
 void bench_matrix_determinant(int n) {
@@ -45,14 +45,14 @@ void bench_matrix_determinant(int n) {
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> mat_data(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
     for(int i=0; i<n; ++i) {
         for(int j=0; j<n; ++j) {
-            // M_ij = x_ij
+            
             auto val = SymbolicExpr::variable("x_" + std::to_string(i) + "_" + std::to_string(j));
             mat_data[i][j] = val;
         }
     }
     auto mat = SymbolicExpr::matrix(mat_data);
     auto det = SymbolicExpr::determinant(mat);
-    // Expand to force computation if lazy properties exist
+    
     det = det->expand();
 }
 
@@ -85,11 +85,11 @@ void bench_symbolic_diff() {
     Timer t("Symbolic Diff (sin(x^2 + 1) * e^x)^5");
     auto x = SymbolicExpr::variable("x");
     
-    // inner = sin(x^2+1) * e^x
+    
     auto x2_1 = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(1));
     auto term1 = SymbolicExpr::sin(x2_1);
     
-    // Use e^x for exp
+    
     auto e = SymbolicExpr::variable("e");
     auto term2 = SymbolicExpr::power(e, x);
     
@@ -101,10 +101,10 @@ void bench_symbolic_diff() {
 }
 
 void bench_linear_system() {
-    // Solve 3x3 Linear System
-    // x + y + z = a
-    // 2x - y + z = b
-    // x + 2y - z = c
+    
+    
+    
+    
     Timer t("Linear System Solve 3x3");
     
     auto x = "x"; auto y = "y"; auto z = "z";
@@ -112,16 +112,16 @@ void bench_linear_system() {
     auto b = SymbolicExpr::variable("b");
     auto c = SymbolicExpr::variable("c");
     
-    // Eq1: x + y + z - a
+    
     auto eq1 = SymbolicExpr::add(SymbolicExpr::add(SymbolicExpr::variable(x), SymbolicExpr::variable(y)), 
                SymbolicExpr::add(SymbolicExpr::variable(z), SymbolicExpr::multiply(SymbolicExpr::number(-1), a)));
     
-    // Eq2: 2x - y + z - b
+    
     auto eq2 = SymbolicExpr::add(SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), SymbolicExpr::variable(x)), 
                SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::variable(y))),
                SymbolicExpr::add(SymbolicExpr::variable(z), SymbolicExpr::multiply(SymbolicExpr::number(-1), b)));
 
-    // Eq3: x + 2y - z - c
+    
     auto eq3 = SymbolicExpr::add(SymbolicExpr::add(SymbolicExpr::variable(x), 
                SymbolicExpr::multiply(SymbolicExpr::number(2), SymbolicExpr::variable(y))),
                SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::variable(z)), 
@@ -159,7 +159,7 @@ int main() {
     
     bench_matrix_determinant(3);
     bench_matrix_determinant(4);
-    // bench_matrix_determinant(5); // 5x5 might be too slow for symbolic determinant without optimization
+    
 
     std::cout << "========================================" << std::endl;
     std::cout << "Benchmarks completed." << std::endl;
