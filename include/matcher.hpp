@@ -51,8 +51,7 @@ public:
 };
 
 
-
-
-SymbolicExpr wildcard(const std::string& name);
+// Helper to create a wildcard expression
+LAMINA_API SymbolicExpr wildcard(const std::string& name);
 
 } 

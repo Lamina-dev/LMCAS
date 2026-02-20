@@ -125,6 +125,9 @@ target_compile_definitions(benchmark_all PRIVATE -D_SYMBOLIC_BENCHMARK)
 add_executable(test_trig_rewrite tests/test_trig_rewrite.cpp)
 target_link_libraries(test_trig_rewrite PRIVATE lmcas LammpCore)
 
+add_executable(test_matcher_comm tests/test_matcher_comm.cpp)
+target_link_libraries(test_matcher_comm PRIVATE lmcas LammpCore)
+
 enable_testing()
 add_test(NAME TestCAS COMMAND test_cas)
 add_test(NAME TestBigIntDebug COMMAND test_bigint_debug)

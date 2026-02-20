@@ -9,6 +9,47 @@ SymbolicExpr wildcard(const std::string& name) {
 }
 
 
+// Forward declaration
+static bool match_recursive(const std::shared_ptr<SymbolicNode>& p_node, 
+                            const std::shared_ptr<SymbolicNode>& t_node, 
+                            const std::unordered_set<std::string>& wildcards,
+                            MatchMap& results);
+
+// Helper for commutative matching (try all permutations of target operands against pattern operands)
+static bool match_commutative_recursive(const std::vector<std::shared_ptr<SymbolicNode>>& p_ops,
+                                        const std::vector<std::shared_ptr<SymbolicNode>>& t_ops,
+                                        std::vector<bool>& used_t,
+                                        size_t p_index,
+                                        const std::unordered_set<std::string>& wildcards,
+                                        MatchMap& results) {
+    // Base case: all pattern operands matched
+    if (p_index == p_ops.size()) {
+        return true;
+    }
+
+    // Attempt to match p_ops[p_index] against any unused t_ops[j]
+    for (size_t j = 0; j < t_ops.size(); ++j) {
+        if (!used_t[j]) {
+            // Save state to backtrack
+            MatchMap saved_results = results;
+            
+            if (match_recursive(p_ops[p_index], t_ops[j], wildcards, results)) {
+                used_t[j] = true;
+                if (match_commutative_recursive(p_ops, t_ops, used_t, p_index + 1, wildcards, results)) {
+                    return true;
+                }
+                // Backtrack
+                used_t[j] = false;
+            }
+            
+            // Restore results if match failed or recursive step failed
+            results = saved_results;
+        }
+    }
+    
+    return false;
+}
+
 static bool is_wildcard(const std::shared_ptr<SymbolicNode>& node, 
                        const std::unordered_set<std::string>& wildcards,
                        std::string& name_out) {
@@ -63,31 +104,19 @@ static bool match_recursive(const std::shared_ptr<SymbolicNode>& p_node,
     if (auto p_add = std::dynamic_pointer_cast<AddNode>(p_node)) {
         auto t_add = std::dynamic_pointer_cast<AddNode>(t_node);
         
-        
         if (p_add->operands.size() != t_add->operands.size()) return false;
         
-        
-        
-        
-        
-        for (size_t i = 0; i < p_add->operands.size(); ++i) {
-            if (!match_recursive(p_add->operands[i], t_add->operands[i], wildcards, results)) {
-                return false;
-            }
-        }
-        return true;
+        std::vector<bool> used(t_add->operands.size(), false);
+        return match_commutative_recursive(p_add->operands, t_add->operands, used, 0, wildcards, results);
     }
 
     
     if (auto p_mul = std::dynamic_pointer_cast<MultiplyNode>(p_node)) {
         auto t_mul = std::dynamic_pointer_cast<MultiplyNode>(t_node);
         if (p_mul->operands.size() != t_mul->operands.size()) return false;
-        for (size_t i = 0; i < p_mul->operands.size(); ++i) {
-            if (!match_recursive(p_mul->operands[i], t_mul->operands[i], wildcards, results)) {
-                return false;
-            }
-        }
-        return true;
+        
+        std::vector<bool> used(t_mul->operands.size(), false);
+        return match_commutative_recursive(p_mul->operands, t_mul->operands, used, 0, wildcards, results);
     }
 
     

@@ -75,7 +75,8 @@ make -j4
 GNU Lesser General Public License v3.0 (LGPL-3.0)
 
 ## 贡献
-Lamina MP LAMMP - Jecricho Knox - Lamina-dev
-Lamina CAS - Ziyang Bai - Lamina-dev
-All contributors are contributed to the Lamina project.
+- Lamina MP LAMMP - Jecricho Knox - Lamina-dev
+- Lamina CAS - Ziyang Bai - Lamina-dev
+- All contributors are contributed to the Lamina project.
+
 Here, I(ZiyangBai) extend my sincere gratitude and heartfelt thanks to them!
