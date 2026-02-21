@@ -1,12 +1,18 @@
 #pragma once
 #include "../symbolic_ast.hpp"
 
+
 class DifferentiationVisitor : public SymbolicVisitor {
     std::string var;
 public:
     std::shared_ptr<SymbolicNode> result;
+    // 隐函数微分相关
+    std::string implicit_var; // 例如 y
+    bool implicit_mode = false;
 
-    DifferentiationVisitor(std::string v) : var(std::move(v)) {}
+    DifferentiationVisitor(const std::string& v) : var(v), result(nullptr) {}
+    DifferentiationVisitor(const std::string& v, const std::string& implicit_v)
+        : var(v), implicit_var(implicit_v), result(nullptr), implicit_mode(true) {}
 
     std::shared_ptr<SymbolicNode> get_result() const {
         return result;
@@ -14,16 +20,6 @@ public:
     void visit(NumberNode& node) override {
         result = SymbolicFactory::create_number(0.0);
     }
-    public:
-        std::shared_ptr<SymbolicNode> result;
-
-        // 隐函数微分相关
-        std::string implicit_var; // 例如 y
-        bool implicit_mode = false;
-
-        DifferentiationVisitor(const std::string& v) : var(v), result(nullptr) {}
-        DifferentiationVisitor(const std::string& v, const std::string& implicit_v)
-            : var(v), implicit_var(implicit_v), result(nullptr), implicit_mode(true) {}
 
     void visit(VariableNode& node) override {
         if (node.name == var) {
@@ -34,11 +30,6 @@ public:
     }
 
     void visit(AddNode& node) override {
-            else if (implicit_mode && node.name == implicit_var) {
-                // 隐函数微分：d(隐变量)/d(自变量) = 隐变量的导数符号
-                // 例如 d(y)/dx = y'
-                result = std::make_shared<VariableNode>(implicit_var + "'");
-            }
         std::vector<std::shared_ptr<SymbolicNode>> diff_ops;
         for (const auto& op : node.operands) {
             op->accept(*this);
