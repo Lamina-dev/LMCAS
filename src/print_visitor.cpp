@@ -16,36 +16,62 @@ void PrintVisitor::visit(VariableNode& node) {
 }
 
 void PrintVisitor::visit(AddNode& node) {
-    buffer << "(";
+    if (node.operands.empty()) {
+        buffer << "0";
+        return;
+    }
     for (size_t i = 0; i < node.operands.size(); ++i) {
-        node.operands[i]->accept(*this);
-        if (i < node.operands.size() - 1) {
-            buffer << " + ";
+        if (i > 0) {
+            std::ostringstream sub;
+            PrintVisitor sub_v;
+            node.operands[i]->accept(sub_v);
+            std::string s = sub_v.get_result();
+            if (!s.empty() && s[0] == '-') {
+                buffer << " - " << s.substr(1);
+            } else {
+                buffer << " + " << s;
+            }
+        } else {
+            node.operands[i]->accept(*this);
         }
     }
-    buffer << ")";
 }
 
 void PrintVisitor::visit(MultiplyNode& node) {
-    buffer << "(";
-    for (size_t i = 0; i < node.operands.size(); ++i) {
-        node.operands[i]->accept(*this);
-        if (i < node.operands.size() - 1) {
-            buffer << " * ";
-        }
+    if (node.operands.empty()) {
+        buffer << "1";
+        return;
     }
-    buffer << ")";
+    for (size_t i = 0; i < node.operands.size(); ++i) {
+        if (i > 0) buffer << "*";
+        bool needs_parens = std::dynamic_pointer_cast<AddNode>(node.operands[i]) != nullptr;
+        if (needs_parens) buffer << "(";
+        node.operands[i]->accept(*this);
+        if (needs_parens) buffer << ")";
+    }
 }
 
 void PrintVisitor::visit(PowerNode& node) {
-    buffer << "(";
+    bool base_parens = std::dynamic_pointer_cast<AddNode>(node.base) || 
+                      std::dynamic_pointer_cast<MultiplyNode>(node.base);
+    if (base_parens) buffer << "(";
     node.base->accept(*this);
-    buffer << " ^ ";
+    if (base_parens) buffer << ")";
+    buffer << "^";
+    bool exp_parens = std::dynamic_pointer_cast<AddNode>(node.exponent) || 
+                     std::dynamic_pointer_cast<MultiplyNode>(node.exponent) ||
+                     std::dynamic_pointer_cast<PowerNode>(node.exponent);
+    if (exp_parens) buffer << "(";
     node.exponent->accept(*this);
-    buffer << ")";
+    if (exp_parens) buffer << ")";
 }
 
 void PrintVisitor::visit(FunctionNode& node) {
+    if (node.type == FunctionNode::FuncType::Infinity) {
+        buffer << "inf";
+        return;
+    }
+    
     switch (node.type) {
         case FunctionNode::FuncType::Sin: buffer << "sin"; break;
         case FunctionNode::FuncType::Cos: buffer << "cos"; break;
@@ -65,6 +91,8 @@ void PrintVisitor::visit(FunctionNode& node) {
         case FunctionNode::FuncType::Sqrt: buffer << "sqrt"; break;
         case FunctionNode::FuncType::Exp: buffer << "exp"; break;
         case FunctionNode::FuncType::Calculus_Integral: buffer << "integral"; break;
+        case FunctionNode::FuncType::Limit: buffer << "limit"; break;
+        case FunctionNode::FuncType::Infinity: buffer << "inf"; break;
     }
     buffer << "(";
     for (size_t i = 0; i < node.arguments.size(); ++i) {

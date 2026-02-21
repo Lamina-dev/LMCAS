@@ -4,7 +4,7 @@
 
 namespace lamina {
 
-class Integrator {
+class LAMINA_API Integrator {
     RewriteEngine engine;
 
 public:

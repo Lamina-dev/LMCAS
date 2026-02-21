@@ -7,11 +7,44 @@
 #include <iostream>
 
 
+inline int get_node_degree_helper(const std::shared_ptr<SymbolicNode>& node) {
+    if (!node) return 0;
+    if (std::dynamic_pointer_cast<VariableNode>(node)) return 1;
+    if (auto p = std::dynamic_pointer_cast<PowerNode>(node)) {
+        if (auto e = std::dynamic_pointer_cast<NumberNode>(p->exponent)) {
+             if (std::holds_alternative<BigInt>(e->value)) return (int)std::get<BigInt>(e->value).to_int();
+             if (std::holds_alternative<double>(e->value)) return (int)std::get<double>(e->value);
+        }
+        return 1;
+    }
+    if (auto m = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+        int d = 0;
+        for (auto& op : m->operands) d += get_node_degree_helper(op);
+        return d;
+    }
+    return 0;
+}
+
 struct NodeCompare {
     bool operator()(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) const {
         if (!lhs && !rhs) return false;
         if (!lhs) return true;
         if (!rhs) return false;
+
+        // Numbers always come last in additions (degree 0)
+        int d1 = get_node_degree_helper(lhs);
+        int d2 = get_node_degree_helper(rhs);
+        if (d1 != d2) return d1 > d2; 
+
+        // If same degree, numbers first or something
+        bool isNum1 = std::dynamic_pointer_cast<NumberNode>(lhs) != nullptr;
+        bool isNum2 = std::dynamic_pointer_cast<NumberNode>(rhs) != nullptr;
+        if (isNum1 != isNum2) return isNum1; 
+
+        if (lhs->type_priority() != rhs->type_priority()) {
+            return lhs->type_priority() < rhs->type_priority();
+        }
+
         return lhs->compare(*rhs) < 0;
     }
 };
@@ -34,7 +67,6 @@ inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>
          return std::make_shared<NumberNode>(r1 + r2);
      }
      
-     
      BigInt i1 = std::get<BigInt>(a->value);
      BigInt i2 = std::get<BigInt>(b->value);
      return std::make_shared<NumberNode>(i1 + i2);
@@ -56,7 +88,6 @@ inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<Number
                        (std::holds_alternative<BigInt>(b->value) ? Rational(std::get<BigInt>(b->value)) : Rational(1));
          return std::make_shared<NumberNode>(r1 * r2);
      }
-     
      
      BigInt i1 = std::get<BigInt>(a->value);
      BigInt i2 = std::get<BigInt>(b->value);
@@ -613,6 +644,7 @@ public:
             result = s_base;
             return;
         }
+
         if (s_base->is_zero()) {
              result = std::make_shared<NumberNode>(BigInt(0));
              return;

@@ -177,7 +177,7 @@ public:
 
     
     
-    std::shared_ptr<SymbolicExpr> limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point) const;
+    std::shared_ptr<SymbolicExpr> limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, const std::string& direction = "") const;
     
     
     std::shared_ptr<SymbolicExpr> integrate(const std::string& var) const;
@@ -375,14 +375,13 @@ public:
     }
 
     static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var) {
-        
-		
-		
-		return nullptr;
+        if (!op) return nullptr;
+        return op->integrate(var);
     }
 
     static std::shared_ptr<SymbolicExpr> limit_func(std::shared_ptr<SymbolicExpr> op, const std::string& var, std::shared_ptr<SymbolicExpr> target) {
-        return nullptr; 
+        if (!op) return nullptr;
+        return op->limit(var, target);
     }
 
     static std::shared_ptr<SymbolicExpr> matrix(const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& elements) {

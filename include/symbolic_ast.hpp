@@ -141,7 +141,7 @@ public:
     explicit NumberNode(std::variant<BigInt, Rational, double> v) : value(std::move(v)) {}
     
     
-    int type_priority() const override { return 10; }
+    int type_priority() const override { return 30; }
 
 protected:
     std::size_t compute_hash() const override {
@@ -221,7 +221,7 @@ public:
     
     explicit VariableNode(std::string n) : name(std::move(n)) {}
 
-    int type_priority() const override { return 1; }
+    int type_priority() const override { return 10; }
 
 protected:
     std::size_t compute_hash() const override {
@@ -352,7 +352,7 @@ public:
     PowerNode(std::shared_ptr<SymbolicNode> b, std::shared_ptr<SymbolicNode> e) 
         : base(std::move(b)), exponent(std::move(e)) {}
     
-    int type_priority() const override { return 3; }
+    int type_priority() const override { return 0; }
 
 protected:
     std::size_t compute_hash() const override {
@@ -365,9 +365,12 @@ protected:
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const PowerNode&>(other);
-        int cmp = base->compare(*o.base);
-        if (cmp != 0) return cmp;
-        return exponent->compare(*o.exponent);
+        
+        // Reverse compare exponent for higher degree first
+        int cmp_exp = exponent->compare(*o.exponent);
+        if (cmp_exp != 0) return cmp_exp > 0 ? -1 : 1; 
+
+        return base->compare(*o.base);
     }
         
 public:
@@ -385,7 +388,9 @@ public:
         Sinh, Cosh, Tanh,
         Ln, Log, Abs, Sqrt,
         Exp,
-        Calculus_Integral
+        Calculus_Integral,
+        Infinity,
+        Limit
     };
     
     FuncType type;

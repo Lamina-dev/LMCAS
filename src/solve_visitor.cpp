@@ -123,7 +123,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<S
         auto x1 = SymbolicExpr::divide(numerator1, two_a);
         auto x2 = SymbolicExpr::divide(numerator2, two_a);
         
-        return {x1, x2};
+        return {x1->simplify(), x2->simplify()};
     }
 
     return {};

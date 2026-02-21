@@ -51,25 +51,25 @@ struct SymbolicPolyCoeff {
     }
     
     SymbolicPolyCoeff operator+(const SymbolicPolyCoeff& other) const {
-        return SymbolicPolyCoeff(SymbolicExpr::add(val, other.val)->simplify());
+        return SymbolicPolyCoeff(SymbolicExpr::add(val, other.val));
     }
     
     SymbolicPolyCoeff operator-(const SymbolicPolyCoeff& other) const {
         return SymbolicPolyCoeff(
-            SymbolicExpr::add(val, SymbolicExpr::multiply(other.val, SymbolicExpr::number(-1)))->simplify()
+            SymbolicExpr::add(val, SymbolicExpr::multiply(other.val, SymbolicExpr::number(-1)))
         );
     }
     
     SymbolicPolyCoeff operator*(const SymbolicPolyCoeff& other) const {
-        return SymbolicPolyCoeff(SymbolicExpr::multiply(val, other.val)->simplify());
+        return SymbolicPolyCoeff(SymbolicExpr::multiply(val, other.val));
     }
 
     SymbolicPolyCoeff operator/(const SymbolicPolyCoeff& other) const {
-        return SymbolicPolyCoeff(SymbolicExpr::divide(val, other.val)->simplify());
+        return SymbolicPolyCoeff(SymbolicExpr::divide(val, other.val));
     }
     
     SymbolicPolyCoeff operator-() const {
-        return SymbolicPolyCoeff(SymbolicExpr::multiply(val, SymbolicExpr::number(-1))->simplify());
+        return SymbolicPolyCoeff(SymbolicExpr::multiply(val, SymbolicExpr::number(-1)));
     }
     
     
@@ -141,100 +141,95 @@ inline Rational extract_coeff_value<Rational>(const std::shared_ptr<SymbolicExpr
     return Rational(0);
 }
 
+inline bool depends_on_var(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
+    if (!node) return false;
+    
+    struct DepVisitor : public SymbolicVisitor {
+        std::string v;
+        bool found = false;
+        void visit(NumberNode&) override {}
+        void visit(VariableNode& n) override { if (n.name == v) found = true; }
+        void visit(AddNode& n) override { for(auto& op : n.operands) { if(found) return; op->accept(*this); } }
+        void visit(MultiplyNode& n) override { for(auto& op : n.operands) { if(found) return; op->accept(*this); } }
+        void visit(PowerNode& n) override { n.base->accept(*this); if(!found) n.exponent->accept(*this); }
+        void visit(FunctionNode& n) override { for(auto& arg : n.arguments) { if(found) return; arg->accept(*this); } }
+        void visit(MatrixNode& n) override {
+            if (std::holds_alternative<MatrixNode::DenseStorage>(n.storage)) {
+                for (auto& item : std::get<MatrixNode::DenseStorage>(n.storage)) {
+                    if (item) { item->accept(*this); if (found) return; }
+                }
+            } else {
+                for (auto& [idx, item] : std::get<MatrixNode::SparseStorage>(n.storage)) {
+                    item->accept(*this); if (found) return;
+                }
+            }
+        }
+    } visitor;
+    visitor.v = var;
+    node->accept(visitor);
+    return visitor.found;
+}
+
+template <typename T>
+Polynomial<T> symbolic_to_poly_recursive(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
+    if (!node) return Polynomial<T>(var);
+
+    // If it doesn't contain the variable, it's a coefficient (T)
+    if (!depends_on_var(node, var)) {
+        return Polynomial<T>({extract_coeff_value<T>(std::make_shared<SymbolicExpr>(node))}, var);
+    }
+
+    // Case: Variable
+    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
+        if (v->name == var) {
+            return Polynomial<T>({T(0), T(1)}, var);
+        }
+    }
+
+    // Case: Add
+    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+        Polynomial<T> res(var);
+        for (auto& op : add->operands) {
+            res = res + symbolic_to_poly_recursive<T>(op, var);
+        }
+        return res;
+    }
+
+    // Case: Multiply
+    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+        Polynomial<T> res({T(1)}, var);
+        for (auto& op : mul->operands) {
+            res = res * symbolic_to_poly_recursive<T>(op, var);
+        }
+        return res;
+    }
+
+    // Case: Power
+    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
+        if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+            int e_val = 0;
+            if (std::holds_alternative<BigInt>(exp_num->value)) e_val = std::get<BigInt>(exp_num->value).to_int();
+            else if (std::holds_alternative<double>(exp_num->value)) e_val = (int)std::get<double>(exp_num->value);
+            else if (std::holds_alternative<Rational>(exp_num->value)) e_val = (int)std::get<Rational>(exp_num->value).to_double();
+            
+            if (e_val == 0) return Polynomial<T>({T(1)}, var);
+            if (e_val > 0) {
+                auto base_poly = symbolic_to_poly_recursive<T>(pow->base, var);
+                Polynomial<T> res({T(1)}, var);
+                for (int i = 0; i < e_val; ++i) res = res * base_poly;
+                return res;
+            }
+        }
+    }
+
+    // Fallback or non-polynomial term
+    return Polynomial<T>(var);
+}
+
 template <typename T>
 Polynomial<T> symbolic_to_poly(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
-    
-    auto expanded = expr->expand(); 
-    
-    std::map<int, T> coeff_map;
-    
-    
-    auto process_term = [&](std::shared_ptr<SymbolicNode> node) {
-        
-        
-        
-        
-        int degree = 0;
-        
-        
-        
-        T coeff_val = T(1);
-        
-        std::vector<std::shared_ptr<SymbolicNode>> factors;
-        if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-            for(auto& op : mul->operands) factors.push_back(op);
-        } else {
-            factors.push_back(node);
-        }
-        
-        for (const auto& f : factors) {
-            
-            
-            bool is_var_term = false;
-            
-            if (auto v = std::dynamic_pointer_cast<VariableNode>(f)) {
-                if (v->name == var) {
-                    degree += 1;
-                    is_var_term = true;
-                }
-            } else if (auto p = std::dynamic_pointer_cast<PowerNode>(f)) {
-                
-                if (auto v = std::dynamic_pointer_cast<VariableNode>(p->base)) {
-                    if (v->name == var) {
-                        
-                        if (auto exp = std::dynamic_pointer_cast<NumberNode>(p->exponent)) {
-                            
-                             if (std::holds_alternative<BigInt>(exp->value)) 
-                                 degree += std::get<BigInt>(exp->value).to_int(); 
-                             else if (std::holds_alternative<double>(exp->value)) 
-                                 degree += (int)std::get<double>(exp->value);
-                             else if (std::holds_alternative<Rational>(exp->value))
-                                 degree += (int)std::get<Rational>(exp->value).to_double();
-                             is_var_term = true;
-                        }
-                    }
-                }
-            }
-            
-            if (!is_var_term) {
-                
-                
-                
-                
-                
-                
-                auto node_expr = std::make_shared<SymbolicExpr>(f);
-                T val = extract_coeff_value<T>(node_expr);
-                coeff_val = coeff_val * val;
-            }
-        }
-        
-        
-        if (coeff_map.find(degree) == coeff_map.end()) {
-            coeff_map[degree] = coeff_val;
-        } else {
-            coeff_map[degree] = coeff_map[degree] + coeff_val;
-        }
-    };
-    
-    if (auto add = std::dynamic_pointer_cast<AddNode>(expanded->root)) {
-        for (const auto& op : add->operands) process_term(op);
-    } else {
-        process_term(expanded->root);
-    }
-    
-    
-    if (coeff_map.empty()) return Polynomial<T>(var);
-    
-    int max_deg = coeff_map.rbegin()->first;
-    if (max_deg < 0) max_deg = 0; 
-    
-    std::vector<T> coeffs(max_deg + 1, T(0));
-    for (const auto& [deg, val] : coeff_map) {
-        if (deg >= 0) coeffs[deg] = val;
-    }
-    
-    return Polynomial<T>(coeffs, var);
+    if (!expr || !expr->root) return Polynomial<T>(var);
+    return symbolic_to_poly_recursive<T>(expr->root, var);
 }
 
 

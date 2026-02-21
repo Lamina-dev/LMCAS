@@ -144,3 +144,20 @@ add_test(NAME TestSeries COMMAND test_series)
 
 # add_executable(debug_recursion debug_recursion.cpp)
 # target_link_libraries(debug_recursion PRIVATE lmcas LammpCore)
+
+add_executable(test_new_integration tests/test_new_integration.cpp)
+target_link_libraries(test_new_integration PRIVATE lmcas LammpCore)
+add_test(NAME TestNewIntegration COMMAND test_new_integration)
+
+add_executable(test_cyclic_integration tests/test_cyclic_integration.cpp)
+target_link_libraries(test_cyclic_integration PRIVATE lmcas LammpCore)
+add_test(NAME TestCyclicIntegration COMMAND test_cyclic_integration)
+
+add_executable(test_definite_integration tests/test_definite_integration.cpp)
+target_link_libraries(test_definite_integration PRIVATE lmcas LammpCore)
+add_test(NAME TestDefiniteIntegration COMMAND test_definite_integration)
+
+add_executable(test_singularity tests/test_singularity.cpp)
+target_link_libraries(test_singularity PRIVATE lmcas LammpCore)
+add_test(NAME TestSingularity COMMAND test_singularity)
+
