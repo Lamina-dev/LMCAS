@@ -19,7 +19,8 @@ public:
                       MatchMap& results);
 
     
-    static SymbolicExpr replace(const SymbolicExpr& template_expr, const MatchMap& bindings);
+    // Replace logic with implicit remainder handling
+    static SymbolicExpr replace(const SymbolicExpr& template_expr, const MatchMap& bindings, bool use_rest = true);
 };
 
 struct LAMINA_API Rule {

@@ -15,7 +15,9 @@ static bool match_recursive(const std::shared_ptr<SymbolicNode>& p_node,
                             const std::unordered_set<std::string>& wildcards,
                             MatchMap& results);
 
-// Helper for commutative matching (try all permutations of target operands against pattern operands)
+// Helper for commutative matching
+// Now supports subset matching: if pattern operands are a subset of target operands, match succeeds.
+// The matching logic tries to match all p_ops against a subset of t_ops.
 static bool match_commutative_recursive(const std::vector<std::shared_ptr<SymbolicNode>>& p_ops,
                                         const std::vector<std::shared_ptr<SymbolicNode>>& t_ops,
                                         std::vector<bool>& used_t,
@@ -40,10 +42,11 @@ static bool match_commutative_recursive(const std::vector<std::shared_ptr<Symbol
                 }
                 // Backtrack
                 used_t[j] = false;
+                results = saved_results;
+            } else {
+                // Restore results if match failed
+                results = saved_results;
             }
-            
-            // Restore results if match failed or recursive step failed
-            results = saved_results;
         }
     }
     
@@ -104,19 +107,85 @@ static bool match_recursive(const std::shared_ptr<SymbolicNode>& p_node,
     if (auto p_add = std::dynamic_pointer_cast<AddNode>(p_node)) {
         auto t_add = std::dynamic_pointer_cast<AddNode>(t_node);
         
-        if (p_add->operands.size() != t_add->operands.size()) return false;
+        // Allow subset match: p_ops.size() <= t_ops.size()
+        if (p_add->operands.size() > t_add->operands.size()) return false;
         
         std::vector<bool> used(t_add->operands.size(), false);
-        return match_commutative_recursive(p_add->operands, t_add->operands, used, 0, wildcards, results);
+        if (match_commutative_recursive(p_add->operands, t_add->operands, used, 0, wildcards, results)) {
+            // Collect unused operands
+            std::vector<std::shared_ptr<SymbolicNode>> rest;
+            for (size_t i = 0; i < used.size(); ++i) {
+                if (!used[i]) {
+                    rest.push_back(t_add->operands[i]);
+                }
+            }
+            // If there are leftovers, store them
+            if (!rest.empty()) {
+                // Determine if we already have a __Add_REST__ binding (collision check or append?)
+                // Simple append strategy:
+                std::shared_ptr<SymbolicNode> rest_node;
+                if (rest.size() == 1) rest_node = rest[0];
+                else rest_node = SymbolicFactory::create_add(rest);
+                
+                // Hack: Store in special binding
+                // If existing binding exists, combine? Ideally yes.
+                if (results.find("__Add_REST__") != results.end()) {
+                    auto existing = results["__Add_REST__"];
+                    // Combine existing rest with new rest
+                    std::vector<std::shared_ptr<SymbolicNode>> combined_ops;
+                    if (auto existing_add = std::dynamic_pointer_cast<AddNode>(existing.root)) {
+                        combined_ops.insert(combined_ops.end(), existing_add->operands.begin(), existing_add->operands.end());
+                    } else {
+                        combined_ops.push_back(existing.root);
+                    }
+                    combined_ops.push_back(rest_node);
+                    results["__Add_REST__"] = SymbolicExpr(SymbolicFactory::create_add(combined_ops));
+                } else {
+                    results["__Add_REST__"] = SymbolicExpr(rest_node);
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     
     if (auto p_mul = std::dynamic_pointer_cast<MultiplyNode>(p_node)) {
         auto t_mul = std::dynamic_pointer_cast<MultiplyNode>(t_node);
-        if (p_mul->operands.size() != t_mul->operands.size()) return false;
+        // Allow subset match
+        if (p_mul->operands.size() > t_mul->operands.size()) return false;
         
         std::vector<bool> used(t_mul->operands.size(), false);
-        return match_commutative_recursive(p_mul->operands, t_mul->operands, used, 0, wildcards, results);
+        if (match_commutative_recursive(p_mul->operands, t_mul->operands, used, 0, wildcards, results)) {
+            // Collect unused operands
+            std::vector<std::shared_ptr<SymbolicNode>> rest;
+            for (size_t i = 0; i < used.size(); ++i) {
+                if (!used[i]) {
+                    rest.push_back(t_mul->operands[i]);
+                }
+            }
+            if (!rest.empty()) {
+                std::shared_ptr<SymbolicNode> rest_node;
+                if (rest.size() == 1) rest_node = rest[0];
+                else rest_node = SymbolicFactory::create_multiply(rest);
+                
+                if (results.find("__Mul_REST__") != results.end()) {
+                    auto existing = results["__Mul_REST__"];
+                    std::vector<std::shared_ptr<SymbolicNode>> combined_ops;
+                    if (auto existing_mul = std::dynamic_pointer_cast<MultiplyNode>(existing.root)) {
+                        combined_ops.insert(combined_ops.end(), existing_mul->operands.begin(), existing_mul->operands.end());
+                    } else {
+                        combined_ops.push_back(existing.root);
+                    }
+                    combined_ops.push_back(rest_node);
+                    results["__Mul_REST__"] = SymbolicExpr(SymbolicFactory::create_multiply(combined_ops));
+                } else {
+                    results["__Mul_REST__"] = SymbolicExpr(rest_node);
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     
@@ -169,9 +238,10 @@ bool Matcher::match(const SymbolicExpr& pattern, const SymbolicExpr& target,
 class ReplacementVisitor : public SymbolicVisitor {
     const MatchMap& bindings;
     std::shared_ptr<SymbolicNode> result;
+    bool use_rest;
 
 public:
-    ReplacementVisitor(const MatchMap& b) : bindings(b) {}
+    ReplacementVisitor(const MatchMap& b, bool use_rest = false) : bindings(b), use_rest(use_rest) {}
 
     std::shared_ptr<SymbolicNode> get_result() const { return result; }
 
@@ -239,11 +309,57 @@ public:
     }
 };
 
-SymbolicExpr Matcher::replace(const SymbolicExpr& template_expr, const MatchMap& bindings) {
+SymbolicExpr Matcher::replace(const SymbolicExpr& template_expr, const MatchMap& bindings, bool use_rest) {
     if (!template_expr.root) return template_expr;
-    ReplacementVisitor v(bindings);
-    template_expr.root->accept(v);
-    return SymbolicExpr(v.get_result());
+    
+    // Visitor doesn't handle rest internally
+    ReplacementVisitor visitor(bindings, false); 
+    template_expr.root->accept(visitor);
+    
+    SymbolicExpr res(visitor.get_result());
+    
+
+    if (use_rest) {
+        // Handle AddNode remainder
+        if (bindings.find("__Add_REST__") != bindings.end()) {
+            auto rest = bindings.at("__Add_REST__");
+            
+            std::vector<std::shared_ptr<SymbolicNode>> ops;
+            if (auto add_node = std::dynamic_pointer_cast<AddNode>(res.root)) {
+                ops = add_node->operands;
+            } else {
+                ops.push_back(res.root);
+            }
+            
+            if (auto rest_add = std::dynamic_pointer_cast<AddNode>(rest.root)) {
+                ops.insert(ops.end(), rest_add->operands.begin(), rest_add->operands.end());
+            } else {
+                ops.push_back(rest.root);
+            }
+            res = SymbolicExpr(SymbolicFactory::create_add(ops));
+        }
+        
+        // Handle MultiplyNode remainder
+        if (bindings.find("__Mul_REST__") != bindings.end()) {
+            auto rest = bindings.at("__Mul_REST__");
+            
+            std::vector<std::shared_ptr<SymbolicNode>> ops;
+            if (auto mul_node = std::dynamic_pointer_cast<MultiplyNode>(res.root)) {
+                ops = mul_node->operands;
+            } else {
+                ops.push_back(res.root);
+            }
+            
+            if (auto rest_mul = std::dynamic_pointer_cast<MultiplyNode>(rest.root)) {
+                ops.insert(ops.end(), rest_mul->operands.begin(), rest_mul->operands.end());
+            } else {
+                ops.push_back(rest.root);
+            }
+            res = SymbolicExpr(SymbolicFactory::create_multiply(ops));
+        }
+    }
+    
+    return res;
 }
 
 
@@ -279,8 +395,10 @@ public:
                     continue; 
                 }
                 
+                // Allow using rest if present
+                SymbolicExpr new_expr = Matcher::replace(rule.replacement, bindings, true);
+                // The third argument 'true' enables automatic appending of __Add_REST__ and __Mul_REST__
                 
-                SymbolicExpr new_expr = Matcher::replace(rule.replacement, bindings);
                 changed = true;
                 return new_expr.root; 
             }

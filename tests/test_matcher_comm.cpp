@@ -92,6 +92,9 @@ bool test_commutative_nested() {
     return results["x"].to_string() == "y";
 }
 
+
+bool test_subset_match();
+
 int main() {
     std::cerr << "Starting matcher tests..." << std::endl;
     bool pass = true;
@@ -107,9 +110,50 @@ int main() {
         std::cerr << "test_commutative_nested failed" << std::endl;
         pass = false;
     }
+    if (!test_subset_match()) {
+        std::cerr << "test_subset_match failed" << std::endl;
+        pass = false;
+    }
     
     if (pass) std::cerr << "All matcher tests passed!" << std::endl;
     else std::cerr << "Some matcher tests failed." << std::endl;
     
     return pass ? 0 : 1;
 }
+
+bool test_subset_match() {
+    std::cout << "Testing subset matching (AddNode)..." << std::endl;
+    auto A = mk_wildcard("A");
+    auto B = mk_wildcard("B");
+    auto pattern = SymbolicExpr::add(A, B);
+    
+    // Target: a + b + c + d
+    auto va = SymbolicExpr::variable("a");
+    auto vb = SymbolicExpr::variable("b");
+    auto vc = SymbolicExpr::variable("c");
+    auto vd = SymbolicExpr::variable("d");
+    
+    std::vector<std::shared_ptr<SymbolicNode>> ops;
+    ops.push_back(va->root);
+    ops.push_back(vb->root);
+    ops.push_back(vc->root);
+    ops.push_back(vd->root);
+    auto target = SymbolicExpr(SymbolicFactory::create_add(ops));
+    
+    MatchMap results;
+    std::unordered_set<std::string> w = {"A", "B"};
+    
+    if (!Matcher::match(*pattern, target, w, results)) {
+        std::cout << "Match failed for subset (A+B inside a+b+c+d)" << std::endl;
+        return false;
+    }
+    
+    if (results.find("__Add_REST__") == results.end()) {
+        std::cout << "Missing __Add_REST__ binding" << std::endl;
+        return false;
+    }
+    
+    std::cout << "Remainder: " << results["__Add_REST__"].to_string() << std::endl;
+    return true;
+}
+
