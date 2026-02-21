@@ -12,13 +12,13 @@
 int passed = 0;
 int failed = 0;
 
-void run_test(const std::string& name, const lmcas::SymbolicExpr& expr, const std::string& var) {
+void run_test(const std::string& name, const SymbolicExpr& expr, const std::string& var) {
     std::cout << "--------------------------------------------------------" << std::endl;
     std::cout << "TEST: " << name << std::endl;
     std::cout << "Expr: " << expr.to_string() << std::endl;
 
     try {
-        lmcas::Integrator integrator;
+        lamina::Integrator integrator;
         auto result = integrator.integrate(expr, var);
         std::cout << "Integral: " << result.to_string() << std::endl;
 
@@ -51,14 +51,14 @@ void run_test(const std::string& name, const lmcas::SymbolicExpr& expr, const st
         // We need to carefully construct the difference
         // We use SymbolicExpr::add(diff, -1 * original)
         
-        auto neg_one = lmcas::SymbolicExpr::number(-1);
-        auto neg_orig = lmcas::SymbolicExpr::multiply(
-            std::make_shared<lmcas::SymbolicExpr>(*neg_one), 
-            std::make_shared<lmcas::SymbolicExpr>(*original_simp)
+        auto neg_one = SymbolicExpr::number(-1);
+        auto neg_orig = SymbolicExpr::multiply(
+            std::make_shared<SymbolicExpr>(*neg_one), 
+            std::make_shared<SymbolicExpr>(*original_simp)
         );
-        auto diff_minus_original = lmcas::SymbolicExpr::add(
-            std::make_shared<lmcas::SymbolicExpr>(*diff_simp), 
-            std::make_shared<lmcas::SymbolicExpr>(*neg_orig)
+        auto diff_minus_original = SymbolicExpr::add(
+            std::make_shared<SymbolicExpr>(*diff_simp), 
+            std::make_shared<SymbolicExpr>(*neg_orig)
         )->simplify();
 
         if (diff_minus_original->is_zero()) {
@@ -78,7 +78,7 @@ void run_test(const std::string& name, const lmcas::SymbolicExpr& expr, const st
 }
 
 int main() {
-    using namespace lmcas;
+    using namespace lamina;
     
     // Setup variables
     auto x_var = std::make_shared<SymbolicExpr>(*SymbolicExpr::variable("x"));

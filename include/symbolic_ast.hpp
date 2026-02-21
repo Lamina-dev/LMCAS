@@ -141,7 +141,7 @@ public:
     explicit NumberNode(std::variant<BigInt, Rational, double> v) : value(std::move(v)) {}
     
     
-    int type_priority() const override { return 30; }
+    int type_priority() const override { return -10; }
 
 protected:
     std::size_t compute_hash() const override {

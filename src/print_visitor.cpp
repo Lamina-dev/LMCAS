@@ -44,7 +44,18 @@ void PrintVisitor::visit(MultiplyNode& node) {
     }
     for (size_t i = 0; i < node.operands.size(); ++i) {
         if (i > 0) buffer << "*";
-        bool needs_parens = std::dynamic_pointer_cast<AddNode>(node.operands[i]) != nullptr;
+        
+        bool needs_parens = std::dynamic_pointer_cast<AddNode>(node.operands[i]) != nullptr ||
+                           std::dynamic_pointer_cast<PowerNode>(node.operands[i]) != nullptr;
+        
+        if (!needs_parens) {
+            if (auto num = std::dynamic_pointer_cast<NumberNode>(node.operands[i])) {
+                if (std::holds_alternative<Rational>(num->value)) {
+                    needs_parens = true;
+                }
+            }
+        }
+
         if (needs_parens) buffer << "(";
         node.operands[i]->accept(*this);
         if (needs_parens) buffer << ")";

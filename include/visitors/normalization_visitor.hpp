@@ -198,14 +198,25 @@ public:
              final_ops.push_back(const_acc);
         }
         
+        std::vector<std::shared_ptr<SymbolicNode>> var_ops;
         for (auto const& [base, exp] : bases) {
             if (exp->is_zero()) {
             } else if (exp->is_one()) {
-                final_ops.push_back(base);
+                var_ops.push_back(base);
             } else {
-                final_ops.push_back(std::make_shared<PowerNode>(base, exp));
+                var_ops.push_back(std::make_shared<PowerNode>(base, exp));
             }
         }
+        
+        // Sort variable ops
+        std::sort(var_ops.begin(), var_ops.end(), [](const std::shared_ptr<SymbolicNode>& l, const std::shared_ptr<SymbolicNode>& r) {
+            int d1 = get_node_degree_helper(l);
+            int d2 = get_node_degree_helper(r);
+            if (d1 != d2) return d1 > d2;
+            return l->compare(*r) < 0;
+        });
+
+        final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
         
         if (final_ops.empty()) return std::make_shared<NumberNode>(BigInt(1));
         if (final_ops.size() == 1) return final_ops[0];
@@ -311,6 +322,18 @@ public:
         } else if (final_ops.size() == 1) {
             result = final_ops[0];
         } else {
+            // Sort final_ops: Higher degree first, constants LAST
+            std::sort(final_ops.begin(), final_ops.end(), [](const std::shared_ptr<SymbolicNode>& l, const std::shared_ptr<SymbolicNode>& r) {
+                int d1 = get_node_degree_helper(l);
+                int d2 = get_node_degree_helper(r);
+                if (d1 != d2) return d1 > d2;
+                
+                bool isNum1 = std::dynamic_pointer_cast<NumberNode>(l) != nullptr;
+                bool isNum2 = std::dynamic_pointer_cast<NumberNode>(r) != nullptr;
+                if (isNum1 != isNum2) return isNum2; // Numbers last
+                
+                return l->compare(*r) < 0;
+            });
             result = std::make_shared<AddNode>(final_ops);
         }
     }
@@ -615,15 +638,25 @@ public:
              final_ops.push_back(const_acc);
         }
         
+        std::vector<std::shared_ptr<SymbolicNode>> var_ops;
         for (auto const& [base, exp] : bases) {
             if (exp->is_zero()) {
-                
             } else if (exp->is_one()) {
-                final_ops.push_back(base);
+                var_ops.push_back(base);
             } else {
-                final_ops.push_back(std::make_shared<PowerNode>(base, exp));
+                var_ops.push_back(std::make_shared<PowerNode>(base, exp));
             }
         }
+        
+        // Sort variable ops to be consistent
+        std::sort(var_ops.begin(), var_ops.end(), [](const std::shared_ptr<SymbolicNode>& l, const std::shared_ptr<SymbolicNode>& r) {
+            int d1 = get_node_degree_helper(l);
+            int d2 = get_node_degree_helper(r);
+            if (d1 != d2) return d1 > d2;
+            return l->compare(*r) < 0;
+        });
+
+        final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
         
         if (final_ops.empty()) result = std::make_shared<NumberNode>(BigInt(1));
         else if (final_ops.size() == 1) result = final_ops[0];
@@ -807,6 +840,50 @@ public:
             a->accept(*this);
             s_args.push_back(result);
         }
+        
+        // Basic constant evaluation
+        if (s_args.size() == 1) {
+            if (auto num = std::dynamic_pointer_cast<NumberNode>(s_args[0])) {
+                double val = 0.0;
+                if (std::holds_alternative<double>(num->value)) val = std::get<double>(num->value);
+                else if (std::holds_alternative<BigInt>(num->value)) val = std::get<BigInt>(num->value).to_double();
+                else if (std::holds_alternative<Rational>(num->value)) val = std::get<Rational>(num->value).to_double();
+
+                switch (node.type) {
+                    case FunctionNode::FuncType::Sin:
+                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
+                        break;
+                    case FunctionNode::FuncType::Cos:
+                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(1)); return; }
+                        break;
+                    case FunctionNode::FuncType::Tan:
+                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
+                        break;
+                    case FunctionNode::FuncType::Exp:
+                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(1)); return; }
+                        break;
+                    case FunctionNode::FuncType::Ln:
+                        if (std::abs(val - 1.0) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
+                        break;
+                    case FunctionNode::FuncType::Abs:
+                        result = std::make_shared<NumberNode>(std::abs(val));
+                        return;
+                    case FunctionNode::FuncType::Sqrt:
+                        if (val >= 0) {
+                             double sq = std::sqrt(val);
+                             if (std::abs(sq - std::round(sq)) < 1e-12) {
+                                 result = std::make_shared<NumberNode>(BigInt((long long)std::round(sq)));
+                             } else {
+                                 result = std::make_shared<NumberNode>(sq);
+                             }
+                             return;
+                        }
+                        break;
+                    default: break;
+                }
+            }
+        }
+        
         result = std::make_shared<FunctionNode>(node.type, s_args);
     }
 

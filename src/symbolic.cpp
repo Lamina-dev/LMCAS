@@ -10,6 +10,7 @@
 #include "../include/visitors/normalization_visitor.hpp"
 #include "../include/visitors/differentiation_visitor.hpp"
 #include "../include/visitors/expand_visitor.hpp"
+#include "../include/visitors/limit_visitor.hpp"
 #include "../include/poly_utils.hpp"
 #include "../include/matcher.hpp"
 #include "../include/integration.hpp"
@@ -443,129 +444,14 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
 std::shared_ptr<SymbolicExpr> SymbolicExpr::limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, const std::string& direction) const {
     if (!root) return nullptr;
     
-    // Check if denominator is zero at point
-    // We try to separate Numerator and Denominator
-    std::shared_ptr<SymbolicExpr> num_expr = nullptr;
-    std::shared_ptr<SymbolicExpr> den_expr = nullptr;
-
-    // TODO: A more robust way to split fraction is needed, but this works for simple cases
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(root)) {
-        std::vector<std::shared_ptr<SymbolicNode>> num_nodes;
-        std::vector<std::shared_ptr<SymbolicNode>> den_nodes;
-        
-        for(const auto& op : mul->operands) {
-             bool is_den = false;
-             if (auto pow = std::dynamic_pointer_cast<PowerNode>(op)) {
-                 if (auto sn = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
-                      // Check for negative exponent
-                      if (std::holds_alternative<double>(sn->value) && std::get<double>(sn->value) == -1.0) is_den = true;
-                      else if (std::holds_alternative<BigInt>(sn->value) && std::get<BigInt>(sn->value) == BigInt(-1)) is_den = true;
-                      else if (std::holds_alternative<Rational>(sn->value) && std::get<Rational>(sn->value) == Rational(-1)) is_den = true;
-                      
-                      if(is_den) {
-                          den_nodes.push_back(pow->base);
-                      }
-                 }
-             }
-             if (!is_den) {
-                 num_nodes.push_back(op);
-             }
-        }
-        
-        if (!den_nodes.empty()) {
-            std::shared_ptr<SymbolicNode> n_node;
-            std::shared_ptr<SymbolicNode> d_node;
-            
-            if (num_nodes.empty()) n_node = std::make_shared<NumberNode>(BigInt(1));
-            else if (num_nodes.size() == 1) n_node = num_nodes[0];
-            else n_node = std::make_shared<MultiplyNode>(num_nodes);
-            
-            if (den_nodes.size() == 1) d_node = den_nodes[0];
-            else d_node = std::make_shared<MultiplyNode>(den_nodes);
-            
-            num_expr = std::make_shared<SymbolicExpr>(n_node);
-            den_expr = std::make_shared<SymbolicExpr>(d_node);
-        }
-    }
-    
-    // Simple substitution attempt
-    SubstituteVisitor v(var, point->root);
+    LimitVisitor v(var, point->root, direction);
     root->accept(v);
-    auto subs_res = std::make_shared<SymbolicExpr>(v.get_result());
-    auto subs_simp = subs_res->simplify();
     
-    // Check for Infinity / NaN result from simple substitution? 
-    // Usually substitution doesn't produce Infinity unless explicitly handled.
-    // If we have Num/Den structure:
-    if (num_expr && den_expr) {
-        auto val_n = num_expr->substitute(var, point)->simplify();
-        auto val_d = den_expr->substitute(var, point)->simplify();
-        
-        bool n_is_zero = val_n->is_zero();
-        bool d_is_zero = val_d->is_zero();
-        
-        // 0/0 -> L'Hopital
-        if (n_is_zero && d_is_zero) {
-             auto dN = num_expr->differentiate(var)->simplify();
-             auto dD = den_expr->differentiate(var)->simplify();
-             
-             // Check if dD is 0 to avoid infinite loop or construct new limit
-             if (dD->is_zero()) {
-                 // Higher order L'Hopital or failure? 
-                 return nullptr; // Fallback
-             }
-             
-             // Construct ratio dN / dD
-             auto ratio = SymbolicExpr::divide(dN, dD);
-             return ratio->limit(var, point, direction);
-        }
-        
-        // k / 0 -> Infinity or -Infinity (Direction matters!)
-        if (!n_is_zero && d_is_zero) {
-            bool positive_num = val_n->to_double() > 0; // Rough check
-            
-            // Analyze sign of denominator around point
-            // For 1/x at 0+: x is small pos -> +Inf
-            // For 1/x at 0-: x is small neg -> -Inf
-            
-            if (direction == "+") {
-                 // Check sign of den at point + epsilon
-                 // Or check derivative of den at point? 
-                 // If den(x) ~ c*(x-a)^n...
-                 
-                 // Heuristic: Evaluate at point + 0.0001
-                 // This is numerical and not purely symbolic, but good for now.
-                 // Ideally we check leading term of Taylor series.
-                 
-                 // Return Infinity with sign
-                 if (positive_num) return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{})); // +Inf
-                 else {
-                     // -Inf
-                     auto inf = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{});
-                     auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
-                     std::vector<std::shared_ptr<SymbolicNode>> ops = {neg_one, inf};
-                     return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(ops));
-                 }
-            } else if (direction == "-") {
-                // Similar logic...
-                 // If 1/x, den goes negative -> -Inf (if num > 0)
-                 if (positive_num) {
-                     auto inf = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{});
-                     auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
-                     std::vector<std::shared_ptr<SymbolicNode>> ops = {neg_one, inf};
-                     return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(ops));
-                 } else {
-                     return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{})); // +Inf
-                 }
-            } else {
-                // Two-sided limit undefined if left != right
-                // Return Undefined or Infinity (unsigned)
-                 return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{})); 
-            }
-        }
+    if (v.get_result()) {
+        return std::make_shared<SymbolicExpr>(v.get_result());
     }
-
-    return subs_simp;
+    
+    return nullptr;
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(const std::string& var) const {
@@ -576,7 +462,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(const std::string& var) co
     SymbolicExpr result = integrator.integrate(*this, var);
     
     // The Integrator returns a value, we return a shared_ptr
-    return std::make_shared<SymbolicExpr>(result);
+    auto res_ptr = std::make_shared<SymbolicExpr>(result);
+    return res_ptr->simplify(); 
 }
 std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order) const {
     if (!root) return nullptr;
