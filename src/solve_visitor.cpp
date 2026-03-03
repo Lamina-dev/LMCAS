@@ -101,7 +101,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<S
         
         auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
         auto result = SymbolicExpr::divide(neg_b, a);
-        return {result};
+        return {result->simplify()};
     } else if (max_deg == 2) {
         
         auto a = get_coeff(poly, 2);

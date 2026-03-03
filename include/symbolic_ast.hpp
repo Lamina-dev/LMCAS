@@ -253,6 +253,9 @@ public:
         }
         
         std::sort(operands.begin(), operands.end(), [](const auto& a, const auto& b) {
+            bool a_num = a->is_number();
+            bool b_num = b->is_number();
+            if (a_num != b_num) return !a_num; // Numbers last
             return a->compare(*b) < 0;
         });
     }
@@ -669,6 +672,7 @@ inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_add(std::vector<std
     std::vector<std::shared_ptr<SymbolicNode>> flat_ops;
     flat_ops.reserve(ops.size());
     for (const auto& op : ops) {
+        if (op->is_zero()) continue;
         if (auto add = std::dynamic_pointer_cast<AddNode>(op)) {
             flat_ops.insert(flat_ops.end(), add->operands.begin(), add->operands.end());
         } else {
@@ -676,21 +680,42 @@ inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_add(std::vector<std
         }
     }
     
+    if (flat_ops.empty()) return create_number(0.0);
+    if (flat_ops.size() == 1) return flat_ops[0];
     return std::make_shared<AddNode>(std::move(flat_ops));
 }
 
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops) {
     if (ops.empty()) return create_number(1.0);
-    if (ops.size() == 1) return ops[0];
     
     for (const auto& op : ops) {
         if (op->is_zero()) return op; 
     }
-    return std::make_shared<MultiplyNode>(std::move(ops));
+
+    if (ops.size() == 1) return ops[0];
+    
+    std::vector<std::shared_ptr<SymbolicNode>> flat_ops;
+    flat_ops.reserve(ops.size());
+    for (const auto& op : ops) {
+        if (op->is_one()) continue;
+        if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(op)) {
+            flat_ops.insert(flat_ops.end(), mul->operands.begin(), mul->operands.end());
+        } else {
+            flat_ops.push_back(op);
+        }
+    }
+
+    if (flat_ops.empty()) return create_number(1.0);
+    if (flat_ops.size() == 1) return flat_ops[0];
+    return std::make_shared<MultiplyNode>(std::move(flat_ops));
 }
 
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent) {
     if (!base || !exponent) return nullptr;
+    if (exponent->is_zero()) return create_number(1.0);
+    if (exponent->is_one()) return base;
+    if (base->is_zero()) return create_number(0.0);
+    if (base->is_one()) return create_number(1.0);
     return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
 }
 

@@ -94,6 +94,93 @@ inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<Number
      return std::make_shared<NumberNode>(i1 * i2);
 }
 
+
+inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::shared_ptr<SymbolicNode>& out_positive) {
+    if (auto num = std::dynamic_pointer_cast<NumberNode>(arg)) {
+        if (std::holds_alternative<double>(num->value) && std::get<double>(num->value) < 0) {
+             out_positive = std::make_shared<NumberNode>(std::abs(std::get<double>(num->value)));
+             return true;
+        }
+        if (std::holds_alternative<BigInt>(num->value) && std::get<BigInt>(num->value).to_double() < 0) {
+             out_positive = std::make_shared<NumberNode>(std::get<BigInt>(num->value) * BigInt(-1));
+             return true;
+        }
+        if (std::holds_alternative<Rational>(num->value) && std::get<Rational>(num->value).to_double() < 0) {
+             out_positive = std::make_shared<NumberNode>(std::get<Rational>(num->value) * Rational(-1));
+             return true;
+        }
+        return false;
+    }
+    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(arg)) {
+        if (!mul->operands.empty()) {
+            if (auto num = std::dynamic_pointer_cast<NumberNode>(mul->operands[0])) {
+                 bool is_neg = false;
+                 std::shared_ptr<NumberNode> pos_num = nullptr;
+                 if (std::holds_alternative<double>(num->value) && std::get<double>(num->value) < 0) {
+                     is_neg = true;
+                     pos_num = std::make_shared<NumberNode>(std::abs(std::get<double>(num->value)));
+                 } else if (std::holds_alternative<BigInt>(num->value) && std::get<BigInt>(num->value).to_double() < 0) {
+                     is_neg = true;
+                     pos_num = std::make_shared<NumberNode>(std::get<BigInt>(num->value) * BigInt(-1));
+                 } else if (std::holds_alternative<Rational>(num->value) && std::get<Rational>(num->value).to_double() < 0) {
+                     is_neg = true;
+                     pos_num = std::make_shared<NumberNode>(std::get<Rational>(num->value) * Rational(-1));
+                 }
+                 
+                 if (is_neg) {
+                     std::vector<std::shared_ptr<SymbolicNode>> new_ops = mul->operands;
+                     
+                     // Check if constant is exactly -1 (special case)
+                     bool is_minus_one = false;
+                     if (std::holds_alternative<double>(num->value)) is_minus_one = (std::abs(std::get<double>(num->value) + 1.0) < 1e-9);
+                     else if (std::holds_alternative<BigInt>(num->value)) is_minus_one = (std::get<BigInt>(num->value) == BigInt(-1));
+                     else if (std::holds_alternative<Rational>(num->value)) is_minus_one = (std::get<Rational>(num->value) == Rational(-1));
+                     
+                     if (is_minus_one) {
+                         new_ops.erase(new_ops.begin());
+                         if (new_ops.size() == 1) out_positive = new_ops[0];
+                         else out_positive = std::make_shared<MultiplyNode>(new_ops);
+                     } else {
+                         // General case: replace -C with +C
+                         new_ops[0] = pos_num;
+                         out_positive = std::make_shared<MultiplyNode>(new_ops);
+                     }
+                     return true;
+                 }
+            }
+        }
+    }
+    return false;
+}
+
+inline bool get_pi_coeff(const std::shared_ptr<SymbolicNode>& node, Rational& k) {
+    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
+        if (v->name == "pi") {
+            k = Rational(1);
+            return true;
+        }
+    }
+    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+        bool has_pi = false;
+        k = Rational(1);
+        
+        for (const auto& op : mul->operands) {
+            if (auto v = std::dynamic_pointer_cast<VariableNode>(op)) {
+                if (v->name == "pi") {
+                    if (has_pi) return false; 
+                    has_pi = true;
+                } else return false;
+            } else if (auto n = std::dynamic_pointer_cast<NumberNode>(op)) {
+                if (std::holds_alternative<Rational>(n->value)) k = k * std::get<Rational>(n->value);
+                else if (std::holds_alternative<BigInt>(n->value)) k = k * Rational(std::get<BigInt>(n->value));
+                else return false;
+            } else return false;
+        }
+        return has_pi;
+    }
+    return false;
+}
+
 class NormalizationVisitor : public SymbolicVisitor {
 public:
     std::shared_ptr<SymbolicNode> result;
@@ -220,6 +307,10 @@ public:
         
         if (final_ops.empty()) return std::make_shared<NumberNode>(BigInt(1));
         if (final_ops.size() == 1) return final_ops[0];
+        // Ensure constants are at the end for consistency (e.g., x * 2 -> 2x)
+        if (final_ops.size() > 1 && std::dynamic_pointer_cast<NumberNode>(final_ops.back())) {
+             std::rotate(final_ops.begin(), final_ops.end() - 1, final_ops.end());
+        }
         return std::make_shared<MultiplyNode>(final_ops);
     }
 
@@ -241,6 +332,52 @@ public:
                 simplified_ops.insert(simplified_ops.end(), add->operands.begin(), add->operands.end());
             } else {
                 simplified_ops.push_back(result);
+            }
+        }
+
+        // Handle Matrix Addition
+        if (!simplified_ops.empty() && std::dynamic_pointer_cast<MatrixNode>(simplified_ops[0])) {
+            auto first_mat = std::dynamic_pointer_cast<MatrixNode>(simplified_ops[0]);
+            size_t rows = first_mat->rows;
+            size_t cols = first_mat->cols;
+            bool all_matrices = true;
+            for (const auto& op : simplified_ops) {
+                 auto m = std::dynamic_pointer_cast<MatrixNode>(op);
+                 if (!m || m->rows != rows || m->cols != cols) {
+                     all_matrices = false; break;
+                 }
+            }
+            
+            if (all_matrices) {
+                 std::vector<std::shared_ptr<SymbolicNode>> new_elements;
+                 new_elements.reserve(rows * cols);
+                 
+                 for (size_t i = 0; i < rows * cols; ++i) {
+                     std::vector<std::shared_ptr<SymbolicNode>> elem_ops;
+                     for (const auto& op : simplified_ops) {
+                         auto m = std::dynamic_pointer_cast<MatrixNode>(op);
+                         std::shared_ptr<SymbolicNode> val;
+                         if (std::holds_alternative<MatrixNode::DenseStorage>(m->storage)) {
+                             const auto& dense = std::get<MatrixNode::DenseStorage>(m->storage);
+                             if (i < dense.size()) val = dense[i];
+                             else val = std::make_shared<NumberNode>(BigInt(0));
+                         } else {
+                             const auto& sparse = std::get<MatrixNode::SparseStorage>(m->storage);
+                             auto it = sparse.find(i);
+                             if (it != sparse.end()) val = it->second;
+                             else val = std::make_shared<NumberNode>(BigInt(0));
+                         }
+                         if (!val) val = std::make_shared<NumberNode>(BigInt(0));
+                         elem_ops.push_back(val);
+                     }
+                     
+                     auto elem_add = std::make_shared<AddNode>(elem_ops);
+                     elem_add->accept(*this);
+                     new_elements.push_back(result);
+                 }
+                 
+                 result = std::make_shared<MatrixNode>(rows, cols, new_elements);
+                 return;
             }
         }
 
@@ -783,6 +920,27 @@ public:
                                      return;
                                  }
                              }
+
+                             // Try to simplify non-perfect squares (e.g. sqrt(8) -> 2*sqrt(2))
+                             BigInt val = std::get<BigInt>(b_num->value);
+                             if (val > BigInt(0) && val < BigInt(1000000)) { 
+                                 long long v_ll = (long long)val.to_double();
+                                 long long root = (long long)std::sqrt(v_ll);
+                                 for (long long i = root; i >= 2; --i) {
+                                     if (v_ll % (i*i) == 0) {
+                                         long long s_ll = i;
+                                         long long k_ll = v_ll / (i*i);
+                                         
+                                         auto s_node = std::make_shared<NumberNode>(BigInt(s_ll));
+                                         auto k_node = std::make_shared<NumberNode>(BigInt(k_ll));
+                                         auto half_node = std::make_shared<NumberNode>(Rational(1, 2));
+                                         auto pow_node = std::make_shared<PowerNode>(k_node, half_node);
+                                         
+                                         result = SymbolicFactory::create_multiply({s_node, pow_node}); 
+                                         return;
+                                     }
+                                 }
+                             }
                          }
                      } else if (std::holds_alternative<double>(b_num->value)) {
                          double d = std::get<double>(b_num->value);
@@ -864,11 +1022,84 @@ public:
                         break;
                     case FunctionNode::FuncType::Ln:
                         if (std::abs(val - 1.0) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
+                        // Ln(0) -> -Infinity
+                        if (std::abs(val) < 1e-12) {
+                             std::vector<std::shared_ptr<SymbolicNode>> inf_args;
+                             auto inf = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                             std::vector<std::shared_ptr<SymbolicNode>> m_args = {std::make_shared<NumberNode>(BigInt(-1)), inf};
+                             result = std::make_shared<MultiplyNode>(m_args);
+                             return;
+                        }
+                        break;
+                    case FunctionNode::FuncType::Log:
+                        if (s_args.size() == 2) {
+                             // log_b(x) = ln(x)/ln(b)
+                             std::vector<std::shared_ptr<SymbolicNode>> args_x = { s_args[0] };
+                             std::vector<std::shared_ptr<SymbolicNode>> args_b = { s_args[1] };
+                             auto ln_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args_x);
+                             auto ln_b = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args_b);
+                             auto ln_b_inv = std::make_shared<PowerNode>(ln_b, std::make_shared<NumberNode>(BigInt(-1)));
+                             std::vector<std::shared_ptr<SymbolicNode>> m_args = { ln_x, ln_b_inv };
+                             auto prod = std::make_shared<MultiplyNode>(m_args);
+                             
+                             NormalizationVisitor v;
+                             prod->accept(v);
+                             result = v.get_result();
+                             return;
+                        }
                         break;
                     case FunctionNode::FuncType::Abs:
                         result = std::make_shared<NumberNode>(std::abs(val));
                         return;
                     case FunctionNode::FuncType::Sqrt:
+                    {
+                        BigInt n;
+                        bool check_int = false;
+
+                        if (std::holds_alternative<BigInt>(num->value)) {
+                            n = std::get<BigInt>(num->value);
+                            check_int = true;
+                        } else if (std::holds_alternative<Rational>(num->value)) {
+                            Rational r = std::get<Rational>(num->value);
+                            if (r.get_denominator() == BigInt(1)) {
+                                n = r.get_numerator();
+                                check_int = true;
+                            }
+                        }
+
+                        if (check_int) {
+                            if (n >= BigInt(0)) {
+                                BigInt s = n.sqrt(); // Integer sqrt
+                                if (s * s == n) {
+                                    result = std::make_shared<NumberNode>(s);
+                                    return;
+                                }
+                                
+                                // Simplify by pulling out square factors: 4, 9, 25, 49
+                                BigInt one(1);
+                                BigInt coeff = one;
+                                BigInt rem = n;
+
+                                long long factors[] = {2, 3, 5, 7};
+                                for (long long f : factors) {
+                                    BigInt sq(f*f);
+                                    while (rem % sq == BigInt(0)) {
+                                        rem = rem / sq;
+                                        coeff = coeff * BigInt(f);
+                                    }
+                                }
+                                
+                                if (coeff > one) {
+                                     std::vector<std::shared_ptr<SymbolicNode>> inner_args = { std::make_shared<NumberNode>(rem) };
+                                     auto inner_sqrt = std::make_shared<FunctionNode>(FunctionNode::FuncType::Sqrt, inner_args);
+                                     std::vector<std::shared_ptr<SymbolicNode>> mul_args = { std::make_shared<NumberNode>(coeff), inner_sqrt };
+                                     result = std::make_shared<MultiplyNode>(mul_args);
+                                     return;
+                                }
+                                // Fall through to symbolic sqrt(rem) if no simpl
+                            }
+                        }
+
                         if (val >= 0) {
                              double sq = std::sqrt(val);
                              if (std::abs(sq - std::round(sq)) < 1e-12) {
@@ -878,12 +1109,211 @@ public:
                              }
                              return;
                         }
+                    }
                         break;
                     default: break;
                 }
             }
         }
+
+        // Handle Ln(x^y) -> y*Ln(x) and Ln(exp(x)) -> x
+        if (node.type == FunctionNode::FuncType::Ln && s_args.size() == 1) {
+             if (auto pow = std::dynamic_pointer_cast<PowerNode>(s_args[0])) {
+                  auto y = pow->exponent;
+                  auto x = pow->base;
+                  
+                  std::vector<std::shared_ptr<SymbolicNode>> ln_args = { x };
+                  auto ln_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, ln_args);
+                  
+                  std::vector<std::shared_ptr<SymbolicNode>> m_args = { y, ln_x };
+                  auto prod = std::make_shared<MultiplyNode>(m_args);
+                  
+                  NormalizationVisitor v;
+                  prod->accept(v);
+                  result = v.get_result();
+                  return;
+             }
+             if (auto func = std::dynamic_pointer_cast<FunctionNode>(s_args[0])) {
+                 if (func->type == FunctionNode::FuncType::Exp && func->arguments.size() == 1) {
+                     result = func->arguments[0];
+                     return;
+                 }
+             }
+        }
+
+        // Handle Log conversion to Ln
+        if (node.type == FunctionNode::FuncType::Log && s_args.size() == 2) {
+             std::vector<std::shared_ptr<SymbolicNode>> args_x = { s_args[0] };
+             std::vector<std::shared_ptr<SymbolicNode>> args_b = { s_args[1] };
+             auto ln_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args_x);
+             auto ln_b = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args_b);
+             auto ln_b_inv = std::make_shared<PowerNode>(ln_b, std::make_shared<NumberNode>(BigInt(-1)));
+             std::vector<std::shared_ptr<SymbolicNode>> m_args = { ln_x, ln_b_inv };
+             auto prod = std::make_shared<MultiplyNode>(m_args);
+             NormalizationVisitor v;
+             prod->accept(v);
+             result = v.get_result();
+             return;
+        }
+
+        // Handle pi multiples
+        if (s_args.size() == 1) {
+            Rational k_pi_val;
+            if (get_pi_coeff(s_args[0], k_pi_val)) {
+                BigInt n = k_pi_val.get_numerator();
+                BigInt d = k_pi_val.get_denominator();
+
+                // Core angle is (n % (2d)) / d * pi
+                BigInt two_d = d * BigInt(2);
+                BigInt reduced_n = n % two_d;
+                if (reduced_n.IsNegative()) reduced_n = reduced_n + two_d;
+
+                // Precompute common constants
+                auto zero = std::make_shared<NumberNode>(BigInt(0));
+                auto one = std::make_shared<NumberNode>(BigInt(1));
+                auto minus_one = std::make_shared<NumberNode>(BigInt(-1));
+                auto half = std::make_shared<NumberNode>(Rational(1, 2));
+                auto minus_half = std::make_shared<NumberNode>(Rational(-1, 2));
+
+                auto root2 = std::make_shared<PowerNode>(std::make_shared<NumberNode>(BigInt(2)), std::make_shared<NumberNode>(Rational(1, 2)));
+                std::vector<std::shared_ptr<SymbolicNode>> half_root2_args = { half, root2 };
+                auto half_root2 = std::make_shared<MultiplyNode>(half_root2_args);
+                std::vector<std::shared_ptr<SymbolicNode>> minus_half_root2_args = { minus_half, root2 };
+                auto minus_half_root2 = std::make_shared<MultiplyNode>(minus_half_root2_args);
+
+                auto root3 = std::make_shared<PowerNode>(std::make_shared<NumberNode>(BigInt(3)), std::make_shared<NumberNode>(Rational(1, 2)));
+                std::vector<std::shared_ptr<SymbolicNode>> half_root3_args = { half, root3 };
+                auto half_root3 = std::make_shared<MultiplyNode>(half_root3_args);
+                std::vector<std::shared_ptr<SymbolicNode>> minus_half_root3_args = { minus_half, root3 };
+                auto minus_half_root3 = std::make_shared<MultiplyNode>(minus_half_root3_args);
+                
+                std::vector<std::shared_ptr<SymbolicNode>> minus_root3_args = { minus_one, root3 };
+                auto minus_root3 = std::make_shared<MultiplyNode>(minus_root3_args);
+
+                auto third = std::make_shared<NumberNode>(Rational(1, 3));
+                std::vector<std::shared_ptr<SymbolicNode>> third_root3_args = { third, root3 };
+                auto third_root3 = std::make_shared<MultiplyNode>(third_root3_args);
+                auto minus_third = std::make_shared<NumberNode>(Rational(-1, 3));
+                std::vector<std::shared_ptr<SymbolicNode>> minus_third_root3_args = { minus_third, root3 };
+                auto minus_third_root3 = std::make_shared<MultiplyNode>(minus_third_root3_args);
+
+
+                if (d == BigInt(1)) {
+                    // k * pi
+                    if (node.type == FunctionNode::FuncType::Sin || node.type == FunctionNode::FuncType::Tan) {
+                        result = zero; return;
+                    } else if (node.type == FunctionNode::FuncType::Cos) {
+                        if (reduced_n == BigInt(0)) result = one;
+                        else result = minus_one;
+                        return;
+                    }
+                } else if (d == BigInt(2)) {
+                    // k * pi/2
+                    if (node.type == FunctionNode::FuncType::Sin) {
+                        if (reduced_n == BigInt(1)) result = one;
+                        else if (reduced_n == BigInt(3)) result = minus_one;
+                        return;
+                    } else if (node.type == FunctionNode::FuncType::Cos) {
+                        if (reduced_n == BigInt(1) || reduced_n == BigInt(3)) {
+                            result = zero; return;
+                        }
+                    }
+                    // Tan undefined at pi/2
+                } else if (d == BigInt(3)) {
+                    // k * pi/3
+                    if (node.type == FunctionNode::FuncType::Sin) {
+                         if (reduced_n == BigInt(1) || reduced_n == BigInt(2)) result = half_root3;
+                         else if (reduced_n == BigInt(4) || reduced_n == BigInt(5)) result = minus_half_root3;
+                         return;
+                    } else if (node.type == FunctionNode::FuncType::Cos) {
+                         if (reduced_n == BigInt(1) || reduced_n == BigInt(5)) result = half;
+                         else if (reduced_n == BigInt(2) || reduced_n == BigInt(4)) result = minus_half;
+                         return;
+                    } else if (node.type == FunctionNode::FuncType::Tan) {
+                         if (reduced_n == BigInt(1) || reduced_n == BigInt(4)) result = root3;
+                         else if (reduced_n == BigInt(2) || reduced_n == BigInt(5)) result = minus_root3;
+                         return;
+                    }
+                } else if (d == BigInt(4)) {
+                     // k * pi/4
+                     if (node.type == FunctionNode::FuncType::Sin) {
+                         if (reduced_n == BigInt(1) || reduced_n == BigInt(3)) result = half_root2;
+                         else if (reduced_n == BigInt(5) || reduced_n == BigInt(7)) result = minus_half_root2;
+                         return;
+                    } else if (node.type == FunctionNode::FuncType::Cos) {
+                         if (reduced_n == BigInt(1) || reduced_n == BigInt(7)) result = half_root2;
+                         else if (reduced_n == BigInt(3) || reduced_n == BigInt(5)) result = minus_half_root2;
+                         return;
+                    } else if (node.type == FunctionNode::FuncType::Tan) {
+                         if (reduced_n == BigInt(1) || reduced_n == BigInt(5)) result = one;
+                         else if (reduced_n == BigInt(3) || reduced_n == BigInt(7)) result = minus_one;
+                         return;
+                    }
+                } else if (d == BigInt(6)) {
+                    // k * pi/6
+                    if (node.type == FunctionNode::FuncType::Sin) {
+                        if (reduced_n == BigInt(1) || reduced_n == BigInt(5)) result = half;
+                        else if (reduced_n == BigInt(7) || reduced_n == BigInt(11)) result = minus_half;
+                        return;
+                    } else if (node.type == FunctionNode::FuncType::Cos) {
+                        if (reduced_n == BigInt(1) || reduced_n == BigInt(11)) result = half_root3;
+                        else if (reduced_n == BigInt(5) || reduced_n == BigInt(7)) result = minus_half_root3;
+                        return;
+                    } else if (node.type == FunctionNode::FuncType::Tan) {
+                        if (reduced_n == BigInt(1) || reduced_n == BigInt(7)) result = third_root3;
+                        else if (reduced_n == BigInt(5) || reduced_n == BigInt(11)) result = minus_third_root3;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Handle negative arguments for trig functions
+        if (s_args.size() == 1) {
+             std::shared_ptr<SymbolicNode> pos_arg = nullptr;
+             
+             if (check_negative_arg(s_args[0], pos_arg)) {
+                 if (node.type == FunctionNode::FuncType::Sin || 
+                     node.type == FunctionNode::FuncType::Tan || 
+                     node.type == FunctionNode::FuncType::ArcTan || 
+                     node.type == FunctionNode::FuncType::ArcSin) {
+                     // f(-x) = -f(x)
+                     std::vector<std::shared_ptr<SymbolicNode>> new_args = { pos_arg };
+                     auto new_func = std::make_shared<FunctionNode>(node.type, new_args);
+                     std::vector<std::shared_ptr<SymbolicNode>> mul_ops = { std::make_shared<NumberNode>(BigInt(-1)), new_func };
+                     result = std::make_shared<MultiplyNode>(mul_ops);
+                     return;
+                 } else if (node.type == FunctionNode::FuncType::Cos) {
+                     // cos(-x) = cos(x)
+                     std::vector<std::shared_ptr<SymbolicNode>> new_args = { pos_arg };
+                     result = std::make_shared<FunctionNode>(node.type, new_args);
+                     return;
+                 }
+             }
+        }
         
+        if (node.type == FunctionNode::FuncType::Log && s_args.size() == 2) {
+             auto val = s_args[0];
+             auto base = s_args[1];
+             
+             if (val->equals(*base)) {
+                 result = std::make_shared<NumberNode>(BigInt(1));
+                 return;
+             }
+             
+             if (val->is_one()) {
+                 result = std::make_shared<NumberNode>(BigInt(0));
+                 return;
+             }
+             
+             if (auto pow = std::dynamic_pointer_cast<PowerNode>(val)) {
+                 if (pow->base->equals(*base)) {
+                     result = pow->exponent;
+                     return;
+                 }
+             }
+        }
+
         result = std::make_shared<FunctionNode>(node.type, s_args);
     }
 

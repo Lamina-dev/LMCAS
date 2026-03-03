@@ -114,8 +114,61 @@ public:
         
         // k / 0 -> Inf
         if (!n_zero && d_zero) {
-            // Sign analysis...
-            result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{});
+            // Check sign of Numerator (val_n)
+            int sign_n = 1; 
+            if (auto num = std::dynamic_pointer_cast<NumberNode>(val_n)) {
+                 if (std::holds_alternative<double>(num->value)) sign_n = std::get<double>(num->value) > 0 ? 1 : -1;
+                 else if (std::holds_alternative<BigInt>(num->value)) sign_n = std::get<BigInt>(num->value) > BigInt(0) ? 1 : -1;
+                 else if (std::holds_alternative<Rational>(num->value)) sign_n = std::get<Rational>(num->value) > Rational(0) ? 1 : -1;
+            }
+
+            // Check sign of Denominator (D)
+            DifferentiationVisitor diff_vis(var);
+            std::shared_ptr<SymbolicNode> curr_d = D;
+            int sign_d = 0;
+            
+            for(int i=1; i<=3; ++i) { 
+                 curr_d->accept(diff_vis);
+                 auto deriv = diff_vis.get_result();
+                 if(!deriv) break;
+                 
+                 LimitVisitor sub_vis(var, point, direction);
+                 deriv->accept(sub_vis);
+                 auto val_deriv = sub_vis.get_result();
+                 
+                 NormalizationVisitor norm;
+                 val_deriv->accept(norm);
+                 val_deriv = norm.get_result();
+                 
+                 if (!val_deriv->is_zero()) {
+                      int s_deriv = 1;
+                      if (auto num = std::dynamic_pointer_cast<NumberNode>(val_deriv)) {
+                           if (std::holds_alternative<double>(num->value)) s_deriv = std::get<double>(num->value) > 0 ? 1 : -1;
+                           else if (std::holds_alternative<BigInt>(num->value)) s_deriv = std::get<BigInt>(num->value) > BigInt(0) ? 1 : -1;
+                           else if (std::holds_alternative<Rational>(num->value)) s_deriv = std::get<Rational>(num->value) > Rational(0) ? 1 : -1;
+                      }
+                      
+                      if (i % 2 != 0) { 
+                          if (direction == "-") s_deriv *= -1;
+                      }
+                      
+                      sign_d = s_deriv;
+                      break;
+                 }
+                 curr_d = deriv;
+            }
+            if (sign_d == 0) sign_d = (direction == "-" ? -1 : 1);
+            
+            int final_sign = sign_n * sign_d;
+            std::vector<std::shared_ptr<SymbolicNode>> inf_args;
+            auto inf_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+            
+            if (final_sign < 0) {
+                std::vector<std::shared_ptr<SymbolicNode>> m_args = { std::make_shared<NumberNode>(BigInt(-1)), inf_node };
+                result = std::make_shared<MultiplyNode>(m_args);
+            } else {
+                result = inf_node;
+            }
             return;
         }
 
@@ -127,6 +180,70 @@ public:
         auto b = result;
         node.exponent->accept(*this);
         auto e = result;
+
+        // Check for 0^-k -> Inf
+        if (b->is_zero()) {
+             bool neg_exp = false;
+             bool odd_exp = false;
+             if (auto num = std::dynamic_pointer_cast<NumberNode>(e)) {
+                 if (std::holds_alternative<BigInt>(num->value)) {
+                      BigInt v = std::get<BigInt>(num->value);
+                      if (v < BigInt(0)) {
+                           neg_exp = true;
+                           if (v.is_odd()) odd_exp = true;
+                      }
+                 } else if (std::holds_alternative<double>(num->value)) {
+                      if (std::get<double>(num->value) < 0) neg_exp = true;
+                 }
+             }
+             
+             if (neg_exp) {
+                  DifferentiationVisitor diff_vis(var);
+                  std::shared_ptr<SymbolicNode> curr_base = node.base; // explicit type
+                  int sign_base = 0;
+                  
+                  for(int i=1; i<=3; ++i) {
+                       curr_base->accept(diff_vis);
+                       auto deriv = diff_vis.get_result();
+                       if (!deriv) break;
+                       
+                       LimitVisitor sub(var, point, direction);
+                       deriv->accept(sub);
+                       auto val = sub.get_result();
+                       
+                       NormalizationVisitor n; val->accept(n); val = n.get_result();
+                       
+                       if (!val->is_zero()) {
+                            int s = 1;
+                            if (auto nval = std::dynamic_pointer_cast<NumberNode>(val)) {
+                                 if (std::holds_alternative<double>(nval->value)) s = std::get<double>(nval->value) > 0 ? 1 : -1;
+                                 else if (std::holds_alternative<BigInt>(nval->value)) s = std::get<BigInt>(nval->value) > BigInt(0) ? 1 : -1;
+                                 else if (std::holds_alternative<Rational>(nval->value)) s = std::get<Rational>(nval->value) > Rational(0) ? 1 : -1;
+                            }
+                            
+                            if (i % 2 != 0 && direction == "-") s *= -1;
+                            sign_base = s;
+                            break;
+                       }
+                       curr_base = deriv;
+                  }
+                  if (sign_base == 0) sign_base = (direction == "-" ? -1 : 1);
+                  
+                  int final_sign = 1; 
+                  if (odd_exp) final_sign = sign_base; 
+                  
+                  std::vector<std::shared_ptr<SymbolicNode>> inf_args;
+                  auto inf_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                  
+                  if (final_sign < 0) {
+                        std::vector<std::shared_ptr<SymbolicNode>> m = {std::make_shared<NumberNode>(BigInt(-1)), inf_node};
+                        result = std::make_shared<MultiplyNode>(m);
+                  } else {
+                        result = inf_node;
+                  }
+                  return;
+             }
+        }
         
         // 1^Inf is Indeterminate
         // Handling p^q as exp(q * ln(p))

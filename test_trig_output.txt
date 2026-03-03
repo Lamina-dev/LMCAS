@@ -1,0 +1,10 @@
+---------------------------------------------------
+Test Case: Trig Basic Values
+[PASS] sin(0)
+[PASS] cos(0)
+[PASS] tan(0)
+---------------------------------------------------
+Test Case: Trig Parity
+  Got: -1*sin(-1*x)
+---------------------------------------------------
+Test Case: Trig Pi Values

@@ -437,7 +437,67 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate_legacy(const std::stri
 
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
-    return simplify();
+    auto simp = simplify();
+    if (!simp || !simp->root) return simp;
+
+    if (auto add_node = std::dynamic_pointer_cast<AddNode>(simp->root)) {
+        // Try common factor
+        std::shared_ptr<SymbolicExpr> common = nullptr;
+        for (const auto& op : add_node->operands) {
+             auto expr_op = std::make_shared<SymbolicExpr>(op);
+             if (!common) common = expr_op;
+             else common = poly_gcd(common, expr_op);
+        }
+        
+        if (common && !common->is_one() && !common->is_zero()) {
+             std::vector<std::shared_ptr<SymbolicNode>> new_ops;
+             for (const auto& op : add_node->operands) {
+                  auto term = std::make_shared<SymbolicExpr>(op);
+                  // Manually divide: term / common
+                  auto inv_common = power(common, number(-1));
+                  auto quot = multiply(term, inv_common);
+                  quot = quot->simplify();
+                  new_ops.push_back(quot->root);
+             }
+             auto new_sum = std::make_shared<SymbolicExpr>(std::make_shared<AddNode>(new_ops));
+             
+             // Construct Multiply(common, sum) WITHOUT calling simplify() on result (to avoid re-expansion)
+             std::vector<std::shared_ptr<SymbolicNode>> final_ops = {common->root, new_sum->root};
+             return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(final_ops));
+        }
+        
+        // Try quadratic
+        VariablesVisitor vv;
+        simp->root->accept(vv);
+        if (vv.vars.size() == 1) {
+             std::string var = *vv.vars.begin();
+             try {
+                 auto poly = lamina::symbolic_to_poly<lamina::SymbolicPolyCoeff>(simp, var);
+                 if (poly.degree() == 2) {
+                      auto solutions = solve(simp, var);
+                      if (solutions.size() == 2) {
+                           auto leading = poly.coeffs[2].val; 
+                           if (!leading) leading = number(1);
+                           leading = leading->simplify();
+                           
+                           auto x_node = std::make_shared<SymbolicExpr>(std::make_shared<VariableNode>(var));
+                           
+                           auto t1 = SymbolicExpr::add(x_node, multiply(solutions[0], number(-1)))->simplify();
+                           auto t2 = SymbolicExpr::add(x_node, multiply(solutions[1], number(-1)))->simplify();
+                           
+                           std::vector<std::shared_ptr<SymbolicNode>> factors;
+                           if (!leading->is_one()) factors.push_back(leading->root);
+                           factors.push_back(t1->root);
+                           factors.push_back(t2->root);
+                           
+                           return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(factors));
+                      }
+                 }
+             } catch (...) {}
+        }
+    }
+    
+    return simp;
 }
 
 
