@@ -588,6 +588,10 @@ SymbolicExpr::Type SymbolicExpr::get_type() const {
             case FunctionNode::FuncType::Exp: return Type::Power; 
             case FunctionNode::FuncType::Abs: return Type::Abs;
             case FunctionNode::FuncType::Sqrt: return Type::Sqrt;
+            case FunctionNode::FuncType::Atan2: return Type::Atan2;
+            case FunctionNode::FuncType::ArcSin: return Type::ArcSin;
+            case FunctionNode::FuncType::ArcCos: return Type::ArcCos;
+            case FunctionNode::FuncType::ArcTan: return Type::ArcTan;
             default: return Type::Variable; 
         }
     }

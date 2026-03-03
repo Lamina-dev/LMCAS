@@ -93,6 +93,7 @@ void PrintVisitor::visit(FunctionNode& node) {
         case FunctionNode::FuncType::ArcSin: buffer << "asin"; break;
         case FunctionNode::FuncType::ArcCos: buffer << "acos"; break;
         case FunctionNode::FuncType::ArcTan: buffer << "atan"; break;
+        case FunctionNode::FuncType::Atan2: buffer << "atan2"; break;
         case FunctionNode::FuncType::Sinh: buffer << "sinh"; break;
         case FunctionNode::FuncType::Cosh: buffer << "cosh"; break;
         case FunctionNode::FuncType::Tanh: buffer << "tanh"; break;

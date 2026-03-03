@@ -1,4 +1,5 @@
 #pragma once
+#define _USE_MATH_DEFINES
 #include "bigint.hpp"
 #include "rational.hpp"
 #include "symbolic_ast.hpp"
@@ -89,7 +90,7 @@ public:
         
         Sin, Cos, Tan, Cot, Sec, Csc,
         
-        ArcSin, ArcCos, ArcTan,
+        ArcSin, ArcCos, ArcTan, Atan2,
         
         Sinh, Cosh, Tanh,
         
@@ -372,6 +373,14 @@ public:
 
     static std::shared_ptr<SymbolicExpr> log(std::shared_ptr<SymbolicExpr> val, std::shared_ptr<SymbolicExpr> base) {
         return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Log, std::vector<std::shared_ptr<SymbolicNode>>{val->root, base->root}));
+    }
+
+    static std::shared_ptr<SymbolicExpr> atan2(std::shared_ptr<SymbolicExpr> y, std::shared_ptr<SymbolicExpr> x) {
+        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Atan2, std::vector<std::shared_ptr<SymbolicNode>>{y->root, x->root}));
+    }
+
+	static std::shared_ptr<SymbolicExpr> eq(std::shared_ptr<SymbolicExpr> lhs, std::shared_ptr<SymbolicExpr> rhs) {
+        return std::make_shared<SymbolicExpr>(std::make_shared<RelationalNode>(lhs->root, rhs->root, RelationalNode::Op::EQ));
     }
 
     static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var) {

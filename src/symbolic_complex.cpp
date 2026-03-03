@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include "../include/symbolic_complex.hpp"
 #include "../include/symbolic.hpp"
 #include <cmath>
@@ -58,8 +59,9 @@ std::vector<ComplexSymbolic> solve_complex_nth_root(std::shared_ptr<SymbolicExpr
     // 这里只支持数值 c
     // 若 c 为符号，返回空
     if (c->is_number()) {
-        double r = std::abs(c->get_number_value());
-        double theta = std::arg(c->get_number_value());
+        double val = c->to_double();
+        double r = std::abs(val);
+        double theta = std::arg(std::complex<double>(val, 0.0));
         std::vector<ComplexSymbolic> roots;
         for (int k = 0; k < n; ++k) {
             double root_r = std::pow(r, 1.0 / n);

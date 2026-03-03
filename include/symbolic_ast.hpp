@@ -388,6 +388,7 @@ public:
         Sinh, Cosh, Tanh,
         Ln, Log, Abs, Sqrt,
         Exp,
+        Atan2,
         Calculus_Integral,
         Infinity,
         Limit
