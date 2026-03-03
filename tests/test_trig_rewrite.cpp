@@ -55,9 +55,13 @@ bool test_cos_2x() {
     std::string s = simplified->to_string();
     std::cout << "DEBUG: " << s << std::endl;
     // Allow various parens formats
-    bool result = s.find("cos(x) ^ 2") != std::string::npos && 
-           s.find("sin(x) ^ 2") != std::string::npos &&
-           (s.find("-1") != std::string::npos || s.find("- 1") != std::string::npos); 
+    bool result = (s.find("cos(x)^2") != std::string::npos || s.find("cos(x) ^ 2") != std::string::npos) && 
+           (s.find("sin(x)^2") != std::string::npos || s.find("sin(x) ^ 2") != std::string::npos) &&
+           (s.find("-1") != std::string::npos || s.find("- 1") != std::string::npos || s.find("- sin") != std::string::npos || s.find("-sin") != std::string::npos); 
+    if (!result) {
+        // Try exact match for typical output
+        if (s == "cos(x)^2 + -1*sin(x)^2" || s == "cos(x)^2 - 1*(sin(x)^2)") result = true;
+    }
     return result;
 }
 

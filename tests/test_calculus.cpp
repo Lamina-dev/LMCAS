@@ -57,7 +57,7 @@ int main() {
         
         
         
-        EXPECT_EQ_STR(integ->to_string(), "((1/2)*(x^2))+x", "int(x+1) dx");
+        EXPECT_EQ_STR(integ->to_string(), "(1/2)*(x^2) + x", "int(x+1) dx");
     }
 
     return TEST_REPORT();

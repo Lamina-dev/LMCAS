@@ -64,6 +64,7 @@ int main() {
         Value res = cas_simplify(args);
         
         std::string s = res.to_string();
+        std::cout << "[DEBUG] sqrt(8) -> " << s << std::endl;
         bool ok = (s.find("2") != std::string::npos) && (s.find("8") == std::string::npos);
         EXPECT_TRUE(ok, "sqrt(8) = 2*sqrt(2) (checks for 2 and no 8)");
     }

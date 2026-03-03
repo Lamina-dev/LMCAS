@@ -43,7 +43,7 @@ int main() {
             
             
             std::string s = factored2->to_string();
-            bool ok = str_contains(s, "x+2") && str_contains(s, "x+3");
+            bool ok = str_contains(s, "x + 2") && str_contains(s, "x + 3");
             EXPECT_TRUE(ok, "Factor x^2+5x+6");
         }
         
@@ -60,7 +60,7 @@ int main() {
             
             
             std::string s = factored3->to_string();
-            bool ok = str_contains(s, "x+2") && (str_contains(s, "x-2") || str_contains(s, "x+-2"));
+            bool ok = str_contains(s, "x + 2") && (str_contains(s, "x - 2") || str_contains(s, "x + -2"));
             EXPECT_TRUE(ok, "Factor x^2-4");
         }
 

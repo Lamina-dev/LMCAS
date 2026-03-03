@@ -51,7 +51,7 @@ void test_basic_arithmetic() {
     std::vector<std::shared_ptr<SymbolicNode>> add_ops = {n1, n2};
     auto add = std::make_shared<AddNode>(std::move(add_ops));
     
-    check("1 + 2", add, "(1 + 2)");
+    check("1 + 2", add, "1 + 2");
     
     
     auto x = std::make_shared<VariableNode>("x");
@@ -59,7 +59,7 @@ void test_basic_arithmetic() {
     std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {x, y};
     auto mul = std::make_shared<MultiplyNode>(std::move(mul_ops));
     
-    check("x * y", mul, "(x * y)");
+    check("x * y", mul, "x*y");
 }
 
 void test_differentiation() {
@@ -136,7 +136,7 @@ void test_normalization_simplification() {
     std::vector<std::shared_ptr<SymbolicNode>> add_ops = {n2, n3, x};
     auto add = std::make_shared<AddNode>(std::move(add_ops));
     
-    check("2 + 3 + x", normalize(add), "(x + 5)");
+    check("2 + 3 + x", normalize(add), "x + 5");
 }
 
 int main() {
