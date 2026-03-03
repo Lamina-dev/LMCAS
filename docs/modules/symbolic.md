@@ -1,127 +1,88 @@
-## 符号表达式
+# 符号表达式模块
 
-### expand()
-- 分配律展开，递归遍历表达式树，将乘法分配到加法，合并同类项。
-- 算法：先判断节点类型，遇到乘法节点时对子节点递归展开，遇到加法节点时合并同类项。
-- 特性：支持嵌套多层展开，自动化简。
-- 局限：深度嵌套时性能瓶颈，部分特殊结构（如函数嵌套）不支持完全展开。
+主要头文件：include/symbolic.hpp
+
+## 概览
+SymbolicExpr 是 LMCAS 中的核心类，用于包装符号表达式树（AST）。它通过 std::shared_ptr 持有 SymbolicNode 根节点，提供了包括内存管理、表达式创建、数学运算等核心功能。
+
+### 核心特性
+- **不可变性 (Immutability)**：所有的修改操作（如展开、求导）均返回新的 SymbolicExpr 实例，保证线程安全与引用透明。
+- **自动内存管理**：使用 std::shared_ptr 进行引用计数，当表达式不再被引用时自动释放内存。
+- **类型安全**：通过 SymbolicExpr::Type 枚举和动态类型检查确保操作的合法性。
+
+## 成员函数 (Member Functions)
+
+以下方法需在 SymbolicExpr 实例上调用：
+
+### xpand()
+- **描述**：对表达式进行代数展开，应用乘法分配律并合并同类项。
+- **算法**：递归遍历 AST，将 NumberNode 与 VariableNode 视为基础，将 MultiplyNode 分配到 AddNode 上。
+- **示例**：(a+b)^2 -> ^2 + 2ab + b^2
 
 ### substitute(var, value)
-- 变量替换，采用访问者模式递归遍历表达式树，将目标变量替换为指定值。
-- 算法：每遇到 VariableNode，判断是否为目标变量，若是则替换，否则递归处理子节点。
-- 特性：支持多变量替换，支持嵌套表达式。
-- 局限：复杂嵌套下替换一致性校验难度大。
+- **描述**：将表达式中的指定符号变量替换为另一个表达式。
+- **参数**：
+    - ar: 目标变量名 (std::string)
+    - alue: 用于替换的表达式 (std::shared_ptr<SymbolicExpr>)
+- **算法**：Visitor 模式遍历，匹配 VariableNode 名称。
 
-### compare(other)
-- 表达式比较，类型优先，递归比较子节点。
-- 算法：先比较节点类型，若类型相同则递归比较子节点，支持 commutative/associative。
-- 特性：支持结构等价、类型安全。
-- 局限：交换律/结合律下全排列效率低。
-
-### poly_gcd(a, b)
-- 多项式最大公约数，采用欧几里得算法。
-- 算法：递归调用除法，直到余数为零，返回最后非零多项式。
-- 特性：支持高精度系数，符号多项式。
-- 局限：多元多项式支持有限。
-
-### determinant(mat)
-- 行列式计算，递归展开或LU分解。
-- 算法：小型矩阵采用递归展开，大型矩阵采用LU分解。
-- 特性：支持符号矩阵、数值矩阵。
-- 局限：大规模稀疏矩阵效率低。
-
-### eigenvalues(mat)
-- 特征值计算，特征多项式法。
-- 算法：构造特征多项式，求解根。
-- 特性：支持符号矩阵、小型矩阵。
-- 局限：大型矩阵、复数特征值支持有限。
+### differentiate(var)
+- **描述**：对指定变量求导。
+- **算法**：依据求导法则（链式法则、乘积法则等）递归构建导数表达式。
+- **支持**：多项式、三角函数、指数对数等基本初等函数的求导。
 
 ### integrate(var)
-- 符号积分，调用 integration 模块。
-- 算法：启发式策略，优先分部积分、换元、部分分式分解。
-- 特性：支持常见积分题型，自动检测奇点。
-- 局限：高阶积分、特殊函数积分未支持。
+- **描述**：对指定变量进行符号积分。
+- **算法**：调用 integration 模块，使用启发式策略（由于 Risch 算法过于复杂，目前采用模式匹配与分部积分结合的策略）。
 
 ### series(var, point, order)
-- 泰勒/麦克劳林级数展开，递归求导并构造多项式。
-- 算法：自动化高阶导数，按阶累加构造多项式。
-- 特性：支持符号系数，自动化简。
-- 局限：高阶导数性能瓶颈，分段函数未支持。
+- **描述**：计算泰勒 (Taylor) 或麦克劳林 (Maclaurin) 级数展开。
+- **参数**：
+    - ar: 展开变量。
+    - point: 展开点 (SymbolicExpr)。
+    - order: 展开阶数 (int)。
+
+### simplify()
+- **描述**：对表达式进行化简。
+- **算法**：综合运用常数折叠、恒等式变换（如 sin^2 + cos^2 = 1）、最大公约数提取等策略。
+
+## 静态算法 (Static Methods)
+
+以下算法为 SymbolicExpr 类的静态成员函数，主要用于多项式与矩阵运算：
+
+### 多项式
+- **SymbolicExpr::poly_gcd(a, b)**: 计算两个多项式的最大公约数（GCD）。
+- **SymbolicExpr::poly_resultant(a, b, var)**: 计算两个多项式的结式（Resultant）。
+
+### 线性代数 (Matrix)
+- **SymbolicExpr::determinant(mat)**: 计算矩阵行列式。支持递归展开与 LU 分解。
+- **SymbolicExpr::inverse(mat)**: 计算逆矩阵。
+- **SymbolicExpr::eigenvalues(mat)**: 计算特征值（通过特征多项式）。
+- **SymbolicExpr::solve_system(eqs, vars)**: 求解线性方程组。
+
 ## 模式匹配逻辑
 
 ### 实现原理
-
-- 基于表达式树（AST）递归遍历，核心思想是将目标表达式与模式表达式逐层比对。
-- 支持 commutative（交换律）与 associative（结合律）匹配：如 a+b 与 b+a，a+(b+c) 与 (a+b)+c。
-- 通配符节点（如 WildcardNode、PatternVarNode）可匹配任意子表达式，并记录绑定关系。
-- 匹配流程：
-  1. 类型优先：先比对节点类型（如 AddNode、MultiplyNode），类型不同则直接失败。
-  2. 通配符处理：遇到模式中的通配符节点，直接绑定目标子树。
-  3. 递归比对：对子节点逐一递归匹配，支持 commutative/associative 时对子节点集合做全排列或哈希分组。
-  4. 变量绑定：PatternVarNode 支持多次绑定，需一致性校验。
-  5. 匹配成功则返回绑定表，否则失败。
+LMCAS 的模式匹配基于 AST 的结构比对，支持：
+- **通配符 (Wildcards)**：匹配任意子树。
+- **交换律 (Commutativity)**： + b 可匹配  + a。
+- **结合律 (Associativity)**：(a + b) + c 可匹配  + b + c。
 
 ### 算法细节
+1. **类型检查**：优先比对节点类型（Add, Multiply, Function 等）。
+2. **递归比对**：对子节点进行递归匹配。
+3. **哈希剪枝**：利用表达式哈希值快速判断是否可能匹配（详见 HashData 结构体）。
+4. **全排列尝试**：对于满足交换律的节点（如加法、乘法），在匹配时尝试子节点的全排列组合（注：这是性能瓶颈之一）。
 
-- 交换律匹配：对子节点集合排序或哈希分组，逐一尝试匹配。
-- 结合律匹配：将嵌套结构拉平成集合，递归匹配。
-- 通配符：支持单点匹配、区间匹配（如 a+b+c 匹配 a+_），实现为 PatternVarNode 或 WildcardNode。
-- 绑定表：用哈希表记录模式变量与目标子树的对应关系。
+## 节点类型 (SymbolicNode)
+- **NumberNode**: 存储数值 (BigInt, Rational, double)。
+- **VariableNode**: 存储变量名。
+- **AddNode / MultiplyNode**: n元运算节点。
+- **PowerNode**: 幂运算。
+- **FunctionNode**: 通用函数节点 (sin, cos, exp, ln 等)。
+- **MatrixNode**: 矩阵容器。
 
-### 特性
-
-- 支持复杂嵌套表达式的模式匹配。
-- 支持多变量、多通配符混合。
-- 支持表达式结构与类型安全。
-
-### 局限与已知问题
-
-- 大型表达式全排列匹配效率低，易爆炸。
-- 部分特殊节点（如函数、矩阵）匹配规则有限。
-- 变量绑定一致性校验复杂，易出错。
-# 符号表达式模块
-
-主要头文件：`include/symbolic.hpp`
-
-## SymbolicExpr
-
-- 表达式包装类，持有 root 指针（AST节点）。
-- 构造/析构：支持多种节点类型（NumberNode、VariableNode、AddNode、MultiplyNode、PowerNode、FunctionNode、MatrixNode）。
-- 算法：表达式树递归遍历，支持化简、模式匹配、类型优先比较。
-- 特性：
-  - 支持通配符匹配（如 a+b 与 b+a），类型安全，引用计数自动管理。
-  - 支持表达式的构建、打印、化简、展开、规范化。
-  - 支持模式匹配与通配符。
-- 已知问题：
-  - 深度递归时性能瓶颈，部分节点类型（如 RelationalNode）功能未完善。
-
-## SymbolicNode 及子类
-
-- NumberNode：数值节点，支持 BigInt、Rational、double。
-- VariableNode：变量节点，支持符号名。
-- AddNode、MultiplyNode：加法/乘法节点，支持多操作数，算法采用递归遍历。
-- PowerNode：幂节点，支持指数运算。
-- FunctionNode：函数节点，支持三角、对数、双曲等函数。
-- MatrixNode：矩阵节点，支持稠密/稀疏存储。
-
-## 主要函数
-
-- `expand()`：分配律展开，递归分配乘法、合并同类项。
-- `substitute(var, value)`：变量替换，访问者模式递归替换。
-- `compare(other)`：表达式比较，类型优先，递归比较子节点。
-- `poly_gcd(a, b)`：多项式最大公约数，欧几里得算法。
-- `determinant(mat)`：行列式，递归展开或LU分解。
-- `eigenvalues(mat)`：特征值，特征多项式法（仅支持小型矩阵）。
-- `integrate(var)`：符号积分，调用 integration 模块。
-- `series(var, point, order)`：泰勒/麦克劳林级数，递归求导并构造多项式。
-
-## 特殊特性
-
-- 支持 commutative/associative 匹配。
-- 支持表达式哈希与缓存。
-- 支持多种数值类型混合。
-
-## 已知问题
-
-- 深度递归时性能瓶颈。
-- 部分节点类型功能未完善（如 RelationalNode、MatrixNode 的高阶操作）。
+## 已知问题与局限
+- **大表达式性能**：深层嵌套的递归化简可能导致栈溢出或性能显著下降。
+- **特殊函数积分**：目前的积分器对非初等积分的支持有限。
+- **非线性方程组**：solve_system 主要针对线性系统，非线性支持较弱。
