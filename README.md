@@ -2,7 +2,7 @@
 
 ## 结构
 
-`	ext
+```text
 LMCAS/
 ├── src/                # 源代码实现 (.cpp)
 │   ├── symbolic.cpp    # 符号表达式核心实现
@@ -20,7 +20,7 @@ LMCAS/
 ├── benchmarks/         # 性能测试
 ├── LAMMP/              # 子模块：Lamina 多精度数学库 (BigInt)
 └── CMakeLists.txt      # CMake 构建配置
-`
+```
 
 ## 构建
 
@@ -30,7 +30,7 @@ LMCAS/
 
 ### Visual Studio (Windows)
 
-`powershell
+```powershell
 mkdir build
 cd build
 
@@ -40,18 +40,18 @@ cmake --build . --config Debug
 
 # 运行测试
 .\bin\Debug\test_proof.exe
-`
+```
 
 注意：ma如果在运行可执行文件时遇到 DLL 缺失错误，请确保 LammpCore.dll 和 lmcas.dll 位于可执行文件同级目录，或将 uild/bin/Debug 添加到系统 PATH。
 
 ### Linux / macOS
 
-`ash
+```bash
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j4
 ./bin/test_proof
-`
+```
 
 ## 核心功能说明
 
@@ -63,11 +63,11 @@ SymbolicExpr 是 LMCAS 的核心类，表示一个不可变的符号表达式树
 
 ### 计算机代数算法
 核心算法作为 SymbolicExpr 的成员函数或静态方法提供：
-*   **求导**: xpr->differentiate("x") - 对变量 x 求导。
-*   **积分**: xpr->integrate("x") - 对变量 x 进行符号积分。
-*   **化简**: xpr->simplify() - 调用化简引擎对表达式进行代数化简。
-*   **展开**: xpr->expand() - 展开多项式或乘积。
-*   **代入**: xpr->substitute("y", val) - 将变量 y 替换为表达式 val。
+*   **求导**: expr->differentiate("x") - 对变量 x 求导。
+*   **积分**: expr->integrate("x") - 对变量 x 进行符号积分。
+*   **化简**: expr->simplify() - 调用化简引擎对表达式进行代数化简。
+*   **展开**: expr->expand() - 展开多项式或乘积。
+*   **代入**: expr->substitute("y", val) - 将变量 y 替换为表达式 val。
 
 ### 矩阵运算
 支持符号矩阵操作（通常通过 SymbolicExpr 静态方法调用）：
