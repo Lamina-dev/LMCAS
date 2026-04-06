@@ -16,9 +16,9 @@ LMCAS/
 │   ├── value.hpp       # 通用值类型定义
 │   ├── rational.hpp    # 有理数类
 │   └── ...
-├── tests/              # 单元测试 (GoogleTest / 自定义框架)
+├── tests/              # 单元测试
 ├── benchmarks/         # 性能测试
-├── LAMMP/              # 子模块：Lamina 多精度数学库 (BigInt)
+├── LAMMP/              # 子模块：Lamina MP (BigInt)
 └── CMakeLists.txt      # CMake 构建配置
 ```
 
@@ -42,7 +42,7 @@ cmake --build . --config Debug
 .\bin\Debug\test_proof.exe
 ```
 
-注意：ma如果在运行可执行文件时遇到 DLL 缺失错误，请确保 LammpCore.dll 和 lmcas.dll 位于可执行文件同级目录，或将 uild/bin/Debug 添加到系统 PATH。
+注意：如果在运行可执行文件时遇到 DLL 缺失错误，请确保 (lib)LammpCore.dll 和 (lib)lmcas.dll 位于可执行文件同级目录，或将 uild/bin/Debug 添加到系统 PATH。
 
 ### Linux / macOS
 

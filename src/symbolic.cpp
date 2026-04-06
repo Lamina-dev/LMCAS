@@ -526,8 +526,44 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(const std::string& var) co
     return res_ptr->simplify(); 
 }
 std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order) const {
-    if (!root) return nullptr;
-    return std::make_shared<SymbolicExpr>(root->clone());
+    if (!root || !point) return nullptr;
+    if (order < 0) return SymbolicExpr::number(0);
+
+    // Taylor series via repeated differentiation at the expansion point.
+    auto x = SymbolicExpr::variable(var);
+    auto neg_point = SymbolicExpr::multiply(SymbolicExpr::number(-1), point);
+    auto delta = SymbolicExpr::add(x, neg_point);
+
+    std::vector<std::shared_ptr<SymbolicNode>> terms;
+    auto deriv = std::make_shared<SymbolicExpr>(root->clone());
+
+    for (int n = 0; n <= order; ++n) {
+        if (n > 0) {
+            deriv = deriv->differentiate(var);
+            if (!deriv) break;
+        }
+
+        auto coeff = deriv->substitute(var, point);
+        if (!coeff) break;
+        coeff = coeff->simplify();
+
+        auto term = coeff;
+        if (n > 0) {
+            term = SymbolicExpr::multiply(term, SymbolicExpr::power(delta, SymbolicExpr::number(n)));
+        }
+
+        if (n > 1) {
+            BigInt fact = BigInt::factorial(static_cast<unsigned int>(n));
+            auto inv_fact = SymbolicExpr::number(Rational(BigInt(1), fact));
+            term = SymbolicExpr::multiply(term, inv_fact);
+        }
+
+        terms.push_back(term->root);
+    }
+
+    if (terms.empty()) return SymbolicExpr::number(0);
+    auto sum = std::make_shared<AddNode>(terms);
+    return std::make_shared<SymbolicExpr>(sum)->simplify();
 }
 
 
