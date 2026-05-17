@@ -1,5 +1,7 @@
 #include "../include/symbolic_ode.hpp"
 #include "../include/symbolic.hpp"
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 #include <cmath>
 #include <memory>
 #include <string>
@@ -58,14 +60,16 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     auto C1 = SymbolicExpr::variable("C1");
     auto C2 = SymbolicExpr::variable("C2");
     std::shared_ptr<SymbolicExpr> yh;
-    if (D > 1e-12) {
+    int eq;
+    lmmc_double_nearly_equal_tol(D, 0.0, 1e-12, 1e-12, &eq);
+    if (!eq && D > 0) {
         double r1 = (-b + std::sqrt(D)) / (2*a);
         double r2 = (-b - std::sqrt(D)) / (2*a);
         yh = SymbolicExpr::add(
             SymbolicExpr::multiply(C1, SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(r1), SymbolicExpr::variable(x)))),
             SymbolicExpr::multiply(C2, SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(r2), SymbolicExpr::variable(x))))
         );
-    } else if (std::abs(D) < 1e-12) {
+    } else if (eq) {
         double r = -b / (2*a);
         yh = SymbolicExpr::add(
             SymbolicExpr::multiply(C1, SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(r), SymbolicExpr::variable(x)))),

@@ -79,7 +79,7 @@ LMCAS 的模式匹配基于 AST 的结构比对，支持：
 - **VariableNode**: 存储变量名。
 - **AddNode / MultiplyNode**: n元运算节点。
 - **PowerNode**: 幂运算。
-- **FunctionNode**: 通用函数节点 (sin, cos, exp, ln 等)。
+- **FunctionNode**: 通用函数节点 (sin, cos, exp, ln, lambertw, rootof 等)。
 - **MatrixNode**: 矩阵容器。
 
 ## 已知问题与局限

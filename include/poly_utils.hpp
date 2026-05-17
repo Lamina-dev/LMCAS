@@ -170,6 +170,10 @@ inline bool depends_on_var(const std::shared_ptr<SymbolicNode>& node, const std:
     return visitor.found;
 }
 
+inline bool contains(const SymbolicExpr& expr, const std::string& var) {
+    return depends_on_var(expr.root, var);
+}
+
 template <typename T>
 Polynomial<T> symbolic_to_poly_recursive(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
     if (!node) return Polynomial<T>(var);
@@ -292,5 +296,7 @@ std::shared_ptr<SymbolicExpr> poly_to_symbolic(const Polynomial<T>& poly) {
     }
     return res;
 }
+
+void gaussian_eliminate(std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& A, size_t m, size_t n, std::vector<size_t>& pivot_col_for_row, int& sign);
 
 } 

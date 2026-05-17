@@ -102,6 +102,8 @@ void PrintVisitor::visit(FunctionNode& node) {
         case FunctionNode::FuncType::Abs: buffer << "abs"; break;
         case FunctionNode::FuncType::Sqrt: buffer << "sqrt"; break;
         case FunctionNode::FuncType::Exp: buffer << "exp"; break;
+        case FunctionNode::FuncType::LambertW: buffer << "lambertw"; break;
+        case FunctionNode::FuncType::RootOf: buffer << "rootof"; break;
         case FunctionNode::FuncType::Calculus_Integral: buffer << "integral"; break;
         case FunctionNode::FuncType::Limit: buffer << "limit"; break;
         case FunctionNode::FuncType::Infinity: buffer << "inf"; break;

@@ -9,6 +9,10 @@
 #include <unordered_set>
 #include "rational.hpp"
 #include "bigint.hpp"
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
+#include <stdexcept>
+#include <atomic>
 
 
 
@@ -30,8 +34,12 @@ inline void hash_combine(std::size_t& seed, std::size_t value) {
 
 class SymbolicNode {
 protected:
-    mutable std::size_t cached_hash = 0;
-    mutable bool hash_computed = false;
+    mutable std::atomic<std::size_t> cached_hash{0};
+    mutable std::atomic<bool> hash_computed{false};
+
+    SymbolicNode() = default;
+    SymbolicNode(const SymbolicNode&) : cached_hash(0), hash_computed(false) {}
+    SymbolicNode& operator=(const SymbolicNode&) { return *this; }
 
     
     virtual std::size_t compute_hash() const = 0;
@@ -51,11 +59,13 @@ public:
     virtual int type_priority() const = 0;
 
     std::size_t hash() const {
-        if (!hash_computed) {
-            cached_hash = compute_hash();
-            hash_computed = true;
+        if (!hash_computed.load(std::memory_order_acquire)) {
+            std::size_t h = compute_hash();
+            cached_hash.store(h, std::memory_order_relaxed);
+            hash_computed.store(true, std::memory_order_release);
+            return h;
         }
-        return cached_hash;
+        return cached_hash.load(std::memory_order_relaxed);
     }
 
     
@@ -81,7 +91,22 @@ public:
 
 
 class SymbolicVisitor {
+protected:
+    int current_depth = 0;
+    static constexpr int MAX_DEPTH = 500;
 public:
+    struct DepthGuard {
+        SymbolicVisitor& visitor;
+        DepthGuard(SymbolicVisitor& v) : visitor(v) {
+            if (++visitor.current_depth > MAX_DEPTH) {
+                throw std::runtime_error("AST traversal depth limit exceeded");
+            }
+        }
+        ~DepthGuard() {
+            --visitor.current_depth;
+        }
+    };
+
     virtual ~SymbolicVisitor() = default;
     
     virtual void visit(NumberNode& node) = 0;
@@ -122,7 +147,7 @@ class SymbolicFactory {
 public:
     static std::shared_ptr<SymbolicNode> create_number(const ::BigInt& v);
     static std::shared_ptr<SymbolicNode> create_number(const ::Rational& v);
-    static std::shared_ptr<SymbolicNode> create_number(double v);
+    static std::shared_ptr<SymbolicNode> create_number(lmmc_real_t v);
     static std::shared_ptr<SymbolicNode> create_variable(const std::string& name);
 
     static std::shared_ptr<SymbolicNode> create_add(std::vector<std::shared_ptr<SymbolicNode>> ops);
@@ -133,72 +158,73 @@ public:
 
 class NumberNode : public SymbolicNode {
 public:
-    std::variant<BigInt, Rational, double> value;
+    std::variant<BigInt, Rational, lmmc_real_t> value;
     
     explicit NumberNode(const BigInt& v) : value(v) {}
     explicit NumberNode(const Rational& v) : value(v) {}
-    explicit NumberNode(double v) : value(v) {}
-    explicit NumberNode(std::variant<BigInt, Rational, double> v) : value(std::move(v)) {}
+    explicit NumberNode(lmmc_real_t v) : value(v) {}
+    explicit NumberNode(std::variant<BigInt, Rational, lmmc_real_t> v) : value(std::move(v)) {}
     
     
     int type_priority() const override { return -10; }
 
 protected:
     std::size_t compute_hash() const override {
-        
-        
-        
-        
-        
         if (std::holds_alternative<Rational>(value)) {
             const auto& r = std::get<Rational>(value);
-            return std::hash<std::string>{}(r.to_string()); 
+            return r.hash(); 
         } else if (std::holds_alternative<BigInt>(value)) {
             const auto& b = std::get<BigInt>(value);
-            return std::hash<std::string>{}(b.to_string());
+            return b.hash();
         } else {
-             auto d = std::get<double>(value);
-             
-             if (d == std::floor(d)) {
-                 
-             }
-             return std::hash<double>{}(d);
+             auto d = std::get<lmmc_real_t>(value);
+             return std::hash<lmmc_real_t>{}(d);
         }
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const NumberNode&>(other);
         
+        bool is_l_real = std::holds_alternative<lmmc_real_t>(value);
+        bool is_r_real = std::holds_alternative<lmmc_real_t>(o.value);
         
-        auto to_double = [](const std::variant<BigInt, Rational, double>& v) {
-            if (std::holds_alternative<double>(v)) return std::get<double>(v);
-            if (std::holds_alternative<Rational>(v)) return std::get<Rational>(v).to_double();
-            return std::get<BigInt>(v).to_double();
-        };
+        if (is_l_real || is_r_real) {
+            auto to_lmmc_real = [](const std::variant<BigInt, Rational, lmmc_real_t>& v) {
+                if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
+                if (std::holds_alternative<Rational>(v)) return (lmmc_real_t)std::get<Rational>(v).to_double();
+                return (lmmc_real_t)std::get<BigInt>(v).to_double();
+            };
 
-        double v1 = to_double(value);
-        double v2 = to_double(o.value);
+            lmmc_real_t v1 = to_lmmc_real(value);
+            lmmc_real_t v2 = to_lmmc_real(o.value);
+            return LMMC_REAL_CMP(&v1, &v2);
+        }
         
-        /* 
-           TODO: Proper exact comparison logic:
-           1. If both BigInt -> compare
-           2. If both Rational -> compare
-           3. If mixed, upgrade to Rational
-           4. Double fallback only for Double variants
-        */
+        bool is_l_rat = std::holds_alternative<Rational>(value);
+        bool is_r_rat = std::holds_alternative<Rational>(o.value);
+        
+        if (is_l_rat || is_r_rat) {
+            Rational r1 = is_l_rat ? std::get<Rational>(value) : Rational(std::get<BigInt>(value));
+            Rational r2 = is_r_rat ? std::get<Rational>(o.value) : Rational(std::get<BigInt>(o.value));
+            if (r1 < r2) return -1;
+            if (r1 == r2) return 0;
+            return 1;
+        }
 
-        if (v1 < v2) return -1;
-        if (v1 > v2) return 1;
-        return 0;
+        const auto& b1 = std::get<BigInt>(value);
+        const auto& b2 = std::get<BigInt>(o.value);
+        if (b1 < b2) return -1;
+        if (b1 == b2) return 0;
+        return 1;
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<SymbolicNode> clone() const override {
         
         if (std::holds_alternative<BigInt>(value)) return std::make_shared<NumberNode>(std::get<BigInt>(value));
         if (std::holds_alternative<Rational>(value)) return std::make_shared<NumberNode>(std::get<Rational>(value));
-        return std::make_shared<NumberNode>(std::get<double>(value));
+        return std::make_shared<NumberNode>(std::get<lmmc_real_t>(value));
     }
     
     bool is_number() const override { return true; }
@@ -206,12 +232,18 @@ public:
         
         if (std::holds_alternative<BigInt>(value)) return std::get<BigInt>(value) == BigInt(0);
         if (std::holds_alternative<Rational>(value)) return std::get<Rational>(value) == Rational(0);
-        return std::get<double>(value) == 0.0;
+        lmmc_real_t v = std::get<lmmc_real_t>(value);
+        int eq;
+        lmmc_double_nearly_equal(v, 0.0, &eq);
+        return eq != 0;
     }
     bool is_one() const override {
         if (std::holds_alternative<BigInt>(value)) return std::get<BigInt>(value) == BigInt(1);
         if (std::holds_alternative<Rational>(value)) return std::get<Rational>(value) == Rational(1);
-        return std::get<double>(value) == 1.0;
+        lmmc_real_t v = std::get<lmmc_real_t>(value);
+        int eq;
+        lmmc_double_nearly_equal(v, 1.0, &eq);
+        return eq != 0;
     }
 };
 
@@ -234,7 +266,7 @@ protected:
     }
     
 public:
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<SymbolicNode> clone() const override { return std::make_shared<VariableNode>(name); }
 };
 
@@ -285,7 +317,7 @@ protected:
     }
     
 public:
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<SymbolicNode> clone() const override {
         std::vector<std::shared_ptr<SymbolicNode>> new_ops;
         new_ops.reserve(operands.size());
@@ -338,7 +370,7 @@ protected:
     }
     
 public:
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<SymbolicNode> clone() const override {
         std::vector<std::shared_ptr<SymbolicNode>> new_ops;
         new_ops.reserve(operands.size());
@@ -377,7 +409,7 @@ protected:
     }
         
 public:
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<SymbolicNode> clone() const override {
         return std::make_shared<PowerNode>(base->clone(), exponent->clone());
     }
@@ -391,6 +423,8 @@ public:
         Sinh, Cosh, Tanh,
         Ln, Log, Abs, Sqrt,
         Exp,
+        LambertW,
+        RootOf,
         Atan2,
         Calculus_Integral,
         Infinity,
@@ -432,7 +466,7 @@ protected:
     }
         
 public:
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<SymbolicNode> clone() const override {
         std::vector<std::shared_ptr<SymbolicNode>> new_args;
         for (const auto& arg : arguments) new_args.push_back(arg->clone());
@@ -449,8 +483,20 @@ public:
     using DenseStorage = std::vector<std::shared_ptr<SymbolicNode>>;
     using SparseStorage = std::map<size_t, std::shared_ptr<SymbolicNode>>;
 
+    static size_t validate_grid_columns(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid) {
+        if (grid.empty()) return 0;
+        size_t ncols = grid[0].size();
+        for (size_t i = 1; i < grid.size(); ++i) {
+            if (grid[i].size() != ncols) {
+                // Irregular grid - use max column count
+                if (grid[i].size() > ncols) ncols = grid[i].size();
+            }
+        }
+        return ncols;
+    }
+
     static std::variant<DenseStorage, SparseStorage> create_storage_from_grid(
-        const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements);
+        const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements, size_t ncols);
 
     
     const std::variant<DenseStorage, SparseStorage> storage;
@@ -459,9 +505,9 @@ public:
 
     
     MatrixNode(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid) 
-        : storage(create_storage_from_grid(grid, grid.size() * (grid.empty() ? 0 : grid[0].size()))),
-          rows(grid.size()),
-          cols(grid.empty() ? 0 : grid[0].size()) {}
+        : rows(grid.size()),
+          cols(grid.empty() ? 0 : validate_grid_columns(grid)),
+          storage(create_storage_from_grid(grid, rows * cols, cols)) {}
 
     MatrixNode(size_t r, size_t c, DenseStorage dense) 
         : storage(std::move(dense)), rows(r), cols(c) {}
@@ -527,7 +573,7 @@ protected:
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     
     std::shared_ptr<SymbolicNode> clone() const override {
         if (std::holds_alternative<DenseStorage>(storage)) {
@@ -568,7 +614,7 @@ private:
 
 
 inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixNode::create_storage_from_grid(
-    const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements) {
+    const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements, size_t ncols) {
     
     size_t non_zeros = 0;
     for (const auto& row : grid) {
@@ -586,7 +632,7 @@ inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixN
             size_t c = 0;
             for (const auto& item : row) {
                 if (item && !item->is_zero()) {
-                    s[r * grid[0].size() + c] = item;
+                    s[r * ncols + c] = item;
                 }
                 c++;
             }
@@ -618,7 +664,7 @@ public:
     RelationalNode(std::shared_ptr<SymbolicNode> l, std::shared_ptr<SymbolicNode> r, Op o)
         : left(std::move(l)), right(std::move(r)), op(o) {}
 
-    void accept(SymbolicVisitor& visitor) override { visitor.visit(*this); }
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     
     std::shared_ptr<SymbolicNode> clone() const override {
         return std::make_shared<RelationalNode>(left->clone(), right->clone(), op);
@@ -662,7 +708,7 @@ public:
 
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::BigInt& v) { return std::make_shared<NumberNode>(v); }
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::Rational& v) { return std::make_shared<NumberNode>(v); }
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(double v) { return std::make_shared<NumberNode>(v); }
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(lmmc_real_t v) { return std::make_shared<NumberNode>(v); }
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_variable(const std::string& name) { return std::make_shared<VariableNode>(name); }
 
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_add(std::vector<std::shared_ptr<SymbolicNode>> ops) {

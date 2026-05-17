@@ -1,4 +1,6 @@
 #pragma once
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 #include "bigint.hpp"
 #include <iomanip>
 #include <sstream>
@@ -236,6 +238,13 @@ public:
         return !numerator;
     }
 
+    std::size_t hash() const {
+        std::size_t seed = numerator.hash();
+        std::size_t d_hash = denominator.hash();
+        seed ^= d_hash + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        return seed;
+    }
+
     
     std::string to_string() const {
         if (is_integer()) {
@@ -277,12 +286,13 @@ public:
 
     
     inline std::string to_float_string(int64_t n) const{
+        if (is_zero()) return "0";
         if (n == 0) return (numerator / denominator).ToString();
         if (n > 0) {
             BigInt pow10n(10);
             pow10n = pow10n.power(BigInt(n));
             std::string re = (numerator * pow10n / denominator).ToString();
-            if (n == re.size()) re.insert(re.end() - n, '0');
+            if (n >= re.size()) re.insert(re.begin(), n - re.size() + 1, '0');
             re.insert(re.end() - n,'.');
             while (re.back() == '0') re.pop_back();
             if (re.back() == '.') re.pop_back();
@@ -391,8 +401,15 @@ public:
     }
 
     
-    double to_double() const {
-        return std::stod(to_float_string(15));
+    lmmc_real_t to_double() const {
+        if (is_zero()) return 0.0;
+        lmmc_real_t res = 0.0;
+#ifdef LMMC_SCN_REAL
+        sscanf(to_float_string(15).c_str(), "%" LMMC_SCN_REAL, &res);
+#else
+        res = std::stod(to_float_string(15));
+#endif
+        return res;
     }
 
     

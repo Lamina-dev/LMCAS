@@ -15,8 +15,8 @@
 #include <algorithm>
 #include <iomanip>
 #include <stdexcept>
-#include <cmath>
 #include <limits>
+#include "lmmc/config.h"
 
 
 
@@ -277,15 +277,21 @@ public:
         return (int)val;
     }
 
-    double to_double() const {
+    lmmc_real_t to_double() const {
         if (_size == 0) return 0.0;
-        double res = 0.0;
+        lmmc_real_t res = 0.0;
+        lmmc_real_t base_mul = 18446744073709551616.0;
         
         for (mp_size_t i = _size; i > 0; --i) {
-            res = res * 18446744073709551616.0; 
-            res += (double)_data[i-1];
+            LMMC_REAL_MUL(&res, &res, &base_mul);
+            lmmc_real_t val = (lmmc_real_t)_data[i-1];
+            LMMC_REAL_ADD(&res, &res, &val);
         }
-        return _sign == NEGATIVE ? -res : res;
+        if (_sign == NEGATIVE) {
+            lmmc_real_t zero = 0.0;
+            LMMC_REAL_SUB(&res, &zero, &res);
+        }
+        return res;
     }
 
     static int cmp_abs(const BigInt& a, const BigInt& b) {
@@ -324,6 +330,17 @@ public:
             d.push_back(_data[i]);
         }
         return d;
+    }
+    
+    std::size_t hash() const {
+        std::size_t seed = 0;
+        for (mp_size_t i = 0; i < _size; ++i) {
+            seed ^= std::hash<uint64_t>{}(_data[i]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        if (negative) {
+            seed ^= std::hash<int>{}(-1) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
     }
     
     BigInt Abs() const {
@@ -377,47 +394,7 @@ public:
         }
         
         if (na > nb) {
-             
-             
-             
-             
-             
-             
-             mp_ptr dp = dst._data + nb;
-             mp_srcptr asp = ap + nb;
-             mp_size_t count = na - nb;
-             
-             mp_limb_t r = asp[0] + cy;
-             dp[0] = r;
-             cy = (r < asp[0]); 
-             if (r < asp[0] || (cy && r == asp[0])) {} 
-             
-             if (cy) {
-                 
-                 for (mp_size_t i = 1; i < count; ++i) {
-                     r = asp[i] + 1;
-                     dp[i] = r;
-                     if (r != 0) { cy = 0; break; } 
-                 }
-                 if (cy) {
-                      
-                      if (count > 0) {
-                           
-                           
-                      }
-                 }
-             } 
-             
-             
-             
-             
-             
-             
-             
-             
-             
              if (dst._data != ap) std::memcpy(dst._data + nb, ap + nb, (na - nb) * sizeof(mp_limb_t));
-             
              
              mp_size_t k = nb;
              while (cy && k < na) {
@@ -512,7 +489,7 @@ public:
     }
 
     BigInt operator/(const BigInt& other) const {
-        if (other._size == 0) throw std::runtime_error("Division by zero");
+        if (other._size == 0) throw std::domain_error("Division by zero");
         if (_size < other._size) return BigInt(0); 
         
         BigInt q, r;
@@ -541,7 +518,7 @@ public:
     }
     
     BigInt operator%(const BigInt& other) const {
-        if (other._size == 0) throw std::runtime_error("Division by zero");
+        if (other._size == 0) throw std::domain_error("Division by zero");
         if (_size < other._size) return *this; 
 
         BigInt q; 
@@ -747,9 +724,10 @@ public:
     
     static BigInt factorial(unsigned int n) {
         BigInt res;
-        mp_size_t needed = lmmp_factorial_size_(n);
+        mp_bitcnt_t bits = 0;
+        mp_size_t needed = lmmp_factorial_size_(n, &bits);
         res.realloc_to(needed);
-        res._size = lmmp_factorial_(res._data, needed, n);
+        res._size = lmmp_factorial_(res._data, bits, needed, n);
         res._sign = POSITIVE;
         res.negative = false;
         res.normalize();
@@ -759,9 +737,10 @@ public:
     static BigInt nPr(unsigned int n, unsigned int r) {
         if (r > n) return BigInt(0);
         BigInt res;
-        mp_size_t needed = lmmp_nPr_size_(n, r);
+        mp_bitcnt_t bits = 0;
+        mp_size_t needed = lmmp_nPr_size_(n, r, &bits);
         res.realloc_to(needed);
-        res._size = lmmp_nPr_(res._data, needed, n, r);
+        res._size = lmmp_nPr_(res._data, bits, needed, n, r);
         res._sign = POSITIVE;
         res.negative = false;
         res.normalize();
@@ -771,9 +750,10 @@ public:
     static BigInt nCr(unsigned int n, unsigned int r) {
         if (r > n) return BigInt(0);
         BigInt res;
-        mp_size_t needed = lmmp_nCr_size_(n, r);
+        mp_bitcnt_t bits = 0;
+        mp_size_t needed = lmmp_nCr_size_(n, r, &bits);
         res.realloc_to(needed);
-        res._size = lmmp_nCr_(res._data, needed, n, r);
+        res._size = lmmp_nCr_(res._data, bits, needed, n, r);
         res._sign = POSITIVE;
         res.negative = false;
         res.normalize();
@@ -872,11 +852,44 @@ public:
              return lmmp_is_prime_ulong_(_size == 0 ? 0 : _data[0]);
         }
         
+        // Miller-Rabin deterministic bases for 64-bit numbers
+        static const uint64_t mr_bases[] = {2, 3, 5, 7, 11, 13, 17};
         
+        // Quick divisibility check by small primes
+        static const uint64_t small_primes[] = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
+        for (auto p : small_primes) {
+            if ((*this % p).is_zero()) return false;
+        }
         
+        // Write n-1 = d * 2^s
+        BigInt n = *this;
+        BigInt d = n - 1;
+        BigInt two(2);
+        int s = 0;
+        while (d.is_even()) {
+            d = d / two;
+            s++;
+        }
         
-        
-        return false; 
+        const int num_bases = sizeof(mr_bases) / sizeof(mr_bases[0]);
+        for (int i = 0; i < num_bases; ++i) {
+            BigInt a(mr_bases[i]);
+            if (a >= n) continue;
+            
+            BigInt x = BigInt::pow_mod(a, d, n);
+            if (x == 1 || x == n - 1) continue;
+            
+            bool composite = true;
+            for (int r = 1; r < s; ++r) {
+                x = BigInt::pow_mod(x, two, n);
+                if (x == n - 1) {
+                    composite = false;
+                    break;
+                }
+            }
+            if (composite) return false;
+        }
+        return true; 
     }
 
     bool is_perfect_square() const {

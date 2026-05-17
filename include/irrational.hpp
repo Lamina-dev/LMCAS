@@ -1,7 +1,8 @@
 #pragma once
 #define _USE_MATH_DEFINES
 #include "symbolic.hpp"
-#include <cmath>
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -10,59 +11,70 @@
 #include <string>
 #include <vector>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
+#ifndef LMMC_E
+#define LMMC_E 2.71828182845904523536
 #endif
 
-#ifndef M_E
-#define M_E 2.71828182845904523536
-#endif
-
+inline lmmc_real_t _irrational_sqrt(lmmc_real_t x) {
+    lmmc_real_t res;
+    LMMC_REAL_SQRT(&res, &x);
+    return res;
+}
 
 class Irrational {
 public:
     
 
     std::shared_ptr<SymbolicExpr> to_symbolic() const {
+        auto is_zero_tol = [](lmmc_real_t x) -> bool {
+            int eq;
+            lmmc_double_nearly_equal_tol(x, 0.0, 1e-15, 1e-15, &eq);
+            return eq != 0;
+        };
+        auto is_one_tol = [](lmmc_real_t x) -> bool {
+            int eq;
+            lmmc_double_nearly_equal_tol(x, 1.0, 1e-15, 1e-15, &eq);
+            return eq != 0;
+        };
         switch (type) {
             case Type::SQRT: {
                 
                 auto sqrtExpr = SymbolicExpr::sqrt(SymbolicExpr::number(static_cast<int>(radicand)));
-                if (std::abs(coefficient) < 1e-15) {
+                if (is_zero_tol(coefficient)) {
                     return SymbolicExpr::number(0);
-                } else if (std::abs(coefficient - 1.0) < 1e-15) {
+                } else if (is_one_tol(coefficient)) {
                     return sqrtExpr;
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational(coefficient)), sqrtExpr);
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), sqrtExpr);
                 }
             }
             case Type::PI:
                 
-                if (std::abs(coefficient) < 1e-15) {
-                    return SymbolicExpr::variable("π");
-                } else if (std::abs(coefficient - 1.0) < 1e-15) {
+                if (is_zero_tol(coefficient)) {
+                    return SymbolicExpr::number(0);
+                } else if (is_one_tol(coefficient)) {
                     return SymbolicExpr::variable("π");
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational(coefficient)), SymbolicExpr::variable("π"));
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("π"));
                 }
             case Type::E:
-                if (std::abs(coefficient) < 1e-15) {
+                if (is_zero_tol(coefficient)) {
                     return SymbolicExpr::number(0);
-                } else if (std::abs(coefficient - 1.0) < 1e-15) {
+                } else if (is_one_tol(coefficient)) {
                     return SymbolicExpr::variable("e");
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational(coefficient)), SymbolicExpr::variable("e"));
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("e"));
                 }
             case Type::LOG:
                 
-                if (std::abs(coefficient) < 1e-15) {
+                if (is_zero_tol(coefficient)) {
                     return SymbolicExpr::number(0);
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
                 }
             case Type::COMPLEX:
                 
-                return SymbolicExpr::number(::Rational(constant_term));
+                return SymbolicExpr::number(::Rational::from_double(constant_term));
             default:
                 return SymbolicExpr::number(0);
         }
@@ -79,12 +91,12 @@ private:
     Type type;
 
     
-    double coefficient;
+    lmmc_real_t coefficient;
     long long radicand;
 
     
-    std::map<std::string, double> coefficients;
-    double constant_term;
+    std::map<std::string, lmmc_real_t> coefficients;
+    lmmc_real_t constant_term;
 
     
     static std::pair<long long, long long> simplify_sqrt(long long n) {
@@ -105,7 +117,7 @@ public:
     Irrational() : type(Type::COMPLEX), coefficient(0), radicand(1), constant_term(0) {}
 
     
-    static Irrational sqrt(long long n, double coeff = 1.0) {
+    static Irrational sqrt(long long n, lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::SQRT;
 
@@ -118,7 +130,7 @@ public:
     }
 
     
-    static Irrational pi(double coeff = 1.0) {
+    static Irrational pi(lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::PI;
         result.coefficient = coeff;
@@ -128,7 +140,7 @@ public:
     }
 
     
-    static Irrational e(double coeff = 1.0) {
+    static Irrational e(lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::E;
         result.coefficient = coeff;
@@ -138,7 +150,7 @@ public:
     }
 
     
-    static Irrational constant(double value) {
+    static Irrational constant(lmmc_real_t value) {
         Irrational result;
         result.type = Type::COMPLEX;
         result.coefficient = 0;
@@ -209,7 +221,7 @@ public:
     }
 
     
-    Irrational operator*(double scalar) const {
+    Irrational operator*(lmmc_real_t scalar) const {
         Irrational result = *this;
 
         if (type == Type::COMPLEX) {
@@ -252,8 +264,10 @@ public:
         }
 
         
-        double other_val = other.to_double();
-        if (std::abs(other_val) < 1e-15) {
+        lmmc_real_t other_val = other.to_double();
+        lmmc_real_t abs_other;
+        LMMC_REAL_ABS(&abs_other, &other_val);
+        if (abs_other < 1e-15) {
             throw std::runtime_error("Irrational: division by zero");
         }
         return Irrational::constant(to_double() / other_val);
@@ -266,7 +280,9 @@ public:
 
     
     bool operator==(const Irrational& other) const {
-        return std::abs(to_double() - other.to_double()) < 1e-12;
+        int eq;
+        lmmc_double_nearly_equal(to_double(), other.to_double(), &eq);
+        return eq != 0;
     }
 
     bool operator<(const Irrational& other) const {
@@ -286,29 +302,38 @@ public:
     }
 
     
-    double to_double() const {
+    lmmc_real_t to_double() const {
         switch (type) {
             case Type::SQRT:
                 if (radicand == 1) {
                     return coefficient;
                 }
-                return coefficient * std::sqrt(radicand);
+                {
+                    lmmc_real_t rad = radicand;
+                    return coefficient * _irrational_sqrt(rad);
+                }
             case Type::PI:
-                return coefficient * M_PI;
+                return coefficient * LMMC_PI;
             case Type::E:
-                return coefficient * M_E;
+                return coefficient * LMMC_E;
             case Type::LOG:
-                return coefficient * std::log(radicand);
+                {
+                    lmmc_real_t rad = radicand;
+                    lmmc_real_t res;
+                    LMMC_REAL_LOG(&res, &rad);
+                    return coefficient * res;
+                }
             case Type::COMPLEX: {
-                double result = constant_term;
+                lmmc_real_t result = constant_term;
                 for (const auto& [key, coeff]: coefficients) {
                     if (key == "pi") {
-                        result += coeff * M_PI;
+                        result += coeff * LMMC_PI;
                     } else if (key == "e") {
-                        result += coeff * M_E;
+                        result += coeff * LMMC_E;
                     } else if (key.substr(0, 4) == "sqrt") {
                         long long n = std::stoll(key.substr(4));
-                        result += coeff * std::sqrt(n);
+                        lmmc_real_t n_real = n;
+                        result += coeff * _irrational_sqrt(n_real);
                     }
                 }
                 return result;
@@ -320,24 +345,46 @@ public:
 
     
     std::string to_string() const {
+        auto round_val = [](lmmc_real_t x) -> lmmc_real_t {
+            lmmc_real_t res, half = 0.5;
+            if (x < 0) half = -0.5;
+            LMMC_REAL_ADD(&res, &x, &half);
+            long long iptr = (long long)res;
+            return (lmmc_real_t)iptr;
+        };
+        auto abs_val = [](lmmc_real_t x) -> lmmc_real_t {
+            lmmc_real_t res;
+            LMMC_REAL_ABS(&res, &x);
+            return res;
+        };
+        auto is_zero_tol = [](lmmc_real_t x) -> bool {
+            int eq;
+            lmmc_double_nearly_equal_tol(x, 0.0, 1e-15, 1e-15, &eq);
+            return eq != 0;
+        };
+        auto is_equal_tol = [](lmmc_real_t a, lmmc_real_t b) -> bool {
+            int eq;
+            lmmc_double_nearly_equal_tol(a, b, 1e-15, 1e-15, &eq);
+            return eq != 0;
+        };
         switch (type) {
             case Type::SQRT:
                 if (radicand == 1) {
                     
-                    if (coefficient == static_cast<int>(coefficient)) {
-                        return std::to_string(static_cast<int>(coefficient));
+                    if (is_equal_tol(coefficient, round_val(coefficient))) {
+                        return std::to_string(static_cast<int>(round_val(coefficient)));
                     }
                     return std::to_string(coefficient);
                 }
-                if (coefficient == 1.0) {
+                if (is_equal_tol(coefficient, 1.0)) {
                     return "√" + std::to_string(radicand);
                 }
-                if (coefficient == -1.0) {
+                if (is_equal_tol(coefficient, -1.0)) {
                     return "-√" + std::to_string(radicand);
                 }
                 
-                if (std::abs(coefficient - std::round(coefficient)) < 1e-15) {
-                    return std::to_string(static_cast<int>(std::round(coefficient))) + "√" + std::to_string(radicand);
+                if (is_equal_tol(coefficient, round_val(coefficient))) {
+                    return std::to_string(static_cast<int>(round_val(coefficient))) + "√" + std::to_string(radicand);
                 } else {
                     
                     std::ostringstream oss;
@@ -349,15 +396,15 @@ public:
                 }
 
             case Type::PI:
-                if (coefficient == 1.0) {
+                if (is_equal_tol(coefficient, 1.0)) {
                     return "π";
                 }
-                if (coefficient == -1.0) {
+                if (is_equal_tol(coefficient, -1.0)) {
                     return "-π";
                 }
                 
-                if (std::abs(coefficient - std::round(coefficient)) < 1e-15) {
-                    return std::to_string(static_cast<int>(std::round(coefficient))) + "π";
+                if (is_equal_tol(coefficient, round_val(coefficient))) {
+                    return std::to_string(static_cast<int>(round_val(coefficient))) + "π";
                 } else {
                     
                     std::ostringstream oss;
@@ -369,15 +416,15 @@ public:
                 }
 
             case Type::E:
-                if (coefficient == 1.0) {
+                if (is_equal_tol(coefficient, 1.0)) {
                     return "e";
                 }
-                if (coefficient == -1.0) {
+                if (is_equal_tol(coefficient, -1.0)) {
                     return "-e";
                 }
                 
-                if (std::abs(coefficient - std::round(coefficient)) < 1e-15) {
-                    return std::to_string(static_cast<int>(std::round(coefficient))) + "e";
+                if (is_equal_tol(coefficient, round_val(coefficient))) {
+                    return std::to_string(static_cast<int>(round_val(coefficient))) + "e";
                 } else {
                     
                     std::ostringstream oss;
@@ -389,15 +436,15 @@ public:
                 }
 
             case Type::LOG:
-                if (coefficient == 1.0) {
+                if (is_equal_tol(coefficient, 1.0)) {
                     return "log(" + std::to_string(radicand) + ")";
                 }
-                if (coefficient == -1.0) {
+                if (is_equal_tol(coefficient, -1.0)) {
                     return "-log(" + std::to_string(radicand) + ")";
                 }
                 
-                if (std::abs(coefficient - std::round(coefficient)) < 1e-15) {
-                    return std::to_string(static_cast<int>(std::round(coefficient))) + "log(" + std::to_string(radicand) + ")";
+                if (is_equal_tol(coefficient, round_val(coefficient))) {
+                    return std::to_string(static_cast<int>(round_val(coefficient))) + "log(" + std::to_string(radicand) + ")";
                 } else {
                     
                     std::ostringstream oss;
@@ -413,10 +460,10 @@ public:
                 bool first = true;
 
                 
-                if (std::abs(constant_term) > 1e-15) {
-                    if (std::abs(constant_term - std::round(constant_term)) < 1e-15) {
+                if (!is_zero_tol(constant_term)) {
+                    if (is_equal_tol(constant_term, round_val(constant_term))) {
                         
-                        result += std::to_string(static_cast<int>(std::round(constant_term)));
+                        result += std::to_string(static_cast<int>(round_val(constant_term)));
                     } else {
                         
                         std::ostringstream oss;
@@ -432,37 +479,37 @@ public:
 
                 
                 for (const auto& [key, coeff]: coefficients) {
-                    if (std::abs(coeff) < 1e-15) continue;
+                    if (is_zero_tol(coeff)) continue;
 
                     if (!first && coeff > 0) result += " + ";
                     else if (!first && coeff < 0)
                         result += " - ";
 
-                    double abs_coeff = std::abs(coeff);
+                    lmmc_real_t abs_coeff = abs_val(coeff);
                     std::string term;
 
                     if (key == "pi") {
-                        if (abs_coeff == 1.0) {
+                        if (is_equal_tol(abs_coeff, 1.0)) {
                             term = "π";
-                        } else if (abs_coeff == static_cast<int>(abs_coeff)) {
-                            term = std::to_string(static_cast<int>(abs_coeff)) + "π";
+                        } else if (is_equal_tol(abs_coeff, round_val(abs_coeff))) {
+                            term = std::to_string(static_cast<int>(round_val(abs_coeff))) + "π";
                         } else {
                             term = std::to_string(abs_coeff) + "π";
                         }
                     } else if (key == "e") {
-                        if (abs_coeff == 1.0) {
+                        if (is_equal_tol(abs_coeff, 1.0)) {
                             term = "e";
-                        } else if (abs_coeff == static_cast<int>(abs_coeff)) {
-                            term = std::to_string(static_cast<int>(abs_coeff)) + "e";
+                        } else if (is_equal_tol(abs_coeff, round_val(abs_coeff))) {
+                            term = std::to_string(static_cast<int>(round_val(abs_coeff))) + "e";
                         } else {
                             term = std::to_string(abs_coeff) + "e";
                         }
                     } else if (key.substr(0, 4) == "sqrt") {
                         long long n = std::stoll(key.substr(4));
-                        if (abs_coeff == 1.0) {
+                        if (is_equal_tol(abs_coeff, 1.0)) {
                             term = "√" + std::to_string(n);
-                        } else if (abs_coeff == static_cast<int>(abs_coeff)) {
-                            term = std::to_string(static_cast<int>(abs_coeff)) + "√" + std::to_string(n);
+                        } else if (is_equal_tol(abs_coeff, round_val(abs_coeff))) {
+                            term = std::to_string(static_cast<int>(round_val(abs_coeff))) + "√" + std::to_string(n);
                         } else {
                             term = std::to_string(abs_coeff) + "√" + std::to_string(n);
                         }
@@ -482,7 +529,9 @@ public:
 
     
     bool is_zero() const {
-        return std::abs(to_double()) < 1e-15;
+        int eq;
+        lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
+        return eq != 0;
     }
 
     
@@ -498,7 +547,9 @@ public:
         if (type == Type::COMPLEX) {
             auto it = coefficients.begin();
             while (it != coefficients.end()) {
-                if (std::abs(it->second) < 1e-15) {
+                int eq;
+                lmmc_double_nearly_equal_tol(it->second, 0.0, 1e-15, 1e-15, &eq);
+                if (eq) {
                     it = coefficients.erase(it);
                 } else {
                     ++it;
@@ -506,7 +557,9 @@ public:
             }
 
             
-            if (coefficients.empty() && std::abs(constant_term) < 1e-15) {
+            int eq_const;
+            lmmc_double_nearly_equal_tol(constant_term, 0.0, 1e-15, 1e-15, &eq_const);
+            if (coefficients.empty() && eq_const) {
                 constant_term = 0.0;
             }
         }
@@ -514,12 +567,16 @@ public:
 
     
     bool is_positive() const {
-        return to_double() > 1e-15;
+        int eq;
+        lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
+        return !eq && to_double() > 0;
     }
 
     
     bool is_negative() const {
-        return to_double() < -1e-15;
+        int eq;
+        lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
+        return !eq && to_double() < 0;
     }
 
     
@@ -544,7 +601,19 @@ public:
         }
 
         
-        return Irrational::constant(std::pow(to_double(), exponent));
+        lmmc_real_t res = 1.0;
+        lmmc_real_t base = to_double();
+        int e = exponent > 0 ? exponent : -exponent;
+        while (e > 0) {
+            if (e % 2 == 1) LMMC_REAL_MUL(&res, &res, &base);
+            LMMC_REAL_MUL(&base, &base, &base);
+            e /= 2;
+        }
+        if (exponent < 0) {
+            lmmc_real_t one = 1.0;
+            LMMC_REAL_DIV(&res, &one, &res);
+        }
+        return Irrational::constant(res);
     }
 
     

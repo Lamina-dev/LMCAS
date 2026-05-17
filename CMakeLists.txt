@@ -10,11 +10,22 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
+    message(WARNING "MSVC is deprecated, please use GCC/G++ instead.")
     add_compile_options(/utf-8 /permissive-)
+    add_compile_definitions(LAMMP_WINDOWS)
 endif()
 
-# 包含 LAMMP 子项目
-add_subdirectory(LAMMP)
+# 包含 LMMC 内部的 LAMMP 子项目
+add_subdirectory(LMMC/LAMMP)
+
+# 包含 LMMC 子项目
+# 禁用 LMMC 的测试和示例以节省编译时间
+set(LMMC_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LMMC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LMMC_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(LMMC_REQUIRE_LAMMP_STATIC OFF CACHE BOOL "" FORCE)
+set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP" CACHE PATH "" FORCE)
+add_subdirectory(LMMC)
 
 # 强制将LAMMP的输出目录设置到项目构建目录，方便调试
 set_target_properties(LammpCore PROPERTIES
@@ -45,11 +56,12 @@ endif()
 # 包含路径
 target_include_directories(lmcas PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/LAMMP/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/include
 )
 
-# 链接 LAMMP 核心库
-target_link_libraries(lmcas PRIVATE LammpCore)
+# 链接 LAMMP 核心库和 LMMC
+target_link_libraries(lmcas PUBLIC LammpCore lmmc)
 
 # 测试程序
 add_executable(test_cas tests/test_main.cpp)
@@ -75,6 +87,9 @@ target_link_libraries(test_matrix_ops PRIVATE lmcas LammpCore)
 
 add_executable(test_solve tests/test_solve.cpp)
 target_link_libraries(test_solve PRIVATE lmcas LammpCore)
+
+add_executable(test_ast_depth tests/test_ast_depth.cpp)
+target_link_libraries(test_ast_depth PRIVATE lmcas LammpCore)
 
 add_executable(test_proof tests/test_proof.cpp)
 target_link_libraries(test_proof PRIVATE lmcas LammpCore)
@@ -124,6 +139,18 @@ target_link_libraries(test_solver_poly PRIVATE lmcas LammpCore)
 add_executable(test_polynomial_gcd tests/test_polynomial_gcd.cpp)
 target_link_libraries(test_polynomial_gcd PRIVATE lmcas LammpCore)
 
+add_executable(test_number_compare tests/test_number_compare.cpp)
+target_link_libraries(test_number_compare PRIVATE lmcas LammpCore)
+
+add_executable(test_integration_fallback tests/test_integration_fallback.cpp)
+target_link_libraries(test_integration_fallback PRIVATE lmcas LammpCore)
+
+add_executable(test_bigint_add_carry tests/test_bigint_add_carry.cpp)
+target_link_libraries(test_bigint_add_carry PRIVATE lmcas LammpCore)
+
+add_executable(test_value_compare tests/test_value_compare.cpp)
+target_link_libraries(test_value_compare PRIVATE lmcas LammpCore)
+
 # add_executable(test_migration tests/test_migration.cpp)
 # target_link_libraries(test_migration PRIVATE lmcas LammpCore)
 
@@ -151,6 +178,26 @@ add_test(NAME TestCalculus COMMAND test_calculus)
 add_test(NAME TestTrig COMMAND test_trig)
 add_test(NAME TestTrigRewrite COMMAND test_trig_rewrite)
 add_test(NAME TestSeries COMMAND test_series)
+# add_test(NAME TestSolveExtended COMMAND test_solve_extended)
+add_test(NAME TestASTDepth COMMAND test_ast_depth)
+add_test(NAME TestNormalization COMMAND test_normalization)
+add_test(NAME TestExpandDebug COMMAND test_expand_debug)
+add_test(NAME TestSuite COMMAND test_suite)
+add_test(NAME TestDet COMMAND test_det)
+add_test(NAME TestMatrixOps COMMAND test_matrix_ops)
+add_test(NAME TestSolve COMMAND test_solve)
+add_test(NAME TestFraction COMMAND test_fraction)
+add_test(NAME TestMatcher COMMAND test_matcher)
+add_test(NAME TestPolyBridge COMMAND test_poly_bridge)
+add_test(NAME TestSolvePoly COMMAND test_solve_poly)
+add_test(NAME TestSolverLinear COMMAND test_solver_linear)
+add_test(NAME TestSolverPoly COMMAND test_solver_poly)
+add_test(NAME TestPolynomialGcd COMMAND test_polynomial_gcd)
+add_test(NAME TestMatcherComm COMMAND test_matcher_comm)
+add_test(NAME TestNumberCompare COMMAND test_number_compare)
+add_test(NAME TestIntegrationFallback COMMAND test_integration_fallback)
+add_test(NAME TestBigIntAddCarry COMMAND test_bigint_add_carry)
+add_test(NAME TestValueCompare COMMAND test_value_compare)
 
 # add_executable(debug_recursion debug_recursion.cpp)
 # target_link_libraries(debug_recursion PRIVATE lmcas LammpCore)

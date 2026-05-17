@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 #include "../symbolic_ast.hpp"
 #include <vector>
 #include <map>
@@ -13,7 +15,7 @@ inline int get_node_degree_helper(const std::shared_ptr<SymbolicNode>& node) {
     if (auto p = std::dynamic_pointer_cast<PowerNode>(node)) {
         if (auto e = std::dynamic_pointer_cast<NumberNode>(p->exponent)) {
              if (std::holds_alternative<BigInt>(e->value)) return (int)std::get<BigInt>(e->value).to_int();
-             if (std::holds_alternative<double>(e->value)) return (int)std::get<double>(e->value);
+             if (std::holds_alternative<lmmc_real_t>(e->value)) return (int)std::get<lmmc_real_t>(e->value);
         }
         return 1;
     }
@@ -51,12 +53,13 @@ struct NodeCompare {
 
 
 inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
-     if (std::holds_alternative<double>(a->value) || std::holds_alternative<double>(b->value)) {
-         double v1 = std::holds_alternative<double>(a->value) ? std::get<double>(a->value) : 
-                     (std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value).to_double() : std::get<BigInt>(a->value).to_double());
-         double v2 = std::holds_alternative<double>(b->value) ? std::get<double>(b->value) : 
-                     (std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value).to_double() : std::get<BigInt>(b->value).to_double());
-         return std::make_shared<NumberNode>(v1 + v2);
+     if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
+         lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) : 
+                     (std::holds_alternative<Rational>(a->value) ? (lmmc_real_t)std::get<Rational>(a->value).to_double() : (lmmc_real_t)std::get<BigInt>(a->value).to_double());
+         lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value) ? std::get<lmmc_real_t>(b->value) : 
+                     (std::holds_alternative<Rational>(b->value) ? (lmmc_real_t)std::get<Rational>(b->value).to_double() : (lmmc_real_t)std::get<BigInt>(b->value).to_double());
+         lmmc_real_t sum = v1 + v2;
+         return std::make_shared<NumberNode>(sum);
      }
      
      if (std::holds_alternative<Rational>(a->value) || std::holds_alternative<Rational>(b->value)) {
@@ -73,12 +76,13 @@ inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>
 }
 
 inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
-     if (std::holds_alternative<double>(a->value) || std::holds_alternative<double>(b->value)) {
-         double v1 = std::holds_alternative<double>(a->value) ? std::get<double>(a->value) : 
-                     (std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value).to_double() : std::get<BigInt>(a->value).to_double());
-         double v2 = std::holds_alternative<double>(b->value) ? std::get<double>(b->value) : 
-                     (std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value).to_double() : std::get<BigInt>(b->value).to_double());
-         return std::make_shared<NumberNode>(v1 * v2);
+     if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
+         lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) : 
+                     (std::holds_alternative<Rational>(a->value) ? (lmmc_real_t)std::get<Rational>(a->value).to_double() : (lmmc_real_t)std::get<BigInt>(a->value).to_double());
+         lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value) ? std::get<lmmc_real_t>(b->value) : 
+                     (std::holds_alternative<Rational>(b->value) ? (lmmc_real_t)std::get<Rational>(b->value).to_double() : (lmmc_real_t)std::get<BigInt>(b->value).to_double());
+         lmmc_real_t prod = v1 * v2;
+         return std::make_shared<NumberNode>(prod);
      }
      
      if (std::holds_alternative<Rational>(a->value) || std::holds_alternative<Rational>(b->value)) {
@@ -97,8 +101,8 @@ inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<Number
 
 inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::shared_ptr<SymbolicNode>& out_positive) {
     if (auto num = std::dynamic_pointer_cast<NumberNode>(arg)) {
-        if (std::holds_alternative<double>(num->value) && std::get<double>(num->value) < 0) {
-             out_positive = std::make_shared<NumberNode>(std::abs(std::get<double>(num->value)));
+        if (std::holds_alternative<lmmc_real_t>(num->value) && std::get<lmmc_real_t>(num->value) < 0) {
+             out_positive = std::make_shared<NumberNode>(std::abs(std::get<lmmc_real_t>(num->value)));
              return true;
         }
         if (std::holds_alternative<BigInt>(num->value) && std::get<BigInt>(num->value).to_double() < 0) {
@@ -116,9 +120,9 @@ inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::sh
             if (auto num = std::dynamic_pointer_cast<NumberNode>(mul->operands[0])) {
                  bool is_neg = false;
                  std::shared_ptr<NumberNode> pos_num = nullptr;
-                 if (std::holds_alternative<double>(num->value) && std::get<double>(num->value) < 0) {
+                 if (std::holds_alternative<lmmc_real_t>(num->value) && std::get<lmmc_real_t>(num->value) < 0) {
                      is_neg = true;
-                     pos_num = std::make_shared<NumberNode>(std::abs(std::get<double>(num->value)));
+                     pos_num = std::make_shared<NumberNode>(std::abs(std::get<lmmc_real_t>(num->value)));
                  } else if (std::holds_alternative<BigInt>(num->value) && std::get<BigInt>(num->value).to_double() < 0) {
                      is_neg = true;
                      pos_num = std::make_shared<NumberNode>(std::get<BigInt>(num->value) * BigInt(-1));
@@ -132,7 +136,11 @@ inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::sh
                      
                      // Check if constant is exactly -1 (special case)
                      bool is_minus_one = false;
-                     if (std::holds_alternative<double>(num->value)) is_minus_one = (std::abs(std::get<double>(num->value) + 1.0) < 1e-9);
+                     if (std::holds_alternative<lmmc_real_t>(num->value)) {
+                         int eq_1;
+                         lmmc_double_nearly_equal_tol(std::get<lmmc_real_t>(num->value), -1.0, 1e-9, 1e-9, &eq_1);
+                         is_minus_one = (eq_1 != 0);
+                     }
                      else if (std::holds_alternative<BigInt>(num->value)) is_minus_one = (std::get<BigInt>(num->value) == BigInt(-1));
                      else if (std::holds_alternative<Rational>(num->value)) is_minus_one = (std::get<Rational>(num->value) == Rational(-1));
                      
@@ -594,11 +602,14 @@ public:
                                      
                                      auto res_val = elem_vis.get_result();
                                      if (auto num = std::dynamic_pointer_cast<NumberNode>(res_val)) {
-                                         if (std::holds_alternative<double>(num->value)) {
-                                             double v = std::get<double>(num->value);
-                                             if (std::abs(v) < 1e-10) { 
+                                         if (std::holds_alternative<lmmc_real_t>(num->value)) {
+                                              lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+                                             int eq_0, eq_1;
+                                             lmmc_double_nearly_equal_tol(v, 0.0, 1e-10, 1e-10, &eq_0);
+                                             lmmc_double_nearly_equal_tol(v, 1.0, 1e-10, 1e-10, &eq_1);
+                                             if (eq_0) { 
                                                  res_val = std::make_shared<NumberNode>(BigInt(0));
-                                             } else if (std::abs(v - 1.0) < 1e-10) {
+                                             } else if (eq_1) {
                                                  res_val = std::make_shared<NumberNode>(BigInt(1));
                                              }
                                          }
@@ -655,15 +666,17 @@ public:
                              if (std::holds_alternative<BigInt>(e_num->value)) {
                                  exp_val = (long long)std::get<BigInt>(e_num->value).to_double();
                                  exp_ok = true;
-                             } else if (std::holds_alternative<double>(e_num->value)) {
-                                 double d = std::get<double>(e_num->value);
-                                 if (d == std::floor(d)) {
-                                     exp_val = (long long)d;
-                                     exp_ok = true;
-                                 } else if (std::abs(d - 0.5) < 1e-9) {
-                                     exp_is_half = true;
-                                 }
-                             } else if (std::holds_alternative<Rational>(e_num->value)) {
+                                 } else if (std::holds_alternative<lmmc_real_t>(e_num->value)) {
+                                      lmmc_real_t d = std::get<lmmc_real_t>(e_num->value);
+                                     int eq_half;
+                                     lmmc_double_nearly_equal_tol(d, 0.5, 1e-9, 1e-9, &eq_half);
+                                     if (d == std::floor(d)) {
+                                         exp_val = (long long)d;
+                                         exp_ok = true;
+                                     } else if (eq_half) {
+                                         exp_is_half = true;
+                                     }
+                                 } else if (std::holds_alternative<Rational>(e_num->value)) {
                                  Rational r = std::get<Rational>(e_num->value);
                                  if (r.get_denominator() == BigInt(1)) {
                                      exp_val = (long long)r.get_numerator().to_double();
@@ -682,8 +695,8 @@ public:
                                       } else if (std::holds_alternative<Rational>(b_num->value)) {
                                           Rational r = std::get<Rational>(b_num->value);
                                           if (!r.get_numerator().is_zero()) pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
-                                      } else if (std::holds_alternative<double>(b_num->value)) {
-                                          pow_val = std::make_shared<NumberNode>(1.0 / std::get<double>(b_num->value));
+                                      } else if (std::holds_alternative<lmmc_real_t>(b_num->value)) {
+                                          pow_val = std::make_shared<NumberNode>(1.0 / std::get<lmmc_real_t>(b_num->value));
                                       }
                                  } else if (exp_val == 0) {
                                       pow_val = std::make_shared<NumberNode>(BigInt(1));
@@ -702,11 +715,11 @@ public:
                                           Rational res(1);
                                           for(int k=0;k<abs_exp;++k) res = res * b;
                                           base_pow_val = std::make_shared<NumberNode>(res);
-                                      } else if (std::holds_alternative<double>(b_num->value)) {
-                                          double b = std::get<double>(b_num->value);
-                                          double res = 1.0;
+                                      } else if (std::holds_alternative<lmmc_real_t>(b_num->value)) {
+                                          lmmc_real_t b = std::get<lmmc_real_t>(b_num->value);
+                                          lmmc_real_t res = 1.0;
                                           for(int k=0;k<abs_exp;++k) res *= b;
-                                          base_pow_val = std::make_shared<NumberNode>(res);
+                                           base_pow_val = std::make_shared<NumberNode>(res);
                                       }
 
                                       if (base_pow_val) {
@@ -719,8 +732,8 @@ public:
                                               } else if (std::holds_alternative<Rational>(base_pow_val->value)) {
                                                   Rational r = std::get<Rational>(base_pow_val->value);
                                                   pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
-                                              } else if (std::holds_alternative<double>(base_pow_val->value)) {
-                                                  pow_val = std::make_shared<NumberNode>(1.0 / std::get<double>(base_pow_val->value));
+                                              } else if (std::holds_alternative<lmmc_real_t>(base_pow_val->value)) {
+                                                  pow_val = std::make_shared<NumberNode>(1.0 / std::get<lmmc_real_t>(base_pow_val->value));
                                               }
                                           }
                                       }
@@ -738,15 +751,17 @@ public:
                                      double d = std::get<BigInt>(b_num->value).to_double();
                                      if (d >= 0) {
                                          double r = std::sqrt(d);
-                                         if (std::abs(r - std::round(r)) < 1e-9) {
+                                         int eq_r;
+                                         lmmc_double_nearly_equal_tol(r, std::round(r), 1e-9, 1e-9, &eq_r);
+                                         if (eq_r) {
                                              BigInt bi((long long)std::round(r));
                                              if (bi * bi == std::get<BigInt>(b_num->value)) {
                                                  root_val = std::make_shared<NumberNode>(bi);
                                              }
                                          }
                                      }
-                                 } else if (std::holds_alternative<double>(b_num->value)) {
-                                     double d = std::get<double>(b_num->value);
+                                 } else if (std::holds_alternative<lmmc_real_t>(b_num->value)) {
+                                     double d = std::get<lmmc_real_t>(b_num->value);
                                      if (d >= 0) root_val = std::make_shared<NumberNode>(std::sqrt(d));
                                  }
                                  
@@ -834,8 +849,8 @@ public:
                  if (std::holds_alternative<BigInt>(e_num->value)) {
                      exp_val = (long long)std::get<BigInt>(e_num->value).to_double();
                      exp_ok = true;
-                 } else if (std::holds_alternative<double>(e_num->value)) {
-                     double d = std::get<double>(e_num->value);
+                 } else if (std::holds_alternative<lmmc_real_t>(e_num->value)) {
+                     lmmc_real_t d = std::get<lmmc_real_t>(e_num->value);
                      if (d == std::floor(d)) {
                          exp_val = (long long)d;
                          exp_ok = true;
@@ -860,8 +875,8 @@ public:
                           } else if (std::holds_alternative<Rational>(b_num->value)) {
                               Rational r = std::get<Rational>(b_num->value);
                               if (!r.get_numerator().is_zero()) pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
-                          } else if (std::holds_alternative<double>(b_num->value)) {
-                              pow_val = std::make_shared<NumberNode>(1.0 / std::get<double>(b_num->value));
+                          } else if (std::holds_alternative<lmmc_real_t>(b_num->value)) {
+                              pow_val = std::make_shared<NumberNode>(1.0 / std::get<lmmc_real_t>(b_num->value));
                           }
                      } else if (exp_val == 0) {
                           pow_val = std::make_shared<NumberNode>(BigInt(1));
@@ -880,11 +895,11 @@ public:
                                           Rational res(1);
                                           for(int k=0;k<abs_exp;++k) res = res * b;
                                           base_pow_val = std::make_shared<NumberNode>(res);
-                                      } else if (std::holds_alternative<double>(b_num->value)) {
-                                          double b = std::get<double>(b_num->value);
-                                          double res = 1.0;
+                                      } else if (std::holds_alternative<lmmc_real_t>(b_num->value)) {
+                                          lmmc_real_t b = std::get<lmmc_real_t>(b_num->value);
+                                          lmmc_real_t res = 1.0;
                                           for(int k=0;k<abs_exp;++k) res *= b;
-                                          base_pow_val = std::make_shared<NumberNode>(res);
+                                           base_pow_val = std::make_shared<NumberNode>(res);
                                       }
 
                                       if (base_pow_val) {
@@ -897,8 +912,8 @@ public:
                                               } else if (std::holds_alternative<Rational>(base_pow_val->value)) {
                                                   Rational r = std::get<Rational>(base_pow_val->value);
                                                   pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
-                                              } else if (std::holds_alternative<double>(base_pow_val->value)) {
-                                                  pow_val = std::make_shared<NumberNode>(1.0 / std::get<double>(base_pow_val->value));
+                                              } else if (std::holds_alternative<lmmc_real_t>(base_pow_val->value)) {
+                                                  pow_val = std::make_shared<NumberNode>(1.0 / std::get<lmmc_real_t>(base_pow_val->value));
                                               }
                                           }
                                       }
@@ -942,8 +957,8 @@ public:
                                  }
                              }
                          }
-                     } else if (std::holds_alternative<double>(b_num->value)) {
-                         double d = std::get<double>(b_num->value);
+                     } else if (std::holds_alternative<lmmc_real_t>(b_num->value)) {
+                         double d = std::get<lmmc_real_t>(b_num->value);
                          if (d >= 0) {
                              result = std::make_shared<NumberNode>(std::sqrt(d));
                              return;
@@ -1002,28 +1017,44 @@ public:
         // Basic constant evaluation
         if (s_args.size() == 1) {
             if (auto num = std::dynamic_pointer_cast<NumberNode>(s_args[0])) {
-                double val = 0.0;
-                if (std::holds_alternative<double>(num->value)) val = std::get<double>(num->value);
-                else if (std::holds_alternative<BigInt>(num->value)) val = std::get<BigInt>(num->value).to_double();
-                else if (std::holds_alternative<Rational>(num->value)) val = std::get<Rational>(num->value).to_double();
+                lmmc_real_t val = 0.0;
+                if (std::holds_alternative<lmmc_real_t>(num->value)) val = std::get<lmmc_real_t>(num->value);
+                else if (std::holds_alternative<BigInt>(num->value)) val = (lmmc_real_t)std::get<BigInt>(num->value).to_double();
+                else if (std::holds_alternative<Rational>(num->value)) val = (lmmc_real_t)std::get<Rational>(num->value).to_double();
 
                 switch (node.type) {
                     case FunctionNode::FuncType::Sin:
-                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
+                    {
+                        int eq; lmmc_double_nearly_equal_tol(val, 0.0, 1e-12, 1e-12, &eq);
+                        if (eq) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
                         break;
+                    }
                     case FunctionNode::FuncType::Cos:
-                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(1)); return; }
+                    {
+                        int eq; lmmc_double_nearly_equal_tol(val, 0.0, 1e-12, 1e-12, &eq);
+                        if (eq) { result = std::make_shared<NumberNode>(BigInt(1)); return; }
                         break;
+                    }
                     case FunctionNode::FuncType::Tan:
-                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
+                    {
+                        int eq; lmmc_double_nearly_equal_tol(val, 0.0, 1e-12, 1e-12, &eq);
+                        if (eq) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
                         break;
+                    }
                     case FunctionNode::FuncType::Exp:
-                        if (std::abs(val) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(1)); return; }
+                    {
+                        int eq; lmmc_double_nearly_equal_tol(val, 0.0, 1e-12, 1e-12, &eq);
+                        if (eq) { result = std::make_shared<NumberNode>(BigInt(1)); return; }
                         break;
+                    }
                     case FunctionNode::FuncType::Ln:
-                        if (std::abs(val - 1.0) < 1e-12) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
+                    {
+                        int eq1, eq0;
+                        lmmc_double_nearly_equal_tol(val, 1.0, 1e-12, 1e-12, &eq1);
+                        if (eq1) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
                         // Ln(0) -> -Infinity
-                        if (std::abs(val) < 1e-12) {
+                        lmmc_double_nearly_equal_tol(val, 0.0, 1e-12, 1e-12, &eq0);
+                        if (eq0) {
                              std::vector<std::shared_ptr<SymbolicNode>> inf_args;
                              auto inf = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                              std::vector<std::shared_ptr<SymbolicNode>> m_args = {std::make_shared<NumberNode>(BigInt(-1)), inf};
@@ -1031,6 +1062,7 @@ public:
                              return;
                         }
                         break;
+                    }
                     case FunctionNode::FuncType::Log:
                         if (s_args.size() == 2) {
                              // log_b(x) = ln(x)/ln(b)
@@ -1102,7 +1134,9 @@ public:
 
                         if (val >= 0) {
                              double sq = std::sqrt(val);
-                             if (std::abs(sq - std::round(sq)) < 1e-12) {
+                             int eq_sq;
+                             lmmc_double_nearly_equal_tol(sq, std::round(sq), 1e-12, 1e-12, &eq_sq);
+                             if (eq_sq) {
                                  result = std::make_shared<NumberNode>(BigInt((long long)std::round(sq)));
                              } else {
                                  result = std::make_shared<NumberNode>(sq);
@@ -1111,7 +1145,18 @@ public:
                         }
                     }
                         break;
-                    default: break;
+                     case FunctionNode::FuncType::LambertW:
+                     {
+                         // W(z) for numeric z — delegate to LMMC
+                         lmmc_real_t w_res;
+                         if (lmmc_lambertw(val, &w_res) == LMMC_STATUS_OK) {
+                             result = std::make_shared<NumberNode>(w_res);
+                             return;
+                         }
+                         // Fall through if LMMC fails (e.g. z < -1/e)
+                         break;
+                     }
+                     default: break;
                 }
             }
         }

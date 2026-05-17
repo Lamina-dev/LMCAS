@@ -3,8 +3,9 @@
 #include "irrational.hpp"
 #include "rational.hpp"
 #include "symbolic.hpp"
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 
-#include <cmath>
 #include <functional>
 #include <iostream>
 #include <set>
@@ -43,7 +44,7 @@ struct LambdaDeclExpr;
 class lmStruct;
 LAMINA_API std::string lStruct_to_string(const std::shared_ptr<lmStruct>& lstruct);
 
-class LAMINA_API Value final {
+class Value final {
 public:
     enum class Type {
         Lambda, lmStruct, Symbolic,
@@ -57,7 +58,7 @@ public:
 
 	using DataType = std::variant<
 		std::nullptr_t,
-		bool, int, double, std::string,
+		bool, int, lmmc_real_t, std::string,
 		std::shared_ptr<LmModule>,
 		std::shared_ptr<LmCppFunction>,
 		std::set<Value>,
@@ -80,8 +81,9 @@ public:
     Value(std::nullptr_t) : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
     Value(bool b) : type(Type::Bool), data(std::in_place_index<1>, b) {}
     Value(int i) : type(Type::Int), data(std::in_place_index<2>, i) {}
-	Value(double f) : type(Type::Float), data(std::in_place_index<3>, f) {
-		int res = std::isinf(f);
+	Value(lmmc_real_t f) : type(Type::Float), data(std::in_place_index<3>, f) {
+		int res;
+		lmmc_isinf(f, &res);
 		if (res) {
 			if (f < 0) res = -1;
 			this->type = Type::Infinity;
@@ -147,10 +149,15 @@ public:
     bool is_lmCppFunction() const { return type == Type::lmCppFunction; }
     bool is_numeric() const { return type == Type::Int || type == Type::Float || type == Type::BigInt || type == Type::Rational || type == Type::Irrational || type == Type::Symbolic; }
     
-    double as_number() const {
-		if (type == Type::Infinity) return (1.0 * std::get<int>(data) / 0.0);
-		if (type == Type::Int) return static_cast<double>(std::get<int>(data));
-        if (type == Type::Float) return std::get<double>(data);
+    lmmc_real_t as_number() const {
+		if (type == Type::Infinity) {
+            lmmc_real_t inf;
+            lmmc_inf(&inf);
+            auto sign = std::get_if<int>(&data);
+            return (sign && *sign > 0) ? inf : -inf;
+        }
+		if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
+        if (type == Type::Float) return std::get<lmmc_real_t>(data);
         if (type == Type::BigInt) {
             
             const auto& bigint_val = std::get<::BigInt>(data);
@@ -159,7 +166,7 @@ public:
                 
                 return bigint_val.to_double();
             }
-            return static_cast<double>(int_val);
+            return static_cast<lmmc_real_t>(int_val);
         }
         if (type == Type::Rational) {
             return std::get<::Rational>(data).to_double();
@@ -168,7 +175,7 @@ public:
             return std::get<::Irrational>(data).to_double();
         }
         if (type == Type::Symbolic) {
-            return std::get<std::shared_ptr<SymbolicExpr>>(data)->to_double();
+            return std::get<std::shared_ptr<SymbolicExpr>>(data)->to_numeric();
         }
         return 0.0;
     }
@@ -177,7 +184,7 @@ public:
     ::Rational as_rational() const {
         if (type == Type::Rational) return std::get<::Rational>(data);
         if (type == Type::Int) return ::Rational(std::get<int>(data));
-        if (type == Type::Float) return ::Rational::from_double(std::get<double>(data));
+        if (type == Type::Float) return ::Rational::from_double(std::get<lmmc_real_t>(data));
         if (type == Type::BigInt) {
             int int_val = std::get<::BigInt>(data).to_int();
             return ::Rational(int_val);
@@ -192,7 +199,7 @@ public:
     ::Irrational as_irrational() const {
         if (type == Type::Irrational) return std::get<::Irrational>(data);
         if (type == Type::Int) return ::Irrational::constant(std::get<int>(data));
-        if (type == Type::Float) return ::Irrational::constant(std::get<double>(data));
+        if (type == Type::Float) return ::Irrational::constant(std::get<lmmc_real_t>(data));
         if (type == Type::Rational) return ::Irrational::constant(std::get<::Rational>(data).to_double());
         if (type == Type::BigInt) {
             int int_val = std::get<::BigInt>(data).to_int();
@@ -202,7 +209,10 @@ public:
     }
 
 	std::shared_ptr<SymbolicExpr> as_symbolic() const {
-		if (type == Type::Infinity) return SymbolicExpr::infinity(std::get<int>(data));
+		if (type == Type::Infinity) {
+			auto sign = std::get_if<int>(&data);
+			return SymbolicExpr::infinity(sign ? *sign : 1);
+		}
 		if (type == Type::Symbolic) return std::get<std::shared_ptr<SymbolicExpr>>(data);
 		if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) {
 			return SymbolicExpr::number(as_rational());
@@ -238,7 +248,7 @@ public:
 		if (type == Type::Infinity) return true;
 		if (type == Type::Bool) return std::get<bool>(data);
         if (type == Type::Int) return std::get<int>(data) != 0;
-        if (type == Type::Float) return std::get<double>(data) != 0.0;
+        if (type == Type::Float) return std::get<lmmc_real_t>(data) != 0.0;
         if (type == Type::BigInt) return !std::get<::BigInt>(data).is_zero();
         if (type == Type::Rational) return !std::get<::Rational>(data).is_zero();
         if (type == Type::Irrational) return !std::get<::Irrational>(data).is_zero();
@@ -250,8 +260,10 @@ public:
     
     std::string to_string() const {
         switch (type) {
-			case Type::Infinity:
-			return std::get<int>(data) > 0 ? "inf" : "-inf";
+			case Type::Infinity: {
+			auto sign = std::get_if<int>(&data);
+			return (sign && *sign > 0) ? "inf" : "-inf";
+		}
 			case Type::Null:
                 return "null";
             case Type::Bool:
@@ -259,7 +271,7 @@ public:
             case Type::Int:
                 return std::to_string(std::get<int>(data));
             case Type::Float: {
-                double val = std::get<double>(data);
+                lmmc_real_t val = std::get<lmmc_real_t>(data);
                 
                 std::string str = std::to_string(val);
                 str.erase(str.find_last_not_of('0') + 1, std::string::npos);
@@ -339,11 +351,39 @@ public:
     }
 
     
-    bool operator<(const Value& other) const {
-        return false;
-    }
     bool operator==(const Value& other) const {
-        return false;
+        if (type != other.type) return false;
+        if (data.index() != other.data.index()) return false;
+        return std::visit([&other](const auto& val1) -> bool {
+            using T = std::decay_t<decltype(val1)>;
+            if constexpr (std::is_same_v<T, std::nullptr_t>) {
+                return true;
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<SymbolicExpr>>) {
+                if (!val1 && !std::get<T>(other.data)) return true;
+                if (!val1 || !std::get<T>(other.data)) return false;
+                return val1->compare(std::get<T>(other.data)) == 0;
+            } else {
+                return val1 == std::get<T>(other.data);
+            }
+        }, data);
+    }
+
+    bool operator<(const Value& other) const {
+        if (type != other.type) return static_cast<int>(type) < static_cast<int>(other.type);
+        if (data.index() != other.data.index()) return data.index() < other.data.index();
+        return std::visit([&other](const auto& val1) -> bool {
+            using T = std::decay_t<decltype(val1)>;
+            if constexpr (std::is_same_v<T, std::nullptr_t>) {
+                return false;
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<SymbolicExpr>>) {
+                if (!val1 && !std::get<T>(other.data)) return false;
+                if (!val1) return true;
+                if (!std::get<T>(other.data)) return false;
+                return val1->compare(std::get<T>(other.data)) < 0;
+            } else {
+                return val1 < std::get<T>(other.data);
+            }
+        }, data);
     }
 
     
@@ -414,7 +454,7 @@ public:
             return Value();
         }
 
-        double result = 0.0;
+        lmmc_real_t result = 0.0;
         for (size_t i = 0; i < a.size(); ++i) {
             if (a[i].is_numeric() && b[i].is_numeric()) {
                 result += a[i].as_number() * b[i].as_number();
@@ -426,7 +466,7 @@ public:
         return Value(result);
     }
     
-    Value scalar_multiply(double scalar) const {
+    Value scalar_multiply(lmmc_real_t scalar) const {
         if (!is_array()) {
             std::cerr << "Error: Scalar multiplication requires an array" << std::endl;
             return Value();
@@ -468,8 +508,8 @@ public:
             }
         }
 
-        double a1 = a[0].as_number(), a2 = a[1].as_number(), a3 = a[2].as_number();
-        double b1 = b[0].as_number(), b2 = b[1].as_number(), b3 = b[2].as_number();
+        lmmc_real_t a1 = a[0].as_number(), a2 = a[1].as_number(), a3 = a[2].as_number();
+        lmmc_real_t b1 = b[0].as_number(), b2 = b[1].as_number(), b3 = b[2].as_number();
 
         std::vector<Value> result = {
                 Value(a2 * b3 - a3 * b2),
@@ -486,18 +526,20 @@ public:
         }
 
         const auto& arr = std::get<std::vector<Value>>(data);
-        double sum = 0.0;
+        lmmc_real_t sum = 0.0;
 
         for (const auto& elem: arr) {
             if (elem.is_numeric()) {
-                double val = elem.as_number();
+                lmmc_real_t val = elem.as_number();
                 sum += val * val;
             } else {
                 std::cerr << "Error: Vector elements must be numeric" << std::endl;
                 return Value();
             }
         }
-        return Value(std::sqrt(sum));
+        lmmc_real_t res_sqrt;
+        LMMC_REAL_SQRT(&res_sqrt, &sum);
+        return Value(res_sqrt);
     }
 
     
@@ -533,7 +575,7 @@ public:
 
         for (size_t i = 0; i < rows; ++i) {
             for (size_t j = 0; j < cols; ++j) {
-                double sum = 0.0;
+                lmmc_real_t sum = 0.0;
                 for (size_t k = 0; k < inner; ++k) {
                     if (!a[i][k].is_numeric() || !b[k][j].is_numeric()) {
                         std::cerr << "Error: Matrix elements must be numeric" << std::endl;
@@ -570,10 +612,10 @@ public:
                 std::cerr << "Error: Matrix elements must be numeric" << std::endl;
                 return Value();
             }
-            double a = mat[0][0].as_number();
-            double b = mat[0][1].as_number();
-            double c = mat[1][0].as_number();
-            double d = mat[1][1].as_number();
+            lmmc_real_t a = mat[0][0].as_number();
+            lmmc_real_t b = mat[0][1].as_number();
+            lmmc_real_t c = mat[1][0].as_number();
+            lmmc_real_t d = mat[1][1].as_number();
             return Value(a * d - b * c);
         } else if (n == 3) {
             
@@ -586,9 +628,9 @@ public:
                 }
             }
 
-            double a = mat[0][0].as_number(), b = mat[0][1].as_number(), c = mat[0][2].as_number();
-            double d = mat[1][0].as_number(), e = mat[1][1].as_number(), f = mat[1][2].as_number();
-            double g = mat[2][0].as_number(), h = mat[2][1].as_number(), i = mat[2][2].as_number();
+            lmmc_real_t a = mat[0][0].as_number(), b = mat[0][1].as_number(), c = mat[0][2].as_number();
+            lmmc_real_t d = mat[1][0].as_number(), e = mat[1][1].as_number(), f = mat[1][2].as_number();
+            lmmc_real_t g = mat[2][0].as_number(), h = mat[2][1].as_number(), i = mat[2][2].as_number();
 
             return Value(a * e * i + b * f * g + c * d * h - c * e * g - b * d * i - a * f * h);
         } else {

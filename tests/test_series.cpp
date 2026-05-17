@@ -14,17 +14,15 @@ void test_maclaurin_sin() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
     
+    std::cout << "Calling series() for order 2..." << std::endl;
+    auto series_2 = expr->series("x", SymbolicExpr::number(0), 2);
+    print_expr("sin(x) series (order 2)", series_2);
     
-    auto series = expr->series("x", SymbolicExpr::number(0), 5);
-    print_expr("sin(x) series (order 5)", series);
+    std::cout << "Calling series() for order 5..." << std::endl;
+    auto series_5 = expr->series("x", SymbolicExpr::number(0), 5);
+    print_expr("sin(x) series (order 5)", series_5);
     
-    
-    
-    
-    
-    
-    
-    auto expanded = series->expand();
+    auto expanded = series_5->expand();
     print_expr("Expanded", expanded);
 }
 
@@ -74,7 +72,10 @@ void test_poly_series() {
     print_expr("Expanded", expanded);
 }
 
+#include "lammp/lmmp.h"
+
 int main() {
+    lmmp_stack_init();
     try {
         test_maclaurin_sin();
         test_maclaurin_exp();

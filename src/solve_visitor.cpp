@@ -3,6 +3,8 @@
 #include <map>
 #include <set>
 #include <cmath>
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 #include "../include/visitors/normalization_visitor.hpp"
 #include "../include/poly_utils.hpp"
 
@@ -137,16 +139,12 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::
     for(size_t i=0; i<m; ++i) {
         auto eq = equations[i]->expand();
         
-        
-        
-        
         auto C = eq;
         for(const auto& v : vars) C = C->substitute(v, SymbolicExpr::number(0));
         C = C->simplify();
         A[i][n] = SymbolicExpr::multiply(C, SymbolicExpr::number(-1)); 
         
         for(size_t j=0; j<n; ++j) {
-            
             auto p = symbolic_to_poly<SymbolicPolyCoeff>(eq, vars[j]);
             if (p.degree() >= 1) {
                  A[i][j] = get_coeff(p, 1);
@@ -156,58 +154,16 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::
         }
     }
 
-    size_t pivot_row = 0;
-    for(size_t col=0; col<n && pivot_row<m; ++col) {
-        size_t max_row = pivot_row;
-        bool found_pivot = false;
-        while(max_row < m) {
-            A[max_row][col] = A[max_row][col]->simplify();
-            if (!A[max_row][col]->is_zero()) {
-                found_pivot = true;
-                break; 
-            }
-            max_row++;
-        }
-        
-        if (!found_pivot) continue;
-        
-        std::swap(A[pivot_row], A[max_row]);
-        
-        auto pivot = A[pivot_row][col];
-        auto pivot_inv = SymbolicExpr::power(pivot, SymbolicExpr::number(-1));
-        
-        for(size_t k=col; k<=n; ++k) {
-            A[pivot_row][k] = SymbolicExpr::multiply(A[pivot_row][k], pivot_inv)->simplify();
-        }
-        
-        for(size_t i=0; i<m; ++i) {
-            if (i != pivot_row) {
-                auto factor = A[i][col];
-                if (!factor->is_zero()) {
-                    auto neg_factor = SymbolicExpr::multiply(factor, SymbolicExpr::number(-1));
-                    for(size_t k=col; k<=n; ++k) {
-                        auto term = SymbolicExpr::multiply(neg_factor, A[pivot_row][k]);
-                        A[i][k] = SymbolicExpr::add(A[i][k], term)->simplify();
-                    }
-                }
-            }
-        }
-        pivot_row++;
-    }
+    std::vector<size_t> pivot_col_for_row;
+    int sign;
+    gaussian_eliminate(A, m, n, pivot_col_for_row, sign);
     
     std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
     for(const auto& v : vars) solution[v] = SymbolicExpr::number(0);
 
     for(size_t r=0; r<m; ++r) {
-        int pivot_col = -1;
-        for(size_t c=0; c<n; ++c) {
-            if (!A[r][c]->is_zero()) {
-                pivot_col = c;
-                break;
-            }
-        }
-        
-        if (pivot_col != -1) {
+        size_t pivot_col = pivot_col_for_row[r];
+        if (pivot_col != (size_t)-1) {
             solution[vars[pivot_col]] = A[r][n];
         }
     }
@@ -232,6 +188,53 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::determinant(const std::shared_ptr<Sy
         auto c = std::make_shared<SymbolicExpr>(mat_node->get(1,0));
         auto d = std::make_shared<SymbolicExpr>(mat_node->get(1,1));
         return SymbolicExpr::add(SymbolicExpr::multiply(a,d), SymbolicExpr::multiply(SymbolicExpr::multiply(b,c), SymbolicExpr::number(-1)))->simplify();
+    }
+
+    if (n > 3) {
+        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> A(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
+        for(size_t i=0; i<n; ++i) {
+            for(size_t j=0; j<n; ++j) {
+                A[i][j] = std::make_shared<SymbolicExpr>(mat_node->get(i,j));
+            }
+        }
+        
+        int sign = 1;
+        auto det = SymbolicExpr::number(1);
+        
+        for (size_t col = 0; col < n; ++col) {
+            size_t pivot_row = col;
+            while (pivot_row < n && A[pivot_row][col]->is_zero()) {
+                pivot_row++;
+            }
+            if (pivot_row == n) return SymbolicExpr::number(0);
+            
+            if (pivot_row != col) {
+                std::swap(A[col], A[pivot_row]);
+                sign = -sign;
+            }
+            
+            auto pivot = A[col][col];
+            det = SymbolicExpr::multiply(det, pivot)->simplify();
+            auto pivot_inv = SymbolicExpr::power(pivot, SymbolicExpr::number(-1));
+            
+            for (size_t r = col + 1; r < n; ++r) {
+                auto factor = A[r][col];
+                if (!factor->is_zero()) {
+                    auto mult = SymbolicExpr::multiply(factor, pivot_inv)->simplify();
+                    auto neg_mult = SymbolicExpr::multiply(mult, SymbolicExpr::number(-1));
+                    for (size_t c = col + 1; c < n; ++c) {
+                        auto term = SymbolicExpr::multiply(neg_mult, A[col][c]);
+                        A[r][c] = SymbolicExpr::add(A[r][c], term)->simplify();
+                    }
+                    A[r][col] = SymbolicExpr::number(0);
+                }
+            }
+        }
+        
+        if (sign == -1) {
+            det = SymbolicExpr::multiply(det, SymbolicExpr::number(-1))->simplify();
+        }
+        return det;
     }
 
     std::vector<std::shared_ptr<SymbolicExpr>> terms;

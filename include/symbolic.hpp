@@ -308,7 +308,7 @@ public:
     }
     
     static std::shared_ptr<SymbolicExpr> number(double n) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<NumberNode>(n));
+        return std::make_shared<SymbolicExpr>(std::make_shared<NumberNode>(static_cast<lmmc_real_t>(n)));
     }
 
     static std::shared_ptr<SymbolicExpr> number(const ::BigInt& bi) {
@@ -320,11 +320,12 @@ public:
     }
 
 	static std::shared_ptr<SymbolicExpr> infinity(int k = 1) {
-		
-		
-		
-		
-		return nullptr;
+		auto inf_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{});
+		auto inf_expr = std::make_shared<SymbolicExpr>(inf_node);
+		if (k < 0) {
+			return SymbolicExpr::multiply(SymbolicExpr::number(-1), inf_expr);
+		}
+		return inf_expr;
 	}
 
     
@@ -371,12 +372,25 @@ public:
         return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Exp, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
     }
 
+    static std::shared_ptr<SymbolicExpr> lambertw(std::shared_ptr<SymbolicExpr> op) {
+        if (!op) return nullptr;
+        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::LambertW, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
+    }
+
     static std::shared_ptr<SymbolicExpr> log(std::shared_ptr<SymbolicExpr> val, std::shared_ptr<SymbolicExpr> base) {
         return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Log, std::vector<std::shared_ptr<SymbolicNode>>{val->root, base->root}));
     }
 
     static std::shared_ptr<SymbolicExpr> atan2(std::shared_ptr<SymbolicExpr> y, std::shared_ptr<SymbolicExpr> x) {
         return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Atan2, std::vector<std::shared_ptr<SymbolicNode>>{y->root, x->root}));
+    }
+
+    static std::shared_ptr<SymbolicExpr> root_of(std::shared_ptr<SymbolicExpr> poly, const std::string& var, int index) {
+        if (!poly) return nullptr;
+        auto v = SymbolicExpr::variable(var);
+        auto k = SymbolicExpr::number(index);
+        std::vector<std::shared_ptr<SymbolicNode>> args = {poly->root, v->root, k->root};
+        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::RootOf, args));
     }
 
 	static std::shared_ptr<SymbolicExpr> eq(std::shared_ptr<SymbolicExpr> lhs, std::shared_ptr<SymbolicExpr> rhs) {
@@ -453,11 +467,26 @@ public:
     bool is_int() const { 
 		if (!is_number()) return false;
 		auto node = std::dynamic_pointer_cast<NumberNode>(root);
-		return node && std::holds_alternative<double>(node->value); 
+		if (!node) return false;
 		
+		// BigInt is always an integer
+		if (std::holds_alternative<BigInt>(node->value)) return true;
 		
+		// Rational is integer when denominator is 1
+		if (std::holds_alternative<Rational>(node->value)) {
+		    return std::get<Rational>(node->value).is_integer();
+		}
 		
-		return false; 
+		// lmmc_real_t is integer when it equals its rounded value
+		if (std::holds_alternative<lmmc_real_t>(node->value)) {
+		    lmmc_real_t v = std::get<lmmc_real_t>(node->value);
+		    lmmc_real_t rounded = std::round(v);
+		    int eq;
+		    lmmc_double_nearly_equal_tol(v, rounded, 1e-12, 1e-12, &eq);
+		    return eq != 0;
+		}
+		
+		return false;
 	}
 
     
@@ -467,7 +496,7 @@ public:
 			if (std::holds_alternative<BigInt>(node->value)) return std::get<BigInt>(node->value);
 			if (std::holds_alternative<Rational>(node->value)) return std::get<Rational>(node->value);
 			
-			return (int)std::get<double>(node->value);
+			return (int)std::get<lmmc_real_t>(node->value);
         }
         throw std::runtime_error("Expression is not a number");
     }
@@ -498,7 +527,7 @@ public:
 	
 
     
-    double to_double() const;
+    lmmc_real_t to_numeric() const;
 
 private:
     

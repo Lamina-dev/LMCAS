@@ -59,7 +59,7 @@ std::vector<ComplexSymbolic> solve_complex_nth_root(std::shared_ptr<SymbolicExpr
     // 这里只支持数值 c
     // 若 c 为符号，返回空
     if (c->is_number()) {
-        double val = c->to_double();
+        double val = c->to_numeric();
         double r = std::abs(val);
         double theta = std::arg(std::complex<double>(val, 0.0));
         std::vector<ComplexSymbolic> roots;

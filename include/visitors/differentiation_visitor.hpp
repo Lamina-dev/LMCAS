@@ -163,6 +163,18 @@ public:
                     std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(-0.5))
                  });
                  break;
+            case FunctionNode::FuncType::LambertW:
+                {
+                    auto W = std::make_shared<FunctionNode>(FunctionNode::FuncType::LambertW, node.arguments);
+                    auto one = SymbolicFactory::create_number(1.0);
+                    auto one_plus_W = SymbolicFactory::create_add({one, W});
+                    auto denom = SymbolicFactory::create_multiply({arg, one_plus_W});
+                    auto denom_inv = std::make_shared<PowerNode>(denom, SymbolicFactory::create_number(-1.0));
+                    d_outer = SymbolicFactory::create_multiply({W, denom_inv});
+                }
+                break;
+            case FunctionNode::FuncType::RootOf:
+                throw std::runtime_error("RootOf differentiation is not mathematically supported yet.");
             default:
                 d_outer = SymbolicFactory::create_number(0.0);
         }

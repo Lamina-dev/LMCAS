@@ -2,6 +2,8 @@
 #include "symbolic_ast.hpp"
 #include "polynomial.hpp"
 #include "poly_utils.hpp"
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 #include <iostream>
 #include <cmath>
 #include <algorithm>
@@ -152,13 +154,16 @@ std::shared_ptr<SymbolicExpr> check_singularity(const SymbolicExpr& expr, const 
         std::vector<std::shared_ptr<SymbolicNode>> den_nodes;
         for(const auto& op : mul->operands) {
              if (auto pow = std::dynamic_pointer_cast<PowerNode>(op)) {
-                 if (auto sn = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
-                      if ((std::holds_alternative<double>(sn->value) && std::get<double>(sn->value) < 0) ||
-                          (std::holds_alternative<BigInt>(sn->value) && std::get<BigInt>(sn->value).to_double() < 0) ||
-                          (std::holds_alternative<Rational>(sn->value) && std::get<Rational>(sn->value).to_double() < 0)) {
-                          den_nodes.push_back(pow->base);
-                      }
-                 }
+                  if (auto sn = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+                       auto is_negative = [](const auto& v) {
+                           if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v) < 0;
+                           if (std::holds_alternative<Rational>(v)) return std::get<Rational>(v).to_double() < 0;
+                           return std::get<BigInt>(v).to_double() < 0;
+                       };
+                       if (is_negative(sn->value)) {
+                           den_nodes.push_back(pow->base);
+                       }
+                  }
              }
         }
         if (!den_nodes.empty()) {
@@ -168,13 +173,16 @@ std::shared_ptr<SymbolicExpr> check_singularity(const SymbolicExpr& expr, const 
         }
     } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(expr.root)) {
          // Single power term check
-         if (auto sn = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
-              if ((std::holds_alternative<double>(sn->value) && std::get<double>(sn->value) < 0) ||
-                  (std::holds_alternative<BigInt>(sn->value) && std::get<BigInt>(sn->value).to_double() < 0) ||
-                  (std::holds_alternative<Rational>(sn->value) && std::get<Rational>(sn->value).to_double() < 0)) {
-                  den_expr = std::make_shared<SymbolicExpr>(pow->base);
-              }
-         }
+          if (auto sn = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+               auto is_negative = [](const auto& v) {
+                   if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v) < 0;
+                   if (std::holds_alternative<Rational>(v)) return std::get<Rational>(v).to_double() < 0;
+                   return std::get<BigInt>(v).to_double() < 0;
+               };
+               if (is_negative(sn->value)) {
+                   den_expr = std::make_shared<SymbolicExpr>(pow->base);
+               }
+          }
     }
 
     if (den_expr) {
@@ -187,8 +195,8 @@ std::shared_ptr<SymbolicExpr> check_singularity(const SymbolicExpr& expr, const 
         
         // Check if [lower, upper] constains 0
         // We need numerical check for [lower, upper]
-        double l = lower.to_double();
-        double u = upper.to_double();
+        double l = lower.to_numeric();
+        double u = upper.to_numeric();
         
         if (l <= 0 && u >= 0 && l != u) {
              // 0 is inside
@@ -220,33 +228,35 @@ SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::stri
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(simp_expr_val.root)) {
         if (auto v = std::dynamic_pointer_cast<VariableNode>(pow->base)) {
              if (v->name == var_name) {
-                 if (auto en = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
-                     if ((std::holds_alternative<double>(en->value) && std::abs(std::get<double>(en->value) + 1.0) < 1e-9) ||
-                         (std::holds_alternative<BigInt>(en->value) && std::get<BigInt>(en->value).to_int() == -1) || 
-                         (std::holds_alternative<Rational>(en->value) && std::get<Rational>(en->value).to_double() == -1.0)) {
-                         is_inv_x = true;
-                     }
+                  if (auto en = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+                      int eq_minus_one = 0;
+                      if (std::holds_alternative<lmmc_real_t>(en->value)) {
+                          lmmc_double_nearly_equal_tol(std::get<lmmc_real_t>(en->value), -1.0, 1e-9, 1e-9, &eq_minus_one);
+                      }
+                      if ((std::holds_alternative<lmmc_real_t>(en->value) && eq_minus_one != 0) ||
+                          (std::holds_alternative<BigInt>(en->value) && std::get<BigInt>(en->value).to_int() == -1) || 
+                          (std::holds_alternative<Rational>(en->value) && std::get<Rational>(en->value).to_double() == -1.0)) {
+                          is_inv_x = true;
+                      }
                  }
              }
         }
     }
     
-    // Check bounds
-    // We need numerical values for bounds to check if 0 is inside
-    // If symbols, we can't reliably know without constraints solver.
-    double l_val = lower.to_double();
-    double u_val = upper.to_double();
+
+    double l_val = lower.to_numeric();
+    double u_val = upper.to_numeric();
     
-    // Check if bounds are purely numeric (non-zero implies success of to_double usually, but 0 is valid too)
-    // If to_double() returns 0 for a symbol 'a', this logic is flawed for symbols.
-    // So we check if roots are NumberNodes.
     
     bool numeric_bounds = (lower.root && std::dynamic_pointer_cast<NumberNode>(lower.root)) && 
                           (upper.root && std::dynamic_pointer_cast<NumberNode>(upper.root));
 
     if (is_inv_x && numeric_bounds) {
-         if (l_val < -1e-9 && u_val > 1e-9) {
-             // Split around 0
+         int eq_l, eq_u;
+         lmmc_double_nearly_equal_tol(l_val, 0.0, 1e-9, 1e-9, &eq_l);
+         lmmc_double_nearly_equal_tol(u_val, 0.0, 1e-9, 1e-9, &eq_u);
+         if (!eq_l && l_val < 0 && !eq_u && u_val > 0) {
+             // splite ~0
              // Limit_{t->0-} Int(l, t) + Limit_{t->0+} Int(t, u)
              
              auto t = std::make_shared<SymbolicExpr>(*SymbolicExpr::variable("t"));
@@ -258,10 +268,10 @@ SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::stri
              // Int(t, u) = ln(|u|) - ln(|t|)
              // Limit t->0+ of -ln(|t|) -> -(-Inf) = +Inf
              
-             // -Inf + Inf -> Indeterminate / Divergent (Cauchy Principal Value might exist = 0)
-             // Standard Riemann integral diverges.
+             // -Inf + Inf -> ind /dev 
+             // std ren
              
-             // Our limit function returns Infinity node.
+             // ret , inf 
              
              auto int_left = integrate_def(expr, var_name, lower, *t);
              auto lim_left = int_left.limit("t", zero, "-");
@@ -364,7 +374,7 @@ static std::shared_ptr<SymbolicExpr> integrate_rec(const SymbolicExpr& expr, con
 // Actual integration strategy
 static std::shared_ptr<SymbolicExpr> integrate_strategy(const SymbolicExpr& expr, const std::string& var_name, IntegralHistory& history, int depth) {
     // 0. Check if constant (Integral(c dx) = c*x)
-    if (!valid_dependency(expr, var_name)) {
+    if (expr.is_number()) {
         return SymbolicExpr::multiply(make_expr_ptr(expr), SymbolicExpr::variable(var_name));
     }
     
@@ -557,10 +567,12 @@ static std::pair<bool, std::shared_ptr<SymbolicExpr>> try_partial_fraction(const
          bool is_inv = false;
          try {
              if (auto num_node = std::dynamic_pointer_cast<NumberNode>(p->exponent)) {
-                  if(std::holds_alternative<double>(num_node->value)) exp_val = std::get<double>(num_node->value);
+                   if(std::holds_alternative<lmmc_real_t>(num_node->value)) exp_val = std::get<lmmc_real_t>(num_node->value);
                   else if(std::holds_alternative<Rational>(num_node->value)) exp_val = std::get<Rational>(num_node->value).to_double();
                   else if(std::holds_alternative<BigInt>(num_node->value)) exp_val = std::get<BigInt>(num_node->value).to_double();
-                  if (std::abs(exp_val + 1.0) < 1e-9) is_inv = true;
+                  int eq;
+                  lmmc_double_nearly_equal_tol(exp_val, -1.0, 1e-9, 1e-9, &eq);
+                  if (eq) is_inv = true;
              }
          } catch(...) {}
          
@@ -581,15 +593,19 @@ static std::pair<bool, std::shared_ptr<SymbolicExpr>> try_partial_fraction(const
             SymbolicExpr b_expr = *(Q.coeffs[1].val); // x^1
             SymbolicExpr a_expr = *(Q.coeffs[2].val); // x^2
             
-            double a = a_expr.is_number() ? a_expr.to_double() : 1.0; 
-            double b = b_expr.is_number() ? b_expr.to_double() : 0.0;
-            double c = c_expr.is_number() ? c_expr.to_double() : 0.0;
+            double a = a_expr.is_number() ? a_expr.to_numeric() : 1.0; 
+            double b = b_expr.is_number() ? b_expr.to_numeric() : 0.0;
+            double c = c_expr.is_number() ? c_expr.to_numeric() : 0.0;
             
-            if (std::abs(a) < 1e-9) return {false, nullptr};
+            int eq_a;
+            lmmc_double_nearly_equal_tol(a, 0.0, 1e-9, 1e-9, &eq_a);
+            if (eq_a) return {false, nullptr};
             
             double delta = b*b - 4*a*c;
+            int eq_delta;
+            lmmc_double_nearly_equal_tol(delta, 0.0, 1e-9, 1e-9, &eq_delta);
             
-            if (delta > 1e-9) {
+            if (!eq_delta && delta > 0) {
                 // Positive discriminant: two real roots: 1 / (a(x-r1)(x-r2))
                 double sqrt_delta = std::sqrt(delta);
                 
@@ -611,7 +627,7 @@ static std::pair<bool, std::shared_ptr<SymbolicExpr>> try_partial_fraction(const
                 
                 return {true, SymbolicExpr::multiply(scalar, sym_sub(*term1, *term2))};
                 
-            } else if (delta < -1e-9) {
+            } else if (!eq_delta && delta < 0) {
                 // Negative discriminant: ArcTan
                 double neg_delta = -delta;
                 double sqrt_neg_delta = std::sqrt(neg_delta);

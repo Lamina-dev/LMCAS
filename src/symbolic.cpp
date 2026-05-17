@@ -14,6 +14,8 @@
 #include "../include/poly_utils.hpp"
 #include "../include/matcher.hpp"
 #include "../include/integration.hpp"
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
 
 
 
@@ -149,7 +151,8 @@ public:
             auto half = std::make_shared<NumberNode>(Rational(1, 2));
             result = std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>{half, x_pow_2});
         } else {
-            result = std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>{node.clone(), std::make_shared<VariableNode>(var)});
+            std::vector<std::shared_ptr<SymbolicNode>> args = {node.clone(), std::make_shared<VariableNode>(var)};
+            result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args);
         }
     }
 
@@ -173,7 +176,8 @@ public:
         }
 
         if (x_ops.empty()) {
-            result = std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>{node.clone(), std::make_shared<VariableNode>(var)});
+            std::vector<std::shared_ptr<SymbolicNode>> args = {node.clone(), std::make_shared<VariableNode>(var)};
+            result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args);
             return;
         }
 
@@ -190,7 +194,8 @@ public:
             return;
         }
         
-        result = std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>{node.clone(), std::make_shared<VariableNode>(var)});
+        std::vector<std::shared_ptr<SymbolicNode>> args = {node.clone(), std::make_shared<VariableNode>(var)};
+        result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args);
     }
     
     void visit(PowerNode& node) override {
@@ -203,13 +208,16 @@ public:
         if (base_is_x) {
             
             if (auto num = std::dynamic_pointer_cast<NumberNode>(node.exponent)) {
-                 if (std::holds_alternative<double>(num->value) && std::get<double>(num->value) == -1.0) {
-                     
-                     std::vector<std::shared_ptr<SymbolicNode>> args = {node.base};
-                     result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args);
-                     return;
-                 }
-                 if (std::holds_alternative<BigInt>(num->value) && std::get<BigInt>(num->value) == BigInt(-1)) {
+                  if (std::holds_alternative<lmmc_real_t>(num->value)) {
+                      int eq;
+                      lmmc_double_nearly_equal_tol(std::get<lmmc_real_t>(num->value), -1.0, 1e-9, 1e-9, &eq);
+                      if (eq) {
+                          std::vector<std::shared_ptr<SymbolicNode>> args = {node.base};
+                          result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args);
+                          return;
+                      }
+                  }
+                  if (std::holds_alternative<BigInt>(num->value) && std::get<BigInt>(num->value) == BigInt(-1)) {
                      std::vector<std::shared_ptr<SymbolicNode>> args = {node.base};
                      result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args);
                      return;
@@ -237,10 +245,8 @@ public:
         }
         
         
-        std::vector<std::shared_ptr<SymbolicNode>> ops;
-        ops.push_back(node.clone());
-        ops.push_back(std::make_shared<VariableNode>(var));
-        result = std::make_shared<MultiplyNode>(ops);
+        std::vector<std::shared_ptr<SymbolicNode>> fallback_args = {node.clone(), std::make_shared<VariableNode>(var)};
+        result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, fallback_args);
     }
     
     void visit(FunctionNode& node) override {
@@ -271,13 +277,14 @@ public:
             }
         }
         
-        result = node.clone(); 
+        std::vector<std::shared_ptr<SymbolicNode>> fallback_args = {node.clone(), std::make_shared<VariableNode>(var)};
+        result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, fallback_args);
     }
 
     void visit(MatrixNode& node) override {
         
-        
-        result = node.clone(); 
+        std::vector<std::shared_ptr<SymbolicNode>> fallback_args = {node.clone(), std::make_shared<VariableNode>(var)};
+        result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, fallback_args);
     }
 };
 
@@ -331,21 +338,76 @@ std::string SymbolicExpr::to_string() const {
 }
 
 
-double SymbolicExpr::to_double() const {
+lmmc_real_t SymbolicExpr::to_numeric() const {
     if (!root) return 0.0;
     
     if (auto num = std::dynamic_pointer_cast<NumberNode>(root)) {
-        if (std::holds_alternative<double>(num->value)) return std::get<double>(num->value);
-        if (std::holds_alternative<::BigInt>(num->value)) return std::get<::BigInt>(num->value).to_double();
-        if (std::holds_alternative<::Rational>(num->value)) return std::get<::Rational>(num->value).to_double();
+        if (std::holds_alternative<lmmc_real_t>(num->value)) return std::get<lmmc_real_t>(num->value);
+        if (std::holds_alternative<::BigInt>(num->value)) return (lmmc_real_t)std::get<::BigInt>(num->value).to_double();
+        if (std::holds_alternative<::Rational>(num->value)) return (lmmc_real_t)std::get<::Rational>(num->value).to_double();
     }
+    
+    // Evaluate elementary functions with numeric arguments via LMMC / std math
+    if (auto func = std::dynamic_pointer_cast<FunctionNode>(root)) {
+        if (func->arguments.size() == 1) {
+            SymbolicExpr arg_expr(func->arguments[0]);
+            lmmc_real_t arg_val = arg_expr.to_numeric();
+            lmmc_real_t result;
+            
+            switch (func->type) {
+                case FunctionNode::FuncType::Sin:
+                    result = std::sin(arg_val);
+                    return result;
+                case FunctionNode::FuncType::Cos:
+                    result = std::cos(arg_val);
+                    return result;
+                case FunctionNode::FuncType::Tan:
+                    result = std::tan(arg_val);
+                    return result;
+                case FunctionNode::FuncType::Exp:
+                    result = std::exp(arg_val);
+                    return result;
+                case FunctionNode::FuncType::Ln:
+                    result = std::log(arg_val);
+                    return result;
+                case FunctionNode::FuncType::Sqrt:
+                    result = std::sqrt(arg_val);
+                    return result;
+                case FunctionNode::FuncType::Abs:
+                    result = std::abs(arg_val);
+                    return result;
+                case FunctionNode::FuncType::LambertW:
+                    if (lmmc_lambertw(arg_val, &result) == LMMC_STATUS_OK) {
+                        return result;
+                    }
+                    break; // LambertW may fail for z < -1/e
+                default:
+                    break;
+            }
+        }
+        
+        // Handle two-argument functions
+        if (func->arguments.size() == 2 && func->type == FunctionNode::FuncType::Atan2) {
+            SymbolicExpr y_expr(func->arguments[0]);
+            SymbolicExpr x_expr(func->arguments[1]);
+            lmmc_real_t y_val = y_expr.to_numeric();
+            lmmc_real_t x_val = x_expr.to_numeric();
+            return std::atan2(y_val, x_val);
+        }
+    }
+    
     return 0.0; 
 }
 
 bool SymbolicExpr::is_zero() const {
     if (!root) return false;
     if (auto num = std::dynamic_pointer_cast<NumberNode>(root)) {
-        if (std::holds_alternative<double>(num->value)) return std::get<double>(num->value) == 0.0;
+        if (std::holds_alternative<lmmc_real_t>(num->value)) {
+            lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+            int eq;
+            lmmc_double_nearly_equal(v, 0.0, &eq);
+            return eq != 0;
+        }
         if (std::holds_alternative<::BigInt>(num->value)) return std::get<::BigInt>(num->value).to_int() == 0;
         if (std::holds_alternative<::Rational>(num->value)) return std::get<::Rational>(num->value).get_numerator().to_int() == 0;
     }
@@ -355,7 +417,12 @@ bool SymbolicExpr::is_zero() const {
 bool SymbolicExpr::is_one() const {
     if (!root) return false;
     if (auto num = std::dynamic_pointer_cast<NumberNode>(root)) {
-        if (std::holds_alternative<double>(num->value)) return std::get<double>(num->value) == 1.0;
+        if (std::holds_alternative<lmmc_real_t>(num->value)) {
+            lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+            int eq;
+            lmmc_double_nearly_equal(v, 1.0, &eq);
+            return eq != 0;
+        }
         if (std::holds_alternative<::BigInt>(num->value)) return std::get<::BigInt>(num->value).to_int() == 1;
         if (std::holds_alternative<::Rational>(num->value)) return std::get<::Rational>(num->value).to_double() == 1.0;
     }
@@ -541,6 +608,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const
         if (n > 0) {
             deriv = deriv->differentiate(var);
             if (!deriv) break;
+            deriv = deriv->simplify();
         }
 
         auto coeff = deriv->substitute(var, point);
@@ -682,6 +750,7 @@ SymbolicExpr::Type SymbolicExpr::get_type() const {
             case FunctionNode::FuncType::Ln: return Type::Ln;
             case FunctionNode::FuncType::Log: return Type::Log;
             case FunctionNode::FuncType::Exp: return Type::Power; 
+            case FunctionNode::FuncType::LambertW: return Type::Variable;
             case FunctionNode::FuncType::Abs: return Type::Abs;
             case FunctionNode::FuncType::Sqrt: return Type::Sqrt;
             case FunctionNode::FuncType::Atan2: return Type::Atan2;
@@ -722,7 +791,7 @@ std::variant<int, ::BigInt, ::Rational> SymbolicExpr::get_number_value() const {
     if (auto node = std::dynamic_pointer_cast<NumberNode>(root)) {
         if (std::holds_alternative<BigInt>(node->value)) return std::get<BigInt>(node->value);
         if (std::holds_alternative<Rational>(node->value)) return std::get<Rational>(node->value);
-        if (std::holds_alternative<double>(node->value)) return (int)std::get<double>(node->value); 
+        if (std::holds_alternative<lmmc_real_t>(node->value)) return (int)std::get<lmmc_real_t>(node->value); 
     }
     return 0; 
 }
