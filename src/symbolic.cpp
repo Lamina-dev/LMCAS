@@ -4,7 +4,22 @@
 #include <string>
 #include <algorithm>
 #include <set>
+#include <mutex>
 #include "../include/symbolic.hpp"
+
+// Initialize LAMMP (BigInt library) global resources exactly once.
+// Must be called before any BigInt/LAMMP operation.
+namespace {
+    struct LAMMPInit {
+        LAMMPInit() {
+            static std::once_flag flag;
+            std::call_once(flag, []() { 
+                lmmp_global_init(); 
+            });
+        }
+    };
+    LAMMPInit lammp_init_;
+}
 #include "../include/integration.hpp"
 #include "../include/visitors/print_visitor.hpp"
 #include "../include/visitors/normalization_visitor.hpp"

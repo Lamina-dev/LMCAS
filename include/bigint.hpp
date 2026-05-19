@@ -7,6 +7,7 @@
 #include "lammp/lmmp.h"
 #include "lammp/lmmpn.h"
 #include "lammp/numth.h"
+#include "lmmc/init.h"
 #include <vector>
 #include <cstdlib>
 #include <cstring>
@@ -35,24 +36,20 @@ inline mp_size_t lmmp_rlz(mp_srcptr p, mp_size_t n) {
     return n;
 }
 
+// Wrapper: reset LAMMP temp stack after call to prevent stack exhaustion.
+// Workaround for current LAMMP — remove when new LAMMP with
+// proper lmmp_global_init_()/lmmp_global_deinit() ships.
 inline void bigint_mul_(mp_ptr dst, mp_srcptr numa, mp_size_t na, mp_srcptr numb, mp_size_t nb) {
     ::lmmp_mul_(dst, numa, na, numb, nb);
+    lmmc_stack_reset(327680);
 }
 
+// Wrapper: reset LAMMP temp stack after call to prevent stack exhaustion.
+// Workaround for current LAMMP — remove when new LAMMP with
+// proper lmmp_global_init_()/lmmp_global_deinit() ships.
 inline void bigint_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
-    dn = lmmp_rlz(d, dn);
-    nn = lmmp_rlz(n, nn);
-    if (dn == 0) return; 
-
-    if (nn < dn) {
-        if (q) q[0] = 0;
-        if (r) {
-            std::memcpy(r, n, nn * sizeof(mp_limb_t));
-            if (dn > nn) std::memset(r + nn, 0, (dn - nn) * sizeof(mp_limb_t));
-        }
-        return;
-    }
     ::lmmp_div_(q, r, n, nn, d, dn);
+    lmmc_stack_reset(327680);
 }
 
 class BigInt {
@@ -410,7 +407,6 @@ public:
     
     
     static void sub_abs(BigInt& dst, const BigInt& a, const BigInt& b) {
-        
         mp_size_t na = a._size;
         mp_size_t nb = b._size;
         dst.realloc_to(na);
@@ -806,6 +802,7 @@ public:
         
         
         res._size = lmmp_gcd_lehmer_(res._data, abs_a._data, na, abs_b._data, nb);
+        lmmc_stack_reset(327680);
         
         res._sign = POSITIVE;
         res.negative = false;

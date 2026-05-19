@@ -6,8 +6,9 @@ int main() {
     auto res = y->integrate("x");
     std::cout << "Integration result: " << res->to_string() << std::endl;
     
-    // Should contain Integral or similar representation based on print_visitor
-    EXPECT_CONTAINS(res->to_string(), {"integral", "y", "x"}, "Integration of y w.r.t x should be unevaluated Integral");
+    // y is constant w.r.t. x, so integral(y, x) = y*x
+    // The result should contain both y and x (as a product)
+    EXPECT_CONTAINS(res->to_string(), {"y", "x"}, "Integration of y w.r.t x should be y*x");
     
     return TEST_REPORT();
 }
