@@ -22,12 +22,15 @@
 
 
 
+// BigInt uses LAMMP's heap allocators directly. These never return NULL —
+// allocation failures trigger lmmp_abort() instead. Therefore subsequent
+// NULL checks on the returned pointer are dead code.
 inline void bigint_free(void* p) { 
-    free(p); 
+    lmmp_free(p);
 }
 
 inline void* bigint_alloc(size_t size) { 
-    return malloc(size);
+    return lmmp_alloc(size);
 }
 
 
@@ -36,20 +39,17 @@ inline mp_size_t lmmp_rlz(mp_srcptr p, mp_size_t n) {
     return n;
 }
 
-// Wrapper: reset LAMMP temp stack after call to prevent stack exhaustion.
-// Workaround for current LAMMP — remove when new LAMMP with
-// proper lmmp_global_init_()/lmmp_global_deinit() ships.
+// Multiplication wrapper around LAMMP's lmmp_mul_.
+// Note: lmmp_global_init() (called via lmmc_init() in DllMain) sets up the
+// default 320KB scratch stack. LAMMP internally manages push/pop within
+// each operation, so no manual reset is required.
 inline void bigint_mul_(mp_ptr dst, mp_srcptr numa, mp_size_t na, mp_srcptr numb, mp_size_t nb) {
     ::lmmp_mul_(dst, numa, na, numb, nb);
-    lmmc_stack_reset(327680);
 }
 
-// Wrapper: reset LAMMP temp stack after call to prevent stack exhaustion.
-// Workaround for current LAMMP — remove when new LAMMP with
-// proper lmmp_global_init_()/lmmp_global_deinit() ships.
+// Division wrapper around LAMMP's lmmp_div_. Same notes as bigint_mul_.
 inline void bigint_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
     ::lmmp_div_(q, r, n, nn, d, dn);
-    lmmc_stack_reset(327680);
 }
 
 class BigInt {
@@ -70,11 +70,9 @@ public:
     void realloc_to(mp_size_t new_alloc) {
         if (new_alloc <= _alloc) return;
         new_alloc = (new_alloc + 3) & ~3; 
+        // bigint_alloc uses lmmp_alloc, which aborts on failure rather than
+        // returning NULL. No null-check is needed.
         mp_ptr new_data = (mp_ptr)bigint_alloc(new_alloc * sizeof(mp_limb_t));
-        if (!new_data) throw std::bad_alloc();
-        
-        
-        
 
         if (_size > 0 && _data) {
              std::memcpy(new_data, _data, _size * sizeof(mp_limb_t));
@@ -802,7 +800,6 @@ public:
         
         
         res._size = lmmp_gcd_lehmer_(res._data, abs_a._data, na, abs_b._data, nb);
-        lmmc_stack_reset(327680);
         
         res._sign = POSITIVE;
         res.negative = false;

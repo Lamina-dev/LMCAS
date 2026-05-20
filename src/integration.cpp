@@ -383,9 +383,17 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
             SymbolicExpr b_expr = *(Q.coeffs[1].val);
             SymbolicExpr a_expr = *(Q.coeffs[2].val);
             
-            double a = a_expr.is_number() ? a_expr.to_numeric() : 1.0;
-            double b = b_expr.is_number() ? b_expr.to_numeric() : 0.0;
-            double c = c_expr.is_number() ? c_expr.to_numeric() : 0.0;
+            // All three coefficients must be numeric, otherwise we can't
+            // compute the discriminant correctly. Symbolic coefficients
+            // require a more general approach (factoring/CAS) which is
+            // beyond this strategy's scope.
+            if (!a_expr.is_number() || !b_expr.is_number() || !c_expr.is_number()) {
+                return nullptr;
+            }
+            
+            double a = a_expr.to_numeric();
+            double b = b_expr.to_numeric();
+            double c = c_expr.to_numeric();
             
             int eq_a;
             lmmc_double_nearly_equal_tol(a, 0.0, 1e-9, 1e-9, &eq_a);
@@ -511,6 +519,9 @@ Integrator::Integrator() {
 }
 
 void Integrator::add_strategy(std::unique_ptr<IntegrationStrategy> strategy, int position) {
+    if (!strategy) {
+        throw std::invalid_argument("Integrator::add_strategy: strategy must not be null");
+    }
     if (position < 0 || position >= (int)strategies_.size()) {
         strategies_.push_back(std::move(strategy));
     } else {
@@ -682,12 +693,13 @@ SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::stri
         }
     }
 
-    double l_val = lower.to_numeric();
-    double u_val = upper.to_numeric();
+    // Check numeric bounds first; only call to_numeric() if bounds are numbers.
     bool numeric_bounds = (lower.root && std::dynamic_pointer_cast<NumberNode>(lower.root)) &&
                           (upper.root && std::dynamic_pointer_cast<NumberNode>(upper.root));
 
     if (is_inv_x && numeric_bounds) {
+        double l_val = lower.to_numeric();
+        double u_val = upper.to_numeric();
         int eq_l, eq_u;
         lmmc_double_nearly_equal_tol(l_val, 0.0, 1e-9, 1e-9, &eq_l);
         lmmc_double_nearly_equal_tol(u_val, 0.0, 1e-9, 1e-9, &eq_u);

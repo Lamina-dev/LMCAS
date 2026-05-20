@@ -15,16 +15,24 @@
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     (void)hinstDLL;
-    (void)lpvReserved;
 
     switch (fdwReason)
     {
     case DLL_PROCESS_ATTACH:
+        /* lmmc_init() must be loader-safe: no thread creation,
+           no synchronization that can block, no calls into other DLLs
+           that might not yet be loaded. */
         lmmc_init();
         break;
 
     case DLL_PROCESS_DETACH:
-        lmmc_deinit();
+        /* If lpvReserved is non-NULL, the process is terminating.
+           In that case skip cleanup since the OS will reclaim
+           everything and running deinit may be unsafe (other
+           DLLs may already be unloaded). */
+        if (lpvReserved == NULL) {
+            lmmc_deinit();
+        }
         break;
 
     case DLL_THREAD_ATTACH:
