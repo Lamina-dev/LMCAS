@@ -11,7 +11,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
     message(WARNING "MSVC is deprecated, please use GCC/G++ instead.")
-    add_compile_options(/utf-8 /permissive-)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/utf-8>)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/permissive->)
+endif()
+
+if(WIN32)
     add_compile_definitions(LAMMP_WINDOWS)
 endif()
 
@@ -45,6 +49,7 @@ add_library(lmcas SHARED
     src/matcher.cpp
     src/integration.cpp
     src/solver.cpp
+    src/dllmain.c
 )
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)

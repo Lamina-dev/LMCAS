@@ -389,6 +389,8 @@ public:
             }
         }
 
+
+
         std::shared_ptr<NumberNode> constant_acc = std::make_shared<NumberNode>(BigInt(0));
         std::map<std::shared_ptr<SymbolicNode>, std::shared_ptr<NumberNode>, NodeCompare> terms;
 

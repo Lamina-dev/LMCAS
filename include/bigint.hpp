@@ -7,6 +7,7 @@
 #include "lammp/lmmp.h"
 #include "lammp/lmmpn.h"
 #include "lammp/numth.h"
+#include "lmmc/init.h"
 #include <vector>
 #include <cstdlib>
 #include <cstring>
@@ -21,12 +22,15 @@
 
 
 
+// BigInt uses LAMMP's heap allocators directly. These never return NULL —
+// allocation failures trigger lmmp_abort() instead. Therefore subsequent
+// NULL checks on the returned pointer are dead code.
 inline void bigint_free(void* p) { 
-    free(p); 
+    lmmp_free(p);
 }
 
 inline void* bigint_alloc(size_t size) { 
-    return malloc(size);
+    return lmmp_alloc(size);
 }
 
 
@@ -35,23 +39,16 @@ inline mp_size_t lmmp_rlz(mp_srcptr p, mp_size_t n) {
     return n;
 }
 
+// Multiplication wrapper around LAMMP's lmmp_mul_.
+// Note: lmmp_global_init() (called via lmmc_init() in DllMain) sets up the
+// default 320KB scratch stack. LAMMP internally manages push/pop within
+// each operation, so no manual reset is required.
 inline void bigint_mul_(mp_ptr dst, mp_srcptr numa, mp_size_t na, mp_srcptr numb, mp_size_t nb) {
     ::lmmp_mul_(dst, numa, na, numb, nb);
 }
 
+// Division wrapper around LAMMP's lmmp_div_. Same notes as bigint_mul_.
 inline void bigint_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
-    dn = lmmp_rlz(d, dn);
-    nn = lmmp_rlz(n, nn);
-    if (dn == 0) return; 
-
-    if (nn < dn) {
-        if (q) q[0] = 0;
-        if (r) {
-            std::memcpy(r, n, nn * sizeof(mp_limb_t));
-            if (dn > nn) std::memset(r + nn, 0, (dn - nn) * sizeof(mp_limb_t));
-        }
-        return;
-    }
     ::lmmp_div_(q, r, n, nn, d, dn);
 }
 
@@ -73,11 +70,9 @@ public:
     void realloc_to(mp_size_t new_alloc) {
         if (new_alloc <= _alloc) return;
         new_alloc = (new_alloc + 3) & ~3; 
+        // bigint_alloc uses lmmp_alloc, which aborts on failure rather than
+        // returning NULL. No null-check is needed.
         mp_ptr new_data = (mp_ptr)bigint_alloc(new_alloc * sizeof(mp_limb_t));
-        if (!new_data) throw std::bad_alloc();
-        
-        
-        
 
         if (_size > 0 && _data) {
              std::memcpy(new_data, _data, _size * sizeof(mp_limb_t));
@@ -410,7 +405,6 @@ public:
     
     
     static void sub_abs(BigInt& dst, const BigInt& a, const BigInt& b) {
-        
         mp_size_t na = a._size;
         mp_size_t nb = b._size;
         dst.realloc_to(na);

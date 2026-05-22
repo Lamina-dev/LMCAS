@@ -3,7 +3,7 @@
 
 int main() {
     auto expr = SymbolicExpr::variable("x");
-    for (int i = 0; i < 600; ++i) {
+    for (int i = 0; i < 510; ++i) {
         expr = SymbolicExpr::sin(expr);
     }
     

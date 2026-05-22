@@ -9,6 +9,8 @@
 #include <numeric>
 #include <cmath>
 #include <set>
+#include <queue>
+#include <unordered_map>
 #include <optional>
 #include <limits>
 
@@ -443,6 +445,7 @@ namespace {
     struct Poly {
         PolyTerms terms;
         size_t num_vars;
+        int sugar = 0;  // Sugar degree for selection strategy
 
         Poly() : num_vars(0) {}
         Poly(size_t n) : num_vars(n) {}
@@ -547,104 +550,351 @@ namespace {
     }
     
     
+    // -----------------------------------------------------------------------
+    // Transcendental variable handling:
+    // When a FunctionNode (sin, cos, exp, etc.) or an unknown variable appears
+    // in a polynomial context, we introduce it as a "transcendental variable"
+    // (an auxiliary indeterminate) rather than silently dropping it to zero.
+    // This prevents incorrect polynomial reductions.
+    // -----------------------------------------------------------------------
+    
+    // Forward declaration: full definition appears after PolyBuilder.
+    struct PolyContext;
+    
     class PolyBuilder : public SymbolicVisitor {
         std::vector<std::string> vars;
+        // Extended variable list: original vars + transcendental auxiliaries
+        std::vector<std::string>& ext_vars;
+        // Map from AST string representation to auxiliary variable index
+        std::unordered_map<std::string, size_t>& transcendental_map;
+        // Reverse map: aux index -> original AST node (for reconstruction)
+        std::unordered_map<size_t, std::shared_ptr<SymbolicNode>>* aux_to_node;
         Poly result;
+        bool strict_mode; // If true, fail on non-polynomial terms instead of extending
+        
+        // Get or create an auxiliary variable index for a transcendental expression
+        size_t get_or_create_aux_var(const std::shared_ptr<SymbolicNode>& node) {
+            // Use the string representation as a key
+            SymbolicExpr tmp(node);
+            std::string key = tmp.to_string();
+            
+            auto it = transcendental_map.find(key);
+            if (it != transcendental_map.end()) {
+                return it->second;
+            }
+            
+            // Create new auxiliary variable
+            size_t idx = ext_vars.size();
+            std::string aux_name = "__aux_" + std::to_string(idx) + "_";
+            ext_vars.push_back(aux_name);
+            transcendental_map[key] = idx;
+            // Record the original AST node so we can reconstruct it later
+            if (aux_to_node) {
+                (*aux_to_node)[idx] = node;
+            }
+            return idx;
+        }
+        
     public:
-        PolyBuilder(const std::vector<std::string>& v) : vars(v), result(v.size()) {}
+        // Preferred constructor: takes a PolyContext for full reconstruction support.
+        // Defined out-of-line below since PolyContext is forward-declared here.
+        PolyBuilder(const std::vector<std::string>& v, PolyContext& ctx, bool strict = false);
+        
+        // Legacy constructor: for backward-compatibility (no reverse map)
+        PolyBuilder(const std::vector<std::string>& v, 
+                    std::vector<std::string>& ext_v,
+                    std::unordered_map<std::string, size_t>& trans_map,
+                    bool strict = false) 
+            : vars(v), ext_vars(ext_v), transcendental_map(trans_map), 
+              aux_to_node(nullptr), result(ext_v.size()), strict_mode(strict) {}
+        
+        // Internal constructor: propagates the reverse map for nested calls
+        PolyBuilder(const std::vector<std::string>& v,
+                    std::vector<std::string>& ext_v,
+                    std::unordered_map<std::string, size_t>& trans_map,
+                    std::unordered_map<size_t, std::shared_ptr<SymbolicNode>>* aux_map,
+                    bool strict = false)
+            : vars(v), ext_vars(ext_v), transcendental_map(trans_map),
+              aux_to_node(aux_map), result(ext_v.size()), strict_mode(strict) {}
         
         Poly get_result() const { return result; }
+        bool failed = false; // Set to true if strict_mode and non-polynomial term found
         
         void visit(NumberNode& node) override {
-            result = Poly(vars.size());
+            result = Poly(ext_vars.size());
             
             if (std::holds_alternative<Rational>(node.value)) {
-                result.add_term(std::vector<int>(vars.size(), 0), std::get<Rational>(node.value));
+                result.add_term(std::vector<int>(ext_vars.size(), 0), std::get<Rational>(node.value));
             } else if (std::holds_alternative<BigInt>(node.value)) {
-                result.add_term(std::vector<int>(vars.size(), 0), Rational(std::get<BigInt>(node.value)));
+                result.add_term(std::vector<int>(ext_vars.size(), 0), Rational(std::get<BigInt>(node.value)));
             } else if (std::holds_alternative<lmmc_real_t>(node.value)) {
-                result.add_term(std::vector<int>(vars.size(), 0), Rational((long long)std::get<lmmc_real_t>(node.value)));
+                result.add_term(std::vector<int>(ext_vars.size(), 0), Rational((long long)std::get<lmmc_real_t>(node.value)));
             } 
         }
         
         void visit(VariableNode& node) override {
-            result = Poly(vars.size());
-            auto it = std::find(vars.begin(), vars.end(), node.name);
-            if (it != vars.end()) {
-                Monomial m(vars.size(), 0);
-                m[std::distance(vars.begin(), it)] = 1;
+            result = Poly(ext_vars.size());
+            // First check in the extended variable list
+            auto it = std::find(ext_vars.begin(), ext_vars.end(), node.name);
+            if (it != ext_vars.end()) {
+                Monomial m(ext_vars.size(), 0);
+                m[std::distance(ext_vars.begin(), it)] = 1;
                 result.add_term(m, Rational(1));
             } else {
-                
-                
-                
-                
-                
+                // Variable not in the list: treat as transcendental auxiliary
+                if (strict_mode) {
+                    failed = true;
+                    return;
+                }
+                size_t idx = get_or_create_aux_var(std::make_shared<VariableNode>(node.name));
+                // Resize result to match new ext_vars size
+                result = Poly(ext_vars.size());
+                Monomial m(ext_vars.size(), 0);
+                m[idx] = 1;
+                result.add_term(m, Rational(1));
             }
         }
         
         void visit(AddNode& node) override {
-            Poly sum(vars.size());
+            Poly sum(ext_vars.size());
             for (auto& op : node.operands) {
-                PolyBuilder b(vars);
+                PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
                 op->accept(b);
-                sum = add_poly(sum, b.get_result());
+                if (b.failed) { failed = true; return; }
+                // Resize sum if ext_vars grew
+                Poly b_res = b.get_result();
+                if (b_res.num_vars > sum.num_vars) {
+                    // Extend existing terms with zeros
+                    Poly new_sum(b_res.num_vars);
+                    for (auto& [m, c] : sum.terms) {
+                        Monomial extended = m;
+                        extended.resize(b_res.num_vars, 0);
+                        new_sum.add_term(extended, c);
+                    }
+                    sum = new_sum;
+                } else if (sum.num_vars > b_res.num_vars) {
+                    Poly new_b(sum.num_vars);
+                    for (auto& [m, c] : b_res.terms) {
+                        Monomial extended = m;
+                        extended.resize(sum.num_vars, 0);
+                        new_b.add_term(extended, c);
+                    }
+                    b_res = new_b;
+                }
+                sum = add_poly(sum, b_res);
             }
             result = sum;
         }
         
         void visit(MultiplyNode& node) override {
-            Poly prod(vars.size());
-            prod.add_term(std::vector<int>(vars.size(), 0), Rational(1)); 
+            Poly prod(ext_vars.size());
+            prod.add_term(std::vector<int>(ext_vars.size(), 0), Rational(1)); 
             
             for (auto& op : node.operands) {
-                PolyBuilder b(vars);
+                PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
                 op->accept(b);
-                prod = mul_poly(prod, b.get_result());
+                if (b.failed) { failed = true; return; }
+                Poly b_res = b.get_result();
+                // Resize prod if ext_vars grew
+                if (b_res.num_vars > prod.num_vars) {
+                    Poly new_prod(b_res.num_vars);
+                    for (auto& [m, c] : prod.terms) {
+                        Monomial extended = m;
+                        extended.resize(b_res.num_vars, 0);
+                        new_prod.add_term(extended, c);
+                    }
+                    prod = new_prod;
+                } else if (prod.num_vars > b_res.num_vars) {
+                    Poly new_b(prod.num_vars);
+                    for (auto& [m, c] : b_res.terms) {
+                        Monomial extended = m;
+                        extended.resize(prod.num_vars, 0);
+                        new_b.add_term(extended, c);
+                    }
+                    b_res = new_b;
+                }
+                prod = mul_poly(prod, b_res);
             }
             result = prod;
         }
         
         void visit(PowerNode& node) override {
-            PolyBuilder b_base(vars);
+            PolyBuilder b_base(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
             node.base->accept(b_base);
+            if (b_base.failed) { failed = true; return; }
             Poly base = b_base.get_result();
             
-            
-            
-            
+            // Determine if the exponent is a non-negative integer.
+            // Only then can we expand it as a polynomial.
             long long exp = 0;
+            bool is_integer_exp = false;
             if (node.exponent->is_number()) {
-                 
-                 auto num_node = std::dynamic_pointer_cast<NumberNode>(node.exponent);
-                  if (num_node) {
-                      const auto& val = num_node->value;
-                      if (std::holds_alternative<BigInt>(val)) exp = std::get<BigInt>(val).to_int();
-                      else if (std::holds_alternative<Rational>(val)) exp = (long long)std::get<Rational>(val).to_double(); 
-                      else exp = (long long)std::get<lmmc_real_t>(val);
-                  }
+                auto num_node = std::dynamic_pointer_cast<NumberNode>(node.exponent);
+                if (num_node) {
+                    const auto& val = num_node->value;
+                    if (std::holds_alternative<BigInt>(val)) {
+                        exp = std::get<BigInt>(val).to_int();
+                        is_integer_exp = true;
+                    } else if (std::holds_alternative<Rational>(val)) {
+                        const auto& r = std::get<Rational>(val);
+                        if (r.is_integer()) {
+                            exp = r.to_BigInt().to_int();
+                            is_integer_exp = true;
+                        }
+                    } else if (std::holds_alternative<lmmc_real_t>(val)) {
+                        lmmc_real_t v = std::get<lmmc_real_t>(val);
+                        lmmc_real_t rounded = std::round(v);
+                        int eq;
+                        lmmc_double_nearly_equal_tol(v, rounded, 1e-12, 1e-12, &eq);
+                        if (eq) {
+                            exp = static_cast<long long>(rounded);
+                            is_integer_exp = true;
+                        }
+                    }
+                }
+            }
+            
+            if (!is_integer_exp) {
+                // Non-integer exponent (e.g. x^(1/2), x^y, x^sin(t)):
+                // not a polynomial; introduce as transcendental auxiliary.
+                if (strict_mode) { failed = true; return; }
+                size_t idx = get_or_create_aux_var(
+                    std::make_shared<PowerNode>(node.base, node.exponent));
+                result = Poly(ext_vars.size());
+                Monomial m(ext_vars.size(), 0);
+                m[idx] = 1;
+                result.add_term(m, Rational(1));
+                return;
             }
             
             if (exp == 0) {
-                result = Poly(vars.size());
-                result.add_term(std::vector<int>(vars.size(), 0), Rational(1));
-            } else {
-                Poly res(vars.size());
-                res.add_term(std::vector<int>(vars.size(), 0), Rational(1));
-                for (int i = 0; i < exp; ++i) {
+                result = Poly(ext_vars.size());
+                result.add_term(std::vector<int>(ext_vars.size(), 0), Rational(1));
+            } else if (exp > 0) {
+                Poly res(ext_vars.size());
+                res.add_term(std::vector<int>(ext_vars.size(), 0), Rational(1));
+                for (long long i = 0; i < exp; ++i) {
+                    // Resize if needed
+                    if (base.num_vars > res.num_vars) {
+                        Poly new_res(base.num_vars);
+                        for (auto& [m, c] : res.terms) {
+                            Monomial extended = m;
+                            extended.resize(base.num_vars, 0);
+                            new_res.add_term(extended, c);
+                        }
+                        res = new_res;
+                    }
                     res = mul_poly(res, base);
                 }
                 result = res;
+            } else {
+                // Negative integer exponent: x^(-k), not a polynomial.
+                // Treat the whole power as a transcendental auxiliary.
+                if (strict_mode) { failed = true; return; }
+                size_t idx = get_or_create_aux_var(
+                    std::make_shared<PowerNode>(node.base, node.exponent));
+                result = Poly(ext_vars.size());
+                Monomial m(ext_vars.size(), 0);
+                m[idx] = 1;
+                result.add_term(m, Rational(1));
             }
         }
         
-        void visit(FunctionNode& node) override { result = Poly(vars.size()); } 
-        void visit(MatrixNode& node) override { result = Poly(vars.size()); }
-        void visit(RelationalNode& node) override { result = Poly(vars.size()); }
+        void visit(FunctionNode& node) override {
+            // FunctionNode (sin, cos, exp, etc.) is NOT a polynomial.
+            // Instead of silently returning zero, introduce it as an auxiliary variable.
+            if (strict_mode) { failed = true; return; }
+            
+            // Check if the function's arguments depend on any of the original vars.
+            // If they don't, treat the whole function as a constant coefficient.
+            bool depends_on_vars = false;
+            for (const auto& arg : node.arguments) {
+                for (const auto& v : vars) {
+                    if (depends_on_var(arg, v)) {
+                        depends_on_vars = true;
+                        break;
+                    }
+                }
+                if (depends_on_vars) break;
+            }
+            
+            if (!depends_on_vars) {
+                // Function of constants only: try to evaluate it as an exact rational.
+                SymbolicExpr func_expr(std::make_shared<FunctionNode>(node.type, node.arguments));
+                auto simplified = func_expr.simplify();
+                if (simplified && simplified->is_number()) {
+                    auto nn = std::dynamic_pointer_cast<NumberNode>(simplified->root);
+                    if (nn) {
+                        // Only treat as a constant coefficient if the result is an
+                        // exact rational. lmmc_real_t (floating point) results
+                        // (e.g., sin(1) ~ 0.8415) cannot be represented exactly
+                        // and would lead to incorrect polynomial reductions, so we
+                        // fall through to introducing an auxiliary variable.
+                        if (std::holds_alternative<Rational>(nn->value)) {
+                            result = Poly(ext_vars.size());
+                            result.add_term(std::vector<int>(ext_vars.size(), 0),
+                                            std::get<Rational>(nn->value));
+                            return;
+                        }
+                        if (std::holds_alternative<BigInt>(nn->value)) {
+                            result = Poly(ext_vars.size());
+                            result.add_term(std::vector<int>(ext_vars.size(), 0),
+                                            Rational(std::get<BigInt>(nn->value)));
+                            return;
+                        }
+                        // lmmc_real_t case falls through to auxiliary variable
+                    }
+                }
+            }
+            
+            // Introduce as auxiliary transcendental variable
+            size_t idx = get_or_create_aux_var(
+                std::make_shared<FunctionNode>(node.type, node.arguments));
+            result = Poly(ext_vars.size());
+            Monomial m(ext_vars.size(), 0);
+            m[idx] = 1;
+            result.add_term(m, Rational(1));
+        }
+        
+        void visit(MatrixNode& node) override { 
+            if (strict_mode) { failed = true; return; }
+            result = Poly(ext_vars.size()); 
+        }
+        void visit(RelationalNode& node) override { 
+            if (strict_mode) { failed = true; return; }
+            result = Poly(ext_vars.size()); 
+        }
     };
 
+    // Shared state for transcendental variable tracking across a Groebner basis computation
+    struct PolyContext {
+        std::vector<std::string> ext_vars; // extended variable list (original + auxiliaries)
+        std::unordered_map<std::string, size_t> transcendental_map; // expr-string -> aux index
+        std::unordered_map<size_t, std::shared_ptr<SymbolicNode>> aux_to_node; // aux index -> original AST node
+        size_t num_original_vars; // number of "real" variables (everything beyond is auxiliary)
+        
+        PolyContext(const std::vector<std::string>& vars) 
+            : ext_vars(vars), num_original_vars(vars.size()) {}
+    };
+    
+    // Out-of-line definition of PolyBuilder's preferred constructor
+    // (PolyContext is fully defined now).
+    inline PolyBuilder::PolyBuilder(const std::vector<std::string>& v, PolyContext& ctx, bool strict)
+        : vars(v), ext_vars(ctx.ext_vars), transcendental_map(ctx.transcendental_map),
+          aux_to_node(&ctx.aux_to_node), result(ctx.ext_vars.size()), strict_mode(strict) {}
+    
+    Poly to_poly(const SymbolicExpr& expr, PolyContext& ctx) {
+        PolyBuilder b(ctx.ext_vars, ctx);  // uses the preferred ctor with reverse map
+        expr.root->accept(b);
+        return b.get_result();
+    }
+    
+    // Legacy overload for backward compatibility
     Poly to_poly(const SymbolicExpr& expr, const std::vector<std::string>& vars) {
-        PolyBuilder b(vars);
+        // Create a temporary context (no transcendental tracking across calls)
+        std::vector<std::string> ext_vars = vars;
+        std::unordered_map<std::string, size_t> trans_map;
+        PolyBuilder b(vars, ext_vars, trans_map);
         expr.root->accept(b);
         return b.get_result();
     }
@@ -665,7 +915,7 @@ namespace {
                 mul_ops.push_back(SymbolicFactory::create_number(c));
             }
             
-            for (size_t i = 0; i < m.size(); ++i) {
+            for (size_t i = 0; i < m.size() && i < vars.size(); ++i) {
                 if (m[i] > 0) {
                     auto var = SymbolicFactory::create_variable(vars[i]);
                     if (m[i] == 1) {
@@ -679,6 +929,69 @@ namespace {
             
             if (mul_ops.size() == 0) { 
                 
+            } else if (mul_ops.size() == 1) {
+                add_ops.push_back(mul_ops[0]);
+            } else {
+                add_ops.push_back(SymbolicFactory::create_multiply(mul_ops));
+            }
+        }
+        
+        if (add_ops.empty()) return SymbolicExpr(SymbolicFactory::create_number(BigInt(0)));
+        if (add_ops.size() == 1) return SymbolicExpr(add_ops[0]);
+        return SymbolicExpr(SymbolicFactory::create_add(add_ops));
+    }
+    
+    // Extended from_poly that reconstructs the original AST for transcendental
+    // auxiliary variables using the reverse map in PolyContext.
+    SymbolicExpr from_poly_ext(const Poly& p, const PolyContext& ctx,
+                               const std::vector<std::string>& original_vars) {
+        if (p.terms.empty()) return SymbolicExpr(SymbolicFactory::create_number(BigInt(0)));
+        
+        std::vector<std::shared_ptr<SymbolicNode>> add_ops;
+        
+        for (auto const& [m, c] : p.terms) {
+            std::vector<std::shared_ptr<SymbolicNode>> mul_ops;
+            
+            if (c.get_denominator() == BigInt(1)) {
+                mul_ops.push_back(SymbolicFactory::create_number(c.get_numerator()));
+            } else {
+                mul_ops.push_back(SymbolicFactory::create_number(c));
+            }
+            
+            for (size_t i = 0; i < m.size() && i < ctx.ext_vars.size(); ++i) {
+                if (m[i] > 0) {
+                    // Determine the AST node for this variable index:
+                    // - Original variables (index < num_original_vars): use VariableNode by name
+                    // - Auxiliary variables (index >= num_original_vars): use the original
+                    //   AST stored in aux_to_node, if available.
+                    std::shared_ptr<SymbolicNode> var_node;
+                    if (i < ctx.num_original_vars) {
+                        var_node = SymbolicFactory::create_variable(ctx.ext_vars[i]);
+                    } else {
+                        auto it = ctx.aux_to_node.find(i);
+                        if (it != ctx.aux_to_node.end()) {
+                            // Reuse the original AST node so the result contains
+                            // sin(x), exp(y), etc. — not the internal aux name.
+                            var_node = it->second;
+                        } else {
+                            // Fallback: still use the aux name (shouldn't happen in
+                            // properly tracked computations).
+                            var_node = SymbolicFactory::create_variable(ctx.ext_vars[i]);
+                        }
+                    }
+                    
+                    if (m[i] == 1) {
+                        mul_ops.push_back(var_node);
+                    } else {
+                        auto pow = SymbolicFactory::create_power(
+                            var_node,
+                            SymbolicFactory::create_number(BigInt(m[i])));
+                        mul_ops.push_back(pow);
+                    }
+                }
+            }
+            
+            if (mul_ops.empty()) {
             } else if (mul_ops.size() == 1) {
                 add_ops.push_back(mul_ops[0]);
             } else {
@@ -742,52 +1055,176 @@ namespace {
         return sub_poly(mul_poly_term(f, t1), mul_poly_term(g, t2));
     }
 
-} 
+    // -----------------------------------------------------------------------
+    // LCM Criterion (Buchberger's first criterion):
+    // If lcm(LM(f), LM(g)) == LM(f) * LM(g) (i.e., the leading monomials
+    // are coprime), then S(f,g) reduces to zero and the pair can be skipped.
+    // -----------------------------------------------------------------------
+    bool coprime_leading_monomials(const Poly& f, const Poly& g) {
+        if (f.is_zero() || g.is_zero()) return false;
+        const Monomial& lm_f = f.LM();
+        const Monomial& lm_g = g.LM();
+        for (size_t i = 0; i < lm_f.size() && i < lm_g.size(); ++i) {
+            if (lm_f[i] > 0 && lm_g[i] > 0) return false;
+        }
+        return true;
+    }
+    
+    // -----------------------------------------------------------------------
+    // Chain criterion (Buchberger's second criterion):
+    // The pair (i, j) can be skipped if there exists k such that
+    // LM(g_k) | lcm(LM(g_i), LM(g_j)) and both (i,k) and (k,j) were processed.
+    // -----------------------------------------------------------------------
+    bool chain_criterion(const std::vector<Poly>& G, size_t i, size_t j,
+                         const std::set<std::pair<size_t,size_t>>& processed_pairs) {
+        Monomial L = lcm_mono(G[i].LM(), G[j].LM());
+        for (size_t k = 0; k < G.size(); ++k) {
+            if (k == i || k == j) continue;
+            if (G[k].is_zero()) continue;
+            if (divides_mono(G[k].LM(), L)) {
+                auto pair_ik = (i < k) ? std::make_pair(i, k) : std::make_pair(k, i);
+                auto pair_kj = (k < j) ? std::make_pair(k, j) : std::make_pair(j, k);
+                if (processed_pairs.count(pair_ik) && processed_pairs.count(pair_kj)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Sugar strategy types and helpers
+    // -----------------------------------------------------------------------
+    struct SugarPair {
+        size_t i, j;
+        int sugar_degree;
+        
+        bool operator>(const SugarPair& other) const {
+            return sugar_degree > other.sugar_degree;  // min-heap: lower sugar first
+        }
+    };
+    
+    // Compute sugar degree of S-polynomial S(f, g)
+    int compute_spoly_sugar(const Poly& f, const Poly& g) {
+        Monomial L = lcm_mono(f.LM(), g.LM());
+        // sugar(S(f,g)) = max(sugar(f) + deg(L) - deg(LM(f)), sugar(g) + deg(L) - deg(LM(g)))
+        int deg_L = 0;
+        for (int e : L) deg_L += e;
+        
+        int deg_lm_f = 0;
+        for (int e : f.LM()) deg_lm_f += e;
+        
+        int deg_lm_g = 0;
+        for (int e : g.LM()) deg_lm_g += e;
+        
+        int sugar_f = f.sugar + deg_L - deg_lm_f;
+        int sugar_g = g.sugar + deg_L - deg_lm_g;
+        
+        return std::max(sugar_f, sugar_g);
+    }
+
+} // end anonymous namespace
 
 
 std::vector<SymbolicExpr> Solver::groebner_basis(
     const std::vector<SymbolicExpr>& polynomials,
     const std::vector<std::string>& variables) 
 {
+    // Use a shared PolyContext so transcendental variables are tracked consistently
+    PolyContext ctx(variables);
+    
     std::vector<Poly> G;
     for (const auto& expr : polynomials) {
-        Poly p = to_poly(expr, variables);
+        Poly p = to_poly(expr, ctx);
         if (!p.is_zero()) G.push_back(p);
     }
     
-    
-    
-    
-    std::vector<std::pair<size_t, size_t>> pairs;
-    for (size_t i = 0; i < G.size(); ++i) {
-        for (size_t j = i + 1; j < G.size(); ++j) {
-            pairs.push_back({i, j});
+    // Ensure all polynomials have consistent num_vars
+    size_t max_vars = ctx.ext_vars.size();
+    for (auto& p : G) {
+        if (p.num_vars < max_vars) {
+            Poly resized(max_vars);
+            for (auto& [m, c] : p.terms) {
+                Monomial extended = m;
+                extended.resize(max_vars, 0);
+                resized.add_term(extended, c);
+            }
+            p = resized;
         }
     }
     
+    // Set initial sugar = total degree of the polynomial
+    for (auto& p : G) {
+        if (!p.is_zero()) {
+            int max_deg = 0;
+            for (const auto& [m, c] : p.terms) {
+                int d = 0;
+                for (int e : m) d += e;
+                max_deg = std::max(max_deg, d);
+            }
+            p.sugar = max_deg;
+        }
+    }
+    
+    // Generate initial pairs with sugar degrees (priority queue: lowest sugar first)
+    std::priority_queue<SugarPair, std::vector<SugarPair>, std::greater<SugarPair>> pairs;
+    for (size_t i = 0; i < G.size(); ++i) {
+        for (size_t j = i + 1; j < G.size(); ++j) {
+            int sugar = compute_spoly_sugar(G[i], G[j]);
+            pairs.push({i, j, sugar});
+        }
+    }
+    
+    std::set<std::pair<size_t, size_t>> processed_pairs;
+    
     while (!pairs.empty()) {
-        auto [i, j] = pairs.back();
-        pairs.pop_back();
+        auto [i, j, sugar_deg] = pairs.top();
+        pairs.pop();
         
+        auto canonical_pair = (i < j) ? std::make_pair(i, j) : std::make_pair(j, i);
+        processed_pairs.insert(canonical_pair);
         
+        // --- Criterion 1: Coprime leading monomials (LCM criterion) ---
+        if (coprime_leading_monomials(G[i], G[j])) {
+            continue;
+        }
         
+        // --- Criterion 2: Chain criterion ---
+        if (chain_criterion(G, i, j, processed_pairs)) {
+            continue;
+        }
         
         Poly S = s_poly(G[i], G[j]);
+        
+        // Ensure S has correct num_vars
+        if (S.num_vars < max_vars) {
+            Poly resized(max_vars);
+            for (auto& [m, c] : S.terms) {
+                Monomial extended = m;
+                extended.resize(max_vars, 0);
+                resized.add_term(extended, c);
+            }
+            S = resized;
+        }
+        
         Poly r = reduce(S, G);
         
         if (!r.is_zero()) {
+            // Set sugar of the reduced polynomial
+            r.sugar = sugar_deg;
             size_t new_idx = G.size();
             G.push_back(r);
             for (size_t k = 0; k < new_idx; ++k) {
-                pairs.push_back({k, new_idx});
+                int new_sugar = compute_spoly_sugar(G[k], G[new_idx]);
+                pairs.push({k, new_idx, new_sugar});
             }
         }
     }
     
-    
+    // Convert back using extended context
     std::vector<SymbolicExpr> result;
     for (const auto& p : G) {
-        result.push_back(from_poly(p, variables));
+        result.push_back(from_poly_ext(p, ctx, variables));
     }
     return result;
 }
@@ -997,6 +1434,175 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
     }
 
     return filtered;
+}
+
+std::vector<SymbolicExpr> Solver::reduced_groebner_basis(
+    const std::vector<SymbolicExpr>& polynomials,
+    const std::vector<std::string>& variables)
+{
+    // Step 1: Compute the initial Gröbner basis
+    auto gb_exprs = groebner_basis(polynomials, variables);
+    if (gb_exprs.empty()) return {};
+
+    // Convert to Poly using a shared context
+    PolyContext ctx(variables);
+    std::vector<Poly> G;
+    for (const auto& expr : gb_exprs) {
+        Poly p = to_poly(expr, ctx);
+        if (!p.is_zero()) G.push_back(p);
+    }
+
+    // Ensure consistent num_vars
+    size_t max_vars = ctx.ext_vars.size();
+    for (auto& p : G) {
+        if (p.num_vars < max_vars) {
+            Poly resized(max_vars);
+            for (auto& [m, c] : p.terms) {
+                Monomial extended = m;
+                extended.resize(max_vars, 0);
+                resized.add_term(extended, c);
+            }
+            p = resized;
+        }
+    }
+
+    // Step 2: Minimize — remove g where LM(g) is divisible by LM(h) for some other h
+    std::vector<bool> marked(G.size(), false);
+    for (size_t i = 0; i < G.size(); ++i) {
+        if (marked[i]) continue;
+        for (size_t j = 0; j < G.size(); ++j) {
+            if (i == j || marked[j]) continue;
+            if (divides_mono(G[j].LM(), G[i].LM())) {
+                marked[i] = true;
+                break;
+            }
+        }
+    }
+    std::vector<Poly> minimal;
+    for (size_t i = 0; i < G.size(); ++i) {
+        if (!marked[i]) minimal.push_back(G[i]);
+    }
+
+    // Step 3: Inter-reduce — replace each g with reduce(g, G \ {g})
+    for (size_t i = 0; i < minimal.size(); ++i) {
+        std::vector<Poly> others;
+        for (size_t j = 0; j < minimal.size(); ++j) {
+            if (j != i) others.push_back(minimal[j]);
+        }
+        minimal[i] = reduce(minimal[i], others);
+    }
+
+    // Remove any that became zero after reduction
+    std::vector<Poly> reduced;
+    for (auto& p : minimal) {
+        if (!p.is_zero()) reduced.push_back(p);
+    }
+
+    // Step 4: Make monic — divide each polynomial by its leading coefficient
+    for (auto& p : reduced) {
+        Rational lc = p.LC();
+        if (lc != Rational(0) && lc != Rational(1)) {
+            Rational inv = Rational(1) / lc;
+            Poly monic(p.num_vars);
+            for (auto& [m, c] : p.terms) {
+                monic.add_term(m, c * inv);
+            }
+            p = monic;
+        }
+    }
+
+    // Convert back to SymbolicExpr
+    std::vector<SymbolicExpr> result;
+    for (const auto& p : reduced) {
+        result.push_back(from_poly_ext(p, ctx, variables));
+    }
+    return result;
+}
+
+bool Solver::ideal_membership(
+    const SymbolicExpr& polynomial,
+    const std::vector<SymbolicExpr>& basis,
+    const std::vector<std::string>& variables)
+{
+    // Convert polynomial and basis to Poly using a shared context
+    PolyContext ctx(variables);
+
+    std::vector<Poly> basis_polys;
+    for (const auto& b : basis) {
+        Poly p = to_poly(b, ctx);
+        if (!p.is_zero()) basis_polys.push_back(p);
+    }
+
+    Poly poly = to_poly(polynomial, ctx);
+
+    // Ensure consistent num_vars
+    size_t max_vars = ctx.ext_vars.size();
+    for (auto& p : basis_polys) {
+        if (p.num_vars < max_vars) {
+            Poly resized(max_vars);
+            for (auto& [m, c] : p.terms) {
+                Monomial extended = m;
+                extended.resize(max_vars, 0);
+                resized.add_term(extended, c);
+            }
+            p = resized;
+        }
+    }
+    if (poly.num_vars < max_vars) {
+        Poly resized(max_vars);
+        for (auto& [m, c] : poly.terms) {
+            Monomial extended = m;
+            extended.resize(max_vars, 0);
+            resized.add_term(extended, c);
+        }
+        poly = resized;
+    }
+
+    // Reduce the polynomial by the basis; membership iff remainder is zero
+    Poly remainder = reduce(poly, basis_polys);
+    return remainder.is_zero();
+}
+
+std::vector<SymbolicExpr> Solver::elimination_ideal(
+    const std::vector<SymbolicExpr>& basis,
+    const std::vector<std::string>& variables,
+    int elim_count)
+{
+    if (elim_count <= 0) {
+        return basis; // Nothing to eliminate
+    }
+    if (elim_count >= static_cast<int>(variables.size())) {
+        return {}; // Eliminating all variables leaves nothing
+    }
+
+    // Convert each basis element and check if it only involves
+    // variables at index >= elim_count
+    PolyContext ctx(variables);
+    std::vector<SymbolicExpr> result;
+
+    for (const auto& expr : basis) {
+        Poly p = to_poly(expr, ctx);
+        if (p.is_zero()) continue;
+
+        // Check all monomials: none should have nonzero exponent
+        // for variables at index 0..elim_count-1
+        bool involves_eliminated = false;
+        for (const auto& [m, c] : p.terms) {
+            for (int i = 0; i < elim_count && i < static_cast<int>(m.size()); ++i) {
+                if (m[i] != 0) {
+                    involves_eliminated = true;
+                    break;
+                }
+            }
+            if (involves_eliminated) break;
+        }
+
+        if (!involves_eliminated) {
+            result.push_back(expr);
+        }
+    }
+
+    return result;
 }
 
 } 

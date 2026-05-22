@@ -93,7 +93,7 @@ public:
 class SymbolicVisitor {
 protected:
     int current_depth = 0;
-    static constexpr int MAX_DEPTH = 500;
+    static constexpr int MAX_DEPTH = 200;
 public:
     struct DepthGuard {
         SymbolicVisitor& visitor;
@@ -499,9 +499,9 @@ public:
         const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements, size_t ncols);
 
     
-    const std::variant<DenseStorage, SparseStorage> storage;
     const size_t rows;
     const size_t cols;
+    const std::variant<DenseStorage, SparseStorage> storage;
 
     
     MatrixNode(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid) 
