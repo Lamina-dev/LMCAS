@@ -49,6 +49,10 @@ add_library(lmcas SHARED
     src/matcher.cpp
     src/integration.cpp
     src/solver.cpp
+    src/solve_polynomial.cpp
+    src/solve_transcendental.cpp
+    src/newton_raphson.cpp
+    src/root_of_utils.cpp
     src/dllmain.c
 )
 
@@ -183,7 +187,6 @@ add_test(NAME TestCalculus COMMAND test_calculus)
 add_test(NAME TestTrig COMMAND test_trig)
 add_test(NAME TestTrigRewrite COMMAND test_trig_rewrite)
 add_test(NAME TestSeries COMMAND test_series)
-# add_test(NAME TestSolveExtended COMMAND test_solve_extended)
 add_test(NAME TestASTDepth COMMAND test_ast_depth)
 add_test(NAME TestNormalization COMMAND test_normalization)
 add_test(NAME TestExpandDebug COMMAND test_expand_debug)
@@ -222,4 +225,44 @@ add_test(NAME TestDefiniteIntegration COMMAND test_definite_integration)
 add_executable(test_singularity tests/test_singularity.cpp)
 target_link_libraries(test_singularity PRIVATE lmcas LammpCore)
 add_test(NAME TestSingularity COMMAND test_singularity)
+
+add_executable(test_solve_cubic tests/test_solve_cubic.cpp)
+target_link_libraries(test_solve_cubic PRIVATE lmcas LammpCore)
+add_test(NAME TestSolveCubic COMMAND test_solve_cubic)
+
+add_executable(test_solve_quartic tests/test_solve_quartic.cpp)
+target_link_libraries(test_solve_quartic PRIVATE lmcas LammpCore)
+add_test(NAME TestSolveQuartic COMMAND test_solve_quartic)
+
+add_executable(test_find_rational_roots tests/test_find_rational_roots.cpp)
+target_link_libraries(test_find_rational_roots PRIVATE lmcas LammpCore)
+add_test(NAME TestFindRationalRoots COMMAND test_find_rational_roots)
+
+add_executable(test_solve_factoring tests/test_solve_factoring.cpp)
+target_link_libraries(test_solve_factoring PRIVATE lmcas LammpCore)
+add_test(NAME TestSolveFactoring COMMAND test_solve_factoring)
+
+add_executable(test_solve_transcendental tests/test_solve_transcendental.cpp)
+target_link_libraries(test_solve_transcendental PRIVATE lmcas LammpCore)
+add_test(NAME TestSolveTranscendental COMMAND test_solve_transcendental)
+
+add_executable(test_newton_raphson tests/test_newton_raphson.cpp)
+target_link_libraries(test_newton_raphson PRIVATE lmcas LammpCore)
+add_test(NAME TestNewtonRaphson COMMAND test_newton_raphson)
+
+add_executable(test_rootof tests/test_rootof.cpp)
+target_link_libraries(test_rootof PRIVATE lmcas LammpCore)
+add_test(NAME TestRootOf COMMAND test_rootof)
+
+add_executable(test_sturm_isolation tests/test_sturm_isolation.cpp)
+target_link_libraries(test_sturm_isolation PRIVATE lmcas LammpCore)
+add_test(NAME TestSturmIsolation COMMAND test_sturm_isolation)
+
+add_executable(test_dispatcher_routing tests/test_dispatcher_routing.cpp)
+target_link_libraries(test_dispatcher_routing PRIVATE lmcas LammpCore)
+add_test(NAME TestDispatcherRouting COMMAND test_dispatcher_routing)
+
+add_executable(test_solve_extended tests/test_solve_extended.cpp)
+target_link_libraries(test_solve_extended PRIVATE lmcas LammpCore)
+add_test(NAME TestSolveExtended COMMAND test_solve_extended)
 

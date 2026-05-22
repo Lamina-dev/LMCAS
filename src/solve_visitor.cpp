@@ -7,6 +7,11 @@
 #include "lmmc/numeric.h"
 #include "../include/visitors/normalization_visitor.hpp"
 #include "../include/poly_utils.hpp"
+#include "../include/solve_strategies.hpp"
+#include "../include/solve_polynomial.hpp"
+#include "../include/solve_transcendental.hpp"
+#include "../include/newton_raphson.hpp"
+#include "../include/root_of_utils.hpp"
 
 using namespace lamina;
 
@@ -20,92 +25,23 @@ std::shared_ptr<SymbolicExpr> get_coeff(const Polynomial<SymbolicPolyCoeff>& p, 
     return p.coeffs[deg].val;
 }
 
-std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var_name) {
-    if (!eq) return {};
-    auto simplified_eq = eq->simplify();
-    
-    
-    if (auto rel = std::dynamic_pointer_cast<RelationalNode>(simplified_eq->root)) {
-        auto L = std::make_shared<SymbolicExpr>(rel->left);
-        auto R = std::make_shared<SymbolicExpr>(rel->right);
-        auto diff = SymbolicExpr::add(L, SymbolicExpr::multiply(R, SymbolicExpr::number(-1)));
-        
-        
-        auto poly = symbolic_to_poly<SymbolicPolyCoeff>(diff, var_name);
-        
-        if (!poly.is_zero()) {
-            int max_deg = poly.degree();
-            if (max_deg == 1) {
-                auto a = get_coeff(poly, 1);
-                auto b = get_coeff(poly, 0);
-                
-                auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
-                auto a_inv = SymbolicExpr::power(a, SymbolicExpr::number(-1));
-                
-                bool flip = false;
-                
-                try {
-                    auto a_simp = a->simplify();
-                    if (auto num_a = std::dynamic_pointer_cast<NumberNode>(a_simp->root)) {
-                        if (std::holds_alternative<double>(num_a->value)) {
-                             if (std::get<double>(num_a->value) < 0) flip = true;
-                        } else if (std::holds_alternative<BigInt>(num_a->value)) {
-                             if (std::get<BigInt>(num_a->value).IsNegative()) flip = true;
-                        } else if (std::holds_alternative<Rational>(num_a->value)) {
-                             if (std::get<Rational>(num_a->value).get_numerator().IsNegative()) flip = true;
-                        }
-                    }
-                    
-                } catch(...) {}
-                
-                RelationalNode::Op new_op = rel->op;
-                if (flip) {
-                    switch(rel->op) {
-                        case RelationalNode::Op::LT: new_op = RelationalNode::Op::GT; break;
-                        case RelationalNode::Op::GT: new_op = RelationalNode::Op::LT; break;
-                        case RelationalNode::Op::LEQ: new_op = RelationalNode::Op::GEQ; break;
-                        case RelationalNode::Op::GEQ: new_op = RelationalNode::Op::LEQ; break;
-                        default: break;
-                    }
-                }
-                
-                auto rhs = SymbolicExpr::multiply(neg_b, a_inv)->simplify();
-                auto var_node = std::make_shared<VariableNode>(var_name);
-                auto res_node = std::make_shared<RelationalNode>(var_node, rhs->root, new_op);
-                
-                return { std::make_shared<SymbolicExpr>(res_node) };
-            }
-        }
-        return {}; 
-    }
-    
-    std::shared_ptr<SymbolicExpr> diff_expr = simplified_eq;
-    if (auto rel = std::dynamic_pointer_cast<RelationalNode>(simplified_eq->root)) {
-        if (rel->op == RelationalNode::Op::EQ) {
-             auto L = std::make_shared<SymbolicExpr>(rel->left);
-             auto R = std::make_shared<SymbolicExpr>(rel->right);
-             diff_expr = SymbolicExpr::add(L, SymbolicExpr::multiply(R, SymbolicExpr::number(-1)));
-        }
-    }
-    
-    
-    
-    auto poly = symbolic_to_poly<SymbolicPolyCoeff>(diff_expr, var_name);
-    
-    if (poly.is_zero()) return {}; 
+// solve_polynomial_closed: route polynomial of degree 1-4 to the appropriate closed-form solver
+static std::vector<std::shared_ptr<SymbolicExpr>> solve_polynomial_closed(
+    const Polynomial<SymbolicPolyCoeff>& poly,
+    const std::string& var) {
 
-    int max_deg = poly.degree();
+    int deg = poly.degree();
+    if (deg <= 0) return {};
 
-    if (max_deg == 1) {
-        
-        auto a = get_coeff(poly, 1); 
-        auto b = get_coeff(poly, 0); 
-        
+    if (deg == 1) {
+        auto a = get_coeff(poly, 1);
+        auto b = get_coeff(poly, 0);
         auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
         auto result = SymbolicExpr::divide(neg_b, a);
-        return {result->simplify()};
-    } else if (max_deg == 2) {
-        
+        return { result->simplify() };
+    }
+
+    if (deg == 2) {
         auto a = get_coeff(poly, 2);
         auto b = get_coeff(poly, 1);
         auto c = get_coeff(poly, 0);
@@ -114,21 +50,171 @@ std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<S
         auto ac4 = SymbolicExpr::multiply(SymbolicExpr::number(4), SymbolicExpr::multiply(a, c));
         auto delta = SymbolicExpr::add(b2, SymbolicExpr::multiply(ac4, SymbolicExpr::number(-1)));
 
-        
         auto sqrt_delta = SymbolicExpr::power(delta, SymbolicExpr::number(0.5));
         auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
         auto two_a = SymbolicExpr::multiply(SymbolicExpr::number(2), a);
-        
+
         auto numerator1 = SymbolicExpr::add(neg_b, sqrt_delta);
         auto numerator2 = SymbolicExpr::add(neg_b, SymbolicExpr::multiply(sqrt_delta, SymbolicExpr::number(-1)));
-        
+
         auto x1 = SymbolicExpr::divide(numerator1, two_a);
         auto x2 = SymbolicExpr::divide(numerator2, two_a);
-        
-        return {x1->simplify(), x2->simplify()};
+
+        return { x1->simplify(), x2->simplify() };
+    }
+
+    if (deg == 3) {
+        auto a = get_coeff(poly, 3);
+        auto b = get_coeff(poly, 2);
+        auto c = get_coeff(poly, 1);
+        auto d = get_coeff(poly, 0);
+        return solve_cubic(a, b, c, d, var);
+    }
+
+    if (deg == 4) {
+        auto a = get_coeff(poly, 4);
+        auto b = get_coeff(poly, 3);
+        auto c = get_coeff(poly, 2);
+        auto d = get_coeff(poly, 1);
+        auto e = get_coeff(poly, 0);
+        return solve_quartic(a, b, c, d, e, var);
     }
 
     return {};
+}
+
+// solve_dispatch: the main strategy dispatcher (Design §3.7)
+// Applies strategies in priority order and returns the first non-empty result.
+// Never throws; returns an empty vector when all strategies fail.
+std::vector<std::shared_ptr<SymbolicExpr>> lamina::solve_dispatch(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts) {
+
+    if (!expr) return {};
+
+    // Simplify the input expression
+    auto simplified = expr->simplify();
+    if (!simplified) return {};
+
+    // Convert to f(x) = 0 form: if it's a relational (equality), extract LHS - RHS
+    std::shared_ptr<SymbolicExpr> f_expr = simplified;
+    if (auto rel = std::dynamic_pointer_cast<RelationalNode>(simplified->root)) {
+        if (rel->op == RelationalNode::Op::EQ) {
+            auto L = std::make_shared<SymbolicExpr>(rel->left);
+            auto R = std::make_shared<SymbolicExpr>(rel->right);
+            f_expr = SymbolicExpr::add(L, SymbolicExpr::multiply(R, SymbolicExpr::number(-1)));
+        }
+    }
+
+    // 1. Try polynomial path
+    auto poly = symbolic_to_poly<SymbolicPolyCoeff>(f_expr, var);
+    if (!poly.is_zero() && poly.degree() >= 1) {
+        // Polynomial classification: closed-form for degree 1-4
+        if (poly.degree() <= 4) {
+            auto results = solve_polynomial_closed(poly, var);
+            if (!results.empty()) return results;
+        }
+
+        // Preprocessing for degree > 4: factoring attempts
+        if (poly.degree() > 4) {
+            auto results = solve_by_factoring(poly, var);
+            if (!results.empty()) return results;
+
+            // Irreducible factors of degree > 4: emit RootOf placeholders
+            if (opts.return_rootof) {
+                return make_rootof_solutions(poly, var);
+            }
+        }
+    }
+
+    // 2. Transcendental path
+    auto trans_results = solve_transcendental(f_expr, var);
+    if (!trans_results.empty()) return trans_results;
+
+    // 3. Numeric path (only when allowed)
+    if (opts.allow_numeric) {
+        auto numeric_roots = solve_numeric(f_expr, var, opts);
+        if (!numeric_roots.empty()) {
+            // Convert NumericRoot results to SymbolicExpr::number(value)
+            std::vector<std::shared_ptr<SymbolicExpr>> results;
+            results.reserve(numeric_roots.size());
+            for (const auto& nr : numeric_roots) {
+                results.push_back(SymbolicExpr::number(nr.value));
+            }
+            return results;
+        }
+    }
+
+    // All strategies failed: return empty without throwing
+    return {};
+}
+
+std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var_name) {
+    if (!eq) return {};
+    auto simplified_eq = eq->simplify();
+
+    // Special case: inequality relations (LT, GT, LEQ, GEQ) require sign-aware handling
+    // that is not part of the general solve_dispatch pipeline.
+    if (auto rel = std::dynamic_pointer_cast<RelationalNode>(simplified_eq->root)) {
+        if (rel->op != RelationalNode::Op::EQ) {
+            auto L = std::make_shared<SymbolicExpr>(rel->left);
+            auto R = std::make_shared<SymbolicExpr>(rel->right);
+            auto diff = SymbolicExpr::add(L, SymbolicExpr::multiply(R, SymbolicExpr::number(-1)));
+
+            auto poly = symbolic_to_poly<SymbolicPolyCoeff>(diff, var_name);
+
+            if (!poly.is_zero()) {
+                int max_deg = poly.degree();
+                if (max_deg == 1) {
+                    auto a = get_coeff(poly, 1);
+                    auto b = get_coeff(poly, 0);
+
+                    auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
+                    auto a_inv = SymbolicExpr::power(a, SymbolicExpr::number(-1));
+
+                    bool flip = false;
+
+                    try {
+                        auto a_simp = a->simplify();
+                        if (auto num_a = std::dynamic_pointer_cast<NumberNode>(a_simp->root)) {
+                            if (std::holds_alternative<double>(num_a->value)) {
+                                 if (std::get<double>(num_a->value) < 0) flip = true;
+                            } else if (std::holds_alternative<BigInt>(num_a->value)) {
+                                 if (std::get<BigInt>(num_a->value).IsNegative()) flip = true;
+                            } else if (std::holds_alternative<Rational>(num_a->value)) {
+                                 if (std::get<Rational>(num_a->value).get_numerator().IsNegative()) flip = true;
+                            }
+                        }
+                    } catch(...) {}
+
+                    RelationalNode::Op new_op = rel->op;
+                    if (flip) {
+                        switch(rel->op) {
+                            case RelationalNode::Op::LT: new_op = RelationalNode::Op::GT; break;
+                            case RelationalNode::Op::GT: new_op = RelationalNode::Op::LT; break;
+                            case RelationalNode::Op::LEQ: new_op = RelationalNode::Op::GEQ; break;
+                            case RelationalNode::Op::GEQ: new_op = RelationalNode::Op::LEQ; break;
+                            default: break;
+                        }
+                    }
+
+                    auto rhs = SymbolicExpr::multiply(neg_b, a_inv)->simplify();
+                    auto var_node = std::make_shared<VariableNode>(var_name);
+                    auto res_node = std::make_shared<RelationalNode>(var_node, rhs->root, new_op);
+
+                    return { std::make_shared<SymbolicExpr>(res_node) };
+                }
+            }
+            return {};
+        }
+    }
+
+    // For equality relations and plain expressions, delegate to the strategy dispatcher
+    // with default SolveOptions. The defaults route degree 1-2 through the same
+    // closed-form paths (-b/a and quadratic formula) without invoking preprocessing
+    // or numeric strategies, preserving backward compatibility (Requirements 8.3, 8.4, 8.5).
+    return lamina::solve_dispatch(simplified_eq, var_name, lamina::SolveOptions{});
 }
 
 std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::solve_system(const std::vector<std::shared_ptr<SymbolicExpr>>& equations, const std::vector<std::string>& vars) {

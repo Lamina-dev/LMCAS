@@ -291,11 +291,15 @@ public:
         if (n > 0) {
             BigInt pow10n(10);
             pow10n = pow10n.power(BigInt(n));
-            std::string re = (numerator * pow10n / denominator).ToString();
-            if (n >= re.size()) re.insert(re.begin(), n - re.size() + 1, '0');
+            BigInt scaled = numerator * pow10n / denominator;
+            bool negative = scaled < BigInt(0);
+            if (negative) scaled = scaled * BigInt(-1);
+            std::string re = scaled.ToString();
+            if ((int64_t)re.size() <= n) re.insert(re.begin(), n - re.size() + 1, '0');
             re.insert(re.end() - n,'.');
             while (re.back() == '0') re.pop_back();
             if (re.back() == '.') re.pop_back();
+            if (negative) re.insert(re.begin(), '-');
             return re;
         } else {
             BigInt pow10n(10);
