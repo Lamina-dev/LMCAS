@@ -307,6 +307,10 @@ public:
     void visit(RelationalNode& node) override {
         result = node.clone();
     }
+
+    void visit(LogicalNode& node) override {
+        result = node.clone();
+    }
 };
 
 SymbolicExpr Matcher::replace(const SymbolicExpr& template_expr, const MatchMap& bindings, bool use_rest) {
@@ -535,6 +539,10 @@ public:
     }
 
     void visit(RelationalNode& node) override {
+        result = try_match(node.clone());
+    }
+
+    void visit(LogicalNode& node) override {
         result = try_match(node.clone());
     }
 };

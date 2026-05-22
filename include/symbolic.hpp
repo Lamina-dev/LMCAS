@@ -176,6 +176,12 @@ public:
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations, 
         const std::vector<std::string>& vars);
 
+    // 三参数版本: 支持参数方程组求解 (委托给 ParametricSolver)
+    static std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> solve_system(
+        const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
+        const std::vector<std::string>& unknowns,
+        const std::vector<std::string>& parameters);
+
     
     
     std::shared_ptr<SymbolicExpr> limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, const std::string& direction = "") const;

@@ -25,6 +25,7 @@ class PowerNode;
 class FunctionNode;
 class MatrixNode;
 class RelationalNode;
+class LogicalNode;
 
 
 inline void hash_combine(std::size_t& seed, std::size_t value) {
@@ -117,6 +118,7 @@ public:
     virtual void visit(FunctionNode& node) = 0;
     virtual void visit(MatrixNode& node) = 0;
     virtual void visit(RelationalNode& node) {}
+    virtual void visit(LogicalNode& node) {}
 };
 
 
@@ -697,6 +699,51 @@ public:
             case Op::GT: return ">";
             case Op::LEQ: return "<=";
             case Op::GEQ: return ">=";
+            default: return "?";
+        }
+    }
+};
+
+
+// Logical connective node: And / Or
+class LogicalNode : public SymbolicNode {
+public:
+    enum class Op { And, Or };
+
+    std::shared_ptr<SymbolicNode> left;
+    std::shared_ptr<SymbolicNode> right;
+    Op op;
+
+    LogicalNode(std::shared_ptr<SymbolicNode> l, std::shared_ptr<SymbolicNode> r, Op o)
+        : left(std::move(l)), right(std::move(r)), op(o) {}
+
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<LogicalNode>(left->clone(), right->clone(), op);
+    }
+
+    int type_priority() const override { return 101; }
+
+    std::size_t compute_hash() const override {
+        std::size_t h = std::hash<int>{}((int)op);
+        hash_combine(h, left->hash());
+        hash_combine(h, right->hash());
+        return h;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const LogicalNode&>(other);
+        if (op != o.op) return (int)op < (int)o.op ? -1 : 1;
+        int cmp = left->compare(*o.left);
+        if (cmp != 0) return cmp;
+        return right->compare(*o.right);
+    }
+
+    static std::string op_to_string(Op op) {
+        switch(op) {
+            case Op::And: return "And";
+            case Op::Or: return "Or";
             default: return "?";
         }
     }

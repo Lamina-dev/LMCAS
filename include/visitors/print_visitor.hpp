@@ -29,6 +29,7 @@ public:
     void visit(FunctionNode& node) override;
     void visit(MatrixNode& node) override;
     void visit(RelationalNode& node) override;
+    void visit(LogicalNode& node) override;
 
 private:
     std::stringstream buffer;

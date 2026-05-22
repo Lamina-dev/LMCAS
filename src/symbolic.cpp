@@ -45,6 +45,14 @@ public:
     void visit(MatrixNode& node) override {
         
     }
+    void visit(RelationalNode& node) override {
+        node.left->accept(*this);
+        node.right->accept(*this);
+    }
+    void visit(LogicalNode& node) override {
+        node.left->accept(*this);
+        node.right->accept(*this);
+    }
 };
 
 class SubstituteVisitor : public SymbolicVisitor {
@@ -124,6 +132,22 @@ public:
             }
             result = std::make_shared<MatrixNode>(node.rows, node.cols, new_sparse);
         }
+    }
+
+    void visit(RelationalNode& node) override {
+        node.left->accept(*this);
+        auto new_left = result;
+        node.right->accept(*this);
+        auto new_right = result;
+        result = std::make_shared<RelationalNode>(new_left, new_right, node.op);
+    }
+
+    void visit(LogicalNode& node) override {
+        node.left->accept(*this);
+        auto new_left = result;
+        node.right->accept(*this);
+        auto new_right = result;
+        result = std::make_shared<LogicalNode>(new_left, new_right, node.op);
     }
 };
 
@@ -687,6 +711,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_gcd(const std::shared_ptr<Symbo
             void visit(FunctionNode& n) override { for(auto& arg : n.arguments) arg->accept(*this); }
             void visit(MatrixNode& n) override {}
             void visit(RelationalNode& n) override { n.left->accept(*this); n.right->accept(*this); }
+            void visit(LogicalNode& n) override { n.left->accept(*this); n.right->accept(*this); }
         } vv;
         if (a->root) a->root->accept(vv);
         if (b->root) b->root->accept(vv);

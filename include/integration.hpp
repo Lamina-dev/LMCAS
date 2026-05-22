@@ -100,10 +100,14 @@ public:
     
     // Attempt to integrate expr w.r.t. var.
     // Returns nullptr if this strategy cannot handle the expression.
+    // @param depth Current recursion depth (strategies should pass depth+1
+    //              when calling ctx.integrate_recursive to ensure the global
+    //              depth limit is respected across nested strategy invocations).
     virtual std::shared_ptr<SymbolicExpr> try_integrate(
         const SymbolicExpr& expr,
         const std::string& var,
-        Integrator& ctx) = 0;
+        Integrator& ctx,
+        int depth = 0) = 0;
     
     // Human-readable name for debugging
     virtual std::string name() const = 0;
@@ -117,7 +121,7 @@ public:
 class LAMINA_API TableLookupStrategy : public IntegrationStrategy {
 public:
     std::shared_ptr<SymbolicExpr> try_integrate(
-        const SymbolicExpr& expr, const std::string& var, Integrator& ctx) override;
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
     std::string name() const override { return "TableLookup"; }
 };
 
@@ -125,7 +129,7 @@ public:
 class LAMINA_API PowerRuleStrategy : public IntegrationStrategy {
 public:
     std::shared_ptr<SymbolicExpr> try_integrate(
-        const SymbolicExpr& expr, const std::string& var, Integrator& ctx) override;
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
     std::string name() const override { return "PowerRule"; }
 };
 
@@ -133,7 +137,7 @@ public:
 class LAMINA_API SubstitutionStrategy : public IntegrationStrategy {
 public:
     std::shared_ptr<SymbolicExpr> try_integrate(
-        const SymbolicExpr& expr, const std::string& var, Integrator& ctx) override;
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
     std::string name() const override { return "Substitution"; }
 };
 
@@ -141,7 +145,7 @@ public:
 class LAMINA_API PartialFractionStrategy : public IntegrationStrategy {
 public:
     std::shared_ptr<SymbolicExpr> try_integrate(
-        const SymbolicExpr& expr, const std::string& var, Integrator& ctx) override;
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
     std::string name() const override { return "PartialFraction"; }
 };
 
@@ -149,7 +153,7 @@ public:
 class LAMINA_API IBPStrategy : public IntegrationStrategy {
 public:
     std::shared_ptr<SymbolicExpr> try_integrate(
-        const SymbolicExpr& expr, const std::string& var, Integrator& ctx) override;
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
     std::string name() const override { return "IntegrationByParts"; }
 };
 

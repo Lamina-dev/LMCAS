@@ -216,7 +216,7 @@ void IntegrationTable::load_defaults() {
 // ============================================================================
 
 std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
     
     auto all_entries = ctx.table().get_all_sorted();
     
@@ -243,7 +243,7 @@ std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate(
 // ============================================================================
 
 std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
     
     // Case 1: x -> x^2/2
     if (auto v_node = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
@@ -280,7 +280,7 @@ std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
 // ============================================================================
 
 std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
     
     std::vector<std::shared_ptr<SymbolicNode>> ops;
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
@@ -350,7 +350,7 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
 // ============================================================================
 
 std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
     
     std::shared_ptr<SymbolicExpr> den = nullptr;
     
@@ -437,7 +437,7 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
 // ============================================================================
 
 std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
     
     std::vector<std::shared_ptr<SymbolicNode>> ops;
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
@@ -491,7 +491,7 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
     else if (dv_ops.size() == 1) dv = make_expr_ptr(SymbolicExpr(dv_ops[0]));
     else dv = std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(dv_ops));
     
-    auto v = ctx.integrate_recursive(*dv, var, ctx.max_depth() - 2);
+    auto v = ctx.integrate_recursive(*dv, var, depth + 1);
     if (has_integral_node_check(v->root)) return nullptr;
 
     auto du_ptr = u.differentiate(var);
@@ -500,7 +500,7 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
 
     auto uv = SymbolicExpr::multiply(make_expr_ptr(u), v);
     auto vdu = SymbolicExpr::multiply(v, du);
-    auto int_vdu = ctx.integrate_recursive(*vdu, var, ctx.max_depth() - 1);
+    auto int_vdu = ctx.integrate_recursive(*vdu, var, depth + 1);
     
     return sym_sub(*uv, *int_vdu);
 }
@@ -614,7 +614,7 @@ std::shared_ptr<SymbolicExpr> Integrator::dispatch_strategies(
     const SymbolicExpr& expr, const std::string& var, int depth) {
     
     for (auto& strategy : strategies_) {
-        auto result = strategy->try_integrate(expr, var, *this);
+        auto result = strategy->try_integrate(expr, var, *this, depth);
         if (result) {
             err_stream << "[Integration] Strategy '" << strategy->name() << "' succeeded\n";
             return result;

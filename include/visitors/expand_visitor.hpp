@@ -92,4 +92,12 @@ public:
         auto tail = result;
         result = std::make_shared<RelationalNode>(head, tail, node.op);
     }
+
+    void visit(LogicalNode& node) override {
+        node.left->accept(*this);
+        auto head = result;
+        node.right->accept(*this);
+        auto tail = result;
+        result = std::make_shared<LogicalNode>(head, tail, node.op);
+    }
 };

@@ -53,6 +53,9 @@ add_library(lmcas SHARED
     src/solve_transcendental.cpp
     src/newton_raphson.cpp
     src/root_of_utils.cpp
+    src/interval.cpp
+    src/inequality_solver.cpp
+    src/parametric_solver.cpp
     src/dllmain.c
 )
 
@@ -265,4 +268,24 @@ add_test(NAME TestDispatcherRouting COMMAND test_dispatcher_routing)
 add_executable(test_solve_extended tests/test_solve_extended.cpp)
 target_link_libraries(test_solve_extended PRIVATE lmcas LammpCore)
 add_test(NAME TestSolveExtended COMMAND test_solve_extended)
+
+add_executable(test_interval tests/test_interval.cpp)
+target_link_libraries(test_interval PRIVATE lmcas LammpCore)
+add_test(NAME TestInterval COMMAND test_interval)
+
+add_executable(test_interval_serialize tests/test_interval_serialize.cpp)
+target_link_libraries(test_interval_serialize PRIVATE lmcas LammpCore)
+add_test(NAME TestIntervalSerialize COMMAND test_interval_serialize)
+
+add_executable(test_inequality tests/test_inequality.cpp)
+target_link_libraries(test_inequality PRIVATE lmcas LammpCore)
+add_test(NAME TestInequality COMMAND test_inequality)
+
+add_executable(test_parametric_inequality tests/test_parametric_inequality.cpp)
+target_link_libraries(test_parametric_inequality PRIVATE lmcas LammpCore)
+add_test(NAME TestParametricInequality COMMAND test_parametric_inequality)
+
+add_executable(test_parametric_system tests/test_parametric_system.cpp)
+target_link_libraries(test_parametric_system PRIVATE lmcas LammpCore)
+add_test(NAME TestParametricSystem COMMAND test_parametric_system)
 

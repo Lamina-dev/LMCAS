@@ -1,4 +1,5 @@
 #include "../include/symbolic.hpp"
+#include "../include/parametric_solver.hpp"
 #include <iostream>
 #include <map>
 #include <set>
@@ -256,7 +257,13 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::
     return { solution };
 }
 
-
+// 三参数版本: 委托给 ParametricSolver::solve_system()
+std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::solve_system(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
+    const std::vector<std::string>& unknowns,
+    const std::vector<std::string>& parameters) {
+    return ParametricSolver::solve_system(equations, unknowns, parameters);
+}
 
 
 

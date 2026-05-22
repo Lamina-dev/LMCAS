@@ -146,3 +146,11 @@ void PrintVisitor::visit(RelationalNode& node) {
     buffer << " " << RelationalNode::op_to_string(node.op) << " ";
     node.right->accept(*this);
 }
+
+void PrintVisitor::visit(LogicalNode& node) {
+    buffer << "(";
+    node.left->accept(*this);
+    buffer << " " << LogicalNode::op_to_string(node.op) << " ";
+    node.right->accept(*this);
+    buffer << ")";
+}

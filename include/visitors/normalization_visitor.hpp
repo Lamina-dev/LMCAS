@@ -1414,4 +1414,23 @@ public:
 
         result = std::make_shared<RelationalNode>(new_left, new_right, node.op);
     }
+
+    void visit(LogicalNode& node) override {
+        std::shared_ptr<SymbolicNode> new_left = nullptr;
+        std::shared_ptr<SymbolicNode> new_right = nullptr;
+
+        if (node.left) {
+            node.left->accept(*this);
+            new_left = result;
+        }
+        if (node.right) {
+            node.right->accept(*this);
+            new_right = result;
+        }
+
+        if (!new_left) new_left = node.left;
+        if (!new_right) new_right = node.right;
+
+        result = std::make_shared<LogicalNode>(new_left, new_right, node.op);
+    }
 };

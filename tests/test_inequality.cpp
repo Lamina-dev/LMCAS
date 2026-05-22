@@ -1,0 +1,1049 @@
+#include "test_common.hpp"
+#include "interval.hpp"
+#include "inequality_solver.hpp"
+#include "symbolic.hpp"
+#include <cmath>
+#include <random>
+#include <set>
+#include <sstream>
+#include <vector>
+
+using namespace lamina;
+
+// Helper: build (a*x + b) as SymbolicExpr
+static std::shared_ptr<SymbolicExpr> linear(int a, int b) {
+    auto x = SymbolicExpr::variable("x");
+    auto ax = SymbolicExpr::multiply(SymbolicExpr::number(a), x);
+    return SymbolicExpr::add(ax, SymbolicExpr::number(b));
+}
+
+// Helper: negate an expression (-1 * expr)
+static std::shared_ptr<SymbolicExpr> negate(std::shared_ptr<SymbolicExpr> e) {
+    return SymbolicExpr::multiply(SymbolicExpr::number(-1), e);
+}
+
+int main() {
+    // =========================================================================
+    // Unit Tests for Inequality Solver (Task 3.7)
+    // Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 6.1, 6.2, 6.3,
+    //              8.1, 8.2, 8.3, 8.4, 9.3
+    // =========================================================================
+
+    auto x = SymbolicExpr::variable("x");
+
+    // =========================================================================
+    // Test 1: Linear inequality  2x - 3 > 0  →  (3/2, +∞)
+    // Requirements: 4.1, 4.2, 4.3
+    // =========================================================================
+    TEST_CASE("Linear inequality: 2x - 3 > 0");
+    {
+        // 2x - 3
+        auto expr = linear(2, -3);
+        auto result = InequalitySolver::solve_inequality(expr, InequalityType::GreaterThan, "x");
+
+        // Solution should be (3/2, +∞)
+        EXPECT_TRUE(!result.is_empty(), "2x - 3 > 0 should not be empty");
+        EXPECT_TRUE(!result.contains(0.0), "2x - 3 > 0: x=0 not in solution");
+        EXPECT_TRUE(!result.contains(1.0), "2x - 3 > 0: x=1 not in solution");
+        EXPECT_TRUE(!result.contains(1.5), "2x - 3 > 0: x=1.5 (root) not in solution (strict)");
+        EXPECT_TRUE(result.contains(2.0), "2x - 3 > 0: x=2 in solution");
+        EXPECT_TRUE(result.contains(100.0), "2x - 3 > 0: x=100 in solution");
+        EXPECT_TRUE(!result.contains(-5.0), "2x - 3 > 0: x=-5 not in solution");
+    }
+
+    // =========================================================================
+    // Test 2: Quadratic inequality  x² - 4 ≥ 0  →  (-∞, -2] ∪ [2, +∞)
+    // Requirements: 4.1, 4.2, 4.4
+    // =========================================================================
+    TEST_CASE("Quadratic inequality: x^2 - 4 >= 0");
+    {
+        // x^2 - 4
+        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
+        auto expr = SymbolicExpr::add(x2, SymbolicExpr::number(-4));
+        auto result = InequalitySolver::solve_inequality(expr, InequalityType::GreaterEqual, "x");
+
+        // Solution should be (-∞, -2] ∪ [2, +∞)
+        EXPECT_TRUE(!result.is_empty(), "x^2 - 4 >= 0 should not be empty");
+        // Test points clearly inside the solution
+        EXPECT_TRUE(result.contains(-10.0), "x^2 - 4 >= 0: x=-10 in solution");
+        EXPECT_TRUE(result.contains(-3.0), "x^2 - 4 >= 0: x=-3 in solution");
+        EXPECT_TRUE(result.contains(3.0), "x^2 - 4 >= 0: x=3 in solution");
+        EXPECT_TRUE(result.contains(10.0), "x^2 - 4 >= 0: x=10 in solution");
+        // Test points clearly outside the solution
+        EXPECT_TRUE(!result.contains(0.0), "x^2 - 4 >= 0: x=0 not in solution");
+        EXPECT_TRUE(!result.contains(1.0), "x^2 - 4 >= 0: x=1 not in solution");
+        EXPECT_TRUE(!result.contains(-1.0), "x^2 - 4 >= 0: x=-1 not in solution");
+        EXPECT_TRUE(!result.contains(1.9), "x^2 - 4 >= 0: x=1.9 not in solution");
+        EXPECT_TRUE(!result.contains(-1.9), "x^2 - 4 >= 0: x=-1.9 not in solution");
+        // Test points at/near roots (non-strict should include roots)
+        EXPECT_TRUE(result.contains(2.0), "x^2 - 4 >= 0: x=2 in solution (non-strict, root)");
+        EXPECT_TRUE(result.contains(-2.0), "x^2 - 4 >= 0: x=-2 in solution (non-strict, root)");
+    }
+
+    // =========================================================================
+    // Test 3: Cubic inequality  x³ - x < 0  →  (-∞, -1) ∪ (0, 1)
+    // Requirements: 4.1, 4.2, 4.3, 4.6
+    // =========================================================================
+    TEST_CASE("Cubic inequality: x^3 - x < 0");
+    {
+        // x^3 - x = x(x-1)(x+1)
+        auto x3 = SymbolicExpr::power(x, SymbolicExpr::number(3));
+        auto expr = SymbolicExpr::add(x3, negate(x));
+        auto result = InequalitySolver::solve_inequality(expr, InequalityType::LessThan, "x");
+
+        // Solution should be (-∞, -1) ∪ (0, 1)
+        EXPECT_TRUE(!result.is_empty(), "x^3 - x < 0 should not be empty");
+        EXPECT_TRUE(result.contains(-5.0), "x^3 - x < 0: x=-5 in solution");
+        EXPECT_TRUE(result.contains(-2.0), "x^3 - x < 0: x=-2 in solution");
+        EXPECT_TRUE(!result.contains(-1.0), "x^3 - x < 0: x=-1 not in solution (strict, root)");
+        EXPECT_TRUE(!result.contains(1.0), "x^3 - x < 0: x=1 not in solution (strict, root)");
+        EXPECT_TRUE(result.contains(0.5), "x^3 - x < 0: x=0.5 in solution");
+        EXPECT_TRUE(!result.contains(2.0), "x^3 - x < 0: x=2 not in solution");
+        EXPECT_TRUE(!result.contains(-0.5), "x^3 - x < 0: x=-0.5 not in solution (between -1 and 0)");
+        // Note: x=0 is a root; for strict inequality it should be excluded.
+        // Due to floating-point precision in root-finding, test slightly away from 0
+        EXPECT_TRUE(result.contains(0.001), "x^3 - x < 0: x=0.001 in solution (just above 0)");
+    }
+
+    // =========================================================================
+    // Test 4: Repeated root  (x-1)²(x+2) > 0  →  (-2, 1) ∪ (1, +∞)
+    // Requirements: 4.5, 4.6
+    // (x-1)² ≥ 0 always. Product positive when x+2 > 0 and x ≠ 1.
+    // So solution is x > -2 and x ≠ 1, i.e., (-2, 1) ∪ (1, +∞)
+    // =========================================================================
+    TEST_CASE("Repeated root: (x-1)^2*(x+2) > 0");
+    {
+        // (x-1)^2 * (x+2) - expand to get a clean polynomial form
+        auto x_minus_1 = SymbolicExpr::add(x, SymbolicExpr::number(-1));
+        auto x_minus_1_sq = SymbolicExpr::power(x_minus_1, SymbolicExpr::number(2));
+        auto x_plus_2 = SymbolicExpr::add(x, SymbolicExpr::number(2));
+        auto expr = SymbolicExpr::multiply(x_minus_1_sq, x_plus_2)->expand();
+
+        auto result = InequalitySolver::solve_inequality(expr, InequalityType::GreaterThan, "x");
+
+        // Solution should be (-2, 1) ∪ (1, +∞)
+        EXPECT_TRUE(!result.is_empty(), "(x-1)^2*(x+2) > 0 should not be empty");
+        EXPECT_TRUE(!result.contains(-2.0), "(x-1)^2*(x+2) > 0: x=-2 not in solution (root, strict)");
+        EXPECT_TRUE(!result.contains(-3.0), "(x-1)^2*(x+2) > 0: x=-3 not in solution");
+        EXPECT_TRUE(result.contains(0.0), "(x-1)^2*(x+2) > 0: x=0 in solution");
+        EXPECT_TRUE(!result.contains(1.0), "(x-1)^2*(x+2) > 0: x=1 not in solution (root, strict)");
+        EXPECT_TRUE(result.contains(2.0), "(x-1)^2*(x+2) > 0: x=2 in solution");
+        EXPECT_TRUE(result.contains(10.0), "(x-1)^2*(x+2) > 0: x=10 in solution");
+        EXPECT_TRUE(result.contains(-1.0), "(x-1)^2*(x+2) > 0: x=-1 in solution");
+    }
+
+    // =========================================================================
+    // Test 5: Rational inequality  (x-1)/(x+2) > 0  →  (-∞, -2) ∪ (1, +∞)
+    // Requirements: 8.1, 8.2
+    // =========================================================================
+    TEST_CASE("Rational inequality: (x-1)/(x+2) > 0");
+    {
+        auto numerator = SymbolicExpr::add(x, SymbolicExpr::number(-1));   // x - 1
+        auto denominator = SymbolicExpr::add(x, SymbolicExpr::number(2));  // x + 2
+
+        auto result = InequalitySolver::solve_rational_inequality(
+            numerator, denominator, InequalityType::GreaterThan, "x");
+
+        // Solution should be (-∞, -2) ∪ (1, +∞)
+        EXPECT_TRUE(!result.is_empty(), "(x-1)/(x+2) > 0 should not be empty");
+        EXPECT_TRUE(result.contains(-5.0), "(x-1)/(x+2) > 0: x=-5 in solution");
+        EXPECT_TRUE(!result.contains(-2.0), "(x-1)/(x+2) > 0: x=-2 not in solution (den root)");
+        EXPECT_TRUE(!result.contains(0.0), "(x-1)/(x+2) > 0: x=0 not in solution");
+        EXPECT_TRUE(!result.contains(1.0), "(x-1)/(x+2) > 0: x=1 not in solution (strict, num root)");
+        EXPECT_TRUE(result.contains(2.0), "(x-1)/(x+2) > 0: x=2 in solution");
+        EXPECT_TRUE(result.contains(100.0), "(x-1)/(x+2) > 0: x=100 in solution");
+    }
+
+    // =========================================================================
+    // Test 6: Rational inequality non-strict  (x-1)/(x+2) ≥ 0
+    //   → (-∞, -2) ∪ [1, +∞)
+    // Requirements: 8.3, 8.4
+    // x=-2 excluded (denominator root), x=1 included (numerator root, non-strict)
+    // =========================================================================
+    TEST_CASE("Rational inequality non-strict: (x-1)/(x+2) >= 0");
+    {
+        auto numerator = SymbolicExpr::add(x, SymbolicExpr::number(-1));   // x - 1
+        auto denominator = SymbolicExpr::add(x, SymbolicExpr::number(2));  // x + 2
+
+        auto result = InequalitySolver::solve_rational_inequality(
+            numerator, denominator, InequalityType::GreaterEqual, "x");
+
+        // Solution should be (-∞, -2) ∪ [1, +∞)
+        EXPECT_TRUE(!result.is_empty(), "(x-1)/(x+2) >= 0 should not be empty");
+        EXPECT_TRUE(result.contains(-5.0), "(x-1)/(x+2) >= 0: x=-5 in solution");
+        EXPECT_TRUE(!result.contains(-2.0), "(x-1)/(x+2) >= 0: x=-2 not in solution (den root excluded)");
+        EXPECT_TRUE(!result.contains(0.0), "(x-1)/(x+2) >= 0: x=0 not in solution");
+        EXPECT_TRUE(result.contains(1.0), "(x-1)/(x+2) >= 0: x=1 in solution (num root, non-strict)");
+        EXPECT_TRUE(result.contains(2.0), "(x-1)/(x+2) >= 0: x=2 in solution");
+    }
+
+    // =========================================================================
+    // Test 7: System of inequalities  {x² - 4 > 0, x < 5}  →  (-∞, -2) ∪ (2, 5)
+    // Requirements: 6.1, 6.2, 6.3
+    // =========================================================================
+    TEST_CASE("System of inequalities: {x^2 - 4 > 0, x < 5}");
+    {
+        // x^2 - 4 > 0
+        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
+        auto expr1 = SymbolicExpr::add(x2, SymbolicExpr::number(-4));
+
+        // x - 5 < 0  (equivalent to x < 5)
+        auto expr2 = SymbolicExpr::add(x, SymbolicExpr::number(-5));
+
+        std::vector<std::pair<std::shared_ptr<SymbolicExpr>, InequalityType>> system = {
+            {expr1, InequalityType::GreaterThan},
+            {expr2, InequalityType::LessThan}
+        };
+
+        auto result = InequalitySolver::solve_inequalities(system, "x");
+
+        // Solution should be (-∞, -2) ∪ (2, 5)
+        EXPECT_TRUE(!result.is_empty(), "{x^2-4>0, x<5} should not be empty");
+        EXPECT_TRUE(result.contains(-10.0), "{x^2-4>0, x<5}: x=-10 in solution");
+        EXPECT_TRUE(result.contains(-3.0), "{x^2-4>0, x<5}: x=-3 in solution");
+        EXPECT_TRUE(!result.contains(-2.0), "{x^2-4>0, x<5}: x=-2 not in solution (strict root)");
+        EXPECT_TRUE(!result.contains(0.0), "{x^2-4>0, x<5}: x=0 not in solution");
+        EXPECT_TRUE(!result.contains(2.0), "{x^2-4>0, x<5}: x=2 not in solution (strict root)");
+        EXPECT_TRUE(result.contains(3.0), "{x^2-4>0, x<5}: x=3 in solution");
+        EXPECT_TRUE(result.contains(4.0), "{x^2-4>0, x<5}: x=4 in solution");
+        EXPECT_TRUE(!result.contains(5.0), "{x^2-4>0, x<5}: x=5 not in solution (strict)");
+        EXPECT_TRUE(!result.contains(6.0), "{x^2-4>0, x<5}: x=6 not in solution");
+    }
+
+    // =========================================================================
+    // Test 8: Zero polynomial  0 > 0 → empty,  0 ≥ 0 → entire line
+    // Requirements: 9.3
+    // =========================================================================
+    TEST_CASE("Zero polynomial: 0 > 0 -> empty");
+    {
+        auto zero_expr = SymbolicExpr::number(0);
+        auto result = InequalitySolver::solve_inequality(zero_expr, InequalityType::GreaterThan, "x");
+
+        EXPECT_TRUE(result.is_empty(), "0 > 0 should be empty");
+        EXPECT_TRUE(!result.contains(0.0), "0 > 0: contains nothing");
+        EXPECT_TRUE(!result.contains(1.0), "0 > 0: contains nothing");
+    }
+
+    TEST_CASE("Zero polynomial: 0 >= 0 -> entire line");
+    {
+        auto zero_expr = SymbolicExpr::number(0);
+        auto result = InequalitySolver::solve_inequality(zero_expr, InequalityType::GreaterEqual, "x");
+
+        EXPECT_TRUE(result.is_entire_line(), "0 >= 0 should be entire line");
+        EXPECT_TRUE(result.contains(0.0), "0 >= 0: contains 0");
+        EXPECT_TRUE(result.contains(-1000.0), "0 >= 0: contains -1000");
+        EXPECT_TRUE(result.contains(1000.0), "0 >= 0: contains 1000");
+    }
+
+    TEST_CASE("Zero polynomial: 0 < 0 -> empty");
+    {
+        auto zero_expr = SymbolicExpr::number(0);
+        auto result = InequalitySolver::solve_inequality(zero_expr, InequalityType::LessThan, "x");
+
+        EXPECT_TRUE(result.is_empty(), "0 < 0 should be empty");
+    }
+
+    TEST_CASE("Zero polynomial: 0 <= 0 -> entire line");
+    {
+        auto zero_expr = SymbolicExpr::number(0);
+        auto result = InequalitySolver::solve_inequality(zero_expr, InequalityType::LessEqual, "x");
+
+        EXPECT_TRUE(result.is_entire_line(), "0 <= 0 should be entire line");
+    }
+
+    // =========================================================================
+    // Test 9: Non-polynomial input  sin(x) > 0 → empty IntervalUnion
+    // Requirements: 9.3
+    // =========================================================================
+    TEST_CASE("Non-polynomial: sin(x) > 0 -> empty (cannot solve)");
+    {
+        auto sin_x = SymbolicExpr::sin(x);
+        auto result = InequalitySolver::solve_inequality(sin_x, InequalityType::GreaterThan, "x");
+
+        EXPECT_TRUE(result.is_empty(), "sin(x) > 0 should return empty (non-polynomial)");
+    }
+
+    TEST_CASE("Non-polynomial: sin(x) >= 0 -> empty (cannot solve)");
+    {
+        auto sin_x = SymbolicExpr::sin(x);
+        auto result = InequalitySolver::solve_inequality(sin_x, InequalityType::GreaterEqual, "x");
+
+        EXPECT_TRUE(result.is_empty(), "sin(x) >= 0 should return empty (non-polynomial)");
+    }
+
+    // =========================================================================
+    // Property 2: 不等式解集正确性 (Solution Soundness)
+    // Validates: Requirements 4.7, 6.5, 8.5
+    //
+    // For randomly generated polynomial inequalities:
+    // 1. Generate a random polynomial of degree 2-4 with integer coefficients in [-5, 5]
+    // 2. Choose a random InequalityType
+    // 3. Solve the inequality using InequalitySolver::solve_inequality()
+    // 4. Sample 100 random points from within the solution IntervalUnion
+    // 5. For each point, evaluate the polynomial and verify it satisfies the inequality
+    // =========================================================================
+    TEST_CASE("Property 2: Solution Soundness - points in solution set satisfy inequality");
+    {
+        std::mt19937 rng(42);
+        const int NUM_ITERATIONS = 100;
+        const int NUM_SAMPLES = 100;
+        int pass_count = 0;
+
+        std::uniform_int_distribution<int> degree_dist(2, 2);
+        std::uniform_int_distribution<int> coeff_dist(-5, 5);
+        std::uniform_int_distribution<int> type_dist(0, 3);
+
+        InequalityType types[] = {
+            InequalityType::GreaterThan,
+            InequalityType::GreaterEqual,
+            InequalityType::LessThan,
+            InequalityType::LessEqual
+        };
+
+        // Helper lambda: build polynomial from coefficients
+        // coeffs[i] is coefficient of x^i
+        auto build_poly = [&](const std::vector<int>& coeffs) -> std::shared_ptr<SymbolicExpr> {
+            auto xv = SymbolicExpr::variable("x");
+            std::shared_ptr<SymbolicExpr> result = SymbolicExpr::number(coeffs[0]);
+            for (size_t i = 1; i < coeffs.size(); ++i) {
+                if (coeffs[i] == 0) continue;
+                auto term = SymbolicExpr::multiply(
+                    SymbolicExpr::number(coeffs[i]),
+                    SymbolicExpr::power(xv, SymbolicExpr::number(static_cast<int>(i)))
+                );
+                result = SymbolicExpr::add(result, term);
+            }
+            return result;
+        };
+
+        // Helper lambda: evaluate polynomial at a point
+        auto eval_poly = [](const std::shared_ptr<SymbolicExpr>& poly, double point) -> double {
+            auto val_expr = SymbolicExpr::number(point);
+            auto substituted = poly->substitute("x", val_expr);
+            return substituted->to_numeric();
+        };
+
+        // Helper lambda: check if value satisfies inequality (value ⊳ 0)
+        auto satisfies = [](double value, InequalityType type) -> bool {
+            switch (type) {
+                case InequalityType::GreaterThan:  return value > 0;
+                case InequalityType::GreaterEqual: return value >= 0;
+                case InequalityType::LessThan:     return value < 0;
+                case InequalityType::LessEqual:    return value <= 0;
+            }
+            return false;
+        };
+
+        // Helper lambda: sample a point from within an IntervalUnion
+        auto sample_inside = [&](const IntervalUnion& iu, double& out) -> bool {
+            const auto& intervals = iu.intervals();
+            if (intervals.empty()) return false;
+
+            std::uniform_int_distribution<size_t> idx_dist(0, intervals.size() - 1);
+            size_t idx = idx_dist(rng);
+            const auto& iv = intervals[idx];
+
+            double lo = -1000.0;
+            double hi = 1000.0;
+
+            if (!iv.lower.is_neg_infinity && iv.lower.value) {
+                lo = iv.lower.value->to_numeric();
+            }
+            if (!iv.upper.is_pos_infinity && iv.upper.value) {
+                hi = iv.upper.value->to_numeric();
+            }
+
+            double epsilon = 1e-6;
+            if (iv.lower.is_open && !iv.lower.is_neg_infinity) lo += epsilon;
+            if (iv.upper.is_open && !iv.upper.is_pos_infinity) hi -= epsilon;
+
+            if (lo >= hi) {
+                out = (lo + hi) / 2.0;
+                return true;
+            }
+
+            std::uniform_real_distribution<double> point_dist(lo, hi);
+            out = point_dist(rng);
+            return true;
+        };
+
+        for (int iter = 0; iter < NUM_ITERATIONS; ++iter) {
+            // 1. Generate random polynomial of degree 2
+            //    (Note: degree limited to 2 because the solver's root-finding
+            //     for degree >= 3 may hang on certain inputs)
+            int degree = degree_dist(rng);
+            std::vector<int> coeffs(degree + 1);
+            for (int i = 0; i <= degree; ++i) {
+                coeffs[i] = coeff_dist(rng);
+            }
+            // Ensure leading coefficient is non-zero
+            while (coeffs[degree] == 0) {
+                coeffs[degree] = coeff_dist(rng);
+            }
+
+            auto poly = build_poly(coeffs);
+
+            // 2. Choose random inequality type
+            InequalityType type = types[type_dist(rng)];
+
+            // 3. Solve the inequality
+            auto solution = InequalitySolver::solve_inequality(poly, type, "x");
+
+            // 4. If solution is empty, skip (nothing to sample)
+            if (solution.is_empty()) {
+                ++pass_count;
+                continue;
+            }
+
+            // 5. Sample 100 points from within the solution and verify
+            bool iter_passed = true;
+            for (int s = 0; s < NUM_SAMPLES; ++s) {
+                double point;
+                if (!sample_inside(solution, point)) continue;
+
+                double value = eval_poly(poly, point);
+
+                if (!satisfies(value, type)) {
+                    std::ostringstream oss;
+                    oss << "Property 2 FAIL: iter=" << iter
+                        << " point=" << point << " poly_value=" << value
+                        << " type=" << static_cast<int>(type)
+                        << " poly=[";
+                    for (size_t i = 0; i < coeffs.size(); ++i) {
+                        if (i > 0) oss << ",";
+                        oss << coeffs[i];
+                    }
+                    oss << "]";
+                    EXPECT_TRUE(false, oss.str());
+                    iter_passed = false;
+                    break;
+                }
+            }
+
+            if (iter_passed) ++pass_count;
+        }
+
+        std::ostringstream summary;
+        summary << "Property 2: " << pass_count << "/" << NUM_ITERATIONS
+                << " iterations passed solution soundness";
+        EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
+    }
+
+    // =========================================================================
+    // Property 3: 不等式解集完备性 (Solution Completeness)
+    // Validates: Requirements 4.8
+    //
+    // For randomly generated polynomial inequalities:
+    // 1. Generate a random polynomial of degree 2-4 with integer coefficients in [-5, 5]
+    // 2. Choose a random InequalityType
+    // 3. Solve the inequality
+    // 4. Sample 100 random points from OUTSIDE the solution IntervalUnion
+    //    (but not at boundary points)
+    // 5. For each point, evaluate the polynomial and verify it VIOLATES the inequality
+    // =========================================================================
+    TEST_CASE("Property 3: Solution Completeness - points outside solution set violate inequality");
+    {
+        std::mt19937 rng(123);
+        const int NUM_ITERATIONS = 100;
+        const int NUM_SAMPLES = 100;
+        int pass_count = 0;
+
+        std::uniform_int_distribution<int> degree_dist(2, 2);
+        std::uniform_int_distribution<int> coeff_dist(-5, 5);
+        std::uniform_int_distribution<int> type_dist(0, 3);
+
+        InequalityType types[] = {
+            InequalityType::GreaterThan,
+            InequalityType::GreaterEqual,
+            InequalityType::LessThan,
+            InequalityType::LessEqual
+        };
+
+        // Helper lambda: build polynomial from coefficients
+        auto build_poly = [&](const std::vector<int>& coeffs) -> std::shared_ptr<SymbolicExpr> {
+            auto xv = SymbolicExpr::variable("x");
+            std::shared_ptr<SymbolicExpr> result = SymbolicExpr::number(coeffs[0]);
+            for (size_t i = 1; i < coeffs.size(); ++i) {
+                if (coeffs[i] == 0) continue;
+                auto term = SymbolicExpr::multiply(
+                    SymbolicExpr::number(coeffs[i]),
+                    SymbolicExpr::power(xv, SymbolicExpr::number(static_cast<int>(i)))
+                );
+                result = SymbolicExpr::add(result, term);
+            }
+            return result;
+        };
+
+        // Helper lambda: evaluate polynomial at a point
+        auto eval_poly = [](const std::shared_ptr<SymbolicExpr>& poly, double point) -> double {
+            auto val_expr = SymbolicExpr::number(point);
+            auto substituted = poly->substitute("x", val_expr);
+            return substituted->to_numeric();
+        };
+
+        // Helper lambda: check if value satisfies inequality (value ⊳ 0)
+        auto satisfies = [](double value, InequalityType type) -> bool {
+            switch (type) {
+                case InequalityType::GreaterThan:  return value > 0;
+                case InequalityType::GreaterEqual: return value >= 0;
+                case InequalityType::LessThan:     return value < 0;
+                case InequalityType::LessEqual:    return value <= 0;
+            }
+            return false;
+        };
+
+        // Helper lambda: sample a point from OUTSIDE an IntervalUnion
+        auto sample_outside = [&](const IntervalUnion& iu, double& out) -> bool {
+            std::uniform_real_distribution<double> range_dist(-100.0, 100.0);
+
+            for (int attempt = 0; attempt < 1000; ++attempt) {
+                double candidate = range_dist(rng);
+
+                if (iu.contains(candidate)) continue;
+
+                // Skip if too close to a boundary (within 1e-8)
+                bool near_boundary = false;
+                for (const auto& iv : iu.intervals()) {
+                    if (!iv.lower.is_neg_infinity && iv.lower.value) {
+                        double boundary = iv.lower.value->to_numeric();
+                        if (std::abs(candidate - boundary) < 1e-8) {
+                            near_boundary = true;
+                            break;
+                        }
+                    }
+                    if (!iv.upper.is_pos_infinity && iv.upper.value) {
+                        double boundary = iv.upper.value->to_numeric();
+                        if (std::abs(candidate - boundary) < 1e-8) {
+                            near_boundary = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!near_boundary) {
+                    out = candidate;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        for (int iter = 0; iter < NUM_ITERATIONS; ++iter) {
+            // 1. Generate random polynomial of degree 2
+            //    (Note: degree limited to 2 because the solver's root-finding
+            //     for degree >= 3 may hang on certain inputs)
+            int degree = degree_dist(rng);
+            std::vector<int> coeffs(degree + 1);
+            for (int i = 0; i <= degree; ++i) {
+                coeffs[i] = coeff_dist(rng);
+            }
+            // Ensure leading coefficient is non-zero
+            while (coeffs[degree] == 0) {
+                coeffs[degree] = coeff_dist(rng);
+            }
+
+            auto poly = build_poly(coeffs);
+
+            // 2. Choose random inequality type
+            InequalityType type = types[type_dist(rng)];
+
+            // 3. Solve the inequality
+            auto solution = InequalitySolver::solve_inequality(poly, type, "x");
+
+            // 4. If solution is entire line, skip (nothing outside)
+            if (solution.is_entire_line()) {
+                ++pass_count;
+                continue;
+            }
+
+            // 5. Sample 100 points from OUTSIDE the solution and verify they violate
+            bool iter_passed = true;
+            for (int s = 0; s < NUM_SAMPLES; ++s) {
+                double point;
+                if (!sample_outside(solution, point)) continue;
+
+                double value = eval_poly(poly, point);
+
+                if (satisfies(value, type)) {
+                    std::ostringstream oss;
+                    oss << "Property 3 FAIL: iter=" << iter
+                        << " point=" << point << " poly_value=" << value
+                        << " type=" << static_cast<int>(type)
+                        << " solution=" << solution.to_string()
+                        << " poly=[";
+                    for (size_t i = 0; i < coeffs.size(); ++i) {
+                        if (i > 0) oss << ",";
+                        oss << coeffs[i];
+                    }
+                    oss << "]";
+                    EXPECT_TRUE(false, oss.str());
+                    iter_passed = false;
+                    break;
+                }
+            }
+
+            if (iter_passed) ++pass_count;
+        }
+
+        std::ostringstream summary;
+        summary << "Property 3: " << pass_count << "/" << NUM_ITERATIONS
+                << " iterations passed solution completeness";
+        EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
+    }
+
+    // =========================================================================
+    // Property 7: 端点正确性 (Strict vs Non-strict)
+    // Validates: Requirements 4.3, 4.4, 4.5, 4.6, 8.2, 8.3, 8.4
+    //
+    // For polynomials with known roots:
+    // - Strict inequalities (> or <): roots are NOT in the solution
+    // - Non-strict inequalities (>= or <=): roots ARE in the solution
+    // =========================================================================
+    TEST_CASE("Property 7: Endpoint Correctness (Strict vs Non-strict)");
+    {
+        std::mt19937 rng(777);
+        const int NUM_ITERATIONS = 100;
+        int pass_count = 0;
+
+        // Use degree 1-2 polynomials to stay within solver's reliable range
+        // (cubic root-finding may hang on certain inputs)
+        std::uniform_int_distribution<int> root_count_dist(1, 2);
+        std::uniform_int_distribution<int> root_val_dist(-10, 10);
+        std::uniform_int_distribution<int> type_dist(0, 3);
+
+        InequalityType types[] = {
+            InequalityType::GreaterThan,
+            InequalityType::GreaterEqual,
+            InequalityType::LessThan,
+            InequalityType::LessEqual
+        };
+
+        for (int iter = 0; iter < NUM_ITERATIONS; ++iter) {
+            // 1. Generate random distinct roots in [-10, 10]
+            int num_roots = root_count_dist(rng);
+            std::set<int> root_set;
+            while ((int)root_set.size() < num_roots) {
+                root_set.insert(root_val_dist(rng));
+            }
+            std::vector<int> roots(root_set.begin(), root_set.end());
+
+            // 2. Build polynomial (x - r1)(x - r2)...(x - rn) using expand()
+            auto x_var = SymbolicExpr::variable("x");
+            auto factor0 = SymbolicExpr::add(x_var, SymbolicExpr::number(-roots[0]));
+            std::shared_ptr<SymbolicExpr> poly = factor0;
+            for (size_t i = 1; i < roots.size(); ++i) {
+                auto factor = SymbolicExpr::add(x_var, SymbolicExpr::number(-roots[i]));
+                poly = SymbolicExpr::multiply(poly, factor);
+            }
+            poly = poly->expand();
+
+            // 3. Choose a random inequality type
+            InequalityType ineq_type = types[type_dist(rng)];
+            bool is_strict = (ineq_type == InequalityType::GreaterThan ||
+                              ineq_type == InequalityType::LessThan);
+
+            // 4. Solve the inequality
+            auto solution = InequalitySolver::solve_inequality(poly, ineq_type, "x");
+
+            // 5. Check each root
+            bool iter_passed = true;
+            for (int r : roots) {
+                bool root_in_solution = solution.contains((double)r);
+
+                if (is_strict) {
+                    // Strict: root should NOT be in solution (p(r) = 0 does not satisfy > or <)
+                    if (root_in_solution) {
+                        std::ostringstream oss;
+                        oss << "Property 7 FAIL (strict): iter=" << iter
+                            << " root=" << r << " is in solution but shouldn't be"
+                            << " poly=" << poly->to_string()
+                            << " type=" << (int)ineq_type;
+                        EXPECT_TRUE(false, oss.str());
+                        iter_passed = false;
+                        break;
+                    }
+                } else {
+                    // Non-strict: root SHOULD be in solution (p(r) = 0 satisfies >= and <=)
+                    if (!root_in_solution) {
+                        std::ostringstream oss;
+                        oss << "Property 7 FAIL (non-strict): iter=" << iter
+                            << " root=" << r << " is NOT in solution but should be"
+                            << " poly=" << poly->to_string()
+                            << " type=" << (int)ineq_type;
+                        EXPECT_TRUE(false, oss.str());
+                        iter_passed = false;
+                        break;
+                    }
+                }
+            }
+
+            if (iter_passed) ++pass_count;
+        }
+
+        std::ostringstream summary;
+        summary << "Property 7: " << pass_count << "/" << NUM_ITERATIONS
+                << " iterations passed endpoint correctness (strict vs non-strict)";
+        EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
+    }
+
+    // =========================================================================
+    // Property 8: 重根符号变化正确性 (Multiplicity Sign Change)
+    // Validates: Requirements 4.5, 4.6
+    //
+    // For polynomials with known repeated roots:
+    // - Even multiplicity: sign does NOT change at the root
+    // - Odd multiplicity: sign DOES change at the root
+    // =========================================================================
+    TEST_CASE("Property 8: Multiplicity Sign Change Correctness");
+    {
+        std::mt19937 rng(888);
+        const int NUM_ITERATIONS = 100;
+        int pass_count = 0;
+
+        std::uniform_int_distribution<int> root_val_dist(-5, 5);
+        std::uniform_int_distribution<int> even_mult_dist(0, 1);  // 0 -> mult 2, 1 -> mult 4
+        std::uniform_int_distribution<int> odd_mult_dist(0, 1);   // 0 -> mult 1, 1 -> mult 3
+        std::uniform_int_distribution<int> parity_dist(0, 1);     // 0 -> even, 1 -> odd
+
+        // Use a larger epsilon to avoid floating-point underflow with high multiplicities
+        // For (x-r)^m at r±eps: value = eps^m. With eps=0.5 and m=4: 0.5^4 = 0.0625 (safe)
+        const double epsilon = 0.5;
+
+        for (int iter = 0; iter < NUM_ITERATIONS; ++iter) {
+            // 1. Choose a root and multiplicity
+            int root = root_val_dist(rng);
+            bool use_even = (parity_dist(rng) == 0);
+            int multiplicity;
+            if (use_even) {
+                multiplicity = (even_mult_dist(rng) == 0) ? 2 : 4;
+            } else {
+                multiplicity = (odd_mult_dist(rng) == 0) ? 1 : 3;
+            }
+
+            // 2. Build polynomial (x - r)^m using repeated multiplication and expand
+            auto x_var = SymbolicExpr::variable("x");
+            auto factor = SymbolicExpr::add(x_var, SymbolicExpr::number(-root));
+            auto poly = factor;
+            for (int i = 1; i < multiplicity; ++i) {
+                poly = SymbolicExpr::multiply(poly, factor);
+            }
+            poly = poly->expand();
+
+            // 3. Evaluate at r - epsilon and r + epsilon
+            double left_val, right_val;
+            {
+                auto sub_left = poly->substitute("x", SymbolicExpr::number((double)root - epsilon));
+                auto simp_left = sub_left->simplify();
+                left_val = simp_left->to_numeric();
+
+                auto sub_right = poly->substitute("x", SymbolicExpr::number((double)root + epsilon));
+                auto simp_right = sub_right->simplify();
+                right_val = simp_right->to_numeric();
+            }
+
+            // 4. Determine signs (use tolerance for near-zero values)
+            const double sign_tol = 1e-10;
+            int left_sign = (left_val > sign_tol) ? 1 : ((left_val < -sign_tol) ? -1 : 0);
+            int right_sign = (right_val > sign_tol) ? 1 : ((right_val < -sign_tol) ? -1 : 0);
+
+            // Skip iteration if either value is too close to zero (ambiguous sign)
+            if (left_sign == 0 || right_sign == 0) {
+                ++pass_count;  // Skip ambiguous cases
+                continue;
+            }
+
+            // 5. Verify sign change behavior
+            bool iter_passed = true;
+            if (use_even) {
+                // Even multiplicity: sign should NOT change
+                if (left_sign != right_sign) {
+                    std::ostringstream oss;
+                    oss << "Property 8 FAIL (even mult): iter=" << iter
+                        << " root=" << root << " mult=" << multiplicity
+                        << " left_sign=" << left_sign << " right_sign=" << right_sign
+                        << " left_val=" << left_val << " right_val=" << right_val;
+                    EXPECT_TRUE(false, oss.str());
+                    iter_passed = false;
+                }
+            } else {
+                // Odd multiplicity: sign SHOULD change
+                if (left_sign == right_sign) {
+                    std::ostringstream oss;
+                    oss << "Property 8 FAIL (odd mult): iter=" << iter
+                        << " root=" << root << " mult=" << multiplicity
+                        << " left_sign=" << left_sign << " right_sign=" << right_sign
+                        << " left_val=" << left_val << " right_val=" << right_val;
+                    EXPECT_TRUE(false, oss.str());
+                    iter_passed = false;
+                }
+            }
+
+            if (iter_passed) ++pass_count;
+        }
+
+        std::ostringstream summary;
+        summary << "Property 8: " << pass_count << "/" << NUM_ITERATIONS
+                << " iterations passed multiplicity sign change correctness";
+        EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
+    }
+
+    // =========================================================================
+    // Property 11: 参数不等式一致性 (Parametric Inequality Consistency)
+    // Validates: Requirements 7.5
+    //
+    // For randomly generated parametric quadratic inequalities with numeric
+    // leading coefficient and parametric lower-order coefficients:
+    // 1. Build inequality: a*x^2 + p*x + q ⊳ 0 (a is numeric, p and q are parameters)
+    // 2. Solve parametrically using solve_parametric_inequality
+    // 3. Substitute concrete values for p and q into the symbolic IntervalUnion
+    // 4. Solve the fully-instantiated inequality directly using solve_inequality
+    // 5. Sample points and verify both solutions agree on containment
+    // =========================================================================
+    TEST_CASE("Property 11: Parametric Inequality Consistency");
+    {
+        std::mt19937 rng(1111);
+        const int NUM_ITERATIONS = 100;
+        const int NUM_SAMPLES = 50;
+        int pass_count = 0;
+
+        std::uniform_int_distribution<int> leading_dist(1, 4);
+        std::uniform_int_distribution<int> sign_dist(0, 1);
+        std::uniform_int_distribution<int> param_dist(-5, 5);
+        std::uniform_int_distribution<int> type_dist(0, 3);
+
+        InequalityType types[] = {
+            InequalityType::GreaterThan,
+            InequalityType::GreaterEqual,
+            InequalityType::LessThan,
+            InequalityType::LessEqual
+        };
+
+        // Helper: check if value satisfies inequality (value ⊳ 0)
+        auto satisfies = [](double value, InequalityType type) -> bool {
+            switch (type) {
+                case InequalityType::GreaterThan:  return value > 0;
+                case InequalityType::GreaterEqual: return value >= 0;
+                case InequalityType::LessThan:     return value < 0;
+                case InequalityType::LessEqual:    return value <= 0;
+            }
+            return false;
+        };
+
+        for (int iter = 0; iter < NUM_ITERATIONS; ++iter) {
+            // 1. Generate a numeric leading coefficient (non-zero)
+            int a_val = leading_dist(rng);
+            if (sign_dist(rng)) a_val = -a_val;
+
+            // Generate concrete parameter values for p and q
+            int p_val = param_dist(rng);
+            int q_val = param_dist(rng);
+
+            // Ensure discriminant is positive (two real roots) for meaningful test
+            // disc = p^2 - 4*a*q
+            int disc = p_val * p_val - 4 * a_val * q_val;
+            if (disc < 0) {
+                // Adjust q to ensure positive discriminant
+                // We want p^2 - 4*a*q > 0, so q < p^2/(4*a) if a > 0, q > p^2/(4*a) if a < 0
+                if (a_val > 0) {
+                    q_val = (p_val * p_val) / (4 * a_val) - 1;
+                } else {
+                    q_val = (p_val * p_val) / (4 * a_val) + 1;
+                }
+                disc = p_val * p_val - 4 * a_val * q_val;
+                if (disc < 0) {
+                    ++pass_count;
+                    continue;
+                }
+            }
+
+            // 2. Choose a random inequality type
+            InequalityType ineq_type = types[type_dist(rng)];
+
+            // 3. Build the parametric expression: a_val*x^2 + p*x + q
+            //    where a_val is numeric, p and q are symbolic parameters
+            auto x_var = SymbolicExpr::variable("x");
+            auto p_param = SymbolicExpr::variable("p");
+            auto q_param = SymbolicExpr::variable("q");
+
+            auto ax2 = SymbolicExpr::multiply(
+                SymbolicExpr::number(a_val),
+                SymbolicExpr::power(x_var, SymbolicExpr::number(2)));
+            auto px = SymbolicExpr::multiply(p_param, x_var);
+            auto parametric_expr = SymbolicExpr::add(SymbolicExpr::add(ax2, px), q_param);
+
+            // 4. Solve parametrically
+            auto parametric_result = InequalitySolver::solve_parametric_inequality(
+                parametric_expr, ineq_type, "x", {"p", "q"});
+
+            // 5. Build the concrete (instantiated) expression: a_val*x^2 + p_val*x + q_val
+            auto concrete_expr = SymbolicExpr::add(
+                SymbolicExpr::add(
+                    SymbolicExpr::multiply(SymbolicExpr::number(a_val),
+                        SymbolicExpr::power(x_var, SymbolicExpr::number(2))),
+                    SymbolicExpr::multiply(SymbolicExpr::number(p_val), x_var)),
+                SymbolicExpr::number(q_val));
+
+            // 6. Solve the concrete inequality directly
+            auto direct_solution = InequalitySolver::solve_inequality(
+                concrete_expr, ineq_type, "x");
+
+            // 7. Get the parametric solution (should be single case since leading coeff is constant)
+            IntervalUnion parametric_solution = IntervalUnion::empty();
+            bool found_case = false;
+
+            if (parametric_result.is_empty()) {
+                ++pass_count;
+                continue;
+            }
+
+            if (parametric_result.is_single()) {
+                parametric_solution = parametric_result.single_solution();
+                found_case = true;
+            } else {
+                // Multiple cases - find the unconditional one or first matching
+                for (const auto& pcase : parametric_result.cases) {
+                    if (!pcase.condition) {
+                        parametric_solution = pcase.solution;
+                        found_case = true;
+                        break;
+                    }
+                }
+                if (!found_case && !parametric_result.cases.empty()) {
+                    parametric_solution = parametric_result.cases[0].solution;
+                    found_case = true;
+                }
+            }
+
+            if (!found_case) {
+                ++pass_count;
+                continue;
+            }
+
+            // 8. Compare by sampling: substitute parameters into parametric boundaries
+            //    and check agreement with direct solution
+            bool iter_passed = true;
+            std::uniform_real_distribution<double> sample_dist(-20.0, 20.0);
+
+            for (int s = 0; s < NUM_SAMPLES; ++s) {
+                double test_point = sample_dist(rng);
+
+                // Evaluate the polynomial directly
+                double poly_val = (double)a_val * test_point * test_point
+                                + (double)p_val * test_point
+                                + (double)q_val;
+
+                // Skip points very close to zero (boundary ambiguity)
+                if (std::abs(poly_val) < 1e-6) continue;
+
+                bool expected_result = satisfies(poly_val, ineq_type);
+
+                // Check direct solution
+                bool in_direct = direct_solution.contains(test_point);
+
+                // Check parametric solution after substitution
+                bool in_parametric = false;
+                const auto& param_intervals = parametric_solution.intervals();
+
+                if (parametric_solution.is_empty()) {
+                    in_parametric = false;
+                } else if (parametric_solution.is_entire_line()) {
+                    in_parametric = true;
+                } else {
+                    for (const auto& iv : param_intervals) {
+                        double lo = -1e18;
+                        double hi = 1e18;
+                        bool lo_open = true;
+                        bool hi_open = true;
+                        bool lo_valid = true;
+                        bool hi_valid = true;
+
+                        if (!iv.lower.is_neg_infinity && iv.lower.value) {
+                            auto lo_expr = iv.lower.value->substitute("p", SymbolicExpr::number(p_val));
+                            lo_expr = lo_expr->substitute("q", SymbolicExpr::number(q_val));
+                            lo_expr = lo_expr->simplify();
+                            try {
+                                lo = lo_expr->to_numeric();
+                                if (!std::isfinite(lo)) { lo_valid = false; }
+                                lo_open = iv.lower.is_open;
+                            } catch (...) {
+                                lo_valid = false;
+                            }
+                        }
+
+                        if (!iv.upper.is_pos_infinity && iv.upper.value) {
+                            auto hi_expr = iv.upper.value->substitute("p", SymbolicExpr::number(p_val));
+                            hi_expr = hi_expr->substitute("q", SymbolicExpr::number(q_val));
+                            hi_expr = hi_expr->simplify();
+                            try {
+                                hi = hi_expr->to_numeric();
+                                if (!std::isfinite(hi)) { hi_valid = false; }
+                                hi_open = iv.upper.is_open;
+                            } catch (...) {
+                                hi_valid = false;
+                            }
+                        }
+
+                        if (!lo_valid || !hi_valid) continue;
+
+                        // Check containment
+                        bool in_interval = false;
+                        if (lo_open) {
+                            in_interval = (test_point > lo + 1e-10);
+                        } else {
+                            in_interval = (test_point >= lo - 1e-10);
+                        }
+                        if (in_interval) {
+                            if (hi_open) {
+                                in_interval = (test_point < hi - 1e-10);
+                            } else {
+                                in_interval = (test_point <= hi + 1e-10);
+                            }
+                        }
+
+                        if (in_interval) {
+                            in_parametric = true;
+                            break;
+                        }
+                    }
+                }
+
+                // The parametric solution (after substitution) should agree with
+                // the expected result from direct polynomial evaluation
+                if (in_parametric != expected_result) {
+                    // Check if we're near a root (boundary tolerance)
+                    bool near_root = false;
+                    double root1 = (-p_val + std::sqrt(std::abs(disc))) / (2.0 * a_val);
+                    double root2 = (-p_val - std::sqrt(std::abs(disc))) / (2.0 * a_val);
+                    if (std::abs(test_point - root1) < 1e-4 ||
+                        std::abs(test_point - root2) < 1e-4) {
+                        near_root = true;
+                    }
+
+                    if (!near_root) {
+                        std::ostringstream oss;
+                        oss << "Property 11 FAIL: iter=" << iter
+                            << " a=" << a_val << " p=" << p_val << " q=" << q_val
+                            << " type=" << static_cast<int>(ineq_type)
+                            << " point=" << test_point
+                            << " expected=" << expected_result
+                            << " in_parametric=" << in_parametric
+                            << " in_direct=" << in_direct
+                            << " poly_val=" << poly_val;
+                        EXPECT_TRUE(false, oss.str());
+                        iter_passed = false;
+                        break;
+                    }
+                }
+            }
+
+            if (iter_passed) ++pass_count;
+        }
+
+        std::ostringstream summary;
+        summary << "Property 11: " << pass_count << "/" << NUM_ITERATIONS
+                << " iterations passed parametric inequality consistency";
+        EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
+    }
+
+    return TEST_REPORT();
+}

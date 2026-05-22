@@ -864,6 +864,10 @@ namespace {
             if (strict_mode) { failed = true; return; }
             result = Poly(ext_vars.size()); 
         }
+        void visit(LogicalNode& node) override { 
+            if (strict_mode) { failed = true; return; }
+            result = Poly(ext_vars.size()); 
+        }
     };
 
     // Shared state for transcendental variable tracking across a Groebner basis computation
