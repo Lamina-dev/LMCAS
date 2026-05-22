@@ -1,3 +1,7 @@
+/**
+ * @file symbolic_ast.hpp
+ * @brief AST 节点定义：NumberNode, VariableNode, AddNode, MultiplyNode, PowerNode, FunctionNode, MatrixNode, RelationalNode, LogicalNode。
+ */
 #pragma once
 #include <memory>
 #include <vector>
@@ -25,10 +29,21 @@ class MatrixNode;
 class RelationalNode;
 class LogicalNode;
 
+/**
+ * @brief 将一个哈希值混合到种子中，用于组合多个字段的哈希。
+ * @param seed 当前哈希种子，混合后就地更新
+ * @param value 要混合的哈希值
+ */
 inline void hash_combine(std::size_t& seed, std::size_t value) {
     seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
+/**
+ * @brief 符号表达式 AST 节点基类。
+ *
+ * 所有具体节点（数值、变量、运算符、函数等）均继承此类。
+ * 提供哈希、比较、克隆等通用接口，支持 Visitor 模式遍历。
+ */
 class SymbolicNode {
 protected:
     mutable std::atomic<std::size_t> cached_hash{0};
@@ -38,18 +53,28 @@ protected:
     SymbolicNode(const SymbolicNode&) : cached_hash(0), hash_computed(false) {}
     SymbolicNode& operator=(const SymbolicNode&) { return *this; }
 
+    /** @brief 计算当前节点的哈希值（由子类实现）。 */
     virtual std::size_t compute_hash() const = 0;
 
+    /** @brief 与同类型节点进行比较（由子类实现）。 */
     virtual int compare_same_type(const SymbolicNode& other) const = 0;
 
 public:
     virtual ~SymbolicNode() = default;
+
+    /** @brief 接受 Visitor 访问。 */
     virtual void accept(SymbolicVisitor& visitor) = 0;
 
+    /** @brief 深拷贝当前节点及其子树。 */
     virtual std::shared_ptr<SymbolicNode> clone() const = 0;
 
+    /** @brief 返回节点类型的排序优先级，用于规范化排序。 */
     virtual int type_priority() const = 0;
 
+    /**
+     * @brief 获取节点哈希值（带缓存）。
+     * @return 哈希值
+     */
     std::size_t hash() const {
         if (!hash_computed.load(std::memory_order_acquire)) {
             std::size_t h = compute_hash();
@@ -60,6 +85,11 @@ public:
         return cached_hash.load(std::memory_order_relaxed);
     }
 
+    /**
+     * @brief 与另一个节点进行全序比较。
+     * @param other 待比较的节点
+     * @return 小于返回 -1，等于返回 0，大于返回 1
+     */
     int compare(const SymbolicNode& other) const {
         if (type_priority() != other.type_priority()) {
             return type_priority() < other.type_priority() ? -1 : 1;
@@ -67,6 +97,11 @@ public:
         return compare_same_type(other);
     }
 
+    /**
+     * @brief 判断两个节点是否结构相等。
+     * @param other 待比较的节点
+     * @return 相等返回 true
+     */
     bool equals(const SymbolicNode& other) const {
         if (this == &other) return true;
         if (hash() != other.hash()) return false;
@@ -74,16 +109,26 @@ public:
         return compare_same_type(other) == 0;
     }
 
+    /** @brief 判断节点是否为数值节点。 */
     virtual bool is_number() const { return false; }
+    /** @brief 判断节点数值是否为 1。 */
     virtual bool is_one() const { return false; }
+    /** @brief 判断节点数值是否为 0。 */
     virtual bool is_zero() const { return false; }
 };
 
+/**
+ * @brief AST 访问者基类（Visitor 模式）。
+ *
+ * 子类实现各 visit 方法以对不同节点类型执行操作。
+ * 内置深度保护，防止递归过深导致栈溢出。
+ */
 class SymbolicVisitor {
 protected:
     int current_depth = 0;
     static constexpr int MAX_DEPTH = 200;
 public:
+    /** @brief 深度守卫，进入时递增深度，超限时抛出异常。 */
     struct DepthGuard {
         SymbolicVisitor& visitor;
         DepthGuard(SymbolicVisitor& v) : visitor(v) {
@@ -109,12 +154,14 @@ public:
     virtual void visit(LogicalNode& node) {}
 };
 
+/** @brief 基于节点哈希的哈希函数对象，用于无序容器。 */
 struct NodeHash {
     std::size_t operator()(const std::shared_ptr<SymbolicNode>& node) const {
         return node ? node->hash() : 0;
     }
 };
 
+/** @brief 基于节点结构相等性的比较函数对象，用于无序容器。 */
 struct NodeEqual {
     bool operator()(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) const {
         if (!lhs || !rhs) return lhs == rhs;
@@ -127,22 +174,51 @@ using NodeMap = std::unordered_map<std::shared_ptr<SymbolicNode>, T, NodeHash, N
 
 using NodeSet = std::unordered_set<std::shared_ptr<SymbolicNode>, NodeHash, NodeEqual>;
 
+/**
+ * @brief 符号节点工厂类，提供创建常用节点的静态方法。
+ *
+ * 创建时自动执行基本简化（如零元素消除、单元素折叠、扁平化）。
+ */
 class SymbolicFactory {
 public:
+    /** @brief 创建大整数数值节点。 */
     static std::shared_ptr<SymbolicNode> create_number(const ::BigInt& v);
+    /** @brief 创建有理数数值节点。 */
     static std::shared_ptr<SymbolicNode> create_number(const ::Rational& v);
+    /** @brief 创建浮点数值节点。 */
     static std::shared_ptr<SymbolicNode> create_number(lmmc_real_t v);
+    /** @brief 创建变量节点。 */
     static std::shared_ptr<SymbolicNode> create_variable(const std::string& name);
 
+    /**
+     * @brief 创建加法节点，自动扁平化嵌套加法并消除零项。
+     * @param ops 操作数列表
+     * @return 简化后的节点
+     */
     static std::shared_ptr<SymbolicNode> create_add(std::vector<std::shared_ptr<SymbolicNode>> ops);
 
+    /**
+     * @brief 创建乘法节点，自动扁平化嵌套乘法并消除单位元。
+     * @param ops 操作数列表
+     * @return 简化后的节点
+     */
     static std::shared_ptr<SymbolicNode> create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops);
+
+    /**
+     * @brief 创建幂运算节点，自动处理指数为 0/1 及底数为 0/1 的情况。
+     * @param base 底数节点
+     * @param exponent 指数节点
+     * @return 简化后的节点
+     */
     static std::shared_ptr<SymbolicNode> create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent);
 };
 
+/**
+ * @brief 数值节点，存储 BigInt、Rational 或浮点数。
+ */
 class NumberNode : public SymbolicNode {
 public:
-    std::variant<BigInt, Rational, lmmc_real_t> value;
+    std::variant<BigInt, Rational, lmmc_real_t> value; ///< 数值，支持大整数、有理数、浮点数
 
     explicit NumberNode(const BigInt& v) : value(v) {}
     explicit NumberNode(const Rational& v) : value(v) {}
@@ -230,9 +306,12 @@ public:
     }
 };
 
+/**
+ * @brief 变量节点，表示一个符号变量。
+ */
 class VariableNode : public SymbolicNode {
 public:
-    std::string name;
+    std::string name; ///< 变量名
 
     explicit VariableNode(std::string n) : name(std::move(n)) {}
 
@@ -253,9 +332,14 @@ public:
     std::shared_ptr<SymbolicNode> clone() const override { return std::make_shared<VariableNode>(name); }
 };
 
+/**
+ * @brief 加法节点，表示多个操作数的求和。
+ *
+ * 构造时自动扁平化嵌套的 AddNode，并按规范顺序排序操作数。
+ */
 class AddNode : public SymbolicNode {
 public:
-    std::vector<std::shared_ptr<SymbolicNode>> operands;
+    std::vector<std::shared_ptr<SymbolicNode>> operands; ///< 加法操作数列表
 
     explicit AddNode(std::vector<std::shared_ptr<SymbolicNode>> ops) {
 
@@ -309,9 +393,14 @@ public:
     }
 };
 
+/**
+ * @brief 乘法节点，表示多个操作数的乘积。
+ *
+ * 构造时自动扁平化嵌套的 MultiplyNode，并按规范顺序排序操作数。
+ */
 class MultiplyNode : public SymbolicNode {
 public:
-    std::vector<std::shared_ptr<SymbolicNode>> operands;
+    std::vector<std::shared_ptr<SymbolicNode>> operands; ///< 乘法操作数列表
 
     explicit MultiplyNode(std::vector<std::shared_ptr<SymbolicNode>> ops) {
 
@@ -362,10 +451,13 @@ public:
     }
 };
 
+/**
+ * @brief 幂运算节点，表示 base^exponent。
+ */
 class PowerNode : public SymbolicNode {
 public:
-    std::shared_ptr<SymbolicNode> base;
-    std::shared_ptr<SymbolicNode> exponent;
+    std::shared_ptr<SymbolicNode> base;     ///< 底数
+    std::shared_ptr<SymbolicNode> exponent; ///< 指数
 
     PowerNode(std::shared_ptr<SymbolicNode> b, std::shared_ptr<SymbolicNode> e)
         : base(std::move(b)), exponent(std::move(e)) {}
@@ -397,24 +489,28 @@ public:
     }
 };
 
+/**
+ * @brief 函数节点，表示数学函数调用（三角函数、对数、特殊函数等）。
+ */
 class FunctionNode : public SymbolicNode {
 public:
+    /** @brief 函数类型枚举 */
     enum class FuncType {
-        Sin, Cos, Tan, Cot, Sec, Csc,
-        ArcSin, ArcCos, ArcTan,
-        Sinh, Cosh, Tanh,
-        Ln, Log, Abs, Sqrt,
-        Exp,
-        LambertW,
-        RootOf,
-        Atan2,
-        Calculus_Integral,
-        Infinity,
-        Limit
+        Sin, Cos, Tan, Cot, Sec, Csc,       ///< 三角函数
+        ArcSin, ArcCos, ArcTan,              ///< 反三角函数
+        Sinh, Cosh, Tanh,                    ///< 双曲函数
+        Ln, Log, Abs, Sqrt,                  ///< 对数、绝对值、平方根
+        Exp,                                 ///< 指数函数
+        LambertW,                            ///< Lambert W 函数
+        RootOf,                              ///< 多项式根表示
+        Atan2,                               ///< 双参数反正切
+        Calculus_Integral,                   ///< 积分
+        Infinity,                            ///< 无穷大
+        Limit                                ///< 极限
     };
 
-    FuncType type;
-    std::vector<std::shared_ptr<SymbolicNode>> arguments;
+    FuncType type;                                          ///< 函数类型
+    std::vector<std::shared_ptr<SymbolicNode>> arguments;   ///< 函数参数列表
 
     FunctionNode(FuncType t, std::vector<std::shared_ptr<SymbolicNode>> args)
         : type(t), arguments(std::move(args)) {}
@@ -458,11 +554,21 @@ public:
 
 #include <map>
 
+/**
+ * @brief 矩阵节点，支持稠密和稀疏两种存储方式。
+ *
+ * 当非零元素占比低于 20% 时自动使用稀疏存储，否则使用稠密存储。
+ */
 class MatrixNode : public SymbolicNode {
 public:
-    using DenseStorage = std::vector<std::shared_ptr<SymbolicNode>>;
-    using SparseStorage = std::map<size_t, std::shared_ptr<SymbolicNode>>;
+    using DenseStorage = std::vector<std::shared_ptr<SymbolicNode>>;   ///< 稠密存储（按行优先展开）
+    using SparseStorage = std::map<size_t, std::shared_ptr<SymbolicNode>>; ///< 稀疏存储（索引 -> 节点）
 
+    /**
+     * @brief 验证并返回网格的列数（取各行最大长度）。
+     * @param grid 二维节点网格
+     * @return 列数
+     */
     static size_t validate_grid_columns(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid) {
         if (grid.empty()) return 0;
         size_t ncols = grid[0].size();
@@ -475,12 +581,19 @@ public:
         return ncols;
     }
 
+    /**
+     * @brief 根据稀疏度选择存储方式，从二维网格创建存储。
+     * @param grid 二维节点网格
+     * @param total_elements 总元素数
+     * @param ncols 列数
+     * @return 稠密或稀疏存储
+     */
     static std::variant<DenseStorage, SparseStorage> create_storage_from_grid(
         const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements, size_t ncols);
 
-    const size_t rows;
-    const size_t cols;
-    const std::variant<DenseStorage, SparseStorage> storage;
+    const size_t rows; ///< 行数
+    const size_t cols; ///< 列数
+    const std::variant<DenseStorage, SparseStorage> storage; ///< 实际存储
 
     MatrixNode(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid)
         : rows(grid.size()),
@@ -567,6 +680,12 @@ public:
         }
     }
 
+    /**
+     * @brief 获取指定位置的矩阵元素。
+     * @param r 行索引（从 0 开始）
+     * @param c 列索引（从 0 开始）
+     * @return 对应节点，越界返回 nullptr，稀疏缺失返回零节点
+     */
     std::shared_ptr<SymbolicNode> get(size_t r, size_t c) const {
         if (r >= rows || c >= cols) return nullptr;
 
@@ -581,6 +700,7 @@ public:
         }
     }
 
+    /** @brief 判断当前矩阵是否使用稀疏存储。 */
     bool is_sparse() const { return std::holds_alternative<SparseStorage>(storage); }
 
 private:
@@ -623,13 +743,24 @@ inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixN
     }
 }
 
+/**
+ * @brief 关系运算节点，表示两个表达式之间的比较关系。
+ */
 class RelationalNode : public SymbolicNode {
 public:
-    enum class Op { EQ, NEQ, LT, GT, LEQ, GEQ };
+    /** @brief 关系运算符类型 */
+    enum class Op {
+        EQ,   ///< 等于
+        NEQ,  ///< 不等于
+        LT,   ///< 小于
+        GT,   ///< 大于
+        LEQ,  ///< 小于等于
+        GEQ   ///< 大于等于
+    };
 
-    std::shared_ptr<SymbolicNode> left;
-    std::shared_ptr<SymbolicNode> right;
-    Op op;
+    std::shared_ptr<SymbolicNode> left;  ///< 左操作数
+    std::shared_ptr<SymbolicNode> right; ///< 右操作数
+    Op op;                               ///< 关系运算符
 
     RelationalNode(std::shared_ptr<SymbolicNode> l, std::shared_ptr<SymbolicNode> r, Op o)
         : left(std::move(l)), right(std::move(r)), op(o) {}
@@ -657,6 +788,11 @@ public:
         return right->compare(*o.right);
     }
 
+    /**
+     * @brief 将关系运算符转换为字符串表示。
+     * @param op 关系运算符
+     * @return 对应的字符串（如 "=", "<", ">=" 等）
+     */
     static std::string op_to_string(Op op) {
         switch(op) {
             case Op::EQ: return "=";
@@ -670,13 +806,20 @@ public:
     }
 };
 
+/**
+ * @brief 逻辑运算节点，表示 And/Or 逻辑组合。
+ */
 class LogicalNode : public SymbolicNode {
 public:
-    enum class Op { And, Or };
+    /** @brief 逻辑运算符类型 */
+    enum class Op {
+        And, ///< 逻辑与
+        Or   ///< 逻辑或
+    };
 
-    std::shared_ptr<SymbolicNode> left;
-    std::shared_ptr<SymbolicNode> right;
-    Op op;
+    std::shared_ptr<SymbolicNode> left;  ///< 左操作数
+    std::shared_ptr<SymbolicNode> right; ///< 右操作数
+    Op op;                               ///< 逻辑运算符
 
     LogicalNode(std::shared_ptr<SymbolicNode> l, std::shared_ptr<SymbolicNode> r, Op o)
         : left(std::move(l)), right(std::move(r)), op(o) {}
@@ -704,6 +847,11 @@ public:
         return right->compare(*o.right);
     }
 
+    /**
+     * @brief 将逻辑运算符转换为字符串表示。
+     * @param op 逻辑运算符
+     * @return "And" 或 "Or"
+     */
     static std::string op_to_string(Op op) {
         switch(op) {
             case Op::And: return "And";

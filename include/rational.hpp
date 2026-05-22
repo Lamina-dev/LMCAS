@@ -1,3 +1,7 @@
+/**
+ * @file rational.hpp
+ * @brief 精确有理数 Rational，基于 BigInt 分子/分母表示，自动约分。
+ */
 #pragma once
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
@@ -9,6 +13,7 @@
 #include <map>
 #include <stdint.h>
 
+/** @brief 精确有理数类，以 BigInt 分子/分母表示，构造时自动约分 */
 class Rational {
 private:
     BigInt numerator;
@@ -33,20 +38,43 @@ private:
 
 public:
 
+    /** @brief 默认构造，值为 0 */
     Rational() : numerator(0), denominator(1) {}
 
+    /**
+     * @brief 从 BigInt 构造整数有理数
+     * @param num 分子（分母为 1）
+     */
     Rational(const BigInt& num) : numerator(num), denominator(1) {}
 
+    /**
+     * @brief 从分子分母构造有理数
+     * @param num 分子
+     * @param den 分母（不可为零）
+     */
     Rational(const BigInt& num, const BigInt& den) : numerator(num), denominator(den) {
         simplify();
     }
 
+    /**
+     * @brief 从 int 构造整数有理数
+     * @param num 整数值
+     */
     Rational(int num) : numerator(num), denominator(1) {}
 
+    /**
+     * @brief 从 int 分子分母构造有理数
+     * @param num 分子
+     * @param den 分母
+     */
     Rational(int num, int den) : numerator(num), denominator(den) {
         simplify();
     }
 
+    /**
+     * @brief 从字符串构造有理数，支持小数、科学计数法、循环小数
+     * @param num 数字字符串
+     */
     Rational(const std::string& num):Rational() {
         if (num.empty() || num == "0") return;
         BigInt &up = numerator, &down = denominator;
@@ -175,6 +203,11 @@ private:
 
 public:
 
+    /**
+     * @brief 从 double 构造有理数
+     * @param value 浮点数值
+     * @return 对应的精确有理数
+     */
     static Rational from_double(double value) {
         if (value == 0.0) {
             return Rational();
@@ -210,17 +243,26 @@ public:
         return r;
     }
 
+    /** @brief 获取分子 */
     BigInt get_numerator() const { return numerator; }
+
+    /** @brief 获取分母 */
     BigInt get_denominator() const { return denominator; }
 
+    /** @brief 判断是否为整数（分母为 1） */
     bool is_integer() const {
         return denominator == BigInt(1);
     }
 
+    /** @brief 判断是否为零 */
     bool is_zero() const {
         return !numerator;
     }
 
+    /**
+     * @brief 计算哈希值
+     * @return 哈希值
+     */
     std::size_t hash() const {
         std::size_t seed = numerator.hash();
         std::size_t d_hash = denominator.hash();
@@ -228,6 +270,10 @@ public:
         return seed;
     }
 
+    /**
+     * @brief 转换为分数字符串（如 "3/4"）
+     * @return 字符串表示
+     */
     std::string to_string() const {
         if (is_integer()) {
             return numerator.ToString();
@@ -235,6 +281,10 @@ public:
         return numerator.ToString() + "/" + denominator.ToString();
     }
 
+    /**
+     * @brief 转换为十进制小数字符串（自动检测循环节）
+     * @return 小数字符串，循环部分用括号标记
+     */
     inline std::string to_float_string() {
         if (numerator % denominator == BigInt(0)) return (numerator / denominator).ToString();
         std::string re;
@@ -265,6 +315,11 @@ public:
 
     }
 
+    /**
+     * @brief 转换为指定精度的十进制小数字符串
+     * @param n 小数位数（正数为小数点后位数，负数为整数部分截断位数）
+     * @return 定精度小数字符串
+     */
     inline std::string to_float_string(int64_t n) const{
         if (is_zero()) return "0";
         if (n == 0) return (numerator / denominator).ToString();
@@ -291,6 +346,10 @@ public:
         }
     }
 
+    /**
+     * @brief 截断到指定精度（就地修改）
+     * @param n 精度位数
+     */
     inline void floor(const int64_t& n) {
         floor_without_sim(n);
         simplify();
@@ -318,6 +377,10 @@ private:
 
 public:
 
+    /**
+     * @brief 牛顿迭代法计算平方根（就地修改）
+     * @param n 精度位数
+     */
     inline void sqrt_self(int64_t n) {
         if (numerator < BigInt(0)) throw std::runtime_error("Sqrt negative number");
         Rational t(numerator * denominator);
@@ -337,12 +400,22 @@ public:
         floor(n);
     }
 
+    /**
+     * @brief 计算平方根（返回新值）
+     * @param n 精度位数
+     * @return 平方根的有理近似
+     */
     inline Rational sqrt(int64_t n) const{
         Rational re = *this;
         re.sqrt_self(n);
         return re;
     }
 
+    /**
+     * @brief 牛顿迭代法计算 n 次方根（就地修改）
+     * @param radical 根次数
+     * @param n 精度位数
+     */
     inline void radicand_self(const BigInt& radical, int64_t n) {
         if (numerator < BigInt(0) && (radical % BigInt(2) == BigInt(0))) throw std::runtime_error("Radicand negative number");
         Rational t(numerator * denominator.power(radical - BigInt(1)));
@@ -365,12 +438,23 @@ public:
         floor(n);
     }
 
+    /**
+     * @brief 计算 n 次方根（返回新值）
+     * @param radical 根次数
+     * @param n 精度位数
+     * @return n 次方根的有理近似
+     */
     inline Rational radicand(const BigInt& radical, int64_t n) {
         Rational re = *this;
         re.radicand_self(radical, n);
         return re;
     }
 
+    /**
+     * @brief 转换为 BigInt（仅当为整数时有效）
+     * @return 对应的 BigInt
+     * @throw std::runtime_error 非整数时抛出
+     */
     BigInt to_BigInt() const {
         if (!is_integer()) {
             throw std::runtime_error("Cannot convert non-integer fraction to BigInt");
@@ -378,6 +462,10 @@ public:
         return numerator;
     }
 
+    /**
+     * @brief 转换为浮点数
+     * @return 对应的 double 值
+     */
     lmmc_real_t to_double() const {
         if (is_zero()) return 0.0;
         lmmc_real_t res = 0.0;
@@ -389,24 +477,33 @@ public:
         return res;
     }
 
+    /** @brief 有理数加法 */
     Rational operator+(const Rational& other) const {
         BigInt new_num = numerator * other.denominator + other.numerator * denominator;
         BigInt new_den = denominator * other.denominator;
         return Rational(new_num, new_den);
     }
 
+    /** @brief 有理数减法 */
     Rational operator-(const Rational& other) const {
         BigInt new_num = numerator * other.denominator - other.numerator * denominator;
         BigInt new_den = denominator * other.denominator;
         return Rational(new_num, new_den);
     }
 
+    /** @brief 有理数乘法 */
     Rational operator*(const Rational& other) const {
         BigInt new_num = numerator * other.numerator;
         BigInt new_den = denominator * other.denominator;
         return Rational(new_num, new_den);
     }
 
+    /**
+     * @brief 有理数除法
+     * @param other 除数
+     * @return 商
+     * @throw std::runtime_error 除数为零时抛出
+     */
     Rational operator/(const Rational& other) const {
         if (other.is_zero()) {
             throw std::runtime_error("Division by zero");
@@ -416,6 +513,12 @@ public:
         return Rational(new_num, new_den);
     }
 
+    /**
+     * @brief 有理数整数幂
+     * @param exponent 指数（可为负）
+     * @return this^exponent
+     * @throw std::runtime_error 零的负幂或 0^0 时抛出
+     */
     Rational power(const BigInt& exponent) const {
         if (exponent < BigInt(0)) {
 
@@ -436,11 +539,22 @@ public:
         return Rational(numerator.power(exponent), denominator.power(exponent));
     }
 
+    /**
+     * @brief 有理数的有理数幂（就地修改）
+     * @param exponent 有理数指数
+     * @param n 精度位数
+     */
     inline void power_self(const Rational& exponent,size_t n) {
         *this = power(exponent.numerator);
         radicand_self(exponent.denominator,n);
     }
 
+    /**
+     * @brief 有理数的有理数幂（返回新值）
+     * @param exponent 有理数指数
+     * @param n 精度位数
+     * @return 结果的有理近似
+     */
     inline Rational power(const Rational& exponent, size_t n) {
         Rational re = *this;
         re.power_self(exponent, n);
@@ -473,6 +587,11 @@ public:
         return !(*this < other);
     }
 
+    /**
+     * @brief 取倒数
+     * @return 1 / *this
+     * @throw std::runtime_error 零的倒数时抛出
+     */
     Rational reciprocal() const {
         if (is_zero()) {
             throw std::runtime_error("Cannot take reciprocal of zero");
@@ -480,12 +599,17 @@ public:
         return Rational(denominator, numerator);
     }
 
+    /**
+     * @brief 取绝对值
+     * @return |*this|
+     */
     Rational abs() const {
         Rational result = *this;
         result.numerator = result.numerator.Abs();
         return result;
     }
 
+    /** @brief 一元负号运算符 */
     Rational operator-() const {
         Rational result = *this;
         result.numerator = -result.numerator;

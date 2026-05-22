@@ -1,14 +1,23 @@
+/**
+ * @file expand_visitor.hpp
+ * @brief 展开访问器，将乘积和幂展开为多项式形式。
+ */
 #pragma once
 
 #include "../symbolic_ast.hpp"
 #include "normalization_visitor.hpp"
 
+/** @brief 展开访问器，将乘积分配律和整数次幂展开为多项式形式 */
 class ExpandVisitor : public SymbolicVisitor {
 public:
-    std::shared_ptr<SymbolicNode> result;
+    std::shared_ptr<SymbolicNode> result;  ///< 展开结果节点
 
     ExpandVisitor() : result(nullptr) {}
 
+    /**
+     * @brief 获取展开结果
+     * @return 展开后的 AST 节点
+     */
     std::shared_ptr<SymbolicNode> get_result() const { return result; }
 
     void visit(NumberNode& node) override { result = node.clone(); }

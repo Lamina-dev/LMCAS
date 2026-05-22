@@ -1,3 +1,7 @@
+/**
+ * @file normalization_visitor.hpp
+ * @brief 规范化访问器，合并同类项、化简数值运算、处理矩阵算术。
+ */
 #pragma once
 
 #include "lmmc/config.h"
@@ -8,6 +12,11 @@
 #include <algorithm>
 #include <iostream>
 
+/**
+ * @brief 计算 AST 节点的多项式次数
+ * @param node 输入节点
+ * @return 节点对应的多项式次数
+ */
 inline int get_node_degree_helper(const std::shared_ptr<SymbolicNode>& node) {
     if (!node) return 0;
     if (std::dynamic_pointer_cast<VariableNode>(node)) return 1;
@@ -26,6 +35,7 @@ inline int get_node_degree_helper(const std::shared_ptr<SymbolicNode>& node) {
     return 0;
 }
 
+/** @brief 节点比较器，按多项式次数降序排列，用于同类项合并 */
 struct NodeCompare {
     bool operator()(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) const {
         if (!lhs && !rhs) return false;
@@ -48,6 +58,12 @@ struct NodeCompare {
     }
 };
 
+/**
+ * @brief 两个数值节点相加
+ * @param a 加数节点
+ * @param b 加数节点
+ * @return 和的数值节点
+ */
 inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
      if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
          lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) :
@@ -71,6 +87,12 @@ inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>
      return std::make_shared<NumberNode>(i1 + i2);
 }
 
+/**
+ * @brief 两个数值节点相乘
+ * @param a 乘数节点
+ * @param b 乘数节点
+ * @return 积的数值节点
+ */
 inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
      if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
          lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) :
@@ -94,6 +116,12 @@ inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<Number
      return std::make_shared<NumberNode>(i1 * i2);
 }
 
+/**
+ * @brief 检查节点是否为负数或带负系数，若是则输出其正值部分
+ * @param arg 待检查的节点
+ * @param out_positive 输出参数，存放取正后的节点
+ * @return 若节点为负则返回 true
+ */
 inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::shared_ptr<SymbolicNode>& out_positive) {
     if (auto num = std::dynamic_pointer_cast<NumberNode>(arg)) {
         if (std::holds_alternative<lmmc_real_t>(num->value) && std::get<lmmc_real_t>(num->value) < 0) {
@@ -155,6 +183,12 @@ inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::sh
     return false;
 }
 
+/**
+ * @brief 提取节点中 π 的有理系数（如 2π/3 中的 2/3）
+ * @param node 待检查的节点
+ * @param k 输出参数，存放 π 的有理系数
+ * @return 若节点为 k*π 形式则返回 true
+ */
 inline bool get_pi_coeff(const std::shared_ptr<SymbolicNode>& node, Rational& k) {
     if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
         if (v->name == "pi") {
@@ -183,14 +217,25 @@ inline bool get_pi_coeff(const std::shared_ptr<SymbolicNode>& node, Rational& k)
     return false;
 }
 
+/** @brief 规范化访问器，合并同类项、化简数值运算、处理矩阵算术和三角函数特殊值 */
 class NormalizationVisitor : public SymbolicVisitor {
 public:
-    std::shared_ptr<SymbolicNode> result;
+    std::shared_ptr<SymbolicNode> result;  ///< 规范化结果节点
 
+    /**
+     * @brief 获取规范化结果
+     * @return 化简后的 AST 节点
+     */
     std::shared_ptr<SymbolicNode> get_result() const {
         return result;
     }
 
+    /**
+     * @brief 展开两个节点的乘积（分配律）
+     * @param lhs 左操作数
+     * @param rhs 右操作数
+     * @return 展开后的 AST 节点
+     */
     std::shared_ptr<SymbolicNode> expand_product(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) {
 
         auto add_lhs = std::dynamic_pointer_cast<AddNode>(lhs);

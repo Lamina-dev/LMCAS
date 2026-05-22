@@ -1,3 +1,7 @@
+/**
+ * @file bigint.hpp
+ * @brief 任意精度整数 BigInt，底层调用 LAMMP 实现高性能大数运算。
+ */
 #pragma once
 
 #ifndef _STATIC_ASSERT
@@ -19,29 +23,56 @@
 #include <limits>
 #include "lmmc/config.h"
 
+/** @brief 释放 BigInt 内部分配的内存 */
 inline void bigint_free(void* p) {
     lmmp_free(p);
 }
 
+/** @brief 为 BigInt 分配内存 */
 inline void* bigint_alloc(size_t size) {
     return lmmp_alloc(size);
 }
 
+/**
+ * @brief 去除 limb 数组的前导零，返回有效长度
+ * @param p limb 数组指针
+ * @param n 原始长度
+ * @return 去除前导零后的有效长度
+ */
 inline mp_size_t lmmp_rlz(mp_srcptr p, mp_size_t n) {
     while (n > 0 && p[n-1] == 0) n--;
     return n;
 }
 
+/**
+ * @brief 大整数乘法（底层 LAMMP 调用）
+ * @param dst 结果缓冲区
+ * @param numa 乘数 a 的 limb 数组
+ * @param na 乘数 a 的 limb 数
+ * @param numb 乘数 b 的 limb 数组
+ * @param nb 乘数 b 的 limb 数
+ */
 inline void bigint_mul_(mp_ptr dst, mp_srcptr numa, mp_size_t na, mp_srcptr numb, mp_size_t nb) {
     ::lmmp_mul_(dst, numa, na, numb, nb);
 }
 
+/**
+ * @brief 大整数除法（底层 LAMMP 调用）
+ * @param q 商缓冲区
+ * @param r 余数缓冲区
+ * @param n 被除数 limb 数组
+ * @param nn 被除数 limb 数
+ * @param d 除数 limb 数组
+ * @param dn 除数 limb 数
+ */
 inline void bigint_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
     ::lmmp_div_(q, r, n, nn, d, dn);
 }
 
+/** @brief 任意精度整数类，底层使用 LAMMP 多精度库 */
 class BigInt {
 public:
+    /** @brief 符号枚举 */
     enum Sign {
         POSITIVE = 1,
         ZERO = 0,
@@ -88,12 +119,14 @@ public:
     }
 
 public:
+    /** @brief 默认构造，值为 0 */
     BigInt() : _data(nullptr), _size(0), _alloc(0), _sign(ZERO), negative(false) {}
 
     ~BigInt() {
         if (_data) bigint_free(_data);
     }
 
+    /** @brief 拷贝构造 */
     BigInt(const BigInt& other) {
         if (other._size > 0) {
             realloc_to(other._size);
@@ -106,6 +139,7 @@ public:
         }
     }
 
+    /** @brief 移动构造 */
     BigInt(BigInt&& other) noexcept
         : _data(other._data), _size(other._size), _alloc(other._alloc), _sign(other._sign), negative(other.negative) {
         other._data = nullptr;
@@ -115,6 +149,7 @@ public:
         other.negative = false;
     }
 
+    /** @brief 拷贝赋值 */
     BigInt& operator=(const BigInt& other) {
         if (this != &other) {
             if (other._size > _alloc) {
@@ -129,6 +164,7 @@ public:
         return *this;
     }
 
+    /** @brief 移动赋值 */
     BigInt& operator=(BigInt&& other) noexcept {
         if (this != &other) {
             if (_data) bigint_free(_data);
@@ -144,6 +180,10 @@ public:
         return *this;
     }
 
+    /**
+     * @brief 从 long long 构造
+     * @param val 整数值
+     */
     BigInt(long long val) {
         if (val == 0) {
             zero();
@@ -166,8 +206,13 @@ public:
         }
         _size = 1;
     }
+    /** @brief 从 int 构造 */
     BigInt(int val) : BigInt((long long)val) {}
 
+    /**
+     * @brief 从 unsigned long long 构造
+     * @param val 无符号整数值
+     */
     BigInt(unsigned long long val) {
         if (val == 0) {
             zero();
@@ -179,9 +224,15 @@ public:
         _data[0] = val;
         _size = 1;
     }
+    /** @brief 从 unsigned int 构造 */
     BigInt(unsigned int val) : BigInt((unsigned long long)val) {}
+    /** @brief 从 unsigned long 构造 */
     BigInt(unsigned long val) : BigInt((unsigned long long)val) {}
 
+    /**
+     * @brief 从十进制字符串构造
+     * @param str 十进制数字字符串，可带正负号
+     */
     BigInt(const std::string& str) {
         if (str.empty()) { zero(); return; }
         size_t start = 0;
@@ -222,6 +273,10 @@ public:
         normalize();
     }
 
+    /**
+     * @brief 转换为十进制字符串
+     * @return 十进制表示的字符串
+     */
     std::string ToString() const {
         if (_size == 0) return "0";
 
@@ -241,8 +296,14 @@ public:
         }
         return res;
     }
+
+    /** @brief 转换为十进制字符串（同 ToString） */
     std::string to_string() const { return ToString(); }
 
+    /**
+     * @brief 转换为 int（溢出时截断到 int 范围）
+     * @return 对应的 int 值
+     */
     int to_int() const {
         if (_size == 0) return 0;
 
@@ -255,6 +316,10 @@ public:
         return (int)val;
     }
 
+    /**
+     * @brief 转换为浮点数
+     * @return 对应的 double 值
+     */
     lmmc_real_t to_double() const {
         if (_size == 0) return 0.0;
         lmmc_real_t res = 0.0;
@@ -272,6 +337,12 @@ public:
         return res;
     }
 
+    /**
+     * @brief 比较两个 BigInt 的绝对值
+     * @param a 第一个操作数
+     * @param b 第二个操作数
+     * @return 1 表示 |a|>|b|，-1 表示 |a|<|b|，0 表示相等
+     */
     static int cmp_abs(const BigInt& a, const BigInt& b) {
         if (a._size != b._size) return a._size > b._size ? 1 : -1;
         if (a._size == 0) return 0;
@@ -297,8 +368,14 @@ public:
     bool operator>=(const BigInt& other) const { return !(*this < other); }
     bool operator!() const { return _size == 0; }
     explicit operator bool() const { return _size != 0; }
+
+    /** @brief 判断是否为零 */
     bool is_zero() const { return _size == 0; }
 
+    /**
+     * @brief 获取 limb 数组的副本
+     * @return 各 limb 值组成的 vector
+     */
     std::vector<uint64_t> get_digits() const {
         std::vector<uint64_t> d;
         d.reserve(_size);
@@ -308,6 +385,10 @@ public:
         return d;
     }
 
+    /**
+     * @brief 计算哈希值
+     * @return 哈希值
+     */
     std::size_t hash() const {
         std::size_t seed = 0;
         for (mp_size_t i = 0; i < _size; ++i) {
@@ -319,6 +400,10 @@ public:
         return seed;
     }
 
+    /**
+     * @brief 取绝对值
+     * @return |*this|
+     */
     BigInt Abs() const {
         BigInt ret = *this;
         if (ret._size > 0) {
@@ -328,8 +413,13 @@ public:
         return ret;
     }
 
+    /** @brief 判断是否为负数 */
     bool IsNegative() const { return _sign == NEGATIVE; }
 
+    /**
+     * @brief 取相反数
+     * @return -*this
+     */
     BigInt negate() const {
         BigInt ret = *this;
         if (ret._size > 0) {
@@ -339,8 +429,15 @@ public:
         return ret;
     }
 
+    /** @brief 一元负号运算符 */
     BigInt operator-() const { return negate(); }
 
+    /**
+     * @brief 绝对值加法（内部使用）
+     * @param dst 结果
+     * @param a 加数
+     * @param b 加数
+     */
     static void add_abs(BigInt& dst, const BigInt& a, const BigInt& b) {
         mp_size_t n = std::max(a._size, b._size);
         dst.realloc_to(n + 1);
@@ -373,6 +470,12 @@ public:
         dst.normalize();
     }
 
+    /**
+     * @brief 绝对值减法（内部使用，要求 |a| >= |b|）
+     * @param dst 结果
+     * @param a 被减数
+     * @param b 减数
+     */
     static void sub_abs(BigInt& dst, const BigInt& a, const BigInt& b) {
         mp_size_t na = a._size;
         mp_size_t nb = b._size;
@@ -395,6 +498,7 @@ public:
         dst.normalize();
     }
 
+    /** @brief 加法运算符 */
     BigInt operator+(const BigInt& other) const {
         if (_sign == ZERO) return other;
         if (other._sign == ZERO) return *this;
@@ -423,10 +527,12 @@ public:
         return res;
     }
 
+    /** @brief 减法运算符 */
     BigInt operator-(const BigInt& other) const {
         return *this + (-other);
     }
 
+    /** @brief 乘法运算符 */
     BigInt operator*(const BigInt& other) const {
         if (_size == 0 || other._size == 0) return BigInt(0);
 
@@ -448,6 +554,12 @@ public:
         return res;
     }
 
+    /**
+     * @brief 除法运算符（整数除法，截断）
+     * @param other 除数
+     * @return 商
+     * @throw std::domain_error 除数为零时抛出
+     */
     BigInt operator/(const BigInt& other) const {
         if (other._size == 0) throw std::domain_error("Division by zero");
         if (_size < other._size) return BigInt(0);
@@ -468,6 +580,12 @@ public:
         return q;
     }
 
+    /**
+     * @brief 取模运算符
+     * @param other 模数
+     * @return 余数
+     * @throw std::domain_error 模数为零时抛出
+     */
     BigInt operator%(const BigInt& other) const {
         if (other._size == 0) throw std::domain_error("Division by zero");
         if (_size < other._size) return *this;
@@ -495,6 +613,11 @@ public:
     BigInt& operator/=(const BigInt& other) { *this = *this / other; return *this; }
     BigInt& operator%=(const BigInt& other) { *this = *this % other; return *this; }
 
+    /**
+     * @brief 整数幂运算
+     * @param exp 非负指数
+     * @return this^exp
+     */
     BigInt power(unsigned long exp) const {
         if (_size == 0) return exp == 0 ? BigInt(1) : BigInt(0);
 
@@ -515,6 +638,12 @@ public:
         return res;
     }
 
+    /**
+     * @brief 整数幂运算（BigInt 指数）
+     * @param exp 非负 BigInt 指数
+     * @return this^exp
+     * @throw std::domain_error 指数为负时抛出
+     */
     BigInt power(BigInt exp) const {
         if (exp._sign == NEGATIVE) throw std::domain_error("Negative exponent in integer power");
         if (exp._size == 0) return BigInt(1);
@@ -544,6 +673,11 @@ public:
         return res;
     }
 
+    /**
+     * @brief 整数平方根（向下取整）
+     * @return floor(sqrt(*this))
+     * @throw std::domain_error 负数时抛出
+     */
     BigInt sqrt() const {
         if (_sign == NEGATIVE) throw std::domain_error("Sqrt of negative number");
         if (_size == 0) return BigInt(0);
@@ -564,15 +698,21 @@ public:
         return res;
     }
 
+    /** @brief 判断是否为奇数 */
     bool is_odd() const {
         if (_size == 0) return false;
         return (_data[0] & 1);
     }
 
+    /** @brief 判断是否为偶数 */
     bool is_even() const {
         return !is_odd();
     }
 
+    /**
+     * @brief 计算末尾零比特数
+     * @return 二进制表示中末尾连续 0 的个数
+     */
     mp_size_t trailing_zeros() const {
         if (is_zero()) return 0;
         mp_size_t count = 0;
@@ -587,6 +727,11 @@ public:
         return count;
     }
 
+    /**
+     * @brief 右移赋值
+     * @param shift 移位比特数
+     * @return *this
+     */
     BigInt& operator>>=(mp_size_t shift) {
         if (shift == 0) return *this;
         if (is_zero()) return *this;
@@ -614,6 +759,11 @@ public:
         return *this;
     }
 
+    /**
+     * @brief 左移赋值
+     * @param shift 移位比特数
+     * @return *this
+     */
     BigInt& operator<<=(mp_size_t shift) {
         if (shift == 0) return *this;
         if (is_zero()) return *this;
@@ -646,18 +796,25 @@ public:
         return *this;
     }
 
+    /** @brief 右移运算符 */
     BigInt operator>>(mp_size_t shift) const {
         BigInt res = *this;
         res >>= shift;
         return res;
     }
 
+    /** @brief 左移运算符 */
     BigInt operator<<(mp_size_t shift) const {
         BigInt res = *this;
         res <<= shift;
         return res;
     }
 
+    /**
+     * @brief 计算阶乘
+     * @param n 非负整数
+     * @return n!
+     */
     static BigInt factorial(unsigned int n) {
         BigInt res;
         mp_bitcnt_t bits = 0;
@@ -670,6 +827,12 @@ public:
         return res;
     }
 
+    /**
+     * @brief 计算排列数 P(n, r)
+     * @param n 总数
+     * @param r 选取数
+     * @return n! / (n-r)!
+     */
     static BigInt nPr(unsigned int n, unsigned int r) {
         if (r > n) return BigInt(0);
         BigInt res;
@@ -683,6 +846,12 @@ public:
         return res;
     }
 
+    /**
+     * @brief 计算组合数 C(n, r)
+     * @param n 总数
+     * @param r 选取数
+     * @return n! / (r! * (n-r)!)
+     */
     static BigInt nCr(unsigned int n, unsigned int r) {
         if (r > n) return BigInt(0);
         BigInt res;
@@ -696,6 +865,13 @@ public:
         return res;
     }
 
+    /**
+     * @brief 计算多项式系数（多重组合数）
+     * @param n 总数（应等于 r 各元素之和）
+     * @param r 各组大小
+     * @return n! / (r[0]! * r[1]! * ... * r[k]!)
+     * @throw std::invalid_argument r 之和不等于 n 时抛出
+     */
     static BigInt multinomial(unsigned int n, const std::vector<unsigned int>& r) {
         if (r.empty()) return BigInt(1);
 
@@ -721,6 +897,12 @@ public:
         return res;
     }
 
+    /**
+     * @brief 计算最大公约数
+     * @param a 第一个大整数
+     * @param b 第二个大整数
+     * @return gcd(|a|, |b|)
+     */
     static BigInt gcd(const BigInt& a, const BigInt& b) {
         if (a.is_zero()) return b.Abs();
         if (b.is_zero()) return a.Abs();
@@ -743,11 +925,25 @@ public:
         return res;
     }
 
+    /**
+     * @brief 计算最小公倍数
+     * @param a 第一个大整数
+     * @param b 第二个大整数
+     * @return lcm(|a|, |b|)
+     */
     static BigInt lcm(const BigInt& a, const BigInt& b) {
         if (a.is_zero() || b.is_zero()) return BigInt(0);
         return (a.Abs() / gcd(a, b)) * b.Abs();
     }
 
+    /**
+     * @brief 模幂运算
+     * @param base 底数
+     * @param exp 指数
+     * @param mod 模数
+     * @return base^exp mod mod
+     * @throw std::runtime_error 模数为零时抛出
+     */
     static BigInt pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod) {
          if (mod.is_zero()) throw std::runtime_error("Modulo by zero");
 
@@ -771,6 +967,10 @@ public:
          return res;
     }
 
+    /**
+     * @brief 素性测试（Miller-Rabin）
+     * @return 是素数返回 true
+     */
     bool is_prime() const {
         if (_sign == NEGATIVE) return false;
 
@@ -815,6 +1015,10 @@ public:
         return true;
     }
 
+    /**
+     * @brief 判断是否为完全平方数
+     * @return 是完全平方数返回 true
+     */
     bool is_perfect_square() const {
         if (_sign == NEGATIVE) return false;
         if (_size == 0) return true;

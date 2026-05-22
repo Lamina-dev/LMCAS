@@ -1,18 +1,37 @@
+/**
+ * @file differentiation_visitor.hpp
+ * @brief 微分访问器，对 AST 执行符号求导（含隐函数模式）。
+ */
 #pragma once
 #include "../symbolic_ast.hpp"
 
+/** @brief 微分访问器，对符号 AST 执行求导运算，支持普通求导和隐函数求导 */
 class DifferentiationVisitor : public SymbolicVisitor {
     std::string var;
 public:
-    std::shared_ptr<SymbolicNode> result;
+    std::shared_ptr<SymbolicNode> result;  ///< 求导结果节点
 
-    std::string implicit_var;
-    bool implicit_mode = false;
+    std::string implicit_var;    ///< 隐函数因变量名
+    bool implicit_mode = false;  ///< 是否为隐函数求导模式
 
+    /**
+     * @brief 构造普通求导访问器
+     * @param v 求导变量名
+     */
     DifferentiationVisitor(const std::string& v) : var(v), result(nullptr) {}
+
+    /**
+     * @brief 构造隐函数求导访问器
+     * @param v 自变量名
+     * @param implicit_v 隐函数因变量名
+     */
     DifferentiationVisitor(const std::string& v, const std::string& implicit_v)
         : var(v), implicit_var(implicit_v), result(nullptr), implicit_mode(true) {}
 
+    /**
+     * @brief 获取求导结果
+     * @return 求导后的 AST 节点
+     */
     std::shared_ptr<SymbolicNode> get_result() const {
         return result;
     }

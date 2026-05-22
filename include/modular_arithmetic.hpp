@@ -1,3 +1,7 @@
+/**
+ * @file modular_arithmetic.hpp
+ * @brief 模运算工具：ModInt 类、扩展欧几里得、CRT、有理重构。
+ */
 #pragma once
 
 #include <cstdint>
@@ -11,6 +15,14 @@
 
 namespace lamina {
 
+/**
+ * @brief 扩展欧几里得算法，求 gcd(a, b) 及 Bezout 系数
+ * @param a 第一个整数
+ * @param b 第二个整数
+ * @param s 输出 Bezout 系数 s，满足 a*s + b*t = gcd(a,b)
+ * @param t 输出 Bezout 系数 t
+ * @return gcd(a, b)
+ */
 inline int64_t extended_gcd(int64_t a, int64_t b, int64_t& s, int64_t& t) {
     int64_t old_r = a, r = b;
     int64_t old_s = 1, ss = 0;
@@ -36,43 +48,72 @@ inline int64_t extended_gcd(int64_t a, int64_t b, int64_t& s, int64_t& t) {
     return old_r;
 }
 
+/**
+ * @brief 计算两个无符号整数的最大公约数（调用 LAMMP）
+ * @param a 第一个无符号整数
+ * @param b 第二个无符号整数
+ * @return gcd(a, b)
+ */
 inline uint64_t lammp_gcd(uint64_t a, uint64_t b) {
     if (a == 0) return b;
     if (b == 0) return a;
     return lmmp_gcd_11_(a, b);
 }
 
+/**
+ * @brief 判断无符号整数是否为素数
+ * @param n 待判断的整数
+ * @return 是素数返回 true
+ */
 inline bool lammp_is_prime(uint64_t n) {
     return lmmp_is_prime_ulong_(n);
 }
 
+/**
+ * @brief 求大于 n 的下一个素数
+ * @param n 起始值
+ * @return 大于 n 的最小素数
+ */
 inline uint64_t lammp_next_prime(uint64_t n) {
     return lmmp_next_prime_ulong_(n);
 }
 
+/** @brief 模整数类，封装模 p 下的算术运算 */
 class ModInt {
     int64_t val_;
     int64_t mod_;
 
 public:
+    /** @brief 默认构造，值为 0，模为 2 */
     ModInt() : val_(0), mod_(2) {}
 
+    /**
+     * @brief 构造模整数
+     * @param v 整数值（自动取模归约到 [0, p)）
+     * @param p 模数
+     */
     ModInt(int64_t v, int64_t p) : mod_(p) {
         val_ = v % p;
         if (val_ < 0) val_ += p;
     }
 
+    /** @brief 获取当前值 */
     int64_t value() const { return val_; }
+
+    /** @brief 获取模数 */
     int64_t modulus() const { return mod_; }
 
+    /** @brief 模加法 */
     ModInt operator+(const ModInt& other) const {
         return ModInt(val_ + other.val_, mod_);
     }
 
+    /** @brief 模减法 */
     ModInt operator-(const ModInt& other) const {
         return ModInt(val_ - other.val_ + mod_, mod_);
     }
 
+    /** @brief 模乘法 */
     ModInt operator*(const ModInt& other) const {
 
         uint64_t q;
@@ -83,33 +124,45 @@ public:
         return ModInt(static_cast<int64_t>(result), mod_);
     }
 
+    /** @brief 模除法（乘以逆元） */
     ModInt operator/(const ModInt& other) const {
         return *this * other.inverse();
     }
 
+    /** @brief 取负 */
     ModInt operator-() const {
         return ModInt(val_ == 0 ? 0 : mod_ - val_, mod_);
     }
 
+    /** @brief 判等 */
     bool operator==(const ModInt& other) const {
         return val_ == other.val_ && mod_ == other.mod_;
     }
 
+    /** @brief 判不等 */
     bool operator!=(const ModInt& other) const {
         return !(*this == other);
     }
 
+    /** @brief 小于比较（先比模数，再比值） */
     bool operator<(const ModInt& other) const {
         if (mod_ != other.mod_) return mod_ < other.mod_;
         return val_ < other.val_;
     }
 
+    /** @brief 大于比较 */
     bool operator>(const ModInt& other) const {
         return other < *this;
     }
 
+    /** @brief 判断是否为零 */
     bool is_zero() const { return val_ == 0; }
 
+    /**
+     * @brief 求模逆元
+     * @return 当前值在模 mod_ 下的乘法逆元
+     * @throw std::domain_error 若值为 0 或不可逆
+     */
     ModInt inverse() const {
         if (val_ == 0) {
             throw std::domain_error("ModInt::inverse(): zero is not invertible");
@@ -123,6 +176,12 @@ public:
         return ModInt(s, mod_);
     }
 
+    /**
+     * @brief 模幂运算
+     * @param base 底数
+     * @param exp 指数（可为负，负指数先求逆）
+     * @return base^exp mod p
+     */
     static ModInt pow(ModInt base, int64_t exp) {
         if (exp < 0) {
             base = base.inverse();
@@ -138,6 +197,15 @@ public:
     }
 };
 
+/**
+ * @brief 中国剩余定理（两模数）
+ * @param r1 第一个余数
+ * @param m1 第一个模数
+ * @param r2 第二个余数
+ * @param m2 第二个模数
+ * @return pair(合并余数, 合并模数 m1*m2)
+ * @throw std::domain_error 若模数不互素
+ */
 inline std::pair<int64_t, int64_t> crt(int64_t r1, int64_t m1,
                                         int64_t r2, int64_t m2) {
     int64_t s, t;
@@ -169,6 +237,13 @@ inline std::pair<int64_t, int64_t> crt(int64_t r1, int64_t m1,
 #endif
 }
 
+/**
+ * @brief 多模数中国剩余定理
+ * @param residues 余数列表
+ * @param primes 对应的模数列表（两两互素）
+ * @return pair(合并余数, 合并模数)
+ * @throw std::invalid_argument 若输入为空或大小不匹配
+ */
 inline std::pair<int64_t, int64_t> multi_crt(const std::vector<int64_t>& residues,
                                               const std::vector<int64_t>& primes) {
     if (residues.empty() || residues.size() != primes.size()) {
@@ -187,6 +262,12 @@ inline std::pair<int64_t, int64_t> multi_crt(const std::vector<int64_t>& residue
     return {combined, modulus};
 }
 
+/**
+ * @brief 有理数重构：从模像 x mod m 恢复有理数 a/b
+ * @param x 模像值
+ * @param m 模数
+ * @return pair(分子 a, 分母 b)；失败时返回 (0, 0)
+ */
 inline std::pair<int64_t, int64_t> rational_reconstruction(int64_t x, int64_t m) {
     if (m <= 0) {
         return {0, 0};
@@ -233,19 +314,34 @@ inline std::pair<int64_t, int64_t> rational_reconstruction(int64_t x, int64_t m)
     return {a, b};
 }
 
+/** @brief 预定义的大素数表，用于模运算多素数方案 */
 constexpr int64_t MODULAR_PRIMES[] = {
     1000000007LL, 1000000009LL, 1000000021LL, 1000000033LL,
     1000000087LL, 1000000093LL, 1000000097LL, 1000000103LL,
     1000000123LL, 1000000181LL, 1000000207LL, 1000000223LL,
     1000000231LL, 1000000271LL, 1000000289LL, 1000000297LL
 };
+/** @brief 预定义素数表的长度 */
 constexpr size_t NUM_MODULAR_PRIMES = sizeof(MODULAR_PRIMES) / sizeof(MODULAR_PRIMES[0]);
 
+/**
+ * @brief 判断素数 p 是否为"好素数"（不整除任何首项系数）
+ * @param p 待检测素数
+ * @param leading_coeffs 首项系数列表
+ * @return 若 p 不整除任何系数则返回 true
+ */
 inline bool is_good_prime(int64_t p, const std::vector<int64_t>& leading_coeffs) {
     return std::none_of(leading_coeffs.begin(), leading_coeffs.end(),
         [p](int64_t c) { return (c % p) == 0; });
 }
 
+/**
+ * @brief 生成指定数量的好素数
+ * @param count 需要的素数个数
+ * @param leading_coeffs 首项系数列表（用于过滤）
+ * @param start_from 搜索起始值
+ * @return 好素数列表
+ */
 inline std::vector<int64_t> generate_good_primes(int count,
                                                   const std::vector<int64_t>& leading_coeffs,
                                                   uint64_t start_from = 1000000000ULL) {

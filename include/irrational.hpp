@@ -1,3 +1,7 @@
+/**
+ * @file irrational.hpp
+ * @brief 无理数表示类 Irrational，支持 sqrt、pi、e 及其线性组合。
+ */
 #pragma once
 #define _USE_MATH_DEFINES
 #include "symbolic.hpp"
@@ -15,15 +19,25 @@
 #define LMMC_E 2.71828182845904523536
 #endif
 
+/**
+ * @brief 计算浮点数的平方根（封装 LMMC 接口）
+ * @param x 被开方数
+ * @return 平方根值
+ */
 inline lmmc_real_t _irrational_sqrt(lmmc_real_t x) {
     lmmc_real_t res;
     LMMC_REAL_SQRT(&res, &x);
     return res;
 }
 
+/** @brief 无理数表示类，支持 √n、π、e、log 及其线性组合的精确表示与运算 */
 class Irrational {
 public:
 
+    /**
+     * @brief 将无理数转换为符号表达式
+     * @return 对应的符号表达式
+     */
     std::shared_ptr<SymbolicExpr> to_symbolic() const {
         auto is_zero_tol = [](lmmc_real_t x) -> bool {
             int eq;
@@ -78,12 +92,13 @@ public:
                 return SymbolicExpr::number(0);
         }
     }
+    /** @brief 无理数的内部类型 */
     enum class Type {
-        SQRT,
-        PI,
-        E,
-        LOG,
-        COMPLEX
+        SQRT,     ///< 平方根形式 coeff * √radicand
+        PI,       ///< π 的倍数
+        E,        ///< e 的倍数
+        LOG,      ///< 对数形式
+        COMPLEX   ///< 多项线性组合
     };
 
 private:
@@ -110,8 +125,15 @@ private:
 
 public:
 
+    /** @brief 默认构造，初始化为零值的 COMPLEX 类型 */
     Irrational() : type(Type::COMPLEX), coefficient(0), radicand(1), constant_term(0) {}
 
+    /**
+     * @brief 构造平方根形式无理数 coeff * √n
+     * @param n 被开方数
+     * @param coeff 系数，默认为 1.0
+     * @return 化简后的无理数对象
+     */
     static Irrational sqrt(long long n, lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::SQRT;
@@ -124,6 +146,11 @@ public:
         return result;
     }
 
+    /**
+     * @brief 构造 π 的倍数
+     * @param coeff 系数，默认为 1.0
+     * @return coeff * π
+     */
     static Irrational pi(lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::PI;
@@ -133,6 +160,11 @@ public:
         return result;
     }
 
+    /**
+     * @brief 构造 e 的倍数
+     * @param coeff 系数，默认为 1.0
+     * @return coeff * e
+     */
     static Irrational e(lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::E;
@@ -142,6 +174,11 @@ public:
         return result;
     }
 
+    /**
+     * @brief 构造有理常数（退化为有理数的无理数表示）
+     * @param value 常数值
+     * @return 常数无理数对象
+     */
     static Irrational constant(lmmc_real_t value) {
         Irrational result;
         result.type = Type::COMPLEX;
@@ -151,6 +188,7 @@ public:
         return result;
     }
 
+    /** @brief 将当前无理数转换为 COMPLEX 线性组合形式 */
     void to_complex() {
         if (type == Type::COMPLEX) return;
 
@@ -282,6 +320,10 @@ public:
         return *this > other || *this == other;
     }
 
+    /**
+     * @brief 转换为浮点数近似值
+     * @return 双精度浮点近似
+     */
     lmmc_real_t to_double() const {
         switch (type) {
             case Type::SQRT:
@@ -323,6 +365,10 @@ public:
         }
     }
 
+    /**
+     * @brief 转换为可读字符串（如 "2√3"、"π/2"）
+     * @return 格式化字符串
+     */
     std::string to_string() const {
         auto round_val = [](lmmc_real_t x) -> lmmc_real_t {
             lmmc_real_t res, half = 0.5;
@@ -504,12 +550,20 @@ public:
         }
     }
 
+    /**
+     * @brief 判断是否为零
+     * @return 若数值近似为零则返回 true
+     */
     bool is_zero() const {
         int eq;
         lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
         return eq != 0;
     }
 
+    /**
+     * @brief 判断是否可精确表示为有理数
+     * @return 若为纯常数项（无无理部分）则返回 true
+     */
     bool is_rational() const {
         if (type == Type::COMPLEX) {
             return coefficients.empty();
@@ -517,6 +571,7 @@ public:
         return false;
     }
 
+    /** @brief 化简，移除系数为零的项 */
     void simplify() {
         if (type == Type::COMPLEX) {
             auto it = coefficients.begin();
@@ -538,18 +593,30 @@ public:
         }
     }
 
+    /**
+     * @brief 判断是否为正数
+     * @return 若数值大于零则返回 true
+     */
     bool is_positive() const {
         int eq;
         lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
         return !eq && to_double() > 0;
     }
 
+    /**
+     * @brief 判断是否为负数
+     * @return 若数值小于零则返回 true
+     */
     bool is_negative() const {
         int eq;
         lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
         return !eq && to_double() < 0;
     }
 
+    /**
+     * @brief 取绝对值
+     * @return 绝对值无理数对象
+     */
     Irrational abs() const {
         if (is_negative()) {
             return -*this;
@@ -557,6 +624,11 @@ public:
         return *this;
     }
 
+    /**
+     * @brief 计算整数次幂
+     * @param exponent 指数
+     * @return 幂运算结果
+     */
     Irrational pow(int exponent) const {
         if (exponent == 0) {
             return Irrational::constant(1.0);
@@ -589,5 +661,9 @@ public:
         return os;
     }
 
+    /**
+     * @brief 获取无理数的内部类型
+     * @return 类型枚举值
+     */
     Type get_type() const { return type; }
 };

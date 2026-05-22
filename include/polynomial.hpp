@@ -1,3 +1,7 @@
+/**
+ * @file polynomial.hpp
+ * @brief 一元多项式模板类 Polynomial<T>，支持四则运算、GCD、求导、求值。
+ */
 #pragma once
 
 #include <vector>
@@ -11,6 +15,13 @@
 
 namespace lamina {
 
+/**
+ * @brief 计算两个系数的最大公约数（泛型实现）
+ * @tparam T 系数类型
+ * @param a 第一个系数
+ * @param b 第二个系数
+ * @return gcd(a, b)
+ */
 template<typename T>
 T gcd_coeff_impl(const T& a, const T& b) {
     if constexpr (std::is_integral_v<T>) {
@@ -27,45 +38,80 @@ T gcd_coeff_impl(const T& a, const T& b) {
     }
 }
 
+/**
+ * @brief 一元多项式模板类
+ * @tparam CoeffType 系数类型（支持 BigInt、Rational、int 等）
+ *
+ * 系数按升幂存储：coeffs[i] 对应 x^i 的系数。
+ */
 template <typename CoeffType>
 class Polynomial {
 public:
 
-    std::vector<CoeffType> coeffs;
-    std::string variable_name;
+    std::vector<CoeffType> coeffs;   ///< 系数数组，coeffs[i] 为 x^i 的系数
+    std::string variable_name;       ///< 变量名
 
+    /**
+     * @brief 构造零多项式
+     * @param var 变量名，默认 "x"
+     */
     Polynomial(const std::string& var = "x") : variable_name(var) {}
 
+    /**
+     * @brief 从系数向量构造多项式
+     * @param c 系数向量（升幂排列）
+     * @param var 变量名
+     */
     Polynomial(const std::vector<CoeffType>& c, const std::string& var = "x")
         : coeffs(c), variable_name(var) {
         trim();
     }
 
+    /**
+     * @brief 从单个常数构造常数多项式
+     * @param c 常数值
+     * @param var 变量名
+     */
     Polynomial(const CoeffType& c, const std::string& var = "x")
         : coeffs{c}, variable_name(var) {
         trim();
     }
 
+    /** @brief 去除高次零系数 */
     void trim() {
         while (coeffs.size() > 0 && coeffs.back() == CoeffType(0)) {
             coeffs.pop_back();
         }
     }
 
+    /** @brief 判断是否为零多项式 */
     bool is_zero() const {
         return coeffs.empty();
     }
 
+    /**
+     * @brief 获取多项式的次数
+     * @return 次数；零多项式返回 -1
+     */
     int degree() const {
         if (coeffs.empty()) return -1;
         return static_cast<int>(coeffs.size()) - 1;
     }
 
+    /**
+     * @brief 获取首项系数
+     * @return 最高次项的系数；零多项式返回 0
+     */
     CoeffType lead_coeff() const {
         if (coeffs.empty()) return CoeffType(0);
         return coeffs.back();
     }
 
+    /**
+     * @brief 多项式加法
+     * @param other 加数
+     * @return 和多项式
+     */
     Polynomial operator+(const Polynomial& other) const {
         if (variable_name != other.variable_name) {
 
@@ -87,6 +133,11 @@ public:
         return res;
     }
 
+    /**
+     * @brief 多项式减法
+     * @param other 减数
+     * @return 差多项式
+     */
     Polynomial operator-(const Polynomial& other) const {
          Polynomial res(variable_name);
          size_t n = std::max(coeffs.size(), other.coeffs.size());
@@ -101,6 +152,11 @@ public:
          return res;
     }
 
+    /**
+     * @brief 多项式乘法
+     * @param other 乘数
+     * @return 积多项式
+     */
     Polynomial operator*(const Polynomial& other) const {
         if (is_zero() || other.is_zero()) return Polynomial(variable_name);
 
@@ -116,6 +172,11 @@ public:
         return res;
     }
 
+    /**
+     * @brief 多项式判等
+     * @param other 比较对象
+     * @return 系数完全相同返回 true
+     */
     bool operator==(const Polynomial& other) const {
          if (degree() != other.degree()) return false;
          if (variable_name != other.variable_name && !is_zero() && !other.is_zero()) return false;
@@ -125,6 +186,12 @@ public:
          return true;
     }
 
+    /**
+     * @brief 多项式带余除法
+     * @param other 除数多项式
+     * @return pair(商, 余数)
+     * @throw std::runtime_error 除数为零多项式时抛出
+     */
     std::pair<Polynomial, Polynomial> div_mod(const Polynomial& other) const {
         if (other.is_zero()) throw std::runtime_error("Division by zero polynomial");
 
@@ -161,6 +228,12 @@ public:
         return {quotient, remainder};
     }
 
+    /**
+     * @brief 计算两个系数的 GCD（静态方法）
+     * @param a 第一个系数
+     * @param b 第二个系数
+     * @return gcd(a, b)
+     */
     static CoeffType gcd_coeff(const CoeffType& a, const CoeffType& b) {
         if constexpr (std::is_same_v<CoeffType, BigInt>) {
             return BigInt::gcd(a, b);
@@ -176,6 +249,10 @@ public:
         }
     }
 
+    /**
+     * @brief 计算多项式的容度（所有系数的 GCD）
+     * @return 容度值
+     */
     CoeffType content() const {
         if (is_zero()) return CoeffType(0);
         CoeffType g = coeffs[0];
@@ -192,6 +269,10 @@ public:
         }
     }
 
+    /**
+     * @brief 计算多项式的本原部分（除以容度）
+     * @return 本原多项式
+     */
     Polynomial primitive_part() const {
         if (is_zero()) return *this;
         CoeffType c = content();
@@ -214,6 +295,12 @@ public:
         return res;
     }
 
+    /**
+     * @brief 伪除法（避免分数运算）
+     * @param other 除数多项式
+     * @return pair(伪商, 伪余数)
+     * @throw std::runtime_error 除数为零多项式时抛出
+     */
     std::pair<Polynomial, Polynomial> pseudo_div_mod(const Polynomial& other) const {
         if (other.is_zero()) throw std::runtime_error("Division by zero polynomial");
 
@@ -261,6 +348,11 @@ public:
         return {quotient, remainder};
     }
 
+    /**
+     * @brief 对多项式求值（Horner 法）
+     * @param val 自变量的值
+     * @return 多项式在 val 处的值
+     */
     CoeffType eval(const CoeffType& val) const {
         if (coeffs.empty()) return CoeffType(0);
         CoeffType res = coeffs.back();
@@ -270,6 +362,10 @@ public:
         return res;
     }
 
+    /**
+     * @brief 求导
+     * @return 导多项式
+     */
     Polynomial differentiate() const {
         if (degree() < 1) return Polynomial(variable_name);
         Polynomial res(variable_name);
@@ -283,6 +379,10 @@ public:
         return res;
     }
 
+    /**
+     * @brief 首一化（使首项系数为 1）
+     * @return 首一多项式
+     */
     Polynomial make_monic() const {
         if (is_zero()) return *this;
         CoeffType lc = lead_coeff();
@@ -296,11 +396,22 @@ public:
         return res;
     }
 
+    /**
+     * @brief 伪除法取余数
+     * @param other 除数多项式
+     * @return 伪余数
+     */
     Polynomial pseudo_div_mod_rem(const Polynomial& other) const {
 
         return pseudo_div_mod(other).second;
     }
 
+    /**
+     * @brief 计算两个多项式的最大公因式
+     * @param a 第一个多项式
+     * @param b 第二个多项式
+     * @return gcd(a, b)
+     */
     static Polynomial gcd(Polynomial a, Polynomial b) {
         if (a.is_zero()) return b;
         if (b.is_zero()) return a;
@@ -344,6 +455,10 @@ public:
         }
     }
 
+    /**
+     * @brief 计算无平方因子部分
+     * @return 去除重因子后的多项式
+     */
     Polynomial square_free_part() const {
 
         if (degree() <= 0) return *this;
@@ -359,6 +474,10 @@ public:
         return q;
     }
 
+    /**
+     * @brief 转换为字符串表示
+     * @return 多项式的字符串形式
+     */
     std::string to_string() const {
         if (is_zero()) return "0";
         std::string s = "";
@@ -389,6 +508,13 @@ public:
     }
 };
 
+/**
+ * @brief 多项式流输出运算符
+ * @tparam T 系数类型
+ * @param os 输出流
+ * @param p 多项式
+ * @return 输出流引用
+ */
 template<typename T>
 std::ostream& operator<<(std::ostream& os, const Polynomial<T>& p) {
     if (p.is_zero()) return os << "0";

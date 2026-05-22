@@ -1,3 +1,7 @@
+/**
+ * @file limit_visitor.hpp
+ * @brief 极限访问器，通过代入和 L'Hôpital 法则计算极限。
+ */
 #pragma once
 
 #include "../symbolic_ast.hpp"
@@ -5,16 +9,27 @@
 #include <iostream>
 #include <cmath>
 
+/** @brief 极限访问器，通过代入求值和 L'Hôpital 法则计算符号表达式的极限 */
 class LimitVisitor : public SymbolicVisitor {
-    std::string var;
-    std::shared_ptr<SymbolicNode> point;
-    std::string direction;
+    std::string var;                        ///< 趋近变量名
+    std::shared_ptr<SymbolicNode> point;    ///< 趋近点
+    std::string direction;                  ///< 趋近方向（"+"、"-" 或空表示双侧）
 public:
-    std::shared_ptr<SymbolicNode> result;
+    std::shared_ptr<SymbolicNode> result;   ///< 极限计算结果
 
+    /**
+     * @brief 构造极限访问器
+     * @param v 趋近变量名
+     * @param p 趋近点的 AST 节点
+     * @param dir 趋近方向，"+" 为右极限，"-" 为左极限，空为双侧
+     */
     LimitVisitor(std::string v, std::shared_ptr<SymbolicNode> p, std::string dir = "")
         : var(std::move(v)), point(std::move(p)), direction(std::move(dir)) {}
 
+    /**
+     * @brief 获取极限计算结果
+     * @return 极限值的 AST 节点
+     */
     std::shared_ptr<SymbolicNode> get_result() const { return result; }
 
     void visit(NumberNode& node) override { result = node.clone(); }
