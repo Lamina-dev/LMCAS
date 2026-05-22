@@ -54,12 +54,12 @@ public:
             if (std::holds_alternative<BigInt>(exp_num->value)) e_val = std::get<BigInt>(exp_num->value).to_int();
             else if (std::holds_alternative<double>(exp_num->value)) e_val = (long long)std::get<double>(exp_num->value);
             else if (std::holds_alternative<Rational>(exp_num->value)) e_val = (long long)std::get<Rational>(exp_num->value).to_double();
-            
+
             if (e_val == 0) {
                 result = std::make_shared<NumberNode>(BigInt(1));
                 return;
             }
-            if (e_val > 0 && e_val < 20) { // Safety limit for expansion
+            if (e_val > 0 && e_val < 20) {
                 NormalizationVisitor norm;
                 std::shared_ptr<SymbolicNode> current = expanded_base;
                 for (int i = 1; i < (int)e_val; ++i) {

@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(LMCAS)
 
-# 设置输出目录
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -19,11 +18,8 @@ if(WIN32)
     add_compile_definitions(LAMMP_WINDOWS)
 endif()
 
-# 包含 LMMC 内部的 LAMMP 子项目
 add_subdirectory(LMMC/LAMMP)
 
-# 包含 LMMC 子项目
-# 禁用 LMMC 的测试和示例以节省编译时间
 set(LMMC_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LMMC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LMMC_BUILD_SHARED OFF CACHE BOOL "" FORCE)
@@ -31,7 +27,6 @@ set(LMMC_REQUIRE_LAMMP_STATIC OFF CACHE BOOL "" FORCE)
 set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP" CACHE PATH "" FORCE)
 add_subdirectory(LMMC)
 
-# 强制将LAMMP的输出目录设置到项目构建目录，方便调试
 set_target_properties(LammpCore PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
@@ -41,7 +36,6 @@ set_target_properties(LammpCore PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"
 )
 
-# LMCAS 库
 add_library(lmcas SHARED
     src/symbolic.cpp
     src/print_visitor.cpp
@@ -65,17 +59,14 @@ if(MSVC)
     target_compile_options(lmcas PRIVATE /utf-8 /permissive-)
 endif()
 
-# 包含路径
 target_include_directories(lmcas PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP/include
     ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/include
 )
 
-# 链接 LAMMP 核心库和 LMMC
 target_link_libraries(lmcas PUBLIC LammpCore lmmc)
 
-# 测试程序
 add_executable(test_cas tests/test_main.cpp)
 target_link_libraries(test_cas PRIVATE lmcas LammpCore)
 
@@ -163,10 +154,6 @@ target_link_libraries(test_bigint_add_carry PRIVATE lmcas LammpCore)
 add_executable(test_value_compare tests/test_value_compare.cpp)
 target_link_libraries(test_value_compare PRIVATE lmcas LammpCore)
 
-# add_executable(test_migration tests/test_migration.cpp)
-# target_link_libraries(test_migration PRIVATE lmcas LammpCore)
-
-# --- Benchmarks ---
 add_executable(benchmark_all benchmarks/benchmark_all.cpp)
 target_link_libraries(benchmark_all PRIVATE lmcas LammpCore)
 target_compile_definitions(benchmark_all PRIVATE -D_SYMBOLIC_BENCHMARK)
@@ -209,9 +196,6 @@ add_test(NAME TestNumberCompare COMMAND test_number_compare)
 add_test(NAME TestIntegrationFallback COMMAND test_integration_fallback)
 add_test(NAME TestBigIntAddCarry COMMAND test_bigint_add_carry)
 add_test(NAME TestValueCompare COMMAND test_value_compare)
-
-# add_executable(debug_recursion debug_recursion.cpp)
-# target_link_libraries(debug_recursion PRIVATE lmcas LammpCore)
 
 add_executable(test_new_integration tests/test_new_integration.cpp)
 target_link_libraries(test_new_integration PRIVATE lmcas LammpCore)
@@ -288,4 +272,3 @@ add_test(NAME TestParametricInequality COMMAND test_parametric_inequality)
 add_executable(test_parametric_system tests/test_parametric_system.cpp)
 target_link_libraries(test_parametric_system PRIVATE lmcas LammpCore)
 add_test(NAME TestParametricSystem COMMAND test_parametric_system)
-

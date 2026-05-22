@@ -4,9 +4,8 @@
 int main() {
     TEST_CASE("Solve Transcendental - Basic callable");
 
-    // Verify the function is callable with sin(x) = 0
     auto x = SymbolicExpr::variable("x");
-    auto expr = SymbolicExpr::sin(x); // sin(x) = 0
+    auto expr = SymbolicExpr::sin(x);
 
     auto roots = lamina::solve_transcendental(expr, "x");
     EXPECT_TRUE(!roots.empty(), "solve_transcendental returns solutions for sin(x)=0");

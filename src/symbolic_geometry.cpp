@@ -4,7 +4,6 @@
 
 namespace lamina {
 
-// 体积：V = ∫[a,b] π (f(x))^2 dx
 std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
@@ -18,7 +17,6 @@ std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
     return SymbolicExpr::add(upper, SymbolicExpr::multiply(SymbolicExpr::number(-1), lower));
 }
 
-// 弧长：L = ∫[a,b] sqrt(1 + (f'(x))^2) dx
 std::shared_ptr<SymbolicExpr> arc_length_x(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
@@ -32,7 +30,6 @@ std::shared_ptr<SymbolicExpr> arc_length_x(
     return SymbolicExpr::add(upper, SymbolicExpr::multiply(SymbolicExpr::number(-1), lower));
 }
 
-// 体积：V = ∫[a,b] π (f(y))^2 dy
 std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
@@ -46,7 +43,6 @@ std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
     return SymbolicExpr::add(upper, SymbolicExpr::multiply(SymbolicExpr::number(-1), lower));
 }
 
-// 弧长：L = ∫[a,b] sqrt(1 + (f'(y))^2) dy
 std::shared_ptr<SymbolicExpr> arc_length_y(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
@@ -60,4 +56,4 @@ std::shared_ptr<SymbolicExpr> arc_length_y(
     return SymbolicExpr::add(upper, SymbolicExpr::multiply(SymbolicExpr::number(-1), lower));
 }
 
-} // namespace lamina
+}

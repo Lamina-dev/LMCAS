@@ -4,3 +4,4 @@ test*.exe
 out.txt
 /*.dll
 .sisyphus/
+.kiro/

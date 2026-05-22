@@ -19,35 +19,23 @@
 #include <limits>
 #include "lmmc/config.h"
 
-
-
-
-// BigInt uses LAMMP's heap allocators directly. These never return NULL —
-// allocation failures trigger lmmp_abort() instead. Therefore subsequent
-// NULL checks on the returned pointer are dead code.
-inline void bigint_free(void* p) { 
+inline void bigint_free(void* p) {
     lmmp_free(p);
 }
 
-inline void* bigint_alloc(size_t size) { 
+inline void* bigint_alloc(size_t size) {
     return lmmp_alloc(size);
 }
-
 
 inline mp_size_t lmmp_rlz(mp_srcptr p, mp_size_t n) {
     while (n > 0 && p[n-1] == 0) n--;
     return n;
 }
 
-// Multiplication wrapper around LAMMP's lmmp_mul_.
-// Note: lmmp_global_init() (called via lmmc_init() in DllMain) sets up the
-// default 320KB scratch stack. LAMMP internally manages push/pop within
-// each operation, so no manual reset is required.
 inline void bigint_mul_(mp_ptr dst, mp_srcptr numa, mp_size_t na, mp_srcptr numb, mp_size_t nb) {
     ::lmmp_mul_(dst, numa, na, numb, nb);
 }
 
-// Division wrapper around LAMMP's lmmp_div_. Same notes as bigint_mul_.
 inline void bigint_div_(mp_ptr q, mp_ptr r, mp_srcptr n, mp_size_t nn, mp_srcptr d, mp_size_t dn) {
     ::lmmp_div_(q, r, n, nn, d, dn);
 }
@@ -64,14 +52,12 @@ public:
     mp_size_t _size = 0;
     mp_size_t _alloc = 0;
     int _sign = ZERO;
-    bool negative = false; 
+    bool negative = false;
 
-    
     void realloc_to(mp_size_t new_alloc) {
         if (new_alloc <= _alloc) return;
-        new_alloc = (new_alloc + 3) & ~3; 
-        // bigint_alloc uses lmmp_alloc, which aborts on failure rather than
-        // returning NULL. No null-check is needed.
+        new_alloc = (new_alloc + 3) & ~3;
+
         mp_ptr new_data = (mp_ptr)bigint_alloc(new_alloc * sizeof(mp_limb_t));
 
         if (_size > 0 && _data) {
@@ -103,7 +89,7 @@ public:
 
 public:
     BigInt() : _data(nullptr), _size(0), _alloc(0), _sign(ZERO), negative(false) {}
-    
+
     ~BigInt() {
         if (_data) bigint_free(_data);
     }
@@ -120,7 +106,7 @@ public:
         }
     }
 
-    BigInt(BigInt&& other) noexcept 
+    BigInt(BigInt&& other) noexcept
         : _data(other._data), _size(other._size), _alloc(other._alloc), _sign(other._sign), negative(other.negative) {
         other._data = nullptr;
         other._size = 0;
@@ -142,7 +128,7 @@ public:
         }
         return *this;
     }
-    
+
     BigInt& operator=(BigInt&& other) noexcept {
         if (this != &other) {
             if (_data) bigint_free(_data);
@@ -151,7 +137,7 @@ public:
             _alloc = other._alloc;
             _sign = other._sign;
             negative = other.negative;
-            
+
             other._data = nullptr;
             other.zero();
         }
@@ -167,9 +153,9 @@ public:
         if (val < 0) {
             _sign = NEGATIVE;
             negative = true;
-            
+
             if (val == std::numeric_limits<long long>::min()) {
-                 _data[0] = (uint64_t)(-(val + 1)) + 1; 
+                 _data[0] = (uint64_t)(-(val + 1)) + 1;
             } else {
                 _data[0] = -val;
             }
@@ -206,15 +192,14 @@ public:
         } else if (str[0] == '+') {
             start = 1;
         }
-        
+
         if (start == str.length()) { zero(); return; }
 
         size_t len = str.length() - start;
-        
-        mp_size_t needed = len / 19 + 2; 
+
+        mp_size_t needed = len / 19 + 2;
         realloc_to(needed);
 
-        
         std::vector<mp_byte_t> digit_buf(len);
         for (size_t i = 0; i < len; ++i) {
             char c = str[start + i];
@@ -222,13 +207,12 @@ public:
             if (c >= '0' && c <= '9') {
                 d = c - '0';
             }
-            
-            digit_buf[len - 1 - i] = d; 
+
+            digit_buf[len - 1 - i] = d;
         }
 
-        
         _size = lmmp_from_str_(_data, digit_buf.data(), len, 10);
-        
+
         if (_size == 0) {
             zero();
         } else {
@@ -237,22 +221,21 @@ public:
         }
         normalize();
     }
-    
+
     std::string ToString() const {
         if (_size == 0) return "0";
-        
-        size_t len_needed = _size * 20 + 5; 
+
+        size_t len_needed = _size * 20 + 5;
         std::vector<mp_byte_t> buf(len_needed);
-        
+
         mp_size_t str_len = lmmp_to_str_((mp_byte_t*)buf.data(), _data, _size, 10);
-        
-        if (str_len == 0) return "0"; 
-        
+
+        if (str_len == 0) return "0";
+
         std::string res;
         res.reserve(str_len + 2);
         if (_sign == NEGATIVE) res += '-';
-        
-        
+
         for(mp_size_t i = str_len; i > 0; --i) {
             res += (char)(buf[i - 1] + '0');
         }
@@ -262,10 +245,10 @@ public:
 
     int to_int() const {
         if (_size == 0) return 0;
-        
+
         long long val = _data[0];
-        if (_size > 1) { 
-             
+        if (_size > 1) {
+
              return _sign == POSITIVE ? 2147483647 : -2147483648;
         }
         if (_sign == NEGATIVE) val = -val;
@@ -276,7 +259,7 @@ public:
         if (_size == 0) return 0.0;
         lmmc_real_t res = 0.0;
         lmmc_real_t base_mul = 18446744073709551616.0;
-        
+
         for (mp_size_t i = _size; i > 0; --i) {
             LMMC_REAL_MUL(&res, &res, &base_mul);
             lmmc_real_t val = (lmmc_real_t)_data[i-1];
@@ -299,7 +282,6 @@ public:
         return 0;
     }
 
-    
     bool operator==(const BigInt& other) const {
         return _sign == other._sign && cmp_abs(*this, other) == 0;
     }
@@ -316,8 +298,7 @@ public:
     bool operator!() const { return _size == 0; }
     explicit operator bool() const { return _size != 0; }
     bool is_zero() const { return _size == 0; }
-    
-    
+
     std::vector<uint64_t> get_digits() const {
         std::vector<uint64_t> d;
         d.reserve(_size);
@@ -326,7 +307,7 @@ public:
         }
         return d;
     }
-    
+
     std::size_t hash() const {
         std::size_t seed = 0;
         for (mp_size_t i = 0; i < _size; ++i) {
@@ -337,7 +318,7 @@ public:
         }
         return seed;
     }
-    
+
     BigInt Abs() const {
         BigInt ret = *this;
         if (ret._size > 0) {
@@ -346,9 +327,9 @@ public:
         }
         return ret;
     }
-    
+
     bool IsNegative() const { return _sign == NEGATIVE; }
-    
+
     BigInt negate() const {
         BigInt ret = *this;
         if (ret._size > 0) {
@@ -357,40 +338,29 @@ public:
         }
         return ret;
     }
-    
+
     BigInt operator-() const { return negate(); }
 
-    
-    
-    
-    
-    
     static void add_abs(BigInt& dst, const BigInt& a, const BigInt& b) {
         mp_size_t n = std::max(a._size, b._size);
         dst.realloc_to(n + 1);
-        
-        
-        
-        
+
         mp_limb_t cy = 0;
-        
-        
+
         mp_srcptr ap = a._data;
         mp_srcptr bp = b._data;
         mp_size_t na = a._size;
         mp_size_t nb = b._size;
-        
-        
+
         if (na < nb) { std::swap(ap, bp); std::swap(na, nb); }
-        
-        
+
         if (nb > 0) {
              cy = lmmp_add_n_(dst._data, ap, bp, nb);
         }
-        
+
         if (na > nb) {
              if (dst._data != ap) std::memcpy(dst._data + nb, ap + nb, (na - nb) * sizeof(mp_limb_t));
-             
+
              mp_size_t k = nb;
              while (cy && k < na) {
                  dst._data[k]++;
@@ -402,24 +372,22 @@ public:
         dst._size = na + cy;
         dst.normalize();
     }
-    
-    
+
     static void sub_abs(BigInt& dst, const BigInt& a, const BigInt& b) {
         mp_size_t na = a._size;
         mp_size_t nb = b._size;
         dst.realloc_to(na);
-        
+
         mp_limb_t bw = 0;
         if (nb > 0)
             bw = lmmp_sub_n_(dst._data, a._data, b._data, nb);
-        
-        
+
         if (na > nb) {
              if (dst._data != a._data) std::memcpy(dst._data + nb, a._data + nb, (na - nb) * sizeof(mp_limb_t));
              mp_size_t k = nb;
              while (bw && k < na) {
                  dst._data[k]--;
-                 bw = (dst._data[k] == (mp_limb_t)-1); 
+                 bw = (dst._data[k] == (mp_limb_t)-1);
                  k++;
              }
         }
@@ -430,21 +398,21 @@ public:
     BigInt operator+(const BigInt& other) const {
         if (_sign == ZERO) return other;
         if (other._sign == ZERO) return *this;
-        
+
         BigInt res;
         if (_sign == other._sign) {
             add_abs(res, *this, other);
             res._sign = _sign;
             res.negative = (_sign == NEGATIVE);
         } else {
-            
+
             int cmp = cmp_abs(*this, other);
             if (cmp == 0) {
                 return BigInt(0);
             }
             if (cmp > 0) {
                 sub_abs(res, *this, other);
-                res._sign = _sign; 
+                res._sign = _sign;
                 res.negative = (_sign == NEGATIVE);
             } else {
                 sub_abs(res, other, *this);
@@ -458,23 +426,21 @@ public:
     BigInt operator-(const BigInt& other) const {
         return *this + (-other);
     }
-    
+
     BigInt operator*(const BigInt& other) const {
         if (_size == 0 || other._size == 0) return BigInt(0);
-        
+
         BigInt res;
         mp_size_t na = _size;
         mp_size_t nb = other._size;
         res.realloc_to(na + nb);
-        
-        
-        
+
         if (na >= nb) {
             bigint_mul_(res._data, _data, na, other._data, nb);
         } else {
             bigint_mul_(res._data, other._data, nb, _data, na);
         }
-        
+
         res._size = na + nb;
         res._sign = (_sign == other._sign) ? POSITIVE : NEGATIVE;
         res.negative = (res._sign == NEGATIVE);
@@ -484,50 +450,40 @@ public:
 
     BigInt operator/(const BigInt& other) const {
         if (other._size == 0) throw std::domain_error("Division by zero");
-        if (_size < other._size) return BigInt(0); 
-        
+        if (_size < other._size) return BigInt(0);
+
         BigInt q, r;
         mp_size_t na = _size;
         mp_size_t nb = other._size;
-        
-        
+
         q.realloc_to(na - nb + 1);
-        r.realloc_to(nb); 
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        r.realloc_to(nb);
+
         bigint_div_(q._data, r._data, _data, na, other._data, nb);
-        
+
         q._size = na - nb + 1;
         q._sign = (_sign == other._sign) ? POSITIVE : NEGATIVE;
         q.negative = (q._sign == NEGATIVE);
         q.normalize();
         return q;
     }
-    
+
     BigInt operator%(const BigInt& other) const {
         if (other._size == 0) throw std::domain_error("Division by zero");
-        if (_size < other._size) return *this; 
+        if (_size < other._size) return *this;
 
-        BigInt q; 
+        BigInt q;
         mp_size_t na = _size;
         mp_size_t nb = other._size;
         q.realloc_to(na - nb + 1);
 
         BigInt r;
         r.realloc_to(nb);
-        
-        
+
         bigint_div_(q._data, r._data, _data, na, other._data, nb);
-        
+
         r._size = nb;
-        r._sign = _sign; 
+        r._sign = _sign;
         r.negative = (r._sign == NEGATIVE);
         r.normalize();
         return r;
@@ -539,18 +495,15 @@ public:
     BigInt& operator/=(const BigInt& other) { *this = *this / other; return *this; }
     BigInt& operator%=(const BigInt& other) { *this = *this % other; return *this; }
 
-    
     BigInt power(unsigned long exp) const {
         if (_size == 0) return exp == 0 ? BigInt(1) : BigInt(0);
-        
+
         BigInt res;
         mp_size_t needed = lmmp_pow_size_(_data, _size, exp);
         res.realloc_to(needed);
-        
-        
+
         res._size = lmmp_pow_(res._data, needed, _data, _size, exp);
-        
-        
+
         if (_sign == NEGATIVE && (exp & 1)) {
             res._sign = NEGATIVE;
             res.negative = true;
@@ -566,22 +519,19 @@ public:
         if (exp._sign == NEGATIVE) throw std::domain_error("Negative exponent in integer power");
         if (exp._size == 0) return BigInt(1);
 
-        
         if (exp._size <= 1) {
             return power((unsigned long)exp._data[0]);
         }
-        
+
         BigInt base = *this;
         BigInt res(1);
-        
-        
+
         while (!exp.is_zero()) {
             if (exp._data[0] & 1) {
                 res = res * base;
             }
             base = base * base;
-            
-             
+
              mp_limb_t carry = 0;
              for (mp_size_t i = exp._size; i > 0; --i) {
                  mp_limb_t cur = exp._data[i-1];
@@ -594,33 +544,26 @@ public:
         return res;
     }
 
-    
     BigInt sqrt() const {
         if (_sign == NEGATIVE) throw std::domain_error("Sqrt of negative number");
         if (_size == 0) return BigInt(0);
         if (*this == BigInt(1)) return BigInt(1);
-        
+
         BigInt res;
-        
+
         mp_size_t res_alloc = (_size / 2) + 2;
         res.realloc_to(res_alloc);
 
-        
-        
-        
         lmmp_sqrt_(res._data, nullptr, _data, _size, 0);
 
-        
-        
         res._size = res_alloc;
         res._sign = POSITIVE;
         res.negative = false;
         res.normalize();
-        
+
         return res;
     }
 
-    
     bool is_odd() const {
         if (_size == 0) return false;
         return (_data[0] & 1);
@@ -647,22 +590,22 @@ public:
     BigInt& operator>>=(mp_size_t shift) {
         if (shift == 0) return *this;
         if (is_zero()) return *this;
-        
+
         mp_size_t limb_shift = shift / LIMB_BITS;
         mp_size_t bit_shift = shift % LIMB_BITS;
-        
+
         if (limb_shift >= _size) {
             _size = 0;
             _sign = POSITIVE;
             negative = false;
             return *this;
         }
-        
+
         if (limb_shift > 0) {
             std::memmove(_data, _data + limb_shift, (_size - limb_shift) * sizeof(mp_limb_t));
             _size -= limb_shift;
         }
-        
+
         if (bit_shift > 0) {
              lmmp_shr_(_data, _data, _size, bit_shift);
              if (_size > 0 && _data[_size-1] == 0) _size--;
@@ -674,14 +617,14 @@ public:
     BigInt& operator<<=(mp_size_t shift) {
         if (shift == 0) return *this;
         if (is_zero()) return *this;
-        
+
         mp_size_t limb_shift = shift / LIMB_BITS;
         mp_size_t bit_shift = shift % LIMB_BITS;
-        
+
         mp_size_t old_size = _size;
         mp_size_t needed = old_size + limb_shift + (bit_shift > 0 ? 1 : 0);
         realloc_to(needed);
-        
+
         if (bit_shift > 0) {
             mp_limb_t carry = lmmp_shl_(_data + limb_shift, _data, old_size, bit_shift);
             if (carry) {
@@ -694,11 +637,11 @@ public:
              std::memmove(_data + limb_shift, _data, old_size * sizeof(mp_limb_t));
              _size += limb_shift;
         }
-        
+
         if (limb_shift > 0) {
             std::memset(_data, 0, limb_shift * sizeof(mp_limb_t));
         }
-        
+
         normalize();
         return *this;
     }
@@ -715,7 +658,6 @@ public:
         return res;
     }
 
-    
     static BigInt factorial(unsigned int n) {
         BigInt res;
         mp_bitcnt_t bits = 0;
@@ -756,11 +698,7 @@ public:
 
     static BigInt multinomial(unsigned int n, const std::vector<unsigned int>& r) {
         if (r.empty()) return BigInt(1);
-        
-        
-        
-        
-        
+
         std::vector<uint> r_uints;
         r_uints.reserve(r.size());
         ulong sum = 0;
@@ -771,10 +709,10 @@ public:
         if (sum != n) throw std::invalid_argument("multinomial: sum of ranks must equal n");
 
         BigInt res;
-        
-        ulong n_calc = 0; 
+
+        ulong n_calc = 0;
         mp_size_t needed = lmmp_multinomial_size_(r_uints.data(), (uint)r_uints.size(), &n_calc);
-        
+
         res.realloc_to(needed);
         res._size = lmmp_multinomial_(res._data, needed, (uint)sum, r_uints.data(), (uint)r_uints.size());
         res._sign = POSITIVE;
@@ -786,21 +724,19 @@ public:
     static BigInt gcd(const BigInt& a, const BigInt& b) {
         if (a.is_zero()) return b.Abs();
         if (b.is_zero()) return a.Abs();
-        
+
         BigInt abs_a = a.Abs();
         BigInt abs_b = b.Abs();
-        
+
         BigInt res;
         mp_size_t na = abs_a._size;
         mp_size_t nb = abs_b._size;
-        
-        
+
         mp_size_t min_n = (na < nb) ? na : nb;
         res.realloc_to(min_n);
-        
-        
+
         res._size = lmmp_gcd_lehmer_(res._data, abs_a._data, na, abs_b._data, nb);
-        
+
         res._sign = POSITIVE;
         res.negative = false;
         res.normalize();
@@ -812,24 +748,21 @@ public:
         return (a.Abs() / gcd(a, b)) * b.Abs();
     }
 
-    
-    
     static BigInt pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod) {
          if (mod.is_zero()) throw std::runtime_error("Modulo by zero");
-         
-         
+
          if (base._size <= 1 && exp._size <= 1 && mod._size <= 1) {
              ulong b = base.is_zero() ? 0 : base._data[0];
              ulong e = exp.is_zero() ? 0 : exp._data[0];
              ulong m = mod._data[0];
-             
+
              return BigInt(lmmp_powmod_ulong_(b % m, e, m));
          }
 
          BigInt res = 1;
          BigInt b = base % mod;
          BigInt e = exp;
-         
+
          while (!e.is_zero()) {
              if (e.is_odd()) res = (res * b) % mod;
              b = (b * b) % mod;
@@ -839,23 +772,19 @@ public:
     }
 
     bool is_prime() const {
-        if (_sign == NEGATIVE) return false; 
-        
-        
+        if (_sign == NEGATIVE) return false;
+
         if (_size <= 1) {
              return lmmp_is_prime_ulong_(_size == 0 ? 0 : _data[0]);
         }
-        
-        // Miller-Rabin deterministic bases for 64-bit numbers
+
         static const uint64_t mr_bases[] = {2, 3, 5, 7, 11, 13, 17};
-        
-        // Quick divisibility check by small primes
+
         static const uint64_t small_primes[] = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
         for (auto p : small_primes) {
             if ((*this % p).is_zero()) return false;
         }
-        
-        // Write n-1 = d * 2^s
+
         BigInt n = *this;
         BigInt d = n - 1;
         BigInt two(2);
@@ -864,15 +793,15 @@ public:
             d = d / two;
             s++;
         }
-        
+
         const int num_bases = sizeof(mr_bases) / sizeof(mr_bases[0]);
         for (int i = 0; i < num_bases; ++i) {
             BigInt a(mr_bases[i]);
             if (a >= n) continue;
-            
+
             BigInt x = BigInt::pow_mod(a, d, n);
             if (x == 1 || x == n - 1) continue;
-            
+
             bool composite = true;
             for (int r = 1; r < s; ++r) {
                 x = BigInt::pow_mod(x, two, n);
@@ -883,7 +812,7 @@ public:
             }
             if (composite) return false;
         }
-        return true; 
+        return true;
     }
 
     bool is_perfect_square() const {

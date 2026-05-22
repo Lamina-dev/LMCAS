@@ -44,10 +44,10 @@ void PrintVisitor::visit(MultiplyNode& node) {
     }
     for (size_t i = 0; i < node.operands.size(); ++i) {
         if (i > 0) buffer << "*";
-        
+
         bool needs_parens = std::dynamic_pointer_cast<AddNode>(node.operands[i]) != nullptr ||
                            std::dynamic_pointer_cast<PowerNode>(node.operands[i]) != nullptr;
-        
+
         if (!needs_parens) {
             if (auto num = std::dynamic_pointer_cast<NumberNode>(node.operands[i])) {
                 if (std::holds_alternative<Rational>(num->value)) {
@@ -63,13 +63,13 @@ void PrintVisitor::visit(MultiplyNode& node) {
 }
 
 void PrintVisitor::visit(PowerNode& node) {
-    bool base_parens = std::dynamic_pointer_cast<AddNode>(node.base) || 
+    bool base_parens = std::dynamic_pointer_cast<AddNode>(node.base) ||
                       std::dynamic_pointer_cast<MultiplyNode>(node.base);
     if (base_parens) buffer << "(";
     node.base->accept(*this);
     if (base_parens) buffer << ")";
     buffer << "^";
-    bool exp_parens = std::dynamic_pointer_cast<AddNode>(node.exponent) || 
+    bool exp_parens = std::dynamic_pointer_cast<AddNode>(node.exponent) ||
                      std::dynamic_pointer_cast<MultiplyNode>(node.exponent) ||
                      std::dynamic_pointer_cast<PowerNode>(node.exponent);
     if (exp_parens) buffer << "(";
@@ -82,7 +82,7 @@ void PrintVisitor::visit(FunctionNode& node) {
         buffer << "inf";
         return;
     }
-    
+
     switch (node.type) {
         case FunctionNode::FuncType::Sin: buffer << "sin"; break;
         case FunctionNode::FuncType::Cos: buffer << "cos"; break;
@@ -127,7 +127,7 @@ void PrintVisitor::visit(MatrixNode& node) {
             if (element) {
                 element->accept(*this);
             } else {
-                buffer << "0"; 
+                buffer << "0";
             }
             if (j < node.cols - 1) {
                 buffer << ", ";

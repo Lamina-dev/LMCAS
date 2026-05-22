@@ -7,31 +7,26 @@
 
 namespace lamina {
 
-
 using MatchMap = std::unordered_map<std::string, SymbolicExpr>;
 
 class LAMINA_API Matcher {
 public:
-    
-    
-    static bool match(const SymbolicExpr& pattern, const SymbolicExpr& target, 
+
+    static bool match(const SymbolicExpr& pattern, const SymbolicExpr& target,
                       const std::unordered_set<std::string>& wildcards,
                       MatchMap& results);
 
-    
-    // Replace logic with implicit remainder handling
     static SymbolicExpr replace(const SymbolicExpr& template_expr, const MatchMap& bindings, bool use_rest = true);
 };
 
 struct LAMINA_API Rule {
     SymbolicExpr pattern;
     SymbolicExpr replacement;
-    std::unordered_set<std::string> wildcards; 
+    std::unordered_set<std::string> wildcards;
 
-    
-    std::function<bool(const MatchMap&)> condition; 
+    std::function<bool(const MatchMap&)> condition;
 
-    Rule(SymbolicExpr p, SymbolicExpr r, std::unordered_set<std::string> w, 
+    Rule(SymbolicExpr p, SymbolicExpr r, std::unordered_set<std::string> w,
          std::function<bool(const MatchMap&)> c = nullptr)
         : pattern(p), replacement(r), wildcards(w), condition(c) {}
 };
@@ -41,18 +36,14 @@ class LAMINA_API RewriteEngine {
 
 public:
     void add_rule(const Rule& rule);
-    
-    
+
     SymbolicExpr apply(const SymbolicExpr& expr, int max_iterations = 100);
 
-    
     SymbolicExpr apply_step(const SymbolicExpr& expr);
 
     const std::vector<Rule>& get_rules() const { return rules; }
 };
 
-
-// Helper to create a wildcard expression
 LAMINA_API SymbolicExpr wildcard(const std::string& name);
 
-} 
+}

@@ -51,9 +51,9 @@ public:
         lmModule, lmCppFunction,
         Null, Bool, Infinity,
         Int, Float, BigInt,
-        lmInt, lmDecimal, 
+        lmInt, lmDecimal,
         Rational, Irrational,
-        String, Array, Set, Matrix }; 
+        String, Array, Set, Matrix };
     Type type;
 
 	using DataType = std::variant<
@@ -74,10 +74,8 @@ public:
 
     ~Value() = default;
 
-    
     Value() : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
 
-    
     Value(std::nullptr_t) : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
     Value(bool b) : type(Type::Bool), data(std::in_place_index<1>, b) {}
     Value(int i) : type(Type::Int), data(std::in_place_index<2>, i) {}
@@ -103,16 +101,16 @@ public:
     Value(const std::shared_ptr<LmCppFunction>& func) : type(Type::lmCppFunction), data(func) {}
     Value(const std::shared_ptr<LmModule>& module) : type(Type::lmModule), data(module) {}
     Value(const std::vector<Value>& arr) {
-        
+
         bool is_matrix = !arr.empty() && arr[0].is_array();
         if (is_matrix) {
-            
+
             std::vector<std::vector<Value>> matrix;
             for (const auto& row: arr) {
                 if (row.is_array()) {
                     matrix.push_back(std::get<std::vector<Value>>(row.data));
                 } else {
-                    
+
                     type = Type::Array;
                     data = arr;
                     return;
@@ -126,10 +124,8 @@ public:
         }
     }
 
-
     Value(const std::vector<std::vector<Value>>& mat) : type(Type::Matrix), data(mat) {}
 
-    
     bool is_null() const { return type == Type::Null; }
 	bool is_infinity() const { return type == Type::Infinity; }
     bool is_bool() const { return type == Type::Bool; }
@@ -148,7 +144,7 @@ public:
     bool is_lmModule() const { return type == Type::lmModule; }
     bool is_lmCppFunction() const { return type == Type::lmCppFunction; }
     bool is_numeric() const { return type == Type::Int || type == Type::Float || type == Type::BigInt || type == Type::Rational || type == Type::Irrational || type == Type::Symbolic; }
-    
+
     lmmc_real_t as_number() const {
 		if (type == Type::Infinity) {
             lmmc_real_t inf;
@@ -159,11 +155,11 @@ public:
 		if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
         if (type == Type::Float) return std::get<lmmc_real_t>(data);
         if (type == Type::BigInt) {
-            
+
             const auto& bigint_val = std::get<::BigInt>(data);
             int int_val = bigint_val.to_int();
             if (int_val == INT_MAX || int_val == INT_MIN) {
-                
+
                 return bigint_val.to_double();
             }
             return static_cast<lmmc_real_t>(int_val);
@@ -180,7 +176,6 @@ public:
         return 0.0;
     }
 
-    
     ::Rational as_rational() const {
         if (type == Type::Rational) return std::get<::Rational>(data);
         if (type == Type::Int) return ::Rational(std::get<int>(data));
@@ -195,7 +190,6 @@ public:
         return ::Rational(0);
     }
 
-    
     ::Irrational as_irrational() const {
         if (type == Type::Irrational) return std::get<::Irrational>(data);
         if (type == Type::Int) return ::Irrational::constant(std::get<int>(data));
@@ -243,7 +237,6 @@ public:
 		return false;
 	}
 
-    
     bool as_bool() const {
 		if (type == Type::Infinity) return true;
 		if (type == Type::Bool) return std::get<bool>(data);
@@ -257,7 +250,6 @@ public:
         return false;
     }
 
-    
     std::string to_string() const {
         switch (type) {
 			case Type::Infinity: {
@@ -272,7 +264,7 @@ public:
                 return std::to_string(std::get<int>(data));
             case Type::Float: {
                 lmmc_real_t val = std::get<lmmc_real_t>(data);
-                
+
                 std::string str = std::to_string(val);
                 str.erase(str.find_last_not_of('0') + 1, std::string::npos);
                 str.erase(str.find_last_not_of('.') + 1, std::string::npos);
@@ -350,7 +342,6 @@ public:
         }
     }
 
-    
     bool operator==(const Value& other) const {
         if (type != other.type) return false;
         if (data.index() != other.data.index()) return false;
@@ -386,7 +377,6 @@ public:
         }, data);
     }
 
-    
     Value vector_add(const Value& other) const {
         if (!is_array() || !other.is_array()) {
             std::cerr << "Error: Vector addition requires two arrays" << std::endl;
@@ -439,7 +429,6 @@ public:
         return Value(result);
     }
 
-    
     Value dot_product(const Value& other) const {
         if (!is_array() || !other.is_array()) {
             std::cerr << "Error: Dot product requires two arrays" << std::endl;
@@ -465,7 +454,7 @@ public:
         }
         return Value(result);
     }
-    
+
     Value scalar_multiply(lmmc_real_t scalar) const {
         if (!is_array()) {
             std::cerr << "Error: Scalar multiplication requires an array" << std::endl;
@@ -486,7 +475,6 @@ public:
         return Value(result);
     }
 
-    
     Value cross_product(const Value& other) const {
         if (!is_array() || !other.is_array()) {
             std::cerr << "Error: Cross product requires two arrays" << std::endl;
@@ -518,7 +506,6 @@ public:
         return Value(result);
     }
 
-    
     Value magnitude() const {
         if (!is_array()) {
             std::cerr << "Error: Magnitude requires an array" << std::endl;
@@ -542,7 +529,6 @@ public:
         return Value(res_sqrt);
     }
 
-    
     Value normalize() const {
         Value mag = magnitude();
         if (!mag.is_numeric() || mag.as_number() == 0.0) {
@@ -552,7 +538,6 @@ public:
         return scalar_multiply(1.0 / mag.as_number());
     }
 
-    
     Value matrix_multiply(const Value& other) const {
         if (!is_matrix() || !other.is_matrix()) {
             std::cerr << "Error: Matrix multiplication requires two matrices" << std::endl;
@@ -589,7 +574,6 @@ public:
         return Value(result);
     }
 
-    
     Value determinant() const {
         if (!is_matrix()) {
             std::cerr << "Error: Determinant requires a matrix" << std::endl;
@@ -606,7 +590,7 @@ public:
         size_t n = mat.size();
 
         if (n == 2) {
-            
+
             if (!mat[0][0].is_numeric() || !mat[0][1].is_numeric() ||
                 !mat[1][0].is_numeric() || !mat[1][1].is_numeric()) {
                 std::cerr << "Error: Matrix elements must be numeric" << std::endl;
@@ -618,7 +602,7 @@ public:
             lmmc_real_t d = mat[1][1].as_number();
             return Value(a * d - b * c);
         } else if (n == 3) {
-            
+
             for (size_t i = 0; i < 3; ++i) {
                 for (size_t j = 0; j < 3; ++j) {
                     if (!mat[i][j].is_numeric()) {

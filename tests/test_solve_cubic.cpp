@@ -5,11 +5,8 @@
 #include <sstream>
 #include <algorithm>
 
-// Helper: create a SymbolicExpr number from int
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
-// Recursive numeric evaluator that handles Add, Multiply, Power, Number, Function nodes.
-// Returns NaN if the expression cannot be evaluated (e.g., contains variables or imaginary unit).
 static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
     if (!expr || !expr->root) return 0.0;
 
@@ -38,7 +35,7 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(expr->root)) {
         double base = eval_numeric(std::make_shared<SymbolicExpr>(pow->base));
         double exp = eval_numeric(std::make_shared<SymbolicExpr>(pow->exponent));
-        // Handle negative base with fractional exponent (e.g., cbrt of negative)
+
         if (base < 0.0 && std::abs(exp - std::round(exp)) > 1e-15) {
             double denom = std::round(1.0 / exp);
             if (std::abs(exp * denom - 1.0) < 1e-12 && ((int)denom % 2 == 1)) {
@@ -59,7 +56,7 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
                 case FunctionNode::FuncType::Exp: return std::exp(arg);
                 case FunctionNode::FuncType::Ln: return std::log(arg);
                 case FunctionNode::FuncType::Sqrt:
-                    if (arg < 0.0) return std::nan(""); // imaginary
+                    if (arg < 0.0) return std::nan("");
                     return std::sqrt(arg);
                 case FunctionNode::FuncType::Abs: return std::abs(arg);
                 case FunctionNode::FuncType::ArcCos: return std::acos(arg);
@@ -77,7 +74,6 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
     return std::nan("");
 }
 
-// Helper: evaluate polynomial ax^3 + bx^2 + cx + d at a numeric root value
 static double eval_cubic_at(double a, double b, double c, double d, double x) {
     return a * x * x * x + b * x * x + c * x + d;
 }
@@ -85,7 +81,6 @@ static double eval_cubic_at(double a, double b, double c, double d, double x) {
 int main() {
     TEST_CASE("Solve Cubic - Placeholder");
 
-    // Basic cubic: x^3 - 6x^2 + 11x - 6 = 0 has roots 1, 2, 3
     {
         auto a = num(1);
         auto b = num(-6);
@@ -96,18 +91,13 @@ int main() {
         EXPECT_TRUE(roots.size() == 3, "Cubic should return 3 roots");
     }
 
-    // =========================================================================
-    // Unit Test 1: D > 0 - x^3 - 2x - 5 = 0
-    // One real root ~ 2.0946, two complex conjugate roots.
-    // Validates: Requirements 2.1, 2.2
-    // =========================================================================
     TEST_CASE("Cubic D > 0: x^3 - 2x - 5 = 0");
     {
         auto roots = lamina::solve_cubic(num(1), num(0), num(-2), num(-5), "x");
         EXPECT_TRUE(roots.size() == 3, "D>0: should return exactly 3 roots");
 
         if (roots.size() >= 1) {
-            // For D>0, the first root is the real one.
+
             double r1 = eval_numeric(roots[0]);
             if (!std::isnan(r1)) {
                 double residual = eval_cubic_at(1.0, 0.0, -2.0, -5.0, r1);
@@ -116,7 +106,7 @@ int main() {
                 EXPECT_TRUE(std::abs(r1 - 2.0946) < 0.001,
                     "D>0: real root approx 2.0946");
             } else {
-                // Fallback: try to_numeric()
+
                 double r1_alt = roots[0]->to_numeric();
                 double residual = eval_cubic_at(1.0, 0.0, -2.0, -5.0, r1_alt);
                 EXPECT_TRUE(std::abs(residual) < 1e-10,
@@ -124,7 +114,6 @@ int main() {
             }
         }
 
-        // The complex roots should contain sqrt(-1) or imaginary indicator
         if (roots.size() == 3) {
             std::string r2_str = roots[1]->to_string();
             std::string r3_str = roots[2]->to_string();
@@ -135,11 +124,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Unit Test 2: Triple root - (x-1)^3 = x^3 - 3x^2 + 3x - 1 = 0
-    // All three roots should equal 1.
-    // Validates: Requirements 2.1, 2.3
-    // =========================================================================
     TEST_CASE("Cubic Triple Root: (x-1)^3 = x^3 - 3x^2 + 3x - 1 = 0");
     {
         auto roots = lamina::solve_cubic(num(1), num(-3), num(3), num(-1), "x");
@@ -162,11 +146,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Unit Test 3: Simple + double root (D=0, p!=0)
-    // x^3 - 3x + 2 = (x-1)^2(x+2) = 0, roots: 1, 1, -2
-    // Validates: Requirements 2.1, 2.4
-    // =========================================================================
     TEST_CASE("Cubic D=0, p!=0: x^3 - 3x + 2 = (x-1)^2(x+2) = 0");
     {
         auto roots = lamina::solve_cubic(num(1), num(0), num(-3), num(2), "x");
@@ -180,7 +159,6 @@ int main() {
             std::vector<double> sorted_roots = {r1, r2, r3};
             std::sort(sorted_roots.begin(), sorted_roots.end());
 
-            // Expected roots: -2, 1, 1
             EXPECT_TRUE(std::abs(sorted_roots[0] - (-2.0)) < 1e-10,
                 "D=0 p!=0: smallest root = -2");
             EXPECT_TRUE(std::abs(sorted_roots[1] - 1.0) < 1e-10,
@@ -196,11 +174,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Unit Test 4: D < 0 casus irreducibilis - x^3 - 3x + 1 = 0
-    // Three distinct real roots. All should satisfy the equation.
-    // Validates: Requirements 2.1, 2.5
-    // =========================================================================
     TEST_CASE("Cubic D < 0 (casus irreducibilis): x^3 - 3x + 1 = 0");
     {
         auto roots = lamina::solve_cubic(num(1), num(0), num(-3), num(1), "x");
@@ -232,12 +205,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Unit Test 5: Symbolic coefficients
-    // Use SymbolicExpr::variable("a") as a coefficient.
-    // Verify 3 roots returned (expressions containing "a").
-    // Validates: Requirements 2.6
-    // =========================================================================
     TEST_CASE("Cubic Symbolic Coefficients: x^3 + a*x^2 + x + 1 = 0");
     {
         auto sym_a = SymbolicExpr::variable("a");
@@ -245,7 +212,7 @@ int main() {
         EXPECT_TRUE(roots.size() == 3, "Symbolic: should return exactly 3 roots");
 
         if (roots.size() == 3) {
-            // At least one root should contain the variable "a"
+
             bool found_a = false;
             for (const auto& root : roots) {
                 std::string s = root->to_string();
@@ -256,8 +223,6 @@ int main() {
             }
             EXPECT_TRUE(found_a, "Symbolic: roots contain variable 'a'");
 
-            // Roots should contain power expressions (^) indicating Cardano form
-            // The symbolic path uses power(x, 1/3) for cbrt and sqrt() for square roots
             bool has_power_expr = false;
             for (const auto& root : roots) {
                 std::string s = root->to_string();
@@ -272,14 +237,9 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Unit Test 6: a=0 delegation
-    // Call solve_cubic with a=0, should delegate to quadratic/linear solver.
-    // Validates: Requirements 2.7
-    // =========================================================================
     TEST_CASE("Cubic a=0 Delegation to Quadratic: 0*x^3 + 2*x^2 - 4*x + 2 = 0");
     {
-        // With a=0, becomes 2x^2 - 4x + 2 = 0 -> (x-1)^2 = 0
+
         auto roots = lamina::solve_cubic(num(0), num(2), num(-4), num(2), "x");
         EXPECT_TRUE(roots.size() >= 1 && roots.size() <= 2,
             "a=0 delegation: returns 1-2 roots (quadratic)");
@@ -293,7 +253,7 @@ int main() {
 
     TEST_CASE("Cubic a=0 Delegation to Linear: 0*x^3 + 0*x^2 + 3*x - 6 = 0");
     {
-        // With a=0 and b=0, becomes 3x - 6 = 0 -> x = 2
+
         auto roots = lamina::solve_cubic(num(0), num(0), num(3), num(-6), "x");
         EXPECT_TRUE(roots.size() == 1,
             "a=0 b=0 delegation: returns 1 root (linear)");
@@ -305,17 +265,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Property 1: Cubic root verification
-    // Validates: Requirements 2.6 (root substitution residual)
-    //
-    // For any cubic ax^3 + bx^2 + cx + d with rational coefficients and a!=0,
-    // every root r returned by solve_cubic SHALL satisfy |f(r)| < 1e-10.
-    //
-    // Strategy: Generate random cubics with integer coefficients in [-10, 10],
-    // a != 0. For each root, evaluate numerically and check residual.
-    // Complex roots (NaN from eval_numeric) are skipped.
-    // =========================================================================
     TEST_CASE("Property 1: Cubic root verification");
 
     {
@@ -329,7 +278,7 @@ int main() {
 
         for (int trial = 0; trial < NUM_CUBIC_TRIALS; ++trial) {
             int a_val = coeff_dist(rng_cubic);
-            // Ensure a != 0
+
             while (a_val == 0) a_val = coeff_dist(rng_cubic);
             int b_val = coeff_dist(rng_cubic);
             int c_val = coeff_dist(rng_cubic);
@@ -349,7 +298,7 @@ int main() {
             bool trial_ok = true;
             for (size_t i = 0; i < roots.size(); ++i) {
                 double r = eval_numeric(roots[i]);
-                // Skip complex roots (eval_numeric returns NaN for expressions with sqrt(-1))
+
                 if (std::isnan(r) || std::isinf(r)) {
                     continue;
                 }
@@ -381,20 +330,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Property 4: Vieta's formulas for cubics
-    // Validates: Requirements 2.7, 9.3
-    //
-    // For monic cubic x^3 + bx^2 + cx + d = 0, the three roots r1, r2, r3
-    // must satisfy:
-    //   r1 + r2 + r3 = -b
-    //   r1*r2 + r1*r3 + r2*r3 = c
-    //   r1*r2*r3 = -d
-    // Verified numerically with tolerance 1e-8.
-    //
-    // Strategy: Generate cubics from known integer roots (r1, r2, r3) in [-5, 5]
-    // to guarantee all roots are real and eval_numeric() works correctly.
-    // =========================================================================
     TEST_CASE("Property 4: Vieta's formulas for cubics");
 
     const double TOLERANCE = 1e-8;
@@ -449,8 +384,7 @@ int main() {
         bool product_ok = std::abs(product_roots - expected_product) < TOLERANCE;
 
         if (!sum_ok || !products_ok || !product_ok) {
-            // Individual trial failure - counted but not reported as hard failure
-            // since floating-point precision in D=0 branch can cause small errors
+
         } else {
             vieta_pass_count++;
         }

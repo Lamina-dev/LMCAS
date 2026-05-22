@@ -8,12 +8,7 @@
 using namespace lamina;
 
 int main() {
-    // =========================================================================
-    // Unit Tests for Interval data structure (Task 1.7)
-    // Requirements: 5.1, 5.2, 5.7, 11.4, 11.5, 11.6
-    // =========================================================================
 
-    // --- Test 1: Empty interval ---
     TEST_CASE("Empty interval");
     {
         auto empty_iv = Interval::empty();
@@ -23,7 +18,6 @@ int main() {
         EXPECT_TRUE(!empty_iv.contains(100), "Interval::empty().contains(100) == false");
     }
 
-    // --- Test 2: Single point interval ---
     TEST_CASE("Single point interval [3, 3]");
     {
         auto pt = Interval::point(SymbolicExpr::number(3));
@@ -34,7 +28,6 @@ int main() {
         EXPECT_TRUE(!pt.contains(0), "Interval::point(3).contains(0) == false");
     }
 
-    // --- Test 3: Entire line ---
     TEST_CASE("Entire line (-inf, +inf)");
     {
         auto entire = Interval::entire_line();
@@ -46,7 +39,6 @@ int main() {
         EXPECT_TRUE(entire.contains(-999.5), "Entire line contains -999.5");
     }
 
-    // --- Test 4: Infinity endpoints always open ---
     TEST_CASE("Infinity endpoints always open");
     {
         auto neg = Endpoint::neg_inf();
@@ -58,7 +50,6 @@ int main() {
         EXPECT_TRUE(pos.is_pos_infinity, "pos_inf().is_pos_infinity == true");
     }
 
-    // --- Test 5: Contains at open endpoints ---
     TEST_CASE("Contains at open endpoints: (1, 5)");
     {
         auto iv = Interval{
@@ -74,7 +65,6 @@ int main() {
         EXPECT_TRUE(!iv.contains(5.001), "(1, 5) should NOT contain 5.001");
     }
 
-    // --- Test 6: Contains at closed endpoints ---
     TEST_CASE("Contains at closed endpoints: [1, 5]");
     {
         auto iv = Interval{
@@ -88,7 +78,6 @@ int main() {
         EXPECT_TRUE(!iv.contains(5.001), "[1, 5] should NOT contain 5.001");
     }
 
-    // --- Test 7: Normalize merges overlapping intervals ---
     TEST_CASE("Normalize merges overlapping: [1,5] ∪ [3,7] → [1,7]");
     {
         std::vector<Interval> ivs = {
@@ -104,7 +93,6 @@ int main() {
         EXPECT_TRUE(!u.contains(7.5), "Merged [1,7] does not contain 7.5");
     }
 
-    // --- Test 8: Normalize merges adjacent intervals ---
     TEST_CASE("Normalize merges adjacent: [1,3] ∪ [3,5] → [1,5]");
     {
         std::vector<Interval> ivs = {
@@ -118,7 +106,6 @@ int main() {
         EXPECT_TRUE(u.contains(5.0), "Merged [1,5] contains 5");
     }
 
-    // --- Test 9: Normalize doesn't merge disjoint intervals ---
     TEST_CASE("Normalize doesn't merge disjoint: [1,2] ∪ [4,5]");
     {
         std::vector<Interval> ivs = {
@@ -132,7 +119,6 @@ int main() {
         EXPECT_TRUE(!u.contains(3.0), "Does not contain 3.0 (in gap)");
     }
 
-    // --- Test 10: Parse invalid strings → nullopt ---
     TEST_CASE("Parse invalid strings return nullopt");
     {
         auto r1 = IntervalUnion::parse("");
@@ -148,7 +134,6 @@ int main() {
         EXPECT_TRUE(!r4.has_value(), "\"abc\" → nullopt");
     }
 
-    // --- Test 11: Parse empty set "∅" ---
     TEST_CASE("Parse empty set ∅");
     {
         auto result = IntervalUnion::parse("\xe2\x88\x85");
@@ -157,7 +142,6 @@ int main() {
         EXPECT_TRUE(!result->contains(0), "Parsed ∅ should not contain 0");
     }
 
-    // --- Test 12: Parse entire line "(-∞, +∞)" ---
     TEST_CASE("Parse entire line (-∞, +∞)");
     {
         auto result = IntervalUnion::parse("(-\xe2\x88\x9e, +\xe2\x88\x9e)");
@@ -168,36 +152,27 @@ int main() {
         EXPECT_TRUE(result->contains(1e10), "Entire line contains 1e10");
     }
 
-    // =========================================================================
-    // Property 9: IntervalUnion 序列化 Round-trip
-    // Validates: Requirements 11.3
-    //
-    // For randomly generated IntervalUnion objects with numeric endpoints,
-    // parsing the string produced by to_string() SHALL produce an equivalent
-    // IntervalUnion (verified by sampling 100 points in [-100, 100]).
-    // =========================================================================
     TEST_CASE("Property 9: IntervalUnion Serialization Round-trip");
     {
-        std::mt19937 rng(42); // Fixed seed for reproducibility
+        std::mt19937 rng(42);
         const int NUM_ITERATIONS = 100;
         const int NUM_SAMPLE_POINTS = 100;
         int pass_count = 0;
 
         std::uniform_int_distribution<int> val_dist(-20, 20);
         std::uniform_int_distribution<int> bool_dist(0, 1);
-        std::uniform_int_distribution<int> inf_dist(0, 5);  // 1/6 chance of infinity
+        std::uniform_int_distribution<int> inf_dist(0, 5);
         std::uniform_int_distribution<int> count_dist(1, 3);
         std::uniform_real_distribution<double> sample_dist(-100.0, 100.0);
 
         for (int iter = 0; iter < NUM_ITERATIONS; ++iter) {
-            // 1. Generate a random IntervalUnion with 1-3 intervals
+
             int count = count_dist(rng);
             std::vector<Interval> intervals;
 
             for (int c = 0; c < count; ++c) {
                 Endpoint lower, upper;
 
-                // Generate lower endpoint
                 if (inf_dist(rng) == 0) {
                     lower = Endpoint::neg_inf();
                 } else {
@@ -206,12 +181,11 @@ int main() {
                                            : Endpoint::closed(SymbolicExpr::number(val));
                 }
 
-                // Generate upper endpoint
                 if (inf_dist(rng) == 0) {
                     upper = Endpoint::pos_inf();
                 } else {
                     int val = val_dist(rng);
-                    // Ensure upper >= lower for non-infinity endpoints
+
                     if (!lower.is_neg_infinity && lower.value) {
                         int lower_val = static_cast<int>(lower.value->to_numeric());
                         if (val < lower_val) val = lower_val;
@@ -223,13 +197,10 @@ int main() {
                 intervals.push_back(Interval{lower, upper});
             }
 
-            // Constructor calls normalize() which merges/sorts/removes empty
             IntervalUnion original(intervals);
 
-            // 2. Serialize to string
             std::string str = original.to_string();
 
-            // 3. Parse the string back
             auto parsed = IntervalUnion::parse(str);
 
             if (!parsed.has_value()) {
@@ -239,7 +210,6 @@ int main() {
                 continue;
             }
 
-            // 4. Verify equivalence by sampling 100 points in [-100, 100]
             bool equivalent = true;
             for (int s = 0; s < NUM_SAMPLE_POINTS; ++s) {
                 double point = sample_dist(rng);
@@ -268,16 +238,6 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    // =========================================================================
-    // Property 4: 区间集合运算正确性
-    // Validates: Requirements 5.4, 5.5, 5.6
-    //
-    // For randomly generated IntervalUnion A and B, sample 100 random points
-    // x in [-100, 100]:
-    // - x ∈ A.intersect(B) iff (x ∈ A and x ∈ B)
-    // - x ∈ A.unite(B) iff (x ∈ A or x ∈ B)
-    // - x ∈ A.complement() iff x ∉ A
-    // =========================================================================
     TEST_CASE("Property 4: Set Operations Correctness (intersect/unite/complement sampling)");
     {
         std::mt19937 rng(100);
@@ -322,7 +282,6 @@ int main() {
             for (int s = 0; s < NUM_SAMPLES; ++s) {
                 double x = sample_dist(rng);
 
-                // intersect: x ∈ A∩B iff (x ∈ A and x ∈ B)
                 bool in_intersect = A_intersect_B.contains(x);
                 bool expected_intersect = A.contains(x) && B.contains(x);
                 if (in_intersect != expected_intersect) {
@@ -334,7 +293,6 @@ int main() {
                     break;
                 }
 
-                // unite: x ∈ A∪B iff (x ∈ A or x ∈ B)
                 bool in_unite = A_unite_B.contains(x);
                 bool expected_unite = A.contains(x) || B.contains(x);
                 if (in_unite != expected_unite) {
@@ -346,7 +304,6 @@ int main() {
                     break;
                 }
 
-                // complement: x ∈ complement(A) iff x ∉ A
                 bool in_complement = A_complement.contains(x);
                 bool expected_complement = !A.contains(x);
                 if (in_complement != expected_complement) {
@@ -368,14 +325,6 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    // =========================================================================
-    // Property 5: De Morgan 定律
-    // Validates: Requirements 5.8
-    //
-    // For randomly generated IntervalUnion A:
-    // - A.intersect(A.complement()).is_empty() == true
-    // - A.unite(A.complement()).is_entire_line() == true
-    // =========================================================================
     TEST_CASE("Property 5: De Morgan's Law (A ∩ complement(A) = ∅, A ∪ complement(A) = ℝ)");
     {
         std::mt19937 rng(200);
@@ -410,7 +359,6 @@ int main() {
             IntervalUnion A = gen_union();
             IntervalUnion A_comp = A.complement();
 
-            // A ∩ complement(A) = ∅
             IntervalUnion intersection = A.intersect(A_comp);
             if (!intersection.is_empty()) {
                 std::ostringstream oss;
@@ -421,7 +369,6 @@ int main() {
                 continue;
             }
 
-            // A ∪ complement(A) = ℝ
             IntervalUnion union_result = A.unite(A_comp);
             if (!union_result.is_entire_line()) {
                 std::ostringstream oss;
@@ -440,14 +387,6 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    // =========================================================================
-    // Property 6: IntervalUnion 不变量 (排序与不相交)
-    // Validates: Requirements 5.3
-    //
-    // For any IntervalUnion, verify:
-    // - All internal intervals are sorted by lower bound
-    // - All internal intervals are pairwise disjoint (no overlap)
-    // =========================================================================
     TEST_CASE("Property 6: IntervalUnion Invariant (sorted by lower bound, pairwise disjoint)");
     {
         std::mt19937 rng(300);
@@ -508,7 +447,7 @@ int main() {
                     EXPECT_TRUE(false, oss.str());
                     return false;
                 }
-                // If equal, at least one must be open
+
                 if (prev_upper == curr_lower &&
                     !ivs[i - 1].upper.is_open && !ivs[i].lower.is_open) {
                     std::ostringstream oss;
@@ -526,15 +465,15 @@ int main() {
             IntervalUnion B = gen_union();
 
             bool ok = true;
-            // Check invariant on A itself
+
             ok = ok && check_invariant(A, "A", iter);
-            // Check invariant on B itself
+
             ok = ok && check_invariant(B, "B", iter);
-            // Check invariant on A.intersect(B)
+
             ok = ok && check_invariant(A.intersect(B), "A∩B", iter);
-            // Check invariant on A.unite(B)
+
             ok = ok && check_invariant(A.unite(B), "A∪B", iter);
-            // Check invariant on A.complement()
+
             ok = ok && check_invariant(A.complement(), "complement(A)", iter);
 
             if (ok) ++pass_count;
@@ -546,12 +485,6 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    // =========================================================================
-    // Unit Tests for IntervalUnion::to_expr() (Task 7.2)
-    // Requirements: 9.4
-    // =========================================================================
-
-    // --- Test: to_expr() for empty set returns nullptr ---
     TEST_CASE("to_expr: empty set returns nullptr");
     {
         auto empty_u = IntervalUnion::empty();
@@ -559,7 +492,6 @@ int main() {
         EXPECT_TRUE(expr == nullptr, "Empty IntervalUnion to_expr() returns nullptr");
     }
 
-    // --- Test: to_expr() for entire line returns nullptr ---
     TEST_CASE("to_expr: entire line returns nullptr");
     {
         auto entire = IntervalUnion::entire_line();
@@ -567,7 +499,6 @@ int main() {
         EXPECT_TRUE(expr == nullptr, "Entire line to_expr() returns nullptr (no constraint)");
     }
 
-    // --- Test: to_expr() for single bounded interval (a, b) ---
     TEST_CASE("to_expr: single interval (2, 5) -> x > 2 And x < 5");
     {
         auto iv = Interval{
@@ -578,13 +509,12 @@ int main() {
         auto expr = u.to_expr("x");
         EXPECT_TRUE(expr != nullptr, "to_expr() for (2, 5) should not be nullptr");
         std::string str = expr->to_string();
-        // Should contain And, x > 2, x < 5
+
         EXPECT_TRUE(str.find("And") != std::string::npos, "to_expr (2,5) should contain 'And'");
         EXPECT_TRUE(str.find(">") != std::string::npos, "to_expr (2,5) should contain '>'");
         EXPECT_TRUE(str.find("<") != std::string::npos, "to_expr (2,5) should contain '<'");
     }
 
-    // --- Test: to_expr() for single half-line (a, +∞) ---
     TEST_CASE("to_expr: single interval (3, +inf) -> x > 3");
     {
         auto iv = Interval{
@@ -596,11 +526,10 @@ int main() {
         EXPECT_TRUE(expr != nullptr, "to_expr() for (3, +inf) should not be nullptr");
         std::string str = expr->to_string();
         EXPECT_TRUE(str.find(">") != std::string::npos, "to_expr (3,+inf) should contain '>'");
-        // Should NOT contain And since there's only one constraint
+
         EXPECT_TRUE(str.find("And") == std::string::npos, "to_expr (3,+inf) should NOT contain 'And'");
     }
 
-    // --- Test: to_expr() for single half-line (-∞, b] ---
     TEST_CASE("to_expr: single interval (-inf, 4] -> x <= 4");
     {
         auto iv = Interval{
@@ -615,7 +544,6 @@ int main() {
         EXPECT_TRUE(str.find("And") == std::string::npos, "to_expr (-inf,4] should NOT contain 'And'");
     }
 
-    // --- Test: to_expr() for closed interval [a, b] ---
     TEST_CASE("to_expr: single interval [1, 3] -> x >= 1 And x <= 3");
     {
         auto iv = Interval{
@@ -631,7 +559,6 @@ int main() {
         EXPECT_TRUE(str.find("And") != std::string::npos, "to_expr [1,3] should contain 'And'");
     }
 
-    // --- Test: to_expr() for multiple intervals (union with Or) ---
     TEST_CASE("to_expr: two intervals (-inf, -2) ∪ (3, +inf) -> Or");
     {
         std::vector<Interval> ivs = {
@@ -647,7 +574,6 @@ int main() {
         EXPECT_TRUE(str.find(">") != std::string::npos, "to_expr should contain '>'");
     }
 
-    // --- Test: to_expr() for three intervals uses nested Or ---
     TEST_CASE("to_expr: three intervals uses nested Or");
     {
         std::vector<Interval> ivs = {

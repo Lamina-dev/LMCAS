@@ -16,11 +16,11 @@
 class LAMINA_API PrintVisitor : public SymbolicVisitor {
 public:
     PrintVisitor() = default;
-    
+
     std::string get_result() const {
         return buffer.str();
     }
-    
+
     void visit(NumberNode& node) override;
     void visit(VariableNode& node) override;
     void visit(AddNode& node) override;

@@ -4,7 +4,7 @@
 #include <vector>
 
 namespace lamina {
-// 点积
+
 std::shared_ptr<SymbolicExpr> vector_dot(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
@@ -17,7 +17,6 @@ std::shared_ptr<SymbolicExpr> vector_dot(
     return std::make_shared<SymbolicExpr>(std::make_shared<AddNode>(sum_terms));
 }
 
-// 叉积（仅三维）
 std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
@@ -29,17 +28,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
     return {x, y, z};
 }
 
-// 求夹角
-// 返回弧度
-// 若有符号表达式则返回double NAN
-// 若全为数值则返回具体值
-// 仅做形式化
-
 double vector_angle(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 ) {
-    // |a|, |b|
+
     double norm_a = 0, norm_b = 0, dot = 0;
     bool numeric = true;
     for (size_t i = 0; i < a.size(); ++i) {
@@ -49,7 +42,7 @@ double vector_angle(
         }
         auto na_var = a[i]->get_number_value();
         auto nb_var = b[i]->get_number_value();
-        // convert variant to double
+
         auto to_double = [](const auto& v) -> double {
             using T = std::decay_t<decltype(v)>;
             if constexpr (std::is_same_v<T, int>) return static_cast<double>(v);
@@ -68,13 +61,11 @@ double vector_angle(
     return angle;
 }
 
-// 直线与平面交点
 std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
     const LineSymbolic& line,
     const PlaneSymbolic& plane
 ) {
-    // r = a + t b, 平面 n ⋅ r = d
-    // 求 t: n ⋅ (a + t b) = d => t = (d - n ⋅ a)/(n ⋅ b)
+
     auto n_dot_a = vector_dot(plane.normal, line.point);
     auto n_dot_b = vector_dot(plane.normal, line.direction);
     auto t = SymbolicExpr::divide(SymbolicExpr::add(plane.d, SymbolicExpr::multiply(SymbolicExpr::number(-1), n_dot_a)), n_dot_b);
@@ -85,26 +76,24 @@ std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
     return intersection;
 }
 
-// 点到平面距离
 std::shared_ptr<SymbolicExpr> point_plane_distance(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const PlaneSymbolic& plane
 ) {
-    // 距离公式：|n ⋅ r - d| / |n|
+
     auto n_dot_r = vector_dot(plane.normal, point);
     auto diff = SymbolicExpr::add(n_dot_r, SymbolicExpr::multiply(SymbolicExpr::number(-1), plane.d));
     auto norm_n = SymbolicExpr::sqrt(vector_dot(plane.normal, plane.normal));
-    // 构造 abs(diff) 的符号表达式
+
     auto abs_diff = std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Abs, std::vector<std::shared_ptr<SymbolicNode>>{diff->root}));
     return SymbolicExpr::divide(abs_diff, norm_n);
 }
 
-// 异面直线距离
 std::shared_ptr<SymbolicExpr> skew_lines_distance(
     const LineSymbolic& l1,
     const LineSymbolic& l2
 ) {
-    // 距离公式：| (a2 - a1) ⋅ (b1 × b2) | / |b1 × b2|
+
     std::vector<std::shared_ptr<SymbolicExpr>> a2_minus_a1;
     for (size_t i = 0; i < l1.point.size(); ++i) {
         a2_minus_a1.push_back(SymbolicExpr::add(l2.point[i], SymbolicExpr::multiply(SymbolicExpr::number(-1), l1.point[i])));
@@ -112,9 +101,9 @@ std::shared_ptr<SymbolicExpr> skew_lines_distance(
     auto cross = vector_cross(l1.direction, l2.direction);
     auto cross_norm = SymbolicExpr::sqrt(vector_dot(cross, cross));
     auto numerator = vector_dot(a2_minus_a1, cross);
-    // 构造 abs(numerator) 的符号表达式
+
     auto abs_num = std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Abs, std::vector<std::shared_ptr<SymbolicNode>>{numerator->root}));
     return SymbolicExpr::divide(abs_num, cross_norm);
 }
 
-} // namespace lamina
+}

@@ -3,7 +3,6 @@
 int main() {
     TEST_CASE("Matrix Transpose & Inverse & RREF");
 
-    
     {
          std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> m1_data = {
             {SymbolicExpr::number(1), SymbolicExpr::number(2)},
@@ -11,20 +10,16 @@ int main() {
         };
         auto m1 = SymbolicExpr::matrix(m1_data);
         auto t1 = SymbolicExpr::transpose(m1);
-        
+
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> m1_t_data = {
             {SymbolicExpr::number(1), SymbolicExpr::number(3)},
             {SymbolicExpr::number(2), SymbolicExpr::number(4)}
         };
         auto m1_t_expected = SymbolicExpr::matrix(m1_t_data);
-        
+
         EXPECT_EQ_EXPR(t1, m1_t_expected, "Transpose 2x2");
     }
 
-    
-    
-    
-    
     {
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> m2_data = {
             {SymbolicExpr::number(4), SymbolicExpr::number(7)},
@@ -32,11 +27,9 @@ int main() {
         };
         auto m2 = SymbolicExpr::matrix(m2_data);
         auto inv2 = SymbolicExpr::inverse(m2);
-        
-        
+
         auto prod = SymbolicExpr::multiply(m2, inv2)->simplify();
-        
-        
+
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> id_data = {
             {SymbolicExpr::number(1), SymbolicExpr::number(0)},
             {SymbolicExpr::number(0), SymbolicExpr::number(1)}
@@ -45,20 +38,12 @@ int main() {
         EXPECT_EQ_EXPR(prod, id, "Inverse * Original == Identity");
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
     {
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> id_data = {
             {SymbolicExpr::number(1), SymbolicExpr::number(0)},
             {SymbolicExpr::number(0), SymbolicExpr::number(1)}
         };
-        auto id = SymbolicExpr::matrix(id_data);  
+        auto id = SymbolicExpr::matrix(id_data);
 
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> m3_data = {
             {SymbolicExpr::number(2), SymbolicExpr::number(4)},

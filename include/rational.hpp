@@ -14,19 +14,16 @@ private:
     BigInt numerator;
     BigInt denominator;
 
-    
     void simplify() {
         if (!denominator) {
             throw std::runtime_error("Denominator cannot be zero");
         }
 
-        
         if (denominator.IsNegative()) {
             numerator = -numerator;
             denominator = denominator.Abs();
         }
 
-        
         BigInt g = BigInt::gcd(numerator, denominator);
         if (g != 0 && g != 1) {
             numerator = numerator / g;
@@ -35,13 +32,13 @@ private:
     }
 
 public:
-    
+
     Rational() : numerator(0), denominator(1) {}
 
     Rational(const BigInt& num) : numerator(num), denominator(1) {}
 
     Rational(const BigInt& num, const BigInt& den) : numerator(num), denominator(den) {
-        simplify(); 
+        simplify();
     }
 
     Rational(int num) : numerator(num), denominator(1) {}
@@ -81,19 +78,16 @@ public:
             i++;
         }
         if (i == num.size() || ((num[i] == 'e' || num[i] == 'E'))) {
-            
-            
+
             for (short& i: n) {
                 up *= BigInt0to10[10];
                 down *= BigInt0to10[10];
                 up += BigInt0to10[i];
             }
         } else {
-            
-            
+
             std::pair<uint64_t, uint64_t> xun = jiance(n);
 
-            
             BigInt xup = BigInt(0), xdown = BigInt(0);
             for (uint64_t i = xun.first; i <= xun.second; i++) {
                 xup *= BigInt0to10[10];
@@ -102,18 +96,15 @@ public:
                 xdown += BigInt0to10[9];
             }
 
-            
             for (uint64_t i = 0; i < xun.first; i++) {
                 up *= BigInt0to10[10];
                 up += BigInt0to10[n[i]];
                 down *= BigInt0to10[10];
             }
 
-            
             up = up * xdown;
             down = down * xdown;
 
-            
             up = up + xup;
         }
 
@@ -134,7 +125,7 @@ public:
 
 private:
     std::pair<uint64_t, uint64_t> jiance(std::vector<short>& n) {
-        
+
         uint64_t h1[10] = {};
         uint64_t h2[10] = {};
 
@@ -154,10 +145,7 @@ private:
                 uint64_t ti1, ti2;
                 bool ok = true;
                 while (!((i2 - i1) & 1) && ok) {
-                    
-                    
-                    
-                    
+
                     ti1 = i1;
                     ti2 = i1 + ((i2 - i1) >> 1);
                     while (ti2 < i2) {
@@ -187,19 +175,17 @@ private:
 
 public:
 
-    
     static Rational from_double(double value) {
         if (value == 0.0) {
             return Rational();
         }
-        if (std::floor(value) == value) {   
+        if (std::floor(value) == value) {
             return Rational(BigInt(std::to_string(value)));
         }
         std::ostringstream oss;
         oss << std::scientific << std::setprecision(15) << value;
         std::string str = oss.str();
 
-        
         size_t e_pos = str.find('e');
         std::string base = str.substr(0, e_pos);
         bool negative = false;
@@ -207,13 +193,13 @@ public:
             negative = true;
             base.erase(0, 1);
         }
-        base.erase(1, 1);               
-        while (base.back() == '0') {    
+        base.erase(1, 1);
+        while (base.back() == '0') {
             base.pop_back();
         }
         int exponent = std::stoi(str.substr(e_pos + 1));
 
-        size_t decimal_places = std::max(0, static_cast<int>(base.length()) - exponent - 1);    
+        size_t decimal_places = std::max(0, static_cast<int>(base.length()) - exponent - 1);
 
         BigInt num(base);
         if (negative) num = -num;
@@ -224,16 +210,13 @@ public:
         return r;
     }
 
-    
     BigInt get_numerator() const { return numerator; }
     BigInt get_denominator() const { return denominator; }
 
-    
     bool is_integer() const {
         return denominator == BigInt(1);
     }
 
-    
     bool is_zero() const {
         return !numerator;
     }
@@ -245,7 +228,6 @@ public:
         return seed;
     }
 
-    
     std::string to_string() const {
         if (is_integer()) {
             return numerator.ToString();
@@ -253,7 +235,6 @@ public:
         return numerator.ToString() + "/" + denominator.ToString();
     }
 
-    
     inline std::string to_float_string() {
         if (numerator % denominator == BigInt(0)) return (numerator / denominator).ToString();
         std::string re;
@@ -284,7 +265,6 @@ public:
 
     }
 
-    
     inline std::string to_float_string(int64_t n) const{
         if (is_zero()) return "0";
         if (n == 0) return (numerator / denominator).ToString();
@@ -311,7 +291,6 @@ public:
         }
     }
 
-    
     inline void floor(const int64_t& n) {
         floor_without_sim(n);
         simplify();
@@ -339,12 +318,10 @@ private:
 
 public:
 
-    
     inline void sqrt_self(int64_t n) {
         if (numerator < BigInt(0)) throw std::runtime_error("Sqrt negative number");
         Rational t(numerator * denominator);
-        
-        
+
         const int64_t nadd1 = n + 1;
         const BigInt ten(10);
         Rational ans( (t * t + Rational(6) * t + Rational(1))  /  (Rational(4) * (t + Rational(1))) );
@@ -366,7 +343,6 @@ public:
         return re;
     }
 
-    
     inline void radicand_self(const BigInt& radical, int64_t n) {
         if (numerator < BigInt(0) && (radical % BigInt(2) == BigInt(0))) throw std::runtime_error("Radicand negative number");
         Rational t(numerator * denominator.power(radical - BigInt(1)));
@@ -375,7 +351,7 @@ public:
         const Rational rat_radical(radical);
         const BigInt ten(10);
         Rational ans(Rational(t.numerator,radical) * (Rational(radical - BigInt(1)) + Rational(t.numerator, t.numerator.power(radical))));
-        
+
         Rational temp;
         while (temp.numerator / ten != ans.numerator / ten) {
             temp = ans / rat_radical * ((rat_radical - Rational(1)) + (t / ans.power(radical)));
@@ -395,8 +371,6 @@ public:
         return re;
     }
 
-
-    
     BigInt to_BigInt() const {
         if (!is_integer()) {
             throw std::runtime_error("Cannot convert non-integer fraction to BigInt");
@@ -404,7 +378,6 @@ public:
         return numerator;
     }
 
-    
     lmmc_real_t to_double() const {
         if (is_zero()) return 0.0;
         lmmc_real_t res = 0.0;
@@ -416,28 +389,24 @@ public:
         return res;
     }
 
-    
     Rational operator+(const Rational& other) const {
         BigInt new_num = numerator * other.denominator + other.numerator * denominator;
         BigInt new_den = denominator * other.denominator;
         return Rational(new_num, new_den);
     }
 
-    
     Rational operator-(const Rational& other) const {
         BigInt new_num = numerator * other.denominator - other.numerator * denominator;
         BigInt new_den = denominator * other.denominator;
         return Rational(new_num, new_den);
     }
 
-    
     Rational operator*(const Rational& other) const {
         BigInt new_num = numerator * other.numerator;
         BigInt new_den = denominator * other.denominator;
         return Rational(new_num, new_den);
     }
 
-    
     Rational operator/(const Rational& other) const {
         if (other.is_zero()) {
             throw std::runtime_error("Division by zero");
@@ -447,10 +416,9 @@ public:
         return Rational(new_num, new_den);
     }
 
-    
     Rational power(const BigInt& exponent) const {
         if (exponent < BigInt(0)) {
-            
+
             if (is_zero()) {
                 throw std::runtime_error("Cannot raise zero to negative power");
             }
@@ -468,20 +436,17 @@ public:
         return Rational(numerator.power(exponent), denominator.power(exponent));
     }
 
-    
     inline void power_self(const Rational& exponent,size_t n) {
         *this = power(exponent.numerator);
         radicand_self(exponent.denominator,n);
     }
 
-    
     inline Rational power(const Rational& exponent, size_t n) {
         Rational re = *this;
         re.power_self(exponent, n);
         return re;
     }
 
-    
     bool operator==(const Rational& other) const {
         return numerator * other.denominator == other.numerator * denominator;
     }
@@ -508,7 +473,6 @@ public:
         return !(*this < other);
     }
 
-    
     Rational reciprocal() const {
         if (is_zero()) {
             throw std::runtime_error("Cannot take reciprocal of zero");
@@ -516,14 +480,12 @@ public:
         return Rational(denominator, numerator);
     }
 
-    
     Rational abs() const {
         Rational result = *this;
         result.numerator = result.numerator.Abs();
         return result;
     }
 
-    
     Rational operator-() const {
         Rational result = *this;
         result.numerator = -result.numerator;
