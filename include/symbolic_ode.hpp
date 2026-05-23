@@ -1,31 +1,55 @@
+/**
+ * @file symbolic_ode.hpp
+ * @brief 常微分方程求解：可分离变量、一阶线性、二阶常系数。
+ */
 #pragma once
 #include "symbolic.hpp"
 #include <memory>
 #include <string>
 
 namespace lamina {
-// 一阶微分方程分离变量法求解：dy/dx = f(x, y)
-// 返回 y(x) 的隐式表达式（如 F(y) = G(x) + C）
-std::shared_ptr<SymbolicExpr> solve_separable_ode(
-    std::shared_ptr<SymbolicExpr> rhs, // f(x, y)
+
+/**
+ * @brief 求解可分离变量型 ODE：dy/dx = rhs(x, y)
+ * @param rhs 方程右端表达式
+ * @param x 自变量名
+ * @param y 因变量名
+ * @return 通解的符号表达式
+ */
+LAMINA_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
+    std::shared_ptr<SymbolicExpr> rhs,
     const std::string& x,
     const std::string& y
 );
 
-// 一阶线性微分方程：y' + P(x)y = Q(x)
-// 返回通解表达式
-std::shared_ptr<SymbolicExpr> solve_linear1_ode(
-    std::shared_ptr<SymbolicExpr> Px, // P(x)
-    std::shared_ptr<SymbolicExpr> Qx, // Q(x)
+/**
+ * @brief 求解一阶线性 ODE：dy/dx + P(x)*y = Q(x)
+ * @param Px 系数函数 P(x)
+ * @param Qx 非齐次项 Q(x)
+ * @param x 自变量名
+ * @param y 因变量名
+ * @return 通解的符号表达式
+ */
+LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
+    std::shared_ptr<SymbolicExpr> Px,
+    std::shared_ptr<SymbolicExpr> Qx,
     const std::string& x,
     const std::string& y
 );
 
-// 二阶常系数齐次/非齐次微分方程 ay''+by'+cy=f(x)
-// 返回通解表达式
-std::shared_ptr<SymbolicExpr> solve_linear2_ode(
+/**
+ * @brief 求解二阶常系数线性 ODE：a*y'' + b*y' + c*y = f(x)
+ * @param a 二阶导数系数
+ * @param b 一阶导数系数
+ * @param c 零阶项系数
+ * @param fx 非齐次项 f(x)
+ * @param x 自变量名
+ * @param y 因变量名
+ * @return 通解的符号表达式
+ */
+LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     double a, double b, double c,
-    std::shared_ptr<SymbolicExpr> fx, // f(x)
+    std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,
     const std::string& y
 );

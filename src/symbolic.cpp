@@ -17,15 +17,11 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
-
-
-
-
 class VariablesVisitor : public SymbolicVisitor {
 public:
     std::set<std::string> vars;
 
-    void visit(NumberNode& node) override {} 
+    void visit(NumberNode& node) override {}
     void visit(VariableNode& node) override {
         vars.insert(node.name);
     }
@@ -43,7 +39,15 @@ public:
         for(auto& arg : node.arguments) arg->accept(*this);
     }
     void visit(MatrixNode& node) override {
-        
+
+    }
+    void visit(RelationalNode& node) override {
+        node.left->accept(*this);
+        node.right->accept(*this);
+    }
+    void visit(LogicalNode& node) override {
+        node.left->accept(*this);
+        node.right->accept(*this);
     }
 };
 
@@ -53,7 +57,7 @@ class SubstituteVisitor : public SymbolicVisitor {
 public:
     std::shared_ptr<SymbolicNode> result;
 
-    SubstituteVisitor(std::string v, std::shared_ptr<SymbolicNode> val) 
+    SubstituteVisitor(std::string v, std::shared_ptr<SymbolicNode> val)
         : var_name(std::move(v)), new_val(std::move(val)) {}
 
     std::shared_ptr<SymbolicNode> get_result() const { return result; }
@@ -106,7 +110,7 @@ public:
     }
 
     void visit(MatrixNode& node) override {
-        
+
         if (std::holds_alternative<MatrixNode::DenseStorage>(node.storage)) {
             const auto& dense = std::get<MatrixNode::DenseStorage>(node.storage);
             MatrixNode::DenseStorage new_dense;
@@ -125,6 +129,22 @@ public:
             result = std::make_shared<MatrixNode>(node.rows, node.cols, new_sparse);
         }
     }
+
+    void visit(RelationalNode& node) override {
+        node.left->accept(*this);
+        auto new_left = result;
+        node.right->accept(*this);
+        auto new_right = result;
+        result = std::make_shared<RelationalNode>(new_left, new_right, node.op);
+    }
+
+    void visit(LogicalNode& node) override {
+        node.left->accept(*this);
+        auto new_left = result;
+        node.right->accept(*this);
+        auto new_right = result;
+        result = std::make_shared<LogicalNode>(new_left, new_right, node.op);
+    }
 };
 
 class IntegrationVisitor : public SymbolicVisitor {
@@ -137,7 +157,7 @@ public:
     std::shared_ptr<SymbolicNode> get_result() const { return result; }
 
     void visit(NumberNode& node) override {
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> ops;
         ops.push_back(node.clone());
         ops.push_back(std::make_shared<VariableNode>(var));
@@ -193,20 +213,20 @@ public:
             }
             return;
         }
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> args = {node.clone(), std::make_shared<VariableNode>(var)};
         result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args);
     }
-    
+
     void visit(PowerNode& node) override {
-        
+
         bool base_is_x = false;
         if (auto v = std::dynamic_pointer_cast<VariableNode>(node.base)) {
             if (v->name == var) base_is_x = true;
         }
-        
+
         if (base_is_x) {
-            
+
             if (auto num = std::dynamic_pointer_cast<NumberNode>(node.exponent)) {
                   if (std::holds_alternative<lmmc_real_t>(num->value)) {
                       int eq;
@@ -222,35 +242,32 @@ public:
                      result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args);
                      return;
                  }
-                 
+
                  auto one = std::make_shared<NumberNode>(BigInt(1));
                  std::vector<std::shared_ptr<SymbolicNode>> add_ops = {node.exponent, one};
                  auto n_plus_1 = std::make_shared<AddNode>(add_ops);
-                 
-                 
+
                  NormalizationVisitor norm_exp;
                  n_plus_1->accept(norm_exp);
                  auto n_plus_1_sched = norm_exp.get_result();
-                 
+
                  auto new_pow = std::make_shared<PowerNode>(node.base, n_plus_1_sched);
-                 
-                 
+
                  auto minus_one = std::make_shared<NumberNode>(BigInt(-1));
                  auto denom = std::make_shared<PowerNode>(n_plus_1_sched, minus_one);
-                 
+
                  std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {denom, new_pow};
                  result = std::make_shared<MultiplyNode>(mul_ops);
                  return;
             }
         }
-        
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> fallback_args = {node.clone(), std::make_shared<VariableNode>(var)};
         result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, fallback_args);
     }
-    
+
     void visit(FunctionNode& node) override {
-        
+
         bool arg_is_x = false;
         if (node.arguments.size() == 1) {
             if (auto v = std::dynamic_pointer_cast<VariableNode>(node.arguments[0])) {
@@ -261,14 +278,14 @@ public:
         if (arg_is_x) {
             std::vector<std::shared_ptr<SymbolicNode>> args = node.arguments;
             if (node.type == FunctionNode::FuncType::Sin) {
-                
+
                 auto cos_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Cos, args);
                 auto minus_one = std::make_shared<NumberNode>(BigInt(-1));
                 std::vector<std::shared_ptr<SymbolicNode>> ops = {minus_one, cos_node};
                 result = std::make_shared<MultiplyNode>(ops);
                 return;
             } else if (node.type == FunctionNode::FuncType::Cos) {
-                
+
                 result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Sin, args);
                 return;
             } else if (node.type == FunctionNode::FuncType::Exp) {
@@ -276,57 +293,46 @@ public:
                 return;
             }
         }
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> fallback_args = {node.clone(), std::make_shared<VariableNode>(var)};
         result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, fallback_args);
     }
 
     void visit(MatrixNode& node) override {
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> fallback_args = {node.clone(), std::make_shared<VariableNode>(var)};
         result = std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, fallback_args);
     }
 };
 
-
-
-
-
-
-
 int SymbolicExpr::compare(const std::shared_ptr<SymbolicExpr>& other) const {
     if (!root || !other->root) return 0;
-    
+
     return root->compare(*other->root);
 }
 
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::   substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const {
+std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const {
     if (!root) return nullptr;
     SubstituteVisitor v(var_name, value->root);
     root->accept(v);
-    
-    
+
     NormalizationVisitor norm;
     v.get_result()->accept(norm);
-    
+
     return std::make_shared<SymbolicExpr>(norm.get_result());
 }
 
-
 std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
     if (!root) return nullptr;
-    
+
     ExpandVisitor v;
     root->accept(v);
-    
+
     auto result_node = v.get_result();
     if (!result_node) return nullptr;
-    
-    // Normalize after expansion to combine like terms like x^2 + x^2 + x^2
+
     return std::make_shared<SymbolicExpr>(result_node)->simplify();
 }
-
 
 std::string SymbolicExpr::to_string() const {
     PrintVisitor printer;
@@ -337,23 +343,21 @@ std::string SymbolicExpr::to_string() const {
     return "null";
 }
 
-
 lmmc_real_t SymbolicExpr::to_numeric() const {
     if (!root) return 0.0;
-    
+
     if (auto num = std::dynamic_pointer_cast<NumberNode>(root)) {
         if (std::holds_alternative<lmmc_real_t>(num->value)) return std::get<lmmc_real_t>(num->value);
         if (std::holds_alternative<::BigInt>(num->value)) return (lmmc_real_t)std::get<::BigInt>(num->value).to_double();
         if (std::holds_alternative<::Rational>(num->value)) return (lmmc_real_t)std::get<::Rational>(num->value).to_double();
     }
-    
-    // Evaluate elementary functions with numeric arguments via LMMC / std math
+
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(root)) {
         if (func->arguments.size() == 1) {
             SymbolicExpr arg_expr(func->arguments[0]);
             lmmc_real_t arg_val = arg_expr.to_numeric();
             lmmc_real_t result;
-            
+
             switch (func->type) {
                 case FunctionNode::FuncType::Sin:
                     result = std::sin(arg_val);
@@ -380,13 +384,12 @@ lmmc_real_t SymbolicExpr::to_numeric() const {
                     if (lmmc_lambertw(arg_val, &result) == LMMC_STATUS_OK) {
                         return result;
                     }
-                    break; // LambertW may fail for z < -1/e
+                    break;
                 default:
                     break;
             }
         }
-        
-        // Handle two-argument functions
+
         if (func->arguments.size() == 2 && func->type == FunctionNode::FuncType::Atan2) {
             SymbolicExpr y_expr(func->arguments[0]);
             SymbolicExpr x_expr(func->arguments[1]);
@@ -395,8 +398,8 @@ lmmc_real_t SymbolicExpr::to_numeric() const {
             return std::atan2(y_val, x_val);
         }
     }
-    
-    return 0.0; 
+
+    return 0.0;
 }
 
 bool SymbolicExpr::is_zero() const {
@@ -429,7 +432,6 @@ bool SymbolicExpr::is_one() const {
     return false;
 }
 
-
 std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
     if (!root) return nullptr;
     NormalizationVisitor v;
@@ -437,64 +439,56 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
     return std::make_shared<SymbolicExpr>(v.get_result());
 }
 
-
 std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_trig() const {
     auto res = simplify();
     if (!res->root) return nullptr;
 
     static lamina::RewriteEngine engine;
     static bool init = false;
-    
+
     if (!init) {
         init = true;
         using namespace lamina;
         auto x_val = wildcard("x");
         auto x = std::make_shared<SymbolicExpr>(x_val);
-        
-        // Rule: sin(x)^2 + cos(x)^2 -> 1
+
         auto sinx = SymbolicExpr::sin(x);
         auto cosx = SymbolicExpr::cos(x);
         auto n2 = SymbolicExpr::number(2);
         auto sin2 = SymbolicExpr::power(sinx, n2);
         auto cos2 = SymbolicExpr::power(cosx, n2);
-        
-        // Match sin(x)^2 + cos(x)^2 -> 1
+
         auto pat1 = SymbolicExpr::add(sin2, cos2);
         engine.add_rule(Rule(*pat1, *SymbolicExpr::number(1), {"x"}));
-        
-        // Match cos(x)^2 + sin(x)^2 -> 1
+
         auto pat2 = SymbolicExpr::add(cos2, sin2);
         engine.add_rule(Rule(*pat2, *SymbolicExpr::number(1), {"x"}));
 
-        // Rule: sin(2*x) -> 2*sin(x)*cos(x)
         auto two_x = SymbolicExpr::multiply(n2, x);
         auto sin2x = SymbolicExpr::sin(two_x);
-        auto two_sin_cos = SymbolicExpr::multiply(n2, 
+        auto two_sin_cos = SymbolicExpr::multiply(n2,
             SymbolicExpr::multiply(sinx, cosx));
         engine.add_rule(Rule(*sin2x, *two_sin_cos, {"x"}));
-        
-        // Rule: cos(2*x) -> cos(x)^2 - sin(x)^2
+
         auto cos2x = SymbolicExpr::cos(two_x);
-        auto cos2_sub_sin2 = SymbolicExpr::add(cos2, 
+        auto cos2_sub_sin2 = SymbolicExpr::add(cos2,
             SymbolicExpr::multiply(sin2, SymbolicExpr::number(-1)));
         engine.add_rule(Rule(*cos2x, *cos2_sub_sin2, {"x"}));
     }
-    
+
     auto simplified = engine.apply(*res);
     auto result_ptr = std::make_shared<SymbolicExpr>(simplified);
     return result_ptr->simplify();
 }
 
-
 std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate(const std::string& var_name) const {
     if (!root) return nullptr;
     DifferentiationVisitor v(var_name);
     root->accept(v);
-    
-    
+
     NormalizationVisitor norm;
     v.get_result()->accept(norm);
-    
+
     return std::make_shared<SymbolicExpr>(norm.get_result());
 }
 
@@ -502,38 +496,35 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate_legacy(const std::stri
     return differentiate(var_name);
 }
 
-
 std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
     auto simp = simplify();
     if (!simp || !simp->root) return simp;
 
     if (auto add_node = std::dynamic_pointer_cast<AddNode>(simp->root)) {
-        // Try common factor
+
         std::shared_ptr<SymbolicExpr> common = nullptr;
         for (const auto& op : add_node->operands) {
              auto expr_op = std::make_shared<SymbolicExpr>(op);
              if (!common) common = expr_op;
              else common = poly_gcd(common, expr_op);
         }
-        
+
         if (common && !common->is_one() && !common->is_zero()) {
              std::vector<std::shared_ptr<SymbolicNode>> new_ops;
              for (const auto& op : add_node->operands) {
                   auto term = std::make_shared<SymbolicExpr>(op);
-                  // Manually divide: term / common
+
                   auto inv_common = power(common, number(-1));
                   auto quot = multiply(term, inv_common);
                   quot = quot->simplify();
                   new_ops.push_back(quot->root);
              }
              auto new_sum = std::make_shared<SymbolicExpr>(std::make_shared<AddNode>(new_ops));
-             
-             // Construct Multiply(common, sum) WITHOUT calling simplify() on result (to avoid re-expansion)
+
              std::vector<std::shared_ptr<SymbolicNode>> final_ops = {common->root, new_sum->root};
              return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(final_ops));
         }
-        
-        // Try quadratic
+
         VariablesVisitor vv;
         simp->root->accept(vv);
         if (vv.vars.size() == 1) {
@@ -543,60 +534,56 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                  if (poly.degree() == 2) {
                       auto solutions = solve(simp, var);
                       if (solutions.size() == 2) {
-                           auto leading = poly.coeffs[2].val; 
+                           auto leading = poly.coeffs[2].val;
                            if (!leading) leading = number(1);
                            leading = leading->simplify();
-                           
+
                            auto x_node = std::make_shared<SymbolicExpr>(std::make_shared<VariableNode>(var));
-                           
+
                            auto t1 = SymbolicExpr::add(x_node, multiply(solutions[0], number(-1)))->simplify();
                            auto t2 = SymbolicExpr::add(x_node, multiply(solutions[1], number(-1)))->simplify();
-                           
+
                            std::vector<std::shared_ptr<SymbolicNode>> factors;
                            if (!leading->is_one()) factors.push_back(leading->root);
                            factors.push_back(t1->root);
                            factors.push_back(t2->root);
-                           
+
                            return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(factors));
                       }
                  }
              } catch (...) {}
         }
     }
-    
+
     return simp;
 }
 
-
 std::shared_ptr<SymbolicExpr> SymbolicExpr::limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, const std::string& direction) const {
     if (!root) return nullptr;
-    
+
     LimitVisitor v(var, point->root, direction);
     root->accept(v);
-    
+
     if (v.get_result()) {
         return std::make_shared<SymbolicExpr>(v.get_result());
     }
-    
+
     return nullptr;
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(const std::string& var) const {
     if (!root) return nullptr;
-    
-    // Use the advanced Integrator class instead of the basic IntegrationVisitor
+
     lamina::Integrator integrator;
     SymbolicExpr result = integrator.integrate(*this, var);
-    
-    // The Integrator returns a value, we return a shared_ptr
+
     auto res_ptr = std::make_shared<SymbolicExpr>(result);
-    return res_ptr->simplify(); 
+    return res_ptr->simplify();
 }
 std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order) const {
     if (!root || !point) return nullptr;
     if (order < 0) return SymbolicExpr::number(0);
 
-    // Taylor series via repeated differentiation at the expansion point.
     auto x = SymbolicExpr::variable(var);
     auto neg_point = SymbolicExpr::multiply(SymbolicExpr::number(-1), point);
     auto delta = SymbolicExpr::add(x, neg_point);
@@ -634,48 +621,28 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const
     return std::make_shared<SymbolicExpr>(sum)->simplify();
 }
 
-
 std::shared_ptr<SymbolicExpr> SymbolicExpr::divide(const std::shared_ptr<SymbolicExpr>& num, const std::shared_ptr<SymbolicExpr>& den) {
     return SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_integral(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
-    return expr;
+    if (!expr) return nullptr;
+    auto var_node = std::make_shared<VariableNode>(var);
+    std::vector<std::shared_ptr<SymbolicNode>> args = {expr->root, var_node};
+    return std::make_shared<SymbolicExpr>(
+        std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args));
 }
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, const std::shared_ptr<SymbolicExpr>& point) {
-    return expr;
+    if (!expr || !point) return nullptr;
+    auto var_node = std::make_shared<VariableNode>(var);
+    std::vector<std::shared_ptr<SymbolicNode>> args = {expr->root, var_node, point->root};
+    return std::make_shared<SymbolicExpr>(
+        std::make_shared<FunctionNode>(FunctionNode::FuncType::Limit, args));
 }
-
-/*
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::determinant(const std::shared_ptr<SymbolicExpr>& mat) { 
-    return SymbolicExpr::number(0); 
-}
-std::shared_ptr<SymbolicExpr> SymbolicExpr::transpose(const std::shared_ptr<SymbolicExpr>& mat) { 
-    return mat; 
-}
-std::shared_ptr<SymbolicExpr> SymbolicExpr::inverse(const std::shared_ptr<SymbolicExpr>& mat) { 
-    return mat; 
-}
-std::shared_ptr<SymbolicExpr> SymbolicExpr::rref(const std::shared_ptr<SymbolicExpr>& mat) { 
-    return mat; 
-}
-std::shared_ptr<SymbolicExpr> SymbolicExpr::charpoly(const std::shared_ptr<SymbolicExpr>& mat, const std::string& lambda) { 
-    return SymbolicExpr::number(0); 
-}
-std::shared_ptr<SymbolicExpr> SymbolicExpr::eigenvalues(const std::shared_ptr<SymbolicExpr>& mat) { 
-    return SymbolicExpr::number(0); 
-}
-std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr<SymbolicExpr>>>> SymbolicExpr::eigenvectors(const std::shared_ptr<SymbolicExpr>& mat) { 
-    return {}; 
-}
-*/
-
-
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_gcd(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
     if (!a || !b) return nullptr;
-    
+
     try {
         struct VarVisitor : public SymbolicVisitor {
             std::set<std::string> vars;
@@ -687,13 +654,14 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_gcd(const std::shared_ptr<Symbo
             void visit(FunctionNode& n) override { for(auto& arg : n.arguments) arg->accept(*this); }
             void visit(MatrixNode& n) override {}
             void visit(RelationalNode& n) override { n.left->accept(*this); n.right->accept(*this); }
+            void visit(LogicalNode& n) override { n.left->accept(*this); n.right->accept(*this); }
         } vv;
         if (a->root) a->root->accept(vv);
         if (b->root) b->root->accept(vv);
 
         if (vv.vars.empty()) return SymbolicExpr::number(1);
         std::string var = *vv.vars.begin();
-        
+
         auto pa = lamina::symbolic_to_poly<BigInt>(a, var);
         auto pb = lamina::symbolic_to_poly<BigInt>(b, var);
         auto g = lamina::Polynomial<BigInt>::gcd(pa, pb);
@@ -707,41 +675,33 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(const std::shared_ptr
     try {
         auto pb = lamina::symbolic_to_poly<Rational>(b, var);
         auto pa = lamina::symbolic_to_poly<Rational>(a, var);
-        
+
         if (pb.degree() == 1) {
             auto m = pb.coeffs[1];
             auto c = pb.coeffs[0];
-            
+
             auto root_val = SymbolicExpr::number(-c/m);
             auto substitution = a->substitute(var, root_val);
             auto factor = SymbolicExpr::power(SymbolicExpr::number(m), SymbolicExpr::number((int)pa.degree()));
-            
+
             return SymbolicExpr::multiply(factor, substitution)->simplify();
         }
     } catch (...) {}
-    
+
     return SymbolicExpr::number(0);
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_sqrt() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_multiply() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_add() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_power() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_sin() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_cos() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_tan() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_ln() const { return simplify(); }
 
 
 SymbolicExpr::Type SymbolicExpr::get_type() const {
     if (!root) return Type::Number;
-    
+
     if (std::dynamic_pointer_cast<NumberNode>(root)) return Type::Number;
     if (std::dynamic_pointer_cast<VariableNode>(root)) return Type::Variable;
     if (std::dynamic_pointer_cast<AddNode>(root)) return Type::Add;
     if (std::dynamic_pointer_cast<MultiplyNode>(root)) return Type::Multiply;
     if (std::dynamic_pointer_cast<PowerNode>(root)) return Type::Power;
-    
+
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(root)) {
         switch (func->type) {
             case FunctionNode::FuncType::Sin: return Type::Sin;
@@ -749,7 +709,7 @@ SymbolicExpr::Type SymbolicExpr::get_type() const {
             case FunctionNode::FuncType::Tan: return Type::Tan;
             case FunctionNode::FuncType::Ln: return Type::Ln;
             case FunctionNode::FuncType::Log: return Type::Log;
-            case FunctionNode::FuncType::Exp: return Type::Power; 
+            case FunctionNode::FuncType::Exp: return Type::Power;
             case FunctionNode::FuncType::LambertW: return Type::Variable;
             case FunctionNode::FuncType::Abs: return Type::Abs;
             case FunctionNode::FuncType::Sqrt: return Type::Sqrt;
@@ -757,10 +717,10 @@ SymbolicExpr::Type SymbolicExpr::get_type() const {
             case FunctionNode::FuncType::ArcSin: return Type::ArcSin;
             case FunctionNode::FuncType::ArcCos: return Type::ArcCos;
             case FunctionNode::FuncType::ArcTan: return Type::ArcTan;
-            default: return Type::Variable; 
+            default: return Type::Variable;
         }
     }
-    
+
     if (auto mat = std::dynamic_pointer_cast<MatrixNode>(root)) {
         if (mat->rows == 1 || mat->cols == 1) return Type::Vector;
         return Type::Matrix;
@@ -786,19 +746,16 @@ std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::get_operands() const {
     return ops;
 }
 
-
-std::variant<int, ::BigInt, ::Rational> SymbolicExpr::get_number_value() const { 
+std::variant<int, ::BigInt, ::Rational> SymbolicExpr::get_number_value() const {
     if (auto node = std::dynamic_pointer_cast<NumberNode>(root)) {
         if (std::holds_alternative<BigInt>(node->value)) return std::get<BigInt>(node->value);
         if (std::holds_alternative<Rational>(node->value)) return std::get<Rational>(node->value);
-        if (std::holds_alternative<lmmc_real_t>(node->value)) return (int)std::get<lmmc_real_t>(node->value); 
+        if (std::holds_alternative<lmmc_real_t>(node->value)) return (int)std::get<lmmc_real_t>(node->value);
     }
-    return 0; 
+    return 0;
 }
 
 std::string SymbolicExpr::get_identifier() const {
     if (auto v = std::dynamic_pointer_cast<VariableNode>(root)) return v->name;
     return "";
 }
-
-

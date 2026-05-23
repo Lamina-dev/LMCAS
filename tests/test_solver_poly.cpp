@@ -4,7 +4,6 @@
 
 using namespace lamina;
 
-
 SymbolicExpr var(const std::string& name) {
     return SymbolicExpr(SymbolicFactory::create_variable(name));
 }
@@ -14,10 +13,7 @@ SymbolicExpr num(int n) {
 }
 
 SymbolicExpr operator+(const SymbolicExpr& a, const SymbolicExpr& b) {
-    
-    
-    
-    
+
     std::vector<std::shared_ptr<SymbolicNode>> ops = {a.root, b.root};
     return SymbolicExpr(SymbolicFactory::create_add(ops));
 }
@@ -40,60 +36,39 @@ SymbolicExpr pow(const SymbolicExpr& a, int n) {
 
 void test_groebner_basis_simple() {
     std::cout << "Testing Groebner Basis simple..." << std::endl;
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     auto x = var("x");
     auto y = var("y");
-    
+
     auto f1 = x + y;
     auto f2 = x - y;
-    
+
     std::vector<SymbolicExpr> F = {f1, f2};
     std::vector<std::string> vars = {"x", "y"};
-    
+
     auto G = Solver::groebner_basis(F, vars);
-    
+
     std::cout << "Basis size: " << G.size() << std::endl;
     for (const auto& g : G) {
         std::cout << "  " << g.to_string() << std::endl;
     }
-    
-    
-    
-    
-    
-    
-    
+
 }
 
 void test_groebner_basis_circle() {
      std::cout << "Testing Groebner Basis circle line..." << std::endl;
-     
-     
-     
-     
-     
-     
+
      auto x = var("x");
      auto y = var("y");
-     
+
      auto f1 = (pow(x, 2) + pow(y, 2)) - num(1);
      auto f2 = x - y;
-     
+
      std::vector<SymbolicExpr> F = {f1, f2};
      std::vector<std::string> vars = {"x", "y"};
-     
+
      auto G = Solver::groebner_basis(F, vars);
-     
+
      std::cout << "Basis size: " << G.size() << std::endl;
      for (const auto& g : G) {
          std::cout << "  " << g.to_string() << std::endl;

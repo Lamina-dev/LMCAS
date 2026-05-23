@@ -1,13 +1,3 @@
-/**
- * @file dllmain.c
- * @brief DLL entry point for the lmcas shared library.
- *
- * On process attach/detach we initialise / tear down the LAMMP
- * global resources via the LMMC lifecycle functions.  This keeps
- * the LAMMP initialisation concern inside the library boundary
- * (LMMC) rather than leaking into application or CAS code.
- */
-
 #ifdef _WIN32
 #include <windows.h>
 #include "lmmc/init.h"
@@ -19,28 +9,23 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     switch (fdwReason)
     {
     case DLL_PROCESS_ATTACH:
-        /* lmmc_init() must be loader-safe: no thread creation,
-           no synchronization that can block, no calls into other DLLs
-           that might not yet be loaded. */
+
         lmmc_init();
         break;
 
     case DLL_PROCESS_DETACH:
-        /* If lpvReserved is non-NULL, the process is terminating.
-           In that case skip cleanup since the OS will reclaim
-           everything and running deinit may be unsafe (other
-           DLLs may already be unloaded). */
+
         if (lpvReserved == NULL) {
             lmmc_deinit();
         }
         break;
 
     case DLL_THREAD_ATTACH:
-        /* new LAMMP may need per-thread lmmp_global_init_() here */
+
         break;
 
     case DLL_THREAD_DETACH:
-        /* new LAMMP may need per-thread lmmp_global_deinit() here */
+
         break;
     }
 
@@ -48,7 +33,5 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 }
 
 #else
-/* On non-Windows platforms we rely on explicit lmmc_init() calls
-   at the application level or __attribute__((constructor)) in the
-   future.  Add support as needed. */
+
 #endif

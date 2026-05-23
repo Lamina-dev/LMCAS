@@ -6,7 +6,7 @@ int main() {
     for (int i = 0; i < 510; ++i) {
         expr = SymbolicExpr::sin(expr);
     }
-    
+
     bool caught = false;
     try {
         expr->simplify();
@@ -16,8 +16,8 @@ int main() {
             caught = true;
         }
     }
-    
+
     EXPECT_TRUE(caught, "AST depth limit should trigger an exception on deep trees");
-    
+
     return TEST_REPORT();
 }

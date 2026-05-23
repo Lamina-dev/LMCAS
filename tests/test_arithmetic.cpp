@@ -2,9 +2,6 @@
 #include "bigint.hpp"
 #include "rational.hpp"
 
-
-
-
 void test_bigint() {
     TEST_CASE("BigInt Basic");
     BigInt a(1);
@@ -12,7 +9,7 @@ void test_bigint() {
     BigInt c(6);
 
     BigInt b2 = b * b;
-    
+
     EXPECT_EQ_STR(b2.to_string(), "25", "5^2 = 25");
 
     BigInt ac4 = BigInt(4) * a * c;
@@ -45,16 +42,13 @@ void test_rational() {
 
 void test_large_mul() {
     TEST_CASE("Large Multiplication");
-    
+
     std::string s = "123456789123456789";
     BigInt a(s);
     BigInt b(s);
-    
+
     BigInt c = a * b;
-    
-    
-    
-    
+
     std::string expected = "15241578780673678515622620750190521";
     EXPECT_EQ_STR(c.to_string(), expected, "Large Mul Check");
 }

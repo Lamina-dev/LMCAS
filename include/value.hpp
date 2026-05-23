@@ -1,3 +1,7 @@
+/**
+ * @file value.hpp
+ * @brief 运行时值类型 Value，支持数值、符号、容器类型。
+ */
 #pragma once
 #include "bigint.hpp"
 #include "irrational.hpp"
@@ -6,14 +10,11 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
-#include <functional>
 #include <iostream>
-#include <set>
 #include <string>
-#include <unordered_map>
-#include <utility>
 #include <variant>
 #include <vector>
+#include <sstream>
 
 #ifdef _WIN32
 #ifdef LAMINA_CORE_EXPORTS
@@ -24,95 +25,58 @@
 #else
 #define LAMINA_API
 #endif
-class Value;
 
-struct LmModule {
-    std::string module_name;
-    std::string id;
-    std::unordered_map<std::string, Value> sub_item;
-    LmModule(std::string module_name, std::string id, std::unordered_map<std::string, Value> sub_item)
-        : module_name(std::move(module_name)), id(std::move(id)), sub_item(std::move(sub_item)) {}
-};
-
-struct LmCppFunction {
-    std::function<Value(std::vector<Value>)> function;
-    explicit LmCppFunction(std::function<Value(std::vector<Value>)> function)
-        : function(std::move(function)) {}
-};
-
-struct LambdaDeclExpr;
-class lmStruct;
-LAMINA_API std::string lStruct_to_string(const std::shared_ptr<lmStruct>& lstruct);
-
+/** @brief 运行时统一值类型，支持数值、符号、容器等类型的动态表示 */
 class Value final {
 public:
+    /** @brief 值的类型枚举 */
     enum class Type {
-        Lambda, lmStruct, Symbolic,
-        lmModule, lmCppFunction,
-        Null, Bool, Infinity,
-        Int, Float, BigInt,
-        lmInt, lmDecimal, 
-        Rational, Irrational,
-        String, Array, Set, Matrix }; 
-    Type type;
+        Null, Int, Float, BigInt,
+        Rational, Irrational, Symbolic,
+        Infinity, Array, Matrix,
+        String
+    };
+    Type type;  ///< 当前值的类型
 
-	using DataType = std::variant<
-		std::nullptr_t,
-		bool, int, lmmc_real_t, std::string,
-		std::shared_ptr<LmModule>,
-		std::shared_ptr<LmCppFunction>,
-		std::set<Value>,
-		std::vector<Value>,
-		std::vector<std::vector<Value>>,
-		std::vector<std::pair<std::string, Value>>,
-		::BigInt, ::Rational, ::Irrational,
-		std::shared_ptr<SymbolicExpr>,
-		std::shared_ptr<lmStruct>,
-		std::shared_ptr<LambdaDeclExpr>>;
+    /** @brief 内部存储的 variant 类型 */
+    using DataType = std::variant<
+        std::nullptr_t,
+        int, lmmc_real_t,
+        ::BigInt, ::Rational, ::Irrational,
+        std::shared_ptr<SymbolicExpr>,
+        std::vector<Value>,
+        std::vector<std::vector<Value>>>;
 
-    DataType data;
+    DataType data;  ///< 实际存储的数据
 
     ~Value() = default;
 
-    
+    /** @brief 默认构造，初始化为 Null */
     Value() : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
 
-    
     Value(std::nullptr_t) : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
-    Value(bool b) : type(Type::Bool), data(std::in_place_index<1>, b) {}
-    Value(int i) : type(Type::Int), data(std::in_place_index<2>, i) {}
-	Value(lmmc_real_t f) : type(Type::Float), data(std::in_place_index<3>, f) {
-		int res;
-		lmmc_isinf(f, &res);
-		if (res) {
-			if (f < 0) res = -1;
-			this->type = Type::Infinity;
-			this->data = DataType(std::in_place_index<2>, res);
-		}
-	}
-    Value(const std::string& s) : type(Type::String), data(s) {}
-    Value(const char* s) : type(Type::String), data(std::string(s)) {}
-    Value(const char s) : type(Type::String), data(std::string(1,s)) {}
+    Value(int i) : type(Type::Int), data(i) {}
+    Value(lmmc_real_t f) : type(Type::Float), data(f) {
+        int res;
+        lmmc_isinf(f, &res);
+        if (res) {
+            if (f < 0) res = -1;
+            this->type = Type::Infinity;
+            this->data = DataType(std::in_place_index<1>, res);
+        }
+    }
     Value(const ::BigInt& bi) : type(Type::BigInt), data(bi) {}
     Value(const ::Rational& r) : type(Type::Rational), data(r) {}
     Value(const ::Irrational& ir) : type(Type::Irrational), data(ir) {}
-    Value(const std::shared_ptr<lmStruct>& lstruct) : type(Type::lmStruct), data(lstruct) {}
-    Value(const std::set<Value>& set) : type(Type::Set), data(set) {}
-    Value(const std::shared_ptr<LambdaDeclExpr>& func_def_stmt) : type(Type::Lambda), data(func_def_stmt) {}
     Value(const std::shared_ptr<SymbolicExpr>& sym) : type(Type::Symbolic), data(sym) {}
-    Value(const std::shared_ptr<LmCppFunction>& func) : type(Type::lmCppFunction), data(func) {}
-    Value(const std::shared_ptr<LmModule>& module) : type(Type::lmModule), data(module) {}
     Value(const std::vector<Value>& arr) {
-        
         bool is_matrix = !arr.empty() && arr[0].is_array();
         if (is_matrix) {
-            
             std::vector<std::vector<Value>> matrix;
-            for (const auto& row: arr) {
+            for (const auto& row : arr) {
                 if (row.is_array()) {
                     matrix.push_back(std::get<std::vector<Value>>(row.data));
                 } else {
-                    
                     type = Type::Array;
                     data = arr;
                     return;
@@ -125,48 +89,60 @@ public:
             data = arr;
         }
     }
-
-
     Value(const std::vector<std::vector<Value>>& mat) : type(Type::Matrix), data(mat) {}
 
-    
+    // 字符串值：用 Type::String 区分，避免和 Null 混在一起。
+    Value(const std::string& s) : type(Type::String), data(nullptr), _str_cache(s) {}
+    Value(const char* s) : type(Type::String), data(nullptr), _str_cache(s ? s : "") {}
+
     bool is_null() const { return type == Type::Null; }
-	bool is_infinity() const { return type == Type::Infinity; }
-    bool is_bool() const { return type == Type::Bool; }
+    bool is_string() const { return type == Type::String; }
+    bool is_infinity() const { return type == Type::Infinity; }
     bool is_int() const { return type == Type::Int; }
     bool is_float() const { return type == Type::Float; }
-    bool is_string() const { return type == Type::String; }
     bool is_array() const { return type == Type::Array; }
     bool is_matrix() const { return type == Type::Matrix; }
     bool is_bigint() const { return type == Type::BigInt; }
     bool is_rational() const { return type == Type::Rational; }
-    bool is_set() const { return type == Type::Set; }
-    bool is_lambda() const { return type == Type::Lambda; }
     bool is_irrational() const { return type == Type::Irrational; }
-    bool is_lstruct() const { return type == Type::lmStruct; }
     bool is_symbolic() const { return type == Type::Symbolic; }
-    bool is_lmModule() const { return type == Type::lmModule; }
-    bool is_lmCppFunction() const { return type == Type::lmCppFunction; }
-    bool is_numeric() const { return type == Type::Int || type == Type::Float || type == Type::BigInt || type == Type::Rational || type == Type::Irrational || type == Type::Symbolic; }
-    
+    bool is_numeric() const {
+        if (type == Type::Int || type == Type::Float ||
+            type == Type::BigInt || type == Type::Rational ||
+            type == Type::Irrational) {
+            return true;
+        }
+        // Symbolic 表达式只要能化简为数值节点，就视为可走 numeric 路径；否则不视为
+        // numeric，避免上层算子把无法求值的符号悄悄塞进数值路径。
+        if (type == Type::Symbolic) {
+            const auto& sp = std::get<std::shared_ptr<SymbolicExpr>>(data);
+            if (!sp) return false;
+            try {
+                auto simp = sp->simplify();
+                return simp && simp->is_number();
+            } catch (...) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @brief 将值转换为浮点数
+     * @return 浮点数近似值，非数值类型返回 0.0
+     */
     lmmc_real_t as_number() const {
-		if (type == Type::Infinity) {
+        if (type == Type::Infinity) {
             lmmc_real_t inf;
             lmmc_inf(&inf);
             auto sign = std::get_if<int>(&data);
             return (sign && *sign > 0) ? inf : -inf;
         }
-		if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
+        if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
         if (type == Type::Float) return std::get<lmmc_real_t>(data);
         if (type == Type::BigInt) {
-            
-            const auto& bigint_val = std::get<::BigInt>(data);
-            int int_val = bigint_val.to_int();
-            if (int_val == INT_MAX || int_val == INT_MIN) {
-                
-                return bigint_val.to_double();
-            }
-            return static_cast<lmmc_real_t>(int_val);
+            // 直接用 BigInt::to_double() 即可，避免先 to_int() 后再转 double 在大数上失真。
+            return std::get<::BigInt>(data).to_double();
         }
         if (type == Type::Rational) {
             return std::get<::Rational>(data).to_double();
@@ -180,14 +156,17 @@ public:
         return 0.0;
     }
 
-    
+    /**
+     * @brief 将值转换为有理数
+     * @return 有理数表示，非数值类型返回 0
+     */
     ::Rational as_rational() const {
         if (type == Type::Rational) return std::get<::Rational>(data);
         if (type == Type::Int) return ::Rational(std::get<int>(data));
         if (type == Type::Float) return ::Rational::from_double(std::get<lmmc_real_t>(data));
         if (type == Type::BigInt) {
-            int int_val = std::get<::BigInt>(data).to_int();
-            return ::Rational(int_val);
+            // 直接用 BigInt 构造 Rational，避免先转 int 截断高位。
+            return ::Rational(std::get<::BigInt>(data));
         }
         if (type == Type::Irrational) {
             return ::Rational::from_double(std::get<::Irrational>(data).to_double());
@@ -195,31 +174,38 @@ public:
         return ::Rational(0);
     }
 
-    
+    /**
+     * @brief 将值转换为无理数表示
+     * @return 无理数对象
+     */
     ::Irrational as_irrational() const {
         if (type == Type::Irrational) return std::get<::Irrational>(data);
         if (type == Type::Int) return ::Irrational::constant(std::get<int>(data));
         if (type == Type::Float) return ::Irrational::constant(std::get<lmmc_real_t>(data));
         if (type == Type::Rational) return ::Irrational::constant(std::get<::Rational>(data).to_double());
         if (type == Type::BigInt) {
-            int int_val = std::get<::BigInt>(data).to_int();
-            return ::Irrational::constant(int_val);
+            // 用 to_double() 而不是 to_int()，避免大整数被饱和到 INT_MAX/INT_MIN 后再当成数值。
+            return ::Irrational::constant(std::get<::BigInt>(data).to_double());
         }
         return ::Irrational::constant(0);
     }
 
-	std::shared_ptr<SymbolicExpr> as_symbolic() const {
-		if (type == Type::Infinity) {
-			auto sign = std::get_if<int>(&data);
-			return SymbolicExpr::infinity(sign ? *sign : 1);
-		}
-		if (type == Type::Symbolic) return std::get<std::shared_ptr<SymbolicExpr>>(data);
-		if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) {
-			return SymbolicExpr::number(as_rational());
-		}
-		if (type == Type::Irrational) {
-			return as_irrational().to_symbolic();
-		}
+    /**
+     * @brief 将值转换为符号表达式
+     * @return 符号表达式智能指针，不可转换时返回数值 0
+     */
+    std::shared_ptr<SymbolicExpr> as_symbolic() const {
+        if (type == Type::Infinity) {
+            auto sign = std::get_if<int>(&data);
+            return SymbolicExpr::infinity(sign ? *sign : 1);
+        }
+        if (type == Type::Symbolic) return std::get<std::shared_ptr<SymbolicExpr>>(data);
+        if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) {
+            return SymbolicExpr::number(as_rational());
+        }
+        if (type == Type::Irrational) {
+            return as_irrational().to_symbolic();
+        }
         if (type == Type::Matrix) {
             const auto& mat = std::get<std::vector<std::vector<Value>>>(data);
             std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> sym_mat;
@@ -232,54 +218,44 @@ public:
             }
             return SymbolicExpr::matrix(sym_mat);
         }
-		return SymbolicExpr::number(0);
-	}
+        return SymbolicExpr::number(0);
+    }
 
-	bool as_symbolic_compatible() const {
-		if (type == Type::Symbolic) return true;
-		if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) return true;
-		if (type == Type::Irrational) return true;
+    /**
+     * @brief 判断值是否可转换为符号表达式
+     * @return 若可转换则返回 true
+     */
+    bool as_symbolic_compatible() const {
+        if (type == Type::Symbolic) return true;
+        if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) return true;
+        if (type == Type::Irrational) return true;
         if (type == Type::Matrix) return true;
-		return false;
-	}
-
-    
-    bool as_bool() const {
-		if (type == Type::Infinity) return true;
-		if (type == Type::Bool) return std::get<bool>(data);
-        if (type == Type::Int) return std::get<int>(data) != 0;
-        if (type == Type::Float) return std::get<lmmc_real_t>(data) != 0.0;
-        if (type == Type::BigInt) return !std::get<::BigInt>(data).is_zero();
-        if (type == Type::Rational) return !std::get<::Rational>(data).is_zero();
-        if (type == Type::Irrational) return !std::get<::Irrational>(data).is_zero();
-        if (type == Type::String) return !std::get<std::string>(data).empty();
-        if (type == Type::Array) return !std::get<std::vector<Value>>(data).empty();
         return false;
     }
 
-    
+    /**
+     * @brief 将值转换为可读字符串
+     * @return 格式化的字符串表示
+     */
     std::string to_string() const {
+        if (type == Type::String) return _str_cache;
+        if (!_str_cache.empty()) return _str_cache;
         switch (type) {
-			case Type::Infinity: {
-			auto sign = std::get_if<int>(&data);
-			return (sign && *sign > 0) ? "inf" : "-inf";
-		}
-			case Type::Null:
+            case Type::Infinity: {
+                auto sign = std::get_if<int>(&data);
+                return (sign && *sign > 0) ? "inf" : "-inf";
+            }
+            case Type::Null:
                 return "null";
-            case Type::Bool:
-                return std::get<bool>(data) ? "true" : "false";
             case Type::Int:
                 return std::to_string(std::get<int>(data));
             case Type::Float: {
                 lmmc_real_t val = std::get<lmmc_real_t>(data);
-                
                 std::string str = std::to_string(val);
                 str.erase(str.find_last_not_of('0') + 1, std::string::npos);
                 str.erase(str.find_last_not_of('.') + 1, std::string::npos);
                 return str;
             }
-            case Type::String:
-                return std::get<std::string>(data);
             case Type::Array: {
                 std::string res = "[";
                 const auto& arr = std::get<std::vector<Value>>(data);
@@ -305,54 +281,24 @@ public:
                 res += "]";
                 return res;
             }
-            case Type::BigInt: {
+            case Type::BigInt:
                 return std::get<::BigInt>(data).to_string();
-            }
-            case Type::Rational: {
+            case Type::Rational:
                 return std::get<::Rational>(data).to_string();
-            }
-            case Type::Irrational: {
+            case Type::Irrational:
                 return std::get<::Irrational>(data).to_string();
-            }
-            case Type::Symbolic: {
+            case Type::Symbolic:
                 return std::get<std::shared_ptr<SymbolicExpr>>(data)->to_string();
-            }
-            case Type::lmStruct: {
-                return "<struct>";
-            }
-            case Type::Lambda: {
-                const auto* func_ptr = std::get<std::shared_ptr<LambdaDeclExpr>>(data).get();
-                std::stringstream ss;
-                ss << std::hex << func_ptr;
-                return "<Lamina lambda at " + ss.str() + ">";
-            }
-            case Type::Set: {
-                std::string text = "{";
-                for (const auto & i: std::get<std::set<Value>>(data)) {
-                    text += i.to_string() + ", ";
-                }
-                return text + "}";
-            }
-            case Type::lmCppFunction: {
-                const auto* cpp_funv__ptr = std::get<std::shared_ptr<LmCppFunction>>(data).get();
-                std::stringstream ss;
-                ss << std::hex << cpp_funv__ptr;
-                return "<Lamina c++ function at " + ss.str() + ">";
-            }
-            case Type::lmModule: {
-                const auto* module_ptr = std::get<std::shared_ptr<LmModule>>(data).get();
-                std::stringstream ss;
-                ss << std::hex << module_ptr;
-                return "<Lamina module at " + ss.str() + ">";
-            }
             default:
                 return "<unknown>";
         }
     }
 
-    
     bool operator==(const Value& other) const {
         if (type != other.type) return false;
+        if (type == Type::String) {
+            return _str_cache == other._str_cache;
+        }
         if (data.index() != other.data.index()) return false;
         return std::visit([&other](const auto& val1) -> bool {
             using T = std::decay_t<decltype(val1)>;
@@ -370,6 +316,9 @@ public:
 
     bool operator<(const Value& other) const {
         if (type != other.type) return static_cast<int>(type) < static_cast<int>(other.type);
+        if (type == Type::String) {
+            return _str_cache < other._str_cache;
+        }
         if (data.index() != other.data.index()) return data.index() < other.data.index();
         return std::visit([&other](const auto& val1) -> bool {
             using T = std::decay_t<decltype(val1)>;
@@ -386,201 +335,67 @@ public:
         }, data);
     }
 
-    
+    /**
+     * @brief 向量加法
+     * @param other 另一个向量
+     * @return 逐元素相加的结果向量
+     */
     Value vector_add(const Value& other) const {
-        if (!is_array() || !other.is_array()) {
-            std::cerr << "Error: Vector addition requires two arrays" << std::endl;
-            return Value();
-        }
-
+        if (!is_array() || !other.is_array()) return Value();
         const auto& a = std::get<std::vector<Value>>(data);
         const auto& b = std::get<std::vector<Value>>(other.data);
-
-        if (a.size() != b.size()) {
-            std::cerr << "Error: Vector addition requires same dimensions" << std::endl;
-            return Value();
-        }
-
+        if (a.size() != b.size()) return Value();
         std::vector<Value> result;
         for (size_t i = 0; i < a.size(); ++i) {
             if (a[i].is_numeric() && b[i].is_numeric()) {
                 result.push_back(Value(a[i].as_number() + b[i].as_number()));
             } else {
-                std::cerr << "Error: Vector elements must be numeric" << std::endl;
                 return Value();
             }
         }
         return Value(result);
     }
 
-    Value vector_minus(const Value& other) const {
-        if (!is_array() || !other.is_array()) {
-            std::cerr << "Error: Vector minus requires two arrays" << std::endl;
-            return Value();
-        }
-
-        const auto& a = std::get<std::vector<Value>>(data);
-        const auto& b = std::get<std::vector<Value>>(other.data);
-
-        if (a.size() != b.size()) {
-            std::cerr << "Error: Vector minus requires same dimensions" << std::endl;
-            return Value();
-        }
-
-        std::vector<Value> result;
-        for (size_t i = 0; i < a.size(); ++i) {
-            if (a[i].is_numeric() && b[i].is_numeric()) {
-                result.push_back(Value(a[i].as_number() - b[i].as_number()));
-            } else {
-                std::cerr << "Error: Vector elements must be numeric" << std::endl;
-                return Value();
-            }
-        }
-        return Value(result);
-    }
-
-    
+    /**
+     * @brief 向量点积
+     * @param other 另一个向量
+     * @return 点积标量值
+     */
     Value dot_product(const Value& other) const {
-        if (!is_array() || !other.is_array()) {
-            std::cerr << "Error: Dot product requires two arrays" << std::endl;
-            return Value();
-        }
-
+        if (!is_array() || !other.is_array()) return Value();
         const auto& a = std::get<std::vector<Value>>(data);
         const auto& b = std::get<std::vector<Value>>(other.data);
-
-        if (a.size() != b.size()) {
-            std::cerr << "Error: Dot product requires same dimensions" << std::endl;
-            return Value();
-        }
-
+        if (a.size() != b.size()) return Value();
         lmmc_real_t result = 0.0;
         for (size_t i = 0; i < a.size(); ++i) {
             if (a[i].is_numeric() && b[i].is_numeric()) {
                 result += a[i].as_number() * b[i].as_number();
             } else {
-                std::cerr << "Error: Vector elements must be numeric" << std::endl;
-                return Value();
-            }
-        }
-        return Value(result);
-    }
-    
-    Value scalar_multiply(lmmc_real_t scalar) const {
-        if (!is_array()) {
-            std::cerr << "Error: Scalar multiplication requires an array" << std::endl;
-            return Value();
-        }
-
-        const auto& arr = std::get<std::vector<Value>>(data);
-        std::vector<Value> result;
-
-        for (const auto& elem: arr) {
-            if (elem.is_numeric()) {
-                result.push_back(Value(elem.as_number() * scalar));
-            } else {
-                std::cerr << "Error: Vector elements must be numeric" << std::endl;
                 return Value();
             }
         }
         return Value(result);
     }
 
-    
-    Value cross_product(const Value& other) const {
-        if (!is_array() || !other.is_array()) {
-            std::cerr << "Error: Cross product requires two arrays" << std::endl;
-            return Value();
-        }
-
-        const auto& a = std::get<std::vector<Value>>(data);
-        const auto& b = std::get<std::vector<Value>>(other.data);
-
-        if (a.size() != 3 || b.size() != 3) {
-            std::cerr << "Error: Cross product requires 3D vectors" << std::endl;
-            return Value();
-        }
-
-        for (size_t i = 0; i < 3; ++i) {
-            if (!a[i].is_numeric() || !b[i].is_numeric()) {
-                std::cerr << "Error: Vector elements must be numeric" << std::endl;
-                return Value();
-            }
-        }
-
-        lmmc_real_t a1 = a[0].as_number(), a2 = a[1].as_number(), a3 = a[2].as_number();
-        lmmc_real_t b1 = b[0].as_number(), b2 = b[1].as_number(), b3 = b[2].as_number();
-
-        std::vector<Value> result = {
-                Value(a2 * b3 - a3 * b2),
-                Value(a3 * b1 - a1 * b3),
-                Value(a1 * b2 - a2 * b1)};
-        return Value(result);
-    }
-
-    
-    Value magnitude() const {
-        if (!is_array()) {
-            std::cerr << "Error: Magnitude requires an array" << std::endl;
-            return Value();
-        }
-
-        const auto& arr = std::get<std::vector<Value>>(data);
-        lmmc_real_t sum = 0.0;
-
-        for (const auto& elem: arr) {
-            if (elem.is_numeric()) {
-                lmmc_real_t val = elem.as_number();
-                sum += val * val;
-            } else {
-                std::cerr << "Error: Vector elements must be numeric" << std::endl;
-                return Value();
-            }
-        }
-        lmmc_real_t res_sqrt;
-        LMMC_REAL_SQRT(&res_sqrt, &sum);
-        return Value(res_sqrt);
-    }
-
-    
-    Value normalize() const {
-        Value mag = magnitude();
-        if (!mag.is_numeric() || mag.as_number() == 0.0) {
-            std::cerr << "Error: Cannot normalize zero vector" << std::endl;
-            return Value();
-        }
-        return scalar_multiply(1.0 / mag.as_number());
-    }
-
-    
+    /**
+     * @brief 矩阵乘法
+     * @param other 右矩阵
+     * @return 乘积矩阵
+     */
     Value matrix_multiply(const Value& other) const {
-        if (!is_matrix() || !other.is_matrix()) {
-            std::cerr << "Error: Matrix multiplication requires two matrices" << std::endl;
-            return Value();
-        }
-
+        if (!is_matrix() || !other.is_matrix()) return Value();
         const auto& a = std::get<std::vector<std::vector<Value>>>(data);
         const auto& b = std::get<std::vector<std::vector<Value>>>(other.data);
-
-        if (a.empty() || b.empty() || a[0].size() != b.size()) {
-            std::cerr << "Error: Invalid matrix dimensions for multiplication" << std::endl;
-            return Value();
-        }
-
+        if (a.empty() || b.empty() || a[0].size() != b.size()) return Value();
         size_t rows = a.size();
         size_t cols = b[0].size();
         size_t inner = a[0].size();
-
         std::vector<std::vector<Value>> result(rows, std::vector<Value>(cols, Value(0.0)));
-
         for (size_t i = 0; i < rows; ++i) {
             for (size_t j = 0; j < cols; ++j) {
                 lmmc_real_t sum = 0.0;
                 for (size_t k = 0; k < inner; ++k) {
-                    if (!a[i][k].is_numeric() || !b[k][j].is_numeric()) {
-                        std::cerr << "Error: Matrix elements must be numeric" << std::endl;
-                        return Value();
-                    }
+                    if (!a[i][k].is_numeric() || !b[k][j].is_numeric()) return Value();
                     sum += a[i][k].as_number() * b[k][j].as_number();
                 }
                 result[i][j] = Value(sum);
@@ -589,53 +404,6 @@ public:
         return Value(result);
     }
 
-    
-    Value determinant() const {
-        if (!is_matrix()) {
-            std::cerr << "Error: Determinant requires a matrix" << std::endl;
-            return Value();
-        }
-
-        const auto& mat = std::get<std::vector<std::vector<Value>>>(data);
-
-        if (mat.size() != mat[0].size()) {
-            std::cerr << "Error: Determinant requires a square matrix" << std::endl;
-            return Value();
-        }
-
-        size_t n = mat.size();
-
-        if (n == 2) {
-            
-            if (!mat[0][0].is_numeric() || !mat[0][1].is_numeric() ||
-                !mat[1][0].is_numeric() || !mat[1][1].is_numeric()) {
-                std::cerr << "Error: Matrix elements must be numeric" << std::endl;
-                return Value();
-            }
-            lmmc_real_t a = mat[0][0].as_number();
-            lmmc_real_t b = mat[0][1].as_number();
-            lmmc_real_t c = mat[1][0].as_number();
-            lmmc_real_t d = mat[1][1].as_number();
-            return Value(a * d - b * c);
-        } else if (n == 3) {
-            
-            for (size_t i = 0; i < 3; ++i) {
-                for (size_t j = 0; j < 3; ++j) {
-                    if (!mat[i][j].is_numeric()) {
-                        std::cerr << "Error: Matrix elements must be numeric" << std::endl;
-                        return Value();
-                    }
-                }
-            }
-
-            lmmc_real_t a = mat[0][0].as_number(), b = mat[0][1].as_number(), c = mat[0][2].as_number();
-            lmmc_real_t d = mat[1][0].as_number(), e = mat[1][1].as_number(), f = mat[1][2].as_number();
-            lmmc_real_t g = mat[2][0].as_number(), h = mat[2][1].as_number(), i = mat[2][2].as_number();
-
-            return Value(a * e * i + b * f * g + c * d * h - c * e * g - b * d * i - a * f * h);
-        } else {
-            std::cerr << "Error: Determinant only supported for 2x2 and 3x3 matrices" << std::endl;
-            return Value();
-        }
-    }
+private:
+    std::string _str_cache;  ///< 字符串构造时的缓存（兼容旧测试）
 };

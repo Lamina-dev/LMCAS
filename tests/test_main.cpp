@@ -2,7 +2,6 @@
 
 #include "value.hpp"
 
-
 Value cas_simplify(const std::vector<Value>& args) {
     if (args.empty()) return Value(SymbolicExpr::number(0));
     auto expr = args[0].as_symbolic();
@@ -18,22 +17,18 @@ Value cas_differentiate(const std::vector<Value>& args) {
 }
 
 Value cas_solve(const std::vector<Value>& args) {
-    if (args.size() < 2) return Value(); 
+    if (args.size() < 2) return Value();
     auto expr = args[0].as_symbolic();
     std::string var = args[1].to_string();
-    
-    
+
     auto solutions = SymbolicExpr::solve(expr, var);
-    
-    
+
     std::vector<Value> val_sols;
     for (const auto& s : solutions) {
         val_sols.push_back(Value(s));
     }
     return Value(val_sols);
 }
-
-
 
 int main() {
     auto x = SymbolicExpr::variable("x");
@@ -62,7 +57,7 @@ int main() {
         auto expr = SymbolicExpr::sqrt(eight);
         std::vector<Value> args = { Value(expr) };
         Value res = cas_simplify(args);
-        
+
         std::string s = res.to_string();
         std::cout << "[DEBUG] sqrt(8) -> " << s << std::endl;
         bool ok = (s.find("2") != std::string::npos) && (s.find("8") == std::string::npos);
@@ -75,18 +70,17 @@ int main() {
         auto expr = SymbolicExpr::multiply(num, num);
         std::vector<Value> args = { Value(expr) };
         Value res = cas_simplify(args);
-        EXPECT_CONTAINS(res.to_string(), {"152415787"}, "BigInt mul result start"); 
+        EXPECT_CONTAINS(res.to_string(), {"152415787"}, "BigInt mul result start");
     }
 
     TEST_CASE("Differentiation");
     {
-        
+
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
         std::vector<Value> args = { Value(x2), Value("x") };
         Value res = cas_differentiate(args);
         EXPECT_EQ_STR(res.to_string(), "2*x", "Diff x^2");
 
-        
         auto sin_x = SymbolicExpr::sin(x);
         args = { Value(sin_x), Value("x") };
         res = cas_differentiate(args);

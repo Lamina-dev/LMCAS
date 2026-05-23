@@ -1,3 +1,7 @@
+/**
+ * @file normalization_visitor.hpp
+ * @brief 规范化访问器，合并同类项、化简数值运算、处理矩阵算术。
+ */
 #pragma once
 
 #include "lmmc/config.h"
@@ -8,7 +12,11 @@
 #include <algorithm>
 #include <iostream>
 
-
+/**
+ * @brief 计算 AST 节点的多项式次数
+ * @param node 输入节点
+ * @return 节点对应的多项式次数
+ */
 inline int get_node_degree_helper(const std::shared_ptr<SymbolicNode>& node) {
     if (!node) return 0;
     if (std::dynamic_pointer_cast<VariableNode>(node)) return 1;
@@ -27,21 +35,20 @@ inline int get_node_degree_helper(const std::shared_ptr<SymbolicNode>& node) {
     return 0;
 }
 
+/** @brief 节点比较器，按多项式次数降序排列，用于同类项合并 */
 struct NodeCompare {
     bool operator()(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) const {
         if (!lhs && !rhs) return false;
         if (!lhs) return true;
         if (!rhs) return false;
 
-        // Numbers always come last in additions (degree 0)
         int d1 = get_node_degree_helper(lhs);
         int d2 = get_node_degree_helper(rhs);
-        if (d1 != d2) return d1 > d2; 
+        if (d1 != d2) return d1 > d2;
 
-        // If same degree, numbers first or something
         bool isNum1 = std::dynamic_pointer_cast<NumberNode>(lhs) != nullptr;
         bool isNum2 = std::dynamic_pointer_cast<NumberNode>(rhs) != nullptr;
-        if (isNum1 != isNum2) return isNum1; 
+        if (isNum1 != isNum2) return isNum1;
 
         if (lhs->type_priority() != rhs->type_priority()) {
             return lhs->type_priority() < rhs->type_priority();
@@ -51,54 +58,70 @@ struct NodeCompare {
     }
 };
 
-
+/**
+ * @brief 两个数值节点相加
+ * @param a 加数节点
+ * @param b 加数节点
+ * @return 和的数值节点
+ */
 inline std::shared_ptr<NumberNode> add_numbers(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
      if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
-         lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) : 
+         lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) :
                      (std::holds_alternative<Rational>(a->value) ? (lmmc_real_t)std::get<Rational>(a->value).to_double() : (lmmc_real_t)std::get<BigInt>(a->value).to_double());
-         lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value) ? std::get<lmmc_real_t>(b->value) : 
+         lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value) ? std::get<lmmc_real_t>(b->value) :
                      (std::holds_alternative<Rational>(b->value) ? (lmmc_real_t)std::get<Rational>(b->value).to_double() : (lmmc_real_t)std::get<BigInt>(b->value).to_double());
          lmmc_real_t sum = v1 + v2;
          return std::make_shared<NumberNode>(sum);
      }
-     
+
      if (std::holds_alternative<Rational>(a->value) || std::holds_alternative<Rational>(b->value)) {
-         Rational r1 = std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value) : 
+         Rational r1 = std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value) :
                        (std::holds_alternative<BigInt>(a->value) ? Rational(std::get<BigInt>(a->value)) : Rational(0));
-         Rational r2 = std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value) : 
+         Rational r2 = std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value) :
                        (std::holds_alternative<BigInt>(b->value) ? Rational(std::get<BigInt>(b->value)) : Rational(0));
          return std::make_shared<NumberNode>(r1 + r2);
      }
-     
+
      BigInt i1 = std::get<BigInt>(a->value);
      BigInt i2 = std::get<BigInt>(b->value);
      return std::make_shared<NumberNode>(i1 + i2);
 }
 
+/**
+ * @brief 两个数值节点相乘
+ * @param a 乘数节点
+ * @param b 乘数节点
+ * @return 积的数值节点
+ */
 inline std::shared_ptr<NumberNode> multiply_numbers(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
      if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
-         lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) : 
+         lmmc_real_t v1 = std::holds_alternative<lmmc_real_t>(a->value) ? std::get<lmmc_real_t>(a->value) :
                      (std::holds_alternative<Rational>(a->value) ? (lmmc_real_t)std::get<Rational>(a->value).to_double() : (lmmc_real_t)std::get<BigInt>(a->value).to_double());
-         lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value) ? std::get<lmmc_real_t>(b->value) : 
+         lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value) ? std::get<lmmc_real_t>(b->value) :
                      (std::holds_alternative<Rational>(b->value) ? (lmmc_real_t)std::get<Rational>(b->value).to_double() : (lmmc_real_t)std::get<BigInt>(b->value).to_double());
          lmmc_real_t prod = v1 * v2;
          return std::make_shared<NumberNode>(prod);
      }
-     
+
      if (std::holds_alternative<Rational>(a->value) || std::holds_alternative<Rational>(b->value)) {
-         Rational r1 = std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value) : 
+         Rational r1 = std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value) :
                        (std::holds_alternative<BigInt>(a->value) ? Rational(std::get<BigInt>(a->value)) : Rational(1));
-         Rational r2 = std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value) : 
+         Rational r2 = std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value) :
                        (std::holds_alternative<BigInt>(b->value) ? Rational(std::get<BigInt>(b->value)) : Rational(1));
          return std::make_shared<NumberNode>(r1 * r2);
      }
-     
+
      BigInt i1 = std::get<BigInt>(a->value);
      BigInt i2 = std::get<BigInt>(b->value);
      return std::make_shared<NumberNode>(i1 * i2);
 }
 
-
+/**
+ * @brief 检查节点是否为负数或带负系数，若是则输出其正值部分
+ * @param arg 待检查的节点
+ * @param out_positive 输出参数，存放取正后的节点
+ * @return 若节点为负则返回 true
+ */
 inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::shared_ptr<SymbolicNode>& out_positive) {
     if (auto num = std::dynamic_pointer_cast<NumberNode>(arg)) {
         if (std::holds_alternative<lmmc_real_t>(num->value) && std::get<lmmc_real_t>(num->value) < 0) {
@@ -130,11 +153,10 @@ inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::sh
                      is_neg = true;
                      pos_num = std::make_shared<NumberNode>(std::get<Rational>(num->value) * Rational(-1));
                  }
-                 
+
                  if (is_neg) {
                      std::vector<std::shared_ptr<SymbolicNode>> new_ops = mul->operands;
-                     
-                     // Check if constant is exactly -1 (special case)
+
                      bool is_minus_one = false;
                      if (std::holds_alternative<lmmc_real_t>(num->value)) {
                          int eq_1;
@@ -143,13 +165,13 @@ inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::sh
                      }
                      else if (std::holds_alternative<BigInt>(num->value)) is_minus_one = (std::get<BigInt>(num->value) == BigInt(-1));
                      else if (std::holds_alternative<Rational>(num->value)) is_minus_one = (std::get<Rational>(num->value) == Rational(-1));
-                     
+
                      if (is_minus_one) {
                          new_ops.erase(new_ops.begin());
                          if (new_ops.size() == 1) out_positive = new_ops[0];
                          else out_positive = std::make_shared<MultiplyNode>(new_ops);
                      } else {
-                         // General case: replace -C with +C
+
                          new_ops[0] = pos_num;
                          out_positive = std::make_shared<MultiplyNode>(new_ops);
                      }
@@ -161,6 +183,12 @@ inline bool check_negative_arg(const std::shared_ptr<SymbolicNode>& arg, std::sh
     return false;
 }
 
+/**
+ * @brief 提取节点中 π 的有理系数（如 2π/3 中的 2/3）
+ * @param node 待检查的节点
+ * @param k 输出参数，存放 π 的有理系数
+ * @return 若节点为 k*π 形式则返回 true
+ */
 inline bool get_pi_coeff(const std::shared_ptr<SymbolicNode>& node, Rational& k) {
     if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
         if (v->name == "pi") {
@@ -171,11 +199,11 @@ inline bool get_pi_coeff(const std::shared_ptr<SymbolicNode>& node, Rational& k)
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
         bool has_pi = false;
         k = Rational(1);
-        
+
         for (const auto& op : mul->operands) {
             if (auto v = std::dynamic_pointer_cast<VariableNode>(op)) {
                 if (v->name == "pi") {
-                    if (has_pi) return false; 
+                    if (has_pi) return false;
                     has_pi = true;
                 } else return false;
             } else if (auto n = std::dynamic_pointer_cast<NumberNode>(op)) {
@@ -189,21 +217,32 @@ inline bool get_pi_coeff(const std::shared_ptr<SymbolicNode>& node, Rational& k)
     return false;
 }
 
+/** @brief 规范化访问器，合并同类项、化简数值运算、处理矩阵算术和三角函数特殊值 */
 class NormalizationVisitor : public SymbolicVisitor {
 public:
-    std::shared_ptr<SymbolicNode> result;
+    std::shared_ptr<SymbolicNode> result;  ///< 规范化结果节点
 
+    /**
+     * @brief 获取规范化结果
+     * @return 化简后的 AST 节点
+     */
     std::shared_ptr<SymbolicNode> get_result() const {
         return result;
     }
 
+    /**
+     * @brief 展开两个节点的乘积（分配律）
+     * @param lhs 左操作数
+     * @param rhs 右操作数
+     * @return 展开后的 AST 节点
+     */
     std::shared_ptr<SymbolicNode> expand_product(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) {
-        
+
         auto add_lhs = std::dynamic_pointer_cast<AddNode>(lhs);
         auto add_rhs = std::dynamic_pointer_cast<AddNode>(rhs);
 
         if (add_lhs && add_rhs) {
-            
+
             std::vector<std::shared_ptr<SymbolicNode>> new_terms;
             for (const auto& op1 : add_lhs->operands) {
                 for (const auto& op2 : add_rhs->operands) {
@@ -211,10 +250,10 @@ public:
                     new_terms.push_back(prod);
                 }
             }
-            
+
             return std::make_shared<AddNode>(new_terms);
         } else if (add_lhs) {
-            
+
             std::vector<std::shared_ptr<SymbolicNode>> new_terms;
             for (const auto& op : add_lhs->operands) {
                  auto prod = expand_product(op, rhs);
@@ -222,7 +261,7 @@ public:
             }
             return std::make_shared<AddNode>(new_terms);
         } else if (add_rhs) {
-             
+
             std::vector<std::shared_ptr<SymbolicNode>> new_terms;
             for (const auto& op : add_rhs->operands) {
                  auto prod = expand_product(lhs, op);
@@ -231,17 +270,12 @@ public:
             return std::make_shared<AddNode>(new_terms);
         }
 
-        
-        
-        
-        
         std::shared_ptr<NumberNode> const_acc = std::make_shared<NumberNode>(BigInt(1));
         std::map<std::shared_ptr<SymbolicNode>, std::shared_ptr<NumberNode>, NodeCompare> bases;
-        
-        
+
         auto process_factor = [&](const std::shared_ptr<SymbolicNode>& factor) {
              if (auto num = std::dynamic_pointer_cast<NumberNode>(factor)) {
-                 if (num->is_zero()) return false; 
+                 if (num->is_zero()) return false;
                  const_acc = multiply_numbers(const_acc, num);
              } else {
                  std::shared_ptr<SymbolicNode> base = factor;
@@ -251,16 +285,9 @@ public:
                      base = pow->base;
                      if (auto e_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
                          exp = e_num;
-                     } 
+                     }
                  }
-                 
-                 
-                 
-                 
-                 
-                 
-                 
-                 
+
                  auto it = bases.find(base);
                  if (it == bases.end()) {
                      bases[base] = exp;
@@ -271,9 +298,6 @@ public:
              return true;
         };
 
-        
-        
-        
         auto flatten_and_process = [&](const std::shared_ptr<SymbolicNode>& node) {
             if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
                 for(const auto& op : mul->operands) {
@@ -292,7 +316,7 @@ public:
         if (!const_acc->is_one()) {
              final_ops.push_back(const_acc);
         }
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> var_ops;
         for (auto const& [base, exp] : bases) {
             if (exp->is_zero()) {
@@ -302,8 +326,7 @@ public:
                 var_ops.push_back(std::make_shared<PowerNode>(base, exp));
             }
         }
-        
-        // Sort variable ops
+
         std::sort(var_ops.begin(), var_ops.end(), [](const std::shared_ptr<SymbolicNode>& l, const std::shared_ptr<SymbolicNode>& r) {
             int d1 = get_node_degree_helper(l);
             int d2 = get_node_degree_helper(r);
@@ -312,10 +335,10 @@ public:
         });
 
         final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
-        
+
         if (final_ops.empty()) return std::make_shared<NumberNode>(BigInt(1));
         if (final_ops.size() == 1) return final_ops[0];
-        // Ensure constants are at the end for consistency (e.g., x * 2 -> 2x)
+
         if (final_ops.size() > 1 && std::dynamic_pointer_cast<NumberNode>(final_ops.back())) {
              std::rotate(final_ops.begin(), final_ops.end() - 1, final_ops.end());
         }
@@ -332,8 +355,7 @@ public:
 
     void visit(AddNode& node) override {
         std::vector<std::shared_ptr<SymbolicNode>> simplified_ops;
-        
-        
+
         for (const auto& op : node.operands) {
             op->accept(*this);
             if (auto add = std::dynamic_pointer_cast<AddNode>(result)) {
@@ -343,7 +365,6 @@ public:
             }
         }
 
-        // Handle Matrix Addition
         if (!simplified_ops.empty() && std::dynamic_pointer_cast<MatrixNode>(simplified_ops[0])) {
             auto first_mat = std::dynamic_pointer_cast<MatrixNode>(simplified_ops[0]);
             size_t rows = first_mat->rows;
@@ -355,11 +376,11 @@ public:
                      all_matrices = false; break;
                  }
             }
-            
+
             if (all_matrices) {
                  std::vector<std::shared_ptr<SymbolicNode>> new_elements;
                  new_elements.reserve(rows * cols);
-                 
+
                  for (size_t i = 0; i < rows * cols; ++i) {
                      std::vector<std::shared_ptr<SymbolicNode>> elem_ops;
                      for (const auto& op : simplified_ops) {
@@ -378,18 +399,16 @@ public:
                          if (!val) val = std::make_shared<NumberNode>(BigInt(0));
                          elem_ops.push_back(val);
                      }
-                     
+
                      auto elem_add = std::make_shared<AddNode>(elem_ops);
                      elem_add->accept(*this);
                      new_elements.push_back(result);
                  }
-                 
+
                  result = std::make_shared<MatrixNode>(rows, cols, new_elements);
                  return;
             }
         }
-
-
 
         std::shared_ptr<NumberNode> constant_acc = std::make_shared<NumberNode>(BigInt(0));
         std::map<std::shared_ptr<SymbolicNode>, std::shared_ptr<NumberNode>, NodeCompare> terms;
@@ -402,10 +421,10 @@ public:
                 std::shared_ptr<NumberNode> coeff_part = std::make_shared<NumberNode>(BigInt(1));
 
                 if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(op)) {
-                    
+
                     std::shared_ptr<NumberNode> coeff = nullptr;
                     int coeff_idx = -1;
-                    
+
                     if (!mul->operands.empty()) {
                         if (auto n_first = std::dynamic_pointer_cast<NumberNode>(mul->operands.front())) {
                             coeff = n_first;
@@ -426,7 +445,7 @@ public:
                              for(int k=0; k<(int)mul->operands.size(); ++k) {
                                  if (k != coeff_idx) rest.push_back(mul->operands[k]);
                              }
-                             
+
                              term_part = std::make_shared<MultiplyNode>(rest);
                          }
                     }
@@ -442,14 +461,14 @@ public:
         }
 
         std::vector<std::shared_ptr<SymbolicNode>> final_ops;
-        
+
         if (!constant_acc->is_zero()) {
             final_ops.push_back(constant_acc);
         }
 
         for (auto const& [term, coeff] : terms) {
             if (coeff->is_zero()) continue;
-            
+
             if (coeff->is_one()) {
                 final_ops.push_back(term);
             } else {
@@ -469,16 +488,16 @@ public:
         } else if (final_ops.size() == 1) {
             result = final_ops[0];
         } else {
-            // Sort final_ops: Higher degree first, constants LAST
+
             std::sort(final_ops.begin(), final_ops.end(), [](const std::shared_ptr<SymbolicNode>& l, const std::shared_ptr<SymbolicNode>& r) {
                 int d1 = get_node_degree_helper(l);
                 int d2 = get_node_degree_helper(r);
                 if (d1 != d2) return d1 > d2;
-                
+
                 bool isNum1 = std::dynamic_pointer_cast<NumberNode>(l) != nullptr;
                 bool isNum2 = std::dynamic_pointer_cast<NumberNode>(r) != nullptr;
-                if (isNum1 != isNum2) return isNum2; // Numbers last
-                
+                if (isNum1 != isNum2) return isNum2;
+
                 return l->compare(*r) < 0;
             });
             result = std::make_shared<AddNode>(final_ops);
@@ -486,32 +505,22 @@ public:
     }
 
     void visit(MultiplyNode& node) override {
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> sc;
-        
+
         for (const auto& op : node.operands) {
             op->accept(*this);
             auto res = result;
             if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(res)) {
-                
+
                 sc.insert(sc.end(), mul->operands.begin(), mul->operands.end());
             } else {
                 sc.push_back(res);
             }
         }
 
-        
         bool has_add = false;
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
         for(const auto& op : sc) {
             if(std::dynamic_pointer_cast<AddNode>(op)) {
                 has_add = true;
@@ -526,16 +535,14 @@ public:
             }
             std::shared_ptr<SymbolicNode> current = sc[0];
             for(size_t i=1; i<sc.size(); ++i) {
-                
-                
+
                 current = expand_product(current, sc[i]);
             }
-            
+
             result = current;
             return;
         }
 
-        
         bool has_matrix = false;
         for(const auto& op : sc) {
             if (std::dynamic_pointer_cast<MatrixNode>(op)) { has_matrix = true; break; }
@@ -547,7 +554,7 @@ public:
         if (has_matrix) {
             std::vector<std::shared_ptr<SymbolicNode>> new_ops;
             std::shared_ptr<NumberNode> scalar_part = std::make_shared<NumberNode>(BigInt(1));
-            
+
             for(const auto& op : sc) {
                 if (auto num = std::dynamic_pointer_cast<NumberNode>(op)) {
                     scalar_part = multiply_numbers(scalar_part, num);
@@ -555,41 +562,37 @@ public:
                     new_ops.push_back(op);
                 }
             }
-            
-            
-            
-            
+
             std::vector<std::shared_ptr<SymbolicNode>> fused_ops;
             if (!new_ops.empty()) fused_ops.push_back(new_ops[0]);
-            
+
             for(size_t i=1; i<new_ops.size(); ++i) {
                 auto left = fused_ops.back();
                 auto right = new_ops[i];
-                
+
                 auto m_left = std::dynamic_pointer_cast<MatrixNode>(left);
                 auto m_right = std::dynamic_pointer_cast<MatrixNode>(right);
-                
+
                 if (m_left && m_right) {
-                    
+
                     if (m_left->cols == m_right->rows) {
-                         
-                         if (std::holds_alternative<MatrixNode::DenseStorage>(m_left->storage) && 
+
+                         if (std::holds_alternative<MatrixNode::DenseStorage>(m_left->storage) &&
                              std::holds_alternative<MatrixNode::DenseStorage>(m_right->storage)) {
-                             
+
                              const auto& d_l = std::get<MatrixNode::DenseStorage>(m_left->storage);
                              const auto& d_r = std::get<MatrixNode::DenseStorage>(m_right->storage);
-                             
+
                              size_t R = m_left->rows;
                              size_t C = m_right->cols;
                              size_t K = m_left->cols;
 
-                             
                              MatrixNode::DenseStorage res_data;
                              res_data.reserve(R*C);
-                             
+
                              for(size_t r=0; r<R; ++r) {
                                  for(size_t c=0; c<C; ++c) {
-                                     
+
                                      std::vector<std::shared_ptr<SymbolicNode>> sum_ops;
                                      for(size_t k=0; k<K; ++k) {
                                          std::vector<std::shared_ptr<SymbolicNode>> prod_ops = {
@@ -597,11 +600,11 @@ public:
                                          };
                                          sum_ops.push_back(std::make_shared<MultiplyNode>(prod_ops));
                                      }
-                                     
+
                                      NormalizationVisitor elem_vis;
                                      auto elem_node = std::make_shared<AddNode>(sum_ops);
                                      elem_node->accept(elem_vis);
-                                     
+
                                      auto res_val = elem_vis.get_result();
                                      if (auto num = std::dynamic_pointer_cast<NumberNode>(res_val)) {
                                          if (std::holds_alternative<lmmc_real_t>(num->value)) {
@@ -609,7 +612,7 @@ public:
                                              int eq_0, eq_1;
                                              lmmc_double_nearly_equal_tol(v, 0.0, 1e-10, 1e-10, &eq_0);
                                              lmmc_double_nearly_equal_tol(v, 1.0, 1e-10, 1e-10, &eq_1);
-                                             if (eq_0) { 
+                                             if (eq_0) {
                                                  res_val = std::make_shared<NumberNode>(BigInt(0));
                                              } else if (eq_1) {
                                                  res_val = std::make_shared<NumberNode>(BigInt(1));
@@ -619,7 +622,7 @@ public:
                                      res_data.push_back(res_val);
                                  }
                              }
-                             
+
                              fused_ops.pop_back();
                              fused_ops.push_back(std::make_shared<MatrixNode>(R, C, res_data));
                              continue;
@@ -628,15 +631,15 @@ public:
                 }
                 fused_ops.push_back(right);
             }
-            
+
             if (!scalar_part->is_one()) {
                 fused_ops.insert(fused_ops.begin(), scalar_part);
             }
-            
+
             if (fused_ops.empty()) result = std::make_shared<NumberNode>(BigInt(1));
             else if (fused_ops.size() == 1) result = fused_ops[0];
             else result = std::make_shared<MultiplyNode>(fused_ops);
-            
+
             return;
         }
 
@@ -659,12 +662,12 @@ public:
                      base = pow->base;
                      if (auto e_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
                          exp = e_num;
-                         
+
                          if (auto b_num = std::dynamic_pointer_cast<NumberNode>(base)) {
                              long long exp_val = 0;
                              bool exp_ok = false;
                              bool exp_is_half = false;
-                             
+
                              if (std::holds_alternative<BigInt>(e_num->value)) {
                                  exp_val = (long long)std::get<BigInt>(e_num->value).to_double();
                                  exp_ok = true;
@@ -690,7 +693,7 @@ public:
 
                              if (exp_ok) {
                                  std::shared_ptr<NumberNode> pow_val = nullptr;
-                                 
+
                                  if (exp_val == -1) {
                                       if (std::holds_alternative<BigInt>(b_num->value)) {
                                           pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), std::get<BigInt>(b_num->value)));
@@ -702,8 +705,8 @@ public:
                                       }
                                  } else if (exp_val == 0) {
                                       pow_val = std::make_shared<NumberNode>(BigInt(1));
-                                 } else if (std::abs(exp_val) > 0 && std::abs(exp_val) < 64) { 
-                                      
+                                 } else if (std::abs(exp_val) > 0 && std::abs(exp_val) < 64) {
+
                                       long long abs_exp = std::abs(exp_val);
                                       std::shared_ptr<NumberNode> base_pow_val = nullptr;
 
@@ -728,7 +731,7 @@ public:
                                           if (exp_val > 0) {
                                               pow_val = base_pow_val;
                                           } else {
-                                              
+
                                               if (std::holds_alternative<BigInt>(base_pow_val->value)) {
                                                   pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), std::get<BigInt>(base_pow_val->value)));
                                               } else if (std::holds_alternative<Rational>(base_pow_val->value)) {
@@ -740,16 +743,16 @@ public:
                                           }
                                       }
                                  }
-                                 
+
                                  if (pow_val) {
                                      const_acc = multiply_numbers(const_acc, pow_val);
                                      is_number_power = true;
                                  }
                              } else if (exp_is_half) {
-                                 
+
                                  std::shared_ptr<NumberNode> root_val = nullptr;
                                  if (std::holds_alternative<BigInt>(b_num->value)) {
-                                     
+
                                      double d = std::get<BigInt>(b_num->value).to_double();
                                      if (d >= 0) {
                                          double r = std::sqrt(d);
@@ -766,14 +769,14 @@ public:
                                      double d = std::get<lmmc_real_t>(b_num->value);
                                      if (d >= 0) root_val = std::make_shared<NumberNode>(std::sqrt(d));
                                  }
-                                 
+
                                  if (root_val) {
                                      const_acc = multiply_numbers(const_acc, root_val);
                                      is_number_power = true;
                                  }
                              }
                          }
-                     } 
+                     }
                  }
 
                  if (!is_number_power) {
@@ -791,7 +794,7 @@ public:
         if (!const_acc->is_one()) {
              final_ops.push_back(const_acc);
         }
-        
+
         std::vector<std::shared_ptr<SymbolicNode>> var_ops;
         for (auto const& [base, exp] : bases) {
             if (exp->is_zero()) {
@@ -801,8 +804,7 @@ public:
                 var_ops.push_back(std::make_shared<PowerNode>(base, exp));
             }
         }
-        
-        // Sort variable ops to be consistent
+
         std::sort(var_ops.begin(), var_ops.end(), [](const std::shared_ptr<SymbolicNode>& l, const std::shared_ptr<SymbolicNode>& r) {
             int d1 = get_node_degree_helper(l);
             int d2 = get_node_degree_helper(r);
@@ -811,7 +813,7 @@ public:
         });
 
         final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
-        
+
         if (final_ops.empty()) result = std::make_shared<NumberNode>(BigInt(1));
         else if (final_ops.size() == 1) result = final_ops[0];
         else result = std::make_shared<MultiplyNode>(final_ops);
@@ -822,7 +824,7 @@ public:
         auto s_base = result;
         node.exponent->accept(*this);
         auto s_exp = result;
-         
+
         if (s_exp->is_zero()) {
             result = std::make_shared<NumberNode>(BigInt(1));
             return;
@@ -841,13 +843,12 @@ public:
             return;
         }
 
-        
         if (auto b_num = std::dynamic_pointer_cast<NumberNode>(s_base)) {
             if (auto e_num = std::dynamic_pointer_cast<NumberNode>(s_exp)) {
                  long long exp_val = 0;
                  bool exp_ok = false;
                  bool exp_is_half = false;
-                 
+
                  if (std::holds_alternative<BigInt>(e_num->value)) {
                      exp_val = (long long)std::get<BigInt>(e_num->value).to_double();
                      exp_ok = true;
@@ -883,7 +884,7 @@ public:
                      } else if (exp_val == 0) {
                           pow_val = std::make_shared<NumberNode>(BigInt(1));
                      } else if (std::abs(exp_val) > 0 && std::abs(exp_val) < 64) {
-                          
+
                                       long long abs_exp = std::abs(exp_val);
                                       std::shared_ptr<NumberNode> base_pow_val = nullptr;
 
@@ -908,7 +909,7 @@ public:
                                           if (exp_val > 0) {
                                               pow_val = base_pow_val;
                                           } else {
-                                              
+
                                               if (std::holds_alternative<BigInt>(base_pow_val->value)) {
                                                   pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), std::get<BigInt>(base_pow_val->value)));
                                               } else if (std::holds_alternative<Rational>(base_pow_val->value)) {
@@ -920,7 +921,7 @@ public:
                                           }
                                       }
                      }
-                     
+
                      if (pow_val) {
                          result = pow_val;
                          return;
@@ -938,22 +939,21 @@ public:
                                  }
                              }
 
-                             // Try to simplify non-perfect squares (e.g. sqrt(8) -> 2*sqrt(2))
                              BigInt val = std::get<BigInt>(b_num->value);
-                             if (val > BigInt(0) && val < BigInt(1000000)) { 
+                             if (val > BigInt(0) && val < BigInt(1000000)) {
                                  long long v_ll = (long long)val.to_double();
                                  long long root = (long long)std::sqrt(v_ll);
                                  for (long long i = root; i >= 2; --i) {
                                      if (v_ll % (i*i) == 0) {
                                          long long s_ll = i;
                                          long long k_ll = v_ll / (i*i);
-                                         
+
                                          auto s_node = std::make_shared<NumberNode>(BigInt(s_ll));
                                          auto k_node = std::make_shared<NumberNode>(BigInt(k_ll));
                                          auto half_node = std::make_shared<NumberNode>(Rational(1, 2));
                                          auto pow_node = std::make_shared<PowerNode>(k_node, half_node);
-                                         
-                                         result = SymbolicFactory::create_multiply({s_node, pow_node}); 
+
+                                         result = SymbolicFactory::create_multiply({s_node, pow_node});
                                          return;
                                      }
                                  }
@@ -969,40 +969,37 @@ public:
                  }
             }
         }
-        
-        
+
         if (auto m_base = std::dynamic_pointer_cast<MultiplyNode>(s_base)) {
             std::vector<std::shared_ptr<SymbolicNode>> new_ops;
             for(auto& op : m_base->operands) {
-                
+
                 auto term_pow = std::make_shared<PowerNode>(op, s_exp);
-                term_pow->accept(*this); 
-                
-                
+                term_pow->accept(*this);
+
                 if (auto mul_res = std::dynamic_pointer_cast<MultiplyNode>(result)) {
                      new_ops.insert(new_ops.end(), mul_res->operands.begin(), mul_res->operands.end());
                 } else {
                      new_ops.push_back(result);
                 }
             }
-            
+
             auto final_mul = std::make_shared<MultiplyNode>(new_ops);
             final_mul->accept(*this);
             return;
         }
 
-        
         if (auto p_base = std::dynamic_pointer_cast<PowerNode>(s_base)) {
-             
+
              std::vector<std::shared_ptr<SymbolicNode>> exp_ops;
              exp_ops.push_back(p_base->exponent);
              exp_ops.push_back(s_exp);
-             
+
              auto mul_exp = std::make_shared<MultiplyNode>(exp_ops);
-             mul_exp->accept(*this); 
-             
+             mul_exp->accept(*this);
+
              auto new_pow = std::make_shared<PowerNode>(p_base->base, result);
-             new_pow->accept(*this); 
+             new_pow->accept(*this);
              return;
         }
 
@@ -1015,8 +1012,7 @@ public:
             a->accept(*this);
             s_args.push_back(result);
         }
-        
-        // Basic constant evaluation
+
         if (s_args.size() == 1) {
             if (auto num = std::dynamic_pointer_cast<NumberNode>(s_args[0])) {
                 lmmc_real_t val = 0.0;
@@ -1054,7 +1050,7 @@ public:
                         int eq1, eq0;
                         lmmc_double_nearly_equal_tol(val, 1.0, 1e-12, 1e-12, &eq1);
                         if (eq1) { result = std::make_shared<NumberNode>(BigInt(0)); return; }
-                        // Ln(0) -> -Infinity
+
                         lmmc_double_nearly_equal_tol(val, 0.0, 1e-12, 1e-12, &eq0);
                         if (eq0) {
                              std::vector<std::shared_ptr<SymbolicNode>> inf_args;
@@ -1067,7 +1063,7 @@ public:
                     }
                     case FunctionNode::FuncType::Log:
                         if (s_args.size() == 2) {
-                             // log_b(x) = ln(x)/ln(b)
+
                              std::vector<std::shared_ptr<SymbolicNode>> args_x = { s_args[0] };
                              std::vector<std::shared_ptr<SymbolicNode>> args_b = { s_args[1] };
                              auto ln_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, args_x);
@@ -1075,7 +1071,7 @@ public:
                              auto ln_b_inv = std::make_shared<PowerNode>(ln_b, std::make_shared<NumberNode>(BigInt(-1)));
                              std::vector<std::shared_ptr<SymbolicNode>> m_args = { ln_x, ln_b_inv };
                              auto prod = std::make_shared<MultiplyNode>(m_args);
-                             
+
                              NormalizationVisitor v;
                              prod->accept(v);
                              result = v.get_result();
@@ -1103,13 +1099,12 @@ public:
 
                         if (check_int) {
                             if (n >= BigInt(0)) {
-                                BigInt s = n.sqrt(); // Integer sqrt
+                                BigInt s = n.sqrt();
                                 if (s * s == n) {
                                     result = std::make_shared<NumberNode>(s);
                                     return;
                                 }
-                                
-                                // Simplify by pulling out square factors: 4, 9, 25, 49
+
                                 BigInt one(1);
                                 BigInt coeff = one;
                                 BigInt rem = n;
@@ -1122,7 +1117,7 @@ public:
                                         coeff = coeff * BigInt(f);
                                     }
                                 }
-                                
+
                                 if (coeff > one) {
                                      std::vector<std::shared_ptr<SymbolicNode>> inner_args = { std::make_shared<NumberNode>(rem) };
                                      auto inner_sqrt = std::make_shared<FunctionNode>(FunctionNode::FuncType::Sqrt, inner_args);
@@ -1130,7 +1125,7 @@ public:
                                      result = std::make_shared<MultiplyNode>(mul_args);
                                      return;
                                 }
-                                // Fall through to symbolic sqrt(rem) if no simpl
+
                             }
                         }
 
@@ -1149,13 +1144,13 @@ public:
                         break;
                      case FunctionNode::FuncType::LambertW:
                      {
-                         // W(z) for numeric z — delegate to LMMC
+
                          lmmc_real_t w_res;
                          if (lmmc_lambertw(val, &w_res) == LMMC_STATUS_OK) {
                              result = std::make_shared<NumberNode>(w_res);
                              return;
                          }
-                         // Fall through if LMMC fails (e.g. z < -1/e)
+
                          break;
                      }
                      default: break;
@@ -1163,18 +1158,17 @@ public:
             }
         }
 
-        // Handle Ln(x^y) -> y*Ln(x) and Ln(exp(x)) -> x
         if (node.type == FunctionNode::FuncType::Ln && s_args.size() == 1) {
              if (auto pow = std::dynamic_pointer_cast<PowerNode>(s_args[0])) {
                   auto y = pow->exponent;
                   auto x = pow->base;
-                  
+
                   std::vector<std::shared_ptr<SymbolicNode>> ln_args = { x };
                   auto ln_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, ln_args);
-                  
+
                   std::vector<std::shared_ptr<SymbolicNode>> m_args = { y, ln_x };
                   auto prod = std::make_shared<MultiplyNode>(m_args);
-                  
+
                   NormalizationVisitor v;
                   prod->accept(v);
                   result = v.get_result();
@@ -1188,7 +1182,6 @@ public:
              }
         }
 
-        // Handle Log conversion to Ln
         if (node.type == FunctionNode::FuncType::Log && s_args.size() == 2) {
              std::vector<std::shared_ptr<SymbolicNode>> args_x = { s_args[0] };
              std::vector<std::shared_ptr<SymbolicNode>> args_b = { s_args[1] };
@@ -1203,19 +1196,16 @@ public:
              return;
         }
 
-        // Handle pi multiples
         if (s_args.size() == 1) {
             Rational k_pi_val;
             if (get_pi_coeff(s_args[0], k_pi_val)) {
                 BigInt n = k_pi_val.get_numerator();
                 BigInt d = k_pi_val.get_denominator();
 
-                // Core angle is (n % (2d)) / d * pi
                 BigInt two_d = d * BigInt(2);
                 BigInt reduced_n = n % two_d;
                 if (reduced_n.IsNegative()) reduced_n = reduced_n + two_d;
 
-                // Precompute common constants
                 auto zero = std::make_shared<NumberNode>(BigInt(0));
                 auto one = std::make_shared<NumberNode>(BigInt(1));
                 auto minus_one = std::make_shared<NumberNode>(BigInt(-1));
@@ -1233,7 +1223,7 @@ public:
                 auto half_root3 = std::make_shared<MultiplyNode>(half_root3_args);
                 std::vector<std::shared_ptr<SymbolicNode>> minus_half_root3_args = { minus_half, root3 };
                 auto minus_half_root3 = std::make_shared<MultiplyNode>(minus_half_root3_args);
-                
+
                 std::vector<std::shared_ptr<SymbolicNode>> minus_root3_args = { minus_one, root3 };
                 auto minus_root3 = std::make_shared<MultiplyNode>(minus_root3_args);
 
@@ -1244,9 +1234,8 @@ public:
                 std::vector<std::shared_ptr<SymbolicNode>> minus_third_root3_args = { minus_third, root3 };
                 auto minus_third_root3 = std::make_shared<MultiplyNode>(minus_third_root3_args);
 
-
                 if (d == BigInt(1)) {
-                    // k * pi
+
                     if (node.type == FunctionNode::FuncType::Sin || node.type == FunctionNode::FuncType::Tan) {
                         result = zero; return;
                     } else if (node.type == FunctionNode::FuncType::Cos) {
@@ -1255,7 +1244,7 @@ public:
                         return;
                     }
                 } else if (d == BigInt(2)) {
-                    // k * pi/2
+
                     if (node.type == FunctionNode::FuncType::Sin) {
                         if (reduced_n == BigInt(1)) result = one;
                         else if (reduced_n == BigInt(3)) result = minus_one;
@@ -1265,9 +1254,9 @@ public:
                             result = zero; return;
                         }
                     }
-                    // Tan undefined at pi/2
+
                 } else if (d == BigInt(3)) {
-                    // k * pi/3
+
                     if (node.type == FunctionNode::FuncType::Sin) {
                          if (reduced_n == BigInt(1) || reduced_n == BigInt(2)) result = half_root3;
                          else if (reduced_n == BigInt(4) || reduced_n == BigInt(5)) result = minus_half_root3;
@@ -1282,7 +1271,7 @@ public:
                          return;
                     }
                 } else if (d == BigInt(4)) {
-                     // k * pi/4
+
                      if (node.type == FunctionNode::FuncType::Sin) {
                          if (reduced_n == BigInt(1) || reduced_n == BigInt(3)) result = half_root2;
                          else if (reduced_n == BigInt(5) || reduced_n == BigInt(7)) result = minus_half_root2;
@@ -1297,7 +1286,7 @@ public:
                          return;
                     }
                 } else if (d == BigInt(6)) {
-                    // k * pi/6
+
                     if (node.type == FunctionNode::FuncType::Sin) {
                         if (reduced_n == BigInt(1) || reduced_n == BigInt(5)) result = half;
                         else if (reduced_n == BigInt(7) || reduced_n == BigInt(11)) result = minus_half;
@@ -1315,44 +1304,43 @@ public:
             }
         }
 
-        // Handle negative arguments for trig functions
         if (s_args.size() == 1) {
              std::shared_ptr<SymbolicNode> pos_arg = nullptr;
-             
+
              if (check_negative_arg(s_args[0], pos_arg)) {
-                 if (node.type == FunctionNode::FuncType::Sin || 
-                     node.type == FunctionNode::FuncType::Tan || 
-                     node.type == FunctionNode::FuncType::ArcTan || 
+                 if (node.type == FunctionNode::FuncType::Sin ||
+                     node.type == FunctionNode::FuncType::Tan ||
+                     node.type == FunctionNode::FuncType::ArcTan ||
                      node.type == FunctionNode::FuncType::ArcSin) {
-                     // f(-x) = -f(x)
+
                      std::vector<std::shared_ptr<SymbolicNode>> new_args = { pos_arg };
                      auto new_func = std::make_shared<FunctionNode>(node.type, new_args);
                      std::vector<std::shared_ptr<SymbolicNode>> mul_ops = { std::make_shared<NumberNode>(BigInt(-1)), new_func };
                      result = std::make_shared<MultiplyNode>(mul_ops);
                      return;
                  } else if (node.type == FunctionNode::FuncType::Cos) {
-                     // cos(-x) = cos(x)
+
                      std::vector<std::shared_ptr<SymbolicNode>> new_args = { pos_arg };
                      result = std::make_shared<FunctionNode>(node.type, new_args);
                      return;
                  }
              }
         }
-        
+
         if (node.type == FunctionNode::FuncType::Log && s_args.size() == 2) {
              auto val = s_args[0];
              auto base = s_args[1];
-             
+
              if (val->equals(*base)) {
                  result = std::make_shared<NumberNode>(BigInt(1));
                  return;
              }
-             
+
              if (val->is_one()) {
                  result = std::make_shared<NumberNode>(BigInt(0));
                  return;
              }
-             
+
              if (auto pow = std::dynamic_pointer_cast<PowerNode>(val)) {
                  if (pow->base->equals(*base)) {
                      result = pow->exponent;
@@ -1391,7 +1379,7 @@ public:
     }
 
     void visit(RelationalNode& node) override {
-        
+
         std::shared_ptr<SymbolicNode> new_left = nullptr;
         std::shared_ptr<SymbolicNode> new_right = nullptr;
 
@@ -1400,18 +1388,33 @@ public:
             new_left = result;
         }
         if (node.right) {
-            
-            
-            
-            
-            
+
             node.right->accept(*this);
             new_right = result;
         }
-        
+
         if (!new_left) new_left = node.left;
         if (!new_right) new_right = node.right;
 
         result = std::make_shared<RelationalNode>(new_left, new_right, node.op);
+    }
+
+    void visit(LogicalNode& node) override {
+        std::shared_ptr<SymbolicNode> new_left = nullptr;
+        std::shared_ptr<SymbolicNode> new_right = nullptr;
+
+        if (node.left) {
+            node.left->accept(*this);
+            new_left = result;
+        }
+        if (node.right) {
+            node.right->accept(*this);
+            new_right = result;
+        }
+
+        if (!new_left) new_left = node.left;
+        if (!new_right) new_right = node.right;
+
+        result = std::make_shared<LogicalNode>(new_left, new_right, node.op);
     }
 };

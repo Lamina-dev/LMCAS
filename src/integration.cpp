@@ -11,10 +11,6 @@
 
 namespace lamina {
 
-// ============================================================================
-// Utility helpers (file-local)
-// ============================================================================
-
 static std::shared_ptr<SymbolicExpr> make_expr_ptr(const SymbolicExpr& e) {
     return std::make_shared<SymbolicExpr>(e);
 }
@@ -59,10 +55,6 @@ static bool has_integral_node_check(const std::shared_ptr<SymbolicNode>& node) {
     return false;
 }
 
-// ============================================================================
-// IntegrationTable
-// ============================================================================
-
 const std::vector<IntegrationEntry> IntegrationTable::empty_entries_;
 
 IntegrationTable::IntegrationTable() {
@@ -71,7 +63,7 @@ IntegrationTable::IntegrationTable() {
 
 void IntegrationTable::add_entry(Category cat, const IntegrationEntry& entry) {
     entries_[static_cast<int>(cat)].push_back(entry);
-    // Keep sorted by priority
+
     auto& vec = entries_[static_cast<int>(cat)];
     std::sort(vec.begin(), vec.end(), [](const IntegrationEntry& a, const IntegrationEntry& b) {
         return a.priority < b.priority;
@@ -102,7 +94,7 @@ std::vector<const IntegrationEntry*> IntegrationTable::get_all_sorted() const {
 }
 
 void IntegrationTable::load_defaults() {
-    // Helper lambda: check that a wildcard binding does NOT depend on the integration variable
+
     auto independent_of_var = [](const std::string& wc_name) {
         return [wc_name](const MatchMap& m, const std::string& var) -> bool {
             auto it = m.find(wc_name);
@@ -111,11 +103,10 @@ void IntegrationTable::load_defaults() {
         };
     };
 
-    // --- Exponential rules ---
     {
-        // exp(a*x) -> (1/a)*exp(a*x), where a is independent of x
+
         auto a = wildcard("_a");
-        auto u = wildcard("_u"); // represents x
+        auto u = wildcard("_u");
         auto pat = *SymbolicExpr::exp(SymbolicExpr::multiply(make_expr_ptr(a), make_expr_ptr(u)));
         auto res = *SymbolicExpr::multiply(
             SymbolicExpr::power(make_expr_ptr(a), SymbolicExpr::number(-1)),
@@ -126,14 +117,14 @@ void IntegrationTable::load_defaults() {
                 auto it_a = m.find("_a");
                 auto it_u = m.find("_u");
                 if (it_a == m.end() || it_u == m.end()) return false;
-                // _a must be independent of var, _u must BE the var
+
                 if (depends_on_var(it_a->second.root, var)) return false;
                 auto v = std::dynamic_pointer_cast<VariableNode>(it_u->second.root);
                 return v && v->name == var;
             }, 50));
     }
     {
-        // exp(x) -> exp(x)
+
         auto u = wildcard("_u");
         auto pat = *SymbolicExpr::exp(make_expr_ptr(u));
         auto res = *SymbolicExpr::exp(make_expr_ptr(u));
@@ -147,9 +138,8 @@ void IntegrationTable::load_defaults() {
             }, 60));
     }
 
-    // --- Trigonometric rules ---
     {
-        // sin(x) -> -cos(x)
+
         auto u = wildcard("_u");
         auto pat = *SymbolicExpr::sin(make_expr_ptr(u));
         auto res = *SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::cos(make_expr_ptr(u)));
@@ -163,7 +153,7 @@ void IntegrationTable::load_defaults() {
             }, 60));
     }
     {
-        // cos(x) -> sin(x)
+
         auto u = wildcard("_u");
         auto pat = *SymbolicExpr::cos(make_expr_ptr(u));
         auto res = *SymbolicExpr::sin(make_expr_ptr(u));
@@ -177,7 +167,7 @@ void IntegrationTable::load_defaults() {
             }, 60));
     }
     {
-        // tan(x) -> -ln(cos(x))
+
         auto u = wildcard("_u");
         auto pat = *SymbolicExpr::tan(make_expr_ptr(u));
         auto res = *SymbolicExpr::multiply(SymbolicExpr::number(-1),
@@ -192,12 +182,11 @@ void IntegrationTable::load_defaults() {
             }, 60));
     }
 
-    // --- Logarithmic rules ---
     {
-        // ln(x) -> x*ln(x) - x
+
         auto u = wildcard("_u");
         auto pat = *SymbolicExpr::ln(make_expr_ptr(u));
-        // x*ln(x) - x
+
         auto x_ln_x = SymbolicExpr::multiply(make_expr_ptr(u), SymbolicExpr::ln(make_expr_ptr(u)));
         auto res = *sym_sub(*x_ln_x, u);
         add_entry(Category::Logarithmic, IntegrationEntry(
@@ -211,23 +200,19 @@ void IntegrationTable::load_defaults() {
     }
 }
 
-// ============================================================================
-// TableLookupStrategy
-// ============================================================================
-
 std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
-    
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
+
     auto all_entries = ctx.table().get_all_sorted();
-    
+
     for (const auto* entry : all_entries) {
         MatchMap bindings;
         if (Matcher::match(entry->pattern, expr, entry->wildcards, bindings)) {
-            // Check condition
+
             if (entry->condition && !entry->condition(bindings, var)) {
                 continue;
             }
-            // Apply replacement
+
             SymbolicExpr result = Matcher::replace(entry->result, bindings, false);
             auto simplified = result.simplify();
             if (simplified && !has_integral_node_check(simplified->root)) {
@@ -238,14 +223,9 @@ std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate(
     return nullptr;
 }
 
-// ============================================================================
-// PowerRuleStrategy
-// ============================================================================
-
 std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
-    
-    // Case 1: x -> x^2/2
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
+
     if (auto v_node = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
         if (v_node->name == var) {
             return SymbolicExpr::multiply(
@@ -254,7 +234,6 @@ std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
         }
     }
 
-    // Case 2: x^n where n is constant w.r.t. var
     if (auto p_node = std::dynamic_pointer_cast<PowerNode>(expr.root)) {
         SymbolicExpr base(p_node->base);
         SymbolicExpr exp_expr(p_node->exponent);
@@ -263,7 +242,7 @@ std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
             if (b_var->name == var && !valid_dependency(exp_expr, var)) {
                 auto n_plus_1 = SymbolicExpr::add(make_expr_ptr(exp_expr), SymbolicExpr::number(1))->simplify();
                 if (n_plus_1->is_zero()) {
-                    // n = -1 -> ln(x)
+
                     return SymbolicExpr::ln(make_expr_ptr(base));
                 }
                 return SymbolicExpr::divide(
@@ -275,20 +254,16 @@ std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
     return nullptr;
 }
 
-// ============================================================================
-// SubstitutionStrategy
-// ============================================================================
-
 std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
-    
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
+
     std::vector<std::shared_ptr<SymbolicNode>> ops;
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
         ops = mul->operands;
     } else {
         ops.push_back(expr.root);
     }
-    
+
     for (size_t i = 0; i < ops.size(); ++i) {
         SymbolicExpr candidate_term(ops[i]);
         SymbolicExpr u;
@@ -313,10 +288,10 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
             auto f_u = candidate_term;
             auto term_times_du = SymbolicExpr::multiply(make_expr_ptr(f_u), make_expr_ptr(*du));
             auto ratio = SymbolicExpr::divide(make_expr_ptr(expr), term_times_du)->simplify();
-            
+
             if (!valid_dependency(*ratio, var)) {
                 std::shared_ptr<SymbolicExpr> prim = nullptr;
-                
+
                 if (auto pow = std::dynamic_pointer_cast<PowerNode>(candidate_term.root)) {
                     SymbolicExpr n(pow->exponent);
                     auto np1 = SymbolicExpr::add(make_expr_ptr(n), SymbolicExpr::number(1))->simplify();
@@ -335,7 +310,7 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
                         prim = SymbolicExpr::exp(make_expr_ptr(u));
                     }
                 }
-                
+
                 if (prim) {
                     return SymbolicExpr::multiply(ratio, prim);
                 }
@@ -345,15 +320,11 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
     return nullptr;
 }
 
-// ============================================================================
-// PartialFractionStrategy
-// ============================================================================
-
 std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
-    
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
+
     std::shared_ptr<SymbolicExpr> den = nullptr;
-    
+
     if (auto p = std::dynamic_pointer_cast<PowerNode>(expr.root)) {
         double exp_val = 0;
         bool is_inv = false;
@@ -372,37 +343,33 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
             den = make_expr_ptr(SymbolicExpr(p->base));
         }
     }
-    
+
     if (!den) return nullptr;
 
     try {
         Polynomial<SymbolicPolyCoeff> Q = symbolic_to_poly<SymbolicPolyCoeff>(den, var);
-        
+
         if (Q.degree() == 2) {
             SymbolicExpr c_expr = *(Q.coeffs[0].val);
             SymbolicExpr b_expr = *(Q.coeffs[1].val);
             SymbolicExpr a_expr = *(Q.coeffs[2].val);
-            
-            // All three coefficients must be numeric, otherwise we can't
-            // compute the discriminant correctly. Symbolic coefficients
-            // require a more general approach (factoring/CAS) which is
-            // beyond this strategy's scope.
+
             if (!a_expr.is_number() || !b_expr.is_number() || !c_expr.is_number()) {
                 return nullptr;
             }
-            
+
             double a = a_expr.to_numeric();
             double b = b_expr.to_numeric();
             double c = c_expr.to_numeric();
-            
+
             int eq_a;
             lmmc_double_nearly_equal_tol(a, 0.0, 1e-9, 1e-9, &eq_a);
             if (eq_a) return nullptr;
-            
+
             double delta = b * b - 4 * a * c;
             int eq_delta;
             lmmc_double_nearly_equal_tol(delta, 0.0, 1e-9, 1e-9, &eq_delta);
-            
+
             if (!eq_delta && delta > 0) {
                 double sqrt_delta = std::sqrt(delta);
                 auto scalar = SymbolicExpr::number(1.0 / sqrt_delta);
@@ -428,27 +395,23 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
             }
         }
     } catch (...) {}
-    
+
     return nullptr;
 }
 
-// ============================================================================
-// IBPStrategy
-// ============================================================================
-
 std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx) {
-    
+    const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth) {
+
     std::vector<std::shared_ptr<SymbolicNode>> ops;
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
         ops = mul->operands;
     } else {
         ops.push_back(expr.root);
     }
-    
+
     int best_u_idx = -1;
     int best_score = 100;
-    
+
     auto get_score = [&](const std::shared_ptr<SymbolicNode>& node) -> int {
         SymbolicExpr e(node);
         if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
@@ -462,7 +425,7 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
         if (std::dynamic_pointer_cast<PowerNode>(node)) return 3;
         return 10;
     };
-    
+
     if (ops.size() == 1) {
         int s = get_score(ops[0]);
         if (s <= 2) best_u_idx = 0;
@@ -476,22 +439,22 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
             }
         }
     }
-    
+
     if (best_u_idx == -1) return nullptr;
-    
+
     SymbolicExpr u(ops[best_u_idx]);
-    
+
     std::vector<std::shared_ptr<SymbolicNode>> dv_ops;
     for (size_t i = 0; i < ops.size(); ++i) {
         if ((int)i != best_u_idx) dv_ops.push_back(ops[i]);
     }
-    
+
     std::shared_ptr<SymbolicExpr> dv;
     if (dv_ops.empty()) dv = SymbolicExpr::number(1);
     else if (dv_ops.size() == 1) dv = make_expr_ptr(SymbolicExpr(dv_ops[0]));
     else dv = std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(dv_ops));
-    
-    auto v = ctx.integrate_recursive(*dv, var, ctx.max_depth() - 2);
+
+    auto v = ctx.integrate_recursive(*dv, var, depth + 1);
     if (has_integral_node_check(v->root)) return nullptr;
 
     auto du_ptr = u.differentiate(var);
@@ -500,17 +463,13 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
 
     auto uv = SymbolicExpr::multiply(make_expr_ptr(u), v);
     auto vdu = SymbolicExpr::multiply(v, du);
-    auto int_vdu = ctx.integrate_recursive(*vdu, var, ctx.max_depth() - 1);
-    
+    auto int_vdu = ctx.integrate_recursive(*vdu, var, depth + 1);
+
     return sym_sub(*uv, *int_vdu);
 }
 
-// ============================================================================
-// Integrator
-// ============================================================================
-
 Integrator::Integrator() {
-    // Register default strategies in order of priority
+
     strategies_.push_back(std::make_unique<TableLookupStrategy>());
     strategies_.push_back(std::make_unique<PowerRuleStrategy>());
     strategies_.push_back(std::make_unique<SubstitutionStrategy>());
@@ -567,14 +526,13 @@ void Integrator::resolve_cycle(std::shared_ptr<SymbolicExpr>& result, size_t cyc
 
 std::shared_ptr<SymbolicExpr> Integrator::apply_linearity(
     const SymbolicExpr& expr, const std::string& var) {
-    
+
     auto simp_expr = expr.simplify();
-    
-    // Factor out constants from multiplication
+
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(simp_expr->root)) {
         std::vector<std::shared_ptr<SymbolicNode>> constants;
         std::vector<std::shared_ptr<SymbolicNode>> dependents;
-        
+
         for (auto& op : mul->operands) {
             SymbolicExpr term(op);
             if (!valid_dependency(term, var)) {
@@ -583,20 +541,19 @@ std::shared_ptr<SymbolicExpr> Integrator::apply_linearity(
                 dependents.push_back(op);
             }
         }
-        
+
         if (!constants.empty() && dependents.size() < mul->operands.size()) {
             SymbolicExpr const_part = (constants.size() == 1) ?
                 SymbolicExpr(constants[0]) : SymbolicExpr(std::make_shared<MultiplyNode>(constants));
             SymbolicExpr dep_part = (dependents.empty()) ?
                 *SymbolicExpr::number(1) :
                 ((dependents.size() == 1) ? SymbolicExpr(dependents[0]) : SymbolicExpr(std::make_shared<MultiplyNode>(dependents)));
-            
+
             auto int_part = integrate(dep_part, var);
             return SymbolicExpr::multiply(std::make_shared<SymbolicExpr>(const_part), std::make_shared<SymbolicExpr>(int_part));
         }
     }
-    
-    // Split sums
+
     if (auto add = std::dynamic_pointer_cast<AddNode>(simp_expr->root)) {
         std::vector<std::shared_ptr<SymbolicNode>> results;
         for (auto& op : add->operands) {
@@ -606,15 +563,15 @@ std::shared_ptr<SymbolicExpr> Integrator::apply_linearity(
         }
         return std::make_shared<SymbolicExpr>(std::make_shared<AddNode>(results));
     }
-    
-    return nullptr; // linearity not applicable
+
+    return nullptr;
 }
 
 std::shared_ptr<SymbolicExpr> Integrator::dispatch_strategies(
     const SymbolicExpr& expr, const std::string& var, int depth) {
-    
+
     for (auto& strategy : strategies_) {
-        auto result = strategy->try_integrate(expr, var, *this);
+        auto result = strategy->try_integrate(expr, var, *this, depth);
         if (result) {
             err_stream << "[Integration] Strategy '" << strategy->name() << "' succeeded\n";
             return result;
@@ -625,56 +582,51 @@ std::shared_ptr<SymbolicExpr> Integrator::dispatch_strategies(
 
 std::shared_ptr<SymbolicExpr> Integrator::integrate_recursive(
     const SymbolicExpr& expr, const std::string& var, int depth) {
-    
+
     if (depth > max_depth_) {
         return make_integral_node(expr, var);
     }
-    
-    // Cycle detection
+
     auto cycle_result = check_cycle(expr, var);
     if (cycle_result) return cycle_result;
-    
+
     cycle_state_.history.push_back(expr);
     size_t my_idx = cycle_state_.history.size() - 1;
-    
-    // Constant check
+
     if (expr.is_number() || !valid_dependency(expr, var)) {
         cycle_state_.history.pop_back();
         return SymbolicExpr::multiply(make_expr_ptr(expr), SymbolicExpr::variable(var));
     }
-    
+
     auto result = dispatch_strategies(expr, var, depth);
-    
+
     cycle_state_.history.pop_back();
-    
+
     if (!result) {
         return make_integral_node(expr, var);
     }
-    
-    // Resolve any cycle variables
+
     resolve_cycle(result, my_idx);
-    
+
     return result;
 }
 
 SymbolicExpr Integrator::integrate(const SymbolicExpr& expr, const std::string& var_name) {
-    // Reset cycle state for this top-level call
+
     cycle_state_.history.clear();
-    
-    // Try linearity first (sums and constant factors)
+
     auto linear_result = apply_linearity(expr, var_name);
     if (linear_result) return *linear_result;
-    
-    // Delegate to recursive handler
+
     return *integrate_recursive(expr, var_name, 0);
 }
 
 SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::string& var_name,
                                         const SymbolicExpr& lower, const SymbolicExpr& upper) {
-    // Check for singularities (basic 1/x case)
+
     SymbolicExpr simp_expr_val = *expr.simplify();
     bool is_inv_x = false;
-    
+
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(simp_expr_val.root)) {
         if (auto v = std::dynamic_pointer_cast<VariableNode>(pow->base)) {
             if (v->name == var_name) {
@@ -693,7 +645,6 @@ SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::stri
         }
     }
 
-    // Check numeric bounds first; only call to_numeric() if bounds are numbers.
     bool numeric_bounds = (lower.root && std::dynamic_pointer_cast<NumberNode>(lower.root)) &&
                           (upper.root && std::dynamic_pointer_cast<NumberNode>(upper.root));
 
@@ -716,10 +667,8 @@ SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::stri
         }
     }
 
-    // Calculate indefinite integral
     SymbolicExpr indefinite = integrate(expr, var_name);
-    
-    // Check if integration failed
+
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(indefinite.root)) {
         if (func->type == FunctionNode::FuncType::Calculus_Integral) {
             std::vector<std::shared_ptr<SymbolicNode>> args;
@@ -731,11 +680,10 @@ SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::stri
         }
     }
 
-    // FTC: F(b) - F(a)
     auto F_b = indefinite.substitute(var_name, make_expr_ptr(upper));
     auto F_a = indefinite.substitute(var_name, make_expr_ptr(lower));
     auto result = sym_sub(*F_b, *F_a);
     return *result->simplify();
 }
 
-} // namespace lamina
+}

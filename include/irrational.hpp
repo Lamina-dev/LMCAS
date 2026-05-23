@@ -1,3 +1,7 @@
+/**
+ * @file irrational.hpp
+ * @brief 无理数表示类 Irrational，支持 sqrt、pi、e 及其线性组合。
+ */
 #pragma once
 #define _USE_MATH_DEFINES
 #include "symbolic.hpp"
@@ -15,16 +19,25 @@
 #define LMMC_E 2.71828182845904523536
 #endif
 
+/**
+ * @brief 计算浮点数的平方根（封装 LMMC 接口）
+ * @param x 被开方数
+ * @return 平方根值
+ */
 inline lmmc_real_t _irrational_sqrt(lmmc_real_t x) {
     lmmc_real_t res;
     LMMC_REAL_SQRT(&res, &x);
     return res;
 }
 
+/** @brief 无理数表示类，支持 √n、π、e、log 及其线性组合的精确表示与运算 */
 class Irrational {
 public:
-    
 
+    /**
+     * @brief 将无理数转换为符号表达式
+     * @return 对应的符号表达式
+     */
     std::shared_ptr<SymbolicExpr> to_symbolic() const {
         auto is_zero_tol = [](lmmc_real_t x) -> bool {
             int eq;
@@ -38,7 +51,7 @@ public:
         };
         switch (type) {
             case Type::SQRT: {
-                
+
                 auto sqrtExpr = SymbolicExpr::sqrt(SymbolicExpr::number(static_cast<int>(radicand)));
                 if (is_zero_tol(coefficient)) {
                     return SymbolicExpr::number(0);
@@ -49,7 +62,7 @@ public:
                 }
             }
             case Type::PI:
-                
+
                 if (is_zero_tol(coefficient)) {
                     return SymbolicExpr::number(0);
                 } else if (is_one_tol(coefficient)) {
@@ -66,39 +79,71 @@ public:
                     return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("e"));
                 }
             case Type::LOG:
-                
+
                 if (is_zero_tol(coefficient)) {
                     return SymbolicExpr::number(0);
                 } else {
                     return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
                 }
-            case Type::COMPLEX:
-                
-                return SymbolicExpr::number(::Rational::from_double(constant_term));
+            case Type::COMPLEX: {
+                // 重建完整线性组合，而不是只返回 constant_term。
+                std::shared_ptr<SymbolicExpr> result;
+                auto add_term = [&](const std::shared_ptr<SymbolicExpr>& term) {
+                    if (!result) {
+                        result = term;
+                    } else {
+                        result = SymbolicExpr::add(result, term);
+                    }
+                };
+
+                if (!is_zero_tol(constant_term)) {
+                    add_term(SymbolicExpr::number(::Rational::from_double(constant_term)));
+                }
+
+                for (const auto& [key, coeff] : coefficients) {
+                    if (is_zero_tol(coeff)) continue;
+                    std::shared_ptr<SymbolicExpr> basis;
+                    if (key == "pi") {
+                        basis = SymbolicExpr::variable("π");
+                    } else if (key == "e") {
+                        basis = SymbolicExpr::variable("e");
+                    } else if (key.substr(0, 4) == "sqrt") {
+                        long long n = std::stoll(key.substr(4));
+                        basis = SymbolicExpr::sqrt(SymbolicExpr::number(static_cast<int>(n)));
+                    } else {
+                        // 未识别的基向量：保留为变量，避免静默丢失。
+                        basis = SymbolicExpr::variable(key);
+                    }
+                    std::shared_ptr<SymbolicExpr> term = is_one_tol(coeff)
+                        ? basis
+                        : SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coeff)), basis);
+                    add_term(term);
+                }
+
+                return result ? result : SymbolicExpr::number(0);
+            }
             default:
                 return SymbolicExpr::number(0);
         }
     }
+    /** @brief 无理数的内部类型 */
     enum class Type {
-        SQRT,  
-        PI,    
-        E,     
-        LOG,   
-        COMPLEX
+        SQRT,     ///< 平方根形式 coeff * √radicand
+        PI,       ///< π 的倍数
+        E,        ///< e 的倍数
+        LOG,      ///< 对数形式
+        COMPLEX   ///< 多项线性组合
     };
 
 private:
     Type type;
 
-    
     lmmc_real_t coefficient;
     long long radicand;
 
-    
     std::map<std::string, lmmc_real_t> coefficients;
     lmmc_real_t constant_term;
 
-    
     static std::pair<long long, long long> simplify_sqrt(long long n) {
         long long perfect_square = 1;
         long long remainder = n;
@@ -113,10 +158,16 @@ private:
     }
 
 public:
-    
+
+    /** @brief 默认构造，初始化为零值的 COMPLEX 类型 */
     Irrational() : type(Type::COMPLEX), coefficient(0), radicand(1), constant_term(0) {}
 
-    
+    /**
+     * @brief 构造平方根形式无理数 coeff * √n
+     * @param n 被开方数
+     * @param coeff 系数，默认为 1.0
+     * @return 化简后的无理数对象
+     */
     static Irrational sqrt(long long n, lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::SQRT;
@@ -129,7 +180,11 @@ public:
         return result;
     }
 
-    
+    /**
+     * @brief 构造 π 的倍数
+     * @param coeff 系数，默认为 1.0
+     * @return coeff * π
+     */
     static Irrational pi(lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::PI;
@@ -139,7 +194,11 @@ public:
         return result;
     }
 
-    
+    /**
+     * @brief 构造 e 的倍数
+     * @param coeff 系数，默认为 1.0
+     * @return coeff * e
+     */
     static Irrational e(lmmc_real_t coeff = 1.0) {
         Irrational result;
         result.type = Type::E;
@@ -149,7 +208,11 @@ public:
         return result;
     }
 
-    
+    /**
+     * @brief 构造有理常数（退化为有理数的无理数表示）
+     * @param value 常数值
+     * @return 常数无理数对象
+     */
     static Irrational constant(lmmc_real_t value) {
         Irrational result;
         result.type = Type::COMPLEX;
@@ -159,7 +222,7 @@ public:
         return result;
     }
 
-    
+    /** @brief 将当前无理数转换为 COMPLEX 线性组合形式 */
     void to_complex() {
         if (type == Type::COMPLEX) return;
 
@@ -186,7 +249,6 @@ public:
         type = Type::COMPLEX;
     }
 
-    
     Irrational operator+(const Irrational& other) const {
         Irrational result = *this;
         Irrational other_copy = other;
@@ -203,7 +265,6 @@ public:
         return result;
     }
 
-    
     Irrational operator-(const Irrational& other) const {
         Irrational result = *this;
         Irrational other_copy = other;
@@ -220,7 +281,6 @@ public:
         return result;
     }
 
-    
     Irrational operator*(lmmc_real_t scalar) const {
         Irrational result = *this;
 
@@ -236,9 +296,8 @@ public:
         return result;
     }
 
-    
     Irrational operator*(const Irrational& other) const {
-        
+
         if (type == Type::COMPLEX && coefficients.empty()) {
             return other * constant_term;
         }
@@ -246,24 +305,20 @@ public:
             return *this * other.constant_term;
         }
 
-        
         if (type == Type::SQRT && other.type == Type::SQRT) {
             return Irrational::sqrt(radicand * other.radicand,
                                     coefficient * other.coefficient);
         }
 
-        
         return Irrational::constant(to_double() * other.to_double());
     }
 
-    
     Irrational operator/(const Irrational& other) const {
-        
+
         if (other.type == Type::COMPLEX && other.coefficients.empty() && other.constant_term != 0) {
             return *this * (1.0 / other.constant_term);
         }
 
-        
         lmmc_real_t other_val = other.to_double();
         lmmc_real_t abs_other;
         LMMC_REAL_ABS(&abs_other, &other_val);
@@ -273,12 +328,10 @@ public:
         return Irrational::constant(to_double() / other_val);
     }
 
-    
     Irrational operator-() const {
         return *this * (-1.0);
     }
 
-    
     bool operator==(const Irrational& other) const {
         int eq;
         lmmc_double_nearly_equal(to_double(), other.to_double(), &eq);
@@ -301,7 +354,10 @@ public:
         return *this > other || *this == other;
     }
 
-    
+    /**
+     * @brief 转换为浮点数近似值
+     * @return 双精度浮点近似
+     */
     lmmc_real_t to_double() const {
         switch (type) {
             case Type::SQRT:
@@ -343,7 +399,10 @@ public:
         }
     }
 
-    
+    /**
+     * @brief 转换为可读字符串（如 "2√3"、"π/2"）
+     * @return 格式化字符串
+     */
     std::string to_string() const {
         auto round_val = [](lmmc_real_t x) -> lmmc_real_t {
             lmmc_real_t res, half = 0.5;
@@ -370,7 +429,7 @@ public:
         switch (type) {
             case Type::SQRT:
                 if (radicand == 1) {
-                    
+
                     if (is_equal_tol(coefficient, round_val(coefficient))) {
                         return std::to_string(static_cast<int>(round_val(coefficient)));
                     }
@@ -382,11 +441,11 @@ public:
                 if (is_equal_tol(coefficient, -1.0)) {
                     return "-√" + std::to_string(radicand);
                 }
-                
+
                 if (is_equal_tol(coefficient, round_val(coefficient))) {
                     return std::to_string(static_cast<int>(round_val(coefficient))) + "√" + std::to_string(radicand);
                 } else {
-                    
+
                     std::ostringstream oss;
                     oss << std::fixed << std::setprecision(6) << coefficient;
                     std::string temp = oss.str();
@@ -402,11 +461,11 @@ public:
                 if (is_equal_tol(coefficient, -1.0)) {
                     return "-π";
                 }
-                
+
                 if (is_equal_tol(coefficient, round_val(coefficient))) {
                     return std::to_string(static_cast<int>(round_val(coefficient))) + "π";
                 } else {
-                    
+
                     std::ostringstream oss;
                     oss << std::fixed << std::setprecision(6) << coefficient;
                     std::string temp = oss.str();
@@ -422,11 +481,11 @@ public:
                 if (is_equal_tol(coefficient, -1.0)) {
                     return "-e";
                 }
-                
+
                 if (is_equal_tol(coefficient, round_val(coefficient))) {
                     return std::to_string(static_cast<int>(round_val(coefficient))) + "e";
                 } else {
-                    
+
                     std::ostringstream oss;
                     oss << std::fixed << std::setprecision(6) << coefficient;
                     std::string temp = oss.str();
@@ -442,11 +501,11 @@ public:
                 if (is_equal_tol(coefficient, -1.0)) {
                     return "-log(" + std::to_string(radicand) + ")";
                 }
-                
+
                 if (is_equal_tol(coefficient, round_val(coefficient))) {
                     return std::to_string(static_cast<int>(round_val(coefficient))) + "log(" + std::to_string(radicand) + ")";
                 } else {
-                    
+
                     std::ostringstream oss;
                     oss << std::fixed << std::setprecision(6) << coefficient;
                     std::string temp = oss.str();
@@ -459,17 +518,16 @@ public:
                 std::string result;
                 bool first = true;
 
-                
                 if (!is_zero_tol(constant_term)) {
                     if (is_equal_tol(constant_term, round_val(constant_term))) {
-                        
+
                         result += std::to_string(static_cast<int>(round_val(constant_term)));
                     } else {
-                        
+
                         std::ostringstream oss;
                         oss << std::fixed << std::setprecision(6) << constant_term;
                         std::string temp = oss.str();
-                        
+
                         temp.erase(temp.find_last_not_of('0') + 1);
                         if (temp.back() == '.') temp.pop_back();
                         result += temp;
@@ -477,7 +535,6 @@ public:
                     first = false;
                 }
 
-                
                 for (const auto& [key, coeff]: coefficients) {
                     if (is_zero_tol(coeff)) continue;
 
@@ -513,6 +570,16 @@ public:
                         } else {
                             term = std::to_string(abs_coeff) + "√" + std::to_string(n);
                         }
+                    } else {
+                        // 未识别的基向量：保留原始 key 作为变量名输出，避免静默漏项。
+                        // 与 to_symbolic 的 COMPLEX 分支保持一致。
+                        if (is_equal_tol(abs_coeff, 1.0)) {
+                            term = key;
+                        } else if (is_equal_tol(abs_coeff, round_val(abs_coeff))) {
+                            term = std::to_string(static_cast<int>(round_val(abs_coeff))) + key;
+                        } else {
+                            term = std::to_string(abs_coeff) + key;
+                        }
                     }
 
                     if (first && coeff < 0) result += "-";
@@ -527,14 +594,20 @@ public:
         }
     }
 
-    
+    /**
+     * @brief 判断是否为零
+     * @return 若数值近似为零则返回 true
+     */
     bool is_zero() const {
         int eq;
         lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
         return eq != 0;
     }
 
-    
+    /**
+     * @brief 判断是否可精确表示为有理数
+     * @return 若为纯常数项（无无理部分）则返回 true
+     */
     bool is_rational() const {
         if (type == Type::COMPLEX) {
             return coefficients.empty();
@@ -542,7 +615,7 @@ public:
         return false;
     }
 
-    
+    /** @brief 化简，移除系数为零的项 */
     void simplify() {
         if (type == Type::COMPLEX) {
             auto it = coefficients.begin();
@@ -556,7 +629,6 @@ public:
                 }
             }
 
-            
             int eq_const;
             lmmc_double_nearly_equal_tol(constant_term, 0.0, 1e-15, 1e-15, &eq_const);
             if (coefficients.empty() && eq_const) {
@@ -565,21 +637,30 @@ public:
         }
     }
 
-    
+    /**
+     * @brief 判断是否为正数
+     * @return 若数值大于零则返回 true
+     */
     bool is_positive() const {
         int eq;
         lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
         return !eq && to_double() > 0;
     }
 
-    
+    /**
+     * @brief 判断是否为负数
+     * @return 若数值小于零则返回 true
+     */
     bool is_negative() const {
         int eq;
         lmmc_double_nearly_equal_tol(to_double(), 0.0, 1e-15, 1e-15, &eq);
         return !eq && to_double() < 0;
     }
 
-    
+    /**
+     * @brief 取绝对值
+     * @return 绝对值无理数对象
+     */
     Irrational abs() const {
         if (is_negative()) {
             return -*this;
@@ -587,7 +668,11 @@ public:
         return *this;
     }
 
-    
+    /**
+     * @brief 计算整数次幂
+     * @param exponent 指数
+     * @return 幂运算结果
+     */
     Irrational pow(int exponent) const {
         if (exponent == 0) {
             return Irrational::constant(1.0);
@@ -596,11 +681,10 @@ public:
             return *this;
         }
         if (exponent == 2 && type == Type::SQRT) {
-            
+
             return Irrational::constant(coefficient * coefficient * radicand);
         }
 
-        
         lmmc_real_t res = 1.0;
         lmmc_real_t base = to_double();
         int e = exponent > 0 ? exponent : -exponent;
@@ -616,12 +700,14 @@ public:
         return Irrational::constant(res);
     }
 
-    
     friend std::ostream& operator<<(std::ostream& os, const Irrational& ir) {
         os << ir.to_string();
         return os;
     }
 
-    
+    /**
+     * @brief 获取无理数的内部类型
+     * @return 类型枚举值
+     */
     Type get_type() const { return type; }
 };
