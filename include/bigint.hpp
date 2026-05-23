@@ -670,7 +670,13 @@ public:
         if (exp._size == 0) return BigInt(1);
 
         if (exp._size <= 1) {
-            return power((unsigned long)exp._data[0]);
+            // 单 limb 时尽量走窄重载，但 mp_limb_t 的位宽未必等于 unsigned long
+            // （例如 LLP64 的 Windows 上 unsigned long 是 32-bit），所以仅在 limb 值
+            // 能完整放进 unsigned long 时才走窄路径，否则继续走通用循环避免截断。
+            mp_limb_t lo = (exp._size == 0) ? 0 : exp._data[0];
+            if (lo <= static_cast<mp_limb_t>(std::numeric_limits<unsigned long>::max())) {
+                return power(static_cast<unsigned long>(lo));
+            }
         }
 
         BigInt base = *this;
@@ -686,7 +692,8 @@ public:
              for (mp_size_t i = exp._size; i > 0; --i) {
                  mp_limb_t cur = exp._data[i-1];
                  mp_limb_t next_carry = cur & 1;
-                 exp._data[i-1] = (cur >> 1) | (carry << 63);
+                 // 不要写死 limb=64：用 LIMB_BITS 计算插入位置，且在 mp_limb_t 类型下移位。
+                 exp._data[i-1] = (cur >> 1) | (carry << (LIMB_BITS - 1));
                  carry = next_carry;
              }
              exp.normalize();

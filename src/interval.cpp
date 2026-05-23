@@ -161,15 +161,18 @@ static int compare_endpoints_lower(const Endpoint& a, const Endpoint& b) {
     bool a_num = endpoint_is_numeric(a);
     bool b_num = endpoint_is_numeric(b);
     if (!a_num || !b_num) {
-        // Symbolic endpoints: we can't order numerically. Treat unequal
-        // symbolic endpoints as incomparable but use a stable shape-based
-        // ordering so std::sort still has a strict weak order.
+        // 不要用 to_string() 给符号端点造伪数值序——后续 intersect()/normalize()
+        // 会把这里的返回值当成真实大小关系，进而把不可比的端点错误合并。
+        // 这里只在两侧"结构相等"时返回 0；否则用 SymbolicNode::compare 给出
+        // 一个确定但纯结构性的 tie-breaker，仅用于 std::sort 的严格弱序需求。
         if (a_num) return -1;
         if (b_num) return 1;
-        std::string sa = a.value ? a.value->to_string() : "";
-        std::string sb = b.value ? b.value->to_string() : "";
-        if (sa < sb) return -1;
-        if (sa > sb) return 1;
+        if (a.value && b.value && a.value->root && b.value->root) {
+            int c = a.value->root->compare(*b.value->root);
+            if (c != 0) return c;
+        } else if (a.value != b.value) {
+            return (a.value < b.value) ? -1 : 1;
+        }
         if (a.is_open && !b.is_open) return 1;
         if (!a.is_open && b.is_open) return -1;
         return 0;
@@ -198,12 +201,15 @@ static int compare_endpoints_upper(const Endpoint& a, const Endpoint& b) {
     bool a_num = endpoint_is_numeric(a);
     bool b_num = endpoint_is_numeric(b);
     if (!a_num || !b_num) {
+        // 同 lower 比较：避免 to_string 造伪序，仅用结构性 compare 维持稳定排序。
         if (a_num) return -1;
         if (b_num) return 1;
-        std::string sa = a.value ? a.value->to_string() : "";
-        std::string sb = b.value ? b.value->to_string() : "";
-        if (sa < sb) return -1;
-        if (sa > sb) return 1;
+        if (a.value && b.value && a.value->root && b.value->root) {
+            int c = a.value->root->compare(*b.value->root);
+            if (c != 0) return c;
+        } else if (a.value != b.value) {
+            return (a.value < b.value) ? -1 : 1;
+        }
         if (!a.is_open && b.is_open) return 1;
         if (a.is_open && !b.is_open) return -1;
         return 0;

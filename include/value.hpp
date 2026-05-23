@@ -107,12 +107,24 @@ public:
     bool is_irrational() const { return type == Type::Irrational; }
     bool is_symbolic() const { return type == Type::Symbolic; }
     bool is_numeric() const {
-        // Symbolic 表达式未必能直接当作数值，as_number() 在符号无法求值时会返回未定义结果，
-        // 因此不把 Symbolic 视为 numeric，避免上层算子（vector_add / matrix_multiply 等）
-        // 把无法求值的符号悄悄塞进数值路径。
-        return type == Type::Int || type == Type::Float ||
-               type == Type::BigInt || type == Type::Rational ||
-               type == Type::Irrational;
+        if (type == Type::Int || type == Type::Float ||
+            type == Type::BigInt || type == Type::Rational ||
+            type == Type::Irrational) {
+            return true;
+        }
+        // Symbolic 表达式只要能化简为数值节点，就视为可走 numeric 路径；否则不视为
+        // numeric，避免上层算子把无法求值的符号悄悄塞进数值路径。
+        if (type == Type::Symbolic) {
+            const auto& sp = std::get<std::shared_ptr<SymbolicExpr>>(data);
+            if (!sp) return false;
+            try {
+                auto simp = sp->simplify();
+                return simp && simp->is_number();
+            } catch (...) {
+                return false;
+            }
+        }
+        return false;
     }
 
     /**

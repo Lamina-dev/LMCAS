@@ -570,6 +570,16 @@ public:
                         } else {
                             term = std::to_string(abs_coeff) + "√" + std::to_string(n);
                         }
+                    } else {
+                        // 未识别的基向量：保留原始 key 作为变量名输出，避免静默漏项。
+                        // 与 to_symbolic 的 COMPLEX 分支保持一致。
+                        if (is_equal_tol(abs_coeff, 1.0)) {
+                            term = key;
+                        } else if (is_equal_tol(abs_coeff, round_val(abs_coeff))) {
+                            term = std::to_string(static_cast<int>(round_val(abs_coeff))) + key;
+                        } else {
+                            term = std::to_string(abs_coeff) + key;
+                        }
                     }
 
                     if (first && coeff < 0) result += "-";

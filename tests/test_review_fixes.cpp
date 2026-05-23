@@ -366,18 +366,26 @@ void test_single_solution_strict() {
 }
 
 int main() {
-    test_bigint_to_int_saturation();
-    test_bigint_string_validation();
-    test_rational_string_sign();
-    test_endpoint_default_init();
-    test_value_string_and_numeric();
-    test_value_as_rational_no_truncate();
-    test_polynomial_variable_mismatch();
-    test_irrational_to_symbolic_complex();
-    test_matrix_clone_with_null_slot();
-    test_numbernode_hash_consistent();
-    test_symbolic_to_poly_integer_exponents();
-    test_extract_coeff_no_silent_truncate();
-    test_single_solution_strict();
+    try {
+        test_bigint_to_int_saturation();
+        test_bigint_string_validation();
+        test_rational_string_sign();
+        test_endpoint_default_init();
+        test_value_string_and_numeric();
+        test_value_as_rational_no_truncate();
+        test_polynomial_variable_mismatch();
+        test_irrational_to_symbolic_complex();
+        test_matrix_clone_with_null_slot();
+        test_numbernode_hash_consistent();
+        test_symbolic_to_poly_integer_exponents();
+        test_extract_coeff_no_silent_truncate();
+        test_single_solution_strict();
+    } catch (const std::exception& ex) {
+        std::cerr << "[FATAL] unhandled std::exception: " << ex.what() << std::endl;
+        return TEST_REPORT() == 0 ? 1 : TEST_REPORT();
+    } catch (...) {
+        std::cerr << "[FATAL] unhandled non-std exception" << std::endl;
+        return TEST_REPORT() == 0 ? 1 : TEST_REPORT();
+    }
     return TEST_REPORT();
 }

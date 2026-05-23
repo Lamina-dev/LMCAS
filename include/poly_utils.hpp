@@ -192,6 +192,14 @@ inline bool depends_on_var(const std::shared_ptr<SymbolicNode>& node, const std:
                 }
             }
         }
+        void visit(RelationalNode& n) override {
+            if (n.left) n.left->accept(*this);
+            if (!found && n.right) n.right->accept(*this);
+        }
+        void visit(LogicalNode& n) override {
+            if (n.left) n.left->accept(*this);
+            if (!found && n.right) n.right->accept(*this);
+        }
     } visitor;
     visitor.v = var;
     node->accept(visitor);

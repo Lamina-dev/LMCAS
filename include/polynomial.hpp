@@ -113,6 +113,7 @@ public:
      * @return 和多项式
      */
     Polynomial operator+(const Polynomial& other) const {
+        std::string result_var = variable_name;
         if (variable_name != other.variable_name) {
             // 仅当双方都不是零多项式时才属于真错误：零多项式可以无视变量名参与运算。
             if (!is_zero() && !other.is_zero()) {
@@ -120,9 +121,13 @@ public:
                     "Polynomial::operator+: variable name mismatch ('" +
                     variable_name + "' vs '" + other.variable_name + "')");
             }
+            // 仅当一侧为零时，沿用非零侧的变量名，避免静默把结果改写成 this 的变量。
+            if (is_zero() && !other.is_zero()) {
+                result_var = other.variable_name;
+            }
         }
 
-        Polynomial res(variable_name);
+        Polynomial res(result_var);
         size_t n = std::max(coeffs.size(), other.coeffs.size());
         res.coeffs.resize(n);
 
@@ -141,15 +146,19 @@ public:
      * @return 差多项式
      */
     Polynomial operator-(const Polynomial& other) const {
+         std::string result_var = variable_name;
          if (variable_name != other.variable_name) {
              if (!is_zero() && !other.is_zero()) {
                  throw std::invalid_argument(
                      "Polynomial::operator-: variable name mismatch ('" +
                      variable_name + "' vs '" + other.variable_name + "')");
              }
+             if (is_zero() && !other.is_zero()) {
+                 result_var = other.variable_name;
+             }
          }
 
-         Polynomial res(variable_name);
+         Polynomial res(result_var);
          size_t n = std::max(coeffs.size(), other.coeffs.size());
          res.coeffs.resize(n);
 

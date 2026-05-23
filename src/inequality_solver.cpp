@@ -774,6 +774,10 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     RelationalNode::Op::GT));
 
             auto symbolic_roots = solve_symbolic_poly(poly, variable);
+            // 与上面 deg>=1 时的保护一致：若拿不到符号根，无法安全构造区间表达式。
+            if (symbolic_roots.empty() && poly.degree() >= 1) {
+                return PiecewiseIntervalResult{};
+            }
             std::vector<int> multiplicities(symbolic_roots.size(), 1);
             pos_case.solution = build_parametric_solution(symbolic_roots, multiplicities, 1, type);
             result.cases.push_back(pos_case);
@@ -788,6 +792,9 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     RelationalNode::Op::LT));
 
             auto symbolic_roots = solve_symbolic_poly(poly, variable);
+            if (symbolic_roots.empty() && poly.degree() >= 1) {
+                return PiecewiseIntervalResult{};
+            }
             std::vector<int> multiplicities(symbolic_roots.size(), 1);
             neg_case.solution = build_parametric_solution(symbolic_roots, multiplicities, -1, type);
             result.cases.push_back(neg_case);
@@ -800,6 +807,10 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     leading_coeff->root,
                     SymbolicExpr::number(0)->root,
                     RelationalNode::Op::EQ));
+
+            // 当降阶后的多项式仍然按参数分情形时，degen_case 不再是单分支：
+            // 此时 expanded_into_subcases 为 true，对应分支已直接 push 进 result.cases。
+            bool expanded_into_subcases = false;
 
             if (deg >= 1) {
                 std::vector<SymbolicPolyCoeff> reduced_coeffs;
@@ -841,10 +852,27 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                         reduced_expr = reduced_expr->simplify();
                         auto sub_result = solve_parametric_inequality(reduced_expr, type, variable, parameters);
 
-                        if (!sub_result.cases.empty()) {
-                            degen_case.solution = sub_result.cases[0].solution;
-                        } else {
+                        // 不能只保留 sub_result.cases[0]，否则降阶后仍按参数分情形的解会被静默丢弃。
+                        // 把每个子分支的参数条件与父级 degen_case 的条件（leading coeff == 0）合取，
+                        // 作为独立分支加入结果。
+                        if (sub_result.cases.empty()) {
                             degen_case.solution = IntervalUnion::empty();
+                        } else {
+                            for (const auto& sub_case : sub_result.cases) {
+                                PiecewiseIntervalResult::Case merged;
+                                if (sub_case.condition) {
+                                    merged.condition = std::make_shared<SymbolicExpr>(
+                                        std::make_shared<LogicalNode>(
+                                            degen_case.condition->root,
+                                            sub_case.condition->root,
+                                            LogicalNode::Op::And));
+                                } else {
+                                    merged.condition = degen_case.condition;
+                                }
+                                merged.solution = sub_case.solution;
+                                result.cases.push_back(merged);
+                            }
+                            expanded_into_subcases = true;
                         }
                     } else {
 
@@ -876,7 +904,9 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                 degen_case.solution = IntervalUnion::empty();
             }
 
-            result.cases.push_back(degen_case);
+            if (!expanded_into_subcases) {
+                result.cases.push_back(degen_case);
+            }
         }
     }
 

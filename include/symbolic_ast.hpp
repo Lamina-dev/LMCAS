@@ -115,6 +115,8 @@ public:
     virtual bool is_one() const { return false; }
     /** @brief 判断节点数值是否为 0。 */
     virtual bool is_zero() const { return false; }
+    /** @brief 判断节点是否可证明为严格正数（非数值节点默认返回 false）。 */
+    virtual bool is_positive() const { return false; }
 };
 
 /**
@@ -307,6 +309,18 @@ public:
         int eq;
         lmmc_double_nearly_equal(v, 1.0, &eq);
         return eq != 0;
+    }
+    bool is_positive() const override {
+        if (std::holds_alternative<BigInt>(value)) {
+            const auto& b = std::get<BigInt>(value);
+            return !b.IsNegative() && !(b == BigInt(0));
+        }
+        if (std::holds_alternative<Rational>(value)) {
+            const auto& r = std::get<Rational>(value);
+            return r > Rational(0);
+        }
+        lmmc_real_t v = std::get<lmmc_real_t>(value);
+        return std::isfinite(v) && v > 0.0;
     }
 };
 
@@ -921,9 +935,19 @@ inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_multiply(std::vecto
 
 inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent) {
     if (!base || !exponent) return nullptr;
-    if (exponent->is_zero()) return create_number(1.0);
+    if (exponent->is_zero()) {
+        // 不能盲目把 x^0 折叠成 1：当 base 也为 0 时 0^0 是未定式，应保留节点。
+        if (base->is_zero()) {
+            return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
+        }
+        return create_number(1.0);
+    }
     if (exponent->is_one()) return base;
-    if (base->is_zero()) return create_number(0.0);
+    if (base->is_zero()) {
+        // 0^x = 0 仅当指数严格为正时才安全；x<=0 或符号未知时保留 PowerNode。
+        if (exponent->is_positive()) return create_number(0.0);
+        return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
+    }
     if (base->is_one()) return create_number(1.0);
     return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
 }
