@@ -4,9 +4,11 @@
 #include <vector>
 #include <cstdlib>
 #include <memory>
+#include <cmath>
 #include "symbolic.hpp"
 
 inline int g_failures = 0;
+inline int g_passes = 0;
 
 inline void TEST_CASE(const std::string& name) {
     std::cout << "---------------------------------------------------" << std::endl;
@@ -19,6 +21,7 @@ inline void EXPECT_EQ_STR(const std::string& actual, const std::string& expected
         g_failures++;
     } else {
         std::cout << "[PASS] " << msg << std::endl;
+        g_passes++;
     }
 }
 
@@ -39,11 +42,32 @@ inline void EXPECT_TRUE(bool condition, const std::string& msg) {
         g_failures++;
     } else {
         std::cout << "[PASS] " << msg << std::endl;
+        g_passes++;
+    }
+}
+
+inline void EXPECT_FALSE(bool condition, const std::string& msg) {
+    if (condition) {
+        std::cerr << "[FAIL] " << msg << " is expected to be FALSE but is TRUE" << std::endl;
+        g_failures++;
+    } else {
+        std::cout << "[PASS] " << msg << std::endl;
+        g_passes++;
+    }
+}
+
+inline void EXPECT_NEAR(double actual, double expected, double tolerance, const std::string& msg) {
+    if (std::abs(actual - expected) > tolerance) {
+        std::cerr << "[FAIL] " << msg << "\n  Expected: " << expected
+                  << " (+/- " << tolerance << ")\n  Got:      " << actual << std::endl;
+        g_failures++;
+    } else {
+        std::cout << "[PASS] " << msg << std::endl;
+        g_passes++;
     }
 }
 
 inline void EXPECT_CONTAINS(const std::string& actual, const std::vector<std::string>& tokens, const std::string& msg) {
-    bool ok = true;
     for(const auto& t : tokens) {
         if (actual.find(t) == std::string::npos) {
             std::cerr << "[FAIL] " << msg << " | Missing token: " << t << "\n  In: " << actual << std::endl;
@@ -52,16 +76,19 @@ inline void EXPECT_CONTAINS(const std::string& actual, const std::vector<std::st
         }
     }
     std::cout << "[PASS] " << msg << std::endl;
+    g_passes++;
 }
 
+/// Returns 0 if all tests passed, 1 otherwise.
+/// Use as: return TEST_REPORT();
 inline int TEST_REPORT() {
+    std::cout << "\n===================================================" << std::endl;
+    std::cout << "Results: " << g_passes << " passed, " << g_failures << " failed." << std::endl;
     if (g_failures == 0) {
-        std::cout << "\n===================================================" << std::endl;
         std::cout << "All tests passed!" << std::endl;
         return 0;
     }
-    std::cerr << "\n===================================================" << std::endl;
-    std::cerr << g_failures << " failures encountered." << std::endl;
+    std::cerr << g_failures << " failure(s) encountered." << std::endl;
     return 1;
 }
 

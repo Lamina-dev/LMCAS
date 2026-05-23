@@ -10,9 +10,12 @@
 #include "../include/visitors/differentiation_visitor.hpp"
 #include "../include/visitors/normalization_visitor.hpp"
 
+static int g_suite_failures = 0;
+
 void check(const std::string& name, const std::shared_ptr<SymbolicNode>& node, const std::string& expected = "") {
     if (!node) {
-        std::cout << "[FAIL] " << name << ": Node is NULL" << std::endl;
+        std::cerr << "[FAIL] " << name << ": Node is NULL" << std::endl;
+        g_suite_failures++;
         return;
     }
 
@@ -21,7 +24,8 @@ void check(const std::string& name, const std::shared_ptr<SymbolicNode>& node, c
     std::string result = pv.get_result();
 
     if (!expected.empty() && result != expected) {
-        std::cout << "[FAIL] " << name << ": Expected '" << expected << "', got '" << result << "'" << std::endl;
+        std::cerr << "[FAIL] " << name << ": Expected '" << expected << "', got '" << result << "'" << std::endl;
+        g_suite_failures++;
     } else {
         std::cout << "[PASS] " << name << ": " << result << std::endl;
     }
@@ -129,10 +133,16 @@ int main() {
         test_differentiation();
         test_normalization_expansion();
         test_normalization_simplification();
-        std::cout << "\nAll Test Sections Completed." << std::endl;
+
+        if (g_suite_failures == 0) {
+            std::cout << "\nAll Test Sections Completed." << std::endl;
+            return 0;
+        } else {
+            std::cerr << "\n" << g_suite_failures << " test(s) failed." << std::endl;
+            return 1;
+        }
     } catch (const std::exception& e) {
-        std::cout << "Top level exception: " << e.what() << std::endl;
+        std::cerr << "Top level exception: " << e.what() << std::endl;
         return 1;
     }
-    return 0;
 }
