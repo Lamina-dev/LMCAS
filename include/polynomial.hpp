@@ -480,16 +480,15 @@ public:
      */
     std::string to_string() const {
         if (is_zero()) return "0";
-        std::string s = "";
+        std::string s;
         for (int i = degree(); i >= 0; --i) {
             CoeffType c = coeffs[i];
             if (c == CoeffType(0)) continue;
 
-            bool positive = (c > CoeffType(0));
+            bool positive = !(c < CoeffType(0));
             if (!s.empty()) {
                 s += (positive ? " + " : " - ");
-
-                c = (c < CoeffType(0)) ? (c * CoeffType(-1)) : c;
+                if (!positive) c = c * CoeffType(-1);
             } else {
                 if (!positive) {
                     s += "-";
@@ -497,14 +496,26 @@ public:
                 }
             }
 
-            bool print_coeff = (c != CoeffType(1)) || (i == 0);
-            if (print_coeff) {
+            bool is_one = (c == CoeffType(1));
+            bool print_coeff = !is_one || (i == 0);
 
+            if (print_coeff) {
+                if constexpr (std::is_same_v<CoeffType, BigInt>) {
+                    s += c.to_string();
+                } else if constexpr (std::is_same_v<CoeffType, Rational>) {
+                    s += c.to_string();
+                } else {
+                    s += std::to_string(c);
+                }
+                if (i > 0) s += "*";
             }
 
+            if (i > 0) {
+                s += variable_name;
+                if (i > 1) s += "^" + std::to_string(i);
+            }
         }
-
-        return "Poly(" + std::to_string(degree()) + ")";
+        return s.empty() ? "0" : s;
     }
 };
 

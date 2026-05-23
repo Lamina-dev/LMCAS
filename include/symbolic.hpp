@@ -296,75 +296,6 @@ public:
      */
     std::shared_ptr<SymbolicExpr> factor() const;
 
-	/** @brief 表达式哈希数据结构，用于快速比较和去重。 */
-	struct HashData {
-#define _HASH_PARAMS		ODDBIT, EVENBIT, SQRBIT, HALFBIT
-		using HashType = unsigned long long;
-
-#define ODDBIT_D 0x555555555555555ull
-#define EVENBIT_D 0xAAAAAAAAAAAAAAAull
-#define SQRBIT_D 0xBDEEBD77BDEEBD7ull
-#define HALFBIT_D 0x969969669699696ull
-#define EMPTY 0ull
-#define INFINITY_D 0xFFF7FFFFDEADBEEFull
-#define PI_H 0x1451419810C0000ull
-#define E_H 0x9198101145C0000ull
-#define UNKNOWN_H 0xAD0AA0BEEFC0000ull
-
-		HashType ODDBIT;
-		HashType EVENBIT;
-		HashType SQRBIT;
-		HashType HALFBIT;
-
-		::Rational k = ::Rational(1), ksqrt = ::Rational(1);
-		HashType hash = EMPTY;
-		std::shared_ptr<SymbolicExpr> hash_obj;
-
-		static HashType bigint_hash(const BigInt& rt) {
-
-			HashType weight = 1ull, ans = 0ull;
-			auto digits = rt.get_digits();
-			for (auto &i : digits) {
-				ans = ans * weight + (i + 3ull);
-				weight *= 17ull;
-			}
-			if (rt.negative) return ~ans;
-			return ans;
-		}
-
-		static HashType rational_hash(const Rational& rt) {
-			return bigint_hash(rt.get_numerator()) ^ bigint_hash(rt.get_denominator());
-		}
-
-		HashType to_single_hash() {
-			return (rational_hash(k) & HALFBIT) ^ (rational_hash(ksqrt) & SQRBIT) ^ hash;
-		}
-
-		std::shared_ptr<SymbolicExpr> get_combined_k() {
-
-			return nullptr;
-		}
-
-		HashData() {
-
-		}
-
-		HashData(std::shared_ptr<SymbolicExpr> obj,
-			HashType ODDBIT = ODDBIT_D, HashType EVENBIT = EVENBIT_D, HashType SQRBIT = SQRBIT_D, HashType HALFBIT = HALFBIT_D)
-			: ODDBIT(ODDBIT), EVENBIT(EVENBIT), SQRBIT(SQRBIT), HALFBIT(HALFBIT) {
-
-		}
-#undef ODDBIT_D
-#undef EVENBIT_D
-#undef SQRBIT_D
-#undef HALFBIT_D
-#undef EMPTY
-#undef INFINITY_D
-#undef PI_H
-#undef E_H
-#undef UNKNOWN_H
-	};
-
     [[deprecated("Use SymbolicNode directly")]]
     Type get_type() const;
 
@@ -729,7 +660,12 @@ public:
     }
 
     int get_int() const {
-
+        if (!is_int()) throw std::runtime_error("Expression is not an integer");
+        auto node = std::dynamic_pointer_cast<NumberNode>(root);
+        if (!node) throw std::runtime_error("Expression is not an integer");
+        if (std::holds_alternative<BigInt>(node->value)) return std::get<BigInt>(node->value).to_int();
+        if (std::holds_alternative<Rational>(node->value)) return std::get<Rational>(node->value).to_BigInt().to_int();
+        if (std::holds_alternative<lmmc_real_t>(node->value)) return static_cast<int>(std::get<lmmc_real_t>(node->value));
         return 0;
     }
     /**
@@ -771,15 +707,4 @@ public:
      * @return 数值结果
      */
     lmmc_real_t to_numeric() const;
-
-private:
-
-    std::shared_ptr<SymbolicExpr> simplify_sqrt() const;
-    std::shared_ptr<SymbolicExpr> simplify_multiply() const;
-    std::shared_ptr<SymbolicExpr> simplify_add() const;
-    std::shared_ptr<SymbolicExpr> simplify_power() const;
-    std::shared_ptr<SymbolicExpr> simplify_sin() const;
-    std::shared_ptr<SymbolicExpr> simplify_cos() const;
-    std::shared_ptr<SymbolicExpr> simplify_tan() const;
-    std::shared_ptr<SymbolicExpr> simplify_ln() const;
 };

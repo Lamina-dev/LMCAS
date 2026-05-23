@@ -2,6 +2,7 @@
  * @file symbolic_implicit_diff.hpp
  * @brief 隐函数微分 dy/dx = -F_x / F_y。
  */
+#pragma once
 #include "symbolic.hpp"
 #include "visitors/differentiation_visitor.hpp"
 #include <memory>
@@ -19,17 +20,16 @@ namespace lamina {
  * @param y 因变量名
  * @return dy/dx 的符号表达式
  */
-std::shared_ptr<SymbolicExpr> implicit_diff(
+inline std::shared_ptr<SymbolicExpr> implicit_diff(
     std::shared_ptr<SymbolicExpr> F,
     const std::string& x,
     const std::string& y
 ) {
-
     DifferentiationVisitor d_dx(x);
     F->root->accept(d_dx);
     auto dFdx = d_dx.result;
 
-    DifferentiationVisitor d_dy(x, y);
+    DifferentiationVisitor d_dy(y);
     F->root->accept(d_dy);
     auto dFdy = d_dy.result;
 
@@ -38,4 +38,5 @@ std::shared_ptr<SymbolicExpr> implicit_diff(
     auto denom = std::make_shared<SymbolicExpr>(dFdy);
     return SymbolicExpr::divide(num, denom);
 }
+
 }

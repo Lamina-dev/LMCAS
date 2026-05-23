@@ -61,7 +61,7 @@ public:
         if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(expanded_exp)) {
             long long e_val = -1;
             if (std::holds_alternative<BigInt>(exp_num->value)) e_val = std::get<BigInt>(exp_num->value).to_int();
-            else if (std::holds_alternative<double>(exp_num->value)) e_val = (long long)std::get<double>(exp_num->value);
+            else if (std::holds_alternative<lmmc_real_t>(exp_num->value)) e_val = (long long)std::get<lmmc_real_t>(exp_num->value);
             else if (std::holds_alternative<Rational>(exp_num->value)) e_val = (long long)std::get<Rational>(exp_num->value).to_double();
 
             if (e_val == 0) {
@@ -77,6 +77,7 @@ public:
                 result = current;
                 return;
             }
+            // Exponent too large for expansion (>= 20) or negative — keep as PowerNode
         }
         result = std::make_shared<PowerNode>(expanded_base, expanded_exp);
     }

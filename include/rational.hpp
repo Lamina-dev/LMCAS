@@ -114,7 +114,7 @@ public:
             }
         } else {
 
-            std::pair<uint64_t, uint64_t> xun = jiance(n);
+            std::pair<uint64_t, uint64_t> xun = detect_repeating_pattern(n);
 
             BigInt xup = BigInt(0), xdown = BigInt(0);
             for (uint64_t i = xun.first; i <= xun.second; i++) {
@@ -152,7 +152,12 @@ public:
     }
 
 private:
-    std::pair<uint64_t, uint64_t> jiance(std::vector<short>& n) {
+    /**
+     * @brief 检测小数位序列中的循环节起止位置
+     * @param n 小数位数字序列
+     * @return pair(循环节起始索引, 循环节结束索引)
+     */
+    std::pair<uint64_t, uint64_t> detect_repeating_pattern(std::vector<short>& n) {
 
         uint64_t h1[10] = {};
         uint64_t h2[10] = {};
@@ -468,13 +473,11 @@ public:
      */
     lmmc_real_t to_double() const {
         if (is_zero()) return 0.0;
-        lmmc_real_t res = 0.0;
-#ifdef LMMC_SCN_REAL
-        sscanf(to_float_string(15).c_str(), "%" LMMC_SCN_REAL, &res);
-#else
-        res = std::stod(to_float_string(15));
-#endif
-        return res;
+        // Direct computation: numerator / denominator as floating point
+        lmmc_real_t num_d = numerator.to_double();
+        lmmc_real_t den_d = denominator.to_double();
+        if (den_d == 0.0) return 0.0;
+        return num_d / den_d;
     }
 
     /** @brief 有理数加法 */

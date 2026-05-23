@@ -129,7 +129,7 @@ inline BigInt extract_coeff_value<BigInt>(const std::shared_ptr<SymbolicExpr>& c
             Rational r = std::get<Rational>(n->value);
             if (r.is_integer()) return r.to_BigInt();
         }
-        if (std::holds_alternative<double>(n->value)) return BigInt((long long)std::get<double>(n->value));
+        if (std::holds_alternative<lmmc_real_t>(n->value)) return BigInt((long long)std::get<lmmc_real_t>(n->value));
     }
 
     if (simp->is_zero()) return BigInt(0);
@@ -145,7 +145,7 @@ inline Rational extract_coeff_value<Rational>(const std::shared_ptr<SymbolicExpr
     if (auto n = std::dynamic_pointer_cast<NumberNode>(simp->root)) {
         if (std::holds_alternative<Rational>(n->value)) return std::get<Rational>(n->value);
         if (std::holds_alternative<BigInt>(n->value)) return Rational(std::get<BigInt>(n->value));
-        if (std::holds_alternative<double>(n->value)) return Rational::from_double(std::get<double>(n->value));
+        if (std::holds_alternative<lmmc_real_t>(n->value)) return Rational::from_double(std::get<lmmc_real_t>(n->value));
     }
     if (simp->is_zero()) return Rational(0);
     if (simp->is_one()) return Rational(1);

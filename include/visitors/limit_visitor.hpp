@@ -279,7 +279,13 @@ private:
             return f->type == FunctionNode::FuncType::Infinity;
         }
         if (auto m = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-            for(auto& op : m->operands) if (is_inf(op)) return true;
+            for (auto& op : m->operands) if (is_inf(op)) return true;
+        }
+        if (auto p = std::dynamic_pointer_cast<PowerNode>(node)) {
+            if (is_inf(p->base)) return true;
+        }
+        if (auto a = std::dynamic_pointer_cast<AddNode>(node)) {
+            for (auto& op : a->operands) if (is_inf(op)) return true;
         }
         return false;
     }

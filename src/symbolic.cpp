@@ -311,7 +311,7 @@ int SymbolicExpr::compare(const std::shared_ptr<SymbolicExpr>& other) const {
     return root->compare(*other->root);
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::   substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const {
+std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const {
     if (!root) return nullptr;
     SubstituteVisitor v(var_name, value->root);
     root->accept(v);
@@ -626,10 +626,18 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::divide(const std::shared_ptr<Symboli
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_integral(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
-    return expr;
+    if (!expr) return nullptr;
+    auto var_node = std::make_shared<VariableNode>(var);
+    std::vector<std::shared_ptr<SymbolicNode>> args = {expr->root, var_node};
+    return std::make_shared<SymbolicExpr>(
+        std::make_shared<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args));
 }
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, const std::shared_ptr<SymbolicExpr>& point) {
-    return expr;
+    if (!expr || !point) return nullptr;
+    auto var_node = std::make_shared<VariableNode>(var);
+    std::vector<std::shared_ptr<SymbolicNode>> args = {expr->root, var_node, point->root};
+    return std::make_shared<SymbolicExpr>(
+        std::make_shared<FunctionNode>(FunctionNode::FuncType::Limit, args));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_gcd(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
@@ -683,14 +691,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(const std::shared_ptr
     return SymbolicExpr::number(0);
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_sqrt() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_multiply() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_add() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_power() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_sin() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_cos() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_tan() const { return simplify(); }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_ln() const { return simplify(); }
+
 
 SymbolicExpr::Type SymbolicExpr::get_type() const {
     if (!root) return Type::Number;

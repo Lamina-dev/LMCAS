@@ -565,17 +565,17 @@ public:
     using SparseStorage = std::map<size_t, std::shared_ptr<SymbolicNode>>; ///< 稀疏存储（索引 -> 节点）
 
     /**
-     * @brief 验证并返回网格的列数（取各行最大长度）。
+     * @brief 验证并返回网格的列数（要求各行列数一致）。
      * @param grid 二维节点网格
      * @return 列数
+     * @throw std::invalid_argument 各行列数不一致时抛出
      */
     static size_t validate_grid_columns(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid) {
         if (grid.empty()) return 0;
         size_t ncols = grid[0].size();
         for (size_t i = 1; i < grid.size(); ++i) {
             if (grid[i].size() != ncols) {
-
-                if (grid[i].size() > ncols) ncols = grid[i].size();
+                throw std::invalid_argument("MatrixNode: all rows must have the same number of columns");
             }
         }
         return ncols;
