@@ -740,20 +740,8 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
 
         auto symbolic_roots = solve_symbolic_poly(poly, variable);
 
-        // If the polynomial has degree >= 1 but no roots could be obtained
-        // symbolically (typical when coefficients other than the leading one
-        // depend on parameters and no factoring is possible), we cannot infer
-        // the sign chart safely. Signal failure.
-        if (symbolic_roots.empty() && poly.degree() >= 1) {
-            return PiecewiseIntervalResult{};
-        }
-
-        // solve_closed_form_poly for quadratics returns roots in the order
-        // (-b+√D)/(2a), (-b-√D)/(2a). When a > 0 the first root is larger;
-        // build_parametric_solution expects ascending order. Swap if needed.
-        if (symbolic_roots.size() == 2 && leading_sign > 0) {
-            std::swap(symbolic_roots[0], symbolic_roots[1]);
-        }
+        // Sort roots in ascending order
+        std::sort(symbolic_roots.begin(), symbolic_roots.end(), root_less_than);
 
         std::vector<int> multiplicities(symbolic_roots.size(), 1);
 
@@ -774,12 +762,22 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     RelationalNode::Op::GT));
 
             auto symbolic_roots = solve_symbolic_poly(poly, variable);
-            // 与上面 deg>=1 时的保护一致：若拿不到符号根，无法安全构造区间表达式。
-            if (symbolic_roots.empty() && poly.degree() >= 1) {
-                return PiecewiseIntervalResult{};
-            }
             std::vector<int> multiplicities(symbolic_roots.size(), 1);
-            pos_case.solution = build_parametric_solution(symbolic_roots, multiplicities, 1, type);
+
+            // Sort roots in ascending order and apply same permutation to multiplicities
+            std::vector<size_t> indices(symbolic_roots.size());
+            for (size_t i = 0; i < indices.size(); ++i) indices[i] = i;
+            std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
+                return root_less_than(symbolic_roots[a], symbolic_roots[b]);
+            });
+            std::vector<std::shared_ptr<SymbolicExpr>> sorted_roots;
+            std::vector<int> sorted_mults;
+            for (size_t idx : indices) {
+                sorted_roots.push_back(symbolic_roots[idx]);
+                sorted_mults.push_back(multiplicities[idx]);
+            }
+
+            pos_case.solution = build_parametric_solution(sorted_roots, sorted_mults, 1, type);
             result.cases.push_back(pos_case);
         }
 
@@ -792,11 +790,22 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     RelationalNode::Op::LT));
 
             auto symbolic_roots = solve_symbolic_poly(poly, variable);
-            if (symbolic_roots.empty() && poly.degree() >= 1) {
-                return PiecewiseIntervalResult{};
-            }
             std::vector<int> multiplicities(symbolic_roots.size(), 1);
-            neg_case.solution = build_parametric_solution(symbolic_roots, multiplicities, -1, type);
+
+            // Sort roots in ascending order and apply same permutation to multiplicities
+            std::vector<size_t> indices(symbolic_roots.size());
+            for (size_t i = 0; i < indices.size(); ++i) indices[i] = i;
+            std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
+                return root_less_than(symbolic_roots[a], symbolic_roots[b]);
+            });
+            std::vector<std::shared_ptr<SymbolicExpr>> sorted_roots;
+            std::vector<int> sorted_mults;
+            for (size_t idx : indices) {
+                sorted_roots.push_back(symbolic_roots[idx]);
+                sorted_mults.push_back(multiplicities[idx]);
+            }
+
+            neg_case.solution = build_parametric_solution(sorted_roots, sorted_mults, -1, type);
             result.cases.push_back(neg_case);
         }
 
