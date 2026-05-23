@@ -34,7 +34,7 @@ inline ComplexSymbolic make_complex(
  * @param b 加数
  * @return 和
  */
-ComplexSymbolic complex_add(const ComplexSymbolic& a, const ComplexSymbolic& b);
+LAMINA_API ComplexSymbolic complex_add(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 /**
  * @brief 复数减法
@@ -42,7 +42,7 @@ ComplexSymbolic complex_add(const ComplexSymbolic& a, const ComplexSymbolic& b);
  * @param b 减数
  * @return 差
  */
-ComplexSymbolic complex_sub(const ComplexSymbolic& a, const ComplexSymbolic& b);
+LAMINA_API ComplexSymbolic complex_sub(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 /**
  * @brief 复数乘法
@@ -50,7 +50,7 @@ ComplexSymbolic complex_sub(const ComplexSymbolic& a, const ComplexSymbolic& b);
  * @param b 乘数
  * @return 积
  */
-ComplexSymbolic complex_mul(const ComplexSymbolic& a, const ComplexSymbolic& b);
+LAMINA_API ComplexSymbolic complex_mul(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 /**
  * @brief 复数除法
@@ -58,28 +58,28 @@ ComplexSymbolic complex_mul(const ComplexSymbolic& a, const ComplexSymbolic& b);
  * @param b 除数
  * @return 商
  */
-ComplexSymbolic complex_div(const ComplexSymbolic& a, const ComplexSymbolic& b);
+LAMINA_API ComplexSymbolic complex_div(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 /**
  * @brief 计算复数的共轭
  * @param z 输入复数
  * @return 共轭复数
  */
-ComplexSymbolic complex_conj(const ComplexSymbolic& z);
+LAMINA_API ComplexSymbolic complex_conj(const ComplexSymbolic& z);
 
 /**
  * @brief 计算复数的模
  * @param z 输入复数
  * @return 模的符号表达式
  */
-std::shared_ptr<SymbolicExpr> complex_abs(const ComplexSymbolic& z);
+LAMINA_API std::shared_ptr<SymbolicExpr> complex_abs(const ComplexSymbolic& z);
 
 /**
  * @brief 计算复数的辐角
  * @param z 输入复数
  * @return 辐角的符号表达式
  */
-std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z);
+LAMINA_API std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z);
 
 /**
  * @brief 将极坐标形式转换为指数形式复数 r*e^(i*theta)
@@ -87,7 +87,7 @@ std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z);
  * @param theta 辐角
  * @return 对应的符号复数
  */
-ComplexSymbolic complex_exp_form(
+LAMINA_API ComplexSymbolic complex_exp_form(
     std::shared_ptr<SymbolicExpr> r,
     std::shared_ptr<SymbolicExpr> theta
 );
@@ -98,7 +98,7 @@ ComplexSymbolic complex_exp_form(
  * @param theta 辐角
  * @return 对应的符号复数
  */
-ComplexSymbolic complex_trig_form(
+LAMINA_API ComplexSymbolic complex_trig_form(
     std::shared_ptr<SymbolicExpr> r,
     std::shared_ptr<SymbolicExpr> theta
 );
@@ -109,7 +109,7 @@ ComplexSymbolic complex_trig_form(
  * @param n 根的次数
  * @return n 个复数根的列表
  */
-std::vector<ComplexSymbolic> solve_complex_nth_root(
+LAMINA_API std::vector<ComplexSymbolic> solve_complex_nth_root(
     std::shared_ptr<SymbolicExpr> c,
     int n
 );
@@ -121,7 +121,7 @@ std::vector<ComplexSymbolic> solve_complex_nth_root(
  * @param c 常数项
  * @return 两个复数根
  */
-std::vector<ComplexSymbolic> solve_complex_quadratic(
+LAMINA_API std::vector<ComplexSymbolic> solve_complex_quadratic(
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
     std::shared_ptr<SymbolicExpr> c
@@ -134,7 +134,7 @@ std::vector<ComplexSymbolic> solve_complex_quadratic(
  * @param z_var 复变量名，默认为 "z"
  * @return 轨迹方程的符号表达式
  */
-std::shared_ptr<SymbolicExpr> complex_locus_circle(
+LAMINA_API std::shared_ptr<SymbolicExpr> complex_locus_circle(
     const ComplexSymbolic& a,
     std::shared_ptr<SymbolicExpr> r,
     const std::string& z_var = "z"
@@ -147,7 +147,7 @@ std::shared_ptr<SymbolicExpr> complex_locus_circle(
  * @param z_var 复变量名，默认为 "z"
  * @return 轨迹方程的符号表达式
  */
-std::shared_ptr<SymbolicExpr> complex_locus_perpendicular_bisector(
+LAMINA_API std::shared_ptr<SymbolicExpr> complex_locus_perpendicular_bisector(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
     const std::string& z_var = "z"

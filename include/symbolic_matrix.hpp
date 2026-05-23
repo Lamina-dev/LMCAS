@@ -16,7 +16,7 @@ namespace lamina {
  * @param B 右矩阵
  * @return 乘积矩阵的符号表达式
  */
-std::shared_ptr<SymbolicExpr> matrix_multiply(
+LAMINA_API std::shared_ptr<SymbolicExpr> matrix_multiply(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::shared_ptr<SymbolicExpr>& B
 );
@@ -26,7 +26,7 @@ std::shared_ptr<SymbolicExpr> matrix_multiply(
  * @param A 输入矩阵
  * @return 行列式的符号表达式
  */
-std::shared_ptr<SymbolicExpr> matrix_determinant(
+LAMINA_API std::shared_ptr<SymbolicExpr> matrix_determinant(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -35,7 +35,7 @@ std::shared_ptr<SymbolicExpr> matrix_determinant(
  * @param A 输入矩阵
  * @return 逆矩阵的符号表达式
  */
-std::shared_ptr<SymbolicExpr> matrix_inverse(
+LAMINA_API std::shared_ptr<SymbolicExpr> matrix_inverse(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -45,7 +45,7 @@ std::shared_ptr<SymbolicExpr> matrix_inverse(
  * @param dim 矩阵维度，默认为 2
  * @return 旋转矩阵的符号表达式
  */
-std::shared_ptr<SymbolicExpr> matrix_rotation(
+LAMINA_API std::shared_ptr<SymbolicExpr> matrix_rotation(
     double theta,
     int dim = 2
 );
@@ -56,7 +56,7 @@ std::shared_ptr<SymbolicExpr> matrix_rotation(
  * @param dim 矩阵维度，默认为 2
  * @return 反射矩阵的符号表达式
  */
-std::shared_ptr<SymbolicExpr> matrix_reflection(
+LAMINA_API std::shared_ptr<SymbolicExpr> matrix_reflection(
     double angle,
     int dim = 2
 );
@@ -68,7 +68,7 @@ std::shared_ptr<SymbolicExpr> matrix_reflection(
  * @param dim 矩阵维度，默认为 2
  * @return 缩放矩阵的符号表达式
  */
-std::shared_ptr<SymbolicExpr> matrix_scaling(
+LAMINA_API std::shared_ptr<SymbolicExpr> matrix_scaling(
     double sx,
     double sy,
     int dim = 2
@@ -79,7 +79,7 @@ std::shared_ptr<SymbolicExpr> matrix_scaling(
  * @param A 输入矩阵
  * @return 特征值列表
  */
-std::vector<std::shared_ptr<SymbolicExpr>> matrix_eigenvalues(
+LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> matrix_eigenvalues(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -88,7 +88,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> matrix_eigenvalues(
  * @param A 输入矩阵
  * @return 特征向量列表，每个特征向量为一组分量
  */
-std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> matrix_eigenvectors(
+LAMINA_API std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> matrix_eigenvectors(
     const std::shared_ptr<SymbolicExpr>& A
 );
 

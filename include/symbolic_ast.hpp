@@ -229,16 +229,20 @@ public:
 
 protected:
     std::size_t compute_hash() const override {
-        if (std::holds_alternative<Rational>(value)) {
-            const auto& r = std::get<Rational>(value);
-            return r.hash();
-        } else if (std::holds_alternative<BigInt>(value)) {
-            const auto& b = std::get<BigInt>(value);
-            return b.hash();
-        } else {
-             auto d = std::get<lmmc_real_t>(value);
-             return std::hash<lmmc_real_t>{}(d);
-        }
+        // 与 compare_same_type 对齐：相同数值（如 1、Rational(1,1)、1.0）必须哈希一致，
+        // 否则 NodeMap/NodeSet 在 equals() 的 hash() 短路里会误判不等。
+        // compare_same_type 在任一为 double 时统一转 double 比较，所以这里也按 double 哈希。
+        auto to_real = [](const std::variant<BigInt, Rational, lmmc_real_t>& v) -> lmmc_real_t {
+            if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
+            if (std::holds_alternative<Rational>(v))   return (lmmc_real_t)std::get<Rational>(v).to_double();
+            return (lmmc_real_t)std::get<BigInt>(v).to_double();
+        };
+        lmmc_real_t d = to_real(value);
+        // NaN 一律映射到一个统一桶，避免不同 NaN 位模式造成 hash 不稳。
+        if (d != d) return std::hash<int>{}(0);
+        // 0.0 与 -0.0 在 == 比较里相等，统一规约为 0.0。
+        if (d == 0.0) d = 0.0;
+        return std::hash<lmmc_real_t>{}(d);
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
@@ -668,13 +672,17 @@ public:
             const auto& dense = std::get<DenseStorage>(storage);
             DenseStorage new_dense;
             new_dense.reserve(dense.size());
-            for(const auto& e : dense) new_dense.push_back(e->clone());
+            // dense 存储允许保留 nullptr 表示零元素，clone 时必须保留这种空槽，
+            // 不能直接调用 e->clone() 触发空指针解引用。
+            for (const auto& e : dense) {
+                new_dense.push_back(e ? e->clone() : nullptr);
+            }
             return std::make_shared<MatrixNode>(rows, cols, std::move(new_dense));
         } else {
             const auto& sparse = std::get<SparseStorage>(storage);
             SparseStorage new_sparse;
             for(const auto& [idx, node] : sparse) {
-                new_sparse[idx] = node->clone();
+                new_sparse[idx] = node ? node->clone() : nullptr;
             }
             return std::make_shared<MatrixNode>(rows, cols, std::move(new_sparse));
         }

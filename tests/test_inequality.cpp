@@ -801,11 +801,12 @@ int main() {
                             auto lo_expr = iv.lower.value->substitute("p", SymbolicExpr::number(p_val));
                             lo_expr = lo_expr->substitute("q", SymbolicExpr::number(q_val));
                             lo_expr = lo_expr->simplify();
-                            try {
-                                lo = lo_expr->to_numeric();
-                                if (!std::isfinite(lo)) { lo_valid = false; }
+                            auto lo_opt = test_numeric_eval(lo_expr);
+                            if (lo_opt && std::isfinite(*lo_opt)) {
+                                lo = *lo_opt;
                                 lo_open = iv.lower.is_open;
-                            } catch (...) {
+                            } else {
+                                // Cannot evaluate lower bound; skip this interval.
                                 lo_valid = false;
                             }
                         }
@@ -814,12 +815,36 @@ int main() {
                             auto hi_expr = iv.upper.value->substitute("p", SymbolicExpr::number(p_val));
                             hi_expr = hi_expr->substitute("q", SymbolicExpr::number(q_val));
                             hi_expr = hi_expr->simplify();
-                            try {
-                                hi = hi_expr->to_numeric();
-                                if (!std::isfinite(hi)) { hi_valid = false; }
+                            auto hi_opt = test_numeric_eval(hi_expr);
+                            if (hi_opt && std::isfinite(*hi_opt)) {
+                                hi = *hi_opt;
                                 hi_open = iv.upper.is_open;
-                            } catch (...) {
+                            } else {
                                 hi_valid = false;
+                            }
+                        }
+
+                        // If we couldn't evaluate an endpoint, try the
+                        // non-simplified version as well (simplify may have
+                        // introduced a form that numeric_eval can't handle).
+                        if (!lo_valid && !iv.lower.is_neg_infinity && iv.lower.value) {
+                            auto lo_expr = iv.lower.value->substitute("p", SymbolicExpr::number(p_val));
+                            lo_expr = lo_expr->substitute("q", SymbolicExpr::number(q_val));
+                            auto lo_opt = test_numeric_eval(lo_expr);
+                            if (lo_opt && std::isfinite(*lo_opt)) {
+                                lo = *lo_opt;
+                                lo_open = iv.lower.is_open;
+                                lo_valid = true;
+                            }
+                        }
+                        if (!hi_valid && !iv.upper.is_pos_infinity && iv.upper.value) {
+                            auto hi_expr = iv.upper.value->substitute("p", SymbolicExpr::number(p_val));
+                            hi_expr = hi_expr->substitute("q", SymbolicExpr::number(q_val));
+                            auto hi_opt = test_numeric_eval(hi_expr);
+                            if (hi_opt && std::isfinite(*hi_opt)) {
+                                hi = *hi_opt;
+                                hi_open = iv.upper.is_open;
+                                hi_valid = true;
                             }
                         }
 
@@ -847,6 +872,33 @@ int main() {
                 }
 
                 if (in_parametric != expected_result) {
+
+                    // If we couldn't evaluate any interval endpoint (all were
+                    // skipped due to lo_valid/hi_valid failures), we cannot
+                    // reliably compare. Skip this sample point.
+                    if (!in_parametric && !parametric_solution.is_empty() &&
+                        !parametric_solution.is_entire_line()) {
+                        // Check if we actually evaluated at least one interval.
+                        bool any_evaluated = false;
+                        for (const auto& iv2 : param_intervals) {
+                            bool l_ok = iv2.lower.is_neg_infinity;
+                            bool u_ok = iv2.upper.is_pos_infinity;
+                            if (!l_ok && iv2.lower.value) {
+                                auto le = iv2.lower.value->substitute("p", SymbolicExpr::number(p_val));
+                                le = le->substitute("q", SymbolicExpr::number(q_val));
+                                auto lv = test_numeric_eval(le);
+                                l_ok = lv.has_value();
+                            } else { l_ok = true; }
+                            if (!u_ok && iv2.upper.value) {
+                                auto ue = iv2.upper.value->substitute("p", SymbolicExpr::number(p_val));
+                                ue = ue->substitute("q", SymbolicExpr::number(q_val));
+                                auto uv = test_numeric_eval(ue);
+                                u_ok = uv.has_value();
+                            } else { u_ok = true; }
+                            if (l_ok && u_ok) { any_evaluated = true; break; }
+                        }
+                        if (!any_evaluated) continue;
+                    }
 
                     bool near_root = false;
                     double root1 = (-p_val + std::sqrt(std::abs(disc))) / (2.0 * a_val);

@@ -21,10 +21,10 @@ enum class InequalityType {
 
 /** @brief 区间端点，支持有限值与正负无穷 */
 struct LAMINA_API Endpoint {
-    std::shared_ptr<SymbolicExpr> value; ///< 端点值（无穷时为空）
-    bool is_open;           ///< 是否为开端点
-    bool is_neg_infinity;   ///< 是否为负无穷
-    bool is_pos_infinity;   ///< 是否为正无穷
+    std::shared_ptr<SymbolicExpr> value{}; ///< 端点值（无穷时为空）
+    bool is_open = false;          ///< 是否为开端点
+    bool is_neg_infinity = false;  ///< 是否为负无穷
+    bool is_pos_infinity = false;  ///< 是否为正无穷
 
     /**
      * @brief 构造负无穷端点

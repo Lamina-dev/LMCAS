@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <sstream>
+#include <string>
 #include <cctype>
 
 namespace lamina {
@@ -23,6 +24,17 @@ Endpoint Endpoint::open(std::shared_ptr<SymbolicExpr> val) {
     return Endpoint{std::move(val), true, false, false};
 }
 
+// True iff `ep` is a finite-valued endpoint whose value is a concrete number
+// node (BigInt / Rational / lmmc_real_t). Endpoints with a symbolic value
+// (e.g. depending on parameters) cannot be compared numerically, so the
+// normalization / merging logic must not collapse them based on `to_numeric()`,
+// which silently returns 0.0 for unevaluable expressions.
+static bool endpoint_is_numeric(const Endpoint& ep) {
+    if (ep.is_neg_infinity || ep.is_pos_infinity) return true;
+    if (!ep.value || !ep.value->root) return false;
+    return ep.value->is_number();
+}
+
 static double endpoint_numeric_value(const Endpoint& ep) {
     if (ep.is_neg_infinity) return -std::numeric_limits<double>::infinity();
     if (ep.is_pos_infinity) return std::numeric_limits<double>::infinity();
@@ -35,6 +47,8 @@ bool Interval::contains(double value) const {
     if (lower.is_neg_infinity) {
 
     } else {
+        // Symbolic lower bound: cannot test numerically.
+        if (!endpoint_is_numeric(lower)) return false;
         double lo = endpoint_numeric_value(lower);
         if (lower.is_open) {
             if (value <= lo) return false;
@@ -46,6 +60,7 @@ bool Interval::contains(double value) const {
     if (upper.is_pos_infinity) {
 
     } else {
+        if (!endpoint_is_numeric(upper)) return false;
         double hi = endpoint_numeric_value(upper);
         if (upper.is_open) {
             if (value >= hi) return false;
@@ -62,6 +77,13 @@ bool Interval::is_empty() const {
     if (lower.is_neg_infinity || upper.is_pos_infinity) return false;
     if (lower.is_pos_infinity) return true;
     if (upper.is_neg_infinity) return true;
+
+    // If either endpoint is a symbolic expression depending on parameters,
+    // we cannot decide emptiness purely from numeric comparison; assume
+    // non-empty (the worst-case caller will rely on syntactic structure).
+    if (!endpoint_is_numeric(lower) || !endpoint_is_numeric(upper)) {
+        return false;
+    }
 
     double lo = endpoint_numeric_value(lower);
     double hi = endpoint_numeric_value(upper);
@@ -136,6 +158,23 @@ static int compare_endpoints_lower(const Endpoint& a, const Endpoint& b) {
     if (a.is_pos_infinity) return 1;
     if (b.is_pos_infinity) return -1;
 
+    bool a_num = endpoint_is_numeric(a);
+    bool b_num = endpoint_is_numeric(b);
+    if (!a_num || !b_num) {
+        // Symbolic endpoints: we can't order numerically. Treat unequal
+        // symbolic endpoints as incomparable but use a stable shape-based
+        // ordering so std::sort still has a strict weak order.
+        if (a_num) return -1;
+        if (b_num) return 1;
+        std::string sa = a.value ? a.value->to_string() : "";
+        std::string sb = b.value ? b.value->to_string() : "";
+        if (sa < sb) return -1;
+        if (sa > sb) return 1;
+        if (a.is_open && !b.is_open) return 1;
+        if (!a.is_open && b.is_open) return -1;
+        return 0;
+    }
+
     double va = endpoint_numeric_value(a);
     double vb = endpoint_numeric_value(b);
 
@@ -156,6 +195,20 @@ static int compare_endpoints_upper(const Endpoint& a, const Endpoint& b) {
     if (a.is_neg_infinity) return -1;
     if (b.is_neg_infinity) return 1;
 
+    bool a_num = endpoint_is_numeric(a);
+    bool b_num = endpoint_is_numeric(b);
+    if (!a_num || !b_num) {
+        if (a_num) return -1;
+        if (b_num) return 1;
+        std::string sa = a.value ? a.value->to_string() : "";
+        std::string sb = b.value ? b.value->to_string() : "";
+        if (sa < sb) return -1;
+        if (sa > sb) return 1;
+        if (!a.is_open && b.is_open) return 1;
+        if (a.is_open && !b.is_open) return -1;
+        return 0;
+    }
+
     double va = endpoint_numeric_value(a);
     double vb = endpoint_numeric_value(b);
 
@@ -173,6 +226,12 @@ static bool can_merge(const Interval& a, const Interval& b) {
     if (b.lower.is_neg_infinity) return true;
 
     if (a.upper.is_neg_infinity || b.lower.is_pos_infinity) return false;
+
+    // If either side is symbolic we cannot prove the intervals are adjacent
+    // or overlapping numerically; refuse to merge.
+    if (!endpoint_is_numeric(a.upper) || !endpoint_is_numeric(b.lower)) {
+        return false;
+    }
 
     double au = endpoint_numeric_value(a.upper);
     double bl = endpoint_numeric_value(b.lower);

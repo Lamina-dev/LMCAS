@@ -16,7 +16,7 @@ namespace lamina {
  * @param b 向量 b 的各分量
  * @return 点积结果的符号表达式
  */
-std::shared_ptr<SymbolicExpr> vector_dot(
+LAMINA_API std::shared_ptr<SymbolicExpr> vector_dot(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 );
@@ -27,7 +27,7 @@ std::shared_ptr<SymbolicExpr> vector_dot(
  * @param b 向量 b 的各分量
  * @return 叉积结果向量的各分量
  */
-std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
+LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 );
@@ -38,7 +38,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
  * @param b 向量 b 的各分量
  * @return 夹角的数值（弧度）
  */
-double vector_angle(
+LAMINA_API double vector_angle(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 );
@@ -78,7 +78,7 @@ inline PlaneSymbolic plane_general(
  * @param plane 平面
  * @return 交点坐标向量
  */
-std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
+LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
     const LineSymbolic& line,
     const PlaneSymbolic& plane
 );
@@ -89,7 +89,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
  * @param plane 平面
  * @return 距离的符号表达式
  */
-std::shared_ptr<SymbolicExpr> point_plane_distance(
+LAMINA_API std::shared_ptr<SymbolicExpr> point_plane_distance(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const PlaneSymbolic& plane
 );
@@ -100,7 +100,7 @@ std::shared_ptr<SymbolicExpr> point_plane_distance(
  * @param l2 第二条直线
  * @return 距离的符号表达式
  */
-std::shared_ptr<SymbolicExpr> skew_lines_distance(
+LAMINA_API std::shared_ptr<SymbolicExpr> skew_lines_distance(
     const LineSymbolic& l1,
     const LineSymbolic& l2
 );

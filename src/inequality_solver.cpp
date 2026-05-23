@@ -740,6 +740,21 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
 
         auto symbolic_roots = solve_symbolic_poly(poly, variable);
 
+        // If the polynomial has degree >= 1 but no roots could be obtained
+        // symbolically (typical when coefficients other than the leading one
+        // depend on parameters and no factoring is possible), we cannot infer
+        // the sign chart safely. Signal failure.
+        if (symbolic_roots.empty() && poly.degree() >= 1) {
+            return PiecewiseIntervalResult{};
+        }
+
+        // solve_closed_form_poly for quadratics returns roots in the order
+        // (-b+√D)/(2a), (-b-√D)/(2a). When a > 0 the first root is larger;
+        // build_parametric_solution expects ascending order. Swap if needed.
+        if (symbolic_roots.size() == 2 && leading_sign > 0) {
+            std::swap(symbolic_roots[0], symbolic_roots[1]);
+        }
+
         std::vector<int> multiplicities(symbolic_roots.size(), 1);
 
         auto solution = build_parametric_solution(symbolic_roots, multiplicities, leading_sign, type);

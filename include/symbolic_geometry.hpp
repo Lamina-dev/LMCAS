@@ -16,7 +16,7 @@ namespace lamina {
  * @param b 积分上限
  * @return 旋转体体积的符号表达式
  */
-std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
+LAMINA_API std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -29,7 +29,7 @@ std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
  * @param b 区间右端点
  * @return 弧长的符号表达式
  */
-std::shared_ptr<SymbolicExpr> arc_length_x(
+LAMINA_API std::shared_ptr<SymbolicExpr> arc_length_x(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -42,7 +42,7 @@ std::shared_ptr<SymbolicExpr> arc_length_x(
  * @param b 积分上限
  * @return 旋转体体积的符号表达式
  */
-std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
+LAMINA_API std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -55,7 +55,7 @@ std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
  * @param b 区间右端点
  * @return 弧长的符号表达式
  */
-std::shared_ptr<SymbolicExpr> arc_length_y(
+LAMINA_API std::shared_ptr<SymbolicExpr> arc_length_y(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b

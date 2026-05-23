@@ -128,8 +128,19 @@ inline BigInt extract_coeff_value<BigInt>(const std::shared_ptr<SymbolicExpr>& c
 
             Rational r = std::get<Rational>(n->value);
             if (r.is_integer()) return r.to_BigInt();
+            // 非整数 Rational：保留为 0，避免悄悄截断。
+            return BigInt(0);
         }
-        if (std::holds_alternative<lmmc_real_t>(n->value)) return BigInt((long long)std::get<lmmc_real_t>(n->value));
+        if (std::holds_alternative<lmmc_real_t>(n->value)) {
+            lmmc_real_t d = std::get<lmmc_real_t>(n->value);
+            // 只接受确确实实是整数级别的 double，否则返回 0 而不是悄悄截断。
+            if (std::isfinite(d) && d == std::floor(d) &&
+                d >= static_cast<lmmc_real_t>(std::numeric_limits<long long>::min()) &&
+                d <= static_cast<lmmc_real_t>(std::numeric_limits<long long>::max())) {
+                return BigInt(static_cast<long long>(d));
+            }
+            return BigInt(0);
+        }
     }
 
     if (simp->is_zero()) return BigInt(0);
@@ -236,13 +247,45 @@ Polynomial<T> symbolic_to_poly_recursive(const std::shared_ptr<SymbolicNode>& no
 
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
         if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+            // 只有指数能确认为非负整数时才走幂展开；否则保持表达式不展开，
+            // 避免 x^(1/2) / x^(-1) 这种被强转 (int) 后被错误展开成 x^0=1 之类。
+            bool is_nonneg_int = false;
             int e_val = 0;
-            if (std::holds_alternative<BigInt>(exp_num->value)) e_val = std::get<BigInt>(exp_num->value).to_int();
-            else if (std::holds_alternative<double>(exp_num->value)) e_val = (int)std::get<double>(exp_num->value);
-            else if (std::holds_alternative<Rational>(exp_num->value)) e_val = (int)std::get<Rational>(exp_num->value).to_double();
 
-            if (e_val == 0) return Polynomial<T>({T(1)}, var);
-            if (e_val > 0) {
+            if (std::holds_alternative<BigInt>(exp_num->value)) {
+                const auto& bi = std::get<BigInt>(exp_num->value);
+                if (!bi.IsNegative()) {
+                    int v = bi.to_int();
+                    // 多项式幂展开会按指数次方做矩阵幂运算，过大时直接放弃。
+                    if (v >= 0 && v < 1000) {
+                        is_nonneg_int = true;
+                        e_val = v;
+                    }
+                }
+            } else if (std::holds_alternative<Rational>(exp_num->value)) {
+                const auto& r = std::get<Rational>(exp_num->value);
+                if (r.is_integer()) {
+                    BigInt bi = r.to_BigInt();
+                    if (!bi.IsNegative()) {
+                        int v = bi.to_int();
+                        if (v >= 0 && v < 1000) {
+                            is_nonneg_int = true;
+                            e_val = v;
+                        }
+                    }
+                }
+            } else if (std::holds_alternative<lmmc_real_t>(exp_num->value)) {
+                lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value);
+                // 只有当 double 严格等于其取整值且为非负时，才视为整数指数。
+                if (std::isfinite(d) && d >= 0 && d < 1000.0 &&
+                    d == std::floor(d)) {
+                    is_nonneg_int = true;
+                    e_val = static_cast<int>(d);
+                }
+            }
+
+            if (is_nonneg_int) {
+                if (e_val == 0) return Polynomial<T>({T(1)}, var);
                 auto base_poly = symbolic_to_poly_recursive<T>(pow->base, var);
                 Polynomial<T> res({T(1)}, var);
                 for (int i = 0; i < e_val; ++i) res = res * base_poly;
@@ -322,6 +365,6 @@ std::shared_ptr<SymbolicExpr> poly_to_symbolic(const Polynomial<T>& poly) {
  * @param pivot_col_for_row 输出各行的主元列号
  * @param sign 输出行交换的符号（+1 或 -1）
  */
-void gaussian_eliminate(std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& A, size_t m, size_t n, std::vector<size_t>& pivot_col_for_row, int& sign);
+LAMINA_API void gaussian_eliminate(std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& A, size_t m, size_t n, std::vector<size_t>& pivot_col_for_row, int& sign);
 
 }

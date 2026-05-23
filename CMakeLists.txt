@@ -50,6 +50,11 @@ add_library(lmcas SHARED
     src/interval.cpp
     src/inequality_solver.cpp
     src/parametric_solver.cpp
+    src/symbolic_ode.cpp
+    src/symbolic_geometry.cpp
+    src/symbolic_vector_geometry.cpp
+    src/symbolic_complex.cpp
+    src/symbolic_matrix.cpp
     src/dllmain.c
 )
 
@@ -164,6 +169,9 @@ target_link_libraries(test_trig_rewrite PRIVATE lmcas LammpCore)
 add_executable(test_matcher_comm tests/test_matcher_comm.cpp)
 target_link_libraries(test_matcher_comm PRIVATE lmcas LammpCore)
 
+add_executable(test_review_fixes tests/test_review_fixes.cpp)
+target_link_libraries(test_review_fixes PRIVATE lmcas LammpCore)
+
 enable_testing()
 add_test(NAME TestCAS COMMAND test_cas)
 add_test(NAME TestBigIntDebug COMMAND test_bigint_debug)
@@ -196,6 +204,7 @@ add_test(NAME TestNumberCompare COMMAND test_number_compare)
 add_test(NAME TestIntegrationFallback COMMAND test_integration_fallback)
 add_test(NAME TestBigIntAddCarry COMMAND test_bigint_add_carry)
 add_test(NAME TestValueCompare COMMAND test_value_compare)
+add_test(NAME TestReviewFixes COMMAND test_review_fixes)
 
 add_executable(test_new_integration tests/test_new_integration.cpp)
 target_link_libraries(test_new_integration PRIVATE lmcas LammpCore)
@@ -272,3 +281,31 @@ add_test(NAME TestParametricInequality COMMAND test_parametric_inequality)
 add_executable(test_parametric_system tests/test_parametric_system.cpp)
 target_link_libraries(test_parametric_system PRIVATE lmcas LammpCore)
 add_test(NAME TestParametricSystem COMMAND test_parametric_system)
+
+add_executable(test_symbolic_ode tests/test_symbolic_ode.cpp)
+target_link_libraries(test_symbolic_ode PRIVATE lmcas LammpCore)
+add_test(NAME TestSymbolicODE COMMAND test_symbolic_ode)
+
+add_executable(test_symbolic_geometry tests/test_symbolic_geometry.cpp)
+target_link_libraries(test_symbolic_geometry PRIVATE lmcas LammpCore)
+add_test(NAME TestSymbolicGeometry COMMAND test_symbolic_geometry)
+
+add_executable(test_symbolic_vector_geometry tests/test_symbolic_vector_geometry.cpp)
+target_link_libraries(test_symbolic_vector_geometry PRIVATE lmcas LammpCore)
+add_test(NAME TestSymbolicVectorGeometry COMMAND test_symbolic_vector_geometry)
+
+add_executable(test_symbolic_complex tests/test_symbolic_complex.cpp)
+target_link_libraries(test_symbolic_complex PRIVATE lmcas LammpCore)
+add_test(NAME TestSymbolicComplex COMMAND test_symbolic_complex)
+
+add_executable(test_poly_utils tests/test_poly_utils.cpp)
+target_link_libraries(test_poly_utils PRIVATE lmcas LammpCore)
+add_test(NAME TestPolyUtils COMMAND test_poly_utils)
+
+add_executable(test_symbolic_implicit_diff tests/test_symbolic_implicit_diff.cpp)
+target_link_libraries(test_symbolic_implicit_diff PRIVATE lmcas LammpCore)
+add_test(NAME TestSymbolicImplicitDiff COMMAND test_symbolic_implicit_diff)
+
+add_executable(test_symbolic_matrix_advanced tests/test_symbolic_matrix_advanced.cpp)
+target_link_libraries(test_symbolic_matrix_advanced PRIVATE lmcas LammpCore)
+add_test(NAME TestSymbolicMatrixAdvanced COMMAND test_symbolic_matrix_advanced)

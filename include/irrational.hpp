@@ -85,9 +85,43 @@ public:
                 } else {
                     return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
                 }
-            case Type::COMPLEX:
+            case Type::COMPLEX: {
+                // 重建完整线性组合，而不是只返回 constant_term。
+                std::shared_ptr<SymbolicExpr> result;
+                auto add_term = [&](const std::shared_ptr<SymbolicExpr>& term) {
+                    if (!result) {
+                        result = term;
+                    } else {
+                        result = SymbolicExpr::add(result, term);
+                    }
+                };
 
-                return SymbolicExpr::number(::Rational::from_double(constant_term));
+                if (!is_zero_tol(constant_term)) {
+                    add_term(SymbolicExpr::number(::Rational::from_double(constant_term)));
+                }
+
+                for (const auto& [key, coeff] : coefficients) {
+                    if (is_zero_tol(coeff)) continue;
+                    std::shared_ptr<SymbolicExpr> basis;
+                    if (key == "pi") {
+                        basis = SymbolicExpr::variable("π");
+                    } else if (key == "e") {
+                        basis = SymbolicExpr::variable("e");
+                    } else if (key.substr(0, 4) == "sqrt") {
+                        long long n = std::stoll(key.substr(4));
+                        basis = SymbolicExpr::sqrt(SymbolicExpr::number(static_cast<int>(n)));
+                    } else {
+                        // 未识别的基向量：保留为变量，避免静默丢失。
+                        basis = SymbolicExpr::variable(key);
+                    }
+                    std::shared_ptr<SymbolicExpr> term = is_one_tol(coeff)
+                        ? basis
+                        : SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coeff)), basis);
+                    add_term(term);
+                }
+
+                return result ? result : SymbolicExpr::number(0);
+            }
             default:
                 return SymbolicExpr::number(0);
         }

@@ -1,6 +1,8 @@
 #include "../include/symbolic_vector_geometry.hpp"
 #include "../include/symbolic.hpp"
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 namespace lamina {
@@ -9,7 +11,9 @@ std::shared_ptr<SymbolicExpr> vector_dot(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 ) {
-    if (a.size() != b.size()) return nullptr;
+    if (a.size() != b.size()) {
+        throw std::invalid_argument("vector_dot: operand dimensions do not match");
+    }
     std::vector<std::shared_ptr<SymbolicNode>> sum_terms;
     for (size_t i = 0; i < a.size(); ++i) {
         sum_terms.push_back(SymbolicExpr::multiply(a[i], b[i])->root);
@@ -21,7 +25,9 @@ std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 ) {
-    if (a.size() != 3 || b.size() != 3) return {};
+    if (a.size() != 3 || b.size() != 3) {
+        throw std::invalid_argument("vector_cross: requires 3-dimensional vectors");
+    }
     auto x = SymbolicExpr::add(SymbolicExpr::multiply(a[1], b[2]), SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::multiply(a[2], b[1])));
     auto y = SymbolicExpr::add(SymbolicExpr::multiply(a[2], b[0]), SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::multiply(a[0], b[2])));
     auto z = SymbolicExpr::add(SymbolicExpr::multiply(a[0], b[1]), SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::multiply(a[1], b[0])));
@@ -32,6 +38,10 @@ double vector_angle(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 ) {
+
+    if (a.size() != b.size() || a.empty()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
 
     double norm_a = 0, norm_b = 0, dot = 0;
     bool numeric = true;
@@ -56,9 +66,15 @@ double vector_angle(
         norm_b += nb * nb;
         dot += na * nb;
     }
-    if (!numeric) return NAN;
-    double angle = std::acos(dot / (std::sqrt(norm_a) * std::sqrt(norm_b)));
-    return angle;
+    if (!numeric) return std::numeric_limits<double>::quiet_NaN();
+    if (norm_a == 0.0 || norm_b == 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    double cosv = dot / (std::sqrt(norm_a) * std::sqrt(norm_b));
+    // Clamp into [-1, 1] to avoid std::acos domain errors caused by rounding.
+    if (cosv > 1.0) cosv = 1.0;
+    else if (cosv < -1.0) cosv = -1.0;
+    return std::acos(cosv);
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
@@ -68,6 +84,14 @@ std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
 
     auto n_dot_a = vector_dot(plane.normal, line.point);
     auto n_dot_b = vector_dot(plane.normal, line.direction);
+    // If n . direction == 0 the line is parallel to the plane: either lies in
+    // the plane (infinite intersections) or has no intersection. In both cases
+    // we cannot return a single point, so signal "no unique intersection" via
+    // an empty vector instead of dividing by zero.
+    auto n_dot_b_simpl = n_dot_b ? n_dot_b->simplify() : nullptr;
+    if (!n_dot_b_simpl || n_dot_b_simpl->is_zero()) {
+        return {};
+    }
     auto t = SymbolicExpr::divide(SymbolicExpr::add(plane.d, SymbolicExpr::multiply(SymbolicExpr::number(-1), n_dot_a)), n_dot_b);
     std::vector<std::shared_ptr<SymbolicExpr>> intersection;
     for (size_t i = 0; i < line.point.size(); ++i) {

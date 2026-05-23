@@ -97,6 +97,9 @@ public:
                     up *= BigInt0to10[10].power(BigInt(std::string(num.begin() + i, num.end())));
                 }
             }
+            // 早退路径仍要应用初始负号并 simplify，否则像 "-3"、"-2e4" 会丢符号。
+            if (num[0] == '-') up = BigInt(0) - up;
+            simplify();
             return ;
         }
         i++;
@@ -218,7 +221,11 @@ public:
             return Rational();
         }
         if (std::floor(value) == value) {
-            return Rational(BigInt(std::to_string(value)));
+            // value 是整数级浮点数；std::to_string(double) 会输出 "123.000000"，
+            // 直接喂给 BigInt 会因含小数点被拒绝。先把整数部分提取成字符串。
+            std::ostringstream iss;
+            iss << std::fixed << std::setprecision(0) << value;
+            return Rational(BigInt(iss.str()));
         }
         std::ostringstream oss;
         oss << std::scientific << std::setprecision(15) << value;

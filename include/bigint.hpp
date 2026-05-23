@@ -254,10 +254,13 @@ public:
         std::vector<mp_byte_t> digit_buf(len);
         for (size_t i = 0; i < len; ++i) {
             char c = str[start + i];
-            uint8_t d = 0;
-            if (c >= '0' && c <= '9') {
-                d = c - '0';
+            if (c < '0' || c > '9') {
+                throw std::invalid_argument(
+                    "BigInt: invalid character '" + std::string(1, c) +
+                    "' at position " + std::to_string(start + i) +
+                    " in input \"" + str + "\"");
             }
+            uint8_t d = static_cast<uint8_t>(c - '0');
 
             digit_buf[len - 1 - i] = d;
         }
@@ -301,19 +304,37 @@ public:
     std::string to_string() const { return ToString(); }
 
     /**
-     * @brief 转换为 int（溢出时截断到 int 范围）
+     * @brief 转换为 int（溢出时饱和到 int 范围）
      * @return 对应的 int 值
      */
     int to_int() const {
         if (_size == 0) return 0;
 
-        long long val = _data[0];
-        if (_size > 1) {
+        constexpr long long INT_MAX_LL = static_cast<long long>(std::numeric_limits<int>::max());
+        constexpr long long INT_MIN_LL = static_cast<long long>(std::numeric_limits<int>::min());
 
-             return _sign == POSITIVE ? 2147483647 : -2147483648;
+        if (_size > 1) {
+            return _sign == POSITIVE
+                       ? std::numeric_limits<int>::max()
+                       : std::numeric_limits<int>::min();
         }
-        if (_sign == NEGATIVE) val = -val;
-        return (int)val;
+
+        // _size == 1: a single limb. Saturate when the magnitude does not fit.
+        unsigned long long mag = _data[0];
+        if (_sign == NEGATIVE) {
+            // Negative: representable range is [INT_MIN, 0].
+            // |INT_MIN| = static_cast<unsigned long long>(INT_MAX) + 1.
+            unsigned long long min_mag =
+                static_cast<unsigned long long>(INT_MAX_LL) + 1ULL;
+            if (mag > min_mag) return std::numeric_limits<int>::min();
+            if (mag == min_mag) return std::numeric_limits<int>::min();
+            return static_cast<int>(-static_cast<long long>(mag));
+        } else {
+            if (mag > static_cast<unsigned long long>(INT_MAX_LL)) {
+                return std::numeric_limits<int>::max();
+            }
+            return static_cast<int>(mag);
+        }
     }
 
     /**

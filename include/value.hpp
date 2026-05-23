@@ -33,7 +33,8 @@ public:
     enum class Type {
         Null, Int, Float, BigInt,
         Rational, Irrational, Symbolic,
-        Infinity, Array, Matrix
+        Infinity, Array, Matrix,
+        String
     };
     Type type;  ///< 当前值的类型
 
@@ -90,11 +91,12 @@ public:
     }
     Value(const std::vector<std::vector<Value>>& mat) : type(Type::Matrix), data(mat) {}
 
-    // 为兼容测试代码，支持从字符串构造（存为 Null，to_string 返回该字符串）
-    Value(const std::string& s) : type(Type::Null), data(nullptr), _str_cache(s) {}
-    Value(const char* s) : type(Type::Null), data(nullptr), _str_cache(s) {}
+    // 字符串值：用 Type::String 区分，避免和 Null 混在一起。
+    Value(const std::string& s) : type(Type::String), data(nullptr), _str_cache(s) {}
+    Value(const char* s) : type(Type::String), data(nullptr), _str_cache(s ? s : "") {}
 
     bool is_null() const { return type == Type::Null; }
+    bool is_string() const { return type == Type::String; }
     bool is_infinity() const { return type == Type::Infinity; }
     bool is_int() const { return type == Type::Int; }
     bool is_float() const { return type == Type::Float; }
@@ -105,9 +107,12 @@ public:
     bool is_irrational() const { return type == Type::Irrational; }
     bool is_symbolic() const { return type == Type::Symbolic; }
     bool is_numeric() const {
+        // Symbolic 表达式未必能直接当作数值，as_number() 在符号无法求值时会返回未定义结果，
+        // 因此不把 Symbolic 视为 numeric，避免上层算子（vector_add / matrix_multiply 等）
+        // 把无法求值的符号悄悄塞进数值路径。
         return type == Type::Int || type == Type::Float ||
                type == Type::BigInt || type == Type::Rational ||
-               type == Type::Irrational || type == Type::Symbolic;
+               type == Type::Irrational;
     }
 
     /**
@@ -124,12 +129,8 @@ public:
         if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
         if (type == Type::Float) return std::get<lmmc_real_t>(data);
         if (type == Type::BigInt) {
-            const auto& bigint_val = std::get<::BigInt>(data);
-            int int_val = bigint_val.to_int();
-            if (int_val == INT_MAX || int_val == INT_MIN) {
-                return bigint_val.to_double();
-            }
-            return static_cast<lmmc_real_t>(int_val);
+            // 直接用 BigInt::to_double() 即可，避免先 to_int() 后再转 double 在大数上失真。
+            return std::get<::BigInt>(data).to_double();
         }
         if (type == Type::Rational) {
             return std::get<::Rational>(data).to_double();
@@ -152,8 +153,8 @@ public:
         if (type == Type::Int) return ::Rational(std::get<int>(data));
         if (type == Type::Float) return ::Rational::from_double(std::get<lmmc_real_t>(data));
         if (type == Type::BigInt) {
-            int int_val = std::get<::BigInt>(data).to_int();
-            return ::Rational(int_val);
+            // 直接用 BigInt 构造 Rational，避免先转 int 截断高位。
+            return ::Rational(std::get<::BigInt>(data));
         }
         if (type == Type::Irrational) {
             return ::Rational::from_double(std::get<::Irrational>(data).to_double());
@@ -171,8 +172,8 @@ public:
         if (type == Type::Float) return ::Irrational::constant(std::get<lmmc_real_t>(data));
         if (type == Type::Rational) return ::Irrational::constant(std::get<::Rational>(data).to_double());
         if (type == Type::BigInt) {
-            int int_val = std::get<::BigInt>(data).to_int();
-            return ::Irrational::constant(int_val);
+            // 用 to_double() 而不是 to_int()，避免大整数被饱和到 INT_MAX/INT_MIN 后再当成数值。
+            return ::Irrational::constant(std::get<::BigInt>(data).to_double());
         }
         return ::Irrational::constant(0);
     }
@@ -225,6 +226,7 @@ public:
      * @return 格式化的字符串表示
      */
     std::string to_string() const {
+        if (type == Type::String) return _str_cache;
         if (!_str_cache.empty()) return _str_cache;
         switch (type) {
             case Type::Infinity: {
@@ -282,6 +284,9 @@ public:
 
     bool operator==(const Value& other) const {
         if (type != other.type) return false;
+        if (type == Type::String) {
+            return _str_cache == other._str_cache;
+        }
         if (data.index() != other.data.index()) return false;
         return std::visit([&other](const auto& val1) -> bool {
             using T = std::decay_t<decltype(val1)>;
@@ -299,6 +304,9 @@ public:
 
     bool operator<(const Value& other) const {
         if (type != other.type) return static_cast<int>(type) < static_cast<int>(other.type);
+        if (type == Type::String) {
+            return _str_cache < other._str_cache;
+        }
         if (data.index() != other.data.index()) return data.index() < other.data.index();
         return std::visit([&other](const auto& val1) -> bool {
             using T = std::decay_t<decltype(val1)>;

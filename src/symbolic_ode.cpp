@@ -4,6 +4,7 @@
 #include "lmmc/numeric.h"
 #include <cmath>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 namespace lamina {
@@ -46,6 +47,25 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     const std::string& y
 ) {
 
+    // Guard a == 0: equation degenerates to first-order (or constant) form.
+    int a_is_zero = 0;
+    lmmc_double_nearly_equal_tol(a, 0.0, 1e-12, 1e-12, &a_is_zero);
+    if (a_is_zero) {
+        int b_is_zero = 0;
+        lmmc_double_nearly_equal_tol(b, 0.0, 1e-12, 1e-12, &b_is_zero);
+        if (b_is_zero) {
+            // a == 0 and b == 0: not a proper second-order ODE.
+            throw std::invalid_argument(
+                "solve_linear2_ode: leading and first-derivative coefficients are both zero");
+        }
+        // a == 0, b != 0: degenerates to b*y' + c*y = f(x), i.e. y' + (c/b)*y = f/b.
+        auto Px = SymbolicExpr::number(c / b);
+        auto Qx = fx->is_zero()
+                      ? SymbolicExpr::number(0)
+                      : SymbolicExpr::divide(fx, SymbolicExpr::number(b));
+        return solve_linear1_ode(Px, Qx, x, y);
+    }
+
     double D = b*b - 4*a*c;
     auto C1 = SymbolicExpr::variable("C1");
     auto C2 = SymbolicExpr::variable("C2");
@@ -76,11 +96,13 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     }
 
     if (!fx->is_zero()) {
-
-        return SymbolicExpr::add(yh, SymbolicExpr::number(0));
-    } else {
-        return yh;
+        // Particular-solution computation for non-homogeneous case is not yet
+        // implemented. Fail loudly instead of returning the homogeneous solution
+        // disguised as the full general solution.
+        throw std::logic_error(
+            "solve_linear2_ode: non-homogeneous case (f(x) != 0) is not implemented");
     }
+    return yh;
 }
 
 }

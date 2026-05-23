@@ -2,6 +2,8 @@
 #include "../include/symbolic_complex.hpp"
 #include "../include/symbolic.hpp"
 #include <cmath>
+#include <complex>
+#include <stdexcept>
 #include <vector>
 
 namespace lamina {
@@ -47,6 +49,10 @@ ComplexSymbolic complex_trig_form(std::shared_ptr<SymbolicExpr> r, std::shared_p
 }
 
 std::vector<ComplexSymbolic> solve_complex_nth_root(std::shared_ptr<SymbolicExpr> c, int n) {
+
+    if (n <= 0) {
+        throw std::invalid_argument("solve_complex_nth_root: n must be > 0");
+    }
 
     ComplexSymbolic c_sym{SymbolicExpr::number(0), SymbolicExpr::number(0)};
 

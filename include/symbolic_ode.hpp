@@ -16,7 +16,7 @@ namespace lamina {
  * @param y 因变量名
  * @return 通解的符号表达式
  */
-std::shared_ptr<SymbolicExpr> solve_separable_ode(
+LAMINA_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
     std::shared_ptr<SymbolicExpr> rhs,
     const std::string& x,
     const std::string& y
@@ -30,7 +30,7 @@ std::shared_ptr<SymbolicExpr> solve_separable_ode(
  * @param y 因变量名
  * @return 通解的符号表达式
  */
-std::shared_ptr<SymbolicExpr> solve_linear1_ode(
+LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
     std::shared_ptr<SymbolicExpr> Px,
     std::shared_ptr<SymbolicExpr> Qx,
     const std::string& x,
@@ -47,7 +47,7 @@ std::shared_ptr<SymbolicExpr> solve_linear1_ode(
  * @param y 因变量名
  * @return 通解的符号表达式
  */
-std::shared_ptr<SymbolicExpr> solve_linear2_ode(
+LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,
