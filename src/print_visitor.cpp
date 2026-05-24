@@ -107,6 +107,11 @@ void PrintVisitor::visit(FunctionNode& node) {
         case FunctionNode::FuncType::Calculus_Integral: buffer << "integral"; break;
         case FunctionNode::FuncType::Limit: buffer << "limit"; break;
         case FunctionNode::FuncType::Infinity: buffer << "inf"; break;
+        case FunctionNode::FuncType::Erf: buffer << "erf"; break;
+        case FunctionNode::FuncType::Ei: buffer << "Ei"; break;
+        case FunctionNode::FuncType::Si: buffer << "Si"; break;
+        case FunctionNode::FuncType::Ci: buffer << "Ci"; break;
+        case FunctionNode::FuncType::Li: buffer << "Li"; break;
     }
     buffer << "(";
     for (size_t i = 0; i < node.arguments.size(); ++i) {

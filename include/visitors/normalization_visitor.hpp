@@ -659,9 +659,13 @@ public:
                  bool is_number_power = false;
 
                  if (auto pow = std::dynamic_pointer_cast<PowerNode>(op)) {
+                     // Only split base/exponent of a PowerNode if the exponent is a NumberNode.
+                     // For symbolic exponents (e.g. 2^x), keep the PowerNode atomic so we
+                     // don't silently drop the exponent when accumulating into `bases`.
+                     auto e_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
+                     if (e_num) {
                      base = pow->base;
-                     if (auto e_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
-                         exp = e_num;
+                     exp = e_num;
 
                          if (auto b_num = std::dynamic_pointer_cast<NumberNode>(base)) {
                              long long exp_val = 0;
@@ -696,12 +700,14 @@ public:
 
                                  if (exp_val == -1) {
                                       if (std::holds_alternative<BigInt>(b_num->value)) {
-                                          pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), std::get<BigInt>(b_num->value)));
+                                          const auto& bi = std::get<BigInt>(b_num->value);
+                                          if (!bi.is_zero()) pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), bi));
                                       } else if (std::holds_alternative<Rational>(b_num->value)) {
                                           Rational r = std::get<Rational>(b_num->value);
                                           if (!r.get_numerator().is_zero()) pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
                                       } else if (std::holds_alternative<lmmc_real_t>(b_num->value)) {
-                                          pow_val = std::make_shared<NumberNode>(1.0 / std::get<lmmc_real_t>(b_num->value));
+                                          lmmc_real_t bv = std::get<lmmc_real_t>(b_num->value);
+                                          if (bv != 0.0) pow_val = std::make_shared<NumberNode>(1.0 / bv);
                                       }
                                  } else if (exp_val == 0) {
                                       pow_val = std::make_shared<NumberNode>(BigInt(1));
@@ -733,12 +739,14 @@ public:
                                           } else {
 
                                               if (std::holds_alternative<BigInt>(base_pow_val->value)) {
-                                                  pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), std::get<BigInt>(base_pow_val->value)));
+                                                  const auto& bi = std::get<BigInt>(base_pow_val->value);
+                                                  if (!bi.is_zero()) pow_val = std::make_shared<NumberNode>(Rational(BigInt(1), bi));
                                               } else if (std::holds_alternative<Rational>(base_pow_val->value)) {
                                                   Rational r = std::get<Rational>(base_pow_val->value);
-                                                  pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
+                                                  if (!r.get_numerator().is_zero()) pow_val = std::make_shared<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
                                               } else if (std::holds_alternative<lmmc_real_t>(base_pow_val->value)) {
-                                                  pow_val = std::make_shared<NumberNode>(1.0 / std::get<lmmc_real_t>(base_pow_val->value));
+                                                  lmmc_real_t bv = std::get<lmmc_real_t>(base_pow_val->value);
+                                                  if (bv != 0.0) pow_val = std::make_shared<NumberNode>(1.0 / bv);
                                               }
                                           }
                                       }
@@ -835,7 +843,14 @@ public:
         }
 
         if (s_base->is_zero()) {
-             result = std::make_shared<NumberNode>(BigInt(0));
+             // 0^x = 0 only when x is provably positive; otherwise keep the
+             // PowerNode so domain issues (e.g. 0^(-1/2)) are not silently
+             // turned into 0. This mirrors SymbolicFactory::create_power.
+             if (s_exp->is_positive()) {
+                 result = std::make_shared<NumberNode>(BigInt(0));
+                 return;
+             }
+             result = std::make_shared<PowerNode>(s_base, s_exp);
              return;
         }
         if (s_base->is_one()) {

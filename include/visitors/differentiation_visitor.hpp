@@ -158,6 +158,95 @@ public:
                     d_outer = std::make_shared<PowerNode>(sec, SymbolicFactory::create_number(2.0));
                 }
                 break;
+            case FunctionNode::FuncType::Cot:
+                {
+                    // d/dx cot(x) = -csc(x)^2
+                    auto csc = std::make_shared<FunctionNode>(FunctionNode::FuncType::Csc, node.arguments);
+                    auto csc_sq = std::make_shared<PowerNode>(csc, SymbolicFactory::create_number(2.0));
+                    d_outer = SymbolicFactory::create_multiply({
+                        SymbolicFactory::create_number(-1.0),
+                        csc_sq
+                    });
+                }
+                break;
+            case FunctionNode::FuncType::Sec:
+                {
+                    // d/dx sec(x) = sec(x) * tan(x)
+                    auto sec = std::make_shared<FunctionNode>(FunctionNode::FuncType::Sec, node.arguments);
+                    auto tan = std::make_shared<FunctionNode>(FunctionNode::FuncType::Tan, node.arguments);
+                    d_outer = SymbolicFactory::create_multiply({sec, tan});
+                }
+                break;
+            case FunctionNode::FuncType::Csc:
+                {
+                    // d/dx csc(x) = -csc(x) * cot(x)
+                    auto csc = std::make_shared<FunctionNode>(FunctionNode::FuncType::Csc, node.arguments);
+                    auto cot = std::make_shared<FunctionNode>(FunctionNode::FuncType::Cot, node.arguments);
+                    d_outer = SymbolicFactory::create_multiply({
+                        SymbolicFactory::create_number(-1.0),
+                        csc, cot
+                    });
+                }
+                break;
+            case FunctionNode::FuncType::ArcSin:
+                {
+                    // d/dx arcsin(x) = 1/sqrt(1 - x^2) = (1 - x^2)^(-1/2)
+                    auto arg_sq = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(2.0));
+                    auto neg_arg_sq = SymbolicFactory::create_multiply({
+                        SymbolicFactory::create_number(-1.0), arg_sq
+                    });
+                    auto one_minus_sq = SymbolicFactory::create_add({
+                        SymbolicFactory::create_number(1.0), neg_arg_sq
+                    });
+                    d_outer = std::make_shared<PowerNode>(
+                        one_minus_sq, SymbolicFactory::create_number(-0.5));
+                }
+                break;
+            case FunctionNode::FuncType::ArcCos:
+                {
+                    // d/dx arccos(x) = -1/sqrt(1 - x^2) = -(1 - x^2)^(-1/2)
+                    auto arg_sq = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(2.0));
+                    auto neg_arg_sq = SymbolicFactory::create_multiply({
+                        SymbolicFactory::create_number(-1.0), arg_sq
+                    });
+                    auto one_minus_sq = SymbolicFactory::create_add({
+                        SymbolicFactory::create_number(1.0), neg_arg_sq
+                    });
+                    auto inv_sqrt = std::make_shared<PowerNode>(
+                        one_minus_sq, SymbolicFactory::create_number(-0.5));
+                    d_outer = SymbolicFactory::create_multiply({
+                        SymbolicFactory::create_number(-1.0), inv_sqrt
+                    });
+                }
+                break;
+            case FunctionNode::FuncType::ArcTan:
+                {
+                    // d/dx arctan(x) = 1/(1 + x^2) = (1 + x^2)^(-1)
+                    auto arg_sq = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(2.0));
+                    auto one_plus_sq = SymbolicFactory::create_add({
+                        SymbolicFactory::create_number(1.0), arg_sq
+                    });
+                    d_outer = std::make_shared<PowerNode>(
+                        one_plus_sq, SymbolicFactory::create_number(-1.0));
+                }
+                break;
+            case FunctionNode::FuncType::Sinh:
+                d_outer = std::make_shared<FunctionNode>(
+                    FunctionNode::FuncType::Cosh, node.arguments);
+                break;
+            case FunctionNode::FuncType::Cosh:
+                d_outer = std::make_shared<FunctionNode>(
+                    FunctionNode::FuncType::Sinh, node.arguments);
+                break;
+            case FunctionNode::FuncType::Tanh:
+                {
+                    // d/dx tanh(x) = sech(x)^2 = 1/cosh(x)^2 = cosh(x)^(-2)
+                    auto cosh = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Cosh, node.arguments);
+                    d_outer = std::make_shared<PowerNode>(
+                        cosh, SymbolicFactory::create_number(-2.0));
+                }
+                break;
             case FunctionNode::FuncType::Exp:
                  d_outer = std::make_shared<FunctionNode>(FunctionNode::FuncType::Exp, node.arguments);
                  break;
@@ -182,6 +271,59 @@ public:
                 break;
             case FunctionNode::FuncType::RootOf:
                 throw std::runtime_error("RootOf differentiation is not mathematically supported yet.");
+            case FunctionNode::FuncType::Erf:
+                {
+                    // d/dx erf(x) = (2/sqrt(pi)) * exp(-x^2)
+                    auto pi = std::make_shared<VariableNode>("pi");
+                    auto sqrt_pi = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Sqrt,
+                        std::vector<std::shared_ptr<SymbolicNode>>{pi});
+                    auto sqrt_pi_inv = std::make_shared<PowerNode>(sqrt_pi, SymbolicFactory::create_number(-1.0));
+                    auto two = SymbolicFactory::create_number(2.0);
+                    auto neg_one = SymbolicFactory::create_number(-1.0);
+                    auto arg_sq = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(2.0));
+                    auto neg_arg_sq = SymbolicFactory::create_multiply({neg_one, arg_sq});
+                    auto exp_term = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Exp,
+                        std::vector<std::shared_ptr<SymbolicNode>>{neg_arg_sq});
+                    d_outer = SymbolicFactory::create_multiply({two, sqrt_pi_inv, exp_term});
+                }
+                break;
+            case FunctionNode::FuncType::Ei:
+                {
+                    // d/dx Ei(x) = exp(x) / x
+                    auto exp_arg = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Exp, node.arguments);
+                    auto arg_inv = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(-1.0));
+                    d_outer = SymbolicFactory::create_multiply({exp_arg, arg_inv});
+                }
+                break;
+            case FunctionNode::FuncType::Si:
+                {
+                    // d/dx Si(x) = sin(x) / x
+                    auto sin_arg = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Sin, node.arguments);
+                    auto arg_inv = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(-1.0));
+                    d_outer = SymbolicFactory::create_multiply({sin_arg, arg_inv});
+                }
+                break;
+            case FunctionNode::FuncType::Ci:
+                {
+                    // d/dx Ci(x) = cos(x) / x
+                    auto cos_arg = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Cos, node.arguments);
+                    auto arg_inv = std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(-1.0));
+                    d_outer = SymbolicFactory::create_multiply({cos_arg, arg_inv});
+                }
+                break;
+            case FunctionNode::FuncType::Li:
+                {
+                    // d/dx Li(x) = 1 / ln(x)
+                    auto ln_arg = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Ln, node.arguments);
+                    d_outer = std::make_shared<PowerNode>(ln_arg, SymbolicFactory::create_number(-1.0));
+                }
+                break;
             default:
                 d_outer = SymbolicFactory::create_number(0.0);
         }
