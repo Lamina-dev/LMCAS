@@ -13,6 +13,7 @@
 #include "interval.hpp"
 #include <algorithm>
 #include <cmath>
+#include <climits>
 
 namespace lamina {
 
@@ -79,12 +80,12 @@ Tribool InferenceEngine::query_positive(const SymbolicExpr& expr) const {
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
         if (num->is_positive()) return Tribool::True;
         if (num->is_zero()) return Tribool::False;
-        // Check if negative
+        // Check if negative — if not negative and not zero, it must be positive
         if (std::holds_alternative<BigInt>(num->value)) {
-            return std::get<BigInt>(num->value).IsNegative() ? Tribool::False : Tribool::Unknown;
+            return std::get<BigInt>(num->value).IsNegative() ? Tribool::False : Tribool::True;
         }
         if (std::holds_alternative<Rational>(num->value)) {
-            return std::get<Rational>(num->value) < Rational(0) ? Tribool::False : Tribool::Unknown;
+            return std::get<Rational>(num->value) < Rational(0) ? Tribool::False : Tribool::True;
         }
         if (std::holds_alternative<lmmc_real_t>(num->value)) {
             lmmc_real_t v = std::get<lmmc_real_t>(num->value);
@@ -688,8 +689,11 @@ static bool is_even_integer_number(const NumberNode& num) {
         BigInt n = std::get<Rational>(num.value).get_numerator();
         return n.is_even();
     }
-    // double case
+    // double case — guard against overflow for very large values
     double v = std::get<lmmc_real_t>(num.value);
+    if (std::fabs(v) > static_cast<double>(LLONG_MAX)) {
+        return std::fmod(v, 2.0) == 0.0;
+    }
     long long iv = static_cast<long long>(v);
     return (iv % 2) == 0;
 }

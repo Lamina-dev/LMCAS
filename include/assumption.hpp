@@ -10,8 +10,8 @@
 
 namespace lamina {
 
-/// Mathematical domain hierarchy (most specific → least specific).
-/// PositiveInt ⊂ Natural ⊂ Integer ⊂ Rational ⊂ Real ⊂ Complex
+/// Mathematical domain hierarchy (least specific → most specific).
+/// Complex ⊃ Real ⊃ Rational ⊃ Integer ⊃ Natural ⊃ PositiveInt
 enum class Domain {
     Complex,      ///< Complex numbers (default, least specific)
     Real,         ///< Real numbers
