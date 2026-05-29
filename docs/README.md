@@ -62,7 +62,7 @@ int main() {
 
 ## 3. 常见问题
 
-- 编译报错：请检查 C++17 支持、依赖库（如 GMP、MPFR）是否安装。
+- 编译报错：请检查 C++17 支持，并确认已通过 `--recurse-submodules` 拉取 LAMMP 依赖。
 - 表达式输出乱码：请确保终端支持 UTF-8。
 - 更多问题见 [FAQ](faq.md)。
 
@@ -85,7 +85,7 @@ int main() {
 
 
 ## 简介
-LMCAS（Lamina Computer Algebra System）是一个基于C++17的符号计算系统，支持表达式化简、微积分、代数、矩阵、复数等功能，目标是自动化地解决A-Level P4数学题目。
+LMCAS（Lamina Computer Algebra System）是一个基于C++17的轻量级符号计算引擎，支持表达式化简、微积分、代数、矩阵、复数等功能。
 
 
 ## 文档树状结构

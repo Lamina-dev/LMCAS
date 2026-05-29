@@ -524,7 +524,12 @@ public:
         Atan2,                               ///< 双参数反正切
         Calculus_Integral,                   ///< 积分
         Infinity,                            ///< 无穷大
-        Limit                                ///< 极限
+        Limit,                               ///< 极限
+        Erf,                                 ///< 误差函数 erf(x) = (2/√π)∫₀ˣ e^(-t²) dt
+        Ei,                                  ///< 指数积分 Ei(x)
+        Si,                                  ///< 正弦积分 Si(x) = ∫₀ˣ sin(t)/t dt
+        Ci,                                  ///< 余弦积分 Ci(x)
+        Li                                   ///< 对数积分 Li(x) = ∫₀ˣ 1/ln(t) dt
     };
 
     FuncType type;                                          ///< 函数类型

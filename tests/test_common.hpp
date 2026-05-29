@@ -99,6 +99,7 @@ inline int TEST_REPORT() {
 #include "symbolic_ast.hpp"
 #include <optional>
 #include <cmath>
+#include <limits>
 
 inline std::optional<double> test_numeric_eval(const std::shared_ptr<SymbolicExpr>& e) {
     if (!e || !e->root) return 0.0;
@@ -144,16 +145,60 @@ inline std::optional<double> test_numeric_eval(const std::shared_ptr<SymbolicExp
         if (func->arguments.size() == 1) {
             auto arg = test_numeric_eval(std::make_shared<SymbolicExpr>(func->arguments[0]));
             if (!arg) return std::nullopt;
+            double v = std::numeric_limits<double>::quiet_NaN();
             switch (func->type) {
-                case FunctionNode::FuncType::Sin: return std::sin(*arg);
-                case FunctionNode::FuncType::Cos: return std::cos(*arg);
-                case FunctionNode::FuncType::Tan: return std::tan(*arg);
-                case FunctionNode::FuncType::Exp: return std::exp(*arg);
-                case FunctionNode::FuncType::Ln:  return std::log(*arg);
-                case FunctionNode::FuncType::Sqrt: return std::sqrt(*arg);
-                case FunctionNode::FuncType::Abs: return std::abs(*arg);
-                default: break;
+                case FunctionNode::FuncType::Sin: v = std::sin(*arg); break;
+                case FunctionNode::FuncType::Cos: v = std::cos(*arg); break;
+                case FunctionNode::FuncType::Tan: v = std::tan(*arg); break;
+                case FunctionNode::FuncType::Exp: v = std::exp(*arg); break;
+                case FunctionNode::FuncType::Ln:  v = std::log(*arg); break;
+                case FunctionNode::FuncType::Sqrt: v = std::sqrt(*arg); break;
+                case FunctionNode::FuncType::Abs: v = std::abs(*arg); break;
+                // Reciprocal trig: sec=1/cos, csc=1/sin, cot=cos/sin.
+                case FunctionNode::FuncType::Sec: {
+                    double c = std::cos(*arg);
+                    if (c == 0.0) return std::nullopt;
+                    v = 1.0 / c;
+                    break;
+                }
+                case FunctionNode::FuncType::Csc: {
+                    double s = std::sin(*arg);
+                    if (s == 0.0) return std::nullopt;
+                    v = 1.0 / s;
+                    break;
+                }
+                case FunctionNode::FuncType::Cot: {
+                    double s = std::sin(*arg);
+                    if (s == 0.0) return std::nullopt;
+                    v = std::cos(*arg) / s;
+                    break;
+                }
+                // Hyperbolic trig.
+                case FunctionNode::FuncType::Sinh: v = std::sinh(*arg); break;
+                case FunctionNode::FuncType::Cosh: v = std::cosh(*arg); break;
+                case FunctionNode::FuncType::Tanh: v = std::tanh(*arg); break;
+                // Inverse trig.
+                case FunctionNode::FuncType::ArcSin:
+                    if (*arg < -1.0 || *arg > 1.0) return std::nullopt;
+                    v = std::asin(*arg);
+                    break;
+                case FunctionNode::FuncType::ArcCos:
+                    if (*arg < -1.0 || *arg > 1.0) return std::nullopt;
+                    v = std::acos(*arg);
+                    break;
+                case FunctionNode::FuncType::ArcTan: v = std::atan(*arg); break;
+                // Special functions have no elementary closed form; treat as
+                // non-numeric for now so round-trip checks fall back to AST equality.
+                case FunctionNode::FuncType::Erf:
+                case FunctionNode::FuncType::Ei:
+                case FunctionNode::FuncType::Si:
+                case FunctionNode::FuncType::Ci:
+                case FunctionNode::FuncType::Li:
+                    return std::nullopt;
+                default: return std::nullopt;
             }
+            if (!std::isfinite(v)) return std::nullopt;
+            return v;
         }
     }
     return std::nullopt;
