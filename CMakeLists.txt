@@ -57,6 +57,11 @@ add_library(lmcas SHARED
     src/symbolic_vector_geometry.cpp
     src/symbolic_complex.cpp
     src/symbolic_matrix.cpp
+    src/property_store.cpp
+    src/relation_store.cpp
+    src/inference_engine.cpp
+    src/assumption_context.cpp
+    src/query_interface.cpp
     src/dllmain.c
 )
 

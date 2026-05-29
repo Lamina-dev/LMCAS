@@ -8,6 +8,11 @@
 #include <string>
 #include <map>
 
+// Forward declaration for assumption-aware solving
+namespace lamina {
+class AssumptionContext;
+}
+
 namespace lamina {
 
 /** @brief 多项式方程组求解器，提供线性系统求解、Gröbner 基计算及多项式系统求解功能。 */
@@ -78,5 +83,27 @@ public:
         const std::vector<std::string>& variables,
         int elim_count);
 };
+
+/**
+ * @brief Solve an equation with assumption-based domain filtering.
+ *
+ * Calls the existing SymbolicExpr::solve() to compute all solutions, then
+ * applies domain filtering based on the variable's declared domain in the
+ * AssumptionContext. Solutions that violate the domain constraint are excluded.
+ *
+ * Domain filtering rules:
+ * - Real: exclude solutions containing sqrt(-1) or non-real numeric values
+ * - PositiveInt: exclude non-integer or <= 0 solutions
+ * - NonNegative (Natural): exclude solutions evaluating to < 0
+ *
+ * @param equation The equation to solve (equal to zero, or RelationalNode)
+ * @param variable The variable name to solve for
+ * @param ctx Optional assumption context; if nullptr, all solutions returned unfiltered
+ * @return Filtered solutions preserving original order
+ */
+LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions(
+    const std::shared_ptr<SymbolicExpr>& equation,
+    const std::string& variable,
+    const AssumptionContext* ctx = nullptr);
 
 }

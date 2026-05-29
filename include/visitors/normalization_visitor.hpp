@@ -7,6 +7,7 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include "../symbolic_ast.hpp"
+#include "../assumption_context.hpp"
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -221,6 +222,13 @@ inline bool get_pi_coeff(const std::shared_ptr<SymbolicNode>& node, Rational& k)
 class NormalizationVisitor : public SymbolicVisitor {
 public:
     std::shared_ptr<SymbolicNode> result;  ///< 规范化结果节点
+
+    /// Default constructor (backward compatible, no assumptions).
+    NormalizationVisitor() : assumptions_(nullptr) {}
+
+    /// Construct with an optional AssumptionContext for assumption-aware simplification.
+    explicit NormalizationVisitor(const lamina::AssumptionContext* ctx)
+        : assumptions_(ctx) {}
 
     /**
      * @brief 获取规范化结果
@@ -601,7 +609,7 @@ public:
                                          sum_ops.push_back(std::make_shared<MultiplyNode>(prod_ops));
                                      }
 
-                                     NormalizationVisitor elem_vis;
+                                     NormalizationVisitor elem_vis(assumptions_);
                                      auto elem_node = std::make_shared<AddNode>(sum_ops);
                                      elem_node->accept(elem_vis);
 
@@ -1087,7 +1095,7 @@ public:
                              std::vector<std::shared_ptr<SymbolicNode>> m_args = { ln_x, ln_b_inv };
                              auto prod = std::make_shared<MultiplyNode>(m_args);
 
-                             NormalizationVisitor v;
+                             NormalizationVisitor v(assumptions_);
                              prod->accept(v);
                              result = v.get_result();
                              return;
@@ -1184,7 +1192,7 @@ public:
                   std::vector<std::shared_ptr<SymbolicNode>> m_args = { y, ln_x };
                   auto prod = std::make_shared<MultiplyNode>(m_args);
 
-                  NormalizationVisitor v;
+                  NormalizationVisitor v(assumptions_);
                   prod->accept(v);
                   result = v.get_result();
                   return;
@@ -1205,7 +1213,7 @@ public:
              auto ln_b_inv = std::make_shared<PowerNode>(ln_b, std::make_shared<NumberNode>(BigInt(-1)));
              std::vector<std::shared_ptr<SymbolicNode>> m_args = { ln_x, ln_b_inv };
              auto prod = std::make_shared<MultiplyNode>(m_args);
-             NormalizationVisitor v;
+             NormalizationVisitor v(assumptions_);
              prod->accept(v);
              result = v.get_result();
              return;
@@ -1364,7 +1372,14 @@ public:
              }
         }
 
-        result = std::make_shared<FunctionNode>(node.type, s_args);
+        // Attempt assumption-based simplification before falling through
+        auto func_node = std::make_shared<FunctionNode>(node.type, s_args);
+        if (auto simplified = try_assumption_simplify(func_node)) {
+            // Recursively normalize the simplified result
+            simplified->accept(*this);
+            return;
+        }
+        result = func_node;
     }
 
     void visit(MatrixNode& node) override {
@@ -1431,5 +1446,93 @@ public:
         if (!new_right) new_right = node.right;
 
         result = std::make_shared<LogicalNode>(new_left, new_right, node.op);
+    }
+
+private:
+    const lamina::AssumptionContext* assumptions_ = nullptr;
+
+    /**
+     * @brief Attempt assumption-based simplification on a node.
+     *
+     * Applies the following rules when an AssumptionContext is available:
+     * - sqrt(x²) → x when x is NonNegative
+     * - sqrt(x²) → abs(x) when x is Real (but not NonNegative)
+     * - abs(x) → x when x is Positive
+     * - abs(x) → -x when x is Negative
+     *
+     * @param node The node to attempt simplification on
+     * @return Simplified node if a rule applied, or nullptr if no rule matched
+     */
+    std::shared_ptr<SymbolicNode> try_assumption_simplify(
+        const std::shared_ptr<SymbolicNode>& node) {
+        if (!assumptions_) return nullptr;
+
+        auto func = std::dynamic_pointer_cast<FunctionNode>(node);
+        if (!func || func->arguments.size() != 1) return nullptr;
+
+        const auto& arg = func->arguments[0];
+
+        // Rule: sqrt(x²) → x when x is NonNegative
+        // Rule: sqrt(x²) → abs(x) when x is Real (but not NonNegative)
+        if (func->type == FunctionNode::FuncType::Sqrt) {
+            // Check if argument is a PowerNode with exponent 2
+            auto pow = std::dynamic_pointer_cast<PowerNode>(arg);
+            if (pow) {
+                auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
+                if (exp_num) {
+                    bool is_exp_two = false;
+                    if (std::holds_alternative<BigInt>(exp_num->value)) {
+                        is_exp_two = (std::get<BigInt>(exp_num->value) == BigInt(2));
+                    } else if (std::holds_alternative<lmmc_real_t>(exp_num->value)) {
+                        int eq;
+                        lmmc_double_nearly_equal_tol(std::get<lmmc_real_t>(exp_num->value), 2.0, 1e-12, 1e-12, &eq);
+                        is_exp_two = (eq != 0);
+                    } else if (std::holds_alternative<Rational>(exp_num->value)) {
+                        is_exp_two = (std::get<Rational>(exp_num->value) == Rational(2));
+                    }
+
+                    if (is_exp_two) {
+                        // We have sqrt(base²) — query the base's properties
+                        SymbolicExpr base_expr(pow->base);
+
+                        lamina::Tribool nonneg = assumptions_->is_nonnegative(base_expr);
+                        if (nonneg == lamina::Tribool::True) {
+                            // sqrt(x²) → x when x is NonNegative
+                            return pow->base;
+                        }
+
+                        lamina::Tribool real = assumptions_->is_real(base_expr);
+                        if (real == lamina::Tribool::True) {
+                            // sqrt(x²) → abs(x) when x is Real (but not NonNegative)
+                            std::vector<std::shared_ptr<SymbolicNode>> abs_args = { pow->base };
+                            return std::make_shared<FunctionNode>(FunctionNode::FuncType::Abs, abs_args);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Rule: abs(x) → x when x is Positive
+        // Rule: abs(x) → -x when x is Negative
+        if (func->type == FunctionNode::FuncType::Abs) {
+            SymbolicExpr arg_expr(arg);
+
+            lamina::Tribool pos = assumptions_->is_positive(arg_expr);
+            if (pos == lamina::Tribool::True) {
+                // abs(x) → x when x is Positive
+                return arg;
+            }
+
+            lamina::Tribool neg = assumptions_->is_negative(arg_expr);
+            if (neg == lamina::Tribool::True) {
+                // abs(x) → -x when x is Negative
+                std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {
+                    std::make_shared<NumberNode>(BigInt(-1)), arg
+                };
+                return std::make_shared<MultiplyNode>(mul_ops);
+            }
+        }
+
+        return nullptr;
     }
 };
