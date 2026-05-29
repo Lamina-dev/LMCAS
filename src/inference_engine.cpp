@@ -691,7 +691,7 @@ static bool is_even_integer_number(const NumberNode& num) {
     }
     // double case — guard against overflow for very large values
     double v = std::get<lmmc_real_t>(num.value);
-    if (std::fabs(v) > static_cast<double>(LLONG_MAX)) {
+    if (std::fabs(v) >= static_cast<double>(LLONG_MAX)) {
         return std::fmod(v, 2.0) == 0.0;
     }
     long long iv = static_cast<long long>(v);
