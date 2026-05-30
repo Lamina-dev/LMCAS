@@ -11,10 +11,11 @@
 namespace lamina {
 
 /// Mathematical domain hierarchy (least specific → most specific).
-/// Complex ⊃ Real ⊃ Rational ⊃ Integer ⊃ Natural ⊃ PositiveInt
+/// Complex ⊃ Real ⊃ Algebraic ⊃ Rational ⊃ Integer ⊃ Natural ⊃ PositiveInt
 enum class Domain {
     Complex,      ///< Complex numbers (default, least specific)
     Real,         ///< Real numbers
+    Algebraic,    ///< Algebraic numbers (roots of polynomials with rational coefficients)
     Rational,     ///< Rational numbers
     Integer,      ///< Integers
     Natural,      ///< Non-negative integers (0, 1, 2, ...)
@@ -50,6 +51,32 @@ enum class Tribool {
     True,         ///< Property definitely holds
     False,        ///< Property definitely does not hold
     Unknown       ///< Property cannot be determined
+};
+
+/// Monotonicity classification for functions over intervals.
+enum class Monotonicity {
+    Increasing,      ///< Strictly increasing
+    Decreasing,      ///< Strictly decreasing
+    NonDecreasing,   ///< Non-decreasing (weakly increasing)
+    NonIncreasing,   ///< Non-increasing (weakly decreasing)
+    Unknown          ///< Monotonicity not determined
+};
+
+/// Matrix definiteness classification.
+enum class Definiteness {
+    PositiveDefinite,      ///< All eigenvalues positive
+    PositiveSemiDefinite,  ///< All eigenvalues non-negative
+    NegativeDefinite,      ///< All eigenvalues negative
+    NegativeSemiDefinite,  ///< All eigenvalues non-positive
+    Indefinite,            ///< Mixed eigenvalue signs
+    Unknown                ///< Definiteness not determined
+};
+
+/// Finiteness classification for limits and sequences.
+enum class Finiteness {
+    Finite,    ///< Has a finite value or limit
+    Divergent, ///< Diverges to infinity or oscillates
+    Unknown    ///< Finiteness not determined
 };
 
 // Forward declarations for assumption system components

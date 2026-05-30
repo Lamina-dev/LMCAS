@@ -11,6 +11,12 @@
 #include "assumption.hpp"
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
+#include "relation_store.hpp"
+#include <unordered_map>
+#include <functional>
+#include <vector>
+#include <utility>
+#include <optional>
 
 namespace lamina {
 
@@ -19,10 +25,59 @@ class AssumptionContext;
 class InferenceEngine;
 
 /**
+ * @brief Identifies which property is being queried, used as part of the cache key.
+ */
+enum class PropType {
+    Positive,
+    Negative,
+    NonNegative,
+    NonPositive,
+    Real,
+    Integer,
+    NonZero,
+    Algebraic,
+    Transcendental,
+    Finite,
+    Divergent,
+    Periodic,
+    PositiveDefinite,
+    PositiveSemiDefinite
+};
+
+/**
+ * @brief Cache key combining an expression's structural hash with the property type.
+ *
+ * Uses SymbolicNode::hash() for structural equality — two structurally identical
+ * expressions will produce the same hash regardless of pointer identity.
+ */
+struct CacheKey {
+    std::size_t expression_hash;
+    PropType property;
+
+    bool operator==(const CacheKey& other) const {
+        return expression_hash == other.expression_hash && property == other.property;
+    }
+};
+
+/**
+ * @brief Hash function for CacheKey, combining expression hash and property type.
+ */
+struct CacheKeyHash {
+    std::size_t operator()(const CacheKey& key) const {
+        std::size_t seed = key.expression_hash;
+        hash_combine(seed, static_cast<std::size_t>(key.property));
+        return seed;
+    }
+};
+
+/**
  * @brief Unified query API for property questions on arbitrary SymbolicExpr trees.
  *
  * Provides query_positive, query_negative, query_nonnegative, query_real,
  * query_integer, and query_nonzero methods that return Tribool results.
+ *
+ * Results are cached by (expression_hash, property_type) to avoid redundant inference.
+ * The cache must be invalidated on any mutation to the AssumptionContext (push/pop/assume).
  *
  * Dispatch logic:
  *   - Null root node → Unknown
@@ -62,8 +117,89 @@ public:
 
     /// @}
 
+    /// @name Extended property queries
+    /// @{
+
+    /// Query whether the expression is algebraic (root of a polynomial with rational coefficients).
+    Tribool query_algebraic(const SymbolicExpr& expr) const;
+
+    /// Query whether the expression is transcendental (real but not algebraic).
+    Tribool query_transcendental(const SymbolicExpr& expr) const;
+
+    /// Query whether the expression has a finite value/limit.
+    Tribool query_finite(const SymbolicExpr& expr) const;
+
+    /// Query whether the expression diverges.
+    Tribool query_divergent(const SymbolicExpr& expr) const;
+
+    /// Query whether the expression is periodic.
+    Tribool query_periodic(const SymbolicExpr& expr) const;
+
+    /**
+     * @brief Get the period of an expression, if known.
+     * @param expr The expression to query
+     * @return The period as a SymbolicExpr, or std::nullopt if not periodic or unknown
+     */
+    std::optional<SymbolicExpr> get_period(const SymbolicExpr& expr) const;
+
+    /// Query whether the expression (matrix symbol) is positive definite.
+    Tribool query_positive_definite(const SymbolicExpr& expr) const;
+
+    /// Query whether the expression (matrix symbol) is positive semidefinite.
+    Tribool query_positive_semidefinite(const SymbolicExpr& expr) const;
+
+    /// @}
+
+    /**
+     * @brief Invalidate the entire query result cache.
+     *
+     * Must be called whenever the AssumptionContext is mutated (push_scope,
+     * pop_scope, assume_domain, assume_sign, assume/add_relation).
+     */
+    void invalidate_cache() const;
+
+    /**
+     * @brief A set of sufficient conditions for a property to hold on an expression.
+     *
+     * Each ConditionSet represents one alternative set of conditions. If all conditions
+     * within a single ConditionSet are satisfied, the target property holds.
+     */
+    struct ConditionSet {
+        /// Sign conditions: pairs of (variable_name, required_sign)
+        std::vector<std::pair<std::string, Sign>> sign_conditions;
+        /// Domain conditions: pairs of (variable_name, required_domain)
+        std::vector<std::pair<std::string, Domain>> domain_conditions;
+        /// Relational conditions between expressions
+        std::vector<Relation> relational_conditions;
+    };
+
+    /**
+     * @brief Query sufficient conditions for a target sign property to hold on an expression.
+     *
+     * Analyzes the expression structure and returns a list of alternative condition sets.
+     * Each condition set, if fully satisfied, guarantees the target sign property holds.
+     *
+     * - Single variable: returns the direct sign assumption needed (e.g., {x: Positive})
+     * - Composite expression (e.g., x - y): derives condition sets from sub-expression
+     *   analysis (e.g., {x: Positive, y: Negative} or {x GT y, y: NonNegative})
+     * - Returns empty list when no sufficient conditions can be determined
+     *
+     * @param expr The expression to analyze
+     * @param target The target sign property (e.g., Sign::Positive)
+     * @return A list of alternative sufficient condition sets (empty if undetermined)
+     */
+    std::vector<ConditionSet> query_conditions(const SymbolicExpr& expr, Sign target) const;
+
 private:
     const AssumptionContext& ctx_;
+
+    /// The cache generation at the time of last cache validation.
+    /// If ctx_.cache_generation() differs, the cache is stale and must be cleared.
+    mutable uint64_t observed_generation_;
+
+    /// Query result cache: (expression_hash, property_type) → Tribool.
+    /// Mutable because queries are logically const but populate the cache.
+    mutable std::unordered_map<CacheKey, Tribool, CacheKeyHash> cache_;
 
     /// Check if the root node is a special case that should return Unknown immediately.
     /// Returns true if the node is null, MatrixNode, RelationalNode, or LogicalNode.
@@ -80,6 +216,16 @@ private:
     /// Negative infinity: MultiplyNode(-1, FunctionNode::Infinity).
     /// Returns +1 for positive infinity, -1 for negative infinity, 0 if indeterminate.
     int get_infinity_sign(const std::shared_ptr<SymbolicNode>& node) const;
+
+    /**
+     * @brief Look up a cached result or compute, cache, and return it.
+     * @param expr The expression to query
+     * @param prop The property type being queried
+     * @param compute Function that performs the actual computation
+     * @return Cached or freshly computed Tribool result
+     */
+    Tribool cached_query(const SymbolicExpr& expr, PropType prop,
+                         const std::function<Tribool()>& compute) const;
 };
 
 } // namespace lamina

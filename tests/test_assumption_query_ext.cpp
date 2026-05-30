@@ -1,0 +1,641 @@
+/**
+ * @file test_assumption_query_ext.cpp
+ * @brief Unit tests for QueryInterface extensions: caching, cache invalidation,
+ *        query_conditions, matrix definiteness queries, and extended property queries.
+ *
+ * Validates: Requirements 21.2, 21.3, 23.2, 23.3, 10.5
+ */
+
+#include "test_common.hpp"
+#include "query_interface.hpp"
+#include "assumption_context.hpp"
+#include "symbolic_ast.hpp"
+#include "bigint.hpp"
+#include "rational.hpp"
+#include <memory>
+
+using namespace lamina;
+
+// ============================================================
+// Helpers
+// ============================================================
+
+static SymbolicExpr make_var(const std::string& name) {
+    SymbolicExpr expr;
+    expr.root = std::make_shared<VariableNode>(name);
+    return expr;
+}
+
+static SymbolicExpr make_int(int v) {
+    SymbolicExpr expr;
+    expr.root = std::make_shared<NumberNode>(BigInt(v));
+    return expr;
+}
+
+/// Build x - y as AddNode([x, MultiplyNode([-1, y])])
+static SymbolicExpr make_subtraction(const std::string& lhs, const std::string& rhs) {
+    auto x_node = std::make_shared<VariableNode>(lhs);
+    auto y_node = std::make_shared<VariableNode>(rhs);
+    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
+    auto neg_y = std::make_shared<MultiplyNode>(
+        std::vector<std::shared_ptr<SymbolicNode>>{neg_one, y_node});
+    auto add = std::make_shared<AddNode>(
+        std::vector<std::shared_ptr<SymbolicNode>>{x_node, neg_y});
+    SymbolicExpr expr;
+    expr.root = add;
+    return expr;
+}
+
+/// Build sin(x) as FunctionNode(Sin, [VariableNode(x)])
+static SymbolicExpr make_sin(const std::string& var_name) {
+    auto x_node = std::make_shared<VariableNode>(var_name);
+    auto sin_node = std::make_shared<FunctionNode>(
+        FunctionNode::FuncType::Sin,
+        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
+    SymbolicExpr expr;
+    expr.root = sin_node;
+    return expr;
+}
+
+/// Build cos(x) as FunctionNode(Cos, [VariableNode(x)])
+static SymbolicExpr make_cos(const std::string& var_name) {
+    auto x_node = std::make_shared<VariableNode>(var_name);
+    auto cos_node = std::make_shared<FunctionNode>(
+        FunctionNode::FuncType::Cos,
+        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
+    SymbolicExpr expr;
+    expr.root = cos_node;
+    return expr;
+}
+
+/// Build tan(x) as FunctionNode(Tan, [VariableNode(x)])
+static SymbolicExpr make_tan(const std::string& var_name) {
+    auto x_node = std::make_shared<VariableNode>(var_name);
+    auto tan_node = std::make_shared<FunctionNode>(
+        FunctionNode::FuncType::Tan,
+        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
+    SymbolicExpr expr;
+    expr.root = tan_node;
+    return expr;
+}
+
+static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& msg) {
+    const char* names[] = {"True", "False", "Unknown"};
+    int ai = static_cast<int>(actual);
+    int ei = static_cast<int>(expected);
+    if (ai == ei) {
+        std::cout << "[PASS] " << msg << std::endl;
+        g_passes++;
+    } else {
+        std::cerr << "[FAIL] " << msg
+                  << "\n  Expected: " << names[ei]
+                  << "\n  Got:      " << names[ai] << std::endl;
+        g_failures++;
+    }
+}
+
+// ============================================================
+// Test: Cache hit returns same result without re-inference (Req 23.2)
+// ============================================================
+
+void test_cache_hit_returns_same_result() {
+    TEST_CASE("Cache hit returns same result without re-inference (Req 23.2)");
+
+    AssumptionContext ctx;
+    ctx.assume_sign("x", Sign::Positive);
+
+    QueryInterface qi(ctx);
+    auto x_expr = make_var("x");
+
+    // First query — computes and caches
+    Tribool result1 = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(result1, Tribool::True, "First query: x is Positive");
+
+    // Second query — should return cached result (same value)
+    Tribool result2 = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(result2, Tribool::True, "Second query (cached): x is Positive");
+
+    // Verify consistency across different property queries on same expression
+    Tribool neg1 = qi.query_negative(x_expr);
+    Tribool neg2 = qi.query_negative(x_expr);
+    EXPECT_TRIBOOL(neg1, Tribool::False, "First query: x is not Negative");
+    EXPECT_TRIBOOL(neg2, Tribool::False, "Second query (cached): x is not Negative");
+}
+
+// ============================================================
+// Test: Cache invalidation on push (Req 23.3)
+// ============================================================
+
+void test_cache_invalidation_on_push() {
+    TEST_CASE("Cache invalidation on push (Req 23.3)");
+
+    AssumptionContext ctx;
+    ctx.assume_sign("x", Sign::Positive);
+
+    QueryInterface qi(ctx);
+    auto x_expr = make_var("x");
+
+    // Populate cache
+    Tribool before = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(before, Tribool::True, "Before push: x is Positive");
+
+    // Manually invalidate cache (simulating push_scope hook)
+    qi.invalidate_cache();
+
+    // After invalidation, query should still return correct result (recomputed)
+    Tribool after = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(after, Tribool::True, "After invalidate (push): x still Positive");
+}
+
+// ============================================================
+// Test: Cache invalidation on pop (Req 23.3)
+// ============================================================
+
+void test_cache_invalidation_on_pop() {
+    TEST_CASE("Cache invalidation on pop (Req 23.3)");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+    auto x_expr = make_var("x");
+
+    // x is undeclared → Unknown
+    Tribool before_push = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(before_push, Tribool::Unknown, "Before push: x is Unknown");
+
+    // Push scope and declare x Positive
+    ctx.push();
+    ctx.assume_sign("x", Sign::Positive);
+    qi.invalidate_cache();  // Simulate hook
+
+    Tribool in_scope = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(in_scope, Tribool::True, "In pushed scope: x is Positive");
+
+    // Pop scope
+    ctx.pop();
+    qi.invalidate_cache();  // Simulate hook
+
+    // After pop, x should be Unknown again
+    Tribool after_pop = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(after_pop, Tribool::Unknown, "After pop: x is Unknown again");
+}
+
+// ============================================================
+// Test: Cache invalidation on assume (Req 23.3)
+// ============================================================
+
+void test_cache_invalidation_on_assume() {
+    TEST_CASE("Cache invalidation on assume (Req 23.3)");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+    auto x_expr = make_var("x");
+
+    // Initially unknown
+    Tribool before = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(before, Tribool::Unknown, "Before assume: x is Unknown");
+
+    // Declare x Positive
+    ctx.assume_sign("x", Sign::Positive);
+    qi.invalidate_cache();  // Simulate hook
+
+    // Now should be True
+    Tribool after = qi.query_positive(x_expr);
+    EXPECT_TRIBOOL(after, Tribool::True, "After assume + invalidate: x is Positive");
+}
+
+// ============================================================
+// Test: query_conditions for simple variable (Req 21.2)
+// ============================================================
+
+void test_query_conditions_simple_variable() {
+    TEST_CASE("query_conditions for simple variable (Req 21.2)");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+    auto x_expr = make_var("x");
+
+    // Query: under what conditions is x > 0?
+    auto conditions = qi.query_conditions(x_expr, Sign::Positive);
+
+    EXPECT_TRUE(conditions.size() == 1,
+                "Single variable should return exactly 1 condition set");
+
+    if (!conditions.empty()) {
+        const auto& cs = conditions[0];
+        EXPECT_TRUE(cs.sign_conditions.size() == 1,
+                    "Condition set should have 1 sign condition");
+        if (!cs.sign_conditions.empty()) {
+            EXPECT_TRUE(cs.sign_conditions[0].first == "x",
+                        "Sign condition variable should be 'x'");
+            EXPECT_TRUE(cs.sign_conditions[0].second == Sign::Positive,
+                        "Sign condition should be Positive");
+        }
+        EXPECT_TRUE(cs.domain_conditions.empty(),
+                    "No domain conditions for simple sign query");
+        EXPECT_TRUE(cs.relational_conditions.empty(),
+                    "No relational conditions for simple variable");
+    }
+
+    // Also test with Negative target
+    auto neg_conditions = qi.query_conditions(x_expr, Sign::Negative);
+    EXPECT_TRUE(neg_conditions.size() == 1,
+                "Negative target: single variable returns 1 condition set");
+    if (!neg_conditions.empty()) {
+        EXPECT_TRUE(neg_conditions[0].sign_conditions[0].second == Sign::Negative,
+                    "Negative target: condition should be Negative");
+    }
+}
+
+// ============================================================
+// Test: query_conditions for composite expression x - y (Req 21.3)
+// ============================================================
+
+void test_query_conditions_subtraction() {
+    TEST_CASE("query_conditions for composite expression x - y (Req 21.3)");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+
+    // Build x - y
+    auto expr = make_subtraction("x", "y");
+
+    // Query: under what conditions is (x - y) > 0?
+    auto conditions = qi.query_conditions(expr, Sign::Positive);
+
+    // Should return at least 2 condition sets:
+    // 1. {x: Positive, y: Negative}
+    // 2. {x GT y, y: NonNegative}
+    EXPECT_TRUE(conditions.size() >= 2,
+                "x - y Positive should return at least 2 condition sets");
+
+    if (conditions.size() >= 2) {
+        // First condition set: x Positive AND y Negative
+        const auto& cs1 = conditions[0];
+        EXPECT_TRUE(cs1.sign_conditions.size() == 2,
+                    "First condition set has 2 sign conditions");
+
+        bool has_x_positive = false;
+        bool has_y_negative = false;
+        for (const auto& sc : cs1.sign_conditions) {
+            if (sc.first == "x" && sc.second == Sign::Positive) has_x_positive = true;
+            if (sc.first == "y" && sc.second == Sign::Negative) has_y_negative = true;
+        }
+        EXPECT_TRUE(has_x_positive, "CS1: x should be Positive");
+        EXPECT_TRUE(has_y_negative, "CS1: y should be Negative");
+
+        // Second condition set: relational condition (x GT y) + y NonNegative
+        const auto& cs2 = conditions[1];
+        EXPECT_TRUE(!cs2.relational_conditions.empty(),
+                    "CS2: should have relational conditions");
+        EXPECT_TRUE(!cs2.sign_conditions.empty(),
+                    "CS2: should have sign conditions (y NonNegative)");
+    }
+}
+
+// ============================================================
+// Test: query_conditions returns empty for undetermined expressions (Req 21.3)
+// ============================================================
+
+void test_query_conditions_empty_for_complex() {
+    TEST_CASE("query_conditions returns empty for undetermined expressions");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+
+    // Null expression
+    SymbolicExpr null_expr;
+    auto conditions = qi.query_conditions(null_expr, Sign::Positive);
+    EXPECT_TRUE(conditions.empty(),
+                "Null expression should return empty conditions");
+}
+
+// ============================================================
+// Test: query_positive_definite (Req 10.5)
+// ============================================================
+
+void test_query_positive_definite() {
+    TEST_CASE("query_positive_definite (Req 10.5)");
+
+    AssumptionContext ctx;
+    // Declare matrix symbol M as PositiveDefinite
+    ctx.current_properties().declare_definiteness("M", Definiteness::PositiveDefinite);
+
+    QueryInterface qi(ctx);
+    auto m_expr = make_var("M");
+
+    EXPECT_TRIBOOL(qi.query_positive_definite(m_expr), Tribool::True,
+                   "M declared PositiveDefinite: query_positive_definite = True");
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(m_expr), Tribool::True,
+                   "M declared PositiveDefinite: query_positive_semidefinite = True (implied)");
+}
+
+// ============================================================
+// Test: query_positive_semidefinite (Req 10.5)
+// ============================================================
+
+void test_query_positive_semidefinite() {
+    TEST_CASE("query_positive_semidefinite (Req 10.5)");
+
+    AssumptionContext ctx;
+    // Declare matrix symbol A as PositiveSemiDefinite only
+    ctx.current_properties().declare_definiteness("A", Definiteness::PositiveSemiDefinite);
+
+    QueryInterface qi(ctx);
+    auto a_expr = make_var("A");
+
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(a_expr), Tribool::True,
+                   "A declared PSD: query_positive_semidefinite = True");
+    // PositiveSemiDefinite does NOT imply PositiveDefinite
+    EXPECT_TRIBOOL(qi.query_positive_definite(a_expr), Tribool::Unknown,
+                   "A declared PSD: query_positive_definite = Unknown");
+}
+
+// ============================================================
+// Test: query_positive_definite for NegativeDefinite (Req 10.5)
+// ============================================================
+
+void test_query_definiteness_negative() {
+    TEST_CASE("query_positive_definite for NegativeDefinite matrix (Req 10.5)");
+
+    AssumptionContext ctx;
+    ctx.current_properties().declare_definiteness("N", Definiteness::NegativeDefinite);
+
+    QueryInterface qi(ctx);
+    auto n_expr = make_var("N");
+
+    EXPECT_TRIBOOL(qi.query_positive_definite(n_expr), Tribool::False,
+                   "N declared NegDef: query_positive_definite = False");
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(n_expr), Tribool::False,
+                   "N declared NegDef: query_positive_semidefinite = False");
+}
+
+// ============================================================
+// Test: query_positive_definite for undeclared symbol
+// ============================================================
+
+void test_query_definiteness_undeclared() {
+    TEST_CASE("query_positive_definite for undeclared symbol");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+    auto u_expr = make_var("U");
+
+    EXPECT_TRIBOOL(qi.query_positive_definite(u_expr), Tribool::Unknown,
+                   "Undeclared: query_positive_definite = Unknown");
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(u_expr), Tribool::Unknown,
+                   "Undeclared: query_positive_semidefinite = Unknown");
+}
+
+// ============================================================
+// Test: query_algebraic (Req 8.5 via QueryInterface)
+// ============================================================
+
+void test_query_algebraic() {
+    TEST_CASE("query_algebraic");
+
+    AssumptionContext ctx;
+    // Declare x as Algebraic domain
+    ctx.assume_domain("x", Domain::Algebraic);
+
+    QueryInterface qi(ctx);
+    auto x_expr = make_var("x");
+
+    EXPECT_TRIBOOL(qi.query_algebraic(x_expr), Tribool::True,
+                   "x declared Algebraic: query_algebraic = True");
+    EXPECT_TRIBOOL(qi.query_transcendental(x_expr), Tribool::False,
+                   "x declared Algebraic: query_transcendental = False");
+
+    // Undeclared variable
+    auto y_expr = make_var("y");
+    EXPECT_TRIBOOL(qi.query_algebraic(y_expr), Tribool::Unknown,
+                   "y undeclared: query_algebraic = Unknown");
+}
+
+// ============================================================
+// Test: query_transcendental
+// ============================================================
+
+void test_query_transcendental() {
+    TEST_CASE("query_transcendental");
+
+    AssumptionContext ctx;
+    ctx.current_properties().declare_transcendental("pi_sym");
+
+    QueryInterface qi(ctx);
+    auto pi_expr = make_var("pi_sym");
+
+    EXPECT_TRIBOOL(qi.query_transcendental(pi_expr), Tribool::True,
+                   "pi_sym declared Transcendental: query_transcendental = True");
+    EXPECT_TRIBOOL(qi.query_algebraic(pi_expr), Tribool::False,
+                   "pi_sym declared Transcendental: query_algebraic = False");
+}
+
+// ============================================================
+// Test: query_finite
+// ============================================================
+
+void test_query_finite() {
+    TEST_CASE("query_finite");
+
+    AssumptionContext ctx;
+    ctx.current_properties().declare_finiteness("a", Finiteness::Finite);
+
+    QueryInterface qi(ctx);
+    auto a_expr = make_var("a");
+
+    EXPECT_TRIBOOL(qi.query_finite(a_expr), Tribool::True,
+                   "a declared Finite: query_finite = True");
+    EXPECT_TRIBOOL(qi.query_divergent(a_expr), Tribool::False,
+                   "a declared Finite: query_divergent = False");
+
+    // Undeclared
+    auto b_expr = make_var("b");
+    EXPECT_TRIBOOL(qi.query_finite(b_expr), Tribool::Unknown,
+                   "b undeclared: query_finite = Unknown");
+    EXPECT_TRIBOOL(qi.query_divergent(b_expr), Tribool::Unknown,
+                   "b undeclared: query_divergent = Unknown");
+}
+
+// ============================================================
+// Test: query_divergent
+// ============================================================
+
+void test_query_divergent() {
+    TEST_CASE("query_divergent");
+
+    AssumptionContext ctx;
+    ctx.current_properties().declare_finiteness("d", Finiteness::Divergent);
+
+    QueryInterface qi(ctx);
+    auto d_expr = make_var("d");
+
+    EXPECT_TRIBOOL(qi.query_divergent(d_expr), Tribool::True,
+                   "d declared Divergent: query_divergent = True");
+    EXPECT_TRIBOOL(qi.query_finite(d_expr), Tribool::False,
+                   "d declared Divergent: query_finite = False");
+}
+
+// ============================================================
+// Test: query_periodic for declared periodic symbol
+// ============================================================
+
+void test_query_periodic_declared() {
+    TEST_CASE("query_periodic for declared periodic symbol");
+
+    AssumptionContext ctx;
+    // Declare f as periodic with period 2*pi (represented as a number for simplicity)
+    auto period_expr = std::make_shared<SymbolicExpr>();
+    period_expr->root = std::make_shared<NumberNode>(BigInt(6));  // Simplified period
+    ctx.current_properties().declare_periodic("f", period_expr);
+
+    QueryInterface qi(ctx);
+    auto f_expr = make_var("f");
+
+    EXPECT_TRIBOOL(qi.query_periodic(f_expr), Tribool::True,
+                   "f declared periodic: query_periodic = True");
+}
+
+// ============================================================
+// Test: query_periodic for sin/cos/tan (auto-inferred)
+// ============================================================
+
+void test_query_periodic_trig() {
+    TEST_CASE("query_periodic for sin/cos/tan (auto-inferred)");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+
+    auto sin_expr = make_sin("x");
+    auto cos_expr = make_cos("x");
+    auto tan_expr = make_tan("x");
+
+    EXPECT_TRIBOOL(qi.query_periodic(sin_expr), Tribool::True,
+                   "sin(x): query_periodic = True");
+    EXPECT_TRIBOOL(qi.query_periodic(cos_expr), Tribool::True,
+                   "cos(x): query_periodic = True");
+    EXPECT_TRIBOOL(qi.query_periodic(tan_expr), Tribool::True,
+                   "tan(x): query_periodic = True");
+}
+
+// ============================================================
+// Test: get_period for sin/cos/tan
+// ============================================================
+
+void test_get_period_trig() {
+    TEST_CASE("get_period for sin/cos/tan");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+
+    auto sin_expr = make_sin("x");
+    auto cos_expr = make_cos("x");
+    auto tan_expr = make_tan("x");
+
+    auto sin_period = qi.get_period(sin_expr);
+    auto cos_period = qi.get_period(cos_expr);
+    auto tan_period = qi.get_period(tan_expr);
+
+    EXPECT_TRUE(sin_period.has_value(), "sin(x) should have a period");
+    EXPECT_TRUE(cos_period.has_value(), "cos(x) should have a period");
+    EXPECT_TRUE(tan_period.has_value(), "tan(x) should have a period");
+
+    // sin and cos should have the same period (2*pi)
+    if (sin_period.has_value() && cos_period.has_value()) {
+        std::string sin_p_str = sin_period->to_string();
+        std::string cos_p_str = cos_period->to_string();
+        EXPECT_TRUE(sin_p_str == cos_p_str,
+                    "sin and cos should have the same period (2*pi)");
+    }
+}
+
+// ============================================================
+// Test: get_period returns nullopt for non-periodic
+// ============================================================
+
+void test_get_period_non_periodic() {
+    TEST_CASE("get_period returns nullopt for non-periodic expression");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+
+    auto x_expr = make_var("x");
+    auto period = qi.get_period(x_expr);
+    EXPECT_TRUE(!period.has_value(),
+                "Variable x (undeclared periodic) should have no period");
+
+    // Null expression
+    SymbolicExpr null_expr;
+    auto null_period = qi.get_period(null_expr);
+    EXPECT_TRUE(!null_period.has_value(),
+                "Null expression should have no period");
+}
+
+// ============================================================
+// Test: Cache works across multiple property types
+// ============================================================
+
+void test_cache_multiple_properties() {
+    TEST_CASE("Cache works across multiple property types");
+
+    AssumptionContext ctx;
+    ctx.assume_sign("x", Sign::Positive);
+    ctx.assume_domain("x", Domain::Integer);
+
+    QueryInterface qi(ctx);
+    auto x_expr = make_var("x");
+
+    // Query multiple properties — each should be cached independently
+    Tribool pos = qi.query_positive(x_expr);
+    Tribool intg = qi.query_integer(x_expr);
+    Tribool neg = qi.query_negative(x_expr);
+
+    EXPECT_TRIBOOL(pos, Tribool::True, "x Positive cached correctly");
+    EXPECT_TRIBOOL(intg, Tribool::True, "x Integer cached correctly");
+    EXPECT_TRIBOOL(neg, Tribool::False, "x not Negative cached correctly");
+
+    // Query again — should hit cache
+    EXPECT_TRIBOOL(qi.query_positive(x_expr), Tribool::True, "x Positive (cache hit)");
+    EXPECT_TRIBOOL(qi.query_integer(x_expr), Tribool::True, "x Integer (cache hit)");
+    EXPECT_TRIBOOL(qi.query_negative(x_expr), Tribool::False, "x not Negative (cache hit)");
+
+    // Invalidate and re-query
+    qi.invalidate_cache();
+    EXPECT_TRIBOOL(qi.query_positive(x_expr), Tribool::True, "x Positive after invalidate");
+    EXPECT_TRIBOOL(qi.query_integer(x_expr), Tribool::True, "x Integer after invalidate");
+}
+
+// ============================================================
+// main
+// ============================================================
+
+int main() {
+    // Cache tests (Req 23.2, 23.3)
+    test_cache_hit_returns_same_result();
+    test_cache_invalidation_on_push();
+    test_cache_invalidation_on_pop();
+    test_cache_invalidation_on_assume();
+    test_cache_multiple_properties();
+
+    // query_conditions tests (Req 21.2, 21.3)
+    test_query_conditions_simple_variable();
+    test_query_conditions_subtraction();
+    test_query_conditions_empty_for_complex();
+
+    // Matrix definiteness tests (Req 10.5)
+    test_query_positive_definite();
+    test_query_positive_semidefinite();
+    test_query_definiteness_negative();
+    test_query_definiteness_undeclared();
+
+    // Extended property queries
+    test_query_algebraic();
+    test_query_transcendental();
+    test_query_finite();
+    test_query_divergent();
+    test_query_periodic_declared();
+    test_query_periodic_trig();
+    test_get_period_trig();
+    test_get_period_non_periodic();
+
+    return TEST_REPORT();
+}

@@ -78,11 +78,11 @@ void test_assume_domain_equivalence() {
 
     // Test all domain values
     std::vector<Domain> domains = {
-        Domain::Complex, Domain::Real, Domain::Rational,
+        Domain::Complex, Domain::Real, Domain::Algebraic, Domain::Rational,
         Domain::Integer, Domain::Natural, Domain::PositiveInt
     };
     std::vector<std::string> domain_names = {
-        "Complex", "Real", "Rational", "Integer", "Natural", "PositiveInt"
+        "Complex", "Real", "Algebraic", "Rational", "Integer", "Natural", "PositiveInt"
     };
 
     std::vector<std::string> variables = {"x", "alpha", "var_123"};

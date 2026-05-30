@@ -67,6 +67,209 @@ public:
     /// Check if symbol has at least the given domain specificity.
     bool has_domain(const std::string& symbol, Domain domain) const;
 
+    /**
+     * @brief Declare a symbol as continuous on a specified interval.
+     * @param symbol Symbol name.
+     * @param interval Interval on which continuity holds.
+     * @throws std::invalid_argument if the declaration contradicts an existing
+     *         overlapping declaration (e.g., downgrading differentiable to continuous-only).
+     */
+    void declare_continuous(const std::string& symbol, const Interval& interval);
+
+    /**
+     * @brief Declare a symbol as differentiable on a specified interval.
+     *
+     * Differentiability implies continuity, so this also ensures the symbol
+     * is recorded as continuous on the same interval.
+     *
+     * @param symbol Symbol name.
+     * @param interval Interval on which differentiability holds.
+     * @throws std::invalid_argument if the declaration contradicts an existing
+     *         overlapping declaration.
+     */
+    void declare_differentiable(const std::string& symbol, const Interval& interval);
+
+    /**
+     * @brief Query whether a symbol is continuous on a given interval.
+     * @param symbol Symbol name.
+     * @param interval Interval to check.
+     * @return true if the symbol has been declared continuous (or differentiable)
+     *         on an interval that covers the queried interval.
+     */
+    bool is_continuous(const std::string& symbol, const Interval& interval) const;
+
+    /**
+     * @brief Query whether a symbol is differentiable on a given interval.
+     * @param symbol Symbol name.
+     * @param interval Interval to check.
+     * @return true if the symbol has been declared differentiable on an interval
+     *         that covers the queried interval.
+     */
+    bool is_differentiable(const std::string& symbol, const Interval& interval) const;
+
+    // ============================================================
+    // Transcendental classification (Req 8)
+    // ============================================================
+
+    /**
+     * @brief Declare a symbol as transcendental.
+     *
+     * Sets the symbol's domain to Real and marks it transcendental.
+     * Throws std::invalid_argument if the symbol already has a domain more
+     * specific than Real (Algebraic, Rational, Integer, Natural, PositiveInt),
+     * since transcendental numbers cannot be algebraic.
+     *
+     * @param symbol Symbol name
+     * @throws std::invalid_argument on contradiction with Algebraic or sub-domains
+     */
+    void declare_transcendental(const std::string& symbol);
+
+    /**
+     * @brief Query whether a symbol has been declared transcendental.
+     * @param symbol Symbol name
+     * @return true if the symbol is marked transcendental
+     */
+    bool is_transcendental(const std::string& symbol) const;
+
+    // ============================================================
+    // Finiteness classification (Req 9)
+    // ============================================================
+
+    /**
+     * @brief Declare finiteness for a symbol.
+     *
+     * Finite implies Bounded (auto-calls declare_bounded).
+     * Throws std::invalid_argument if contradicting an existing finiteness
+     * (e.g., declaring Finite when already Divergent, or vice versa).
+     *
+     * @param symbol Symbol name
+     * @param f Finiteness value (Finite, Divergent, or Unknown)
+     * @throws std::invalid_argument on Finite+Divergent contradiction
+     */
+    void declare_finiteness(const std::string& symbol, Finiteness f);
+
+    /**
+     * @brief Query the finiteness classification of a symbol.
+     * @param symbol Symbol name
+     * @return Finiteness value (default: Unknown)
+     */
+    Finiteness get_finiteness(const std::string& symbol) const;
+
+    // ============================================================
+    // Matrix definiteness (Req 10)
+    // ============================================================
+
+    /**
+     * @brief Declare matrix definiteness for a symbol.
+     *
+     * PositiveDefinite implies PositiveSemiDefinite.
+     * NegativeDefinite implies NegativeSemiDefinite.
+     * Contradictions (e.g., PositiveDefinite + NegativeDefinite,
+     * PositiveDefinite + Indefinite, NegativeDefinite + Indefinite) throw.
+     *
+     * @param symbol Symbol name
+     * @param d Definiteness value
+     * @throws std::invalid_argument on contradiction
+     */
+    void declare_definiteness(const std::string& symbol, Definiteness d);
+
+    /**
+     * @brief Query the definiteness classification of a symbol.
+     * @param symbol Symbol name
+     * @return Definiteness value (default: Unknown)
+     */
+    Definiteness get_definiteness(const std::string& symbol) const;
+
+    // ============================================================
+    // Periodicity (Req 11)
+    // ============================================================
+
+    /**
+     * @brief Declare a symbol as periodic with a given period expression.
+     * @param symbol Symbol name
+     * @param period The period as a symbolic expression (must be non-null)
+     */
+    void declare_periodic(const std::string& symbol,
+                          const std::shared_ptr<SymbolicExpr>& period);
+
+    /**
+     * @brief Get the period expression for a symbol, if declared.
+     * @param symbol Symbol name
+     * @return The period expression, or std::nullopt if not periodic
+     */
+    std::optional<std::shared_ptr<SymbolicExpr>> get_period(const std::string& symbol) const;
+
+    /**
+     * @brief Query whether a symbol has been declared periodic.
+     * @param symbol Symbol name
+     * @return true if the symbol has a declared period
+     */
+    bool is_periodic(const std::string& symbol) const;
+
+    /**
+     * @brief Get all symbol names that have any declared properties.
+     * @return Vector of symbol names with at least one non-default property.
+     */
+    std::vector<std::string> get_all_symbols() const;
+
+    /// Continuity declaration (public type for serialization access).
+    struct ContinuityInfo {
+        Interval interval;
+        bool is_differentiable;
+    };
+
+    /// Monotonicity declaration (public type for serialization access).
+    struct MonotonicityInfo {
+        std::string variable;
+        Interval interval;
+        Monotonicity type;
+    };
+
+    /**
+     * @brief Get all continuity/differentiability declarations for a symbol.
+     * @param symbol Symbol name.
+     * @return Vector of continuity declarations.
+     */
+    std::vector<ContinuityInfo> get_continuity_decls(const std::string& symbol) const;
+
+    /**
+     * @brief Get all monotonicity declarations for a symbol.
+     * @param symbol Symbol name.
+     * @return Vector of monotonicity declarations.
+     */
+    std::vector<MonotonicityInfo> get_monotonicity_decls(const std::string& symbol) const;
+
+    /**
+     * @brief Declare monotonicity of a symbol with respect to a variable on an interval.
+     *
+     * Stores a MonotonicityDecl recording that the symbol is monotonically
+     * increasing/decreasing (or non-decreasing/non-increasing) with respect to
+     * the given variable over the specified interval.
+     *
+     * @param symbol   The symbol (expression name) being declared monotone.
+     * @param variable The variable with respect to which monotonicity holds.
+     * @param interval The interval on which the monotonicity property holds.
+     * @param mono     The type of monotonicity (Increasing, Decreasing, etc.).
+     */
+    void declare_monotonicity(const std::string& symbol, const std::string& variable,
+                              const Interval& interval, Monotonicity mono);
+
+    /**
+     * @brief Query the monotonicity of a symbol with respect to a variable on an interval.
+     *
+     * Searches stored MonotonicityDecl entries for the symbol. Returns the
+     * monotonicity type if the queried interval is covered by a stored
+     * declaration (i.e., the stored interval contains the queried interval),
+     * otherwise returns Monotonicity::Unknown.
+     *
+     * @param symbol   The symbol to query.
+     * @param variable The variable with respect to which monotonicity is queried.
+     * @param interval The interval to check coverage for.
+     * @return The monotonicity type if covered, or Monotonicity::Unknown.
+     */
+    Monotonicity get_monotonicity(const std::string& symbol, const std::string& variable,
+                                  const Interval& interval) const;
+
 private:
     struct SymbolProperties {
         Domain most_specific_domain = Domain::Complex;
@@ -74,6 +277,37 @@ private:
         Parity parity = Parity::Unknown;
         Boundedness boundedness = Boundedness::Unknown;
         std::optional<Interval> bounds;
+
+        /// Whether the symbol is classified as transcendental.
+        bool transcendental = false;
+
+        /// Finiteness classification (Finite, Divergent, or Unknown).
+        Finiteness finiteness = Finiteness::Unknown;
+
+        /// Matrix definiteness classification.
+        Definiteness definiteness = Definiteness::Unknown;
+
+        /// Period expression for periodic symbols (nullopt if not periodic).
+        std::optional<std::shared_ptr<SymbolicExpr>> period;
+
+        /// Continuity declaration over an interval.
+        struct ContinuityDecl {
+            Interval interval;          ///< Interval on which continuity/differentiability holds
+            bool is_differentiable;     ///< True if differentiable (implies continuous)
+        };
+
+        /// Declared continuity/differentiability intervals.
+        std::vector<ContinuityDecl> continuity_decls;
+
+        /// Monotonicity declaration with respect to a variable over an interval.
+        struct MonotonicityDecl {
+            std::string variable;       ///< Variable with respect to which monotonicity holds
+            Interval interval;          ///< Interval on which monotonicity holds
+            Monotonicity type;          ///< Type of monotonicity
+        };
+
+        /// Declared monotonicity intervals.
+        std::vector<MonotonicityDecl> monotonicity_decls;
     };
 
     std::unordered_map<std::string, SymbolProperties> properties_;
@@ -96,6 +330,12 @@ private:
 
     /// Get the specificity level of a domain (higher = more specific).
     int domain_specificity(Domain domain) const;
+
+    /// Check whether two intervals overlap (have a non-empty intersection).
+    bool intervals_overlap(const Interval& a, const Interval& b) const;
+
+    /// Check whether interval `outer` fully covers interval `inner`.
+    bool interval_covers(const Interval& outer, const Interval& inner) const;
 };
 
 } // namespace lamina

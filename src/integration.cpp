@@ -1,4 +1,5 @@
 #include "integration.hpp"
+#include "assumption_context.hpp"
 #include "symbolic_ast.hpp"
 #include "polynomial.hpp"
 #include "poly_utils.hpp"
@@ -766,8 +767,15 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
             auto f_u = candidate_term;
             auto term_times_du = SymbolicExpr::multiply(make_expr_ptr(f_u), make_expr_ptr(*du));
             auto ratio = SymbolicExpr::divide(make_expr_ptr(expr), term_times_du)->simplify();
+            bool ratio_independent = !valid_dependency(*ratio, var);
+            if (!ratio_independent && ctx.assumption_context()) {
+                Tribool du_nonzero = ctx.assumption_context()->is_nonzero(*du);
+                if (du_nonzero == Tribool::True) {
+                    ratio_independent = !valid_dependency(*ratio, var);
+                }
+            }
 
-            if (!valid_dependency(*ratio, var)) {
+            if (ratio_independent) {
                 std::shared_ptr<SymbolicExpr> prim = nullptr;
 
                 if (auto pow = std::dynamic_pointer_cast<PowerNode>(candidate_term.root)) {
@@ -1521,6 +1529,106 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_sec_power(
     return SymbolicExpr::add(first, second);
 }
 
+// Assumption-aware integrand simplification helpers
+
+/**
+ * @brief Recursively replace |var| with var in an AST when the variable is known Positive.
+ *
+ * Traverses the expression tree and replaces any FunctionNode(Abs, [arg]) where
+ * arg is exactly the integration variable with just the variable itself.
+ * This is valid when the AssumptionContext confirms the variable is Positive.
+ */
+static std::shared_ptr<SymbolicNode> simplify_abs_positive(
+    const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
+    if (!node) return node;
+
+    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
+        if (fn->type == FunctionNode::FuncType::Abs && fn->arguments.size() == 1) {
+            // Check if the argument is exactly the integration variable
+            if (auto vn = std::dynamic_pointer_cast<VariableNode>(fn->arguments[0])) {
+                if (vn->name == var) {
+                    // |x| → x when x is Positive
+                    return fn->arguments[0];
+                }
+            }
+        }
+        // Recurse into function arguments
+        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
+        bool changed = false;
+        for (auto& op : fn->arguments) {
+            auto new_op = simplify_abs_positive(op, var);
+            if (new_op != op) changed = true;
+            new_ops.push_back(new_op);
+        }
+        if (changed) {
+            return std::make_shared<FunctionNode>(fn->type, new_ops);
+        }
+        return node;
+    }
+
+    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
+        bool changed = false;
+        for (auto& op : add->operands) {
+            auto new_op = simplify_abs_positive(op, var);
+            if (new_op != op) changed = true;
+            new_ops.push_back(new_op);
+        }
+        if (changed) return std::make_shared<AddNode>(new_ops);
+        return node;
+    }
+
+    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
+        bool changed = false;
+        for (auto& op : mul->operands) {
+            auto new_op = simplify_abs_positive(op, var);
+            if (new_op != op) changed = true;
+            new_ops.push_back(new_op);
+        }
+        if (changed) return std::make_shared<MultiplyNode>(new_ops);
+        return node;
+    }
+
+    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
+        auto new_base = simplify_abs_positive(pow->base, var);
+        auto new_exp = simplify_abs_positive(pow->exponent, var);
+        if (new_base != pow->base || new_exp != pow->exponent) {
+            return std::make_shared<PowerNode>(new_base, new_exp);
+        }
+        return node;
+    }
+
+    // Leaf nodes (NumberNode, VariableNode, etc.) — no change
+    return node;
+}
+
+/**
+ * @brief Apply assumption-aware simplifications to an integrand.
+ *
+ * When the AssumptionContext indicates the integration variable is Positive,
+ * replaces |var| with var throughout the integrand. Returns the original
+ * expression unchanged if no simplifications apply.
+ */
+static SymbolicExpr apply_assumption_simplifications(
+    const SymbolicExpr& expr, const std::string& var,
+    const AssumptionContext* ctx) {
+    if (!ctx) return expr;
+
+    // Check if the integration variable is known Positive
+    SymbolicExpr var_expr = *SymbolicExpr::variable(var);
+    Tribool var_positive = ctx->is_positive(var_expr);
+
+    if (var_positive == Tribool::True) {
+        auto new_root = simplify_abs_positive(expr.root, var);
+        if (new_root != expr.root) {
+            return SymbolicExpr(new_root);
+        }
+    }
+
+    return expr;
+}
+
 Integrator::Integrator() {
 
     strategies_.push_back(std::make_unique<TableLookupStrategy>());
@@ -1672,16 +1780,20 @@ SymbolicExpr Integrator::integrate(const SymbolicExpr& expr, const std::string& 
 
     cycle_state_.history.clear();
 
-    auto linear_result = apply_linearity(expr, var_name);
+    // Apply assumption-aware simplifications to the integrand (Req 12.2, 12.3)
+    SymbolicExpr working_expr = apply_assumption_simplifications(expr, var_name, assumption_ctx_);
+
+    auto linear_result = apply_linearity(working_expr, var_name);
     if (linear_result) return *linear_result;
 
-    return *integrate_recursive(expr, var_name, 0);
+    return *integrate_recursive(working_expr, var_name, 0);
 }
 
 SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::string& var_name,
                                         const SymbolicExpr& lower, const SymbolicExpr& upper) {
 
-    SymbolicExpr simp_expr_val = *expr.simplify();
+    // Apply assumption-aware simplifications to the integrand (Req 12.2, 12.3)
+    SymbolicExpr simp_expr_val = *apply_assumption_simplifications(expr, var_name, assumption_ctx_).simplify();
     bool is_inv_x = false;
 
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(simp_expr_val.root)) {

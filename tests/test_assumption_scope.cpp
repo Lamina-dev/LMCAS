@@ -25,7 +25,7 @@ using namespace lamina;
 // ============================================================
 
 static const std::vector<Domain> ALL_DOMAINS = {
-    Domain::Complex, Domain::Real, Domain::Rational,
+    Domain::Complex, Domain::Real, Domain::Algebraic, Domain::Rational,
     Domain::Integer, Domain::Natural, Domain::PositiveInt
 };
 
@@ -42,6 +42,7 @@ static std::string domain_name(Domain d) {
     switch (d) {
         case Domain::Complex:     return "Complex";
         case Domain::Real:        return "Real";
+        case Domain::Algebraic:   return "Algebraic";
         case Domain::Rational:    return "Rational";
         case Domain::Integer:     return "Integer";
         case Domain::Natural:     return "Natural";

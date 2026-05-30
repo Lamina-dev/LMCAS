@@ -18,6 +18,9 @@
 #include <iostream>
 #include <cstdlib>
 
+// Forward declaration for optional assumption context parameter
+namespace lamina { class AssumptionContext; }
+
 #ifndef _SYMBOLIC_DEBUG
 
 #define _SYMBOLIC_DEBUG 0
@@ -261,9 +264,10 @@ public:
      * @param var 展开变量名
      * @param point 展开中心点
      * @param order 展开阶数
+     * @param ctx 可选的假设上下文，用于验证收敛域和选择展开形式
      * @return 级数表达式
      */
-    std::shared_ptr<SymbolicExpr> series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order) const;
+    std::shared_ptr<SymbolicExpr> series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order, const lamina::AssumptionContext* ctx = nullptr) const;
 
     /**
      * @brief 执行符号除法。

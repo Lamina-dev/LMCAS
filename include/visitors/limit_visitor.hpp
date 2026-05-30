@@ -5,6 +5,7 @@
 #pragma once
 
 #include "../symbolic_ast.hpp"
+#include "../assumption_context.hpp"
 #include "normalization_visitor.hpp"
 #include <iostream>
 #include <cmath>
@@ -14,6 +15,7 @@ class LimitVisitor : public SymbolicVisitor {
     std::string var;                        ///< 趋近变量名
     std::shared_ptr<SymbolicNode> point;    ///< 趋近点
     std::string direction;                  ///< 趋近方向（"+"、"-" 或空表示双侧）
+    const lamina::AssumptionContext* assumption_ctx_ = nullptr; ///< 可选假设上下文
 public:
     std::shared_ptr<SymbolicNode> result;   ///< 极限计算结果
 
@@ -22,9 +24,12 @@ public:
      * @param v 趋近变量名
      * @param p 趋近点的 AST 节点
      * @param dir 趋近方向，"+" 为右极限，"-" 为左极限，空为双侧
+     * @param ctx 可选假设上下文，用于解决符号歧义（nullptr 表示无假设）
      */
-    LimitVisitor(std::string v, std::shared_ptr<SymbolicNode> p, std::string dir = "")
-        : var(std::move(v)), point(std::move(p)), direction(std::move(dir)) {}
+    LimitVisitor(std::string v, std::shared_ptr<SymbolicNode> p, std::string dir = "",
+                 const lamina::AssumptionContext* ctx = nullptr)
+        : var(std::move(v)), point(std::move(p)), direction(std::move(dir)),
+          assumption_ctx_(ctx) {}
 
     /**
      * @brief 获取极限计算结果
@@ -93,7 +98,7 @@ public:
         auto N = num_nodes.size() == 1 ? num_nodes[0] : std::make_shared<MultiplyNode>(num_nodes);
         auto D = den_nodes.size() == 1 ? den_nodes[0] : std::make_shared<MultiplyNode>(den_nodes);
 
-        LimitVisitor sub_vis(var, point, direction);
+        LimitVisitor sub_vis(var, point, direction, assumption_ctx_);
         N->accept(sub_vis);
         auto val_n = sub_vis.get_result();
         D->accept(sub_vis);
@@ -127,6 +132,14 @@ public:
                  if (std::holds_alternative<double>(num->value)) sign_n = std::get<double>(num->value) > 0 ? 1 : -1;
                  else if (std::holds_alternative<BigInt>(num->value)) sign_n = std::get<BigInt>(num->value) > BigInt(0) ? 1 : -1;
                  else if (std::holds_alternative<Rational>(num->value)) sign_n = std::get<Rational>(num->value) > Rational(0) ? 1 : -1;
+            } else if (assumption_ctx_) {
+                 // Use assumption context to resolve sign of non-numeric numerator
+                 SymbolicExpr val_n_expr(val_n);
+                 if (assumption_ctx_->is_positive(val_n_expr) == lamina::Tribool::True) {
+                      sign_n = 1;
+                 } else if (assumption_ctx_->is_negative(val_n_expr) == lamina::Tribool::True) {
+                      sign_n = -1;
+                 }
             }
 
             DifferentiationVisitor diff_vis(var);
@@ -138,9 +151,9 @@ public:
                  auto deriv = diff_vis.get_result();
                  if(!deriv) break;
 
-                 LimitVisitor sub_vis(var, point, direction);
-                 deriv->accept(sub_vis);
-                 auto val_deriv = sub_vis.get_result();
+                 LimitVisitor sub_vis2(var, point, direction, assumption_ctx_);
+                 deriv->accept(sub_vis2);
+                 auto val_deriv = sub_vis2.get_result();
 
                  NormalizationVisitor norm;
                  val_deriv->accept(norm);
@@ -152,6 +165,14 @@ public:
                            if (std::holds_alternative<double>(num->value)) s_deriv = std::get<double>(num->value) > 0 ? 1 : -1;
                            else if (std::holds_alternative<BigInt>(num->value)) s_deriv = std::get<BigInt>(num->value) > BigInt(0) ? 1 : -1;
                            else if (std::holds_alternative<Rational>(num->value)) s_deriv = std::get<Rational>(num->value) > Rational(0) ? 1 : -1;
+                      } else if (assumption_ctx_) {
+                           // Use assumption context to resolve sign of derivative limit
+                           SymbolicExpr deriv_expr(val_deriv);
+                           if (assumption_ctx_->is_positive(deriv_expr) == lamina::Tribool::True) {
+                                s_deriv = 1;
+                           } else if (assumption_ctx_->is_negative(deriv_expr) == lamina::Tribool::True) {
+                                s_deriv = -1;
+                           }
                       }
 
                       if (i % 2 != 0) {
@@ -163,7 +184,18 @@ public:
                  }
                  curr_d = deriv;
             }
-            if (sign_d == 0) sign_d = (direction == "-" ? -1 : 1);
+            if (sign_d == 0) {
+                // Try assumption context to determine direction of approach to zero
+                if (assumption_ctx_) {
+                    SymbolicExpr d_expr(D);
+                    if (assumption_ctx_->is_positive(d_expr) == lamina::Tribool::True) {
+                        sign_d = 1;  // Approaching zero from positive side
+                    } else if (assumption_ctx_->is_negative(d_expr) == lamina::Tribool::True) {
+                        sign_d = -1; // Approaching zero from negative side
+                    }
+                }
+                if (sign_d == 0) sign_d = (direction == "-" ? -1 : 1);
+            }
 
             int final_sign = sign_n * sign_d;
             std::vector<std::shared_ptr<SymbolicNode>> inf_args;
@@ -212,7 +244,7 @@ public:
                        auto deriv = diff_vis.get_result();
                        if (!deriv) break;
 
-                       LimitVisitor sub(var, point, direction);
+                       LimitVisitor sub(var, point, direction, assumption_ctx_);
                        deriv->accept(sub);
                        auto val = sub.get_result();
 
@@ -224,6 +256,14 @@ public:
                                  if (std::holds_alternative<double>(nval->value)) s = std::get<double>(nval->value) > 0 ? 1 : -1;
                                  else if (std::holds_alternative<BigInt>(nval->value)) s = std::get<BigInt>(nval->value) > BigInt(0) ? 1 : -1;
                                  else if (std::holds_alternative<Rational>(nval->value)) s = std::get<Rational>(nval->value) > Rational(0) ? 1 : -1;
+                            } else if (assumption_ctx_) {
+                                 // Use assumption context to resolve sign of derivative limit
+                                 SymbolicExpr val_expr(val);
+                                 if (assumption_ctx_->is_positive(val_expr) == lamina::Tribool::True) {
+                                      s = 1;
+                                 } else if (assumption_ctx_->is_negative(val_expr) == lamina::Tribool::True) {
+                                      s = -1;
+                                 }
                             }
 
                             if (i % 2 != 0 && direction == "-") s *= -1;
@@ -232,7 +272,18 @@ public:
                        }
                        curr_base = deriv;
                   }
-                  if (sign_base == 0) sign_base = (direction == "-" ? -1 : 1);
+                  if (sign_base == 0) {
+                      // Try assumption context to determine direction of approach to zero
+                      if (assumption_ctx_) {
+                          SymbolicExpr base_expr(node.base);
+                          if (assumption_ctx_->is_positive(base_expr) == lamina::Tribool::True) {
+                              sign_base = 1;
+                          } else if (assumption_ctx_->is_negative(base_expr) == lamina::Tribool::True) {
+                              sign_base = -1;
+                          }
+                      }
+                      if (sign_base == 0) sign_base = (direction == "-" ? -1 : 1);
+                  }
 
                   int final_sign = 1;
                   if (odd_exp) final_sign = sign_base;

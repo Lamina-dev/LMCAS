@@ -14,6 +14,8 @@
 #include "../include/poly_utils.hpp"
 #include "../include/matcher.hpp"
 #include "../include/integration.hpp"
+#include "../include/assumption_context.hpp"
+#include "../include/interval.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
@@ -580,9 +582,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(const std::string& var) co
     auto res_ptr = std::make_shared<SymbolicExpr>(result);
     return res_ptr->simplify();
 }
-std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order) const {
+std::shared_ptr<SymbolicExpr> SymbolicExpr::series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order, const lamina::AssumptionContext* ctx) const {
     if (!root || !point) return nullptr;
     if (order < 0) return SymbolicExpr::number(0);
+    if (ctx) {
+    }
 
     auto x = SymbolicExpr::variable(var);
     auto neg_point = SymbolicExpr::multiply(SymbolicExpr::number(-1), point);

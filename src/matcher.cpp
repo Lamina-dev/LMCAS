@@ -1,4 +1,5 @@
 #include "matcher.hpp"
+#include "assumption_context.hpp"
 #include <algorithm>
 #include <iostream>
 
@@ -190,7 +191,8 @@ static bool match_recursive(const std::shared_ptr<SymbolicNode>& p_node,
 
 bool Matcher::match(const SymbolicExpr& pattern, const SymbolicExpr& target,
                   const std::unordered_set<std::string>& wildcards,
-                  MatchMap& results) {
+                  MatchMap& results,
+                  const AssumptionContext* /*ctx*/) {
     if (!pattern.root) return !target.root;
     return match_recursive(pattern.root, target.root, wildcards, results);
 }
@@ -323,6 +325,10 @@ void RewriteEngine::add_rule(const Rule& rule) {
     rules.push_back(rule);
 }
 
+void RewriteEngine::set_assumption_context(const AssumptionContext* ctx) {
+    assumption_ctx_ = ctx;
+}
+
 class RewriteVisitor : public SymbolicVisitor {
 public:
     RewriteEngine& engine;
@@ -336,13 +342,26 @@ public:
     std::shared_ptr<SymbolicNode> try_match(std::shared_ptr<SymbolicNode> node) {
         SymbolicExpr current_expr(node);
         const auto& rules = engine.get_rules();
+        const AssumptionContext* ctx = engine.get_assumption_context();
         for (const auto& rule : rules) {
             MatchMap bindings;
 
-            if (Matcher::match(rule.pattern, current_expr, rule.wildcards, bindings)) {
+            if (Matcher::match(rule.pattern, current_expr, rule.wildcards, bindings, ctx)) {
 
-                if (rule.condition && !rule.condition(bindings)) {
-                    continue;
+                // Evaluate condition: prefer assumption_condition when context is available
+                if (rule.assumption_condition && ctx) {
+                    if (!rule.assumption_condition(bindings, ctx)) {
+                        continue;
+                    }
+                } else if (rule.assumption_condition && !ctx) {
+                    // No context available; fall back to plain condition if present
+                    if (rule.condition && !rule.condition(bindings)) {
+                        continue;
+                    }
+                } else if (rule.condition) {
+                    if (!rule.condition(bindings)) {
+                        continue;
+                    }
                 }
 
                 SymbolicExpr new_expr = Matcher::replace(rule.replacement, bindings, true);

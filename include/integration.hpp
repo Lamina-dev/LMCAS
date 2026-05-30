@@ -15,6 +15,9 @@
 
 namespace lamina {
 
+// Forward declaration for optional assumption context integration
+class AssumptionContext;
+
 /** @brief 积分表条目，描述一条积分规则（模式 → 结果） */
 struct LAMINA_API IntegrationEntry {
 
@@ -474,6 +477,20 @@ public:
      */
     void set_max_depth(int d) { max_depth_ = d; }
 
+    /**
+     * @brief 设置可选的假设上下文，用于指导积分策略选择和被积函数化简。
+     *
+     * 当提供非空上下文时，积分器可利用变量的符号属性（如正性、非零性）
+     * 来简化被积函数（例如将 |x| 简化为 x）或跳过不必要的分情况讨论。
+     * 传入 nullptr 恢复默认行为（与未设置上下文时完全一致）。
+     *
+     * @param ctx 指向 AssumptionContext 的常量指针，nullptr 表示不使用假设
+     */
+    void set_assumption_context(const AssumptionContext* ctx) { assumption_ctx_ = ctx; }
+
+    /** @brief 获取当前假设上下文（可能为 nullptr） */
+    const AssumptionContext* assumption_context() const { return assumption_ctx_; }
+
 private:
     IntegrationTable table_;
     std::vector<std::unique_ptr<IntegrationStrategy>> strategies_;
@@ -484,6 +501,8 @@ private:
     CycleState cycle_state_;
 
     int max_depth_ = 8;
+
+    const AssumptionContext* assumption_ctx_ = nullptr;
 
     std::shared_ptr<SymbolicExpr> apply_linearity(
         const SymbolicExpr& expr, const std::string& var);
