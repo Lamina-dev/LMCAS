@@ -14,7 +14,7 @@
 namespace lamina {
 
 // ============================================================================
-// 辅助函数
+/// 辅助函数
 // ============================================================================
 
 /**
@@ -59,7 +59,7 @@ static bool depends_only_on(const std::shared_ptr<SymbolicExpr>& expr,
 }
 
 // ============================================================================
-// is_separable
+/// is_separable
 // ============================================================================
 
 bool is_separable(
@@ -72,13 +72,13 @@ bool is_separable(
     bool has_x = depends_on_var(rhs->root, x);
     bool has_y = depends_on_var(rhs->root, y);
 
-    // 若只依赖一个变量或都不依赖，则可分离
+    /// 若只依赖一个变量或都不依赖，则可分离
     if (!has_x || !has_y) return true;
 
-    // 检查乘法形式 f(x)*g(y)
+    /// 检查乘法形式 f(x)*g(y)
     auto mul = std::dynamic_pointer_cast<MultiplyNode>(rhs->root);
     if (mul) {
-        // 将因子分为仅含 x 的和仅含 y 的
+        /// 将因子分为仅含 x 的和仅含 y 的
         bool all_separable = true;
         for (const auto& factor : mul->operands) {
             bool fx = depends_on_var(factor, x);
@@ -91,7 +91,7 @@ bool is_separable(
         if (all_separable) return true;
     }
 
-    // 检查除法形式 f(x)/g(y) 或 g(y)/f(x)
+    /// 检查除法形式 f(x)/g(y) 或 g(y)/f(x)
     auto pow = std::dynamic_pointer_cast<PowerNode>(rhs->root);
     if (pow) {
         auto exp_node = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
@@ -100,7 +100,7 @@ bool is_separable(
             int eq;
             lmmc_double_nearly_equal_tol(exp_val, -1.0, 1e-12, 1e-12, &eq);
             if (eq) {
-                // rhs = base^(-1) = 1/base; 若 base 仅含一个变量则可分离
+                /// rhs = base^(-1) = 1/base; 若 base 仅含一个变量则可分离
                 bool base_x = depends_on_var(pow->base, x);
                 bool base_y = depends_on_var(pow->base, y);
                 if ((base_x && !base_y) || (!base_x && base_y)) return true;
@@ -112,7 +112,7 @@ bool is_separable(
 }
 
 // ============================================================================
-// is_linear_first_order
+/// is_linear_first_order
 // ============================================================================
 
 bool is_linear_first_order(
@@ -128,41 +128,41 @@ bool is_linear_first_order(
         return true;
     }
 
-    // 方程形式: y' = rhs(x, y)
-    // 线性形式: y' + P(x)*y = Q(x)  →  y' = Q(x) - P(x)*y  →  rhs = Q(x) - P(x)*y
-    // 即 rhs 关于 y 是线性的: rhs = A(x) + B(x)*y，其中 Q = A, P = -B
+    /// 方程形式: y' = rhs(x, y)
+    /// 线性形式: y' + P(x)*y = Q(x)  →  y' = Q(x) - P(x)*y  →  rhs = Q(x) - P(x)*y
+    /// 即 rhs 关于 y 是线性的: rhs = A(x) + B(x)*y，其中 Q = A, P = -B
 
-    // 若 rhs 不依赖 y，则 P=0, Q=rhs
+    /// 若 rhs 不依赖 y，则 P=0, Q=rhs
     if (!depends_on_var(rhs->root, y)) {
         P = SymbolicExpr::number(0);
         Q = rhs;
         return true;
     }
 
-    // 对 rhs 关于 y 求导，若结果不依赖 y，则 rhs 关于 y 是线性的
+    /// 对 rhs 关于 y 求导，若结果不依赖 y，则 rhs 关于 y 是线性的
     auto drhs_dy = rhs->differentiate(y);
     if (!drhs_dy || depends_on_var(drhs_dy->root, y)) {
         return false;
     }
 
-    // rhs = A(x) + B(x)*y，其中 B(x) = ∂rhs/∂y
-    // 计算 A(x) = rhs|_{y=0}
+    /// rhs = A(x) + B(x)*y，其中 B(x) = ∂rhs/∂y
+    /// 计算 A(x) = rhs|_{y=0}
     auto A = rhs->substitute(y, SymbolicExpr::number(0));
     if (!A) return false;
 
-    // 验证 A 不依赖 y
+    /// 验证 A 不依赖 y
     if (depends_on_var(A->root, y)) return false;
 
-    // B(x) = drhs_dy（已验证不依赖 y）
-    // 线性形式: y' = A(x) + B(x)*y  →  y' - B(x)*y = A(x)  →  y' + (-B(x))*y = A(x)
-    // 所以 P = -B(x), Q = A(x)
+    /// B(x) = drhs_dy（已验证不依赖 y）
+    /// 线性形式: y' = A(x) + B(x)*y  →  y' - B(x)*y = A(x)  →  y' + (-B(x))*y = A(x)
+    /// 所以 P = -B(x), Q = A(x)
     P = SymbolicExpr::multiply(SymbolicExpr::number(-1), drhs_dy)->simplify();
     Q = A->simplify();
     return true;
 }
 
 // ============================================================================
-// is_homogeneous_ode
+/// is_homogeneous_ode
 // ============================================================================
 
 bool is_homogeneous_ode(
@@ -172,8 +172,8 @@ bool is_homogeneous_ode(
 {
     if (!rhs || !rhs->root) return false;
 
-    // 齐次方程: f(tx, ty) = f(x, y) 对所有 t 成立
-    // 用 t=2 进行数值测试：f(2x, 2y) 应等于 f(x, y)
+    /// 齐次方程: f(tx, ty) = f(x, y) 对所有 t 成立
+    /// 用 t=2 进行数值测试：f(2x, 2y) 应等于 f(x, y)
     auto t_val = SymbolicExpr::number(2);
     auto tx = SymbolicExpr::multiply(t_val, SymbolicExpr::variable(x));
     auto ty = SymbolicExpr::multiply(t_val, SymbolicExpr::variable(y));
@@ -182,14 +182,14 @@ bool is_homogeneous_ode(
     f_scaled = f_scaled->substitute(y, ty);
     f_scaled = f_scaled->simplify();
 
-    // 计算 f_scaled - rhs，若化简为零则齐次
+    /// 计算 f_scaled - rhs，若化简为零则齐次
     auto diff = SymbolicExpr::add(f_scaled,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs));
     diff = diff->simplify();
 
     if (diff->is_zero()) return true;
 
-    // 数值验证：在具体点 (x=1, y=1) 和 (x=2, y=3) 测试
+    /// 数值验证：在具体点 (x=1, y=1) 和 (x=2, y=3) 测试
     auto test_at = [&](double xv, double yv) -> bool {
         auto f_orig = rhs->substitute(x, SymbolicExpr::number(xv));
         f_orig = f_orig->substitute(y, SymbolicExpr::number(yv));
@@ -212,7 +212,7 @@ bool is_homogeneous_ode(
         return eq != 0;
     };
 
-    // 在多个点测试
+    /// 在多个点测试
     if (test_at(1.0, 1.0) && test_at(2.0, 3.0) && test_at(0.5, 1.5)) {
         return true;
     }
@@ -221,7 +221,7 @@ bool is_homogeneous_ode(
 }
 
 // ============================================================================
-// is_bernoulli_ode
+/// is_bernoulli_ode
 // ============================================================================
 
 bool is_bernoulli_ode(
@@ -235,68 +235,68 @@ bool is_bernoulli_ode(
     if (!rhs || !rhs->root) return false;
     if (!depends_on_var(rhs->root, y)) return false;
 
-    // Bernoulli: y' + P(x)*y = Q(x)*y^n  →  y' = -P(x)*y + Q(x)*y^n
-    // 即 rhs = -P(x)*y + Q(x)*y^n = y*(-P(x) + Q(x)*y^{n-1})
+    /// Bernoulli: y' + P(x)*y = Q(x)*y^n  →  y' = -P(x)*y + Q(x)*y^n
+    /// 即 rhs = -P(x)*y + Q(x)*y^n = y*(-P(x) + Q(x)*y^{n-1})
 
-    // 尝试 rhs / y 并检查结果是否为 A(x) + B(x)*y^m 形式
-    // 其中 m = n-1, P = -A, Q = B, n = m+1
+    /// 尝试 rhs / y 并检查结果是否为 A(x) + B(x)*y^m 形式
+    /// 其中 m = n-1, P = -A, Q = B, n = m+1
 
-    // 首先检查 rhs 是否含 y 的幂次
-    // 对 rhs 关于 y 求两次导，检查是否为 y 的幂函数
+    /// 首先检查 rhs 是否含 y 的幂次
+    /// 对 rhs 关于 y 求两次导，检查是否为 y 的幂函数
     auto d1 = rhs->differentiate(y);
     if (!d1) return false;
     auto d2 = d1->differentiate(y);
     if (!d2) return false;
 
-    // 若 d2 不依赖 y，则 rhs 关于 y 最多是二次的
-    // 对于 Bernoulli，我们需要 rhs = A(x)*y + B(x)*y^n
-    // 尝试特定的 n 值: 2, 3, -1
+    /// 若 d2 不依赖 y，则 rhs 关于 y 最多是二次的
+    /// 对于 Bernoulli，我们需要 rhs = A(x)*y + B(x)*y^n
+    /// 尝试特定的 n 值: 2, 3, -1
     for (int test_n : {2, 3, -1, 4}) {
-        // rhs 应为 -P(x)*y + Q(x)*y^n
-        // 令 rhs / y = -P(x) + Q(x)*y^{n-1}
-        // 若 n=2: rhs/y = -P(x) + Q(x)*y → 关于 y 线性
-        // 若 n=3: rhs/y = -P(x) + Q(x)*y^2 → 关于 y 二次
+        /// rhs 应为 -P(x)*y + Q(x)*y^n
+        /// 令 rhs / y = -P(x) + Q(x)*y^{n-1}
+        /// 若 n=2: rhs/y = -P(x) + Q(x)*y → 关于 y 线性
+        /// 若 n=3: rhs/y = -P(x) + Q(x)*y^2 → 关于 y 二次
 
-        // 计算 rhs 在 y=1 和 y=2 处的值来推断结构
+        /// 计算 rhs 在 y=1 和 y=2 处的值来推断结构
         auto rhs_at_y1 = rhs->substitute(y, SymbolicExpr::number(1))->simplify();
         auto rhs_at_y0 = rhs->substitute(y, SymbolicExpr::number(0))->simplify();
 
-        // 若 rhs(x, 0) = 0，则 rhs 含 y 因子
+        /// 若 rhs(x, 0) = 0，则 rhs 含 y 因子
         if (!rhs_at_y0->is_zero()) continue;
 
-        // rhs = y * h(x, y)，计算 h = rhs / y
-        // h(x, y) = -P(x) + Q(x)*y^{n-1}
-        // h(x, 0) = -P(x)
-        // h(x, 1) = -P(x) + Q(x)
+        /// rhs = y * h(x, y)，计算 h = rhs / y
+        /// h(x, y) = -P(x) + Q(x)*y^{n-1}
+        /// h(x, 0) = -P(x)
+        /// h(x, 1) = -P(x) + Q(x)
 
-        // 用 y 除 rhs：对 rhs 做 substitute 检查
-        // 实际上，若 rhs(x,0)=0，则 rhs 含 y 因子
-        // 计算 ∂rhs/∂y|_{y=0} = h(x, 0) = -P(x)
+        /// 用 y 除 rhs：对 rhs 做 substitute 检查
+        /// 实际上，若 rhs(x,0)=0，则 rhs 含 y 因子
+        /// 计算 ∂rhs/∂y|_{y=0} = h(x, 0) = -P(x)
         auto h_at_0 = d1->substitute(y, SymbolicExpr::number(0))->simplify();
         if (depends_on_var(h_at_0->root, y)) continue;
 
-        // 对于 Bernoulli n=test_n:
-        // rhs = -P*y + Q*y^n
-        // d(rhs)/dy = -P + n*Q*y^{n-1}
-        // d(rhs)/dy|_{y=0} = -P (对 n>=2)
-        // d²(rhs)/dy²|_{y=0} = n*(n-1)*Q*y^{n-2}|_{y=0}
-        //   对 n=2: = 2*Q
-        //   对 n=3: = 0 (需要 y=0 时 y^1 = 0)
+        /// 对于 Bernoulli n=test_n:
+        /// rhs = -P*y + Q*y^n
+        /// d(rhs)/dy = -P + n*Q*y^{n-1}
+        /// d(rhs)/dy|_{y=0} = -P (对 n>=2)
+        /// d²(rhs)/dy²|_{y=0} = n*(n-1)*Q*y^{n-2}|_{y=0}
+        ///   对 n=2: = 2*Q
+        ///   对 n=3: = 0 (需要 y=0 时 y^1 = 0)
 
         if (test_n == 2) {
-            // d²rhs/dy² = 2*Q(x) (常数关于 y)
+            /// d²rhs/dy² = 2*Q(x) (常数关于 y)
             auto d2_simplified = d2->simplify();
             if (depends_on_var(d2_simplified->root, y)) continue;
 
-            // 验证三阶导为零
+            /// 验证三阶导为零
             auto d3 = d2->differentiate(y)->simplify();
             if (!d3->is_zero()) continue;
 
-            // P = -(d1|_{y=0}), Q = d2/2
+            /// P = -(d1|_{y=0}), Q = d2/2
             P = SymbolicExpr::multiply(SymbolicExpr::number(-1), h_at_0)->simplify();
             Q = SymbolicExpr::divide(d2_simplified, SymbolicExpr::number(2))->simplify();
 
-            // 验证 Q 不依赖 y
+            /// 验证 Q 不依赖 y
             if (depends_on_var(Q->root, y)) continue;
 
             n = 2;
@@ -304,10 +304,10 @@ bool is_bernoulli_ode(
         }
 
         if (test_n == 3) {
-            // rhs = -P*y + Q*y^3
-            // d1 = -P + 3*Q*y^2
-            // d2 = 6*Q*y
-            // d3 = 6*Q
+            /// rhs = -P*y + Q*y^3
+            /// d1 = -P + 3*Q*y^2
+            /// d2 = 6*Q*y
+            /// d3 = 6*Q
             auto d2_at_0 = d2->substitute(y, SymbolicExpr::number(0))->simplify();
             if (!d2_at_0->is_zero()) continue;
 
@@ -326,19 +326,19 @@ bool is_bernoulli_ode(
             return true;
         }
 
-        // 对于 n=-1 和 n=4，使用数值验证
-        // rhs = -P*y + Q*y^n
-        // 在 y=1: rhs(x,1) = -P + Q
-        // 在 y=2: rhs(x,2) = -2P + Q*2^n
-        // 在 y=3: rhs(x,3) = -3P + Q*3^n
-        // 从两个方程解出 P 和 Q，用第三个验证
+        /// 对于 n=-1 和 n=4，使用数值验证
+        /// rhs = -P*y + Q*y^n
+        /// 在 y=1: rhs(x,1) = -P + Q
+        /// 在 y=2: rhs(x,2) = -2P + Q*2^n
+        /// 在 y=3: rhs(x,3) = -3P + Q*3^n
+        /// 从两个方程解出 P 和 Q，用第三个验证
     }
 
     return false;
 }
 
 // ============================================================================
-// is_exact_ode
+/// is_exact_ode
 // ============================================================================
 
 bool is_exact_ode(
@@ -349,20 +349,20 @@ bool is_exact_ode(
 {
     if (!M || !N) return false;
 
-    // 恰当条件: ∂M/∂y = ∂N/∂x
+    /// 恰当条件: ∂M/∂y = ∂N/∂x
     auto dM_dy = M->differentiate(y);
     auto dN_dx = N->differentiate(x);
 
     if (!dM_dy || !dN_dx) return false;
 
-    // 计算差值并化简
+    /// 计算差值并化简
     auto diff = SymbolicExpr::add(dM_dy,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dN_dx));
     diff = diff->simplify();
 
     if (diff->is_zero()) return true;
 
-    // 数值验证：在几个点检查
+    /// 数值验证：在几个点检查
     auto eval_at = [&](double xv, double yv) -> bool {
         auto d = diff->substitute(x, SymbolicExpr::number(xv));
         d = d->substitute(y, SymbolicExpr::number(yv));
@@ -382,7 +382,7 @@ bool is_exact_ode(
 }
 
 // ============================================================================
-// is_constant_coefficient
+/// is_constant_coefficient
 // ============================================================================
 
 bool is_constant_coefficient(
@@ -397,7 +397,7 @@ bool is_constant_coefficient(
 }
 
 // ============================================================================
-// is_euler_equation
+/// is_euler_equation
 // ============================================================================
 
 bool is_euler_equation(
@@ -405,8 +405,8 @@ bool is_euler_equation(
     const std::string& x,
     std::vector<double>& euler_consts)
 {
-    // Euler 方程: 第 k 阶导数的系数为 a_k * x^k
-    // coeffs[0] 对应最高阶 (阶数 n)，coeffs[i] 对应阶数 n-i
+    /// Euler 方程: 第 k 阶导数的系数为 a_k * x^k
+    /// coeffs[0] 对应最高阶 (阶数 n)，coeffs[i] 对应阶数 n-i
     int n = static_cast<int>(coeffs.size()) - 1;
     euler_consts.clear();
     euler_consts.resize(coeffs.size(), 0.0);
@@ -420,7 +420,7 @@ bool is_euler_equation(
         }
 
         if (order == 0) {
-            // 零阶项系数应为常数
+            /// 零阶项系数应为常数
             if (depends_on_var(coeffs[i]->root, x)) return false;
             double val = try_eval_double(coeffs[i]);
             if (std::isnan(val)) return false;
@@ -428,15 +428,15 @@ bool is_euler_equation(
             continue;
         }
 
-        // 第 order 阶导数的系数应为 a_k * x^order
-        // 除以 x^order 后应为常数
+        /// 第 order 阶导数的系数应为 a_k * x^order
+        /// 除以 x^order 后应为常数
         auto x_power = SymbolicExpr::power(
             SymbolicExpr::variable(x),
             SymbolicExpr::number(order));
         auto ratio = SymbolicExpr::divide(coeffs[i], x_power)->simplify();
 
         if (depends_on_var(ratio->root, x)) {
-            // 数值验证：在 x=1 和 x=2 处检查比值是否相同
+            /// 数值验证：在 x=1 和 x=2 处检查比值是否相同
             auto at_1 = ratio->substitute(x, SymbolicExpr::number(1.0))->simplify();
             auto at_2 = ratio->substitute(x, SymbolicExpr::number(2.0))->simplify();
             double v1 = try_eval_double(at_1);
@@ -457,7 +457,7 @@ bool is_euler_equation(
 }
 
 // ============================================================================
-// classify_first_order_ode
+/// classify_first_order_ode
 // ============================================================================
 
 ODEClassification classify_first_order_ode(
@@ -473,13 +473,13 @@ ODEClassification classify_first_order_ode(
         return result;
     }
 
-    // 1. 检测可分离变量
+    /// 1. 检测可分离变量
     if (is_separable(rhs, x, y)) {
         result.type = ODEType::Separable;
         return result;
     }
 
-    // 2. 检测一阶线性
+    /// 2. 检测一阶线性
     std::shared_ptr<SymbolicExpr> P, Q;
     if (is_linear_first_order(rhs, x, y, P, Q)) {
         result.type = ODEType::Linear1;
@@ -488,13 +488,13 @@ ODEClassification classify_first_order_ode(
         return result;
     }
 
-    // 3. 检测齐次方程
+    /// 3. 检测齐次方程
     if (is_homogeneous_ode(rhs, x, y)) {
         result.type = ODEType::Homogeneous;
         return result;
     }
 
-    // 4. 检测 Bernoulli
+    /// 4. 检测 Bernoulli
     std::shared_ptr<SymbolicExpr> bP, bQ;
     int bn;
     if (is_bernoulli_ode(rhs, x, y, bP, bQ, bn)) {
@@ -505,11 +505,11 @@ ODEClassification classify_first_order_ode(
         return result;
     }
 
-    // 5. 检测恰当方程
-    // 将 y' = rhs 改写为 M + N*y' = 0 形式: -rhs + y' = 0
-    // 即 M = -rhs, N = 1（标准形式 M*dx + N*dy = 0 → M + N*dy/dx = 0）
-    // 更一般地: 若 rhs = f(x,y)，则 -f(x,y)*dx + dy = 0
-    // M = -f(x,y), N = 1
+    /// 5. 检测恰当方程
+    /// 将 y' = rhs 改写为 M + N*y' = 0 形式: -rhs + y' = 0
+    /// 即 M = -rhs, N = 1（标准形式 M*dx + N*dy = 0 → M + N*dy/dx = 0）
+    /// 更一般地: 若 rhs = f(x,y)，则 -f(x,y)*dx + dy = 0
+    /// M = -f(x,y), N = 1
     auto neg_rhs = SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs)->simplify();
     auto one = SymbolicExpr::number(1);
     if (is_exact_ode(neg_rhs, one, x, y)) {
@@ -524,7 +524,7 @@ ODEClassification classify_first_order_ode(
 }
 
 // ============================================================================
-// classify_higher_order_ode
+/// classify_higher_order_ode
 // ============================================================================
 
 ODEClassification classify_higher_order_ode(
@@ -541,7 +541,7 @@ ODEClassification classify_higher_order_ode(
         return result;
     }
 
-    // 1. 检测常系数
+    /// 1. 检测常系数
     if (is_constant_coefficient(coeffs, x)) {
         if (result.order == 2) {
             result.type = ODEType::Linear2_ConstCoeff;
@@ -549,7 +549,7 @@ ODEClassification classify_higher_order_ode(
             result.type = ODEType::HigherOrder_ConstCoeff;
         }
 
-        // 提取数值系数
+        /// 提取数值系数
         result.const_coeffs.clear();
         for (const auto& c : coeffs) {
             double val = try_eval_double(c);
@@ -559,7 +559,7 @@ ODEClassification classify_higher_order_ode(
         return result;
     }
 
-    // 2. 检测 Euler 方程
+    /// 2. 检测 Euler 方程
     std::vector<double> euler_consts;
     if (is_euler_equation(coeffs, x, euler_consts)) {
         result.type = ODEType::Euler;
@@ -575,13 +575,13 @@ ODEClassification classify_higher_order_ode(
 } // namespace lamina
 
 // ============================================================================
-// 一阶 ODE 求解方法实现
+/// 一阶 ODE 求解方法实现
 // ============================================================================
 
 namespace lamina {
 
 // ============================================================================
-// solve_homogeneous_ode
+/// solve_homogeneous_ode
 // ============================================================================
 
 ODESolution solve_homogeneous_ode(
@@ -593,40 +593,40 @@ ODESolution solve_homogeneous_ode(
     result.method_used = ODEType::Homogeneous;
     result.constants = {"C"};
 
-    // 齐次方程 y' = f(y/x)
-    // 令 v = y/x，则 y = v*x，y' = v + x*v'
-    // 代入: v + x*v' = f(v)
-    // 即: x*v' = f(v) - v
-    // 分离变量: dv/(f(v) - v) = dx/x
+    /// 齐次方程 y' = f(y/x)
+    /// 令 v = y/x，则 y = v*x，y' = v + x*v'
+    /// 代入: v + x*v' = f(v)
+    /// 即: x*v' = f(v) - v
+    /// 分离变量: dv/(f(v) - v) = dx/x
 
-    // 将 rhs 中的 y 替换为 v*x，得到 f 关于 v 和 x 的表达式
-    // 由于齐次性，f(x, vx) = f(1, v)（令 t=1/x 缩放）
-    // 所以直接用 x=1, y=v 代入得到 f(v)
+    /// 将 rhs 中的 y 替换为 v*x，得到 f 关于 v 和 x 的表达式
+    /// 由于齐次性，f(x, vx) = f(1, v)（令 t=1/x 缩放）
+    /// 所以直接用 x=1, y=v 代入得到 f(v)
     std::string v_name = "v";
     auto v_var = SymbolicExpr::variable(v_name);
     auto x_var = SymbolicExpr::variable(x);
 
-    // f(v) = rhs(1, v)：将 x=1, y=v 代入
+    /// f(v) = rhs(1, v)：将 x=1, y=v 代入
     auto f_v = rhs->substitute(x, SymbolicExpr::number(1));
     f_v = f_v->substitute(y, v_var);
     f_v = f_v->simplify();
 
-    // 分离变量方程: dv/(f(v) - v) = dx/x
-    // 积分: ∫ dv/(f(v) - v) = ∫ dx/x = ln|x| + C
+    /// 分离变量方程: dv/(f(v) - v) = dx/x
+    /// 积分: ∫ dv/(f(v) - v) = ∫ dx/x = ln|x| + C
     auto f_minus_v = SymbolicExpr::add(f_v,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), v_var));
     f_minus_v = f_minus_v->simplify();
 
-    // 计算 ∫ 1/(f(v) - v) dv
+    /// 计算 ∫ 1/(f(v) - v) dv
     auto integrand = SymbolicExpr::divide(SymbolicExpr::number(1), f_minus_v);
     auto lhs_integral = integrand->integrate(v_name);
 
-    // 右端: ln(x)
+    /// 右端: ln(x)
     auto rhs_integral = SymbolicExpr::ln(x_var);
 
-    // 解为: lhs_integral = ln(x) + C
-    // 即: lhs_integral - ln(x) = C
-    // 回代 v = y/x
+    /// 解为: lhs_integral = ln(x) + C
+    /// 即: lhs_integral - ln(x) = C
+    /// 回代 v = y/x
     auto v_replacement = SymbolicExpr::divide(
         SymbolicExpr::variable(y), x_var);
 
@@ -635,13 +635,13 @@ ODESolution solve_homogeneous_ode(
         SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs_integral));
     solution = solution->simplify();
 
-    // 返回隐式解形式: F(x,y) = C
+    /// 返回隐式解形式: F(x,y) = C
     result.general_solution = solution;
     return result;
 }
 
 // ============================================================================
-// solve_bernoulli_ode
+/// solve_bernoulli_ode
 // ============================================================================
 
 ODESolution solve_bernoulli_ode(
@@ -655,28 +655,28 @@ ODESolution solve_bernoulli_ode(
     result.method_used = ODEType::Bernoulli;
     result.constants = {"C"};
 
-    // Bernoulli 方程: y' + P(x)*y = Q(x)*y^n  (n ≠ 0, 1)
-    // 令 v = y^(1-n)，则 v' = (1-n)*y^(-n)*y'
-    // 从原方程: y' = -P(x)*y + Q(x)*y^n
-    // 两边乘以 (1-n)*y^(-n):
-    //   (1-n)*y^(-n)*y' = (1-n)*(-P(x)*y^(1-n) + Q(x))
-    //   v' = (1-n)*(-P(x)*v + Q(x))
-    //   v' + (1-n)*P(x)*v = (1-n)*Q(x)
-    // 这是关于 v 的一阶线性 ODE
+    /// Bernoulli 方程: y' + P(x)*y = Q(x)*y^n  (n ≠ 0, 1)
+    /// 令 v = y^(1-n)，则 v' = (1-n)*y^(-n)*y'
+    /// 从原方程: y' = -P(x)*y + Q(x)*y^n
+    /// 两边乘以 (1-n)*y^(-n):
+    ///   (1-n)*y^(-n)*y' = (1-n)*(-P(x)*y^(1-n) + Q(x))
+    ///   v' = (1-n)*(-P(x)*v + Q(x))
+    ///   v' + (1-n)*P(x)*v = (1-n)*Q(x)
+    /// 这是关于 v 的一阶线性 ODE
 
     int one_minus_n = 1 - n;
     auto coeff = SymbolicExpr::number(one_minus_n);
 
-    // 线性 ODE 的系数: P_linear = (1-n)*P(x), Q_linear = (1-n)*Q(x)
+    /// 线性 ODE 的系数: P_linear = (1-n)*P(x), Q_linear = (1-n)*Q(x)
     auto P_linear = SymbolicExpr::multiply(coeff, P)->simplify();
     auto Q_linear = SymbolicExpr::multiply(coeff, Q)->simplify();
 
-    // 用积分因子法求解线性 ODE: v' + P_linear*v = Q_linear
-    // 积分因子 μ = exp(∫P_linear dx)
+    /// 用积分因子法求解线性 ODE: v' + P_linear*v = Q_linear
+    /// 积分因子 μ = exp(∫P_linear dx)
     auto intP = P_linear->integrate(x);
     auto mu = SymbolicExpr::exp(intP);
 
-    // v = (1/μ) * (∫ Q_linear * μ dx + C)
+    /// v = (1/μ) * (∫ Q_linear * μ dx + C)
     auto Q_mu = SymbolicExpr::multiply(Q_linear, mu)->simplify();
     auto int_Q_mu = Q_mu->integrate(x);
 
@@ -684,9 +684,9 @@ ODESolution solve_bernoulli_ode(
     auto numerator = SymbolicExpr::add(int_Q_mu, C_const);
     auto v_solution = SymbolicExpr::divide(numerator, mu)->simplify();
 
-    // 回代: v = y^(1-n)，所以 y = v^(1/(1-n))
-    // y^(1-n) = v_solution
-    // y = v_solution^(1/(1-n))
+    /// 回代: v = y^(1-n)，所以 y = v^(1/(1-n))
+    /// y^(1-n) = v_solution
+    /// y = v_solution^(1/(1-n))
     auto exponent = SymbolicExpr::divide(
         SymbolicExpr::number(1),
         SymbolicExpr::number(one_minus_n));
@@ -697,7 +697,7 @@ ODESolution solve_bernoulli_ode(
 }
 
 // ============================================================================
-// find_integrating_factor
+/// find_integrating_factor
 // ============================================================================
 
 std::shared_ptr<SymbolicExpr> find_integrating_factor(
@@ -708,7 +708,7 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
 {
     if (!M || !N) return nullptr;
 
-    // 计算 ∂M/∂y - ∂N/∂x
+    /// 计算 ∂M/∂y - ∂N/∂x
     auto dM_dy = M->differentiate(y);
     auto dN_dx = N->differentiate(x);
     if (!dM_dy || !dN_dx) return nullptr;
@@ -718,26 +718,26 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     diff = diff->simplify();
 
     if (diff->is_zero()) {
-        // 已经恰当，积分因子为 1
+        /// 已经恰当，积分因子为 1
         return SymbolicExpr::number(1);
     }
 
-    // 尝试 μ = μ(x): (∂M/∂y - ∂N/∂x) / N 仅依赖 x
+    /// 尝试 μ = μ(x): (∂M/∂y - ∂N/∂x) / N 仅依赖 x
     if (N && !N->is_zero()) {
         auto ratio_x = SymbolicExpr::divide(diff, N)->simplify();
         if (!depends_on_var(ratio_x->root, y)) {
-            // μ(x) = exp(∫ ratio_x dx)
+            /// μ(x) = exp(∫ ratio_x dx)
             auto int_ratio = ratio_x->integrate(x);
             return SymbolicExpr::exp(int_ratio);
         }
     }
 
-    // 尝试 μ = μ(y): (∂N/∂x - ∂M/∂y) / M 仅依赖 y
+    /// 尝试 μ = μ(y): (∂N/∂x - ∂M/∂y) / M 仅依赖 y
     if (M && !M->is_zero()) {
         auto neg_diff = SymbolicExpr::multiply(SymbolicExpr::number(-1), diff)->simplify();
         auto ratio_y = SymbolicExpr::divide(neg_diff, M)->simplify();
         if (!depends_on_var(ratio_y->root, x)) {
-            // μ(y) = exp(∫ ratio_y dy)
+            /// μ(y) = exp(∫ ratio_y dy)
             auto int_ratio = ratio_y->integrate(y);
             return SymbolicExpr::exp(int_ratio);
         }
@@ -747,7 +747,7 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
 }
 
 // ============================================================================
-// solve_exact_ode
+/// solve_exact_ode
 // ============================================================================
 
 ODESolution solve_exact_ode(
@@ -763,43 +763,43 @@ ODESolution solve_exact_ode(
     auto M_eff = M;
     auto N_eff = N;
 
-    // 检查是否恰当，若不恰当则尝试寻找积分因子
+    /// 检查是否恰当，若不恰当则尝试寻找积分因子
     if (!is_exact_ode(M, N, x, y)) {
         auto mu = find_integrating_factor(M, N, x, y);
         if (!mu) {
-            // 无法找到积分因子
+            /// 无法找到积分因子
             result.general_solution = nullptr;
             return result;
         }
-        // 乘以积分因子
+        /// 乘以积分因子
         M_eff = SymbolicExpr::multiply(mu, M)->simplify();
         N_eff = SymbolicExpr::multiply(mu, N)->simplify();
     }
 
-    // 恰当方程: ∂F/∂x = M, ∂F/∂y = N
-    // F(x,y) = ∫ M dx + g(y)
-    // 对 F 关于 y 求导: ∂F/∂y = ∂/∂y(∫ M dx) + g'(y) = N
-    // 所以 g'(y) = N - ∂/∂y(∫ M dx)
+    /// 恰当方程: ∂F/∂x = M, ∂F/∂y = N
+    /// F(x,y) = ∫ M dx + g(y)
+    /// 对 F 关于 y 求导: ∂F/∂y = ∂/∂y(∫ M dx) + g'(y) = N
+    /// 所以 g'(y) = N - ∂/∂y(∫ M dx)
 
-    // 步骤 1: 计算 ∫ M dx（将 y 视为常数）
+    /// 步骤 1: 计算 ∫ M dx（将 y 视为常数）
     auto F_partial = M_eff->integrate(x);
 
-    // 步骤 2: 对 F_partial 关于 y 求导
+    /// 步骤 2: 对 F_partial 关于 y 求导
     auto dF_dy = F_partial->differentiate(y);
     dF_dy = dF_dy ? dF_dy->simplify() : SymbolicExpr::number(0);
 
-    // 步骤 3: g'(y) = N - dF_dy
+    /// 步骤 3: g'(y) = N - dF_dy
     auto g_prime = SymbolicExpr::add(N_eff,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dF_dy));
     g_prime = g_prime->simplify();
 
-    // 步骤 4: g(y) = ∫ g'(y) dy
+    /// 步骤 4: g(y) = ∫ g'(y) dy
     auto g_y = g_prime->integrate(y);
 
-    // 步骤 5: F(x,y) = F_partial + g(y)
+    /// 步骤 5: F(x,y) = F_partial + g(y)
     auto F_total = SymbolicExpr::add(F_partial, g_y)->simplify();
 
-    // 解为 F(x,y) = C
+    /// 解为 F(x,y) = C
     result.general_solution = F_total;
     return result;
 }
@@ -807,7 +807,7 @@ ODESolution solve_exact_ode(
 } // namespace lamina
 
 // ============================================================================
-// 高阶常系数 ODE 求解
+/// 高阶常系数 ODE 求解
 // ============================================================================
 
 namespace lamina {
@@ -838,7 +838,7 @@ static std::vector<CharRoot> find_characteristic_roots(
 
     std::vector<CharRoot> roots;
 
-    // 归一化系数（使最高次项系数为 1）
+    /// 归一化系数（使最高次项系数为 1）
     double leading = coeffs[0];
     if (std::abs(leading) < 1e-15) return {};
 
@@ -847,9 +847,9 @@ static std::vector<CharRoot> find_characteristic_roots(
         norm_coeffs[i] = coeffs[i] / leading;
     }
 
-    // 对于低阶多项式，使用解析公式
+    /// 对于低阶多项式，使用解析公式
     if (n == 1) {
-        // r + norm_coeffs[1] = 0
+        /// r + norm_coeffs[1] = 0
         double r = -norm_coeffs[1];
         roots.push_back({r, 0.0, 1, false});
         return roots;
@@ -876,8 +876,8 @@ static std::vector<CharRoot> find_characteristic_roots(
         return roots;
     }
 
-    // 对于 n >= 3，使用 Durand-Kerner 方法求所有根
-    // 初始化：在单位圆上均匀分布初始猜测
+    /// 对于 n >= 3，使用 Durand-Kerner 方法求所有根
+    /// 初始化：在单位圆上均匀分布初始猜测
     struct Complex {
         double re, im;
         Complex(double r = 0, double i = 0) : re(r), im(i) {}
@@ -900,14 +900,14 @@ static std::vector<CharRoot> find_characteristic_roots(
     };
 
     std::vector<Complex> z(n);
-    // 初始猜测：使用不同半径的点避免对称性问题
+    /// 初始猜测：使用不同半径的点避免对称性问题
     for (int i = 0; i < n; ++i) {
         double angle = 2.0 * 3.14159265358979323846 * i / n + 0.1;
         double radius = 1.0 + 0.3 * i;
         z[i] = {radius * std::cos(angle), radius * std::sin(angle)};
     }
 
-    // 求值多项式 p(z)
+    /// 求值多项式 p(z)
     auto eval_poly = [&](const Complex& val) -> Complex {
         Complex result = {1.0, 0.0};
         for (int i = 1; i <= n; ++i) {
@@ -916,7 +916,7 @@ static std::vector<CharRoot> find_characteristic_roots(
         return result;
     };
 
-    // Durand-Kerner 迭代
+    /// Durand-Kerner 迭代
     for (int iter = 0; iter < 1000; ++iter) {
         double max_change = 0.0;
         for (int i = 0; i < n; ++i) {
@@ -935,12 +935,12 @@ static std::vector<CharRoot> find_characteristic_roots(
         if (max_change < 1e-12) break;
     }
 
-    // 将数值根分类为实根和复共轭对，并检测重根
+    /// 将数值根分类为实根和复共轭对，并检测重根
     std::vector<bool> used(n, false);
     for (int i = 0; i < n; ++i) {
         if (used[i]) continue;
 
-        // 检查是否为实根（虚部接近零）
+        /// 检查是否为实根（虚部接近零）
         int is_real;
         lmmc_double_nearly_equal_tol(z[i].im, 0.0, 1e-8, 1e-8, &is_real);
 
@@ -948,7 +948,7 @@ static std::vector<CharRoot> find_characteristic_roots(
             double r = z[i].re;
             int mult = 1;
             used[i] = true;
-            // 检查重根
+            /// 检查重根
             for (int j = i + 1; j < n; ++j) {
                 if (used[j]) continue;
                 int j_real;
@@ -963,13 +963,13 @@ static std::vector<CharRoot> find_characteristic_roots(
             }
             roots.push_back({r, 0.0, mult, false});
         } else {
-            // 复根：找共轭对
+            /// 复根：找共轭对
             double re = z[i].re;
             double im = std::abs(z[i].im);
             used[i] = true;
             int mult = 1;
 
-            // 找到共轭根并标记
+            /// 找到共轭根并标记
             for (int j = i + 1; j < n; ++j) {
                 if (used[j]) continue;
                 int same_re, conj_im;
@@ -980,7 +980,7 @@ static std::vector<CharRoot> find_characteristic_roots(
                     break;
                 }
             }
-            // 检查重复的复共轭对
+            /// 检查重复的复共轭对
             for (int j = i + 1; j < n; ++j) {
                 if (used[j]) continue;
                 int same_re, same_im;
@@ -989,7 +989,7 @@ static std::vector<CharRoot> find_characteristic_roots(
                 if (same_re && same_im) {
                     mult++;
                     used[j] = true;
-                    // 也标记其共轭
+                    /// 也标记其共轭
                     for (int k = j + 1; k < n; ++k) {
                         if (used[k]) continue;
                         int k_re, k_im;
@@ -1016,7 +1016,7 @@ static std::vector<CharRoot> find_characteristic_roots(
  * 若值接近整数或简单分数，使用精确表示。
  */
 static std::shared_ptr<SymbolicExpr> clean_number(double val) {
-    // 检查是否接近整数
+    /// 检查是否接近整数
     double rounded = std::round(val);
     int eq;
     lmmc_double_nearly_equal_tol(val, rounded, 1e-10, 1e-10, &eq);
@@ -1024,7 +1024,7 @@ static std::shared_ptr<SymbolicExpr> clean_number(double val) {
         return SymbolicExpr::number(static_cast<int>(rounded));
     }
 
-    // 检查是否接近简单分数 p/q (q <= 12)
+    /// 检查是否接近简单分数 p/q (q <= 12)
     for (int q = 2; q <= 12; ++q) {
         double p = val * q;
         double p_rounded = std::round(p);
@@ -1058,20 +1058,20 @@ static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
     for (const auto& root : roots) {
         for (int k = 0; k < root.multiplicity; ++k) {
             if (!root.is_complex) {
-                // 实根: C_i * x^k * e^(r*x)
+                /// 实根: C_i * x^k * e^(r*x)
                 std::string c_name = "C" + std::to_string(const_idx++);
                 constants.push_back(c_name);
                 auto C = SymbolicExpr::variable(c_name);
 
                 std::shared_ptr<SymbolicExpr> term = C;
 
-                // x^k 因子
+                /// x^k 因子
                 if (k > 0) {
                     auto x_pow = SymbolicExpr::power(x_var, SymbolicExpr::number(k));
                     term = SymbolicExpr::multiply(term, x_pow);
                 }
 
-                // e^(r*x) 因子
+                /// e^(r*x) 因子
                 int r_zero;
                 lmmc_double_nearly_equal_tol(root.real_part, 0.0, 1e-10, 1e-10, &r_zero);
                 if (!r_zero) {
@@ -1083,9 +1083,9 @@ static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
 
                 solution = solution ? SymbolicExpr::add(solution, term) : term;
             } else {
-                // 复根 α±βi: 产生两个基本解
-                // C_a * x^k * e^(αx) * cos(βx)
-                // C_b * x^k * e^(αx) * sin(βx)
+                /// 复根 α±βi: 产生两个基本解
+                /// C_a * x^k * e^(αx) * cos(βx)
+                /// C_b * x^k * e^(αx) * sin(βx)
                 std::string ca_name = "C" + std::to_string(const_idx++);
                 std::string cb_name = "C" + std::to_string(const_idx++);
                 constants.push_back(ca_name);
@@ -1098,7 +1098,7 @@ static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
                 auto cos_term = SymbolicExpr::cos(beta_x);
                 auto sin_term = SymbolicExpr::sin(beta_x);
 
-                // e^(αx) 因子
+                /// e^(αx) 因子
                 std::shared_ptr<SymbolicExpr> exp_factor = nullptr;
                 int alpha_zero;
                 lmmc_double_nearly_equal_tol(root.real_part, 0.0, 1e-10, 1e-10, &alpha_zero);
@@ -1108,19 +1108,19 @@ static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
                     exp_factor = SymbolicExpr::exp(exp_arg);
                 }
 
-                // x^k 因子
+                /// x^k 因子
                 std::shared_ptr<SymbolicExpr> x_pow_factor = nullptr;
                 if (k > 0) {
                     x_pow_factor = SymbolicExpr::power(x_var, SymbolicExpr::number(k));
                 }
 
-                // 构造 cos 项: Ca * x^k * e^(αx) * cos(βx)
+                /// 构造 cos 项: Ca * x^k * e^(αx) * cos(βx)
                 auto term_cos = Ca;
                 if (x_pow_factor) term_cos = SymbolicExpr::multiply(term_cos, x_pow_factor);
                 if (exp_factor) term_cos = SymbolicExpr::multiply(term_cos, exp_factor);
                 term_cos = SymbolicExpr::multiply(term_cos, cos_term);
 
-                // 构造 sin 项: Cb * x^k * e^(αx) * sin(βx)
+                /// 构造 sin 项: Cb * x^k * e^(αx) * sin(βx)
                 auto term_sin = Cb;
                 if (x_pow_factor) term_sin = SymbolicExpr::multiply(term_sin, x_pow_factor);
                 if (exp_factor) term_sin = SymbolicExpr::multiply(term_sin, exp_factor);
@@ -1148,13 +1148,13 @@ static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
 } // namespace lamina
 
 // ============================================================================
-// 参数变分法与 Frobenius 级数解实现
+/// 参数变分法与 Frobenius 级数解实现
 // ============================================================================
 
 namespace lamina {
 
 // ============================================================================
-// solve_variation_of_parameters
+/// solve_variation_of_parameters
 // ============================================================================
 
 ODESolution solve_variation_of_parameters(
@@ -1172,7 +1172,7 @@ ODESolution solve_variation_of_parameters(
         return result;
     }
 
-    // 计算 y₁' 和 y₂'
+    /// 计算 y₁' 和 y₂'
     auto y1_prime = y1->differentiate(x);
     auto y2_prime = y2->differentiate(x);
 
@@ -1181,7 +1181,7 @@ ODESolution solve_variation_of_parameters(
         return result;
     }
 
-    // 计算 Wronskian: W = y₁·y₂' - y₂·y₁'
+    /// 计算 Wronskian: W = y₁·y₂' - y₂·y₁'
     auto term1 = SymbolicExpr::multiply(y1, y2_prime);
     auto term2 = SymbolicExpr::multiply(y2, y1_prime);
     auto W = SymbolicExpr::add(term1,
@@ -1193,20 +1193,20 @@ ODESolution solve_variation_of_parameters(
         return result;
     }
 
-    // 计算 u₁' = -y₂·g(x)/W
+    /// 计算 u₁' = -y₂·g(x)/W
     auto u1_prime = SymbolicExpr::divide(
         SymbolicExpr::multiply(SymbolicExpr::number(-1),
             SymbolicExpr::multiply(y2, g)),
         W);
     u1_prime = u1_prime->simplify();
 
-    // 计算 u₂' = y₁·g(x)/W
+    /// 计算 u₂' = y₁·g(x)/W
     auto u2_prime = SymbolicExpr::divide(
         SymbolicExpr::multiply(y1, g),
         W);
     u2_prime = u2_prime->simplify();
 
-    // 积分得 u₁ 和 u₂
+    /// 积分得 u₁ 和 u₂
     auto u1 = u1_prime->integrate(x);
     auto u2 = u2_prime->integrate(x);
 
@@ -1215,7 +1215,7 @@ ODESolution solve_variation_of_parameters(
         return result;
     }
 
-    // 特解: y_p = u₁·y₁ + u₂·y₂
+    /// 特解: y_p = u₁·y₁ + u₂·y₂
     auto y_p = SymbolicExpr::add(
         SymbolicExpr::multiply(u1, y1),
         SymbolicExpr::multiply(u2, y2));
@@ -1226,7 +1226,7 @@ ODESolution solve_variation_of_parameters(
 }
 
 // ============================================================================
-// classify_singular_point
+/// classify_singular_point
 // ============================================================================
 
 ODESingularityType classify_singular_point(
@@ -1237,7 +1237,7 @@ ODESingularityType classify_singular_point(
 {
     if (!p || !q) return ODESingularityType::Ordinary;
 
-    // 检查 p(x) 和 q(x) 在 x₀ 处是否解析（有限）
+    /// 检查 p(x) 和 q(x) 在 x₀ 处是否解析（有限）
     auto p_at_x0 = p->substitute(x, x0)->simplify();
     auto q_at_x0 = q->substitute(x, x0)->simplify();
 
@@ -1249,7 +1249,7 @@ ODESingularityType classify_singular_point(
         return ODESingularityType::Ordinary;
     }
 
-    // 检查正则奇点条件
+    /// 检查正则奇点条件
     auto x_var = SymbolicExpr::variable(x);
     auto x_minus_x0 = SymbolicExpr::add(x_var,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), x0));
@@ -1258,7 +1258,7 @@ ODESingularityType classify_singular_point(
     auto x2q = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
-    // 尝试用极限计算 (x-x₀)·p(x) 和 (x-x₀)²·q(x) 在 x₀ 处的值
+    /// 尝试用极限计算 (x-x₀)·p(x) 和 (x-x₀)²·q(x) 在 x₀ 处的值
     auto xp_limit = xp->limit(x, x0);
     auto x2q_limit = x2q->limit(x, x0);
 
@@ -1274,7 +1274,7 @@ ODESingularityType classify_singular_point(
 }
 
 // ============================================================================
-// solve_frobenius
+/// solve_frobenius
 // ============================================================================
 
 FrobeniusSolution solve_frobenius(
@@ -1298,8 +1298,8 @@ FrobeniusSolution solve_frobenius(
     }
 
     if (result.point_type == ODESingularityType::Ordinary) {
-        // 常点：y = ∑aₙ(x-x₀)ⁿ
-        // 通过在 x₀ 处求导来提取 p, q 的 Taylor 系数
+        /// 常点：y = ∑aₙ(x-x₀)ⁿ
+        /// 通过在 x₀ 处求导来提取 p, q 的 Taylor 系数
         std::vector<double> p_coeffs(order + 2, 0.0);
         std::vector<double> q_coeffs(order + 2, 0.0);
 
@@ -1320,11 +1320,11 @@ FrobeniusSolution solve_frobenius(
             if (!q_current) q_current = SymbolicExpr::number(0);
         }
 
-        // 递推确定系数: a₀=1, a₁=0
+        /// 递推确定系数: a₀=1, a₁=0
         std::vector<double> a(order + 1, 0.0);
         a[0] = 1.0;
 
-        // a_{n+2} = -1/((n+2)(n+1)) * ∑_{k=0}^{n}[(k+1)·a_{k+1}·p_{n-k} + a_k·q_{n-k}]
+        /// a_{n+2} = -1/((n+2)(n+1)) * ∑_{k=0}^{n}[(k+1)·a_{k+1}·p_{n-k} + a_k·q_{n-k}]
         for (int n_idx = 0; n_idx + 2 <= order; ++n_idx) {
             double sum = 0.0;
             for (int k = 0; k <= n_idx; ++k) {
@@ -1335,7 +1335,7 @@ FrobeniusSolution solve_frobenius(
             a[n_idx + 2] = -sum / denom;
         }
 
-        // 构造级数解
+        /// 构造级数解
         auto series_sol = SymbolicExpr::number(0);
         for (int k = 0; k <= order; ++k) {
             if (std::abs(a[k]) < 1e-15) continue;
@@ -1351,8 +1351,8 @@ FrobeniusSolution solve_frobenius(
         return result;
     }
 
-    // 正则奇点：Frobenius 方法
-    // 计算 P₀ = lim (x-x₀)·p(x), Q₀ = lim (x-x₀)²·q(x)
+    /// 正则奇点：Frobenius 方法
+    /// 计算 P₀ = lim (x-x₀)·p(x), Q₀ = lim (x-x₀)²·q(x)
     auto xp_expr = SymbolicExpr::multiply(x_minus_x0, p)->simplify();
     auto x2q_expr = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
@@ -1365,7 +1365,7 @@ FrobeniusSolution solve_frobenius(
     if (std::isnan(P0)) P0 = 0.0;
     if (std::isnan(Q0)) Q0 = 0.0;
 
-    // 指标方程: r(r-1) + P₀·r + Q₀ = 0  →  r² + (P₀-1)·r + Q₀ = 0
+    /// 指标方程: r(r-1) + P₀·r + Q₀ = 0  →  r² + (P₀-1)·r + Q₀ = 0
     double ind_b = P0 - 1.0;
     double ind_c = Q0;
     double ind_D = ind_b * ind_b - 4.0 * ind_c;
@@ -1386,7 +1386,7 @@ FrobeniusSolution solve_frobenius(
     if (r1 < r2) std::swap(r1, r2);
     result.indicial_roots = {r1, r2};
 
-    // 展开 (x-x₀)·p(x) 和 (x-x₀)²·q(x) 的 Taylor 系数
+    /// 展开 (x-x₀)·p(x) 和 (x-x₀)²·q(x) 的 Taylor 系数
     std::vector<double> pn_coeffs(order + 1, 0.0);
     std::vector<double> qn_coeffs(order + 1, 0.0);
 
@@ -1422,8 +1422,8 @@ FrobeniusSolution solve_frobenius(
         if (!x2q_current) x2q_current = SymbolicExpr::number(0);
     }
 
-    // 递推: a_n = -1/F(r1+n) * ∑_{k=0}^{n-1} [(r1+k)·p_{n-k} + q_{n-k}]·a_k
-    // 其中 F(s) = s(s-1) + P₀·s + Q₀
+    /// 递推: a_n = -1/F(r1+n) * ∑_{k=0}^{n-1} [(r1+k)·p_{n-k} + q_{n-k}]·a_k
+    /// 其中 F(s) = s(s-1) + P₀·s + Q₀
     auto indicial_poly = [&](double s) -> double {
         return s * (s - 1.0) + P0 * s + Q0;
     };
@@ -1448,7 +1448,7 @@ FrobeniusSolution solve_frobenius(
         a[n_idx] = -sum / F_val;
     }
 
-    // 构造级数解: y = (x-x₀)^r₁ · ∑aₙ·(x-x₀)ⁿ
+    /// 构造级数解: y = (x-x₀)^r₁ · ∑aₙ·(x-x₀)ⁿ
     auto power_prefix = SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(r1));
     auto series_part = SymbolicExpr::number(0);
 

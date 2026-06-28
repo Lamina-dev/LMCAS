@@ -21,7 +21,7 @@
 namespace lamina {
 
 // ============================================================
-// 文件局部常量与辅助函数
+/// 文件局部常量与辅助函数
 // ============================================================
 
 /**
@@ -64,7 +64,7 @@ static std::vector<int64_t> bk_reduce_to_mod_coeffs(
         return {};
     }
 
-    // 计算所有分母的 LCM 以清除分母
+    /// 计算所有分母的 LCM 以清除分母
     BigInt lcm_den(1);
     for (const auto& c : poly.coeffs) {
         BigInt den = c.get_denominator();
@@ -74,26 +74,26 @@ static std::vector<int64_t> bk_reduce_to_mod_coeffs(
 
     BigInt big_p(static_cast<long long>(p));
 
-    // 将每个系数乘以 lcm_den 得到整系数，再取模 p
+    /// 将每个系数乘以 lcm_den 得到整系数，再取模 p
     std::vector<int64_t> mod_coeffs;
     mod_coeffs.reserve(poly.coeffs.size());
 
     for (const auto& c : poly.coeffs) {
-        // integer_coeff = c * lcm_den = (num/den) * lcm_den
+        /// integer_coeff = c * lcm_den = (num/den) * lcm_den
         BigInt num = c.get_numerator();
         BigInt den = c.get_denominator();
         BigInt integer_coeff = num * (lcm_den / den);
 
-        // 取模 p
+        /// 取模 p
         BigInt rem = integer_coeff % big_p;
         int64_t rem_val = rem.to_int();
-        // 确保非负
+        /// 确保非负
         if (rem_val < 0) rem_val += p;
 
         mod_coeffs.push_back(rem_val);
     }
 
-    // 去除高次零系数
+    /// 去除高次零系数
     while (!mod_coeffs.empty() && mod_coeffs.back() == 0) {
         mod_coeffs.pop_back();
     }
@@ -125,7 +125,7 @@ static std::vector<int64_t> bk_derivative_mod(
         deriv.push_back(coeff);
     }
 
-    // 去除高次零系数
+    /// 去除高次零系数
     while (!deriv.empty() && deriv.back() == 0) {
         deriv.pop_back();
     }
@@ -193,7 +193,7 @@ static void bk_div_mod(
             r[shift + i] = (r[shift + i] - factor * b[i] % p + p) % p;
         }
 
-        // 更新 deg_r
+        /// 更新 deg_r
         while (deg_r >= 0 && r[deg_r] == 0) {
             r.pop_back();
             deg_r--;
@@ -224,7 +224,7 @@ static std::vector<int64_t> bk_gcd_mod(
         b = std::move(r);
     }
 
-    // 首一化
+    /// 首一化
     if (!a.empty()) {
         int64_t lc_inv = bk_mod_inverse(a.back(), p);
         for (auto& c : a) {
@@ -253,12 +253,12 @@ static bool bk_is_square_free_mod(
 
     std::vector<int64_t> f_prime = bk_derivative_mod(f, p);
 
-    // 若导数为零多项式，则 f 不是 square-free（特征 p 下的情形）
+    /// 若导数为零多项式，则 f 不是 square-free（特征 p 下的情形）
     if (f_prime.empty()) return false;
 
     std::vector<int64_t> g = bk_gcd_mod(f, f_prime, p);
 
-    // gcd 次数为 0（即 g 为非零常数）意味着 square-free
+    /// gcd 次数为 0（即 g 为非零常数）意味着 square-free
     return g.size() <= 1;
 }
 
@@ -280,7 +280,7 @@ static int64_t bk_select_prime(const Polynomial<Rational>& poly) {
         return -1;
     }
 
-    // 提取首项系数的分子绝对值
+    /// 提取首项系数的分子绝对值
     Rational lc = poly.lead_coeff();
     BigInt lc_num = lc.get_numerator();
     if (lc_num.IsNegative()) {
@@ -291,16 +291,16 @@ static int64_t bk_select_prime(const Polynomial<Rational>& poly) {
         int64_t p = BK_SMALL_PRIMES[i];
         BigInt big_p(static_cast<long long>(p));
 
-        // 条件 1：p 不整除首项系数的分子
+        /// 条件 1：p 不整除首项系数的分子
         BigInt rem = lc_num % big_p;
         if (rem == BigInt(0)) {
             continue;
         }
 
-        // 条件 2：多项式模 p 约化后仍为 square-free
+        /// 条件 2：多项式模 p 约化后仍为 square-free
         std::vector<int64_t> f_mod_p = bk_reduce_to_mod_coeffs(poly, p);
 
-        // 约化后次数降低说明清除分母后首项系数被 p 整除
+        /// 约化后次数降低说明清除分母后首项系数被 p 整除
         if (static_cast<int>(f_mod_p.size()) - 1 < poly.degree()) {
             continue;
         }
@@ -335,7 +335,7 @@ static std::vector<int64_t> bk_poly_mul_mod(
         return {};
     }
 
-    // 计算 a * b（卷积）
+    /// 计算 a * b（卷积）
     size_t prod_size = a.size() + b.size() - 1;
     std::vector<int64_t> product(prod_size, 0);
 
@@ -347,7 +347,7 @@ static std::vector<int64_t> bk_poly_mul_mod(
         }
     }
 
-    // 对 f 取余
+    /// 对 f 取余
     std::vector<int64_t> q, r;
     bk_div_mod(product, f, p, q, r);
 
@@ -374,23 +374,23 @@ static std::vector<int64_t> bk_poly_pow_mod(
     const std::vector<int64_t>& f,
     int64_t p) {
 
-    // base^0 = 1
+    /// base^0 = 1
     if (exp == 0) {
         return {1};
     }
 
-    // base^1 mod f
+    /// base^1 mod f
     if (exp == 1) {
         std::vector<int64_t> q, r;
         bk_div_mod(base, f, p, q, r);
         return r;
     }
 
-    // Repeated squaring: 从高位到低位扫描 exp 的二进制位
+    /// Repeated squaring: 从高位到低位扫描 exp 的二进制位
     std::vector<int64_t> result = {1};  // 累积结果，初始为 1
     std::vector<int64_t> cur = base;    // 当前底数
 
-    // 先对 cur 取余确保 deg(cur) < deg(f)
+    /// 先对 cur 取余确保 deg(cur) < deg(f)
     {
         std::vector<int64_t> q, r;
         bk_div_mod(cur, f, p, q, r);
@@ -442,24 +442,24 @@ static std::vector<std::vector<int64_t>> bk_build_q_matrix(
         return Q;
     }
 
-    // 第 0 行：x^0 mod f(x) = 1
+    /// 第 0 行：x^0 mod f(x) = 1
     Q[0][0] = 1;
 
     if (n == 1) {
         return Q;
     }
 
-    // 计算 h(x) = x^p mod f(x)
+    /// 计算 h(x) = x^p mod f(x)
     std::vector<int64_t> x_poly = {0, 1};  // x
     std::vector<int64_t> h = bk_poly_pow_mod(x_poly, p, f, p);
 
-    // 第 1 行：x^p mod f(x) = h(x)
-    // 将 h 的系数填入第 1 行（不足 n 位补零）
+    /// 第 1 行：x^p mod f(x) = h(x)
+    /// 将 h 的系数填入第 1 行（不足 n 位补零）
     for (size_t j = 0; j < h.size() && j < static_cast<size_t>(n); ++j) {
         Q[1][j] = h[j];
     }
 
-    // 第 i 行（i >= 2）：x^(ip) mod f(x) = (x^((i-1)*p) mod f) * h mod f
+    /// 第 i 行（i >= 2）：x^(ip) mod f(x) = (x^((i-1)*p) mod f) * h mod f
     std::vector<int64_t> current = h;
     for (int i = 2; i < n; ++i) {
         current = bk_poly_mul_mod(current, h, f, p);
@@ -500,8 +500,8 @@ static std::vector<std::vector<int64_t>> bk_null_space(
         return {};
     }
 
-    // 构造 M = (Q - I)^T
-    // M[i][j] = Q[j][i] - (i == j ? 1 : 0)
+    /// 构造 M = (Q - I)^T
+    /// M[i][j] = Q[j][i] - (i == j ? 1 : 0)
     std::vector<std::vector<int64_t>> M(n, std::vector<int64_t>(n, 0));
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
@@ -513,15 +513,15 @@ static std::vector<std::vector<int64_t>> bk_null_space(
         }
     }
 
-    // 高斯消元（列主元），记录每行的主元列位置
-    // pivot_col[row] = 该行主元所在列，-1 表示该行为零行
+    /// 高斯消元（列主元），记录每行的主元列位置
+    /// pivot_col[row] = 该行主元所在列，-1 表示该行为零行
     std::vector<int> pivot_col(n, -1);
-    // pivot_row[col] = 该列主元所在行，-1 表示该列为自由变量
+    /// pivot_row[col] = 该列主元所在行，-1 表示该列为自由变量
     std::vector<int> pivot_row(n, -1);
 
     int current_row = 0;
     for (int col = 0; col < n && current_row < n; ++col) {
-        // 寻找列主元（当前列中绝对值最大的非零元素）
+        /// 寻找列主元（当前列中绝对值最大的非零元素）
         int pivot = -1;
         for (int row = current_row; row < n; ++row) {
             if (M[row][col] != 0) {
@@ -531,26 +531,26 @@ static std::vector<std::vector<int64_t>> bk_null_space(
         }
 
         if (pivot == -1) {
-            // 该列无主元，为自由变量
+            /// 该列无主元，为自由变量
             continue;
         }
 
-        // 交换行
+        /// 交换行
         if (pivot != current_row) {
             std::swap(M[pivot], M[current_row]);
         }
 
-        // 记录主元位置
+        /// 记录主元位置
         pivot_col[current_row] = col;
         pivot_row[col] = current_row;
 
-        // 将主元归一化为 1
+        /// 将主元归一化为 1
         int64_t lc_inv = bk_mod_inverse(M[current_row][col], p);
         for (int j = 0; j < n; ++j) {
             M[current_row][j] = (M[current_row][j] * lc_inv) % p;
         }
 
-        // 消去其他行中该列的元素
+        /// 消去其他行中该列的元素
         for (int row = 0; row < n; ++row) {
             if (row == current_row) continue;
             int64_t factor = M[row][col];
@@ -563,26 +563,26 @@ static std::vector<std::vector<int64_t>> bk_null_space(
         current_row++;
     }
 
-    // 识别自由变量（无主元的列）并构造零空间基向量
+    /// 识别自由变量（无主元的列）并构造零空间基向量
     std::vector<std::vector<int64_t>> basis;
 
     for (int col = 0; col < n; ++col) {
         if (pivot_row[col] != -1) {
-            // 该列有主元，不是自由变量
+            /// 该列有主元，不是自由变量
             continue;
         }
 
-        // 该列为自由变量，构造对应的零空间基向量
+        /// 该列为自由变量，构造对应的零空间基向量
         std::vector<int64_t> vec(n, 0);
         vec[col] = 1;  // 自由变量设为 1
 
-        // 回代：对每个有主元的行，计算对应分量
+        /// 回代：对每个有主元的行，计算对应分量
         for (int row = 0; row < n; ++row) {
             int pc = pivot_col[row];
             if (pc == -1) continue;  // 零行
-            // M[row] 已化为行简化阶梯形，M[row][pc] = 1
-            // 方程：x[pc] + sum_{free cols j} M[row][j] * x[j] = 0
-            // 所以 x[pc] = -M[row][col] mod p
+            /// M[row] 已化为行简化阶梯形，M[row][pc] = 1
+            /// 方程：x[pc] + sum_{free cols j} M[row][j] * x[j] = 0
+            /// 所以 x[pc] = -M[row][col] mod p
             vec[pc] = (p - M[row][col]) % p;
         }
 
@@ -611,7 +611,7 @@ static Polynomial<ModInt> bk_to_poly_modint(
     for (int64_t c : coeffs) {
         mod_coeffs.emplace_back(c, p);
     }
-    // 直接构造，不调用 trim()（已保证无高次零系数）
+    /// 直接构造，不调用 trim()（已保证无高次零系数）
     Polynomial<ModInt> result(var);
     result.coeffs = std::move(mod_coeffs);
     return result;
@@ -641,13 +641,13 @@ static std::vector<std::vector<int64_t>> bk_split_factors(
     int null_dim,
     int64_t p) {
 
-    // 初始因子列表：仅包含 f 本身
+    /// 初始因子列表：仅包含 f 本身
     std::vector<std::vector<int64_t>> factor_list;
     factor_list.push_back(f_coeffs);
 
-    // 遍历每个零空间基向量
+    /// 遍历每个零空间基向量
     for (const auto& basis_vec : null_basis) {
-        // 跳过平凡基向量 [1, 0, 0, ..., 0]
+        /// 跳过平凡基向量 [1, 0, 0, ..., 0]
         bool is_trivial = true;
         if (!basis_vec.empty() && basis_vec[0] == 1) {
             for (size_t i = 1; i < basis_vec.size(); ++i) {
@@ -661,62 +661,62 @@ static std::vector<std::vector<int64_t>> bk_split_factors(
         }
         if (is_trivial) continue;
 
-        // 已找到足够因子则提前终止
+        /// 已找到足够因子则提前终止
         if (static_cast<int>(factor_list.size()) >= null_dim) break;
 
-        // 将基向量解释为多项式 v(x) 的系数（去除高次零系数）
+        /// 将基向量解释为多项式 v(x) 的系数（去除高次零系数）
         std::vector<int64_t> v_poly = basis_vec;
         while (!v_poly.empty() && v_poly.back() == 0) {
             v_poly.pop_back();
         }
 
-        // 对当前因子列表中每个次数 > 1 的因子尝试分裂
+        /// 对当前因子列表中每个次数 > 1 的因子尝试分裂
         for (size_t fi = 0; fi < factor_list.size(); ++fi) {
-            // 已找到足够因子则提前终止
+            /// 已找到足够因子则提前终止
             if (static_cast<int>(factor_list.size()) >= null_dim) break;
 
-            // 只对次数 > 1 的因子尝试分裂
+            /// 只对次数 > 1 的因子尝试分裂
             if (factor_list[fi].size() <= 2) continue;
 
-            // 对 c = 0, 1, ..., p-1 计算 gcd(g, v(x) - c)
+            /// 对 c = 0, 1, ..., p-1 计算 gcd(g, v(x) - c)
             for (int64_t c = 0; c < p; ++c) {
                 if (static_cast<int>(factor_list.size()) >= null_dim) break;
 
-                // 构造 v(x) - c：从常数项减去 c
+                /// 构造 v(x) - c：从常数项减去 c
                 std::vector<int64_t> v_minus_c = v_poly;
                 if (v_minus_c.empty()) {
-                    // v(x) = 0，则 v(x) - c = -c
+                    /// v(x) = 0，则 v(x) - c = -c
                     v_minus_c.push_back((p - c) % p);
                 } else {
                     v_minus_c[0] = (v_minus_c[0] - c % p + p) % p;
                 }
-                // 去除高次零系数
+                /// 去除高次零系数
                 while (!v_minus_c.empty() && v_minus_c.back() == 0) {
                     v_minus_c.pop_back();
                 }
 
-                // 若 v(x) - c 为零多项式则跳过
+                /// 若 v(x) - c 为零多项式则跳过
                 if (v_minus_c.empty()) continue;
 
-                // 计算 h = gcd(g, v(x) - c)
+                /// 计算 h = gcd(g, v(x) - c)
                 std::vector<int64_t> h = bk_gcd_mod(factor_list[fi], v_minus_c, p);
 
-                // 检查是否为非平凡因子：0 < deg(h) < deg(g)
+                /// 检查是否为非平凡因子：0 < deg(h) < deg(g)
                 int deg_h = static_cast<int>(h.size()) - 1;
                 int deg_g = static_cast<int>(factor_list[fi].size()) - 1;
 
                 if (deg_h > 0 && deg_h < deg_g) {
-                    // 计算商 g / h
+                    /// 计算商 g / h
                     std::vector<int64_t> quotient, remainder;
                     bk_div_mod(factor_list[fi], h, p, quotient, remainder);
 
-                    // 替换 g 为 h，并将商加入因子列表
+                    /// 替换 g 为 h，并将商加入因子列表
                     factor_list[fi] = h;
                     factor_list.push_back(quotient);
 
-                    // 当前因子 g 已被分裂，跳出 c 循环
-                    // （新的 factor_list[fi] = h 可能还能继续分裂，
-                    //   但由外层 fi 循环在下一轮处理）
+                    /// 当前因子 g 已被分裂，跳出 c 循环
+                    /// （新的 factor_list[fi] = h 可能还能继续分裂，
+                    ///   但由外层 fi 循环在下一轮处理）
                     break;
                 }
             }
@@ -727,7 +727,7 @@ static std::vector<std::vector<int64_t>> bk_split_factors(
 }
 
 // ============================================================
-// 公共 API 实现
+/// 公共 API 实现
 // ============================================================
 
 /**
@@ -749,12 +749,12 @@ BerlekampResult berlekamp_factor(
 
     BerlekampResult result;
 
-    // 零多项式或常数多项式：无因子
+    /// 零多项式或常数多项式：无因子
     if (poly.is_zero() || poly.degree() <= 0) {
         return result;
     }
 
-    // 素数选取：若调用方指定了 prime > 0 则使用之，否则自动选取
+    /// 素数选取：若调用方指定了 prime > 0 则使用之，否则自动选取
     int64_t p = prime;
     if (p <= 0) {
         p = bk_select_prime(poly);
@@ -765,10 +765,10 @@ BerlekampResult berlekamp_factor(
 
     result.prime = p;
 
-    // 将多项式约化到 F_p
+    /// 将多项式约化到 F_p
     std::vector<int64_t> f_coeffs = bk_reduce_to_mod_coeffs(poly, p);
 
-    // 首一化
+    /// 首一化
     if (!f_coeffs.empty()) {
         int64_t lc = f_coeffs.back();
         if (lc != 1) {
@@ -779,30 +779,30 @@ BerlekampResult berlekamp_factor(
         }
     }
 
-    // 线性多项式：本身不可约
+    /// 线性多项式：本身不可约
     if (f_coeffs.size() <= 2) {
         result.factors.push_back(bk_to_poly_modint(f_coeffs, p, poly.variable_name));
         return result;
     }
 
-    // 构造 Berlekamp 矩阵 Q
+    /// 构造 Berlekamp 矩阵 Q
     auto Q = bk_build_q_matrix(f_coeffs, p);
 
-    // 计算 (Q - I)^T 的零空间
+    /// 计算 (Q - I)^T 的零空间
     auto null_basis = bk_null_space(Q, p);
     int null_dim = static_cast<int>(null_basis.size());
 
-    // 存储零空间信息
+    /// 存储零空间信息
     result.null_space_dim = null_dim;
     result.null_space_basis = null_basis;
 
-    // 零空间维度 = 1：多项式在 F_p 上不可约
+    /// 零空间维度 = 1：多项式在 F_p 上不可约
     if (null_dim <= 1) {
         result.factors.push_back(bk_to_poly_modint(f_coeffs, p, poly.variable_name));
         return result;
     }
 
-    // 零空间维度 > 1：多项式可分解，使用基向量分裂
+    /// 零空间维度 > 1：多项式可分解，使用基向量分裂
     auto split = bk_split_factors(f_coeffs, null_basis, null_dim, p);
     for (const auto& factor_coeffs : split) {
         result.factors.push_back(bk_to_poly_modint(factor_coeffs, p, poly.variable_name));

@@ -154,7 +154,7 @@ PlaneSymbolic plane_from_three_points(
     auto n = vector_cross(v1, v2);
     PlaneSymbolic plane;
     plane.normal = {n[0]->simplify(), n[1]->simplify(), n[2]->simplify()};
-    // d = n · p1
+    /// d = n · p1
     plane.d = vector_dot(plane.normal, p1)->simplify();
     return plane;
 }
@@ -178,14 +178,14 @@ std::string classify_quadric(const SurfaceSymbolic& surf) {
     auto F = surf.F->expand();
     if (!F) F = surf.F;
 
-    // 提取二次项系数 a*x^2、线性项、常数。
+    /// 提取二次项系数 a*x^2、线性项、常数。
     auto coeff_of_sq = [&](const std::string& v) -> double {
         auto d2 = F->differentiate(v)->differentiate(v)->simplify();
         if (d2->is_number()) return d2->to_numeric() / 2.0;
         return 0.0;
     };
     auto coeff_of_lin = [&](const std::string& v) -> double {
-        // 在所有变量=0 处的一阶偏导
+        /// 在所有变量=0 处的一阶偏导
         auto d = F->differentiate(v);
         for (auto& w : vars) d = d->substitute(w, SymbolicExpr::number(0));
         d = d->simplify();
@@ -205,12 +205,12 @@ std::string classify_quadric(const SurfaceSymbolic& surf) {
     if (n_sq == 2) return "cylinder";
     if (n_sq == 3) {
         if (n_neg == 0) {
-            // 全正：球或椭球。系数相等→球
+            /// 全正：球或椭球。系数相等→球
             if (a == b && b == c) return "sphere";
             return "ellipsoid";
         }
         if (n_pos == 0) return "ellipsoid"; // 全负，移项后等价
-        // 混合符号：锥面（常数项0）或双曲面
+        /// 混合符号：锥面（常数项0）或双曲面
         for (auto& w : vars) F = F->substitute(w, SymbolicExpr::number(0));
         auto cst = F->simplify();
         double cval = cst->is_number() ? cst->to_numeric() : 1.0;
@@ -231,7 +231,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> surface_normal(
         }
         grad.push_back(d->simplify());
     }
-    // 归一化
+    /// 归一化
     auto norm_sq = SymbolicExpr::number(0);
     for (auto& g : grad) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(g, g));
     auto norm = SymbolicExpr::sqrt(norm_sq);
@@ -251,7 +251,7 @@ PlaneSymbolic tangent_plane(
         }
         plane.normal.push_back(d->simplify());
     }
-    // d = n · point
+    /// d = n · point
     plane.d = vector_dot(plane.normal, point)->simplify();
     return plane;
 }

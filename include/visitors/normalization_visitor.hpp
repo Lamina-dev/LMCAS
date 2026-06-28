@@ -71,7 +71,7 @@ inline std::shared_ptr<SymbolicNode> norm_subst_index(
         for (auto& arg : f->arguments) args.push_back(norm_subst_index(arg, index_var, value));
         return std::make_shared<FunctionNode>(f->type, args);
     }
-    // 其它节点类型：保守地原样克隆
+    /// 其它节点类型：保守地原样克隆
     return node->clone();
 }
 
@@ -443,7 +443,7 @@ public:
             }
         }
 
-        // Merge ComplexNodes and NumberNodes
+        /// Merge ComplexNodes and NumberNodes
         std::vector<std::shared_ptr<SymbolicNode>> real_parts;
         std::vector<std::shared_ptr<SymbolicNode>> imag_parts;
         std::vector<std::shared_ptr<SymbolicNode>> non_complex_ops;
@@ -1101,8 +1101,8 @@ public:
                      }
                  }
 
-                 // Simplify powers of imaginary unit: (-1)^(n/2) for odd n
-                 // i² = -1, i³ = -i, i⁴ = 1 (handled via (-1)^(n/2) reduction)
+                 /// Simplify powers of imaginary unit: (-1)^(n/2) for odd n
+                 /// i² = -1, i³ = -i, i⁴ = 1 (handled via (-1)^(n/2) reduction)
                  if (std::holds_alternative<Rational>(e_num->value)) {
                      Rational exp_r = std::get<Rational>(e_num->value);
                      bool base_is_neg_one = false;
@@ -1117,28 +1117,28 @@ public:
                      }
 
                      if (base_is_neg_one && exp_r.get_denominator() == BigInt(2)) {
-                         // (-1)^(n/2) where n is the numerator
+                         /// (-1)^(n/2) where n is the numerator
                          long long n_val = (long long)exp_r.get_numerator().to_double();
-                         // Reduce n mod 4
+                         /// Reduce n mod 4
                          long long r_mod = ((n_val % 4) + 4) % 4;
-                         // i = (-1)^(1/2)
+                         /// i = (-1)^(1/2)
                          auto i_node = std::make_shared<PowerNode>(
                              std::make_shared<NumberNode>(BigInt(-1)),
                              std::make_shared<NumberNode>(Rational(1, 2)));
                          if (r_mod == 0) {
-                             // i⁴ = 1
+                             /// i⁴ = 1
                              result = std::make_shared<NumberNode>(BigInt(1));
                              return;
                          } else if (r_mod == 1) {
-                             // i¹ = i (keep as (-1)^(1/2))
+                             /// i¹ = i (keep as (-1)^(1/2))
                              result = i_node;
                              return;
                          } else if (r_mod == 2) {
-                             // i² = -1
+                             /// i² = -1
                              result = std::make_shared<NumberNode>(BigInt(-1));
                              return;
                          } else { // r_mod == 3
-                             // i³ = -i
+                             /// i³ = -i
                              std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {
                                  std::make_shared<NumberNode>(BigInt(-1)), i_node
                              };
@@ -1587,7 +1587,7 @@ public:
     }
 
     void visit(LogicalNode& node) override {
-        // Implication: A ⇒ B = ¬A ∨ B
+        /// Implication: A ⇒ B = ¬A ∨ B
         if (node.op == LogicalNode::Op::Implies) {
             auto not_left = std::make_shared<LogicalNode>(node.left, nullptr, LogicalNode::Op::Not);
             auto or_node = std::make_shared<LogicalNode>(not_left, node.right, LogicalNode::Op::Or);
@@ -1595,9 +1595,9 @@ public:
             return;
         }
 
-        // NOT handling: De Morgan's laws and double negation
+        /// NOT handling: De Morgan's laws and double negation
         if (node.op == LogicalNode::Op::Not) {
-            // Normalize the operand first
+            /// Normalize the operand first
             std::shared_ptr<SymbolicNode> new_left = nullptr;
             if (node.left) {
                 node.left->accept(*this);
@@ -1605,13 +1605,13 @@ public:
             }
             if (!new_left) new_left = node.left;
 
-            // Double negation: ¬(¬A) = A
+            /// Double negation: ¬(¬A) = A
             if (auto inner_logical = std::dynamic_pointer_cast<LogicalNode>(new_left)) {
                 if (inner_logical->op == LogicalNode::Op::Not) {
                     result = inner_logical->left;
                     return;
                 }
-                // De Morgan's law: ¬(A∧B) = ¬A∨¬B
+                /// De Morgan's law: ¬(A∧B) = ¬A∨¬B
                 if (inner_logical->op == LogicalNode::Op::And) {
                     auto not_a = std::make_shared<LogicalNode>(inner_logical->left, nullptr, LogicalNode::Op::Not);
                     auto not_b = std::make_shared<LogicalNode>(inner_logical->right, nullptr, LogicalNode::Op::Not);
@@ -1619,7 +1619,7 @@ public:
                     or_node->accept(*this);
                     return;
                 }
-                // De Morgan's law: ¬(A∨B) = ¬A∧¬B
+                /// De Morgan's law: ¬(A∨B) = ¬A∧¬B
                 if (inner_logical->op == LogicalNode::Op::Or) {
                     auto not_a = std::make_shared<LogicalNode>(inner_logical->left, nullptr, LogicalNode::Op::Not);
                     auto not_b = std::make_shared<LogicalNode>(inner_logical->right, nullptr, LogicalNode::Op::Not);
@@ -1633,7 +1633,7 @@ public:
             return;
         }
 
-        // And / Or: normalize operands
+        /// And / Or: normalize operands
         std::shared_ptr<SymbolicNode> new_left = nullptr;
         std::shared_ptr<SymbolicNode> new_right = nullptr;
 
@@ -1657,16 +1657,16 @@ public:
         new_branches.reserve(node.branches.size());
 
         for (const auto& b : node.branches) {
-            // Normalize expression
+            /// Normalize expression
             b.expression->accept(*this);
             auto new_expr = result;
 
-            // Normalize condition
+            /// Normalize condition
             b.condition->accept(*this);
             auto new_cond = result;
 
-            // Validate condition is RelationalNode or LogicalNode
-            // (keep it regardless, but this ensures normalization is applied)
+            /// Validate condition is RelationalNode or LogicalNode
+            /// (keep it regardless, but this ensures normalization is applied)
             new_branches.push_back({new_expr, new_cond});
         }
 
@@ -1689,7 +1689,7 @@ public:
         node.upper_bound->accept(*this);
         auto new_upper = result;
 
-        // 当上下界均为具体整数且范围较小时，展开求和为显式和。
+        /// 当上下界均为具体整数且范围较小时，展开求和为显式和。
         auto lo_n = std::dynamic_pointer_cast<NumberNode>(new_lower);
         auto hi_n = std::dynamic_pointer_cast<NumberNode>(new_upper);
         if (lo_n && hi_n && std::holds_alternative<BigInt>(lo_n->value)
@@ -1766,7 +1766,7 @@ public:
         node.predicate->accept(*this);
         auto new_predicate = result;
 
-        // Simplify ∀x∈S: true → true
+        /// Simplify ∀x∈S: true → true
         if (node.quantifier_type == QuantifierNode::Type::ForAll) {
             if (new_predicate->is_one()) {
                 result = std::make_shared<NumberNode>(BigInt(1));
@@ -1774,7 +1774,7 @@ public:
             }
         }
 
-        // Simplify ∃x∈S: false → false
+        /// Simplify ∃x∈S: false → false
         if (node.quantifier_type == QuantifierNode::Type::Exists) {
             if (new_predicate->is_zero()) {
                 result = std::make_shared<NumberNode>(BigInt(0));

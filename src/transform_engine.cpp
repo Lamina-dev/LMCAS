@@ -18,7 +18,7 @@
 namespace lamina {
 
 // ============================================================
-// 辅助函数
+/// 辅助函数
 // ============================================================
 
 static bool te_contains_var(const std::shared_ptr<SymbolicNode>& node,
@@ -190,14 +190,14 @@ static bool te_extract_exp(const std::shared_ptr<SymbolicExpr>& e, const std::st
 }
 
 // ============================================================
-// TransformTable
+/// TransformTable
 // ============================================================
 TransformTable::TransformTable() { init_laplace_pairs(); }
 void TransformTable::add_entry(TransformTableEntry entry) { entries_.push_back(std::move(entry)); }
 void TransformTable::init_laplace_pairs() { /* 变换对通过模式匹配硬编码 */ }
 
 // ============================================================
-// Laplace 变换查表
+/// Laplace 变换查表
 // ============================================================
 static std::shared_ptr<SymbolicExpr> te_laplace_lookup(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
@@ -226,7 +226,7 @@ static std::shared_ptr<SymbolicExpr> te_laplace_lookup(
 }
 
 // ============================================================
-// laplace_transform
+/// laplace_transform
 // ============================================================
 std::shared_ptr<SymbolicExpr> laplace_transform(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
@@ -263,7 +263,7 @@ std::shared_ptr<SymbolicExpr> laplace_transform(
 }
 
 // ============================================================
-// inverse_laplace 辅助
+/// inverse_laplace 辅助
 // ============================================================
 static std::shared_ptr<SymbolicExpr> te_inv_power(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
@@ -341,7 +341,7 @@ static std::shared_ptr<SymbolicExpr> te_inv_product(
 }
 
 // ============================================================
-// inverse_laplace
+/// inverse_laplace
 // ============================================================
 std::shared_ptr<SymbolicExpr> inverse_laplace(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
@@ -370,8 +370,8 @@ std::shared_ptr<SymbolicExpr> inverse_laplace(
 }
 
 // ============================================================
-// Fourier 变换 (Task 8.2)
-// 算法来源: Bracewell, The Fourier Transform and Its Applications, 3rd ed.
+/// Fourier 变换 (Task 8.2)
+/// 算法来源: Bracewell, The Fourier Transform and Its Applications, 3rd ed.
 // ============================================================
 
 /**
@@ -440,10 +440,10 @@ static bool te_is_abs_exp(const std::shared_ptr<SymbolicExpr>& f, const std::str
             }
             continue;
         }
-        // 允许符号变量作为系数（如 -a）
+        /// 允许符号变量作为系数（如 -a）
         auto vn = std::dynamic_pointer_cast<VariableNode>(op);
         if (vn) {
-            // 假设符号变量为正 a，前面有负号处理
+            /// 假设符号变量为正 a，前面有负号处理
             a_candidate = std::make_shared<SymbolicExpr>(op);
             continue;
         }
@@ -461,13 +461,13 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
     if (!f || !f->root) return nullptr;
     auto wv = SymbolicExpr::variable(omega);
 
-    // 不依赖 t：无有限 Fourier 变换（δ函数），返回未求值
+    /// 不依赖 t：无有限 Fourier 变换（δ函数），返回未求值
     if (!te_depends_on(f, t)) {
         return std::make_shared<SymbolicExpr>(std::make_shared<TransformNode>(
             TransformNode::TransformType::Fourier, f->root->clone(), t, omega));
     }
 
-    // 线性性：处理加法 F{af+bg} = aF{f} + bF{g}
+    /// 线性性：处理加法 F{af+bg} = aF{f} + bF{g}
     auto add_node = std::dynamic_pointer_cast<AddNode>(f->root);
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
@@ -482,14 +482,14 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
         return result;
     }
 
-    // 分离常数系数: c * body
+    /// 分离常数系数: c * body
     auto [coeff, body] = te_split_coeff(f, t);
     if (!coeff->is_one()) {
         auto ft_body = fourier_transform(body, t, omega);
         if (ft_body) return SymbolicExpr::multiply(coeff, ft_body);
     }
 
-    // F{e^(-a*t^2)} = sqrt(π/a) * e^(-ω²/(4a))
+    /// F{e^(-a*t^2)} = sqrt(π/a) * e^(-ω²/(4a))
     {
         double a_val = 0.0;
         if (te_is_gaussian(f, t, a_val)) {
@@ -503,7 +503,7 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
         }
     }
 
-    // F{e^(-a|t|)} = 2a/(a² + ω²)
+    /// F{e^(-a|t|)} = 2a/(a² + ω²)
     {
         std::shared_ptr<SymbolicExpr> a_expr;
         if (te_is_abs_exp(f, t, a_expr)) {
@@ -515,21 +515,21 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
         }
     }
 
-    // F{e^(-a*t)} (因果指数，a > 0): 1/(a + iω)
+    /// F{e^(-a*t)} (因果指数，a > 0): 1/(a + iω)
     {
-        // 提取指数 e^(arg)，其中 arg 关于 t 线性：arg = c * t（c 不依赖 t）。
+        /// 提取指数 e^(arg)，其中 arg 关于 t 线性：arg = c * t（c 不依赖 t）。
         auto fn = std::dynamic_pointer_cast<FunctionNode>(f->root);
         if (fn && fn->type == FunctionNode::FuncType::Exp && fn->arguments.size() == 1) {
             auto arg = std::make_shared<SymbolicExpr>(fn->arguments[0]);
-            // c = d(arg)/dt；若 arg 关于 t 线性则 c 不依赖 t。
+            /// c = d(arg)/dt；若 arg 关于 t 线性则 c 不依赖 t。
             auto c = arg->differentiate(t);
             if (c && !te_depends_on(c, t)) {
-                // arg - c*t 应为 0（纯线性，无常数项）才是标准因果指数。
+                /// arg - c*t 应为 0（纯线性，无常数项）才是标准因果指数。
                 auto linear = SymbolicExpr::multiply(c, SymbolicExpr::variable(t));
                 auto residual = SymbolicExpr::add(arg,
                     SymbolicExpr::multiply(SymbolicExpr::number(-1), linear))->simplify();
                 if (residual->root && residual->root->is_zero()) {
-                    // 衰减率 a = -c（要求 a>0，即 c 为负）。ℱ = 1/(a + iω)。
+                    /// 衰减率 a = -c（要求 a>0，即 c 为负）。ℱ = 1/(a + iω)。
                     auto a = SymbolicExpr::multiply(SymbolicExpr::number(-1), c)->simplify();
                     auto i_unit = std::make_shared<SymbolicExpr>(
                         SymbolicFactory::create_complex(SymbolicExpr::number(0)->root,
@@ -542,26 +542,26 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
         }
     }
 
-    // 未知形式：返回未求值 TransformNode
+    /// 未知形式：返回未求值 TransformNode
     return std::make_shared<SymbolicExpr>(std::make_shared<TransformNode>(
         TransformNode::TransformType::Fourier, f->root->clone(), t, omega));
 }
 
 // ============================================================
-// inverse_fourier_transform (Task 8.2)
+/// inverse_fourier_transform (Task 8.2)
 // ============================================================
 std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& omega, const std::string& t) {
     if (!F || !F->root) return nullptr;
     auto tv = SymbolicExpr::variable(t);
 
-    // 不依赖 ω：返回未求值
+    /// 不依赖 ω：返回未求值
     if (!te_depends_on(F, omega)) {
         return std::make_shared<SymbolicExpr>(std::make_shared<TransformNode>(
             TransformNode::TransformType::InverseFourier, F->root->clone(), omega, t));
     }
 
-    // 线性性
+    /// 线性性
     auto add_node = std::dynamic_pointer_cast<AddNode>(F->root);
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
@@ -576,7 +576,7 @@ std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
         return result;
     }
 
-    // F⁻¹{e^(-a*ω²)} = (1/sqrt(4πa)) * e^(-t²/(4a))
+    /// F⁻¹{e^(-a*ω²)} = (1/sqrt(4πa)) * e^(-t²/(4a))
     {
         double a_val = 0.0;
         if (te_is_gaussian(F, omega, a_val)) {
@@ -590,21 +590,21 @@ std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
         }
     }
 
-    // 未知形式：返回未求值
+    /// 未知形式：返回未求值
     return std::make_shared<SymbolicExpr>(std::make_shared<TransformNode>(
         TransformNode::TransformType::InverseFourier, F->root->clone(), omega, t));
 }
 
 // ============================================================
-// convolve (Task 8.2)
+/// convolve (Task 8.2)
 // ============================================================
 std::shared_ptr<SymbolicExpr> convolve(
     const std::shared_ptr<SymbolicExpr>& f, const std::shared_ptr<SymbolicExpr>& g,
     const std::string& var) {
     if (!f || !f->root) return nullptr;
     if (!g || !g->root) return nullptr;
-    // (f * g)(t) = ∫_{-∞}^{∞} f(τ)g(t-τ)dτ
-    // 使用辅助变量 tau 避免命名冲突
+    /// (f * g)(t) = ∫_{-∞}^{∞} f(τ)g(t-τ)dτ
+    /// 使用辅助变量 tau 避免命名冲突
     std::string tau = "__conv_tau__";
     auto tau_var = SymbolicExpr::variable(tau);
     auto t_var = SymbolicExpr::variable(var);
@@ -626,8 +626,8 @@ std::shared_ptr<SymbolicExpr> convolve(
 }
 
 // ============================================================
-// Z 变换 (Task 8.3)
-// 算法来源: Oppenheim & Willsky, Signals and Systems, 2nd ed., Chapter 10
+/// Z 变换 (Task 8.3)
+/// 算法来源: Oppenheim & Willsky, Signals and Systems, 2nd ed., Chapter 10
 // ============================================================
 
 /**
@@ -683,7 +683,7 @@ std::shared_ptr<SymbolicExpr> z_transform(
     if (!f_n || !f_n->root) return nullptr;
     auto zv = SymbolicExpr::variable(z);
 
-    // 线性性：处理加法
+    /// 线性性：处理加法
     auto add_node = std::dynamic_pointer_cast<AddNode>(f_n->root);
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
@@ -698,20 +698,20 @@ std::shared_ptr<SymbolicExpr> z_transform(
         return result;
     }
 
-    // 分离常数系数: c * body → c * Z{body}
+    /// 分离常数系数: c * body → c * Z{body}
     auto [coeff, body] = te_split_coeff(f_n, n);
     if (!coeff->is_one()) {
         auto zt_body = z_transform(body, n, z);
         if (zt_body) return SymbolicExpr::multiply(coeff, zt_body)->simplify();
     }
 
-    // Z{c} = c·z/(z-1)（常数序列，即阶跃函数 u[n]）
+    /// Z{c} = c·z/(z-1)（常数序列，即阶跃函数 u[n]）
     if (!te_depends_on(f_n, n)) {
         auto den = SymbolicExpr::add(zv, SymbolicExpr::number(-1));
         return SymbolicExpr::multiply(f_n, SymbolicExpr::divide(zv, den))->simplify();
     }
 
-    // Z{n} = z/(z-1)^2
+    /// Z{n} = z/(z-1)^2
     {
         auto vn = std::dynamic_pointer_cast<VariableNode>(f_n->root);
         if (vn && vn->name == n) {
@@ -722,7 +722,7 @@ std::shared_ptr<SymbolicExpr> z_transform(
         }
     }
 
-    // Z{n^2} = z*(z+1)/(z-1)^3
+    /// Z{n^2} = z*(z+1)/(z-1)^3
     {
         auto pw = std::dynamic_pointer_cast<PowerNode>(f_n->root);
         if (pw) {
@@ -740,7 +740,7 @@ std::shared_ptr<SymbolicExpr> z_transform(
         }
     }
 
-    // Z{a^n} = z/(z-a)
+    /// Z{a^n} = z/(z-a)
     {
         std::shared_ptr<SymbolicExpr> base_expr;
         if (zt_is_exp_seq(f_n, n, base_expr)) {
@@ -750,7 +750,7 @@ std::shared_ptr<SymbolicExpr> z_transform(
         }
     }
 
-    // Z{n·a^n} = a·z/(z-a)^2
+    /// Z{n·a^n} = a·z/(z-a)^2
     {
         auto mul = std::dynamic_pointer_cast<MultiplyNode>(f_n->root);
         if (mul && mul->operands.size() == 2) {
@@ -772,8 +772,8 @@ std::shared_ptr<SymbolicExpr> z_transform(
         }
     }
 
-    // Z{sin(w·n)} = z·sin(w)/(z^2 - 2z·cos(w) + 1)
-    // Z{cos(w·n)} = z·(z-cos(w))/(z^2 - 2z·cos(w) + 1)
+    /// Z{sin(w·n)} = z·sin(w)/(z^2 - 2z·cos(w) + 1)
+    /// Z{cos(w·n)} = z·(z-cos(w))/(z^2 - 2z·cos(w) + 1)
     {
         bool is_sin_s = false;
         std::shared_ptr<SymbolicExpr> omega_expr;
@@ -798,7 +798,7 @@ std::shared_ptr<SymbolicExpr> z_transform(
         }
     }
 
-    // 未知形式：返回未求值节点
+    /// 未知形式：返回未求值节点
     return std::make_shared<SymbolicExpr>(std::make_shared<TransformNode>(
         TransformNode::TransformType::ZTransform, f_n->root->clone(), n, z));
 }

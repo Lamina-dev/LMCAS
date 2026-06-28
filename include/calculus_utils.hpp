@@ -16,7 +16,7 @@ class SymbolicExpr;
 namespace lamina {
 
 // ============================================================
-// 连续性判定 (Requirement 7)
+/// 连续性判定 (Requirement 7)
 // ============================================================
 
 /**
@@ -44,7 +44,7 @@ LAMINA_API ContinuityType continuity_at(
     const std::shared_ptr<SymbolicExpr>& point);
 
 // ============================================================
-// 渐近线分析 (Requirement 15)
+/// 渐近线分析 (Requirement 15)
 // ============================================================
 
 /**
@@ -72,7 +72,7 @@ LAMINA_API AsymptoteResult asymptotes(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 // ============================================================
-// 对数微分、微分、全微分、反函数 (Requirements 12, 13, 14, 77)
+/// 对数微分、微分、全微分、反函数 (Requirements 12, 13, 14, 77)
 // ============================================================
 
 /**
@@ -143,7 +143,7 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inverse_function(
     const std::shared_ptr<SymbolicExpr>& y);
 
 // ============================================================
-// 曲率 (Requirement 16)
+/// 曲率 (Requirement 16)
 // ============================================================
 
 /**
@@ -167,7 +167,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> curvature_parametric(
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t);
 
 // ============================================================
-// 拐点 (Requirement 34)
+/// 拐点 (Requirement 34)
 // ============================================================
 
 /**
@@ -181,7 +181,7 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inflection_points(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 // ============================================================
-// 旋转体表面积 (Requirement 17)
+/// 旋转体表面积 (Requirement 17)
 // ============================================================
 
 /**

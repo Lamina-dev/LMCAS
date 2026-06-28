@@ -73,6 +73,26 @@ int main() {
         auto res_poly3 = SymbolicExpr::add(x, SymbolicExpr::number(-2));
         auto resultant2 = SymbolicExpr::poly_resultant(res_poly1, res_poly3, "x");
         EXPECT_EQ_EXPR_STR(resultant2, "3", "Res(x^2-1, x-2)");
+
+        // 一般情形：两个二次多项式（之前只支持线性第二多项式）
+        // Res(x^2-1, x^2-4) = (1-4)(1-4)... 标准值 = ((-1)-(-4))^2 * ... 用根验证：
+        // x^2-1 根 ±1；Res = lead(b)^deg(a) ∏ b(根) = 1 * (1-4)(1-4) = 9
+        auto res_q1 = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(-1));
+        auto res_q2 = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(-4));
+        auto resultant3 = SymbolicExpr::poly_resultant(res_q1, res_q2, "x");
+        EXPECT_EQ_EXPR_STR(resultant3, "9", "Res(x^2-1, x^2-4) = 9");
+
+        // 共享公因子 → 结式为 0：Res(x^2-1, x^2+x-2)，二者都有根 x=1
+        auto res_q3 = SymbolicExpr::add(SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), x), SymbolicExpr::number(-2));
+        auto resultant4 = SymbolicExpr::poly_resultant(res_q1, res_q3, "x");
+        EXPECT_EQ_EXPR_STR(resultant4, "0", "Res(x^2-1, x^2+x-2) = 0 (shared root x=1)");
+
+        // 三次 × 二次
+        // Res(x^3-1, x^2+1)：x^3-1 根含 1；x^2+1 在这些根上的积。标准值 = 2
+        auto res_cubic = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(3)), SymbolicExpr::number(-1));
+        auto res_quad = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(1));
+        auto resultant5 = SymbolicExpr::poly_resultant(res_cubic, res_quad, "x");
+        EXPECT_EQ_EXPR_STR(resultant5, "2", "Res(x^3-1, x^2+1) = 2");
     }
 
     {

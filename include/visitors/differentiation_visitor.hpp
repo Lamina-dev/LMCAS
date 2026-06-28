@@ -261,7 +261,7 @@ public:
                  break;
             case FunctionNode::FuncType::Abs:
                 {
-                    // d/dx |u| = u / |u| = sgn(u)  (undefined at u=0)
+                    /// d/dx |u| = u / |u| = sgn(u)  (undefined at u=0)
                     auto abs_arg = std::make_shared<FunctionNode>(
                         FunctionNode::FuncType::Abs, node.arguments);
                     auto abs_inv = std::make_shared<PowerNode>(abs_arg, SymbolicFactory::create_number(-1.0));

@@ -18,7 +18,7 @@
 namespace lamina {
 
 // ============================================================
-// 文件局部辅助函数
+/// 文件局部辅助函数
 // ============================================================
 
 /**
@@ -61,7 +61,7 @@ static void tf_collect_transcendental(
             depends_on_var(func->arguments[0], var)) {
             candidates.push_back(node);
         }
-        // 继续递归参数，以收集嵌套的超越子表达式
+        /// 继续递归参数，以收集嵌套的超越子表达式
         for (auto& arg : func->arguments) {
             tf_collect_transcendental(arg, var, candidates);
         }
@@ -88,7 +88,7 @@ static void tf_collect_transcendental(
         return;
     }
 
-    // NumberNode、VariableNode 等叶节点无需递归
+    /// NumberNode、VariableNode 等叶节点无需递归
 }
 
 /**
@@ -145,12 +145,12 @@ static bool tf_is_negation_of(const std::shared_ptr<SymbolicNode>& node,
     auto mul = std::dynamic_pointer_cast<MultiplyNode>(node);
     if (!mul || mul->operands.size() != 2) return false;
 
-    // 检查两种排列：(-1)*arg 或 arg*(-1)
+    /// 检查两种排列：(-1)*arg 或 arg*(-1)
     for (int i = 0; i < 2; ++i) {
         auto num_node = std::dynamic_pointer_cast<NumberNode>(mul->operands[i]);
         if (!num_node) continue;
 
-        // 检查数值是否为 -1
+        /// 检查数值是否为 -1
         bool is_neg_one = false;
         if (std::holds_alternative<BigInt>(num_node->value)) {
             is_neg_one = (std::get<BigInt>(num_node->value) == BigInt(-1));
@@ -191,7 +191,7 @@ static std::shared_ptr<SymbolicNode> tf_substitute_expr(
 
     if (!node) return nullptr;
 
-    // 按映射顺序检查当前节点是否匹配某个超越子表达式
+    /// 按映射顺序检查当前节点是否匹配某个超越子表达式
     for (const auto& m : mappings) {
         if (m.trans_expr && m.trans_expr->root &&
             node->equals(*m.trans_expr->root)) {
@@ -199,7 +199,7 @@ static std::shared_ptr<SymbolicNode> tf_substitute_expr(
         }
     }
 
-    // 对各节点类型递归处理子节点
+    /// 对各节点类型递归处理子节点
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
         std::vector<std::shared_ptr<SymbolicNode>> new_args;
         new_args.reserve(func->arguments.size());
@@ -233,7 +233,7 @@ static std::shared_ptr<SymbolicNode> tf_substitute_expr(
         return std::make_shared<PowerNode>(std::move(new_base), std::move(new_exp));
     }
 
-    // 叶节点（NumberNode、VariableNode）直接返回
+    /// 叶节点（NumberNode、VariableNode）直接返回
     return node;
 }
 
@@ -263,7 +263,7 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
             auto func_j = std::dynamic_pointer_cast<FunctionNode>(node_j);
             if (!func_j || func_j->arguments.size() != 1) continue;
 
-            // --- sin/cos Pythagorean 约束 ---
+            /// --- sin/cos Pythagorean 约束 ---
             bool is_sin_cos = (func_i->type == FunctionNode::FuncType::Sin &&
                                func_j->type == FunctionNode::FuncType::Cos) ||
                               (func_i->type == FunctionNode::FuncType::Cos &&
@@ -271,7 +271,7 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
 
             if (is_sin_cos &&
                 tf_nodes_equal(func_i->arguments[0], func_j->arguments[0])) {
-                // 构造约束：u_i² + u_j² - 1 = 0
+                /// 构造约束：u_i² + u_j² - 1 = 0
                 auto ui = SymbolicExpr::variable(mappings[i].indeterminate);
                 auto uj = SymbolicExpr::variable(mappings[j].indeterminate);
                 auto two = SymbolicExpr::number(2);
@@ -286,20 +286,20 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
                 continue;
             }
 
-            // --- exp/exp(-) 逆元约束 ---
+            /// --- exp/exp(-) 逆元约束 ---
             if (func_i->type == FunctionNode::FuncType::Exp &&
                 func_j->type == FunctionNode::FuncType::Exp) {
 
                 bool is_inverse_pair = false;
 
-                // 检查 arg_j == -arg_i 或 arg_i == -arg_j
+                /// 检查 arg_j == -arg_i 或 arg_i == -arg_j
                 if (tf_is_negation_of(func_j->arguments[0], func_i->arguments[0]) ||
                     tf_is_negation_of(func_i->arguments[0], func_j->arguments[0])) {
                     is_inverse_pair = true;
                 }
 
                 if (is_inverse_pair) {
-                    // 构造约束：u_i * u_j - 1 = 0
+                    /// 构造约束：u_i * u_j - 1 = 0
                     auto ui = SymbolicExpr::variable(mappings[i].indeterminate);
                     auto uj = SymbolicExpr::variable(mappings[j].indeterminate);
 
@@ -315,7 +315,7 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
 }
 
 // ============================================================
-// 公共 API 实现
+/// 公共 API 实现
 // ============================================================
 
 /**
@@ -339,14 +339,14 @@ TransSubstitutionResult detect_trans_substitutions(
         return result;
     }
 
-    // 收集所有依赖 var 的超越子表达式
+    /// 收集所有依赖 var 的超越子表达式
     std::vector<std::shared_ptr<SymbolicNode>> candidates;
     tf_collect_transcendental(expr->root, var, candidates);
 
-    // 结构去重
+    /// 结构去重
     tf_deduplicate(candidates);
 
-    // 为每个唯一的超越子表达式分配不定元
+    /// 为每个唯一的超越子表达式分配不定元
     for (size_t i = 0; i < candidates.size(); ++i) {
         TransSubstitution mapping;
         mapping.trans_expr = std::make_shared<SymbolicExpr>(candidates[i]);
@@ -354,15 +354,15 @@ TransSubstitutionResult detect_trans_substitutions(
         result.mappings.push_back(std::move(mapping));
     }
 
-    // 检测映射之间的代数约束
+    /// 检测映射之间的代数约束
     tf_detect_constraints(result);
 
-    // 执行替换：将超越子表达式替换为对应不定元变量
+    /// 执行替换：将超越子表达式替换为对应不定元变量
     if (!result.mappings.empty()) {
         auto substituted = tf_substitute_expr(expr->root, result.mappings);
         result.poly_expr = std::make_shared<SymbolicExpr>(substituted);
     } else {
-        // 无超越子表达式时，poly_expr 即为原表达式
+        /// 无超越子表达式时，poly_expr 即为原表达式
         result.poly_expr = expr;
     }
 
@@ -370,7 +370,7 @@ TransSubstitutionResult detect_trans_substitutions(
 }
 
 // ============================================================
-// Phase 2: 多项式构造
+/// Phase 2: 多项式构造
 // ============================================================
 
 /**
@@ -414,7 +414,7 @@ static int tf_degree_in(const std::shared_ptr<SymbolicNode>& node, const std::st
     }
 
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        // 指数必须为非负整数常量
+        /// 指数必须为非负整数常量
         auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
         if (!exp_num) return -1;
 
@@ -442,7 +442,7 @@ static int tf_degree_in(const std::shared_ptr<SymbolicNode>& node, const std::st
         return base_deg * e_val;
     }
 
-    // FunctionNode 依赖 var 意味着非多项式结构
+    /// FunctionNode 依赖 var 意味着非多项式结构
     if (std::dynamic_pointer_cast<FunctionNode>(node)) {
         return -1;
     }
@@ -467,7 +467,7 @@ static bool tf_validate_polynomial(
 
     if (!poly_expr || !poly_expr->root) return false;
 
-    // 对每个变量检查次数是否可确定
+    /// 对每个变量检查次数是否可确定
     for (const auto& var : all_variables) {
         if (depends_on_var(poly_expr->root, var)) {
             int deg = tf_degree_in(poly_expr->root, var);
@@ -502,8 +502,8 @@ TfPolyBuildResult tf_build_polynomial(
         return result;
     }
 
-    // 先对原始表达式进行多项式验证（在展开之前）
-    // 这可以捕获分数指数等情形，避免 expand() 错误简化后遗漏
+    /// 先对原始表达式进行多项式验证（在展开之前）
+    /// 这可以捕获分数指数等情形，避免 expand() 错误简化后遗漏
     {
         std::vector<std::string> pre_vars;
         for (const auto& ind : indeterminates) {
@@ -519,13 +519,13 @@ TfPolyBuildResult tf_build_polynomial(
         }
     }
 
-    // 展开表达式以确保多项式结构可见
+    /// 展开表达式以确保多项式结构可见
     auto expanded = poly_expr->expand();
     if (!expanded || !expanded->root) {
         expanded = poly_expr;
     }
 
-    // 收集所有候选变量：不定元 + 原始变量（若表达式仍依赖它）
+    /// 收集所有候选变量：不定元 + 原始变量（若表达式仍依赖它）
     std::vector<std::string> all_variables;
     for (const auto& ind : indeterminates) {
         if (depends_on_var(expanded->root, ind)) {
@@ -536,7 +536,7 @@ TfPolyBuildResult tf_build_polynomial(
         all_variables.push_back(original_var);
     }
 
-    // 无变量依赖：常数表达式
+    /// 无变量依赖：常数表达式
     if (all_variables.empty()) {
         Rational c = extract_coeff_value<Rational>(expanded);
         result.poly = Polynomial<Rational>({c}, "x");
@@ -545,12 +545,12 @@ TfPolyBuildResult tf_build_polynomial(
         return result;
     }
 
-    // 验证表达式是否为有效多项式
+    /// 验证表达式是否为有效多项式
     if (!tf_validate_polynomial(expanded, all_variables)) {
         return result;
     }
 
-    // 计算每个变量的次数，选择最高次的作为主变量
+    /// 计算每个变量的次数，选择最高次的作为主变量
     std::string main_var;
     int max_degree = -1;
 
@@ -568,20 +568,20 @@ TfPolyBuildResult tf_build_polynomial(
 
     result.main_variable = main_var;
 
-    // 收集参数变量（非主变量）
+    /// 收集参数变量（非主变量）
     for (const auto& var : all_variables) {
         if (var != main_var) {
             result.param_variables.push_back(var);
         }
     }
 
-    // 单变量情形：仅主变量，无参数变量
-    // 此时 symbolic_to_poly<Rational> 可直接提取有理系数
+    /// 单变量情形：仅主变量，无参数变量
+    /// 此时 symbolic_to_poly<Rational> 可直接提取有理系数
     if (result.param_variables.empty()) {
         result.poly = symbolic_to_poly<Rational>(expanded, main_var);
-        // 验证转换结果非零（除非原表达式确实为零）
+        /// 验证转换结果非零（除非原表达式确实为零）
         if (result.poly.is_zero() && !expanded->is_zero()) {
-            // 转换失败：可能系数提取出错
+            /// 转换失败：可能系数提取出错
             result.success = false;
             return result;
         }
@@ -589,26 +589,26 @@ TfPolyBuildResult tf_build_polynomial(
         return result;
     }
 
-    // 多变量情形：主变量策略
-    // 使用 symbolic_to_poly<Rational> 以主变量转换。
-    // 注意：非主变量若出现在系数位置，extract_coeff_value<Rational> 会返回 0，
-    // 导致信息丢失。因此仅当参数变量不实际出现在系数中时才能成功。
+    /// 多变量情形：主变量策略
+    /// 使用 symbolic_to_poly<Rational> 以主变量转换。
+    /// 注意：非主变量若出现在系数位置，extract_coeff_value<Rational> 会返回 0，
+    /// 导致信息丢失。因此仅当参数变量不实际出现在系数中时才能成功。
     //
-    // 对于如 u0² - x² 这种情形，以 u0 为主变量时，
-    // 常数项为 -x²，无法表示为 Rational。
-    // 此时尝试：若所有参数变量的系数均为有理数（即参数变量仅以有理数倍出现），
-    // 则可以成功；否则标记为需要符号系数处理。
+    /// 对于如 u0² - x² 这种情形，以 u0 为主变量时，
+    /// 常数项为 -x²，无法表示为 Rational。
+    /// 此时尝试：若所有参数变量的系数均为有理数（即参数变量仅以有理数倍出现），
+    /// 则可以成功；否则标记为需要符号系数处理。
     result.poly = symbolic_to_poly<Rational>(expanded, main_var);
 
-    // 验证：重建多项式并与原表达式比较
-    // 简单验证：检查多项式次数是否与预期一致
+    /// 验证：重建多项式并与原表达式比较
+    /// 简单验证：检查多项式次数是否与预期一致
     if (result.poly.degree() == max_degree) {
         result.success = true;
         return result;
     }
 
-    // 次数不匹配，说明系数提取有损失
-    // 尝试反转主变量选择：如果有其他变量能产生正确结果
+    /// 次数不匹配，说明系数提取有损失
+    /// 尝试反转主变量选择：如果有其他变量能产生正确结果
     for (const auto& var : all_variables) {
         if (var == main_var) continue;
 
@@ -626,13 +626,13 @@ TfPolyBuildResult tf_build_polynomial(
         }
     }
 
-    // 所有尝试均失败：多变量情形无法用 Polynomial<Rational> 精确表示
+    /// 所有尝试均失败：多变量情形无法用 Polynomial<Rational> 精确表示
     result.success = false;
     return result;
 }
 
 // ============================================================
-// Phase 2.3: 无平方因子预处理
+/// Phase 2.3: 无平方因子预处理
 // ============================================================
 
 /**
@@ -652,7 +652,7 @@ TfPolyBuildResult tf_build_polynomial(
 TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
     TfSquareFreeResult result;
 
-    // 常数或零多项式：本身即为 square-free
+    /// 常数或零多项式：本身即为 square-free
     if (poly.degree() <= 0) {
         result.square_free = poly;
         result.repeated_factor = Polynomial<Rational>(Rational(1), poly.variable_name);
@@ -660,7 +660,7 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
         return result;
     }
 
-    // 线性多项式：始终 square-free
+    /// 线性多项式：始终 square-free
     if (poly.degree() == 1) {
         result.square_free = poly;
         result.repeated_factor = Polynomial<Rational>(Rational(1), poly.variable_name);
@@ -668,13 +668,13 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
         return result;
     }
 
-    // 计算形式导数
+    /// 计算形式导数
     Polynomial<Rational> deriv = poly.differentiate();
 
-    // 计算 gcd(f, f')
+    /// 计算 gcd(f, f')
     Polynomial<Rational> g = Polynomial<Rational>::gcd(poly, deriv);
 
-    // 若 gcd 为常数（degree 0），f 已为 square-free
+    /// 若 gcd 为常数（degree 0），f 已为 square-free
     if (g.degree() <= 0) {
         result.square_free = poly.make_monic();
         result.repeated_factor = Polynomial<Rational>(Rational(1), poly.variable_name);
@@ -682,7 +682,7 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
         return result;
     }
 
-    // 存在重复因子：square_free_part = f / gcd(f, f')
+    /// 存在重复因子：square_free_part = f / gcd(f, f')
     auto [quotient, remainder] = poly.div_mod(g);
     result.square_free = quotient.make_monic();
     result.repeated_factor = g.make_monic();
@@ -691,7 +691,7 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
 }
 
 // ============================================================
-// Phase 5: Zassenhaus 因子组合
+/// Phase 5: Zassenhaus 因子组合
 // ============================================================
 
 /**
@@ -757,7 +757,7 @@ static std::vector<BigInt> zc_subset_product(
         const auto& factor_coeffs = lifted_factors[i].coeffs;
         if (factor_coeffs.empty()) return {};
 
-        // 多项式乘法
+        /// 多项式乘法
         size_t new_size = product.size() + factor_coeffs.size() - 1;
         std::vector<BigInt> new_product(new_size, BigInt(0));
 
@@ -769,12 +769,12 @@ static std::vector<BigInt> zc_subset_product(
             }
         }
 
-        // 对称归约
+        /// 对称归约
         for (auto& c : new_product) {
             c = zc_symmetric_mod(c, mod);
         }
 
-        // 去除高次零系数
+        /// 去除高次零系数
         while (!new_product.empty() && new_product.back().is_zero()) {
             new_product.pop_back();
         }
@@ -832,8 +832,8 @@ static bool zc_rational_reconstruction(
 
     if (m.is_zero() || m.IsNegative()) return false;
 
-    // 对于小模数，委托给 int64_t 版本
-    // int64_t 最大值约 9.2e18，单 limb BigInt 可安全转换
+    /// 对于小模数，委托给 int64_t 版本
+    /// int64_t 最大值约 9.2e18，单 limb BigInt 可安全转换
     if (m._size <= 1 && a._size <= 1) {
         int64_t a_val = a.is_zero() ? 0 : static_cast<int64_t>(a._data[0]);
         if (a.IsNegative()) a_val = -a_val;
@@ -847,19 +847,19 @@ static bool zc_rational_reconstruction(
         return true;
     }
 
-    // BigInt 版本的有理重构
-    // 将 a 归约到 [0, m)
+    /// BigInt 版本的有理重构
+    /// 将 a 归约到 [0, m)
     BigInt a_mod = a % m;
     if (a_mod.IsNegative()) {
         a_mod = a_mod + m;
     }
 
-    // 计算界 bound = floor(sqrt(m/2))
+    /// 计算界 bound = floor(sqrt(m/2))
     BigInt half_m = m / BigInt(2);
     BigInt bound = half_m.sqrt();
     if (bound.is_zero()) bound = BigInt(1);
 
-    // 扩展欧几里得算法
+    /// 扩展欧几里得算法
     BigInt r0 = m, r1 = a_mod;
     BigInt s0 = BigInt(0), s1 = BigInt(1);
 
@@ -877,18 +877,18 @@ static bool zc_rational_reconstruction(
     BigInt p = r1;
     BigInt q_val = s1;
 
-    // 确保分母为正
+    /// 确保分母为正
     if (q_val.IsNegative()) {
         p = -p;
         q_val = -q_val;
     }
 
-    // 验证界约束
+    /// 验证界约束
     if (p.Abs() > bound || q_val.is_zero() || q_val > bound) {
         return false;
     }
 
-    // 验证 gcd(|p|, q) == 1
+    /// 验证 gcd(|p|, q) == 1
     BigInt g = BigInt::gcd(p.Abs(), q_val);
     if (g != BigInt(1)) {
         return false;
@@ -920,13 +920,13 @@ static Polynomial<Rational> zc_reconstruct_candidate(
     std::vector<Rational> rat_coeffs;
     rat_coeffs.reserve(product_coeffs.size());
 
-    // 尝试对每个系数执行有理重构
+    /// 尝试对每个系数执行有理重构
     for (const auto& c : product_coeffs) {
         BigInt num, den;
         if (zc_rational_reconstruction(c, mod, num, den)) {
             rat_coeffs.emplace_back(num, den);
         } else {
-            // 任一系数重构失败，回退到整数系数
+            /// 任一系数重构失败，回退到整数系数
             return zc_bigint_to_rational_poly(product_coeffs, var);
         }
     }
@@ -997,7 +997,7 @@ static BigInt zc_mignotte_bound(const Polynomial<Rational>& poly) {
     BigInt max_coeff(0);
     for (const auto& c : poly.coeffs) {
         BigInt abs_num = c.get_numerator().Abs();
-        // 取 |numerator| 作为系数大小的近似上界
+        /// 取 |numerator| 作为系数大小的近似上界
         if (abs_num > max_coeff) {
             max_coeff = abs_num;
         }
@@ -1006,7 +1006,7 @@ static BigInt zc_mignotte_bound(const Polynomial<Rational>& poly) {
     int n = poly.degree();
     if (n <= 0) return max_coeff;
 
-    // 2^n * max_coeff 作为保守 Mignotte 界
+    /// 2^n * max_coeff 作为保守 Mignotte 界
     BigInt bound = max_coeff;
     for (int i = 0; i < n; ++i) {
         bound = bound * BigInt(2);
@@ -1047,24 +1047,24 @@ static std::vector<Polynomial<Rational>> zc_lll_pruned_combine(
     size_t r = lifted_factors.size();
     std::string var = poly.variable_name;
 
-    // 预计算每个提升因子的次数
+    /// 预计算每个提升因子的次数
     std::vector<int> factor_degrees(r);
     for (size_t i = 0; i < r; ++i) {
         factor_degrees[i] = static_cast<int>(lifted_factors[i].coeffs.size()) - 1;
         if (factor_degrees[i] < 0) factor_degrees[i] = 0;
     }
 
-    // 计算 Mignotte 界用于范数剪枝
+    /// 计算 Mignotte 界用于范数剪枝
     BigInt mignotte = zc_mignotte_bound(poly);
     BigInt norm_threshold = mignotte * BigInt(2);
 
-    // 工作副本
+    /// 工作副本
     Polynomial<Rational> remaining = poly;
     uint64_t active_mask = (1ULL << r) - 1;
 
-    // TODO: 完整的 LLL 格基约化实现可将此搜索从指数级优化为多项式级。
-    // 当前使用度数+范数启发式剪枝，对典型用例（15 < r ≤ 30）已足够高效。
-    // 参考：van Hoeij (2002) 的 LLL-based 因子组合算法。
+    /// TODO: 完整的 LLL 格基约化实现可将此搜索从指数级优化为多项式级。
+    /// 当前使用度数+范数启发式剪枝，对典型用例（15 < r ≤ 30）已足够高效。
+    /// 参考：van Hoeij (2002) 的 LLL-based 因子组合算法。
 
     bool found_factor = true;
     while (found_factor) {
@@ -1083,8 +1083,8 @@ static std::vector<Polynomial<Rational>> zc_lll_pruned_combine(
             while (subset <= active_mask) {
                 if ((subset & active_mask) == subset && zc_popcount(subset) == subset_size) {
 
-                    // --- 度数剪枝 ---
-                    // 计算子集因子的总度数
+                    /// --- 度数剪枝 ---
+                    /// 计算子集因子的总度数
                     int subset_degree = 0;
                     for (size_t i = 0; i < r; ++i) {
                         if ((subset >> i) & 1) {
@@ -1092,18 +1092,18 @@ static std::vector<Polynomial<Rational>> zc_lll_pruned_combine(
                         }
                     }
 
-                    // 跳过总度数超过剩余多项式度数一半的子集
+                    /// 跳过总度数超过剩余多项式度数一半的子集
                     if (subset_degree > remaining_deg / 2) {
                         goto next_pruned_subset;
                     }
 
-                    // 跳过总度数为 0 的子集（不可能产生有意义的因子）
+                    /// 跳过总度数为 0 的子集（不可能产生有意义的因子）
                     if (subset_degree <= 0) {
                         goto next_pruned_subset;
                     }
 
                     {
-                        // 计算子集因子乘积 mod p^k
+                        /// 计算子集因子乘积 mod p^k
                         std::vector<BigInt> product_coeffs = zc_subset_product(
                             lifted_factors, subset, mod);
 
@@ -1111,21 +1111,21 @@ static std::vector<Polynomial<Rational>> zc_lll_pruned_combine(
                             goto next_pruned_subset;
                         }
 
-                        // --- 范数剪枝 ---
-                        // 若乘积的 L1 范数超过 2 倍 Mignotte 界，拒绝此候选
+                        /// --- 范数剪枝 ---
+                        /// 若乘积的 L1 范数超过 2 倍 Mignotte 界，拒绝此候选
                         BigInt candidate_norm = zc_l1_norm(product_coeffs);
                         if (candidate_norm > norm_threshold) {
                             goto next_pruned_subset;
                         }
 
                         {
-                            // 有理重构
+                            /// 有理重构
                             Polynomial<Rational> candidate = zc_reconstruct_candidate(
                                 product_coeffs, mod, var);
 
                             candidate = zc_make_primitive(candidate);
 
-                            // 整除性检验
+                            /// 整除性检验
                             if (!candidate.is_zero() && candidate.degree() > 0 &&
                                 candidate.degree() < remaining.degree() &&
                                 zc_divides_exactly(remaining, candidate)) {
@@ -1155,7 +1155,7 @@ static std::vector<Polynomial<Rational>> zc_lll_pruned_combine(
         restart_pruned_enumeration:;
     }
 
-    // 剩余因子形成最后一个真因子
+    /// 剩余因子形成最后一个真因子
     if (!remaining.is_zero() && remaining.degree() > 0) {
         true_factors.push_back(remaining.make_monic());
     } else if (!remaining.is_zero() && remaining.degree() == 0) {
@@ -1196,27 +1196,27 @@ std::vector<Polynomial<Rational>> zassenhaus_combine(
 
     std::vector<Polynomial<Rational>> true_factors;
 
-    // 边界情形
+    /// 边界情形
     if (poly.is_zero() || lifted_factors.empty()) {
         if (!poly.is_zero()) true_factors.push_back(poly);
         return true_factors;
     }
 
-    // 单因子：原多项式本身不可约
+    /// 单因子：原多项式本身不可约
     if (lifted_factors.size() == 1) {
         true_factors.push_back(poly);
         return true_factors;
     }
 
-    // 因子数上限
+    /// 因子数上限
     size_t r = lifted_factors.size();
     if (r > 30) {
-        // 因子数过多（> 30），即使剪枝也不实际，返回原多项式
+        /// 因子数过多（> 30），即使剪枝也不实际，返回原多项式
         true_factors.push_back(poly);
         return true_factors;
     }
 
-    // 当因子数 > 15 时，使用度数+范数剪枝的组合策略
+    /// 当因子数 > 15 时，使用度数+范数剪枝的组合策略
     if (r > 15) {
         BigInt mod(prime_power);
         return zc_lll_pruned_combine(poly, lifted_factors, mod);
@@ -1225,68 +1225,68 @@ std::vector<Polynomial<Rational>> zassenhaus_combine(
     BigInt mod(prime_power);
     std::string var = poly.variable_name;
 
-    // 工作副本：当前剩余多项式和因子池
+    /// 工作副本：当前剩余多项式和因子池
     Polynomial<Rational> remaining = poly;
 
-    // 活跃因子索引集合（用位掩码表示）
+    /// 活跃因子索引集合（用位掩码表示）
     uint64_t active_mask = (1ULL << r) - 1;  // 所有因子初始活跃
 
-    // 按子集大小从 1 到 floor(active_count/2) 枚举
+    /// 按子集大小从 1 到 floor(active_count/2) 枚举
     bool found_factor = true;
     while (found_factor) {
         found_factor = false;
 
         int active_count = zc_popcount(active_mask);
 
-        // 早期终止：仅剩 1 个活跃因子，剩余多项式本身即为不可约因子
+        /// 早期终止：仅剩 1 个活跃因子，剩余多项式本身即为不可约因子
         if (active_count <= 1) break;
 
-        // 早期终止：剩余多项式为线性或常数，必然不可约
+        /// 早期终止：剩余多项式为线性或常数，必然不可约
         if (remaining.degree() <= 1) break;
 
         int max_subset_size = active_count / 2;
 
         for (int subset_size = 1; subset_size <= max_subset_size; ++subset_size) {
-            // 枚举所有大小为 subset_size 的活跃因子子集
-            // 使用位掩码枚举：遍历 active_mask 的所有子集中 popcount == subset_size 的
+            /// 枚举所有大小为 subset_size 的活跃因子子集
+            /// 使用位掩码枚举：遍历 active_mask 的所有子集中 popcount == subset_size 的
             uint64_t subset = 0;
 
-            // Gosper's hack 初始化：最小的 subset_size 位子集
+            /// Gosper's hack 初始化：最小的 subset_size 位子集
             subset = (1ULL << subset_size) - 1;
 
             while (subset <= active_mask) {
-                // 检查 subset 是否为 active_mask 的子集
+                /// 检查 subset 是否为 active_mask 的子集
                 if ((subset & active_mask) == subset && zc_popcount(subset) == subset_size) {
-                    // 计算子集因子的乘积 mod p^k
+                    /// 计算子集因子的乘积 mod p^k
                     std::vector<BigInt> product_coeffs = zc_subset_product(
                         lifted_factors, subset, mod);
 
                     if (product_coeffs.empty()) {
-                        // 跳过空乘积
+                        /// 跳过空乘积
                         goto next_subset;
                     }
 
                     {
-                        // 通过有理重构构造候选因子
+                        /// 通过有理重构构造候选因子
                         Polynomial<Rational> candidate = zc_reconstruct_candidate(
                             product_coeffs, mod, var);
 
-                        // 首一化
+                        /// 首一化
                         candidate = zc_make_primitive(candidate);
 
-                        // 检验整除性
+                        /// 检验整除性
                         if (!candidate.is_zero() && candidate.degree() > 0 &&
                             candidate.degree() < remaining.degree() &&
                             zc_divides_exactly(remaining, candidate)) {
 
-                            // 找到真因子
+                            /// 找到真因子
                             true_factors.push_back(candidate);
 
-                            // 更新剩余多项式
+                            /// 更新剩余多项式
                             auto [quotient, rem] = remaining.div_mod(candidate);
                             remaining = quotient;
 
-                            // 从活跃集中移除已用因子
+                            /// 从活跃集中移除已用因子
                             active_mask &= ~subset;
 
                             found_factor = true;
@@ -1296,13 +1296,13 @@ std::vector<Polynomial<Rational>> zassenhaus_combine(
                 }
 
                 next_subset:
-                // 下一个子集（Gosper's hack）
+                /// 下一个子集（Gosper's hack）
                 if (subset == 0) break;
                 uint64_t c = subset & (-static_cast<int64_t>(subset));
                 uint64_t rr = subset + c;
                 subset = (((rr ^ subset) >> 2) / c) | rr;
 
-                // 防止溢出
+                /// 防止溢出
                 if (subset > active_mask || subset == 0) break;
             }
         }
@@ -1310,11 +1310,11 @@ std::vector<Polynomial<Rational>> zassenhaus_combine(
         restart_enumeration:;
     }
 
-    // 剩余因子形成最后一个真因子
+    /// 剩余因子形成最后一个真因子
     if (!remaining.is_zero() && remaining.degree() > 0) {
         true_factors.push_back(remaining.make_monic());
     } else if (!remaining.is_zero() && remaining.degree() == 0) {
-        // 常数因子：若非 1 则记录
+        /// 常数因子：若非 1 则记录
         if (remaining.coeffs[0] != Rational(1)) {
             true_factors.push_back(remaining);
         }
@@ -1324,7 +1324,7 @@ std::vector<Polynomial<Rational>> zassenhaus_combine(
 }
 
 // ============================================================
-// Phase 6: 逆换元（Back-substitution）
+/// Phase 6: 逆换元（Back-substitution）
 // ============================================================
 
 /**
@@ -1351,7 +1351,7 @@ static std::shared_ptr<SymbolicExpr> tf_back_substitute(
     for (const auto& m : mappings) {
         if (!m.trans_expr || m.indeterminate.empty()) continue;
 
-        // 仅当表达式依赖该不定元时才执行替换
+        /// 仅当表达式依赖该不定元时才执行替换
         if (depends_on_var(result->root, m.indeterminate)) {
             result = result->substitute(m.indeterminate, m.trans_expr);
         }
@@ -1361,7 +1361,7 @@ static std::shared_ptr<SymbolicExpr> tf_back_substitute(
 }
 
 // ============================================================
-// Phase 6.2: 因子化简与常数提取
+/// Phase 6.2: 因子化简与常数提取
 // ============================================================
 
 /**
@@ -1388,7 +1388,7 @@ static bool tf_extract_rational(const std::shared_ptr<NumberNode>& num_node, Rat
     }
     if (std::holds_alternative<lmmc_real_t>(num_node->value)) {
         lmmc_real_t v = std::get<lmmc_real_t>(num_node->value);
-        // 仅处理精确整数浮点值
+        /// 仅处理精确整数浮点值
         if (std::isfinite(v) && v == std::floor(v) && std::abs(v) < 1e15) {
             out = Rational(BigInt(static_cast<long long>(v)));
             return true;
@@ -1420,33 +1420,33 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
     for (auto& factor : factors) {
         if (!factor || !factor->root) continue;
 
-        // 调用 simplify() 规范化因子
+        /// 调用 simplify() 规范化因子
         auto simplified = factor->simplify();
         if (!simplified || !simplified->root) {
             simplified = factor;
         }
 
-        // 情形 1：因子为纯数值
+        /// 情形 1：因子为纯数值
         if (auto num = std::dynamic_pointer_cast<NumberNode>(simplified->root)) {
             Rational val;
             if (tf_extract_rational(num, val)) {
                 if (val != Rational(0)) {
                     constant_product = constant_product * val;
                 }
-                // 零因子不累乘，但保留（整个乘积为零）
+                /// 零因子不累乘，但保留（整个乘积为零）
                 else {
                     result.clear();
                     result.push_back(SymbolicExpr::number(0));
                     return result;
                 }
             } else {
-                // 无法提取为有理数的数值（如非整数浮点），保留原样
+                /// 无法提取为有理数的数值（如非整数浮点），保留原样
                 result.push_back(simplified);
             }
             continue;
         }
 
-        // 情形 2：因子为乘积形式，检查是否含数值前导系数
+        /// 情形 2：因子为乘积形式，检查是否含数值前导系数
         if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(simplified->root)) {
             std::vector<std::shared_ptr<SymbolicNode>> numeric_ops;
             std::vector<std::shared_ptr<SymbolicNode>> non_numeric_ops;
@@ -1459,7 +1459,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
                 }
             }
 
-            // 提取所有数值操作数为常数乘子
+            /// 提取所有数值操作数为常数乘子
             if (!numeric_ops.empty() && !non_numeric_ops.empty()) {
                 for (const auto& nop : numeric_ops) {
                     auto num = std::dynamic_pointer_cast<NumberNode>(nop);
@@ -1467,12 +1467,12 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
                     if (tf_extract_rational(num, val)) {
                         constant_product = constant_product * val;
                     } else {
-                        // 无法提取的数值操作数保留在非常数部分
+                        /// 无法提取的数值操作数保留在非常数部分
                         non_numeric_ops.push_back(nop);
                     }
                 }
 
-                // 重建非常数部分
+                /// 重建非常数部分
                 if (non_numeric_ops.size() == 1) {
                     result.push_back(std::make_shared<SymbolicExpr>(non_numeric_ops[0]));
                 } else {
@@ -1480,10 +1480,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
                         std::make_shared<MultiplyNode>(std::move(non_numeric_ops))));
                 }
             } else if (numeric_ops.empty()) {
-                // 无数值操作数，保留原因子
+                /// 无数值操作数，保留原因子
                 result.push_back(simplified);
             } else {
-                // 全为数值操作数：整个因子为常数
+                /// 全为数值操作数：整个因子为常数
                 Rational val(1);
                 for (const auto& nop : numeric_ops) {
                     auto num = std::dynamic_pointer_cast<NumberNode>(nop);
@@ -1497,11 +1497,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
             continue;
         }
 
-        // 情形 3：非数值、非乘积形式，直接保留
+        /// 情形 3：非数值、非乘积形式，直接保留
         result.push_back(simplified);
     }
 
-    // 若累积常数 ≠ 1，插入为首个因子
+    /// 若累积常数 ≠ 1，插入为首个因子
     if (constant_product != Rational(1)) {
         auto const_expr = SymbolicExpr::number(constant_product);
         result.insert(result.begin(), const_expr);
@@ -1511,7 +1511,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
 }
 
 // ============================================================
-// 特殊情形快速路径
+/// 特殊情形快速路径
 // ============================================================
 
 /**
@@ -1535,13 +1535,13 @@ static bool tf_is_linear_irreducible(
 
     const auto& root = sub_result.poly_expr->root;
 
-    // 检查每个不定元的次数是否 ≤ 1
+    /// 检查每个不定元的次数是否 ≤ 1
     for (const auto& m : sub_result.mappings) {
         int deg = tf_degree_in(root, m.indeterminate);
         if (deg < 0 || deg > 1) return false;
     }
 
-    // 检查原始变量的次数是否 ≤ 1
+    /// 检查原始变量的次数是否 ≤ 1
     if (depends_on_var(root, var)) {
         int deg = tf_degree_in(root, var);
         if (deg < 0 || deg > 1) return false;
@@ -1575,7 +1575,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_multiplicative_struc
     for (const auto& op : mul->operands) {
         if (!op) continue;
 
-        // 数值常数单独累积
+        /// 数值常数单独累积
         if (op->is_number()) {
             auto num = std::dynamic_pointer_cast<NumberNode>(op);
             if (num) {
@@ -1584,23 +1584,23 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_multiplicative_struc
                 } else if (std::holds_alternative<Rational>(num->value)) {
                     constant_acc = constant_acc * std::get<Rational>(num->value);
                 } else {
-                    // 浮点数值：作为独立因子保留
+                    /// 浮点数值：作为独立因子保留
                     factors.push_back(std::make_shared<SymbolicExpr>(op));
                 }
             }
             continue;
         }
 
-        // 非数值操作数作为独立因子
+        /// 非数值操作数作为独立因子
         factors.push_back(std::make_shared<SymbolicExpr>(op));
     }
 
-    // 仅当存在至少两个非常数因子（或一个非常数因子加一个非 1 常数）时才视为有效乘积分解
+    /// 仅当存在至少两个非常数因子（或一个非常数因子加一个非 1 常数）时才视为有效乘积分解
     if (factors.size() < 2 && (factors.empty() || constant_acc == Rational(1))) {
         return {};
     }
 
-    // 插入累积常数因子（若非 1）
+    /// 插入累积常数因子（若非 1）
     if (constant_acc != Rational(1)) {
         auto const_expr = SymbolicExpr::number(constant_acc);
         factors.insert(factors.begin(), const_expr);
@@ -1627,7 +1627,7 @@ static std::shared_ptr<SymbolicNode> tf_extract_exp_factor(
 
     if (!node) return nullptr;
 
-    // 直接为 exp(f(x)) 形式
+    /// 直接为 exp(f(x)) 形式
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
         if (func->type == FunctionNode::FuncType::Exp &&
             func->arguments.size() == 1 &&
@@ -1636,7 +1636,7 @@ static std::shared_ptr<SymbolicNode> tf_extract_exp_factor(
         }
     }
 
-    // 乘积形式：遍历操作数寻找 exp 因子
+    /// 乘积形式：遍历操作数寻找 exp 因子
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
         for (const auto& op : mul->operands) {
             auto func = std::dynamic_pointer_cast<FunctionNode>(op);
@@ -1669,12 +1669,12 @@ static std::shared_ptr<SymbolicNode> tf_remove_exp_factor(
 
     if (!node || !exp_factor) return node;
 
-    // 节点本身即为 exp 因子
+    /// 节点本身即为 exp 因子
     if (node->equals(*exp_factor)) {
         return std::make_shared<NumberNode>(BigInt(1));
     }
 
-    // 乘积形式：移除匹配的操作数
+    /// 乘积形式：移除匹配的操作数
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
         std::vector<std::shared_ptr<SymbolicNode>> remaining_ops;
         bool removed = false;
@@ -1726,11 +1726,11 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
     auto add = std::dynamic_pointer_cast<AddNode>(expr->root);
     if (!add || add->operands.size() < 2) return {};
 
-    // 从第一个加法项中提取 exp 因子作为候选公因子
+    /// 从第一个加法项中提取 exp 因子作为候选公因子
     std::shared_ptr<SymbolicNode> common_exp = tf_extract_exp_factor(add->operands[0], var);
     if (!common_exp) return {};
 
-    // 验证所有加法项均含有相同的 exp 因子
+    /// 验证所有加法项均含有相同的 exp 因子
     for (size_t i = 1; i < add->operands.size(); ++i) {
         std::shared_ptr<SymbolicNode> term_exp = tf_extract_exp_factor(add->operands[i], var);
         if (!term_exp || !term_exp->equals(*common_exp)) {
@@ -1738,8 +1738,8 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
         }
     }
 
-    // 所有项共享相同的 exp(f(x))，执行分离
-    // 构造剩余和：对每个项移除 exp 因子
+    /// 所有项共享相同的 exp(f(x))，执行分离
+    /// 构造剩余和：对每个项移除 exp 因子
     std::vector<std::shared_ptr<SymbolicNode>> remainder_terms;
     remainder_terms.reserve(add->operands.size());
 
@@ -1748,7 +1748,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
         remainder_terms.push_back(remainder);
     }
 
-    // 构造结果
+    /// 构造结果
     auto exp_factor_expr = std::make_shared<SymbolicExpr>(common_exp);
 
     std::shared_ptr<SymbolicExpr> sum_expr;
@@ -1759,7 +1759,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
             std::make_shared<AddNode>(std::move(remainder_terms)));
     }
 
-    // 化简剩余和
+    /// 化简剩余和
     auto simplified_sum = sum_expr->simplify();
     if (simplified_sum && simplified_sum->root) {
         sum_expr = simplified_sum;
@@ -1769,7 +1769,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
 }
 
 // ============================================================
-// 公共 API 实现
+/// 公共 API 实现
 // ============================================================
 
 /**
@@ -1824,7 +1824,7 @@ static bool tf_contains_transcendental(
 }
 
 // ============================================================
-// 特殊情形快速路径：毕达哥拉斯恒等式化简
+/// 特殊情形快速路径：毕达哥拉斯恒等式化简
 // ============================================================
 
 /**
@@ -1846,7 +1846,7 @@ static bool tf_is_trig_squared(
     auto pow = std::dynamic_pointer_cast<PowerNode>(node);
     if (!pow) return false;
 
-    // 检查指数是否为 2
+    /// 检查指数是否为 2
     auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
     if (!exp_num) return false;
 
@@ -1863,7 +1863,7 @@ static bool tf_is_trig_squared(
     }
     if (!is_two) return false;
 
-    // 检查底数是否为 sin 或 cos
+    /// 检查底数是否为 sin 或 cos
     auto func = std::dynamic_pointer_cast<FunctionNode>(pow->base);
     if (!func || func->arguments.size() != 1) return false;
 
@@ -1896,20 +1896,20 @@ static bool tf_extract_coeff_trig_squared(
     FunctionNode::FuncType& func_type,
     std::shared_ptr<SymbolicNode>& argument) {
 
-    // 直接为 sin²(f) 或 cos²(f)
+    /// 直接为 sin²(f) 或 cos²(f)
     if (tf_is_trig_squared(node, func_type, argument)) {
         coeff = nullptr;  // 系数为 1
         return true;
     }
 
-    // 乘积形式：a * sin²(f) 或 sin²(f) * a
+    /// 乘积形式：a * sin²(f) 或 sin²(f) * a
     auto mul = std::dynamic_pointer_cast<MultiplyNode>(node);
     if (!mul || mul->operands.size() < 2) return false;
 
-    // 在操作数中寻找 sin²(f) 或 cos²(f) 部分
+    /// 在操作数中寻找 sin²(f) 或 cos²(f) 部分
     for (size_t i = 0; i < mul->operands.size(); ++i) {
         if (tf_is_trig_squared(mul->operands[i], func_type, argument)) {
-            // 提取剩余操作数作为系数
+            /// 提取剩余操作数作为系数
             std::vector<std::shared_ptr<SymbolicNode>> coeff_ops;
             for (size_t j = 0; j < mul->operands.size(); ++j) {
                 if (j != i) coeff_ops.push_back(mul->operands[j]);
@@ -1947,16 +1947,16 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
 
     if (!node) return node;
 
-    // 递归处理子节点
+    /// 递归处理子节点
     if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        // 先递归化简每个操作数
+        /// 先递归化简每个操作数
         std::vector<std::shared_ptr<SymbolicNode>> simplified_ops;
         simplified_ops.reserve(add->operands.size());
         for (const auto& op : add->operands) {
             simplified_ops.push_back(tf_simplify_pythagorean_node(op, var));
         }
 
-        // 在化简后的操作数中寻找 sin²(f) + cos²(f) 配对
+        /// 在化简后的操作数中寻找 sin²(f) + cos²(f) 配对
         std::vector<bool> consumed(simplified_ops.size(), false);
         std::vector<std::shared_ptr<SymbolicNode>> result_ops;
 
@@ -1972,7 +1972,7 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
                 continue;
             }
 
-            // 确定配对目标类型
+            /// 确定配对目标类型
             FunctionNode::FuncType target_type =
                 (type_i == FunctionNode::FuncType::Sin)
                     ? FunctionNode::FuncType::Cos
@@ -1990,14 +1990,14 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
                     continue;
                 }
 
-                // 检查类型互补且参数相同
+                /// 检查类型互补且参数相同
                 if (type_j != target_type) continue;
                 if (!arg_i || !arg_j || !arg_i->equals(*arg_j)) continue;
 
-                // 检查系数相等
+                /// 检查系数相等
                 bool coeffs_equal = false;
                 if (!coeff_i && !coeff_j) {
-                    // 两者系数均为 1
+                    /// 两者系数均为 1
                     coeffs_equal = true;
                 } else if (coeff_i && coeff_j) {
                     coeffs_equal = coeff_i->equals(*coeff_j);
@@ -2005,16 +2005,16 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
 
                 if (!coeffs_equal) continue;
 
-                // 找到配对：sin²(f) + cos²(f) → 1，或 a*sin²(f) + a*cos²(f) → a
+                /// 找到配对：sin²(f) + cos²(f) → 1，或 a*sin²(f) + a*cos²(f) → a
                 consumed[i] = true;
                 consumed[j] = true;
                 found_pair = true;
 
                 if (!coeff_i) {
-                    // 系数为 1：替换为 NumberNode(1)
+                    /// 系数为 1：替换为 NumberNode(1)
                     result_ops.push_back(std::make_shared<NumberNode>(BigInt(1)));
                 } else {
-                    // 有公共系数：替换为系数本身
+                    /// 有公共系数：替换为系数本身
                     result_ops.push_back(coeff_i);
                 }
                 break;
@@ -2025,7 +2025,7 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
             }
         }
 
-        // 重建 AddNode
+        /// 重建 AddNode
         if (result_ops.empty()) {
             return std::make_shared<NumberNode>(BigInt(0));
         }
@@ -2059,7 +2059,7 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
         return std::make_shared<FunctionNode>(func->type, std::move(new_args));
     }
 
-    // 叶节点（NumberNode、VariableNode）直接返回
+    /// 叶节点（NumberNode、VariableNode）直接返回
     return node;
 }
 
@@ -2084,7 +2084,7 @@ static std::shared_ptr<SymbolicExpr> tf_simplify_pythagorean(
 
     if (!simplified_root) return expr;
 
-    // 若化简后与原表达式结构相同，返回原表达式避免不必要的重建
+    /// 若化简后与原表达式结构相同，返回原表达式避免不必要的重建
     if (simplified_root->equals(*expr->root)) {
         return expr;
     }
@@ -2112,44 +2112,44 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
 
     if (!expr || !expr->root) return {};
 
-    // --- 预处理：毕达哥拉斯恒等式化简 ---
-    // 将 sin²(f) + cos²(f) 子模式替换为 1，简化后续分解
+    /// --- 预处理：毕达哥拉斯恒等式化简 ---
+    /// 将 sin²(f) + cos²(f) 子模式替换为 1，简化后续分解
     auto pyth_simplified = tf_simplify_pythagorean(expr, var);
 
-    // --- 快速路径：乘积结构检测 ---
-    // 若表达式已为独立子表达式的乘积，直接返回各因子
+    /// --- 快速路径：乘积结构检测 ---
+    /// 若表达式已为独立子表达式的乘积，直接返回各因子
     auto mult_factors = tf_detect_multiplicative_structure(pyth_simplified);
     if (!mult_factors.empty()) {
         return mult_factors;
     }
 
-    // --- 快速路径：指数分离 ---
-    // 若表达式为加法且所有项共享公共 exp(f(x)) 因子，提取之
+    /// --- 快速路径：指数分离 ---
+    /// 若表达式为加法且所有项共享公共 exp(f(x)) 因子，提取之
     auto exp_factors = tf_detect_exponential_separation(pyth_simplified, var);
     if (!exp_factors.empty()) {
         return exp_factors;
     }
 
-    // 若表达式不含超越函数，直接返回原表达式
+    /// 若表达式不含超越函数，直接返回原表达式
     if (!tf_contains_transcendental(pyth_simplified->root, var)) {
         return {pyth_simplified};
     }
 
-    // --- Phase 1: 换元检测 ---
+    /// --- Phase 1: 换元检测 ---
     TransSubstitutionResult sub_result = detect_trans_substitutions(pyth_simplified, var);
 
-    // 无换元映射：表达式不含可处理的超越子表达式
+    /// 无换元映射：表达式不含可处理的超越子表达式
     if (sub_result.mappings.empty()) {
         return {pyth_simplified};
     }
 
-    // --- 快速路径：线性不可约检测 ---
-    // 若换元后表达式对所有不定元和原始变量均为线性，则不可约
+    /// --- 快速路径：线性不可约检测 ---
+    /// 若换元后表达式对所有不定元和原始变量均为线性，则不可约
     if (tf_is_linear_irreducible(sub_result, var)) {
         return {pyth_simplified};
     }
 
-    // --- Phase 2: 多项式构造 ---
+    /// --- Phase 2: 多项式构造 ---
     std::vector<std::string> indeterminates;
     indeterminates.reserve(sub_result.mappings.size());
     for (const auto& m : sub_result.mappings) {
@@ -2160,28 +2160,28 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         sub_result.poly_expr, indeterminates, var);
 
     if (!poly_result.success) {
-        // 多项式构造失败：表达式不可多项式化
+        /// 多项式构造失败：表达式不可多项式化
         return {pyth_simplified};
     }
 
-    // 常数或线性多项式：不可约
+    /// 常数或线性多项式：不可约
     if (poly_result.poly.degree() <= 1) {
         return {pyth_simplified};
     }
 
-    // --- Phase 2.3: 无平方因子预处理 ---
+    /// --- Phase 2.3: 无平方因子预处理 ---
     TfSquareFreeResult sqf_result = tf_square_free(poly_result.poly);
 
-    // 使用 square-free 部分进行后续分解
+    /// 使用 square-free 部分进行后续分解
     Polynomial<Rational> work_poly = sqf_result.square_free;
 
-    // 若 square-free 部分为常数或线性，不可约
+    /// 若 square-free 部分为常数或线性，不可约
     if (work_poly.degree() <= 1) {
         return {pyth_simplified};
     }
 
-    // --- Phase 3: Berlekamp 模分解 ---
-    // 尝试多个素数以找到合适的分解
+    /// --- Phase 3: Berlekamp 模分解 ---
+    /// 尝试多个素数以找到合适的分解
     static const int64_t TRIAL_PRIMES[] = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31};
     BerlekampResult berl_result;
     bool berlekamp_success = false;
@@ -2199,12 +2199,12 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     }
 
     if (!berlekamp_success || berl_result.factors.size() <= 1) {
-        // Berlekamp 分解失败或多项式在所有尝试素数下不可约
+        /// Berlekamp 分解失败或多项式在所有尝试素数下不可约
         return {pyth_simplified};
     }
 
-    // --- Phase 4: Hensel 提升 ---
-    // 将有理系数多项式转为整系数（乘以分母 LCM）
+    /// --- Phase 4: Hensel 提升 ---
+    /// 将有理系数多项式转为整系数（乘以分母 LCM）
     BigInt lcm_denom(1);
     for (const auto& c : work_poly.coeffs) {
         BigInt d = c.get_denominator();
@@ -2219,20 +2219,20 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     }
     Polynomial<BigInt> int_poly(int_coeffs, work_poly.variable_name);
 
-    // 计算提升界：使用 Mignotte bound 确定需要的精度
+    /// 计算提升界：使用 Mignotte bound 确定需要的精度
     int n = work_poly.degree();
     BigInt max_coeff(0);
     for (const auto& c : int_coeffs) {
         BigInt ac = c.Abs();
         if (ac > max_coeff) max_coeff = ac;
     }
-    // 保守 Mignotte 界：2^n * max_coeff
+    /// 保守 Mignotte 界：2^n * max_coeff
     BigInt mignotte = max_coeff;
     for (int i = 0; i < n; ++i) {
         mignotte = mignotte * BigInt(2);
     }
 
-    // 确定提升次数 k 使得 p^k > 2 * mignotte
+    /// 确定提升次数 k 使得 p^k > 2 * mignotte
     BigInt target = mignotte * BigInt(2);
     int64_t prime = berl_result.prime;
     int lift_bound = 1;
@@ -2253,10 +2253,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         return {pyth_simplified};
     }
 
-    // --- Phase 5: Zassenhaus 因子组合 ---
+    /// --- Phase 5: Zassenhaus 因子组合 ---
     int64_t prime_power = 1;
     for (int i = 0; i < lift_bound; ++i) {
-        // 防止溢出：若超出 int64_t 范围则截断
+        /// 防止溢出：若超出 int64_t 范围则截断
         if (prime_power > std::numeric_limits<int64_t>::max() / prime) {
             prime_power = std::numeric_limits<int64_t>::max();
             break;
@@ -2271,36 +2271,36 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         return {pyth_simplified};
     }
 
-    // 若组合后仅得到一个因子（或无因子），表达式不可约
+    /// 若组合后仅得到一个因子（或无因子），表达式不可约
     if (true_factors.size() <= 1) {
         return {pyth_simplified};
     }
 
-    // --- Phase 6: 逆换元 ---
+    /// --- Phase 6: 逆换元 ---
     std::vector<std::shared_ptr<SymbolicExpr>> symbolic_factors;
     symbolic_factors.reserve(true_factors.size());
 
     for (const auto& poly_factor : true_factors) {
-        // 将多项式因子转回符号表达式
+        /// 将多项式因子转回符号表达式
         auto sym_factor = poly_to_symbolic(poly_factor);
         if (!sym_factor) continue;
 
-        // 逆换元：将不定元替换回原始超越表达式
+        /// 逆换元：将不定元替换回原始超越表达式
         auto back_sub = tf_back_substitute(sym_factor, sub_result.mappings);
         if (back_sub) {
             symbolic_factors.push_back(back_sub);
         }
     }
 
-    // 若逆换元后因子数 ≤ 1，分解无效
+    /// 若逆换元后因子数 ≤ 1，分解无效
     if (symbolic_factors.size() <= 1) {
         return {pyth_simplified};
     }
 
-    // --- Phase 6.2: 化简与常数提取 ---
+    /// --- Phase 6.2: 化简与常数提取 ---
     auto final_factors = tf_simplify_factors(symbolic_factors);
 
-    // 若化简后仅剩一个非常数因子，分解无效
+    /// 若化简后仅剩一个非常数因子，分解无效
     size_t non_const_count = 0;
     for (const auto& f : final_factors) {
         if (f && !f->is_number()) non_const_count++;
@@ -2309,9 +2309,9 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         return {pyth_simplified};
     }
 
-    // 若存在重复因子（来自 square-free 预处理），需要恢复重数
+    /// 若存在重复因子（来自 square-free 预处理），需要恢复重数
     if (sqf_result.had_repeated_factors) {
-        // 将重复因子也进行逆换元并加入结果
+        /// 将重复因子也进行逆换元并加入结果
         auto rep_sym = poly_to_symbolic(sqf_result.repeated_factor);
         if (rep_sym && !rep_sym->is_one()) {
             auto rep_back = tf_back_substitute(rep_sym, sub_result.mappings);

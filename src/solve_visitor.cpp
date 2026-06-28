@@ -119,14 +119,14 @@ std::vector<std::shared_ptr<SymbolicExpr>> lamina::solve_dispatch(
     auto trans_results = solve_transcendental(f_expr, var);
     if (!trans_results.empty()) return trans_results;
 
-    // 混合超越方程路径：含超越函数且换元无法化为多项式时，委托给混合求解器
+    /// 混合超越方程路径：含超越函数且换元无法化为多项式时，委托给混合求解器
     if (contains_transcendental_of_var(f_expr, var)) {
         auto sub_result = detect_trans_substitutions(f_expr, var);
         if (sub_result.mappings.empty() || !is_polynomial_after_substitution(sub_result)) {
             if (opts.allow_numeric) {
                 return solve_mixed_transcendental(f_expr, var, opts);
             }
-            // allow_numeric 为 false 时不调用数值求解，落入后续逻辑
+            /// allow_numeric 为 false 时不调用数值求解，落入后续逻辑
         }
     }
 

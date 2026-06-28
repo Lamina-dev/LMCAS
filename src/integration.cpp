@@ -436,7 +436,7 @@ void IntegrationTable::load_defaults() {
             "1/sqrt(1-x^2)", pat, res, {"_u"}, u_is_var("_u"), 40));
     }
 
-    // |x| -> x*|x|/2   (since d/dx[x|x|/2] = |x|)
+    /// |x| -> x*|x|/2   (since d/dx[x|x|/2] = |x|)
     {
         auto u = wildcard("_u");
         auto pat = *make_fn(FT::Abs, make_expr_ptr(u));
@@ -2604,9 +2604,9 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
     // Defensive: if Q is zero or constant, this is not the right strategy.
     if (rd_is_zero_poly(Q) || Q.degree() < 1) return nullptr;
 
-    // PartialFractionStrategy 处理 deg<=1 的简单情形；degree>=2 交给本策略，
-    // 因为它的 integrate_term 对不可约二次因子（→ arctan + ln）是完整的，
-    // 而 PartialFraction 对不可约二次式会失败（留下未求值积分）。
+    /// PartialFractionStrategy 处理 deg<=1 的简单情形；degree>=2 交给本策略，
+    /// 因为它的 integrate_term 对不可约二次因子（→ arctan + ln）是完整的，
+    /// 而 PartialFraction 对不可约二次式会失败（留下未求值积分）。
     if (Q.degree() < 2) return nullptr;
     try {
         // Long division if needed.
@@ -3026,17 +3026,17 @@ std::shared_ptr<SymbolicExpr> MultipleIntegralEngine::evaluate(
 }
 
 // ================================================================
-// 万能代换（Weierstrass）策略实现 (任务 15.2)
+/// 万能代换（Weierstrass）策略实现 (任务 15.2)
 // ================================================================
 
 namespace {
 
-// 判断表达式是否仅由 var 通过 sin(var)/cos(var)/tan(var) 以及常数、四则、整数幂构成，
-// 即关于 sin/cos 的有理函数。含有其它依赖 var 的函数（exp/ln/sqrt 等）时返回 false。
+/// 判断表达式是否仅由 var 通过 sin(var)/cos(var)/tan(var) 以及常数、四则、整数幂构成，
+/// 即关于 sin/cos 的有理函数。含有其它依赖 var 的函数（exp/ln/sqrt 等）时返回 false。
 bool weier_is_rational_trig(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
     if (!node) return true;
     if (auto vn = std::dynamic_pointer_cast<VariableNode>(node)) {
-        // 裸 var 不允许（如 x*sin(x) 不是 sin/cos 的有理函数）
+        /// 裸 var 不允许（如 x*sin(x) 不是 sin/cos 的有理函数）
         return vn->name != var;
     }
     if (std::dynamic_pointer_cast<NumberNode>(node)) return true;
@@ -3049,7 +3049,7 @@ bool weier_is_rational_trig(const std::shared_ptr<SymbolicNode>& node, const std
         return true;
     }
     if (auto pw = std::dynamic_pointer_cast<PowerNode>(node)) {
-        // 指数必须是不依赖 var 的整数常数
+        /// 指数必须是不依赖 var 的整数常数
         auto en = std::dynamic_pointer_cast<NumberNode>(pw->exponent);
         if (!en) return false;
         return weier_is_rational_trig(pw->base, var);
@@ -3059,20 +3059,20 @@ bool weier_is_rational_trig(const std::shared_ptr<SymbolicNode>& node, const std
         if ((fn->type == FT::Sin || fn->type == FT::Cos || fn->type == FT::Tan ||
              fn->type == FT::Sec || fn->type == FT::Csc || fn->type == FT::Cot) &&
             fn->arguments.size() == 1) {
-            // 参数必须恰为 var
+            /// 参数必须恰为 var
             auto av = std::dynamic_pointer_cast<VariableNode>(fn->arguments[0]);
             if (av && av->name == var) return true;
-            // 参数不依赖 var 时也算常数
+            /// 参数不依赖 var 时也算常数
             return !depends_on_var(fn->arguments[0], var);
         }
-        // 其它函数：仅当不依赖 var 才允许
+        /// 其它函数：仅当不依赖 var 才允许
         for (auto& a : fn->arguments) if (depends_on_var(a, var)) return false;
         return true;
     }
     return false;
 }
 
-// 是否至少包含一个 sin(var)/cos(var)/tan(var)... 形式（确保确实是三角有理函数）
+/// 是否至少包含一个 sin(var)/cos(var)/tan(var)... 形式（确保确实是三角有理函数）
 bool weier_has_trig_of_var(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
     if (!node) return false;
     if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
@@ -3100,8 +3100,8 @@ bool weier_has_trig_of_var(const std::shared_ptr<SymbolicNode>& node, const std:
     return false;
 }
 
-// 递归替换：将 sin(var)/cos(var)/tan(var)... 替换为关于 t 的有理表达式。
-//   sin = 2t/(1+t²), cos = (1-t²)/(1+t²), tan = 2t/(1-t²)
+/// 递归替换：将 sin(var)/cos(var)/tan(var)... 替换为关于 t 的有理表达式。
+///   sin = 2t/(1+t²), cos = (1-t²)/(1+t²), tan = 2t/(1-t²)
 std::shared_ptr<SymbolicNode> weier_replace(const std::shared_ptr<SymbolicNode>& node,
                                             const std::string& var, const std::string& tvar) {
     if (!node) return node;
@@ -3128,7 +3128,7 @@ std::shared_ptr<SymbolicNode> weier_replace(const std::shared_ptr<SymbolicNode>&
                 }
             }
         }
-        // 其它函数：递归替换参数
+        /// 其它函数：递归替换参数
         std::vector<std::shared_ptr<SymbolicNode>> new_args;
         for (auto& a : fn->arguments) new_args.push_back(weier_replace(a, var, tvar));
         return std::make_shared<FunctionNode>(fn->type, new_args);
@@ -3150,8 +3150,8 @@ std::shared_ptr<SymbolicNode> weier_replace(const std::shared_ptr<SymbolicNode>&
     return node->clone();
 }
 
-// 将（已做 sin/cos→t 代换的）表达式树递归求值为有理数对 (分子, 分母)，
-// 分子分母均为关于 t 的多项式表达式。返回 nullopt 表示遇到无法处理的结构。
+/// 将（已做 sin/cos→t 代换的）表达式树递归求值为有理数对 (分子, 分母)，
+/// 分子分母均为关于 t 的多项式表达式。返回 nullopt 表示遇到无法处理的结构。
 typedef std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>> RatPair;
 
 std::optional<RatPair> weier_to_rational(const std::shared_ptr<SymbolicNode>& node,
@@ -3164,7 +3164,7 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<SymbolicNode>& no
         return RatPair{std::make_shared<SymbolicExpr>(node->clone()), one};
     }
     if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        // 累加：a/b + c/d = (a*d + c*b)/(b*d)
+        /// 累加：a/b + c/d = (a*d + c*b)/(b*d)
         std::shared_ptr<SymbolicExpr> num = SymbolicExpr::number(0);
         std::shared_ptr<SymbolicExpr> den = one;
         for (auto& op : add->operands) {
@@ -3219,7 +3219,7 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<SymbolicNode>& no
         if (neg) std::swap(num, den);
         return RatPair{num, den};
     }
-    // 其它结构（含未代换的函数）无法表示为 t 的有理函数
+    /// 其它结构（含未代换的函数）无法表示为 t 的有理函数
     return std::nullopt;
 }
 
@@ -3230,13 +3230,13 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
     if (depth > ctx.max_depth()) return nullptr;
     if (!expr.root) return nullptr;
 
-    // 必须确实含有 sin/cos(var) 且整体为其有理函数
+    /// 必须确实含有 sin/cos(var) 且整体为其有理函数
     if (!weier_has_trig_of_var(expr.root, var)) return nullptr;
     if (!weier_is_rational_trig(expr.root, var)) return nullptr;
 
     const std::string tvar = "__weier_t";
 
-    // 替换 sin/cos -> t 的有理式，并乘以 dx = 2/(1+t²) dt
+    /// 替换 sin/cos -> t 的有理式，并乘以 dx = 2/(1+t²) dt
     auto replaced = std::make_shared<SymbolicExpr>(weier_replace(expr.root, var, tvar));
     auto t = SymbolicExpr::variable(tvar);
     auto t2 = SymbolicExpr::power(t, SymbolicExpr::number(2));
@@ -3244,16 +3244,16 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
     auto dx = SymbolicExpr::divide(SymbolicExpr::number(2), onep); // 2/(1+t²)
     auto integrand_raw = SymbolicExpr::multiply(replaced, dx);
 
-    // 关键：被积函数是 sin/cos 的有理函数，代换后仍是 t 的有理函数，但
-    // 嵌套分式 simplify() 无法约化。用「有理数对 (分子多项式, 分母多项式)」
-    // 递归求值整棵表达式树，得到干净的 N(t)/D(t)，再交给有理函数积分。
+    /// 关键：被积函数是 sin/cos 的有理函数，代换后仍是 t 的有理函数，但
+    /// 嵌套分式 simplify() 无法约化。用「有理数对 (分子多项式, 分母多项式)」
+    /// 递归求值整棵表达式树，得到干净的 N(t)/D(t)，再交给有理函数积分。
     auto rat = weier_to_rational(integrand_raw->root, tvar);
     if (!rat) return nullptr;  // 出现非多项式结构，放弃
     auto [num_poly, den_poly] = *rat;
     if (!den_poly || den_poly->root->is_zero()) return nullptr;
 
-    // 用多项式 GCD 约简 num/den，得到最简有理函数，避免 simplify() 把
-    // 单一分式重新展开成分式之和（那样 RationalDecomposition 无法识别）。
+    /// 用多项式 GCD 约简 num/den，得到最简有理函数，避免 simplify() 把
+    /// 单一分式重新展开成分式之和（那样 RationalDecomposition 无法识别）。
     std::shared_ptr<SymbolicExpr> integrand_t;
     try {
         Polynomial<Rational> Np = symbolic_to_poly<Rational>(num_poly->expand(), tvar);
@@ -3274,21 +3274,21 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
         integrand_t = SymbolicExpr::divide(num_poly, den_poly)->simplify();
     }
 
-    // 用有理分解策略直接积分（用独立的 Integrator 实例，避免污染外层
-    // 积分器的循环检测状态导致结果被错误改写）。
+    /// 用有理分解策略直接积分（用独立的 Integrator 实例，避免污染外层
+    /// 积分器的循环检测状态导致结果被错误改写）。
     Integrator inner;
     RationalDecompositionStrategy rds;
     auto integrated = rds.try_integrate(*integrand_t, tvar, inner, depth + 1);
     if (!integrated) {
-        // 退化为多项式（如常数 1）时，RationalDecomposition 可能不接受；
-        // 直接用幂律积分兜底。
+        /// 退化为多项式（如常数 1）时，RationalDecomposition 可能不接受；
+        /// 直接用幂律积分兜底。
         integrated = inner.integrate_recursive(*integrand_t, tvar, 0);
     }
     if (!integrated) return nullptr;
 
-    // 若结果仍含未求值积分节点，视为失败
+    /// 若结果仍含未求值积分节点，视为失败
     if (depends_on_var(integrated->root, tvar)) {
-        // 检查是否残留 Calculus_Integral
+        /// 检查是否残留 Calculus_Integral
         bool has_uneval = false;
         std::function<void(const std::shared_ptr<SymbolicNode>&)> scan =
             [&](const std::shared_ptr<SymbolicNode>& n) {
@@ -3304,7 +3304,7 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
         if (has_uneval) return nullptr;
     }
 
-    // 回代 t = tan(x/2)
+    /// 回代 t = tan(x/2)
     auto half_x = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)),
                                          SymbolicExpr::variable(var));
     auto tan_half = std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(
@@ -3315,17 +3315,17 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
 }
 
 // ================================================================
-// 三角换元策略实现 (任务 15.1)
+/// 三角换元策略实现 (任务 15.1)
 // ================================================================
 
 namespace {
 
-// 检测形如 (c0 + c2*x²)^p 的二次根式幂，其中 p = ±1/2。
-// 返回 a²=|c0/c2| 信息与符号模式。pattern:
-//   1 => a²-x²  (c2<0, c0>0, 归一化后 a²-x²)
-//   2 => a²+x²  (c2>0, c0>0)
-//   3 => x²-a²  (c2>0, c0<0)
-// 同时输出 a_sq=|c0|/|c2| 以及 c2 的绝对值（要求 c2=±1 以保持简单）。
+/// 检测形如 (c0 + c2*x²)^p 的二次根式幂，其中 p = ±1/2。
+/// 返回 a²=|c0/c2| 信息与符号模式。pattern:
+///   1 => a²-x²  (c2<0, c0>0, 归一化后 a²-x²)
+///   2 => a²+x²  (c2>0, c0>0)
+///   3 => x²-a²  (c2>0, c0<0)
+/// 同时输出 a_sq=|c0|/|c2| 以及 c2 的绝对值（要求 c2=±1 以保持简单）。
 struct QuadRadical {
     int pattern = 0;       // 1,2,3
     double exponent = 0;   // +0.5 or -0.5
@@ -3345,19 +3345,19 @@ bool trigsub_match_radical(const std::shared_ptr<SymbolicNode>& node, const std:
     else return false;
     if (std::abs(e - 0.5) > 1e-9 && std::abs(e + 0.5) > 1e-9) return false;
 
-    // base 必须是 c0 + c2*x²（关于 var 的二次、无一次项）
+    /// base 必须是 c0 + c2*x²（关于 var 的二次、无一次项）
     SymbolicExpr base(pw->base);
     auto b = base.expand();
     if (!b) b = std::make_shared<SymbolicExpr>(pw->base);
-    // 提取关于 var 的系数：c0（常数）、c1（一次）、c2（二次）
-    // 用求导法：c2 = (1/2) d²/dx² ; c1 = d/dx |_{x=0} ; c0 = base|_{x=0}
+    /// 提取关于 var 的系数：c0（常数）、c1（一次）、c2（二次）
+    /// 用求导法：c2 = (1/2) d²/dx² ; c1 = d/dx |_{x=0} ; c0 = base|_{x=0}
     auto d1 = b->differentiate(var);
     auto d2 = d1->differentiate(var);
     auto zero = SymbolicExpr::number(0);
     auto c0e = b->substitute(var, zero)->simplify();
     auto c1e = d1->substitute(var, zero)->simplify();
     auto c2e = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1,2)), d2)->simplify();
-    // 必须 c1=0，且 c2 为非零常数，c0 常数，且 d2 不依赖 var（纯二次）
+    /// 必须 c1=0，且 c2 为非零常数，c0 常数，且 d2 不依赖 var（纯二次）
     if (!c1e->root || !c1e->root->is_zero()) return false;
     if (depends_on_var(c2e->root, var)) return false;
     if (depends_on_var(c0e->root, var)) return false;
@@ -3365,7 +3365,7 @@ bool trigsub_match_radical(const std::shared_ptr<SymbolicNode>& node, const std:
     double c0 = c0e->to_numeric();
     double c2 = c2e->to_numeric();
     if (std::abs(c2) < 1e-12) return false;
-    // 仅支持 c2 = ±1（标准型 a²±x² / x²-a²）
+    /// 仅支持 c2 = ±1（标准型 a²±x² / x²-a²）
     if (std::abs(std::abs(c2) - 1.0) > 1e-9) return false;
 
     out.exponent = e;
@@ -3385,11 +3385,11 @@ std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate(
 
     auto x = SymbolicExpr::variable(var);
 
-    // 仅处理被积函数恰为单个二次根式幂的常见闭式情形：
-    //   ∫ (a²-x²)^(-1/2) dx = arcsin(x/a)
-    //   ∫ (a²+x²)^(-1/2) dx = arcsinh(x/a) = ln(x + √(x²+a²))
-    //   ∫ (x²-a²)^(-1/2) dx = arccosh(x/a) = ln(x + √(x²-a²))
-    //   ∫ (a²-x²)^( 1/2) dx = (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
+    /// 仅处理被积函数恰为单个二次根式幂的常见闭式情形：
+    ///   ∫ (a²-x²)^(-1/2) dx = arcsin(x/a)
+    ///   ∫ (a²+x²)^(-1/2) dx = arcsinh(x/a) = ln(x + √(x²+a²))
+    ///   ∫ (x²-a²)^(-1/2) dx = arccosh(x/a) = ln(x + √(x²-a²))
+    ///   ∫ (a²-x²)^( 1/2) dx = (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
     QuadRadical qr;
     if (!trigsub_match_radical(expr.root, var, qr)) return nullptr;
 
@@ -3397,7 +3397,7 @@ std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate(
     auto a_sq_expr = SymbolicExpr::number(a_sq);
     auto a_expr = SymbolicExpr::sqrt(a_sq_expr); // a = √(a²)
 
-    // 构造 √(模式) 表达式
+    /// 构造 √(模式) 表达式
     auto x_sq = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto make_radicand = [&]() -> std::shared_ptr<SymbolicExpr> {
         if (qr.pattern == 1) // a²-x²
@@ -3415,39 +3415,39 @@ std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate(
     auto ln = [&](const std::shared_ptr<SymbolicExpr>& u) { return SymbolicExpr::ln(u); };
 
     if (qr.exponent < 0) {
-        // (...)^(-1/2)
+        /// (...)^(-1/2)
         if (qr.pattern == 1) {
-            // arcsin(x/a)
+            /// arcsin(x/a)
             return arcsin(x_over_a)->simplify();
         }
         if (qr.pattern == 2) {
-            // ln(x + √(x²+a²))
+            /// ln(x + √(x²+a²))
             auto rad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq, a_sq_expr));
             return ln(SymbolicExpr::add(x, rad))->simplify();
         }
-        // pattern 3: ln(x + √(x²-a²))
+        /// pattern 3: ln(x + √(x²-a²))
         auto rad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq,
             SymbolicExpr::multiply(SymbolicExpr::number(-1), a_sq_expr)));
         return ln(SymbolicExpr::add(x, rad))->simplify();
     } else {
-        // (...)^(+1/2)
+        /// (...)^(+1/2)
         auto rad = SymbolicExpr::sqrt(make_radicand());
         auto half = SymbolicExpr::number(Rational(1, 2));
         if (qr.pattern == 1) {
-            // (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
+            /// (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
             auto term1 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, x), rad);
             auto term2 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, a_sq_expr), arcsin(x_over_a));
             return SymbolicExpr::add(term1, term2)->simplify();
         }
         if (qr.pattern == 2) {
-            // (x/2)√(a²+x²) + (a²/2)ln(x+√(x²+a²))
+            /// (x/2)√(a²+x²) + (a²/2)ln(x+√(x²+a²))
             auto lrad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq, a_sq_expr));
             auto term1 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, x), rad);
             auto term2 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, a_sq_expr),
                 ln(SymbolicExpr::add(x, lrad)));
             return SymbolicExpr::add(term1, term2)->simplify();
         }
-        // pattern 3: (x/2)√(x²-a²) - (a²/2)ln(x+√(x²-a²))
+        /// pattern 3: (x/2)√(x²-a²) - (a²/2)ln(x+√(x²-a²))
         auto lrad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq,
             SymbolicExpr::multiply(SymbolicExpr::number(-1), a_sq_expr)));
         auto term1 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, x), rad);

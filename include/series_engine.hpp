@@ -15,7 +15,7 @@ class SymbolicExpr;
 namespace lamina {
 
 // ============================================================
-// 收敛性判定 (Requirements 22, 23)
+/// 收敛性判定 (Requirements 22, 23)
 // ============================================================
 
 /**
@@ -60,7 +60,7 @@ LAMINA_API ConvergenceInfo convergence_test(
     const std::shared_ptr<SymbolicExpr>& general_term, const std::string& index_var);
 
 // ============================================================
-// 幂级数运算 (Requirement 24)
+/// 幂级数运算 (Requirement 24)
 // ============================================================
 
 /**
@@ -99,7 +99,7 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_compose(
     const std::vector<std::shared_ptr<SymbolicExpr>>& g, int order);
 
 // ============================================================
-// 傅里叶级数 (Requirement 25)
+/// 傅里叶级数 (Requirement 25)
 // ============================================================
 
 /**
@@ -121,7 +121,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> fourier_series(
     const std::shared_ptr<SymbolicExpr>& period, int n_terms);
 
 // ============================================================
-// 洛朗级数 (Requirement 26)
+/// 洛朗级数 (Requirement 26)
 // ============================================================
 
 /**
@@ -179,7 +179,7 @@ LAMINA_API LaurentResult laurent_series_full(
     const std::shared_ptr<SymbolicExpr>& center, int order_neg, int order_pos);
 
 // ============================================================
-// 渐近展开 (Requirement 27)
+/// 渐近展开 (Requirement 27)
 // ============================================================
 
 /**
@@ -197,7 +197,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> asymptotic_expand(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var, int order);
 
 // ============================================================
-// 符号求和 (Requirements 28, 85)
+/// 符号求和 (Requirements 28, 85)
 // ============================================================
 
 /**
@@ -217,7 +217,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_sum(
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper);
 
 // ============================================================
-// 符号乘积 (Requirements 67, 94, 95)
+/// 符号乘积 (Requirements 67, 94, 95)
 // ============================================================
 
 /**
@@ -237,7 +237,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_product(
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper);
 
 // ============================================================
-// 上极限与下极限 (Requirement 66)
+/// 上极限与下极限 (Requirement 66)
 // ============================================================
 
 /**

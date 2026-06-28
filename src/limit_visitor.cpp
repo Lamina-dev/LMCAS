@@ -31,16 +31,16 @@ std::shared_ptr<SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
     auto simplified = ratio_expr->simplify();
     if (!simplified || !simplified->root) return nullptr;
 
-    // Check if simplification actually changed the expression (avoid infinite loops)
+    /// Check if simplification actually changed the expression (avoid infinite loops)
     auto orig_str = ratio_expr->to_string();
     auto simp_str = simplified->to_string();
     if (orig_str == simp_str) return nullptr;
 
-    // Reject simplified forms that are AddNodes (sums). When simplify() expands
-    // a fraction like (1-cos(x))/(sin(x)+x*cos(x)) into a sum of terms with
-    // negative powers, evaluating the limit of that sum can trigger ∞−∞ detection,
-    // which calls resolve_inf_minus_inf → apply_lhopital → simplify_and_eval_ratio
-    // again, creating an infinite loop.
+    /// Reject simplified forms that are AddNodes (sums). When simplify() expands
+    /// a fraction like (1-cos(x))/(sin(x)+x*cos(x)) into a sum of terms with
+    /// negative powers, evaluating the limit of that sum can trigger ∞−∞ detection,
+    /// which calls resolve_inf_minus_inf → apply_lhopital → simplify_and_eval_ratio
+    /// again, creating an infinite loop.
     if (std::dynamic_pointer_cast<AddNode>(simplified->root)) return nullptr;
 
     LimitVisitor sub_simp(var, point, direction, assumption_ctx_);
@@ -54,11 +54,11 @@ std::shared_ptr<SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
     simp_result = n2.get_result();
     if (!simp_result) return nullptr;
 
-    // Accept the result if it's a determinate finite value
+    /// Accept the result if it's a determinate finite value
     if (!is_inf(simp_result)) {
         return simp_result;
     }
-    // Also accept infinity results
+    /// Also accept infinity results
     return simp_result;
 }
 
@@ -91,7 +91,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
     std::shared_ptr<SymbolicExpr> expand_point;
 
     if (at_infinity) {
-        // x → ∞: 代换 x = 1/t，在 t → 0 处展开
+        /// x → ∞: 代换 x = 1/t，在 t → 0 处展开
         std::string t_var = "__lim_t__";
         auto t_expr = SymbolicExpr::variable(t_var);
         auto one_over_t = SymbolicExpr::power(t_expr, SymbolicExpr::number(-1));
@@ -110,7 +110,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
 
     if (!num_expr || !den_expr || !expand_point) return nullptr;
 
-    // 从 order=4 开始，逐步增加到 max_order
+    /// 从 order=4 开始，逐步增加到 max_order
     for (int order = 4; order <= max_order; order += 2) {
         auto num_series = num_expr->series(expand_var, expand_point, order);
         auto den_series = den_expr->series(expand_var, expand_point, order);
@@ -120,23 +120,23 @@ std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
         num_series = num_series->simplify();
         den_series = den_series->simplify();
 
-        // 提取首项：在展开点处求值得到常数项，
-        // 若为零则对 (x - a) 的各阶系数逐一检查
+        /// 提取首项：在展开点处求值得到常数项，
+        /// 若为零则对 (x - a) 的各阶系数逐一检查
         auto num_leading = find_leading_term(num_series, expand_var, expand_point, order);
         auto den_leading = find_leading_term(den_series, expand_var, expand_point, order);
 
         if (!num_leading.first || !den_leading.first) continue;
 
-        // 两个首项都非零 → 可以确定极限
+        /// 两个首项都非零 → 可以确定极限
         if (!num_leading.first->is_zero() && !den_leading.first->is_zero()) {
             int power_diff = num_leading.second - den_leading.second;
 
             if (power_diff > 0) {
-                // 分子阶数更高 → 极限为 0
+                /// 分子阶数更高 → 极限为 0
                 return std::make_shared<NumberNode>(BigInt(0));
             } else if (power_diff < 0) {
-                // 分母阶数更高 → 极限为 ±∞
-                // 确定符号
+                /// 分母阶数更高 → 极限为 ±∞
+                /// 确定符号
                 auto ratio = SymbolicExpr::multiply(
                     std::make_shared<SymbolicExpr>(num_leading.first),
                     SymbolicExpr::power(
@@ -157,7 +157,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
                 }
                 return inf_node;
             } else {
-                // 同阶 → 极限为系数之比
+                /// 同阶 → 极限为系数之比
                 auto ratio = SymbolicExpr::multiply(
                     std::make_shared<SymbolicExpr>(num_leading.first),
                     SymbolicExpr::power(
@@ -168,12 +168,12 @@ std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
             }
         }
 
-        // 如果分子首项为零但分母不为零，极限为 0
+        /// 如果分子首项为零但分母不为零，极限为 0
         if (num_leading.first->is_zero() && !den_leading.first->is_zero()) {
             return std::make_shared<NumberNode>(BigInt(0));
         }
 
-        // 两者都为零 → 需要更高阶展开
+        /// 两者都为零 → 需要更高阶展开
     }
 
     return nullptr;
@@ -202,17 +202,17 @@ std::pair<std::shared_ptr<SymbolicNode>, int> LimitVisitor::find_leading_term(
     auto current = series_expr;
 
     for (int n = 0; n <= max_order; ++n) {
-        // 在展开点求值得到第 n 阶系数（乘以 n!）
+        /// 在展开点求值得到第 n 阶系数（乘以 n!）
         auto val = current->substitute(expand_var, expand_point);
         if (!val) return {nullptr, 0};
         val = val->simplify();
 
         if (val && val->root && !val->root->is_zero()) {
-            // 系数为 val / n!（但对于比较比值，n! 会约掉，所以直接返回 val）
+            /// 系数为 val / n!（但对于比较比值，n! 会约掉，所以直接返回 val）
             return {val->root, n};
         }
 
-        // 对当前表达式求导以获取下一阶系数
+        /// 对当前表达式求导以获取下一阶系数
         current = current->differentiate(expand_var);
         if (!current) return {nullptr, 0};
         current = current->simplify();
@@ -249,7 +249,7 @@ int LimitVisitor::get_sign(const std::shared_ptr<SymbolicNode>& node) {
             return 0;
         }
     }
-    // 对于乘法节点，符号为各因子符号之积
+    /// 对于乘法节点，符号为各因子符号之积
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
         int sign = 1;
         for (auto& op : mul->operands) {
@@ -263,7 +263,7 @@ int LimitVisitor::get_sign(const std::shared_ptr<SymbolicNode>& node) {
 }
 
 // ============================================================================
-// PiecewiseNode limit handling and direction-aware sign evaluation
+/// PiecewiseNode limit handling and direction-aware sign evaluation
 // ============================================================================
 
 /**
@@ -287,7 +287,7 @@ void LimitVisitor::visit(PiecewiseNode& node) {
             result = nullptr;
         }
     } else {
-        // 双侧极限：分别计算左右极限
+        /// 双侧极限：分别计算左右极限
         auto lb = select_branch_by_direction(node, "-");
         auto rb = select_branch_by_direction(node, "+");
         std::shared_ptr<SymbolicNode> lr = nullptr, rr = nullptr;
@@ -367,7 +367,7 @@ bool LimitVisitor::condition_satisfied_by_direction(
  */
 std::optional<int> LimitVisitor::evaluate_relational_sign(
     const std::shared_ptr<RelationalNode>& rel, const std::string& dir) {
-    // 模式：var op number
+    /// 模式：var op number
     auto left_var = std::dynamic_pointer_cast<VariableNode>(rel->left);
     auto right_num = std::dynamic_pointer_cast<NumberNode>(rel->right);
     if (left_var && left_var->name == var && right_num) {
@@ -380,7 +380,7 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         if (diff < -1e-15) return -1;
         return 0;
     }
-    // 模式：number op var
+    /// 模式：number op var
     auto left_num = std::dynamic_pointer_cast<NumberNode>(rel->left);
     auto right_var = std::dynamic_pointer_cast<VariableNode>(rel->right);
     if (left_num && right_var && right_var->name == var) {
@@ -393,7 +393,7 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         if (diff < -1e-15) return -1;
         return 0;
     }
-    // 通用：计算 (left - right) 的极限符号
+    /// 通用：计算 (left - right) 的极限符号
     auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
     std::vector<std::shared_ptr<SymbolicNode>> neg_ops = {neg_one, rel->right->clone()};
     std::vector<std::shared_ptr<SymbolicNode>> add_ops = {rel->left->clone(), std::make_shared<MultiplyNode>(neg_ops)};
@@ -427,7 +427,7 @@ std::optional<std::shared_ptr<SymbolicNode>> LimitVisitor::evaluate_sgn_limit(
         if (s) return std::make_shared<NumberNode>(BigInt(*s));
         return std::nullopt;
     }
-    // 参数极限为零，根据方向确定符号
+    /// 参数极限为零，根据方向确定符号
     int sign = determine_sign_near_point(arg, direction);
     if (sign != 0) return std::make_shared<NumberNode>(BigInt(sign));
     return std::make_shared<NumberNode>(BigInt(0));
@@ -462,7 +462,7 @@ std::optional<std::shared_ptr<SymbolicNode>> LimitVisitor::evaluate_abs_limit(
 
 
 // ============================================================================
-// Limits at infinity enhancements
+/// Limits at infinity enhancements
 // ============================================================================
 
 /**
@@ -521,7 +521,7 @@ int LimitVisitor::get_polynomial_degree(const std::shared_ptr<SymbolicNode>& nod
                 if (e == static_cast<int>(e) && e >= 0) return static_cast<int>(e);
             }
         }
-        // c^x or similar — not a polynomial
+        /// c^x or similar — not a polynomial
         int base_deg = get_polynomial_degree(pow->base);
         if (base_deg < 0) return -1;
         if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
@@ -554,7 +554,7 @@ int LimitVisitor::get_polynomial_degree(const std::shared_ptr<SymbolicNode>& nod
         return max_deg;
     }
 
-    // FunctionNode (sin, cos, exp, ln, etc.) — not a polynomial
+    /// FunctionNode (sin, cos, exp, ln, etc.) — not a polynomial
     return -1;
 }
 
@@ -586,7 +586,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::get_leading_coefficient(const std::s
         if (base_var && base_var->name == var) {
             return std::make_shared<NumberNode>(BigInt(1));
         }
-        // constant^n
+        /// constant^n
         auto base_lc = get_leading_coefficient(pow->base);
         if (!base_lc) return nullptr;
         if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
@@ -610,7 +610,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::get_leading_coefficient(const std::s
     }
 
     if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        // Find terms with the highest degree and sum their leading coefficients
+        /// Find terms with the highest degree and sum their leading coefficients
         std::vector<std::shared_ptr<SymbolicNode>> leading_terms;
         for (auto& op : add->operands) {
             int d = get_polynomial_degree(op);
@@ -668,7 +668,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_rational_at_infinity(
         return norm.get_result();
     }
 
-    // deg_num > deg_den → ±∞
+    /// deg_num > deg_den → ±∞
     auto lc_num = get_leading_coefficient(num);
     auto lc_den = get_leading_coefficient(den);
     int sign_num = lc_num ? get_sign(lc_num) : 1;
@@ -705,7 +705,7 @@ LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<Sy
 
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
         if (func->type == FunctionNode::FuncType::Exp) {
-            // Check if argument contains var with positive growth
+            /// Check if argument contains var with positive growth
             if (func->arguments.size() == 1) {
                 int arg_deg = get_polynomial_degree(func->arguments[0]);
                 if (arg_deg > 0) return GrowthClass::Exponential;
@@ -718,7 +718,7 @@ LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<Sy
         if (func->type == FunctionNode::FuncType::Infinity) {
             return GrowthClass::Unknown;
         }
-        // sin, cos, etc. are bounded
+        /// sin, cos, etc. are bounded
         if (func->type == FunctionNode::FuncType::Sin || func->type == FunctionNode::FuncType::Cos) {
             return GrowthClass::Constant;
         }
@@ -726,17 +726,17 @@ LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<Sy
     }
 
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        // x^n is polynomial, e^x is exponential
+        /// x^n is polynomial, e^x is exponential
         auto base_var = std::dynamic_pointer_cast<VariableNode>(pow->base);
         if (base_var && base_var->name == var) {
             return GrowthClass::Polynomial;
         }
-        // Check if base is exp-like: a^x where a > 1
+        /// Check if base is exp-like: a^x where a > 1
         if (auto base_num = std::dynamic_pointer_cast<NumberNode>(pow->base)) {
             int exp_deg = get_polynomial_degree(pow->exponent);
             if (exp_deg > 0) return GrowthClass::Exponential;
         }
-        // Check if base contains exp
+        /// Check if base contains exp
         auto base_growth = classify_growth(pow->base);
         if (base_growth == GrowthClass::Exponential) return GrowthClass::Exponential;
         if (base_growth == GrowthClass::Polynomial) return GrowthClass::Polynomial;
@@ -778,7 +778,7 @@ int LimitVisitor::get_growth_polynomial_degree(const std::shared_ptr<SymbolicNod
     int deg = get_polynomial_degree(node);
     if (deg >= 0) return deg;
 
-    // For multiply nodes with mixed polynomial and logarithmic factors
+    /// For multiply nodes with mixed polynomial and logarithmic factors
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
         int total_poly_deg = 0;
         for (auto& op : mul->operands) {
@@ -787,7 +787,7 @@ int LimitVisitor::get_growth_polynomial_degree(const std::shared_ptr<SymbolicNod
                 int d = get_polynomial_degree(op);
                 if (d >= 0) total_poly_deg += d;
             }
-            // Logarithmic factors don't contribute to polynomial degree
+            /// Logarithmic factors don't contribute to polynomial degree
         }
         return total_poly_deg;
     }
@@ -817,19 +817,19 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_by_growth_comparison(
         return nullptr;
     }
 
-    // Different growth classes
+    /// Different growth classes
     if (static_cast<int>(num_growth) > static_cast<int>(den_growth)) {
-        // Numerator grows faster → ±∞
+        /// Numerator grows faster → ±∞
         std::vector<std::shared_ptr<SymbolicNode>> inf_args;
         return std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     }
 
     if (static_cast<int>(num_growth) < static_cast<int>(den_growth)) {
-        // Denominator grows faster → 0
+        /// Denominator grows faster → 0
         return std::make_shared<NumberNode>(BigInt(0));
     }
 
-    // Same growth class — compare within class
+    /// Same growth class — compare within class
     if (num_growth == GrowthClass::Polynomial) {
         int num_deg = get_growth_polynomial_degree(num);
         int den_deg = get_growth_polynomial_degree(den);
@@ -838,7 +838,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_by_growth_comparison(
             std::vector<std::shared_ptr<SymbolicNode>> inf_args;
             return std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
         }
-        // Same degree — fall through to L'Hôpital or other methods
+        /// Same degree — fall through to L'Hôpital or other methods
     }
 
     return nullptr;
@@ -857,17 +857,17 @@ std::shared_ptr<SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
 
     std::string t_var = "__neg_inf_t__";
 
-    // Substitute x = -t in the expression
+    /// Substitute x = -t in the expression
     auto substituted = substitute_neg_t(expr, t_var);
     if (!substituted) return nullptr;
 
-    // Normalize the substituted expression
+    /// Normalize the substituted expression
     NormalizationVisitor norm;
     substituted->accept(norm);
     substituted = norm.get_result();
     if (!substituted) return nullptr;
 
-    // Evaluate lim(t→+∞) of the substituted expression
+    /// Evaluate lim(t→+∞) of the substituted expression
     std::vector<std::shared_ptr<SymbolicNode>> inf_args;
     auto pos_inf = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
 
@@ -895,7 +895,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::substitute_neg_t(
 
     if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
         if (v->name == var) {
-            // x = -t → multiply(-1, t)
+            /// x = -t → multiply(-1, t)
             std::vector<std::shared_ptr<SymbolicNode>> ops = {
                 std::make_shared<NumberNode>(BigInt(-1)),
                 std::make_shared<VariableNode>(t_var)
@@ -945,6 +945,6 @@ std::shared_ptr<SymbolicNode> LimitVisitor::substitute_neg_t(
         return std::make_shared<FunctionNode>(func->type, new_args);
     }
 
-    // For other node types, clone as-is
+    /// For other node types, clone as-is
     return node->clone();
 }

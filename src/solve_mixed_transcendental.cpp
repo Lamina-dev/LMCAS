@@ -19,7 +19,7 @@
 namespace lamina {
 
 // ============================================================================
-// contains_transcendental_of_var
+/// contains_transcendental_of_var
 // ============================================================================
 
 /**
@@ -89,7 +89,7 @@ bool contains_transcendental_of_var(
             if (found) return;
 
             if (is_transcendental_func(n.type)) {
-                // 检查参数是否依赖目标变量
+                /// 检查参数是否依赖目标变量
                 for (auto& arg : n.arguments) {
                     if (depends_on_var(arg, target_var)) {
                         found = true;
@@ -98,7 +98,7 @@ bool contains_transcendental_of_var(
                 }
             }
 
-            // 递归检查参数子树（可能嵌套超越函数）
+            /// 递归检查参数子树（可能嵌套超越函数）
             for (auto& arg : n.arguments) {
                 if (found) return;
                 arg->accept(*this);
@@ -111,7 +111,7 @@ bool contains_transcendental_of_var(
 }
 
 // ============================================================================
-// is_polynomial_after_substitution
+/// is_polynomial_after_substitution
 // ============================================================================
 
 /**
@@ -181,7 +181,7 @@ static int degree_in_var(const std::shared_ptr<SymbolicNode>& node, const std::s
         return base_deg * e_val;
     }
 
-    // FunctionNode 依赖 var 意味着非多项式结构
+    /// FunctionNode 依赖 var 意味着非多项式结构
     if (std::dynamic_pointer_cast<FunctionNode>(node)) {
         return -1;
     }
@@ -208,7 +208,7 @@ bool is_polynomial_after_substitution(
 }
 
 // ============================================================================
-// determine_search_interval
+/// determine_search_interval
 // ============================================================================
 
 #ifndef M_PI
@@ -257,15 +257,15 @@ static lmmc_real_t extract_linear_coefficient(
 {
     if (!node || !depends_on_var(node, var)) return 0.0;
 
-    // 模式 1: 变量本身 → k = 1
+    /// 模式 1: 变量本身 → k = 1
     if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
         if (v->name == var) return 1.0;
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
-    // 模式 2: 乘法节点 k*x
+    /// 模式 2: 乘法节点 k*x
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        // 检查是否恰好是 数值 * 变量 的形式
+        /// 检查是否恰好是 数值 * 变量 的形式
         if (mul->operands.size() == 2) {
             std::shared_ptr<SymbolicNode> num_part = nullptr;
             std::shared_ptr<SymbolicNode> var_part = nullptr;
@@ -282,23 +282,23 @@ static lmmc_real_t extract_linear_coefficient(
                 return extract_real_value(num_part);
             }
         }
-        // 非简单 k*x 形式 → 非线性
+        /// 非简单 k*x 形式 → 非线性
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
-    // 模式 3: 加法节点 k*x + c
+    /// 模式 3: 加法节点 k*x + c
     if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
         lmmc_real_t coeff = std::numeric_limits<lmmc_real_t>::quiet_NaN();
         bool found_var_term = false;
 
         for (const auto& op : add->operands) {
             if (!depends_on_var(op, var)) {
-                // 常数项，跳过
+                /// 常数项，跳过
                 continue;
             }
-            // 含变量的项 — 只允许一个
+            /// 含变量的项 — 只允许一个
             if (found_var_term) {
-                // 多个含变量的项 → 非线性
+                /// 多个含变量的项 → 非线性
                 return std::numeric_limits<lmmc_real_t>::quiet_NaN();
             }
             found_var_term = true;
@@ -308,7 +308,7 @@ static lmmc_real_t extract_linear_coefficient(
         return found_var_term ? coeff : std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
-    // 其他节点类型（PowerNode, FunctionNode 等）→ 非线性
+    /// 其他节点类型（PowerNode, FunctionNode 等）→ 非线性
     return std::numeric_limits<lmmc_real_t>::quiet_NaN();
 }
 
@@ -369,20 +369,20 @@ struct PeriodicCollector : public SymbolicVisitor {
 
     void visit(FunctionNode& n) override {
         if (is_periodic_func(n.type)) {
-            // 检查参数是否依赖目标变量
+            /// 检查参数是否依赖目标变量
             if (!n.arguments.empty() && depends_on_var(n.arguments[0], target_var)) {
                 found_periodic = true;
 
                 lmmc_real_t k = extract_linear_coefficient(n.arguments[0], target_var);
                 if (std::isnan(k) || k == 0.0) {
-                    // 非线性参数
+                    /// 非线性参数
                     has_nonlinear_periodic = true;
                 } else {
                     lmmc_real_t period = 0.0;
                     if (n.type == FunctionNode::FuncType::Tan) {
                         period = M_PI / std::fabs(k);
                     } else {
-                        // sin/cos
+                        /// sin/cos
                         period = 2.0 * M_PI / std::fabs(k);
                     }
                     if (period > max_period) {
@@ -392,7 +392,7 @@ struct PeriodicCollector : public SymbolicVisitor {
             }
         }
 
-        // 递归检查参数子树
+        /// 递归检查参数子树
         for (auto& arg : n.arguments) {
             arg->accept(*this);
         }
@@ -404,14 +404,14 @@ std::optional<SearchInterval> determine_search_interval(
     const std::string& var,
     const SolveOptions& opts)
 {
-    // 优先级 1: 用户指定区间
+    /// 优先级 1: 用户指定区间
     if (opts.has_search_interval) {
         if (opts.search_lo >= opts.search_hi) return std::nullopt;
         if ((opts.search_hi - opts.search_lo) <= opts.tolerance) return std::nullopt;
         return SearchInterval{opts.search_lo, opts.search_hi};
     }
 
-    // 优先级 2: 周期扩展
+    /// 优先级 2: 周期扩展
     lmmc_real_t lo = -10.0;
     lmmc_real_t hi = 10.0;
 
@@ -420,19 +420,19 @@ std::optional<SearchInterval> determine_search_interval(
         expr->root->accept(collector);
 
         if (collector.found_periodic && !collector.has_nonlinear_periodic && collector.max_period > 0.0) {
-            // 扩展区间覆盖 2 个完整周期（对称于 0）
+            /// 扩展区间覆盖 2 个完整周期（对称于 0）
             lmmc_real_t half_span = collector.max_period;  // 2 periods / 2 = period (symmetric)
             if (half_span > lo * -1.0 || half_span > hi) {
                 lo = -half_span;
                 hi = half_span;
             }
-            // 钳制到 [-100, 100]
+            /// 钳制到 [-100, 100]
             if (lo < -100.0) lo = -100.0;
             if (hi > 100.0) hi = 100.0;
         }
     }
 
-    // 最终验证
+    /// 最终验证
     if (lo >= hi) return std::nullopt;
     if ((hi - lo) <= opts.tolerance) return std::nullopt;
 
@@ -440,7 +440,7 @@ std::optional<SearchInterval> determine_search_interval(
 }
 
 // ============================================================================
-// isolate_roots
+/// isolate_roots
 // ============================================================================
 
 /**
@@ -603,10 +603,10 @@ static lmmc_real_t evaluate_with_retry(
     lmmc_real_t offset = half_width;
     for (int i = 0; i < max_retries; ++i) {
         offset *= 0.5;
-        // 尝试右侧
+        /// 尝试右侧
         val = evaluate_at(expr, var, x + offset);
         if (!std::isnan(val)) return val;
-        // 尝试左侧
+        /// 尝试左侧
         val = evaluate_at(expr, var, x - offset);
         if (!std::isnan(val)) return val;
     }
@@ -622,13 +622,13 @@ std::vector<IsolatedInterval> isolate_roots(
 {
     std::vector<IsolatedInterval> result;
 
-    // 无效区间检查
+    /// 无效区间检查
     if (interval.lo >= interval.hi) return result;
 
     int max_roots_limit = opts.max_roots;
     constexpr lmmc_real_t MIN_WIDTH = 1e-6;
 
-    // 使用栈进行自适应细分（避免深递归）
+    /// 使用栈进行自适应细分（避免深递归）
     struct SubInterval {
         lmmc_real_t lo;
         lmmc_real_t hi;
@@ -636,19 +636,19 @@ std::vector<IsolatedInterval> isolate_roots(
         lmmc_real_t f_hi;
     };
 
-    // 初始均匀划分为 N 个子区间
+    /// 初始均匀划分为 N 个子区间
     constexpr int INITIAL_DIVISIONS = 64;
     lmmc_real_t total_width = interval.hi - interval.lo;
     lmmc_real_t step = total_width / INITIAL_DIVISIONS;
 
-    // 预计算初始采样点的函数值
+    /// 预计算初始采样点的函数值
     std::vector<lmmc_real_t> sample_vals(INITIAL_DIVISIONS + 1);
     for (int i = 0; i <= INITIAL_DIVISIONS; ++i) {
         lmmc_real_t x = interval.lo + i * step;
         sample_vals[i] = evaluate_with_retry(expr, var, x, step * 0.5);
     }
 
-    // 收集需要进一步处理的子区间（含符号变化或需要细分的）
+    /// 收集需要进一步处理的子区间（含符号变化或需要细分的）
     std::vector<SubInterval> work_stack;
     for (int i = 0; i < INITIAL_DIVISIONS; ++i) {
         lmmc_real_t a = interval.lo + i * step;
@@ -656,25 +656,25 @@ std::vector<IsolatedInterval> isolate_roots(
         lmmc_real_t fa = sample_vals[i];
         lmmc_real_t fb = sample_vals[i + 1];
 
-        // 跳过两端都是 NaN 的子区间
+        /// 跳过两端都是 NaN 的子区间
         if (std::isnan(fa) && std::isnan(fb)) continue;
 
-        // 若一端为 NaN，尝试缩小区间
+        /// 若一端为 NaN，尝试缩小区间
         if (std::isnan(fa) || std::isnan(fb)) {
-            // 将此子区间加入工作栈进行进一步细分
+            /// 将此子区间加入工作栈进行进一步细分
             work_stack.push_back({a, b, fa, fb});
             continue;
         }
 
-        // 检测符号变化
+        /// 检测符号变化
         if (fa * fb < 0.0) {
             work_stack.push_back({a, b, fa, fb});
         }
     }
 
-    // 自适应细分处理工作栈
+    /// 自适应细分处理工作栈
     while (!work_stack.empty()) {
-        // 检查 max_roots 限制
+        /// 检查 max_roots 限制
         if (max_roots_limit > 0 && static_cast<int>(result.size()) >= max_roots_limit) {
             break;
         }
@@ -686,11 +686,11 @@ std::vector<IsolatedInterval> isolate_roots(
         lmmc_real_t fa = current.f_lo;
         lmmc_real_t fb = current.f_hi;
 
-        // 处理 NaN 端点：尝试重新采样
+        /// 处理 NaN 端点：尝试重新采样
         if (std::isnan(fa)) {
             fa = evaluate_with_retry(expr, var, current.lo, width * 0.25);
             if (std::isnan(fa)) {
-                // 若宽度足够，细分后重试
+                /// 若宽度足够，细分后重试
                 if (width > MIN_WIDTH * 2.0) {
                     lmmc_real_t mid = (current.lo + current.hi) * 0.5;
                     lmmc_real_t fm = evaluate_with_retry(expr, var, mid, width * 0.125);
@@ -711,11 +711,11 @@ std::vector<IsolatedInterval> isolate_roots(
             }
         }
 
-        // 无符号变化 → 跳过
+        /// 无符号变化 → 跳过
         if (fa * fb >= 0.0) continue;
 
-        // 符号变化确认 — 检查是否需要进一步细分
-        // 若宽度已达最小限制，直接接受
+        /// 符号变化确认 — 检查是否需要进一步细分
+        /// 若宽度已达最小限制，直接接受
         if (width <= MIN_WIDTH) {
             bool confirmed = false;
             if (derivative) {
@@ -729,36 +729,36 @@ std::vector<IsolatedInterval> isolate_roots(
             continue;
         }
 
-        // 单调性确认：若导数在区间内不变号，则恰含一个根
+        /// 单调性确认：若导数在区间内不变号，则恰含一个根
         if (derivative) {
             lmmc_real_t da = evaluate_at(derivative, var, current.lo);
             lmmc_real_t db = evaluate_at(derivative, var, current.hi);
 
             if (!std::isnan(da) && !std::isnan(db) && da * db > 0.0) {
-                // 导数不变号 → 单调 → 恰含一个根
+                /// 导数不变号 → 单调 → 恰含一个根
                 result.push_back({current.lo, current.hi, true});
                 continue;
             }
 
-            // 导数变号 → 可能含多个根，需要细分
+            /// 导数变号 → 可能含多个根，需要细分
             if (!std::isnan(da) && !std::isnan(db) && da * db < 0.0) {
-                // 仅在宽度允许时细分
+                /// 仅在宽度允许时细分
                 if (width > MIN_WIDTH * 2.0) {
                     lmmc_real_t mid = (current.lo + current.hi) * 0.5;
                     lmmc_real_t fm = evaluate_with_retry(expr, var, mid, width * 0.125);
 
                     if (std::isnan(fm)) {
-                        // 中点求值失败，接受当前区间
+                        /// 中点求值失败，接受当前区间
                         result.push_back({current.lo, current.hi, false});
                     } else {
-                        // 将两半加入工作栈
+                        /// 将两半加入工作栈
                         if (fa * fm < 0.0) {
                             work_stack.push_back({current.lo, mid, fa, fm});
                         }
                         if (fm * fb < 0.0) {
                             work_stack.push_back({mid, current.hi, fm, fb});
                         }
-                        // 若两半都无符号变化但原区间有，说明根恰在中点附近
+                        /// 若两半都无符号变化但原区间有，说明根恰在中点附近
                         if (fa * fm >= 0.0 && fm * fb >= 0.0) {
                             result.push_back({current.lo, current.hi, false});
                         }
@@ -767,16 +767,16 @@ std::vector<IsolatedInterval> isolate_roots(
                 }
             }
 
-            // 导数有 NaN → 无法确认单调性，接受区间但标记未确认
+            /// 导数有 NaN → 无法确认单调性，接受区间但标记未确认
             result.push_back({current.lo, current.hi, false});
         } else {
-            // 无导数可用 — 尝试细分以缩小区间
+            /// 无导数可用 — 尝试细分以缩小区间
             if (width > MIN_WIDTH * 4.0) {
                 lmmc_real_t mid = (current.lo + current.hi) * 0.5;
                 lmmc_real_t fm = evaluate_with_retry(expr, var, mid, width * 0.125);
 
                 if (std::isnan(fm)) {
-                    // 中点求值失败，接受当前区间
+                    /// 中点求值失败，接受当前区间
                     result.push_back({current.lo, current.hi, false});
                 } else {
                     if (fa * fm < 0.0) {
@@ -790,19 +790,19 @@ std::vector<IsolatedInterval> isolate_roots(
                     }
                 }
             } else {
-                // 宽度已足够小，接受
+                /// 宽度已足够小，接受
                 result.push_back({current.lo, current.hi, false});
             }
         }
     }
 
-    // 按区间下界排序
+    /// 按区间下界排序
     std::sort(result.begin(), result.end(),
         [](const IsolatedInterval& a, const IsolatedInterval& b) {
             return a.lo < b.lo;
         });
 
-    // 应用 max_roots 限制
+    /// 应用 max_roots 限制
     if (max_roots_limit > 0 && static_cast<int>(result.size()) > max_roots_limit) {
         result.resize(static_cast<size_t>(max_roots_limit));
     }
@@ -811,7 +811,7 @@ std::vector<IsolatedInterval> isolate_roots(
 }
 
 // ============================================================================
-// deduplicate_roots
+/// deduplicate_roots
 // ============================================================================
 
 std::vector<lmmc_real_t> deduplicate_roots(
@@ -821,13 +821,13 @@ std::vector<lmmc_real_t> deduplicate_roots(
 {
     if (roots.empty()) return {};
 
-    // 按根值升序排序
+    /// 按根值升序排序
     std::sort(roots.begin(), roots.end(),
         [](const NumericRoot& a, const NumericRoot& b) {
             return a.value < b.value;
         });
 
-    // 去重：相邻比较，差值 < 10 * tolerance 视为重复，保留残差较小者
+    /// 去重：相邻比较，差值 < 10 * tolerance 视为重复，保留残差较小者
     lmmc_real_t threshold = 10.0 * tolerance;
     std::vector<NumericRoot> survivors;
     survivors.reserve(roots.size());
@@ -836,7 +836,7 @@ std::vector<lmmc_real_t> deduplicate_roots(
     for (size_t i = 1; i < roots.size(); ++i) {
         NumericRoot& last = survivors.back();
         if (std::fabs(roots[i].value - last.value) < threshold) {
-            // 重复：保留残差更小者（相等时保留先出现的，即 last）
+            /// 重复：保留残差更小者（相等时保留先出现的，即 last）
             if (roots[i].residual < last.residual) {
                 last = roots[i];
             }
@@ -845,14 +845,14 @@ std::vector<lmmc_real_t> deduplicate_roots(
         }
     }
 
-    // 收集存活根的值（已按升序排列）
+    /// 收集存活根的值（已按升序排列）
     std::vector<lmmc_real_t> result;
     result.reserve(survivors.size());
     for (const auto& r : survivors) {
         result.push_back(r.value);
     }
 
-    // 应用 max_roots 限制
+    /// 应用 max_roots 限制
     if (max_roots > 0 && static_cast<int>(result.size()) > max_roots) {
         result.resize(static_cast<size_t>(max_roots));
     }
@@ -861,7 +861,7 @@ std::vector<lmmc_real_t> deduplicate_roots(
 }
 
 // ============================================================================
-// refine_root — 根精化：带区间约束的 Newton-Raphson + 二分法回退
+/// refine_root — 根精化：带区间约束的 Newton-Raphson + 二分法回退
 // ============================================================================
 
 /**
@@ -899,7 +899,7 @@ std::optional<NumericRoot> refine_root(
     lmmc_real_t f_lo = evaluate_at(expr, var, lo);
     lmmc_real_t f_hi = evaluate_at(expr, var, hi);
 
-    // 端点已是根的情形
+    /// 端点已是根的情形
     if (!std::isnan(f_lo) && std::fabs(f_lo) < opts.tolerance) {
         return NumericRoot{lo, std::fabs(f_lo), 0};
     }
@@ -907,18 +907,18 @@ std::optional<NumericRoot> refine_root(
         return NumericRoot{hi, std::fabs(f_hi), 0};
     }
 
-    // 跟踪最佳迭代结果（残差最小）
+    /// 跟踪最佳迭代结果（残差最小）
     lmmc_real_t best_x = x;
     lmmc_real_t best_residual = std::numeric_limits<lmmc_real_t>::max();
     int best_iter = 0;
 
     int max_iter = opts.max_newton_iterations;
 
-    // 纯二分法路径：导数不可用
+    /// 纯二分法路径：导数不可用
     if (!derivative) {
-        // 确保端点有效且异号
+        /// 确保端点有效且异号
         if (std::isnan(f_lo) || std::isnan(f_hi) || f_lo * f_hi > 0.0) {
-            // 尝试中点求值
+            /// 尝试中点求值
             lmmc_real_t fx = evaluate_at(expr, var, x);
             if (!std::isnan(fx) && std::fabs(fx) < opts.tolerance) {
                 return NumericRoot{x, std::fabs(fx), 1};
@@ -931,7 +931,7 @@ std::optional<NumericRoot> refine_root(
             lmmc_real_t f_mid = evaluate_at(expr, var, mid);
 
             if (std::isnan(f_mid)) {
-                // NaN 时缩小区间继续
+                /// NaN 时缩小区间继续
                 hi = mid;
                 continue;
             }
@@ -947,7 +947,7 @@ std::optional<NumericRoot> refine_root(
                 return NumericRoot{mid, residual, i};
             }
 
-            // 保持符号变化的半区间
+            /// 保持符号变化的半区间
             if (f_lo * f_mid < 0.0) {
                 hi = mid;
                 f_hi = f_mid;
@@ -956,7 +956,7 @@ std::optional<NumericRoot> refine_root(
                 f_lo = f_mid;
             }
 
-            // 区间宽度收敛
+            /// 区间宽度收敛
             if ((hi - lo) < opts.tolerance) {
                 lmmc_real_t final_x = (lo + hi) * 0.5;
                 lmmc_real_t final_res = std::fabs(evaluate_at(expr, var, final_x));
@@ -969,17 +969,17 @@ std::optional<NumericRoot> refine_root(
             }
         }
 
-        // 返回最佳结果（仅当残差 < tolerance）
+        /// 返回最佳结果（仅当残差 < tolerance）
         if (best_residual < opts.tolerance) {
             return NumericRoot{best_x, best_residual, best_iter};
         }
         return std::nullopt;
     }
 
-    // 带区间约束的 Newton-Raphson 路径
-    // 确保端点函数值有效
+    /// 带区间约束的 Newton-Raphson 路径
+    /// 确保端点函数值有效
     if (std::isnan(f_lo) || std::isnan(f_hi)) {
-        // 尝试重新采样端点
+        /// 尝试重新采样端点
         if (std::isnan(f_lo)) {
             f_lo = evaluate_at(expr, var, lo + (hi - lo) * 0.01);
             lo = lo + (hi - lo) * 0.01;
@@ -999,31 +999,31 @@ std::optional<NumericRoot> refine_root(
         lmmc_real_t fx = evaluate_at(expr, var, x);
 
         if (std::isnan(fx)) {
-            // NaN 时执行二分步
+            /// NaN 时执行二分步
             x = (lo + hi) * 0.5;
             continue;
         }
 
         lmmc_real_t residual = std::fabs(fx);
 
-        // 更新最佳结果
+        /// 更新最佳结果
         if (residual < best_residual) {
             best_x = x;
             best_residual = residual;
             best_iter = i;
         }
 
-        // 收敛判定
+        /// 收敛判定
         if (residual < opts.tolerance) {
             return NumericRoot{x, residual, i};
         }
 
-        // 计算导数值
+        /// 计算导数值
         lmmc_real_t dfx = evaluate_at(derivative, var, x);
 
-        // 导数为零或 NaN → 执行二分步
+        /// 导数为零或 NaN → 执行二分步
         if (std::isnan(dfx) || std::fabs(dfx) < 1e-15) {
-            // 二分步：保持符号变化
+            /// 二分步：保持符号变化
             lmmc_real_t mid = (lo + hi) * 0.5;
             lmmc_real_t f_mid = evaluate_at(expr, var, mid);
 
@@ -1041,24 +1041,24 @@ std::optional<NumericRoot> refine_root(
             continue;
         }
 
-        // Newton 更新
+        /// Newton 更新
         lmmc_real_t x_new = x - fx / dfx;
 
-        // 检查 Newton 迭代是否有效：
-        // 1. x_new 必须在 [lo, hi] 内
-        // 2. 残差不应增大
+        /// 检查 Newton 迭代是否有效：
+        /// 1. x_new 必须在 [lo, hi] 内
+        /// 2. 残差不应增大
         bool do_bisection = false;
 
         if (x_new < lo || x_new > hi) {
             do_bisection = true;
         } else {
-            // 检查新点的残差是否增大
+            /// 检查新点的残差是否增大
             lmmc_real_t f_new = evaluate_at(expr, var, x_new);
             if (std::isnan(f_new) || std::fabs(f_new) > residual) {
                 do_bisection = true;
             } else {
-                // Newton 步有效，更新状态
-                // 缩小区间：根据 fx 的符号更新端点
+                /// Newton 步有效，更新状态
+                /// 缩小区间：根据 fx 的符号更新端点
                 if (!std::isnan(f_lo) && fx * f_lo < 0.0) {
                     hi = x;
                     f_hi = fx;
@@ -1073,7 +1073,7 @@ std::optional<NumericRoot> refine_root(
         }
 
         if (do_bisection) {
-            // 丢弃 Newton 迭代，执行一步二分法
+            /// 丢弃 Newton 迭代，执行一步二分法
             lmmc_real_t mid = (lo + hi) * 0.5;
             lmmc_real_t f_mid = evaluate_at(expr, var, mid);
 
@@ -1090,7 +1090,7 @@ std::optional<NumericRoot> refine_root(
             prev_residual = residual;
         }
 
-        // 区间宽度收敛
+        /// 区间宽度收敛
         if ((hi - lo) < opts.tolerance) {
             lmmc_real_t final_x = (lo + hi) * 0.5;
             lmmc_real_t final_fx = evaluate_at(expr, var, final_x);
@@ -1101,7 +1101,7 @@ std::optional<NumericRoot> refine_root(
         }
     }
 
-    // 达到最大迭代次数：返回最佳结果（仅当残差 < tolerance）
+    /// 达到最大迭代次数：返回最佳结果（仅当残差 < tolerance）
     if (best_residual < opts.tolerance) {
         return NumericRoot{best_x, best_residual, best_iter};
     }
@@ -1109,7 +1109,7 @@ std::optional<NumericRoot> refine_root(
 }
 
 // ============================================================================
-// assemble_results — 将 lmmc_real_t 根值转换为 NumberNode 表达式
+/// assemble_results — 将 lmmc_real_t 根值转换为 NumberNode 表达式
 // ============================================================================
 
 /**
@@ -1138,7 +1138,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> assemble_results(
 }
 
 // ============================================================================
-// solve_mixed_transcendental — 完整编排器
+/// solve_mixed_transcendental — 完整编排器
 // ============================================================================
 
 /**
@@ -1161,7 +1161,7 @@ static std::vector<NumericRoot> numerical_path(
 {
     std::vector<NumericRoot> roots;
 
-    // 计算导数
+    /// 计算导数
     std::shared_ptr<SymbolicExpr> derivative = nullptr;
     try {
         if (factor && factor->root) {
@@ -1173,13 +1173,13 @@ static std::vector<NumericRoot> numerical_path(
             }
         }
     } catch (...) {
-        // 微分失败，derivative 保持 nullptr → 回退到纯二分法
+        /// 微分失败，derivative 保持 nullptr → 回退到纯二分法
     }
 
-    // 根隔离
+    /// 根隔离
     auto intervals = isolate_roots(factor, derivative, var, interval, opts);
 
-    // 逐区间精化
+    /// 逐区间精化
     for (const auto& iso : intervals) {
         auto refined = refine_root(factor, derivative, var, iso, opts);
         if (refined.has_value()) {
@@ -1196,57 +1196,57 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
     const SolveOptions& opts)
 {
     try {
-        // 1. 早期退出：表达式不依赖变量
+        /// 1. 早期退出：表达式不依赖变量
         if (!expr || !expr->root || !depends_on_var(expr->root, var)) {
             return {};
         }
 
-        // 2. 确定搜索区间
+        /// 2. 确定搜索区间
         auto interval_opt = determine_search_interval(expr, var, opts);
         if (!interval_opt.has_value()) {
             return {};
         }
         SearchInterval interval = interval_opt.value();
 
-        // 3. 符号预处理：因式分解
+        /// 3. 符号预处理：因式分解
         auto factors = factor_transcendental(expr, var);
 
-        // 收集所有数值根
+        /// 收集所有数值根
         std::vector<NumericRoot> all_roots;
 
-        // 4. 多因子处理
+        /// 4. 多因子处理
         bool is_single_factor_same_as_input = false;
         if (factors.size() == 1) {
-            // 检查唯一因子是否结构等于原表达式
+            /// 检查唯一因子是否结构等于原表达式
             if (factors[0] && factors[0]->to_string() == expr->to_string()) {
                 is_single_factor_same_as_input = true;
             }
         }
 
         if (!is_single_factor_same_as_input && factors.size() > 1) {
-            // 多因子：对每个因子独立求解
+            /// 多因子：对每个因子独立求解
             for (const auto& factor : factors) {
                 if (!factor || !factor->root) continue;
 
-                // 跳过不依赖变量的因子（常数因子）
+                /// 跳过不依赖变量的因子（常数因子）
                 if (!depends_on_var(factor->root, var)) continue;
 
-                // (a) 尝试转换为多项式
+                /// (a) 尝试转换为多项式
                 bool solved_as_poly = false;
                 try {
                     auto poly = symbolic_to_poly<SymbolicPolyCoeff>(factor, var);
                     int deg = poly.degree();
                     if (deg >= 1 && deg <= 4) {
-                        // 委托给多项式求解器
+                        /// 委托给多项式求解器
                         auto poly_roots = solve_by_factoring(poly, var);
                         for (const auto& root_expr : poly_roots) {
                             if (!root_expr) continue;
-                            // 提取数值
+                            /// 提取数值
                             auto simplified = root_expr->simplify();
                             if (!simplified || !simplified->root) continue;
                             lmmc_real_t val = recursive_eval(simplified->root);
                             if (std::isfinite(val)) {
-                                // 验证根在搜索区间内
+                                /// 验证根在搜索区间内
                                 if (val >= interval.lo && val <= interval.hi) {
                                     lmmc_real_t residual = std::fabs(evaluate_at(expr, var, val));
                                     if (!std::isnan(residual)) {
@@ -1258,12 +1258,12 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                         solved_as_poly = true;
                     }
                 } catch (...) {
-                    // 转换失败，不是多项式
+                    /// 转换失败，不是多项式
                 }
 
                 if (solved_as_poly) continue;
 
-                // (b) 尝试 solve_transcendental（收集符号解的数值）
+                /// (b) 尝试 solve_transcendental（收集符号解的数值）
                 try {
                     auto trans_roots = solve_transcendental(factor, var);
                     if (!trans_roots.empty()) {
@@ -1283,26 +1283,26 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                         }
                     }
                 } catch (...) {
-                    // solve_transcendental 失败
+                    /// solve_transcendental 失败
                 }
 
-                // (c) 数值路径：对该因子执行根隔离 + 精化
-                // 始终执行数值路径以捕获区间内所有周期根
+                /// (c) 数值路径：对该因子执行根隔离 + 精化
+                /// 始终执行数值路径以捕获区间内所有周期根
                 auto factor_roots = numerical_path(factor, var, interval, opts);
                 all_roots.insert(all_roots.end(), factor_roots.begin(), factor_roots.end());
             }
         } else {
-            // 5. 单因子等于输入 或 分解返回空/单因子：直接数值路径
+            /// 5. 单因子等于输入 或 分解返回空/单因子：直接数值路径
             auto numeric_roots = numerical_path(expr, var, interval, opts);
             all_roots.insert(all_roots.end(), numeric_roots.begin(), numeric_roots.end());
         }
 
-        // 6. 结果组装：去重、排序、转换
+        /// 6. 结果组装：去重、排序、转换
         auto deduplicated = deduplicate_roots(all_roots, opts.tolerance, opts.max_roots);
         return assemble_results(deduplicated);
 
     } catch (...) {
-        // Requirement 8.5: 不传播异常
+        /// Requirement 8.5: 不传播异常
         return {};
     }
 }

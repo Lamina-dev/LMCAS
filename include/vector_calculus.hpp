@@ -20,7 +20,7 @@ namespace lamina {
 using VectorField = std::vector<std::shared_ptr<SymbolicExpr>>;
 
 // ============================================================
-// 微分算子 (Requirements 8, 9, 45, 46, 47, 87, 88)
+/// 微分算子 (Requirements 8, 9, 45, 46, 47, 87, 88)
 // ============================================================
 
 /**
@@ -84,7 +84,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> directional_derivative(
     const VectorField& direction, int order = 1);
 
 // ============================================================
-// 雅可比矩阵与海森矩阵 (Requirements 10, 11)
+/// 雅可比矩阵与海森矩阵 (Requirements 10, 11)
 // ============================================================
 
 /**
@@ -114,7 +114,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> hessian(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars);
 
 // ============================================================
-// 曲线积分与曲面积分 (Requirements 48, 49)
+/// 曲线积分与曲面积分 (Requirements 48, 49)
 // ============================================================
 
 /**
@@ -194,7 +194,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> surface_integral_vector(
     const std::shared_ptr<SymbolicExpr>& v_lower, const std::shared_ptr<SymbolicExpr>& v_upper);
 
 // ============================================================
-// 积分定理 (Requirements 50, 89, 92, 93)
+/// 积分定理 (Requirements 50, 89, 92, 93)
 // ============================================================
 
 /**
@@ -276,7 +276,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> stokes_theorem(
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& v_bounds);
 
 // ============================================================
-// 多元极值与拉格朗日乘数法 (Requirements 44, 51, 91)
+/// 多元极值与拉格朗日乘数法 (Requirements 44, 51, 91)
 // ============================================================
 
 /**
@@ -320,7 +320,7 @@ LAMINA_API std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lag
     const std::vector<std::string>& vars);
 
 // ============================================================
-// 向量代数运算 (Requirements 40, 41, 42)
+/// 向量代数运算 (Requirements 40, 41, 42)
 // ============================================================
 
 /**

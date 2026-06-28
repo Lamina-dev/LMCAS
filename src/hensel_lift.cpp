@@ -23,7 +23,7 @@
 namespace lamina {
 
 // ============================================================
-// 文件局部辅助函数
+/// 文件局部辅助函数
 // ============================================================
 
 /**
@@ -41,7 +41,7 @@ static BigInt hl_binomial(int n, int k) {
     if (k < 0 || k > n) return BigInt(0);
     if (k == 0 || k == n) return BigInt(1);
 
-    // 利用对称性 C(n, k) = C(n, n-k)
+    /// 利用对称性 C(n, k) = C(n, n-k)
     if (k > n - k) {
         k = n - k;
     }
@@ -93,17 +93,17 @@ static BigInt hl_mignotte_bound(const Polynomial<BigInt>& poly) {
     int n = poly.degree();
     if (n <= 0) return BigInt(1);
 
-    // C(n, floor(n/2))
+    /// C(n, floor(n/2))
     BigInt binom = hl_binomial(n, n / 2);
 
-    // ||f||_2^2
+    /// ||f||_2^2
     BigInt norm_sq = hl_l2_norm_squared(poly);
 
-    // B^2 = binom^2 * norm_sq
+    /// B^2 = binom^2 * norm_sq
     BigInt b_squared = binom * binom * norm_sq;
 
-    // B = ceil(sqrt(B^2))
-    // BigInt::sqrt() 返回 floor(sqrt(x))，需要检查是否精确
+    /// B = ceil(sqrt(B^2))
+    /// BigInt::sqrt() 返回 floor(sqrt(x))，需要检查是否精确
     BigInt b = b_squared.sqrt();
     if (b * b < b_squared) {
         b = b + BigInt(1);
@@ -133,10 +133,10 @@ static int hl_compute_lift_height(const Polynomial<BigInt>& poly, int64_t prime)
     BigInt B = hl_mignotte_bound(poly);
     BigInt lc = poly.lead_coeff().Abs();
 
-    // 阈值 threshold = 2 * B * |lc(f)|
+    /// 阈值 threshold = 2 * B * |lc(f)|
     BigInt threshold = BigInt(2) * B * lc;
 
-    // 计算最小 k 使得 p^k > threshold
+    /// 计算最小 k 使得 p^k > threshold
     BigInt p_power(1);
     BigInt big_p(static_cast<long long>(prime));
     int k = 0;
@@ -146,7 +146,7 @@ static int hl_compute_lift_height(const Polynomial<BigInt>& poly, int64_t prime)
         k++;
     }
 
-    // 至少提升 1 次
+    /// 至少提升 1 次
     if (k < 1) k = 1;
 
     return k;
@@ -167,12 +167,12 @@ static BigInt hl_symmetric_mod(const BigInt& c, const BigInt& m) {
     if (m.is_zero()) return c;
 
     BigInt r = c % m;
-    // 确保 r 在 [0, m) 范围内
+    /// 确保 r 在 [0, m) 范围内
     if (r.IsNegative()) {
         r = r + m;
     }
 
-    // 映射到 [-m/2, m/2)
+    /// 映射到 [-m/2, m/2)
     BigInt half_m = m / BigInt(2);
     if (r > half_m) {
         r = r - m;
@@ -193,7 +193,7 @@ static void hl_reduce_coeffs(std::vector<BigInt>& poly, const BigInt& m) {
     for (auto& c : poly) {
         c = hl_symmetric_mod(c, m);
     }
-    // 去除高次零系数
+    /// 去除高次零系数
     while (!poly.empty() && poly.back().is_zero()) {
         poly.pop_back();
     }
@@ -293,7 +293,7 @@ static std::vector<BigInt> hl_poly_add_mod(const std::vector<BigInt>& a,
  * @internal
  */
 static BigInt hl_mod_inverse(const BigInt& a, const BigInt& m) {
-    // 扩展欧几里得：求 s 使得 a*s ≡ 1 (mod m)
+    /// 扩展欧几里得：求 s 使得 a*s ≡ 1 (mod m)
     BigInt r0 = m, r1 = a % m;
     if (r1.IsNegative()) r1 = r1 + m;
 
@@ -310,12 +310,12 @@ static BigInt hl_mod_inverse(const BigInt& a, const BigInt& m) {
         s1 = s_new;
     }
 
-    // r0 应为 gcd(a, m) = 1
+    /// r0 应为 gcd(a, m) = 1
     if (r0 != BigInt(1) && r0 != BigInt(-1)) {
         throw std::domain_error("hl_mod_inverse: element not invertible");
     }
 
-    // 若 gcd 为 -1，调整符号
+    /// 若 gcd 为 -1，调整符号
     if (r0.IsNegative()) {
         s0 = s0.negate();
     }
@@ -355,7 +355,7 @@ hl_poly_divmod(const std::vector<BigInt>& a,
         return {{}, r};
     }
 
-    // 首项系数的逆元
+    /// 首项系数的逆元
     BigInt lc_inv = hl_mod_inverse(b.back(), m);
 
     std::vector<BigInt> remainder = a;
@@ -374,14 +374,14 @@ hl_poly_divmod(const std::vector<BigInt>& a,
         }
     }
 
-    // 余数截断到 deg < deg_b
+    /// 余数截断到 deg < deg_b
     std::vector<BigInt> rem(remainder.begin(), remainder.begin() + deg_b);
     hl_reduce_coeffs(quotient, m);
     hl_reduce_coeffs(rem, m);
     return {quotient, rem};
 }
 
-// HenselLiftPair 结构体已在 transcendental_factor.hpp 中声明
+/// HenselLiftPair 结构体已在 transcendental_factor.hpp 中声明
 
 /**
  * @brief 执行一步二次 Hensel 提升：mod m → mod m²。
@@ -422,49 +422,49 @@ HenselLiftPair hl_two_factor_lift(
     const auto& t = current.t;
     const BigInt& m = current.modulus;
 
-    // 新模数 m² = m * m
+    /// 新模数 m² = m * m
     BigInt m2 = m * m;
 
-    // 步骤 1：计算误差 e = f - g*h (mod m²)
+    /// 步骤 1：计算误差 e = f - g*h (mod m²)
     std::vector<BigInt> gh = hl_poly_mul_mod(g, h, m2);
     std::vector<BigInt> e = hl_poly_sub_mod(f, gh, m2);
 
-    // 步骤 2：计算修正项
-    // se = s * e (mod m²)
+    /// 步骤 2：计算修正项
+    /// se = s * e (mod m²)
     std::vector<BigInt> se = hl_poly_mul_mod(s, e, m2);
 
-    // (q, r) = divmod(se, h) over Z/m²Z，其中 deg(r) < deg(h)
+    /// (q, r) = divmod(se, h) over Z/m²Z，其中 deg(r) < deg(h)
     auto [q, r] = hl_poly_divmod(se, h, m2);
 
-    // g' = g + t*e + q*g (mod m²)
+    /// g' = g + t*e + q*g (mod m²)
     std::vector<BigInt> te = hl_poly_mul_mod(t, e, m2);
     std::vector<BigInt> qg = hl_poly_mul_mod(q, g, m2);
     std::vector<BigInt> g_new = hl_poly_add_mod(g, hl_poly_add_mod(te, qg, m2), m2);
     hl_reduce_coeffs(g_new, m2);
 
-    // h' = h + r (mod m²)
+    /// h' = h + r (mod m²)
     std::vector<BigInt> h_new = hl_poly_add_mod(h, r, m2);
     hl_reduce_coeffs(h_new, m2);
 
-    // 步骤 3：更新 Bezout 系数
-    // b = s*g' + t*h' - 1 (mod m²)
+    /// 步骤 3：更新 Bezout 系数
+    /// b = s*g' + t*h' - 1 (mod m²)
     std::vector<BigInt> sg_new = hl_poly_mul_mod(s, g_new, m2);
     std::vector<BigInt> th_new = hl_poly_mul_mod(t, h_new, m2);
     std::vector<BigInt> sg_plus_th = hl_poly_add_mod(sg_new, th_new, m2);
 
-    // 减去常数 1
+    /// 减去常数 1
     std::vector<BigInt> one_poly = {BigInt(1)};
     std::vector<BigInt> b = hl_poly_sub_mod(sg_plus_th, one_poly, m2);
 
-    // (c, d) = divmod(s*b, h') over Z/m²Z
+    /// (c, d) = divmod(s*b, h') over Z/m²Z
     std::vector<BigInt> sb = hl_poly_mul_mod(s, b, m2);
     auto [c, d] = hl_poly_divmod(sb, h_new, m2);
 
-    // s' = s - d (mod m²)
+    /// s' = s - d (mod m²)
     std::vector<BigInt> s_new = hl_poly_sub_mod(s, d, m2);
     hl_reduce_coeffs(s_new, m2);
 
-    // t' = t - t*b - c*g' (mod m²)
+    /// t' = t - t*b - c*g' (mod m²)
     std::vector<BigInt> tb = hl_poly_mul_mod(t, b, m2);
     std::vector<BigInt> cg_new = hl_poly_mul_mod(c, g_new, m2);
     std::vector<BigInt> t_new = hl_poly_sub_mod(t, hl_poly_add_mod(tb, cg_new, m2), m2);
@@ -491,8 +491,8 @@ static std::pair<std::vector<BigInt>, std::vector<BigInt>>
 hl_extended_gcd_poly(const std::vector<BigInt>& g,
                      const std::vector<BigInt>& h,
                      const BigInt& m) {
-    // 扩展欧几里得算法：r0 = g, r1 = h
-    // s0*g + t0*h = r0, s1*g + t1*h = r1
+    /// 扩展欧几里得算法：r0 = g, r1 = h
+    /// s0*g + t0*h = r0, s1*g + t1*h = r1
     std::vector<BigInt> r0 = g, r1 = h;
     std::vector<BigInt> s0 = {BigInt(1)}, s1 = {};  // s0=1, s1=0
     std::vector<BigInt> t0 = {}, t1 = {BigInt(1)};  // t0=0, t1=1
@@ -500,14 +500,14 @@ hl_extended_gcd_poly(const std::vector<BigInt>& g,
     while (!r1.empty()) {
         auto [q, r] = hl_poly_divmod(r0, r1, m);
 
-        // r_new = r0 - q*r1
+        /// r_new = r0 - q*r1
         std::vector<BigInt> r_new = r;
 
-        // s_new = s0 - q*s1
+        /// s_new = s0 - q*s1
         std::vector<BigInt> qs1 = hl_poly_mul_mod(q, s1, m);
         std::vector<BigInt> s_new = hl_poly_sub_mod(s0, qs1, m);
 
-        // t_new = t0 - q*t1
+        /// t_new = t0 - q*t1
         std::vector<BigInt> qt1 = hl_poly_mul_mod(q, t1, m);
         std::vector<BigInt> t_new = hl_poly_sub_mod(t0, qt1, m);
 
@@ -516,8 +516,8 @@ hl_extended_gcd_poly(const std::vector<BigInt>& g,
         t0 = t1; t1 = t_new;
     }
 
-    // r0 = gcd，应为常数（可逆元）
-    // 归一化使 gcd = 1
+    /// r0 = gcd，应为常数（可逆元）
+    /// 归一化使 gcd = 1
     if (!r0.empty() && r0[0] != BigInt(1)) {
         BigInt inv = hl_mod_inverse(r0[0], m);
         for (auto& c : s0) {
@@ -528,7 +528,7 @@ hl_extended_gcd_poly(const std::vector<BigInt>& g,
         }
     }
 
-    // 去除高次零系数
+    /// 去除高次零系数
     while (!s0.empty() && s0.back().is_zero()) s0.pop_back();
     while (!t0.empty() && t0.back().is_zero()) t0.pop_back();
 
@@ -567,7 +567,7 @@ static std::vector<std::vector<BigInt>> hl_multi_factor_lift(
 
     if (factors.empty()) return {};
     if (factors.size() == 1) {
-        // 单因子：直接归约到目标模数
+        /// 单因子：直接归约到目标模数
         BigInt target_mod(1);
         BigInt big_p(static_cast<long long>(prime));
         for (int i = 0; i < target_k; ++i) {
@@ -581,58 +581,58 @@ static std::vector<std::vector<BigInt>> hl_multi_factor_lift(
     BigInt big_p(static_cast<long long>(prime));
     BigInt initial_mod(static_cast<long long>(prime));
 
-    // 计算目标模数 p^target_k
+    /// 计算目标模数 p^target_k
     BigInt target_mod(1);
     for (int i = 0; i < target_k; ++i) {
         target_mod = target_mod * big_p;
     }
 
-    // 顺序剥离策略：逐个提升因子
+    /// 顺序剥离策略：逐个提升因子
     std::vector<std::vector<BigInt>> lifted_factors;
     lifted_factors.reserve(factors.size());
 
-    // 当前待分解的多项式（初始为 f）
+    /// 当前待分解的多项式（初始为 f）
     std::vector<BigInt> remaining = f;
     hl_reduce_coeffs(remaining, target_mod);
 
-    // 剩余因子列表
+    /// 剩余因子列表
     std::vector<std::vector<BigInt>> remaining_factors = factors;
 
     for (size_t i = 0; i < factors.size() - 1; ++i) {
-        // 取出第一个因子 g
+        /// 取出第一个因子 g
         std::vector<BigInt> g = remaining_factors[0];
 
-        // 计算 h = 剩余因子的乘积 (mod p)
+        /// 计算 h = 剩余因子的乘积 (mod p)
         std::vector<BigInt> h = remaining_factors[1];
         for (size_t j = 2; j < remaining_factors.size(); ++j) {
             h = hl_poly_mul_mod(h, remaining_factors[j], initial_mod);
         }
 
-        // 计算 Bezout 系数 s, t 使得 s*g + t*h ≡ 1 (mod p)
+        /// 计算 Bezout 系数 s, t 使得 s*g + t*h ≡ 1 (mod p)
         auto [s, t] = hl_extended_gcd_poly(g, h, initial_mod);
 
-        // 构造初始提升状态
+        /// 构造初始提升状态
         HenselLiftPair state{g, h, s, t, initial_mod};
 
-        // 反复二次提升直到模数 ≥ target_mod
+        /// 反复二次提升直到模数 ≥ target_mod
         while (state.modulus < target_mod) {
             state = hl_two_factor_lift(remaining, state);
         }
 
-        // 提取提升后的 g（已提升到 target_mod）
+        /// 提取提升后的 g（已提升到 target_mod）
         std::vector<BigInt> lifted_g = state.g;
         hl_reduce_coeffs(lifted_g, target_mod);
         lifted_factors.push_back(lifted_g);
 
-        // 更新 remaining 为提升后的 h
+        /// 更新 remaining 为提升后的 h
         remaining = state.h;
         hl_reduce_coeffs(remaining, target_mod);
 
-        // 更新 remaining_factors：去掉第一个，后续因子保持不变
+        /// 更新 remaining_factors：去掉第一个，后续因子保持不变
         remaining_factors.erase(remaining_factors.begin());
     }
 
-    // 最后一个因子就是 remaining
+    /// 最后一个因子就是 remaining
     hl_reduce_coeffs(remaining, target_mod);
     lifted_factors.push_back(remaining);
 
@@ -640,7 +640,7 @@ static std::vector<std::vector<BigInt>> hl_multi_factor_lift(
 }
 
 // ============================================================
-// 公共 API 实现
+/// 公共 API 实现
 // ============================================================
 
 /**
@@ -666,21 +666,21 @@ std::vector<Polynomial<BigInt>> hensel_lift(
     int64_t prime,
     int lift_bound) {
 
-    // 空输入或无因子：直接返回
+    /// 空输入或无因子：直接返回
     if (poly.is_zero() || mod_factors.empty()) {
         return {};
     }
 
-    // 若调用方未指定提升界，则自动计算
+    /// 若调用方未指定提升界，则自动计算
     int k = lift_bound;
     if (k <= 0) {
         k = hl_compute_lift_height(poly, prime);
     }
 
-    // 将原始多项式转换为系数向量
+    /// 将原始多项式转换为系数向量
     std::vector<BigInt> f_vec = poly.coeffs;
 
-    // 将 Polynomial<ModInt> 因子转换为 vector<BigInt> 表示
+    /// 将 Polynomial<ModInt> 因子转换为 vector<BigInt> 表示
     std::vector<std::vector<BigInt>> factor_vecs;
     factor_vecs.reserve(mod_factors.size());
     for (const auto& mf : mod_factors) {
@@ -692,10 +692,10 @@ std::vector<Polynomial<BigInt>> hensel_lift(
         factor_vecs.push_back(std::move(fv));
     }
 
-    // 执行多因子 Hensel 提升
+    /// 执行多因子 Hensel 提升
     auto lifted_vecs = hl_multi_factor_lift(f_vec, factor_vecs, prime, k);
 
-    // 将结果转换回 Polynomial<BigInt>
+    /// 将结果转换回 Polynomial<BigInt>
     std::vector<Polynomial<BigInt>> result;
     result.reserve(lifted_vecs.size());
     for (auto& lv : lifted_vecs) {

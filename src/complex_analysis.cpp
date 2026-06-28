@@ -39,7 +39,7 @@ std::shared_ptr<SymbolicExpr> cauchy_integral(
     const std::shared_ptr<SymbolicExpr>& z0,
     int n) {
     
-    // n is the power in the denominator: \oint f(z)/(z-z0)^n dz
+    /// n is the power in the denominator: \oint f(z)/(z-z0)^n dz
     if (n < 1) return SymbolicExpr::number(0);
     
     auto deriv = f;
@@ -68,17 +68,17 @@ std::shared_ptr<SymbolicExpr> cauchy_integral(
 std::shared_ptr<SymbolicExpr> analytic_continuation(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z) {
-    // Basic analytic continuation via symbolic simplification
-    // Simplification often reduces locally defined series (if represented)
-    // to their global analytic forms (e.g. geometric series).
+    /// Basic analytic continuation via symbolic simplification
+    /// Simplification often reduces locally defined series (if represented)
+    /// to their global analytic forms (e.g. geometric series).
     if (!f) return f;
     return f->simplify();
 }
 
 namespace {
 
-// 递归地将表达式分解为 (实部, 虚部)，把 ComplexNode 视为 a+bi。
-// 仅处理加法、乘法、数值与 ComplexNode 组合；其余子表达式视为实值。
+/// 递归地将表达式分解为 (实部, 虚部)，把 ComplexNode 视为 a+bi。
+/// 仅处理加法、乘法、数值与 ComplexNode 组合；其余子表达式视为实值。
 void split_real_imag(const std::shared_ptr<SymbolicNode>& node,
                      std::shared_ptr<SymbolicExpr>& re,
                      std::shared_ptr<SymbolicExpr>& im) {
@@ -103,7 +103,7 @@ void split_real_imag(const std::shared_ptr<SymbolicNode>& node,
         return;
     }
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        // 累乘：(a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        /// 累乘：(a+bi)(c+di) = (ac-bd) + (ad+bc)i
         std::shared_ptr<SymbolicExpr> accR = SymbolicExpr::number(1);
         std::shared_ptr<SymbolicExpr> accI = SymbolicExpr::number(0);
         for (const auto& op : mul->operands) {
@@ -121,7 +121,7 @@ void split_real_imag(const std::shared_ptr<SymbolicNode>& node,
         return;
     }
     if (auto pw = std::dynamic_pointer_cast<PowerNode>(node)) {
-        // 对整数次幂，展开为重复乘法以分离实/虚部。
+        /// 对整数次幂，展开为重复乘法以分离实/虚部。
         auto exp_num = std::dynamic_pointer_cast<NumberNode>(pw->exponent);
         long long e = 0;
         bool int_exp = false;
@@ -138,7 +138,7 @@ void split_real_imag(const std::shared_ptr<SymbolicNode>& node,
         split_real_imag(pw->base, baseR, baseI);
         bool base_real = baseI->root && baseI->root->is_zero();
         if (int_exp && e >= 0 && e <= 16 && !base_real) {
-            // (a+bi)^e via repeated complex multiplication
+            /// (a+bi)^e via repeated complex multiplication
             std::shared_ptr<SymbolicExpr> accR = SymbolicExpr::number(1);
             std::shared_ptr<SymbolicExpr> accI = SymbolicExpr::number(0);
             for (long long k = 0; k < e; ++k) {
@@ -152,18 +152,18 @@ void split_real_imag(const std::shared_ptr<SymbolicNode>& node,
             re = accR; im = accI;
             return;
         }
-        // 实底数或非整数指数：视为实值
+        /// 实底数或非整数指数：视为实值
         if (base_real) {
             re = std::make_shared<SymbolicExpr>(node);
             im = SymbolicExpr::number(0);
             return;
         }
-        // 退化情形：原样返回为实部
+        /// 退化情形：原样返回为实部
         re = std::make_shared<SymbolicExpr>(node);
         im = SymbolicExpr::number(0);
         return;
     }
-    // 默认：视为实值表达式
+    /// 默认：视为实值表达式
     re = std::make_shared<SymbolicExpr>(node);
     im = SymbolicExpr::number(0);
 }
@@ -188,7 +188,7 @@ std::shared_ptr<SymbolicExpr> conjugate(const std::shared_ptr<SymbolicExpr>& exp
     if (!expr) return nullptr;
     std::shared_ptr<SymbolicExpr> re, im;
     split_real_imag(expr->root, re, im);
-    // conj(a+bi) = a - bi
+    /// conj(a+bi) = a - bi
     auto neg_im = SymbolicExpr::multiply(SymbolicExpr::number(-1), im)->simplify();
     if (neg_im->root && neg_im->root->is_zero()) {
         return re->simplify();
@@ -199,7 +199,7 @@ std::shared_ptr<SymbolicExpr> conjugate(const std::shared_ptr<SymbolicExpr>& exp
 
 bool is_analytic(const std::shared_ptr<SymbolicExpr>& f, const std::string& z) {
     if (!f) return false;
-    // 将 z 替换为 (z_re + i·z_im)，分离 u、v，检验 Cauchy-Riemann。
+    /// 将 z 替换为 (z_re + i·z_im)，分离 u、v，检验 Cauchy-Riemann。
     std::string xr = z + "_re";
     std::string xi = z + "_im";
     auto zr = SymbolicExpr::variable(xr);
@@ -220,7 +220,7 @@ bool is_analytic(const std::shared_ptr<SymbolicExpr>& f, const std::string& z) {
     auto vx = v->differentiate(xr);
     auto vy = v->differentiate(xi);
 
-    // CR1: ux - vy == 0 ; CR2: uy + vx == 0
+    /// CR1: ux - vy == 0 ; CR2: uy + vx == 0
     auto cr1 = SymbolicExpr::add(ux, SymbolicExpr::multiply(SymbolicExpr::number(-1), vy))->simplify();
     auto cr2 = SymbolicExpr::add(uy, vx)->simplify();
 

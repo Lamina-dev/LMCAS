@@ -175,7 +175,7 @@ static int detect_parity(const std::shared_ptr<SymbolicExpr>& f, const std::stri
 
 namespace lamina {
 
-// Stubs for functions not yet fully implemented in this task
+/// Stubs for functions not yet fully implemented in this task
 std::shared_ptr<SymbolicExpr> convergence_radius(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients, const std::string& var) {
     (void)var;
@@ -291,7 +291,7 @@ std::shared_ptr<SymbolicExpr> fourier_series(
     const std::shared_ptr<SymbolicExpr>& period, int n_terms) {
     if (!f || !period || n_terms < 0) return nullptr;
 
-    // 周期 T，半周期 L = T/2，基频 w = 2π/T
+    /// 周期 T，半周期 L = T/2，基频 w = 2π/T
     auto T = period;
     auto pi = std::make_shared<SymbolicExpr>(std::make_shared<VariableNode>("pi"));
     auto two = SymbolicExpr::number(2);
@@ -305,7 +305,7 @@ std::shared_ptr<SymbolicExpr> fourier_series(
     Integrator integrator;
     auto x = SymbolicExpr::variable(var);
 
-    // a0 = (1/L) ∫_{-L}^{L} f dx ; 常数项 a0/2
+    /// a0 = (1/L) ∫_{-L}^{L} f dx ; 常数项 a0/2
     std::shared_ptr<SymbolicExpr> a0 = SymbolicExpr::number(0);
     {
         auto integ = integrator.integrate_def(*f, var, *half_lo, *half_hi);
@@ -317,7 +317,7 @@ std::shared_ptr<SymbolicExpr> fourier_series(
         auto kw = SymbolicExpr::multiply(SymbolicExpr::number(k), w); // k·2π/T
         auto arg = SymbolicExpr::multiply(kw, x);
 
-        // a_k：奇函数时为 0
+        /// a_k：奇函数时为 0
         if (parity != -1) {
             auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::cos(arg));
             auto integ = integrator.integrate_def(*integrand, var, *half_lo, *half_hi);
@@ -326,7 +326,7 @@ std::shared_ptr<SymbolicExpr> fourier_series(
                 result = SymbolicExpr::add(result, SymbolicExpr::multiply(ak, SymbolicExpr::cos(arg)));
             }
         }
-        // b_k：偶函数时为 0
+        /// b_k：偶函数时为 0
         if (parity != 1) {
             auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::sin(arg));
             auto integ = integrator.integrate_def(*integrand, var, *half_lo, *half_hi);
@@ -353,16 +353,16 @@ LaurentResult laurent_series_full(
     if (!f || !center) return res;
 
     auto x = SymbolicExpr::variable(var);
-    // (x - center)
+    /// (x - center)
     auto shift = SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), center));
 
-    // 寻找极点阶数 m：使 (x-c)^m · f 在 c 处解析（有限）。
+    /// 寻找极点阶数 m：使 (x-c)^m · f 在 c 处解析（有限）。
     int pole_order = 0;
     std::shared_ptr<SymbolicExpr> regular = f;
     {
         auto test = f;
         const int MAX_M = (order_neg > 0 ? order_neg : 5);
-        // 先判断 f 在 center 是否已解析
+        /// 先判断 f 在 center 是否已解析
         auto f_at = f->substitute(var, center);
         if (f_at) f_at = f_at->simplify();
         bool finite = f_at && f_at->is_number();
@@ -381,13 +381,13 @@ LaurentResult laurent_series_full(
         }
     }
 
-    // 对 regular（解析部分）做 Taylor 展开
+    /// 对 regular（解析部分）做 Taylor 展开
     int taylor_order = order_pos + pole_order + 1;
     if (taylor_order < 1) taylor_order = 1;
     auto taylor = regular->series(var, center, taylor_order);
     if (!taylor) return res;
 
-    // Laurent = taylor / (x-c)^pole_order
+    /// Laurent = taylor / (x-c)^pole_order
     std::shared_ptr<SymbolicExpr> laurent = taylor;
     if (pole_order > 0) {
         auto powm = SymbolicExpr::power(shift, SymbolicExpr::number(pole_order));
@@ -399,12 +399,12 @@ LaurentResult laurent_series_full(
     if (pole_order == 0) res.singularity = SingularityType::Removable;
     else res.singularity = SingularityType::Pole;
 
-    // 留数 = Taylor 展开中 (x-c)^(pole_order-1) 的系数
+    /// 留数 = Taylor 展开中 (x-c)^(pole_order-1) 的系数
     if (pole_order >= 1) {
-        // a_{m-1} = (1/(m-1)!) lim_{x->c} d^{m-1}/dx^{m-1} [regular]
+        /// a_{m-1} = (1/(m-1)!) lim_{x->c} d^{m-1}/dx^{m-1} [regular]
         auto deriv = regular;
         for (int i = 0; i < pole_order - 1; ++i) deriv = deriv->differentiate(var);
-        // 用极限求值，稳健处理 0/0 形式（如 z/(z(z+1)) 在 z=0）。
+        /// 用极限求值，稳健处理 0/0 形式（如 z/(z(z+1)) 在 z=0）。
         auto val = deriv->limit(var, center);
         if (!val) val = deriv->substitute(var, center);
         long long fact = 1;
@@ -418,8 +418,8 @@ LaurentResult laurent_series_full(
 std::shared_ptr<SymbolicExpr> asymptotic_expand(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var, int order) {
     if (!f || order < 0) return nullptr;
-    // 通过 x = 1/t 替换，在 t=0 处做 Taylor 展开，再回代 t = 1/x，
-    // 得到按 x 递减幂次的渐近展开。
+    /// 通过 x = 1/t 替换，在 t=0 处做 Taylor 展开，再回代 t = 1/x，
+    /// 得到按 x 递减幂次的渐近展开。
     auto x = SymbolicExpr::variable(var);
     std::string tname = var + "__asym_t";
     auto t = SymbolicExpr::variable(tname);
@@ -429,7 +429,7 @@ std::shared_ptr<SymbolicExpr> asymptotic_expand(
     g = g->simplify();
     auto taylor_t = g->series(tname, SymbolicExpr::number(0), order + 1);
     if (!taylor_t) return nullptr;
-    // 回代 t = 1/x
+    /// 回代 t = 1/x
     auto inv_x = SymbolicExpr::divide(SymbolicExpr::number(1), x);
     auto back = taylor_t->substitute(tname, inv_x);
     if (!back) return nullptr;
@@ -488,14 +488,14 @@ std::shared_ptr<SymbolicExpr> symbolic_product(
 }
 
 // ============================================================
-// lim sup / lim inf (Requirement 66)
+/// lim sup / lim inf (Requirement 66)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> lim_sup(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n) {
     if (!a_n || !a_n->root) return nullptr;
 
-    // Detect (-1)^n oscillation pattern
+    /// Detect (-1)^n oscillation pattern
     std::shared_ptr<SymbolicExpr> remainder;
     if (series_extract_alternating(a_n->root, n, remainder)) {
         auto inf = SymbolicExpr::infinity();
@@ -508,7 +508,7 @@ std::shared_ptr<SymbolicExpr> lim_sup(
         return series_abs(lim_f);
     }
 
-    // Detect sin/cos oscillation
+    /// Detect sin/cos oscillation
     std::shared_ptr<SymbolicExpr> amplitude;
     if (series_detect_trig_oscillation(a_n->root, n, amplitude)) {
         auto inf = SymbolicExpr::infinity();
@@ -520,7 +520,7 @@ std::shared_ptr<SymbolicExpr> lim_sup(
         }
     }
 
-    // For convergent/monotone sequences: lim sup = lim
+    /// For convergent/monotone sequences: lim sup = lim
     auto inf = SymbolicExpr::infinity();
     auto lim = a_n->limit(n, inf);
     if (lim) { auto s = lim->simplify(); if (s) return s; return lim; }
@@ -531,7 +531,7 @@ std::shared_ptr<SymbolicExpr> lim_inf(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n) {
     if (!a_n || !a_n->root) return nullptr;
 
-    // Detect (-1)^n oscillation pattern
+    /// Detect (-1)^n oscillation pattern
     std::shared_ptr<SymbolicExpr> remainder;
     if (series_extract_alternating(a_n->root, n, remainder)) {
         auto inf = SymbolicExpr::infinity();
@@ -544,7 +544,7 @@ std::shared_ptr<SymbolicExpr> lim_inf(
         return series_negate(series_abs(lim_f));
     }
 
-    // Detect sin/cos oscillation
+    /// Detect sin/cos oscillation
     std::shared_ptr<SymbolicExpr> amplitude;
     if (series_detect_trig_oscillation(a_n->root, n, amplitude)) {
         auto inf = SymbolicExpr::infinity();
@@ -556,7 +556,7 @@ std::shared_ptr<SymbolicExpr> lim_inf(
         }
     }
 
-    // For convergent/monotone sequences: lim inf = lim
+    /// For convergent/monotone sequences: lim inf = lim
     auto inf = SymbolicExpr::infinity();
     auto lim = a_n->limit(n, inf);
     if (lim) { auto s = lim->simplify(); if (s) return s; return lim; }

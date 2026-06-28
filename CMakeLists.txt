@@ -41,18 +41,23 @@ set_target_properties(LammpCore PROPERTIES
 add_library(lmcas SHARED
     src/symbolic.cpp
     src/print_visitor.cpp
+    src/limit_visitor.cpp
     src/solve_visitor.cpp
     src/matcher.cpp
+    src/multivariate_factor.cpp
+    src/multivariate_poly.cpp
     src/integration.cpp
     src/solver.cpp
     src/solve_polynomial.cpp
     src/solve_transcendental.cpp
+    src/solve_mixed_transcendental.cpp
     src/newton_raphson.cpp
     src/root_of_utils.cpp
     src/interval.cpp
     src/inequality_solver.cpp
     src/parametric_solver.cpp
     src/symbolic_ode.cpp
+    src/symbolic_ode_engine.cpp
     src/symbolic_geometry.cpp
     src/symbolic_vector_geometry.cpp
     src/symbolic_complex.cpp
@@ -62,6 +67,17 @@ add_library(lmcas SHARED
     src/inference_engine.cpp
     src/assumption_context.cpp
     src/query_interface.cpp
+    src/transcendental_factor.cpp
+    src/calculus_utils.cpp
+    src/vector_calculus.cpp
+    src/series_engine.cpp
+    src/transform_engine.cpp
+    src/berlekamp.cpp
+    src/hensel_lift.cpp
+    src/matrix_decomposition.cpp
+    src/complex_analysis.cpp
+    src/differential_geometry.cpp
+    src/numerical_integration.cpp
     src/dllmain.c
 )
 

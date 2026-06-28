@@ -956,7 +956,7 @@ public:
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const LogicalNode&>(other);
         if (op != o.op) return (int)op < (int)o.op ? -1 : 1;
-        // 处理一元 Not 运算（right 为 nullptr）
+        /// 处理一元 Not 运算（right 为 nullptr）
         bool l_null = !left;
         bool ol_null = !o.left;
         if (l_null != ol_null) return l_null ? -1 : 1;

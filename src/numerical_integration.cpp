@@ -46,9 +46,9 @@ std::shared_ptr<SymbolicExpr> quadrature_gaussian(
     const std::shared_ptr<SymbolicExpr>& b,
     int n) {
     
-    // Convert integral from [a, b] to [-1, 1]
-    // x = 0.5 * (b - a) * t + 0.5 * (a + b)
-    // dx = 0.5 * (b - a) dt
+    /// Convert integral from [a, b] to [-1, 1]
+    /// x = 0.5 * (b - a) * t + 0.5 * (a + b)
+    /// dx = 0.5 * (b - a) dt
     
     auto diff = SymbolicExpr::add(b, SymbolicExpr::multiply(a, SymbolicExpr::number(-1)));
     auto sum_ab = SymbolicExpr::add(a, b);
@@ -81,7 +81,7 @@ std::shared_ptr<SymbolicExpr> quadrature_gaussian(
             SymbolicExpr::divide(SymbolicExpr::number(5), SymbolicExpr::number(9))
         };
     } else {
-        // Fallback to Simpson for higher symbolic degrees due to analytical complexity of Legendre roots
+        /// Fallback to Simpson for higher symbolic degrees due to analytical complexity of Legendre roots
         return quadrature_simpson(f, var, a, b, n * 2);
     }
     
@@ -97,7 +97,7 @@ std::shared_ptr<SymbolicExpr> quadrature_gaussian(
 
 namespace {
 
-// 在数值点处求 f 的 double 值；失败抛出。
+/// 在数值点处求 f 的 double 值；失败抛出。
 double eval_f(const std::shared_ptr<SymbolicExpr>& f, const std::string& var, double xval) {
     auto x = SymbolicExpr::number(xval);
     auto fx = f->substitute(var, x);
@@ -106,7 +106,7 @@ double eval_f(const std::shared_ptr<SymbolicExpr>& f, const std::string& var, do
     return fx->to_numeric();
 }
 
-// 单段辛普森
+/// 单段辛普森
 double simpson_seg(const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
                    double a, double b, double fa, double fb, double fm) {
     double h = b - a;

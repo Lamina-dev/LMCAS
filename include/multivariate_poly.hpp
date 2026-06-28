@@ -59,7 +59,7 @@ public:
      */
     explicit MultiPoly(const Rational& constant, const std::vector<std::string>& vars);
 
-    // --- 算术运算 ---
+    /// --- 算术运算 ---
 
     /** @brief 多项式加法 */
     MultiPoly operator+(const MultiPoly& other) const;
@@ -94,7 +94,7 @@ public:
      */
     MultiPoly exact_div(const MultiPoly& divisor) const;
 
-    // --- 求值 ---
+    /// --- 求值 ---
 
     /**
      * @brief 将指定变量代入有理数值，返回降维后的多项式
@@ -111,7 +111,7 @@ public:
      */
     MultiPoly eval(const std::map<std::string, Rational>& substitution) const;
 
-    // --- 度数查询 ---
+    /// --- 度数查询 ---
 
     /**
      * @brief 计算多项式的全次数
@@ -135,7 +135,7 @@ public:
      */
     MultiPoly leading_coeff(const std::string& var) const;
 
-    // --- 转换 ---
+    /// --- 转换 ---
 
     /**
      * @brief 转换为一元 Polynomial<Rational>
@@ -155,7 +155,7 @@ public:
     static MultiPoly from_univariate(const Polynomial<Rational>& poly,
                                      const std::string& var);
 
-    // --- 属性查询 ---
+    /// --- 属性查询 ---
 
     /** @brief 判断是否为零多项式 */
     bool is_zero() const;
@@ -187,7 +187,7 @@ public:
      */
     const std::vector<Term>& terms() const;
 
-    // --- 工具方法 ---
+    /// --- 工具方法 ---
 
     /**
      * @brief 提取数值内容（所有系数的 GCD）

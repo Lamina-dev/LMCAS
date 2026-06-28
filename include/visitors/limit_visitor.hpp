@@ -39,7 +39,7 @@ class LAMINA_API LimitVisitor : public SymbolicVisitor {
 
     enum class IndeterminateForm { None, ZeroTimesInf, InfMinusInf, OnePowInf, ZeroPowZero, InfPowZero };
 
-    // --- Low-level helpers ---
+    /// --- Low-level helpers ---
     bool is_inf(const std::shared_ptr<SymbolicNode>& node) const;
     bool is_neg_inf(const std::shared_ptr<SymbolicNode>& node) const;
     std::optional<int> get_node_sign(const std::shared_ptr<SymbolicNode>& node) const;
@@ -50,12 +50,12 @@ class LAMINA_API LimitVisitor : public SymbolicVisitor {
     bool tends_to_zero(const std::shared_ptr<SymbolicNode>& node) const;
     std::shared_ptr<SymbolicNode> eval_limit(const std::shared_ptr<SymbolicNode>& expr);
 
-    // --- Classification ---
+    /// --- Classification ---
     IndeterminateForm classify_product_form(const std::vector<std::shared_ptr<SymbolicNode>>& vals);
     IndeterminateForm classify_power_form(const std::shared_ptr<SymbolicNode>& bv, const std::shared_ptr<SymbolicNode>& ev);
     IndeterminateForm classify_add_form(const std::vector<std::shared_ptr<SymbolicNode>>& vals);
 
-    // --- Resolution ---
+    /// --- Resolution ---
     std::shared_ptr<SymbolicNode> try_squeeze(const std::shared_ptr<SymbolicNode>& expr);
     std::pair<std::shared_ptr<SymbolicNode>, std::shared_ptr<SymbolicNode>> extract_num_den(const std::shared_ptr<SymbolicNode>& expr);
     std::shared_ptr<SymbolicNode> resolve_zero_times_inf(const std::vector<std::shared_ptr<SymbolicNode>>& factors, const std::vector<std::shared_ptr<SymbolicNode>>& factor_vals);
@@ -63,13 +63,13 @@ class LAMINA_API LimitVisitor : public SymbolicVisitor {
     std::shared_ptr<SymbolicNode> resolve_exponential_form(const std::shared_ptr<SymbolicNode>& base, const std::shared_ptr<SymbolicNode>& exponent);
     std::shared_ptr<SymbolicNode> apply_lhopital(const std::shared_ptr<SymbolicNode>& num, const std::shared_ptr<SymbolicNode>& den);
 
-    // --- Taylor fallback (defined in limit_visitor.cpp) ---
+    /// --- Taylor fallback (defined in limit_visitor.cpp) ---
     std::shared_ptr<SymbolicNode> taylor_fallback(const std::shared_ptr<SymbolicNode>& num, const std::shared_ptr<SymbolicNode>& den, int max_order = 8);
     std::shared_ptr<SymbolicNode> simplify_and_eval_ratio(const std::shared_ptr<SymbolicNode>& ratio_node);
     std::pair<std::shared_ptr<SymbolicNode>, int> find_leading_term(const std::shared_ptr<SymbolicExpr>& series_expr, const std::string& expand_var, const std::shared_ptr<SymbolicExpr>& expand_point, int max_order);
     static int get_sign(const std::shared_ptr<SymbolicNode>& node);
 
-    // --- Limits at infinity helpers ---
+    /// --- Limits at infinity helpers ---
     bool is_limit_at_infinity() const;
     bool is_limit_at_neg_infinity() const;
     int get_polynomial_degree(const std::shared_ptr<SymbolicNode>& node) const;
@@ -82,7 +82,7 @@ class LAMINA_API LimitVisitor : public SymbolicVisitor {
     std::shared_ptr<SymbolicNode> handle_neg_infinity_limit(const std::shared_ptr<SymbolicNode>& expr);
     std::shared_ptr<SymbolicNode> substitute_neg_t(const std::shared_ptr<SymbolicNode>& node, const std::string& t_var) const;
 
-    // --- Direction helpers ---
+    /// --- Direction helpers ---
     int determine_sign_near_point(const std::shared_ptr<SymbolicNode>& expr, const std::string& dir);
     std::shared_ptr<SymbolicNode> select_branch_by_direction(PiecewiseNode& node, const std::string& dir);
     bool condition_satisfied_by_direction(const std::shared_ptr<SymbolicNode>& condition, const std::string& dir);
@@ -117,7 +117,7 @@ public:
 };
 
 // ============================================================================
-// Inline implementations
+/// Inline implementations
 // ============================================================================
 
 inline bool LimitVisitor::is_inf(const std::shared_ptr<SymbolicNode>& node) const {
@@ -126,7 +126,7 @@ inline bool LimitVisitor::is_inf(const std::shared_ptr<SymbolicNode>& node) cons
     if (auto m = std::dynamic_pointer_cast<MultiplyNode>(node)) for (auto& op : m->operands) if (is_inf(op)) return true;
     if (auto p = std::dynamic_pointer_cast<PowerNode>(node)) {
         if (is_inf(p->base)) return true;
-        // 0^(negative) is infinity
+        /// 0^(negative) is infinity
         if (p->base && p->base->is_zero()) {
             if (auto e_num = std::dynamic_pointer_cast<NumberNode>(p->exponent)) {
                 double ev = 0;
@@ -184,14 +184,14 @@ inline double LimitVisitor::get_point_value() const {
 
 inline bool LimitVisitor::is_bounded(const std::shared_ptr<SymbolicNode>& node) const {
     if (!node) return false;
-    // sin(expr) and cos(expr) are bounded in [-1, 1]
-    // arctan(expr) is bounded in (-π/2, π/2)
+    /// sin(expr) and cos(expr) are bounded in [-1, 1]
+    /// arctan(expr) is bounded in (-π/2, π/2)
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
         return func->type == FunctionNode::FuncType::Sin
             || func->type == FunctionNode::FuncType::Cos
             || func->type == FunctionNode::FuncType::ArcTan;
     }
-    // Product of bounded functions is bounded
+    /// Product of bounded functions is bounded
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
         bool all_bounded_or_const = true;
         bool has_bounded = false;
@@ -202,7 +202,7 @@ inline bool LimitVisitor::is_bounded(const std::shared_ptr<SymbolicNode>& node) 
         }
         return all_bounded_or_const && has_bounded;
     }
-    // bounded^(even positive integer) is bounded (e.g., sin(x)^2)
+    /// bounded^(even positive integer) is bounded (e.g., sin(x)^2)
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
         if (is_bounded(pow->base)) {
             if (auto num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
@@ -229,16 +229,16 @@ inline bool LimitVisitor::is_bounded(const std::shared_ptr<SymbolicNode>& node) 
  */
 inline bool LimitVisitor::is_bounded_expression(const std::shared_ptr<SymbolicNode>& node) const {
     if (!node) return false;
-    // Already bounded by the basic check
+    /// Already bounded by the basic check
     if (is_bounded(node)) return true;
-    // constant + bounded is bounded (e.g., 2 + sin(1/x))
+    /// constant + bounded is bounded (e.g., 2 + sin(1/x))
     if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
         bool has_bounded = false;
         for (const auto& op : add->operands) {
             if (is_bounded(op) || is_bounded_expression(op)) {
                 has_bounded = true;
             } else if (std::dynamic_pointer_cast<NumberNode>(op)) {
-                // constants are bounded
+                /// constants are bounded
             } else {
                 return false;
             }
@@ -287,7 +287,7 @@ inline LimitVisitor::IndeterminateForm LimitVisitor::classify_add_form(const std
 }
 
 inline std::shared_ptr<SymbolicNode> LimitVisitor::try_squeeze(const std::shared_ptr<SymbolicNode>& expr) {
-    // Case 1: MultiplyNode — product of bounded × zero-tending → 0
+    /// Case 1: MultiplyNode — product of bounded × zero-tending → 0
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr)) {
         std::vector<std::shared_ptr<SymbolicNode>> bounded_factors, other_factors;
         for (const auto& op : mul->operands) {
@@ -301,7 +301,7 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::try_squeeze(const std::shared
         }
         if (bounded_factors.empty() || other_factors.empty()) return nullptr;
 
-        // Check if the non-bounded factors tend to zero
+        /// Check if the non-bounded factors tend to zero
         auto remaining = other_factors.size() == 1
             ? other_factors[0]
             : std::static_pointer_cast<SymbolicNode>(std::make_shared<MultiplyNode>(other_factors));
@@ -311,17 +311,17 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::try_squeeze(const std::shared
         return nullptr;
     }
 
-    // Case 2: AddNode — general squeeze theorem.
-    // If f(x) = g(x) + h(x) where h(x) is a product of bounded × zero-tending,
-    // then lim f = lim g (since h squeezes to 0).
-    // This handles the case: f bounded between g and (g + bounded×zero) where
-    // lim(lower) = lim(upper) = lim g = L.
+    /// Case 2: AddNode — general squeeze theorem.
+    /// If f(x) = g(x) + h(x) where h(x) is a product of bounded × zero-tending,
+    /// then lim f = lim g (since h squeezes to 0).
+    /// This handles the case: f bounded between g and (g + bounded×zero) where
+    /// lim(lower) = lim(upper) = lim g = L.
     if (auto add = std::dynamic_pointer_cast<AddNode>(expr)) {
         std::vector<std::shared_ptr<SymbolicNode>> squeeze_to_zero_terms;
         std::vector<std::shared_ptr<SymbolicNode>> other_terms;
 
         for (const auto& op : add->operands) {
-            // Check if this term is a product of bounded × zero-tending
+            /// Check if this term is a product of bounded × zero-tending
             if (auto term_mul = std::dynamic_pointer_cast<MultiplyNode>(op)) {
                 auto term_squeeze = try_squeeze(op);
                 if (term_squeeze && term_squeeze->is_zero()) {
@@ -332,12 +332,12 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::try_squeeze(const std::shared
             other_terms.push_back(op);
         }
 
-        // If we found squeeze-to-zero terms and have remaining terms with computable limits
+        /// If we found squeeze-to-zero terms and have remaining terms with computable limits
         if (!squeeze_to_zero_terms.empty() && !other_terms.empty()) {
             auto remaining_expr = other_terms.size() == 1
                 ? other_terms[0]
                 : std::static_pointer_cast<SymbolicNode>(std::make_shared<AddNode>(other_terms));
-            // Compute the limit of the remaining terms
+            /// Compute the limit of the remaining terms
             auto remaining_limit = eval_limit(remaining_expr);
             if (remaining_limit && !is_inf(remaining_limit)) {
                 return remaining_limit;
@@ -392,27 +392,27 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::resolve_zero_times_inf(const 
     auto f = zero_f.size() == 1 ? zero_f[0] : std::static_pointer_cast<SymbolicNode>(std::make_shared<MultiplyNode>(zero_f));
     auto g = inf_f.size() == 1 ? inf_f[0] : std::static_pointer_cast<SymbolicNode>(std::make_shared<MultiplyNode>(inf_f));
 
-    // Choose between 0/0 form (f/(1/g)) and ∞/∞ form (g/(1/f)).
-    // Heuristic: if the zero factor has exponential growth class (e.g., e^(-x)),
-    // prefer ∞/∞ form because L'Hôpital on 0/0 won't converge (polynomial grows).
-    // Otherwise, try 0/0 first as it's simpler for most cases.
+    /// Choose between 0/0 form (f/(1/g)) and ∞/∞ form (g/(1/f)).
+    /// Heuristic: if the zero factor has exponential growth class (e.g., e^(-x)),
+    /// prefer ∞/∞ form because L'Hôpital on 0/0 won't converge (polynomial grows).
+    /// Otherwise, try 0/0 first as it's simpler for most cases.
     bool prefer_inf_over_inf = false;
     if (is_limit_at_infinity() || is_limit_at_neg_infinity()) {
         GrowthClass f_growth = classify_growth(f);
         GrowthClass g_growth = classify_growth(g);
-        // If zero factor is exponential (e.g., e^(-x)→0) and inf factor is polynomial,
-        // the ∞/∞ form (polynomial/exponential) converges in one step.
+        /// If zero factor is exponential (e.g., e^(-x)→0) and inf factor is polynomial,
+        /// the ∞/∞ form (polynomial/exponential) converges in one step.
         if (f_growth == GrowthClass::Exponential && g_growth == GrowthClass::Polynomial) {
             prefer_inf_over_inf = true;
         }
-        // If zero factor is polynomial (e.g., 1/x→0) and inf factor is logarithmic,
-        // the 0/0 form works well.
+        /// If zero factor is polynomial (e.g., 1/x→0) and inf factor is logarithmic,
+        /// the 0/0 form works well.
     }
 
     std::shared_ptr<SymbolicNode> res = nullptr;
 
     if (prefer_inf_over_inf) {
-        // Try ∞/∞ form first: g / (1/f)
+        /// Try ∞/∞ form first: g / (1/f)
         auto f_inv = std::make_shared<PowerNode>(f, std::make_shared<NumberNode>(BigInt(-1)));
         res = apply_lhopital(g, f_inv);
         if (!res) {
@@ -420,7 +420,7 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::resolve_zero_times_inf(const 
             res = apply_lhopital(f, g_inv);
         }
     } else {
-        // Try 0/0 form first: f / (1/g)
+        /// Try 0/0 form first: f / (1/g)
         auto g_inv = std::make_shared<PowerNode>(g, std::make_shared<NumberNode>(BigInt(-1)));
         res = apply_lhopital(f, g_inv);
         if (!res) {
@@ -444,10 +444,10 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::resolve_inf_minus_inf(AddNode
     bool has_nontrivial_den = false;
     for (auto& op : node.operands) { auto nd = extract_num_den(op); nums.push_back(nd.first); dens.push_back(nd.second); if (!nd.second->is_one()) has_nontrivial_den = true; }
 
-    // If no operand has a denominator, combining into a fraction won't help.
-    // Fall back to Taylor expansion at the limit point.
+    /// If no operand has a denominator, combining into a fraction won't help.
+    /// Fall back to Taylor expansion at the limit point.
     if (!has_nontrivial_den) {
-        // Try Taylor fallback: treat the whole expression as numerator / 1
+        /// Try Taylor fallback: treat the whole expression as numerator / 1
         auto whole_expr = node.operands.size() == 1 ? node.operands[0] : std::static_pointer_cast<SymbolicNode>(std::make_shared<AddNode>(node.operands));
         auto one_node = std::make_shared<NumberNode>(BigInt(1));
         auto tf_result = taylor_fallback(whole_expr, one_node);
@@ -503,21 +503,21 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::apply_lhopital(const std::sha
     dD->accept(norm); dD = norm.get_result();
     if (dD->is_zero()) return taylor_fallback(num, den);
 
-    // Try to simplify the ratio dN/dD algebraically before evaluating limits.
-    // This handles cases like x*ln(1+1/x) where L'Hôpital produces derivatives
-    // with common factors (e.g., x^-2) that cancel, avoiding infinite 0/0 loops.
+    /// Try to simplify the ratio dN/dD algebraically before evaluating limits.
+    /// This handles cases like x*ln(1+1/x) where L'Hôpital produces derivatives
+    /// with common factors (e.g., x^-2) that cancel, avoiding infinite 0/0 loops.
     {
         std::vector<std::shared_ptr<SymbolicNode>> ratio_ops = {
             dN, std::make_shared<PowerNode>(dD, std::make_shared<NumberNode>(BigInt(-1)))};
         auto ratio_node = std::make_shared<MultiplyNode>(ratio_ops);
-        // Wrap in SymbolicExpr for simplification (defined in limit_visitor.cpp)
+        /// Wrap in SymbolicExpr for simplification (defined in limit_visitor.cpp)
         auto simp_result = simplify_and_eval_ratio(ratio_node);
         if (simp_result) return simp_result;
     }
 
-    // Construct the ratio dN/dD. Instead of creating a MultiplyNode that might
-    // be misinterpreted as 0×∞, evaluate as a proper fraction: compute limits
-    // of dN and dD separately and check for 0/0 or ∞/∞ forms.
+    /// Construct the ratio dN/dD. Instead of creating a MultiplyNode that might
+    /// be misinterpreted as 0×∞, evaluate as a proper fraction: compute limits
+    /// of dN and dD separately and check for 0/0 or ∞/∞ forms.
     LimitVisitor sub_n(var, point, direction, assumption_ctx_);
     sub_n.lhopital_depth_ = this->lhopital_depth_ + 1;
     dN->accept(sub_n);
@@ -537,18 +537,18 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::apply_lhopital(const std::sha
     bool n_inf = is_inf(val_n);
     bool d_inf = is_inf(val_d);
 
-    // If still indeterminate (0/0 or ∞/∞), recurse with increased depth
+    /// If still indeterminate (0/0 or ∞/∞), recurse with increased depth
     if ((n_zero && d_zero) || (n_inf && d_inf)) {
         LimitVisitor sub(var, point, direction, assumption_ctx_);
         sub.lhopital_depth_ = this->lhopital_depth_ + 1;
-        // Build ratio as MultiplyNode for the sub-visitor
+        /// Build ratio as MultiplyNode for the sub-visitor
         std::vector<std::shared_ptr<SymbolicNode>> ratio_ops = {dN, std::make_shared<PowerNode>(dD, std::make_shared<NumberNode>(BigInt(-1)))};
         auto ratio = std::make_shared<MultiplyNode>(ratio_ops);
         ratio->accept(sub);
         return sub.get_result();
     }
 
-    // Denominator is zero but numerator isn't → ±∞
+    /// Denominator is zero but numerator isn't → ±∞
     if (d_zero && !n_zero) {
         int sign_n = 1;
         if (auto nn = std::dynamic_pointer_cast<NumberNode>(val_n)) {
@@ -564,7 +564,7 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::apply_lhopital(const std::sha
         return inf_node;
     }
 
-    // Normal case: compute the ratio of limits
+    /// Normal case: compute the ratio of limits
     if (!d_zero && !d_inf) {
         auto ratio_result = std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>{
             val_n, std::make_shared<PowerNode>(val_d, std::make_shared<NumberNode>(BigInt(-1)))});
@@ -572,12 +572,12 @@ inline std::shared_ptr<SymbolicNode> LimitVisitor::apply_lhopital(const std::sha
         return norm.get_result();
     }
 
-    // Numerator is finite, denominator is ∞ → 0
+    /// Numerator is finite, denominator is ∞ → 0
     if (!n_inf && !n_zero && d_inf) {
         return std::make_shared<NumberNode>(BigInt(0));
     }
 
-    // Fallback: evaluate the ratio expression directly
+    /// Fallback: evaluate the ratio expression directly
     std::vector<std::shared_ptr<SymbolicNode>> ratio_ops = {dN, std::make_shared<PowerNode>(dD, std::make_shared<NumberNode>(BigInt(-1)))};
     auto ratio = std::make_shared<MultiplyNode>(ratio_ops);
     LimitVisitor sub(var, point, direction, assumption_ctx_);
@@ -610,13 +610,13 @@ inline int LimitVisitor::determine_sign_near_point(const std::shared_ptr<Symboli
 }
 
 inline void LimitVisitor::visit(AddNode& node) {
-    // Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
     if (is_limit_at_neg_infinity()) {
         auto neg_inf_result = handle_neg_infinity_limit(std::make_shared<AddNode>(node.operands));
         if (neg_inf_result) { result = neg_inf_result; return; }
     }
-    // General squeeze theorem for AddNode: detect terms that are products of
-    // bounded × zero-tending (squeeze to 0) and compute limit of remaining terms.
+    /// General squeeze theorem for AddNode: detect terms that are products of
+    /// bounded × zero-tending (squeeze to 0) and compute limit of remaining terms.
     auto squeeze_result = try_squeeze(std::make_shared<AddNode>(std::vector<std::shared_ptr<SymbolicNode>>(node.operands.begin(), node.operands.end())));
     if (squeeze_result) { result = squeeze_result; return; }
     std::vector<std::shared_ptr<SymbolicNode>> new_ops;
@@ -627,7 +627,7 @@ inline void LimitVisitor::visit(AddNode& node) {
 }
 
 inline void LimitVisitor::visit(MultiplyNode& node) {
-    // Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
     if (is_limit_at_neg_infinity()) {
         auto neg_inf_result = handle_neg_infinity_limit(std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>(node.operands.begin(), node.operands.end())));
         if (neg_inf_result) { result = neg_inf_result; return; }
@@ -661,7 +661,7 @@ inline void LimitVisitor::visit(MultiplyNode& node) {
     auto val_n = eval_limit(N); auto val_d = eval_limit(D);
     bool n_zero = val_n && val_n->is_zero(), d_zero = val_d && val_d->is_zero();
     bool n_inf = is_inf(val_n), d_inf = is_inf(val_d);
-    // Limits at infinity: try rational function degree comparison and growth-rate comparison
+    /// Limits at infinity: try rational function degree comparison and growth-rate comparison
     if (is_limit_at_infinity() || is_limit_at_neg_infinity()) {
         if (n_inf && d_inf) {
             auto rat_result = limit_rational_at_infinity(N, D);
@@ -690,7 +690,7 @@ inline void LimitVisitor::visit(MultiplyNode& node) {
 }
 
 inline void LimitVisitor::visit(PowerNode& node) {
-    // Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
     if (is_limit_at_neg_infinity()) {
         auto neg_inf_result = handle_neg_infinity_limit(std::make_shared<PowerNode>(node.base, node.exponent));
         if (neg_inf_result) { result = neg_inf_result; return; }
@@ -699,7 +699,7 @@ inline void LimitVisitor::visit(PowerNode& node) {
     node.exponent->accept(*this); auto e = result;
     auto form = classify_power_form(b, e);
     if (form != IndeterminateForm::None) { auto resolved = resolve_exponential_form(node.base, node.exponent); if (resolved) { result = resolved; return; } }
-    // Handle ∞^(negative) → 0 and ∞^(positive) → ∞
+    /// Handle ∞^(negative) → 0 and ∞^(positive) → ∞
     if (is_inf(b)) {
         if (auto e_num = std::dynamic_pointer_cast<NumberNode>(e)) {
             double ev = 0;
@@ -714,7 +714,7 @@ inline void LimitVisitor::visit(PowerNode& node) {
             }
         }
     }
-    // Handle 0^(negative) → ±∞ with direction-aware sign determination
+    /// Handle 0^(negative) → ±∞ with direction-aware sign determination
     if (b && b->is_zero()) {
         if (auto e_num = std::dynamic_pointer_cast<NumberNode>(e)) {
             double ev = 0;
@@ -722,15 +722,15 @@ inline void LimitVisitor::visit(PowerNode& node) {
             else if (std::holds_alternative<BigInt>(e_num->value)) ev = std::get<BigInt>(e_num->value).to_double();
             else if (std::holds_alternative<Rational>(e_num->value)) ev = std::get<Rational>(e_num->value).to_double();
             if (ev < 0 && !direction.empty()) {
-                // base→0, exponent is negative, direction specified → ±∞
-                // Determine sign based on approach direction and exponent parity
+                /// base→0, exponent is negative, direction specified → ±∞
+                /// Determine sign based on approach direction and exponent parity
                 std::vector<std::shared_ptr<SymbolicNode>> inf_args;
                 auto inf_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                 int exp_int = static_cast<int>(ev);
                 bool odd_exponent = (exp_int % 2 != 0);
                 if (odd_exponent) {
-                    // For odd negative exponents (e.g., x^(-1), x^(-3)):
-                    // x→0+ gives +∞, x→0- gives -∞
+                    /// For odd negative exponents (e.g., x^(-1), x^(-3)):
+                    /// x→0+ gives +∞, x→0- gives -∞
                     int base_sign = determine_sign_near_point(node.base, direction);
                     if (base_sign < 0) {
                         std::vector<std::shared_ptr<SymbolicNode>> m = {std::make_shared<NumberNode>(BigInt(-1)), inf_node};
@@ -738,7 +738,7 @@ inline void LimitVisitor::visit(PowerNode& node) {
                         return;
                     }
                 }
-                // Even negative exponents always give +∞
+                /// Even negative exponents always give +∞
                 result = inf_node;
                 return;
             }
@@ -748,26 +748,26 @@ inline void LimitVisitor::visit(PowerNode& node) {
 }
 
 inline void LimitVisitor::visit(FunctionNode& node) {
-    // Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
     if (is_limit_at_neg_infinity() && node.type != FunctionNode::FuncType::Infinity) {
         auto neg_inf_result = handle_neg_infinity_limit(std::make_shared<FunctionNode>(node.type, node.arguments));
         if (neg_inf_result) { result = neg_inf_result; return; }
     }
-    // 方向感知的符号函数处理
+    /// 方向感知的符号函数处理
     if (node.type == FunctionNode::FuncType::Sgn && node.arguments.size() == 1) {
         auto r = evaluate_sgn_limit(node.arguments[0]);
         if (r) { result = *r; return; }
     }
-    // 方向感知的绝对值处理
+    /// 方向感知的绝对值处理
     if (node.type == FunctionNode::FuncType::Abs && node.arguments.size() == 1) {
         auto r = evaluate_abs_limit(node.arguments[0]);
         if (r) { result = *r; return; }
     }
-    // Composed functions at infinity: evaluate inner limit first, then apply outer function
+    /// Composed functions at infinity: evaluate inner limit first, then apply outer function
     if (is_limit_at_infinity() && node.arguments.size() == 1 && node.type != FunctionNode::FuncType::Infinity) {
         auto inner_lim = eval_limit(node.arguments[0]);
         if (inner_lim) {
-            // If inner limit is a finite number, evaluate the function at that value
+            /// If inner limit is a finite number, evaluate the function at that value
             if (auto num = std::dynamic_pointer_cast<NumberNode>(inner_lim)) {
                 std::vector<std::shared_ptr<SymbolicNode>> new_args = {inner_lim};
                 NormalizationVisitor norm;
@@ -775,7 +775,7 @@ inline void LimitVisitor::visit(FunctionNode& node) {
                 result = norm.get_result();
                 return;
             }
-            // If inner limit is infinity, handle based on function type
+            /// If inner limit is infinity, handle based on function type
             if (is_inf(inner_lim)) {
                 bool neg = is_neg_inf(inner_lim);
                 switch (node.type) {

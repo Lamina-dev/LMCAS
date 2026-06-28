@@ -19,7 +19,7 @@
 namespace lamina {
 
 // ============================================================
-// 构造函数
+/// 构造函数
 // ============================================================
 
 /**
@@ -46,7 +46,7 @@ MultiPoly::MultiPoly(std::vector<Term> terms, std::vector<std::string> vars,
                      MonomialOrderType order)
     : terms_(std::move(terms)), vars_(std::move(vars)), order_(order)
 {
-    // 确保所有单项式长度与变量数一致
+    /// 确保所有单项式长度与变量数一致
     for (auto& term : terms_) {
         if (term.first.size() < vars_.size()) {
             term.first.resize(vars_.size(), 0);
@@ -74,7 +74,7 @@ MultiPoly::MultiPoly(const Rational& constant, const std::vector<std::string>& v
 }
 
 // ============================================================
-// 规范化
+/// 规范化
 // ============================================================
 
 /**
@@ -92,14 +92,14 @@ void MultiPoly::normalize()
 {
     if (terms_.empty()) return;
 
-    // 步骤 1：按单项式序降序排列
+    /// 步骤 1：按单项式序降序排列
     MonomialOrder cmp(order_);
     std::sort(terms_.begin(), terms_.end(),
               [&cmp](const Term& a, const Term& b) {
                   return cmp(a.first, b.first);
               });
 
-    // 步骤 2 & 3：合并同类项并移除零系数项
+    /// 步骤 2 & 3：合并同类项并移除零系数项
     std::vector<Term> merged;
     merged.reserve(terms_.size());
 
@@ -108,13 +108,13 @@ void MultiPoly::normalize()
         Rational coeff_sum = terms_[i].second;
         size_t j = i + 1;
 
-        // 合并所有具有相同单项式的连续项
+        /// 合并所有具有相同单项式的连续项
         while (j < terms_.size() && terms_[j].first == current_mono) {
             coeff_sum = coeff_sum + terms_[j].second;
             ++j;
         }
 
-        // 仅保留非零系数项
+        /// 仅保留非零系数项
         if (!coeff_sum.is_zero()) {
             merged.emplace_back(std::move(current_mono), std::move(coeff_sum));
         }
@@ -126,7 +126,7 @@ void MultiPoly::normalize()
 }
 
 // ============================================================
-// 属性查询（任务 1.5 的最小子集，供链接通过）
+/// 属性查询（任务 1.5 的最小子集，供链接通过）
 // ============================================================
 
 bool MultiPoly::is_zero() const
@@ -138,7 +138,7 @@ bool MultiPoly::is_constant() const
 {
     if (terms_.empty()) return true;
     if (terms_.size() != 1) return false;
-    // 检查唯一项的单项式是否全零
+    /// 检查唯一项的单项式是否全零
     for (int exp : terms_[0].first) {
         if (exp != 0) return false;
     }
@@ -148,7 +148,7 @@ bool MultiPoly::is_constant() const
 bool MultiPoly::is_univariate() const
 {
     if (terms_.empty()) return true;
-    // 统计哪些变量出现了非零指数
+    /// 统计哪些变量出现了非零指数
     int active_count = 0;
     for (size_t vi = 0; vi < vars_.size(); ++vi) {
         bool active = false;
@@ -208,7 +208,7 @@ int MultiPoly::total_degree() const
 int MultiPoly::degree(const std::string& var) const
 {
     if (terms_.empty()) return -1;
-    // 找到变量在 vars_ 中的索引
+    /// 找到变量在 vars_ 中的索引
     int var_idx = -1;
     for (size_t i = 0; i < vars_.size(); ++i) {
         if (vars_[i] == var) {
@@ -244,7 +244,7 @@ MultiPoly MultiPoly::leading_coeff(const std::string& var) const
         return MultiPoly();
     }
 
-    // 找到变量在 vars_ 中的索引
+    /// 找到变量在 vars_ 中的索引
     int var_idx = -1;
     for (size_t i = 0; i < vars_.size(); ++i) {
         if (vars_[i] == var) {
@@ -253,12 +253,12 @@ MultiPoly MultiPoly::leading_coeff(const std::string& var) const
         }
     }
 
-    // 变量不在列表中：整个多项式就是"系数"
+    /// 变量不在列表中：整个多项式就是"系数"
     if (var_idx < 0) {
         return *this;
     }
 
-    // 找到 var 的最高指数
+    /// 找到 var 的最高指数
     int max_exp = 0;
     for (const auto& term : terms_) {
         if (static_cast<size_t>(var_idx) < term.first.size()) {
@@ -268,7 +268,7 @@ MultiPoly MultiPoly::leading_coeff(const std::string& var) const
         }
     }
 
-    // 构建剩余变量列表（移除 var）
+    /// 构建剩余变量列表（移除 var）
     std::vector<std::string> remaining_vars;
     remaining_vars.reserve(vars_.size() - 1);
     for (size_t i = 0; i < vars_.size(); ++i) {
@@ -277,7 +277,7 @@ MultiPoly MultiPoly::leading_coeff(const std::string& var) const
         }
     }
 
-    // 收集具有最高指数的项，移除 var 维度
+    /// 收集具有最高指数的项，移除 var 维度
     std::vector<Term> lc_terms;
     for (const auto& term : terms_) {
         int exp_val = (static_cast<size_t>(var_idx) < term.first.size())
@@ -298,7 +298,7 @@ MultiPoly MultiPoly::leading_coeff(const std::string& var) const
 }
 
 // ============================================================
-// 算术运算
+/// 算术运算
 // ============================================================
 
 /**
@@ -378,14 +378,14 @@ MultiPoly MultiPoly::operator*(const MultiPoly& other) const
 
     for (const auto& term_a : terms_) {
         for (const auto& term_b : other.terms_) {
-            // 单项式逐元素相加
+            /// 单项式逐元素相加
             Monomial product_mono(n_vars, 0);
             for (size_t i = 0; i < n_vars; ++i) {
                 int exp_a = (i < term_a.first.size()) ? term_a.first[i] : 0;
                 int exp_b = (i < term_b.first.size()) ? term_b.first[i] : 0;
                 product_mono[i] = exp_a + exp_b;
             }
-            // 系数相乘
+            /// 系数相乘
             Rational product_coeff = term_a.second * term_b.second;
             result_terms.emplace_back(std::move(product_mono), std::move(product_coeff));
         }
@@ -419,7 +419,7 @@ MultiPoly MultiPoly::operator-() const
     result.terms_ = std::move(negated_terms);
     result.vars_ = vars_;
     result.order_ = order_;
-    // 无需 normalize：仅系数取负不改变排序和唯一性
+    /// 无需 normalize：仅系数取负不改变排序和唯一性
     return result;
 }
 
@@ -486,7 +486,7 @@ MultiPoly MultiPoly::operator*(const Rational& scalar) const
 }
 
 // ============================================================
-// 精确除法
+/// 精确除法
 // ============================================================
 
 /**
@@ -506,7 +506,7 @@ MultiPoly MultiPoly::exact_div(const MultiPoly& divisor) const
         throw std::runtime_error("exact division by zero polynomial");
     }
 
-    // 被除数为零，商为零
+    /// 被除数为零，商为零
     if (is_zero()) {
         MultiPoly zero;
         zero.vars_ = vars_;
@@ -514,7 +514,7 @@ MultiPoly MultiPoly::exact_div(const MultiPoly& divisor) const
         return zero;
     }
 
-    // 除数首项（排序后第一项即为首项）
+    /// 除数首项（排序后第一项即为首项）
     const Monomial& divisor_lt_mono = divisor.terms_[0].first;
     const Rational& divisor_lt_coeff = divisor.terms_[0].second;
 
@@ -524,16 +524,16 @@ MultiPoly MultiPoly::exact_div(const MultiPoly& divisor) const
     MultiPoly remainder = *this;
 
     while (!remainder.is_zero()) {
-        // 余式首项
+        /// 余式首项
         const Monomial& rem_lt_mono = remainder.terms_[0].first;
         const Rational& rem_lt_coeff = remainder.terms_[0].second;
 
-        // 检查除数首项单项式是否整除余式首项单项式
+        /// 检查除数首项单项式是否整除余式首项单项式
         if (!divides_monomial(divisor_lt_mono, rem_lt_mono)) {
             throw std::runtime_error("exact division failed");
         }
 
-        // 计算商项单项式：逐分量相减
+        /// 计算商项单项式：逐分量相减
         Monomial q_mono(n_vars, 0);
         for (size_t i = 0; i < n_vars; ++i) {
             int rem_exp = (i < rem_lt_mono.size()) ? rem_lt_mono[i] : 0;
@@ -541,13 +541,13 @@ MultiPoly MultiPoly::exact_div(const MultiPoly& divisor) const
             q_mono[i] = rem_exp - div_exp;
         }
 
-        // 计算商项系数
+        /// 计算商项系数
         Rational q_coeff = rem_lt_coeff / divisor_lt_coeff;
 
-        // 记录商项
+        /// 记录商项
         quotient_terms.emplace_back(q_mono, q_coeff);
 
-        // 构造商项多项式并从余式中减去 (商项 * 除数)
+        /// 构造商项多项式并从余式中减去 (商项 * 除数)
         MultiPoly q_term_poly(std::vector<Term>{{q_mono, q_coeff}}, vars_, order_);
         remainder = remainder - (q_term_poly * divisor);
     }
@@ -556,7 +556,7 @@ MultiPoly MultiPoly::exact_div(const MultiPoly& divisor) const
 }
 
 // ============================================================
-// 求值
+/// 求值
 // ============================================================
 
 /**
@@ -571,7 +571,7 @@ MultiPoly MultiPoly::exact_div(const MultiPoly& divisor) const
  */
 MultiPoly MultiPoly::eval(const std::string& var, const Rational& val) const
 {
-    // 找到变量在 vars_ 中的索引
+    /// 找到变量在 vars_ 中的索引
     int var_idx = -1;
     for (size_t i = 0; i < vars_.size(); ++i) {
         if (vars_[i] == var) {
@@ -580,12 +580,12 @@ MultiPoly MultiPoly::eval(const std::string& var, const Rational& val) const
         }
     }
 
-    // 变量不在列表中，返回自身不变
+    /// 变量不在列表中，返回自身不变
     if (var_idx < 0) {
         return *this;
     }
 
-    // 构建新变量列表（移除 var）
+    /// 构建新变量列表（移除 var）
     std::vector<std::string> new_vars;
     new_vars.reserve(vars_.size() - 1);
     for (size_t i = 0; i < vars_.size(); ++i) {
@@ -594,7 +594,7 @@ MultiPoly MultiPoly::eval(const std::string& var, const Rational& val) const
         }
     }
 
-    // 对每一项：系数乘以 val^(该变量的指数)，移除该维度
+    /// 对每一项：系数乘以 val^(该变量的指数)，移除该维度
     std::vector<Term> new_terms;
     new_terms.reserve(terms_.size());
 
@@ -602,18 +602,18 @@ MultiPoly MultiPoly::eval(const std::string& var, const Rational& val) const
         int exp = (static_cast<size_t>(var_idx) < term.first.size())
                       ? term.first[var_idx] : 0;
 
-        // 计算 val^exp * coefficient
+        /// 计算 val^exp * coefficient
         Rational new_coeff = term.second;
         if (exp > 0) {
             if (val.is_zero()) {
-                // val=0 且 exp>0 → 该项系数变为 0，跳过
+                /// val=0 且 exp>0 → 该项系数变为 0，跳过
                 continue;
             }
             new_coeff = new_coeff * val.power(BigInt(exp));
         }
-        // exp == 0 时 val^0 = 1，系数不变
+        /// exp == 0 时 val^0 = 1，系数不变
 
-        // 构建移除 var 维度后的单项式
+        /// 构建移除 var 维度后的单项式
         Monomial reduced_mono;
         reduced_mono.reserve(vars_.size() - 1);
         for (size_t i = 0; i < term.first.size(); ++i) {
@@ -646,7 +646,7 @@ MultiPoly MultiPoly::eval(const std::map<std::string, Rational>& substitution) c
 }
 
 // ============================================================
-// 一元转换
+/// 一元转换
 // ============================================================
 
 /**
@@ -665,12 +665,12 @@ Polynomial<Rational> MultiPoly::to_univariate() const
             "MultiPoly::to_univariate: polynomial is not univariate");
     }
 
-    // 零多项式
+    /// 零多项式
     if (terms_.empty()) {
         return Polynomial<Rational>(vars_.empty() ? "x" : vars_[0]);
     }
 
-    // 找到有效变量的索引（指数非零的变量）
+    /// 找到有效变量的索引（指数非零的变量）
     int active_idx = -1;
     for (size_t vi = 0; vi < vars_.size(); ++vi) {
         for (const auto& term : terms_) {
@@ -682,7 +682,7 @@ Polynomial<Rational> MultiPoly::to_univariate() const
         if (active_idx >= 0) break;
     }
 
-    // 常数多项式（所有指数为零）
+    /// 常数多项式（所有指数为零）
     std::string var_name = vars_.empty() ? "x" : vars_[0];
     if (active_idx < 0) {
         Rational c = terms_[0].second;
@@ -691,14 +691,14 @@ Polynomial<Rational> MultiPoly::to_univariate() const
 
     var_name = vars_[static_cast<size_t>(active_idx)];
 
-    // 确定最高次数
+    /// 确定最高次数
     int max_deg = 0;
     for (const auto& term : terms_) {
         int exp = term.first[static_cast<size_t>(active_idx)];
         if (exp > max_deg) max_deg = exp;
     }
 
-    // 构建系数向量（coeffs[i] = x^i 的系数）
+    /// 构建系数向量（coeffs[i] = x^i 的系数）
     std::vector<Rational> coeffs(static_cast<size_t>(max_deg + 1), Rational(0));
     for (const auto& term : terms_) {
         int exp = term.first[static_cast<size_t>(active_idx)];
@@ -722,7 +722,7 @@ MultiPoly MultiPoly::from_univariate(const Polynomial<Rational>& poly,
 {
     std::vector<std::string> vars = {var};
 
-    // 零多项式
+    /// 零多项式
     if (poly.is_zero()) {
         return MultiPoly(std::vector<Term>{}, vars);
     }
@@ -739,7 +739,7 @@ MultiPoly MultiPoly::from_univariate(const Polynomial<Rational>& poly,
 }
 
 // ============================================================
-// 数值内容与本原化
+/// 数值内容与本原化
 // ============================================================
 
 /**
@@ -757,7 +757,7 @@ Rational MultiPoly::numeric_content() const
         return Rational(0);
     }
 
-    // 从第一个系数的绝对值开始
+    /// 从第一个系数的绝对值开始
     BigInt num_gcd = terms_[0].second.get_numerator().Abs();
     BigInt den_lcm = terms_[0].second.get_denominator();
 
@@ -765,10 +765,10 @@ Rational MultiPoly::numeric_content() const
         BigInt num_i = terms_[i].second.get_numerator().Abs();
         BigInt den_i = terms_[i].second.get_denominator();
 
-        // gcd(a/b, c/d) = gcd(a, c) / lcm(b, d)
+        /// gcd(a/b, c/d) = gcd(a, c) / lcm(b, d)
         num_gcd = BigInt::gcd(num_gcd, num_i);
 
-        // lcm(b, d) = b * d / gcd(b, d)
+        /// lcm(b, d) = b * d / gcd(b, d)
         BigInt den_gcd = BigInt::gcd(den_lcm, den_i);
         den_lcm = den_lcm * den_i / den_gcd;
     }
@@ -798,14 +798,14 @@ MultiPoly MultiPoly::make_primitive() const
     Rational content = numeric_content();
 
     if (content.is_zero() || content == Rational(1)) {
-        // 内容为 1 时仍需检查首项系数符号
+        /// 内容为 1 时仍需检查首项系数符号
         if (!terms_.empty() && terms_[0].second < Rational(0)) {
             return (*this) * Rational(-1);
         }
         return *this;
     }
 
-    // 除以内容
+    /// 除以内容
     std::vector<Term> prim_terms;
     prim_terms.reserve(terms_.size());
 
@@ -813,7 +813,7 @@ MultiPoly MultiPoly::make_primitive() const
         prim_terms.emplace_back(term.first, term.second / content);
     }
 
-    // 若首项系数为负，取负使其为正
+    /// 若首项系数为负，取负使其为正
     if (!prim_terms.empty() && prim_terms[0].second < Rational(0)) {
         for (auto& term : prim_terms) {
             term.second = -term.second;
@@ -828,7 +828,7 @@ MultiPoly MultiPoly::make_primitive() const
 }
 
 // ============================================================
-// 字符串表示
+/// 字符串表示
 // ============================================================
 
 /**
@@ -855,7 +855,7 @@ std::string MultiPoly::to_string() const
         const Rational& coeff = terms_[i].second;
         const Monomial& mono = terms_[i].first;
 
-        // 判断是否为常数项（所有指数为零）
+        /// 判断是否为常数项（所有指数为零）
         bool is_const_term = true;
         for (size_t vi = 0; vi < mono.size(); ++vi) {
             if (mono[vi] != 0) {
@@ -864,11 +864,11 @@ std::string MultiPoly::to_string() const
             }
         }
 
-        // 确定系数的符号和绝对值
+        /// 确定系数的符号和绝对值
         bool negative = coeff < Rational(0);
         Rational abs_coeff = coeff.abs();
 
-        // 输出符号
+        /// 输出符号
         if (i == 0) {
             if (negative) oss << "-";
         } else {
@@ -879,19 +879,19 @@ std::string MultiPoly::to_string() const
             }
         }
 
-        // 常数项：直接输出绝对值
+        /// 常数项：直接输出绝对值
         if (is_const_term) {
             oss << abs_coeff.to_string();
             continue;
         }
 
-        // 非常数项：系数不为 1 时输出系数
+        /// 非常数项：系数不为 1 时输出系数
         bool coeff_is_one = (abs_coeff == Rational(1));
         if (!coeff_is_one) {
             oss << abs_coeff.to_string() << "*";
         }
 
-        // 输出变量部分
+        /// 输出变量部分
         bool first_var = true;
         for (size_t vi = 0; vi < mono.size() && vi < vars_.size(); ++vi) {
             if (mono[vi] == 0) continue;

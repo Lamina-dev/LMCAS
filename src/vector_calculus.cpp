@@ -19,7 +19,7 @@
 namespace lamina {
 
 // ============================================================
-// 梯度 ∇f (Requirement 9)
+/// 梯度 ∇f (Requirement 9)
 // ============================================================
 
 VectorField gradient(const std::shared_ptr<SymbolicExpr>& f,
@@ -41,7 +41,7 @@ VectorField gradient(const std::shared_ptr<SymbolicExpr>& f,
 }
 
 // ============================================================
-// 散度 ∇·F (Requirement 45)
+/// 散度 ∇·F (Requirement 45)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> divergence(const VectorField& F,
@@ -76,7 +76,7 @@ std::shared_ptr<SymbolicExpr> divergence(const VectorField& F,
 }
 
 // ============================================================
-// 旋度 ∇×F (Requirement 46)
+/// 旋度 ∇×F (Requirement 46)
 // ============================================================
 
 VectorField curl(const VectorField& F,
@@ -87,7 +87,7 @@ VectorField curl(const VectorField& F,
             "curl: F and vars must have the same dimension");
     }
 
-    // 二维标量旋度: ∂F₂/∂x₁ - ∂F₁/∂x₂
+    /// 二维标量旋度: ∂F₂/∂x₁ - ∂F₁/∂x₂
     if (F.size() == 2 && vars.size() == 2) {
         auto dF2_dx1 = F[1]->differentiate(vars[0]);
         auto dF1_dx2 = F[0]->differentiate(vars[1]);
@@ -100,13 +100,13 @@ VectorField curl(const VectorField& F,
         return VectorField{scalar_curl};
     }
 
-    // 三维旋度
+    /// 三维旋度
     if (F.size() != 3 || vars.size() != 3) {
         throw std::invalid_argument(
             "curl: requires 2D or 3D vector field");
     }
 
-    // curl_x = ∂F₃/∂x₂ - ∂F₂/∂x₃
+    /// curl_x = ∂F₃/∂x₂ - ∂F₂/∂x₃
     auto dF3_dx2 = F[2]->differentiate(vars[1]);
     auto dF2_dx3 = F[1]->differentiate(vars[2]);
     auto curl_x = SymbolicExpr::add(
@@ -114,7 +114,7 @@ VectorField curl(const VectorField& F,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dF2_dx3));
     curl_x = curl_x->simplify();
 
-    // curl_y = ∂F₁/∂x₃ - ∂F₃/∂x₁
+    /// curl_y = ∂F₁/∂x₃ - ∂F₃/∂x₁
     auto dF1_dx3 = F[0]->differentiate(vars[2]);
     auto dF3_dx1 = F[2]->differentiate(vars[0]);
     auto curl_y = SymbolicExpr::add(
@@ -122,7 +122,7 @@ VectorField curl(const VectorField& F,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dF3_dx1));
     curl_y = curl_y->simplify();
 
-    // curl_z = ∂F₂/∂x₁ - ∂F₁/∂x₂
+    /// curl_z = ∂F₂/∂x₁ - ∂F₁/∂x₂
     auto dF2_dx1 = F[1]->differentiate(vars[0]);
     auto dF1_dx2 = F[0]->differentiate(vars[1]);
     auto curl_z = SymbolicExpr::add(
@@ -134,7 +134,7 @@ VectorField curl(const VectorField& F,
 }
 
 // ============================================================
-// 拉普拉斯算子 ∇²f (Requirement 47)
+/// 拉普拉斯算子 ∇²f (Requirement 47)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> laplacian(const std::shared_ptr<SymbolicExpr>& f,
@@ -169,7 +169,7 @@ std::shared_ptr<SymbolicExpr> laplacian(const std::shared_ptr<SymbolicExpr>& f,
 }
 
 // ============================================================
-// 方向导数 (Requirement 8, 87, 88)
+/// 方向导数 (Requirement 8, 87, 88)
 // ============================================================
 
 /**
@@ -240,14 +240,14 @@ std::shared_ptr<SymbolicExpr> directional_derivative(
             "directional_derivative: order must be >= 1");
     }
 
-    // 计算方向向量的模长平方
+    /// 计算方向向量的模长平方
     auto mag_sq = vector_calculus_magnitude_squared(direction);
     if (!mag_sq || mag_sq->is_zero()) {
-        // 零向量，返回 nullptr 表示错误
+        /// 零向量，返回 nullptr 表示错误
         return nullptr;
     }
 
-    // 构造单位向量分量: uᵢ = dirᵢ / |dir|
+    /// 构造单位向量分量: uᵢ = dirᵢ / |dir|
     auto magnitude = SymbolicExpr::sqrt(mag_sq);
     magnitude = magnitude->simplify();
     VectorField unit_dir;
@@ -264,7 +264,7 @@ std::shared_ptr<SymbolicExpr> directional_derivative(
         }
     }
 
-    // 递归应用方向导数 order 次
+    /// 递归应用方向导数 order 次
     auto result = f;
     for (int k = 0; k < order; ++k) {
         result = vector_calculus_single_dir_deriv(result, vars, unit_dir);
@@ -275,7 +275,7 @@ std::shared_ptr<SymbolicExpr> directional_derivative(
 }
 
 // ============================================================
-// 雅可比矩阵 (Requirement 10)
+/// 雅可比矩阵 (Requirement 10)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> jacobian(
@@ -303,7 +303,7 @@ std::shared_ptr<SymbolicExpr> jacobian(
 }
 
 // ============================================================
-// 海森矩阵 (Requirement 11)
+/// 海森矩阵 (Requirement 11)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> hessian(
@@ -311,14 +311,14 @@ std::shared_ptr<SymbolicExpr> hessian(
 {
     size_t n = vars.size();
 
-    // 先计算一阶偏导数
+    /// 先计算一阶偏导数
     std::vector<std::shared_ptr<SymbolicExpr>> first_partials;
     first_partials.reserve(n);
     for (size_t i = 0; i < n; ++i) {
         first_partials.push_back(f->differentiate(vars[i]));
     }
 
-    // 构建 n×n 对称矩阵
+    /// 构建 n×n 对称矩阵
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> grid(n,
         std::vector<std::shared_ptr<SymbolicExpr>>(n));
 
@@ -337,7 +337,7 @@ std::shared_ptr<SymbolicExpr> hessian(
 }
 
 // ============================================================
-// 曲线积分与曲面积分辅助函数
+/// 曲线积分与曲面积分辅助函数
 // ============================================================
 
 /**
@@ -439,7 +439,7 @@ static std::shared_ptr<SymbolicExpr> vector_calculus_integrate_with_fallback(
 }
 
 // ============================================================
-// 第一类曲线积分 (Requirement 48.1, 48.3, 48.4)
+/// 第一类曲线积分 (Requirement 48.1, 48.3, 48.4)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> curve_integral_scalar(
@@ -460,14 +460,14 @@ std::shared_ptr<SymbolicExpr> curve_integral_scalar(
     size_t dim = parametrization.size();
     auto coord_vars = vector_calculus_coord_vars(dim);
 
-    // 将 f 中的坐标变量替换为参数化表达式: f(r(t))
+    /// 将 f 中的坐标变量替换为参数化表达式: f(r(t))
     auto f_composed = f;
     for (size_t i = 0; i < dim; ++i) {
         f_composed = f_composed->substitute(coord_vars[i], parametrization[i]);
     }
     f_composed = f_composed->simplify();
 
-    // 计算 |r'(t)| = √(∑(r_i'(t))²)
+    /// 计算 |r'(t)| = √(∑(r_i'(t))²)
     std::shared_ptr<SymbolicExpr> speed_sq = nullptr;
     for (size_t i = 0; i < dim; ++i) {
         auto deriv = parametrization[i]->differentiate(t);
@@ -490,16 +490,16 @@ std::shared_ptr<SymbolicExpr> curve_integral_scalar(
     auto speed = SymbolicExpr::sqrt(speed_sq);
     speed = speed->simplify();
 
-    // 被积函数: f(r(t)) · |r'(t)|
+    /// 被积函数: f(r(t)) · |r'(t)|
     auto integrand = SymbolicExpr::multiply(f_composed, speed);
     integrand = integrand->simplify();
 
-    // 计算定积分 ∫ₐᵇ f(r(t))·|r'(t)| dt
+    /// 计算定积分 ∫ₐᵇ f(r(t))·|r'(t)| dt
     return vector_calculus_integrate_with_fallback(integrand, t, a, b);
 }
 
 // ============================================================
-// 第二类曲线积分 (Requirement 48.2)
+/// 第二类曲线积分 (Requirement 48.2)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> curve_integral_vector(
@@ -524,24 +524,24 @@ std::shared_ptr<SymbolicExpr> curve_integral_vector(
     size_t dim = parametrization.size();
     auto coord_vars = vector_calculus_coord_vars(dim);
 
-    // 计算 F(r(t))·r'(t) = ∑ Fᵢ(r(t)) · rᵢ'(t)
+    /// 计算 F(r(t))·r'(t) = ∑ Fᵢ(r(t)) · rᵢ'(t)
     std::shared_ptr<SymbolicExpr> dot_product = nullptr;
     for (size_t i = 0; i < dim; ++i) {
         if (!F[i]) continue;
 
-        // 将 Fᵢ 中的坐标变量替换为参数化表达式
+        /// 将 Fᵢ 中的坐标变量替换为参数化表达式
         auto Fi_composed = F[i];
         for (size_t j = 0; j < dim; ++j) {
             Fi_composed = Fi_composed->substitute(coord_vars[j], parametrization[j]);
         }
         Fi_composed = Fi_composed->simplify();
 
-        // rᵢ'(t)
+        /// rᵢ'(t)
         auto ri_prime = parametrization[i]->differentiate(t);
         if (!ri_prime) continue;
         ri_prime = ri_prime->simplify();
 
-        // Fᵢ(r(t)) · rᵢ'(t)
+        /// Fᵢ(r(t)) · rᵢ'(t)
         auto term = SymbolicExpr::multiply(Fi_composed, ri_prime);
         term = term->simplify();
 
@@ -557,12 +557,12 @@ std::shared_ptr<SymbolicExpr> curve_integral_vector(
         return SymbolicExpr::number(0);
     }
 
-    // 计算定积分 ∫ₐᵇ F(r(t))·r'(t) dt
+    /// 计算定积分 ∫ₐᵇ F(r(t))·r'(t) dt
     return vector_calculus_integrate_with_fallback(dot_product, t, a, b);
 }
 
 // ============================================================
-// 曲面积分辅助：计算 r_u × r_v (Requirement 49.3)
+/// 曲面积分辅助：计算 r_u × r_v (Requirement 49.3)
 // ============================================================
 
 /**
@@ -576,7 +576,7 @@ static VectorField vector_calculus_cross_product_partials(
     const VectorField& parametrization,
     const std::string& u, const std::string& v)
 {
-    // r_u = [∂x/∂u, ∂y/∂u, ∂z/∂u]
+    /// r_u = [∂x/∂u, ∂y/∂u, ∂z/∂u]
     VectorField r_u;
     r_u.reserve(3);
     for (size_t i = 0; i < 3; ++i) {
@@ -584,7 +584,7 @@ static VectorField vector_calculus_cross_product_partials(
         r_u.push_back(deriv ? deriv->simplify() : SymbolicExpr::number(0));
     }
 
-    // r_v = [∂x/∂v, ∂y/∂v, ∂z/∂v]
+    /// r_v = [∂x/∂v, ∂y/∂v, ∂z/∂v]
     VectorField r_v;
     r_v.reserve(3);
     for (size_t i = 0; i < 3; ++i) {
@@ -592,9 +592,9 @@ static VectorField vector_calculus_cross_product_partials(
         r_v.push_back(deriv ? deriv->simplify() : SymbolicExpr::number(0));
     }
 
-    // 叉积: r_u × r_v = (r_u[1]*r_v[2] - r_u[2]*r_v[1],
-    //                     r_u[2]*r_v[0] - r_u[0]*r_v[2],
-    //                     r_u[0]*r_v[1] - r_u[1]*r_v[0])
+    /// 叉积: r_u × r_v = (r_u[1]*r_v[2] - r_u[2]*r_v[1],
+    ///                     r_u[2]*r_v[0] - r_u[0]*r_v[2],
+    ///                     r_u[0]*r_v[1] - r_u[1]*r_v[0])
     auto cross_x = SymbolicExpr::add(
         SymbolicExpr::multiply(r_u[1], r_v[2]),
         SymbolicExpr::multiply(SymbolicExpr::number(-1),
@@ -617,7 +617,7 @@ static VectorField vector_calculus_cross_product_partials(
 }
 
 // ============================================================
-// 第一类曲面积分 (Requirement 49.1, 49.3)
+/// 第一类曲面积分 (Requirement 49.1, 49.3)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> surface_integral_scalar(
@@ -639,17 +639,17 @@ std::shared_ptr<SymbolicExpr> surface_integral_scalar(
 
     std::vector<std::string> coord_vars = {"x", "y", "z"};
 
-    // 将 f 中的坐标变量替换为参数化表达式: f(r(u,v))
+    /// 将 f 中的坐标变量替换为参数化表达式: f(r(u,v))
     auto f_composed = f;
     for (size_t i = 0; i < 3; ++i) {
         f_composed = f_composed->substitute(coord_vars[i], parametrization[i]);
     }
     f_composed = f_composed->simplify();
 
-    // 计算 r_u × r_v
+    /// 计算 r_u × r_v
     auto cross = vector_calculus_cross_product_partials(parametrization, u, v);
 
-    // |r_u × r_v| = √(cross_x² + cross_y² + cross_z²)
+    /// |r_u × r_v| = √(cross_x² + cross_y² + cross_z²)
     std::shared_ptr<SymbolicExpr> mag_sq = nullptr;
     for (size_t i = 0; i < 3; ++i) {
         auto sq = SymbolicExpr::power(cross[i], SymbolicExpr::number(2));
@@ -665,11 +665,11 @@ std::shared_ptr<SymbolicExpr> surface_integral_scalar(
     auto magnitude = SymbolicExpr::sqrt(mag_sq);
     magnitude = magnitude->simplify();
 
-    // 被积函数: f(r(u,v)) · |r_u × r_v|
+    /// 被积函数: f(r(u,v)) · |r_u × r_v|
     auto integrand = SymbolicExpr::multiply(f_composed, magnitude);
     integrand = integrand->simplify();
 
-    // 使用 MultipleIntegralEngine 计算二重积分
+    /// 使用 MultipleIntegralEngine 计算二重积分
     MultipleIntegralEngine engine;
     Integrator integrator;
 
@@ -686,7 +686,7 @@ std::shared_ptr<SymbolicExpr> surface_integral_scalar(
 }
 
 // ============================================================
-// 第二类曲面积分 (Requirement 49.2, 49.3)
+/// 第二类曲面积分 (Requirement 49.2, 49.3)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> surface_integral_vector(
@@ -709,22 +709,22 @@ std::shared_ptr<SymbolicExpr> surface_integral_vector(
 
     std::vector<std::string> coord_vars = {"x", "y", "z"};
 
-    // 计算 r_u × r_v
+    /// 计算 r_u × r_v
     auto cross = vector_calculus_cross_product_partials(parametrization, u, v);
 
-    // 将 F 中的坐标变量替换为参数化表达式，然后计算 F·(r_u × r_v)
+    /// 将 F 中的坐标变量替换为参数化表达式，然后计算 F·(r_u × r_v)
     std::shared_ptr<SymbolicExpr> dot_product = nullptr;
     for (size_t i = 0; i < 3; ++i) {
         if (!F[i]) continue;
 
-        // 将 Fᵢ 中的坐标变量替换为参数化表达式
+        /// 将 Fᵢ 中的坐标变量替换为参数化表达式
         auto Fi_composed = F[i];
         for (size_t j = 0; j < 3; ++j) {
             Fi_composed = Fi_composed->substitute(coord_vars[j], parametrization[j]);
         }
         Fi_composed = Fi_composed->simplify();
 
-        // Fᵢ(r(u,v)) · (r_u × r_v)ᵢ
+        /// Fᵢ(r(u,v)) · (r_u × r_v)ᵢ
         auto term = SymbolicExpr::multiply(Fi_composed, cross[i]);
         term = term->simplify();
 
@@ -740,7 +740,7 @@ std::shared_ptr<SymbolicExpr> surface_integral_vector(
         return SymbolicExpr::number(0);
     }
 
-    // 使用 MultipleIntegralEngine 计算二重积分
+    /// 使用 MultipleIntegralEngine 计算二重积分
     MultipleIntegralEngine engine;
     Integrator integrator;
 
@@ -757,7 +757,7 @@ std::shared_ptr<SymbolicExpr> surface_integral_vector(
 }
 
 // ============================================================
-// 格林定理 (Requirements 50.1, 89.1, 89.2, 89.3)
+/// 格林定理 (Requirements 50.1, 89.1, 89.2, 89.3)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> greens_theorem(
@@ -781,7 +781,7 @@ std::shared_ptr<SymbolicExpr> greens_theorem(
     const std::string& x_var = vars[0];
     const std::string& y_var = vars[1];
 
-    // 计算被积函数: ∂Q/∂x - ∂P/∂y
+    /// 计算被积函数: ∂Q/∂x - ∂P/∂y
     auto dQ_dx = Q->differentiate(x_var);
     auto dP_dy = P->differentiate(y_var);
 
@@ -796,7 +796,7 @@ std::shared_ptr<SymbolicExpr> greens_theorem(
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dP_dy));
     integrand = integrand->simplify();
 
-    // 使用 MultipleIntegralEngine 计算二重积分 ∬(∂Q/∂x - ∂P/∂y) dA
+    /// 使用 MultipleIntegralEngine 计算二重积分 ∬(∂Q/∂x - ∂P/∂y) dA
     MultipleIntegralEngine engine;
     Integrator integrator;
 
@@ -813,7 +813,7 @@ std::shared_ptr<SymbolicExpr> greens_theorem(
 }
 
 // ============================================================
-// 格林定理面积公式 (Requirement 50.4, 89.2)
+/// 格林定理面积公式 (Requirement 50.4, 89.2)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> greens_theorem_area(
@@ -837,7 +837,7 @@ std::shared_ptr<SymbolicExpr> greens_theorem_area(
         throw std::invalid_argument("greens_theorem_area: parametrization components must not be null");
     }
 
-    // A = (1/2) ∮ (x dy - y dx)
+    /// A = (1/2) ∮ (x dy - y dx)
     // = (1/2) ∫ₐᵇ (x(t)·y'(t) - y(t)·x'(t)) dt
     auto dx_dt = x_t->differentiate(t);
     auto dy_dt = y_t->differentiate(t);
@@ -848,7 +848,7 @@ std::shared_ptr<SymbolicExpr> greens_theorem_area(
     dx_dt = dx_dt->simplify();
     dy_dt = dy_dt->simplify();
 
-    // x(t)·y'(t) - y(t)·x'(t)
+    /// x(t)·y'(t) - y(t)·x'(t)
     auto term1 = SymbolicExpr::multiply(x_t, dy_dt);
     auto term2 = SymbolicExpr::multiply(y_t, dx_dt);
     auto integrand = SymbolicExpr::add(
@@ -856,13 +856,13 @@ std::shared_ptr<SymbolicExpr> greens_theorem_area(
         SymbolicExpr::multiply(SymbolicExpr::number(-1), term2));
     integrand = integrand->simplify();
 
-    // 计算定积分
+    /// 计算定积分
     auto integral_result = vector_calculus_integrate_with_fallback(integrand, t, a, b);
     if (!integral_result) {
         return nullptr;
     }
 
-    // 乘以 1/2
+    /// 乘以 1/2
     auto half = std::make_shared<SymbolicExpr>(
         std::make_shared<NumberNode>(Rational(1, 2)));
     auto area = SymbolicExpr::multiply(half, integral_result);
@@ -872,7 +872,7 @@ std::shared_ptr<SymbolicExpr> greens_theorem_area(
 }
 
 // ============================================================
-// 散度定理 / 高斯定理 (Requirements 50.2, 92.1, 92.2, 92.3)
+/// 散度定理 / 高斯定理 (Requirements 50.2, 92.1, 92.2, 92.3)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> divergence_theorem(
@@ -894,13 +894,13 @@ std::shared_ptr<SymbolicExpr> divergence_theorem(
         throw std::invalid_argument("divergence_theorem: bounds must not be null");
     }
 
-    // 计算散度 ∇·F = ∂F₁/∂x + ∂F₂/∂y + ∂F₃/∂z
+    /// 计算散度 ∇·F = ∂F₁/∂x + ∂F₂/∂y + ∂F₃/∂z
     auto div_F = divergence(F, vars);
     if (!div_F) {
         return SymbolicExpr::number(0);
     }
 
-    // 使用 MultipleIntegralEngine 计算三重积分 ∭_V ∇·F dV
+    /// 使用 MultipleIntegralEngine 计算三重积分 ∭_V ∇·F dV
     MultipleIntegralEngine engine;
     Integrator integrator;
 
@@ -918,7 +918,7 @@ std::shared_ptr<SymbolicExpr> divergence_theorem(
 }
 
 // ============================================================
-// 斯托克斯定理 (Requirements 50.3, 93.1, 93.2, 93.3)
+/// 斯托克斯定理 (Requirements 50.3, 93.1, 93.2, 93.3)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> stokes_theorem(
@@ -944,27 +944,27 @@ std::shared_ptr<SymbolicExpr> stokes_theorem(
         throw std::invalid_argument("stokes_theorem: bounds must not be null");
     }
 
-    // 计算旋度 ∇×F
+    /// 计算旋度 ∇×F
     auto curl_F = curl(F, vars);
 
-    // 计算 r_u × r_v（曲面法向量）
+    /// 计算 r_u × r_v（曲面法向量）
     auto cross = vector_calculus_cross_product_partials(parametrization, u, v);
 
-    // 将 (∇×F) 中的坐标变量替换为参数化表达式，然后计算 (∇×F)·(r_u × r_v)
+    /// 将 (∇×F) 中的坐标变量替换为参数化表达式，然后计算 (∇×F)·(r_u × r_v)
     std::vector<std::string> coord_vars = {"x", "y", "z"};
     std::shared_ptr<SymbolicExpr> dot_product = nullptr;
 
     for (size_t i = 0; i < 3; ++i) {
         if (!curl_F[i]) continue;
 
-        // 将 (∇×F)ᵢ 中的坐标变量替换为参数化表达式
+        /// 将 (∇×F)ᵢ 中的坐标变量替换为参数化表达式
         auto curl_i_composed = curl_F[i];
         for (size_t j = 0; j < 3; ++j) {
             curl_i_composed = curl_i_composed->substitute(coord_vars[j], parametrization[j]);
         }
         curl_i_composed = curl_i_composed->simplify();
 
-        // (∇×F)ᵢ(r(u,v)) · (r_u × r_v)ᵢ
+        /// (∇×F)ᵢ(r(u,v)) · (r_u × r_v)ᵢ
         auto term = SymbolicExpr::multiply(curl_i_composed, cross[i]);
         term = term->simplify();
 
@@ -980,7 +980,7 @@ std::shared_ptr<SymbolicExpr> stokes_theorem(
         return SymbolicExpr::number(0);
     }
 
-    // 使用 MultipleIntegralEngine 计算二重积分
+    /// 使用 MultipleIntegralEngine 计算二重积分
     MultipleIntegralEngine engine;
     Integrator integrator;
 
@@ -997,7 +997,7 @@ std::shared_ptr<SymbolicExpr> stokes_theorem(
 }
 
 // ============================================================
-// 多元极值 (Requirements 44, 51, 91)
+/// 多元极值 (Requirements 44, 51, 91)
 // ============================================================
 
 /**
@@ -1032,7 +1032,7 @@ static bool vector_calculus_evaluate_hessian_at_point(
                 continue;
             }
             auto elem = std::make_shared<SymbolicExpr>(elem_node);
-            // 代入临界点坐标
+            /// 代入临界点坐标
             for (const auto& [var_name, val] : pt) {
                 elem = elem->substitute(var_name, val);
                 if (!elem) return false;
@@ -1047,7 +1047,7 @@ static bool vector_calculus_evaluate_hessian_at_point(
                     return false;
                 }
             } else {
-                // 尝试直接数值求值
+                /// 尝试直接数值求值
                 try {
                     numeric_H[i * n + j] = elem->to_numeric();
                 } catch (...) {
@@ -1075,7 +1075,7 @@ static std::string vector_calculus_classify_critical_point(
 {
     const double tol = 1e-10;
 
-    // 1×1 情况：直接判断
+    /// 1×1 情况：直接判断
     if (n == 1) {
         double val = numeric_H[0];
         if (std::abs(val) < tol) return "degenerate";
@@ -1083,7 +1083,7 @@ static std::string vector_calculus_classify_critical_point(
         return "maximum";
     }
 
-    // 2×2 情况：使用行列式和迹直接判断
+    /// 2×2 情况：使用行列式和迹直接判断
     if (n == 2) {
         double a = numeric_H[0], b = numeric_H[1];
         double c = numeric_H[2], d = numeric_H[3];
@@ -1096,12 +1096,12 @@ static std::string vector_calculus_classify_critical_point(
         return "saddle";
     }
 
-    // 一般情况：构建符号矩阵并求特征值
+    /// 一般情况：构建符号矩阵并求特征值
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> grid(n,
         std::vector<std::shared_ptr<SymbolicExpr>>(n));
     for (size_t i = 0; i < n; ++i) {
         for (size_t j = 0; j < n; ++j) {
-            // 使用 Rational 避免浮点精度问题
+            /// 使用 Rational 避免浮点精度问题
             double val = numeric_H[i * n + j];
             int int_val = static_cast<int>(std::round(val));
             if (std::abs(val - int_val) < tol) {
@@ -1113,7 +1113,7 @@ static std::string vector_calculus_classify_critical_point(
     }
     auto H_mat = SymbolicExpr::matrix(grid);
 
-    // 计算特征多项式并求解特征值
+    /// 计算特征多项式并求解特征值
     auto cp = SymbolicExpr::charpoly(H_mat, "lambda");
     if (!cp) return "degenerate";
 
@@ -1162,7 +1162,7 @@ std::vector<CriticalPoint> find_extrema(
 
     size_t n = vars.size();
 
-    // 计算梯度 ∇f
+    /// 计算梯度 ∇f
     std::vector<std::shared_ptr<SymbolicExpr>> grad_eqs;
     grad_eqs.reserve(n);
     for (const auto& var : vars) {
@@ -1173,7 +1173,7 @@ std::vector<CriticalPoint> find_extrema(
         grad_eqs.push_back(partial);
     }
 
-    // 求解 ∇f = 0 系统（使用多项式系统求解器）
+    /// 求解 ∇f = 0 系统（使用多项式系统求解器）
     std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> solutions;
 
     std::vector<SymbolicExpr> poly_eqs;
@@ -1192,7 +1192,7 @@ std::vector<CriticalPoint> find_extrema(
         }
     }
 
-    // 如果多项式求解器失败，尝试线性求解器
+    /// 如果多项式求解器失败，尝试线性求解器
     if (solutions.empty()) {
         solutions = SymbolicExpr::solve_system(grad_eqs, vars);
     }
@@ -1201,11 +1201,11 @@ std::vector<CriticalPoint> find_extrema(
         return {};
     }
 
-    // 计算海森矩阵
+    /// 计算海森矩阵
     auto H = hessian(f, vars);
     if (!H) return {};
 
-    // 对每个临界点进行分类
+    /// 对每个临界点进行分类
     std::vector<CriticalPoint> result;
     result.reserve(solutions.size());
 
@@ -1213,7 +1213,7 @@ std::vector<CriticalPoint> find_extrema(
         CriticalPoint cp;
         cp.point = sol;
 
-        // 在临界点处求值海森矩阵
+        /// 在临界点处求值海森矩阵
         std::vector<double> numeric_H;
         if (vector_calculus_evaluate_hessian_at_point(H, vars, sol, n, numeric_H)) {
             cp.classification = vector_calculus_classify_critical_point(numeric_H, n);
@@ -1228,7 +1228,7 @@ std::vector<CriticalPoint> find_extrema(
 }
 
 // ============================================================
-// 拉格朗日乘数法 (Requirement 44)
+/// 拉格朗日乘数法 (Requirement 44)
 // ============================================================
 
 std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multipliers(
@@ -1243,7 +1243,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
     size_t n = vars.size();
     size_t m = constraints.size();
 
-    // 计算目标函数的梯度
+    /// 计算目标函数的梯度
     VectorField grad_f;
     grad_f.reserve(n);
     for (const auto& var : vars) {
@@ -1252,7 +1252,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         grad_f.push_back(partial);
     }
 
-    // 计算每个约束的梯度
+    /// 计算每个约束的梯度
     std::vector<VectorField> grad_constraints;
     grad_constraints.reserve(m);
     for (const auto& g : constraints) {
@@ -1266,20 +1266,20 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         grad_constraints.push_back(std::move(grad_g));
     }
 
-    // 构造乘数变量名
+    /// 构造乘数变量名
     std::vector<std::string> lambda_names;
     lambda_names.reserve(m);
     for (size_t k = 0; k < m; ++k) {
         lambda_names.push_back("lambda_" + std::to_string(k + 1));
     }
 
-    // 构造方程组: ∂f/∂xᵢ - ∑ λₖ · ∂gₖ/∂xᵢ = 0 (对每个 i)
-    // 加上约束方程: gₖ = 0 (对每个 k)
+    /// 构造方程组: ∂f/∂xᵢ - ∑ λₖ · ∂gₖ/∂xᵢ = 0 (对每个 i)
+    /// 加上约束方程: gₖ = 0 (对每个 k)
     std::vector<std::shared_ptr<SymbolicExpr>> equations;
     equations.reserve(n + m);
 
     for (size_t i = 0; i < n; ++i) {
-        // ∂f/∂xᵢ - λ₁·∂g₁/∂xᵢ - λ₂·∂g₂/∂xᵢ - ...
+        /// ∂f/∂xᵢ - λ₁·∂g₁/∂xᵢ - λ₂·∂g₂/∂xᵢ - ...
         auto eq = grad_f[i];
         for (size_t k = 0; k < m; ++k) {
             auto lambda_var = SymbolicExpr::variable(lambda_names[k]);
@@ -1290,12 +1290,12 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         equations.push_back(eq);
     }
 
-    // 添加约束方程
+    /// 添加约束方程
     for (const auto& g : constraints) {
         equations.push_back(g);
     }
 
-    // 构造所有未知数列表: 原始变量 + 乘数
+    /// 构造所有未知数列表: 原始变量 + 乘数
     std::vector<std::string> all_vars;
     all_vars.reserve(n + m);
     for (const auto& v : vars) {
@@ -1305,7 +1305,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         all_vars.push_back(lam);
     }
 
-    // 使用多项式系统求解器求解增广系统
+    /// 使用多项式系统求解器求解增广系统
     std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> solutions;
 
     std::vector<SymbolicExpr> poly_eqs;
@@ -1325,12 +1325,12 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         }
     }
 
-    // 如果多项式求解器失败，尝试线性求解器
+    /// 如果多项式求解器失败，尝试线性求解器
     if (solutions.empty()) {
         solutions = SymbolicExpr::solve_system(equations, all_vars);
     }
 
-    // 从解中提取仅原始变量（去除乘数）
+    /// 从解中提取仅原始变量（去除乘数）
     std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> result;
     std::set<std::string> var_set(vars.begin(), vars.end());
 
@@ -1350,7 +1350,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
 }
 
 // ============================================================
-// 向量代数运算 (Requirements 40, 41, 42)
+/// 向量代数运算 (Requirements 40, 41, 42)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> dot_product(const VectorField& a, const VectorField& b)

@@ -169,8 +169,10 @@ void test_repeated_rational_roots() {
     EXPECT_TRUE(count_occurrences(roots, Rational(1)) == 3,
         "find_rational_roots: root 1 has multiplicity 3");
 
-    EXPECT_TRUE(roots.size() == 3,
-        "find_rational_roots: returns 3 roots (stops when quotient degree <= 4)");
+    EXPECT_TRUE(roots.size() == 5,
+        "find_rational_roots: returns all 5 rational roots of (x-1)^3(x+2)^2");
+    EXPECT_TRUE(count_occurrences(roots, Rational(-2)) == 2,
+        "find_rational_roots: root -2 has multiplicity 2");
 
     auto sym_poly = to_symbolic_poly(p);
     auto all_roots = solve_by_factoring(sym_poly, "x");
@@ -199,8 +201,8 @@ void test_repeated_rational_roots_fractional() {
     auto roots = find_rational_roots(p);
     EXPECT_TRUE(count_occurrences(roots, Rational(1, 2)) == 2,
         "find_rational_roots: root 1/2 has multiplicity 2");
-    EXPECT_TRUE(roots.size() == 2,
-        "find_rational_roots: returns 2 roots (stops when quotient degree <= 4)");
+    EXPECT_TRUE(roots.size() == 3,
+        "find_rational_roots: returns all 3 rational roots of (x-1/2)^2(x-3)");
 
     auto sym_poly = to_symbolic_poly(p);
     auto all_roots = solve_by_factoring(sym_poly, "x");

@@ -155,7 +155,7 @@ bool svd_decomposition(
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> U_cols;
     for (size_t i = 0; i < n; i++) {
         if (!sigmas[i]->root->is_zero()) {
-            // u_i = A v_i / sigma_i
+            /// u_i = A v_i / sigma_i
             std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> v_col_mat(n, std::vector<std::shared_ptr<SymbolicExpr>>(1));
             for (size_t j = 0; j < n; j++) v_col_mat[j][0] = V_cols[i][j];
             auto Avi = SymbolicExpr::multiply(A, SymbolicExpr::matrix(v_col_mat));
@@ -168,7 +168,7 @@ bool svd_decomposition(
         }
     }
     
-    // Complete U basis with standard basis via Gram-Schmidt if needed (simplified for stub replacement)
+    /// Complete U basis with standard basis via Gram-Schmidt if needed (simplified for stub replacement)
     for (size_t i = 0; i < m && U_cols.size() < m; i++) {
         std::vector<std::shared_ptr<SymbolicExpr>> ei(m, SymbolicExpr::number(0));
         ei[i] = SymbolicExpr::number(1);
@@ -245,7 +245,7 @@ std::shared_ptr<SymbolicExpr> matrix_exp(
 }
 
 // ============================================================
-// 迹与秩 (Requirements 52, 58)
+/// 迹与秩 (Requirements 52, 58)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> matrix_trace(const std::shared_ptr<SymbolicExpr>& A) {
@@ -264,7 +264,7 @@ int matrix_rank(const std::shared_ptr<SymbolicExpr>& A) {
     size_t m = mat->rows, n = mat->cols;
     if (m == 0 || n == 0) return 0;
 
-    // 构造可变副本（数值化为 double，符号项无法判零时视为非零主元）
+    /// 构造可变副本（数值化为 double，符号项无法判零时视为非零主元）
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> g(m,
         std::vector<std::shared_ptr<SymbolicExpr>>(n));
     for (size_t i = 0; i < m; ++i)
@@ -278,14 +278,14 @@ int matrix_rank(const std::shared_ptr<SymbolicExpr>& A) {
     int rank = 0;
     size_t row = 0;
     for (size_t col = 0; col < n && row < m; ++col) {
-        // 寻找主元
+        /// 寻找主元
         size_t pivot = row;
         while (pivot < m && is_zero_expr(g[pivot][col])) ++pivot;
         if (pivot == m) continue;
         std::swap(g[row], g[pivot]);
 
         auto pval = g[row][col];
-        // 消元
+        /// 消元
         for (size_t i = 0; i < m; ++i) {
             if (i == row || is_zero_expr(g[i][col])) continue;
             auto factor = SymbolicExpr::divide(g[i][col], pval);
@@ -302,7 +302,7 @@ int matrix_rank(const std::shared_ptr<SymbolicExpr>& A) {
 }
 
 // ============================================================
-// Gram-Schmidt 正交化 (Requirement 57)
+/// Gram-Schmidt 正交化 (Requirement 57)
 // ============================================================
 
 std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
@@ -312,7 +312,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
     for (const auto& v : vectors) {
         std::vector<std::shared_ptr<SymbolicExpr>> u = v;
         for (const auto& b : basis) {
-            // 投影系数 <v,b>/<b,b>
+            /// 投影系数 <v,b>/<b,b>
             auto vb = SymbolicExpr::number(0);
             auto bb = SymbolicExpr::number(0);
             for (size_t k = 0; k < u.size(); ++k) {
@@ -327,7 +327,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
                         SymbolicExpr::multiply(coeff, b[k])))->simplify();
             }
         }
-        // 检查 u 是否为零向量（线性相关）
+        /// 检查 u 是否为零向量（线性相关）
         auto norm_sq = SymbolicExpr::number(0);
         for (auto& x : u) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(x, x));
         norm_sq = norm_sq->simplify();
@@ -346,7 +346,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
 }
 
 // ============================================================
-// 矩阵对数 (Requirement 69)
+/// 矩阵对数 (Requirement 69)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A) {
@@ -371,7 +371,7 @@ std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A)
     }
     if (P_cols.size() != n) return nullptr;
 
-    // 检查特征值为正（实数对数存在性）
+    /// 检查特征值为正（实数对数存在性）
     for (auto& ev : evals) {
         auto se = ev->simplify();
         if (se->is_number()) {
@@ -397,7 +397,7 @@ std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A)
 }
 
 // ============================================================
-// Kronecker 积 (Requirement 70)
+/// Kronecker 积 (Requirement 70)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
@@ -421,7 +421,7 @@ std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
 }
 
 // ============================================================
-// 矩阵范数 (Requirement 71)
+/// 矩阵范数 (Requirement 71)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A,
@@ -446,7 +446,7 @@ std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A
         return SymbolicExpr::sqrt(sum)->simplify();
     }
     if (type == "1") {
-        // 最大列和
+        /// 最大列和
         std::shared_ptr<SymbolicExpr> best = nullptr;
         double best_val = -1;
         for (size_t j = 0; j < n; ++j) {
@@ -461,7 +461,7 @@ std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A
         return best;
     }
     if (type == "inf") {
-        // 最大行和
+        /// 最大行和
         std::shared_ptr<SymbolicExpr> best = nullptr;
         double best_val = -1;
         for (size_t i = 0; i < m; ++i) {
@@ -479,7 +479,7 @@ std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A
 }
 
 // ============================================================
-// 二次型 (Requirement 59)
+/// 二次型 (Requirement 59)
 // ============================================================
 
 std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
@@ -490,14 +490,14 @@ std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
     auto e = expr->expand();
     if (!e) e = expr;
 
-    // A[i][j] = (1/2) ∂²(expr)/∂xᵢ∂xⱼ （对称矩阵，对角为 ∂²/2 即系数本身的一半*2）
+    /// A[i][j] = (1/2) ∂²(expr)/∂xᵢ∂xⱼ （对称矩阵，对角为 ∂²/2 即系数本身的一半*2）
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> grid(n,
         std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
     for (size_t i = 0; i < n; ++i) {
         auto di = e->differentiate(vars[i]);
         for (size_t j = 0; j < n; ++j) {
             auto dij = di->differentiate(vars[j]);
-            // 对二次型，二阶偏导为常数；A_ij = (1/2)·∂²/∂xi∂xj
+            /// 对二次型，二阶偏导为常数；A_ij = (1/2)·∂²/∂xi∂xj
             grid[i][j] = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), dij)->simplify();
         }
     }
@@ -505,7 +505,7 @@ std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
 }
 
 std::string classify_quadratic_form(const std::shared_ptr<SymbolicExpr>& A) {
-    // 使用特征值列表（来自特征多项式求根），避免脆弱的特征向量求解。
+    /// 使用特征值列表（来自特征多项式求根），避免脆弱的特征向量求解。
     auto evals_expr = SymbolicExpr::eigenvalues(A);
     if (!evals_expr) return "unknown";
     auto mat_node = std::dynamic_pointer_cast<MatrixNode>(evals_expr->root);
@@ -517,7 +517,7 @@ std::string classify_quadratic_form(const std::shared_ptr<SymbolicExpr>& A) {
     }
     if (evals.empty()) return "unknown";
 
-    // 递归数值求值，处理未化简的根式（如 (1/2)*(4^0.5)）。
+    /// 递归数值求值，处理未化简的根式（如 (1/2)*(4^0.5)）。
     std::function<bool(const std::shared_ptr<SymbolicNode>&, double&)> num_eval =
         [&](const std::shared_ptr<SymbolicNode>& n, double& out) -> bool {
         if (!n) return false;
@@ -570,7 +570,7 @@ std::string classify_quadratic_form(const std::shared_ptr<SymbolicExpr>& A) {
 }
 
 // ============================================================
-// Jordan 标准型 (Requirement 56)
+/// Jordan 标准型 (Requirement 56)
 // ============================================================
 
 bool jordan_form(const std::shared_ptr<SymbolicExpr>& A,
@@ -594,8 +594,8 @@ bool jordan_form(const std::shared_ptr<SymbolicExpr>& A,
             diag.push_back(pr.first);
         }
     }
-    // 当特征向量数等于 n 时，矩阵可对角化，Jordan 型即对角阵。
-    // 缺陷情形（重根但特征向量不足）当前不支持广义特征向量链，返回 false。
+    /// 当特征向量数等于 n 时，矩阵可对角化，Jordan 型即对角阵。
+    /// 缺陷情形（重根但特征向量不足）当前不支持广义特征向量链，返回 false。
     if (P_cols.size() != n) return false;
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> P_grid(n,

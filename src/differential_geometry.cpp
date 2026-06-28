@@ -119,7 +119,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> exterior_derivative(
     size_t n = vars.size();
 
     if (degree == 0) {
-        // d(f) = ∑ (∂f/∂xᵢ) dxᵢ  → 返回梯度分量
+        /// d(f) = ∑ (∂f/∂xᵢ) dxᵢ  → 返回梯度分量
         if (form_coeffs.empty()) return result;
         auto f = form_coeffs[0];
         for (size_t i = 0; i < n; ++i) {
@@ -129,7 +129,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> exterior_derivative(
     }
 
     if (degree == 1) {
-        // d(∑ωᵢ dxᵢ) = ∑_{i<j} (∂ωⱼ/∂xᵢ - ∂ωᵢ/∂xⱼ) dxᵢ∧dxⱼ
+        /// d(∑ωᵢ dxᵢ) = ∑_{i<j} (∂ωⱼ/∂xᵢ - ∂ωᵢ/∂xⱼ) dxᵢ∧dxⱼ
         if (form_coeffs.size() != n) return result;
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = i + 1; j < n; ++j) {
