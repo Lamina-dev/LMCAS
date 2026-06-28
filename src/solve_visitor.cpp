@@ -11,6 +11,7 @@
 #include "../include/solve_strategies.hpp"
 #include "../include/solve_polynomial.hpp"
 #include "../include/solve_transcendental.hpp"
+#include "../include/solve_mixed_transcendental.hpp"
 #include "../include/newton_raphson.hpp"
 #include "../include/root_of_utils.hpp"
 
@@ -117,6 +118,17 @@ std::vector<std::shared_ptr<SymbolicExpr>> lamina::solve_dispatch(
 
     auto trans_results = solve_transcendental(f_expr, var);
     if (!trans_results.empty()) return trans_results;
+
+    // 混合超越方程路径：含超越函数且换元无法化为多项式时，委托给混合求解器
+    if (contains_transcendental_of_var(f_expr, var)) {
+        auto sub_result = detect_trans_substitutions(f_expr, var);
+        if (sub_result.mappings.empty() || !is_polynomial_after_substitution(sub_result)) {
+            if (opts.allow_numeric) {
+                return solve_mixed_transcendental(f_expr, var, opts);
+            }
+            // allow_numeric 为 false 时不调用数值求解，落入后续逻辑
+        }
+    }
 
     if (opts.allow_numeric) {
         auto numeric_roots = solve_numeric(f_expr, var, opts);
@@ -422,12 +434,21 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr
         auto sols = solve_system(equations, vars);
 
         std::vector<std::shared_ptr<SymbolicExpr>> eigenvec;
-        for(const auto& v : vars) eigenvec.push_back(sols[0].at(v));
+        bool sols_usable = !sols.empty();
+        if (sols_usable) {
+            for(const auto& v : vars) {
+                auto it = sols[0].find(v);
+                if (it == sols[0].end()) { sols_usable = false; break; }
+                eigenvec.push_back(it->second);
+            }
+        }
 
         bool is_non_zero = false;
-        for(auto& x : eigenvec) if(!x->is_zero()) is_non_zero = true;
+        if (sols_usable) {
+            for(auto& x : eigenvec) if(!x->is_zero()) is_non_zero = true;
+        }
 
-        if (is_non_zero) {
+        if (sols_usable && is_non_zero) {
              std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> col_vec_data;
              for(auto& val : eigenvec) col_vec_data.push_back({val});
              result.push_back({lambda, {SymbolicExpr::matrix(col_vec_data)}});
@@ -452,14 +473,18 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr
                        auto sub_sols = solve_system(sub_eqs, sub_vars);
                        if (!sub_sols.empty()) {
                             std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> col_vec_data(n);
+                            bool ok = true;
                             for(size_t k=0; k<n; ++k) {
-                                if (k == (size_t)free_var_idx) col_vec_data[k] = {SymbolicExpr::number(1)};
-                                else col_vec_data[k] = {sub_sols[0].at(vars[k])};
+                                if (k == (size_t)free_var_idx) { col_vec_data[k] = {SymbolicExpr::number(1)}; continue; }
+                                auto it = sub_sols[0].find(vars[k]);
+                                if (it == sub_sols[0].end()) { ok = false; break; }
+                                col_vec_data[k] = {it->second};
                             }
-
-                            auto vec_expr = SymbolicExpr::matrix(col_vec_data);
-                            result.push_back({lambda, {vec_expr}});
-                            found_vec = true;
+                            if (ok) {
+                                auto vec_expr = SymbolicExpr::matrix(col_vec_data);
+                                result.push_back({lambda, {vec_expr}});
+                                found_vec = true;
+                            }
                        }
                   }
              }

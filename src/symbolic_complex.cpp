@@ -1,6 +1,7 @@
 #define _USE_MATH_DEFINES
 #include "../include/symbolic_complex.hpp"
 #include "../include/symbolic.hpp"
+#include "../include/visitors/normalization_visitor.hpp"
 #include <cmath>
 #include <complex>
 #include <stdexcept>

@@ -906,10 +906,6 @@ std::vector<Rational> find_rational_roots(const Polynomial<Rational>& poly) {
                 break;
             }
         }
-
-        if (current.degree() <= 4) {
-            break;
-        }
     }
 
     return roots;

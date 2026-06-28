@@ -1,0 +1,444 @@
+/**
+ * @file symbolic_ode_engine.hpp
+ * @brief 统一 ODE 求解引擎：分类、分派、多种求解方法。
+ *
+ * 扩展已有的 symbolic_ode.hpp，提供统一的 ODE 类型检测与分派机制，
+ * 支持可分离变量、一阶线性、齐次、Bernoulli、恰当、高阶常系数、Euler 等类型。
+ */
+#pragma once
+#include "symbolic_ast.hpp"
+#include <memory>
+#include <string>
+#include <vector>
+
+class SymbolicExpr;
+
+
+#ifdef _WIN32
+#ifdef LAMINA_CORE_EXPORTS
+#define LAMINA_API __declspec(dllexport)
+#else
+#define LAMINA_API __declspec(dllimport)
+#endif
+#else
+#define LAMINA_API
+#endif
+
+namespace lamina {
+
+/**
+ * @brief ODE 类型枚举，标识方程所属的求解类别。
+ */
+enum class ODEType {
+    Separable,              ///< 可分离变量型 dy/dx = f(x)g(y)
+    Linear1,                ///< 一阶线性 dy/dx + P(x)y = Q(x)
+    Linear2_ConstCoeff,     ///< 二阶常系数线性
+    Homogeneous,            ///< 齐次方程 y' = f(y/x)
+    Bernoulli,              ///< Bernoulli 方程 y' + P(x)y = Q(x)y^n
+    Exact,                  ///< 恰当方程 M(x,y)dx + N(x,y)dy = 0
+    HigherOrder_ConstCoeff, ///< 高阶常系数线性
+    Euler,                  ///< Euler (Cauchy-Euler) 方程
+    System,                 ///< ODE 系统
+    LaplaceMethod,          ///< Laplace 变换法
+    Frobenius,              ///< Frobenius 级数解法
+    Unknown                 ///< 无法识别的类型
+};
+
+/**
+ * @brief ODE 分类结果，包含类型及提取的结构信息。
+ */
+struct ODEClassification {
+    ODEType type = ODEType::Unknown;  ///< 识别出的 ODE 类型
+    int order = 0;                    ///< 方程阶数
+
+    /// 一阶线性: P(x), Q(x) 使得 y' + P(x)y = Q(x)
+    std::shared_ptr<SymbolicExpr> P_coeff;
+    std::shared_ptr<SymbolicExpr> Q_coeff;
+
+    /// Bernoulli: P(x), Q(x), n 使得 y' + P(x)y = Q(x)y^n
+    std::shared_ptr<SymbolicExpr> bernoulli_P;
+    std::shared_ptr<SymbolicExpr> bernoulli_Q;
+    int bernoulli_n = 0;
+
+    /// 恰当方程: M(x,y), N(x,y)
+    std::shared_ptr<SymbolicExpr> exact_M;
+    std::shared_ptr<SymbolicExpr> exact_N;
+
+    /// 常系数: 系数列表 [a_n, a_{n-1}, ..., a_1, a_0] 和非齐次项 f(x)
+    std::vector<double> const_coeffs;
+    std::shared_ptr<SymbolicExpr> forcing_func;
+
+    /// Euler 方程: 系数列表 [a_n, ..., a_0] 对应 x^n*y^(n) + ... + a_0*y = f(x)
+    std::vector<double> euler_coeffs;
+    std::shared_ptr<SymbolicExpr> euler_forcing;
+};
+
+/**
+ * @brief ODE 求解结果。
+ */
+struct ODESolution {
+    std::shared_ptr<SymbolicExpr> general_solution;  ///< 通解表达式
+    std::vector<std::string> constants;              ///< 任意常数名称列表 (C1, C2, ...)
+    ODEType method_used = ODEType::Unknown;          ///< 使用的求解方法
+};
+
+/**
+ * @brief 对一阶 ODE 进行类型分类。
+ *
+ * 给定 dy/dx = rhs(x, y) 形式的方程右端，检测其属于哪种可求解类型。
+ * 检测顺序：可分离 → 一阶线性 → 齐次 → Bernoulli → 恰当。
+ *
+ * @param[in] rhs 方程右端表达式 (dy/dx = rhs)
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 分类结果
+ */
+LAMINA_API ODEClassification classify_first_order_ode(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 对高阶线性 ODE 进行类型分类。
+ *
+ * 给定系数列表和非齐次项，检测是否为常系数或 Euler 类型。
+ * 系数列表按降阶排列：coeffs[0] 对应最高阶导数。
+ *
+ * @param[in] coeffs 各阶导数的系数表达式列表（降阶排列）
+ * @param[in] forcing 非齐次项 f(x)
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 分类结果
+ */
+LAMINA_API ODEClassification classify_higher_order_ode(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 检测表达式是否为可分离变量形式 f(x)*g(y)。
+ *
+ * @param[in] rhs 方程右端表达式
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 若可分离返回 true
+ */
+LAMINA_API bool is_separable(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 检测一阶 ODE 是否为线性形式 y' + P(x)y = Q(x)。
+ *
+ * @param[in] rhs 方程右端表达式 (dy/dx = rhs)
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @param[out] P 若为线性，输出 P(x)
+ * @param[out] Q 若为线性，输出 Q(x)
+ * @return 若为一阶线性返回 true
+ */
+LAMINA_API bool is_linear_first_order(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y,
+    std::shared_ptr<SymbolicExpr>& P,
+    std::shared_ptr<SymbolicExpr>& Q);
+
+/**
+ * @brief 检测一阶 ODE 是否为齐次形式 y' = f(y/x)。
+ *
+ * 通过检查 f(tx, ty) = f(x, y) 来判断齐次性。
+ *
+ * @param[in] rhs 方程右端表达式
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 若为齐次返回 true
+ */
+LAMINA_API bool is_homogeneous_ode(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 检测一阶 ODE 是否为 Bernoulli 形式 y' + P(x)y = Q(x)y^n。
+ *
+ * @param[in] rhs 方程右端表达式 (dy/dx = rhs)
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @param[out] P 若为 Bernoulli，输出 P(x)
+ * @param[out] Q 若为 Bernoulli，输出 Q(x)
+ * @param[out] n 若为 Bernoulli，输出幂次 n (n ≠ 0, 1)
+ * @return 若为 Bernoulli 返回 true
+ */
+LAMINA_API bool is_bernoulli_ode(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y,
+    std::shared_ptr<SymbolicExpr>& P,
+    std::shared_ptr<SymbolicExpr>& Q,
+    int& n);
+
+/**
+ * @brief 检测方程是否为恰当形式 M(x,y) + N(x,y)y' = 0，即 ∂M/∂y = ∂N/∂x。
+ *
+ * @param[in] M M(x,y) 表达式
+ * @param[in] N N(x,y) 表达式
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 若恰当返回 true
+ */
+LAMINA_API bool is_exact_ode(
+    const std::shared_ptr<SymbolicExpr>& M,
+    const std::shared_ptr<SymbolicExpr>& N,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 检测高阶 ODE 系数是否全为常数。
+ *
+ * @param[in] coeffs 各阶导数的系数表达式列表
+ * @param[in] x 自变量名
+ * @return 若所有系数不依赖 x 返回 true
+ */
+LAMINA_API bool is_constant_coefficient(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
+    const std::string& x);
+
+/**
+ * @brief 检测高阶 ODE 是否为 Euler (Cauchy-Euler) 形式。
+ *
+ * Euler 方程形如 x^n*y^(n) + a_{n-1}*x^{n-1}*y^{n-1} + ... + a_0*y = f(x)，
+ * 即第 k 阶导数的系数为常数乘以 x^k。
+ *
+ * @param[in] coeffs 各阶导数的系数表达式列表（降阶排列）
+ * @param[in] x 自变量名
+ * @param[out] euler_consts 提取的常数系数列表
+ * @return 若为 Euler 方程返回 true
+ */
+LAMINA_API bool is_euler_equation(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
+    const std::string& x,
+    std::vector<double>& euler_consts);
+
+// ============================================================================
+// 一阶 ODE 求解方法
+// ============================================================================
+
+/**
+ * @brief 求解齐次 ODE y' = f(y/x)。
+ *
+ * 算法：令 v = y/x，则 y = vx，y' = v + xv'。
+ * 代入得 v + xv' = f(v)，即 xv' = f(v) - v，
+ * 分离变量后积分，最后回代 v = y/x。
+ *
+ * @param[in] rhs 方程右端表达式 f(x, y)（满足 f(tx,ty)=f(x,y)）
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 求解结果
+ */
+LAMINA_API ODESolution solve_homogeneous_ode(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 求解 Bernoulli 方程 y' + P(x)y = Q(x)y^n。
+ *
+ * 算法：令 v = y^(1-n)，则 v' = (1-n)y^(-n)y'。
+ * 代入得线性方程 v' + (1-n)P(x)v = (1-n)Q(x)，
+ * 用积分因子法求解后回代 y = v^(1/(1-n))。
+ *
+ * @param[in] P P(x) 系数
+ * @param[in] Q Q(x) 系数
+ * @param[in] n 幂次 (n ≠ 0, 1)
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 求解结果
+ */
+LAMINA_API ODESolution solve_bernoulli_ode(
+    const std::shared_ptr<SymbolicExpr>& P,
+    const std::shared_ptr<SymbolicExpr>& Q,
+    int n,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 求解恰当方程 M(x,y)dx + N(x,y)dy = 0。
+ *
+ * 算法：当 ∂M/∂y = ∂N/∂x 时，存在势函数 F(x,y) 使得
+ * ∂F/∂x = M, ∂F/∂y = N。通过对 M 关于 x 积分并从 N 确定
+ * y 相关部分来构造 F，解为 F(x,y) = C。
+ *
+ * 当方程不恰当时，尝试寻找积分因子 μ(x) 或 μ(y)。
+ *
+ * @param[in] M M(x,y) 表达式
+ * @param[in] N N(x,y) 表达式
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 求解结果（隐式解 F(x,y) = C）
+ */
+LAMINA_API ODESolution solve_exact_ode(
+    const std::shared_ptr<SymbolicExpr>& M,
+    const std::shared_ptr<SymbolicExpr>& N,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 寻找积分因子使非恰当方程变为恰当方程。
+ *
+ * 尝试以下形式的积分因子：
+ * 1. μ = μ(x)：当 (∂M/∂y - ∂N/∂x)/N 仅依赖 x 时
+ * 2. μ = μ(y)：当 (∂N/∂x - ∂M/∂y)/M 仅依赖 y 时
+ *
+ * @param[in] M M(x,y) 表达式
+ * @param[in] N N(x,y) 表达式
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 积分因子表达式，若找不到返回 nullptr
+ */
+LAMINA_API std::shared_ptr<SymbolicExpr> find_integrating_factor(
+    const std::shared_ptr<SymbolicExpr>& M,
+    const std::shared_ptr<SymbolicExpr>& N,
+    const std::string& x,
+    const std::string& y);
+
+// ============================================================================
+// 高阶 ODE 求解方法
+// ============================================================================
+
+/**
+ * @brief 求解高阶常系数线性 ODE。
+ *
+ * 算法：构造特征多项式，求根（实根、复根、重根），
+ * 根据根的类型构造通解：
+ * - 实根 r（重数 m）：e^(rx), x·e^(rx), ..., x^(m-1)·e^(rx)
+ * - 复根 α±βi（重数 m）：e^(αx)(cos(βx), sin(βx)), x·e^(αx)(cos(βx), sin(βx)), ...
+ *
+ * 对于非齐次情形，使用待定系数法求特解。
+ * 支持阶数最高为 6。
+ *
+ * @param[in] coeffs 各阶导数的数值系数（降阶排列：coeffs[0] 对应最高阶）
+ * @param[in] forcing 非齐次项 f(x)，齐次时为 nullptr 或零
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 求解结果
+ */
+LAMINA_API ODESolution solve_higher_order_ode(
+    const std::vector<double>& coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string& y);
+
+/**
+ * @brief 求解 Euler (Cauchy-Euler) 方程。
+ *
+ * 算法：对 Euler 方程 a_n·x^n·y^(n) + ... + a_0·y = f(x)，
+ * 令 x = e^t（即 t = ln(x)），将方程转化为关于 t 的常系数 ODE，
+ * 求解后回代 t = ln(x)。
+ *
+ * 支持二阶和三阶 Euler 方程。
+ *
+ * @param[in] euler_coeffs Euler 方程的常数系数列表（降阶排列）
+ * @param[in] forcing 非齐次项 f(x)，齐次时为 nullptr 或零
+ * @param[in] x 自变量名
+ * @param[in] y 因变量名
+ * @return 求解结果
+ */
+LAMINA_API ODESolution solve_euler_ode(
+    const std::vector<double>& euler_coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string& y);
+
+// ============================================================================
+// 参数变分法与 Frobenius 级数解
+// ============================================================================
+
+/**
+ * @brief 奇点类型枚举。
+ */
+enum class ODESingularityType {
+    Ordinary,         ///< 常点
+    RegularSingular,  ///< 正则奇点
+    IrregularSingular ///< 非正则奇点
+};
+
+/**
+ * @brief Frobenius 级数解结果。
+ */
+struct FrobeniusSolution {
+    std::shared_ptr<SymbolicExpr> series_solution;  ///< 截断级数解
+    ODESingularityType point_type;                     ///< 展开点的奇点类型
+    std::vector<double> indicial_roots;             ///< 指标方程的根（正则奇点时）
+    int truncation_order;                           ///< 截断阶数
+};
+
+/**
+ * @brief 用参数变分法求特解。
+ *
+ * 算法来源: Boyce & DiPrima, Elementary Differential Equations, Section 3.6
+ *
+ * 给定二阶线性 ODE y'' + p(x)y' + q(x)y = g(x) 的两个齐次解 y₁, y₂，
+ * 计算 Wronskian W = y₁y₂' - y₂y₁'，然后：
+ *   u₁' = -y₂·g(x)/W,  u₂' = y₁·g(x)/W
+ * 积分得 u₁, u₂，特解为 y_p = u₁·y₁ + u₂·y₂。
+ *
+ * @param[in] y1 第一个齐次解
+ * @param[in] y2 第二个齐次解
+ * @param[in] g 非齐次项 g(x)（方程已归一化为首项系数 1）
+ * @param[in] x 自变量名
+ * @return 求解结果，general_solution 为特解 y_p
+ */
+LAMINA_API ODESolution solve_variation_of_parameters(
+    const std::shared_ptr<SymbolicExpr>& y1,
+    const std::shared_ptr<SymbolicExpr>& y2,
+    const std::shared_ptr<SymbolicExpr>& g,
+    const std::string& x);
+
+/**
+ * @brief 对 ODE 的指定点进行奇点分类。
+ *
+ * 给定 y'' + p(x)y' + q(x)y = 0，检查 x₀ 处：
+ * - 若 p(x) 和 q(x) 在 x₀ 解析 → 常点
+ * - 若 (x-x₀)p(x) 和 (x-x₀)²q(x) 在 x₀ 解析 → 正则奇点
+ * - 否则 → 非正则奇点
+ *
+ * @param[in] p 系数 p(x)（y' 的系数，方程已归一化）
+ * @param[in] q 系数 q(x)（y 的系数，方程已归一化）
+ * @param[in] x0 展开点
+ * @param[in] x 自变量名
+ * @return 奇点类型
+ */
+LAMINA_API ODESingularityType classify_singular_point(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x);
+
+/**
+ * @brief 用 Frobenius 方法求 ODE 的级数解。
+ *
+ * 算法来源: Bender & Orszag, Advanced Mathematical Methods, Chapter 3
+ *
+ * 给定 y'' + p(x)y' + q(x)y = 0：
+ * - 常点：假设 y = ∑aₙ(x-x₀)ⁿ，代入匹配系数
+ * - 正则奇点：假设 y = (x-x₀)^r·∑aₙ(x-x₀)ⁿ，
+ *   先求指标方程确定 r，再递推确定 aₙ
+ *
+ * @param[in] p 系数 p(x)（y' 的系数，方程已归一化）
+ * @param[in] q 系数 q(x)（y 的系数，方程已归一化）
+ * @param[in] x0 展开点
+ * @param[in] x 自变量名
+ * @param[in] order 截断阶数（默认 6）
+ * @return Frobenius 解结果
+ */
+LAMINA_API FrobeniusSolution solve_frobenius(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x,
+    int order = 6);
+
+} // namespace lamina

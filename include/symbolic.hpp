@@ -25,6 +25,7 @@ namespace lamina { class AssumptionContext; }
 
 #define _SYMBOLIC_DEBUG 0
 #endif
+#ifndef LAMINA_API
 #ifdef _WIN32
 #ifdef LAMINA_CORE_EXPORTS
 #define LAMINA_API __declspec(dllexport)
@@ -34,6 +35,8 @@ namespace lamina { class AssumptionContext; }
 #else
 #define LAMINA_API
 #endif
+#endif
+
 
 class _NullBuffer : public std::streambuf {
 public:
@@ -299,6 +302,17 @@ public:
      * @return 因式分解后的表达式
      */
     std::shared_ptr<SymbolicExpr> factor() const;
+
+    /**
+     * @brief 有理函数约分（消去分子分母公因式）。
+     *
+     * 将表达式视为有理函数 P(x)/Q(x)，计算 gcd(P, Q) 并约分。
+     * 支持多元多项式（逐变量迭代 GCD）。
+     * 例如 (x²-1)/(x-1) 约分为 x+1。
+     *
+     * @return 约分后的表达式
+     */
+    std::shared_ptr<SymbolicExpr> cancel() const;
 
     [[deprecated("Use SymbolicNode directly")]]
     Type get_type() const;
@@ -712,3 +726,13 @@ public:
      */
     lmmc_real_t to_numeric() const;
 };
+
+#include "matrix_decomposition.hpp"
+#include "complex_analysis.hpp"
+#include "differential_geometry.hpp"
+#include "numerical_integration.hpp"
+#include "vector_calculus.hpp"
+#include "transform_engine.hpp"
+#include "series_engine.hpp"
+#include "symbolic_ode_engine.hpp"
+#include "calculus_utils.hpp"

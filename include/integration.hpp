@@ -415,6 +415,39 @@ public:
     std::string name() const override { return "IntegrationByParts"; }
 };
 
+/**
+ * @brief 三角换元积分策略（任务 15.1）。
+ *
+ * 识别含二次根式 √(a²-x²)、√(a²+x²)、√(x²-a²) 的被积函数，应用相应的
+ * 三角/双曲换元：
+ *   - √(a²-x²): x = a·sin(θ)
+ *   - √(a²+x²): x = a·tan(θ)（结果以 arcsinh / ln 形式表达）
+ *   - √(x²-a²): x = a·sec(θ)
+ * 换元后积分，再用反函数与直角三角关系回代为原变量。
+ * 在策略链中位于 SubstitutionStrategy 之后、IBPStrategy 之前。
+ */
+class LAMINA_API TrigSubstitutionStrategy : public IntegrationStrategy {
+public:
+    std::shared_ptr<SymbolicExpr> try_integrate(
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
+    std::string name() const override { return "TrigSubstitution"; }
+};
+
+/**
+ * @brief 万能代换（Weierstrass）积分策略（任务 15.2）。
+ *
+ * 识别 sin(x)、cos(x) 的有理函数，应用半角代换 t = tan(x/2)：
+ *   sin(x) = 2t/(1+t²), cos(x) = (1-t²)/(1+t²), dx = 2/(1+t²) dt
+ * 将被积函数转化为 t 的有理函数后递归积分，再回代 t = tan(x/2)。
+ * 在策略链中位于 TrigCombinationStrategy 之后。
+ */
+class LAMINA_API WeierstrassStrategy : public IntegrationStrategy {
+public:
+    std::shared_ptr<SymbolicExpr> try_integrate(
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
+    std::string name() const override { return "Weierstrass"; }
+};
+
 /** @brief 符号积分器，协调各策略完成积分运算 */
 class LAMINA_API Integrator {
 public:

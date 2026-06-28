@@ -130,4 +130,130 @@ std::shared_ptr<SymbolicExpr> skew_lines_distance(
     return SymbolicExpr::divide(abs_num, cross_norm);
 }
 
+LineSymbolic line_from_two_points(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p2) {
+    LineSymbolic line;
+    line.point = p1;
+    for (size_t i = 0; i < p1.size() && i < p2.size(); ++i) {
+        line.direction.push_back(
+            SymbolicExpr::add(p2[i], SymbolicExpr::multiply(SymbolicExpr::number(-1), p1[i]))->simplify());
+    }
+    return line;
+}
+
+PlaneSymbolic plane_from_three_points(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p2,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p3) {
+    std::vector<std::shared_ptr<SymbolicExpr>> v1, v2;
+    for (size_t i = 0; i < 3; ++i) {
+        v1.push_back(SymbolicExpr::add(p2[i], SymbolicExpr::multiply(SymbolicExpr::number(-1), p1[i])));
+        v2.push_back(SymbolicExpr::add(p3[i], SymbolicExpr::multiply(SymbolicExpr::number(-1), p1[i])));
+    }
+    auto n = vector_cross(v1, v2);
+    PlaneSymbolic plane;
+    plane.normal = {n[0]->simplify(), n[1]->simplify(), n[2]->simplify()};
+    // d = n · p1
+    plane.d = vector_dot(plane.normal, p1)->simplify();
+    return plane;
+}
+
+std::shared_ptr<SymbolicExpr> dihedral_angle(
+    const PlaneSymbolic& p1, const PlaneSymbolic& p2) {
+    auto dot = vector_dot(p1.normal, p2.normal);
+    auto n1 = SymbolicExpr::sqrt(vector_dot(p1.normal, p1.normal));
+    auto n2 = SymbolicExpr::sqrt(vector_dot(p2.normal, p2.normal));
+    auto abs_dot = std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(
+        FunctionNode::FuncType::Abs, std::vector<std::shared_ptr<SymbolicNode>>{dot->root}));
+    auto cos_theta = SymbolicExpr::divide(abs_dot, SymbolicExpr::multiply(n1, n2));
+    auto arccos = std::make_shared<FunctionNode>(FunctionNode::FuncType::ArcCos,
+        std::vector<std::shared_ptr<SymbolicNode>>{cos_theta->root});
+    return std::make_shared<SymbolicExpr>(arccos)->simplify();
+}
+
+std::string classify_quadric(const SurfaceSymbolic& surf) {
+    if (!surf.F || surf.vars.size() < 3) return "unknown";
+    auto& vars = surf.vars;
+    auto F = surf.F->expand();
+    if (!F) F = surf.F;
+
+    // 提取二次项系数 a*x^2、线性项、常数。
+    auto coeff_of_sq = [&](const std::string& v) -> double {
+        auto d2 = F->differentiate(v)->differentiate(v)->simplify();
+        if (d2->is_number()) return d2->to_numeric() / 2.0;
+        return 0.0;
+    };
+    auto coeff_of_lin = [&](const std::string& v) -> double {
+        // 在所有变量=0 处的一阶偏导
+        auto d = F->differentiate(v);
+        for (auto& w : vars) d = d->substitute(w, SymbolicExpr::number(0));
+        d = d->simplify();
+        if (d->is_number()) return d->to_numeric();
+        return 0.0;
+    };
+    double a = coeff_of_sq(vars[0]);
+    double b = coeff_of_sq(vars[1]);
+    double c = coeff_of_sq(vars[2]);
+    double lz = coeff_of_lin(vars[2]);
+
+    int n_sq = (a != 0) + (b != 0) + (c != 0);
+    int n_pos = (a > 0) + (b > 0) + (c > 0);
+    int n_neg = (a < 0) + (b < 0) + (c < 0);
+
+    if (n_sq == 2 && lz != 0 && c == 0) return "paraboloid";
+    if (n_sq == 2) return "cylinder";
+    if (n_sq == 3) {
+        if (n_neg == 0) {
+            // 全正：球或椭球。系数相等→球
+            if (a == b && b == c) return "sphere";
+            return "ellipsoid";
+        }
+        if (n_pos == 0) return "ellipsoid"; // 全负，移项后等价
+        // 混合符号：锥面（常数项0）或双曲面
+        for (auto& w : vars) F = F->substitute(w, SymbolicExpr::number(0));
+        auto cst = F->simplify();
+        double cval = cst->is_number() ? cst->to_numeric() : 1.0;
+        if (std::abs(cval) < 1e-9) return "cone";
+        return "hyperboloid";
+    }
+    return "unknown";
+}
+
+std::vector<std::shared_ptr<SymbolicExpr>> surface_normal(
+    const SurfaceSymbolic& surf,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point) {
+    std::vector<std::shared_ptr<SymbolicExpr>> grad;
+    for (size_t i = 0; i < surf.vars.size(); ++i) {
+        auto d = surf.F->differentiate(surf.vars[i]);
+        for (size_t j = 0; j < surf.vars.size() && j < point.size(); ++j) {
+            d = d->substitute(surf.vars[j], point[j]);
+        }
+        grad.push_back(d->simplify());
+    }
+    // 归一化
+    auto norm_sq = SymbolicExpr::number(0);
+    for (auto& g : grad) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(g, g));
+    auto norm = SymbolicExpr::sqrt(norm_sq);
+    std::vector<std::shared_ptr<SymbolicExpr>> result;
+    for (auto& g : grad) result.push_back(SymbolicExpr::divide(g, norm)->simplify());
+    return result;
+}
+
+PlaneSymbolic tangent_plane(
+    const SurfaceSymbolic& surf,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point) {
+    PlaneSymbolic plane;
+    for (size_t i = 0; i < surf.vars.size(); ++i) {
+        auto d = surf.F->differentiate(surf.vars[i]);
+        for (size_t j = 0; j < surf.vars.size() && j < point.size(); ++j) {
+            d = d->substitute(surf.vars[j], point[j]);
+        }
+        plane.normal.push_back(d->simplify());
+    }
+    // d = n · point
+    plane.d = vector_dot(plane.normal, point)->simplify();
+    return plane;
+}
+
 }
