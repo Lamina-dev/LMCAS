@@ -20,6 +20,10 @@ struct SolveOptions {
     bool return_rootof = true;            ///< 无闭式解时是否返回 RootOf 表达式
     lmmc_real_t initial_guess = 0.0;      ///< 数值迭代初始猜测值
     bool has_initial_guess = false;       ///< 是否指定了初始猜测值
+
+    lmmc_real_t search_lo = -10.0;        ///< 搜索区间下界（默认 -10）
+    lmmc_real_t search_hi = 10.0;         ///< 搜索区间上界（默认 10）
+    bool has_search_interval = false;     ///< 是否指定了搜索区间
 };
 
 /** @brief 数值根结果，包含根值、残差和迭代次数。 */

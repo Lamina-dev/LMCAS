@@ -6,6 +6,8 @@
  * power expressions, and built-in functions.
  */
 
+#define _USE_MATH_DEFINES
+
 #include "inference_engine.hpp"
 #include "assumption_context.hpp"
 #include "property_store.hpp"
@@ -17,16 +19,72 @@
 
 namespace lamina {
 
-// ============================================================
+// Forward declarations of static helpers used across sections
+static bool is_integer_number(const NumberNode& num);
+static bool is_even_integer_number(const NumberNode& num);
+static bool is_positive_integer_number(const NumberNode& num);
+static bool is_zero_number(const NumberNode& num);
+static bool is_exponent_neg_one(const std::shared_ptr<SymbolicNode>& node);
+
 // Construction
-// ============================================================
 
 InferenceEngine::InferenceEngine(const AssumptionContext& ctx)
-    : ctx_(ctx) {}
+    : ctx_(ctx), max_depth_(ctx.get_max_query_depth()) {}
 
-// ============================================================
+// Depth limit configuration
+
+void InferenceEngine::set_max_depth(int depth) {
+    if (depth > 0) {
+        max_depth_ = depth;
+    }
+}
+
+int InferenceEngine::get_max_depth() const {
+    return max_depth_;
+}
+
+// DepthGuard RAII implementation
+
+InferenceEngine::DepthGuard::DepthGuard(const InferenceEngine& engine, const SymbolicNode* node)
+    : engine_(engine), node_(node) {
+    // Increment depth
+    engine_.current_depth_++;
+
+    // Check depth limit
+    if (engine_.current_depth_ > engine_.max_depth_) {
+        abort_ = true;
+        return;
+    }
+
+    // Check cycle: if node is already in visited set, abort
+    if (node_ && engine_.visited_.count(node_) > 0) {
+        abort_ = true;
+        return;
+    }
+
+    // Insert node into visited set
+    if (node_) {
+        engine_.visited_.insert(node_);
+        inserted_ = true;
+    }
+}
+
+InferenceEngine::DepthGuard::~DepthGuard() {
+    // Remove node from visited set if we inserted it
+    if (inserted_ && node_) {
+        engine_.visited_.erase(node_);
+    }
+
+    // Decrement depth
+    engine_.current_depth_--;
+
+    // Clear visited set when returning to top level (depth == 0)
+    if (engine_.current_depth_ == 0) {
+        engine_.visited_.clear();
+    }
+}
+
 // Helper: query sign/domain of a sub-expression
-// ============================================================
 
 // These helpers will eventually delegate through the AssumptionContext's
 // QueryInterface. For now, they provide the interface that the inference
@@ -62,19 +120,61 @@ Tribool InferenceEngine::query_domain_of(const SymbolicExpr& expr, Domain domain
     switch (domain) {
         case Domain::Integer:  return query_integer(expr);
         case Domain::Real:     return query_real(expr);
+        case Domain::Rational: {
+            // Rational: Integer ⊂ Rational, so Integer implies Rational
+            if (query_integer(expr) == Tribool::True) return Tribool::True;
+            // Check if it's a Rational number literal
+            if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
+                if (std::holds_alternative<Rational>(num->value)) return Tribool::True;
+            }
+            // Check variable domain
+            if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+                const auto& props = ctx_.current_properties();
+                if (props.has_domain(var->name, Domain::Rational)) return Tribool::True;
+            }
+            return Tribool::Unknown;
+        }
+        case Domain::Natural: {
+            // Natural: non-negative integers (0, 1, 2, ...)
+            // Check if it's a non-negative integer literal
+            if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
+                if (is_integer_number(*num)) {
+                    if (std::holds_alternative<BigInt>(num->value)) {
+                        const auto& b = std::get<BigInt>(num->value);
+                        if (!b.IsNegative()) return Tribool::True;
+                    } else if (std::holds_alternative<Rational>(num->value)) {
+                        BigInt n = std::get<Rational>(num->value).get_numerator();
+                        if (!n.IsNegative()) return Tribool::True;
+                    } else {
+                        double v = std::get<lmmc_real_t>(num->value);
+                        if (std::isfinite(v) && v >= 0.0 && v == std::floor(v))
+                            return Tribool::True;
+                    }
+                }
+                return Tribool::False;
+            }
+            // Check variable domain
+            if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+                const auto& props = ctx_.current_properties();
+                if (props.has_domain(var->name, Domain::Natural)) return Tribool::True;
+            }
+            return Tribool::Unknown;
+        }
         default:               return Tribool::Unknown;
     }
 }
 
-// ============================================================
 // Public query methods — dispatch based on node type
-// ============================================================
 
 // These public methods are called by the QueryInterface for composite nodes.
 // They inspect the root node type and dispatch to the appropriate inference method.
 
 Tribool InferenceEngine::query_positive(const SymbolicExpr& expr) const {
     if (!expr.root) return Tribool::Unknown;
+
+    // Depth guard: detect cycles and enforce depth limit
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
 
     // Handle NumberNode: determine sign directly from numeric value
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
@@ -109,10 +209,14 @@ Tribool InferenceEngine::query_positive(const SymbolicExpr& expr) const {
     }
 
     if (auto add = std::dynamic_pointer_cast<AddNode>(expr.root)) {
-        return infer_add_sign(*add, Sign::Positive);
+        auto result = infer_add_sign(*add, Sign::Positive);
+        if (result != Tribool::Unknown) return result;
+        return infer_sign_from_relations(expr, Sign::Positive);
     }
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
-        return infer_multiply_sign(*mul, Sign::Positive);
+        auto result = infer_multiply_sign(*mul, Sign::Positive);
+        if (result != Tribool::Unknown) return result;
+        return infer_sign_from_relations(expr, Sign::Positive);
     }
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(expr.root)) {
         return infer_power_property(*pow, Sign::Positive);
@@ -120,11 +224,16 @@ Tribool InferenceEngine::query_positive(const SymbolicExpr& expr) const {
     if (auto func = std::dynamic_pointer_cast<FunctionNode>(expr.root)) {
         return infer_function_property(*func, Sign::Positive);
     }
-    return Tribool::Unknown;
+    // For other expression types (e.g., variables handled above), check relations
+    return infer_sign_from_relations(expr, Sign::Positive);
 }
 
 Tribool InferenceEngine::query_negative(const SymbolicExpr& expr) const {
     if (!expr.root) return Tribool::Unknown;
+
+    // Depth guard: detect cycles and enforce depth limit
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
 
     // Handle NumberNode
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
@@ -174,6 +283,10 @@ Tribool InferenceEngine::query_negative(const SymbolicExpr& expr) const {
 Tribool InferenceEngine::query_nonnegative(const SymbolicExpr& expr) const {
     if (!expr.root) return Tribool::Unknown;
 
+    // Depth guard: detect cycles and enforce depth limit
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
+
     // Handle NumberNode
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
         if (num->is_zero()) return Tribool::True;
@@ -201,10 +314,14 @@ Tribool InferenceEngine::query_nonnegative(const SymbolicExpr& expr) const {
     }
 
     if (auto add = std::dynamic_pointer_cast<AddNode>(expr.root)) {
-        return infer_add_sign(*add, Sign::NonNegative);
+        auto result = infer_add_sign(*add, Sign::NonNegative);
+        if (result != Tribool::Unknown) return result;
+        return infer_sign_from_relations(expr, Sign::NonNegative);
     }
     if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
-        return infer_multiply_sign(*mul, Sign::NonNegative);
+        auto result = infer_multiply_sign(*mul, Sign::NonNegative);
+        if (result != Tribool::Unknown) return result;
+        return infer_sign_from_relations(expr, Sign::NonNegative);
     }
     if (auto pow = std::dynamic_pointer_cast<PowerNode>(expr.root)) {
         return infer_power_property(*pow, Sign::NonNegative);
@@ -217,6 +334,10 @@ Tribool InferenceEngine::query_nonnegative(const SymbolicExpr& expr) const {
 
 Tribool InferenceEngine::query_nonpositive(const SymbolicExpr& expr) const {
     if (!expr.root) return Tribool::Unknown;
+
+    // Depth guard: detect cycles and enforce depth limit
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
 
     // Handle NumberNode
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
@@ -262,6 +383,10 @@ Tribool InferenceEngine::query_nonpositive(const SymbolicExpr& expr) const {
 Tribool InferenceEngine::query_real(const SymbolicExpr& expr) const {
     if (!expr.root) return Tribool::Unknown;
 
+    // Depth guard: detect cycles and enforce depth limit
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
+
     // Handle NumberNode: finite numbers are Real
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
         if (std::holds_alternative<BigInt>(num->value)) return Tribool::True;
@@ -297,6 +422,10 @@ Tribool InferenceEngine::query_real(const SymbolicExpr& expr) const {
 
 Tribool InferenceEngine::query_integer(const SymbolicExpr& expr) const {
     if (!expr.root) return Tribool::Unknown;
+
+    // Depth guard: detect cycles and enforce depth limit
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
 
     // Handle NumberNode: BigInt values are Integer
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
@@ -338,6 +467,10 @@ Tribool InferenceEngine::query_integer(const SymbolicExpr& expr) const {
 
 Tribool InferenceEngine::query_nonzero(const SymbolicExpr& expr) const {
     if (!expr.root) return Tribool::Unknown;
+
+    // Depth guard: detect cycles and enforce depth limit
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
 
     // Handle NumberNode
     if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
@@ -388,12 +521,280 @@ Tribool InferenceEngine::query_nonzero(const SymbolicExpr& expr) const {
     return Tribool::Unknown;
 }
 
-// ============================================================
+// Subtraction sign inference
+
+Tribool InferenceEngine::infer_subtraction_sign(const AddNode& node, Sign target) const {
+    // Subtraction pattern: AddNode with operands where some are negated
+    // Negation is represented as MultiplyNode([NumberNode(-1), subtrahend])
+
+    if (node.operands.size() != 2) return Tribool::Unknown;
+
+    // Identify which operand is the negated one (subtrahend) and which is the minuend
+    std::shared_ptr<SymbolicNode> minuend_node;
+    std::shared_ptr<SymbolicNode> subtrahend_node;
+
+    for (const auto& operand : node.operands) {
+        auto mul = std::dynamic_pointer_cast<MultiplyNode>(operand);
+        if (mul && mul->operands.size() == 2) {
+            // Check if one of the multiply operands is NumberNode(-1)
+            bool found_neg_one = false;
+            std::shared_ptr<SymbolicNode> other_operand;
+            for (const auto& mul_op : mul->operands) {
+                auto num = std::dynamic_pointer_cast<NumberNode>(mul_op);
+                if (num) {
+                    // Check if it's -1
+                    bool is_neg_one = false;
+                    if (std::holds_alternative<BigInt>(num->value)) {
+                        is_neg_one = (std::get<BigInt>(num->value) == BigInt(-1));
+                    } else if (std::holds_alternative<Rational>(num->value)) {
+                        is_neg_one = (std::get<Rational>(num->value) == Rational(-1));
+                    } else if (std::holds_alternative<lmmc_real_t>(num->value)) {
+                        lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+                        is_neg_one = (std::isfinite(v) && v == -1.0);
+                    }
+                    if (is_neg_one) {
+                        found_neg_one = true;
+                        continue;
+                    }
+                }
+                other_operand = mul_op;
+            }
+            if (found_neg_one && other_operand) {
+                subtrahend_node = other_operand;
+            } else {
+                minuend_node = operand;
+            }
+        } else {
+            minuend_node = operand;
+        }
+    }
+
+    // Must have both minuend and subtrahend identified
+    if (!minuend_node || !subtrahend_node) return Tribool::Unknown;
+
+    SymbolicExpr minuend_expr;
+    minuend_expr.root = minuend_node;
+    SymbolicExpr subtrahend_expr;
+    subtrahend_expr.root = subtrahend_node;
+
+    // Query signs of minuend and subtrahend
+    Tribool min_pos = query_positive(minuend_expr);
+    Tribool min_neg = query_negative(minuend_expr);
+    Tribool sub_pos = query_positive(subtrahend_expr);
+    Tribool sub_neg = query_negative(subtrahend_expr);
+
+    // Subtraction rules:
+    // positive - negative → positive (because positive + positive = positive)
+    // negative - positive → negative (because negative + negative = negative)
+    // positive - positive → unknown (could be either)
+    // negative - negative → unknown (could be either)
+
+    if (min_pos == Tribool::True && sub_neg == Tribool::True) {
+        // positive - negative = positive + positive → positive
+        switch (target) {
+            case Sign::Positive:    return Tribool::True;
+            case Sign::NonNegative: return Tribool::True;
+            case Sign::NonZero:     return Tribool::True;
+            case Sign::Negative:    return Tribool::False;
+            case Sign::NonPositive: return Tribool::False;
+            case Sign::Zero:        return Tribool::False;
+        }
+    }
+
+    if (min_neg == Tribool::True && sub_pos == Tribool::True) {
+        // negative - positive = negative + negative → negative
+        switch (target) {
+            case Sign::Negative:    return Tribool::True;
+            case Sign::NonPositive: return Tribool::True;
+            case Sign::NonZero:     return Tribool::True;
+            case Sign::Positive:    return Tribool::False;
+            case Sign::NonNegative: return Tribool::False;
+            case Sign::Zero:        return Tribool::False;
+        }
+    }
+
+    // NonNegative minuend - NonPositive subtrahend → NonNegative
+    // (because nonneg + nonneg = nonneg)
+    Tribool min_nn = query_nonnegative(minuend_expr);
+    Tribool sub_np = query_nonpositive(subtrahend_expr);
+    if (min_nn == Tribool::True && sub_np == Tribool::True) {
+        switch (target) {
+            case Sign::NonNegative: return Tribool::True;
+            case Sign::Negative:    return Tribool::False;
+            default: break;
+        }
+    }
+
+    // NonPositive minuend - NonNegative subtrahend → NonPositive
+    // (because nonpos + nonpos = nonpos)
+    Tribool min_np = query_nonpositive(minuend_expr);
+    Tribool sub_nn = query_nonnegative(subtrahend_expr);
+    if (min_np == Tribool::True && sub_nn == Tribool::True) {
+        switch (target) {
+            case Sign::NonPositive: return Tribool::True;
+            case Sign::Positive:    return Tribool::False;
+            default: break;
+        }
+    }
+
+    return Tribool::Unknown;
+}
+
+// Algebraic / Transcendental / Finite / Divergent queries
+
+Tribool InferenceEngine::query_algebraic(const SymbolicExpr& expr) const {
+    if (!expr.root) return Tribool::Unknown;
+
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
+
+    // NumberNode: BigInt and Rational are algebraic; finite doubles are Unknown
+    if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
+        if (std::holds_alternative<BigInt>(num->value)) return Tribool::True;
+        if (std::holds_alternative<Rational>(num->value)) return Tribool::True;
+        return Tribool::Unknown;
+    }
+
+    // VariableNode: check if domain is Algebraic or more specific
+    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+        const auto& props = ctx_.current_properties();
+        // Domain hierarchy: Algebraic ⊃ Rational ⊃ Integer ⊃ Natural ⊃ PositiveInt
+        if (props.has_domain(var->name, Domain::Algebraic)) return Tribool::True;
+        // If transcendental, definitely not algebraic
+        if (props.is_transcendental(var->name)) return Tribool::False;
+        return Tribool::Unknown;
+    }
+
+    // Composite expressions: return Unknown for now
+    return Tribool::Unknown;
+}
+
+Tribool InferenceEngine::query_transcendental(const SymbolicExpr& expr) const {
+    if (!expr.root) return Tribool::Unknown;
+
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
+
+    // NumberNode: integers and rationals are algebraic, not transcendental
+    if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
+        if (std::holds_alternative<BigInt>(num->value)) return Tribool::False;
+        if (std::holds_alternative<Rational>(num->value)) return Tribool::False;
+        return Tribool::Unknown;
+    }
+
+    // VariableNode: check the transcendental flag
+    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+        const auto& props = ctx_.current_properties();
+        if (props.is_transcendental(var->name)) return Tribool::True;
+        // If domain is Algebraic or more specific, not transcendental
+        if (props.has_domain(var->name, Domain::Algebraic)) return Tribool::False;
+        return Tribool::Unknown;
+    }
+
+    // Composite expressions: return Unknown for now
+    return Tribool::Unknown;
+}
+
+Tribool InferenceEngine::query_finite(const SymbolicExpr& expr) const {
+    if (!expr.root) return Tribool::Unknown;
+
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
+
+    // NumberNode: finite numeric values are Finite
+    if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
+        if (std::holds_alternative<BigInt>(num->value)) return Tribool::True;
+        if (std::holds_alternative<Rational>(num->value)) return Tribool::True;
+        if (std::holds_alternative<lmmc_real_t>(num->value)) {
+            lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+            return std::isfinite(v) ? Tribool::True : Tribool::False;
+        }
+        return Tribool::Unknown;
+    }
+
+    // VariableNode: check Finiteness in PropertyStore
+    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+        const auto& props = ctx_.current_properties();
+        Finiteness f = props.get_finiteness(var->name);
+        if (f == Finiteness::Finite) return Tribool::True;
+        if (f == Finiteness::Divergent) return Tribool::False;
+        return Tribool::Unknown;
+    }
+
+    // Composite expressions: return Unknown for now
+    return Tribool::Unknown;
+}
+
+Tribool InferenceEngine::query_divergent(const SymbolicExpr& expr) const {
+    if (!expr.root) return Tribool::Unknown;
+
+    DepthGuard guard(*this, expr.root.get());
+    if (guard.should_abort()) return Tribool::Unknown;
+
+    // NumberNode: finite numeric values are not divergent
+    if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
+        if (std::holds_alternative<BigInt>(num->value)) return Tribool::False;
+        if (std::holds_alternative<Rational>(num->value)) return Tribool::False;
+        if (std::holds_alternative<lmmc_real_t>(num->value)) {
+            lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+            return std::isfinite(v) ? Tribool::False : Tribool::Unknown;
+        }
+        return Tribool::Unknown;
+    }
+
+    // VariableNode: check Finiteness in PropertyStore
+    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+        const auto& props = ctx_.current_properties();
+        Finiteness f = props.get_finiteness(var->name);
+        if (f == Finiteness::Divergent) return Tribool::True;
+        if (f == Finiteness::Finite) return Tribool::False;
+        return Tribool::Unknown;
+    }
+
+    // Composite expressions: return Unknown for now
+    return Tribool::Unknown;
+}
+
 // Addition sign inference
-// ============================================================
 
 Tribool InferenceEngine::infer_add_sign(const AddNode& node, Sign target) const {
     if (node.operands.empty()) return Tribool::Unknown;
+
+    // First, try subtraction pattern detection for 2-operand AddNodes
+    if (node.operands.size() == 2) {
+        // Check if one operand is a negated term (MultiplyNode with -1 coefficient)
+        bool has_negated = false;
+        for (const auto& operand : node.operands) {
+            auto mul = std::dynamic_pointer_cast<MultiplyNode>(operand);
+            if (mul && mul->operands.size() == 2) {
+                for (const auto& mul_op : mul->operands) {
+                    auto num = std::dynamic_pointer_cast<NumberNode>(mul_op);
+                    if (num) {
+                        bool is_neg_one = false;
+                        if (std::holds_alternative<BigInt>(num->value)) {
+                            is_neg_one = (std::get<BigInt>(num->value) == BigInt(-1));
+                        } else if (std::holds_alternative<Rational>(num->value)) {
+                            is_neg_one = (std::get<Rational>(num->value) == Rational(-1));
+                        } else if (std::holds_alternative<lmmc_real_t>(num->value)) {
+                            lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+                            is_neg_one = (std::isfinite(v) && v == -1.0);
+                        }
+                        if (is_neg_one) {
+                            has_negated = true;
+                            break;
+                        }
+                    }
+                }
+                if (has_negated) break;
+            }
+        }
+        if (has_negated) {
+            Tribool sub_result = infer_subtraction_sign(node, target);
+            if (sub_result != Tribool::Unknown) {
+                return sub_result;
+            }
+        }
+    }
 
     // For sign inference on addition:
     // - If all operands have the target sign property → sum has that property
@@ -430,9 +831,120 @@ Tribool InferenceEngine::infer_add_sign(const AddNode& node, Sign target) const 
     return Tribool::Unknown;
 }
 
-// ============================================================
+// Sign inference from relational constraints
+
+Tribool InferenceEngine::infer_sign_from_relations(const SymbolicExpr& expr, Sign target) const {
+    if (!expr.root) return Tribool::Unknown;
+
+    const auto& rel_store = ctx_.current_relations();
+
+    // Create a zero expression for comparison
+    SymbolicExpr zero_expr;
+    zero_expr.root = std::make_shared<NumberNode>(BigInt(0));
+    if (auto add = std::dynamic_pointer_cast<AddNode>(expr.root)) {
+        if (add->operands.empty()) return Tribool::Unknown;
+
+        bool all_gt_zero = true;
+        bool all_geq_zero = true;
+
+        for (const auto& operand : add->operands) {
+            SymbolicExpr op_expr;
+            op_expr.root = operand;
+
+            bool op_gt = rel_store.has_relation(op_expr, zero_expr, RelationalNode::Op::GT);
+            bool op_geq = rel_store.has_relation(op_expr, zero_expr, RelationalNode::Op::GEQ);
+
+            // Also check if the operand is known positive/non-negative via sign properties
+            if (!op_gt) {
+                if (auto var = std::dynamic_pointer_cast<VariableNode>(operand)) {
+                    op_gt = ctx_.current_properties().has_sign(var->name, Sign::Positive);
+                } else if (auto num = std::dynamic_pointer_cast<NumberNode>(operand)) {
+                    op_gt = num->is_positive();
+                }
+            }
+            if (!op_geq && !op_gt) {
+                if (auto var = std::dynamic_pointer_cast<VariableNode>(operand)) {
+                    op_geq = ctx_.current_properties().has_sign(var->name, Sign::NonNegative);
+                } else if (auto num = std::dynamic_pointer_cast<NumberNode>(operand)) {
+                    op_geq = num->is_zero() || num->is_positive();
+                }
+            }
+
+            if (!op_gt) all_gt_zero = false;
+            if (!op_gt && !op_geq) all_geq_zero = false;
+        }
+
+        if (target == Sign::Positive && all_gt_zero) return Tribool::True;
+        if (target == Sign::NonNegative && all_geq_zero) return Tribool::True;
+    }
+    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
+        if (mul->operands.empty()) return Tribool::Unknown;
+
+        if (target == Sign::Positive) {
+            bool all_gt_zero = true;
+
+            for (const auto& operand : mul->operands) {
+                SymbolicExpr op_expr;
+                op_expr.root = operand;
+
+                bool op_gt = rel_store.has_relation(op_expr, zero_expr, RelationalNode::Op::GT);
+
+                // Also check sign properties
+                if (!op_gt) {
+                    if (auto var = std::dynamic_pointer_cast<VariableNode>(operand)) {
+                        op_gt = ctx_.current_properties().has_sign(var->name, Sign::Positive);
+                    } else if (auto num = std::dynamic_pointer_cast<NumberNode>(operand)) {
+                        op_gt = num->is_positive();
+                    }
+                }
+
+                if (!op_gt) {
+                    all_gt_zero = false;
+                    break;
+                }
+            }
+
+            if (all_gt_zero) return Tribool::True;
+        }
+    }
+    if (target == Sign::Positive) {
+        const auto& relations = rel_store.get_relations();
+        for (const auto& rel : relations) {
+            if (rel.op != RelationalNode::Op::GT) continue;
+
+            // Check if expr matches the LHS of the relation
+            if (!rel.lhs.root || !expr.root) continue;
+            if (!rel.lhs.root->equals(*expr.root)) continue;
+
+            // Check if the RHS (y) is non-negative
+            if (!rel.rhs.root) continue;
+
+            // Check if RHS is a non-negative number
+            if (auto rhs_num = std::dynamic_pointer_cast<NumberNode>(rel.rhs.root)) {
+                if (rhs_num->is_zero() || rhs_num->is_positive()) {
+                    return Tribool::True;
+                }
+            }
+
+            // Check if RHS is a variable with NonNegative sign
+            if (auto rhs_var = std::dynamic_pointer_cast<VariableNode>(rel.rhs.root)) {
+                if (ctx_.current_properties().has_sign(rhs_var->name, Sign::NonNegative)) {
+                    return Tribool::True;
+                }
+            }
+
+            // Check if RHS has a GEQ 0 relation
+            if (rel_store.has_relation(rel.rhs, zero_expr, RelationalNode::Op::GEQ) ||
+                rel_store.has_relation(rel.rhs, zero_expr, RelationalNode::Op::GT)) {
+                return Tribool::True;
+            }
+        }
+    }
+
+    return Tribool::Unknown;
+}
+
 // Addition domain inference
-// ============================================================
 
 Tribool InferenceEngine::infer_add_domain(const AddNode& node, Domain target) const {
     if (node.operands.empty()) return Tribool::Unknown;
@@ -468,12 +980,130 @@ Tribool InferenceEngine::infer_add_domain(const AddNode& node, Domain target) co
     return Tribool::True;
 }
 
-// ============================================================
+// Division sign inference
+
+Tribool InferenceEngine::infer_division_sign(const MultiplyNode& node, Sign target) const {
+    // Division pattern: MultiplyNode with exactly 2 children where one is PowerNode(den, -1)
+    if (node.operands.size() != 2) return Tribool::Unknown;
+
+    // Find the PowerNode with exponent -1 (denominator) and the other operand (numerator)
+    std::shared_ptr<SymbolicNode> numerator_node;
+    std::shared_ptr<SymbolicNode> denominator_node;
+
+    for (const auto& operand : node.operands) {
+        auto pow_node = std::dynamic_pointer_cast<PowerNode>(operand);
+        if (pow_node && is_exponent_neg_one(pow_node->exponent)) {
+            denominator_node = pow_node->base;
+        } else {
+            numerator_node = operand;
+        }
+    }
+
+    // Must have exactly one denominator and one numerator
+    if (!denominator_node || !numerator_node) return Tribool::Unknown;
+
+    SymbolicExpr num_expr;
+    num_expr.root = numerator_node;
+    SymbolicExpr den_expr;
+    den_expr.root = denominator_node;
+
+    // Check if denominator is zero → return Unknown for all sign queries
+    Tribool den_nn = query_nonnegative(den_expr);
+    Tribool den_np = query_nonpositive(den_expr);
+    if (den_nn == Tribool::True && den_np == Tribool::True) {
+        // Denominator is zero
+        return Tribool::Unknown;
+    }
+
+    // Determine numerator sign
+    Tribool num_pos = query_positive(num_expr);
+    Tribool num_neg = query_negative(num_expr);
+
+    // Determine denominator sign
+    Tribool den_pos = query_positive(den_expr);
+    Tribool den_neg = query_negative(den_expr);
+
+    // If denominator sign is unknown, return Unknown
+    if (den_pos != Tribool::True && den_neg != Tribool::True) {
+        return Tribool::Unknown;
+    }
+
+    // If numerator sign is unknown, return Unknown
+    if (num_pos != Tribool::True && num_neg != Tribool::True) {
+        // Check if numerator is zero
+        Tribool num_nn = query_nonnegative(num_expr);
+        Tribool num_np_check = query_nonpositive(num_expr);
+        if (num_nn == Tribool::True && num_np_check == Tribool::True) {
+            // Numerator is zero → result is zero
+            switch (target) {
+                case Sign::Zero:        return Tribool::True;
+                case Sign::NonNegative: return Tribool::True;
+                case Sign::NonPositive: return Tribool::True;
+                case Sign::Positive:    return Tribool::False;
+                case Sign::Negative:    return Tribool::False;
+                case Sign::NonZero:     return Tribool::False;
+            }
+        }
+        return Tribool::Unknown;
+    }
+
+    // Apply sign table for division
+    // positive ÷ positive → positive
+    // negative ÷ negative → positive
+    // positive ÷ negative → negative
+    // negative ÷ positive → negative
+    bool result_positive = (num_pos == Tribool::True && den_pos == Tribool::True) ||
+                           (num_neg == Tribool::True && den_neg == Tribool::True);
+    bool result_negative = (num_pos == Tribool::True && den_neg == Tribool::True) ||
+                           (num_neg == Tribool::True && den_pos == Tribool::True);
+
+    if (result_positive) {
+        switch (target) {
+            case Sign::Positive:    return Tribool::True;
+            case Sign::NonNegative: return Tribool::True;
+            case Sign::NonZero:     return Tribool::True;
+            case Sign::Negative:    return Tribool::False;
+            case Sign::NonPositive: return Tribool::False;
+            case Sign::Zero:        return Tribool::False;
+        }
+    }
+
+    if (result_negative) {
+        switch (target) {
+            case Sign::Negative:    return Tribool::True;
+            case Sign::NonPositive: return Tribool::True;
+            case Sign::NonZero:     return Tribool::True;
+            case Sign::Positive:    return Tribool::False;
+            case Sign::NonNegative: return Tribool::False;
+            case Sign::Zero:        return Tribool::False;
+        }
+    }
+
+    return Tribool::Unknown;
+}
+
 // Multiplication sign inference
-// ============================================================
 
 Tribool InferenceEngine::infer_multiply_sign(const MultiplyNode& node, Sign target) const {
     if (node.operands.empty()) return Tribool::Unknown;
+
+    // Check for division pattern: exactly 2 operands with one being PowerNode(den, -1)
+    if (node.operands.size() == 2) {
+        bool has_power_neg_one = false;
+        for (const auto& operand : node.operands) {
+            auto pow_node = std::dynamic_pointer_cast<PowerNode>(operand);
+            if (pow_node && is_exponent_neg_one(pow_node->exponent)) {
+                has_power_neg_one = true;
+                break;
+            }
+        }
+        if (has_power_neg_one) {
+            Tribool div_result = infer_division_sign(node, target);
+            if (div_result != Tribool::Unknown) {
+                return div_result;
+            }
+        }
+    }
 
     // Step 1: Check if any operand is Zero → product is Zero
     bool has_zero = false;
@@ -616,9 +1246,7 @@ Tribool InferenceEngine::infer_multiply_sign(const MultiplyNode& node, Sign targ
     return Tribool::Unknown;
 }
 
-// ============================================================
 // Multiplication domain inference
-// ============================================================
 
 Tribool InferenceEngine::infer_multiply_domain(const MultiplyNode& node, Domain target) const {
     if (node.operands.empty()) return Tribool::Unknown;
@@ -654,9 +1282,7 @@ Tribool InferenceEngine::infer_multiply_domain(const MultiplyNode& node, Domain 
     return Tribool::Unknown;
 }
 
-// ============================================================
 // Power expression inference
-// ============================================================
 
 /**
  * @brief Helper: check if a NumberNode holds an integer value.
@@ -848,9 +1474,7 @@ Tribool InferenceEngine::infer_power_domain(const PowerNode& node, Domain target
     return Tribool::Unknown;
 }
 
-// ============================================================
 // Function inference
-// ============================================================
 
 Tribool InferenceEngine::infer_function_property(const FunctionNode& node, Sign target) const {
     // Need at least one argument for all built-in function rules
@@ -900,16 +1524,32 @@ Tribool InferenceEngine::infer_function_property(const FunctionNode& node, Sign 
 
         case FunctionNode::FuncType::Abs: {
             // abs(Real) → NonNegative, Real
+            // abs(Positive) → Positive (Req 18.2: |x| = x when x is Positive)
+            // abs(NonZero) → Positive (|x| > 0 when x ≠ 0)
             Tribool arg_real = query_real(arg_expr);
             if (arg_real != Tribool::True) return Tribool::Unknown;
+
+            // Check if argument is known Positive, Negative, or NonZero
+            Tribool arg_pos = query_positive(arg_expr);
+            Tribool arg_neg = query_negative(arg_expr);
+            Tribool arg_nz = query_nonzero(arg_expr);
+
+            // If argument is Positive or Negative (or NonZero), abs is Positive
+            bool abs_is_positive = (arg_pos == Tribool::True) ||
+                                   (arg_neg == Tribool::True) ||
+                                   (arg_nz == Tribool::True);
 
             switch (target) {
                 case Sign::NonNegative: return Tribool::True;
                 case Sign::Negative:    return Tribool::False;
-                case Sign::NonPositive: return Tribool::Unknown; // abs could be zero
-                case Sign::Positive:    return Tribool::Unknown; // abs could be zero
-                case Sign::Zero:        return Tribool::Unknown; // depends on argument
-                case Sign::NonZero:     return Tribool::Unknown; // depends on argument
+                case Sign::Positive:
+                    return abs_is_positive ? Tribool::True : Tribool::Unknown;
+                case Sign::NonZero:
+                    return abs_is_positive ? Tribool::True : Tribool::Unknown;
+                case Sign::NonPositive:
+                    return abs_is_positive ? Tribool::False : Tribool::Unknown;
+                case Sign::Zero:
+                    return abs_is_positive ? Tribool::False : Tribool::Unknown;
             }
             return Tribool::Unknown;
         }
@@ -972,13 +1612,16 @@ Tribool InferenceEngine::infer_function_domain(const FunctionNode& node, Domain 
 
     switch (node.type) {
         case FunctionNode::FuncType::Exp: {
-            // exp(Real) → Real
+            // exp(Rational|Real) → Real (Req 2.2)
             if (target == Domain::Real) {
                 Tribool arg_real = query_real(arg_expr);
                 if (arg_real == Tribool::True) return Tribool::True;
                 // Integer implies Real
                 Tribool arg_int = query_integer(arg_expr);
                 if (arg_int == Tribool::True) return Tribool::True;
+                // Rational implies Real
+                Tribool arg_rational = query_domain_of(arg_expr, Domain::Rational);
+                if (arg_rational == Tribool::True) return Tribool::True;
             }
             // exp does not produce integers in general
             return Tribool::Unknown;
@@ -1023,10 +1666,14 @@ Tribool InferenceEngine::infer_function_domain(const FunctionNode& node, Domain 
         }
 
         case FunctionNode::FuncType::Ln: {
-            // ln(Positive) → Real
+            // ln(Integer) → Real (Req 2.3); ln(Positive) → Real
             if (target == Domain::Real) {
+                // If argument is positive, ln is defined and produces Real
                 Tribool arg_positive = query_positive(arg_expr);
                 if (arg_positive == Tribool::True) return Tribool::True;
+                // If argument has Integer domain, result is Real when defined (Req 2.3)
+                Tribool arg_int = query_integer(arg_expr);
+                if (arg_int == Tribool::True) return Tribool::True;
             }
             return Tribool::Unknown;
         }
@@ -1065,9 +1712,7 @@ Tribool InferenceEngine::infer_function_domain(const FunctionNode& node, Domain 
     }
 }
 
-// ============================================================
 // Interval propagation
-// ============================================================
 
 /**
  * @brief Helper: extract a numeric double value from an Endpoint.
@@ -1373,9 +2018,169 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
     return std::nullopt;
 }
 
-// ============================================================
-// Monotonicity deduction
-// ============================================================
+// Periodicity inference
+
+Tribool InferenceEngine::query_periodic(const SymbolicExpr& expr) const {
+    if (!expr.root) return Tribool::Unknown;
+
+    // FunctionNode: sin, cos, tan are periodic
+    if (auto func = std::dynamic_pointer_cast<FunctionNode>(expr.root)) {
+        switch (func->type) {
+            case FunctionNode::FuncType::Sin:
+            case FunctionNode::FuncType::Cos:
+            case FunctionNode::FuncType::Tan:
+                return Tribool::True;
+            default:
+                break;
+        }
+    }
+
+    // VariableNode: check PropertyStore for declared periodicity
+    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+        const auto& props = ctx_.current_properties();
+        if (props.is_periodic(var->name)) return Tribool::True;
+    }
+
+    return Tribool::Unknown;
+}
+
+std::optional<SymbolicExpr> InferenceEngine::infer_period(const SymbolicExpr& expr) const {
+    if (!expr.root) return std::nullopt;
+
+    // FunctionNode: known periods for trig functions
+    if (auto func = std::dynamic_pointer_cast<FunctionNode>(expr.root)) {
+        switch (func->type) {
+            case FunctionNode::FuncType::Sin:
+            case FunctionNode::FuncType::Cos: {
+                // Period = 2*pi
+                auto two = std::make_shared<NumberNode>(static_cast<lmmc_real_t>(2.0));
+                auto pi_val = std::make_shared<NumberNode>(static_cast<lmmc_real_t>(M_PI));
+                auto two_pi = std::make_shared<MultiplyNode>(
+                    std::vector<std::shared_ptr<SymbolicNode>>{two, pi_val});
+                SymbolicExpr period;
+                period.root = two_pi;
+                return period;
+            }
+            case FunctionNode::FuncType::Tan: {
+                // Period = pi
+                auto pi_val = std::make_shared<NumberNode>(static_cast<lmmc_real_t>(M_PI));
+                SymbolicExpr period;
+                period.root = pi_val;
+                return period;
+            }
+            default:
+                break;
+        }
+    }
+
+    // VariableNode: check PropertyStore for declared period
+    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+        const auto& props = ctx_.current_properties();
+        auto stored_period = props.get_period(var->name);
+        if (stored_period.has_value() && *stored_period) {
+            return *(*stored_period); // dereference optional<shared_ptr<SymbolicExpr>>
+        }
+    }
+
+    return std::nullopt;
+}
+
+// Monotonicity inference
+
+/**
+ * @brief Helper: check if a MultiplyNode represents negation (multiplication by -1).
+ * Returns the inner expression if it's a negation, nullptr otherwise.
+ */
+static std::shared_ptr<SymbolicNode> detect_negation(const std::shared_ptr<SymbolicNode>& node) {
+    auto mul = std::dynamic_pointer_cast<MultiplyNode>(node);
+    if (!mul || mul->operands.size() != 2) return nullptr;
+
+    // Check if one operand is -1
+    for (size_t i = 0; i < 2; ++i) {
+        auto num = std::dynamic_pointer_cast<NumberNode>(mul->operands[i]);
+        if (!num) continue;
+
+        bool is_neg_one = false;
+        if (std::holds_alternative<BigInt>(num->value)) {
+            is_neg_one = (std::get<BigInt>(num->value) == BigInt(-1));
+        } else if (std::holds_alternative<Rational>(num->value)) {
+            is_neg_one = (std::get<Rational>(num->value) == Rational(-1));
+        } else if (std::holds_alternative<lmmc_real_t>(num->value)) {
+            is_neg_one = (std::get<lmmc_real_t>(num->value) == -1.0);
+        }
+
+        if (is_neg_one) {
+            return mul->operands[1 - i]; // return the other operand
+        }
+    }
+    return nullptr;
+}
+
+Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
+                                                  const std::string& var,
+                                                  const Interval& interval) const {
+    if (!expr.root) return Monotonicity::Unknown;
+
+    // FunctionNode: auto-infer for known functions
+    if (auto func = std::dynamic_pointer_cast<FunctionNode>(expr.root)) {
+        // Check that the function argument is the queried variable
+        if (func->arguments.empty()) return Monotonicity::Unknown;
+        auto arg_var = std::dynamic_pointer_cast<VariableNode>(func->arguments[0]);
+        if (!arg_var || arg_var->name != var) return Monotonicity::Unknown;
+
+        switch (func->type) {
+            case FunctionNode::FuncType::Exp:
+                // exp is strictly increasing on all of ℝ
+                return Monotonicity::Increasing;
+
+            case FunctionNode::FuncType::Ln: {
+                // ln is strictly increasing on ℝ⁺ (positive reals)
+                // Check if the interval is within positive reals
+                // If the lower bound is > 0 (or open at 0), ln is increasing
+                auto lo = endpoint_to_double(interval.lower);
+                if (lo.has_value() && *lo > 0.0) {
+                    return Monotonicity::Increasing;
+                }
+                // If lower is open at 0, also increasing
+                if (lo.has_value() && *lo == 0.0 && interval.lower.is_open) {
+                    return Monotonicity::Increasing;
+                }
+                // If interval is (0, +inf) or similar positive interval
+                if (interval.lower.is_neg_infinity) {
+                    return Monotonicity::Unknown; // ln not defined on negative reals
+                }
+                return Monotonicity::Unknown;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    // Negation: multiply by -1 reverses monotonicity
+    if (auto inner = detect_negation(expr.root)) {
+        SymbolicExpr inner_expr;
+        inner_expr.root = inner;
+        Monotonicity inner_mono = infer_monotonicity(inner_expr, var, interval);
+        switch (inner_mono) {
+            case Monotonicity::Increasing:    return Monotonicity::Decreasing;
+            case Monotonicity::Decreasing:    return Monotonicity::Increasing;
+            case Monotonicity::NonDecreasing:  return Monotonicity::NonIncreasing;
+            case Monotonicity::NonIncreasing:  return Monotonicity::NonDecreasing;
+            default:                           return Monotonicity::Unknown;
+        }
+    }
+
+    // VariableNode: check PropertyStore for declared monotonicity
+    if (auto var_node = std::dynamic_pointer_cast<VariableNode>(expr.root)) {
+        const auto& props = ctx_.current_properties();
+        return props.get_monotonicity(var_node->name, var, interval);
+    }
+
+    return Monotonicity::Unknown;
+}
+
+// Monotonicity deduction (apply_monotonicity_rules)
 
 /**
  * @brief Helper: collect positive integer exponents that appear in PowerNode

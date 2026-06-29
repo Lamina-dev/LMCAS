@@ -11,6 +11,9 @@
 
 namespace lamina {
 
+// Forward declaration for optional assumption context integration
+class AssumptionContext;
+
 /** @brief 匹配结果映射，通配符名称 → 绑定的表达式 */
 using MatchMap = std::unordered_map<std::string, SymbolicExpr>;
 
@@ -24,11 +27,13 @@ public:
      * @param target 目标表达式
      * @param wildcards 模式中的通配符名称集合
      * @param results 匹配成功时输出绑定结果
+     * @param ctx 可选的假设上下文，用于条件评估（默认 nullptr 表示无假设）
      * @return 匹配成功返回 true
      */
     static bool match(const SymbolicExpr& pattern, const SymbolicExpr& target,
                       const std::unordered_set<std::string>& wildcards,
-                      MatchMap& results);
+                      MatchMap& results,
+                      const AssumptionContext* ctx = nullptr);
 
     /**
      * @brief 将绑定结果代入模板表达式
@@ -48,14 +53,23 @@ struct LAMINA_API Rule {
 
     std::function<bool(const MatchMap&)> condition; ///< 附加匹配条件（可选）
 
+    /// Assumption-aware condition: receives bindings and the assumption context.
+    /// If set, this is preferred over `condition` when a context is available.
+    std::function<bool(const MatchMap&, const AssumptionContext*)> assumption_condition;
+
     Rule(SymbolicExpr p, SymbolicExpr r, std::unordered_set<std::string> w,
          std::function<bool(const MatchMap&)> c = nullptr)
         : pattern(p), replacement(r), wildcards(w), condition(c) {}
+
+    Rule(SymbolicExpr p, SymbolicExpr r, std::unordered_set<std::string> w,
+         std::function<bool(const MatchMap&, const AssumptionContext*)> ac)
+        : pattern(p), replacement(r), wildcards(w), assumption_condition(ac) {}
 };
 
 /** @brief 基于规则的表达式重写引擎 */
 class LAMINA_API RewriteEngine {
     std::vector<Rule> rules;
+    const AssumptionContext* assumption_ctx_ = nullptr;
 
 public:
     /**
@@ -63,6 +77,23 @@ public:
      * @param rule 规则对象
      */
     void add_rule(const Rule& rule);
+
+    /**
+     * @brief 设置假设上下文，用于规则条件评估
+     *
+     * When set, the context is passed to rule condition functions during
+     * apply and apply_step. When nullptr, behavior is identical to the
+     * original implementation (conditions receive only the MatchMap).
+     *
+     * @param ctx 假设上下文指针（nullptr 表示不使用假设）
+     */
+    void set_assumption_context(const AssumptionContext* ctx);
+
+    /**
+     * @brief 获取当前假设上下文
+     * @return 当前假设上下文指针（可能为 nullptr）
+     */
+    const AssumptionContext* get_assumption_context() const { return assumption_ctx_; }
 
     /**
      * @brief 反复应用规则直到不动点或达到最大迭代次数

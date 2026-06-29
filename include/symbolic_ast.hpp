@@ -18,6 +18,19 @@
 #include <stdexcept>
 #include <atomic>
 
+#ifndef LAMINA_API
+#ifdef _WIN32
+#ifdef LAMINA_CORE_EXPORTS
+#define LAMINA_API __declspec(dllexport)
+#else
+#define LAMINA_API __declspec(dllimport)
+#endif
+#else
+#define LAMINA_API
+#endif
+#endif
+
+
 class SymbolicVisitor;
 class NumberNode;
 class VariableNode;
@@ -28,6 +41,13 @@ class FunctionNode;
 class MatrixNode;
 class RelationalNode;
 class LogicalNode;
+class TransformNode;
+class QuantifierNode;
+class SetBuilderNode;
+class PiecewiseNode;
+class SummationNode;
+class ProductNode_Op;
+class ComplexNode;
 
 /**
  * @brief 将一个哈希值混合到种子中，用于组合多个字段的哈希。
@@ -154,6 +174,13 @@ public:
     virtual void visit(MatrixNode& node) = 0;
     virtual void visit(RelationalNode& node) {}
     virtual void visit(LogicalNode& node) {}
+    virtual void visit(PiecewiseNode& node) {}
+    virtual void visit(SummationNode& node) {}
+    virtual void visit(ProductNode_Op& node) {}
+    virtual void visit(TransformNode& node) {}
+    virtual void visit(QuantifierNode& node) {}
+    virtual void visit(SetBuilderNode& node) {}
+    virtual void visit(ComplexNode& node) {}
 };
 
 /** @brief 基于节点哈希的哈希函数对象，用于无序容器。 */
@@ -213,6 +240,11 @@ public:
      * @return 简化后的节点
      */
     static std::shared_ptr<SymbolicNode> create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent);
+
+    /**
+     * @brief 创建复数节点，自动简化（若虚部为 0，则返回实部）。
+     */
+    static std::shared_ptr<SymbolicNode> create_complex(std::shared_ptr<SymbolicNode> real, std::shared_ptr<SymbolicNode> imag);
 };
 
 /**
@@ -321,6 +353,46 @@ public:
         }
         lmmc_real_t v = std::get<lmmc_real_t>(value);
         return std::isfinite(v) && v > 0.0;
+    }
+};
+
+/**
+ * @brief 复数节点，表示 real + imag * i。
+ */
+class ComplexNode : public SymbolicNode {
+public:
+    std::shared_ptr<SymbolicNode> real; ///< 实部
+    std::shared_ptr<SymbolicNode> imag; ///< 虚部
+
+    ComplexNode(std::shared_ptr<SymbolicNode> r, std::shared_ptr<SymbolicNode> i)
+        : real(std::move(r)), imag(std::move(i)) {}
+
+    int type_priority() const override { return -5; } // 在 NumberNode 和 VariableNode 之间
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, real->hash());
+        hash_combine(seed, imag->hash());
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const ComplexNode&>(other);
+        int cmp_r = real->compare(*o.real);
+        if (cmp_r != 0) return cmp_r;
+        return imag->compare(*o.imag);
+    }
+
+public:
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<ComplexNode>(real->clone(), imag->clone());
+    }
+    
+    bool is_zero() const override {
+        return real->is_zero() && imag->is_zero();
     }
 };
 
@@ -529,7 +601,17 @@ public:
         Ei,                                  ///< 指数积分 Ei(x)
         Si,                                  ///< 正弦积分 Si(x) = ∫₀ˣ sin(t)/t dt
         Ci,                                  ///< 余弦积分 Ci(x)
-        Li                                   ///< 对数积分 Li(x) = ∫₀ˣ 1/ln(t) dt
+        Li,                                  ///< 对数积分 Li(x) = ∫₀ˣ 1/ln(t) dt
+        Max,                                 ///< 最大值 max(a, b)
+        Min,                                 ///< 最小值 min(a, b)
+        Sgn,                                 ///< 符号函数 sgn(x) ∈ {-1, 0, 1}
+        Floor,                               ///< 下取整 ⌊x⌋
+        Ceil,                                ///< 上取整 ⌈x⌉
+        RealPart,                            ///< 实部 Re(z)
+        ImagPart,                            ///< 虚部 Im(z)
+        Conjugate,                           ///< 共轭 conj(z)
+        ComplexAbs,                          ///< 复数模 |z|
+        ComplexArg                           ///< 复数辐角 arg(z)
     };
 
     FuncType type;                                          ///< 函数类型
@@ -840,8 +922,10 @@ class LogicalNode : public SymbolicNode {
 public:
     /** @brief 逻辑运算符类型 */
     enum class Op {
-        And, ///< 逻辑与
-        Or   ///< 逻辑或
+        And,     ///< 逻辑与
+        Or,      ///< 逻辑或
+        Not,     ///< 逻辑非（一元运算，right 为 nullptr）
+        Implies  ///< 逻辑蕴含 A ⇒ B
     };
 
     std::shared_ptr<SymbolicNode> left;  ///< 左操作数
@@ -854,37 +938,422 @@ public:
     void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
     std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<LogicalNode>(left->clone(), right->clone(), op);
+        return std::make_shared<LogicalNode>(
+            left ? left->clone() : nullptr,
+            right ? right->clone() : nullptr,
+            op);
     }
 
     int type_priority() const override { return 101; }
 
     std::size_t compute_hash() const override {
         std::size_t h = std::hash<int>{}((int)op);
-        hash_combine(h, left->hash());
-        hash_combine(h, right->hash());
+        if (left) hash_combine(h, left->hash());
+        if (right) hash_combine(h, right->hash());
         return h;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const LogicalNode&>(other);
         if (op != o.op) return (int)op < (int)o.op ? -1 : 1;
-        int cmp = left->compare(*o.left);
-        if (cmp != 0) return cmp;
-        return right->compare(*o.right);
+        /// 处理一元 Not 运算（right 为 nullptr）
+        bool l_null = !left;
+        bool ol_null = !o.left;
+        if (l_null != ol_null) return l_null ? -1 : 1;
+        if (!l_null) {
+            int cmp = left->compare(*o.left);
+            if (cmp != 0) return cmp;
+        }
+        bool r_null = !right;
+        bool or_null = !o.right;
+        if (r_null != or_null) return r_null ? -1 : 1;
+        if (!r_null) {
+            return right->compare(*o.right);
+        }
+        return 0;
     }
 
     /**
      * @brief 将逻辑运算符转换为字符串表示。
      * @param op 逻辑运算符
-     * @return "And" 或 "Or"
+     * @return "And"、"Or"、"Not" 或 "Implies"
      */
     static std::string op_to_string(Op op) {
         switch(op) {
             case Op::And: return "And";
             case Op::Or: return "Or";
+            case Op::Not: return "Not";
+            case Op::Implies: return "Implies";
             default: return "?";
         }
+    }
+};
+
+/**
+ * @brief 分段函数节点，表示条件分支表达式。
+ *
+ * 存储有序的 (表达式, 条件) 对列表和可选的默认表达式。
+ * 条件应为 RelationalNode 或 LogicalNode 表达式。
+ */
+class PiecewiseNode : public SymbolicNode {
+public:
+    /** @brief 分支结构，包含表达式和对应条件。 */
+    struct Branch {
+        std::shared_ptr<SymbolicNode> expression; ///< 分支值
+        std::shared_ptr<SymbolicNode> condition;  ///< 条件（RelationalNode 或 LogicalNode）
+    };
+
+    std::vector<Branch> branches;                  ///< 有序分支列表
+    std::shared_ptr<SymbolicNode> default_expr;    ///< 可选的默认表达式（所有条件不满足时）
+
+    /**
+     * @brief 构造分段函数节点。
+     * @param br 分支列表
+     * @param def 默认表达式（可为 nullptr）
+     */
+    PiecewiseNode(std::vector<Branch> br, std::shared_ptr<SymbolicNode> def = nullptr)
+        : branches(std::move(br)), default_expr(std::move(def)) {}
+
+    int type_priority() const override { return 7; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        for (const auto& b : branches) {
+            hash_combine(seed, b.expression->hash());
+            hash_combine(seed, b.condition->hash());
+        }
+        if (default_expr) {
+            hash_combine(seed, default_expr->hash());
+        }
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const PiecewiseNode&>(other);
+        if (branches.size() != o.branches.size()) {
+            return branches.size() < o.branches.size() ? -1 : 1;
+        }
+        for (size_t i = 0; i < branches.size(); ++i) {
+            int cmp = branches[i].expression->compare(*o.branches[i].expression);
+            if (cmp != 0) return cmp;
+            cmp = branches[i].condition->compare(*o.branches[i].condition);
+            if (cmp != 0) return cmp;
+        }
+        bool has_def = (default_expr != nullptr);
+        bool o_has_def = (o.default_expr != nullptr);
+        if (has_def != o_has_def) return has_def ? 1 : -1;
+        if (has_def && o_has_def) {
+            return default_expr->compare(*o.default_expr);
+        }
+        return 0;
+    }
+
+public:
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<SymbolicNode> clone() const override {
+        std::vector<Branch> new_branches;
+        new_branches.reserve(branches.size());
+        for (const auto& b : branches) {
+            new_branches.push_back({b.expression->clone(), b.condition->clone()});
+        }
+        auto new_def = default_expr ? default_expr->clone() : nullptr;
+        return std::make_shared<PiecewiseNode>(std::move(new_branches), std::move(new_def));
+    }
+};
+
+/**
+ * @brief 求和节点，表示符号有限/无限求和 ∑_{k=a}^{b} f(k)。
+ */
+class SummationNode : public SymbolicNode {
+public:
+    std::shared_ptr<SymbolicNode> body;        ///< 通项 f(k)
+    std::string index_var;                      ///< 求和指标变量名
+    std::shared_ptr<SymbolicNode> lower_bound;  ///< 下界
+    std::shared_ptr<SymbolicNode> upper_bound;  ///< 上界（可为 Infinity）
+
+    /**
+     * @brief 构造求和节点。
+     * @param b 通项表达式
+     * @param idx 指标变量名
+     * @param lo 下界
+     * @param hi 上界
+     */
+    SummationNode(std::shared_ptr<SymbolicNode> b, std::string idx,
+                  std::shared_ptr<SymbolicNode> lo, std::shared_ptr<SymbolicNode> hi)
+        : body(std::move(b)), index_var(std::move(idx)),
+          lower_bound(std::move(lo)), upper_bound(std::move(hi)) {}
+
+    int type_priority() const override { return 8; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, body->hash());
+        hash_combine(seed, std::hash<std::string>{}(index_var));
+        hash_combine(seed, lower_bound->hash());
+        hash_combine(seed, upper_bound->hash());
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const SummationNode&>(other);
+        int cmp = index_var.compare(o.index_var);
+        if (cmp != 0) return cmp;
+        cmp = lower_bound->compare(*o.lower_bound);
+        if (cmp != 0) return cmp;
+        cmp = upper_bound->compare(*o.upper_bound);
+        if (cmp != 0) return cmp;
+        return body->compare(*o.body);
+    }
+
+public:
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<SummationNode>(
+            body->clone(), index_var, lower_bound->clone(), upper_bound->clone());
+    }
+};
+
+/**
+ * @brief 连乘节点，表示符号有限/无限连乘 ∏_{k=a}^{b} f(k)。
+ */
+class ProductNode_Op : public SymbolicNode {
+public:
+    std::shared_ptr<SymbolicNode> body;        ///< 通项因子 f(k)
+    std::string index_var;                      ///< 连乘指标变量名
+    std::shared_ptr<SymbolicNode> lower_bound;  ///< 下界
+    std::shared_ptr<SymbolicNode> upper_bound;  ///< 上界（可为 Infinity）
+
+    /**
+     * @brief 构造连乘节点。
+     * @param b 通项表达式
+     * @param idx 指标变量名
+     * @param lo 下界
+     * @param hi 上界
+     */
+    ProductNode_Op(std::shared_ptr<SymbolicNode> b, std::string idx,
+                   std::shared_ptr<SymbolicNode> lo, std::shared_ptr<SymbolicNode> hi)
+        : body(std::move(b)), index_var(std::move(idx)),
+          lower_bound(std::move(lo)), upper_bound(std::move(hi)) {}
+
+    int type_priority() const override { return 9; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, body->hash());
+        hash_combine(seed, std::hash<std::string>{}(index_var));
+        hash_combine(seed, lower_bound->hash());
+        hash_combine(seed, upper_bound->hash());
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const ProductNode_Op&>(other);
+        int cmp = index_var.compare(o.index_var);
+        if (cmp != 0) return cmp;
+        cmp = lower_bound->compare(*o.lower_bound);
+        if (cmp != 0) return cmp;
+        cmp = upper_bound->compare(*o.upper_bound);
+        if (cmp != 0) return cmp;
+        return body->compare(*o.body);
+    }
+
+public:
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<ProductNode_Op>(
+            body->clone(), index_var, lower_bound->clone(), upper_bound->clone());
+    }
+};
+
+/**
+ * @brief 积分变换节点，表示 Laplace、Fourier、Z 变换及其逆变换。
+ *
+ * 统一表示各类积分变换：L{f(t)}(s)、F{f(t)}(ω)、Z{f[n]}(z) 等。
+ */
+class TransformNode : public SymbolicNode {
+public:
+    /** @brief 变换类型枚举 */
+    enum class TransformType {
+        Laplace,         ///< Laplace 变换 L{f(t)}(s)
+        InverseLaplace,  ///< 逆 Laplace 变换 L⁻¹{F(s)}(t)
+        Fourier,         ///< Fourier 变换 F{f(t)}(ω)
+        InverseFourier,  ///< 逆 Fourier 变换 F⁻¹{F(ω)}(t)
+        ZTransform       ///< Z 变换 Z{f[n]}(z)
+    };
+
+    TransformType transform_type;              ///< 变换类型
+    std::shared_ptr<SymbolicNode> body;        ///< 被变换的表达式
+    std::string source_var;                    ///< 源变量（如 t、n）
+    std::string target_var;                    ///< 目标变量（如 s、ω、z）
+
+    /**
+     * @brief 构造积分变换节点。
+     * @param tt 变换类型
+     * @param b 被变换的表达式
+     * @param src 源变量名
+     * @param tgt 目标变量名
+     */
+    TransformNode(TransformType tt, std::shared_ptr<SymbolicNode> b,
+                  std::string src, std::string tgt)
+        : transform_type(tt), body(std::move(b)),
+          source_var(std::move(src)), target_var(std::move(tgt)) {}
+
+    int type_priority() const override { return 11; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, static_cast<std::size_t>(transform_type));
+        hash_combine(seed, body->hash());
+        hash_combine(seed, std::hash<std::string>{}(source_var));
+        hash_combine(seed, std::hash<std::string>{}(target_var));
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const TransformNode&>(other);
+        if (transform_type != o.transform_type) {
+            return static_cast<int>(transform_type) < static_cast<int>(o.transform_type) ? -1 : 1;
+        }
+        int cmp = source_var.compare(o.source_var);
+        if (cmp != 0) return cmp;
+        cmp = target_var.compare(o.target_var);
+        if (cmp != 0) return cmp;
+        return body->compare(*o.body);
+    }
+
+public:
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<TransformNode>(
+            transform_type, body->clone(), source_var, target_var);
+    }
+};
+
+/**
+ * @brief 量词节点，表示全称量词 (∀) 或存在量词 (∃)。
+ *
+ * 用于表示逻辑公式中的量化表达式，如 ∀x∈D: P(x) 或 ∃x∈D: P(x)。
+ */
+class QuantifierNode : public SymbolicNode {
+public:
+    /** @brief 量词类型枚举 */
+    enum class Type {
+        ForAll, ///< 全称量词 ∀
+        Exists  ///< 存在量词 ∃
+    };
+
+    Type quantifier_type;                      ///< 量词类型
+    std::string bound_var;                     ///< 约束变量名
+    std::shared_ptr<SymbolicNode> domain;      ///< 定义域（集合/区间表达式）
+    std::shared_ptr<SymbolicNode> predicate;   ///< 谓词（布尔表达式）
+
+    /**
+     * @brief 构造量词节点。
+     * @param qt 量词类型
+     * @param var 约束变量名
+     * @param dom 定义域表达式
+     * @param pred 谓词表达式
+     */
+    QuantifierNode(Type qt, std::string var,
+                   std::shared_ptr<SymbolicNode> dom, std::shared_ptr<SymbolicNode> pred)
+        : quantifier_type(qt), bound_var(std::move(var)),
+          domain(std::move(dom)), predicate(std::move(pred)) {}
+
+    int type_priority() const override { return 102; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, static_cast<std::size_t>(quantifier_type));
+        hash_combine(seed, std::hash<std::string>{}(bound_var));
+        hash_combine(seed, domain->hash());
+        hash_combine(seed, predicate->hash());
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const QuantifierNode&>(other);
+        if (quantifier_type != o.quantifier_type) {
+            return static_cast<int>(quantifier_type) < static_cast<int>(o.quantifier_type) ? -1 : 1;
+        }
+        int cmp = bound_var.compare(o.bound_var);
+        if (cmp != 0) return cmp;
+        cmp = domain->compare(*o.domain);
+        if (cmp != 0) return cmp;
+        return predicate->compare(*o.predicate);
+    }
+
+public:
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<QuantifierNode>(
+            quantifier_type, bound_var, domain->clone(), predicate->clone());
+    }
+};
+
+/**
+ * @brief 集合构造器节点，表示集合构造式 {x ∈ D | P(x)}。
+ *
+ * 用于表示满足特定条件的元素集合。
+ */
+class SetBuilderNode : public SymbolicNode {
+public:
+    std::string element_var;                   ///< 元素变量名
+    std::shared_ptr<SymbolicNode> domain;      ///< 基础集合/区间
+    std::shared_ptr<SymbolicNode> predicate;   ///< 成员条件
+
+    /**
+     * @brief 构造集合构造器节点。
+     * @param var 元素变量名
+     * @param dom 定义域表达式
+     * @param pred 成员条件表达式
+     */
+    SetBuilderNode(std::string var, std::shared_ptr<SymbolicNode> dom,
+                   std::shared_ptr<SymbolicNode> pred)
+        : element_var(std::move(var)), domain(std::move(dom)),
+          predicate(std::move(pred)) {}
+
+    int type_priority() const override { return 103; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, std::hash<std::string>{}(element_var));
+        hash_combine(seed, domain->hash());
+        hash_combine(seed, predicate->hash());
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const SetBuilderNode&>(other);
+        int cmp = element_var.compare(o.element_var);
+        if (cmp != 0) return cmp;
+        cmp = domain->compare(*o.domain);
+        if (cmp != 0) return cmp;
+        return predicate->compare(*o.predicate);
+    }
+
+public:
+    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<SymbolicNode> clone() const override {
+        return std::make_shared<SetBuilderNode>(
+            element_var, domain->clone(), predicate->clone());
     }
 };
 
@@ -955,4 +1424,13 @@ inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_power(std::shared_p
     }
     if (base->is_one()) return create_number(1.0);
     return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
+}
+
+inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_complex(std::shared_ptr<SymbolicNode> real, std::shared_ptr<SymbolicNode> imag) {
+    if (!real) real = create_number(0.0);
+    if (!imag) imag = create_number(0.0);
+    if (imag->is_zero()) {
+        return real;
+    }
+    return std::make_shared<ComplexNode>(std::move(real), std::move(imag));
 }

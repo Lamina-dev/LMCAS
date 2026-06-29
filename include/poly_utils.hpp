@@ -103,6 +103,11 @@ struct SymbolicPolyCoeff {
 
         return s;
     }
+
+    /** @brief 比较运算符（符号系数无法有意义地排序，始终返回 false） */
+    bool operator<(const SymbolicPolyCoeff& /*other*/) const {
+        return false;
+    }
 };
 
 /**
@@ -326,6 +331,8 @@ std::shared_ptr<SymbolicExpr> poly_to_symbolic(const Polynomial<T>& poly) {
             coeff_node = SymbolicExpr::number(poly.coeffs[i]);
         } else if constexpr (std::is_same_v<T, Rational>) {
             coeff_node = SymbolicExpr::number(poly.coeffs[i]);
+        } else if constexpr (std::is_same_v<T, SymbolicPolyCoeff>) {
+            coeff_node = poly.coeffs[i].val ? poly.coeffs[i].val : SymbolicExpr::number(0);
         } else {
 
             coeff_node = SymbolicExpr::number(poly.coeffs[i]);

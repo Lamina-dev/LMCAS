@@ -140,9 +140,99 @@ static bool root_less_than(const std::shared_ptr<SymbolicExpr>& a,
         double va = a->to_numeric();
         double vb = b->to_numeric();
         return va < vb;
-    } catch (...) {
-        return false;
-    }
+    } catch (...) {}
+
+    /// 当根含参数无法直接求值时，尝试通过 (a - b) 的符号判断大小。
+    /// 对于二次公式的两个根，差值可化简为 ±sqrt(disc)/a 的形式。
+    auto diff = SymbolicExpr::add(a, SymbolicExpr::multiply(b, SymbolicExpr::number(-1)))->simplify();
+    try {
+        double vd = diff->to_numeric();
+        return vd < 0;
+    } catch (...) {}
+
+    /// 尝试判断差值表达式的符号结构：
+    /// 如果差值形如 k * sqrt(...) / denom，判断各因子的符号。
+    /// 这覆盖了二次公式根差 = sqrt(delta)/a 的情形。
+    auto try_sign_of_node = [](const std::shared_ptr<SymbolicNode>& node) -> int {
+        if (!node) return 0;
+
+        if (auto num_node = std::dynamic_pointer_cast<NumberNode>(node)) {
+            if (std::holds_alternative<BigInt>(num_node->value)) {
+                auto& v = std::get<BigInt>(num_node->value);
+                if (v.is_zero()) return 0;
+                return v.IsNegative() ? -1 : 1;
+            }
+            if (std::holds_alternative<Rational>(num_node->value)) {
+                auto& v = std::get<Rational>(num_node->value);
+                if (v.get_numerator().is_zero()) return 0;
+                return v.get_numerator().IsNegative() ? -1 : 1;
+            }
+            if (std::holds_alternative<lmmc_real_t>(num_node->value)) {
+                auto v = std::get<lmmc_real_t>(num_node->value);
+                if (v == 0.0) return 0;
+                return v < 0 ? -1 : 1;
+            }
+        }
+
+        /// sqrt(...) 非负（假设参数使判别式非负）
+        if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
+            if (fn->type == FunctionNode::FuncType::Sqrt) return 1;
+        }
+
+        /// x^(1/2) 或 x^0.5 也是平方根，非负
+        if (auto pw = std::dynamic_pointer_cast<PowerNode>(node)) {
+            auto exp_expr = std::make_shared<SymbolicExpr>(pw->exponent);
+            try {
+                double ev = exp_expr->to_numeric();
+                if (ev > 0 && ev < 1.0) {
+                    /// base^(正分数) >= 0（假设 base 为判别式等非负量）
+                    return 1;
+                }
+            } catch (...) {}
+
+            /// 对于整数指数，判断底数符号
+            auto base_expr = std::make_shared<SymbolicExpr>(pw->base);
+            try {
+                double bv = base_expr->to_numeric();
+                double ev = exp_expr->to_numeric();
+                int ei = static_cast<int>(ev);
+                if (std::abs(ev - ei) < 1e-10) {
+                    if (bv > 0) return 1;
+                    if (bv < 0) return (ei % 2 == 0) ? 1 : -1;
+                }
+            } catch (...) {}
+        }
+
+        return 0;
+    };
+
+    /// 对乘积节点，各因子符号之积
+    auto try_sign_of_expr = [&try_sign_of_node](const std::shared_ptr<SymbolicExpr>& expr) -> int {
+        if (!expr || !expr->root) return 0;
+
+        /// 直接节点
+        int s = try_sign_of_node(expr->root);
+        if (s != 0) return s;
+
+        /// 乘积：各因子符号之积
+        if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr->root)) {
+            int sign = 1;
+            for (const auto& op : mul->operands) {
+                int os = try_sign_of_node(op);
+                if (os == 0) return 0;
+                sign *= os;
+            }
+            return sign;
+        }
+
+        return 0;
+    };
+
+    int diff_sign = try_sign_of_expr(diff);
+    if (diff_sign < 0) return true;
+    if (diff_sign > 0) return false;
+
+    return false;
 }
 
 static bool roots_equal(const std::shared_ptr<SymbolicExpr>& a,
@@ -741,7 +831,125 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
         auto symbolic_roots = solve_symbolic_poly(poly, variable);
 
         // Sort roots in ascending order
-        std::sort(symbolic_roots.begin(), symbolic_roots.end(), root_less_than);
+        /// 当根含参数时，root_less_than 通过差值符号判断排序。
+        /// 对于二次公式根 r1=(-b+sqrt(d))/(2a), r2=(-b-sqrt(d))/(2a)，
+        /// 当 a>0 时 r1>r2，需要交换为 [r2, r1]。
+        if (symbolic_roots.size() == 2) {
+            /// 尝试判断 root[0] > root[1]，若是则交换
+            bool swapped = false;
+            auto d = SymbolicExpr::add(symbolic_roots[0],
+                SymbolicExpr::multiply(symbolic_roots[1], SymbolicExpr::number(-1)))->simplify();
+            if (!d) {
+                std::sort(symbolic_roots.begin(), symbolic_roots.end(), root_less_than);
+                return;
+            }
+            /// 如果差值可以求值为正数，说明 root[0] > root[1]，需要交换
+            try {
+                double dv = d->to_numeric();
+                if (dv > 0) { std::swap(symbolic_roots[0], symbolic_roots[1]); swapped = true; }
+            } catch (...) {
+                /// 尝试结构化符号判断
+                /// diff 为 (disc)^0.5 形式（PowerNode with exp=0.5）或含 sqrt 的乘积
+                auto check_positive = [](const std::shared_ptr<SymbolicExpr>& e) -> bool {
+                    if (!e || !e->root) return false;
+                    /// PowerNode with exponent in (0,1) -> non-negative
+                    if (auto pw = std::dynamic_pointer_cast<PowerNode>(e->root)) {
+                        auto exp_e = std::make_shared<SymbolicExpr>(pw->exponent);
+                        try {
+                            double ev = exp_e->to_numeric();
+                            if (ev > 0 && ev < 1.0) return true;
+                        } catch (...) {}
+                    }
+                    /// FunctionNode::Sqrt -> non-negative
+                    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(e->root)) {
+                        if (fn->type == FunctionNode::FuncType::Sqrt) return true;
+                    }
+                    /// MultiplyNode: all factors positive
+                    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(e->root)) {
+                        int sign = 1;
+                        for (const auto& op : mul->operands) {
+                            if (auto n = std::dynamic_pointer_cast<NumberNode>(op)) {
+                                if (std::holds_alternative<BigInt>(n->value)) {
+                                    if (std::get<BigInt>(n->value).IsNegative()) sign *= -1;
+                                    else if (std::get<BigInt>(n->value).is_zero()) return false;
+                                } else if (std::holds_alternative<Rational>(n->value)) {
+                                    if (std::get<Rational>(n->value).get_numerator().IsNegative()) sign *= -1;
+                                    else if (std::get<Rational>(n->value).get_numerator().is_zero()) return false;
+                                } else if (std::holds_alternative<lmmc_real_t>(n->value)) {
+                                    if (std::get<lmmc_real_t>(n->value) < 0) sign *= -1;
+                                    else if (std::get<lmmc_real_t>(n->value) == 0) return false;
+                                }
+                            } else if (auto pw2 = std::dynamic_pointer_cast<PowerNode>(op)) {
+                                auto exp_e2 = std::make_shared<SymbolicExpr>(pw2->exponent);
+                                try {
+                                    double ev2 = exp_e2->to_numeric();
+                                    if (ev2 > 0 && ev2 < 1.0) { /* positive, sign unchanged */ }
+                                    else return false; // can't determine
+                                } catch (...) { return false; }
+                            } else if (auto fn2 = std::dynamic_pointer_cast<FunctionNode>(op)) {
+                                if (fn2->type == FunctionNode::FuncType::Sqrt) { /* positive */ }
+                                else return false;
+                            } else {
+                                return false; // unknown factor
+                            }
+                        }
+                        return sign > 0;
+                    }
+                    return false;
+                };
+                auto check_negative = [&check_positive](const std::shared_ptr<SymbolicExpr>& e) -> bool {
+                    if (!e || !e->root) return false;
+                    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(e->root)) {
+                        int sign = 1;
+                        for (const auto& op : mul->operands) {
+                            if (auto n = std::dynamic_pointer_cast<NumberNode>(op)) {
+                                if (std::holds_alternative<BigInt>(n->value)) {
+                                    if (std::get<BigInt>(n->value).IsNegative()) sign *= -1;
+                                    else if (std::get<BigInt>(n->value).is_zero()) return false;
+                                } else if (std::holds_alternative<Rational>(n->value)) {
+                                    if (std::get<Rational>(n->value).get_numerator().IsNegative()) sign *= -1;
+                                    else if (std::get<Rational>(n->value).get_numerator().is_zero()) return false;
+                                } else if (std::holds_alternative<lmmc_real_t>(n->value)) {
+                                    if (std::get<lmmc_real_t>(n->value) < 0) sign *= -1;
+                                    else if (std::get<lmmc_real_t>(n->value) == 0) return false;
+                                }
+                            } else if (auto pw2 = std::dynamic_pointer_cast<PowerNode>(op)) {
+                                auto exp_e2 = std::make_shared<SymbolicExpr>(pw2->exponent);
+                                try {
+                                    double ev2 = exp_e2->to_numeric();
+                                    if (ev2 > 0 && ev2 < 1.0) { /* positive */ }
+                                    else return false;
+                                } catch (...) { return false; }
+                            } else if (auto fn2 = std::dynamic_pointer_cast<FunctionNode>(op)) {
+                                if (fn2->type == FunctionNode::FuncType::Sqrt) { /* positive */ }
+                                else return false;
+                            } else {
+                                return false;
+                            }
+                        }
+                        return sign < 0;
+                    }
+                    return false;
+                };
+                if (check_positive(d)) {
+                    std::swap(symbolic_roots[0], symbolic_roots[1]);
+                    swapped = true;
+                } else if (check_negative(d)) {
+                    /// already in correct order
+                    swapped = false;
+                }
+            }
+            if (!swapped) {
+                /// Fallback: 对于 a>0 的二次多项式，solve_quadratic_internal 返回
+                /// [大根, 小根]，需要交换。对于 a<0 则已经是 [小根, 大根]。
+                /// 这里利用 leading_sign 直接判断。
+                if (leading_sign > 0 && deg == 2) {
+                    std::swap(symbolic_roots[0], symbolic_roots[1]);
+                }
+            }
+        } else {
+            std::sort(symbolic_roots.begin(), symbolic_roots.end(), root_less_than);
+        }
 
         std::vector<int> multiplicities(symbolic_roots.size(), 1);
 

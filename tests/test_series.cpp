@@ -64,7 +64,7 @@ void test_poly_series() {
 #include "lammp/lmmp.h"
 
 int main() {
-    lmmp_stack_init();
+    lmmp_stack_init(512 * 1024);
     try {
         test_maclaurin_sin();
         test_maclaurin_exp();

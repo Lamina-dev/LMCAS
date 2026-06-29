@@ -85,6 +85,41 @@ public:
 
 private:
     std::vector<Relation> relations_;
+
+    /// Maximum number of new relations deduced per add_relation call via transitive closure.
+    static constexpr int MAX_TRANSITIVE_DEDUCTIONS = 64;
+
+    /**
+     * @brief Detect reversed "0 op variable" patterns and derive sign properties.
+     *
+     * When the LHS is a NumberNode with value 0 and the RHS is a VariableNode,
+     * the operator semantics are reversed to derive the variable's sign:
+     *   - 0 LT  var → var is Positive   (0 < var means var > 0)
+     *   - 0 GT  var → var is Negative   (0 > var means var < 0)
+     *   - 0 GEQ var → var is NonPositive (0 >= var means var <= 0)
+     *   - 0 LEQ var → var is NonNegative (0 <= var means var >= 0)
+     *   - 0 NEQ var → var is NonZero
+     *
+     * @param lhs Left-hand side expression (expected to be zero)
+     * @param rhs Right-hand side expression (expected to be a variable)
+     * @param op  Relational operator
+     * @param prop_store PropertyStore to update with derived sign
+     */
+    void detect_reversed_pattern(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+                                 RelationalNode::Op op, PropertyStore& prop_store);
+
+    /**
+     * @brief Compute transitive closure after adding a new relation.
+     *
+     * BFS from the new relation, combining GT/GEQ operators transitively:
+     *   GT+GT→GT, GT+GEQ→GT, GEQ+GT→GT, GEQ+GEQ→GEQ.
+     * Only GT and GEQ participate in transitive closure.
+     * Stops after MAX_TRANSITIVE_DEDUCTIONS new relations are deduced.
+     *
+     * @param new_rel The newly added relation that triggers closure computation
+     * @param prop_store PropertyStore for sign derivation of deduced relations
+     */
+    void compute_transitive_closure(const Relation& new_rel, PropertyStore& prop_store);
 };
 
 } // namespace lamina

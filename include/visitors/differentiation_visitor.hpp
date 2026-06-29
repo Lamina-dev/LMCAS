@@ -259,6 +259,15 @@ public:
                     std::make_shared<PowerNode>(arg, SymbolicFactory::create_number(-0.5))
                  });
                  break;
+            case FunctionNode::FuncType::Abs:
+                {
+                    /// d/dx |u| = u / |u| = sgn(u)  (undefined at u=0)
+                    auto abs_arg = std::make_shared<FunctionNode>(
+                        FunctionNode::FuncType::Abs, node.arguments);
+                    auto abs_inv = std::make_shared<PowerNode>(abs_arg, SymbolicFactory::create_number(-1.0));
+                    d_outer = SymbolicFactory::create_multiply({arg, abs_inv});
+                }
+                break;
             case FunctionNode::FuncType::LambertW:
                 {
                     auto W = std::make_shared<FunctionNode>(FunctionNode::FuncType::LambertW, node.arguments);
@@ -328,7 +337,7 @@ public:
                 d_outer = SymbolicFactory::create_number(0.0);
         }
 
-        result = SymbolicFactory::create_multiply({d_outer, d_arg});
+        result = SymbolicFactory::create_multiply(std::vector<std::shared_ptr<SymbolicNode>>{d_outer, d_arg});
     }
 
     void visit(MatrixNode& node) override {
@@ -356,5 +365,29 @@ public:
              }
              result = std::make_shared<MatrixNode>(node.rows, node.cols, new_sparse);
         }
+    }
+    void visit(ComplexNode& node) override {
+        node.real->accept(*this);
+        auto dr = result;
+        node.imag->accept(*this);
+        auto di = result;
+        result = SymbolicFactory::create_complex(dr, di);
+    }
+
+    void visit(PiecewiseNode& node) override {
+        std::vector<PiecewiseNode::Branch> new_branches;
+        for (const auto& br : node.branches) {
+            PiecewiseNode::Branch new_br;
+            br.expression->accept(*this);
+            new_br.expression = result;
+            new_br.condition = br.condition;
+            new_branches.push_back(new_br);
+        }
+        std::shared_ptr<SymbolicNode> new_def = nullptr;
+        if (node.default_expr) {
+            node.default_expr->accept(*this);
+            new_def = result;
+        }
+        result = std::make_shared<PiecewiseNode>(std::move(new_branches), new_def);
     }
 };

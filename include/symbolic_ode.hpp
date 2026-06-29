@@ -9,17 +9,24 @@
 
 namespace lamina {
 
+// Forward declaration to avoid circular include.
+class AssumptionContext;
+
 /**
  * @brief 求解可分离变量型 ODE：dy/dx = rhs(x, y)
  * @param rhs 方程右端表达式
  * @param x 自变量名
  * @param y 因变量名
+ * @param ctx Optional assumption context. When provided and the dependent
+ *            variable y is known Positive, the solver prefers positive solution
+ *            branches. When nullptr, behavior is identical to the unparameterized call.
  * @return 通解的符号表达式
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
     std::shared_ptr<SymbolicExpr> rhs,
     const std::string& x,
-    const std::string& y
+    const std::string& y,
+    const AssumptionContext* ctx = nullptr
 );
 
 /**
@@ -28,13 +35,19 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
  * @param Qx 非齐次项 Q(x)
  * @param x 自变量名
  * @param y 因变量名
+ * @param ctx Optional assumption context. When provided and the dependent
+ *            variable y is known Positive, the solver prefers positive solution
+ *            branches. When a coefficient is known NonZero, the solver skips
+ *            zero-coefficient degenerate case checks. When nullptr, behavior is
+ *            identical to the unparameterized call.
  * @return 通解的符号表达式
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
     std::shared_ptr<SymbolicExpr> Px,
     std::shared_ptr<SymbolicExpr> Qx,
     const std::string& x,
-    const std::string& y
+    const std::string& y,
+    const AssumptionContext* ctx = nullptr
 );
 
 /**
@@ -45,13 +58,19 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
  * @param fx 非齐次项 f(x)
  * @param x 自变量名
  * @param y 因变量名
+ * @param ctx Optional assumption context. When provided and a coefficient is
+ *            known NonZero, the solver skips the zero-coefficient degenerate
+ *            case check for that coefficient. When the dependent variable y is
+ *            known Positive, the solver prefers positive solution branches.
+ *            When nullptr, behavior is identical to the unparameterized call.
  * @return 通解的符号表达式
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,
-    const std::string& y
+    const std::string& y,
+    const AssumptionContext* ctx = nullptr
 );
 
 }

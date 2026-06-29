@@ -1709,7 +1709,8 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions(
 
         // --- Real domain filter ---
         // Exclude solutions containing imaginary components
-        if (domain == Domain::Real || domain == Domain::Rational ||
+        if (domain == Domain::Real || domain == Domain::Algebraic ||
+            domain == Domain::Rational ||
             domain == Domain::Integer || domain == Domain::Natural ||
             domain == Domain::PositiveInt) {
             if (contains_imaginary(sol)) {

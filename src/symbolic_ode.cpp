@@ -1,5 +1,6 @@
 #include "../include/symbolic_ode.hpp"
 #include "../include/symbolic.hpp"
+#include "../include/assumption_context.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include <cmath>
@@ -9,24 +10,60 @@
 
 namespace lamina {
 
+/// Check if the dependent variable is known Positive in the given context.
+static bool dep_var_is_positive(const std::string& y, const AssumptionContext* ctx) {
+    if (!ctx) return false;
+    auto y_expr = SymbolicExpr::variable(y);
+    return ctx->is_positive(*y_expr) == Tribool::True;
+}
+
+/// Check if a symbolic expression is known NonZero in the given context.
+static bool expr_is_nonzero(const std::shared_ptr<SymbolicExpr>& expr, const AssumptionContext* ctx) {
+    if (!ctx || !expr) return false;
+    return ctx->is_nonzero(*expr) == Tribool::True;
+}
+
+/// Wrap an expression in abs() to signal positive-branch preference.
+static std::shared_ptr<SymbolicExpr> make_abs(std::shared_ptr<SymbolicExpr> expr) {
+    return std::make_shared<SymbolicExpr>(
+        std::make_shared<FunctionNode>(
+            FunctionNode::FuncType::Abs,
+            std::vector<std::shared_ptr<SymbolicNode>>{expr->root}));
+}
+
+// solve_separable_ode
+
 std::shared_ptr<SymbolicExpr> solve_separable_ode(
     std::shared_ptr<SymbolicExpr> rhs,
     const std::string& x,
-    const std::string& y
+    const std::string& y,
+    const AssumptionContext* ctx
 ) {
 
     auto inv_y = SymbolicExpr::divide(SymbolicExpr::number(1), rhs);
     auto int_y = inv_y->integrate(y);
     auto int_x = SymbolicExpr::number(1)->integrate(x);
 
-    return SymbolicExpr::add(int_y, SymbolicExpr::multiply(SymbolicExpr::number(-1), int_x));
+    auto result = SymbolicExpr::add(int_y, SymbolicExpr::multiply(SymbolicExpr::number(-1), int_x));
+
+    // When the dependent variable is known Positive, prefer the positive
+    // solution branch by wrapping in abs() (which simplifies to identity for
+    // positive expressions, signaling downstream that only positive values apply).
+    if (dep_var_is_positive(y, ctx)) {
+        result = make_abs(result);
+    }
+
+    return result;
 }
+
+// solve_linear1_ode
 
 std::shared_ptr<SymbolicExpr> solve_linear1_ode(
     std::shared_ptr<SymbolicExpr> Px,
     std::shared_ptr<SymbolicExpr> Qx,
     const std::string& x,
-    const std::string& y
+    const std::string& y,
+    const AssumptionContext* ctx
 ) {
 
     auto intP = Px->integrate(x);
@@ -37,33 +74,53 @@ std::shared_ptr<SymbolicExpr> solve_linear1_ode(
 
     auto C = SymbolicExpr::variable("C");
     auto num = SymbolicExpr::add(intQmu, C);
-    return SymbolicExpr::divide(num, mu);
+    auto result = SymbolicExpr::divide(num, mu);
+
+    // When the dependent variable is known Positive, prefer positive branch.
+    if (dep_var_is_positive(y, ctx)) {
+        result = make_abs(result);
+    }
+
+    return result;
 }
+
+// solve_linear2_ode
 
 std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,
-    const std::string& y
+    const std::string& y,
+    const AssumptionContext* ctx
 ) {
 
-    // Guard a == 0: equation degenerates to first-order (or constant) form.
-    int a_is_zero = 0;
-    lmmc_double_nearly_equal_tol(a, 0.0, 1e-12, 1e-12, &a_is_zero);
-    if (a_is_zero) {
-        int b_is_zero = 0;
-        lmmc_double_nearly_equal_tol(b, 0.0, 1e-12, 1e-12, &b_is_zero);
-        if (b_is_zero) {
-            // a == 0 and b == 0: not a proper second-order ODE.
-            throw std::invalid_argument(
-                "solve_linear2_ode: leading and first-derivative coefficients are both zero");
+    // Determine whether the leading coefficient 'a' is known NonZero via
+    // assumptions. If so, skip the zero-coefficient degenerate case check.
+    bool a_known_nonzero = false;
+    if (ctx) {
+        auto a_expr = SymbolicExpr::number(a);
+        a_known_nonzero = expr_is_nonzero(a_expr, ctx);
+    }
+
+    if (!a_known_nonzero) {
+        // Guard a == 0: equation degenerates to first-order (or constant) form.
+        int a_is_zero = 0;
+        lmmc_double_nearly_equal_tol(a, 0.0, 1e-12, 1e-12, &a_is_zero);
+        if (a_is_zero) {
+            int b_is_zero = 0;
+            lmmc_double_nearly_equal_tol(b, 0.0, 1e-12, 1e-12, &b_is_zero);
+            if (b_is_zero) {
+                // a == 0 and b == 0: not a proper second-order ODE.
+                throw std::invalid_argument(
+                    "solve_linear2_ode: leading and first-derivative coefficients are both zero");
+            }
+            // a == 0, b != 0: degenerates to b*y' + c*y = f(x), i.e. y' + (c/b)*y = f/b.
+            auto Px = SymbolicExpr::number(c / b);
+            auto Qx = fx->is_zero()
+                          ? SymbolicExpr::number(0)
+                          : SymbolicExpr::divide(fx, SymbolicExpr::number(b));
+            return solve_linear1_ode(Px, Qx, x, y, ctx);
         }
-        // a == 0, b != 0: degenerates to b*y' + c*y = f(x), i.e. y' + (c/b)*y = f/b.
-        auto Px = SymbolicExpr::number(c / b);
-        auto Qx = fx->is_zero()
-                      ? SymbolicExpr::number(0)
-                      : SymbolicExpr::divide(fx, SymbolicExpr::number(b));
-        return solve_linear1_ode(Px, Qx, x, y);
     }
 
     double D = b*b - 4*a*c;
@@ -102,6 +159,12 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
         throw std::logic_error(
             "solve_linear2_ode: non-homogeneous case (f(x) != 0) is not implemented");
     }
+
+    // When the dependent variable is known Positive, prefer positive branch.
+    if (dep_var_is_positive(y, ctx)) {
+        yh = make_abs(yh);
+    }
+
     return yh;
 }
 

@@ -15,6 +15,9 @@
 
 namespace lamina {
 
+// Forward declaration for optional assumption context integration
+class AssumptionContext;
+
 /** @brief 积分表条目，描述一条积分规则（模式 → 结果） */
 struct LAMINA_API IntegrationEntry {
 
@@ -412,6 +415,39 @@ public:
     std::string name() const override { return "IntegrationByParts"; }
 };
 
+/**
+ * @brief 三角换元积分策略（任务 15.1）。
+ *
+ * 识别含二次根式 √(a²-x²)、√(a²+x²)、√(x²-a²) 的被积函数，应用相应的
+ * 三角/双曲换元：
+ *   - √(a²-x²): x = a·sin(θ)
+ *   - √(a²+x²): x = a·tan(θ)（结果以 arcsinh / ln 形式表达）
+ *   - √(x²-a²): x = a·sec(θ)
+ * 换元后积分，再用反函数与直角三角关系回代为原变量。
+ * 在策略链中位于 SubstitutionStrategy 之后、IBPStrategy 之前。
+ */
+class LAMINA_API TrigSubstitutionStrategy : public IntegrationStrategy {
+public:
+    std::shared_ptr<SymbolicExpr> try_integrate(
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
+    std::string name() const override { return "TrigSubstitution"; }
+};
+
+/**
+ * @brief 万能代换（Weierstrass）积分策略（任务 15.2）。
+ *
+ * 识别 sin(x)、cos(x) 的有理函数，应用半角代换 t = tan(x/2)：
+ *   sin(x) = 2t/(1+t²), cos(x) = (1-t²)/(1+t²), dx = 2/(1+t²) dt
+ * 将被积函数转化为 t 的有理函数后递归积分，再回代 t = tan(x/2)。
+ * 在策略链中位于 TrigCombinationStrategy 之后。
+ */
+class LAMINA_API WeierstrassStrategy : public IntegrationStrategy {
+public:
+    std::shared_ptr<SymbolicExpr> try_integrate(
+        const SymbolicExpr& expr, const std::string& var, Integrator& ctx, int depth = 0) override;
+    std::string name() const override { return "Weierstrass"; }
+};
+
 /** @brief 符号积分器，协调各策略完成积分运算 */
 class LAMINA_API Integrator {
 public:
@@ -474,6 +510,20 @@ public:
      */
     void set_max_depth(int d) { max_depth_ = d; }
 
+    /**
+     * @brief 设置可选的假设上下文，用于指导积分策略选择和被积函数化简。
+     *
+     * 当提供非空上下文时，积分器可利用变量的符号属性（如正性、非零性）
+     * 来简化被积函数（例如将 |x| 简化为 x）或跳过不必要的分情况讨论。
+     * 传入 nullptr 恢复默认行为（与未设置上下文时完全一致）。
+     *
+     * @param ctx 指向 AssumptionContext 的常量指针，nullptr 表示不使用假设
+     */
+    void set_assumption_context(const AssumptionContext* ctx) { assumption_ctx_ = ctx; }
+
+    /** @brief 获取当前假设上下文（可能为 nullptr） */
+    const AssumptionContext* assumption_context() const { return assumption_ctx_; }
+
 private:
     IntegrationTable table_;
     std::vector<std::unique_ptr<IntegrationStrategy>> strategies_;
@@ -484,6 +534,8 @@ private:
     CycleState cycle_state_;
 
     int max_depth_ = 8;
+
+    const AssumptionContext* assumption_ctx_ = nullptr;
 
     std::shared_ptr<SymbolicExpr> apply_linearity(
         const SymbolicExpr& expr, const std::string& var);

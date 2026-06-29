@@ -39,6 +39,13 @@ public:
     void visit(MatrixNode& node) override;
     void visit(RelationalNode& node) override;
     void visit(LogicalNode& node) override;
+    void visit(PiecewiseNode& node) override;
+    void visit(SummationNode& node) override;
+    void visit(ProductNode_Op& node) override;
+    void visit(TransformNode& node) override;
+    void visit(QuantifierNode& node) override;
+    void visit(SetBuilderNode& node) override;
+    void visit(ComplexNode& node) override;
 
 private:
     std::stringstream buffer;

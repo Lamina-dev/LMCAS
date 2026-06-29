@@ -110,4 +110,12 @@ public:
         auto tail = result;
         result = std::make_shared<LogicalNode>(head, tail, node.op);
     }
+
+    void visit(ComplexNode& node) override {
+        node.real->accept(*this);
+        auto expanded_r = result;
+        node.imag->accept(*this);
+        auto expanded_i = result;
+        result = SymbolicFactory::create_complex(expanded_r, expanded_i);
+    }
 };

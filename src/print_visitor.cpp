@@ -112,6 +112,16 @@ void PrintVisitor::visit(FunctionNode& node) {
         case FunctionNode::FuncType::Si: buffer << "Si"; break;
         case FunctionNode::FuncType::Ci: buffer << "Ci"; break;
         case FunctionNode::FuncType::Li: buffer << "Li"; break;
+        case FunctionNode::FuncType::Max: buffer << "max"; break;
+        case FunctionNode::FuncType::Min: buffer << "min"; break;
+        case FunctionNode::FuncType::Sgn: buffer << "sgn"; break;
+        case FunctionNode::FuncType::Floor: buffer << "floor"; break;
+        case FunctionNode::FuncType::Ceil: buffer << "ceil"; break;
+        case FunctionNode::FuncType::RealPart: buffer << "re"; break;
+        case FunctionNode::FuncType::ImagPart: buffer << "im"; break;
+        case FunctionNode::FuncType::Conjugate: buffer << "conj"; break;
+        case FunctionNode::FuncType::ComplexAbs: buffer << "cabs"; break;
+        case FunctionNode::FuncType::ComplexArg: buffer << "carg"; break;
     }
     buffer << "(";
     for (size_t i = 0; i < node.arguments.size(); ++i) {
@@ -153,9 +163,114 @@ void PrintVisitor::visit(RelationalNode& node) {
 }
 
 void PrintVisitor::visit(LogicalNode& node) {
-    buffer << "(";
-    node.left->accept(*this);
-    buffer << " " << LogicalNode::op_to_string(node.op) << " ";
-    node.right->accept(*this);
+    if (node.op == LogicalNode::Op::Not) {
+        buffer << "(¬";
+        node.left->accept(*this);
+        buffer << ")";
+    } else if (node.op == LogicalNode::Op::Implies) {
+        buffer << "(";
+        node.left->accept(*this);
+        buffer << " \xe2\x87\x92 ";
+        node.right->accept(*this);
+        buffer << ")";
+    } else {
+        buffer << "(";
+        node.left->accept(*this);
+        buffer << " " << LogicalNode::op_to_string(node.op) << " ";
+        node.right->accept(*this);
+        buffer << ")";
+    }
+}
+
+void PrintVisitor::visit(PiecewiseNode& node) {
+    buffer << "piecewise(";
+    for (size_t i = 0; i < node.branches.size(); ++i) {
+        if (i > 0) buffer << ", ";
+        node.branches[i].expression->accept(*this);
+        buffer << " if ";
+        node.branches[i].condition->accept(*this);
+    }
+    if (node.default_expr) {
+        buffer << ", default: ";
+        node.default_expr->accept(*this);
+    }
     buffer << ")";
+}
+
+void PrintVisitor::visit(SummationNode& node) {
+    buffer << "\xce\xa3(";
+    node.body->accept(*this);
+    buffer << ", " << node.index_var << "=";
+    node.lower_bound->accept(*this);
+    buffer << "..";
+    node.upper_bound->accept(*this);
+    buffer << ")";
+}
+
+void PrintVisitor::visit(ProductNode_Op& node) {
+    buffer << "\xce\xa0(";
+    node.body->accept(*this);
+    buffer << ", " << node.index_var << "=";
+    node.lower_bound->accept(*this);
+    buffer << "..";
+    node.upper_bound->accept(*this);
+    buffer << ")";
+}
+
+void PrintVisitor::visit(TransformNode& node) {
+    switch (node.transform_type) {
+        case TransformNode::TransformType::Laplace:
+            buffer << "L{";
+            node.body->accept(*this);
+            buffer << "}(" << node.target_var << ")";
+            break;
+        case TransformNode::TransformType::InverseLaplace:
+            buffer << "L\xe2\x81\xbb\xc2\xb9{";
+            node.body->accept(*this);
+            buffer << "}(" << node.target_var << ")";
+            break;
+        case TransformNode::TransformType::Fourier:
+            buffer << "F{";
+            node.body->accept(*this);
+            buffer << "}(" << node.target_var << ")";
+            break;
+        case TransformNode::TransformType::InverseFourier:
+            buffer << "F\xe2\x81\xbb\xc2\xb9{";
+            node.body->accept(*this);
+            buffer << "}(" << node.target_var << ")";
+            break;
+        case TransformNode::TransformType::ZTransform:
+            buffer << "Z{";
+            node.body->accept(*this);
+            buffer << "}(" << node.target_var << ")";
+            break;
+    }
+}
+
+void PrintVisitor::visit(QuantifierNode& node) {
+    if (node.quantifier_type == QuantifierNode::Type::ForAll) {
+        buffer << "\xe2\x88\x80";
+    } else {
+        buffer << "\xe2\x88\x83";
+    }
+    buffer << node.bound_var << "\xe2\x88\x88";
+    node.domain->accept(*this);
+    buffer << ": ";
+    node.predicate->accept(*this);
+}
+
+void PrintVisitor::visit(SetBuilderNode& node) {
+    buffer << "{" << node.element_var << " \xe2\x88\x88 ";
+    node.domain->accept(*this);
+    buffer << " | ";
+    node.predicate->accept(*this);
+    buffer << "}";
+}
+
+void PrintVisitor::visit(ComplexNode& node) {
+    buffer << "(";
+    node.real->accept(*this);
+    buffer << " + ";
+    node.imag->accept(*this);
+    buffer << "*I)";
 }

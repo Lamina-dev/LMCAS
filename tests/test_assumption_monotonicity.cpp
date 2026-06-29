@@ -1,10 +1,11 @@
 /**
  * @file test_assumption_monotonicity.cpp
- * @brief Tests for InferenceEngine::apply_monotonicity_rules — Properties 28-31.
+ * @brief Tests for InferenceEngine monotonicity — Properties 7, 28-31.
  *
+ * Feature: assumption-system-enhancements, Property 7: Monotonicity deduction from inequalities
  * Feature: assumption-system, Properties 28-31: Monotonicity deduction
  *
- * Validates: Requirements 15.1, 15.2, 15.3, 15.4, 15.5, 15.6
+ * Validates: Requirements 7.3, 7.4, 7.5, 15.1, 15.2, 15.3, 15.4, 15.5, 15.6
  */
 
 #include "test_common.hpp"
@@ -13,8 +14,13 @@
 #include "property_store.hpp"
 #include "relation_store.hpp"
 #include "assumption.hpp"
+#include "interval.hpp"
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 using namespace lamina;
 
@@ -442,7 +448,260 @@ void test_all_rules_applied_together() {
                 "exp(a) > exp(b) should be deduced");
 }
 
+// ============================================================================
+// Property 7: Monotonicity deduction from inequalities
+// Validates: Requirements 7.3, 7.4, 7.5
+// ============================================================================
+
+/// Helper: create a closed interval [lo, hi] from numeric values.
+static Interval make_closed_interval(double lo, double hi) {
+    auto lo_expr = std::make_shared<SymbolicExpr>(
+        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = std::make_shared<SymbolicExpr>(
+        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    Interval iv;
+    iv.lower = Endpoint::closed(lo_expr);
+    iv.upper = Endpoint::closed(hi_expr);
+    return iv;
+}
+
+/// Helper: create an open interval (lo, hi) from numeric values.
+static Interval make_open_interval(double lo, double hi) {
+    auto lo_expr = std::make_shared<SymbolicExpr>(
+        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = std::make_shared<SymbolicExpr>(
+        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    Interval iv;
+    iv.lower = Endpoint::open(lo_expr);
+    iv.upper = Endpoint::open(hi_expr);
+    return iv;
+}
+
+void test_property7_exp_increasing_on_reals() {
+    TEST_CASE("Property 7: exp is auto-inferred as Increasing on all of R");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+
+    InferenceEngine engine(ctx);
+
+    // exp(x) should be Increasing on any interval
+    SymbolicExpr exp_x = make_func_expr(FunctionNode::FuncType::Exp, "x");
+
+    Interval entire = Interval::entire_line();
+    Monotonicity mono = engine.infer_monotonicity(exp_x, "x", entire);
+
+    EXPECT_TRUE(mono == Monotonicity::Increasing,
+        "exp(x) is Increasing on entire real line");
+}
+
+void test_property7_exp_increasing_on_finite_interval() {
+    TEST_CASE("Property 7: exp is Increasing on finite interval [0, 10]");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr exp_x = make_func_expr(FunctionNode::FuncType::Exp, "x");
+
+    Interval iv = make_closed_interval(0.0, 10.0);
+    Monotonicity mono = engine.infer_monotonicity(exp_x, "x", iv);
+
+    EXPECT_TRUE(mono == Monotonicity::Increasing,
+        "exp(x) is Increasing on [0, 10]");
+}
+
+void test_property7_ln_increasing_on_positive_reals() {
+    TEST_CASE("Property 7: ln is auto-inferred as Increasing on positive reals");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+    ctx.assume_sign("x", Sign::Positive);
+
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr ln_x = make_func_expr(FunctionNode::FuncType::Ln, "x");
+
+    // ln is increasing on (0, +inf)
+    Interval pos_reals = make_open_interval(0.0, 1000.0);
+    Monotonicity mono = engine.infer_monotonicity(ln_x, "x", pos_reals);
+
+    EXPECT_TRUE(mono == Monotonicity::Increasing,
+        "ln(x) is Increasing on (0, 1000)");
+}
+
+void test_property7_ln_increasing_on_closed_positive() {
+    TEST_CASE("Property 7: ln is Increasing on [1, 100]");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+    ctx.assume_sign("x", Sign::Positive);
+
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr ln_x = make_func_expr(FunctionNode::FuncType::Ln, "x");
+
+    Interval iv = make_closed_interval(1.0, 100.0);
+    Monotonicity mono = engine.infer_monotonicity(ln_x, "x", iv);
+
+    EXPECT_TRUE(mono == Monotonicity::Increasing,
+        "ln(x) is Increasing on [1, 100]");
+}
+
+void test_property7_negation_reverses_monotonicity() {
+    TEST_CASE("Property 7: Negation reverses monotonicity (-exp(x) is Decreasing)");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+
+    InferenceEngine engine(ctx);
+
+    // Create -exp(x) = MultiplyNode([-1, exp(x)])
+    auto x_node = std::make_shared<VariableNode>("x");
+    auto exp_node = std::make_shared<FunctionNode>(
+        FunctionNode::FuncType::Exp,
+        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
+    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
+    auto neg_exp = std::make_shared<MultiplyNode>(
+        std::vector<std::shared_ptr<SymbolicNode>>{neg_one, exp_node});
+    SymbolicExpr neg_exp_x(neg_exp);
+
+    Interval entire = Interval::entire_line();
+    Monotonicity mono = engine.infer_monotonicity(neg_exp_x, "x", entire);
+
+    EXPECT_TRUE(mono == Monotonicity::Decreasing,
+        "-exp(x) is Decreasing (negation reverses Increasing)");
+}
+
+void test_property7_negation_reverses_ln() {
+    TEST_CASE("Property 7: -ln(x) is Decreasing on positive reals");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+    ctx.assume_sign("x", Sign::Positive);
+
+    InferenceEngine engine(ctx);
+
+    // Create -ln(x)
+    auto x_node = std::make_shared<VariableNode>("x");
+    auto ln_node = std::make_shared<FunctionNode>(
+        FunctionNode::FuncType::Ln,
+        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
+    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
+    auto neg_ln = std::make_shared<MultiplyNode>(
+        std::vector<std::shared_ptr<SymbolicNode>>{neg_one, ln_node});
+    SymbolicExpr neg_ln_x(neg_ln);
+
+    Interval iv = make_closed_interval(1.0, 100.0);
+    Monotonicity mono = engine.infer_monotonicity(neg_ln_x, "x", iv);
+
+    EXPECT_TRUE(mono == Monotonicity::Decreasing,
+        "-ln(x) is Decreasing on [1, 100]");
+}
+
+void test_property7_declared_monotonicity_deduction() {
+    TEST_CASE("Property 7: Declared monotonically increasing f with x > y deduces f(x) > f(y)");
+
+    AssumptionContext ctx;
+    ctx.assume_sign("x", Sign::Positive);
+    ctx.assume_sign("y", Sign::Positive);
+    ctx.assume_domain("x", Domain::Real);
+    ctx.assume_domain("y", Domain::Real);
+
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr x_expr = make_var_expr("x");
+    SymbolicExpr y_expr = make_var_expr("y");
+
+    // Add x > y relation
+    Relation rel{x_expr, y_expr, RelationalNode::Op::GT};
+    ctx.current_relations().add_relation(x_expr, y_expr, RelationalNode::Op::GT, ctx.current_properties());
+
+    // Apply monotonicity rules — exp is auto-inferred increasing
+    engine.apply_monotonicity_rules(rel, ctx.current_relations(), ctx.current_properties());
+
+    // exp(x) > exp(y) should be deduced (exp is increasing on R)
+    SymbolicExpr exp_x = make_func_expr(FunctionNode::FuncType::Exp, "x");
+    SymbolicExpr exp_y = make_func_expr(FunctionNode::FuncType::Exp, "y");
+
+    EXPECT_TRUE(ctx.current_relations().has_relation(exp_x, exp_y, RelationalNode::Op::GT),
+        "x > y with exp increasing => exp(x) > exp(y)");
+}
+
+void test_property7_ln_deduction_from_inequality() {
+    TEST_CASE("Property 7: x > y with both Positive deduces ln(x) > ln(y)");
+
+    AssumptionContext ctx;
+    ctx.assume_sign("x", Sign::Positive);
+    ctx.assume_sign("y", Sign::Positive);
+
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr x_expr = make_var_expr("x");
+    SymbolicExpr y_expr = make_var_expr("y");
+
+    Relation rel{x_expr, y_expr, RelationalNode::Op::GT};
+    ctx.current_relations().add_relation(x_expr, y_expr, RelationalNode::Op::GT, ctx.current_properties());
+
+    engine.apply_monotonicity_rules(rel, ctx.current_relations(), ctx.current_properties());
+
+    SymbolicExpr ln_x = make_func_expr(FunctionNode::FuncType::Ln, "x");
+    SymbolicExpr ln_y = make_func_expr(FunctionNode::FuncType::Ln, "y");
+
+    EXPECT_TRUE(ctx.current_relations().has_relation(ln_x, ln_y, RelationalNode::Op::GT),
+        "x > y with both Positive => ln(x) > ln(y)");
+}
+
+void test_property7_unknown_for_non_monotone_function() {
+    TEST_CASE("Property 7: Non-monotone function (sin) returns Unknown monotonicity");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr sin_x = make_func_expr(FunctionNode::FuncType::Sin, "x");
+
+    Interval iv = make_closed_interval(0.0, 2.0 * M_PI);
+    Monotonicity mono = engine.infer_monotonicity(sin_x, "x", iv);
+
+    EXPECT_TRUE(mono == Monotonicity::Unknown,
+        "sin(x) on [0, 2*pi] has Unknown monotonicity (not monotone on full period)");
+}
+
+void test_property7_wrong_variable_returns_unknown() {
+    TEST_CASE("Property 7: Querying monotonicity w.r.t. wrong variable returns Unknown");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("x", Domain::Real);
+
+    InferenceEngine engine(ctx);
+
+    // exp(x) is increasing w.r.t. x, but Unknown w.r.t. y
+    SymbolicExpr exp_x = make_func_expr(FunctionNode::FuncType::Exp, "x");
+
+    Interval iv = make_closed_interval(0.0, 10.0);
+    Monotonicity mono = engine.infer_monotonicity(exp_x, "y", iv);
+
+    EXPECT_TRUE(mono == Monotonicity::Unknown,
+        "exp(x) w.r.t. y returns Unknown (wrong variable)");
+}
+
 int main() {
+    // Property 7: Monotonicity deduction from inequalities (Req 7.3, 7.4, 7.5)
+    test_property7_exp_increasing_on_reals();
+    test_property7_exp_increasing_on_finite_interval();
+    test_property7_ln_increasing_on_positive_reals();
+    test_property7_ln_increasing_on_closed_positive();
+    test_property7_negation_reverses_monotonicity();
+    test_property7_negation_reverses_ln();
+    test_property7_declared_monotonicity_deduction();
+    test_property7_ln_deduction_from_inequality();
+    test_property7_unknown_for_non_monotone_function();
+    test_property7_wrong_variable_returns_unknown();
+
+    // Properties 28-31: Monotonicity deduction rules (existing tests)
     test_ln_monotonicity_both_positive();
     test_sqrt_monotonicity_both_positive();
     test_exp_monotonicity_both_real();

@@ -233,6 +233,73 @@ void test_skew_lines_distance() {
     }
 }
 
+void test_geometry_extensions() {
+    using lamina::SurfaceSymbolic;
+    auto N = [](int n){ return SymbolicExpr::number(n); };
+
+    TEST_CASE("line_from_two_points: direction = p2 - p1");
+    {
+        std::vector<std::shared_ptr<SymbolicExpr>> p1 = {N(0), N(0), N(0)};
+        std::vector<std::shared_ptr<SymbolicExpr>> p2 = {N(1), N(2), N(3)};
+        auto line = lamina::line_from_two_points(p1, p2);
+        EXPECT_EQ_EXPR_STR(line.direction[0]->simplify(), "1", "dir.x = 1");
+        EXPECT_EQ_EXPR_STR(line.direction[1]->simplify(), "2", "dir.y = 2");
+        EXPECT_EQ_EXPR_STR(line.direction[2]->simplify(), "3", "dir.z = 3");
+    }
+
+    TEST_CASE("plane_from_three_points: xy-plane normal is (0,0,c)");
+    {
+        std::vector<std::shared_ptr<SymbolicExpr>> p1 = {N(0), N(0), N(0)};
+        std::vector<std::shared_ptr<SymbolicExpr>> p2 = {N(1), N(0), N(0)};
+        std::vector<std::shared_ptr<SymbolicExpr>> p3 = {N(0), N(1), N(0)};
+        auto plane = lamina::plane_from_three_points(p1, p2, p3);
+        // normal = (p2-p1)x(p3-p1) = (1,0,0)x(0,1,0) = (0,0,1)
+        EXPECT_EQ_EXPR_STR(plane.normal[0]->simplify(), "0", "n.x = 0");
+        EXPECT_EQ_EXPR_STR(plane.normal[1]->simplify(), "0", "n.y = 0");
+        EXPECT_EQ_EXPR_STR(plane.normal[2]->simplify(), "1", "n.z = 1");
+    }
+
+    TEST_CASE("classify_quadric: unit sphere");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto z = SymbolicExpr::variable("z");
+        // x^2 + y^2 + z^2 - 1 = 0
+        auto F = SymbolicExpr::add(
+            SymbolicExpr::add(SymbolicExpr::multiply(x, x), SymbolicExpr::multiply(y, y)),
+            SymbolicExpr::add(SymbolicExpr::multiply(z, z), N(-1)));
+        SurfaceSymbolic surf{F, {"x", "y", "z"}};
+        std::string c = lamina::classify_quadric(surf);
+        EXPECT_TRUE(c == "sphere", "x^2+y^2+z^2=1 classified as sphere");
+    }
+
+    TEST_CASE("surface_normal / tangent_plane of sphere at (1,0,0)");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto z = SymbolicExpr::variable("z");
+        auto F = SymbolicExpr::add(
+            SymbolicExpr::add(SymbolicExpr::multiply(x, x), SymbolicExpr::multiply(y, y)),
+            SymbolicExpr::add(SymbolicExpr::multiply(z, z), N(-1)));
+        SurfaceSymbolic surf{F, {"x", "y", "z"}};
+        std::vector<std::shared_ptr<SymbolicExpr>> pt = {N(1), N(0), N(0)};
+        auto n = lamina::surface_normal(surf, pt);
+        // grad = (2x,2y,2z) at (1,0,0) = (2,0,0); normalized = (1,0,0)
+        EXPECT_EQ_EXPR_STR(n[0]->simplify(), "1", "unit normal x = 1");
+        EXPECT_EQ_EXPR_STR(n[1]->simplify(), "0", "unit normal y = 0");
+    }
+
+    TEST_CASE("dihedral_angle: perpendicular planes = pi/2");
+    {
+        lamina::PlaneSymbolic p1{{N(1), N(0), N(0)}, N(0)};
+        lamina::PlaneSymbolic p2{{N(0), N(1), N(0)}, N(0)};
+        auto ang = lamina::dihedral_angle(p1, p2);
+        auto v = test_numeric_eval(ang ? ang->simplify() : nullptr);
+        EXPECT_TRUE(v.has_value() && std::abs(*v - LMMC_CONST_PI/2.0) < 1e-6,
+            "dihedral angle of perpendicular planes is pi/2");
+    }
+}
+
 int main() {
     try {
         test_vector_dot();
@@ -241,6 +308,7 @@ int main() {
         test_line_plane_intersection();
         test_point_plane_distance();
         test_skew_lines_distance();
+        test_geometry_extensions();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;
         g_failures++;
