@@ -101,6 +101,7 @@ add_library(lmcas SHARED
     src/differential_geometry.cpp
     src/numerical_integration.cpp
     src/lmmc_lifecycle.cpp
+    src/lsr_expr.cpp
 )
 
 if(WIN32)
@@ -171,7 +172,7 @@ endif()
 # ============================================================
 # Install / package config
 # ============================================================
-install(TARGETS lmcas
+install(TARGETS lmcas lmmc
     EXPORT LMCASTargets
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

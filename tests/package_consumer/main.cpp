@@ -3,7 +3,9 @@
 #include "property_store.hpp"
 #include "query_interface.hpp"
 #include "symbolic.hpp"
+#include "lsr_expr.hpp"
 #include "solve_strategies.hpp"
+#include "lmmc/lsr_stdlib.h"
 
 #include <iostream>
 
@@ -78,10 +80,33 @@ int main() {
         return 9;
     }
 
+    auto i = lamina::lsr::imaginary_unit();
+    if (!i) {
+        std::cerr << "failed to construct LSR imaginary unit\n";
+        return 10;
+    }
+    auto i_squared = SymbolicExpr::multiply(i.value(), i.value());
+    lamina::ComputationContext lsr_context;
+    auto i_rule = lamina::lsr::equivalent_core(
+        *i_squared, *SymbolicExpr::number(-1), lsr_context);
+    if (!i_rule || !i_rule.value()) {
+        std::cerr << "failed to prove LSR i*i == -1\n";
+        return 11;
+    }
+
+    lmmc_complex_t numeric_i;
+    lmmc_real_t numeric_abs = 0;
+    if (lmmc_lsr_math_i(&numeric_i) != LMMC_STATUS_OK ||
+        lmmc_lsr_math_complex_abs(&numeric_i, &numeric_abs) != LMMC_STATUS_OK ||
+        numeric_abs != 1.0) {
+        std::cerr << "failed to call LMMC LSR std.math adapter\n";
+        return 12;
+    }
+
     std::cout << expr->to_string() << '\n';
     if (expr->to_string().empty()) {
         std::cerr << "expression string is empty\n";
-        return 10;
+        return 13;
     }
     return 0;
 }

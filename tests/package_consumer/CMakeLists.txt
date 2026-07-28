@@ -8,4 +8,4 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(LMCAS CONFIG REQUIRED)
 
 add_executable(lmcas_package_consumer main.cpp)
-target_link_libraries(lmcas_package_consumer PRIVATE LMCAS::lmcas)
+target_link_libraries(lmcas_package_consumer PRIVATE LMCAS::lmcas LMCAS::lmmc)
