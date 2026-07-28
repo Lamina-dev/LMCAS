@@ -94,19 +94,28 @@ int main() {
         return 11;
     }
 
+    auto lsr_roots = lamina::lsr::solve_expr_set(
+        SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
+                          SymbolicExpr::number(-1)),
+        "x");
+    if (!lsr_roots || lsr_roots.value().size() != 2) {
+        std::cerr << "failed to lower LSR solve result to set<Expr>\n";
+        return 12;
+    }
+
     lmmc_complex_t numeric_i;
     lmmc_real_t numeric_abs = 0;
     if (lmmc_lsr_math_i(&numeric_i) != LMMC_STATUS_OK ||
         lmmc_lsr_math_complex_abs(&numeric_i, &numeric_abs) != LMMC_STATUS_OK ||
         numeric_abs != 1.0) {
         std::cerr << "failed to call LMMC LSR std.math adapter\n";
-        return 12;
+        return 13;
     }
 
     std::cout << expr->to_string() << '\n';
     if (expr->to_string().empty()) {
         std::cerr << "expression string is empty\n";
-        return 13;
+        return 14;
     }
     return 0;
 }

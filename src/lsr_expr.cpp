@@ -17,10 +17,17 @@ constexpr const char* kApproxOperation = "lsr.approx_real";
 constexpr const char* kImaginaryOperation = "lsr.imaginary_unit";
 constexpr const char* kComplexOperation = "lsr.complex";
 constexpr const char* kEquivalentOperation = "lsr.equivalent_core";
+constexpr const char* kExprSetOperation = "lsr.expr_set";
+constexpr const char* kSolveExprSetOperation = "lsr.solve_expr_set";
 
 ExprResult expression_failure(CasErrc code, std::string message,
                               const char* operation) {
     return ExprResult::failure(code, std::move(message), operation);
+}
+
+ExprSetResult expr_set_failure(CasErrc code, std::string message,
+                               const char* operation) {
+    return ExprSetResult::failure(code, std::move(message), operation);
 }
 
 bool is_reserved_symbol_name(const std::string& name) {
@@ -73,6 +80,86 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
 }
 
 } // namespace
+
+ExprSet::ExprSet(std::vector<ExprPtr> elements)
+    : elements_(std::move(elements)) {}
+
+Result<ExprSet> ExprSet::make(std::vector<ExprPtr> elements) {
+    std::vector<ExprPtr> unique;
+    unique.reserve(elements.size());
+    for (auto& element : elements) {
+        if (!element) {
+            return expr_set_failure(CasErrc::InvalidArgument,
+                                    "set<Expr> elements cannot be null",
+                                    kExprSetOperation);
+        }
+        bool duplicate = false;
+        for (const auto& existing : unique) {
+            if (structurally_equal(*existing, *element)) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            unique.push_back(std::move(element));
+        }
+    }
+    return Result<ExprSet>::success(ExprSet(std::move(unique)));
+}
+
+bool ExprSet::contains(const SymbolicExpr& expression) const {
+    for (const auto& element : elements_) {
+        if (element && structurally_equal(*element, expression)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ExprSet::subset_of(const ExprSet& other) const {
+    for (const auto& element : elements_) {
+        if (!element || !other.contains(*element)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+ExprSet ExprSet::set_union(const ExprSet& other) const {
+    std::vector<ExprPtr> result = elements_;
+    for (const auto& element : other.elements_) {
+        if (element && !contains(*element)) {
+            result.push_back(element);
+        }
+    }
+    return ExprSet(std::move(result));
+}
+
+ExprSet ExprSet::intersection(const ExprSet& other) const {
+    std::vector<ExprPtr> result;
+    for (const auto& element : elements_) {
+        if (element && other.contains(*element)) {
+            result.push_back(element);
+        }
+    }
+    return ExprSet(std::move(result));
+}
+
+ExprSet ExprSet::difference(const ExprSet& other) const {
+    std::vector<ExprPtr> result;
+    for (const auto& element : elements_) {
+        if (element && !other.contains(*element)) {
+            result.push_back(element);
+        }
+    }
+    return ExprSet(std::move(result));
+}
+
+ExprSet ExprSet::symmetric_difference(const ExprSet& other) const {
+    auto left_only = difference(other);
+    auto right_only = other.difference(*this);
+    return left_only.set_union(right_only);
+}
 
 ExprResult sym(const std::string& name) {
     if (name.empty()) {
@@ -208,6 +295,61 @@ SolveResult solve_set(const ExprPtr& equation,
                       const SolveOptions& options) {
     ComputationContext context;
     return solve_set(equation, variable, context, options);
+}
+
+ExprSetResult expr_set(std::vector<ExprPtr> elements) {
+    try {
+        return ExprSet::make(std::move(elements));
+    } catch (const std::bad_alloc&) {
+        return expr_set_failure(CasErrc::ResourceLimit,
+                                "set<Expr> allocation failed",
+                                kExprSetOperation);
+    } catch (const std::exception& error) {
+        return expr_set_failure(CasErrc::InvalidArgument, error.what(),
+                                kExprSetOperation);
+    }
+}
+
+ExprSetResult solve_expr_set(const ExprPtr& equation,
+                             const std::string& variable,
+                             ComputationContext& context,
+                             const SolveOptions& options) {
+    auto solved = solve_set(equation, variable, context, options);
+    if (!solved) {
+        return ExprSetResult::failure(solved.error());
+    }
+
+    const auto& solution_set = solved.value();
+    if (solution_set.kind() == SolutionSet::Kind::Empty) {
+        return expr_set({});
+    }
+    if (solution_set.kind() != SolutionSet::Kind::Finite) {
+        std::string reason = solution_set.reason();
+        if (reason.empty()) {
+            reason = "solution set is not a finite enumerable set<Expr>";
+        }
+        return expr_set_failure(CasErrc::Inconclusive, std::move(reason),
+                                kSolveExprSetOperation);
+    }
+
+    std::vector<ExprPtr> elements;
+    elements.reserve(solution_set.finite_solutions().size());
+    for (const auto& solution : solution_set.finite_solutions()) {
+        if (!solution.conditions.empty()) {
+            return expr_set_failure(CasErrc::Inconclusive,
+                                    "conditional finite solutions cannot be lowered to set<Expr>",
+                                    kSolveExprSetOperation);
+        }
+        elements.push_back(solution.value);
+    }
+    return expr_set(std::move(elements));
+}
+
+ExprSetResult solve_expr_set(const ExprPtr& equation,
+                             const std::string& variable,
+                             const SolveOptions& options) {
+    ComputationContext context;
+    return solve_expr_set(equation, variable, context, options);
 }
 
 bool structurally_equal(const SymbolicExpr& lhs, const SymbolicExpr& rhs) {

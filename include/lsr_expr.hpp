@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "bigint.hpp"
 #include "conditional_result.hpp"
@@ -15,6 +16,32 @@ namespace lamina::lsr {
 using Expr = SymbolicExpr;
 using ExprPtr = std::shared_ptr<SymbolicExpr>;
 using ExprResult = Result<ExprPtr>;
+
+class LAMINA_API ExprSet {
+public:
+    ExprSet() = default;
+
+    static Result<ExprSet> make(std::vector<ExprPtr> elements);
+
+    bool empty() const noexcept { return elements_.empty(); }
+    std::size_t size() const noexcept { return elements_.size(); }
+    const std::vector<ExprPtr>& elements() const noexcept { return elements_; }
+
+    bool contains(const SymbolicExpr& expression) const;
+    bool subset_of(const ExprSet& other) const;
+
+    ExprSet set_union(const ExprSet& other) const;
+    ExprSet intersection(const ExprSet& other) const;
+    ExprSet difference(const ExprSet& other) const;
+    ExprSet symmetric_difference(const ExprSet& other) const;
+
+private:
+    explicit ExprSet(std::vector<ExprPtr> elements);
+
+    std::vector<ExprPtr> elements_;
+};
+
+using ExprSetResult = Result<ExprSet>;
 
 LAMINA_API ExprResult sym(const std::string& name);
 LAMINA_API ExprResult integer(long long value);
@@ -40,6 +67,17 @@ LAMINA_API SolveResult solve_set(const ExprPtr& equation,
 LAMINA_API SolveResult solve_set(const ExprPtr& equation,
                                  const std::string& variable,
                                  const SolveOptions& options = {});
+
+LAMINA_API ExprSetResult expr_set(std::vector<ExprPtr> elements);
+
+LAMINA_API ExprSetResult solve_expr_set(const ExprPtr& equation,
+                                        const std::string& variable,
+                                        ComputationContext& context,
+                                        const SolveOptions& options = {});
+
+LAMINA_API ExprSetResult solve_expr_set(const ExprPtr& equation,
+                                        const std::string& variable,
+                                        const SolveOptions& options = {});
 
 LAMINA_API bool structurally_equal(const SymbolicExpr& lhs,
                                    const SymbolicExpr& rhs);
