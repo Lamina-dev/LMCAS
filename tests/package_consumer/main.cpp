@@ -128,6 +128,8 @@ int main() {
     lmmc_mat_t numeric_inv = {0};
     lmmc_mat_t numeric_rhs = {0};
     lmmc_mat_t numeric_solution = {0};
+    lmmc_eigen_gen_full_result_t numeric_eig = {0};
+    lmmc_svd_result_t numeric_svd = {0};
     size_t numeric_rows = 0;
     size_t numeric_cols = 0;
     size_t numeric_rank = 0;
@@ -154,14 +156,22 @@ int main() {
         lmmc_lsr_linalg_solve_left(&numeric_a, &numeric_rhs,
                                    &numeric_solution) != LMMC_STATUS_OK ||
         numeric_solution.data[0] != 1.0 ||
-        numeric_solution.data[numeric_solution.stride] != 2.0) {
+        numeric_solution.data[numeric_solution.stride] != 2.0 ||
+        lmmc_lsr_linalg_eig(&numeric_a, &numeric_eig) != LMMC_STATUS_OK ||
+        numeric_eig.real_parts.size != 2 ||
+        lmmc_lsr_linalg_svd(&numeric_a, &numeric_svd) != LMMC_STATUS_OK ||
+        numeric_svd.sigma.size != 2) {
         std::cerr << "failed to call LMMC LSR std.linalg adapter\n";
+        lmmc_svd_result_destroy(&numeric_svd);
+        lmmc_eigen_gen_full_result_destroy(&numeric_eig);
         lmmc_mat_destroy(&numeric_solution);
         lmmc_mat_destroy(&numeric_inv);
         lmmc_mat_destroy(&numeric_rhs);
         lmmc_mat_destroy(&numeric_a);
         return 16;
     }
+    lmmc_svd_result_destroy(&numeric_svd);
+    lmmc_eigen_gen_full_result_destroy(&numeric_eig);
     lmmc_mat_destroy(&numeric_solution);
     lmmc_mat_destroy(&numeric_inv);
     lmmc_mat_destroy(&numeric_rhs);
