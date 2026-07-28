@@ -107,6 +107,9 @@ LAMINA_API ExprSetResult solve_expr_set(const ExprPtr& equation,
                                         const std::string& variable,
                                         const SolveOptions& options = {});
 
+LAMINA_API const char* error_name(CasErrc code) noexcept;
+LAMINA_API const char* error_name(const CasError& error) noexcept;
+
 LAMINA_API bool structurally_equal(const SymbolicExpr& lhs,
                                    const SymbolicExpr& rhs);
 

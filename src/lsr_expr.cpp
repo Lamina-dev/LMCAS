@@ -43,6 +43,10 @@ Result<ApproxComplex> complex_failure(CasErrc code, std::string message,
     return Result<ApproxComplex>::failure(code, std::move(message), operation);
 }
 
+Result<ApproxComplex> eval_complex_failure(const CasError& error) {
+    return complex_failure(error.code, error.message, kEvalComplexOperation);
+}
+
 ExprResult expr_from_complex_result(const ComplexExprResult& result,
                                     const char* operation) {
     if (!result) {
@@ -81,7 +85,7 @@ Result<ApproxComplex> checked_complex(double real, double imag,
 
 Result<ApproxComplex> real_to_complex(const Result<ApproxReal>& real) {
     if (!real) {
-        return Result<ApproxComplex>::failure(real.error());
+        return eval_complex_failure(real.error());
     }
     if (!real.value().is_finite()) {
         return complex_failure(CasErrc::NumericFailure,
@@ -151,6 +155,10 @@ bool is_reserved_symbol_name(const std::string& name) {
            name == "e";
 }
 
+bool is_imaginary_unit_name(const std::string& name) {
+    return name == "i" || name == "I";
+}
+
 ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     const auto& node = lamina::detail::node(expression);
     auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node);
@@ -211,11 +219,11 @@ Result<ApproxComplex> evaluate_complex_node(
         auto real = evaluate_numeric(
             *lamina::detail::make_expression_ptr(complex_node->real()),
             bindings, context);
-        if (!real) return Result<ApproxComplex>::failure(real.error());
+        if (!real) return eval_complex_failure(real.error());
         auto imag = evaluate_numeric(
             *lamina::detail::make_expression_ptr(complex_node->imag()),
             bindings, context);
-        if (!imag) return Result<ApproxComplex>::failure(imag.error());
+        if (!imag) return eval_complex_failure(imag.error());
         if (!real.value().is_finite() || !imag.value().is_finite()) {
             return complex_failure(CasErrc::NumericFailure,
                                    "complex components must be finite",
@@ -253,7 +261,7 @@ Result<ApproxComplex> evaluate_complex_node(
         auto exponent = evaluate_numeric(
             *lamina::detail::make_expression_ptr(power->exponent()),
             bindings, context);
-        if (!exponent) return Result<ApproxComplex>::failure(exponent.error());
+        if (!exponent) return eval_complex_failure(exponent.error());
         const double exponent_value = exponent.value().value;
         if (!is_integer_double(exponent_value) ||
             std::abs(exponent_value) > 64.0) {
@@ -366,6 +374,11 @@ ExprResult sym(const std::string& name) {
                                   "symbol name cannot be empty", kSymOperation);
     }
     if (is_reserved_symbol_name(name)) {
+        if (is_imaginary_unit_name(name)) {
+            return expression_failure(CasErrc::InvalidArgument,
+                                      "imaginary unit symbol is reserved",
+                                      kSymOperation);
+        }
         return expression_failure(CasErrc::InvalidArgument,
                                   "reserved mathematical constants cannot be shadowed",
                                   kSymOperation);
@@ -639,6 +652,57 @@ ExprSetResult solve_expr_set(const ExprPtr& equation,
                              const SolveOptions& options) {
     ComputationContext context;
     return solve_expr_set(equation, variable, context, options);
+}
+
+const char* error_name(CasErrc code) noexcept {
+    switch (code) {
+    case CasErrc::InvalidArgument:
+        return "InvalidArgument";
+    case CasErrc::ParseError:
+        return "ParseError";
+    case CasErrc::UnboundSymbol:
+        return "UnboundSymbol";
+    case CasErrc::DomainError:
+        return "DomainError";
+    case CasErrc::UnsupportedExpression:
+        return "UnsupportedExpression";
+    case CasErrc::Inconclusive:
+        return "Inconclusive";
+    case CasErrc::ResourceLimit:
+        return "ResourceLimit";
+    case CasErrc::Cancelled:
+        return "Cancelled";
+    case CasErrc::NumericFailure:
+        return "NumericFailure";
+    case CasErrc::InternalInvariant:
+        return "InternalInvariant";
+    }
+    return "InternalInvariant";
+}
+
+const char* error_name(const CasError& error) noexcept {
+    if (error.operation == kSymOperation &&
+        error.code == CasErrc::InvalidArgument &&
+        error.message.find("imaginary unit") != std::string::npos) {
+        return "ImaginaryUnitReserved";
+    }
+    if (error.operation == kEvalComplexOperation &&
+        error.code == CasErrc::UnboundSymbol) {
+        return "ComplexEvalUnboundSymbol";
+    }
+    if (error.operation == kComplexOperation &&
+        error.code == CasErrc::InvalidArgument) {
+        return "ComplexTypeMismatch";
+    }
+    if (error.operation == kExprSetOperation &&
+        error.code == CasErrc::InvalidArgument) {
+        return "SetElementTypeMismatch";
+    }
+    if (error.operation == kSolveExprSetOperation &&
+        error.code == CasErrc::Inconclusive) {
+        return "SetResultInconclusive";
+    }
+    return error_name(error.code);
 }
 
 bool structurally_equal(const SymbolicExpr& lhs, const SymbolicExpr& rhs) {

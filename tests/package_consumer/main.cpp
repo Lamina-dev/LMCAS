@@ -8,6 +8,7 @@
 #include "lmmc/lsr_stdlib.h"
 
 #include <iostream>
+#include <string>
 
 int main() {
     auto x = SymbolicExpr::variable("x");
@@ -83,6 +84,13 @@ int main() {
     auto i = lamina::lsr::imaginary_unit();
     if (!i) {
         std::cerr << "failed to construct LSR imaginary unit\n";
+        return 10;
+    }
+    auto reserved_i = lamina::lsr::sym("i");
+    if (reserved_i ||
+        std::string(lamina::lsr::error_name(reserved_i.error())) !=
+            "ImaginaryUnitReserved") {
+        std::cerr << "failed to expose LSR diagnostic names\n";
         return 10;
     }
     auto i_squared = SymbolicExpr::multiply(i.value(), i.value());

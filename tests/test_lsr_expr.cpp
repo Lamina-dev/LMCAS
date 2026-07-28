@@ -11,11 +11,19 @@ int main() {
     EXPECT_TRUE(!reserved_i &&
                     reserved_i.error().code == lamina::CasErrc::InvalidArgument,
                 "i is the imaginary unit and cannot be shadowed as a symbol");
+    EXPECT_TRUE(!reserved_i &&
+                    std::string(lamina::lsr::error_name(reserved_i.error())) ==
+                        "ImaginaryUnitReserved",
+                "LSR diagnostic name preserves reserved imaginary unit errors");
 
     auto reserved_pi = lamina::lsr::sym("pi");
     EXPECT_TRUE(!reserved_pi &&
                     reserved_pi.error().code == lamina::CasErrc::InvalidArgument,
                 "pi is a constant and cannot be shadowed as a symbol");
+    EXPECT_TRUE(!reserved_pi &&
+                    std::string(lamina::lsr::error_name(reserved_pi.error())) ==
+                        "InvalidArgument",
+                "non-imaginary reserved constants keep the generic argument diagnostic");
 
     TEST_CASE("LSR imaginary unit is canonical complex zero plus one i");
 
@@ -50,6 +58,10 @@ int main() {
     EXPECT_TRUE(!unbound &&
                     unbound.error().code == lamina::CasErrc::UnboundSymbol,
                 "evalf without a required binding reports UnboundSymbol");
+    EXPECT_TRUE(!unbound &&
+                    std::string(lamina::lsr::error_name(unbound.error())) ==
+                        "UnboundSymbol",
+                "evalf keeps the generic unbound symbol diagnostic");
 
     lamina::NumericBindings bindings{{"x", 3.0}};
     auto evaluated = lamina::lsr::evalf(*linear, bindings);
@@ -95,6 +107,10 @@ int main() {
     EXPECT_TRUE(!complex_unbound &&
                     complex_unbound.error().code == lamina::CasErrc::UnboundSymbol,
                 "eval_complex rejects unbound symbols during Expr to complex lowering");
+    EXPECT_TRUE(!complex_unbound &&
+                    std::string(lamina::lsr::error_name(complex_unbound.error())) ==
+                        "ComplexEvalUnboundSymbol",
+                "eval_complex exposes the LSR complex unbound-symbol diagnostic");
 
     if (i) {
         auto fractional_power = SymbolicExpr::power(i.value(), SymbolicExpr::number(0.5));
@@ -198,6 +214,10 @@ int main() {
     EXPECT_TRUE(!null_set &&
                     null_set.error().code == lamina::CasErrc::InvalidArgument,
                 "set<Expr> rejects null elements");
+    EXPECT_TRUE(!null_set &&
+                    std::string(lamina::lsr::error_name(null_set.error())) ==
+                        "SetElementTypeMismatch",
+                "set<Expr> construction exposes the LSR element type diagnostic");
 
     TEST_CASE("LSR solve_expr_set lowers only complete finite CAS results");
 
@@ -213,6 +233,10 @@ int main() {
     EXPECT_TRUE(!universal_solved &&
                     universal_solved.error().code == lamina::CasErrc::Inconclusive,
                 "solve_expr_set does not pretend universal solutions are finite set<Expr>");
+    EXPECT_TRUE(!universal_solved &&
+                    std::string(lamina::lsr::error_name(universal_solved.error())) ==
+                        "SetResultInconclusive",
+                "non-finite solution lowering exposes the LSR set inconclusive diagnostic");
 
     TEST_CASE("LSR equivalence core handles local exact identities");
 
