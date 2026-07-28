@@ -2172,13 +2172,6 @@ bool rd_collect_rational(const std::shared_ptr<const SymbolicNode>& node,
     return false;
 }
 
-// Returns true and sets out_n if `c` is a non-negative integer NumberNode-like
-// constant (kept simple; we only need this for safety checks).
-inline bool rd_is_const_in(const std::shared_ptr<SymbolicExpr>& expr,
-                           const std::string& var) {
-    return !depends_on_var(lamina::detail::node(expr), var);
-}
-
 } // anonymous namespace
 
 bool RationalDecompositionStrategy::extract_rational(
