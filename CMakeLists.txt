@@ -36,6 +36,10 @@ endif()
 
 add_subdirectory(LMMC/LAMMP EXCLUDE_FROM_ALL)
 
+if(UNIX)
+    target_link_libraries(LammpCore PRIVATE m)
+endif()
+
 set(LMMC_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LMMC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LMMC_BUILD_SHARED OFF CACHE BOOL "" FORCE)
