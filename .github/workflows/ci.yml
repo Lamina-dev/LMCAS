@@ -100,7 +100,7 @@ jobs:
       - name: Test
         env:
           ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
-          LSAN_OPTIONS: suppressions=.github/lsan.supp:print_suppressions=0
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp:print_suppressions=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: ctest --test-dir build --output-on-failure --timeout 120
 
