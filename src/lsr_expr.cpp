@@ -164,12 +164,6 @@ bool is_imaginary_unit_name(const std::string& name) {
 }
 
 Result<void> validate_eqv_options(const EqvOptions& options) {
-    if (options.profile == EqvProfile::ExpLogBasic) {
-        return Result<void>::failure(
-            CasErrc::UnsupportedExpression,
-            "LSR equivalence profile is declared but not implemented by this build",
-            kEquivalentProfileOperation);
-    }
     if (options.budget.max_rewrite_steps == 0 ||
         options.budget.max_rewrite_depth == 0 ||
         options.budget.max_node_growth_factor == 0) {
@@ -298,6 +292,71 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
     if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
         auto real_part = rewrite_trig_basic_identity(complex_node->real());
         auto imag_part = rewrite_trig_basic_identity(complex_node->imag());
+        auto value = complex(real_part, imag_part);
+        if (!value) throw std::runtime_error(value.error().message);
+        return value.value()->simplify();
+    }
+
+    return lamina::detail::make_expression_ptr(node);
+}
+
+ExprPtr rewrite_exp_log_basic_identity(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    if (!node) return nullptr;
+
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
+        operands.reserve(add->operands().size());
+        for (const auto& operand : add->operands()) {
+            auto child = rewrite_exp_log_basic_identity(operand);
+            operands.push_back(lamina::detail::node(child));
+        }
+        return lamina::detail::make_expression_ptr(
+            SymbolicFactory::create_add(std::move(operands)))->simplify();
+    }
+
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
+        operands.reserve(multiply->operands().size());
+        for (const auto& operand : multiply->operands()) {
+            auto child = rewrite_exp_log_basic_identity(operand);
+            operands.push_back(lamina::detail::node(child));
+        }
+        return lamina::detail::make_expression_ptr(
+            SymbolicFactory::create_multiply(std::move(operands)))->simplify();
+    }
+
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto base = rewrite_exp_log_basic_identity(power->base());
+        auto exponent = rewrite_exp_log_basic_identity(power->exponent());
+        return SymbolicExpr::power(base, exponent)->simplify();
+    }
+
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> args;
+        args.reserve(function->arguments().size());
+        for (const auto& argument : function->arguments()) {
+            auto child = rewrite_exp_log_basic_identity(argument);
+            args.push_back(lamina::detail::node(child));
+        }
+
+        if (function->type() == FunctionNode::FuncType::Exp &&
+            args.size() == 1 && exact_integer_node(args[0], 0)) {
+            return SymbolicExpr::number(1);
+        }
+        if (function->type() == FunctionNode::FuncType::Ln &&
+            args.size() == 1 && exact_integer_node(args[0], 1)) {
+            return SymbolicExpr::number(0);
+        }
+
+        return lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<FunctionNode>(function->type(),
+                                                    std::move(args)))->simplify();
+    }
+
+    if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
+        auto real_part = rewrite_exp_log_basic_identity(complex_node->real());
+        auto imag_part = rewrite_exp_log_basic_identity(complex_node->imag());
         auto value = complex(real_part, imag_part);
         if (!value) throw std::runtime_error(value.error().message);
         return value.value()->simplify();
@@ -1134,6 +1193,24 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
             EqvOptions core_options = options;
             core_options.profile = EqvProfile::Core;
             return equivalent_core(*trig_lhs, *trig_rhs, context,
+                                   core_options);
+        }
+        if (options.profile == EqvProfile::ExpLogBasic) {
+            if (options.budget.max_rewrite_steps < 8) {
+                return Result<bool>::failure(
+                    CasErrc::ResourceLimit,
+                    "equivalence rewrite budget exhausted before ExpLog-Basic normalization",
+                    kEquivalentOperation);
+            }
+            auto exp_log_step = context.consume_steps(8, kEquivalentOperation);
+            if (!exp_log_step) return Result<bool>::failure(exp_log_step.error());
+            auto exp_log_lhs = rewrite_exp_log_basic_identity(
+                lamina::detail::node(lhs));
+            auto exp_log_rhs = rewrite_exp_log_basic_identity(
+                lamina::detail::node(rhs));
+            EqvOptions core_options = options;
+            core_options.profile = EqvProfile::Core;
+            return equivalent_core(*exp_log_lhs, *exp_log_rhs, context,
                                    core_options);
         }
         return Result<bool>::success(false);

@@ -139,6 +139,16 @@ int main() {
         std::cerr << "failed to prove LSR Trig-Basic equivalence example\n";
         return 11;
     }
+    lamina::lsr::EqvOptions exp_log_eqv_options;
+    exp_log_eqv_options.profile = lamina::lsr::EqvProfile::ExpLogBasic;
+    lamina::ComputationContext exp_log_eqv_context;
+    auto exp_log_eqv = lamina::lsr::equivalent_core(
+        *SymbolicExpr::exp(SymbolicExpr::number(0)), *SymbolicExpr::number(1),
+        exp_log_eqv_context, exp_log_eqv_options);
+    if (!exp_log_eqv || !exp_log_eqv.value()) {
+        std::cerr << "failed to prove LSR ExpLog-Basic equivalence example\n";
+        return 11;
+    }
 
     auto lsr_roots = lamina::lsr::solve_expr_set(
         SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),

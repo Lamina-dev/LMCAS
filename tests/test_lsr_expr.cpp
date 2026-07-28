@@ -341,16 +341,19 @@ int main() {
     lamina::lsr::EqvOptions exp_log_profile;
     exp_log_profile.profile = lamina::lsr::EqvProfile::ExpLogBasic;
     lamina::ComputationContext exp_log_profile_context;
-    auto disabled_profile = lamina::lsr::equivalent_core(
-        *one_plus_x, *x_plus_one, exp_log_profile_context, exp_log_profile);
-    EXPECT_TRUE(!disabled_profile &&
-                    disabled_profile.error().code ==
-                        lamina::CasErrc::UnsupportedExpression,
-                "equivalent_core does not silently enable unsupported ExpLog profile");
-    EXPECT_TRUE(!disabled_profile &&
-                    std::string(lamina::lsr::error_name(disabled_profile.error())) ==
-                        "EqvRuleDisabled",
-                "unsupported LSR equivalence profiles expose EqvRuleDisabled");
+    auto exp_zero = SymbolicExpr::exp(SymbolicExpr::number(0));
+    auto exp_log_equivalent = lamina::lsr::equivalent_core(
+        *exp_zero, *SymbolicExpr::number(1), exp_log_profile_context,
+        exp_log_profile);
+    EXPECT_TRUE(exp_log_equivalent && exp_log_equivalent.value(),
+                "equivalent_core proves the LSR ExpLog-Basic exp(0) identity");
+
+    auto ln_one = SymbolicExpr::ln(SymbolicExpr::number(1));
+    lamina::ComputationContext ln_one_context;
+    auto ln_one_equivalent = lamina::lsr::equivalent_core(
+        *ln_one, *SymbolicExpr::number(0), ln_one_context, exp_log_profile);
+    EXPECT_TRUE(ln_one_equivalent && ln_one_equivalent.value(),
+                "equivalent_core proves the LSR ExpLog-Basic ln(1) identity");
 
     return TEST_REPORT();
 }
