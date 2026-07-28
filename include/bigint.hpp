@@ -260,9 +260,6 @@ public:
 
         size_t len = str.length() - start;
 
-        mp_size_t needed = len / 19 + 2;
-        realloc_to(needed);
-
         std::vector<mp_byte_t> digit_buf(len);
         for (size_t i = 0; i < len; ++i) {
             char c = str[start + i];
@@ -276,6 +273,9 @@ public:
 
             digit_buf[len - 1 - i] = d;
         }
+
+        mp_size_t needed = len / 19 + 2;
+        realloc_to(needed);
 
         _size = lmmp_from_str_(_data, digit_buf.data(), len, 10);
 
