@@ -124,10 +124,53 @@ int main() {
         return 14;
     }
 
+    lmmc_mat_t numeric_a = {0};
+    lmmc_mat_t numeric_inv = {0};
+    lmmc_mat_t numeric_rhs = {0};
+    lmmc_mat_t numeric_solution = {0};
+    size_t numeric_rows = 0;
+    size_t numeric_cols = 0;
+    size_t numeric_rank = 0;
+    lmmc_real_t numeric_det = 0;
+    if (lmmc_mat_create(2, 2, &numeric_a) != LMMC_STATUS_OK ||
+        lmmc_mat_create(2, 1, &numeric_rhs) != LMMC_STATUS_OK) {
+        std::cerr << "failed to allocate LMMC matrices\n";
+        return 15;
+    }
+    numeric_a.data[0] = 1;
+    numeric_a.data[1] = 2;
+    numeric_a.data[numeric_a.stride] = 3;
+    numeric_a.data[numeric_a.stride + 1] = 4;
+    numeric_rhs.data[0] = 5;
+    numeric_rhs.data[numeric_rhs.stride] = 11;
+    if (lmmc_lsr_linalg_shape(&numeric_a, &numeric_rows, &numeric_cols) !=
+            LMMC_STATUS_OK ||
+        numeric_rows != 2 || numeric_cols != 2 ||
+        lmmc_lsr_linalg_det(&numeric_a, &numeric_det) != LMMC_STATUS_OK ||
+        numeric_det != -2.0 ||
+        lmmc_lsr_linalg_rank(&numeric_a, &numeric_rank) != LMMC_STATUS_OK ||
+        numeric_rank != 2 ||
+        lmmc_lsr_linalg_inv(&numeric_a, &numeric_inv) != LMMC_STATUS_OK ||
+        lmmc_lsr_linalg_solve_left(&numeric_a, &numeric_rhs,
+                                   &numeric_solution) != LMMC_STATUS_OK ||
+        numeric_solution.data[0] != 1.0 ||
+        numeric_solution.data[numeric_solution.stride] != 2.0) {
+        std::cerr << "failed to call LMMC LSR std.linalg adapter\n";
+        lmmc_mat_destroy(&numeric_solution);
+        lmmc_mat_destroy(&numeric_inv);
+        lmmc_mat_destroy(&numeric_rhs);
+        lmmc_mat_destroy(&numeric_a);
+        return 16;
+    }
+    lmmc_mat_destroy(&numeric_solution);
+    lmmc_mat_destroy(&numeric_inv);
+    lmmc_mat_destroy(&numeric_rhs);
+    lmmc_mat_destroy(&numeric_a);
+
     std::cout << expr->to_string() << '\n';
     if (expr->to_string().empty()) {
         std::cerr << "expression string is empty\n";
-        return 15;
+        return 17;
     }
     return 0;
 }
