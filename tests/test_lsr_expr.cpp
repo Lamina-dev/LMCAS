@@ -225,6 +225,38 @@ int main() {
     EXPECT_TRUE(finite_solved && finite_solved.value().size() == 2,
                 "solve_expr_set lowers finite solutions to set<Expr>");
 
+    auto complex_equation = SymbolicExpr::add(
+        SymbolicExpr::power(x.value(), SymbolicExpr::number(2)),
+        SymbolicExpr::number(1));
+    auto complex_solved = lamina::lsr::solve_expr_set(complex_equation, "x");
+    auto negative_i = lamina::lsr::complex(SymbolicExpr::number(0),
+                                           SymbolicExpr::number(-1));
+    EXPECT_TRUE(complex_solved && complex_solved.value().size() == 2,
+                "solve_expr_set returns both complex roots for x^2 + 1");
+    EXPECT_TRUE(complex_solved && i && negative_i &&
+                    complex_solved.value().contains(*i.value()) &&
+                    complex_solved.value().contains(*negative_i.value()),
+                "solve_expr_set lowers x^2 + 1 roots to explicit LSR complex expressions");
+    if (complex_solved) {
+        bool saw_positive_i = false;
+        bool saw_negative_i = false;
+        for (const auto& root : complex_solved.value().elements()) {
+            auto lowered_root = lamina::lsr::eval_complex(*root);
+            EXPECT_TRUE(lowered_root && lowered_root.value().is_finite(),
+                        "complex solve roots explicitly lower to complex values");
+            if (lowered_root && lowered_root.value().real.value == 0.0 &&
+                lowered_root.value().imag.value == 1.0) {
+                saw_positive_i = true;
+            }
+            if (lowered_root && lowered_root.value().real.value == 0.0 &&
+                lowered_root.value().imag.value == -1.0) {
+                saw_negative_i = true;
+            }
+        }
+        EXPECT_TRUE(saw_positive_i && saw_negative_i,
+                    "complex solve roots evaluate to -i and i");
+    }
+
     auto empty_solved = lamina::lsr::solve_expr_set(SymbolicExpr::number(1), "x");
     EXPECT_TRUE(empty_solved && empty_solved.value().empty(),
                 "solve_expr_set lowers mathematical no-solution to empty set<Expr>");

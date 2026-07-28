@@ -110,6 +110,19 @@ int main() {
         std::cerr << "failed to lower LSR solve result to set<Expr>\n";
         return 12;
     }
+    auto lsr_complex_roots = lamina::lsr::solve_expr_set(
+        SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
+                          SymbolicExpr::number(1)),
+        "x");
+    auto negative_i = lamina::lsr::complex(SymbolicExpr::number(0),
+                                           SymbolicExpr::number(-1));
+    if (!lsr_complex_roots || lsr_complex_roots.value().size() != 2 ||
+        !lsr_complex_roots.value().contains(*i.value()) ||
+        !negative_i ||
+        !lsr_complex_roots.value().contains(*negative_i.value())) {
+        std::cerr << "failed to lower LSR complex roots to set<Expr>\n";
+        return 12;
+    }
 
     auto four_i = lamina::lsr::complex(SymbolicExpr::number(0),
                                        SymbolicExpr::number(4));
