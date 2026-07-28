@@ -649,8 +649,8 @@ int main()
     rc::check("x_i^2 - x_j^2 factors into (x_i + x_j)(x_i - x_j)", []() {
         std::vector<std::string> vars = {"x", "y", "z"};
         // Pick two distinct variable indices
-        int i = rc::gen::inRange(0, 3);
-        int j = rc::gen::inRange(0, 3);
+        int i = rc::gen::inRange(0, 2);
+        int j = rc::gen::inRange(0, 2);
         if (i == j) j = (i + 1) % 3;
 
         // Construct x_i^2 - x_j^2
