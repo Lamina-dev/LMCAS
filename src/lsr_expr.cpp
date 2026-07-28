@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "complex_analysis.hpp"
 #include "symbolic_ast.hpp"
 
 namespace lamina::lsr {
@@ -18,6 +19,10 @@ constexpr const char* kRationalOperation = "lsr.rational";
 constexpr const char* kApproxOperation = "lsr.approx_real";
 constexpr const char* kImaginaryOperation = "lsr.imaginary_unit";
 constexpr const char* kComplexOperation = "lsr.complex";
+constexpr const char* kRealOperation = "lsr.real";
+constexpr const char* kImagOperation = "lsr.imag";
+constexpr const char* kConjOperation = "lsr.conj";
+constexpr const char* kAbsOperation = "lsr.abs";
 constexpr const char* kEquivalentOperation = "lsr.equivalent_core";
 constexpr const char* kExprSetOperation = "lsr.expr_set";
 constexpr const char* kSolveExprSetOperation = "lsr.solve_expr_set";
@@ -36,6 +41,19 @@ ExprSetResult expr_set_failure(CasErrc code, std::string message,
 Result<ApproxComplex> complex_failure(CasErrc code, std::string message,
                                       const char* operation) {
     return Result<ApproxComplex>::failure(code, std::move(message), operation);
+}
+
+ExprResult expr_from_complex_result(const ComplexExprResult& result,
+                                    const char* operation) {
+    if (!result) {
+        return ExprResult::failure(result.error());
+    }
+    if (!result.value() || !lamina::detail::node(result.value())) {
+        return expression_failure(CasErrc::InternalInvariant,
+                                  "complex expression result is null",
+                                  operation);
+    }
+    return ExprResult::success(result.value());
 }
 
 ApproxReal approx_part(double value) {
@@ -441,6 +459,69 @@ ExprResult complex(ExprPtr real, ExprPtr imag) {
         return expression_failure(CasErrc::InvalidArgument, error.what(),
                                   kComplexOperation);
     }
+}
+
+ExprResult real(const ExprPtr& expression, ComputationContext& context) {
+    return expr_from_complex_result(real_part_checked(expression, context),
+                                    kRealOperation);
+}
+
+ExprResult real(const ExprPtr& expression) {
+    ComputationContext context;
+    return real(expression, context);
+}
+
+ExprResult imag(const ExprPtr& expression, ComputationContext& context) {
+    return expr_from_complex_result(imag_part_checked(expression, context),
+                                    kImagOperation);
+}
+
+ExprResult imag(const ExprPtr& expression) {
+    ComputationContext context;
+    return imag(expression, context);
+}
+
+ExprResult conj(const ExprPtr& expression, ComputationContext& context) {
+    return expr_from_complex_result(conjugate_checked(expression, context),
+                                    kConjOperation);
+}
+
+ExprResult conj(const ExprPtr& expression) {
+    ComputationContext context;
+    return conj(expression, context);
+}
+
+ExprResult abs(const ExprPtr& expression, ComputationContext& context) {
+    auto step = context.consume_steps(1, kAbsOperation);
+    if (!step) return ExprResult::failure(step.error());
+    auto re = real(expression, context);
+    if (!re) return re;
+    auto im = imag(expression, context);
+    if (!im) return im;
+    try {
+        auto re_squared = SymbolicExpr::power(re.value(), SymbolicExpr::number(2));
+        auto im_squared = SymbolicExpr::power(im.value(), SymbolicExpr::number(2));
+        auto sum = SymbolicExpr::add(re_squared, im_squared);
+        auto result = SymbolicExpr::sqrt(sum)->simplify();
+        if (!result || !lamina::detail::node(result)) {
+            return expression_failure(CasErrc::InternalInvariant,
+                                      "complex absolute value construction failed",
+                                      kAbsOperation);
+        }
+        return ExprResult::success(std::move(result));
+    } catch (const std::bad_alloc&) {
+        return expression_failure(CasErrc::ResourceLimit,
+                                  "complex absolute value allocation failed",
+                                  kAbsOperation);
+    } catch (const std::exception& error) {
+        return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                  kAbsOperation);
+    }
+}
+
+ExprResult abs(const ExprPtr& expression) {
+    ComputationContext context;
+    return abs(expression, context);
 }
 
 Result<ApproxReal> evalf(const SymbolicExpr& expression,

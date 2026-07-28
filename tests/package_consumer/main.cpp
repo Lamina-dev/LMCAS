@@ -114,6 +114,17 @@ int main() {
         std::cerr << "failed to explicitly lower LSR Expr to complex\n";
         return 13;
     }
+    auto lsr_real = lamina::lsr::real(three_plus_four_i);
+    auto lsr_imag = lamina::lsr::imag(three_plus_four_i);
+    auto lsr_abs = lamina::lsr::abs(three_plus_four_i);
+    if (!lsr_real || !lsr_imag || !lsr_abs ||
+        !lamina::lsr::structurally_equal(*lsr_real.value(),
+                                         *SymbolicExpr::number(3)) ||
+        !lamina::lsr::structurally_equal(*lsr_imag.value(),
+                                         *SymbolicExpr::number(4))) {
+        std::cerr << "failed to call LSR complex part facade\n";
+        return 14;
+    }
 
     lmmc_complex_t numeric_i;
     lmmc_real_t numeric_abs = 0;
@@ -121,7 +132,7 @@ int main() {
         lmmc_lsr_math_complex_abs(&numeric_i, &numeric_abs) != LMMC_STATUS_OK ||
         numeric_abs != 1.0) {
         std::cerr << "failed to call LMMC LSR std.math adapter\n";
-        return 14;
+        return 15;
     }
 
     lmmc_mat_t numeric_a = {0};
@@ -137,7 +148,7 @@ int main() {
     if (lmmc_mat_create(2, 2, &numeric_a) != LMMC_STATUS_OK ||
         lmmc_mat_create(2, 1, &numeric_rhs) != LMMC_STATUS_OK) {
         std::cerr << "failed to allocate LMMC matrices\n";
-        return 15;
+        return 16;
     }
     numeric_a.data[0] = 1;
     numeric_a.data[1] = 2;
@@ -168,7 +179,7 @@ int main() {
         lmmc_mat_destroy(&numeric_inv);
         lmmc_mat_destroy(&numeric_rhs);
         lmmc_mat_destroy(&numeric_a);
-        return 16;
+        return 17;
     }
     lmmc_svd_result_destroy(&numeric_svd);
     lmmc_eigen_gen_full_result_destroy(&numeric_eig);
@@ -180,7 +191,7 @@ int main() {
     std::cout << expr->to_string() << '\n';
     if (expr->to_string().empty()) {
         std::cerr << "expression string is empty\n";
-        return 17;
+        return 18;
     }
     return 0;
 }

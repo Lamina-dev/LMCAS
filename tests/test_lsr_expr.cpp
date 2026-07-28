@@ -105,6 +105,42 @@ int main() {
                     "eval_complex does not silently approximate unsupported complex powers");
     }
 
+    TEST_CASE("LSR complex part functions expose std.math boundaries");
+
+    auto real_part = lamina::lsr::real(three_plus_four_i);
+    EXPECT_TRUE(real_part && lamina::lsr::structurally_equal(
+                                 *real_part.value(), *SymbolicExpr::number(3)),
+                "real(3 + 4i) returns 3");
+
+    auto imag_part = lamina::lsr::imag(three_plus_four_i);
+    EXPECT_TRUE(imag_part && lamina::lsr::structurally_equal(
+                                 *imag_part.value(), *SymbolicExpr::number(4)),
+                "imag(3 + 4i) returns 4");
+
+    auto conjugated = lamina::lsr::conj(three_plus_four_i);
+    EXPECT_TRUE(conjugated.has_value(), "conj(3 + 4i) succeeds");
+    auto expected_conj = lamina::lsr::complex(SymbolicExpr::number(3),
+                                             SymbolicExpr::number(-4));
+    lamina::ComputationContext conj_context;
+    auto conj_equiv = lamina::lsr::equivalent_core(
+        *conjugated.value(), *expected_conj.value(), conj_context);
+    EXPECT_TRUE(conj_equiv && conj_equiv.value(),
+                "conj(3 + 4i) returns 3 - 4i");
+
+    auto complex_abs = lamina::lsr::abs(three_plus_four_i);
+    EXPECT_TRUE(complex_abs.has_value(), "abs(3 + 4i) succeeds");
+    auto abs_value = lamina::lsr::evalf(*complex_abs.value());
+    EXPECT_TRUE(abs_value && abs_value.value().is_finite(),
+                "abs(3 + 4i) can be explicitly numerically evaluated");
+    EXPECT_NEAR(abs_value.value().value, 5.0, 1e-12,
+                "abs(3 + 4i) evaluates to 5");
+
+    auto unsupported_real = lamina::lsr::real(
+        SymbolicExpr::sin(three_plus_four_i));
+    EXPECT_TRUE(!unsupported_real &&
+                    unsupported_real.error().code == lamina::CasErrc::Inconclusive,
+                "real(sin(3 + 4i)) reports unsupported complex function split");
+
     TEST_CASE("LSR solve_set returns mathematical sets");
 
     auto equation = SymbolicExpr::add(

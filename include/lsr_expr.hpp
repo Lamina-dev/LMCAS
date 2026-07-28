@@ -60,6 +60,18 @@ LAMINA_API ExprResult approx_real(double value);
 
 LAMINA_API ExprResult imaginary_unit();
 LAMINA_API ExprResult complex(ExprPtr real, ExprPtr imag);
+LAMINA_API ExprResult real(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult real(const ExprPtr& expression);
+LAMINA_API ExprResult imag(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult imag(const ExprPtr& expression);
+LAMINA_API ExprResult conj(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult conj(const ExprPtr& expression);
+LAMINA_API ExprResult abs(const ExprPtr& expression,
+                          ComputationContext& context);
+LAMINA_API ExprResult abs(const ExprPtr& expression);
 
 LAMINA_API Result<ApproxReal> evalf(const SymbolicExpr& expression,
                                     const NumericBindings& bindings,
