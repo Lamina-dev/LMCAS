@@ -377,6 +377,27 @@ static int determine_leading_sign(const Polynomial<SymbolicPolyCoeff>& poly) {
     return 1;
 }
 
+static std::shared_ptr<SymbolicExpr> snap_verified_integer_root(
+    const Polynomial<Rational>& poly,
+    const std::shared_ptr<SymbolicExpr>& root) {
+    if (!root || poly.is_zero()) return root;
+    auto numeric = try_checked_numeric_constant(*root);
+    if (!numeric || !std::isfinite(*numeric)) return root;
+
+    double rounded = std::round(*numeric);
+    if (std::abs(*numeric - rounded) > 1e-8) return root;
+    if (rounded < static_cast<double>(std::numeric_limits<long long>::min()) ||
+        rounded > static_cast<double>(std::numeric_limits<long long>::max())) {
+        return root;
+    }
+
+    Rational candidate(BigInt(static_cast<long long>(rounded)));
+    if (poly.eval(candidate) == Rational(0)) {
+        return SymbolicExpr::number(candidate);
+    }
+    return root;
+}
+
 static std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> find_roots_with_multiplicity(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& variable) {
@@ -396,8 +417,9 @@ static std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> find_roots_wit
             auto roots = solve_by_factoring(poly_spc, variable);
             for (const auto& root : roots) {
                 if (!root) continue;
-                if (try_checked_numeric_constant(*root)) {
-                    result.push_back({root, 1});
+                auto verified_root = snap_verified_integer_root(poly_rat, root);
+                if (try_checked_numeric_constant(*verified_root)) {
+                    result.push_back({verified_root, 1});
                 }
             }
         }
@@ -439,10 +461,12 @@ static std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> find_roots_wit
             double r2 = (-b_val - sqrt_disc) / (2.0 * a_val);
 
             if (std::isfinite(r1)) {
-                result.push_back({SymbolicExpr::number(r1), mult});
+                auto root = snap_verified_integer_root(factor, SymbolicExpr::number(r1));
+                result.push_back({root, mult});
             }
             if (std::isfinite(r2) && std::abs(r1 - r2) > 1e-10) {
-                result.push_back({SymbolicExpr::number(r2), mult});
+                auto root = snap_verified_integer_root(factor, SymbolicExpr::number(r2));
+                result.push_back({root, mult});
             }
             continue;
         }
@@ -456,8 +480,9 @@ static std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> find_roots_wit
         auto factor_roots = solve_by_factoring(factor_spc, variable);
         for (const auto& root : factor_roots) {
             if (!root) continue;
-            if (try_checked_numeric_constant(*root)) {
-                result.push_back({root, mult});
+            auto verified_root = snap_verified_integer_root(factor, root);
+            if (try_checked_numeric_constant(*verified_root)) {
+                result.push_back({verified_root, mult});
             }
         }
     }
