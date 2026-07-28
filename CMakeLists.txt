@@ -100,8 +100,11 @@ add_library(lmcas SHARED
     src/complex_analysis.cpp
     src/differential_geometry.cpp
     src/numerical_integration.cpp
-    src/dllmain.c
 )
+
+if(WIN32)
+    target_sources(lmcas PRIVATE src/dllmain.c)
+endif()
 
 set_target_properties(lmcas PROPERTIES
     VERSION ${PROJECT_VERSION}
