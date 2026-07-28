@@ -103,19 +103,31 @@ int main() {
         return 12;
     }
 
+    auto four_i = lamina::lsr::complex(SymbolicExpr::number(0),
+                                       SymbolicExpr::number(4));
+    auto three_plus_four_i = SymbolicExpr::add(SymbolicExpr::number(3),
+                                               four_i.value());
+    auto lowered_complex = lamina::lsr::eval_complex(*three_plus_four_i);
+    if (!lowered_complex || !lowered_complex.value().is_finite() ||
+        lowered_complex.value().real.value != 3.0 ||
+        lowered_complex.value().imag.value != 4.0) {
+        std::cerr << "failed to explicitly lower LSR Expr to complex\n";
+        return 13;
+    }
+
     lmmc_complex_t numeric_i;
     lmmc_real_t numeric_abs = 0;
     if (lmmc_lsr_math_i(&numeric_i) != LMMC_STATUS_OK ||
         lmmc_lsr_math_complex_abs(&numeric_i, &numeric_abs) != LMMC_STATUS_OK ||
         numeric_abs != 1.0) {
         std::cerr << "failed to call LMMC LSR std.math adapter\n";
-        return 13;
+        return 14;
     }
 
     std::cout << expr->to_string() << '\n';
     if (expr->to_string().empty()) {
         std::cerr << "expression string is empty\n";
-        return 14;
+        return 15;
     }
     return 0;
 }

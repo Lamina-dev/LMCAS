@@ -58,6 +58,53 @@ int main() {
     EXPECT_NEAR(evaluated.value().value, 5.0, 0.0,
                 "evalf computes the numeric value");
 
+    TEST_CASE("LSR eval_complex explicitly lowers Expr to complex");
+
+    auto real_as_complex = lamina::lsr::eval_complex(*SymbolicExpr::number(5));
+    EXPECT_TRUE(real_as_complex && real_as_complex.value().is_finite(),
+                "eval_complex accepts real expressions explicitly");
+    EXPECT_NEAR(real_as_complex.value().real.value, 5.0, 0.0,
+                "eval_complex preserves real component");
+    EXPECT_NEAR(real_as_complex.value().imag.value, 0.0, 0.0,
+                "eval_complex promotes real expression with zero imaginary component");
+
+    auto four_i = lamina::lsr::complex(SymbolicExpr::number(0),
+                                       SymbolicExpr::number(4));
+    auto three_plus_four_i = SymbolicExpr::add(SymbolicExpr::number(3),
+                                               four_i.value());
+    auto lowered_complex = lamina::lsr::eval_complex(*three_plus_four_i);
+    EXPECT_TRUE(lowered_complex && lowered_complex.value().is_finite(),
+                "eval_complex lowers 3 + 4i");
+    EXPECT_NEAR(lowered_complex.value().real.value, 3.0, 0.0,
+                "eval_complex computes real part of 3 + 4i");
+    EXPECT_NEAR(lowered_complex.value().imag.value, 4.0, 0.0,
+                "eval_complex computes imaginary part of 3 + 4i");
+
+    if (i) {
+        auto i_power_two = SymbolicExpr::power(i.value(), SymbolicExpr::number(2));
+        auto lowered_i_squared = lamina::lsr::eval_complex(*i_power_two);
+        EXPECT_TRUE(lowered_i_squared && lowered_i_squared.value().is_finite(),
+                    "eval_complex supports the LSR i^2 rule");
+        EXPECT_NEAR(lowered_i_squared.value().real.value, -1.0, 0.0,
+                    "eval_complex computes i^2 real part");
+        EXPECT_NEAR(lowered_i_squared.value().imag.value, 0.0, 0.0,
+                    "eval_complex computes i^2 imaginary part");
+    }
+
+    auto complex_unbound = lamina::lsr::eval_complex(*linear);
+    EXPECT_TRUE(!complex_unbound &&
+                    complex_unbound.error().code == lamina::CasErrc::UnboundSymbol,
+                "eval_complex rejects unbound symbols during Expr to complex lowering");
+
+    if (i) {
+        auto fractional_power = SymbolicExpr::power(i.value(), SymbolicExpr::number(0.5));
+        auto unsupported_power = lamina::lsr::eval_complex(*fractional_power);
+        EXPECT_TRUE(!unsupported_power &&
+                        unsupported_power.error().code ==
+                            lamina::CasErrc::UnsupportedExpression,
+                    "eval_complex does not silently approximate unsupported complex powers");
+    }
+
     TEST_CASE("LSR solve_set returns mathematical sets");
 
     auto equation = SymbolicExpr::add(

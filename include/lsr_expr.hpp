@@ -17,6 +17,15 @@ using Expr = SymbolicExpr;
 using ExprPtr = std::shared_ptr<SymbolicExpr>;
 using ExprResult = Result<ExprPtr>;
 
+struct ApproxComplex {
+    ApproxReal real;
+    ApproxReal imag;
+
+    bool is_finite() const noexcept {
+        return real.is_finite() && imag.is_finite();
+    }
+};
+
 class LAMINA_API ExprSet {
 public:
     ExprSet() = default;
@@ -58,6 +67,13 @@ LAMINA_API Result<ApproxReal> evalf(const SymbolicExpr& expression,
 
 LAMINA_API Result<ApproxReal> evalf(const SymbolicExpr& expression,
                                     const NumericBindings& bindings = {});
+
+LAMINA_API Result<ApproxComplex> eval_complex(const SymbolicExpr& expression,
+                                              const NumericBindings& bindings,
+                                              ComputationContext& context);
+
+LAMINA_API Result<ApproxComplex> eval_complex(const SymbolicExpr& expression,
+                                              const NumericBindings& bindings = {});
 
 LAMINA_API SolveResult solve_set(const ExprPtr& equation,
                                  const std::string& variable,
