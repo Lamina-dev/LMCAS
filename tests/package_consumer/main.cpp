@@ -151,6 +151,9 @@ int main() {
     lmmc_mat_t numeric_solution = {0};
     lmmc_eigen_gen_full_result_t numeric_eig = {0};
     lmmc_svd_result_t numeric_svd = {0};
+    lmmc_lsr_eig_table_t numeric_eig_table = {0};
+    lmmc_lsr_svd_table_t numeric_svd_table = {0};
+    const lmmc_mat_t* numeric_named = nullptr;
     size_t numeric_rows = 0;
     size_t numeric_cols = 0;
     size_t numeric_rank = 0;
@@ -181,8 +184,19 @@ int main() {
         lmmc_lsr_linalg_eig(&numeric_a, &numeric_eig) != LMMC_STATUS_OK ||
         numeric_eig.real_parts.size != 2 ||
         lmmc_lsr_linalg_svd(&numeric_a, &numeric_svd) != LMMC_STATUS_OK ||
-        numeric_svd.sigma.size != 2) {
+        numeric_svd.sigma.size != 2 ||
+        lmmc_lsr_linalg_eig_table(&numeric_a, &numeric_eig_table) !=
+            LMMC_STATUS_OK ||
+        !(numeric_named = lmmc_lsr_eig_table_get(&numeric_eig_table,
+                                                 "values_real")) ||
+        numeric_named->rows != 2 || numeric_named->cols != 1 ||
+        lmmc_lsr_linalg_svd_table(&numeric_a, &numeric_svd_table) !=
+            LMMC_STATUS_OK ||
+        !(numeric_named = lmmc_lsr_svd_table_get(&numeric_svd_table, "S")) ||
+        numeric_named->rows != 2 || numeric_named->cols != 2) {
         std::cerr << "failed to call LMMC LSR std.linalg adapter\n";
+        lmmc_lsr_svd_table_destroy(&numeric_svd_table);
+        lmmc_lsr_eig_table_destroy(&numeric_eig_table);
         lmmc_svd_result_destroy(&numeric_svd);
         lmmc_eigen_gen_full_result_destroy(&numeric_eig);
         lmmc_mat_destroy(&numeric_solution);
@@ -191,6 +205,8 @@ int main() {
         lmmc_mat_destroy(&numeric_a);
         return 17;
     }
+    lmmc_lsr_svd_table_destroy(&numeric_svd_table);
+    lmmc_lsr_eig_table_destroy(&numeric_eig_table);
     lmmc_svd_result_destroy(&numeric_svd);
     lmmc_eigen_gen_full_result_destroy(&numeric_eig);
     lmmc_mat_destroy(&numeric_solution);
