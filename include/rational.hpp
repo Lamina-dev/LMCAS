@@ -353,7 +353,7 @@ public:
         if (n == 0) return (numerator / denominator).ToString();
         if (n > 0) {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n));
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)));
             BigInt scaled = numerator * pow10n / denominator;
             bool negative = scaled < BigInt(0);
             if (negative) scaled = scaled * BigInt(-1);
@@ -366,7 +366,7 @@ public:
             return re;
         } else {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n).Abs());
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)).Abs());
             std::string re = (numerator / (denominator * pow10n)).ToString();
             if (re.size() == 1 && re[0] == '0') return re;
             for (; n < 0; n++) re.push_back('0');
@@ -389,13 +389,13 @@ private:
         if (n == 0) return;
         if (n > 0) {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n));
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)));
             numerator *= pow10n;
             numerator /= denominator;
             denominator = pow10n;
         } else {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n).Abs());
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)).Abs());
             denominator *= pow10n;
             numerator /= denominator;
             numerator *= pow10n;
