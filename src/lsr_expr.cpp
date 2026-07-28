@@ -26,6 +26,7 @@ constexpr const char* kImagOperation = "lsr.imag";
 constexpr const char* kConjOperation = "lsr.conj";
 constexpr const char* kAbsOperation = "lsr.abs";
 constexpr const char* kEquivalentOperation = "lsr.equivalent_core";
+constexpr const char* kEquivalentProfileOperation = "lsr.equivalent_core.profile";
 constexpr const char* kExprSetOperation = "lsr.expr_set";
 constexpr const char* kSolveExprSetOperation = "lsr.solve_expr_set";
 constexpr const char* kEvalComplexOperation = "lsr.eval_complex";
@@ -159,6 +160,24 @@ bool is_reserved_symbol_name(const std::string& name) {
 
 bool is_imaginary_unit_name(const std::string& name) {
     return name == "i" || name == "I";
+}
+
+Result<void> validate_eqv_options(const EqvOptions& options) {
+    if (options.profile != EqvProfile::Core) {
+        return Result<void>::failure(
+            CasErrc::UnsupportedExpression,
+            "LSR equivalence profile is declared but not implemented by this build",
+            kEquivalentProfileOperation);
+    }
+    if (options.budget.max_rewrite_steps == 0 ||
+        options.budget.max_rewrite_depth == 0 ||
+        options.budget.max_node_growth_factor == 0) {
+        return Result<void>::failure(
+            CasErrc::ResourceLimit,
+            "equivalence rewrite budget exhausted before normalization",
+            kEquivalentOperation);
+    }
+    return Result<void>::success();
 }
 
 Rational polynomial_coeff_or_zero(const Polynomial<Rational>& polynomial,
@@ -844,6 +863,14 @@ const char* error_name(const CasError& error) noexcept {
         error.code == CasErrc::Inconclusive) {
         return "SetResultInconclusive";
     }
+    if (error.operation == kEquivalentOperation &&
+        error.code == CasErrc::ResourceLimit) {
+        return "EqvBudgetExceeded";
+    }
+    if (error.operation == kEquivalentProfileOperation &&
+        error.code == CasErrc::UnsupportedExpression) {
+        return "EqvRuleDisabled";
+    }
     return error_name(error.code);
 }
 
@@ -856,7 +883,11 @@ bool structurally_equal(const SymbolicExpr& lhs, const SymbolicExpr& rhs) {
 
 Result<bool> equivalent_core(const SymbolicExpr& lhs,
                              const SymbolicExpr& rhs,
-                             ComputationContext& context) {
+                             ComputationContext& context,
+                             const EqvOptions& options) {
+    auto options_valid = validate_eqv_options(options);
+    if (!options_valid) return Result<bool>::failure(options_valid.error());
+
     auto step = context.consume_steps(1, kEquivalentOperation);
     if (!step) return Result<bool>::failure(step.error());
     try {
@@ -883,6 +914,12 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
         return Result<bool>::failure(CasErrc::Inconclusive, error.what(),
                                      kEquivalentOperation);
     }
+}
+
+Result<bool> equivalent_core(const SymbolicExpr& lhs,
+                             const SymbolicExpr& rhs,
+                             ComputationContext& context) {
+    return equivalent_core(lhs, rhs, context, EqvOptions{});
 }
 
 } // namespace lamina::lsr

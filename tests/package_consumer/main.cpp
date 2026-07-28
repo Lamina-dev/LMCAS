@@ -101,6 +101,18 @@ int main() {
         std::cerr << "failed to prove LSR i*i == -1\n";
         return 11;
     }
+    lamina::lsr::EqvOptions exhausted_eqv_options;
+    exhausted_eqv_options.budget.max_rewrite_steps = 0;
+    lamina::ComputationContext exhausted_eqv_context;
+    auto exhausted_eqv = lamina::lsr::equivalent_core(
+        *i_squared, *SymbolicExpr::number(-1), exhausted_eqv_context,
+        exhausted_eqv_options);
+    if (exhausted_eqv ||
+        std::string(lamina::lsr::error_name(exhausted_eqv.error())) !=
+            "EqvBudgetExceeded") {
+        std::cerr << "failed to expose LSR equivalence budget diagnostics\n";
+        return 11;
+    }
 
     auto lsr_roots = lamina::lsr::solve_expr_set(
         SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),

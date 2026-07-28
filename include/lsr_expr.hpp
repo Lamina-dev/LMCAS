@@ -26,6 +26,23 @@ struct ApproxComplex {
     }
 };
 
+enum class EqvProfile {
+    Core,
+    TrigBasic,
+    ExpLogBasic
+};
+
+struct EqvBudget {
+    std::size_t max_rewrite_steps = 256;
+    std::size_t max_rewrite_depth = 64;
+    std::size_t max_node_growth_factor = 4;
+};
+
+struct EqvOptions {
+    EqvProfile profile = EqvProfile::Core;
+    EqvBudget budget = {};
+};
+
 class LAMINA_API ExprSet {
 public:
     ExprSet() = default;
@@ -116,5 +133,10 @@ LAMINA_API bool structurally_equal(const SymbolicExpr& lhs,
 LAMINA_API Result<bool> equivalent_core(const SymbolicExpr& lhs,
                                         const SymbolicExpr& rhs,
                                         ComputationContext& context);
+
+LAMINA_API Result<bool> equivalent_core(const SymbolicExpr& lhs,
+                                        const SymbolicExpr& rhs,
+                                        ComputationContext& context,
+                                        const EqvOptions& options);
 
 } // namespace lamina::lsr

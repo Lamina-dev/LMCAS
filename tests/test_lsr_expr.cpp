@@ -281,5 +281,32 @@ int main() {
     EXPECT_TRUE(equivalent && equivalent.value(),
                 "equivalent_core proves normalized additive equality");
 
+    lamina::lsr::EqvOptions no_budget;
+    no_budget.budget.max_rewrite_steps = 0;
+    lamina::ComputationContext no_budget_context;
+    auto exhausted_eqv = lamina::lsr::equivalent_core(
+        *one_plus_x, *x_plus_one, no_budget_context, no_budget);
+    EXPECT_TRUE(!exhausted_eqv &&
+                    exhausted_eqv.error().code == lamina::CasErrc::ResourceLimit,
+                "equivalent_core observes explicit LSR rewrite budgets");
+    EXPECT_TRUE(!exhausted_eqv &&
+                    std::string(lamina::lsr::error_name(exhausted_eqv.error())) ==
+                        "EqvBudgetExceeded",
+                "LSR equivalence budget exhaustion exposes EqvBudgetExceeded");
+
+    lamina::lsr::EqvOptions trig_profile;
+    trig_profile.profile = lamina::lsr::EqvProfile::TrigBasic;
+    lamina::ComputationContext trig_profile_context;
+    auto disabled_profile = lamina::lsr::equivalent_core(
+        *one_plus_x, *x_plus_one, trig_profile_context, trig_profile);
+    EXPECT_TRUE(!disabled_profile &&
+                    disabled_profile.error().code ==
+                        lamina::CasErrc::UnsupportedExpression,
+                "equivalent_core does not silently enable unsupported profiles");
+    EXPECT_TRUE(!disabled_profile &&
+                    std::string(lamina::lsr::error_name(disabled_profile.error())) ==
+                        "EqvRuleDisabled",
+                "unsupported LSR equivalence profiles expose EqvRuleDisabled");
+
     return TEST_REPORT();
 }
