@@ -5,6 +5,8 @@
 #pragma once
 
 #include "symbolic.hpp"
+#include "computation_context.hpp"
+#include "conditional_result.hpp"
 #include <vector>
 #include <memory>
 #include <string>
@@ -53,5 +55,57 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> solve_dispatch(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts);
+
+using SolveVectorResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
+
+/**
+ * @brief Compatibility checked dispatcher for callers still expecting vectors.
+ *
+ * This preserves the legacy vector result shape while returning CasError for
+ * invalid input and checked numeric fallback failures. Prefer
+ * solve_dispatch_checked for new 2.0 code because it can represent Empty,
+ * Universal, Conditional, and Inconclusive solution sets.
+ */
+LAMINA_API SolveVectorResult solve_dispatch_vector_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    ComputationContext& context,
+    const SolveOptions& opts = {});
+
+/**
+ * @brief Checked legacy-vector dispatcher with a default computation context.
+ *
+ * Use this as the migration path from solve_dispatch() when the caller needs
+ * explicit CasError propagation but does not need custom budgets or
+ * cancellation.
+ */
+LAMINA_API SolveVectorResult solve_dispatch_vector_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts = {});
+
+using SolveResult = Result<SolutionSet>;
+
+/**
+ * @brief Solve an equation using the verified 2.0 support domain.
+ *
+ * Exact rational polynomials produce exact RootOf solutions. Approximate
+ * candidates are produced only when `allow_numeric` is set and are verified by
+ * checked numeric evaluation. Unsupported symbolic domains return an
+ * inconclusive SolutionSet rather than an empty set.
+ */
+LAMINA_API SolveResult solve_dispatch_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    ComputationContext& context,
+    const SolveOptions& opts = {});
+
+/**
+ * @brief Checked solution-set dispatcher with a default computation context.
+ */
+LAMINA_API SolveResult solve_dispatch_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts = {});
 
 }

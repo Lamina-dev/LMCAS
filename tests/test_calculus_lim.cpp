@@ -1,16 +1,20 @@
 #include "../include/symbolic.hpp"
 #include <iostream>
 #include <cassert>
+#include "test_common.hpp"
 
 int main() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::power(x, SymbolicExpr::number(2));
 
     auto integrated = expr->integrate("x");
+    EXPECT_TRUE(integrated != nullptr, "integral of x^2 exists");
     std::cout << "int(x^2) = " << integrated->to_string() << "\n";
 
     auto point = SymbolicExpr::number(2);
     auto lim = expr->limit("x", point);
+    EXPECT_TRUE(lim != nullptr && std::abs(lim->to_numeric() - 4.0) < 1e-12,
+                "limit x^2 at 2 equals 4");
     std::cout << "limit(x^2, x->2) = " << lim->to_string() << "\n";
 
     auto five = SymbolicExpr::number(5);
@@ -48,7 +52,9 @@ int main() {
     auto rational = SymbolicExpr::multiply(num, SymbolicExpr::power(den, minus_one));
     std::cout << "Rational: " << rational->to_string() << "\n";
     auto lim_rational = rational->limit("x", two);
+    EXPECT_TRUE(lim_rational != nullptr && std::abs(lim_rational->to_numeric() - 4.0) < 1e-12,
+                "removable singularity limit equals 4");
     std::cout << "Result: " << lim_rational->to_string() << "\n";
 
-    return 0;
+    return TEST_REPORT();
 }

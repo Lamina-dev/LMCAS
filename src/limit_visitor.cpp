@@ -22,14 +22,14 @@
  * @param[in] ratio_node 导数比 dN * dD^(-1) 的 AST 节点
  * @return 极限结果，化简无效时返回 nullptr
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
-    const std::shared_ptr<SymbolicNode>& ratio_node) {
+std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
+    const std::shared_ptr<const SymbolicNode>& ratio_node) {
 
     if (!ratio_node) return nullptr;
 
-    auto ratio_expr = std::make_shared<SymbolicExpr>(ratio_node->clone());
+    auto ratio_expr = lamina::detail::make_expression_ptr(ratio_node->clone());
     auto simplified = ratio_expr->simplify();
-    if (!simplified || !simplified->root) return nullptr;
+    if (!simplified || !lamina::detail::node(simplified)) return nullptr;
 
     /// Check if simplification actually changed the expression (avoid infinite loops)
     auto orig_str = ratio_expr->to_string();
@@ -41,11 +41,11 @@ std::shared_ptr<SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
     /// negative powers, evaluating the limit of that sum can trigger ∞−∞ detection,
     /// which calls resolve_inf_minus_inf → apply_lhopital → simplify_and_eval_ratio
     /// again, creating an infinite loop.
-    if (std::dynamic_pointer_cast<AddNode>(simplified->root)) return nullptr;
+    if (std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(simplified))) return nullptr;
 
     LimitVisitor sub_simp(var, point, direction, assumption_ctx_);
     sub_simp.lhopital_depth_ = this->lhopital_depth_ + 1;
-    simplified->root->accept(sub_simp);
+    lamina::detail::node(simplified)->accept(sub_simp);
     auto simp_result = sub_simp.get_result();
     if (!simp_result) return nullptr;
 
@@ -74,16 +74,16 @@ std::shared_ptr<SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
  * @param[in] max_order 最大展开阶数
  * @return 极限结果节点，无法确定时返回 nullptr
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
-    const std::shared_ptr<SymbolicNode>& num,
-    const std::shared_ptr<SymbolicNode>& den,
+std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
+    const std::shared_ptr<const SymbolicNode>& num,
+    const std::shared_ptr<const SymbolicNode>& den,
     int max_order) {
 
     if (!num || !den) return nullptr;
 
-    auto num_expr = std::make_shared<SymbolicExpr>(num->clone());
-    auto den_expr = std::make_shared<SymbolicExpr>(den->clone());
-    auto point_expr = std::make_shared<SymbolicExpr>(point->clone());
+    auto num_expr = lamina::detail::make_expression_ptr(num->clone());
+    auto den_expr = lamina::detail::make_expression_ptr(den->clone());
+    auto point_expr = lamina::detail::make_expression_ptr(point->clone());
 
     bool at_infinity = is_inf(point);
 
@@ -133,44 +133,44 @@ std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
 
             if (power_diff > 0) {
                 /// 分子阶数更高 → 极限为 0
-                return std::make_shared<NumberNode>(BigInt(0));
+                return lamina::detail::make_node<NumberNode>(BigInt(0));
             } else if (power_diff < 0) {
                 /// 分母阶数更高 → 极限为 ±∞
                 /// 确定符号
                 auto ratio = SymbolicExpr::multiply(
-                    std::make_shared<SymbolicExpr>(num_leading.first),
+                    lamina::detail::make_expression_ptr(num_leading.first),
                     SymbolicExpr::power(
-                        std::make_shared<SymbolicExpr>(den_leading.first),
+                        lamina::detail::make_expression_ptr(den_leading.first),
                         SymbolicExpr::number(-1)));
                 ratio = ratio->simplify();
                 if (!ratio) {
-                    std::vector<std::shared_ptr<SymbolicNode>> inf_args;
-                    return std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                    std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
+                    return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                 }
-                int sign = get_sign(ratio->root);
-                std::vector<std::shared_ptr<SymbolicNode>> inf_args;
-                auto inf_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                int sign = get_sign(lamina::detail::node(ratio));
+                std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
+                auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                 if (sign < 0) {
-                    std::vector<std::shared_ptr<SymbolicNode>> m = {
-                        std::make_shared<NumberNode>(BigInt(-1)), inf_node};
-                    return std::make_shared<MultiplyNode>(m);
+                    std::vector<std::shared_ptr<const SymbolicNode>> m = {
+                        lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
+                    return lamina::detail::make_node<MultiplyNode>(m);
                 }
                 return inf_node;
             } else {
                 /// 同阶 → 极限为系数之比
                 auto ratio = SymbolicExpr::multiply(
-                    std::make_shared<SymbolicExpr>(num_leading.first),
+                    lamina::detail::make_expression_ptr(num_leading.first),
                     SymbolicExpr::power(
-                        std::make_shared<SymbolicExpr>(den_leading.first),
+                        lamina::detail::make_expression_ptr(den_leading.first),
                         SymbolicExpr::number(-1)));
                 ratio = ratio->simplify();
-                if (ratio) return ratio->root;
+                if (ratio) return lamina::detail::node(ratio);
             }
         }
 
         /// 如果分子首项为零但分母不为零，极限为 0
         if (num_leading.first->is_zero() && !den_leading.first->is_zero()) {
-            return std::make_shared<NumberNode>(BigInt(0));
+            return lamina::detail::make_node<NumberNode>(BigInt(0));
         }
 
         /// 两者都为零 → 需要更高阶展开
@@ -191,7 +191,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::taylor_fallback(
  * @param[in] max_order 最大检查阶数
  * @return (首项系数节点, 首项阶数) 对
  */
-std::pair<std::shared_ptr<SymbolicNode>, int> LimitVisitor::find_leading_term(
+std::pair<std::shared_ptr<const SymbolicNode>, int> LimitVisitor::find_leading_term(
     const std::shared_ptr<SymbolicExpr>& series_expr,
     const std::string& expand_var,
     const std::shared_ptr<SymbolicExpr>& expand_point,
@@ -207,9 +207,9 @@ std::pair<std::shared_ptr<SymbolicNode>, int> LimitVisitor::find_leading_term(
         if (!val) return {nullptr, 0};
         val = val->simplify();
 
-        if (val && val->root && !val->root->is_zero()) {
+        if (val && lamina::detail::node(val) && !lamina::detail::node(val)->is_zero()) {
             /// 系数为 val / n!（但对于比较比值，n! 会约掉，所以直接返回 val）
-            return {val->root, n};
+            return {lamina::detail::node(val), n};
         }
 
         /// 对当前表达式求导以获取下一阶系数
@@ -218,7 +218,7 @@ std::pair<std::shared_ptr<SymbolicNode>, int> LimitVisitor::find_leading_term(
         current = current->simplify();
     }
 
-    return {std::make_shared<NumberNode>(BigInt(0)), max_order + 1};
+    return {lamina::detail::make_node<NumberNode>(BigInt(0)), max_order + 1};
 }
 
 /**
@@ -227,32 +227,32 @@ std::pair<std::shared_ptr<SymbolicNode>, int> LimitVisitor::find_leading_term(
  * @param[in] node AST 节点
  * @return 正数返回 1，负数返回 -1，零或无法判断返回 0
  */
-int LimitVisitor::get_sign(const std::shared_ptr<SymbolicNode>& node) {
+int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return 0;
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(node)) {
-        if (std::holds_alternative<double>(num->value)) {
-            double v = std::get<double>(num->value);
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
+        if (std::holds_alternative<double>(num->value())) {
+            double v = std::get<double>(num->value());
             if (v > 0) return 1;
             if (v < 0) return -1;
             return 0;
         }
-        if (std::holds_alternative<BigInt>(num->value)) {
-            BigInt v = std::get<BigInt>(num->value);
+        if (std::holds_alternative<BigInt>(num->value())) {
+            BigInt v = std::get<BigInt>(num->value());
             if (v > BigInt(0)) return 1;
             if (v < BigInt(0)) return -1;
             return 0;
         }
-        if (std::holds_alternative<Rational>(num->value)) {
-            Rational v = std::get<Rational>(num->value);
+        if (std::holds_alternative<Rational>(num->value())) {
+            Rational v = std::get<Rational>(num->value());
             if (v > Rational(0)) return 1;
             if (v < Rational(0)) return -1;
             return 0;
         }
     }
     /// 对于乘法节点，符号为各因子符号之积
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int sign = 1;
-        for (auto& op : mul->operands) {
+        for (auto& op : mul->operands()) {
             int s = get_sign(op);
             if (s == 0) return 0;
             sign *= s;
@@ -272,16 +272,16 @@ int LimitVisitor::get_sign(const std::shared_ptr<SymbolicNode>& node) {
  * 根据趋近方向选择满足条件的分支，计算该分支表达式的极限。
  * 对于双侧极限，分别计算左右极限，若不同则返回 nullptr 表示极限不存在。
  */
-void LimitVisitor::visit(PiecewiseNode& node) {
+void LimitVisitor::visit(const PiecewiseNode& node) {
     if (direction == "+" || direction == "-") {
         auto branch_expr = select_branch_by_direction(node, direction);
         if (branch_expr) {
             LimitVisitor sv(var, point, direction, assumption_ctx_);
             branch_expr->accept(sv);
             result = sv.get_result();
-        } else if (node.default_expr) {
+        } else if (node.default_expr()) {
             LimitVisitor sv(var, point, direction, assumption_ctx_);
-            node.default_expr->accept(sv);
+            node.default_expr()->accept(sv);
             result = sv.get_result();
         } else {
             result = nullptr;
@@ -290,23 +290,23 @@ void LimitVisitor::visit(PiecewiseNode& node) {
         /// 双侧极限：分别计算左右极限
         auto lb = select_branch_by_direction(node, "-");
         auto rb = select_branch_by_direction(node, "+");
-        std::shared_ptr<SymbolicNode> lr = nullptr, rr = nullptr;
+        std::shared_ptr<const SymbolicNode> lr = nullptr, rr = nullptr;
         if (lb) {
             LimitVisitor lv(var, point, "-", assumption_ctx_);
             lb->accept(lv);
             lr = lv.get_result();
-        } else if (node.default_expr) {
+        } else if (node.default_expr()) {
             LimitVisitor lv(var, point, "-", assumption_ctx_);
-            node.default_expr->accept(lv);
+            node.default_expr()->accept(lv);
             lr = lv.get_result();
         }
         if (rb) {
             LimitVisitor rv(var, point, "+", assumption_ctx_);
             rb->accept(rv);
             rr = rv.get_result();
-        } else if (node.default_expr) {
+        } else if (node.default_expr()) {
             LimitVisitor rv(var, point, "+", assumption_ctx_);
-            node.default_expr->accept(rv);
+            node.default_expr()->accept(rv);
             rr = rv.get_result();
         }
         if (!lr || !rr) { result = nullptr; return; }
@@ -317,9 +317,9 @@ void LimitVisitor::visit(PiecewiseNode& node) {
 /**
  * @brief 根据趋近方向选择分段函数中满足条件的分支表达式。
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::select_branch_by_direction(
-    PiecewiseNode& node, const std::string& dir) {
-    for (auto& branch : node.branches) {
+std::shared_ptr<const SymbolicNode> LimitVisitor::select_branch_by_direction(
+    const PiecewiseNode& node, const std::string& dir) {
+    for (const auto& branch : node.branches()) {
         if (condition_satisfied_by_direction(branch.condition, dir))
             return branch.expression;
     }
@@ -332,26 +332,26 @@ std::shared_ptr<SymbolicNode> LimitVisitor::select_branch_by_direction(
  * 右极限（"+"）意味着 var > point，左极限（"-"）意味着 var < point。
  */
 bool LimitVisitor::condition_satisfied_by_direction(
-    const std::shared_ptr<SymbolicNode>& condition, const std::string& dir) {
-    auto rel = std::dynamic_pointer_cast<RelationalNode>(condition);
+    const std::shared_ptr<const SymbolicNode>& condition, const std::string& dir) {
+    auto rel = std::dynamic_pointer_cast<const RelationalNode>(condition);
     if (!rel) {
-        auto logical = std::dynamic_pointer_cast<LogicalNode>(condition);
+        auto logical = std::dynamic_pointer_cast<const LogicalNode>(condition);
         if (logical) {
-            if (logical->op == LogicalNode::Op::And)
-                return condition_satisfied_by_direction(logical->left, dir) &&
-                       condition_satisfied_by_direction(logical->right, dir);
-            if (logical->op == LogicalNode::Op::Or)
-                return condition_satisfied_by_direction(logical->left, dir) ||
-                       condition_satisfied_by_direction(logical->right, dir);
-            if (logical->op == LogicalNode::Op::Not && logical->left)
-                return !condition_satisfied_by_direction(logical->left, dir);
+            if (logical->op() == LogicalNode::Op::And)
+                return condition_satisfied_by_direction(logical->left(), dir) &&
+                       condition_satisfied_by_direction(logical->right(), dir);
+            if (logical->op() == LogicalNode::Op::Or)
+                return condition_satisfied_by_direction(logical->left(), dir) ||
+                       condition_satisfied_by_direction(logical->right(), dir);
+            if (logical->op() == LogicalNode::Op::Not && logical->left())
+                return !condition_satisfied_by_direction(logical->left(), dir);
         }
         return false;
     }
     auto sign = evaluate_relational_sign(rel, dir);
     if (!sign) return false;
     int s = *sign;
-    switch (rel->op) {
+    switch (rel->op()) {
         case RelationalNode::Op::GT:  return s > 0;
         case RelationalNode::Op::GEQ: return s >= 0;
         case RelationalNode::Op::LT:  return s < 0;
@@ -366,11 +366,11 @@ bool LimitVisitor::condition_satisfied_by_direction(
  * @brief 评估关系表达式 left - right 在趋近方向下的符号。
  */
 std::optional<int> LimitVisitor::evaluate_relational_sign(
-    const std::shared_ptr<RelationalNode>& rel, const std::string& dir) {
+    const std::shared_ptr<const RelationalNode>& rel, const std::string& dir) {
     /// 模式：var op number
-    auto left_var = std::dynamic_pointer_cast<VariableNode>(rel->left);
-    auto right_num = std::dynamic_pointer_cast<NumberNode>(rel->right);
-    if (left_var && left_var->name == var && right_num) {
+    auto left_var = std::dynamic_pointer_cast<const VariableNode>(rel->left());
+    auto right_num = std::dynamic_pointer_cast<const NumberNode>(rel->right());
+    if (left_var && left_var->name() == var && right_num) {
         double rv = get_numeric_value(right_num);
         double pv = get_point_value();
         if (std::isnan(pv) || std::isnan(rv)) return std::nullopt;
@@ -381,9 +381,9 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         return 0;
     }
     /// 模式：number op var
-    auto left_num = std::dynamic_pointer_cast<NumberNode>(rel->left);
-    auto right_var = std::dynamic_pointer_cast<VariableNode>(rel->right);
-    if (left_num && right_var && right_var->name == var) {
+    auto left_num = std::dynamic_pointer_cast<const NumberNode>(rel->left());
+    auto right_var = std::dynamic_pointer_cast<const VariableNode>(rel->right());
+    if (left_num && right_var && right_var->name() == var) {
         double lv = get_numeric_value(left_num);
         double pv = get_point_value();
         if (std::isnan(pv) || std::isnan(lv)) return std::nullopt;
@@ -394,10 +394,10 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         return 0;
     }
     /// 通用：计算 (left - right) 的极限符号
-    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
-    std::vector<std::shared_ptr<SymbolicNode>> neg_ops = {neg_one, rel->right->clone()};
-    std::vector<std::shared_ptr<SymbolicNode>> add_ops = {rel->left->clone(), std::make_shared<MultiplyNode>(neg_ops)};
-    auto diff_expr = std::make_shared<AddNode>(add_ops);
+    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
+    std::vector<std::shared_ptr<const SymbolicNode>> neg_ops = {neg_one, rel->right()->clone()};
+    std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {rel->left()->clone(), lamina::detail::make_node<MultiplyNode>(neg_ops)};
+    auto diff_expr = lamina::detail::make_node<AddNode>(add_ops);
     LimitVisitor sv(var, point, dir, assumption_ctx_);
     diff_expr->accept(sv);
     auto val = sv.get_result();
@@ -413,8 +413,8 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
  *
  * 当 sgn 的参数在趋近点为零时，根据趋近方向确定符号。
  */
-std::optional<std::shared_ptr<SymbolicNode>> LimitVisitor::evaluate_sgn_limit(
-    const std::shared_ptr<SymbolicNode>& arg) {
+std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_sgn_limit(
+    const std::shared_ptr<const SymbolicNode>& arg) {
     LimitVisitor sv(var, point, direction, assumption_ctx_);
     arg->accept(sv);
     auto al = sv.get_result();
@@ -424,20 +424,20 @@ std::optional<std::shared_ptr<SymbolicNode>> LimitVisitor::evaluate_sgn_limit(
     al = norm.get_result();
     if (!al->is_zero()) {
         auto s = get_node_sign(al);
-        if (s) return std::make_shared<NumberNode>(BigInt(*s));
+        if (s) return lamina::detail::make_node<NumberNode>(BigInt(*s));
         return std::nullopt;
     }
     /// 参数极限为零，根据方向确定符号
     int sign = determine_sign_near_point(arg, direction);
-    if (sign != 0) return std::make_shared<NumberNode>(BigInt(sign));
-    return std::make_shared<NumberNode>(BigInt(0));
+    if (sign != 0) return lamina::detail::make_node<NumberNode>(BigInt(sign));
+    return lamina::detail::make_node<NumberNode>(BigInt(0));
 }
 
 /**
  * @brief 方向感知的绝对值函数极限计算。
  */
-std::optional<std::shared_ptr<SymbolicNode>> LimitVisitor::evaluate_abs_limit(
-    const std::shared_ptr<SymbolicNode>& arg) {
+std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_abs_limit(
+    const std::shared_ptr<const SymbolicNode>& arg) {
     LimitVisitor sv(var, point, direction, assumption_ctx_);
     arg->accept(sv);
     auto al = sv.get_result();
@@ -446,14 +446,14 @@ std::optional<std::shared_ptr<SymbolicNode>> LimitVisitor::evaluate_abs_limit(
     al->accept(norm);
     al = norm.get_result();
     if (is_inf(al)) {
-        std::vector<std::shared_ptr<SymbolicNode>> inf_args;
-        return std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+        std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
+        return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     }
     auto s = get_node_sign(al);
     if (s) {
         if (*s >= 0) return al;
-        std::vector<std::shared_ptr<SymbolicNode>> neg_ops = {std::make_shared<NumberNode>(BigInt(-1)), al};
-        auto neg_result = std::make_shared<MultiplyNode>(neg_ops);
+        std::vector<std::shared_ptr<const SymbolicNode>> neg_ops = {lamina::detail::make_node<NumberNode>(BigInt(-1)), al};
+        auto neg_result = lamina::detail::make_node<MultiplyNode>(neg_ops);
         neg_result->accept(norm);
         return norm.get_result();
     }
@@ -470,8 +470,8 @@ std::optional<std::shared_ptr<SymbolicNode>> LimitVisitor::evaluate_abs_limit(
  * @return 极限点为 +∞ 时返回 true
  */
 bool LimitVisitor::is_limit_at_infinity() const {
-    if (auto f = std::dynamic_pointer_cast<FunctionNode>(point)) {
-        return f->type == FunctionNode::FuncType::Infinity;
+    if (auto f = std::dynamic_pointer_cast<const FunctionNode>(point)) {
+        return f->type() == FunctionNode::FuncType::Infinity;
     }
     return false;
 }
@@ -499,44 +499,44 @@ bool LimitVisitor::is_limit_at_neg_infinity() const {
  * @param[in] node AST 节点
  * @return 多项式次数，非多项式返回 -1
  */
-int LimitVisitor::get_polynomial_degree(const std::shared_ptr<SymbolicNode>& node) const {
+int LimitVisitor::get_polynomial_degree(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return -1;
 
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(node)) {
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
         return 0;
     }
 
-    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
-        return (v->name == var) ? 1 : 0;
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        return (v->name() == var) ? 1 : 0;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        auto base_var = std::dynamic_pointer_cast<VariableNode>(pow->base);
-        if (base_var && base_var->name == var) {
-            if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto base_var = std::dynamic_pointer_cast<const VariableNode>(pow->base());
+        if (base_var && base_var->name() == var) {
+            if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
                 double e = 0;
-                if (std::holds_alternative<double>(exp_num->value)) e = std::get<double>(exp_num->value);
-                else if (std::holds_alternative<BigInt>(exp_num->value)) e = std::get<BigInt>(exp_num->value).to_double();
-                else if (std::holds_alternative<Rational>(exp_num->value)) e = std::get<Rational>(exp_num->value).to_double();
+                if (std::holds_alternative<double>(exp_num->value())) e = std::get<double>(exp_num->value());
+                else if (std::holds_alternative<BigInt>(exp_num->value())) e = std::get<BigInt>(exp_num->value()).to_double();
+                else if (std::holds_alternative<Rational>(exp_num->value())) e = std::get<Rational>(exp_num->value()).to_double();
                 if (e == static_cast<int>(e) && e >= 0) return static_cast<int>(e);
             }
         }
         /// c^x or similar — not a polynomial
-        int base_deg = get_polynomial_degree(pow->base);
+        int base_deg = get_polynomial_degree(pow->base());
         if (base_deg < 0) return -1;
-        if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+        if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
             double e = 0;
-            if (std::holds_alternative<double>(exp_num->value)) e = std::get<double>(exp_num->value);
-            else if (std::holds_alternative<BigInt>(exp_num->value)) e = std::get<BigInt>(exp_num->value).to_double();
-            else if (std::holds_alternative<Rational>(exp_num->value)) e = std::get<Rational>(exp_num->value).to_double();
+            if (std::holds_alternative<double>(exp_num->value())) e = std::get<double>(exp_num->value());
+            else if (std::holds_alternative<BigInt>(exp_num->value())) e = std::get<BigInt>(exp_num->value()).to_double();
+            else if (std::holds_alternative<Rational>(exp_num->value())) e = std::get<Rational>(exp_num->value()).to_double();
             if (e == static_cast<int>(e) && e >= 0) return base_deg * static_cast<int>(e);
         }
         return -1;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int total = 0;
-        for (auto& op : mul->operands) {
+        for (auto& op : mul->operands()) {
             int d = get_polynomial_degree(op);
             if (d < 0) return -1;
             total += d;
@@ -544,9 +544,9 @@ int LimitVisitor::get_polynomial_degree(const std::shared_ptr<SymbolicNode>& nod
         return total;
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         int max_deg = 0;
-        for (auto& op : add->operands) {
+        for (auto& op : add->operands()) {
             int d = get_polynomial_degree(op);
             if (d < 0) return -1;
             if (d > max_deg) max_deg = d;
@@ -566,53 +566,53 @@ int LimitVisitor::get_polynomial_degree(const std::shared_ptr<SymbolicNode>& nod
  * @param[in] node AST 节点
  * @return 首项系数节点，无法确定时返回 nullptr
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::get_leading_coefficient(const std::shared_ptr<SymbolicNode>& node) const {
+std::shared_ptr<const SymbolicNode> LimitVisitor::get_leading_coefficient(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return nullptr;
 
     int deg = get_polynomial_degree(node);
     if (deg < 0) return nullptr;
 
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(node)) {
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
         return node->clone();
     }
 
-    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
-        if (v->name == var) return std::make_shared<NumberNode>(BigInt(1));
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (v->name() == var) return lamina::detail::make_node<NumberNode>(BigInt(1));
         return node->clone();
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        auto base_var = std::dynamic_pointer_cast<VariableNode>(pow->base);
-        if (base_var && base_var->name == var) {
-            return std::make_shared<NumberNode>(BigInt(1));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto base_var = std::dynamic_pointer_cast<const VariableNode>(pow->base());
+        if (base_var && base_var->name() == var) {
+            return lamina::detail::make_node<NumberNode>(BigInt(1));
         }
         /// constant^n
-        auto base_lc = get_leading_coefficient(pow->base);
+        auto base_lc = get_leading_coefficient(pow->base());
         if (!base_lc) return nullptr;
-        if (auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
-            return std::make_shared<PowerNode>(base_lc, pow->exponent->clone());
+        if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
+            return lamina::detail::make_node<PowerNode>(base_lc, pow->exponent()->clone());
         }
         return nullptr;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> lc_parts;
-        for (auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> lc_parts;
+        for (auto& op : mul->operands()) {
             auto lc = get_leading_coefficient(op);
             if (!lc) return nullptr;
             lc_parts.push_back(lc);
         }
         if (lc_parts.size() == 1) return lc_parts[0];
-        auto prod = std::make_shared<MultiplyNode>(lc_parts);
+        auto prod = lamina::detail::make_node<MultiplyNode>(lc_parts);
         NormalizationVisitor norm;
         prod->accept(norm);
         return norm.get_result();
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         /// Find terms with the highest degree and sum their leading coefficients
-        std::vector<std::shared_ptr<SymbolicNode>> leading_terms;
-        for (auto& op : add->operands) {
+        std::vector<std::shared_ptr<const SymbolicNode>> leading_terms;
+        for (auto& op : add->operands()) {
             int d = get_polynomial_degree(op);
             if (d == deg) {
                 auto lc = get_leading_coefficient(op);
@@ -621,7 +621,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::get_leading_coefficient(const std::s
         }
         if (leading_terms.empty()) return nullptr;
         if (leading_terms.size() == 1) return leading_terms[0];
-        auto sum = std::make_shared<AddNode>(leading_terms);
+        auto sum = lamina::detail::make_node<AddNode>(leading_terms);
         NormalizationVisitor norm;
         sum->accept(norm);
         return norm.get_result();
@@ -642,9 +642,9 @@ std::shared_ptr<SymbolicNode> LimitVisitor::get_leading_coefficient(const std::s
  * @param[in] den 分母 AST 节点
  * @return 极限结果，非有理函数时返回 nullptr
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::limit_rational_at_infinity(
-    const std::shared_ptr<SymbolicNode>& num,
-    const std::shared_ptr<SymbolicNode>& den) {
+std::shared_ptr<const SymbolicNode> LimitVisitor::limit_rational_at_infinity(
+    const std::shared_ptr<const SymbolicNode>& num,
+    const std::shared_ptr<const SymbolicNode>& den) {
 
     int deg_num = get_polynomial_degree(num);
     int deg_den = get_polynomial_degree(den);
@@ -652,7 +652,7 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_rational_at_infinity(
     if (deg_num < 0 || deg_den < 0) return nullptr;
 
     if (deg_num < deg_den) {
-        return std::make_shared<NumberNode>(BigInt(0));
+        return lamina::detail::make_node<NumberNode>(BigInt(0));
     }
 
     if (deg_num == deg_den) {
@@ -660,8 +660,8 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_rational_at_infinity(
         auto lc_den = get_leading_coefficient(den);
         if (!lc_num || !lc_den) return nullptr;
 
-        auto ratio = std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>{
-            lc_num, std::make_shared<PowerNode>(lc_den, std::make_shared<NumberNode>(BigInt(-1)))
+        auto ratio = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+            lc_num, lamina::detail::make_node<PowerNode>(lc_den, lamina::detail::make_node<NumberNode>(BigInt(-1)))
         });
         NormalizationVisitor norm;
         ratio->accept(norm);
@@ -675,11 +675,11 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_rational_at_infinity(
     int sign_den = lc_den ? get_sign(lc_den) : 1;
     int final_sign = sign_num * sign_den;
 
-    std::vector<std::shared_ptr<SymbolicNode>> inf_args;
-    auto inf_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+    std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
+    auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     if (final_sign < 0) {
-        std::vector<std::shared_ptr<SymbolicNode>> m = {std::make_shared<NumberNode>(BigInt(-1)), inf_node};
-        return std::make_shared<MultiplyNode>(m);
+        std::vector<std::shared_ptr<const SymbolicNode>> m = {lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
+        return lamina::detail::make_node<MultiplyNode>(m);
     }
     return inf_node;
 }
@@ -692,60 +692,60 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_rational_at_infinity(
  * @param[in] node AST 节点
  * @return 增长速率分类
  */
-LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<SymbolicNode>& node) const {
+LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return GrowthClass::Unknown;
 
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(node)) {
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
         return GrowthClass::Constant;
     }
 
-    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
-        return (v->name == var) ? GrowthClass::Polynomial : GrowthClass::Constant;
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        return (v->name() == var) ? GrowthClass::Polynomial : GrowthClass::Constant;
     }
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (func->type == FunctionNode::FuncType::Exp) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (func->type() == FunctionNode::FuncType::Exp) {
             /// Check if argument contains var with positive growth
-            if (func->arguments.size() == 1) {
-                int arg_deg = get_polynomial_degree(func->arguments[0]);
+            if (func->arguments().size() == 1) {
+                int arg_deg = get_polynomial_degree(func->arguments()[0]);
                 if (arg_deg > 0) return GrowthClass::Exponential;
             }
             return GrowthClass::Exponential;
         }
-        if (func->type == FunctionNode::FuncType::Ln || func->type == FunctionNode::FuncType::Log) {
+        if (func->type() == FunctionNode::FuncType::Ln || func->type() == FunctionNode::FuncType::Log) {
             return GrowthClass::Logarithmic;
         }
-        if (func->type == FunctionNode::FuncType::Infinity) {
+        if (func->type() == FunctionNode::FuncType::Infinity) {
             return GrowthClass::Unknown;
         }
         /// sin, cos, etc. are bounded
-        if (func->type == FunctionNode::FuncType::Sin || func->type == FunctionNode::FuncType::Cos) {
+        if (func->type() == FunctionNode::FuncType::Sin || func->type() == FunctionNode::FuncType::Cos) {
             return GrowthClass::Constant;
         }
         return GrowthClass::Unknown;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         /// x^n is polynomial, e^x is exponential
-        auto base_var = std::dynamic_pointer_cast<VariableNode>(pow->base);
-        if (base_var && base_var->name == var) {
+        auto base_var = std::dynamic_pointer_cast<const VariableNode>(pow->base());
+        if (base_var && base_var->name() == var) {
             return GrowthClass::Polynomial;
         }
         /// Check if base is exp-like: a^x where a > 1
-        if (auto base_num = std::dynamic_pointer_cast<NumberNode>(pow->base)) {
-            int exp_deg = get_polynomial_degree(pow->exponent);
+        if (auto base_num = std::dynamic_pointer_cast<const NumberNode>(pow->base())) {
+            int exp_deg = get_polynomial_degree(pow->exponent());
             if (exp_deg > 0) return GrowthClass::Exponential;
         }
         /// Check if base contains exp
-        auto base_growth = classify_growth(pow->base);
+        auto base_growth = classify_growth(pow->base());
         if (base_growth == GrowthClass::Exponential) return GrowthClass::Exponential;
         if (base_growth == GrowthClass::Polynomial) return GrowthClass::Polynomial;
         return GrowthClass::Unknown;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         GrowthClass max_class = GrowthClass::Constant;
-        for (auto& op : mul->operands) {
+        for (auto& op : mul->operands()) {
             GrowthClass g = classify_growth(op);
             if (g == GrowthClass::Unknown) return GrowthClass::Unknown;
             if (static_cast<int>(g) > static_cast<int>(max_class)) max_class = g;
@@ -753,9 +753,9 @@ LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<Sy
         return max_class;
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         GrowthClass max_class = GrowthClass::Constant;
-        for (auto& op : add->operands) {
+        for (auto& op : add->operands()) {
             GrowthClass g = classify_growth(op);
             if (g == GrowthClass::Unknown) return GrowthClass::Unknown;
             if (static_cast<int>(g) > static_cast<int>(max_class)) max_class = g;
@@ -774,14 +774,14 @@ LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<Sy
  * @param[in] node AST 节点
  * @return 有效多项式次数
  */
-int LimitVisitor::get_growth_polynomial_degree(const std::shared_ptr<SymbolicNode>& node) const {
+int LimitVisitor::get_growth_polynomial_degree(const std::shared_ptr<const SymbolicNode>& node) const {
     int deg = get_polynomial_degree(node);
     if (deg >= 0) return deg;
 
     /// For multiply nodes with mixed polynomial and logarithmic factors
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int total_poly_deg = 0;
-        for (auto& op : mul->operands) {
+        for (auto& op : mul->operands()) {
             GrowthClass g = classify_growth(op);
             if (g == GrowthClass::Polynomial || g == GrowthClass::Constant) {
                 int d = get_polynomial_degree(op);
@@ -806,9 +806,9 @@ int LimitVisitor::get_growth_polynomial_degree(const std::shared_ptr<SymbolicNod
  * @param[in] den 分母 AST 节点
  * @return 极限结果，无法确定时返回 nullptr
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::limit_by_growth_comparison(
-    const std::shared_ptr<SymbolicNode>& num,
-    const std::shared_ptr<SymbolicNode>& den) {
+std::shared_ptr<const SymbolicNode> LimitVisitor::limit_by_growth_comparison(
+    const std::shared_ptr<const SymbolicNode>& num,
+    const std::shared_ptr<const SymbolicNode>& den) {
 
     GrowthClass num_growth = classify_growth(num);
     GrowthClass den_growth = classify_growth(den);
@@ -820,23 +820,23 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_by_growth_comparison(
     /// Different growth classes
     if (static_cast<int>(num_growth) > static_cast<int>(den_growth)) {
         /// Numerator grows faster → ±∞
-        std::vector<std::shared_ptr<SymbolicNode>> inf_args;
-        return std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+        std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
+        return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     }
 
     if (static_cast<int>(num_growth) < static_cast<int>(den_growth)) {
         /// Denominator grows faster → 0
-        return std::make_shared<NumberNode>(BigInt(0));
+        return lamina::detail::make_node<NumberNode>(BigInt(0));
     }
 
     /// Same growth class — compare within class
     if (num_growth == GrowthClass::Polynomial) {
         int num_deg = get_growth_polynomial_degree(num);
         int den_deg = get_growth_polynomial_degree(den);
-        if (num_deg < den_deg) return std::make_shared<NumberNode>(BigInt(0));
+        if (num_deg < den_deg) return lamina::detail::make_node<NumberNode>(BigInt(0));
         if (num_deg > den_deg) {
-            std::vector<std::shared_ptr<SymbolicNode>> inf_args;
-            return std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+            std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
+            return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
         }
         /// Same degree — fall through to L'Hôpital or other methods
     }
@@ -850,8 +850,8 @@ std::shared_ptr<SymbolicNode> LimitVisitor::limit_by_growth_comparison(
  * @param[in] expr 原始表达式
  * @return 极限结果，无法处理时返回 nullptr
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
-    const std::shared_ptr<SymbolicNode>& expr) {
+std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
+    const std::shared_ptr<const SymbolicNode>& expr) {
 
     if (!expr) return nullptr;
 
@@ -868,8 +868,8 @@ std::shared_ptr<SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
     if (!substituted) return nullptr;
 
     /// Evaluate lim(t→+∞) of the substituted expression
-    std::vector<std::shared_ptr<SymbolicNode>> inf_args;
-    auto pos_inf = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+    std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
+    auto pos_inf = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
 
     LimitVisitor sub_vis(t_var, pos_inf, "", assumption_ctx_);
     sub_vis.lhopital_depth_ = this->lhopital_depth_;
@@ -884,65 +884,65 @@ std::shared_ptr<SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
  * @param[in] t_var 替换变量名
  * @return 替换后的节点
  */
-std::shared_ptr<SymbolicNode> LimitVisitor::substitute_neg_t(
-    const std::shared_ptr<SymbolicNode>& node, const std::string& t_var) const {
+std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
+    const std::shared_ptr<const SymbolicNode>& node, const std::string& t_var) const {
 
     if (!node) return nullptr;
 
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(node)) {
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
         return node->clone();
     }
 
-    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
-        if (v->name == var) {
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (v->name() == var) {
             /// x = -t → multiply(-1, t)
-            std::vector<std::shared_ptr<SymbolicNode>> ops = {
-                std::make_shared<NumberNode>(BigInt(-1)),
-                std::make_shared<VariableNode>(t_var)
+            std::vector<std::shared_ptr<const SymbolicNode>> ops = {
+                lamina::detail::make_node<NumberNode>(BigInt(-1)),
+                lamina::detail::make_node<VariableNode>(t_var)
             };
-            return std::make_shared<MultiplyNode>(ops);
+            return lamina::detail::make_node<MultiplyNode>(ops);
         }
         return node->clone();
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-        for (auto& op : add->operands) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+        for (auto& op : add->operands()) {
             auto sub = substitute_neg_t(op, t_var);
             if (!sub) return nullptr;
             new_ops.push_back(sub);
         }
-        return std::make_shared<AddNode>(new_ops);
+        return lamina::detail::make_node<AddNode>(new_ops);
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-        for (auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+        for (auto& op : mul->operands()) {
             auto sub = substitute_neg_t(op, t_var);
             if (!sub) return nullptr;
             new_ops.push_back(sub);
         }
-        return std::make_shared<MultiplyNode>(new_ops);
+        return lamina::detail::make_node<MultiplyNode>(new_ops);
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        auto new_base = substitute_neg_t(pow->base, t_var);
-        auto new_exp = substitute_neg_t(pow->exponent, t_var);
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto new_base = substitute_neg_t(pow->base(), t_var);
+        auto new_exp = substitute_neg_t(pow->exponent(), t_var);
         if (!new_base || !new_exp) return nullptr;
-        return std::make_shared<PowerNode>(new_base, new_exp);
+        return lamina::detail::make_node<PowerNode>(new_base, new_exp);
     }
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (func->type == FunctionNode::FuncType::Infinity) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (func->type() == FunctionNode::FuncType::Infinity) {
             return node->clone();
         }
-        std::vector<std::shared_ptr<SymbolicNode>> new_args;
-        for (auto& arg : func->arguments) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_args;
+        for (auto& arg : func->arguments()) {
             auto sub = substitute_neg_t(arg, t_var);
             if (!sub) return nullptr;
             new_args.push_back(sub);
         }
-        return std::make_shared<FunctionNode>(func->type, new_args);
+        return lamina::detail::make_node<FunctionNode>(func->type(), new_args);
     }
 
     /// For other node types, clone as-is

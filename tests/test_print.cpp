@@ -1,6 +1,6 @@
 #include <iostream>
-#include <cassert>
 #include "../include/symbolic.hpp"
+#include "test_common.hpp"
 
 int main() {
     auto x = SymbolicExpr::variable("x");
@@ -13,8 +13,10 @@ int main() {
     std::cout << "x + 1 = " << sum->to_string() << std::endl;
     std::cout << "(x + 1) * 2 = " << prod->to_string() << std::endl;
 
-    assert(sum->to_string() == "(x + 1)" || sum->to_string() == "x + 1");
+    EXPECT_TRUE(sum->to_string() == "(x + 1)" || sum->to_string() == "x + 1",
+                "sum prints as x + 1");
+    EXPECT_TRUE(prod && !prod->to_string().empty(), "product prints a non-empty expression");
 
     std::cout << "Print test passed!" << std::endl;
-    return 0;
+    return TEST_REPORT();
 }

@@ -16,6 +16,7 @@
 #include "property_store.hpp"
 #include "interval.hpp"
 #include <stdexcept>
+#include <string>
 
 using namespace lamina;
 
@@ -195,10 +196,10 @@ void test_declare_bounded_with_interval() {
     TEST_CASE("Declare Bounded with Interval stores bounds");
     PropertyStore store;
 
-    auto lower_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(0)));
-    auto upper_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(10)));
+    auto lower_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);
@@ -279,10 +280,10 @@ void test_boundedness_unknown_can_be_set() {
     TEST_CASE("Setting boundedness to Unknown is allowed and clears bounds");
     PropertyStore store;
 
-    auto lower_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(0)));
-    auto upper_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(10)));
+    auto lower_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);
@@ -303,6 +304,41 @@ void test_undeclared_symbol_has_no_bounds() {
 
     EXPECT_FALSE(store.get_bounds("undeclared").has_value(),
                  "Undeclared symbol has no bounds");
+}
+
+void test_interval_queries_preserve_exact_large_endpoints() {
+    TEST_CASE("PropertyStore interval queries preserve exact large endpoints");
+    PropertyStore store;
+    const BigInt two_to_53("9007199254740992");
+    const BigInt next_integer = two_to_53 + BigInt(1);
+
+    Interval first_point = Interval::point(SymbolicExpr::number(two_to_53));
+    Interval second_point = Interval::point(SymbolicExpr::number(next_integer));
+    store.declare_differentiable("f", first_point);
+    bool threw = false;
+    try {
+        store.declare_continuous("f", second_point);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    EXPECT_TRUE(!threw,
+                "adjacent large integer points do not falsely overlap after exact comparison");
+
+    Interval closed_span{
+        Endpoint::closed(SymbolicExpr::number(two_to_53)),
+        Endpoint::closed(SymbolicExpr::number(next_integer))
+    };
+    store.declare_continuous("g", closed_span);
+    EXPECT_TRUE(store.is_continuous("g", second_point),
+                "closed span covers its exact large upper endpoint");
+
+    Interval open_upper_span{
+        Endpoint::closed(SymbolicExpr::number(two_to_53)),
+        Endpoint::open(SymbolicExpr::number(next_integer))
+    };
+    store.declare_continuous("h", open_upper_span);
+    EXPECT_TRUE(!store.is_continuous("h", second_point),
+                "open upper endpoint does not cover the exact large boundary point");
 }
 
 // ============================================================
@@ -349,6 +385,7 @@ int main() {
     test_boundedness_contradiction_unbounded_then_bounded();
     test_boundedness_unknown_can_be_set();
     test_undeclared_symbol_has_no_bounds();
+    test_interval_queries_preserve_exact_large_endpoints();
 
     // Combined tests
     test_parity_even_with_integer_domain_already_set();

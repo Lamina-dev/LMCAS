@@ -35,26 +35,26 @@ static auto var(const std::string& name) { return SE::variable(name); }
 static std::shared_ptr<SymbolicExpr> get_mat_entry(
     const std::shared_ptr<SymbolicExpr>& mat, size_t r, size_t c)
 {
-    if (!mat || !mat->root) return nullptr;
-    auto mn = std::dynamic_pointer_cast<MatrixNode>(mat->root);
+    if (!mat || !lamina::detail::node(mat)) return nullptr;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
     if (!mn) return nullptr;
     auto node = mn->get(r, c);
     if (!node) return SE::number(0);
-    return std::make_shared<SymbolicExpr>(node);
+    return lamina::detail::make_expression_ptr(node);
 }
 
 static size_t get_mat_rows(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !mat->root) return 0;
-    auto mn = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    return mn ? mn->rows : 0;
+    if (!mat || !lamina::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    return mn ? mn->rows() : 0;
 }
 
 static size_t get_mat_cols(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !mat->root) return 0;
-    auto mn = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    return mn ? mn->cols : 0;
+    if (!mat || !lamina::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    return mn ? mn->cols() : 0;
 }
 
 // ============================================================

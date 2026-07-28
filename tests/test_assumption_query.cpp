@@ -24,22 +24,19 @@ using namespace lamina;
 
 // Helper: create a SymbolicExpr wrapping a NumberNode from BigInt
 static SymbolicExpr make_bigint_expr(int v) {
-    SymbolicExpr expr;
-    expr.root = std::make_shared<NumberNode>(BigInt(v));
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(v)));
     return expr;
 }
 
 // Helper: create a SymbolicExpr wrapping a NumberNode from Rational
 static SymbolicExpr make_rational_expr(int num, int den) {
-    SymbolicExpr expr;
-    expr.root = std::make_shared<NumberNode>(Rational(BigInt(num), BigInt(den)));
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(Rational(BigInt(num), BigInt(den))));
     return expr;
 }
 
 // Helper: create a SymbolicExpr wrapping a NumberNode from double
 static SymbolicExpr make_double_expr(double v) {
-    SymbolicExpr expr;
-    expr.root = std::make_shared<NumberNode>(static_cast<lmmc_real_t>(v));
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v)));
     return expr;
 }
 
@@ -356,20 +353,19 @@ void test_integer_double() {
 // ============================================================
 
 // Helper: create a SymbolicExpr from a node
-static SymbolicExpr make_expr(std::shared_ptr<SymbolicNode> node) {
-    SymbolicExpr expr;
-    expr.root = std::move(node);
+static SymbolicExpr make_expr(std::shared_ptr<const SymbolicNode> node) {
+    auto expr = lamina::detail::expression_from_node(std::move(node));
     return expr;
 }
 
 // Helper: create a VariableNode
-static std::shared_ptr<SymbolicNode> var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
 // Helper: create a NumberNode from an integer (shared_ptr)
-static std::shared_ptr<SymbolicNode> num(int v) {
-    return std::make_shared<NumberNode>(BigInt(v));
+static std::shared_ptr<const SymbolicNode> num(int v) {
+    return lamina::detail::make_node<NumberNode>(BigInt(v));
 }
 
 // Helper: check Tribool equality with descriptive output
@@ -400,7 +396,7 @@ void test_nan_handling() {
     AssumptionContext ctx;
     QueryInterface qi(ctx);
 
-    auto nan_node = std::make_shared<NumberNode>(static_cast<lmmc_real_t>(std::nan("")));
+    auto nan_node = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(std::nan("")));
     SymbolicExpr nan_expr = make_expr(nan_node);
 
     EXPECT_TRIBOOL(qi.query_integer(nan_expr), Tribool::False,
@@ -429,9 +425,9 @@ void test_infinity_handling() {
     QueryInterface qi(ctx);
 
     // Positive infinity: FunctionNode with FuncType::Infinity
-    auto inf_node = std::make_shared<FunctionNode>(
+    auto inf_node = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Infinity,
-        std::vector<std::shared_ptr<SymbolicNode>>{});
+        std::vector<std::shared_ptr<const SymbolicNode>>{});
     SymbolicExpr pos_inf_expr = make_expr(inf_node);
 
     EXPECT_TRIBOOL(qi.query_positive(pos_inf_expr), Tribool::True,
@@ -444,45 +440,18 @@ void test_infinity_handling() {
                    "+Infinity: query_nonzero should return True");
 
     // Negative infinity: MultiplyNode(-1, Infinity)
-    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
-    auto inf_node2 = std::make_shared<FunctionNode>(
+    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
+    auto inf_node2 = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Infinity,
-        std::vector<std::shared_ptr<SymbolicNode>>{});
-    auto neg_inf_node = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{neg_one, inf_node2});
+        std::vector<std::shared_ptr<const SymbolicNode>>{});
+    auto neg_inf_node = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, inf_node2});
     SymbolicExpr neg_inf_expr = make_expr(neg_inf_node);
 
     EXPECT_TRIBOOL(qi.query_negative(neg_inf_expr), Tribool::True,
                    "-Infinity: query_negative should return True");
     EXPECT_TRIBOOL(qi.query_positive(neg_inf_expr), Tribool::False,
                    "-Infinity: query_positive should return False");
-}
-
-// ============================================================
-// Test: Null root node (Req 10.10)
-// All queries → Unknown
-// ============================================================
-
-void test_null_root_node() {
-    TEST_CASE("Null root node (Req 10.10)");
-
-    AssumptionContext ctx;
-    QueryInterface qi(ctx);
-
-    SymbolicExpr null_expr;
-
-    EXPECT_TRIBOOL(qi.query_positive(null_expr), Tribool::Unknown,
-                   "Null root: query_positive should return Unknown");
-    EXPECT_TRIBOOL(qi.query_negative(null_expr), Tribool::Unknown,
-                   "Null root: query_negative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonnegative(null_expr), Tribool::Unknown,
-                   "Null root: query_nonnegative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_real(null_expr), Tribool::Unknown,
-                   "Null root: query_real should return Unknown");
-    EXPECT_TRIBOOL(qi.query_integer(null_expr), Tribool::Unknown,
-                   "Null root: query_integer should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonzero(null_expr), Tribool::Unknown,
-                   "Null root: query_nonzero should return Unknown");
 }
 
 // ============================================================
@@ -522,10 +491,10 @@ void test_matrix_node() {
     AssumptionContext ctx;
     QueryInterface qi(ctx);
 
-    std::vector<std::vector<std::shared_ptr<SymbolicNode>>> grid = {
+    std::vector<std::vector<std::shared_ptr<const SymbolicNode>>> grid = {
         {num(1)}
     };
-    auto mat_node = std::make_shared<MatrixNode>(grid);
+    auto mat_node = lamina::detail::make_node<MatrixNode>(grid);
     SymbolicExpr mat_expr = make_expr(mat_node);
 
     EXPECT_TRIBOOL(qi.query_positive(mat_expr), Tribool::Unknown,
@@ -552,7 +521,7 @@ void test_relational_node() {
     AssumptionContext ctx;
     QueryInterface qi(ctx);
 
-    auto rel_node = std::make_shared<RelationalNode>(
+    auto rel_node = lamina::detail::make_node<RelationalNode>(
         var("x"), num(0), RelationalNode::Op::GT);
     SymbolicExpr rel_expr = make_expr(rel_node);
 
@@ -580,11 +549,11 @@ void test_logical_node() {
     AssumptionContext ctx;
     QueryInterface qi(ctx);
 
-    auto left_rel = std::make_shared<RelationalNode>(
+    auto left_rel = lamina::detail::make_node<RelationalNode>(
         var("x"), num(0), RelationalNode::Op::GT);
-    auto right_rel = std::make_shared<RelationalNode>(
+    auto right_rel = lamina::detail::make_node<RelationalNode>(
         var("y"), num(0), RelationalNode::Op::GT);
-    auto logical_node = std::make_shared<LogicalNode>(
+    auto logical_node = lamina::detail::make_node<LogicalNode>(
         left_rel, right_rel, LogicalNode::Op::And);
     SymbolicExpr logical_expr = make_expr(logical_node);
 
@@ -600,6 +569,77 @@ void test_logical_node() {
                    "LogicalNode: query_integer should return Unknown");
     EXPECT_TRIBOOL(qi.query_nonzero(logical_expr), Tribool::Unknown,
                    "LogicalNode: query_nonzero should return Unknown");
+}
+
+void test_checked_query_interface_contracts() {
+    TEST_CASE("QueryInterface checked core queries: explicit errors and values");
+
+    AssumptionContext ctx;
+    QueryInterface qi(ctx);
+
+    auto positive = make_bigint_expr(3);
+    auto positive_result = qi.query_positive_checked(positive);
+    EXPECT_TRUE(positive_result.has_value(), "checked query_positive succeeds");
+    if (positive_result) {
+        EXPECT_TRUE(positive_result.value() == Tribool::True,
+                    "checked query_positive returns True for positive integer");
+    }
+
+    auto real_result = qi.query_real_checked(positive);
+    EXPECT_TRUE(real_result.has_value(), "checked query_real succeeds");
+    if (real_result) {
+        EXPECT_TRUE(real_result.value() == Tribool::True,
+                    "checked query_real returns True for integer");
+    }
+
+    auto integer_result = qi.query_integer_checked(positive);
+    EXPECT_TRUE(integer_result.has_value(), "checked query_integer succeeds");
+    if (integer_result) {
+        EXPECT_TRUE(integer_result.value() == Tribool::True,
+                    "checked query_integer returns True for integer");
+    }
+
+    auto negative = make_bigint_expr(-2);
+    auto negative_result = qi.query_negative_checked(negative);
+    EXPECT_TRUE(negative_result.has_value(), "checked query_negative succeeds");
+    if (negative_result) {
+        EXPECT_TRUE(negative_result.value() == Tribool::True,
+                    "checked query_negative returns True for negative integer");
+    }
+
+    auto zero = make_bigint_expr(0);
+    auto nonnegative_result = qi.query_nonnegative_checked(zero);
+    EXPECT_TRUE(nonnegative_result.has_value(), "checked query_nonnegative succeeds");
+    if (nonnegative_result) {
+        EXPECT_TRUE(nonnegative_result.value() == Tribool::True,
+                    "checked query_nonnegative returns True for zero");
+    }
+
+    auto nonzero_result = qi.query_nonzero_checked(zero);
+    EXPECT_TRUE(nonzero_result.has_value(), "checked query_nonzero succeeds");
+    if (nonzero_result) {
+        EXPECT_TRUE(nonzero_result.value() == Tribool::False,
+                    "checked query_nonzero returns False for zero");
+    }
+
+    auto rel_node = lamina::detail::make_node<RelationalNode>(
+        var("x"), num(0), RelationalNode::Op::GT);
+    SymbolicExpr rel_expr = make_expr(rel_node);
+    auto relation_result = qi.query_real_checked(rel_expr);
+    EXPECT_TRUE(relation_result.has_value(),
+                "checked query_real accepts handled compatibility expression types");
+    if (relation_result) {
+        EXPECT_TRUE(relation_result.value() == Tribool::Unknown,
+                    "checked query_real preserves Unknown for relational expressions");
+    }
+
+    auto relation_positive = qi.query_positive_checked(rel_expr);
+    EXPECT_TRUE(relation_positive.has_value(),
+                "checked query_positive accepts relational compatibility expressions");
+    if (relation_positive) {
+        EXPECT_TRUE(relation_positive.value() == Tribool::Unknown,
+                    "checked query_positive reports Unknown for relational expressions");
+    }
 }
 
 // ============================================================
@@ -623,11 +663,11 @@ int main() {
     // Task 8.3: Edge cases
     test_nan_handling();
     test_infinity_handling();
-    test_null_root_node();
     test_undeclared_variable();
     test_matrix_node();
     test_relational_node();
     test_logical_node();
+    test_checked_query_interface_contracts();
 
     return TEST_REPORT();
 }

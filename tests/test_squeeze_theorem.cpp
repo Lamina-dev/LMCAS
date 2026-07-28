@@ -106,9 +106,9 @@ int main() {
     {
         auto inv_x = SymbolicExpr::power(x, neg_one);
         // Create arctan(1/x) using FunctionNode directly
-        auto atan_inv_x = std::make_shared<SymbolicExpr>(
-            std::make_shared<FunctionNode>(FunctionNode::FuncType::ArcTan,
-                std::vector<std::shared_ptr<SymbolicNode>>{inv_x->root}));
+        auto atan_inv_x = lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::ArcTan,
+                std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(inv_x)}));
         auto expr = SymbolicExpr::multiply(x, atan_inv_x);
 
         auto lim = expr->limit("x", zero);

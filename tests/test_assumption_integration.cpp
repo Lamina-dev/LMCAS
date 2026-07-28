@@ -34,22 +34,21 @@ using namespace lamina;
 // Helpers
 // ============================================================
 
-static std::shared_ptr<SymbolicNode> make_var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<SymbolicNode> node) {
-    SymbolicExpr expr;
-    expr.root = std::move(node);
+static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
+    auto expr = lamina::detail::expression_from_node(std::move(node));
     return expr;
 }
 
 /// Convert a SymbolicNode to string via PrintVisitor
-static std::string node_to_string(const std::shared_ptr<SymbolicNode>& node) {
+static std::string node_to_string(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return "null";
     PrintVisitor pv;
     node->accept(pv);
@@ -73,12 +72,10 @@ static void test_property19_integrator_nullptr_backward_compat() {
         auto x_node = make_var("x");
         auto coeff_node = make_number(a);
         auto exp_node = make_number(n);
-        auto power_node = std::make_shared<PowerNode>(x_node, exp_node);
-        std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {coeff_node, power_node};
-        auto mul_node = std::make_shared<MultiplyNode>(mul_ops);
-        SymbolicExpr integrand;
-        integrand.root = mul_node;
-
+        auto power_node = lamina::detail::make_node<PowerNode>(x_node, exp_node);
+        std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {coeff_node, power_node};
+        auto mul_node = lamina::detail::make_node<MultiplyNode>(mul_ops);
+        auto integrand = lamina::detail::expression_from_node(mul_node);
         // Integrator without context (default)
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(integrand, "x");
@@ -158,13 +155,13 @@ static void test_property19_limit_nullptr_backward_compat() {
         auto x_node = make_var("x");
         auto a_node = make_number(a);
         auto b_node = make_number(b);
-        std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {a_node, x_node};
-        auto ax = std::make_shared<MultiplyNode>(mul_ops);
-        std::vector<std::shared_ptr<SymbolicNode>> add_ops = {ax, b_node};
-        auto expr_node = std::make_shared<AddNode>(add_ops);
+        std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {a_node, x_node};
+        auto ax = lamina::detail::make_node<MultiplyNode>(mul_ops);
+        std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {ax, b_node};
+        auto expr_node = lamina::detail::make_node<AddNode>(add_ops);
 
         // Limit point: x → 1
-        auto point = std::make_shared<NumberNode>(BigInt(1));
+        auto point = lamina::detail::make_node<NumberNode>(BigInt(1));
 
         // LimitVisitor without context (default)
         LimitVisitor visitor_default("x", point, "");
@@ -189,9 +186,9 @@ static void test_property19_limit_trig_nullptr() {
     // lim x→0 sin(x) = 0
     {
         auto x_node = make_var("x");
-        std::vector<std::shared_ptr<SymbolicNode>> args = {x_node};
-        auto sin_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Sin, args);
-        auto point = std::make_shared<NumberNode>(BigInt(0));
+        std::vector<std::shared_ptr<const SymbolicNode>> args = {x_node};
+        auto sin_x = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, args);
+        auto point = lamina::detail::make_node<NumberNode>(BigInt(0));
 
         LimitVisitor visitor_default("x", point, "");
         sin_x->accept(visitor_default);
@@ -210,9 +207,9 @@ static void test_property19_limit_trig_nullptr() {
     // lim x→0 cos(x) = 1
     {
         auto x_node = make_var("x");
-        std::vector<std::shared_ptr<SymbolicNode>> args = {x_node};
-        auto cos_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Cos, args);
-        auto point = std::make_shared<NumberNode>(BigInt(0));
+        std::vector<std::shared_ptr<const SymbolicNode>> args = {x_node};
+        auto cos_x = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Cos, args);
+        auto point = lamina::detail::make_node<NumberNode>(BigInt(0));
 
         LimitVisitor visitor_default("x", point, "");
         cos_x->accept(visitor_default);
@@ -380,20 +377,16 @@ static void test_property19_matcher_nullptr_backward_compat() {
         int num_val = rc::gen::inRange(1, 10);
 
         // Pattern: _a + num_val
-        auto wc = std::make_shared<VariableNode>("_a");
+        auto wc = lamina::detail::make_node<VariableNode>("_a");
         auto num = make_number(num_val);
-        std::vector<std::shared_ptr<SymbolicNode>> pat_ops = {wc, num};
-        auto pat_node = std::make_shared<AddNode>(pat_ops);
-        SymbolicExpr pattern;
-        pattern.root = pat_node;
-
+        std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {wc, num};
+        auto pat_node = lamina::detail::make_node<AddNode>(pat_ops);
+        auto pattern = lamina::detail::expression_from_node(pat_node);
         // Target: x + num_val
         auto x_node = make_var("x");
-        std::vector<std::shared_ptr<SymbolicNode>> tgt_ops = {x_node, num};
-        auto tgt_node = std::make_shared<AddNode>(tgt_ops);
-        SymbolicExpr target;
-        target.root = tgt_node;
-
+        std::vector<std::shared_ptr<const SymbolicNode>> tgt_ops = {x_node, num};
+        auto tgt_node = lamina::detail::make_node<AddNode>(tgt_ops);
+        auto target = lamina::detail::expression_from_node(tgt_node);
         std::unordered_set<std::string> wildcards = {"_a"};
 
         // Match without context (default)
@@ -411,7 +404,7 @@ static void test_property19_matcher_nullptr_backward_compat() {
             RC_ASSERT(results_default.size() == results_nullptr.size());
             for (auto& [key, val] : results_default) {
                 RC_ASSERT(results_nullptr.count(key) > 0);
-                RC_ASSERT(val.to_string() == results_nullptr[key].to_string());
+                RC_ASSERT(val.to_string() == results_nullptr.at(key).to_string());
             }
         }
     });
@@ -424,12 +417,9 @@ static void test_property19_rewrite_engine_nullptr() {
     // Rule: x + 0 -> x
     {
         auto wc_a = wildcard("_a");
-        SymbolicExpr zero_expr;
-        zero_expr.root = make_number(0);
-        std::vector<std::shared_ptr<SymbolicNode>> pat_ops = {wc_a.root, zero_expr.root};
-        SymbolicExpr pattern;
-        pattern.root = std::make_shared<AddNode>(pat_ops);
-
+        auto zero_expr = lamina::detail::expression_from_node(make_number(0));
+        std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {lamina::detail::node(wc_a), lamina::detail::node(zero_expr)};
+        auto pattern = lamina::detail::expression_from_node(lamina::detail::make_node<AddNode>(pat_ops));
         SymbolicExpr replacement = wc_a;
         std::unordered_set<std::string> wcs = {"_a"};
 
@@ -437,10 +427,8 @@ static void test_property19_rewrite_engine_nullptr() {
 
         // Target: y + 0
         auto y_node = make_var("y");
-        std::vector<std::shared_ptr<SymbolicNode>> tgt_ops = {y_node, make_number(0)};
-        SymbolicExpr target;
-        target.root = std::make_shared<AddNode>(tgt_ops);
-
+        std::vector<std::shared_ptr<const SymbolicNode>> tgt_ops = {y_node, make_number(0)};
+        auto target = lamina::detail::expression_from_node(lamina::detail::make_node<AddNode>(tgt_ops));
         // RewriteEngine without context (default)
         RewriteEngine engine_default;
         engine_default.add_rule(rule);
@@ -459,12 +447,9 @@ static void test_property19_rewrite_engine_nullptr() {
     // Rule: _a * 1 -> _a
     {
         auto wc_a = wildcard("_a");
-        SymbolicExpr one_expr;
-        one_expr.root = make_number(1);
-        std::vector<std::shared_ptr<SymbolicNode>> pat_ops = {wc_a.root, one_expr.root};
-        SymbolicExpr pattern;
-        pattern.root = std::make_shared<MultiplyNode>(pat_ops);
-
+        auto one_expr = lamina::detail::expression_from_node(make_number(1));
+        std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {lamina::detail::node(wc_a), lamina::detail::node(one_expr)};
+        auto pattern = lamina::detail::expression_from_node(lamina::detail::make_node<MultiplyNode>(pat_ops));
         SymbolicExpr replacement = wc_a;
         std::unordered_set<std::string> wcs = {"_a"};
 
@@ -472,10 +457,8 @@ static void test_property19_rewrite_engine_nullptr() {
 
         // Target: z * 1
         auto z_node = make_var("z");
-        std::vector<std::shared_ptr<SymbolicNode>> tgt_ops = {z_node, make_number(1)};
-        SymbolicExpr target;
-        target.root = std::make_shared<MultiplyNode>(tgt_ops);
-
+        std::vector<std::shared_ptr<const SymbolicNode>> tgt_ops = {z_node, make_number(1)};
+        auto target = lamina::detail::expression_from_node(lamina::detail::make_node<MultiplyNode>(tgt_ops));
         RewriteEngine engine_default;
         engine_default.add_rule(rule);
         auto result_default = engine_default.apply(target, 10);

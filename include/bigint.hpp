@@ -14,6 +14,7 @@
 #include "lmmc/init.h"
 #include <vector>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <iostream>
@@ -21,6 +22,7 @@
 #include <iomanip>
 #include <stdexcept>
 #include <limits>
+#include <optional>
 #include "lmmc/config.h"
 
 /** @brief 释放 BigInt 内部分配的内存 */
@@ -79,6 +81,7 @@ public:
         NEGATIVE = -1
     };
 
+private:
     mp_ptr _data = nullptr;
     mp_size_t _size = 0;
     mp_size_t _alloc = 0;
@@ -87,16 +90,25 @@ public:
 
     void realloc_to(mp_size_t new_alloc) {
         if (new_alloc <= _alloc) return;
-        new_alloc = (new_alloc + 3) & ~3;
+        const std::size_t requested = static_cast<std::size_t>(new_alloc);
+        if (requested > std::numeric_limits<std::size_t>::max() - 3) {
+            throw std::length_error("BigInt allocation size overflow");
+        }
+        const std::size_t rounded = (requested + 3) & ~std::size_t(3);
+        if (rounded > std::numeric_limits<std::size_t>::max() / sizeof(mp_limb_t) ||
+            rounded > static_cast<std::size_t>(std::numeric_limits<mp_size_t>::max())) {
+            throw std::length_error("BigInt allocation byte size overflow");
+        }
 
-        mp_ptr new_data = (mp_ptr)bigint_alloc(new_alloc * sizeof(mp_limb_t));
+        mp_ptr new_data = static_cast<mp_ptr>(bigint_alloc(rounded * sizeof(mp_limb_t)));
+        if (!new_data) throw std::bad_alloc();
 
         if (_size > 0 && _data) {
              std::memcpy(new_data, _data, _size * sizeof(mp_limb_t));
         }
         if (_data) bigint_free(_data);
         _data = new_data;
-        _alloc = new_alloc;
+        _alloc = static_cast<mp_size_t>(rounded);
     }
 
     void normalize() {
@@ -311,8 +323,6 @@ public:
         if (_size == 0) return 0;
 
         constexpr long long INT_MAX_LL = static_cast<long long>(std::numeric_limits<int>::max());
-        constexpr long long INT_MIN_LL = static_cast<long long>(std::numeric_limits<int>::min());
-
         if (_size > 1) {
             return _sign == POSITIVE
                        ? std::numeric_limits<int>::max()
@@ -335,6 +345,25 @@ public:
             }
             return static_cast<int>(mag);
         }
+    }
+
+    /** @brief 精确转换为 int64_t；超出范围时返回空。 */
+    std::optional<std::int64_t> try_to_int64() const noexcept {
+        if (_size == 0) return std::int64_t{0};
+        if (_size > 1) return std::nullopt;
+
+        const unsigned long long magnitude =
+            static_cast<unsigned long long>(_data[0]);
+        const auto max_value =
+            static_cast<unsigned long long>(std::numeric_limits<std::int64_t>::max());
+        if (_sign == NEGATIVE) {
+            const unsigned long long min_magnitude = max_value + 1ULL;
+            if (magnitude > min_magnitude) return std::nullopt;
+            if (magnitude == min_magnitude) return std::numeric_limits<std::int64_t>::min();
+            return -static_cast<std::int64_t>(magnitude);
+        }
+        if (magnitude > max_value) return std::nullopt;
+        return static_cast<std::int64_t>(magnitude);
     }
 
     /**
@@ -640,7 +669,8 @@ public:
      * @return this^exp
      */
     BigInt power(unsigned long exp) const {
-        if (_size == 0) return exp == 0 ? BigInt(1) : BigInt(0);
+        if (exp == 0) return BigInt(1);
+        if (_size == 0) return BigInt(0);
 
         BigInt res;
         mp_size_t needed = lmmp_pow_size_(_data, _size, exp);
@@ -713,12 +743,13 @@ public:
 
         BigInt res;
 
-        mp_size_t res_alloc = (_size / 2) + 2;
-        res.realloc_to(res_alloc);
+        const mp_size_t root_size = (_size + 1) / 2;
+        // lmmp_sqrt_ may write one guard limb for an even input limb count.
+        res.realloc_to(root_size + 1);
 
         lmmp_sqrt_(res._data, nullptr, _data, _size, 0);
 
-        res._size = res_alloc;
+        res._size = root_size;
         res._sign = POSITIVE;
         res.negative = false;
         res.normalize();

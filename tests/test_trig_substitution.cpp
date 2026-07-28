@@ -4,8 +4,8 @@
 #include <cmath>
 #include "symbolic.hpp"
 #include "integration.hpp"
+#include "test_common.hpp"
 
-static int g_pass = 0, g_fail = 0;
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
 // Verify ∫f dx by differentiating the antiderivative and numerically comparing
@@ -17,7 +17,10 @@ static void check_roundtrip(const std::string& name, const std::shared_ptr<Symbo
     auto F = integ.integrate(*f, var);
     std::cout << "  F = " << F.to_string() << "\n";
     auto dF = F.differentiate(var);
-    if (!dF) { std::cout << "[FAIL] cannot differentiate result\n"; g_fail++; return; }
+    if (!dF) {
+        EXPECT_TRUE(false, name + ": cannot differentiate result");
+        return;
+    }
 
     bool ok = true;
     int checked = 0;
@@ -35,9 +38,11 @@ static void check_roundtrip(const std::string& name, const std::shared_ptr<Symbo
         checked++;
         if (std::abs(dv - fv) > 1e-4) { ok = false; break; }
     }
-    if (checked == 0) { std::cout << "[FAIL] no evaluable sample points\n"; g_fail++; return; }
-    if (ok) { std::cout << "[PASS] d/dx[F] == f at " << checked << " points\n"; g_pass++; }
-    else { std::cout << "[FAIL] derivative mismatch\n"; g_fail++; }
+    if (checked == 0) {
+        EXPECT_TRUE(false, name + ": no evaluable sample points");
+        return;
+    }
+    EXPECT_TRUE(ok, name + ": d/dx[F] == f at sampled points");
 }
 
 // Check the antiderivative is not just an unevaluated integral node.
@@ -49,8 +54,12 @@ static void check_evaluated(const std::string& name, const std::shared_ptr<Symbo
     bool uneval = s.find("Integral") != std::string::npos ||
                   s.find("integral") != std::string::npos ||
                   s.find("∫") != std::string::npos;
-    if (!uneval) { std::cout << "[PASS] " << name << " evaluated: " << s << "\n"; g_pass++; }
-    else { std::cout << "[FAIL] " << name << " left unevaluated: " << s << "\n"; g_fail++; }
+    EXPECT_TRUE(!uneval, name + " is evaluated");
+    if (!uneval) {
+        std::cout << "[PASS] " << name << " evaluated: " << s << "\n";
+    } else {
+        std::cout << "[FAIL] " << name << " left unevaluated: " << s << "\n";
+    }
 }
 
 int main() {
@@ -107,6 +116,5 @@ int main() {
         check_roundtrip("∫1/(1-cos x)", f, "x", {0.5, 1.0, 1.5, 2.0});
     }
 
-    std::cout << "\n=== Results: " << g_pass << " passed, " << g_fail << " failed ===\n";
-    return g_fail == 0 ? 0 : 1;
+    return TEST_REPORT();
 }

@@ -1,8 +1,8 @@
 #include "solve_polynomial.hpp"
 #include "polynomial.hpp"
 #include "rational.hpp"
+#include "test_common.hpp"
 #include <iostream>
-#include <cassert>
 #include <algorithm>
 #include <map>
 
@@ -31,8 +31,8 @@ void test_simple_linear() {
 
     Polynomial<Rational> p({Rational(-2), Rational(1)}, "x");
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 1);
-    assert(roots[0] == Rational(2));
+    EXPECT_TRUE(roots.size() == 1, "linear polynomial has one rational root");
+    EXPECT_TRUE(!roots.empty() && roots[0] == Rational(2), "linear root is 2");
     std::cout << "PASSED\n";
 }
 
@@ -41,9 +41,9 @@ void test_quadratic_two_roots() {
 
     auto p = poly_from_roots({Rational(1), Rational(3)});
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 2);
-    assert(count_occurrences(roots, Rational(1)) == 1);
-    assert(count_occurrences(roots, Rational(3)) == 1);
+    EXPECT_TRUE(roots.size() == 2, "quadratic has two rational roots");
+    EXPECT_TRUE(count_occurrences(roots, Rational(1)) == 1, "quadratic root 1 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(3)) == 1, "quadratic root 3 found once");
     std::cout << "PASSED\n";
 }
 
@@ -52,9 +52,9 @@ void test_repeated_root() {
 
     auto p = poly_from_roots({Rational(2), Rational(2), Rational(2)});
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 3);
+    EXPECT_TRUE(roots.size() == 3, "repeated root preserves multiplicity");
     for (const auto& r : roots) {
-        assert(r == Rational(2));
+        EXPECT_TRUE(r == Rational(2), "repeated root value is 2");
     }
     std::cout << "PASSED\n";
 }
@@ -64,9 +64,9 @@ void test_rational_roots() {
 
     auto p = poly_from_roots({Rational(1, 2), Rational(3, 4)});
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 2);
-    assert(count_occurrences(roots, Rational(1, 2)) == 1);
-    assert(count_occurrences(roots, Rational(3, 4)) == 1);
+    EXPECT_TRUE(roots.size() == 2, "polynomial has two rational fractional roots");
+    EXPECT_TRUE(count_occurrences(roots, Rational(1, 2)) == 1, "root 1/2 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(3, 4)) == 1, "root 3/4 found once");
     std::cout << "PASSED\n";
 }
 
@@ -75,9 +75,9 @@ void test_zero_constant_term() {
 
     auto p = poly_from_roots({Rational(0), Rational(0), Rational(3)});
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 3);
-    assert(count_occurrences(roots, Rational(0)) == 2);
-    assert(count_occurrences(roots, Rational(3)) == 1);
+    EXPECT_TRUE(roots.size() == 3, "zero constant term roots preserve multiplicity");
+    EXPECT_TRUE(count_occurrences(roots, Rational(0)) == 2, "zero root found twice");
+    EXPECT_TRUE(count_occurrences(roots, Rational(3)) == 1, "root 3 found once");
     std::cout << "PASSED\n";
 }
 
@@ -85,10 +85,10 @@ void test_negative_roots() {
     std::cout << "Test: negative roots (x+1)(x+2)(x-3) ... ";
     auto p = poly_from_roots({Rational(-1), Rational(-2), Rational(3)});
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 3);
-    assert(count_occurrences(roots, Rational(-1)) == 1);
-    assert(count_occurrences(roots, Rational(-2)) == 1);
-    assert(count_occurrences(roots, Rational(3)) == 1);
+    EXPECT_TRUE(roots.size() == 3, "negative-root polynomial has three roots");
+    EXPECT_TRUE(count_occurrences(roots, Rational(-1)) == 1, "root -1 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(-2)) == 1, "root -2 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(3)) == 1, "root 3 found once");
     std::cout << "PASSED\n";
 }
 
@@ -97,7 +97,7 @@ void test_no_rational_roots() {
 
     Polynomial<Rational> p({Rational(1), Rational(0), Rational(1)}, "x");
     auto roots = find_rational_roots(p);
-    assert(roots.empty());
+    EXPECT_TRUE(roots.empty(), "x^2 + 1 has no rational roots");
     std::cout << "PASSED\n";
 }
 
@@ -105,10 +105,10 @@ void test_mixed_multiplicity() {
     std::cout << "Test: mixed multiplicity (x-1)^2(x+1)(x-2) ... ";
     auto p = poly_from_roots({Rational(1), Rational(1), Rational(-1), Rational(2)});
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 4);
-    assert(count_occurrences(roots, Rational(1)) == 2);
-    assert(count_occurrences(roots, Rational(-1)) == 1);
-    assert(count_occurrences(roots, Rational(2)) == 1);
+    EXPECT_TRUE(roots.size() == 4, "mixed multiplicity roots preserve total multiplicity");
+    EXPECT_TRUE(count_occurrences(roots, Rational(1)) == 2, "root 1 found twice");
+    EXPECT_TRUE(count_occurrences(roots, Rational(-1)) == 1, "root -1 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(2)) == 1, "root 2 found once");
     std::cout << "PASSED\n";
 }
 
@@ -120,9 +120,9 @@ void test_high_degree_partial() {
     Polynomial<Rational> p3({Rational(1), Rational(1), Rational(1)}, "x");
     auto p = p1 * p2 * p3;
     auto roots = find_rational_roots(p);
-    assert(roots.size() == 2);
-    assert(count_occurrences(roots, Rational(1)) == 1);
-    assert(count_occurrences(roots, Rational(2)) == 1);
+    EXPECT_TRUE(roots.size() == 2, "high-degree mixed polynomial finds rational roots only");
+    EXPECT_TRUE(count_occurrences(roots, Rational(1)) == 1, "high-degree root 1 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(2)) == 1, "high-degree root 2 found once");
     std::cout << "PASSED\n";
 }
 
@@ -130,7 +130,7 @@ void test_zero_polynomial() {
     std::cout << "Test: zero polynomial ... ";
     Polynomial<Rational> p("x");
     auto roots = find_rational_roots(p);
-    assert(roots.empty());
+    EXPECT_TRUE(roots.empty(), "zero polynomial returns no finite rational roots");
     std::cout << "PASSED\n";
 }
 
@@ -138,7 +138,7 @@ void test_constant_polynomial() {
     std::cout << "Test: constant polynomial (5) ... ";
     Polynomial<Rational> p({Rational(5)}, "x");
     auto roots = find_rational_roots(p);
-    assert(roots.empty());
+    EXPECT_TRUE(roots.empty(), "constant polynomial returns no rational roots");
     std::cout << "PASSED\n";
 }
 
@@ -153,10 +153,10 @@ void test_degree_stops_at_4() {
     auto p = p1 * p2 * p3 * p4 * p5;
     auto roots = find_rational_roots(p);
 
-    assert(roots.size() == 3);
-    assert(count_occurrences(roots, Rational(1)) == 1);
-    assert(count_occurrences(roots, Rational(2)) == 1);
-    assert(count_occurrences(roots, Rational(3)) == 1);
+    EXPECT_TRUE(roots.size() == 3, "degree-stop case finds three rational roots");
+    EXPECT_TRUE(count_occurrences(roots, Rational(1)) == 1, "degree-stop root 1 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(2)) == 1, "degree-stop root 2 found once");
+    EXPECT_TRUE(count_occurrences(roots, Rational(3)) == 1, "degree-stop root 3 found once");
     std::cout << "PASSED\n";
 }
 
@@ -317,5 +317,5 @@ int main() {
     }
 
     std::cout << "\nAll tests PASSED!\n";
-    return 0;
+    return TEST_REPORT();
 }

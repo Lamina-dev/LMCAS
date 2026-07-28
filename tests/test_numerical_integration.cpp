@@ -2,6 +2,7 @@
 #include "symbolic_ast.hpp"
 #include "test_common.hpp"
 #include <cmath>
+#include <limits>
 
 using namespace lamina;
 
@@ -33,6 +34,17 @@ int main() {
         EXPECT_TRUE(close(r, 1.0/3.0), "Simpson ∫₀¹ x² dx = 1/3");
     }
 
+    // checked fixed Simpson exposes explicit approximate result metadata
+    {
+        auto f = SymbolicExpr::multiply(x, x);
+        auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 10);
+        EXPECT_TRUE(r && std::abs(r.value().value - 1.0 / 3.0) < 1e-12,
+                    "checked fixed Simpson ∫₀¹ x² dx = 1/3");
+        EXPECT_TRUE(r && r.value().status == NumericStatus::Finite &&
+                        r.value().absolute_error >= 0.0,
+                    "checked fixed Simpson reports finite ApproxReal metadata");
+    }
+
     // ∫₀¹ x^3 dx = 1/4 via Gauss-Legendre (n=2 exact up to degree 3)
     {
         auto f = SymbolicExpr::power(x, num(3));
@@ -40,11 +52,179 @@ int main() {
         EXPECT_TRUE(close(r, 0.25, 1e-6), "Gauss ∫₀¹ x³ dx = 1/4");
     }
 
+    // checked Gauss-Legendre reports the same value through Result<ApproxReal>
+    {
+        auto f = SymbolicExpr::power(x, num(3));
+        auto r = quadrature_gaussian_numeric(f, "x", num(0), num(1), 2);
+        EXPECT_TRUE(r && std::abs(r.value().value - 0.25) < 1e-12,
+                    "checked Gauss ∫₀¹ x³ dx = 1/4");
+    }
+
     // adaptive_simpson on ∫₀¹ x^2 dx = 1/3
     {
         auto f = SymbolicExpr::multiply(x, x);
         auto r = adaptive_simpson(f, "x", num(0), num(1), 1e-10);
         EXPECT_TRUE(close(r, 1.0/3.0, 1e-8), "adaptive Simpson ∫₀¹ x² dx = 1/3");
+    }
+
+    // checked adaptive_simpson reports success with explicit error metadata
+    {
+        auto f = SymbolicExpr::multiply(x, x);
+        auto r = adaptive_simpson_numeric(f, "x", num(0), num(1), 1e-10);
+        EXPECT_TRUE(r.has_value(), "checked adaptive Simpson returns Result success");
+        EXPECT_TRUE(r.has_value() && std::abs(r.value().value - 1.0/3.0) < 1e-8,
+                    "checked adaptive Simpson ∫₀¹ x² dx = 1/3");
+        EXPECT_TRUE(r.has_value() && r.value().absolute_error >= 0.0 &&
+                        std::abs(r.value().value - 1.0/3.0) <= r.value().absolute_error,
+                    "reported Simpson error bounds the observed quadratic error");
+    }
+
+    // Crossing a singularity is a domain failure, not a principal-value success.
+    {
+        auto reciprocal = SymbolicExpr::divide(num(1), x);
+        auto r = adaptive_simpson_numeric(
+            reciprocal, "x", num(-1), num(1), 1e-10);
+        EXPECT_TRUE(!r && r.error().code == CasErrc::DomainError,
+                    "adaptive Simpson rejects an interior pole");
+    }
+
+    // A caller-imposed recursion limit must not return an unverified estimate.
+    {
+        auto absolute = lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<FunctionNode>(
+                FunctionNode::FuncType::Abs,
+                std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(x)}));
+        ComputationContext context;
+        auto r = adaptive_simpson_numeric(
+            absolute, "x", num(-1), num(1), context, 1e-14, 0);
+        EXPECT_TRUE(!r && r.error().code == CasErrc::ResourceLimit,
+                    "insufficient refinement depth returns ResourceLimit");
+    }
+
+    // Cancellation is checked through the shared evaluation context.
+    {
+        CancellationToken cancellation;
+        cancellation.cancel();
+        ComputationContext context({}, cancellation);
+        auto r = adaptive_simpson_numeric(x, "x", num(0), num(1), context, 1e-10);
+        EXPECT_TRUE(!r && r.error().code == CasErrc::Cancelled,
+                    "adaptive Simpson propagates cancellation");
+    }
+
+    // Finite endpoints can still define a width that overflows IEEE double.
+    {
+        const double largest = std::numeric_limits<double>::max();
+        auto r = adaptive_simpson_numeric(
+            x, "x", SymbolicExpr::number(-largest), SymbolicExpr::number(largest), 1e-10);
+        EXPECT_TRUE(!r && r.error().code == CasErrc::NumericFailure,
+                    "unrepresentable interval width returns NumericFailure");
+    }
+
+    // Reversed limits preserve orientation.
+    {
+        auto square = SymbolicExpr::multiply(x, x);
+        auto r = adaptive_simpson_numeric(square, "x", num(1), num(0), 1e-10);
+        EXPECT_TRUE(r && std::abs(r.value().value + 1.0/3.0) <=
+                            r.value().absolute_error + 1e-15,
+                    "reversed limits negate the integral");
+    }
+
+    // checked path must not hide missing variables as zero/null.
+    {
+        auto y = SymbolicExpr::variable("y");
+        auto f = SymbolicExpr::add(x, y);
+        auto r = adaptive_simpson_numeric(f, "x", num(0), num(1), 1e-10);
+        EXPECT_TRUE(!r.has_value(), "checked adaptive Simpson rejects unbound variables");
+        EXPECT_TRUE(!r.has_value() && r.error().code == CasErrc::UnboundSymbol,
+                    "checked adaptive Simpson reports UnboundSymbol");
+    }
+
+    // checked endpoint evaluation must also use explicit numeric errors.
+    {
+        auto r = adaptive_simpson_numeric(x, "x", SymbolicExpr::variable("a"), num(1), 1e-10);
+        EXPECT_TRUE(!r.has_value(), "checked adaptive Simpson rejects symbolic bounds");
+        EXPECT_TRUE(!r.has_value() && r.error().code == CasErrc::UnboundSymbol,
+                    "checked adaptive Simpson reports symbolic bound as UnboundSymbol");
+    }
+
+    // Resource budgets must be honored before deep recursion starts.
+    {
+        ResourceLimits limits;
+        limits.max_steps = 0;
+        ComputationContext context(limits);
+        auto r = adaptive_simpson_numeric(x, "x", num(0), num(1), context, 1e-10);
+        EXPECT_TRUE(!r.has_value(), "checked adaptive Simpson honors exhausted step budget");
+        EXPECT_TRUE(!r.has_value() && r.error().code == CasErrc::ResourceLimit,
+                    "checked adaptive Simpson reports ResourceLimit");
+    }
+
+    // checked fixed Simpson propagates unbound variables.
+    {
+        auto y = SymbolicExpr::variable("y");
+        auto f = SymbolicExpr::add(x, y);
+        auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 10);
+        EXPECT_TRUE(!r && r.error().code == CasErrc::UnboundSymbol,
+                    "checked fixed Simpson reports UnboundSymbol");
+    }
+
+    // checked fixed Simpson rejects domain errors at samples.
+    {
+        auto f = SymbolicExpr::ln(x);
+        auto r = quadrature_simpson_numeric(f, "x", num(-1), num(1), 10);
+        EXPECT_TRUE(!r && r.error().code == CasErrc::DomainError,
+                    "checked fixed Simpson reports sample DomainError");
+    }
+
+    // checked fixed quadrature validates arguments and observes cancellation.
+    {
+        auto invalid_n = quadrature_simpson_numeric(x, "x", num(0), num(1), 0);
+        EXPECT_TRUE(!invalid_n && invalid_n.error().code == CasErrc::InvalidArgument,
+                    "checked fixed Simpson rejects non-positive sample counts");
+
+        auto odd_n = quadrature_simpson_numeric(x, "x", num(0), num(1), 9);
+        EXPECT_TRUE(!odd_n && odd_n.error().code == CasErrc::InvalidArgument,
+                    "checked fixed Simpson rejects odd subinterval counts");
+
+        CancellationToken cancellation;
+        cancellation.cancel();
+        ComputationContext context({}, cancellation);
+        auto cancelled = quadrature_gaussian_numeric(x, "x", num(0), num(1), context, 2);
+        EXPECT_TRUE(!cancelled && cancelled.error().code == CasErrc::Cancelled,
+                    "checked Gaussian observes cancellation");
+    }
+
+    // legacy wrappers now unwrap checked failures instead of fabricating values.
+    {
+        auto invalid_simpson = quadrature_simpson(x, "x", num(0), num(1), 0);
+        EXPECT_TRUE(!invalid_simpson,
+                    "legacy Simpson wrapper returns nullptr for invalid sample counts");
+
+        auto invalid_gauss = quadrature_gaussian(x, "x", num(0), num(1), 0);
+        EXPECT_TRUE(!invalid_gauss,
+                    "legacy Gaussian wrapper returns nullptr for invalid sample counts");
+
+        auto invalid_default = numerical_integrate(x, "x", num(0), num(1), 0);
+        EXPECT_TRUE(!invalid_default,
+                    "legacy default integration wrapper returns nullptr for invalid sample counts");
+
+        auto odd_simpson = quadrature_simpson(x, "x", num(0), num(1), 9);
+        EXPECT_TRUE(!odd_simpson,
+                    "legacy Simpson wrapper returns nullptr for odd subinterval counts");
+
+        auto y = SymbolicExpr::variable("y");
+        auto unbound = quadrature_simpson(SymbolicExpr::add(x, y), "x", num(0), num(1), 10);
+        EXPECT_TRUE(!unbound,
+                    "legacy Simpson wrapper returns nullptr for unbound variables");
+    }
+
+    // checked fixed quadrature consumes the shared step budget.
+    {
+        ResourceLimits limits;
+        limits.max_steps = 1;
+        ComputationContext context(limits);
+        auto r = quadrature_simpson_numeric(x, "x", num(0), num(1), context, 10);
+        EXPECT_TRUE(!r && r.error().code == CasErrc::ResourceLimit,
+                    "checked fixed Simpson reports ResourceLimit");
     }
 
     // adaptive_simpson on a transcendental: ∫₀^π sin(x) dx = 2
@@ -60,6 +240,14 @@ int main() {
         auto f = SymbolicExpr::multiply(x, x);
         auto r = numerical_integrate(f, "x", num(0), num(1), 100);
         EXPECT_TRUE(close(r, 1.0/3.0, 1e-6), "numerical_integrate ∫₀¹ x² dx = 1/3");
+    }
+
+    // checked numerical_integrate wrapper uses the explicit fixed Simpson contract.
+    {
+        auto f = SymbolicExpr::multiply(x, x);
+        auto r = numerical_integrate_numeric(f, "x", num(0), num(1), 100);
+        EXPECT_TRUE(r && std::abs(r.value().value - 1.0 / 3.0) < 1e-10,
+                    "checked numerical_integrate ∫₀¹ x² dx = 1/3");
     }
 
     return TEST_REPORT();

@@ -287,7 +287,8 @@ void test_routing_transcendental_substitution_not_hybrid() {
                 // Accept symbolic result — the key property is that it was found
                 // without allow_numeric, confirming the transcendental path handled it
                 std::cout << "  [INFO] Root is symbolic: " << results[0]->to_string() << std::endl;
-                EXPECT_TRUE(true, "Transcendental path produced a symbolic result (not hybrid)");
+                EXPECT_TRUE(results[0] != nullptr && !results[0]->to_string().empty(),
+                            "Transcendental path produced a symbolic result (not hybrid)");
             }
         }
     }
@@ -1069,13 +1070,13 @@ static std::optional<double> eval_at(const std::shared_ptr<SymbolicExpr>& expr,
 /// Helper: compute derivative of expr with respect to var using DifferentiationVisitor
 static std::shared_ptr<SymbolicExpr> compute_derivative(
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
-    if (!expr || !expr->root) return nullptr;
+    if (!expr || !lamina::detail::node(expr)) return nullptr;
     try {
         DifferentiationVisitor dv(var);
-        expr->root->accept(dv);
+        lamina::detail::node(expr)->accept(dv);
         auto result_node = dv.get_result();
         if (!result_node) return nullptr;
-        return std::make_shared<SymbolicExpr>(result_node);
+        return lamina::detail::make_expression_ptr(result_node);
     } catch (...) {
         return nullptr;
     }
@@ -1809,8 +1810,8 @@ void test_property7_output_validity_sin_x_refined_roots() {
             auto number_expr = SymbolicExpr::number(root_result->value);
             EXPECT_TRUE(number_expr != nullptr,
                 "Root " + std::to_string(i) + " should be convertible to SymbolicExpr");
-            if (number_expr && number_expr->root) {
-                auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+            if (number_expr && lamina::detail::node(number_expr)) {
+                auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
                 EXPECT_TRUE(as_number != nullptr,
                     "Root " + std::to_string(i) + " expression should be a NumberNode");
             }
@@ -1862,10 +1863,10 @@ void test_property7_output_validity_exp_x_minus_x_minus_2() {
 
             // (c) Can be converted to NumberNode
             auto number_expr = SymbolicExpr::number(root_result->value);
-            EXPECT_TRUE(number_expr != nullptr && number_expr->root != nullptr,
+            EXPECT_TRUE(number_expr != nullptr && lamina::detail::node(number_expr) != nullptr,
                 "Root " + std::to_string(i) + " should produce a valid SymbolicExpr");
-            if (number_expr && number_expr->root) {
-                auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+            if (number_expr && lamina::detail::node(number_expr)) {
+                auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
                 EXPECT_TRUE(as_number != nullptr,
                     "Root " + std::to_string(i) + " expression root should be NumberNode");
             }
@@ -1913,10 +1914,10 @@ void test_property7_max_roots_limit_after_deduplication() {
             std::to_string(deduped[i]) + " should be finite");
 
         auto number_expr = SymbolicExpr::number(deduped[i]);
-        EXPECT_TRUE(number_expr != nullptr && number_expr->root != nullptr,
+        EXPECT_TRUE(number_expr != nullptr && lamina::detail::node(number_expr) != nullptr,
             "Deduplicated root " + std::to_string(i) + " should be convertible to NumberNode");
-        if (number_expr && number_expr->root) {
-            auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+        if (number_expr && lamina::detail::node(number_expr)) {
+            auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
             EXPECT_TRUE(as_number != nullptr,
                 "Deduplicated root " + std::to_string(i) + " expression should be NumberNode");
         }
@@ -1963,7 +1964,7 @@ void test_property7_output_validity_x_cos_x_minus_1() {
 
             // (c) NumberNode representation
             auto number_expr = SymbolicExpr::number(root_result->value);
-            auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+            auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
             EXPECT_TRUE(as_number != nullptr,
                 "Root " + std::to_string(i) + " should be representable as NumberNode");
 
@@ -2022,7 +2023,8 @@ void test_assemble_results_basic() {
     for (size_t i = 0; i < results.size(); ++i) {
         EXPECT_TRUE(results[i] != nullptr,
             "Result " + std::to_string(i) + " should not be null");
-        auto num = std::dynamic_pointer_cast<NumberNode>(results[i]->root);
+        auto num = std::dynamic_pointer_cast<const NumberNode>(
+            lamina::detail::node(results[i]));
         EXPECT_TRUE(num != nullptr,
             "Result " + std::to_string(i) + " root should be a NumberNode");
     }

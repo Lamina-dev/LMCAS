@@ -88,7 +88,7 @@ void test_depends_on_var() {
             SymbolicExpr::multiply(SymbolicExpr::number(3), x),
             SymbolicExpr::number(1)
         );
-        bool result = lamina::depends_on_var(expr->root, "x");
+        bool result = lamina::contains(*expr, "x");
         EXPECT_TRUE(result, "3x+1 depends on x");
     }
 
@@ -99,14 +99,14 @@ void test_depends_on_var() {
             SymbolicExpr::multiply(SymbolicExpr::number(2), y),
             SymbolicExpr::number(5)
         );
-        bool result = lamina::depends_on_var(expr->root, "x");
+        bool result = lamina::contains(*expr, "x");
         EXPECT_TRUE(!result, "2y+5 does not depend on x");
     }
 
     TEST_CASE("depends_on_var: constant expression");
     {
         auto expr = SymbolicExpr::number(42);
-        bool result = lamina::depends_on_var(expr->root, "x");
+        bool result = lamina::contains(*expr, "x");
         EXPECT_TRUE(!result, "constant 42 does not depend on x");
     }
 
@@ -117,7 +117,7 @@ void test_depends_on_var() {
             SymbolicExpr::add(x, SymbolicExpr::number(1)),
             SymbolicExpr::number(2)
         );
-        bool result = lamina::depends_on_var(expr->root, "x");
+        bool result = lamina::contains(*expr, "x");
         EXPECT_TRUE(result, "(x+1)^2 depends on x");
     }
 }

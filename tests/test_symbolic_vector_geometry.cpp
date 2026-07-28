@@ -131,6 +131,82 @@ void test_vector_angle() {
     }
 }
 
+void test_vector_checked_contracts() {
+    TEST_CASE("Vector Geometry Checked API Contracts");
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+
+    auto dot = lamina::vector_dot_checked({one, zero}, {zero, one});
+    EXPECT_TRUE(dot.has_value(), "checked vector_dot succeeds");
+    if (dot) {
+        EXPECT_EQ_EXPR_STR(dot.value()->simplify(), "0",
+                           "checked dot product of orthogonal vectors is 0");
+    }
+
+    auto bad_dot = lamina::vector_dot_checked({one}, {one, zero});
+    EXPECT_TRUE(!bad_dot &&
+                    bad_dot.error().code == lamina::CasErrc::InvalidArgument,
+                "checked vector_dot rejects dimension mismatch");
+    bool legacy_dot_threw = false;
+    try {
+        (void)lamina::vector_dot({one}, {one, zero});
+    } catch (const std::invalid_argument&) {
+        legacy_dot_threw = true;
+    }
+    EXPECT_TRUE(legacy_dot_threw,
+                "legacy vector_dot preserves invalid_argument for dimension mismatch");
+
+    auto bad_component = lamina::vector_cross_checked({one, nullptr, zero},
+                                                     {zero, one, zero});
+    EXPECT_TRUE(!bad_component &&
+                    bad_component.error().code == lamina::CasErrc::InvalidArgument,
+                "checked vector_cross rejects null component");
+
+    auto bad_cross_dim = lamina::vector_cross_checked({one, zero},
+                                                     {zero, one});
+    EXPECT_TRUE(!bad_cross_dim &&
+                    bad_cross_dim.error().code == lamina::CasErrc::InvalidArgument,
+                "checked vector_cross rejects non-3D vectors");
+
+    auto angle = lamina::vector_angle_checked({one, zero}, {zero, one});
+    EXPECT_TRUE(angle.has_value(), "checked vector_angle succeeds");
+    if (angle) {
+        EXPECT_TRUE(std::abs(angle.value() - M_PI / 2.0) < 1e-9,
+                    "checked vector_angle of orthogonal vectors is pi/2");
+    }
+
+    auto zero_angle = lamina::vector_angle_checked({zero, zero}, {one, zero});
+    EXPECT_TRUE(!zero_angle &&
+                    zero_angle.error().code == lamina::CasErrc::DomainError,
+                "checked vector_angle rejects zero-length vectors");
+    EXPECT_TRUE(std::isnan(lamina::vector_angle({zero, zero}, {one, zero})),
+                "legacy vector_angle unwraps domain failure to NaN");
+
+    auto x = SymbolicExpr::variable("x");
+    auto symbolic_angle = lamina::vector_angle_checked({x, zero}, {one, zero});
+    EXPECT_TRUE(!symbolic_angle &&
+                    symbolic_angle.error().code == lamina::CasErrc::NumericFailure,
+                "checked vector_angle rejects symbolic components");
+
+    auto two_as_expr = SymbolicExpr::add(one, one);
+    auto expression_angle = lamina::vector_angle_checked(
+        {two_as_expr, zero}, {SymbolicExpr::number(2), zero});
+    EXPECT_TRUE(expression_angle.has_value(),
+                "checked vector_angle accepts finite numeric expressions");
+    if (expression_angle) {
+        EXPECT_TRUE(std::abs(expression_angle.value()) < 1e-9,
+                    "checked vector_angle evaluates expression components");
+    }
+
+    lamina::CancellationToken token;
+    token.cancel();
+    lamina::ComputationContext context({}, token);
+    auto cancelled = lamina::vector_dot_checked({one, zero}, {zero, one}, context);
+    EXPECT_TRUE(!cancelled &&
+                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                "checked vector_dot observes cancelled context");
+}
+
 void test_line_plane_intersection() {
     TEST_CASE("Line-Plane Intersection: Known intersection point");
     {
@@ -233,6 +309,111 @@ void test_skew_lines_distance() {
     }
 }
 
+void test_line_plane_checked_contracts() {
+    TEST_CASE("Line/Plane Vector Geometry Checked API Contracts");
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+    auto two = SymbolicExpr::number(2);
+    auto three = SymbolicExpr::number(3);
+
+    lamina::LineSymbolic line{{zero, zero, zero}, {one, one, one}};
+    lamina::PlaneSymbolic plane{{one, one, one}, three};
+    auto intersection = lamina::line_plane_intersection_checked(line, plane);
+    EXPECT_TRUE(intersection.has_value(),
+                "checked line_plane_intersection succeeds");
+    if (intersection) {
+        EXPECT_TRUE(intersection.value().size() == 3,
+                    "checked intersection has three coordinates");
+        EXPECT_EQ_EXPR_STR(intersection.value()[0]->simplify(), "1",
+                           "checked intersection x = 1");
+    }
+
+    lamina::LineSymbolic parallel{{zero, zero, zero}, {one, zero, zero}};
+    lamina::PlaneSymbolic z_plane{{zero, zero, one}, one};
+    auto no_unique = lamina::line_plane_intersection_checked(parallel, z_plane);
+    EXPECT_TRUE(!no_unique &&
+                    no_unique.error().code == lamina::CasErrc::DomainError,
+                "checked line_plane_intersection rejects parallel line-plane");
+    EXPECT_TRUE(lamina::line_plane_intersection(parallel, z_plane).empty(),
+                "legacy line_plane_intersection unwraps no-unique result to empty");
+
+    lamina::LineSymbolic zero_direction{{zero, zero, zero}, {zero, zero, zero}};
+    auto bad_line = lamina::line_plane_intersection_checked(zero_direction, plane);
+    EXPECT_TRUE(!bad_line &&
+                    bad_line.error().code == lamina::CasErrc::DomainError,
+                "checked line_plane_intersection rejects zero direction");
+
+    lamina::PlaneSymbolic zero_plane{{zero, zero, zero}, one};
+    auto bad_distance = lamina::point_plane_distance_checked({one, two, three}, zero_plane);
+    EXPECT_TRUE(!bad_distance &&
+                    bad_distance.error().code == lamina::CasErrc::DomainError,
+                "checked point_plane_distance rejects zero plane normal");
+    EXPECT_TRUE(lamina::point_plane_distance({one, two, three}, zero_plane) == nullptr,
+                "legacy point_plane_distance unwraps zero normal to nullptr");
+
+    lamina::LineSymbolic l1{{zero, zero, zero}, {one, zero, zero}};
+    lamina::LineSymbolic l2{{zero, one, zero}, {zero, zero, one}};
+    auto skew = lamina::skew_lines_distance_checked(l1, l2);
+    EXPECT_TRUE(skew.has_value(), "checked skew_lines_distance succeeds");
+    if (skew) {
+        auto value = test_numeric_eval(skew.value()->simplify());
+        EXPECT_TRUE(value.has_value() && std::abs(*value - 1.0) < 1e-9,
+                    "checked skew distance is 1");
+    }
+
+    lamina::LineSymbolic parallel_l2{{zero, one, zero}, {one, zero, zero}};
+    auto parallel_distance = lamina::skew_lines_distance_checked(l1, parallel_l2);
+    EXPECT_TRUE(!parallel_distance &&
+                    parallel_distance.error().code == lamina::CasErrc::DomainError,
+                "checked skew_lines_distance rejects parallel directions");
+
+    auto constructed_line = lamina::line_from_two_points_checked(
+        {zero, zero, zero}, {one, two, three});
+    EXPECT_TRUE(constructed_line.has_value(), "checked line_from_two_points succeeds");
+    if (constructed_line) {
+        EXPECT_EQ_EXPR_STR(constructed_line.value().direction[2]->simplify(), "3",
+                           "checked constructed line z direction = 3");
+    }
+
+    auto identical_points = lamina::line_from_two_points_checked(
+        {one, one, one}, {one, one, one});
+    EXPECT_TRUE(!identical_points &&
+                    identical_points.error().code == lamina::CasErrc::DomainError,
+                "checked line_from_two_points rejects identical points");
+
+    auto checked_plane = lamina::plane_from_three_points_checked(
+        {zero, zero, zero}, {one, zero, zero}, {zero, one, zero});
+    EXPECT_TRUE(checked_plane.has_value(), "checked plane_from_three_points succeeds");
+    if (checked_plane) {
+        EXPECT_EQ_EXPR_STR(checked_plane.value().normal[2]->simplify(), "1",
+                           "checked plane normal z = 1");
+    }
+
+    auto collinear_plane = lamina::plane_from_three_points_checked(
+        {zero, zero, zero}, {one, zero, zero}, {two, zero, zero});
+    EXPECT_TRUE(!collinear_plane &&
+                    collinear_plane.error().code == lamina::CasErrc::DomainError,
+                "checked plane_from_three_points rejects collinear points");
+
+    auto angle = lamina::dihedral_angle_checked(
+        lamina::PlaneSymbolic{{one, zero, zero}, zero},
+        lamina::PlaneSymbolic{{zero, one, zero}, zero});
+    EXPECT_TRUE(angle.has_value(), "checked dihedral_angle succeeds");
+    if (angle) {
+        auto value = test_numeric_eval(angle.value()->simplify());
+        EXPECT_TRUE(value.has_value() && std::abs(*value - LMMC_CONST_PI / 2.0) < 1e-6,
+                    "checked dihedral angle is pi/2");
+    }
+
+    lamina::CancellationToken token;
+    token.cancel();
+    lamina::ComputationContext context({}, token);
+    auto cancelled = lamina::point_plane_distance_checked({one, two, three}, plane, context);
+    EXPECT_TRUE(!cancelled &&
+                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                "checked point_plane_distance observes cancellation");
+}
+
 void test_geometry_extensions() {
     using lamina::SurfaceSymbolic;
     auto N = [](int n){ return SymbolicExpr::number(n); };
@@ -271,6 +452,53 @@ void test_geometry_extensions() {
         SurfaceSymbolic surf{F, {"x", "y", "z"}};
         std::string c = lamina::classify_quadric(surf);
         EXPECT_TRUE(c == "sphere", "x^2+y^2+z^2=1 classified as sphere");
+
+        auto checked = lamina::classify_quadric_checked(surf);
+        EXPECT_TRUE(checked.has_value(), "checked classify_quadric succeeds");
+        if (checked) {
+            EXPECT_TRUE(checked.value() == "sphere",
+                        "checked classify_quadric reports sphere");
+        }
+    }
+
+    TEST_CASE("classify_quadric_checked: explicit failures and unknowns");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto z = SymbolicExpr::variable("z");
+        auto a = SymbolicExpr::variable("a");
+
+        SurfaceSymbolic invalid{nullptr, {"x", "y", "z"}};
+        auto invalid_result = lamina::classify_quadric_checked(invalid);
+        EXPECT_TRUE(!invalid_result &&
+                        invalid_result.error().code == lamina::CasErrc::InvalidArgument,
+                    "checked classify_quadric rejects null surface equation");
+
+        auto linear = SymbolicExpr::add(x, y);
+        SurfaceSymbolic non_quadric{linear, {"x", "y", "z"}};
+        auto unknown = lamina::classify_quadric_checked(non_quadric);
+        EXPECT_TRUE(unknown.has_value() && unknown.value() == "unknown",
+                    "checked classify_quadric returns unknown for supported non-quadric");
+
+        auto symbolic_coeff = SymbolicExpr::add(
+            SymbolicExpr::multiply(a, SymbolicExpr::multiply(x, x)),
+            SymbolicExpr::add(SymbolicExpr::multiply(y, y),
+                              SymbolicExpr::multiply(z, z)));
+        SurfaceSymbolic symbolic{symbolic_coeff, {"x", "y", "z"}};
+        auto unsupported = lamina::classify_quadric_checked(symbolic);
+        EXPECT_TRUE(!unsupported &&
+                        unsupported.error().code == lamina::CasErrc::Inconclusive,
+                    "checked classify_quadric rejects unproved symbolic coefficients");
+        EXPECT_TRUE(lamina::classify_quadric(symbolic) == "unknown",
+                    "legacy classify_quadric unwraps checked failure to unknown");
+
+        lamina::CancellationToken token;
+        token.cancel();
+        lamina::ComputationContext context({}, token);
+        auto cancelled = lamina::classify_quadric_checked(non_quadric, context);
+        EXPECT_TRUE(!cancelled &&
+                        cancelled.error().code == lamina::CasErrc::Cancelled,
+                    "checked classify_quadric observes cancellation");
     }
 
     TEST_CASE("surface_normal / tangent_plane of sphere at (1,0,0)");
@@ -287,6 +515,66 @@ void test_geometry_extensions() {
         // grad = (2x,2y,2z) at (1,0,0) = (2,0,0); normalized = (1,0,0)
         EXPECT_EQ_EXPR_STR(n[0]->simplify(), "1", "unit normal x = 1");
         EXPECT_EQ_EXPR_STR(n[1]->simplify(), "0", "unit normal y = 0");
+
+        auto checked_normal = lamina::surface_normal_checked(surf, pt);
+        EXPECT_TRUE(checked_normal.has_value(), "checked surface normal succeeds");
+        if (checked_normal) {
+            EXPECT_EQ_EXPR_STR(checked_normal.value()[0]->simplify(), "1",
+                               "checked unit normal x = 1");
+            EXPECT_EQ_EXPR_STR(checked_normal.value()[1]->simplify(), "0",
+                               "checked unit normal y = 0");
+        }
+
+        auto checked_plane = lamina::tangent_plane_checked(surf, pt);
+        EXPECT_TRUE(checked_plane.has_value(), "checked tangent plane succeeds");
+        if (checked_plane) {
+            EXPECT_EQ_EXPR_STR(checked_plane.value().normal[0]->simplify(), "2",
+                               "checked tangent plane normal x = 2");
+            EXPECT_EQ_EXPR_STR(checked_plane.value().d->simplify(), "2",
+                               "checked tangent plane d = 2");
+        }
+    }
+
+    TEST_CASE("surface_normal_checked / tangent_plane_checked: explicit failures");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto z = SymbolicExpr::variable("z");
+        auto zero = N(0);
+
+        auto singular_F = SymbolicExpr::add(
+            SymbolicExpr::add(SymbolicExpr::multiply(x, x), SymbolicExpr::multiply(y, y)),
+            SymbolicExpr::multiply(z, z));
+        SurfaceSymbolic singular{singular_F, {"x", "y", "z"}};
+        std::vector<std::shared_ptr<SymbolicExpr>> origin = {zero, zero, zero};
+        auto singular_normal = lamina::surface_normal_checked(singular, origin);
+        EXPECT_TRUE(!singular_normal.has_value(),
+                    "checked surface normal rejects singular point");
+        EXPECT_TRUE(singular_normal.error().code == lamina::CasErrc::DomainError,
+                    "checked surface normal reports DomainError at singular point");
+
+        auto singular_plane = lamina::tangent_plane_checked(singular, origin);
+        EXPECT_TRUE(!singular_plane.has_value(),
+                    "checked tangent plane rejects singular point");
+        EXPECT_TRUE(singular_plane.error().code == lamina::CasErrc::DomainError,
+                    "checked tangent plane reports DomainError at singular point");
+
+        auto unsupported_F = SymbolicExpr::eq(x, zero);
+        SurfaceSymbolic unsupported{unsupported_F, {"x", "y", "z"}};
+        auto unsupported_normal = lamina::surface_normal_checked(unsupported, origin);
+        EXPECT_TRUE(!unsupported_normal.has_value(),
+                    "checked surface normal rejects unsupported derivatives");
+        EXPECT_TRUE(unsupported_normal.error().code == lamina::CasErrc::Inconclusive,
+                    "checked surface normal reports Inconclusive for unsupported derivatives");
+
+        lamina::CancellationToken token;
+        token.cancel();
+        lamina::ComputationContext context({}, token);
+        auto cancelled = lamina::tangent_plane_checked(singular, origin, context);
+        EXPECT_TRUE(!cancelled.has_value(),
+                    "checked tangent plane observes cancellation");
+        EXPECT_TRUE(cancelled.error().code == lamina::CasErrc::Cancelled,
+                    "checked tangent plane reports Cancelled");
     }
 
     TEST_CASE("dihedral_angle: perpendicular planes = pi/2");
@@ -305,9 +593,11 @@ int main() {
         test_vector_dot();
         test_vector_cross();
         test_vector_angle();
+        test_vector_checked_contracts();
         test_line_plane_intersection();
         test_point_plane_distance();
         test_skew_lines_distance();
+        test_line_plane_checked_contracts();
         test_geometry_extensions();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;

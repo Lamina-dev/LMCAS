@@ -1,5 +1,6 @@
 #include "polynomial.hpp"
 #include "bigint.hpp"
+#include "test_common.hpp"
 #include <iostream>
 #include <vector>
 
@@ -63,6 +64,14 @@ void test_gcd_primitive() {
     } else {
         std::cout << "Rational GCD Test Failed." << std::endl;
     }
+    EXPECT_TRUE(g.degree() == 1, "BigInt GCD has degree 1 for shared x-1 factor");
+    EXPECT_TRUE(gab.degree() == 2, "BigInt GCD has degree 2 for shared quadratic factor");
+    EXPECT_TRUE(g34.degree() == 1, "BigInt GCD preserves shared linear primitive factor");
+    EXPECT_TRUE(gr.degree() == 1 &&
+                    gr.coeffs.size() >= 2 &&
+                    gr.coeffs[0].to_string() == "1" &&
+                    gr.coeffs[1].to_string() == "1",
+                "Rational GCD finds x + 1");
 
 }
 
@@ -70,8 +79,7 @@ int main() {
     try {
         test_gcd_primitive();
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
     }
-    return 0;
+    return TEST_REPORT();
 }

@@ -23,26 +23,24 @@ using namespace lamina;
 
 // Helper: create a SymbolicExpr wrapping a FunctionNode
 static SymbolicExpr make_func_expr(FunctionNode::FuncType type,
-                                   std::shared_ptr<SymbolicNode> arg) {
-    SymbolicExpr expr;
-    std::vector<std::shared_ptr<SymbolicNode>> args = {std::move(arg)};
-    expr.root = std::make_shared<FunctionNode>(type, std::move(args));
-    return expr;
+                                   std::shared_ptr<const SymbolicNode> arg) {
+    std::vector<std::shared_ptr<const SymbolicNode>> args = {std::move(arg)};
+    return lamina::detail::expression_from_node(lamina::detail::make_node<FunctionNode>(type, std::move(args)));
 }
 
 // Helper: create a VariableNode
-static std::shared_ptr<SymbolicNode> var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
 // Helper: create a NumberNode from an integer
-static std::shared_ptr<SymbolicNode> num(int v) {
-    return std::make_shared<NumberNode>(BigInt(v));
+static std::shared_ptr<const SymbolicNode> num(int v) {
+    return lamina::detail::make_node<NumberNode>(BigInt(v));
 }
 
 // Helper: create a NumberNode from a double
-static std::shared_ptr<SymbolicNode> num_d(double v) {
-    return std::make_shared<NumberNode>(static_cast<lmmc_real_t>(v));
+static std::shared_ptr<const SymbolicNode> num_d(double v) {
+    return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v));
 }
 
 // ============================================================

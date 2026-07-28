@@ -1,41 +1,41 @@
 #include "../include/solver.hpp"
+#include "test_common.hpp"
 #include <iostream>
-#include <cassert>
 
 using namespace lamina;
 
 SymbolicExpr create_var(const std::string& name) {
-    return SymbolicExpr(SymbolicFactory::create_variable(name));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_variable(name));
 }
 
 SymbolicExpr create_num(int n) {
-    return SymbolicExpr(SymbolicFactory::create_number(BigInt(n)));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(n)));
 }
 
 SymbolicExpr operator+(const SymbolicExpr& a, const SymbolicExpr& b) {
-    std::vector<std::shared_ptr<SymbolicNode>> ops;
-    ops.push_back(a.root);
-    ops.push_back(b.root);
-    return SymbolicExpr(SymbolicFactory::create_add(ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> ops;
+    ops.push_back(lamina::detail::node(a));
+    ops.push_back(lamina::detail::node(b));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
 }
 
 SymbolicExpr operator-(const SymbolicExpr& a, const SymbolicExpr& b) {
-    std::vector<std::shared_ptr<SymbolicNode>> ops;
+    std::vector<std::shared_ptr<const SymbolicNode>> ops;
     ops.push_back(SymbolicFactory::create_number(BigInt(-1)));
-    ops.push_back(b.root);
+    ops.push_back(lamina::detail::node(b));
     auto neg = SymbolicFactory::create_multiply(ops);
 
-    std::vector<std::shared_ptr<SymbolicNode>> aops;
-    aops.push_back(a.root);
+    std::vector<std::shared_ptr<const SymbolicNode>> aops;
+    aops.push_back(lamina::detail::node(a));
     aops.push_back(neg);
-    return SymbolicExpr(SymbolicFactory::create_add(aops));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_add(aops));
 }
 
 SymbolicExpr operator*(const SymbolicExpr& a, const SymbolicExpr& b) {
-    std::vector<std::shared_ptr<SymbolicNode>> ops;
-    ops.push_back(a.root);
-    ops.push_back(b.root);
-    return SymbolicExpr(SymbolicFactory::create_multiply(ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> ops;
+    ops.push_back(lamina::detail::node(a));
+    ops.push_back(lamina::detail::node(b));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
 }
 
 void test_linear_solver_2x2() {
@@ -56,17 +56,21 @@ void test_linear_solver_2x2() {
 
     if (result.count("x")) {
 
-        std::cout << "x = " << result["x"].to_string() << std::endl;
+        std::cout << "x = " << result.at("x").to_string() << std::endl;
     }
     if (result.count("y")) {
-        std::cout << "y = " << result["y"].to_string() << std::endl;
+        std::cout << "y = " << result.at("y").to_string() << std::endl;
     }
 
-    auto x_val = result["x"];
-    auto y_val = result["y"];
+    auto x_val = result.at("x");
+    auto y_val = result.at("y");
 
-    assert(x_val.is_number() && x_val.get_number().index() == 1 && std::get<BigInt>(x_val.get_number()).to_int() == 2);
-    assert(y_val.is_number() && y_val.get_number().index() == 1 && std::get<BigInt>(y_val.get_number()).to_int() == 1);
+    EXPECT_TRUE(x_val.is_number() && x_val.get_number().index() == 1 &&
+                    std::get<BigInt>(x_val.get_number()).to_int() == 2,
+                "2x2 linear solver returns x = 2");
+    EXPECT_TRUE(y_val.is_number() && y_val.get_number().index() == 1 &&
+                    std::get<BigInt>(y_val.get_number()).to_int() == 1,
+                "2x2 linear solver returns y = 1");
 
     std::cout << "2x2 test passed." << std::endl;
 }
@@ -90,13 +94,13 @@ void test_linear_solver_3x3() {
 
     auto result = Solver::solve_linear_system(equations, variables);
 
-    assert(result.count("x"));
-    assert(result.count("y"));
-    assert(result.count("z"));
+    EXPECT_TRUE(result.count("x") == 1, "3x3 linear solver returns x");
+    EXPECT_TRUE(result.count("y") == 1, "3x3 linear solver returns y");
+    EXPECT_TRUE(result.count("z") == 1, "3x3 linear solver returns z");
 
-    std::cout << "x = " << result["x"].to_string() << std::endl;
-    std::cout << "y = " << result["y"].to_string() << std::endl;
-    std::cout << "z = " << result["z"].to_string() << std::endl;
+    std::cout << "x = " << result.at("x").to_string() << std::endl;
+    std::cout << "y = " << result.at("y").to_string() << std::endl;
+    std::cout << "z = " << result.at("z").to_string() << std::endl;
 
 }
 
@@ -105,8 +109,7 @@ int main() {
         test_linear_solver_2x2();
         test_linear_solver_3x3();
     } catch (const std::exception& e) {
-        std::cerr << "Test failed: " << e.what() << std::endl;
-        return 1;
+        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
     }
-    return 0;
+    return TEST_REPORT();
 }

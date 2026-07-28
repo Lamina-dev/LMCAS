@@ -56,8 +56,8 @@ int main() {
              EXPECT_TRUE(sys_sol[0].count("x") > 0, "x in solution");
              EXPECT_TRUE(sys_sol[0].count("y") > 0, "y in solution");
              if (sys_sol[0].count("x") && sys_sol[0].count("y")) {
-                 EXPECT_EQ_EXPR(sys_sol[0]["x"], SymbolicExpr::number(2), "x=2");
-                 EXPECT_EQ_EXPR(sys_sol[0]["y"], SymbolicExpr::number(1), "y=1");
+                 EXPECT_EQ_EXPR(sys_sol[0].at("x"), SymbolicExpr::number(2), "x=2");
+                 EXPECT_EQ_EXPR(sys_sol[0].at("y"), SymbolicExpr::number(1), "y=1");
              }
         }
     }

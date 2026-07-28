@@ -5,6 +5,7 @@
 #pragma once
 #include "symbolic.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 #include <functional>
@@ -102,14 +103,12 @@ public:
      * @return 重写后的表达式
      */
     SymbolicExpr apply(const SymbolicExpr& expr, int max_iterations = 100);
-
     /**
      * @brief 对表达式应用一步重写
      * @param expr 输入表达式
      * @return 重写后的表达式，若无规则匹配则返回原表达式
      */
     SymbolicExpr apply_step(const SymbolicExpr& expr);
-
     /**
      * @brief 获取当前所有规则
      * @return 规则列表的常引用

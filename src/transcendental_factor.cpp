@@ -7,7 +7,9 @@
  */
 
 #include "transcendental_factor.hpp"
+#include "symbolic_ast.hpp"
 #include "poly_utils.hpp"
+#include "poly_utils_internal.hpp"
 
 #include <string>
 #include <vector>
@@ -49,42 +51,42 @@ static bool tf_is_transcendental_type(FunctionNode::FuncType ft) {
  * @internal
  */
 static void tf_collect_transcendental(
-    const std::shared_ptr<SymbolicNode>& node,
+    const std::shared_ptr<const SymbolicNode>& node,
     const std::string& var,
-    std::vector<std::shared_ptr<SymbolicNode>>& candidates) {
+    std::vector<std::shared_ptr<const SymbolicNode>>& candidates) {
 
     if (!node) return;
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (func->arguments.size() == 1 &&
-            tf_is_transcendental_type(func->type) &&
-            depends_on_var(func->arguments[0], var)) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (func->arguments().size() == 1 &&
+            tf_is_transcendental_type(func->type()) &&
+            depends_on_var(func->arguments()[0], var)) {
             candidates.push_back(node);
         }
         /// 继续递归参数，以收集嵌套的超越子表达式
-        for (auto& arg : func->arguments) {
+        for (auto& arg : func->arguments()) {
             tf_collect_transcendental(arg, var, candidates);
         }
         return;
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands()) {
             tf_collect_transcendental(op, var, candidates);
         }
         return;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands()) {
             tf_collect_transcendental(op, var, candidates);
         }
         return;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        tf_collect_transcendental(pow->base, var, candidates);
-        tf_collect_transcendental(pow->exponent, var, candidates);
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        tf_collect_transcendental(pow->base(), var, candidates);
+        tf_collect_transcendental(pow->exponent(), var, candidates);
         return;
     }
 
@@ -100,9 +102,9 @@ static void tf_collect_transcendental(
  * @param[in,out] candidates 候选列表，去重后仅保留唯一项
  * @internal
  */
-static void tf_deduplicate(std::vector<std::shared_ptr<SymbolicNode>>& candidates) {
+static void tf_deduplicate(std::vector<std::shared_ptr<const SymbolicNode>>& candidates) {
     NodeSet seen;
-    std::vector<std::shared_ptr<SymbolicNode>> unique;
+    std::vector<std::shared_ptr<const SymbolicNode>> unique;
 
     for (auto& node : candidates) {
         if (seen.find(node) == seen.end()) {
@@ -121,8 +123,8 @@ static void tf_deduplicate(std::vector<std::shared_ptr<SymbolicNode>>& candidate
  * @return 结构相等返回 true
  * @internal
  */
-static bool tf_nodes_equal(const std::shared_ptr<SymbolicNode>& a,
-                           const std::shared_ptr<SymbolicNode>& b) {
+static bool tf_nodes_equal(const std::shared_ptr<const SymbolicNode>& a,
+                           const std::shared_ptr<const SymbolicNode>& b) {
     if (!a || !b) return a == b;
     return a->equals(*b);
 }
@@ -138,26 +140,26 @@ static bool tf_nodes_equal(const std::shared_ptr<SymbolicNode>& a,
  * @return 若 node 表示 -arg 则返回 true
  * @internal
  */
-static bool tf_is_negation_of(const std::shared_ptr<SymbolicNode>& node,
-                              const std::shared_ptr<SymbolicNode>& arg) {
+static bool tf_is_negation_of(const std::shared_ptr<const SymbolicNode>& node,
+                              const std::shared_ptr<const SymbolicNode>& arg) {
     if (!node || !arg) return false;
 
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(node);
-    if (!mul || mul->operands.size() != 2) return false;
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node);
+    if (!mul || mul->operands().size() != 2) return false;
 
     /// 检查两种排列：(-1)*arg 或 arg*(-1)
     for (int i = 0; i < 2; ++i) {
-        auto num_node = std::dynamic_pointer_cast<NumberNode>(mul->operands[i]);
+        auto num_node = std::dynamic_pointer_cast<const NumberNode>(mul->operands()[i]);
         if (!num_node) continue;
 
         /// 检查数值是否为 -1
         bool is_neg_one = false;
-        if (std::holds_alternative<BigInt>(num_node->value)) {
-            is_neg_one = (std::get<BigInt>(num_node->value) == BigInt(-1));
-        } else if (std::holds_alternative<Rational>(num_node->value)) {
-            is_neg_one = (std::get<Rational>(num_node->value) == Rational(-1));
-        } else if (std::holds_alternative<lmmc_real_t>(num_node->value)) {
-            lmmc_real_t v = std::get<lmmc_real_t>(num_node->value);
+        if (std::holds_alternative<BigInt>(num_node->value())) {
+            is_neg_one = (std::get<BigInt>(num_node->value()) == BigInt(-1));
+        } else if (std::holds_alternative<Rational>(num_node->value())) {
+            is_neg_one = (std::get<Rational>(num_node->value()) == Rational(-1));
+        } else if (std::holds_alternative<lmmc_real_t>(num_node->value())) {
+            lmmc_real_t v = std::get<lmmc_real_t>(num_node->value());
             int eq;
             lmmc_double_nearly_equal(v, -1.0, &eq);
             is_neg_one = (eq != 0);
@@ -165,7 +167,7 @@ static bool tf_is_negation_of(const std::shared_ptr<SymbolicNode>& node,
 
         if (is_neg_one) {
             int other_idx = 1 - i;
-            return tf_nodes_equal(mul->operands[other_idx], arg);
+            return tf_nodes_equal(mul->operands()[other_idx], arg);
         }
     }
 
@@ -185,52 +187,52 @@ static bool tf_is_negation_of(const std::shared_ptr<SymbolicNode>& node,
  * @return 替换后的新节点
  * @internal
  */
-static std::shared_ptr<SymbolicNode> tf_substitute_expr(
-    const std::shared_ptr<SymbolicNode>& node,
+static std::shared_ptr<const SymbolicNode> tf_substitute_expr(
+    const std::shared_ptr<const SymbolicNode>& node,
     const std::vector<TransSubstitution>& mappings) {
 
     if (!node) return nullptr;
 
     /// 按映射顺序检查当前节点是否匹配某个超越子表达式
     for (const auto& m : mappings) {
-        if (m.trans_expr && m.trans_expr->root &&
-            node->equals(*m.trans_expr->root)) {
-            return std::make_shared<VariableNode>(m.indeterminate);
+        if (m.trans_expr && lamina::detail::node(m.trans_expr) &&
+            node->equals(*lamina::detail::node(m.trans_expr))) {
+            return lamina::detail::make_node<VariableNode>(m.indeterminate);
         }
     }
 
     /// 对各节点类型递归处理子节点
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> new_args;
-        new_args.reserve(func->arguments.size());
-        for (const auto& arg : func->arguments) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_args;
+        new_args.reserve(func->arguments().size());
+        for (const auto& arg : func->arguments()) {
             new_args.push_back(tf_substitute_expr(arg, mappings));
         }
-        return std::make_shared<FunctionNode>(func->type, std::move(new_args));
+        return lamina::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-        new_ops.reserve(add->operands.size());
-        for (const auto& op : add->operands) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+        new_ops.reserve(add->operands().size());
+        for (const auto& op : add->operands()) {
             new_ops.push_back(tf_substitute_expr(op, mappings));
         }
-        return std::make_shared<AddNode>(std::move(new_ops));
+        return lamina::detail::make_node<AddNode>(std::move(new_ops));
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-        new_ops.reserve(mul->operands.size());
-        for (const auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+        new_ops.reserve(mul->operands().size());
+        for (const auto& op : mul->operands()) {
             new_ops.push_back(tf_substitute_expr(op, mappings));
         }
-        return std::make_shared<MultiplyNode>(std::move(new_ops));
+        return lamina::detail::make_node<MultiplyNode>(std::move(new_ops));
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        auto new_base = tf_substitute_expr(pow->base, mappings);
-        auto new_exp = tf_substitute_expr(pow->exponent, mappings);
-        return std::make_shared<PowerNode>(std::move(new_base), std::move(new_exp));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto new_base = tf_substitute_expr(pow->base(), mappings);
+        auto new_exp = tf_substitute_expr(pow->exponent(), mappings);
+        return lamina::detail::make_node<PowerNode>(std::move(new_base), std::move(new_exp));
     }
 
     /// 叶节点（NumberNode、VariableNode）直接返回
@@ -254,23 +256,23 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
     size_t n = mappings.size();
 
     for (size_t i = 0; i < n; ++i) {
-        auto node_i = mappings[i].trans_expr->root;
-        auto func_i = std::dynamic_pointer_cast<FunctionNode>(node_i);
-        if (!func_i || func_i->arguments.size() != 1) continue;
+        auto node_i = lamina::detail::node(mappings[i].trans_expr);
+        auto func_i = std::dynamic_pointer_cast<const FunctionNode>(node_i);
+        if (!func_i || func_i->arguments().size() != 1) continue;
 
         for (size_t j = i + 1; j < n; ++j) {
-            auto node_j = mappings[j].trans_expr->root;
-            auto func_j = std::dynamic_pointer_cast<FunctionNode>(node_j);
-            if (!func_j || func_j->arguments.size() != 1) continue;
+            auto node_j = lamina::detail::node(mappings[j].trans_expr);
+            auto func_j = std::dynamic_pointer_cast<const FunctionNode>(node_j);
+            if (!func_j || func_j->arguments().size() != 1) continue;
 
             /// --- sin/cos Pythagorean 约束 ---
-            bool is_sin_cos = (func_i->type == FunctionNode::FuncType::Sin &&
-                               func_j->type == FunctionNode::FuncType::Cos) ||
-                              (func_i->type == FunctionNode::FuncType::Cos &&
-                               func_j->type == FunctionNode::FuncType::Sin);
+            bool is_sin_cos = (func_i->type() == FunctionNode::FuncType::Sin &&
+                               func_j->type() == FunctionNode::FuncType::Cos) ||
+                              (func_i->type() == FunctionNode::FuncType::Cos &&
+                               func_j->type() == FunctionNode::FuncType::Sin);
 
             if (is_sin_cos &&
-                tf_nodes_equal(func_i->arguments[0], func_j->arguments[0])) {
+                tf_nodes_equal(func_i->arguments()[0], func_j->arguments()[0])) {
                 /// 构造约束：u_i² + u_j² - 1 = 0
                 auto ui = SymbolicExpr::variable(mappings[i].indeterminate);
                 auto uj = SymbolicExpr::variable(mappings[j].indeterminate);
@@ -287,14 +289,14 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
             }
 
             /// --- exp/exp(-) 逆元约束 ---
-            if (func_i->type == FunctionNode::FuncType::Exp &&
-                func_j->type == FunctionNode::FuncType::Exp) {
+            if (func_i->type() == FunctionNode::FuncType::Exp &&
+                func_j->type() == FunctionNode::FuncType::Exp) {
 
                 bool is_inverse_pair = false;
 
                 /// 检查 arg_j == -arg_i 或 arg_i == -arg_j
-                if (tf_is_negation_of(func_j->arguments[0], func_i->arguments[0]) ||
-                    tf_is_negation_of(func_i->arguments[0], func_j->arguments[0])) {
+                if (tf_is_negation_of(func_j->arguments()[0], func_i->arguments()[0]) ||
+                    tf_is_negation_of(func_i->arguments()[0], func_j->arguments()[0])) {
                     is_inverse_pair = true;
                 }
 
@@ -335,13 +337,13 @@ TransSubstitutionResult detect_trans_substitutions(
     TransSubstitutionResult result;
     result.poly_expr = nullptr;
 
-    if (!expr || !expr->root) {
+    if (!expr || !lamina::detail::node(expr)) {
         return result;
     }
 
     /// 收集所有依赖 var 的超越子表达式
-    std::vector<std::shared_ptr<SymbolicNode>> candidates;
-    tf_collect_transcendental(expr->root, var, candidates);
+    std::vector<std::shared_ptr<const SymbolicNode>> candidates;
+    tf_collect_transcendental(lamina::detail::node(expr), var, candidates);
 
     /// 结构去重
     tf_deduplicate(candidates);
@@ -349,7 +351,7 @@ TransSubstitutionResult detect_trans_substitutions(
     /// 为每个唯一的超越子表达式分配不定元
     for (size_t i = 0; i < candidates.size(); ++i) {
         TransSubstitution mapping;
-        mapping.trans_expr = std::make_shared<SymbolicExpr>(candidates[i]);
+        mapping.trans_expr = lamina::detail::make_expression_ptr(candidates[i]);
         mapping.indeterminate = "u" + std::to_string(i);
         result.mappings.push_back(std::move(mapping));
     }
@@ -359,8 +361,8 @@ TransSubstitutionResult detect_trans_substitutions(
 
     /// 执行替换：将超越子表达式替换为对应不定元变量
     if (!result.mappings.empty()) {
-        auto substituted = tf_substitute_expr(expr->root, result.mappings);
-        result.poly_expr = std::make_shared<SymbolicExpr>(substituted);
+        auto substituted = tf_substitute_expr(lamina::detail::node(expr), result.mappings);
+        result.poly_expr = lamina::detail::make_expression_ptr(substituted);
     } else {
         /// 无超越子表达式时，poly_expr 即为原表达式
         result.poly_expr = expr;
@@ -384,18 +386,18 @@ TransSubstitutionResult detect_trans_substitutions(
  * @return 关于 var 的次数；-1 表示无法确定（非多项式结构）
  * @internal
  */
-static int tf_degree_in(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
+static int tf_degree_in(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     if (!node) return 0;
 
     if (!depends_on_var(node, var)) return 0;
 
-    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
-        return (v->name == var) ? 1 : 0;
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        return (v->name() == var) ? 1 : 0;
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         int max_deg = 0;
-        for (const auto& op : add->operands) {
+        for (const auto& op : add->operands()) {
             int d = tf_degree_in(op, var);
             if (d < 0) return -1;
             max_deg = std::max(max_deg, d);
@@ -403,9 +405,9 @@ static int tf_degree_in(const std::shared_ptr<SymbolicNode>& node, const std::st
         return max_deg;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int total_deg = 0;
-        for (const auto& op : mul->operands) {
+        for (const auto& op : mul->operands()) {
             int d = tf_degree_in(op, var);
             if (d < 0) return -1;
             total_deg += d;
@@ -413,23 +415,23 @@ static int tf_degree_in(const std::shared_ptr<SymbolicNode>& node, const std::st
         return total_deg;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         /// 指数必须为非负整数常量
-        auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
+        auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent());
         if (!exp_num) return -1;
 
         int e_val = -1;
-        if (std::holds_alternative<BigInt>(exp_num->value)) {
-            const auto& bi = std::get<BigInt>(exp_num->value);
+        if (std::holds_alternative<BigInt>(exp_num->value())) {
+            const auto& bi = std::get<BigInt>(exp_num->value());
             if (!bi.IsNegative()) e_val = bi.to_int();
-        } else if (std::holds_alternative<Rational>(exp_num->value)) {
-            const auto& r = std::get<Rational>(exp_num->value);
+        } else if (std::holds_alternative<Rational>(exp_num->value())) {
+            const auto& r = std::get<Rational>(exp_num->value());
             if (r.is_integer()) {
                 BigInt bi = r.to_BigInt();
                 if (!bi.IsNegative()) e_val = bi.to_int();
             }
-        } else if (std::holds_alternative<lmmc_real_t>(exp_num->value)) {
-            lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value);
+        } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
+            lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value());
             if (std::isfinite(d) && d >= 0 && d == std::floor(d) && d < 1000.0) {
                 e_val = static_cast<int>(d);
             }
@@ -437,13 +439,13 @@ static int tf_degree_in(const std::shared_ptr<SymbolicNode>& node, const std::st
 
         if (e_val < 0) return -1;
 
-        int base_deg = tf_degree_in(pow->base, var);
+        int base_deg = tf_degree_in(pow->base(), var);
         if (base_deg < 0) return -1;
         return base_deg * e_val;
     }
 
     /// FunctionNode 依赖 var 意味着非多项式结构
-    if (std::dynamic_pointer_cast<FunctionNode>(node)) {
+    if (std::dynamic_pointer_cast<const FunctionNode>(node)) {
         return -1;
     }
 
@@ -465,12 +467,12 @@ static bool tf_validate_polynomial(
     const std::shared_ptr<SymbolicExpr>& poly_expr,
     const std::vector<std::string>& all_variables) {
 
-    if (!poly_expr || !poly_expr->root) return false;
+    if (!poly_expr || !lamina::detail::node(poly_expr)) return false;
 
     /// 对每个变量检查次数是否可确定
     for (const auto& var : all_variables) {
-        if (depends_on_var(poly_expr->root, var)) {
-            int deg = tf_degree_in(poly_expr->root, var);
+        if (depends_on_var(lamina::detail::node(poly_expr), var)) {
+            int deg = tf_degree_in(lamina::detail::node(poly_expr), var);
             if (deg < 0) return false;
         }
     }
@@ -498,7 +500,7 @@ TfPolyBuildResult tf_build_polynomial(
     TfPolyBuildResult result;
     result.success = false;
 
-    if (!poly_expr || !poly_expr->root) {
+    if (!poly_expr || !lamina::detail::node(poly_expr)) {
         return result;
     }
 
@@ -507,11 +509,11 @@ TfPolyBuildResult tf_build_polynomial(
     {
         std::vector<std::string> pre_vars;
         for (const auto& ind : indeterminates) {
-            if (depends_on_var(poly_expr->root, ind)) {
+            if (depends_on_var(lamina::detail::node(poly_expr), ind)) {
                 pre_vars.push_back(ind);
             }
         }
-        if (depends_on_var(poly_expr->root, original_var)) {
+        if (depends_on_var(lamina::detail::node(poly_expr), original_var)) {
             pre_vars.push_back(original_var);
         }
         if (!pre_vars.empty() && !tf_validate_polynomial(poly_expr, pre_vars)) {
@@ -521,18 +523,18 @@ TfPolyBuildResult tf_build_polynomial(
 
     /// 展开表达式以确保多项式结构可见
     auto expanded = poly_expr->expand();
-    if (!expanded || !expanded->root) {
+    if (!expanded || !lamina::detail::node(expanded)) {
         expanded = poly_expr;
     }
 
     /// 收集所有候选变量：不定元 + 原始变量（若表达式仍依赖它）
     std::vector<std::string> all_variables;
     for (const auto& ind : indeterminates) {
-        if (depends_on_var(expanded->root, ind)) {
+        if (depends_on_var(lamina::detail::node(expanded), ind)) {
             all_variables.push_back(ind);
         }
     }
-    if (depends_on_var(expanded->root, original_var)) {
+    if (depends_on_var(lamina::detail::node(expanded), original_var)) {
         all_variables.push_back(original_var);
     }
 
@@ -555,7 +557,7 @@ TfPolyBuildResult tf_build_polynomial(
     int max_degree = -1;
 
     for (const auto& var : all_variables) {
-        int deg = tf_degree_in(expanded->root, var);
+        int deg = tf_degree_in(lamina::detail::node(expanded), var);
         if (deg > max_degree) {
             max_degree = deg;
             main_var = var;
@@ -612,7 +614,7 @@ TfPolyBuildResult tf_build_polynomial(
     for (const auto& var : all_variables) {
         if (var == main_var) continue;
 
-        int deg = tf_degree_in(expanded->root, var);
+        int deg = tf_degree_in(lamina::detail::node(expanded), var);
         auto trial_poly = symbolic_to_poly<Rational>(expanded, var);
         if (trial_poly.degree() == deg && deg > 0) {
             result.main_variable = var;
@@ -832,12 +834,12 @@ static bool zc_rational_reconstruction(
 
     if (m.is_zero() || m.IsNegative()) return false;
 
-    /// 对于小模数，委托给 int64_t 版本
-    /// int64_t 最大值约 9.2e18，单 limb BigInt 可安全转换
-    if (m._size <= 1 && a._size <= 1) {
-        int64_t a_val = a.is_zero() ? 0 : static_cast<int64_t>(a._data[0]);
-        if (a.IsNegative()) a_val = -a_val;
-        int64_t m_val = static_cast<int64_t>(m._data[0]);
+    /// 对于可精确表示的小模数，委托给 int64_t 版本
+    const auto a_small = a.try_to_int64();
+    const auto m_small = m.try_to_int64();
+    if (a_small && m_small) {
+        const int64_t a_val = *a_small;
+        const int64_t m_val = *m_small;
 
         auto [p, q] = lamina::rational_reconstruction(a_val, m_val);
         if (q == 0) return false;
@@ -1343,7 +1345,7 @@ static std::shared_ptr<SymbolicExpr> tf_back_substitute(
     const std::shared_ptr<SymbolicExpr>& factor_expr,
     const std::vector<TransSubstitution>& mappings) {
 
-    if (!factor_expr || !factor_expr->root) return factor_expr;
+    if (!factor_expr || !lamina::detail::node(factor_expr)) return factor_expr;
     if (mappings.empty()) return factor_expr;
 
     auto result = factor_expr;
@@ -1352,7 +1354,7 @@ static std::shared_ptr<SymbolicExpr> tf_back_substitute(
         if (!m.trans_expr || m.indeterminate.empty()) continue;
 
         /// 仅当表达式依赖该不定元时才执行替换
-        if (depends_on_var(result->root, m.indeterminate)) {
+        if (depends_on_var(lamina::detail::node(result), m.indeterminate)) {
             result = result->substitute(m.indeterminate, m.trans_expr);
         }
     }
@@ -1375,19 +1377,19 @@ static std::shared_ptr<SymbolicExpr> tf_back_substitute(
  * @return 提取成功返回 true
  * @internal
  */
-static bool tf_extract_rational(const std::shared_ptr<NumberNode>& num_node, Rational& out) {
+static bool tf_extract_rational(const std::shared_ptr<const NumberNode>& num_node, Rational& out) {
     if (!num_node) return false;
 
-    if (std::holds_alternative<BigInt>(num_node->value)) {
-        out = Rational(std::get<BigInt>(num_node->value));
+    if (std::holds_alternative<BigInt>(num_node->value())) {
+        out = Rational(std::get<BigInt>(num_node->value()));
         return true;
     }
-    if (std::holds_alternative<Rational>(num_node->value)) {
-        out = std::get<Rational>(num_node->value);
+    if (std::holds_alternative<Rational>(num_node->value())) {
+        out = std::get<Rational>(num_node->value());
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(num_node->value)) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num_node->value);
+    if (std::holds_alternative<lmmc_real_t>(num_node->value())) {
+        lmmc_real_t v = std::get<lmmc_real_t>(num_node->value());
         /// 仅处理精确整数浮点值
         if (std::isfinite(v) && v == std::floor(v) && std::abs(v) < 1e15) {
             out = Rational(BigInt(static_cast<long long>(v)));
@@ -1418,16 +1420,16 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
     Rational constant_product(1);
 
     for (auto& factor : factors) {
-        if (!factor || !factor->root) continue;
+        if (!factor || !lamina::detail::node(factor)) continue;
 
         /// 调用 simplify() 规范化因子
         auto simplified = factor->simplify();
-        if (!simplified || !simplified->root) {
+        if (!simplified || !lamina::detail::node(simplified)) {
             simplified = factor;
         }
 
         /// 情形 1：因子为纯数值
-        if (auto num = std::dynamic_pointer_cast<NumberNode>(simplified->root)) {
+        if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
             Rational val;
             if (tf_extract_rational(num, val)) {
                 if (val != Rational(0)) {
@@ -1447,12 +1449,12 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
         }
 
         /// 情形 2：因子为乘积形式，检查是否含数值前导系数
-        if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(simplified->root)) {
-            std::vector<std::shared_ptr<SymbolicNode>> numeric_ops;
-            std::vector<std::shared_ptr<SymbolicNode>> non_numeric_ops;
+        if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(simplified))) {
+            std::vector<std::shared_ptr<const SymbolicNode>> numeric_ops;
+            std::vector<std::shared_ptr<const SymbolicNode>> non_numeric_ops;
 
-            for (const auto& op : mul->operands) {
-                if (auto num = std::dynamic_pointer_cast<NumberNode>(op)) {
+            for (const auto& op : mul->operands()) {
+                if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
                     numeric_ops.push_back(op);
                 } else {
                     non_numeric_ops.push_back(op);
@@ -1462,7 +1464,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
             /// 提取所有数值操作数为常数乘子
             if (!numeric_ops.empty() && !non_numeric_ops.empty()) {
                 for (const auto& nop : numeric_ops) {
-                    auto num = std::dynamic_pointer_cast<NumberNode>(nop);
+                    auto num = std::dynamic_pointer_cast<const NumberNode>(nop);
                     Rational val;
                     if (tf_extract_rational(num, val)) {
                         constant_product = constant_product * val;
@@ -1474,10 +1476,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
 
                 /// 重建非常数部分
                 if (non_numeric_ops.size() == 1) {
-                    result.push_back(std::make_shared<SymbolicExpr>(non_numeric_ops[0]));
+                    result.push_back(lamina::detail::make_expression_ptr(non_numeric_ops[0]));
                 } else {
-                    result.push_back(std::make_shared<SymbolicExpr>(
-                        std::make_shared<MultiplyNode>(std::move(non_numeric_ops))));
+                    result.push_back(lamina::detail::make_expression_ptr(
+                        lamina::detail::make_node<MultiplyNode>(std::move(non_numeric_ops))));
                 }
             } else if (numeric_ops.empty()) {
                 /// 无数值操作数，保留原因子
@@ -1486,7 +1488,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
                 /// 全为数值操作数：整个因子为常数
                 Rational val(1);
                 for (const auto& nop : numeric_ops) {
-                    auto num = std::dynamic_pointer_cast<NumberNode>(nop);
+                    auto num = std::dynamic_pointer_cast<const NumberNode>(nop);
                     Rational v;
                     if (tf_extract_rational(num, v)) {
                         val = val * v;
@@ -1530,10 +1532,10 @@ static bool tf_is_linear_irreducible(
     const TransSubstitutionResult& sub_result,
     const std::string& var) {
 
-    if (!sub_result.poly_expr || !sub_result.poly_expr->root) return false;
+    if (!sub_result.poly_expr || !lamina::detail::node(sub_result.poly_expr)) return false;
     if (sub_result.mappings.empty()) return false;
 
-    const auto& root = sub_result.poly_expr->root;
+    const auto& root = lamina::detail::node(sub_result.poly_expr);
 
     /// 检查每个不定元的次数是否 ≤ 1
     for (const auto& m : sub_result.mappings) {
@@ -1564,35 +1566,35 @@ static bool tf_is_linear_irreducible(
 static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_multiplicative_structure(
     const std::shared_ptr<SymbolicExpr>& expr) {
 
-    if (!expr || !expr->root) return {};
+    if (!expr || !lamina::detail::node(expr)) return {};
 
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr->root);
-    if (!mul || mul->operands.size() < 2) return {};
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr));
+    if (!mul || mul->operands().size() < 2) return {};
 
     std::vector<std::shared_ptr<SymbolicExpr>> factors;
     Rational constant_acc(1);
 
-    for (const auto& op : mul->operands) {
+    for (const auto& op : mul->operands()) {
         if (!op) continue;
 
         /// 数值常数单独累积
         if (op->is_number()) {
-            auto num = std::dynamic_pointer_cast<NumberNode>(op);
+            auto num = std::dynamic_pointer_cast<const NumberNode>(op);
             if (num) {
-                if (std::holds_alternative<BigInt>(num->value)) {
-                    constant_acc = constant_acc * Rational(std::get<BigInt>(num->value));
-                } else if (std::holds_alternative<Rational>(num->value)) {
-                    constant_acc = constant_acc * std::get<Rational>(num->value);
+                if (std::holds_alternative<BigInt>(num->value())) {
+                    constant_acc = constant_acc * Rational(std::get<BigInt>(num->value()));
+                } else if (std::holds_alternative<Rational>(num->value())) {
+                    constant_acc = constant_acc * std::get<Rational>(num->value());
                 } else {
                     /// 浮点数值：作为独立因子保留
-                    factors.push_back(std::make_shared<SymbolicExpr>(op));
+                    factors.push_back(lamina::detail::make_expression_ptr(op));
                 }
             }
             continue;
         }
 
         /// 非数值操作数作为独立因子
-        factors.push_back(std::make_shared<SymbolicExpr>(op));
+        factors.push_back(lamina::detail::make_expression_ptr(op));
     }
 
     /// 仅当存在至少两个非常数因子（或一个非常数因子加一个非 1 常数）时才视为有效乘积分解
@@ -1621,29 +1623,29 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_multiplicative_struc
  * @return 找到的 exp 因子节点；未找到返回 nullptr
  * @internal
  */
-static std::shared_ptr<SymbolicNode> tf_extract_exp_factor(
-    const std::shared_ptr<SymbolicNode>& node,
+static std::shared_ptr<const SymbolicNode> tf_extract_exp_factor(
+    const std::shared_ptr<const SymbolicNode>& node,
     const std::string& var) {
 
     if (!node) return nullptr;
 
     /// 直接为 exp(f(x)) 形式
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (func->type == FunctionNode::FuncType::Exp &&
-            func->arguments.size() == 1 &&
-            depends_on_var(func->arguments[0], var)) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (func->type() == FunctionNode::FuncType::Exp &&
+            func->arguments().size() == 1 &&
+            depends_on_var(func->arguments()[0], var)) {
             return node;
         }
     }
 
     /// 乘积形式：遍历操作数寻找 exp 因子
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (const auto& op : mul->operands) {
-            auto func = std::dynamic_pointer_cast<FunctionNode>(op);
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& op : mul->operands()) {
+            auto func = std::dynamic_pointer_cast<const FunctionNode>(op);
             if (func &&
-                func->type == FunctionNode::FuncType::Exp &&
-                func->arguments.size() == 1 &&
-                depends_on_var(func->arguments[0], var)) {
+                func->type() == FunctionNode::FuncType::Exp &&
+                func->arguments().size() == 1 &&
+                depends_on_var(func->arguments()[0], var)) {
                 return op;
             }
         }
@@ -1663,23 +1665,23 @@ static std::shared_ptr<SymbolicNode> tf_extract_exp_factor(
  * @return 移除 exp 因子后的剩余节点
  * @internal
  */
-static std::shared_ptr<SymbolicNode> tf_remove_exp_factor(
-    const std::shared_ptr<SymbolicNode>& node,
-    const std::shared_ptr<SymbolicNode>& exp_factor) {
+static std::shared_ptr<const SymbolicNode> tf_remove_exp_factor(
+    const std::shared_ptr<const SymbolicNode>& node,
+    const std::shared_ptr<const SymbolicNode>& exp_factor) {
 
     if (!node || !exp_factor) return node;
 
     /// 节点本身即为 exp 因子
     if (node->equals(*exp_factor)) {
-        return std::make_shared<NumberNode>(BigInt(1));
+        return lamina::detail::make_node<NumberNode>(BigInt(1));
     }
 
     /// 乘积形式：移除匹配的操作数
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> remaining_ops;
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> remaining_ops;
         bool removed = false;
 
-        for (const auto& op : mul->operands) {
+        for (const auto& op : mul->operands()) {
             if (!removed && op->equals(*exp_factor)) {
                 removed = true;
                 continue;
@@ -1690,12 +1692,12 @@ static std::shared_ptr<SymbolicNode> tf_remove_exp_factor(
         if (!removed) return node;
 
         if (remaining_ops.empty()) {
-            return std::make_shared<NumberNode>(BigInt(1));
+            return lamina::detail::make_node<NumberNode>(BigInt(1));
         }
         if (remaining_ops.size() == 1) {
             return remaining_ops[0];
         }
-        return std::make_shared<MultiplyNode>(std::move(remaining_ops));
+        return lamina::detail::make_node<MultiplyNode>(std::move(remaining_ops));
     }
 
     return node;
@@ -1721,18 +1723,18 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !expr->root) return {};
+    if (!expr || !lamina::detail::node(expr)) return {};
 
-    auto add = std::dynamic_pointer_cast<AddNode>(expr->root);
-    if (!add || add->operands.size() < 2) return {};
+    auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr));
+    if (!add || add->operands().size() < 2) return {};
 
     /// 从第一个加法项中提取 exp 因子作为候选公因子
-    std::shared_ptr<SymbolicNode> common_exp = tf_extract_exp_factor(add->operands[0], var);
+    std::shared_ptr<const SymbolicNode> common_exp = tf_extract_exp_factor(add->operands()[0], var);
     if (!common_exp) return {};
 
     /// 验证所有加法项均含有相同的 exp 因子
-    for (size_t i = 1; i < add->operands.size(); ++i) {
-        std::shared_ptr<SymbolicNode> term_exp = tf_extract_exp_factor(add->operands[i], var);
+    for (size_t i = 1; i < add->operands().size(); ++i) {
+        std::shared_ptr<const SymbolicNode> term_exp = tf_extract_exp_factor(add->operands()[i], var);
         if (!term_exp || !term_exp->equals(*common_exp)) {
             return {};
         }
@@ -1740,28 +1742,28 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
 
     /// 所有项共享相同的 exp(f(x))，执行分离
     /// 构造剩余和：对每个项移除 exp 因子
-    std::vector<std::shared_ptr<SymbolicNode>> remainder_terms;
-    remainder_terms.reserve(add->operands.size());
+    std::vector<std::shared_ptr<const SymbolicNode>> remainder_terms;
+    remainder_terms.reserve(add->operands().size());
 
-    for (const auto& op : add->operands) {
+    for (const auto& op : add->operands()) {
         auto remainder = tf_remove_exp_factor(op, common_exp);
         remainder_terms.push_back(remainder);
     }
 
     /// 构造结果
-    auto exp_factor_expr = std::make_shared<SymbolicExpr>(common_exp);
+    auto exp_factor_expr = lamina::detail::make_expression_ptr(common_exp);
 
     std::shared_ptr<SymbolicExpr> sum_expr;
     if (remainder_terms.size() == 1) {
-        sum_expr = std::make_shared<SymbolicExpr>(remainder_terms[0]);
+        sum_expr = lamina::detail::make_expression_ptr(remainder_terms[0]);
     } else {
-        sum_expr = std::make_shared<SymbolicExpr>(
-            std::make_shared<AddNode>(std::move(remainder_terms)));
+        sum_expr = lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<AddNode>(std::move(remainder_terms)));
     }
 
     /// 化简剩余和
     auto simplified_sum = sum_expr->simplify();
-    if (simplified_sum && simplified_sum->root) {
+    if (simplified_sum && lamina::detail::node(simplified_sum)) {
         sum_expr = simplified_sum;
     }
 
@@ -1784,40 +1786,40 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separati
  * @internal
  */
 static bool tf_contains_transcendental(
-    const std::shared_ptr<SymbolicNode>& node,
+    const std::shared_ptr<const SymbolicNode>& node,
     const std::string& var) {
 
     if (!node) return false;
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (func->arguments.size() == 1 &&
-            tf_is_transcendental_type(func->type) &&
-            depends_on_var(func->arguments[0], var)) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (func->arguments().size() == 1 &&
+            tf_is_transcendental_type(func->type()) &&
+            depends_on_var(func->arguments()[0], var)) {
             return true;
         }
-        for (const auto& arg : func->arguments) {
+        for (const auto& arg : func->arguments()) {
             if (tf_contains_transcendental(arg, var)) return true;
         }
         return false;
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (const auto& op : add->operands) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (const auto& op : add->operands()) {
             if (tf_contains_transcendental(op, var)) return true;
         }
         return false;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (const auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& op : mul->operands()) {
             if (tf_contains_transcendental(op, var)) return true;
         }
         return false;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        return tf_contains_transcendental(pow->base, var) ||
-               tf_contains_transcendental(pow->exponent, var);
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        return tf_contains_transcendental(pow->base(), var) ||
+               tf_contains_transcendental(pow->exponent(), var);
     }
 
     return false;
@@ -1839,24 +1841,24 @@ static bool tf_contains_transcendental(
  * @internal
  */
 static bool tf_is_trig_squared(
-    const std::shared_ptr<SymbolicNode>& node,
+    const std::shared_ptr<const SymbolicNode>& node,
     FunctionNode::FuncType& func_type,
-    std::shared_ptr<SymbolicNode>& argument) {
+    std::shared_ptr<const SymbolicNode>& argument) {
 
-    auto pow = std::dynamic_pointer_cast<PowerNode>(node);
+    auto pow = std::dynamic_pointer_cast<const PowerNode>(node);
     if (!pow) return false;
 
     /// 检查指数是否为 2
-    auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
+    auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent());
     if (!exp_num) return false;
 
     bool is_two = false;
-    if (std::holds_alternative<BigInt>(exp_num->value)) {
-        is_two = (std::get<BigInt>(exp_num->value) == BigInt(2));
-    } else if (std::holds_alternative<Rational>(exp_num->value)) {
-        is_two = (std::get<Rational>(exp_num->value) == Rational(2));
-    } else if (std::holds_alternative<lmmc_real_t>(exp_num->value)) {
-        lmmc_real_t v = std::get<lmmc_real_t>(exp_num->value);
+    if (std::holds_alternative<BigInt>(exp_num->value())) {
+        is_two = (std::get<BigInt>(exp_num->value()) == BigInt(2));
+    } else if (std::holds_alternative<Rational>(exp_num->value())) {
+        is_two = (std::get<Rational>(exp_num->value()) == Rational(2));
+    } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
+        lmmc_real_t v = std::get<lmmc_real_t>(exp_num->value());
         int eq;
         lmmc_double_nearly_equal(v, 2.0, &eq);
         is_two = (eq != 0);
@@ -1864,16 +1866,16 @@ static bool tf_is_trig_squared(
     if (!is_two) return false;
 
     /// 检查底数是否为 sin 或 cos
-    auto func = std::dynamic_pointer_cast<FunctionNode>(pow->base);
-    if (!func || func->arguments.size() != 1) return false;
+    auto func = std::dynamic_pointer_cast<const FunctionNode>(pow->base());
+    if (!func || func->arguments().size() != 1) return false;
 
-    if (func->type != FunctionNode::FuncType::Sin &&
-        func->type != FunctionNode::FuncType::Cos) {
+    if (func->type() != FunctionNode::FuncType::Sin &&
+        func->type() != FunctionNode::FuncType::Cos) {
         return false;
     }
 
-    func_type = func->type;
-    argument = func->arguments[0];
+    func_type = func->type();
+    argument = func->arguments()[0];
     return true;
 }
 
@@ -1891,10 +1893,10 @@ static bool tf_is_trig_squared(
  * @internal
  */
 static bool tf_extract_coeff_trig_squared(
-    const std::shared_ptr<SymbolicNode>& node,
-    std::shared_ptr<SymbolicNode>& coeff,
+    const std::shared_ptr<const SymbolicNode>& node,
+    std::shared_ptr<const SymbolicNode>& coeff,
     FunctionNode::FuncType& func_type,
-    std::shared_ptr<SymbolicNode>& argument) {
+    std::shared_ptr<const SymbolicNode>& argument) {
 
     /// 直接为 sin²(f) 或 cos²(f)
     if (tf_is_trig_squared(node, func_type, argument)) {
@@ -1903,22 +1905,22 @@ static bool tf_extract_coeff_trig_squared(
     }
 
     /// 乘积形式：a * sin²(f) 或 sin²(f) * a
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(node);
-    if (!mul || mul->operands.size() < 2) return false;
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node);
+    if (!mul || mul->operands().size() < 2) return false;
 
     /// 在操作数中寻找 sin²(f) 或 cos²(f) 部分
-    for (size_t i = 0; i < mul->operands.size(); ++i) {
-        if (tf_is_trig_squared(mul->operands[i], func_type, argument)) {
+    for (size_t i = 0; i < mul->operands().size(); ++i) {
+        if (tf_is_trig_squared(mul->operands()[i], func_type, argument)) {
             /// 提取剩余操作数作为系数
-            std::vector<std::shared_ptr<SymbolicNode>> coeff_ops;
-            for (size_t j = 0; j < mul->operands.size(); ++j) {
-                if (j != i) coeff_ops.push_back(mul->operands[j]);
+            std::vector<std::shared_ptr<const SymbolicNode>> coeff_ops;
+            for (size_t j = 0; j < mul->operands().size(); ++j) {
+                if (j != i) coeff_ops.push_back(mul->operands()[j]);
             }
 
             if (coeff_ops.size() == 1) {
                 coeff = coeff_ops[0];
             } else {
-                coeff = std::make_shared<MultiplyNode>(std::move(coeff_ops));
+                coeff = lamina::detail::make_node<MultiplyNode>(std::move(coeff_ops));
             }
             return true;
         }
@@ -1941,31 +1943,31 @@ static bool tf_extract_coeff_trig_squared(
  * @return 化简后的节点；若无可化简的模式则返回原节点
  * @internal
  */
-static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
-    const std::shared_ptr<SymbolicNode>& node,
+static std::shared_ptr<const SymbolicNode> tf_simplify_pythagorean_node(
+    const std::shared_ptr<const SymbolicNode>& node,
     const std::string& var) {
 
     if (!node) return node;
 
     /// 递归处理子节点
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         /// 先递归化简每个操作数
-        std::vector<std::shared_ptr<SymbolicNode>> simplified_ops;
-        simplified_ops.reserve(add->operands.size());
-        for (const auto& op : add->operands) {
+        std::vector<std::shared_ptr<const SymbolicNode>> simplified_ops;
+        simplified_ops.reserve(add->operands().size());
+        for (const auto& op : add->operands()) {
             simplified_ops.push_back(tf_simplify_pythagorean_node(op, var));
         }
 
         /// 在化简后的操作数中寻找 sin²(f) + cos²(f) 配对
         std::vector<bool> consumed(simplified_ops.size(), false);
-        std::vector<std::shared_ptr<SymbolicNode>> result_ops;
+        std::vector<std::shared_ptr<const SymbolicNode>> result_ops;
 
         for (size_t i = 0; i < simplified_ops.size(); ++i) {
             if (consumed[i]) continue;
 
-            std::shared_ptr<SymbolicNode> coeff_i;
+            std::shared_ptr<const SymbolicNode> coeff_i;
             FunctionNode::FuncType type_i;
-            std::shared_ptr<SymbolicNode> arg_i;
+            std::shared_ptr<const SymbolicNode> arg_i;
 
             if (!tf_extract_coeff_trig_squared(simplified_ops[i], coeff_i, type_i, arg_i)) {
                 result_ops.push_back(simplified_ops[i]);
@@ -1982,9 +1984,9 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
             for (size_t j = i + 1; j < simplified_ops.size(); ++j) {
                 if (consumed[j]) continue;
 
-                std::shared_ptr<SymbolicNode> coeff_j;
+                std::shared_ptr<const SymbolicNode> coeff_j;
                 FunctionNode::FuncType type_j;
-                std::shared_ptr<SymbolicNode> arg_j;
+                std::shared_ptr<const SymbolicNode> arg_j;
 
                 if (!tf_extract_coeff_trig_squared(simplified_ops[j], coeff_j, type_j, arg_j)) {
                     continue;
@@ -2012,7 +2014,7 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
 
                 if (!coeff_i) {
                     /// 系数为 1：替换为 NumberNode(1)
-                    result_ops.push_back(std::make_shared<NumberNode>(BigInt(1)));
+                    result_ops.push_back(lamina::detail::make_node<NumberNode>(BigInt(1)));
                 } else {
                     /// 有公共系数：替换为系数本身
                     result_ops.push_back(coeff_i);
@@ -2027,36 +2029,36 @@ static std::shared_ptr<SymbolicNode> tf_simplify_pythagorean_node(
 
         /// 重建 AddNode
         if (result_ops.empty()) {
-            return std::make_shared<NumberNode>(BigInt(0));
+            return lamina::detail::make_node<NumberNode>(BigInt(0));
         }
         if (result_ops.size() == 1) {
             return result_ops[0];
         }
-        return std::make_shared<AddNode>(std::move(result_ops));
+        return lamina::detail::make_node<AddNode>(std::move(result_ops));
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-        new_ops.reserve(mul->operands.size());
-        for (const auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+        new_ops.reserve(mul->operands().size());
+        for (const auto& op : mul->operands()) {
             new_ops.push_back(tf_simplify_pythagorean_node(op, var));
         }
-        return std::make_shared<MultiplyNode>(std::move(new_ops));
+        return lamina::detail::make_node<MultiplyNode>(std::move(new_ops));
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        auto new_base = tf_simplify_pythagorean_node(pow->base, var);
-        auto new_exp = tf_simplify_pythagorean_node(pow->exponent, var);
-        return std::make_shared<PowerNode>(std::move(new_base), std::move(new_exp));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto new_base = tf_simplify_pythagorean_node(pow->base(), var);
+        auto new_exp = tf_simplify_pythagorean_node(pow->exponent(), var);
+        return lamina::detail::make_node<PowerNode>(std::move(new_base), std::move(new_exp));
     }
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        std::vector<std::shared_ptr<SymbolicNode>> new_args;
-        new_args.reserve(func->arguments.size());
-        for (const auto& arg : func->arguments) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_args;
+        new_args.reserve(func->arguments().size());
+        for (const auto& arg : func->arguments()) {
             new_args.push_back(tf_simplify_pythagorean_node(arg, var));
         }
-        return std::make_shared<FunctionNode>(func->type, std::move(new_args));
+        return lamina::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
     }
 
     /// 叶节点（NumberNode、VariableNode）直接返回
@@ -2078,18 +2080,18 @@ static std::shared_ptr<SymbolicExpr> tf_simplify_pythagorean(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !expr->root) return expr;
+    if (!expr || !lamina::detail::node(expr)) return expr;
 
-    auto simplified_root = tf_simplify_pythagorean_node(expr->root, var);
+    auto simplified_root = tf_simplify_pythagorean_node(lamina::detail::node(expr), var);
 
     if (!simplified_root) return expr;
 
     /// 若化简后与原表达式结构相同，返回原表达式避免不必要的重建
-    if (simplified_root->equals(*expr->root)) {
+    if (simplified_root->equals(*lamina::detail::node(expr))) {
         return expr;
     }
 
-    return std::make_shared<SymbolicExpr>(simplified_root);
+    return lamina::detail::make_expression_ptr(simplified_root);
 }
 
 /**
@@ -2110,7 +2112,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !expr->root) return {};
+    if (!expr || !lamina::detail::node(expr)) return {};
 
     /// --- 预处理：毕达哥拉斯恒等式化简 ---
     /// 将 sin²(f) + cos²(f) 子模式替换为 1，简化后续分解
@@ -2131,7 +2133,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     }
 
     /// 若表达式不含超越函数，直接返回原表达式
-    if (!tf_contains_transcendental(pyth_simplified->root, var)) {
+    if (!tf_contains_transcendental(lamina::detail::node(pyth_simplified), var)) {
         return {pyth_simplified};
     }
 

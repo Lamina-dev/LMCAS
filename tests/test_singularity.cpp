@@ -1,19 +1,13 @@
 #include "integration.hpp"
 #include "symbolic_ast.hpp"
+#include "test_common.hpp"
 #include <iostream>
-#include <cassert>
 #include <cmath>
-
-#define ASSERT_TRUE(a) \
-    if (!(a)) { \
-        std::cerr << "Assertion failed: " << #a << std::endl; \
-        std::exit(1); \
-    }
 
 using namespace lamina;
 
 std::shared_ptr<SymbolicExpr> MakeSymbolicExprPtr(const SymbolicExpr& e) {
-    return std::make_shared<SymbolicExpr>(e);
+    return lamina::detail::make_expression_ptr(e);
 }
 
 void test_one_sided_limit() {
@@ -31,10 +25,10 @@ void test_one_sided_limit() {
     std::cout << "Limit x->0- 1/x = " << limit_left->to_string() << std::endl;
 
     bool has_inf = false;
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(limit_right->root)) {
-        if(func->type == FunctionNode::FuncType::Infinity) has_inf = true;
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(limit_right))) {
+        if(func->type() == FunctionNode::FuncType::Infinity) has_inf = true;
     }
-    ASSERT_TRUE(has_inf);
+    EXPECT_TRUE(has_inf, "right-hand limit of 1/x at 0 is infinity");
 }
 
 void test_improper_integral_singularity() {
@@ -50,11 +44,11 @@ void test_improper_integral_singularity() {
     auto res = integrator.integrate_def(*expr, "x", *lower, *upper);
     std::cout << "Result: " << res.to_string() << std::endl;
 
-    ASSERT_TRUE(res.root != nullptr);
+    EXPECT_TRUE(lamina::detail::node(res) != nullptr, "improper integral returns a non-null expression");
 }
 
 int main() {
     test_one_sided_limit();
     test_improper_integral_singularity();
-    return 0;
+    return TEST_REPORT();
 }

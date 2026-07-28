@@ -1,3 +1,6 @@
 [submodule "LMMC"]
 	path = LMMC
 	url = https://github.com/Lamina-dev/LMMC.git
+[submodule "symengine"]
+	path = symengine
+	url = https://github.com/symengine/symengine

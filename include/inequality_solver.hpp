@@ -3,7 +3,10 @@
  * @brief 不等式求解器 InequalitySolver，支持多项式、有理式、参数化不等式。
  */
 #pragma once
+#include "computation_context.hpp"
 #include "interval.hpp"
+#include "polynomial.hpp"
+#include "result.hpp"
 #include "symbolic.hpp"
 #include <vector>
 #include <memory>
@@ -57,6 +60,44 @@ class LAMINA_API InequalitySolver {
 public:
 
     /**
+     * @brief Solve an inequality in the checked exact support domain.
+     *
+     * The current complete support domain is an exact rational polynomial of
+     * degree at most two in @p variable. Approximate coefficients, parameters,
+     * and higher-degree expressions return CasErrc::Inconclusive.
+     */
+    static Result<IntervalUnion> solve_inequality_checked(
+        const std::shared_ptr<SymbolicExpr>& expr,
+        InequalityType type,
+        const std::string& variable,
+        ComputationContext& context);
+
+    /** @brief Checked inequality solving with a default computation context. */
+    static Result<IntervalUnion> solve_inequality_checked(
+        const std::shared_ptr<SymbolicExpr>& expr,
+        InequalityType type,
+        const std::string& variable);
+
+    /**
+     * @brief Solve a conjunction of inequalities through the checked solver.
+     *
+     * Every component must lie in the checked scalar support domain and every
+     * required endpoint comparison must be exact. An empty conjunction denotes
+     * the entire real line.
+     */
+    static Result<IntervalUnion> solve_inequalities_checked(
+        const std::vector<std::pair<std::shared_ptr<SymbolicExpr>,
+                                     InequalityType>>& inequalities,
+        const std::string& variable,
+        ComputationContext& context);
+
+    /** @brief Checked inequality conjunction with a default context. */
+    static Result<IntervalUnion> solve_inequalities_checked(
+        const std::vector<std::pair<std::shared_ptr<SymbolicExpr>,
+                                     InequalityType>>& inequalities,
+        const std::string& variable);
+
+    /**
      * @brief 求解单个不等式
      * @param expr 不等式左端表达式（右端为 0）
      * @param type 不等式类型
@@ -108,6 +149,11 @@ public:
         const std::vector<std::string>& parameters);
 
 private:
+
+    static Result<IntervalUnion> solve_exact_quadratic_inequality(
+        const Polynomial<Rational>& polynomial,
+        InequalityType type,
+        ComputationContext& context);
 
     static std::vector<SignChartEntry> build_sign_chart(
         const std::shared_ptr<SymbolicExpr>& poly,

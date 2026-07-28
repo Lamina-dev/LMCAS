@@ -12,6 +12,7 @@
 #include "property_store.hpp"
 #include "relation_store.hpp"
 #include "query_interface.hpp"
+#include "result.hpp"
 #include <vector>
 #include <string>
 #include <stdexcept>
@@ -20,12 +21,16 @@
 #include <sstream>
 #include <type_traits>
 #include <initializer_list>
+#include <variant>
 
 namespace lamina {
 
 // Forward declarations
 class InferenceEngine;
 struct Interval;
+
+using AssumptionVoidResult = Result<void>;
+using AssumptionTriboolResult = Result<Tribool>;
 
 /**
  * @brief Scoped assumption context with push/pop management.
@@ -97,13 +102,22 @@ public:
     /// Throws std::invalid_argument if variable name is empty.
     void assume_domain(const std::string& variable, Domain domain);
 
+    /// Checked domain declaration for migration away from exception-only APIs.
+    AssumptionVoidResult assume_domain_checked(const std::string& variable, Domain domain);
+
     /// Declare sign for a variable in the current scope.
     /// Throws std::invalid_argument if variable name is empty.
     void assume_sign(const std::string& variable, Sign sign);
 
+    /// Checked sign declaration for migration away from exception-only APIs.
+    AssumptionVoidResult assume_sign_checked(const std::string& variable, Sign sign);
+
     /// Store a relational constraint. The expression's root must be a RelationalNode.
     /// Throws std::invalid_argument if expression is null/empty or root is not RelationalNode.
     void assume(const SymbolicExpr& relation);
+
+    /// Checked relation declaration for migration away from exception-only APIs.
+    AssumptionVoidResult assume_checked(const SymbolicExpr& relation);
 
     /**
      * @brief Store a conditional assumption: if condition holds, conclude conclusion.
@@ -115,9 +129,14 @@ public:
      *
      * @param condition  A relational expression (e.g., x > 1) serving as the guard
      * @param conclusion A relational expression (e.g., ln(x) > 0) to use when condition holds
-     * @throws std::invalid_argument if condition or conclusion has null root
+     * @throws std::invalid_argument if condition or conclusion is not relational
      */
     void assume_conditional(const SymbolicExpr& condition, const SymbolicExpr& conclusion);
+
+    /// Checked conditional declaration for migration away from exception-only APIs.
+    AssumptionVoidResult assume_conditional_checked(
+        const SymbolicExpr& condition,
+        const SymbolicExpr& conclusion);
 
     /**
      * @brief A conditional assumption: "if condition then conclusion".
@@ -152,28 +171,40 @@ public:
     // --- Convenience query API (delegates to QueryInterface) ---
 
     /// Query whether the expression is positive (> 0).
-    /// Throws std::invalid_argument if expression has null root.
     Tribool is_positive(const SymbolicExpr& expr) const;
 
+    /// Checked positive query for migration away from exception-only APIs.
+    AssumptionTriboolResult is_positive_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is negative (< 0).
-    /// Throws std::invalid_argument if expression has null root.
     Tribool is_negative(const SymbolicExpr& expr) const;
 
+    /// Checked negative query for migration away from exception-only APIs.
+    AssumptionTriboolResult is_negative_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is non-negative (>= 0).
-    /// Throws std::invalid_argument if expression has null root.
     Tribool is_nonnegative(const SymbolicExpr& expr) const;
 
+    /// Checked non-negative query for migration away from exception-only APIs.
+    AssumptionTriboolResult is_nonnegative_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is real.
-    /// Throws std::invalid_argument if expression has null root.
     Tribool is_real(const SymbolicExpr& expr) const;
 
+    /// Checked real-domain query for migration away from exception-only APIs.
+    AssumptionTriboolResult is_real_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is an integer.
-    /// Throws std::invalid_argument if expression has null root.
     Tribool is_integer(const SymbolicExpr& expr) const;
 
+    /// Checked integer-domain query for migration away from exception-only APIs.
+    AssumptionTriboolResult is_integer_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is non-zero (!= 0).
-    /// Throws std::invalid_argument if expression has null root.
     Tribool is_nonzero(const SymbolicExpr& expr) const;
+
+    /// Checked non-zero query for migration away from exception-only APIs.
+    AssumptionTriboolResult is_nonzero_checked(const SymbolicExpr& expr) const;
 
     /**
      * @brief Serialize the entire AssumptionContext to a human-readable string.
@@ -198,6 +229,10 @@ public:
      */
     static AssumptionContext deserialize(const std::string& data);
 
+    /// Checked deserialization for untrusted input. Malformed or contradictory
+    /// data returns CasError instead of throwing.
+    static Result<AssumptionContext> deserialize_checked(const std::string& data);
+
     /**
      * @brief Query whether a symbol is continuous on a given interval (read-through all scopes).
      * @param symbol Symbol name to query.
@@ -205,6 +240,11 @@ public:
      * @return True if continuous, False if not, Unknown if undetermined.
      */
     Tribool is_continuous(const std::string& symbol, const Interval& interval) const;
+
+    /// Checked continuity query for migration away from bare Tribool APIs.
+    AssumptionTriboolResult is_continuous_checked(
+        const std::string& symbol,
+        const Interval& interval) const;
 
     /**
      * @brief Query whether a symbol is differentiable on a given interval (read-through all scopes).
@@ -214,6 +254,11 @@ public:
      */
     Tribool is_differentiable(const std::string& symbol, const Interval& interval) const;
 
+    /// Checked differentiability query for migration away from bare Tribool APIs.
+    AssumptionTriboolResult is_differentiable_checked(
+        const std::string& symbol,
+        const Interval& interval) const;
+
     /**
      * @brief Query whether a symbol (matrix) is positive definite (read-through all scopes).
      * @param symbol Symbol name to query.
@@ -221,12 +266,18 @@ public:
      */
     Tribool is_positive_definite(const std::string& symbol) const;
 
+    /// Checked positive-definite query for migration away from bare Tribool APIs.
+    AssumptionTriboolResult is_positive_definite_checked(const std::string& symbol) const;
+
     /**
      * @brief Query whether a symbol (matrix) is positive semidefinite (read-through all scopes).
      * @param symbol Symbol name to query.
      * @return True if positive semidefinite, False if known not, Unknown if undetermined.
      */
     Tribool is_positive_semidefinite(const std::string& symbol) const;
+
+    /// Checked positive-semidefinite query for migration away from bare Tribool APIs.
+    AssumptionTriboolResult is_positive_semidefinite_checked(const std::string& symbol) const;
 
     /**
      * @brief Set the maximum recursion depth for inference queries.
@@ -243,6 +294,8 @@ public:
     int get_max_query_depth() const;
 
 private:
+    static AssumptionContext deserialize_impl(const std::string& data);
+
     struct Scope {
         PropertyStore properties;
         RelationStore relations;
@@ -272,46 +325,91 @@ public:
  * Represents a single domain, sign, or relational assumption that can be
  * applied to an AssumptionContext scope.
  */
-struct AssumptionDecl {
+class AssumptionDecl {
+public:
     /// The type of assumption being declared.
     enum class Type { Domain, Sign, Relation };
 
-    Type type;                 ///< Which kind of assumption this is
-    std::string symbol;        ///< Variable name (for Domain and Sign types)
-    Domain domain;             ///< Domain value (used when type == Domain)
-    Sign sign;                 ///< Sign value (used when type == Sign)
-    SymbolicExpr relation;     ///< Relational expression (used when type == Relation)
-
     /// Construct a domain assumption declaration.
     static AssumptionDecl make_domain(const std::string& sym, Domain d) {
-        AssumptionDecl decl;
-        decl.type = Type::Domain;
-        decl.symbol = sym;
-        decl.domain = d;
-        decl.sign = Sign::Positive; // unused default
-        return decl;
+        return AssumptionDecl(DomainDeclaration{sym, d});
     }
 
     /// Construct a sign assumption declaration.
     static AssumptionDecl make_sign(const std::string& sym, Sign s) {
-        AssumptionDecl decl;
-        decl.type = Type::Sign;
-        decl.symbol = sym;
-        decl.sign = s;
-        decl.domain = Domain::Complex; // unused default
-        return decl;
+        return AssumptionDecl(SignDeclaration{sym, s});
     }
 
     /// Construct a relational assumption declaration.
     static AssumptionDecl make_relation(const SymbolicExpr& rel) {
-        AssumptionDecl decl;
-        decl.type = Type::Relation;
-        decl.relation = rel;
-        decl.domain = Domain::Complex; // unused default
-        decl.sign = Sign::Positive;    // unused default
-        return decl;
+        return AssumptionDecl(rel);
     }
+
+    Type type() const noexcept {
+        if (std::holds_alternative<DomainDeclaration>(payload_)) return Type::Domain;
+        if (std::holds_alternative<SignDeclaration>(payload_)) return Type::Sign;
+        return Type::Relation;
+    }
+
+    const std::string& symbol() const {
+        if (const auto* domain = std::get_if<DomainDeclaration>(&payload_)) {
+            return domain->symbol;
+        }
+        if (const auto* sign = std::get_if<SignDeclaration>(&payload_)) {
+            return sign->symbol;
+        }
+        throw std::logic_error("relational assumption has no symbol field");
+    }
+
+    Domain domain() const {
+        return std::get<DomainDeclaration>(payload_).domain;
+    }
+
+    Sign sign() const {
+        return std::get<SignDeclaration>(payload_).sign;
+    }
+
+    const SymbolicExpr& relation() const {
+        return std::get<SymbolicExpr>(payload_);
+    }
+
+private:
+    struct DomainDeclaration {
+        std::string symbol;
+        Domain domain;
+    };
+
+    struct SignDeclaration {
+        std::string symbol;
+        Sign sign;
+    };
+
+    using Payload = std::variant<DomainDeclaration, SignDeclaration, SymbolicExpr>;
+
+    explicit AssumptionDecl(DomainDeclaration declaration)
+        : payload_(std::move(declaration)) {}
+    explicit AssumptionDecl(SignDeclaration declaration)
+        : payload_(std::move(declaration)) {}
+    explicit AssumptionDecl(SymbolicExpr relation)
+        : payload_(std::move(relation)) {}
+
+    Payload payload_;
 };
+
+inline AssumptionVoidResult apply_assumption_decl_checked(
+    AssumptionContext& ctx,
+    const AssumptionDecl& decl) {
+    switch (decl.type()) {
+        case AssumptionDecl::Type::Domain:
+            return ctx.assume_domain_checked(decl.symbol(), decl.domain());
+        case AssumptionDecl::Type::Sign:
+            return ctx.assume_sign_checked(decl.symbol(), decl.sign());
+        case AssumptionDecl::Type::Relation:
+            return ctx.assume_checked(decl.relation());
+    }
+    return AssumptionVoidResult::failure(
+        CasErrc::InternalInvariant, "unknown assumption declaration type", "with_assumptions");
+}
 
 /**
  * @brief Execute a callable within a temporary assumption scope.
@@ -338,15 +436,15 @@ auto with_assumptions(AssumptionContext& ctx,
     ctx.push();
     try {
         for (const auto& decl : decls) {
-            switch (decl.type) {
+            switch (decl.type()) {
                 case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol, decl.domain);
+                    ctx.assume_domain(decl.symbol(), decl.domain());
                     break;
                 case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol, decl.sign);
+                    ctx.assume_sign(decl.symbol(), decl.sign());
                     break;
                 case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation);
+                    ctx.assume(decl.relation());
                     break;
             }
         }
@@ -357,6 +455,85 @@ auto with_assumptions(AssumptionContext& ctx,
         ctx.pop();
         throw;
     }
+}
+
+/**
+ * @brief Checked scoped assumption application for non-void callables.
+ *
+ * Applies declarations with checked APIs and returns CasError on declaration or
+ * callable failure. The temporary scope is always popped before returning.
+ */
+template<typename F>
+auto with_assumptions_checked(AssumptionContext& ctx,
+                              const std::vector<AssumptionDecl>& decls,
+                              F&& callable)
+    -> std::enable_if_t<!std::is_void_v<decltype(callable())>, Result<decltype(callable())>>
+{
+    using ReturnT = decltype(callable());
+    ctx.push();
+    try {
+        for (const auto& decl : decls) {
+            auto applied = apply_assumption_decl_checked(ctx, decl);
+            if (!applied.has_value()) {
+                ctx.pop();
+                return Result<ReturnT>::failure(applied.error());
+            }
+        }
+        auto result = callable();
+        ctx.pop();
+        return Result<ReturnT>::success(std::move(result));
+    } catch (const std::bad_alloc&) {
+        ctx.pop();
+        return Result<ReturnT>::failure(
+            CasErrc::ResourceLimit, "with_assumptions allocation failed", "with_assumptions");
+    } catch (const std::exception& ex) {
+        ctx.pop();
+        return Result<ReturnT>::failure(
+            CasErrc::InternalInvariant, ex.what(), "with_assumptions");
+    }
+}
+
+/**
+ * @brief Checked scoped assumption application for void callables.
+ */
+template<typename F>
+auto with_assumptions_checked(AssumptionContext& ctx,
+                              const std::vector<AssumptionDecl>& decls,
+                              F&& callable)
+    -> std::enable_if_t<std::is_void_v<decltype(callable())>, AssumptionVoidResult>
+{
+    ctx.push();
+    try {
+        for (const auto& decl : decls) {
+            auto applied = apply_assumption_decl_checked(ctx, decl);
+            if (!applied.has_value()) {
+                ctx.pop();
+                return AssumptionVoidResult::failure(applied.error());
+            }
+        }
+        callable();
+        ctx.pop();
+        return AssumptionVoidResult::success();
+    } catch (const std::bad_alloc&) {
+        ctx.pop();
+        return AssumptionVoidResult::failure(
+            CasErrc::ResourceLimit, "with_assumptions allocation failed", "with_assumptions");
+    } catch (const std::exception& ex) {
+        ctx.pop();
+        return AssumptionVoidResult::failure(
+            CasErrc::InternalInvariant, ex.what(), "with_assumptions");
+    }
+}
+
+template<typename F>
+auto with_assumptions_checked(AssumptionContext& ctx,
+                              std::initializer_list<AssumptionDecl> decls,
+                              F&& callable)
+    -> decltype(with_assumptions_checked(
+        ctx, std::vector<AssumptionDecl>(decls), std::forward<F>(callable)))
+{
+    return with_assumptions_checked(
+        ctx, std::vector<AssumptionDecl>(decls), std::forward<F>(callable));
 }
 
 /**
@@ -380,15 +557,15 @@ auto with_assumptions(AssumptionContext& ctx,
     ctx.push();
     try {
         for (const auto& decl : decls) {
-            switch (decl.type) {
+            switch (decl.type()) {
                 case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol, decl.domain);
+                    ctx.assume_domain(decl.symbol(), decl.domain());
                     break;
                 case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol, decl.sign);
+                    ctx.assume_sign(decl.symbol(), decl.sign());
                     break;
                 case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation);
+                    ctx.assume(decl.relation());
                     break;
             }
         }
@@ -420,15 +597,15 @@ auto with_assumptions(AssumptionContext& ctx,
     ctx.push();
     try {
         for (const auto& decl : decls) {
-            switch (decl.type) {
+            switch (decl.type()) {
                 case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol, decl.domain);
+                    ctx.assume_domain(decl.symbol(), decl.domain());
                     break;
                 case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol, decl.sign);
+                    ctx.assume_sign(decl.symbol(), decl.sign());
                     break;
                 case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation);
+                    ctx.assume(decl.relation());
                     break;
             }
         }
@@ -460,15 +637,15 @@ auto with_assumptions(AssumptionContext& ctx,
     ctx.push();
     try {
         for (const auto& decl : decls) {
-            switch (decl.type) {
+            switch (decl.type()) {
                 case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol, decl.domain);
+                    ctx.assume_domain(decl.symbol(), decl.domain());
                     break;
                 case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol, decl.sign);
+                    ctx.assume_sign(decl.symbol(), decl.sign());
                     break;
                 case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation);
+                    ctx.assume(decl.relation());
                     break;
             }
         }

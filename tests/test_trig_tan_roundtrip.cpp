@@ -47,21 +47,21 @@ constexpr double kTolerance = 1e-10;
 
 // ----- AST helpers --------------------------------------------------------
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
@@ -97,9 +97,9 @@ NReport verify_n(int n) {
 
     // Integrate.
     Integrator integ;
-    SymbolicExpr result;
+    std::shared_ptr<SymbolicExpr> result;
     try {
-        result = integ.integrate(*integrand_ptr, kVarName);
+        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand_ptr, kVarName));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception during integration: ") + e.what();
@@ -107,14 +107,14 @@ NReport verify_n(int n) {
     }
 
     // Property 5 requires the integrator to succeed for all n in [2, 8].
-    if (has_integral_node(result.root)) {
+    if (has_integral_node(lamina::detail::node(result))) {
         rep.unevaluated = true;
         rep.detail = "integrator left an unevaluated integral: "
-                     + result.to_string();
+                     + result->to_string();
         return rep;
     }
 
-    auto deriv = result.differentiate(kVarName);
+    auto deriv = result->differentiate(kVarName);
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
@@ -153,7 +153,7 @@ NReport verify_n(int n) {
                 << ": integrand=" << *pv
                 << " vs d/dx(result)=" << *dv
                 << " |delta|=" << delta
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             break;
         }
@@ -190,7 +190,7 @@ int main() {
             std::ostringstream oss;
             oss << prefix << ": " << rep.matches << " match(es), "
                 << rep.skipped << " skipped point(s)";
-            EXPECT_TRUE(true, oss.str());
+            EXPECT_TRUE(!rep.failed && !rep.unevaluated && rep.matches > 0, oss.str());
         } else {
             ++failed;
             std::cerr << "[FAIL] " << prefix

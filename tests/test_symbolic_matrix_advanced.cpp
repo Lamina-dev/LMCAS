@@ -213,12 +213,8 @@ void test_matrix_eigenvalues() {
         auto m = SymbolicExpr::matrix(m_data);
         auto eigenvals = lamina::matrix_eigenvalues(m);
 
-        // The function currently returns empty vector (stub), so test what we can
-        if (eigenvals.empty()) {
-            // Stub implementation - verify it at least doesn't crash
-            EXPECT_TRUE(true, "matrix_eigenvalues returns (stub - empty vector)");
-        } else {
-            // If implemented, should contain eigenvalues 2 and 3
+        EXPECT_TRUE(eigenvals.size() == 2, "Upper triangular 2x2 has 2 eigenvalues");
+        if (eigenvals.size() == 2) {
             EXPECT_TRUE(eigenvals.size() == 2, "Upper triangular 2x2 has 2 eigenvalues");
             bool found2 = false, found3 = false;
             for (auto& ev : eigenvals) {
@@ -243,13 +239,8 @@ void test_matrix_eigenvectors() {
         auto m = SymbolicExpr::matrix(m_data);
         auto eigenvecs = lamina::matrix_eigenvectors(m);
 
-        // The function currently returns empty vector (stub), so test what we can
-        if (eigenvecs.empty()) {
-            // Stub implementation - verify it at least doesn't crash
-            EXPECT_TRUE(true, "matrix_eigenvectors returns (stub - empty vector)");
-        } else {
-            // If implemented, verify structural properties
-            EXPECT_TRUE(eigenvecs.size() >= 1, "At least one eigenvector returned");
+        EXPECT_TRUE(eigenvecs.size() == 2, "2x2 matrix has two independent eigenvectors");
+        if (eigenvecs.size() == 2) {
             for (auto& vec : eigenvecs) {
                 EXPECT_TRUE(!vec.empty(), "Eigenvector is non-empty");
                 // Each component should be a valid symbolic expression
@@ -259,6 +250,85 @@ void test_matrix_eigenvectors() {
             }
         }
     }
+}
+
+void test_matrix_checked_contracts() {
+    TEST_CASE("Matrix Checked API Contracts");
+
+    auto x = SymbolicExpr::variable("x");
+    auto not_matrix = lamina::matrix_determinant_checked(x);
+    EXPECT_TRUE(!not_matrix &&
+                    not_matrix.error().code == lamina::CasErrc::InvalidArgument,
+                "checked determinant rejects non-matrix input");
+
+    auto null_mul = lamina::matrix_multiply_checked(nullptr, nullptr);
+    EXPECT_TRUE(!null_mul &&
+                    null_mul.error().code == lamina::CasErrc::InvalidArgument,
+                "checked matrix multiply rejects null inputs");
+
+    auto A = SymbolicExpr::matrix({
+        {SymbolicExpr::number(1), SymbolicExpr::number(2), SymbolicExpr::number(3)},
+        {SymbolicExpr::number(4), SymbolicExpr::number(5), SymbolicExpr::number(6)}
+    });
+    auto B = SymbolicExpr::matrix({
+        {SymbolicExpr::number(1), SymbolicExpr::number(2)},
+        {SymbolicExpr::number(3), SymbolicExpr::number(4)}
+    });
+    auto bad_mul = lamina::matrix_multiply_checked(A, B);
+    EXPECT_TRUE(!bad_mul &&
+                    bad_mul.error().code == lamina::CasErrc::InvalidArgument,
+                "checked matrix multiply rejects incompatible dimensions");
+    EXPECT_TRUE(lamina::matrix_multiply(A, B) == nullptr,
+                "legacy matrix multiply unwraps incompatible dimensions to nullptr");
+
+    auto non_square_det = lamina::matrix_determinant_checked(A);
+    EXPECT_TRUE(!non_square_det &&
+                    non_square_det.error().code == lamina::CasErrc::InvalidArgument,
+                "checked determinant rejects non-square matrix");
+    EXPECT_TRUE(lamina::matrix_determinant(A) == nullptr,
+                "legacy determinant unwraps non-square matrix to nullptr");
+
+    auto singular = SymbolicExpr::matrix({
+        {SymbolicExpr::number(1), SymbolicExpr::number(2)},
+        {SymbolicExpr::number(2), SymbolicExpr::number(4)}
+    });
+    auto singular_inverse = lamina::matrix_inverse_checked(singular);
+    EXPECT_TRUE(!singular_inverse &&
+                    singular_inverse.error().code == lamina::CasErrc::DomainError,
+                "checked inverse rejects provably singular matrices");
+    EXPECT_TRUE(lamina::matrix_inverse(singular) == nullptr,
+                "legacy inverse unwraps singular matrix domain failure to nullptr");
+
+    auto symbolic_det = SymbolicExpr::matrix({
+        {SymbolicExpr::variable("x"), SymbolicExpr::number(0)},
+        {SymbolicExpr::number(0), SymbolicExpr::number(1)}
+    });
+    auto conditional_inverse = lamina::matrix_inverse_checked(symbolic_det);
+    EXPECT_TRUE(!conditional_inverse &&
+                    conditional_inverse.error().code == lamina::CasErrc::Inconclusive,
+                "checked inverse reports inconclusive when determinant nonzero cannot be verified");
+
+    auto unsupported_rot = lamina::matrix_rotation_checked(0.0, 3);
+    EXPECT_TRUE(!unsupported_rot &&
+                    unsupported_rot.error().code == lamina::CasErrc::UnsupportedExpression,
+                "checked rotation reports unsupported dimensions");
+    EXPECT_TRUE(lamina::matrix_rotation(0.0, 3) == nullptr,
+                "legacy rotation unwraps unsupported dimensions to nullptr");
+
+    auto bad_eigenvalues = lamina::matrix_eigenvalues_checked(A);
+    EXPECT_TRUE(!bad_eigenvalues &&
+                    bad_eigenvalues.error().code == lamina::CasErrc::InvalidArgument,
+                "checked eigenvalues reject non-square matrix");
+    EXPECT_TRUE(lamina::matrix_eigenvalues(A).empty(),
+                "legacy eigenvalues unwrap non-square matrix to empty list");
+
+    lamina::CancellationToken token;
+    token.cancel();
+    lamina::ComputationContext context({}, token);
+    auto cancelled = lamina::matrix_scaling_checked(1.0, 1.0, 2, context);
+    EXPECT_TRUE(!cancelled &&
+                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                "checked scaling observes cancelled context");
 }
 
 int main() {
@@ -271,6 +341,7 @@ int main() {
         test_matrix_scaling();
         test_matrix_eigenvalues();
         test_matrix_eigenvectors();
+        test_matrix_checked_contracts();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;
         g_failures++;

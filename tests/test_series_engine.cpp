@@ -213,6 +213,172 @@ static void test_power_series_multiply_order_zero() {
     EXPECT_TRUE(result.empty(), "Order 0 returns empty vector");
 }
 
+static void test_power_series_checked_contracts() {
+    TEST_CASE("power_series checked APIs: explicit errors and cancellation");
+
+    Coeffs a = {num(1), num(1)};
+    Coeffs b = {num(1), num(1)};
+    auto checked_product = lamina::power_series_multiply_checked(a, b, 3);
+    EXPECT_TRUE(checked_product.has_value(), "checked multiply succeeds");
+    if (checked_product) {
+        EXPECT_TRUE(checked_product.value().size() == 3,
+                    "checked multiply has requested order");
+        EXPECT_EQ_EXPR(checked_product.value()[1], num(2),
+                       "checked multiply coefficient c[1] = 2");
+    }
+
+    auto bad_order = lamina::power_series_multiply_checked(a, b, 0);
+    EXPECT_TRUE(!bad_order &&
+                    bad_order.error().code == lamina::CasErrc::InvalidArgument,
+                "checked multiply rejects non-positive order");
+    EXPECT_TRUE(lamina::power_series_multiply(a, b, 0).empty(),
+                "legacy multiply unwraps non-positive order to empty vector");
+
+    Coeffs with_null = {num(1), nullptr};
+    auto null_coeff = lamina::power_series_multiply_checked(with_null, b, 2);
+    EXPECT_TRUE(!null_coeff &&
+                    null_coeff.error().code == lamina::CasErrc::InvalidArgument,
+                "checked multiply rejects null coefficients");
+
+    Coeffs f = {num(1), num(1)};
+    Coeffs g = {num(0), num(2)};
+    auto checked_compose = lamina::power_series_compose_checked(f, g, 3);
+    EXPECT_TRUE(checked_compose.has_value(), "checked compose succeeds");
+    if (checked_compose) {
+        EXPECT_EQ_EXPR(checked_compose.value()[0], num(1),
+                       "checked compose coefficient c[0] = 1");
+        EXPECT_EQ_EXPR(checked_compose.value()[1], num(2),
+                       "checked compose coefficient c[1] = 2");
+    }
+
+    Coeffs bad_g = {num(1), num(1)};
+    auto nonzero_g0 = lamina::power_series_compose_checked(f, bad_g, 3);
+    EXPECT_TRUE(!nonzero_g0 &&
+                    nonzero_g0.error().code == lamina::CasErrc::DomainError,
+                "checked compose reports g(0) != 0 as domain error");
+    EXPECT_TRUE(lamina::power_series_compose(f, bad_g, 3).empty(),
+                "legacy compose unwraps g(0) != 0 to empty vector");
+
+    lamina::CancellationToken token;
+    token.cancel();
+    lamina::ComputationContext context({}, token);
+    auto cancelled = lamina::power_series_multiply_checked(a, b, 3, context);
+    EXPECT_TRUE(!cancelled &&
+                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                "checked multiply observes cancelled context");
+}
+
+static void test_series_analysis_checked_contracts() {
+    TEST_CASE("series analysis checked APIs: explicit errors and context");
+
+    Coeffs geometric = {num(1), num(1), num(1)};
+    auto radius = lamina::convergence_radius_checked(geometric, "x");
+    EXPECT_TRUE(radius.has_value(), "checked convergence_radius succeeds");
+    if (radius) {
+        EXPECT_TRUE(radius.value() != nullptr,
+                    "checked convergence_radius returns non-null expression");
+    }
+
+    auto empty_coeffs = lamina::convergence_radius_checked({}, "x");
+    EXPECT_TRUE(!empty_coeffs &&
+                    empty_coeffs.error().code == lamina::CasErrc::InvalidArgument,
+                "checked convergence_radius rejects empty coefficients");
+
+    Coeffs with_null = {num(1), nullptr};
+    auto null_coeff = lamina::convergence_radius_checked(with_null, "x");
+    EXPECT_TRUE(!null_coeff &&
+                    null_coeff.error().code == lamina::CasErrc::InvalidArgument,
+                "checked convergence_radius rejects null coefficients");
+
+    auto bad_var = lamina::convergence_radius_checked(geometric, "");
+    EXPECT_TRUE(!bad_var &&
+                    bad_var.error().code == lamina::CasErrc::InvalidArgument,
+                "checked convergence_radius rejects empty variable");
+
+    Coeffs symbolic_coeffs = {num(1), var("a"), num(1)};
+    auto symbolic_radius = lamina::convergence_radius_checked(symbolic_coeffs, "x");
+    EXPECT_TRUE(!symbolic_radius &&
+                    symbolic_radius.error().code == lamina::CasErrc::Inconclusive,
+                "checked convergence_radius rejects unsupported symbolic coefficients");
+    EXPECT_TRUE(lamina::convergence_radius(symbolic_coeffs, "x") != nullptr,
+                "legacy convergence_radius keeps compatibility result for symbolic coefficients");
+
+    auto n = var("n");
+    auto p_term = SymbolicExpr::power(n, num(-2));
+    auto convergence = lamina::convergence_test_checked(p_term, "n");
+    EXPECT_TRUE(convergence.has_value(), "checked convergence_test succeeds");
+    if (convergence) {
+        EXPECT_TRUE(convergence.value().result == lamina::ConvergenceResult::Convergent,
+                    "checked convergence_test detects p-series convergence");
+    }
+
+    auto null_term = lamina::convergence_test_checked(nullptr, "n");
+    EXPECT_TRUE(!null_term &&
+                    null_term.error().code == lamina::CasErrc::InvalidArgument,
+                "checked convergence_test rejects null term");
+
+    auto unsupported_term = SymbolicExpr::sin(n);
+    auto unsupported_convergence = lamina::convergence_test_checked(unsupported_term, "n");
+    EXPECT_TRUE(!unsupported_convergence &&
+                    unsupported_convergence.error().code == lamina::CasErrc::Inconclusive,
+                "checked convergence_test reports Inconclusive for unsupported terms");
+    auto legacy_unsupported = lamina::convergence_test(unsupported_term, "n");
+    EXPECT_TRUE(legacy_unsupported.result == lamina::ConvergenceResult::Inconclusive,
+                "legacy convergence_test preserves inconclusive enum result");
+
+    auto z = var("z");
+    auto f = SymbolicExpr::divide(num(1), z);
+    auto laurent = lamina::laurent_series_full_checked(f, "z", num(0), 2, 2);
+    EXPECT_TRUE(laurent.has_value(), "checked Laurent series succeeds for 1/z");
+    if (laurent) {
+        EXPECT_TRUE(laurent.value().series != nullptr,
+                    "checked Laurent full result has non-null series");
+        EXPECT_TRUE(laurent.value().pole_order == 1,
+                    "checked Laurent detects simple pole");
+    }
+
+    auto laurent_expr = lamina::laurent_series_checked(f, "z", num(0), 2, 2);
+    EXPECT_TRUE(laurent_expr.has_value(), "checked Laurent expression succeeds");
+
+    auto bad_order = lamina::laurent_series_full_checked(f, "z", num(0), -1, 2);
+    EXPECT_TRUE(!bad_order &&
+                    bad_order.error().code == lamina::CasErrc::InvalidArgument,
+                "checked Laurent rejects negative truncation order");
+
+    auto null_center = lamina::laurent_series_full_checked(f, "z", nullptr, 2, 2);
+    EXPECT_TRUE(!null_center &&
+                    null_center.error().code == lamina::CasErrc::InvalidArgument,
+                "checked Laurent rejects null center");
+
+    auto unsupported_laurent = lamina::laurent_series_full_checked(SymbolicExpr::sin(z),
+                                                                   "z", num(0), 2, 2);
+    EXPECT_TRUE(!unsupported_laurent &&
+                    unsupported_laurent.error().code == lamina::CasErrc::Inconclusive,
+                "checked Laurent reports Inconclusive for unsupported analytic functions");
+
+    auto shifted_laurent = lamina::laurent_series_full_checked(f, "z", num(1), 2, 2);
+    EXPECT_TRUE(!shifted_laurent &&
+                    shifted_laurent.error().code == lamina::CasErrc::Inconclusive,
+                "checked Laurent reports Inconclusive outside zero-center support");
+
+    lamina::CancellationToken token;
+    token.cancel();
+    lamina::ComputationContext cancelled_context({}, token);
+    auto cancelled = lamina::convergence_test_checked(p_term, "n", cancelled_context);
+    EXPECT_TRUE(!cancelled &&
+                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                "checked convergence_test observes cancellation");
+
+    lamina::ResourceLimits limits;
+    limits.max_steps = 1;
+    lamina::ComputationContext limited_context(limits);
+    auto limited = lamina::laurent_series_full_checked(f, "z", num(0), 2, 2,
+                                                       limited_context);
+    EXPECT_TRUE(!limited &&
+                    limited.error().code == lamina::CasErrc::ResourceLimit,
+                "checked Laurent observes exhausted step budget");
+}
+
 // ============================================================
 // lim_sup / lim_inf 测试
 // ============================================================
@@ -439,7 +605,7 @@ static void test_symbolic_sum_unevaluated() {
     EXPECT_TRUE(result != nullptr, "result is not null");
     // Should be a SummationNode
     if (result) {
-        auto sn = std::dynamic_pointer_cast<SummationNode>(result->root);
+        auto sn = std::dynamic_pointer_cast<const SummationNode>(lamina::detail::node(result));
         EXPECT_TRUE(sn != nullptr, "result is SummationNode for sin(k)");
     }
 }
@@ -502,7 +668,7 @@ static void test_symbolic_product_unevaluated() {
     auto result = lamina::symbolic_product(body, "k", num(1), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
-        auto pn = std::dynamic_pointer_cast<ProductNode_Op>(result->root);
+        auto pn = std::dynamic_pointer_cast<const ProductNode_Op>(lamina::detail::node(result));
         EXPECT_TRUE(pn != nullptr, "result is ProductNode_Op for sin(k)");
     }
 }
@@ -713,6 +879,8 @@ int main() {
     test_power_series_compose_quadratic();
     test_power_series_compose_g0_nonzero();
     test_power_series_compose_exp_like();
+    test_power_series_checked_contracts();
+    test_series_analysis_checked_contracts();
 
     // convergence_radius tests
     test_convergence_radius_geometric();

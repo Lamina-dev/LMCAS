@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include "lamina_export.hpp"
 #include "monomial_order.hpp"
 #include "rational.hpp"
 #include "polynomial.hpp"
@@ -15,16 +16,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#ifdef LAMINA_CORE_EXPORTS
-#define LAMINA_API __declspec(dllexport)
-#else
-#define LAMINA_API __declspec(dllimport)
-#endif
-#else
-#define LAMINA_API
-#endif
 
 namespace lamina {
 

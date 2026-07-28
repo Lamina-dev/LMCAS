@@ -3,6 +3,7 @@
  * @brief AST 节点定义：NumberNode, VariableNode, AddNode, MultiplyNode, PowerNode, FunctionNode, MatrixNode, RelationalNode, LogicalNode。
  */
 #pragma once
+#define LAMINA_INTERNAL_AST_INCLUDED 1
 #include <memory>
 #include <vector>
 #include <string>
@@ -11,27 +12,19 @@
 #include <typeindex>
 #include <unordered_map>
 #include <unordered_set>
+#include <limits>
+#include "lamina_export.hpp"
+#include "symbolic.hpp"
 #include "rational.hpp"
 #include "bigint.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include <stdexcept>
 #include <atomic>
+#include <type_traits>
+#include <utility>
 
-#ifndef LAMINA_API
-#ifdef _WIN32
-#ifdef LAMINA_CORE_EXPORTS
-#define LAMINA_API __declspec(dllexport)
-#else
-#define LAMINA_API __declspec(dllimport)
-#endif
-#else
-#define LAMINA_API
-#endif
-#endif
-
-
-class SymbolicVisitor;
+class SymbolicNode;
 class NumberNode;
 class VariableNode;
 class AddNode;
@@ -48,6 +41,83 @@ class PiecewiseNode;
 class SummationNode;
 class ProductNode_Op;
 class ComplexNode;
+
+struct SymbolicExpr::Impl {
+    explicit Impl(std::shared_ptr<const SymbolicNode> root_node)
+        : root(std::move(root_node)) {
+        if (!root) {
+            throw std::invalid_argument("SymbolicExpr requires a non-null AST root");
+        }
+    }
+
+    const std::shared_ptr<const SymbolicNode> root;
+};
+
+namespace lamina::detail {
+
+using SymbolicNodePtr = std::shared_ptr<const SymbolicNode>;
+
+struct SymbolicExprAccess {
+    static const SymbolicNodePtr& node(const ::SymbolicExpr& expression) noexcept {
+        return expression.impl_->root;
+    }
+
+    static ::SymbolicExpr expression_from_node(SymbolicNodePtr root) {
+        return ::SymbolicExpr(
+            std::make_shared<const ::SymbolicExpr::Impl>(std::move(root)));
+    }
+
+    static std::shared_ptr<::SymbolicExpr> make_expression_ptr(SymbolicNodePtr root) {
+        return std::shared_ptr<::SymbolicExpr>(new ::SymbolicExpr(
+            std::make_shared<const ::SymbolicExpr::Impl>(std::move(root))));
+    }
+};
+
+inline const SymbolicNodePtr& node(const ::SymbolicExpr& expression) noexcept {
+    return SymbolicExprAccess::node(expression);
+}
+
+inline const SymbolicNodePtr& node(
+    const std::shared_ptr<::SymbolicExpr>& expression) noexcept {
+    static const SymbolicNodePtr empty;
+    return expression ? node(*expression) : empty;
+}
+
+inline const SymbolicNodePtr& node(
+    const std::shared_ptr<const ::SymbolicExpr>& expression) noexcept {
+    static const SymbolicNodePtr empty;
+    return expression ? node(*expression) : empty;
+}
+
+inline ::SymbolicExpr expression_from_node(SymbolicNodePtr root) {
+    return SymbolicExprAccess::expression_from_node(std::move(root));
+}
+
+inline std::shared_ptr<::SymbolicExpr> make_expression_ptr(SymbolicNodePtr root) {
+    return SymbolicExprAccess::make_expression_ptr(std::move(root));
+}
+
+inline std::shared_ptr<::SymbolicExpr> make_expression_ptr(
+    const ::SymbolicExpr& expression) {
+    return std::make_shared<::SymbolicExpr>(expression);
+}
+
+class SymbolicVisitor;
+
+template <typename Node, typename... Args>
+std::shared_ptr<const Node> make_node(Args&&... args) {
+    static_assert(std::is_base_of<SymbolicNode, Node>::value,
+                  "make_node only constructs SymbolicNode implementations");
+    return std::shared_ptr<const Node>(
+        new Node(std::forward<Args>(args)...));
+}
+
+} // namespace lamina::detail
+
+#define LAMINA_AST_NODE_FACTORY_FRIEND                                      \
+    template <typename Node, typename... Args>                              \
+    friend std::shared_ptr<const Node>                                      \
+        lamina::detail::make_node(Args&&... args)
 
 /**
  * @brief 将一个哈希值混合到种子中，用于组合多个字段的哈希。
@@ -83,10 +153,10 @@ public:
     virtual ~SymbolicNode() = default;
 
     /** @brief 接受 Visitor 访问。 */
-    virtual void accept(SymbolicVisitor& visitor) = 0;
+    virtual void accept(lamina::detail::SymbolicVisitor& visitor) const = 0;
 
     /** @brief 深拷贝当前节点及其子树。 */
-    virtual std::shared_ptr<SymbolicNode> clone() const = 0;
+    virtual std::shared_ptr<const SymbolicNode> clone() const = 0;
 
     /** @brief 返回节点类型的排序优先级，用于规范化排序。 */
     virtual int type_priority() const = 0;
@@ -145,6 +215,8 @@ public:
  * 子类实现各 visit 方法以对不同节点类型执行操作。
  * 内置深度保护，防止递归过深导致栈溢出。
  */
+namespace lamina::detail {
+
 class SymbolicVisitor {
 protected:
     int current_depth = 0;
@@ -165,43 +237,45 @@ public:
 
     virtual ~SymbolicVisitor() = default;
 
-    virtual void visit(NumberNode& node) = 0;
-    virtual void visit(VariableNode& node) = 0;
-    virtual void visit(AddNode& node) = 0;
-    virtual void visit(MultiplyNode& node) = 0;
-    virtual void visit(PowerNode& node) = 0;
-    virtual void visit(FunctionNode& node) = 0;
-    virtual void visit(MatrixNode& node) = 0;
-    virtual void visit(RelationalNode& node) {}
-    virtual void visit(LogicalNode& node) {}
-    virtual void visit(PiecewiseNode& node) {}
-    virtual void visit(SummationNode& node) {}
-    virtual void visit(ProductNode_Op& node) {}
-    virtual void visit(TransformNode& node) {}
-    virtual void visit(QuantifierNode& node) {}
-    virtual void visit(SetBuilderNode& node) {}
-    virtual void visit(ComplexNode& node) {}
+    virtual void visit(const NumberNode& node) = 0;
+    virtual void visit(const VariableNode& node) = 0;
+    virtual void visit(const AddNode& node) = 0;
+    virtual void visit(const MultiplyNode& node) = 0;
+    virtual void visit(const PowerNode& node) = 0;
+    virtual void visit(const FunctionNode& node) = 0;
+    virtual void visit(const MatrixNode& node) = 0;
+    virtual void visit(const RelationalNode& node) = 0;
+    virtual void visit(const LogicalNode& node) = 0;
+    virtual void visit(const PiecewiseNode& node) = 0;
+    virtual void visit(const SummationNode& node) = 0;
+    virtual void visit(const ProductNode_Op& node) = 0;
+    virtual void visit(const TransformNode& node) = 0;
+    virtual void visit(const QuantifierNode& node) = 0;
+    virtual void visit(const SetBuilderNode& node) = 0;
+    virtual void visit(const ComplexNode& node) = 0;
 };
+
+} // namespace lamina::detail
 
 /** @brief 基于节点哈希的哈希函数对象，用于无序容器。 */
 struct NodeHash {
-    std::size_t operator()(const std::shared_ptr<SymbolicNode>& node) const {
+    std::size_t operator()(const std::shared_ptr<const SymbolicNode>& node) const {
         return node ? node->hash() : 0;
     }
 };
 
 /** @brief 基于节点结构相等性的比较函数对象，用于无序容器。 */
 struct NodeEqual {
-    bool operator()(const std::shared_ptr<SymbolicNode>& lhs, const std::shared_ptr<SymbolicNode>& rhs) const {
+    bool operator()(const std::shared_ptr<const SymbolicNode>& lhs, const std::shared_ptr<const SymbolicNode>& rhs) const {
         if (!lhs || !rhs) return lhs == rhs;
         return lhs->equals(*rhs);
     }
 };
 
 template<typename T>
-using NodeMap = std::unordered_map<std::shared_ptr<SymbolicNode>, T, NodeHash, NodeEqual>;
+using NodeMap = std::unordered_map<std::shared_ptr<const SymbolicNode>, T, NodeHash, NodeEqual>;
 
-using NodeSet = std::unordered_set<std::shared_ptr<SymbolicNode>, NodeHash, NodeEqual>;
+using NodeSet = std::unordered_set<std::shared_ptr<const SymbolicNode>, NodeHash, NodeEqual>;
 
 /**
  * @brief 符号节点工厂类，提供创建常用节点的静态方法。
@@ -211,27 +285,27 @@ using NodeSet = std::unordered_set<std::shared_ptr<SymbolicNode>, NodeHash, Node
 class SymbolicFactory {
 public:
     /** @brief 创建大整数数值节点。 */
-    static std::shared_ptr<SymbolicNode> create_number(const ::BigInt& v);
+    static std::shared_ptr<const SymbolicNode> create_number(const ::BigInt& v);
     /** @brief 创建有理数数值节点。 */
-    static std::shared_ptr<SymbolicNode> create_number(const ::Rational& v);
+    static std::shared_ptr<const SymbolicNode> create_number(const ::Rational& v);
     /** @brief 创建浮点数值节点。 */
-    static std::shared_ptr<SymbolicNode> create_number(lmmc_real_t v);
+    static std::shared_ptr<const SymbolicNode> create_number(lmmc_real_t v);
     /** @brief 创建变量节点。 */
-    static std::shared_ptr<SymbolicNode> create_variable(const std::string& name);
+    static std::shared_ptr<const SymbolicNode> create_variable(const std::string& name);
 
     /**
      * @brief 创建加法节点，自动扁平化嵌套加法并消除零项。
      * @param ops 操作数列表
      * @return 简化后的节点
      */
-    static std::shared_ptr<SymbolicNode> create_add(std::vector<std::shared_ptr<SymbolicNode>> ops);
+    static std::shared_ptr<const SymbolicNode> create_add(std::vector<std::shared_ptr<const SymbolicNode>> ops);
 
     /**
      * @brief 创建乘法节点，自动扁平化嵌套乘法并消除单位元。
      * @param ops 操作数列表
      * @return 简化后的节点
      */
-    static std::shared_ptr<SymbolicNode> create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops);
+    static std::shared_ptr<const SymbolicNode> create_multiply(std::vector<std::shared_ptr<const SymbolicNode>> ops);
 
     /**
      * @brief 创建幂运算节点，自动处理指数为 0/1 及底数为 0/1 的情况。
@@ -239,119 +313,140 @@ public:
      * @param exponent 指数节点
      * @return 简化后的节点
      */
-    static std::shared_ptr<SymbolicNode> create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent);
+    static std::shared_ptr<const SymbolicNode> create_power(std::shared_ptr<const SymbolicNode> base, std::shared_ptr<const SymbolicNode> exponent);
 
     /**
      * @brief 创建复数节点，自动简化（若虚部为 0，则返回实部）。
      */
-    static std::shared_ptr<SymbolicNode> create_complex(std::shared_ptr<SymbolicNode> real, std::shared_ptr<SymbolicNode> imag);
+    static std::shared_ptr<const SymbolicNode> create_complex(std::shared_ptr<const SymbolicNode> real, std::shared_ptr<const SymbolicNode> imag);
 };
 
 /**
  * @brief 数值节点，存储 BigInt、Rational 或浮点数。
  */
 class NumberNode : public SymbolicNode {
-public:
-    std::variant<BigInt, Rational, lmmc_real_t> value; ///< 数值，支持大整数、有理数、浮点数
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    explicit NumberNode(const BigInt& v) : value(v) {}
-    explicit NumberNode(const Rational& v) : value(v) {}
-    explicit NumberNode(lmmc_real_t v) : value(v) {}
-    explicit NumberNode(std::variant<BigInt, Rational, lmmc_real_t> v) : value(std::move(v)) {}
+    const std::variant<BigInt, Rational, lmmc_real_t> value_;
+
+    explicit NumberNode(const BigInt& v) : value_(v) {}
+    explicit NumberNode(const Rational& v) : value_(v) {}
+    explicit NumberNode(lmmc_real_t v) : value_(v) {}
+    explicit NumberNode(std::variant<BigInt, Rational, lmmc_real_t> v) : value_(std::move(v)) {}
+
+public:
+    const std::variant<BigInt, Rational, lmmc_real_t>& value() const noexcept {
+        return value_;
+    }
 
     int type_priority() const override { return -10; }
 
 protected:
     std::size_t compute_hash() const override {
-        // 与 compare_same_type 对齐：相同数值（如 1、Rational(1,1)、1.0）必须哈希一致，
-        // 否则 NodeMap/NodeSet 在 equals() 的 hash() 短路里会误判不等。
-        // compare_same_type 在任一为 double 时统一转 double 比较，所以这里也按 double 哈希。
-        auto to_real = [](const std::variant<BigInt, Rational, lmmc_real_t>& v) -> lmmc_real_t {
-            if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
-            if (std::holds_alternative<Rational>(v))   return (lmmc_real_t)std::get<Rational>(v).to_double();
-            return (lmmc_real_t)std::get<BigInt>(v).to_double();
-        };
-        lmmc_real_t d = to_real(value);
-        // NaN 一律映射到一个统一桶，避免不同 NaN 位模式造成 hash 不稳。
-        if (d != d) return std::hash<int>{}(0);
-        // 0.0 与 -0.0 在 == 比较里相等，统一规约为 0.0。
-        if (d == 0.0) d = 0.0;
-        return std::hash<lmmc_real_t>{}(d);
+        if (std::holds_alternative<lmmc_real_t>(value_)) {
+            lmmc_real_t real = std::get<lmmc_real_t>(value_);
+            if (real == 0.0) real = 0.0; // canonicalize negative zero
+            std::size_t seed = std::hash<int>{}(2); // approximate-number domain
+            hash_combine(seed, std::hash<lmmc_real_t>{}(real));
+            return seed;
+        }
+
+        // BigInt n and Rational n/1 are the same exact number. Approximate
+        // reals intentionally occupy a different structural domain.
+        if (std::holds_alternative<Rational>(value_)) {
+            return std::get<Rational>(value_).hash();
+        }
+        return Rational(std::get<BigInt>(value_)).hash();
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const NumberNode&>(other);
 
-        bool is_l_real = std::holds_alternative<lmmc_real_t>(value);
-        bool is_r_real = std::holds_alternative<lmmc_real_t>(o.value);
+        bool is_l_real = std::holds_alternative<lmmc_real_t>(value_);
+        bool is_r_real = std::holds_alternative<lmmc_real_t>(o.value_);
 
-        if (is_l_real || is_r_real) {
-            auto to_lmmc_real = [](const std::variant<BigInt, Rational, lmmc_real_t>& v) {
-                if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
-                if (std::holds_alternative<Rational>(v)) return (lmmc_real_t)std::get<Rational>(v).to_double();
-                return (lmmc_real_t)std::get<BigInt>(v).to_double();
-            };
-
-            lmmc_real_t v1 = to_lmmc_real(value);
-            lmmc_real_t v2 = to_lmmc_real(o.value);
-            return LMMC_REAL_CMP(&v1, &v2);
+        if (is_l_real) {
+            if (!is_r_real) {
+                const Rational lhs = Rational::from_double(std::get<lmmc_real_t>(value_));
+                const Rational rhs = std::holds_alternative<Rational>(o.value_)
+                    ? std::get<Rational>(o.value_)
+                    : Rational(std::get<BigInt>(o.value_));
+                if (lhs < rhs) return -1;
+                if (rhs < lhs) return 1;
+                return 1; // same numeric value, but approximate numbers remain structurally distinct
+            }
+            const lmmc_real_t lhs = std::get<lmmc_real_t>(value_);
+            const lmmc_real_t rhs = std::get<lmmc_real_t>(o.value_);
+            const bool lhs_nan = std::isnan(lhs);
+            const bool rhs_nan = std::isnan(rhs);
+            if (lhs_nan || rhs_nan) {
+                if (lhs_nan && rhs_nan) return 0;
+                return lhs_nan ? 1 : -1;
+            }
+            if (lhs < rhs) return -1;
+            if (lhs > rhs) return 1;
+            return 0;
+        }
+        if (is_r_real) {
+            const Rational lhs = std::holds_alternative<Rational>(value_)
+                ? std::get<Rational>(value_)
+                : Rational(std::get<BigInt>(value_));
+            const Rational rhs = Rational::from_double(std::get<lmmc_real_t>(o.value_));
+            if (lhs < rhs) return -1;
+            if (rhs < lhs) return 1;
+            return -1; // same numeric value, but exact numbers remain structurally distinct
         }
 
-        bool is_l_rat = std::holds_alternative<Rational>(value);
-        bool is_r_rat = std::holds_alternative<Rational>(o.value);
+        bool is_l_rat = std::holds_alternative<Rational>(value_);
+        bool is_r_rat = std::holds_alternative<Rational>(o.value_);
 
         if (is_l_rat || is_r_rat) {
-            Rational r1 = is_l_rat ? std::get<Rational>(value) : Rational(std::get<BigInt>(value));
-            Rational r2 = is_r_rat ? std::get<Rational>(o.value) : Rational(std::get<BigInt>(o.value));
+            Rational r1 = is_l_rat ? std::get<Rational>(value_) : Rational(std::get<BigInt>(value_));
+            Rational r2 = is_r_rat ? std::get<Rational>(o.value_) : Rational(std::get<BigInt>(o.value_));
             if (r1 < r2) return -1;
             if (r1 == r2) return 0;
             return 1;
         }
 
-        const auto& b1 = std::get<BigInt>(value);
-        const auto& b2 = std::get<BigInt>(o.value);
+        const auto& b1 = std::get<BigInt>(value_);
+        const auto& b2 = std::get<BigInt>(o.value_);
         if (b1 < b2) return -1;
         if (b1 == b2) return 0;
         return 1;
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<SymbolicNode> clone() const override {
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override {
 
-        if (std::holds_alternative<BigInt>(value)) return std::make_shared<NumberNode>(std::get<BigInt>(value));
-        if (std::holds_alternative<Rational>(value)) return std::make_shared<NumberNode>(std::get<Rational>(value));
-        return std::make_shared<NumberNode>(std::get<lmmc_real_t>(value));
+        if (std::holds_alternative<BigInt>(value_)) return lamina::detail::make_node<NumberNode>(std::get<BigInt>(value_));
+        if (std::holds_alternative<Rational>(value_)) return lamina::detail::make_node<NumberNode>(std::get<Rational>(value_));
+        return lamina::detail::make_node<NumberNode>(std::get<lmmc_real_t>(value_));
     }
 
     bool is_number() const override { return true; }
     bool is_zero() const override {
 
-        if (std::holds_alternative<BigInt>(value)) return std::get<BigInt>(value) == BigInt(0);
-        if (std::holds_alternative<Rational>(value)) return std::get<Rational>(value) == Rational(0);
-        lmmc_real_t v = std::get<lmmc_real_t>(value);
-        int eq;
-        lmmc_double_nearly_equal(v, 0.0, &eq);
-        return eq != 0;
+        if (std::holds_alternative<BigInt>(value_)) return std::get<BigInt>(value_) == BigInt(0);
+        if (std::holds_alternative<Rational>(value_)) return std::get<Rational>(value_) == Rational(0);
+        return std::get<lmmc_real_t>(value_) == 0.0;
     }
     bool is_one() const override {
-        if (std::holds_alternative<BigInt>(value)) return std::get<BigInt>(value) == BigInt(1);
-        if (std::holds_alternative<Rational>(value)) return std::get<Rational>(value) == Rational(1);
-        lmmc_real_t v = std::get<lmmc_real_t>(value);
-        int eq;
-        lmmc_double_nearly_equal(v, 1.0, &eq);
-        return eq != 0;
+        if (std::holds_alternative<BigInt>(value_)) return std::get<BigInt>(value_) == BigInt(1);
+        if (std::holds_alternative<Rational>(value_)) return std::get<Rational>(value_) == Rational(1);
+        return std::get<lmmc_real_t>(value_) == 1.0;
     }
     bool is_positive() const override {
-        if (std::holds_alternative<BigInt>(value)) {
-            const auto& b = std::get<BigInt>(value);
+        if (std::holds_alternative<BigInt>(value_)) {
+            const auto& b = std::get<BigInt>(value_);
             return !b.IsNegative() && !(b == BigInt(0));
         }
-        if (std::holds_alternative<Rational>(value)) {
-            const auto& r = std::get<Rational>(value);
+        if (std::holds_alternative<Rational>(value_)) {
+            const auto& r = std::get<Rational>(value_);
             return r > Rational(0);
         }
-        lmmc_real_t v = std::get<lmmc_real_t>(value);
+        lmmc_real_t v = std::get<lmmc_real_t>(value_);
         return std::isfinite(v) && v > 0.0;
     }
 };
@@ -360,12 +455,22 @@ public:
  * @brief 复数节点，表示 real + imag * i。
  */
 class ComplexNode : public SymbolicNode {
-public:
-    std::shared_ptr<SymbolicNode> real; ///< 实部
-    std::shared_ptr<SymbolicNode> imag; ///< 虚部
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    ComplexNode(std::shared_ptr<SymbolicNode> r, std::shared_ptr<SymbolicNode> i)
-        : real(std::move(r)), imag(std::move(i)) {}
+    const std::shared_ptr<const SymbolicNode> real_;
+    const std::shared_ptr<const SymbolicNode> imag_;
+
+    ComplexNode(std::shared_ptr<const SymbolicNode> r, std::shared_ptr<const SymbolicNode> i)
+        : real_(std::move(r)), imag_(std::move(i)) {
+        if (!real_ || !imag_) {
+            throw std::invalid_argument("ComplexNode real and imaginary parts cannot be null");
+        }
+    }
+
+public:
+    const std::shared_ptr<const SymbolicNode>& real() const noexcept { return real_; }
+    const std::shared_ptr<const SymbolicNode>& imag() const noexcept { return imag_; }
 
     int type_priority() const override { return -5; } // 在 NumberNode 和 VariableNode 之间
 
@@ -373,26 +478,26 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, real->hash());
-        hash_combine(seed, imag->hash());
+        hash_combine(seed, real_->hash());
+        hash_combine(seed, imag_->hash());
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const ComplexNode&>(other);
-        int cmp_r = real->compare(*o.real);
+        int cmp_r = real_->compare(*o.real_);
         if (cmp_r != 0) return cmp_r;
-        return imag->compare(*o.imag);
+        return imag_->compare(*o.imag_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<ComplexNode>(real->clone(), imag->clone());
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<ComplexNode>(real_->clone(), imag_->clone());
     }
     
     bool is_zero() const override {
-        return real->is_zero() && imag->is_zero();
+        return real_->is_zero() && imag_->is_zero();
     }
 };
 
@@ -400,26 +505,31 @@ public:
  * @brief 变量节点，表示一个符号变量。
  */
 class VariableNode : public SymbolicNode {
-public:
-    std::string name; ///< 变量名
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    explicit VariableNode(std::string n) : name(std::move(n)) {}
+    const std::string name_;
+
+    explicit VariableNode(std::string n) : name_(std::move(n)) {}
+
+public:
+    const std::string& name() const noexcept { return name_; }
 
     int type_priority() const override { return 10; }
 
 protected:
     std::size_t compute_hash() const override {
-        return std::hash<std::string>{}(name);
+        return std::hash<std::string>{}(name_);
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const VariableNode&>(other);
-        return name.compare(o.name);
+        return name_.compare(o.name_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<SymbolicNode> clone() const override { return std::make_shared<VariableNode>(name); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override { return lamina::detail::make_node<VariableNode>(name_); }
 };
 
 /**
@@ -428,25 +538,39 @@ public:
  * 构造时自动扁平化嵌套的 AddNode，并按规范顺序排序操作数。
  */
 class AddNode : public SymbolicNode {
-public:
-    std::vector<std::shared_ptr<SymbolicNode>> operands; ///< 加法操作数列表
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    explicit AddNode(std::vector<std::shared_ptr<SymbolicNode>> ops) {
+    const std::vector<std::shared_ptr<const SymbolicNode>> operands_;
 
+    explicit AddNode(std::vector<std::shared_ptr<const SymbolicNode>> ops)
+        : operands_([&ops]() {
+        if (ops.empty()) {
+            throw std::invalid_argument("AddNode requires at least one operand");
+        }
+        std::vector<std::shared_ptr<const SymbolicNode>> flattened;
         for (const auto& op : ops) {
-            if (auto add = std::dynamic_pointer_cast<AddNode>(op)) {
-                operands.insert(operands.end(), add->operands.begin(), add->operands.end());
+            if (!op) {
+                throw std::invalid_argument("AddNode operand cannot be null");
+            }
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(op)) {
+                flattened.insert(flattened.end(), add->operands_.begin(), add->operands_.end());
             } else {
-                operands.push_back(op);
+                flattened.push_back(op);
             }
         }
-
-        std::sort(operands.begin(), operands.end(), [](const auto& a, const auto& b) {
+        std::sort(flattened.begin(), flattened.end(), [](const auto& a, const auto& b) {
             bool a_num = a->is_number();
             bool b_num = b->is_number();
             if (a_num != b_num) return !a_num;
             return a->compare(*b) < 0;
         });
+        return flattened;
+    }()) {}
+
+public:
+    const std::vector<std::shared_ptr<const SymbolicNode>>& operands() const noexcept {
+        return operands_;
     }
 
     int type_priority() const override { return 5; }
@@ -455,7 +579,7 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        for (const auto& op : operands) {
+        for (const auto& op : operands_) {
             hash_combine(seed, op->hash());
         }
         return seed;
@@ -463,23 +587,23 @@ protected:
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const AddNode&>(other);
-        if (operands.size() != o.operands.size()) {
-            return operands.size() < o.operands.size() ? -1 : 1;
+        if (operands_.size() != o.operands_.size()) {
+            return operands_.size() < o.operands_.size() ? -1 : 1;
         }
-        for (size_t i = 0; i < operands.size(); ++i) {
-            int cmp = operands[i]->compare(*o.operands[i]);
+        for (size_t i = 0; i < operands_.size(); ++i) {
+            int cmp = operands_[i]->compare(*o.operands_[i]);
             if (cmp != 0) return cmp;
         }
         return 0;
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<SymbolicNode> clone() const override {
-        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-        new_ops.reserve(operands.size());
-        for (const auto& op : operands) new_ops.push_back(op->clone());
-        return std::make_shared<AddNode>(std::move(new_ops));
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+        new_ops.reserve(operands_.size());
+        for (const auto& op : operands_) new_ops.push_back(op->clone());
+        return lamina::detail::make_node<AddNode>(std::move(new_ops));
     }
 };
 
@@ -489,22 +613,36 @@ public:
  * 构造时自动扁平化嵌套的 MultiplyNode，并按规范顺序排序操作数。
  */
 class MultiplyNode : public SymbolicNode {
-public:
-    std::vector<std::shared_ptr<SymbolicNode>> operands; ///< 乘法操作数列表
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    explicit MultiplyNode(std::vector<std::shared_ptr<SymbolicNode>> ops) {
+    const std::vector<std::shared_ptr<const SymbolicNode>> operands_;
 
+    explicit MultiplyNode(std::vector<std::shared_ptr<const SymbolicNode>> ops)
+        : operands_([&ops]() {
+        if (ops.empty()) {
+            throw std::invalid_argument("MultiplyNode requires at least one operand");
+        }
+        std::vector<std::shared_ptr<const SymbolicNode>> flattened;
         for (const auto& op : ops) {
-            if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(op)) {
-                operands.insert(operands.end(), mul->operands.begin(), mul->operands.end());
+            if (!op) {
+                throw std::invalid_argument("MultiplyNode operand cannot be null");
+            }
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(op)) {
+                flattened.insert(flattened.end(), mul->operands_.begin(), mul->operands_.end());
             } else {
-                operands.push_back(op);
+                flattened.push_back(op);
             }
         }
-
-        std::sort(operands.begin(), operands.end(), [](const auto& a, const auto& b) {
+        std::sort(flattened.begin(), flattened.end(), [](const auto& a, const auto& b) {
             return a->compare(*b) < 0;
         });
+        return flattened;
+    }()) {}
+
+public:
+    const std::vector<std::shared_ptr<const SymbolicNode>>& operands() const noexcept {
+        return operands_;
     }
 
     int type_priority() const override { return 4; }
@@ -513,7 +651,7 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        for (const auto& op : operands) {
+        for (const auto& op : operands_) {
             hash_combine(seed, op->hash());
         }
         return seed;
@@ -521,23 +659,23 @@ protected:
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const MultiplyNode&>(other);
-        if (operands.size() != o.operands.size()) {
-            return operands.size() < o.operands.size() ? -1 : 1;
+        if (operands_.size() != o.operands_.size()) {
+            return operands_.size() < o.operands_.size() ? -1 : 1;
         }
-        for (size_t i = 0; i < operands.size(); ++i) {
-            int cmp = operands[i]->compare(*o.operands[i]);
+        for (size_t i = 0; i < operands_.size(); ++i) {
+            int cmp = operands_[i]->compare(*o.operands_[i]);
             if (cmp != 0) return cmp;
         }
         return 0;
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<SymbolicNode> clone() const override {
-        std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-        new_ops.reserve(operands.size());
-        for (const auto& op : operands) new_ops.push_back(op->clone());
-        return std::make_shared<MultiplyNode>(std::move(new_ops));
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+        new_ops.reserve(operands_.size());
+        for (const auto& op : operands_) new_ops.push_back(op->clone());
+        return lamina::detail::make_node<MultiplyNode>(std::move(new_ops));
     }
 };
 
@@ -545,12 +683,24 @@ public:
  * @brief 幂运算节点，表示 base^exponent。
  */
 class PowerNode : public SymbolicNode {
-public:
-    std::shared_ptr<SymbolicNode> base;     ///< 底数
-    std::shared_ptr<SymbolicNode> exponent; ///< 指数
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    PowerNode(std::shared_ptr<SymbolicNode> b, std::shared_ptr<SymbolicNode> e)
-        : base(std::move(b)), exponent(std::move(e)) {}
+    const std::shared_ptr<const SymbolicNode> base_;
+    const std::shared_ptr<const SymbolicNode> exponent_;
+
+    PowerNode(std::shared_ptr<const SymbolicNode> b, std::shared_ptr<const SymbolicNode> e)
+        : base_(std::move(b)), exponent_(std::move(e)) {
+        if (!base_ || !exponent_) {
+            throw std::invalid_argument("PowerNode base and exponent cannot be null");
+        }
+    }
+
+public:
+    const std::shared_ptr<const SymbolicNode>& base() const noexcept { return base_; }
+    const std::shared_ptr<const SymbolicNode>& exponent() const noexcept {
+        return exponent_;
+    }
 
     int type_priority() const override { return 0; }
 
@@ -558,24 +708,24 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, base->hash());
-        hash_combine(seed, exponent->hash());
+        hash_combine(seed, base_->hash());
+        hash_combine(seed, exponent_->hash());
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const PowerNode&>(other);
 
-        int cmp_exp = exponent->compare(*o.exponent);
+        int cmp_exp = exponent_->compare(*o.exponent_);
         if (cmp_exp != 0) return cmp_exp > 0 ? -1 : 1;
 
-        return base->compare(*o.base);
+        return base_->compare(*o.base_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<PowerNode>(base->clone(), exponent->clone());
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<PowerNode>(base_->clone(), exponent_->clone());
     }
 };
 
@@ -614,11 +764,26 @@ public:
         ComplexArg                           ///< 复数辐角 arg(z)
     };
 
-    FuncType type;                                          ///< 函数类型
-    std::vector<std::shared_ptr<SymbolicNode>> arguments;   ///< 函数参数列表
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    FunctionNode(FuncType t, std::vector<std::shared_ptr<SymbolicNode>> args)
-        : type(t), arguments(std::move(args)) {}
+    const FuncType type_;
+    const std::vector<std::shared_ptr<const SymbolicNode>> arguments_;
+
+    FunctionNode(FuncType t, std::vector<std::shared_ptr<const SymbolicNode>> args)
+        : type_(t), arguments_(std::move(args)) {
+        for (const auto& arg : arguments_) {
+            if (!arg) {
+                throw std::invalid_argument("FunctionNode argument cannot be null");
+            }
+        }
+    }
+
+public:
+    FuncType type() const noexcept { return type_; }
+    const std::vector<std::shared_ptr<const SymbolicNode>>& arguments() const noexcept {
+        return arguments_;
+    }
 
     int type_priority() const override { return 2; }
 
@@ -626,8 +791,8 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, static_cast<size_t>(type));
-        for (const auto& arg : arguments) {
+        hash_combine(seed, static_cast<size_t>(type_));
+        for (const auto& arg : arguments_) {
             hash_combine(seed, arg->hash());
         }
         return seed;
@@ -635,25 +800,25 @@ protected:
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const FunctionNode&>(other);
-        if (type != o.type) {
-            return static_cast<int>(type) < static_cast<int>(o.type) ? -1 : 1;
+        if (type_ != o.type_) {
+            return static_cast<int>(type_) < static_cast<int>(o.type_) ? -1 : 1;
         }
-        if (arguments.size() != o.arguments.size()) {
-            return arguments.size() < o.arguments.size() ? -1 : 1;
+        if (arguments_.size() != o.arguments_.size()) {
+            return arguments_.size() < o.arguments_.size() ? -1 : 1;
         }
-        for (size_t i = 0; i < arguments.size(); ++i) {
-            int cmp = arguments[i]->compare(*o.arguments[i]);
+        for (size_t i = 0; i < arguments_.size(); ++i) {
+            int cmp = arguments_[i]->compare(*o.arguments_[i]);
             if (cmp != 0) return cmp;
         }
         return 0;
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<SymbolicNode> clone() const override {
-        std::vector<std::shared_ptr<SymbolicNode>> new_args;
-        for (const auto& arg : arguments) new_args.push_back(arg->clone());
-        return std::make_shared<FunctionNode>(type, std::move(new_args));
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_args;
+        for (const auto& arg : arguments_) new_args.push_back(arg->clone());
+        return lamina::detail::make_node<FunctionNode>(type_, std::move(new_args));
     }
 };
 
@@ -666,8 +831,8 @@ public:
  */
 class MatrixNode : public SymbolicNode {
 public:
-    using DenseStorage = std::vector<std::shared_ptr<SymbolicNode>>;   ///< 稠密存储（按行优先展开）
-    using SparseStorage = std::map<size_t, std::shared_ptr<SymbolicNode>>; ///< 稀疏存储（索引 -> 节点）
+    using DenseStorage = std::vector<std::shared_ptr<const SymbolicNode>>;   ///< 稠密存储（按行优先展开）
+    using SparseStorage = std::map<size_t, std::shared_ptr<const SymbolicNode>>; ///< 稀疏存储（索引 -> 节点）
 
     /**
      * @brief 验证并返回网格的列数（要求各行列数一致）。
@@ -675,15 +840,67 @@ public:
      * @return 列数
      * @throw std::invalid_argument 各行列数不一致时抛出
      */
-    static size_t validate_grid_columns(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid) {
-        if (grid.empty()) return 0;
+    static size_t validate_grid_columns(const std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>& grid) {
+        if (grid.empty()) {
+            throw std::invalid_argument("MatrixNode: matrix must have at least one row");
+        }
         size_t ncols = grid[0].size();
+        if (ncols == 0) {
+            throw std::invalid_argument("MatrixNode: matrix must have at least one column");
+        }
+        for (const auto& item : grid[0]) {
+            if (!item) {
+                throw std::invalid_argument("MatrixNode: matrix elements cannot be null");
+            }
+        }
         for (size_t i = 1; i < grid.size(); ++i) {
             if (grid[i].size() != ncols) {
                 throw std::invalid_argument("MatrixNode: all rows must have the same number of columns");
             }
+            for (const auto& item : grid[i]) {
+                if (!item) {
+                    throw std::invalid_argument("MatrixNode: matrix elements cannot be null");
+                }
+            }
         }
         return ncols;
+    }
+
+    static DenseStorage validate_dense_storage(size_t r, size_t c, DenseStorage dense) {
+        if (r == 0 || c == 0) {
+            throw std::invalid_argument("MatrixNode: matrix dimensions must be non-zero");
+        }
+        if (r > std::numeric_limits<size_t>::max() / c) {
+            throw std::length_error("MatrixNode: matrix dimensions overflow");
+        }
+        if (dense.size() != r * c) {
+            throw std::invalid_argument("MatrixNode: dense storage size does not match dimensions");
+        }
+        for (const auto& item : dense) {
+            if (!item) {
+                throw std::invalid_argument("MatrixNode: dense storage elements cannot be null");
+            }
+        }
+        return dense;
+    }
+
+    static SparseStorage validate_sparse_storage(size_t r, size_t c, SparseStorage sparse) {
+        if (r == 0 || c == 0) {
+            throw std::invalid_argument("MatrixNode: matrix dimensions must be non-zero");
+        }
+        if (r > std::numeric_limits<size_t>::max() / c) {
+            throw std::length_error("MatrixNode: matrix dimensions overflow");
+        }
+        const size_t total = r * c;
+        for (const auto& [idx, item] : sparse) {
+            if (idx >= total) {
+                throw std::invalid_argument("MatrixNode: sparse storage index is out of bounds");
+            }
+            if (!item) {
+                throw std::invalid_argument("MatrixNode: sparse storage elements cannot be null");
+            }
+        }
+        return sparse;
     }
 
     /**
@@ -694,22 +911,32 @@ public:
      * @return 稠密或稀疏存储
      */
     static std::variant<DenseStorage, SparseStorage> create_storage_from_grid(
-        const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements, size_t ncols);
+        const std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>& grid, size_t total_elements, size_t ncols);
 
-    const size_t rows; ///< 行数
-    const size_t cols; ///< 列数
-    const std::variant<DenseStorage, SparseStorage> storage; ///< 实际存储
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    MatrixNode(const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid)
-        : rows(grid.size()),
-          cols(grid.empty() ? 0 : validate_grid_columns(grid)),
-          storage(create_storage_from_grid(grid, rows * cols, cols)) {}
+    const size_t rows_;
+    const size_t cols_;
+    const std::variant<DenseStorage, SparseStorage> storage_;
+
+    MatrixNode(const std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>& grid)
+        : rows_(grid.size()),
+          cols_(validate_grid_columns(grid)),
+          storage_(create_storage_from_grid(grid, rows_ * cols_, cols_)) {}
 
     MatrixNode(size_t r, size_t c, DenseStorage dense)
-        : storage(std::move(dense)), rows(r), cols(c) {}
+        : rows_(r), cols_(c), storage_(validate_dense_storage(r, c, std::move(dense))) {}
 
     MatrixNode(size_t r, size_t c, SparseStorage sparse)
-        : storage(std::move(sparse)), rows(r), cols(c) {}
+        : rows_(r), cols_(c), storage_(validate_sparse_storage(r, c, std::move(sparse))) {}
+
+public:
+    size_t rows() const noexcept { return rows_; }
+    size_t cols() const noexcept { return cols_; }
+    const std::variant<DenseStorage, SparseStorage>& storage() const noexcept {
+        return storage_;
+    }
 
     int type_priority() const override { return 6; }
 
@@ -717,11 +944,11 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, rows);
-        hash_combine(seed, cols);
+        hash_combine(seed, rows_);
+        hash_combine(seed, cols_);
 
-        if (std::holds_alternative<DenseStorage>(storage)) {
-            const auto& dense = std::get<DenseStorage>(storage);
+        if (std::holds_alternative<DenseStorage>(storage_)) {
+            const auto& dense = std::get<DenseStorage>(storage_);
             for (size_t i = 0; i < dense.size(); ++i) {
                 if (dense[i] && !dense[i]->is_zero()) {
                     hash_combine(seed, i);
@@ -729,7 +956,7 @@ protected:
                 }
             }
         } else {
-            const auto& sparse = std::get<SparseStorage>(storage);
+            const auto& sparse = std::get<SparseStorage>(storage_);
             for (const auto& [idx, val] : sparse) {
 
                 if (val && !val->is_zero()) {
@@ -743,11 +970,11 @@ protected:
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const MatrixNode&>(other);
-        if (rows != o.rows) return rows < o.rows ? -1 : 1;
-        if (cols != o.cols) return cols < o.cols ? -1 : 1;
+        if (rows_ != o.rows_) return rows_ < o.rows_ ? -1 : 1;
+        if (cols_ != o.cols_) return cols_ < o.cols_ ? -1 : 1;
 
-        for (size_t r = 0; r < rows; ++r) {
-            for (size_t c = 0; c < cols; ++c) {
+        for (size_t r = 0; r < rows_; ++r) {
+            for (size_t c = 0; c < cols_; ++c) {
                 auto v1 = this->get(r, c);
                 auto v2 = o.get(r, c);
 
@@ -766,26 +993,24 @@ protected:
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        if (std::holds_alternative<DenseStorage>(storage)) {
-            const auto& dense = std::get<DenseStorage>(storage);
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        if (std::holds_alternative<DenseStorage>(storage_)) {
+            const auto& dense = std::get<DenseStorage>(storage_);
             DenseStorage new_dense;
             new_dense.reserve(dense.size());
-            // dense 存储允许保留 nullptr 表示零元素，clone 时必须保留这种空槽，
-            // 不能直接调用 e->clone() 触发空指针解引用。
             for (const auto& e : dense) {
-                new_dense.push_back(e ? e->clone() : nullptr);
+                new_dense.push_back(e->clone());
             }
-            return std::make_shared<MatrixNode>(rows, cols, std::move(new_dense));
+            return lamina::detail::make_node<MatrixNode>(rows_, cols_, std::move(new_dense));
         } else {
-            const auto& sparse = std::get<SparseStorage>(storage);
+            const auto& sparse = std::get<SparseStorage>(storage_);
             SparseStorage new_sparse;
             for(const auto& [idx, node] : sparse) {
-                new_sparse[idx] = node ? node->clone() : nullptr;
+                new_sparse[idx] = node->clone();
             }
-            return std::make_shared<MatrixNode>(rows, cols, std::move(new_sparse));
+            return lamina::detail::make_node<MatrixNode>(rows_, cols_, std::move(new_sparse));
         }
     }
 
@@ -795,29 +1020,29 @@ public:
      * @param c 列索引（从 0 开始）
      * @return 对应节点，越界返回 nullptr，稀疏缺失返回零节点
      */
-    std::shared_ptr<SymbolicNode> get(size_t r, size_t c) const {
-        if (r >= rows || c >= cols) return nullptr;
+    std::shared_ptr<const SymbolicNode> get(size_t r, size_t c) const {
+        if (r >= rows_ || c >= cols_) return nullptr;
 
-        size_t idx = r * cols + c;
-        if (std::holds_alternative<DenseStorage>(storage)) {
-            return std::get<DenseStorage>(storage)[idx];
+        size_t idx = r * cols_ + c;
+        if (std::holds_alternative<DenseStorage>(storage_)) {
+            return std::get<DenseStorage>(storage_)[idx];
         } else {
-            const auto& sparse = std::get<SparseStorage>(storage);
+            const auto& sparse = std::get<SparseStorage>(storage_);
             auto it = sparse.find(idx);
             if (it != sparse.end()) return it->second;
-            return std::make_shared<NumberNode>(0.0);
+            return lamina::detail::make_node<NumberNode>(0.0);
         }
     }
 
     /** @brief 判断当前矩阵是否使用稀疏存储。 */
-    bool is_sparse() const { return std::holds_alternative<SparseStorage>(storage); }
+    bool is_sparse() const { return std::holds_alternative<SparseStorage>(storage_); }
 
 private:
 
 };
 
 inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixNode::create_storage_from_grid(
-    const std::vector<std::vector<std::shared_ptr<SymbolicNode>>>& grid, size_t total_elements, size_t ncols) {
+    const std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>& grid, size_t total_elements, size_t ncols) {
 
     size_t non_zeros = 0;
     for (const auto& row : grid) {
@@ -857,44 +1082,48 @@ inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixN
  */
 class RelationalNode : public SymbolicNode {
 public:
-    /** @brief 关系运算符类型 */
-    enum class Op {
-        EQ,   ///< 等于
-        NEQ,  ///< 不等于
-        LT,   ///< 小于
-        GT,   ///< 大于
-        LEQ,  ///< 小于等于
-        GEQ   ///< 大于等于
-    };
+    using Op = lamina::RelationOp;
 
-    std::shared_ptr<SymbolicNode> left;  ///< 左操作数
-    std::shared_ptr<SymbolicNode> right; ///< 右操作数
-    Op op;                               ///< 关系运算符
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    RelationalNode(std::shared_ptr<SymbolicNode> l, std::shared_ptr<SymbolicNode> r, Op o)
-        : left(std::move(l)), right(std::move(r)), op(o) {}
+    const std::shared_ptr<const SymbolicNode> left_;
+    const std::shared_ptr<const SymbolicNode> right_;
+    const Op op_;
 
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    RelationalNode(std::shared_ptr<const SymbolicNode> l, std::shared_ptr<const SymbolicNode> r, Op o)
+        : left_(std::move(l)), right_(std::move(r)), op_(o) {
+        if (!left_ || !right_) {
+            throw std::invalid_argument("RelationalNode operands cannot be null");
+        }
+    }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<RelationalNode>(left->clone(), right->clone(), op);
+public:
+    const std::shared_ptr<const SymbolicNode>& left() const noexcept { return left_; }
+    const std::shared_ptr<const SymbolicNode>& right() const noexcept { return right_; }
+    Op op() const noexcept { return op_; }
+
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<RelationalNode>(left_->clone(), right_->clone(), op_);
     }
 
     int type_priority() const override { return 100; }
 
     std::size_t compute_hash() const override {
-        std::size_t h = std::hash<int>{}((int)op);
-        hash_combine(h, left->hash());
-        hash_combine(h, right->hash());
+        std::size_t h = std::hash<int>{}((int)op_);
+        hash_combine(h, left_->hash());
+        hash_combine(h, right_->hash());
         return h;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const RelationalNode&>(other);
-        if (op != o.op) return (int)op < (int)o.op ? -1 : 1;
-        int cmp = left->compare(*o.left);
+        if (op_ != o.op_) return (int)op_ < (int)o.op_ ? -1 : 1;
+        int cmp = left_->compare(*o.left_);
         if (cmp != 0) return cmp;
-        return right->compare(*o.right);
+        return right_->compare(*o.right_);
     }
 
     /**
@@ -928,47 +1157,62 @@ public:
         Implies  ///< 逻辑蕴含 A ⇒ B
     };
 
-    std::shared_ptr<SymbolicNode> left;  ///< 左操作数
-    std::shared_ptr<SymbolicNode> right; ///< 右操作数
-    Op op;                               ///< 逻辑运算符
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
 
-    LogicalNode(std::shared_ptr<SymbolicNode> l, std::shared_ptr<SymbolicNode> r, Op o)
-        : left(std::move(l)), right(std::move(r)), op(o) {}
+    const std::shared_ptr<const SymbolicNode> left_;
+    const std::shared_ptr<const SymbolicNode> right_;
+    const Op op_;
 
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    LogicalNode(std::shared_ptr<const SymbolicNode> l, std::shared_ptr<const SymbolicNode> r, Op o)
+        : left_(std::move(l)), right_(std::move(r)), op_(o) {
+        if (!left_) {
+            throw std::invalid_argument("LogicalNode left operand cannot be null");
+        }
+        if (op_ != Op::Not && !right_) {
+            throw std::invalid_argument("LogicalNode binary right operand cannot be null");
+        }
+    }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<LogicalNode>(
-            left ? left->clone() : nullptr,
-            right ? right->clone() : nullptr,
-            op);
+public:
+    const std::shared_ptr<const SymbolicNode>& left() const noexcept { return left_; }
+    const std::shared_ptr<const SymbolicNode>& right() const noexcept { return right_; }
+    Op op() const noexcept { return op_; }
+
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<LogicalNode>(
+            left_ ? left_->clone() : nullptr,
+            right_ ? right_->clone() : nullptr,
+            op_);
     }
 
     int type_priority() const override { return 101; }
 
     std::size_t compute_hash() const override {
-        std::size_t h = std::hash<int>{}((int)op);
-        if (left) hash_combine(h, left->hash());
-        if (right) hash_combine(h, right->hash());
+        std::size_t h = std::hash<int>{}((int)op_);
+        if (left_) hash_combine(h, left_->hash());
+        if (right_) hash_combine(h, right_->hash());
         return h;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const LogicalNode&>(other);
-        if (op != o.op) return (int)op < (int)o.op ? -1 : 1;
+        if (op_ != o.op_) return (int)op_ < (int)o.op_ ? -1 : 1;
         /// 处理一元 Not 运算（right 为 nullptr）
-        bool l_null = !left;
-        bool ol_null = !o.left;
+        bool l_null = !left_;
+        bool ol_null = !o.left_;
         if (l_null != ol_null) return l_null ? -1 : 1;
         if (!l_null) {
-            int cmp = left->compare(*o.left);
+            int cmp = left_->compare(*o.left_);
             if (cmp != 0) return cmp;
         }
-        bool r_null = !right;
-        bool or_null = !o.right;
+        bool r_null = !right_;
+        bool or_null = !o.right_;
         if (r_null != or_null) return r_null ? -1 : 1;
         if (!r_null) {
-            return right->compare(*o.right);
+            return right_->compare(*o.right_);
         }
         return 0;
     }
@@ -999,20 +1243,38 @@ class PiecewiseNode : public SymbolicNode {
 public:
     /** @brief 分支结构，包含表达式和对应条件。 */
     struct Branch {
-        std::shared_ptr<SymbolicNode> expression; ///< 分支值
-        std::shared_ptr<SymbolicNode> condition;  ///< 条件（RelationalNode 或 LogicalNode）
+        std::shared_ptr<const SymbolicNode> expression; ///< 分支值
+        std::shared_ptr<const SymbolicNode> condition;  ///< 条件（RelationalNode 或 LogicalNode）
     };
 
-    std::vector<Branch> branches;                  ///< 有序分支列表
-    std::shared_ptr<SymbolicNode> default_expr;    ///< 可选的默认表达式（所有条件不满足时）
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::vector<Branch> branches_;
+    const std::shared_ptr<const SymbolicNode> default_expr_;
 
     /**
      * @brief 构造分段函数节点。
      * @param br 分支列表
      * @param def 默认表达式（可为 nullptr）
      */
-    PiecewiseNode(std::vector<Branch> br, std::shared_ptr<SymbolicNode> def = nullptr)
-        : branches(std::move(br)), default_expr(std::move(def)) {}
+    PiecewiseNode(std::vector<Branch> br, std::shared_ptr<const SymbolicNode> def = nullptr)
+        : branches_(std::move(br)), default_expr_(std::move(def)) {
+        if (branches_.empty()) {
+            throw std::invalid_argument("PiecewiseNode requires at least one branch");
+        }
+        for (const auto& branch : branches_) {
+            if (!branch.expression || !branch.condition) {
+                throw std::invalid_argument("PiecewiseNode branch fields cannot be null");
+            }
+        }
+    }
+
+public:
+    const std::vector<Branch>& branches() const noexcept { return branches_; }
+    const std::shared_ptr<const SymbolicNode>& default_expr() const noexcept {
+        return default_expr_;
+    }
 
     int type_priority() const override { return 7; }
 
@@ -1020,47 +1282,47 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        for (const auto& b : branches) {
+        for (const auto& b : branches_) {
             hash_combine(seed, b.expression->hash());
             hash_combine(seed, b.condition->hash());
         }
-        if (default_expr) {
-            hash_combine(seed, default_expr->hash());
+        if (default_expr_) {
+            hash_combine(seed, default_expr_->hash());
         }
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const PiecewiseNode&>(other);
-        if (branches.size() != o.branches.size()) {
-            return branches.size() < o.branches.size() ? -1 : 1;
+        if (branches_.size() != o.branches_.size()) {
+            return branches_.size() < o.branches_.size() ? -1 : 1;
         }
-        for (size_t i = 0; i < branches.size(); ++i) {
-            int cmp = branches[i].expression->compare(*o.branches[i].expression);
+        for (size_t i = 0; i < branches_.size(); ++i) {
+            int cmp = branches_[i].expression->compare(*o.branches_[i].expression);
             if (cmp != 0) return cmp;
-            cmp = branches[i].condition->compare(*o.branches[i].condition);
+            cmp = branches_[i].condition->compare(*o.branches_[i].condition);
             if (cmp != 0) return cmp;
         }
-        bool has_def = (default_expr != nullptr);
-        bool o_has_def = (o.default_expr != nullptr);
+        bool has_def = (default_expr_ != nullptr);
+        bool o_has_def = (o.default_expr_ != nullptr);
         if (has_def != o_has_def) return has_def ? 1 : -1;
         if (has_def && o_has_def) {
-            return default_expr->compare(*o.default_expr);
+            return default_expr_->compare(*o.default_expr_);
         }
         return 0;
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
+    std::shared_ptr<const SymbolicNode> clone() const override {
         std::vector<Branch> new_branches;
-        new_branches.reserve(branches.size());
-        for (const auto& b : branches) {
+        new_branches.reserve(branches_.size());
+        for (const auto& b : branches_) {
             new_branches.push_back({b.expression->clone(), b.condition->clone()});
         }
-        auto new_def = default_expr ? default_expr->clone() : nullptr;
-        return std::make_shared<PiecewiseNode>(std::move(new_branches), std::move(new_def));
+        auto new_def = default_expr_ ? default_expr_->clone() : nullptr;
+        return lamina::detail::make_node<PiecewiseNode>(std::move(new_branches), std::move(new_def));
     }
 };
 
@@ -1068,11 +1330,13 @@ public:
  * @brief 求和节点，表示符号有限/无限求和 ∑_{k=a}^{b} f(k)。
  */
 class SummationNode : public SymbolicNode {
-public:
-    std::shared_ptr<SymbolicNode> body;        ///< 通项 f(k)
-    std::string index_var;                      ///< 求和指标变量名
-    std::shared_ptr<SymbolicNode> lower_bound;  ///< 下界
-    std::shared_ptr<SymbolicNode> upper_bound;  ///< 上界（可为 Infinity）
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::shared_ptr<const SymbolicNode> body_;
+    const std::string index_var_;
+    const std::shared_ptr<const SymbolicNode> lower_bound_;
+    const std::shared_ptr<const SymbolicNode> upper_bound_;
 
     /**
      * @brief 构造求和节点。
@@ -1081,10 +1345,27 @@ public:
      * @param lo 下界
      * @param hi 上界
      */
-    SummationNode(std::shared_ptr<SymbolicNode> b, std::string idx,
-                  std::shared_ptr<SymbolicNode> lo, std::shared_ptr<SymbolicNode> hi)
-        : body(std::move(b)), index_var(std::move(idx)),
-          lower_bound(std::move(lo)), upper_bound(std::move(hi)) {}
+    SummationNode(std::shared_ptr<const SymbolicNode> b, std::string idx,
+                  std::shared_ptr<const SymbolicNode> lo, std::shared_ptr<const SymbolicNode> hi)
+        : body_(std::move(b)), index_var_(std::move(idx)),
+          lower_bound_(std::move(lo)), upper_bound_(std::move(hi)) {
+        if (!body_ || !lower_bound_ || !upper_bound_) {
+            throw std::invalid_argument("SummationNode children cannot be null");
+        }
+        if (index_var_.empty()) {
+            throw std::invalid_argument("SummationNode index variable cannot be empty");
+        }
+    }
+
+public:
+    const std::shared_ptr<const SymbolicNode>& body() const noexcept { return body_; }
+    const std::string& index_var() const noexcept { return index_var_; }
+    const std::shared_ptr<const SymbolicNode>& lower_bound() const noexcept {
+        return lower_bound_;
+    }
+    const std::shared_ptr<const SymbolicNode>& upper_bound() const noexcept {
+        return upper_bound_;
+    }
 
     int type_priority() const override { return 8; }
 
@@ -1092,30 +1373,30 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, body->hash());
-        hash_combine(seed, std::hash<std::string>{}(index_var));
-        hash_combine(seed, lower_bound->hash());
-        hash_combine(seed, upper_bound->hash());
+        hash_combine(seed, body_->hash());
+        hash_combine(seed, std::hash<std::string>{}(index_var_));
+        hash_combine(seed, lower_bound_->hash());
+        hash_combine(seed, upper_bound_->hash());
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const SummationNode&>(other);
-        int cmp = index_var.compare(o.index_var);
+        int cmp = index_var_.compare(o.index_var_);
         if (cmp != 0) return cmp;
-        cmp = lower_bound->compare(*o.lower_bound);
+        cmp = lower_bound_->compare(*o.lower_bound_);
         if (cmp != 0) return cmp;
-        cmp = upper_bound->compare(*o.upper_bound);
+        cmp = upper_bound_->compare(*o.upper_bound_);
         if (cmp != 0) return cmp;
-        return body->compare(*o.body);
+        return body_->compare(*o.body_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<SummationNode>(
-            body->clone(), index_var, lower_bound->clone(), upper_bound->clone());
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<SummationNode>(
+            body_->clone(), index_var_, lower_bound_->clone(), upper_bound_->clone());
     }
 };
 
@@ -1123,11 +1404,13 @@ public:
  * @brief 连乘节点，表示符号有限/无限连乘 ∏_{k=a}^{b} f(k)。
  */
 class ProductNode_Op : public SymbolicNode {
-public:
-    std::shared_ptr<SymbolicNode> body;        ///< 通项因子 f(k)
-    std::string index_var;                      ///< 连乘指标变量名
-    std::shared_ptr<SymbolicNode> lower_bound;  ///< 下界
-    std::shared_ptr<SymbolicNode> upper_bound;  ///< 上界（可为 Infinity）
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::shared_ptr<const SymbolicNode> body_;
+    const std::string index_var_;
+    const std::shared_ptr<const SymbolicNode> lower_bound_;
+    const std::shared_ptr<const SymbolicNode> upper_bound_;
 
     /**
      * @brief 构造连乘节点。
@@ -1136,10 +1419,27 @@ public:
      * @param lo 下界
      * @param hi 上界
      */
-    ProductNode_Op(std::shared_ptr<SymbolicNode> b, std::string idx,
-                   std::shared_ptr<SymbolicNode> lo, std::shared_ptr<SymbolicNode> hi)
-        : body(std::move(b)), index_var(std::move(idx)),
-          lower_bound(std::move(lo)), upper_bound(std::move(hi)) {}
+    ProductNode_Op(std::shared_ptr<const SymbolicNode> b, std::string idx,
+                   std::shared_ptr<const SymbolicNode> lo, std::shared_ptr<const SymbolicNode> hi)
+        : body_(std::move(b)), index_var_(std::move(idx)),
+          lower_bound_(std::move(lo)), upper_bound_(std::move(hi)) {
+        if (!body_ || !lower_bound_ || !upper_bound_) {
+            throw std::invalid_argument("ProductNode children cannot be null");
+        }
+        if (index_var_.empty()) {
+            throw std::invalid_argument("ProductNode index variable cannot be empty");
+        }
+    }
+
+public:
+    const std::shared_ptr<const SymbolicNode>& body() const noexcept { return body_; }
+    const std::string& index_var() const noexcept { return index_var_; }
+    const std::shared_ptr<const SymbolicNode>& lower_bound() const noexcept {
+        return lower_bound_;
+    }
+    const std::shared_ptr<const SymbolicNode>& upper_bound() const noexcept {
+        return upper_bound_;
+    }
 
     int type_priority() const override { return 9; }
 
@@ -1147,30 +1447,30 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, body->hash());
-        hash_combine(seed, std::hash<std::string>{}(index_var));
-        hash_combine(seed, lower_bound->hash());
-        hash_combine(seed, upper_bound->hash());
+        hash_combine(seed, body_->hash());
+        hash_combine(seed, std::hash<std::string>{}(index_var_));
+        hash_combine(seed, lower_bound_->hash());
+        hash_combine(seed, upper_bound_->hash());
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const ProductNode_Op&>(other);
-        int cmp = index_var.compare(o.index_var);
+        int cmp = index_var_.compare(o.index_var_);
         if (cmp != 0) return cmp;
-        cmp = lower_bound->compare(*o.lower_bound);
+        cmp = lower_bound_->compare(*o.lower_bound_);
         if (cmp != 0) return cmp;
-        cmp = upper_bound->compare(*o.upper_bound);
+        cmp = upper_bound_->compare(*o.upper_bound_);
         if (cmp != 0) return cmp;
-        return body->compare(*o.body);
+        return body_->compare(*o.body_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<ProductNode_Op>(
-            body->clone(), index_var, lower_bound->clone(), upper_bound->clone());
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<ProductNode_Op>(
+            body_->clone(), index_var_, lower_bound_->clone(), upper_bound_->clone());
     }
 };
 
@@ -1190,10 +1490,13 @@ public:
         ZTransform       ///< Z 变换 Z{f[n]}(z)
     };
 
-    TransformType transform_type;              ///< 变换类型
-    std::shared_ptr<SymbolicNode> body;        ///< 被变换的表达式
-    std::string source_var;                    ///< 源变量（如 t、n）
-    std::string target_var;                    ///< 目标变量（如 s、ω、z）
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const TransformType transform_type_;
+    const std::shared_ptr<const SymbolicNode> body_;
+    const std::string source_var_;
+    const std::string target_var_;
 
     /**
      * @brief 构造积分变换节点。
@@ -1202,10 +1505,23 @@ public:
      * @param src 源变量名
      * @param tgt 目标变量名
      */
-    TransformNode(TransformType tt, std::shared_ptr<SymbolicNode> b,
+    TransformNode(TransformType tt, std::shared_ptr<const SymbolicNode> b,
                   std::string src, std::string tgt)
-        : transform_type(tt), body(std::move(b)),
-          source_var(std::move(src)), target_var(std::move(tgt)) {}
+        : transform_type_(tt), body_(std::move(b)),
+          source_var_(std::move(src)), target_var_(std::move(tgt)) {
+        if (!body_) {
+            throw std::invalid_argument("TransformNode body cannot be null");
+        }
+        if (source_var_.empty() || target_var_.empty()) {
+            throw std::invalid_argument("TransformNode variables cannot be empty");
+        }
+    }
+
+public:
+    TransformType transform_type() const noexcept { return transform_type_; }
+    const std::shared_ptr<const SymbolicNode>& body() const noexcept { return body_; }
+    const std::string& source_var() const noexcept { return source_var_; }
+    const std::string& target_var() const noexcept { return target_var_; }
 
     int type_priority() const override { return 11; }
 
@@ -1213,31 +1529,31 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, static_cast<std::size_t>(transform_type));
-        hash_combine(seed, body->hash());
-        hash_combine(seed, std::hash<std::string>{}(source_var));
-        hash_combine(seed, std::hash<std::string>{}(target_var));
+        hash_combine(seed, static_cast<std::size_t>(transform_type_));
+        hash_combine(seed, body_->hash());
+        hash_combine(seed, std::hash<std::string>{}(source_var_));
+        hash_combine(seed, std::hash<std::string>{}(target_var_));
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const TransformNode&>(other);
-        if (transform_type != o.transform_type) {
-            return static_cast<int>(transform_type) < static_cast<int>(o.transform_type) ? -1 : 1;
+        if (transform_type_ != o.transform_type_) {
+            return static_cast<int>(transform_type_) < static_cast<int>(o.transform_type_) ? -1 : 1;
         }
-        int cmp = source_var.compare(o.source_var);
+        int cmp = source_var_.compare(o.source_var_);
         if (cmp != 0) return cmp;
-        cmp = target_var.compare(o.target_var);
+        cmp = target_var_.compare(o.target_var_);
         if (cmp != 0) return cmp;
-        return body->compare(*o.body);
+        return body_->compare(*o.body_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<TransformNode>(
-            transform_type, body->clone(), source_var, target_var);
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<TransformNode>(
+            transform_type_, body_->clone(), source_var_, target_var_);
     }
 };
 
@@ -1254,10 +1570,13 @@ public:
         Exists  ///< 存在量词 ∃
     };
 
-    Type quantifier_type;                      ///< 量词类型
-    std::string bound_var;                     ///< 约束变量名
-    std::shared_ptr<SymbolicNode> domain;      ///< 定义域（集合/区间表达式）
-    std::shared_ptr<SymbolicNode> predicate;   ///< 谓词（布尔表达式）
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const Type quantifier_type_;
+    const std::string bound_var_;
+    const std::shared_ptr<const SymbolicNode> domain_;
+    const std::shared_ptr<const SymbolicNode> predicate_;
 
     /**
      * @brief 构造量词节点。
@@ -1267,9 +1586,24 @@ public:
      * @param pred 谓词表达式
      */
     QuantifierNode(Type qt, std::string var,
-                   std::shared_ptr<SymbolicNode> dom, std::shared_ptr<SymbolicNode> pred)
-        : quantifier_type(qt), bound_var(std::move(var)),
-          domain(std::move(dom)), predicate(std::move(pred)) {}
+                   std::shared_ptr<const SymbolicNode> dom, std::shared_ptr<const SymbolicNode> pred)
+        : quantifier_type_(qt), bound_var_(std::move(var)),
+          domain_(std::move(dom)), predicate_(std::move(pred)) {
+        if (!domain_ || !predicate_) {
+            throw std::invalid_argument("QuantifierNode domain and predicate cannot be null");
+        }
+        if (bound_var_.empty()) {
+            throw std::invalid_argument("QuantifierNode bound variable cannot be empty");
+        }
+    }
+
+public:
+    Type quantifier_type() const noexcept { return quantifier_type_; }
+    const std::string& bound_var() const noexcept { return bound_var_; }
+    const std::shared_ptr<const SymbolicNode>& domain() const noexcept { return domain_; }
+    const std::shared_ptr<const SymbolicNode>& predicate() const noexcept {
+        return predicate_;
+    }
 
     int type_priority() const override { return 102; }
 
@@ -1277,31 +1611,31 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, static_cast<std::size_t>(quantifier_type));
-        hash_combine(seed, std::hash<std::string>{}(bound_var));
-        hash_combine(seed, domain->hash());
-        hash_combine(seed, predicate->hash());
+        hash_combine(seed, static_cast<std::size_t>(quantifier_type_));
+        hash_combine(seed, std::hash<std::string>{}(bound_var_));
+        hash_combine(seed, domain_->hash());
+        hash_combine(seed, predicate_->hash());
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const QuantifierNode&>(other);
-        if (quantifier_type != o.quantifier_type) {
-            return static_cast<int>(quantifier_type) < static_cast<int>(o.quantifier_type) ? -1 : 1;
+        if (quantifier_type_ != o.quantifier_type_) {
+            return static_cast<int>(quantifier_type_) < static_cast<int>(o.quantifier_type_) ? -1 : 1;
         }
-        int cmp = bound_var.compare(o.bound_var);
+        int cmp = bound_var_.compare(o.bound_var_);
         if (cmp != 0) return cmp;
-        cmp = domain->compare(*o.domain);
+        cmp = domain_->compare(*o.domain_);
         if (cmp != 0) return cmp;
-        return predicate->compare(*o.predicate);
+        return predicate_->compare(*o.predicate_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<QuantifierNode>(
-            quantifier_type, bound_var, domain->clone(), predicate->clone());
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<QuantifierNode>(
+            quantifier_type_, bound_var_, domain_->clone(), predicate_->clone());
     }
 };
 
@@ -1311,10 +1645,12 @@ public:
  * 用于表示满足特定条件的元素集合。
  */
 class SetBuilderNode : public SymbolicNode {
-public:
-    std::string element_var;                   ///< 元素变量名
-    std::shared_ptr<SymbolicNode> domain;      ///< 基础集合/区间
-    std::shared_ptr<SymbolicNode> predicate;   ///< 成员条件
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::string element_var_;
+    const std::shared_ptr<const SymbolicNode> domain_;
+    const std::shared_ptr<const SymbolicNode> predicate_;
 
     /**
      * @brief 构造集合构造器节点。
@@ -1322,10 +1658,24 @@ public:
      * @param dom 定义域表达式
      * @param pred 成员条件表达式
      */
-    SetBuilderNode(std::string var, std::shared_ptr<SymbolicNode> dom,
-                   std::shared_ptr<SymbolicNode> pred)
-        : element_var(std::move(var)), domain(std::move(dom)),
-          predicate(std::move(pred)) {}
+    SetBuilderNode(std::string var, std::shared_ptr<const SymbolicNode> dom,
+                   std::shared_ptr<const SymbolicNode> pred)
+        : element_var_(std::move(var)), domain_(std::move(dom)),
+          predicate_(std::move(pred)) {
+        if (!domain_ || !predicate_) {
+            throw std::invalid_argument("SetBuilderNode domain and predicate cannot be null");
+        }
+        if (element_var_.empty()) {
+            throw std::invalid_argument("SetBuilderNode element variable cannot be empty");
+        }
+    }
+
+public:
+    const std::string& element_var() const noexcept { return element_var_; }
+    const std::shared_ptr<const SymbolicNode>& domain() const noexcept { return domain_; }
+    const std::shared_ptr<const SymbolicNode>& predicate() const noexcept {
+        return predicate_;
+    }
 
     int type_priority() const override { return 103; }
 
@@ -1333,104 +1683,127 @@ protected:
     std::size_t compute_hash() const override {
         std::size_t seed = 0;
         hash_combine(seed, type_priority());
-        hash_combine(seed, std::hash<std::string>{}(element_var));
-        hash_combine(seed, domain->hash());
-        hash_combine(seed, predicate->hash());
+        hash_combine(seed, std::hash<std::string>{}(element_var_));
+        hash_combine(seed, domain_->hash());
+        hash_combine(seed, predicate_->hash());
         return seed;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const SetBuilderNode&>(other);
-        int cmp = element_var.compare(o.element_var);
+        int cmp = element_var_.compare(o.element_var_);
         if (cmp != 0) return cmp;
-        cmp = domain->compare(*o.domain);
+        cmp = domain_->compare(*o.domain_);
         if (cmp != 0) return cmp;
-        return predicate->compare(*o.predicate);
+        return predicate_->compare(*o.predicate_);
     }
 
 public:
-    void accept(SymbolicVisitor& visitor) override { SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
-    std::shared_ptr<SymbolicNode> clone() const override {
-        return std::make_shared<SetBuilderNode>(
-            element_var, domain->clone(), predicate->clone());
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<SetBuilderNode>(
+            element_var_, domain_->clone(), predicate_->clone());
     }
 };
 
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::BigInt& v) { return std::make_shared<NumberNode>(v); }
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(const ::Rational& v) { return std::make_shared<NumberNode>(v); }
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_number(lmmc_real_t v) { return std::make_shared<NumberNode>(v); }
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_variable(const std::string& name) { return std::make_shared<VariableNode>(name); }
+#undef LAMINA_AST_NODE_FACTORY_FRIEND
 
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_add(std::vector<std::shared_ptr<SymbolicNode>> ops) {
-    if (ops.empty()) return create_number(0.0);
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_number(const ::BigInt& v) { return lamina::detail::make_node<NumberNode>(v); }
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_number(const ::Rational& v) { return lamina::detail::make_node<NumberNode>(v); }
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_number(lmmc_real_t v) { return lamina::detail::make_node<NumberNode>(v); }
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_variable(const std::string& name) { return lamina::detail::make_node<VariableNode>(name); }
+
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_add(std::vector<std::shared_ptr<const SymbolicNode>> ops) {
+    if (ops.empty()) return create_number(::BigInt(0));
+    for (const auto& op : ops) {
+        if (!op) {
+            throw std::invalid_argument("create_add operand cannot be null");
+        }
+    }
     if (ops.size() == 1) return ops[0];
 
-    std::vector<std::shared_ptr<SymbolicNode>> flat_ops;
+    std::vector<std::shared_ptr<const SymbolicNode>> flat_ops;
     flat_ops.reserve(ops.size());
     for (const auto& op : ops) {
         if (op->is_zero()) continue;
-        if (auto add = std::dynamic_pointer_cast<AddNode>(op)) {
-            flat_ops.insert(flat_ops.end(), add->operands.begin(), add->operands.end());
+        if (auto add = std::dynamic_pointer_cast<const AddNode>(op)) {
+            flat_ops.insert(flat_ops.end(), add->operands().begin(), add->operands().end());
         } else {
             flat_ops.push_back(op);
         }
     }
 
-    if (flat_ops.empty()) return create_number(0.0);
+    if (flat_ops.empty()) return create_number(::BigInt(0));
     if (flat_ops.size() == 1) return flat_ops[0];
-    return std::make_shared<AddNode>(std::move(flat_ops));
+    return lamina::detail::make_node<AddNode>(std::move(flat_ops));
 }
 
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_multiply(std::vector<std::shared_ptr<SymbolicNode>> ops) {
-    if (ops.empty()) return create_number(1.0);
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_multiply(std::vector<std::shared_ptr<const SymbolicNode>> ops) {
+    if (ops.empty()) return create_number(::BigInt(1));
 
     for (const auto& op : ops) {
+        if (!op) {
+            throw std::invalid_argument("create_multiply operand cannot be null");
+        }
         if (op->is_zero()) return op;
     }
 
     if (ops.size() == 1) return ops[0];
 
-    std::vector<std::shared_ptr<SymbolicNode>> flat_ops;
+    std::vector<std::shared_ptr<const SymbolicNode>> flat_ops;
     flat_ops.reserve(ops.size());
     for (const auto& op : ops) {
         if (op->is_one()) continue;
-        if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(op)) {
-            flat_ops.insert(flat_ops.end(), mul->operands.begin(), mul->operands.end());
+        if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(op)) {
+            flat_ops.insert(flat_ops.end(), mul->operands().begin(), mul->operands().end());
         } else {
             flat_ops.push_back(op);
         }
     }
 
-    if (flat_ops.empty()) return create_number(1.0);
+    if (flat_ops.empty()) return create_number(::BigInt(1));
     if (flat_ops.size() == 1) return flat_ops[0];
-    return std::make_shared<MultiplyNode>(std::move(flat_ops));
+    return lamina::detail::make_node<MultiplyNode>(std::move(flat_ops));
 }
 
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_power(std::shared_ptr<SymbolicNode> base, std::shared_ptr<SymbolicNode> exponent) {
-    if (!base || !exponent) return nullptr;
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_power(std::shared_ptr<const SymbolicNode> base, std::shared_ptr<const SymbolicNode> exponent) {
+    if (!base || !exponent) {
+        throw std::invalid_argument("create_power operands cannot be null");
+    }
     if (exponent->is_zero()) {
-        // 不能盲目把 x^0 折叠成 1：当 base 也为 0 时 0^0 是未定式，应保留节点。
+        // 不能盲目把 x^0 折叠成 1：base 可能为 0 时原表达式有定义域条件。
         if (base->is_zero()) {
-            return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
+            return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
         }
-        return create_number(1.0);
+        if (auto num = std::dynamic_pointer_cast<const NumberNode>(base)) {
+            if (!num->is_zero()) return create_number(::BigInt(1));
+        }
+        if (auto complex = std::dynamic_pointer_cast<const ComplexNode>(base)) {
+            auto real_num = std::dynamic_pointer_cast<const NumberNode>(complex->real());
+            auto imag_num = std::dynamic_pointer_cast<const NumberNode>(complex->imag());
+            if ((real_num && !real_num->is_zero()) || (imag_num && !imag_num->is_zero())) {
+                return create_number(::BigInt(1));
+            }
+        }
+        return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
     }
     if (exponent->is_one()) return base;
     if (base->is_zero()) {
         // 0^x = 0 仅当指数严格为正时才安全；x<=0 或符号未知时保留 PowerNode。
-        if (exponent->is_positive()) return create_number(0.0);
-        return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
+        if (exponent->is_positive()) return create_number(::BigInt(0));
+        return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
     }
-    if (base->is_one()) return create_number(1.0);
-    return std::make_shared<PowerNode>(std::move(base), std::move(exponent));
+    if (base->is_one()) return create_number(::BigInt(1));
+    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
 }
 
-inline std::shared_ptr<SymbolicNode> SymbolicFactory::create_complex(std::shared_ptr<SymbolicNode> real, std::shared_ptr<SymbolicNode> imag) {
-    if (!real) real = create_number(0.0);
-    if (!imag) imag = create_number(0.0);
+inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_complex(std::shared_ptr<const SymbolicNode> real, std::shared_ptr<const SymbolicNode> imag) {
+    if (!real || !imag) {
+        throw std::invalid_argument("create_complex operands cannot be null");
+    }
     if (imag->is_zero()) {
         return real;
     }
-    return std::make_shared<ComplexNode>(std::move(real), std::move(imag));
+    return lamina::detail::make_node<ComplexNode>(std::move(real), std::move(imag));
 }

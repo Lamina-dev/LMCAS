@@ -1,7 +1,7 @@
 #include "solver.hpp"
 #include "symbolic.hpp"
+#include "test_common.hpp"
 #include <iostream>
-#include <cassert>
 
 int main() {
     using namespace lamina;
@@ -23,7 +23,7 @@ int main() {
         for (auto& g : rgb) {
             std::cout << "  " << g.to_string() << std::endl;
         }
-        assert(!rgb.empty());
+        EXPECT_TRUE(!rgb.empty(), "reduced Groebner basis is non-empty");
         std::cout << "  [PASS]" << std::endl;
     }
 
@@ -40,7 +40,7 @@ int main() {
 
         bool member1 = Solver::ideal_membership(p1, gb, {"x", "y"});
         std::cout << "  x+y in ideal: " << (member1 ? "true" : "false") << std::endl;
-        assert(member1);
+        EXPECT_TRUE(member1, "original generator is in the ideal");
 
         auto test_poly = *SymbolicExpr::add(x, SymbolicExpr::number(1));
         bool member2 = Solver::ideal_membership(test_poly, gb, {"x", "y"});
@@ -67,10 +67,10 @@ int main() {
             std::cout << "    " << e.to_string() << std::endl;
         }
 
-        assert(!elim.empty());
+        EXPECT_TRUE(!elim.empty(), "elimination ideal is non-empty");
         std::cout << "  [PASS]" << std::endl;
     }
 
     std::cout << "\nAll advanced Groebner tests passed!" << std::endl;
-    return 0;
+    return TEST_REPORT();
 }

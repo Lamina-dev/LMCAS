@@ -27,30 +27,29 @@ using namespace lamina;
 // Helpers: create AST nodes
 // ============================================================
 
-static std::shared_ptr<SymbolicNode> make_var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
-static std::shared_ptr<SymbolicNode> make_power(
-    std::shared_ptr<SymbolicNode> base,
-    std::shared_ptr<SymbolicNode> exp) {
-    return std::make_shared<PowerNode>(std::move(base), std::move(exp));
+static std::shared_ptr<const SymbolicNode> make_power(
+    std::shared_ptr<const SymbolicNode> base,
+    std::shared_ptr<const SymbolicNode> exp) {
+    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exp));
 }
 
-static std::shared_ptr<SymbolicNode> make_function(
+static std::shared_ptr<const SymbolicNode> make_function(
     FunctionNode::FuncType type,
-    std::shared_ptr<SymbolicNode> arg) {
-    return std::make_shared<FunctionNode>(
-        type, std::vector<std::shared_ptr<SymbolicNode>>{std::move(arg)});
+    std::shared_ptr<const SymbolicNode> arg) {
+    return lamina::detail::make_node<FunctionNode>(
+        type, std::vector<std::shared_ptr<const SymbolicNode>>{std::move(arg)});
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<SymbolicNode> node) {
-    SymbolicExpr expr;
-    expr.root = std::move(node);
+static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
+    auto expr = lamina::detail::expression_from_node(std::move(node));
     return expr;
 }
 

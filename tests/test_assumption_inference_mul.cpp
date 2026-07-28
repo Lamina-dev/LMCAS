@@ -32,26 +32,25 @@ using namespace lamina;
 // Helpers: create nodes and expressions
 // ============================================================
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
-static std::shared_ptr<SymbolicNode> make_number_real(double val) {
-    return std::make_shared<NumberNode>(static_cast<lmmc_real_t>(val));
+static std::shared_ptr<const SymbolicNode> make_number_real(double val) {
+    return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
 }
 
-static std::shared_ptr<SymbolicNode> make_var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
-static std::shared_ptr<SymbolicNode> make_multiply(
-    std::vector<std::shared_ptr<SymbolicNode>> ops) {
-    return std::make_shared<MultiplyNode>(std::move(ops));
+static std::shared_ptr<const SymbolicNode> make_multiply(
+    std::vector<std::shared_ptr<const SymbolicNode>> ops) {
+    return lamina::detail::make_node<MultiplyNode>(std::move(ops));
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<SymbolicNode> node) {
-    SymbolicExpr expr;
-    expr.root = std::move(node);
+static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
+    auto expr = lamina::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -123,7 +122,7 @@ void test_property14a_zero_rational_and_float() {
 
     // Rational(0) * x
     {
-        auto zero_rat = std::make_shared<NumberNode>(Rational(0));
+        auto zero_rat = lamina::detail::make_node<NumberNode>(Rational(0));
         auto mul_node = make_multiply({zero_rat, make_var("x")});
         auto expr = wrap_expr(mul_node);
         EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
@@ -133,7 +132,7 @@ void test_property14a_zero_rational_and_float() {
     }
     // 0.0 * x
     {
-        auto zero_float = std::make_shared<NumberNode>(
+        auto zero_float = lamina::detail::make_node<NumberNode>(
             static_cast<lmmc_real_t>(0.0));
         auto mul_node = make_multiply({zero_float, make_var("x")});
         auto expr = wrap_expr(mul_node);
@@ -463,18 +462,15 @@ void test_property14c_zero_overrides_unknown() {
 // ============================================================
 
 void test_property14_empty_operands() {
-    TEST_CASE("Property 14: Empty MultiplyNode returns Unknown");
-    AssumptionContext ctx;
-    InferenceEngine engine(ctx);
-
-    auto mul_node = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{});
-    auto expr = wrap_expr(mul_node);
-
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
-        "Empty multiply: Positive Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
-        "Empty multiply: Negative Unknown");
+    TEST_CASE("Property 14: Empty MultiplyNode is rejected");
+    bool rejected = false;
+    try {
+        (void)lamina::detail::make_node<MultiplyNode>(
+            std::vector<std::shared_ptr<const SymbolicNode>>{});
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    EXPECT_TRUE(rejected, "Empty MultiplyNode violates the AST invariant");
 }
 
 void test_property14_single_positive_number() {
@@ -697,18 +693,15 @@ void test_property15_natural_domain_implies_integer() {
 }
 
 void test_property15_empty_multiply_domain() {
-    TEST_CASE("Property 15: Empty MultiplyNode returns Unknown domain");
-    AssumptionContext ctx;
-    InferenceEngine engine(ctx);
-
-    auto mul_node = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{});
-    auto expr = wrap_expr(mul_node);
-
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
-        "Empty multiply: Integer Unknown");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
-        "Empty multiply: Real Unknown");
+    TEST_CASE("Property 15: Empty MultiplyNode has no domain query state");
+    bool rejected = false;
+    try {
+        (void)lamina::detail::make_node<MultiplyNode>(
+            std::vector<std::shared_ptr<const SymbolicNode>>{});
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    EXPECT_TRUE(rejected, "Invalid empty products are rejected before inference");
 }
 
 void test_property15_rational_not_integer() {
@@ -717,7 +710,7 @@ void test_property15_rational_not_integer() {
     InferenceEngine engine(ctx);
 
     // multiply(Rational(1,2), 3)
-    auto rat_node = std::make_shared<NumberNode>(Rational(1, 2));
+    auto rat_node = lamina::detail::make_node<NumberNode>(Rational(1, 2));
     auto mul_node = make_multiply({rat_node, make_number(3)});
     auto expr = wrap_expr(mul_node);
 

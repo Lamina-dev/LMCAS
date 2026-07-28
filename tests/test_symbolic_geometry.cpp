@@ -11,10 +11,9 @@ void test_volume_revolution_x() {
         auto result = lamina::volume_of_revolution_x(x, zero, h);
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Cone volume result: " << s << std::endl;
-        // The result should contain h (the upper limit variable) and pi/3 factor (numeric ~1.0472)
+        // The result should keep the exact pi/3 factor.
         EXPECT_CONTAINS(s, {"h"}, "cone volume contains h");
-        // pi/3 ≈ 1.0472 — pi is folded into the numeric coefficient
-        EXPECT_CONTAINS(s, {"1.0472"}, "cone volume contains pi/3 factor");
+        EXPECT_CONTAINS(s, {"1/3", "pi"}, "cone volume contains exact pi/3 factor");
     }
 
     TEST_CASE("Volume of Revolution X: f(x) = sqrt(r^2 - x^2) on [-r, r] (sphere)");
@@ -31,9 +30,11 @@ void test_volume_revolution_x() {
         auto result = lamina::volume_of_revolution_x(fx, neg_r, r);
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Sphere volume result: " << s << std::endl;
-        // The result should contain r and a pi-derived factor (2*pi/3 ≈ 2.0944)
+        // The result should stay exact and must not leave the polynomial integral unevaluated.
         EXPECT_CONTAINS(s, {"r"}, "sphere volume contains r");
-        EXPECT_CONTAINS(s, {"2.0944"}, "sphere volume contains 2*pi/3 factor");
+        EXPECT_CONTAINS(s, {"pi"}, "sphere volume contains exact pi factor");
+        EXPECT_TRUE(s.find("integral(") == std::string::npos,
+                    "sphere volume polynomial integral is evaluated");
     }
 }
 
@@ -60,7 +61,8 @@ void test_arc_length_x() {
     TEST_CASE("Arc Length X: f(x) = x^2 on [0, 1]");
     {
         // f(x) = x^2, f'(x) = 2x
-        // Arc length = integral(sqrt(1 + 4x^2), 0, 1)
+        // Arc length = integral(sqrt(1 + 4x^2), 0, 1), outside the
+        // checked symbolic geometry support domain.
         auto x = SymbolicExpr::variable("x");
         auto fx = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto zero = SymbolicExpr::number(0);
@@ -68,7 +70,14 @@ void test_arc_length_x() {
         auto result = lamina::arc_length_x(fx, zero, one);
         std::string s = result ? result->to_string() : "null";
         std::cout << "  x^2 arc length result: " << s << std::endl;
-        EXPECT_TRUE(result != nullptr, "x^2 arc length is not null");
+        EXPECT_TRUE(result == nullptr,
+                    "legacy x^2 arc length unwraps unsupported checked result to nullptr");
+
+        auto checked = lamina::arc_length_x_checked(fx, zero, one);
+        EXPECT_TRUE(!checked.has_value(),
+                    "checked x^2 arc length rejects unsupported integral");
+        EXPECT_TRUE(checked.error().code == lamina::CasErrc::Inconclusive,
+                    "checked x^2 arc length reports Inconclusive");
     }
 }
 
@@ -82,9 +91,9 @@ void test_volume_revolution_y() {
         auto result = lamina::volume_of_revolution_y(y, zero, h);
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Y-axis cone volume result: " << s << std::endl;
-        // The result should contain h and pi/3 factor (numeric ~1.0472)
+        // The result should keep the exact pi/3 factor.
         EXPECT_CONTAINS(s, {"h"}, "y-axis cone volume contains h");
-        EXPECT_CONTAINS(s, {"1.0472"}, "y-axis cone volume contains pi/3 factor");
+        EXPECT_CONTAINS(s, {"1/3", "pi"}, "y-axis cone volume contains exact pi/3 factor");
     }
 }
 
@@ -107,12 +116,73 @@ void test_arc_length_y() {
     }
 }
 
+void test_symbolic_geometry_checked_contracts() {
+    TEST_CASE("Symbolic Geometry checked APIs: explicit errors and cancellation");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto zero = SymbolicExpr::number(0);
+        auto one = SymbolicExpr::number(1);
+
+        auto volume = lamina::volume_of_revolution_x_checked(x, zero, one);
+        EXPECT_TRUE(volume.has_value(), "checked volume_of_revolution_x succeeds");
+        if (volume) {
+            EXPECT_TRUE(volume.value() != nullptr,
+                        "checked volume_of_revolution_x returns an expression");
+        }
+
+        auto null_profile = lamina::volume_of_revolution_x_checked(nullptr, zero, one);
+        EXPECT_TRUE(!null_profile.has_value(),
+                    "checked volume_of_revolution_x rejects null profile");
+        EXPECT_TRUE(null_profile.error().code == lamina::CasErrc::InvalidArgument,
+                    "checked volume_of_revolution_x reports InvalidArgument");
+        EXPECT_TRUE(lamina::volume_of_revolution_x(nullptr, zero, one) == nullptr,
+                    "legacy volume_of_revolution_x unwraps invalid input to nullptr");
+
+        std::shared_ptr<SymbolicExpr> null_root;
+        auto null_bound = lamina::arc_length_x_checked(x, null_root, one);
+        EXPECT_TRUE(!null_bound.has_value(),
+                    "checked arc_length_x rejects null bound");
+        EXPECT_TRUE(null_bound.error().code == lamina::CasErrc::InvalidArgument,
+                    "checked arc_length_x reports InvalidArgument for null bound");
+
+        auto unsupported_profile = SymbolicExpr::eq(x, zero);
+        auto unsupported_arc = lamina::arc_length_x_checked(
+            unsupported_profile, zero, one);
+        EXPECT_TRUE(!unsupported_arc.has_value(),
+                    "checked arc_length_x rejects unsupported derivatives");
+        EXPECT_TRUE(unsupported_arc.error().code == lamina::CasErrc::Inconclusive,
+                    "checked arc_length_x reports Inconclusive for unsupported derivatives");
+        EXPECT_TRUE(lamina::arc_length_x(unsupported_profile, zero, one) == nullptr,
+                    "legacy arc_length_x unwraps unsupported checked result to nullptr");
+
+        lamina::CancellationToken cancellation;
+        lamina::ComputationContext cancelled_context({}, cancellation);
+        cancellation.cancel();
+        auto cancelled = lamina::volume_of_revolution_y_checked(
+            x, zero, one, cancelled_context);
+        EXPECT_TRUE(!cancelled.has_value(),
+                    "checked volume_of_revolution_y observes cancellation");
+        EXPECT_TRUE(cancelled.error().code == lamina::CasErrc::Cancelled,
+                    "checked volume_of_revolution_y reports Cancelled");
+
+        lamina::ResourceLimits limits;
+        limits.max_steps = 0;
+        lamina::ComputationContext limited_context(limits);
+        auto limited = lamina::arc_length_y_checked(x, zero, one, limited_context);
+        EXPECT_TRUE(!limited.has_value(),
+                    "checked arc_length_y observes exhausted step budget");
+        EXPECT_TRUE(limited.error().code == lamina::CasErrc::ResourceLimit,
+                    "checked arc_length_y reports ResourceLimit");
+    }
+}
+
 int main() {
     try {
         test_volume_revolution_x();
         test_arc_length_x();
         test_volume_revolution_y();
         test_arc_length_y();
+        test_symbolic_geometry_checked_contracts();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;
         g_failures++;

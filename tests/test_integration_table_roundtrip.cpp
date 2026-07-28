@@ -88,8 +88,8 @@ EntryReport verify_entry(const IntegrationEntry& entry) {
     SymbolicExpr pat_inst = Matcher::replace(entry.pattern, bindings, false);
     SymbolicExpr res_inst = Matcher::replace(entry.result,  bindings, false);
 
-    auto pattern = std::make_shared<SymbolicExpr>(pat_inst);
-    auto result  = std::make_shared<SymbolicExpr>(res_inst);
+    auto pattern = lamina::detail::make_expression_ptr(pat_inst);
+    auto result  = lamina::detail::make_expression_ptr(res_inst);
 
     auto pattern_simp = pattern->simplify();
     auto result_simp  = result->simplify();
@@ -201,7 +201,7 @@ int main() {
                 std::ostringstream oss;
                 oss << prefix << ": " << rep.matches << " match(es), "
                     << rep.skipped_points << " skipped point(s)";
-                EXPECT_TRUE(true, oss.str());
+                EXPECT_TRUE(rep.checked && !rep.failed && rep.matches > 0, oss.str());
             }
         }
     }

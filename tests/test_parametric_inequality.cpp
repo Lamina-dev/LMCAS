@@ -5,6 +5,7 @@
 #include "poly_utils.hpp"
 #include <cmath>
 #include <random>
+#include <string>
 #include <vector>
 
 using namespace lamina;
@@ -130,6 +131,54 @@ int main() {
                 } catch (...) {
 
                 }
+            }
+        }
+    }
+
+    TEST_CASE("Parametric inequality keeps exact huge constant leading sign");
+    {
+        std::string huge_digits = "1" + std::string(400, '0');
+        auto huge_positive = SymbolicExpr::number(BigInt(huge_digits));
+        auto positive_expr = SymbolicExpr::add(
+            SymbolicExpr::multiply(huge_positive, x),
+            SymbolicExpr::number(1));
+
+        auto positive_result = InequalitySolver::solve_parametric_inequality(
+            positive_expr, InequalityType::GreaterThan, "x", {"a"});
+
+        EXPECT_TRUE(positive_result.cases.size() == 1,
+            "huge positive leading coeff not depending on params should produce one case");
+        if (!positive_result.cases.empty()) {
+            auto& intervals = positive_result.cases[0].solution.intervals();
+            EXPECT_TRUE(intervals.size() == 1,
+                "huge positive leading coeff > 0 should produce one interval");
+            if (!intervals.empty()) {
+                EXPECT_TRUE(!intervals[0].lower.is_neg_infinity,
+                    "huge positive leading coeff: lower bound should be finite root");
+                EXPECT_TRUE(intervals[0].upper.is_pos_infinity,
+                    "huge positive leading coeff: solution should extend to +inf");
+            }
+        }
+
+        auto huge_negative = SymbolicExpr::number(BigInt("-" + huge_digits));
+        auto negative_expr = SymbolicExpr::add(
+            SymbolicExpr::multiply(huge_negative, x),
+            SymbolicExpr::number(1));
+
+        auto negative_result = InequalitySolver::solve_parametric_inequality(
+            negative_expr, InequalityType::GreaterThan, "x", {"a"});
+
+        EXPECT_TRUE(negative_result.cases.size() == 1,
+            "huge negative leading coeff not depending on params should produce one case");
+        if (!negative_result.cases.empty()) {
+            auto& intervals = negative_result.cases[0].solution.intervals();
+            EXPECT_TRUE(intervals.size() == 1,
+                "huge negative leading coeff > 0 should produce one interval");
+            if (!intervals.empty()) {
+                EXPECT_TRUE(intervals[0].lower.is_neg_infinity,
+                    "huge negative leading coeff: solution should extend to -inf");
+                EXPECT_TRUE(!intervals[0].upper.is_pos_infinity,
+                    "huge negative leading coeff: upper bound should be finite root");
             }
         }
     }

@@ -21,12 +21,12 @@ using namespace lamina;
 
 /// Helper: create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return SymbolicExpr(std::make_shared<VariableNode>(name));
+    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
 }
 
 /// Helper: create a SymbolicExpr wrapping a NumberNode with value 0.
 static SymbolicExpr make_zero() {
-    return SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+    return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 }
 
 // ============================================================================

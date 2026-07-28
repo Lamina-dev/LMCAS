@@ -29,33 +29,32 @@ using namespace lamina;
 // Helpers: create AST nodes
 // ============================================================
 
-static std::shared_ptr<SymbolicNode> make_var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
-static std::shared_ptr<SymbolicNode> make_power(
-    std::shared_ptr<SymbolicNode> base,
-    std::shared_ptr<SymbolicNode> exp) {
-    return std::make_shared<PowerNode>(std::move(base), std::move(exp));
+static std::shared_ptr<const SymbolicNode> make_power(
+    std::shared_ptr<const SymbolicNode> base,
+    std::shared_ptr<const SymbolicNode> exp) {
+    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exp));
 }
 
-static std::shared_ptr<SymbolicNode> make_multiply(
-    std::vector<std::shared_ptr<SymbolicNode>> ops) {
-    return std::make_shared<MultiplyNode>(std::move(ops));
+static std::shared_ptr<const SymbolicNode> make_multiply(
+    std::vector<std::shared_ptr<const SymbolicNode>> ops) {
+    return lamina::detail::make_node<MultiplyNode>(std::move(ops));
 }
 
-static std::shared_ptr<SymbolicNode> make_add(
-    std::vector<std::shared_ptr<SymbolicNode>> ops) {
-    return std::make_shared<AddNode>(std::move(ops));
+static std::shared_ptr<const SymbolicNode> make_add(
+    std::vector<std::shared_ptr<const SymbolicNode>> ops) {
+    return lamina::detail::make_node<AddNode>(std::move(ops));
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<SymbolicNode> node) {
-    SymbolicExpr expr;
-    expr.root = std::move(node);
+static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
+    auto expr = lamina::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -247,7 +246,7 @@ static void test_property4_add_all_positive_is_positive() {
     rc::check("For any AddNode where all operands are GT zero, sum is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "x" + std::to_string(i);
@@ -269,7 +268,7 @@ static void test_property4_add_all_nonneg_is_nonneg() {
     rc::check("For any AddNode where all operands are GEQ zero, sum is non-negative", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "x" + std::to_string(i);
@@ -296,7 +295,7 @@ static void test_property4_multiply_all_positive_is_positive() {
     rc::check("For any MultiplyNode where all operands are GT zero, product is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "x" + std::to_string(i);
@@ -328,19 +327,16 @@ static void test_property4_gt_nonneg_implies_positive() {
         AssumptionContext ctx;
 
         // Add relation x > 0 — this triggers sign derivation in RelationStore
-        auto x_var = std::make_shared<VariableNode>(x_name);
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
-        auto rel_node = std::make_shared<RelationalNode>(
+        auto x_var = lamina::detail::make_node<VariableNode>(x_name);
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto rel_node = lamina::detail::make_node<RelationalNode>(
             x_var, zero_node, RelationalNode::Op::GT);
-        SymbolicExpr rel_expr;
-        rel_expr.root = rel_node;
+        auto rel_expr = lamina::detail::expression_from_node(rel_node);
         ctx.assume(rel_expr);
 
         InferenceEngine engine(ctx);
 
-        SymbolicExpr x_expr;
-        x_expr.root = make_var(x_name);
-
+        auto x_expr = lamina::detail::expression_from_node(make_var(x_name));
         // x > 0 should derive Positive sign for x in the PropertyStore
         RC_ASSERT(engine.query_positive(x_expr) == Tribool::True);
     });
@@ -359,7 +355,7 @@ static void test_property4_unknown_operand_returns_unknown() {
         int num_operands = rc::gen::inRange(2, 4);
 
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         // Make all but one operand positive, leave one undetermined
         for (int i = 0; i < num_operands; ++i) {
@@ -373,7 +369,7 @@ static void test_property4_unknown_operand_returns_unknown() {
 
         InferenceEngine engine(ctx);
 
-        std::shared_ptr<SymbolicNode> node;
+        std::shared_ptr<const SymbolicNode> node;
         if (use_add) {
             node = make_add(operands);
         } else {
@@ -402,20 +398,19 @@ static void test_property4_add_with_gt_zero_relations() {
     rc::check("For any AddNode where all operands have x GT 0 relations, sum is positive", []() {
         int num_operands = rc::gen::inRange(2, 4);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "r" + std::to_string(i);
             operands.push_back(make_var(name));
 
             // Add relation: r_i > 0
-            auto var_node = std::make_shared<VariableNode>(name);
-            auto rel_node = std::make_shared<RelationalNode>(
+            auto var_node = lamina::detail::make_node<VariableNode>(name);
+            auto rel_node = lamina::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GT);
-            SymbolicExpr rel_expr;
-            rel_expr.root = rel_node;
+            auto rel_expr = lamina::detail::expression_from_node(rel_node);
             ctx.assume(rel_expr);
         }
 
@@ -437,7 +432,7 @@ static void test_property4_add_mixed_pos_nonneg() {
     rc::check("AddNode with at least one positive and rest non-negative is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         // All operands are positive (which implies non-negative)
         for (int i = 0; i < num_operands; ++i) {

@@ -80,7 +80,10 @@ int main() {
             } else {
                 // Accept symbolic form like -1/2
                 std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(true, "limit(x - sqrt(x^2+x), x->inf) computed (symbolic)");
+                EXPECT_TRUE(lim->to_string().find("-") != std::string::npos &&
+                                (lim->to_string().find("1/2") != std::string::npos ||
+                                 lim->to_string().find("0.5") != std::string::npos),
+                            "limit(x - sqrt(x^2+x), x->inf) computed symbolically as -1/2");
             }
         }
     }
@@ -176,7 +179,9 @@ int main() {
                 EXPECT_NEAR(*val, -1.0/6.0, 1e-6, "limit((sin(x)-x)/x^3, x->0) = -1/6");
             } else {
                 std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(true, "limit((sin(x)-x)/x^3, x->0) computed");
+                EXPECT_TRUE(lim->to_string().find("-") != std::string::npos &&
+                                lim->to_string().find("6") != std::string::npos,
+                            "limit((sin(x)-x)/x^3, x->0) computed symbolically as -1/6");
             }
         }
     }

@@ -3,6 +3,7 @@
  * @brief 常微分方程求解：可分离变量、一阶线性、二阶常系数。
  */
 #pragma once
+#include "computation_context.hpp"
 #include "symbolic.hpp"
 #include <memory>
 #include <string>
@@ -66,6 +67,31 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
  * @return 通解的符号表达式
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
+    double a, double b, double c,
+    std::shared_ptr<SymbolicExpr> fx,
+    const std::string& x,
+    const std::string& y,
+    const AssumptionContext* ctx = nullptr
+);
+
+/**
+ * @brief Checked migration API for second-order constant-coefficient ODEs.
+ *
+ * Supported domain currently covers homogeneous equations and first-order
+ * degeneracy when a == 0 and b != 0. Non-homogeneous second-order equations
+ * are outside the current support domain and return `CasErrc::Inconclusive`
+ * instead of throwing or returning the homogeneous solution as a false success.
+ */
+LAMINA_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
+    double a, double b, double c,
+    std::shared_ptr<SymbolicExpr> fx,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context,
+    const AssumptionContext* ctx = nullptr
+);
+
+LAMINA_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,

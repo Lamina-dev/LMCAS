@@ -2,8 +2,8 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <cassert>
 #include "../include/symbolic.hpp"
+#include "test_common.hpp"
 
 void test_solve_numeric() {
     std::cout << "Testing Solve Numeric..." << std::endl;
@@ -15,7 +15,7 @@ void test_solve_numeric() {
     );
 
     auto solutions = SymbolicExpr::solve(eq1, "x");
-    assert(solutions.size() == 1);
+    EXPECT_TRUE(solutions.size() == 1, "linear equation has one solution");
     std::cout << "2x - 4 = 0 => x = " << solutions[0]->to_string() << std::endl;
 
     auto eq2 = SymbolicExpr::add(
@@ -27,7 +27,7 @@ void test_solve_numeric() {
     );
 
     auto sol2 = SymbolicExpr::solve(eq2, "x");
-    assert(sol2.size() == 2);
+    EXPECT_TRUE(sol2.size() == 2, "quadratic equation has two solutions");
     std::cout << "x^2 - 3x + 2 = 0 => x1=" << sol2[0]->to_string() << ", x2=" << sol2[1]->to_string() << std::endl;
 }
 
@@ -43,7 +43,7 @@ void test_solve_symbolic() {
     );
 
     auto sols = SymbolicExpr::solve(eq, "x");
-    assert(sols.size() == 1);
+    EXPECT_TRUE(sols.size() == 1, "symbolic linear equation has one solution");
     std::cout << "ax + b = 0 => x = " << sols[0]->to_string() << std::endl;
 
 }
@@ -54,8 +54,7 @@ int main() {
         test_solve_symbolic();
         std::cout << "All solve visitor tests passed!" << std::endl;
     } catch(const std::exception& e) {
-        std::cerr << "Exception: " << e.what() << std::endl;
-        return 1;
+        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
     }
-    return 0;
+    return TEST_REPORT();
 }

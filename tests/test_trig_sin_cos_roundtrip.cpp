@@ -88,21 +88,21 @@ std::shared_ptr<SymbolicExpr> build_integrand(int m, int n) {
     return SymbolicExpr::multiply(sin_part, cos_part);
 }
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
@@ -131,22 +131,22 @@ PairReport verify_pair(int m, int n) {
     }
 
     Integrator integ;
-    SymbolicExpr result;
+    std::shared_ptr<SymbolicExpr> result;
     try {
-        result = integ.integrate(*integrand, kVarName);
+        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand, kVarName));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception during integration: ") + e.what();
         return rep;
     }
 
-    if (has_integral_node(result.root)) {
+    if (has_integral_node(lamina::detail::node(result))) {
         rep.failed = true;
-        rep.detail = "integrator returned unevaluated integral: " + result.to_string();
+        rep.detail = "integrator returned unevaluated integral: " + result->to_string();
         return rep;
     }
 
-    auto deriv = result.differentiate(kVarName);
+    auto deriv = result->differentiate(kVarName);
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
@@ -166,7 +166,7 @@ PairReport verify_pair(int m, int n) {
             rep.failed = true;
             std::ostringstream oss;
             oss << "x=" << xv << ": substitute returned null"
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             return rep;
         }
@@ -179,7 +179,7 @@ PairReport verify_pair(int m, int n) {
             rep.failed = true;
             std::ostringstream oss;
             oss << "x=" << xv << ": numeric evaluation failed"
-                << " | result=" << result.to_string()
+                << " | result=" << result->to_string()
                 << " | derivative=" << deriv_simp->to_string();
             rep.detail = oss.str();
             return rep;
@@ -192,7 +192,7 @@ PairReport verify_pair(int m, int n) {
                 << ": integrand=" << *pv
                 << " vs d/dx(result)=" << *dv
                 << " |delta|=" << delta
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             return rep;
         }
@@ -228,7 +228,7 @@ int main() {
                 total_matches += rep.matches;
                 std::ostringstream oss;
                 oss << label.str() << ": " << rep.matches << " sample point(s) matched";
-                EXPECT_TRUE(true, oss.str());
+                EXPECT_TRUE(!rep.failed && rep.matches > 0, oss.str());
             }
         }
     }

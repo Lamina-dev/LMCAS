@@ -17,6 +17,37 @@
 
 namespace lamina {
 
+namespace {
+
+[[noreturn]] void throw_legacy_assumption_error(const CasError& error) {
+    if (error.code == CasErrc::InvalidArgument || error.code == CasErrc::ParseError) {
+        throw std::invalid_argument(error.message);
+    }
+    if (error.code == CasErrc::ResourceLimit) {
+        throw std::bad_alloc();
+    }
+    throw std::runtime_error(error.message);
+}
+
+void require_deserialization_update(const Result<void>& result,
+                                    int line,
+                                    const std::string& keyword) {
+    if (result) {
+        return;
+    }
+    if (result.error().code == CasErrc::ResourceLimit) {
+        throw std::bad_alloc();
+    }
+    if (result.error().code == CasErrc::InvalidArgument) {
+        throw std::invalid_argument(
+            "Line " + std::to_string(line) + ": " + keyword + ": " +
+            result.error().message);
+    }
+    throw std::runtime_error(result.error().message);
+}
+
+} // anonymous namespace
+
 // Construction
 
 AssumptionContext::AssumptionContext() {
@@ -141,30 +172,44 @@ std::optional<Interval> AssumptionContext::get_bounds(const std::string& symbol)
 // Conditional assumptions
 
 void AssumptionContext::assume_conditional(const SymbolicExpr& condition, const SymbolicExpr& conclusion) {
-    if (!condition.root) {
-        throw std::invalid_argument(
-            "assume_conditional: condition expression must not be null/empty");
+    auto result = assume_conditional_checked(condition, conclusion);
+    if (!result) {
+        throw_legacy_assumption_error(result.error());
     }
-    if (!conclusion.root) {
-        throw std::invalid_argument(
-            "assume_conditional: conclusion expression must not be null/empty");
-    }
+}
 
-    // Check if the condition is already satisfied. If so, verify the conclusion
-    // does not contradict the current state.
-    Tribool cond_result = evaluate_condition(condition);
-    if (cond_result == Tribool::True) {
-        Tribool concl_result = evaluate_condition(conclusion);
-        if (concl_result == Tribool::False) {
-            throw std::invalid_argument(
-                "assume_conditional: contradiction detected — condition '" +
-                condition.to_string() + "' is satisfied but conclusion '" +
-                conclusion.to_string() + "' contradicts the current assumption state");
+AssumptionVoidResult AssumptionContext::assume_conditional_checked(
+    const SymbolicExpr& condition,
+    const SymbolicExpr& conclusion) {
+    constexpr const char* operation = "assume_conditional";
+    if (!std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(condition))) {
+        return AssumptionVoidResult::failure(
+            CasErrc::InvalidArgument, "condition expression must be relational", operation);
+    }
+    if (!std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(conclusion))) {
+        return AssumptionVoidResult::failure(
+            CasErrc::InvalidArgument, "conclusion expression must be relational", operation);
+    }
+    try {
+        Tribool cond_result = evaluate_condition(condition);
+        if (cond_result == Tribool::True &&
+            evaluate_condition(conclusion) == Tribool::False) {
+            return AssumptionVoidResult::failure(
+                CasErrc::InvalidArgument,
+                "condition is satisfied but conclusion contradicts the current assumption state",
+                operation);
         }
+        scope_stack_.back().conditionals.push_back({condition, conclusion});
+        ++cache_generation_;
+    } catch (const std::bad_alloc&) {
+        return AssumptionVoidResult::failure(
+            CasErrc::ResourceLimit, "assumption allocation failed", operation);
+    } catch (const std::invalid_argument& ex) {
+        return AssumptionVoidResult::failure(CasErrc::InvalidArgument, ex.what(), operation);
+    } catch (const std::exception& ex) {
+        return AssumptionVoidResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
     }
-
-    scope_stack_.back().conditionals.push_back({condition, conclusion});
-    ++cache_generation_;
+    return AssumptionVoidResult::success();
 }
 
 std::vector<AssumptionContext::ConditionalAssumption> AssumptionContext::get_active_conditionals() const {
@@ -178,28 +223,28 @@ std::vector<AssumptionContext::ConditionalAssumption> AssumptionContext::get_act
 }
 
 Tribool AssumptionContext::evaluate_condition(const SymbolicExpr& condition) const {
-    if (!condition.root) {
+    if (!lamina::detail::node(condition)) {
         return Tribool::Unknown;
     }
-    auto rel_node = std::dynamic_pointer_cast<RelationalNode>(condition.root);
+    auto rel_node = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(condition));
     if (!rel_node) {
         return Tribool::Unknown;
     }
 
-    SymbolicExpr lhs(rel_node->left);
-    SymbolicExpr rhs(rel_node->right);
-    RelationalNode::Op op = rel_node->op;
+    auto lhs = lamina::detail::expression_from_node(rel_node->left());
+    auto rhs = lamina::detail::expression_from_node(rel_node->right());
+    RelationalNode::Op op = rel_node->op();
     for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
         if (it->relations.has_relation(lhs, rhs, op)) {
             return Tribool::True;
         }
     }
     // For patterns like "variable > 0", check if the variable has the corresponding sign.
-    auto lhs_var = std::dynamic_pointer_cast<VariableNode>(rel_node->left);
-    auto rhs_num = std::dynamic_pointer_cast<NumberNode>(rel_node->right);
+    auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(rel_node->left());
+    auto rhs_num = std::dynamic_pointer_cast<const NumberNode>(rel_node->right());
 
     if (lhs_var && rhs_num && rhs_num->is_zero()) {
-        const std::string& name = lhs_var->name;
+        const std::string& name = lhs_var->name();
         switch (op) {
             case RelationalNode::Op::GT:
                 if (has_sign(name, Sign::Positive)) return Tribool::True;
@@ -236,11 +281,11 @@ Tribool AssumptionContext::evaluate_condition(const SymbolicExpr& condition) con
                 break;
         }
     }
-    auto lhs_num = std::dynamic_pointer_cast<NumberNode>(rel_node->left);
-    auto rhs_var = std::dynamic_pointer_cast<VariableNode>(rel_node->right);
+    auto lhs_num = std::dynamic_pointer_cast<const NumberNode>(rel_node->left());
+    auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(rel_node->right());
 
     if (lhs_num && lhs_num->is_zero() && rhs_var) {
-        const std::string& name = rhs_var->name;
+        const std::string& name = rhs_var->name();
         switch (op) {
             case RelationalNode::Op::LT:  // 0 < var → var > 0
                 if (has_sign(name, Sign::Positive)) return Tribool::True;
@@ -283,126 +328,282 @@ Tribool AssumptionContext::evaluate_condition(const SymbolicExpr& condition) con
 // Convenience declaration API
 
 void AssumptionContext::assume_domain(const std::string& variable, Domain domain) {
-    if (variable.empty()) {
-        throw std::invalid_argument("assume_domain: variable name must not be empty");
+    auto result = assume_domain_checked(variable, domain);
+    if (!result) {
+        throw_legacy_assumption_error(result.error());
     }
-    scope_stack_.back().properties.declare_domain(variable, domain);
+}
+
+AssumptionVoidResult AssumptionContext::assume_domain_checked(
+    const std::string& variable,
+    Domain domain) {
+    constexpr const char* operation = "assume_domain";
+    if (variable.empty()) {
+        return AssumptionVoidResult::failure(
+            CasErrc::InvalidArgument, "variable name must not be empty", operation);
+    }
+    auto result = scope_stack_.back().properties.declare_domain_checked(variable, domain);
+    if (!result) {
+        return AssumptionVoidResult::failure(
+            result.error().code, result.error().message, operation);
+    }
     ++cache_generation_;
+    return AssumptionVoidResult::success();
 }
 
 void AssumptionContext::assume_sign(const std::string& variable, Sign sign) {
-    if (variable.empty()) {
-        throw std::invalid_argument("assume_sign: variable name must not be empty");
+    auto result = assume_sign_checked(variable, sign);
+    if (!result) {
+        throw_legacy_assumption_error(result.error());
     }
-    scope_stack_.back().properties.declare_sign(variable, sign);
+}
+
+AssumptionVoidResult AssumptionContext::assume_sign_checked(
+    const std::string& variable,
+    Sign sign) {
+    constexpr const char* operation = "assume_sign";
+    if (variable.empty()) {
+        return AssumptionVoidResult::failure(
+            CasErrc::InvalidArgument, "variable name must not be empty", operation);
+    }
+    auto result = scope_stack_.back().properties.declare_sign_checked(variable, sign);
+    if (!result) {
+        return AssumptionVoidResult::failure(
+            result.error().code, result.error().message, operation);
+    }
     ++cache_generation_;
+    return AssumptionVoidResult::success();
 }
 
 void AssumptionContext::assume(const SymbolicExpr& relation) {
-    if (!relation.root) {
-        throw std::invalid_argument("assume: expression must not be null/empty");
+    auto result = assume_checked(relation);
+    if (result) {
+        return;
     }
-    auto rel_node = std::dynamic_pointer_cast<RelationalNode>(relation.root);
-    if (!rel_node) {
-        throw std::invalid_argument("assume: expression root must be a RelationalNode");
+
+    throw_legacy_assumption_error(result.error());
+}
+
+AssumptionVoidResult AssumptionContext::assume_checked(const SymbolicExpr& relation) {
+    constexpr const char* operation = "assume";
+    if (!lamina::detail::node(relation)) {
+        return AssumptionVoidResult::failure(
+            CasErrc::InvalidArgument, "relation expression must not be null", operation);
     }
-    // Extract lhs, rhs, and op from the RelationalNode and store in RelationStore
-    SymbolicExpr lhs(rel_node->left);
-    SymbolicExpr rhs(rel_node->right);
-    scope_stack_.back().relations.add_relation(lhs, rhs, rel_node->op,
-                                               scope_stack_.back().properties);
-    ++cache_generation_;
+    if (!std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(relation))) {
+        return AssumptionVoidResult::failure(
+            CasErrc::InvalidArgument, "relation expression root must be relational", operation);
+    }
+    try {
+        auto rel_node = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(relation));
+        auto lhs = lamina::detail::expression_from_node(rel_node->left());
+        auto rhs = lamina::detail::expression_from_node(rel_node->right());
+        auto result = scope_stack_.back().relations.add_relation_checked(
+            lhs, rhs, rel_node->op(), scope_stack_.back().properties);
+        if (!result.has_value()) {
+            return AssumptionVoidResult::failure(result.error());
+        }
+        ++cache_generation_;
+    } catch (const std::bad_alloc&) {
+        return AssumptionVoidResult::failure(
+            CasErrc::ResourceLimit, "assumption allocation failed", operation);
+    } catch (const std::invalid_argument& ex) {
+        return AssumptionVoidResult::failure(CasErrc::InvalidArgument, ex.what(), operation);
+    } catch (const std::exception& ex) {
+        return AssumptionVoidResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
+    }
+    return AssumptionVoidResult::success();
 }
 
 // Convenience query API (delegates to QueryInterface)
 
+namespace {
+
+AssumptionTriboolResult assumption_query_result(QueryTriboolResult result) {
+    if (!result) {
+        return AssumptionTriboolResult::failure(result.error());
+    }
+    return AssumptionTriboolResult::success(result.value());
+}
+
+Tribool assumption_query_or_unknown(AssumptionTriboolResult result) {
+    if (!result) {
+        return Tribool::Unknown;
+    }
+    return result.value();
+}
+
+} // anonymous namespace
+
 Tribool AssumptionContext::is_positive(const SymbolicExpr& expr) const {
-    if (!expr.root) {
+    if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_positive: expression must not be null/empty");
     }
     QueryInterface qi(*this);
     return qi.query_positive(expr);
 }
 
+AssumptionTriboolResult AssumptionContext::is_positive_checked(const SymbolicExpr& expr) const {
+    QueryInterface qi(*this);
+    return assumption_query_result(qi.query_positive_checked(expr));
+}
+
 Tribool AssumptionContext::is_negative(const SymbolicExpr& expr) const {
-    if (!expr.root) {
+    if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_negative: expression must not be null/empty");
     }
     QueryInterface qi(*this);
     return qi.query_negative(expr);
 }
 
+AssumptionTriboolResult AssumptionContext::is_negative_checked(const SymbolicExpr& expr) const {
+    QueryInterface qi(*this);
+    return assumption_query_result(qi.query_negative_checked(expr));
+}
+
 Tribool AssumptionContext::is_nonnegative(const SymbolicExpr& expr) const {
-    if (!expr.root) {
+    if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_nonnegative: expression must not be null/empty");
     }
     QueryInterface qi(*this);
     return qi.query_nonnegative(expr);
 }
 
+AssumptionTriboolResult AssumptionContext::is_nonnegative_checked(const SymbolicExpr& expr) const {
+    QueryInterface qi(*this);
+    return assumption_query_result(qi.query_nonnegative_checked(expr));
+}
+
 Tribool AssumptionContext::is_real(const SymbolicExpr& expr) const {
-    if (!expr.root) {
+    if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_real: expression must not be null/empty");
     }
     QueryInterface qi(*this);
     return qi.query_real(expr);
 }
 
+AssumptionTriboolResult AssumptionContext::is_real_checked(const SymbolicExpr& expr) const {
+    QueryInterface qi(*this);
+    return assumption_query_result(qi.query_real_checked(expr));
+}
+
 Tribool AssumptionContext::is_integer(const SymbolicExpr& expr) const {
-    if (!expr.root) {
+    if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_integer: expression must not be null/empty");
     }
     QueryInterface qi(*this);
     return qi.query_integer(expr);
 }
 
+AssumptionTriboolResult AssumptionContext::is_integer_checked(const SymbolicExpr& expr) const {
+    QueryInterface qi(*this);
+    return assumption_query_result(qi.query_integer_checked(expr));
+}
+
 Tribool AssumptionContext::is_nonzero(const SymbolicExpr& expr) const {
-    if (!expr.root) {
+    if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_nonzero: expression must not be null/empty");
     }
     QueryInterface qi(*this);
     return qi.query_nonzero(expr);
 }
 
+AssumptionTriboolResult AssumptionContext::is_nonzero_checked(const SymbolicExpr& expr) const {
+    QueryInterface qi(*this);
+    return assumption_query_result(qi.query_nonzero_checked(expr));
+}
+
 // Extended query methods (read-through all scopes)
 
 Tribool AssumptionContext::is_continuous(const std::string& symbol, const Interval& interval) const {
+    return assumption_query_or_unknown(is_continuous_checked(symbol, interval));
+}
+
+AssumptionTriboolResult AssumptionContext::is_continuous_checked(
+    const std::string& symbol,
+    const Interval& interval) const {
+    constexpr const char* operation = "is_continuous";
+    if (symbol.empty()) {
+        return AssumptionTriboolResult::failure(
+            CasErrc::InvalidArgument, "symbol name must not be empty", operation);
+    }
     for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
-        if (it->properties.is_continuous(symbol, interval)) {
-            return Tribool::True;
+        auto result = it->properties.is_continuous_checked(symbol, interval);
+        if (!result) {
+            return AssumptionTriboolResult::failure(result.error());
+        }
+        if (result.value()) {
+            return AssumptionTriboolResult::success(Tribool::True);
         }
     }
-    return Tribool::Unknown;
+    return AssumptionTriboolResult::success(Tribool::Unknown);
 }
 
 Tribool AssumptionContext::is_differentiable(const std::string& symbol, const Interval& interval) const {
+    return assumption_query_or_unknown(is_differentiable_checked(symbol, interval));
+}
+
+AssumptionTriboolResult AssumptionContext::is_differentiable_checked(
+    const std::string& symbol,
+    const Interval& interval) const {
+    constexpr const char* operation = "is_differentiable";
+    if (symbol.empty()) {
+        return AssumptionTriboolResult::failure(
+            CasErrc::InvalidArgument, "symbol name must not be empty", operation);
+    }
     for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
-        if (it->properties.is_differentiable(symbol, interval)) {
-            return Tribool::True;
+        auto result = it->properties.is_differentiable_checked(symbol, interval);
+        if (!result) {
+            return AssumptionTriboolResult::failure(result.error());
+        }
+        if (result.value()) {
+            return AssumptionTriboolResult::success(Tribool::True);
         }
     }
-    return Tribool::Unknown;
+    return AssumptionTriboolResult::success(Tribool::Unknown);
 }
 
 Tribool AssumptionContext::is_positive_definite(const std::string& symbol) const {
+    return assumption_query_or_unknown(is_positive_definite_checked(symbol));
+}
+
+AssumptionTriboolResult AssumptionContext::is_positive_definite_checked(
+    const std::string& symbol) const {
+    constexpr const char* operation = "is_positive_definite";
+    if (symbol.empty()) {
+        return AssumptionTriboolResult::failure(
+            CasErrc::InvalidArgument, "symbol name must not be empty", operation);
+    }
     for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
         Definiteness d = it->properties.get_definiteness(symbol);
         if (d != Definiteness::Unknown) {
-            return (d == Definiteness::PositiveDefinite) ? Tribool::True : Tribool::False;
+            return AssumptionTriboolResult::success(
+                (d == Definiteness::PositiveDefinite) ? Tribool::True : Tribool::False);
         }
     }
-    return Tribool::Unknown;
+    return AssumptionTriboolResult::success(Tribool::Unknown);
 }
 
 Tribool AssumptionContext::is_positive_semidefinite(const std::string& symbol) const {
+    return assumption_query_or_unknown(is_positive_semidefinite_checked(symbol));
+}
+
+AssumptionTriboolResult AssumptionContext::is_positive_semidefinite_checked(
+    const std::string& symbol) const {
+    constexpr const char* operation = "is_positive_semidefinite";
+    if (symbol.empty()) {
+        return AssumptionTriboolResult::failure(
+            CasErrc::InvalidArgument, "symbol name must not be empty", operation);
+    }
     for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
         Definiteness d = it->properties.get_definiteness(symbol);
         if (d != Definiteness::Unknown) {
-            return (d == Definiteness::PositiveDefinite ||
-                    d == Definiteness::PositiveSemiDefinite) ? Tribool::True : Tribool::False;
+            return AssumptionTriboolResult::success(
+                (d == Definiteness::PositiveDefinite ||
+                 d == Definiteness::PositiveSemiDefinite) ? Tribool::True : Tribool::False);
         }
     }
-    return Tribool::Unknown;
+    return AssumptionTriboolResult::success(Tribool::Unknown);
 }
 
 // Depth limit configuration
@@ -627,16 +828,16 @@ Interval parse_interval(const std::string& s, int line_num) {
         iv.lower = Endpoint::neg_inf();
     } else {
         double lo_val = std::stod(lo_str);
-        auto lo_expr = std::make_shared<SymbolicExpr>(
-            std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo_val)));
+        auto lo_expr = lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo_val)));
         iv.lower = lower_open ? Endpoint::open(lo_expr) : Endpoint::closed(lo_expr);
     }
     if (hi_str == "+inf") {
         iv.upper = Endpoint::pos_inf();
     } else {
         double hi_val = std::stod(hi_str);
-        auto hi_expr = std::make_shared<SymbolicExpr>(
-            std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi_val)));
+        auto hi_expr = lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi_val)));
         iv.upper = upper_open ? Endpoint::open(hi_expr) : Endpoint::closed(hi_expr);
     }
 
@@ -727,7 +928,7 @@ std::string AssumptionContext::serialize() const {
 
 // Deserialization
 
-AssumptionContext AssumptionContext::deserialize(const std::string& data) {
+AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
     AssumptionContext ctx;
     std::istringstream input(data);
     std::string line;
@@ -773,7 +974,8 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": DOMAIN requires symbol and domain");
             }
             Domain dom = parse_domain(dom_str, line_num);
-            ctx.current_properties().declare_domain(sym, dom);
+            require_deserialization_update(
+                ctx.current_properties().declare_domain_checked(sym, dom), line_num, keyword);
         } else if (keyword == "SIGN") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -785,7 +987,8 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": SIGN requires symbol and sign");
             }
             Sign s = parse_sign(sign_str, line_num);
-            ctx.current_properties().declare_sign(sym, s);
+            require_deserialization_update(
+                ctx.current_properties().declare_sign_checked(sym, s), line_num, keyword);
         } else if (keyword == "PARITY") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -797,7 +1000,8 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": PARITY requires symbol and parity");
             }
             Parity p = parse_parity(par_str, line_num);
-            ctx.current_properties().declare_parity(sym, p);
+            require_deserialization_update(
+                ctx.current_properties().declare_parity_checked(sym, p), line_num, keyword);
         } else if (keyword == "BOUNDED") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -809,7 +1013,8 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": BOUNDED requires symbol and boundedness");
             }
             Boundedness b = parse_boundedness(bnd_str, line_num);
-            ctx.current_properties().declare_bounded(sym, b);
+            require_deserialization_update(
+                ctx.current_properties().declare_bounded_checked(sym, b), line_num, keyword);
         } else if (keyword == "TRANSCENDENTAL") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -820,7 +1025,8 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                 throw std::invalid_argument(
                     "Line " + std::to_string(line_num) + ": TRANSCENDENTAL requires symbol");
             }
-            ctx.current_properties().declare_transcendental(sym);
+            require_deserialization_update(
+                ctx.current_properties().declare_transcendental_checked(sym), line_num, keyword);
         } else if (keyword == "FINITENESS") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -832,7 +1038,8 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": FINITENESS requires symbol and value");
             }
             Finiteness f = parse_finiteness(fin_str, line_num);
-            ctx.current_properties().declare_finiteness(sym, f);
+            require_deserialization_update(
+                ctx.current_properties().declare_finiteness_checked(sym, f), line_num, keyword);
         } else if (keyword == "DEFINITENESS") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -844,7 +1051,8 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": DEFINITENESS requires symbol and value");
             }
             Definiteness d = parse_definiteness(def_str, line_num);
-            ctx.current_properties().declare_definiteness(sym, d);
+            require_deserialization_update(
+                ctx.current_properties().declare_definiteness_checked(sym, d), line_num, keyword);
         } else if (keyword == "PERIODIC") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -866,13 +1074,15 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
             std::shared_ptr<SymbolicExpr> period_expr;
             try {
                 double period_val = std::stod(period_str);
-                period_expr = std::make_shared<SymbolicExpr>(
-                    std::make_shared<NumberNode>(static_cast<lmmc_real_t>(period_val)));
+                period_expr = lamina::detail::make_expression_ptr(
+                    lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(period_val)));
             } catch (...) {
-                period_expr = std::make_shared<SymbolicExpr>(
-                    std::make_shared<VariableNode>(period_str));
+                period_expr = lamina::detail::make_expression_ptr(
+                    lamina::detail::make_node<VariableNode>(period_str));
             }
-            ctx.current_properties().declare_periodic(sym, period_expr);
+            require_deserialization_update(
+                ctx.current_properties().declare_periodic_checked(sym, period_expr),
+                line_num, keyword);
         } else if (keyword == "RELATION") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -921,15 +1131,21 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
             auto parse_simple_expr = [&](const std::string& s) -> SymbolicExpr {
                 try {
                     double val = std::stod(s);
-                    return SymbolicExpr(std::make_shared<NumberNode>(
+                    return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(
                         static_cast<lmmc_real_t>(val)));
                 } catch (...) {}
-                return SymbolicExpr(std::make_shared<VariableNode>(s));
+                return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(s));
             };
 
             SymbolicExpr lhs = parse_simple_expr(lhs_str);
             SymbolicExpr rhs = parse_simple_expr(rhs_str);
-            ctx.current_relations().add_relation(lhs, rhs, op, ctx.current_properties());
+            auto relation_result = ctx.current_relations().add_relation_checked(
+                lhs, rhs, op, ctx.current_properties());
+            if (!relation_result.has_value()) {
+                throw std::invalid_argument(
+                    "Line " + std::to_string(line_num) + ": " +
+                    relation_result.error().message);
+            }
         } else if (keyword == "CONDITIONAL") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -1000,22 +1216,23 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
                 std::string lhs_s = s.substr(0, op_pos_local);
                 std::string rhs_s = s.substr(op_pos_local + 1 + op_token.size() + 1);
                 RelationalNode::Op rel_op = parse_relop(op_token, line_num);
-                auto parse_token = [](const std::string& tok) -> std::shared_ptr<SymbolicNode> {
+                auto parse_token = [](const std::string& tok) -> std::shared_ptr<const SymbolicNode> {
                     try {
                         double val = std::stod(tok);
-                        return std::make_shared<NumberNode>(static_cast<lmmc_real_t>(val));
+                        return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
                     } catch (...) {}
-                    return std::make_shared<VariableNode>(tok);
+                    return lamina::detail::make_node<VariableNode>(tok);
                 };
 
                 auto lhs_node = parse_token(lhs_s);
                 auto rhs_node = parse_token(rhs_s);
-                return SymbolicExpr(std::make_shared<RelationalNode>(lhs_node, rhs_node, rel_op));
+                return lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(lhs_node, rhs_node, rel_op));
             };
 
             SymbolicExpr cond_expr = parse_relational(cond_str);
             SymbolicExpr concl_expr = parse_relational(concl_str);
-            ctx.assume_conditional(cond_expr, concl_expr);
+            require_deserialization_update(
+                ctx.assume_conditional_checked(cond_expr, concl_expr), line_num, keyword);
         } else if (keyword == "CONTINUOUS") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -1035,7 +1252,9 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
             }
             iv_str = iv_str.substr(ivstart);
             Interval iv = parse_interval(iv_str, line_num);
-            ctx.current_properties().declare_continuous(sym, iv);
+            require_deserialization_update(
+                ctx.current_properties().declare_continuous_checked(sym, iv),
+                line_num, keyword);
         } else if (keyword == "DIFFERENTIABLE") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -1055,7 +1274,9 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
             }
             iv_str = iv_str.substr(ivstart);
             Interval iv = parse_interval(iv_str, line_num);
-            ctx.current_properties().declare_differentiable(sym, iv);
+            require_deserialization_update(
+                ctx.current_properties().declare_differentiable_checked(sym, iv),
+                line_num, keyword);
         } else if (keyword == "MONOTONICITY") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -1097,7 +1318,9 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
             if (mend != std::string::npos) mono_str = mono_str.substr(0, mend + 1);
 
             Monotonicity m = parse_monotonicity(mono_str, line_num);
-            ctx.current_properties().declare_monotonicity(sym, var, iv, m);
+            require_deserialization_update(
+                ctx.current_properties().declare_monotonicity_checked(sym, var, iv, m),
+                line_num, keyword);
         } else if (keyword == "END") {
             ended = true;
             break;
@@ -1113,6 +1336,29 @@ AssumptionContext AssumptionContext::deserialize(const std::string& data) {
     }
 
     return ctx;
+}
+
+AssumptionContext AssumptionContext::deserialize(const std::string& data) {
+    auto result = deserialize_checked(data);
+    if (!result) {
+        throw_legacy_assumption_error(result.error());
+    }
+    return std::move(result.value());
+}
+
+Result<AssumptionContext> AssumptionContext::deserialize_checked(const std::string& data) {
+    constexpr const char* operation = "deserialize";
+    try {
+        return Result<AssumptionContext>::success(deserialize_impl(data));
+    } catch (const std::bad_alloc&) {
+        return Result<AssumptionContext>::failure(
+            CasErrc::ResourceLimit, "assumption deserialization allocation failed", operation);
+    } catch (const std::invalid_argument& ex) {
+        return Result<AssumptionContext>::failure(CasErrc::ParseError, ex.what(), operation);
+    } catch (const std::exception& ex) {
+        return Result<AssumptionContext>::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
 }
 
 } // namespace lamina

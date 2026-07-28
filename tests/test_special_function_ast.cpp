@@ -40,31 +40,31 @@ constexpr const char* kVarName = "x";
 
 // Recursively walk the AST and return true if it contains a FunctionNode
 // whose type equals `expected`.
-bool ast_contains_functype(const std::shared_ptr<SymbolicNode>& node,
+bool ast_contains_functype(const std::shared_ptr<const SymbolicNode>& node,
                            FunctionNode::FuncType expected) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == expected) return true;
-        for (const auto& a : fn->arguments) {
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == expected) return true;
+        for (const auto& a : fn->arguments()) {
             if (ast_contains_functype(a, expected)) return true;
         }
         return false;
     }
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (const auto& op : add->operands) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (const auto& op : add->operands()) {
             if (ast_contains_functype(op, expected)) return true;
         }
         return false;
     }
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (const auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& op : mul->operands()) {
             if (ast_contains_functype(op, expected)) return true;
         }
         return false;
     }
-    if (auto pw = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (ast_contains_functype(pw->base, expected)) return true;
-        if (ast_contains_functype(pw->exponent, expected)) return true;
+    if (auto pw = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (ast_contains_functype(pw->base(), expected)) return true;
+        if (ast_contains_functype(pw->exponent(), expected)) return true;
         return false;
     }
     return false;
@@ -155,28 +155,28 @@ void verify_case(const Case& c) {
     }
 
     Integrator integ;
-    SymbolicExpr result;
+    std::shared_ptr<SymbolicExpr> result;
     try {
-        result = integ.integrate(*integrand, kVarName);
+        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand, kVarName));
     } catch (const std::exception& e) {
         EXPECT_TRUE(false,
                     c.name + ": exception during integration: " + e.what());
         return;
     }
 
-    bool ok = ast_contains_functype(result.root, c.expected);
+    bool ok = ast_contains_functype(lamina::detail::node(result), c.expected);
     if (!ok) {
         std::string msg = c.name
             + ": expected FunctionNode with FuncType::"
             + functype_name(c.expected)
-            + " but result was: " + result.to_string();
+            + " but result was: " + result->to_string();
         EXPECT_TRUE(false, msg);
         return;
     }
 
     std::string ok_msg = c.name + " (integrand=" + integrand->to_string()
-        + ", result=" + result.to_string() + ")";
-    EXPECT_TRUE(true, ok_msg);
+        + ", result=" + result->to_string() + ")";
+    EXPECT_TRUE(ok, ok_msg);
 }
 
 } // anonymous namespace

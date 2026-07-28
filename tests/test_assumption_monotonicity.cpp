@@ -26,23 +26,23 @@ using namespace lamina;
 
 /// Helper: create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var_expr(const std::string& name) {
-    return SymbolicExpr(std::make_shared<VariableNode>(name));
+    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
 }
 
 /// Helper: create a FunctionNode expression (e.g., ln(x), sqrt(x), exp(x)).
 static SymbolicExpr make_func_expr(FunctionNode::FuncType type, const std::string& var_name) {
-    auto var_node = std::make_shared<VariableNode>(var_name);
-    auto func_node = std::make_shared<FunctionNode>(
-        type, std::vector<std::shared_ptr<SymbolicNode>>{var_node});
-    return SymbolicExpr(func_node);
+    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
+    auto func_node = lamina::detail::make_node<FunctionNode>(
+        type, std::vector<std::shared_ptr<const SymbolicNode>>{var_node});
+    return lamina::detail::expression_from_node(func_node);
 }
 
 /// Helper: create a PowerNode expression (var^n).
 static SymbolicExpr make_power_expr(const std::string& var_name, int n) {
-    auto var_node = std::make_shared<VariableNode>(var_name);
-    auto exp_node = std::make_shared<NumberNode>(BigInt(n));
-    auto pow_node = std::make_shared<PowerNode>(var_node, exp_node);
-    return SymbolicExpr(pow_node);
+    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
+    auto exp_node = lamina::detail::make_node<NumberNode>(BigInt(n));
+    auto pow_node = lamina::detail::make_node<PowerNode>(var_node, exp_node);
+    return lamina::detail::expression_from_node(pow_node);
 }
 
 // ============================================================================
@@ -74,6 +74,51 @@ void test_ln_monotonicity_both_positive() {
 
     EXPECT_TRUE(ctx.current_relations().has_relation(ln_x, ln_y, RelationalNode::Op::GT),
                 "ln(x) > ln(y) should be deduced when both x,y are Positive and x > y");
+}
+
+void test_checked_monotonicity_rules_success() {
+    TEST_CASE("Checked monotonicity rules: explicit success result");
+
+    AssumptionContext ctx;
+    ctx.assume_sign("x", Sign::Positive);
+    ctx.assume_sign("y", Sign::Positive);
+
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr x_expr = make_var_expr("x");
+    SymbolicExpr y_expr = make_var_expr("y");
+
+    Relation rel{x_expr, y_expr, RelationalNode::Op::GT};
+    auto seed = ctx.current_relations().add_relation_checked(
+        x_expr, y_expr, RelationalNode::Op::GT, ctx.current_properties());
+    EXPECT_TRUE(seed.has_value(), "checked seed relation succeeds");
+
+    auto result = engine.apply_monotonicity_rules_checked(
+        rel, ctx.current_relations(), ctx.current_properties());
+    EXPECT_TRUE(result.has_value(), "checked monotonicity rules report success");
+
+    SymbolicExpr ln_x = make_func_expr(FunctionNode::FuncType::Ln, "x");
+    SymbolicExpr ln_y = make_func_expr(FunctionNode::FuncType::Ln, "y");
+
+    EXPECT_TRUE(ctx.current_relations().has_relation(ln_x, ln_y, RelationalNode::Op::GT),
+                "checked monotonicity rules deduce ln(x) > ln(y)");
+}
+
+void test_checked_monotonicity_rules_noop() {
+    TEST_CASE("Checked monotonicity rules: unsupported relation is no-op success");
+
+    AssumptionContext ctx;
+    InferenceEngine engine(ctx);
+
+    SymbolicExpr x_expr = make_var_expr("x");
+    SymbolicExpr y_expr = make_var_expr("y");
+    Relation rel{x_expr, y_expr, RelationalNode::Op::LEQ};
+
+    auto result = engine.apply_monotonicity_rules_checked(
+        rel, ctx.current_relations(), ctx.current_properties());
+    EXPECT_TRUE(result.has_value(), "checked monotonicity no-op reports success");
+    EXPECT_TRUE(ctx.current_relations().get_relations().empty(),
+                "checked monotonicity no-op leaves relation store unchanged");
 }
 
 // ============================================================================
@@ -280,11 +325,11 @@ void test_no_rules_for_non_variable_operands() {
     InferenceEngine engine(ctx);
 
     // Create a composite LHS: x + 1
-    auto x_node = std::make_shared<VariableNode>("x");
-    auto one_node = std::make_shared<NumberNode>(BigInt(1));
-    auto add_node = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node, one_node});
-    SymbolicExpr composite_expr(add_node);
+    auto x_node = lamina::detail::make_node<VariableNode>("x");
+    auto one_node = lamina::detail::make_node<NumberNode>(BigInt(1));
+    auto add_node = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node, one_node});
+    auto composite_expr = lamina::detail::expression_from_node(add_node);
     SymbolicExpr y_expr = make_var_expr("y");
 
     Relation rel{composite_expr, y_expr, RelationalNode::Op::GT};
@@ -317,7 +362,7 @@ void test_power_monotonicity_both_nonnegative() {
     // First, add a relation that contains a power expression with x^2
     // so that the exponent 2 is "appearing in expressions"
     SymbolicExpr x_squared = make_power_expr("x", 2);
-    SymbolicExpr zero_expr(std::make_shared<NumberNode>(BigInt(0)));
+    auto zero_expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
     ctx.current_relations().add_relation(x_squared, zero_expr, RelationalNode::Op::GT, ctx.current_properties());
 
     // Now add x > y and apply monotonicity
@@ -349,7 +394,7 @@ void test_power_guard_missing_nonnegative() {
 
     // Add a power expression to provide exponent context
     SymbolicExpr x_squared = make_power_expr("x", 2);
-    SymbolicExpr zero_expr(std::make_shared<NumberNode>(BigInt(0)));
+    auto zero_expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
     ctx.current_relations().add_relation(x_squared, zero_expr, RelationalNode::Op::GT, ctx.current_properties());
 
     Relation rel{x_expr, y_expr, RelationalNode::Op::GT};
@@ -455,10 +500,10 @@ void test_all_rules_applied_together() {
 
 /// Helper: create a closed interval [lo, hi] from numeric values.
 static Interval make_closed_interval(double lo, double hi) {
-    auto lo_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::closed(lo_expr);
     iv.upper = Endpoint::closed(hi_expr);
@@ -467,10 +512,10 @@ static Interval make_closed_interval(double lo, double hi) {
 
 /// Helper: create an open interval (lo, hi) from numeric values.
 static Interval make_open_interval(double lo, double hi) {
-    auto lo_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::open(lo_expr);
     iv.upper = Endpoint::open(hi_expr);
@@ -558,15 +603,14 @@ void test_property7_negation_reverses_monotonicity() {
     InferenceEngine engine(ctx);
 
     // Create -exp(x) = MultiplyNode([-1, exp(x)])
-    auto x_node = std::make_shared<VariableNode>("x");
-    auto exp_node = std::make_shared<FunctionNode>(
+    auto x_node = lamina::detail::make_node<VariableNode>("x");
+    auto exp_node = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Exp,
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
-    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
-    auto neg_exp = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{neg_one, exp_node});
-    SymbolicExpr neg_exp_x(neg_exp);
-
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
+    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
+    auto neg_exp = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, exp_node});
+    auto neg_exp_x = lamina::detail::expression_from_node(neg_exp);
     Interval entire = Interval::entire_line();
     Monotonicity mono = engine.infer_monotonicity(neg_exp_x, "x", entire);
 
@@ -584,15 +628,14 @@ void test_property7_negation_reverses_ln() {
     InferenceEngine engine(ctx);
 
     // Create -ln(x)
-    auto x_node = std::make_shared<VariableNode>("x");
-    auto ln_node = std::make_shared<FunctionNode>(
+    auto x_node = lamina::detail::make_node<VariableNode>("x");
+    auto ln_node = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Ln,
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
-    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
-    auto neg_ln = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{neg_one, ln_node});
-    SymbolicExpr neg_ln_x(neg_ln);
-
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
+    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
+    auto neg_ln = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, ln_node});
+    auto neg_ln_x = lamina::detail::expression_from_node(neg_ln);
     Interval iv = make_closed_interval(1.0, 100.0);
     Monotonicity mono = engine.infer_monotonicity(neg_ln_x, "x", iv);
 
@@ -703,6 +746,8 @@ int main() {
 
     // Properties 28-31: Monotonicity deduction rules (existing tests)
     test_ln_monotonicity_both_positive();
+    test_checked_monotonicity_rules_success();
+    test_checked_monotonicity_rules_noop();
     test_sqrt_monotonicity_both_positive();
     test_exp_monotonicity_both_real();
     test_exp_monotonicity_positive_implies_real();

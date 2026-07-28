@@ -330,9 +330,10 @@ static std::vector<Polynomial<Rational>> factor_univariate_bridge(
  * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
  *      Mathematics of Computation, 32(144), 1978.
  */
-static bool select_evaluation_points(const MultiPoly& poly,
-                                     std::string& main_var,
-                                     std::map<std::string, Rational>& eval_points)
+[[maybe_unused]] static bool select_evaluation_points(
+    const MultiPoly& poly,
+    std::string& main_var,
+    std::map<std::string, Rational>& eval_points)
 {
     const auto& vars = poly.variables();
     if (vars.empty() || poly.is_zero()) return false;
@@ -468,7 +469,7 @@ static bool select_evaluation_points(const MultiPoly& poly,
  * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
  *      Mathematics of Computation, 32(144), 1978.
  */
-static std::vector<MultiPoly> trial_division(
+[[maybe_unused]] static std::vector<MultiPoly> trial_division(
     MultiPoly& remaining,
     std::vector<MultiPoly>& lifted_factors)
 {
@@ -532,7 +533,7 @@ static std::vector<MultiPoly> trial_division(
  *
  * @see Geddes, Czapor, Labahn. "Algorithms for Computer Algebra." §15.7.
  */
-static std::vector<MultiPoly> factor_combination(
+[[maybe_unused]] static std::vector<MultiPoly> factor_combination(
     MultiPoly& remaining,
     std::vector<MultiPoly>& lifted_factors)
 {
@@ -668,7 +669,7 @@ static std::vector<MultiPoly> factor_combination(
  * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
  *      Mathematics of Computation, 32(144), 1978.
  */
-static MultiFactorResult assemble_result(
+[[maybe_unused]] static MultiFactorResult assemble_result(
     const std::vector<MultiPoly>& factors,
     const std::vector<int>& multiplicities,
     const MultiPoly& original)
@@ -1383,7 +1384,7 @@ SquareFreeDecomp square_free_decompose(const MultiPoly& poly, const std::string&
  * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
  *      Mathematics of Computation, 32(144), 1978.
  */
-static void precompute_leading_coefficients(
+[[maybe_unused]] static void precompute_leading_coefficients(
     const MultiPoly& poly,
     const std::string& main_var,
     const std::map<std::string, Rational>& eval_points,
@@ -2258,7 +2259,6 @@ factor_homogeneous_bivariate(const MultiPoly& poly)
     if (uni_factors.size() <= 1) return std::nullopt;
 
     /// 重新齐次化每个因子
-    int total_deg = poly.total_degree();
     MultiFactorResult result;
     result.constant = poly.numeric_content();
 

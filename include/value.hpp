@@ -3,10 +3,12 @@
  * @brief 运行时值类型 Value，支持数值、符号、容器类型。
  */
 #pragma once
+#include "lamina_export.hpp"
 #include "bigint.hpp"
 #include "irrational.hpp"
 #include "rational.hpp"
 #include "symbolic.hpp"
+#include "numeric_evaluation.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
@@ -15,16 +17,6 @@
 #include <variant>
 #include <vector>
 #include <sstream>
-
-#ifdef _WIN32
-#ifdef LAMINA_CORE_EXPORTS
-#define LAMINA_API __declspec(dllexport)
-#else
-#define LAMINA_API __declspec(dllimport)
-#endif
-#else
-#define LAMINA_API
-#endif
 
 /** @brief 运行时统一值类型，支持数值、符号、容器等类型的动态表示 */
 class Value final {
@@ -151,7 +143,20 @@ public:
             return std::get<::Irrational>(data).to_double();
         }
         if (type == Type::Symbolic) {
-            return std::get<std::shared_ptr<SymbolicExpr>>(data)->to_numeric();
+            const auto& expr = std::get<std::shared_ptr<SymbolicExpr>>(data);
+            if (!expr) {
+                throw std::runtime_error(
+                    "numeric evaluation failed: symbolic value is null");
+            }
+            auto evaluated = lamina::evaluate_numeric(*expr);
+            if (!evaluated || !evaluated.value().is_finite() ||
+                !std::isfinite(evaluated.value().value)) {
+                throw std::runtime_error(
+                    "numeric evaluation failed: " +
+                    (evaluated ? std::string("non-finite result")
+                               : evaluated.error().message));
+            }
+            return static_cast<lmmc_real_t>(evaluated.value().value);
         }
         return 0.0;
     }

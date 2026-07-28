@@ -57,40 +57,40 @@ static std::shared_ptr<SymbolicExpr> build_parametric_linear_2x2(
 // expression contains symbols other than `var` (which should be substituted
 // before calling) or when a math error occurs.
 static std::optional<double> numeric_eval(const std::shared_ptr<SymbolicExpr>& e) {
-    if (!e || !e->root) return 0.0;
-    auto root = e->root;
+    if (!e || !lamina::detail::node(e)) return 0.0;
+    auto root = lamina::detail::node(e);
 
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(root)) {
-        if (std::holds_alternative<lmmc_real_t>(num->value)) return std::get<lmmc_real_t>(num->value);
-        if (std::holds_alternative<BigInt>(num->value)) return (double)std::get<BigInt>(num->value).to_double();
-        if (std::holds_alternative<Rational>(num->value)) return (double)std::get<Rational>(num->value).to_double();
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(root)) {
+        if (std::holds_alternative<lmmc_real_t>(num->value())) return std::get<lmmc_real_t>(num->value());
+        if (std::holds_alternative<BigInt>(num->value())) return (double)std::get<BigInt>(num->value()).to_double();
+        if (std::holds_alternative<Rational>(num->value())) return (double)std::get<Rational>(num->value()).to_double();
         return 0.0;
     }
-    if (std::dynamic_pointer_cast<VariableNode>(root)) {
+    if (std::dynamic_pointer_cast<const VariableNode>(root)) {
         // Free variable still present after substitution -> cannot evaluate.
         return std::nullopt;
     }
-    if (auto add = std::dynamic_pointer_cast<AddNode>(root)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(root)) {
         double s = 0.0;
-        for (auto& op : add->operands) {
-            auto v = numeric_eval(std::make_shared<SymbolicExpr>(op));
+        for (auto& op : add->operands()) {
+            auto v = numeric_eval(lamina::detail::make_expression_ptr(op));
             if (!v) return std::nullopt;
             s += *v;
         }
         return s;
     }
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(root)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(root)) {
         double s = 1.0;
-        for (auto& op : mul->operands) {
-            auto v = numeric_eval(std::make_shared<SymbolicExpr>(op));
+        for (auto& op : mul->operands()) {
+            auto v = numeric_eval(lamina::detail::make_expression_ptr(op));
             if (!v) return std::nullopt;
             s *= *v;
         }
         return s;
     }
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(root)) {
-        auto b = numeric_eval(std::make_shared<SymbolicExpr>(pow->base));
-        auto x = numeric_eval(std::make_shared<SymbolicExpr>(pow->exponent));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(root)) {
+        auto b = numeric_eval(lamina::detail::make_expression_ptr(pow->base()));
+        auto x = numeric_eval(lamina::detail::make_expression_ptr(pow->exponent()));
         if (!b || !x) return std::nullopt;
         if (*b == 0.0 && *x < 0.0) return std::nullopt;
         double v = std::pow(*b, *x);

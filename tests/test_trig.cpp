@@ -46,5 +46,5 @@ int main() {
         EXPECT_EQ_STR(SymbolicExpr::tan(pi_4)->simplify()->to_string(), "1", "tan(pi/4)");
     }
 
-    return 0;
+    return TEST_REPORT();
 }

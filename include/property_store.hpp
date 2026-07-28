@@ -9,6 +9,7 @@
 
 #include "assumption.hpp"
 #include "interval.hpp"
+#include "result.hpp"
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -17,6 +18,8 @@
 #include <stdexcept>
 
 namespace lamina {
+
+using PropertyStoreResult = Result<void>;
 
 /// Hash functor for Sign enum to allow use in unordered_set.
 struct SignHash {
@@ -36,15 +39,30 @@ public:
     /// Declare domain for a symbol. Throws std::invalid_argument on contradiction.
     void declare_domain(const std::string& symbol, Domain domain);
 
+    /// Checked domain declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_domain_checked(const std::string& symbol, Domain domain);
+
     /// Declare sign for a symbol. Throws std::invalid_argument on contradiction.
     void declare_sign(const std::string& symbol, Sign sign);
+
+    /// Checked sign declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_sign_checked(const std::string& symbol, Sign sign);
 
     /// Declare parity for a symbol. Throws std::invalid_argument on contradiction.
     void declare_parity(const std::string& symbol, Parity parity);
 
+    /// Checked parity declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_parity_checked(const std::string& symbol, Parity parity);
+
     /// Declare boundedness for a symbol, optionally with interval bounds.
     void declare_bounded(const std::string& symbol, Boundedness bounded,
                          std::optional<Interval> bounds = std::nullopt);
+
+    /// Checked boundedness declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_bounded_checked(
+        const std::string& symbol,
+        Boundedness bounded,
+        std::optional<Interval> bounds = std::nullopt);
 
     /// Query the most specific domain for a symbol (default: Complex).
     Domain get_domain(const std::string& symbol) const;
@@ -76,6 +94,14 @@ public:
      */
     void declare_continuous(const std::string& symbol, const Interval& interval);
 
+    PropertyStoreResult declare_continuous_checked(
+        const std::string& symbol,
+        const Interval& interval,
+        ComputationContext& context);
+    PropertyStoreResult declare_continuous_checked(
+        const std::string& symbol,
+        const Interval& interval);
+
     /**
      * @brief Declare a symbol as differentiable on a specified interval.
      *
@@ -89,6 +115,14 @@ public:
      */
     void declare_differentiable(const std::string& symbol, const Interval& interval);
 
+    PropertyStoreResult declare_differentiable_checked(
+        const std::string& symbol,
+        const Interval& interval,
+        ComputationContext& context);
+    PropertyStoreResult declare_differentiable_checked(
+        const std::string& symbol,
+        const Interval& interval);
+
     /**
      * @brief Query whether a symbol is continuous on a given interval.
      * @param symbol Symbol name.
@@ -98,6 +132,14 @@ public:
      */
     bool is_continuous(const std::string& symbol, const Interval& interval) const;
 
+    Result<bool> is_continuous_checked(
+        const std::string& symbol,
+        const Interval& interval,
+        ComputationContext& context) const;
+    Result<bool> is_continuous_checked(
+        const std::string& symbol,
+        const Interval& interval) const;
+
     /**
      * @brief Query whether a symbol is differentiable on a given interval.
      * @param symbol Symbol name.
@@ -106,6 +148,14 @@ public:
      *         that covers the queried interval.
      */
     bool is_differentiable(const std::string& symbol, const Interval& interval) const;
+
+    Result<bool> is_differentiable_checked(
+        const std::string& symbol,
+        const Interval& interval,
+        ComputationContext& context) const;
+    Result<bool> is_differentiable_checked(
+        const std::string& symbol,
+        const Interval& interval) const;
 
     // ============================================================
     // Transcendental classification (Req 8)
@@ -123,6 +173,9 @@ public:
      * @throws std::invalid_argument on contradiction with Algebraic or sub-domains
      */
     void declare_transcendental(const std::string& symbol);
+
+    /// Checked transcendental declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_transcendental_checked(const std::string& symbol);
 
     /**
      * @brief Query whether a symbol has been declared transcendental.
@@ -147,6 +200,9 @@ public:
      * @throws std::invalid_argument on Finite+Divergent contradiction
      */
     void declare_finiteness(const std::string& symbol, Finiteness f);
+
+    /// Checked finiteness declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_finiteness_checked(const std::string& symbol, Finiteness f);
 
     /**
      * @brief Query the finiteness classification of a symbol.
@@ -173,6 +229,9 @@ public:
      */
     void declare_definiteness(const std::string& symbol, Definiteness d);
 
+    /// Checked definiteness declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_definiteness_checked(const std::string& symbol, Definiteness d);
+
     /**
      * @brief Query the definiteness classification of a symbol.
      * @param symbol Symbol name
@@ -191,6 +250,11 @@ public:
      */
     void declare_periodic(const std::string& symbol,
                           const std::shared_ptr<SymbolicExpr>& period);
+
+    /// Checked periodic declaration for migration away from exception-only APIs.
+    PropertyStoreResult declare_periodic_checked(
+        const std::string& symbol,
+        const std::shared_ptr<SymbolicExpr>& period);
 
     /**
      * @brief Get the period expression for a symbol, if declared.
@@ -254,6 +318,18 @@ public:
     void declare_monotonicity(const std::string& symbol, const std::string& variable,
                               const Interval& interval, Monotonicity mono);
 
+    PropertyStoreResult declare_monotonicity_checked(
+        const std::string& symbol,
+        const std::string& variable,
+        const Interval& interval,
+        Monotonicity mono,
+        ComputationContext& context);
+    PropertyStoreResult declare_monotonicity_checked(
+        const std::string& symbol,
+        const std::string& variable,
+        const Interval& interval,
+        Monotonicity mono);
+
     /**
      * @brief Query the monotonicity of a symbol with respect to a variable on an interval.
      *
@@ -269,6 +345,16 @@ public:
      */
     Monotonicity get_monotonicity(const std::string& symbol, const std::string& variable,
                                   const Interval& interval) const;
+
+    Result<Monotonicity> get_monotonicity_checked(
+        const std::string& symbol,
+        const std::string& variable,
+        const Interval& interval,
+        ComputationContext& context) const;
+    Result<Monotonicity> get_monotonicity_checked(
+        const std::string& symbol,
+        const std::string& variable,
+        const Interval& interval) const;
 
 private:
     struct SymbolProperties {
@@ -312,6 +398,18 @@ private:
 
     std::unordered_map<std::string, SymbolProperties> properties_;
 
+    void declare_domain_unchecked(const std::string& symbol, Domain domain);
+    void declare_sign_unchecked(const std::string& symbol, Sign sign);
+    void declare_parity_unchecked(const std::string& symbol, Parity parity);
+    void declare_bounded_unchecked(const std::string& symbol,
+                                   Boundedness bounded,
+                                   std::optional<Interval> bounds);
+    void declare_transcendental_unchecked(const std::string& symbol);
+    void declare_finiteness_unchecked(const std::string& symbol, Finiteness f);
+    void declare_definiteness_unchecked(const std::string& symbol, Definiteness d);
+    void declare_periodic_unchecked(const std::string& symbol,
+                                    const std::shared_ptr<SymbolicExpr>& period);
+
     /// Check domain-sign cross-constraints. Throws on contradiction.
     void check_domain_sign_consistency(const std::string& symbol,
                                        const SymbolProperties& props,
@@ -331,11 +429,6 @@ private:
     /// Get the specificity level of a domain (higher = more specific).
     int domain_specificity(Domain domain) const;
 
-    /// Check whether two intervals overlap (have a non-empty intersection).
-    bool intervals_overlap(const Interval& a, const Interval& b) const;
-
-    /// Check whether interval `outer` fully covers interval `inner`.
-    bool interval_covers(const Interval& outer, const Interval& inner) const;
 };
 
 } // namespace lamina

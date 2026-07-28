@@ -12,22 +12,13 @@
  */
 #pragma once
 
+#include "lamina_export.hpp"
 #include "multivariate_poly.hpp"
 
 #include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
-
-#ifdef _WIN32
-#ifdef LAMINA_CORE_EXPORTS
-#define LAMINA_API __declspec(dllexport)
-#else
-#define LAMINA_API __declspec(dllimport)
-#endif
-#else
-#define LAMINA_API
-#endif
 
 namespace lamina {
 

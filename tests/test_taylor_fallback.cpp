@@ -165,12 +165,13 @@ int main() {
                     std::cout << "[INFO] Got " << *val << " (expected 1.0; "
                               << "indeterminate form dispatch intercepts before Taylor fallback)" << std::endl;
                 }
-                // Don't fail the test — this is a known interaction issue
-                EXPECT_TRUE(true, "limit(sin(1/x)/(1/x), x->inf) computed");
+                EXPECT_TRUE(std::isfinite(*val),
+                            "limit(sin(1/x)/(1/x), x->inf) produced a finite numeric result");
             } else {
                 auto str = lim->to_string();
                 std::cout << "[INFO] Result: " << str << std::endl;
-                EXPECT_TRUE(true, "limit(sin(1/x)/(1/x), x->inf) computed");
+                EXPECT_TRUE(!str.empty() && str != "null",
+                            "limit(sin(1/x)/(1/x), x->inf) produced a symbolic result");
             }
         }
     }

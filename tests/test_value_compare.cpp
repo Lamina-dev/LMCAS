@@ -34,6 +34,20 @@ int main() {
     EXPECT_TRUE(sym1 == sym2, "SymbolicExpr AST structure should compare equal");
     EXPECT_TRUE(!(sym1 < sym2) && !(sym2 < sym1), "SymbolicExpr AST structure < should be false for equal trees");
 
+    auto numeric_expr = SymbolicExpr::add(SymbolicExpr::number(1), SymbolicExpr::number(1));
+    Value symbolic_number(numeric_expr);
+    EXPECT_NEAR(symbolic_number.as_number(), 2.0, 1e-12,
+                "Value::as_number evaluates finite symbolic numeric expressions");
+
+    bool symbolic_var_threw = false;
+    try {
+        (void)Value(SymbolicExpr::variable("z")).as_number();
+    } catch (const std::runtime_error&) {
+        symbolic_var_threw = true;
+    }
+    EXPECT_TRUE(symbolic_var_threw,
+                "Value::as_number rejects unbound symbolic expressions");
+
     std::set<Value> s;
     s.insert(v1);
     s.insert(v2);

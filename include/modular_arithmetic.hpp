@@ -10,10 +10,36 @@
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
+#include <limits>
+#include <string>
+#include "computation_context.hpp"
 #include "lammp/lmmp.h"
 #include "lammp/numth.h"
+#include "result.hpp"
 
 namespace lamina {
+
+using CrtResult = Result<std::pair<int64_t, int64_t>>;
+using RationalReconstructionResult = Result<std::pair<int64_t, int64_t>>;
+
+namespace modular_detail {
+
+inline uint64_t abs_to_u64(int64_t value) {
+    if (value >= 0) return static_cast<uint64_t>(value);
+    return static_cast<uint64_t>(-(value + 1)) + 1;
+}
+
+inline bool checked_positive_product(int64_t a, int64_t b, int64_t& out) {
+    if (a <= 0 || b <= 0) return false;
+    if (static_cast<uint64_t>(a) >
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) / static_cast<uint64_t>(b)) {
+        return false;
+    }
+    out = a * b;
+    return true;
+}
+
+} // namespace modular_detail
 
 /**
  * @brief 扩展欧几里得算法，求 gcd(a, b) 及 Bezout 系数
@@ -214,7 +240,6 @@ inline std::pair<int64_t, int64_t> crt(int64_t r1, int64_t m1,
         throw std::domain_error("crt(): moduli must be coprime");
     }
 
-    int64_t M = m1 * m2;
     int64_t diff = ((r2 - r1) % m2 + m2) % m2;
 
     int64_t s_mod = ((s % m2) + m2) % m2;
@@ -226,15 +251,77 @@ inline std::pair<int64_t, int64_t> crt(int64_t r1, int64_t m1,
         static_cast<uint64_t>(m2), &q_unused);
 
 #if defined(__GNUC__) || defined(__clang__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wpedantic"
     __int128 x = static_cast<__int128>(r1) + static_cast<__int128>(m1) * factor;
     __int128 bigM = static_cast<__int128>(m1) * m2;
     x = ((x % bigM) + bigM) % bigM;
+    #pragma GCC diagnostic pop
     return {static_cast<int64_t>(x), static_cast<int64_t>(bigM)};
 #else
+    int64_t M = m1 * m2;
     int64_t x = r1 + m1 * static_cast<int64_t>(factor);
     x = ((x % M) + M) % M;
     return {x, M};
 #endif
+}
+
+/**
+ * @brief Checked Chinese remainder theorem for two positive coprime moduli.
+ */
+inline CrtResult crt_checked(int64_t r1, int64_t m1,
+                             int64_t r2, int64_t m2,
+                             ComputationContext& context) {
+    constexpr const char* operation = "crt";
+    auto step = context.consume_steps(1, operation);
+    if (!step) return CrtResult::failure(step.error());
+    if (m1 <= 0 || m2 <= 0) {
+        return CrtResult::failure(CasErrc::InvalidArgument,
+                                  "CRT moduli must be positive", operation);
+    }
+
+    int64_t product = 0;
+    if (!modular_detail::checked_positive_product(m1, m2, product)) {
+        return CrtResult::failure(CasErrc::ResourceLimit,
+                                  "CRT modulus product exceeds int64 range", operation);
+    }
+
+    int64_t s = 0;
+    int64_t t = 0;
+    int64_t g = extended_gcd(m1, m2, s, t);
+    if (g < 0) g = -g;
+    if (g != 1) {
+        return CrtResult::failure(CasErrc::InvalidArgument,
+                                  "CRT moduli must be coprime", operation);
+    }
+
+#if defined(__GNUC__) || defined(__clang__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wpedantic"
+    const __int128 big_m2 = static_cast<__int128>(m2);
+    const __int128 diff = ((static_cast<__int128>(r2) - r1) % big_m2 + big_m2) % big_m2;
+    const __int128 s_mod = ((static_cast<__int128>(s) % big_m2) + big_m2) % big_m2;
+    __int128 factor = (s_mod * diff) % big_m2;
+    __int128 x = static_cast<__int128>(r1) + static_cast<__int128>(m1) * factor;
+    const __int128 big_product = static_cast<__int128>(product);
+    x = ((x % big_product) + big_product) % big_product;
+    #pragma GCC diagnostic pop
+    return CrtResult::success({static_cast<int64_t>(x), product});
+#else
+    try {
+        return CrtResult::success(crt(r1, m1, r2, m2));
+    } catch (const std::bad_alloc&) {
+        return CrtResult::failure(CasErrc::ResourceLimit,
+                                  "CRT allocation failed", operation);
+    } catch (const std::exception& ex) {
+        return CrtResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
+    }
+#endif
+}
+
+inline CrtResult crt_checked(int64_t r1, int64_t m1, int64_t r2, int64_t m2) {
+    ComputationContext context;
+    return crt_checked(r1, m1, r2, m2, context);
 }
 
 /**
@@ -260,6 +347,46 @@ inline std::pair<int64_t, int64_t> multi_crt(const std::vector<int64_t>& residue
     }
 
     return {combined, modulus};
+}
+
+/**
+ * @brief Checked CRT for a non-empty list of pairwise coprime positive moduli.
+ */
+inline CrtResult multi_crt_checked(const std::vector<int64_t>& residues,
+                                   const std::vector<int64_t>& primes,
+                                   ComputationContext& context) {
+    constexpr const char* operation = "multi_crt";
+    auto step = context.consume_steps(residues.size() + 1, operation);
+    if (!step) return CrtResult::failure(step.error());
+    if (residues.empty() || residues.size() != primes.size()) {
+        return CrtResult::failure(
+            CasErrc::InvalidArgument,
+            "multi_crt residues and moduli must be non-empty and the same size",
+            operation);
+    }
+    for (int64_t modulus : primes) {
+        if (modulus <= 0) {
+            return CrtResult::failure(CasErrc::InvalidArgument,
+                                      "multi_crt moduli must be positive", operation);
+        }
+    }
+
+    int64_t combined = residues[0];
+    int64_t modulus = primes[0];
+    for (size_t i = 1; i < residues.size(); ++i) {
+        auto merged = crt_checked(combined, modulus, residues[i], primes[i], context);
+        if (!merged) return merged;
+        combined = merged.value().first;
+        modulus = merged.value().second;
+    }
+
+    return CrtResult::success({combined, modulus});
+}
+
+inline CrtResult multi_crt_checked(const std::vector<int64_t>& residues,
+                                   const std::vector<int64_t>& primes) {
+    ComputationContext context;
+    return multi_crt_checked(residues, primes, context);
 }
 
 /**
@@ -312,6 +439,37 @@ inline std::pair<int64_t, int64_t> rational_reconstruction(int64_t x, int64_t m)
     }
 
     return {a, b};
+}
+
+/**
+ * @brief Checked rational reconstruction. Returns Inconclusive when no
+ * supported coprime numerator/denominator can be reconstructed.
+ */
+inline RationalReconstructionResult rational_reconstruction_checked(
+    int64_t x,
+    int64_t m,
+    ComputationContext& context) {
+    constexpr const char* operation = "rational_reconstruction";
+    auto step = context.consume_steps(1, operation);
+    if (!step) return RationalReconstructionResult::failure(step.error());
+    if (m <= 0) {
+        return RationalReconstructionResult::failure(
+            CasErrc::InvalidArgument, "rational reconstruction modulus must be positive", operation);
+    }
+
+    auto reconstructed = rational_reconstruction(x, m);
+    if (reconstructed.second == 0) {
+        return RationalReconstructionResult::failure(
+            CasErrc::Inconclusive,
+            "no rational reconstruction exists in the supported bound",
+            operation);
+    }
+    return RationalReconstructionResult::success(reconstructed);
+}
+
+inline RationalReconstructionResult rational_reconstruction_checked(int64_t x, int64_t m) {
+    ComputationContext context;
+    return rational_reconstruction_checked(x, m, context);
 }
 
 /** @brief 预定义的大素数表，用于模运算多素数方案 */

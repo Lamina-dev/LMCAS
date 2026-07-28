@@ -6,6 +6,7 @@
 #include <random>
 #include <set>
 #include <sstream>
+#include <string>
 #include <vector>
 
 using namespace lamina;
@@ -23,6 +24,219 @@ static std::shared_ptr<SymbolicExpr> negate(std::shared_ptr<SymbolicExpr> e) {
 int main() {
 
     auto x = SymbolicExpr::variable("x");
+
+    TEST_CASE("Checked exact affine inequality contracts");
+    {
+        auto greater = InequalitySolver::solve_inequality_checked(
+            linear(2, -3), InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(greater.has_value(), "checked 2x-3 > 0 succeeds");
+        if (greater) {
+            EXPECT_TRUE(!greater.value().contains(1.5),
+                        "checked strict affine inequality excludes its exact boundary");
+            EXPECT_TRUE(greater.value().contains(2.0),
+                        "checked positive-slope affine inequality selects the upper ray");
+        }
+
+        auto negative_slope = InequalitySolver::solve_inequality_checked(
+            linear(-2, 4), InequalityType::LessEqual, "x");
+        EXPECT_TRUE(negative_slope.has_value(), "checked -2x+4 <= 0 succeeds");
+        if (negative_slope) {
+            EXPECT_TRUE(negative_slope.value().contains(2.0),
+                        "checked non-strict affine inequality includes its boundary");
+            EXPECT_TRUE(negative_slope.value().contains(3.0),
+                        "checked negative-slope inequality reverses direction exactly");
+            EXPECT_TRUE(!negative_slope.value().contains(1.0),
+                        "checked negative-slope inequality excludes the other ray");
+        }
+
+        auto true_constant = InequalitySolver::solve_inequality_checked(
+            SymbolicExpr::number(Rational(1, 3)),
+            InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(true_constant && true_constant.value().is_entire_line(),
+                    "checked true constant inequality returns the entire real line");
+
+        auto false_constant = InequalitySolver::solve_inequality_checked(
+            SymbolicExpr::number(0), InequalityType::LessThan, "x");
+        EXPECT_TRUE(false_constant && false_constant.value().is_empty(),
+                    "checked false constant inequality returns the empty set");
+
+        auto approximate = SymbolicExpr::add(
+            SymbolicExpr::multiply(SymbolicExpr::number(0.5), x),
+            SymbolicExpr::number(1));
+        auto approximate_result = InequalitySolver::solve_inequality_checked(
+            approximate, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(!approximate_result &&
+                        approximate_result.error().code == CasErrc::Inconclusive,
+                    "checked affine solving does not relabel approximate coefficients as exact");
+
+        auto parameterized = SymbolicExpr::add(x, SymbolicExpr::variable("a"));
+        auto parameterized_result = InequalitySolver::solve_inequality_checked(
+            parameterized, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(!parameterized_result &&
+                        parameterized_result.error().code == CasErrc::Inconclusive,
+                    "checked affine solving reports symbolic coefficients as unsupported");
+
+        auto cubic = SymbolicExpr::power(x, SymbolicExpr::number(3));
+        auto cubic_result = InequalitySolver::solve_inequality_checked(
+            cubic, InequalityType::GreaterEqual, "x");
+        EXPECT_TRUE(!cubic_result &&
+                        cubic_result.error().code == CasErrc::Inconclusive,
+                    "checked inequality solving declares its current degree support domain");
+
+        auto null_result = InequalitySolver::solve_inequality_checked(
+            nullptr, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(!null_result && null_result.error().code == CasErrc::InvalidArgument,
+                    "checked inequality solving rejects null expressions");
+
+        CancellationToken cancellation;
+        cancellation.cancel();
+        ComputationContext cancelled_context(ResourceLimits{}, cancellation);
+        auto cancelled = InequalitySolver::solve_inequality_checked(
+            linear(1, 0), InequalityType::GreaterThan, "x", cancelled_context);
+        EXPECT_TRUE(!cancelled && cancelled.error().code == CasErrc::Cancelled,
+                    "checked inequality solving observes cancellation");
+
+        ResourceLimits limits;
+        limits.max_steps = 0;
+        ComputationContext limited_context(limits);
+        auto limited = InequalitySolver::solve_inequality_checked(
+            linear(1, 0), InequalityType::GreaterThan, "x", limited_context);
+        EXPECT_TRUE(!limited && limited.error().code == CasErrc::ResourceLimit,
+                    "checked inequality solving observes the step budget");
+    }
+
+    TEST_CASE("Checked exact quadratic inequality contracts");
+    {
+        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
+
+        auto rational_roots = SymbolicExpr::add(x2, SymbolicExpr::number(-4));
+        auto outside = InequalitySolver::solve_inequality_checked(
+            rational_roots, InequalityType::GreaterEqual, "x");
+        EXPECT_TRUE(outside.has_value(),
+                    outside ? "checked x^2-4 >= 0 succeeds exactly"
+                            : "checked x^2-4 >= 0 failed: " + outside.error().message);
+        if (outside) {
+            EXPECT_TRUE(outside.value().contains(-2.0) && outside.value().contains(2.0),
+                        "checked non-strict quadratic includes both roots");
+            EXPECT_TRUE(outside.value().contains(-3.0) && outside.value().contains(3.0),
+                        "checked positive quadratic selects both outside rays");
+            EXPECT_TRUE(!outside.value().contains(0.0),
+                        "checked positive quadratic excludes its negative interior");
+        }
+
+        auto irrational_roots = SymbolicExpr::add(x2, SymbolicExpr::number(-2));
+        auto inside = InequalitySolver::solve_inequality_checked(
+            irrational_roots, InequalityType::LessThan, "x");
+        EXPECT_TRUE(inside.has_value(),
+                    inside ? "checked x^2-2 < 0 verifies algebraic boundaries"
+                           : "checked x^2-2 < 0 failed: " + inside.error().message);
+        if (inside) {
+            EXPECT_TRUE(inside.value().contains(0.0),
+                        "checked irrational-root quadratic includes its interior");
+            EXPECT_TRUE(!inside.value().contains(2.0),
+                        "checked irrational-root quadratic excludes its exterior");
+            EXPECT_TRUE(!inside.value().contains(std::sqrt(2.0)),
+                        "checked strict irrational-root quadratic excludes its boundary");
+        }
+
+        auto no_real_roots = SymbolicExpr::add(x2, SymbolicExpr::number(1));
+        auto always_positive = InequalitySolver::solve_inequality_checked(
+            no_real_roots, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(always_positive && always_positive.value().is_entire_line(),
+                    "checked positive quadratic with negative discriminant is always positive");
+        auto never_negative = InequalitySolver::solve_inequality_checked(
+            no_real_roots, InequalityType::LessEqual, "x");
+        EXPECT_TRUE(never_negative && never_negative.value().is_empty(),
+                    "checked positive quadratic with negative discriminant is never non-positive");
+
+        auto repeated = SymbolicExpr::add(
+            SymbolicExpr::add(x2, SymbolicExpr::multiply(SymbolicExpr::number(-2), x)),
+            SymbolicExpr::number(1));
+        auto repeated_nonpositive = InequalitySolver::solve_inequality_checked(
+            repeated, InequalityType::LessEqual, "x");
+        EXPECT_TRUE(repeated_nonpositive &&
+                        repeated_nonpositive.value().intervals().size() == 1 &&
+                        repeated_nonpositive.value().contains(1.0) &&
+                        !repeated_nonpositive.value().contains(0.0),
+                    "checked repeated-root quadratic returns exactly the root point");
+        auto repeated_positive = InequalitySolver::solve_inequality_checked(
+            repeated, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(repeated_positive &&
+                        !repeated_positive.value().contains(1.0) &&
+                        repeated_positive.value().contains(0.0) &&
+                        repeated_positive.value().contains(2.0),
+                    "checked strict repeated-root quadratic returns the punctured line");
+
+        auto downward = SymbolicExpr::multiply(SymbolicExpr::number(-1), rational_roots);
+        auto downward_positive = InequalitySolver::solve_inequality_checked(
+            downward, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(downward_positive && downward_positive.value().contains(0.0) &&
+                        !downward_positive.value().contains(3.0),
+                    downward_positive
+                        ? "checked downward quadratic reverses the sign regions exactly"
+                        : "checked downward quadratic failed: " +
+                              downward_positive.error().message);
+    }
+
+    TEST_CASE("Checked inequality conjunction contracts");
+    {
+        std::vector<std::pair<std::shared_ptr<SymbolicExpr>, InequalityType>> bounded{
+            {x, InequalityType::GreaterEqual},
+            {SymbolicExpr::add(x, SymbolicExpr::number(-2)),
+             InequalityType::LessThan}
+        };
+        auto bounded_result = InequalitySolver::solve_inequalities_checked(bounded, "x");
+        EXPECT_TRUE(bounded_result.has_value(),
+                    "checked conjunction of exact affine inequalities succeeds");
+        if (bounded_result) {
+            EXPECT_TRUE(bounded_result.value().contains(0.0) &&
+                            bounded_result.value().contains(1.0) &&
+                            !bounded_result.value().contains(2.0),
+                        "checked conjunction preserves closed and open endpoints");
+        }
+
+        std::vector<std::pair<std::shared_ptr<SymbolicExpr>, InequalityType>> empty;
+        auto empty_result = InequalitySolver::solve_inequalities_checked(empty, "x");
+        EXPECT_TRUE(empty_result && empty_result.value().is_entire_line(),
+                    "empty checked conjunction denotes the entire real line");
+
+        auto x2_minus_2 = SymbolicExpr::add(
+            SymbolicExpr::power(x, SymbolicExpr::number(2)),
+            SymbolicExpr::number(-2));
+        std::vector<std::pair<std::shared_ptr<SymbolicExpr>, InequalityType>> one_surd{
+            {x2_minus_2, InequalityType::LessThan}
+        };
+        auto one_surd_result = InequalitySolver::solve_inequalities_checked(one_surd, "x");
+        EXPECT_TRUE(one_surd_result && one_surd_result.value().contains(0.0),
+                    "single checked quadratic conjunction keeps its proven-order surd interval");
+
+        std::vector<std::pair<std::shared_ptr<SymbolicExpr>, InequalityType>> mixed_surd{
+            {x2_minus_2, InequalityType::LessThan},
+            {x, InequalityType::GreaterThan}
+        };
+        auto mixed_surd_result = InequalitySolver::solve_inequalities_checked(
+            mixed_surd, "x");
+        EXPECT_TRUE(mixed_surd_result &&
+                        mixed_surd_result.value().contains(1.0) &&
+                        !mixed_surd_result.value().contains(-1.0) &&
+                        !mixed_surd_result.value().contains(2.0),
+                    "checked conjunction compares a quadratic surd with rational bounds exactly");
+
+        std::vector<std::pair<std::shared_ptr<SymbolicExpr>, InequalityType>> invalid{
+            {nullptr, InequalityType::GreaterThan}
+        };
+        auto invalid_result = InequalitySolver::solve_inequalities_checked(invalid, "x");
+        EXPECT_TRUE(!invalid_result && invalid_result.error().code == CasErrc::InvalidArgument,
+                    "checked conjunction propagates invalid component errors");
+
+        CancellationToken cancellation;
+        cancellation.cancel();
+        ComputationContext cancelled_context(ResourceLimits{}, cancellation);
+        auto cancelled = InequalitySolver::solve_inequalities_checked(
+            bounded, "x", cancelled_context);
+        EXPECT_TRUE(!cancelled && cancelled.error().code == CasErrc::Cancelled,
+                    "checked conjunction observes cancellation before processing components");
+    }
 
     TEST_CASE("Linear inequality: 2x - 3 > 0");
     {
@@ -79,7 +293,8 @@ int main() {
         EXPECT_TRUE(!result.contains(2.0), "x^3 - x < 0: x=2 not in solution");
         EXPECT_TRUE(!result.contains(-0.5), "x^3 - x < 0: x=-0.5 not in solution (between -1 and 0)");
 
-        EXPECT_TRUE(result.contains(0.001), "x^3 - x < 0: x=0.001 in solution (just above 0)");
+        EXPECT_TRUE(result.contains(0.001),
+                    "x^3 - x < 0: x=0.001 in solution (just above 0)");
     }
 
     TEST_CASE("Repeated root: (x-1)^2*(x+2) > 0");
@@ -197,6 +412,22 @@ int main() {
         auto result = InequalitySolver::solve_inequality(zero_expr, InequalityType::LessEqual, "x");
 
         EXPECT_TRUE(result.is_entire_line(), "0 <= 0 should be entire line");
+    }
+
+    TEST_CASE("Exact huge constant inequality keeps exact sign");
+    {
+        std::string huge_digits = "1" + std::string(400, '0');
+        auto huge_positive = SymbolicExpr::number(BigInt(huge_digits));
+        auto positive_result = InequalitySolver::solve_inequality(
+            huge_positive, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(positive_result.is_entire_line(),
+                    "huge exact positive constant > 0 should be entire line");
+
+        auto huge_negative = SymbolicExpr::number(BigInt("-" + huge_digits));
+        auto negative_result = InequalitySolver::solve_inequality(
+            huge_negative, InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(negative_result.is_empty(),
+                    "huge exact negative constant > 0 should be empty");
     }
 
     TEST_CASE("Non-polynomial: sin(x) > 0 -> empty (cannot solve)");

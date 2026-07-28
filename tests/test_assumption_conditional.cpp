@@ -28,43 +28,37 @@ using namespace lamina;
 
 int main() {
     // =========================================================
-    TEST_CASE("assume_conditional: null condition throws");
+    TEST_CASE("assume_conditional_checked rejects non-relational inputs transactionally");
     // =========================================================
     {
         AssumptionContext ctx;
-        SymbolicExpr null_expr;
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
-        SymbolicExpr conclusion(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
+        SymbolicExpr x = *SymbolicExpr::variable("x");
+        SymbolicExpr zero = *SymbolicExpr::number(0);
+        auto conclusion = lamina::detail::expression_from_node(
+            lamina::detail::make_node<RelationalNode>(
+                lamina::detail::node(x), lamina::detail::node(zero), RelationOp::GT));
+        const auto generation = ctx.cache_generation();
+
+        auto result = ctx.assume_conditional_checked(x, conclusion);
+        EXPECT_TRUE(!result.has_value(),
+                    "checked conditional rejects a non-relational condition");
+        EXPECT_TRUE(result.error().code == CasErrc::InvalidArgument,
+                    "checked conditional reports InvalidArgument");
+        EXPECT_TRUE(ctx.cache_generation() == generation,
+                    "failed checked conditional preserves cache generation");
+        EXPECT_TRUE(ctx.get_active_conditionals().empty(),
+                    "failed checked conditional stores no conditional");
 
         bool threw = false;
         try {
-            ctx.assume_conditional(null_expr, conclusion);
+            ctx.assume_conditional(x, conclusion);
         } catch (const std::invalid_argument&) {
             threw = true;
         }
-        EXPECT_TRUE(threw, "assume_conditional throws on null condition");
-    }
-
-    // =========================================================
-    TEST_CASE("assume_conditional: null conclusion throws");
-    // =========================================================
-    {
-        AssumptionContext ctx;
-        SymbolicExpr null_expr;
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
-        SymbolicExpr condition(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
-
-        bool threw = false;
-        try {
-            ctx.assume_conditional(condition, null_expr);
-        } catch (const std::invalid_argument&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw, "assume_conditional throws on null conclusion");
+        EXPECT_TRUE(threw,
+                    "legacy conditional maps checked validation failure to invalid_argument");
+        EXPECT_TRUE(ctx.get_active_conditionals().empty(),
+                    "legacy conditional failure remains transactional");
     }
 
     // =========================================================
@@ -72,23 +66,23 @@ int main() {
     // =========================================================
     {
         AssumptionContext ctx;
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto one = SymbolicExpr(std::make_shared<NumberNode>(BigInt(1)));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto one = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(1)));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
         // condition: x > 1
-        SymbolicExpr condition(std::make_shared<RelationalNode>(
-            x.root, one.root, RelationalNode::Op::GT));
+        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(one), RelationalNode::Op::GT));
         // conclusion: x > 0 (ln(x) > 0 would be more realistic but harder to construct)
-        SymbolicExpr conclusion(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
+        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
 
         ctx.assume_conditional(condition, conclusion);
 
         auto conditionals = ctx.get_active_conditionals();
         EXPECT_TRUE(conditionals.size() == 1, "One conditional stored");
-        EXPECT_TRUE(conditionals[0].condition.root != nullptr, "Condition is not null");
-        EXPECT_TRUE(conditionals[0].conclusion.root != nullptr, "Conclusion is not null");
+        EXPECT_TRUE(lamina::detail::node(conditionals[0].condition) != nullptr, "Condition is not null");
+        EXPECT_TRUE(lamina::detail::node(conditionals[0].conclusion) != nullptr, "Conclusion is not null");
     }
 
     // =========================================================
@@ -96,14 +90,14 @@ int main() {
     // =========================================================
     {
         AssumptionContext ctx;
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto one = SymbolicExpr(std::make_shared<NumberNode>(BigInt(1)));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto one = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(1)));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
-        SymbolicExpr condition(std::make_shared<RelationalNode>(
-            x.root, one.root, RelationalNode::Op::GT));
-        SymbolicExpr conclusion(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
+        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(one), RelationalNode::Op::GT));
+        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
 
         // Store conditional in root scope
         ctx.assume_conditional(condition, conclusion);
@@ -111,11 +105,11 @@ int main() {
 
         // Push and add another conditional
         ctx.push();
-        auto y = SymbolicExpr(std::make_shared<VariableNode>("y"));
-        SymbolicExpr cond2(std::make_shared<RelationalNode>(
-            y.root, zero.root, RelationalNode::Op::GT));
-        SymbolicExpr concl2(std::make_shared<RelationalNode>(
-            y.root, one.root, RelationalNode::Op::GT));
+        auto y = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("y"));
+        auto cond2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(y), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto concl2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(y), lamina::detail::node(one), RelationalNode::Op::GT));
         ctx.assume_conditional(cond2, concl2);
 
         EXPECT_TRUE(ctx.get_active_conditionals().size() == 2, "Two conditionals (child + parent)");
@@ -132,30 +126,30 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Positive);
 
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
         // x > 0 should be satisfied since x is Positive
-        SymbolicExpr cond_gt(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
+        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::True,
                     "x > 0 satisfied when x is Positive");
 
         // x >= 0 should also be satisfied
-        SymbolicExpr cond_geq(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GEQ));
+        auto cond_geq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_geq) == Tribool::True,
                     "x >= 0 satisfied when x is Positive");
 
         // x < 0 should be False
-        SymbolicExpr cond_lt(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::LT));
+        auto cond_lt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::LT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::False,
                     "x < 0 is False when x is Positive");
 
         // x != 0 should be True
-        SymbolicExpr cond_neq(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::NEQ));
+        auto cond_neq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::NEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True,
                     "x != 0 satisfied when x is Positive");
     }
@@ -167,11 +161,11 @@ int main() {
         AssumptionContext ctx;
         // No assumptions about x
 
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
-        SymbolicExpr cond(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
+        auto cond = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::Unknown,
                     "x > 0 is Unknown when no assumptions about x");
     }
@@ -183,18 +177,18 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Positive);
 
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
         // 0 < x (reversed pattern)
-        SymbolicExpr cond(std::make_shared<RelationalNode>(
-            zero.root, x.root, RelationalNode::Op::LT));
+        auto cond = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(zero), lamina::detail::node(x), RelationalNode::Op::LT));
         EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::True,
                     "0 < x satisfied when x is Positive");
 
         // 0 > x should be False
-        SymbolicExpr cond_gt(std::make_shared<RelationalNode>(
-            zero.root, x.root, RelationalNode::Op::GT));
+        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(zero), lamina::detail::node(x), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
                     "0 > x is False when x is Positive");
     }
@@ -204,12 +198,12 @@ int main() {
     // =========================================================
     {
         AssumptionContext ctx;
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto y = SymbolicExpr(std::make_shared<VariableNode>("y"));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto y = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("y"));
 
         // Store relation x > y
-        SymbolicExpr rel(std::make_shared<RelationalNode>(
-            x.root, y.root, RelationalNode::Op::GT));
+        auto rel = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(y), RelationalNode::Op::GT));
         ctx.assume(rel);
 
         // Evaluate x > y — should be True (stored directly)
@@ -218,21 +212,11 @@ int main() {
     }
 
     // =========================================================
-    TEST_CASE("evaluate_condition: null expression returns Unknown");
-    // =========================================================
-    {
-        AssumptionContext ctx;
-        SymbolicExpr null_expr;
-        EXPECT_TRUE(ctx.evaluate_condition(null_expr) == Tribool::Unknown,
-                    "null expression evaluates to Unknown");
-    }
-
-    // =========================================================
     TEST_CASE("evaluate_condition: non-relational expression returns Unknown");
     // =========================================================
     {
         AssumptionContext ctx;
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
         EXPECT_TRUE(ctx.evaluate_condition(x) == Tribool::Unknown,
                     "non-relational expression evaluates to Unknown");
     }
@@ -244,30 +228,30 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Negative);
 
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
         // x < 0 should be True
-        SymbolicExpr cond_lt(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::LT));
+        auto cond_lt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::LT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::True,
                     "x < 0 satisfied when x is Negative");
 
         // x <= 0 should be True
-        SymbolicExpr cond_leq(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::LEQ));
+        auto cond_leq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::LEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_leq) == Tribool::True,
                     "x <= 0 satisfied when x is Negative");
 
         // x > 0 should be False
-        SymbolicExpr cond_gt(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
+        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
                     "x > 0 is False when x is Negative");
 
         // x != 0 should be True
-        SymbolicExpr cond_neq(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::NEQ));
+        auto cond_neq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::NEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True,
                     "x != 0 satisfied when x is Negative");
     }
@@ -279,24 +263,24 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Zero);
 
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
         // x == 0 should be True
-        SymbolicExpr cond_eq(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::EQ));
+        auto cond_eq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::EQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_eq) == Tribool::True,
                     "x == 0 satisfied when x is Zero");
 
         // x > 0 should be False
-        SymbolicExpr cond_gt(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
+        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
                     "x > 0 is False when x is Zero");
 
         // x != 0 should be False
-        SymbolicExpr cond_neq(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::NEQ));
+        auto cond_neq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::NEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::False,
                     "x != 0 is False when x is Zero");
     }
@@ -306,24 +290,24 @@ int main() {
     // =========================================================
     {
         AssumptionContext ctx;
-        auto x = SymbolicExpr(std::make_shared<VariableNode>("x"));
-        auto y = SymbolicExpr(std::make_shared<VariableNode>("y"));
-        auto z = SymbolicExpr(std::make_shared<VariableNode>("z"));
-        auto zero = SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto y = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("y"));
+        auto z = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("z"));
+        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 
         // Root scope conditional
-        SymbolicExpr cond1(std::make_shared<RelationalNode>(
-            x.root, zero.root, RelationalNode::Op::GT));
-        SymbolicExpr concl1(std::make_shared<RelationalNode>(
-            y.root, zero.root, RelationalNode::Op::GT));
+        auto cond1 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto concl1 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(y), lamina::detail::node(zero), RelationalNode::Op::GT));
         ctx.assume_conditional(cond1, concl1);
 
         // Push and add child conditional
         ctx.push();
-        SymbolicExpr cond2(std::make_shared<RelationalNode>(
-            y.root, zero.root, RelationalNode::Op::GT));
-        SymbolicExpr concl2(std::make_shared<RelationalNode>(
-            z.root, zero.root, RelationalNode::Op::GT));
+        auto cond2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(y), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto concl2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            lamina::detail::node(z), lamina::detail::node(zero), RelationalNode::Op::GT));
         ctx.assume_conditional(cond2, concl2);
 
         auto all = ctx.get_active_conditionals();
@@ -331,13 +315,13 @@ int main() {
 
         // Most recent scope first
         // The child scope conditional should come first (top scope)
-        auto child_cond_var = std::dynamic_pointer_cast<RelationalNode>(all[0].condition.root);
-        auto child_lhs = std::dynamic_pointer_cast<VariableNode>(child_cond_var->left);
-        EXPECT_TRUE(child_lhs->name == "y", "Child scope conditional comes first (most recent)");
+        auto child_cond_var = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(all[0].condition));
+        auto child_lhs = std::dynamic_pointer_cast<const VariableNode>(child_cond_var->left());
+        EXPECT_TRUE(child_lhs->name() == "y", "Child scope conditional comes first (most recent)");
 
-        auto parent_cond_var = std::dynamic_pointer_cast<RelationalNode>(all[1].condition.root);
-        auto parent_lhs = std::dynamic_pointer_cast<VariableNode>(parent_cond_var->left);
-        EXPECT_TRUE(parent_lhs->name == "x", "Parent scope conditional comes second");
+        auto parent_cond_var = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(all[1].condition));
+        auto parent_lhs = std::dynamic_pointer_cast<const VariableNode>(parent_cond_var->left());
+        EXPECT_TRUE(parent_lhs->name() == "x", "Parent scope conditional comes second");
 
         ctx.pop();
     }
@@ -362,13 +346,13 @@ int main() {
         ctx.assume_sign(var, Sign::Positive);
 
         // Create condition: var > 0
-        auto var_node = std::make_shared<VariableNode>(var);
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
-        SymbolicExpr condition(std::make_shared<RelationalNode>(
+        auto var_node = lamina::detail::make_node<VariableNode>(var);
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT));
 
         // Create conclusion: var != 0 (trivially implied by Positive, but tests the mechanism)
-        SymbolicExpr conclusion(std::make_shared<RelationalNode>(
+        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::NEQ));
 
         ctx.assume_conditional(condition, conclusion);
@@ -395,14 +379,14 @@ int main() {
         ctx.push();
 
         // Create condition: var > 0 (unverifiable since no sign declared)
-        auto var_node = std::make_shared<VariableNode>(var);
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
-        SymbolicExpr condition(std::make_shared<RelationalNode>(
+        auto var_node = lamina::detail::make_node<VariableNode>(var);
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT));
 
         // Create some conclusion
-        auto one_node = std::make_shared<NumberNode>(BigInt(1));
-        SymbolicExpr conclusion(std::make_shared<RelationalNode>(
+        auto one_node = lamina::detail::make_node<NumberNode>(BigInt(1));
+        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
             var_node, one_node, RelationalNode::Op::GT));
 
         ctx.assume_conditional(condition, conclusion);
@@ -427,11 +411,11 @@ int main() {
         int num_conditionals = rc::gen::inRange(1, 5);
         for (int i = 0; i < num_conditionals; ++i) {
             std::string var = "pop_" + std::to_string(i) + "_" + std::to_string(rc::gen::inRange(0, 99));
-            auto var_node = std::make_shared<VariableNode>(var);
-            auto zero_node = std::make_shared<NumberNode>(BigInt(0));
-            SymbolicExpr condition(std::make_shared<RelationalNode>(
+            auto var_node = lamina::detail::make_node<VariableNode>(var);
+            auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+            auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GT));
-            SymbolicExpr conclusion(std::make_shared<RelationalNode>(
+            auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GEQ));
             ctx.assume_conditional(condition, conclusion);
         }
@@ -459,11 +443,11 @@ int main() {
         Sign chosen_sign = rc::gen::elementOf(signs);
         ctx.assume_sign(var, chosen_sign);
 
-        auto var_node = std::make_shared<VariableNode>(var);
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
+        auto var_node = lamina::detail::make_node<VariableNode>(var);
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
 
         // Test condition: var > 0
-        SymbolicExpr cond_gt(std::make_shared<RelationalNode>(
+        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT));
         Tribool gt_result = ctx.evaluate_condition(cond_gt);
 
@@ -476,7 +460,7 @@ int main() {
         // NonNegative: could be zero, so GT might be Unknown — that's acceptable
 
         // Test condition: var < 0
-        SymbolicExpr cond_lt(std::make_shared<RelationalNode>(
+        auto cond_lt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::LT));
         Tribool lt_result = ctx.evaluate_condition(cond_lt);
 

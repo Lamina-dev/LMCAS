@@ -59,21 +59,21 @@ constexpr double kTolerance = 1e-10;
 
 // --------------------- AST helpers -------------------------------
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
@@ -177,28 +177,31 @@ ComboReport verify_combo(const FunctionSpec& f,
         rep.detail = "engine.evaluate returned null";
         return rep;
     }
-    if (has_integral_node(engine_result->root)) {
+    if (has_integral_node(lamina::detail::node(engine_result))) {
         rep.unevaluated = true;
         rep.detail = "engine result contains unevaluated integral";
         return rep;
     }
 
     // Compute Ix = integrate_def(f, x, x_lo, x_hi)
-    SymbolicExpr Ix, Iy;
+    std::shared_ptr<SymbolicExpr> Ix;
+    std::shared_ptr<SymbolicExpr> Iy;
     try {
         // Build f(x) and g(y) afresh (they were consumed when wrapped as
         // children of the multiply node above; rebuild for safety).
         auto fx2 = f.build(SymbolicExpr::variable("x"));
         auto gy2 = g.build(SymbolicExpr::variable("y"));
-        Ix = integrator.integrate_def(*fx2, "x", *x_lo, *x_hi);
-        Iy = integrator.integrate_def(*gy2, "y", *y_lo, *y_hi);
+        Ix = lamina::detail::make_expression_ptr(
+            integrator.integrate_def(*fx2, "x", *x_lo, *x_hi));
+        Iy = lamina::detail::make_expression_ptr(
+            integrator.integrate_def(*gy2, "y", *y_lo, *y_hi));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception in integrate_def: ") + e.what();
         return rep;
     }
 
-    if (has_integral_node(Ix.root) || has_integral_node(Iy.root)) {
+    if (has_integral_node(lamina::detail::node(Ix)) || has_integral_node(lamina::detail::node(Iy))) {
         rep.unevaluated = true;
         rep.detail = "per-variable integrate_def left unevaluated integral";
         return rep;
@@ -208,8 +211,8 @@ ComboReport verify_combo(const FunctionSpec& f,
     auto engine_simp = engine_result->simplify();
     if (!engine_simp) engine_simp = engine_result;
 
-    auto Ix_simp = Ix.simplify();
-    auto Iy_simp = Iy.simplify();
+    auto Ix_simp = Ix->simplify();
+    auto Iy_simp = Iy->simplify();
     if (!Ix_simp || !Iy_simp) {
         rep.failed = true;
         rep.detail = "simplify of per-variable integral returned null";

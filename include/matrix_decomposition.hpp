@@ -3,15 +3,45 @@
  * @brief 矩阵高级分解算法：LU、QR、Cholesky、SVD、特征分解及矩阵指数。
  */
 #pragma once
-#include "symbolic_ast.hpp"
+#include "computation_context.hpp"
+#include "result.hpp"
+#include "symbolic.hpp"
 #include <memory>
 #include <vector>
 #include <string>
 
-class SymbolicExpr;
-
-
 namespace lamina {
+
+struct LUDecomposition {
+    std::shared_ptr<SymbolicExpr> L;
+    std::shared_ptr<SymbolicExpr> U;
+};
+
+struct QRDecomposition {
+    std::shared_ptr<SymbolicExpr> Q;
+    std::shared_ptr<SymbolicExpr> R;
+};
+
+struct CholeskyDecomposition {
+    std::shared_ptr<SymbolicExpr> L;
+};
+
+struct SVDDecomposition {
+    std::shared_ptr<SymbolicExpr> U;
+    std::shared_ptr<SymbolicExpr> S;
+    std::shared_ptr<SymbolicExpr> V;
+};
+
+struct JordanDecomposition {
+    std::shared_ptr<SymbolicExpr> J;
+    std::shared_ptr<SymbolicExpr> P;
+};
+
+using LUDecompositionResult = Result<LUDecomposition>;
+using QRDecompositionResult = Result<QRDecomposition>;
+using CholeskyDecompositionResult = Result<CholeskyDecomposition>;
+using SVDDecompositionResult = Result<SVDDecomposition>;
+using JordanDecompositionResult = Result<JordanDecomposition>;
 
 /**
  * @brief 计算符号矩阵的 LU 分解 (A = L * U)
@@ -20,6 +50,15 @@ namespace lamina {
  * @param U 输出的上三角矩阵
  * @return 成功返回 true
  */
+LAMINA_API LUDecompositionResult lu_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context
+);
+
+LAMINA_API LUDecompositionResult lu_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A
+);
+
 LAMINA_API bool lu_decomposition(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& L,
@@ -33,6 +72,15 @@ LAMINA_API bool lu_decomposition(
  * @param R 输出的上三角矩阵
  * @return 成功返回 true
  */
+LAMINA_API QRDecompositionResult qr_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context
+);
+
+LAMINA_API QRDecompositionResult qr_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A
+);
+
 LAMINA_API bool qr_decomposition(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& Q,
@@ -45,6 +93,15 @@ LAMINA_API bool qr_decomposition(
  * @param L 输出的下三角矩阵
  * @return 成功返回 true
  */
+LAMINA_API CholeskyDecompositionResult cholesky_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context
+);
+
+LAMINA_API CholeskyDecompositionResult cholesky_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A
+);
+
 LAMINA_API bool cholesky_decomposition(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& L
@@ -58,6 +115,15 @@ LAMINA_API bool cholesky_decomposition(
  * @param V 输出的右奇异矩阵
  * @return 成功返回 true
  */
+LAMINA_API SVDDecompositionResult svd_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context
+);
+
+LAMINA_API SVDDecompositionResult svd_decomposition_checked(
+    const std::shared_ptr<SymbolicExpr>& A
+);
+
 LAMINA_API bool svd_decomposition(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& U,
@@ -162,6 +228,15 @@ LAMINA_API std::string classify_quadratic_form(
  * @param P 输出变换矩阵
  * @return 成功返回 true（可对角化或可求 Jordan 块时）
  */
+LAMINA_API JordanDecompositionResult jordan_form_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context
+);
+
+LAMINA_API JordanDecompositionResult jordan_form_checked(
+    const std::shared_ptr<SymbolicExpr>& A
+);
+
 LAMINA_API bool jordan_form(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& J,

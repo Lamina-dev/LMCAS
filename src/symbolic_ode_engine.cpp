@@ -3,8 +3,10 @@
  * @brief 统一 ODE 求解引擎实现：类型检测与分类。
  */
 #include "../include/symbolic_ode_engine.hpp"
+#include "symbolic_ast.hpp"
 #include "../include/symbolic.hpp"
 #include "../include/poly_utils.hpp"
+#include "poly_utils_internal.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include <cmath>
@@ -23,39 +25,207 @@ namespace lamina {
  * @return 若表达式为纯数值返回其值，否则返回 NaN。
  */
 static double try_eval_double(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !expr->root) return std::numeric_limits<double>::quiet_NaN();
+    if (!expr || !lamina::detail::node(expr)) return std::numeric_limits<double>::quiet_NaN();
     if (expr->is_number()) {
-        auto node = std::dynamic_pointer_cast<NumberNode>(expr->root);
+        auto node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
         if (!node) return std::numeric_limits<double>::quiet_NaN();
-        if (std::holds_alternative<BigInt>(node->value))
-            return std::get<BigInt>(node->value).to_double();
-        if (std::holds_alternative<Rational>(node->value))
-            return std::get<Rational>(node->value).to_double();
-        return static_cast<double>(std::get<lmmc_real_t>(node->value));
+        if (std::holds_alternative<BigInt>(node->value()))
+            return std::get<BigInt>(node->value()).to_double();
+        if (std::holds_alternative<Rational>(node->value()))
+            return std::get<Rational>(node->value()).to_double();
+        return static_cast<double>(std::get<lmmc_real_t>(node->value()));
     }
     return std::numeric_limits<double>::quiet_NaN();
+}
+
+static Result<void> validate_ode_expr_var_pair(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto step = context.consume_steps(1, operation);
+    if (!step) return step;
+    if (!expr || !lamina::detail::node(expr)) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE expression cannot be null",
+                                     operation);
+    }
+    if (x.empty() || y.empty()) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE variable names cannot be empty",
+                                     operation);
+    }
+    if (x == y) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE independent and dependent variables must be distinct",
+                                     operation);
+    }
+    return Result<void>::success();
+}
+
+static Result<void> validate_ode_pair_var_pair(
+    const std::shared_ptr<SymbolicExpr>& first,
+    const std::shared_ptr<SymbolicExpr>& second,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto step = context.consume_steps(1, operation);
+    if (!step) return step;
+    if (!first || !lamina::detail::node(first) || !second || !lamina::detail::node(second)) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE expressions cannot be null",
+                                     operation);
+    }
+    if (x.empty() || y.empty()) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE variable names cannot be empty",
+                                     operation);
+    }
+    if (x == y) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE independent and dependent variables must be distinct",
+                                     operation);
+    }
+    return Result<void>::success();
+}
+
+static ODESolutionResult wrap_ode_solution(ODESolution solution,
+                                           ODEType expected_method,
+                                           const std::string& operation)
+{
+    if (!solution.general_solution || !lamina::detail::node(solution.general_solution)) {
+        return ODESolutionResult::failure(
+            CasErrc::Inconclusive,
+            "ODE solver produced no solution in the supported domain",
+            operation);
+    }
+    if (solution.method_used != expected_method) {
+        return ODESolutionResult::failure(
+            CasErrc::InternalInvariant,
+            "ODE solver reported an unexpected method",
+            operation);
+    }
+    return ODESolutionResult::success(std::move(solution));
+}
+
+static Result<void> validate_ode_variables(
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto step = context.consume_steps(1, operation);
+    if (!step) return step;
+    if (x.empty() || y.empty()) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE variable names cannot be empty",
+                                     operation);
+    }
+    if (x == y) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE independent and dependent variables must be distinct",
+                                     operation);
+    }
+    return Result<void>::success();
+}
+
+static Result<void> validate_numeric_ode_coefficients(
+    const std::vector<double>& coeffs,
+    std::size_t min_size,
+    std::size_t max_size,
+    const std::string& operation)
+{
+    if (coeffs.size() < min_size || coeffs.size() > max_size) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE coefficient list has unsupported size",
+                                     operation);
+    }
+    if (!std::isfinite(coeffs.front()) || std::abs(coeffs.front()) < 1e-15) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE leading coefficient must be finite and nonzero",
+                                     operation);
+    }
+    for (double coeff : coeffs) {
+        if (!std::isfinite(coeff)) {
+            return Result<void>::failure(CasErrc::InvalidArgument,
+                                         "ODE coefficients must be finite",
+                                         operation);
+        }
+    }
+    return Result<void>::success();
+}
+
+static Result<void> validate_ode_three_expr_one_var(
+    const std::shared_ptr<SymbolicExpr>& first,
+    const std::shared_ptr<SymbolicExpr>& second,
+    const std::shared_ptr<SymbolicExpr>& third,
+    const std::string& x,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto step = context.consume_steps(1, operation);
+    if (!step) return step;
+    if (!first || !lamina::detail::node(first) || !second || !lamina::detail::node(second) ||
+        !third || !lamina::detail::node(third)) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE expressions cannot be null",
+                                     operation);
+    }
+    if (x.empty()) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE variable name cannot be empty",
+                                     operation);
+    }
+    return Result<void>::success();
+}
+
+static Result<void> validate_ode_two_expr_point(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto step = context.consume_steps(1, operation);
+    if (!step) return step;
+    if (!p || !lamina::detail::node(p) || !q || !lamina::detail::node(q) || !x0 || !lamina::detail::node(x0)) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "Frobenius inputs cannot be null",
+                                     operation);
+    }
+    if (x.empty()) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "ODE variable name cannot be empty",
+                                     operation);
+    }
+    return Result<void>::success();
 }
 
 /**
  * @internal
  * @brief 检查表达式是否为纯数值常量（不依赖任何变量）。
  */
-static bool is_constant_expr(const std::shared_ptr<SymbolicExpr>& expr,
-                             const std::string& x,
-                             const std::string& y) {
-    if (!expr || !expr->root) return true;
-    return !depends_on_var(expr->root, x) && !depends_on_var(expr->root, y);
+[[maybe_unused]] static bool is_constant_expr(const std::shared_ptr<SymbolicExpr>& expr,
+                                              const std::string& x,
+                                              const std::string& y) {
+    if (!expr || !lamina::detail::node(expr)) return true;
+    return !depends_on_var(lamina::detail::node(expr), x) && !depends_on_var(lamina::detail::node(expr), y);
 }
 
 /**
  * @internal
  * @brief 检查表达式是否仅依赖指定变量（不依赖另一个变量）。
  */
-static bool depends_only_on(const std::shared_ptr<SymbolicExpr>& expr,
-                            const std::string& var,
-                            const std::string& other_var) {
-    if (!expr || !expr->root) return true;
-    return !depends_on_var(expr->root, other_var);
+[[maybe_unused]] static bool depends_only_on(const std::shared_ptr<SymbolicExpr>& expr,
+                                             const std::string&,
+                                             const std::string& other_var) {
+    if (!expr || !lamina::detail::node(expr)) return true;
+    return !depends_on_var(lamina::detail::node(expr), other_var);
 }
 
 // ============================================================================
@@ -67,20 +237,20 @@ bool is_separable(
     const std::string& x,
     const std::string& y)
 {
-    if (!rhs || !rhs->root) return true;
+    if (!rhs || !lamina::detail::node(rhs)) return true;
 
-    bool has_x = depends_on_var(rhs->root, x);
-    bool has_y = depends_on_var(rhs->root, y);
+    bool has_x = depends_on_var(lamina::detail::node(rhs), x);
+    bool has_y = depends_on_var(lamina::detail::node(rhs), y);
 
     /// 若只依赖一个变量或都不依赖，则可分离
     if (!has_x || !has_y) return true;
 
     /// 检查乘法形式 f(x)*g(y)
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(rhs->root);
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(rhs));
     if (mul) {
         /// 将因子分为仅含 x 的和仅含 y 的
         bool all_separable = true;
-        for (const auto& factor : mul->operands) {
+        for (const auto& factor : mul->operands()) {
             bool fx = depends_on_var(factor, x);
             bool fy = depends_on_var(factor, y);
             if (fx && fy) {
@@ -92,17 +262,17 @@ bool is_separable(
     }
 
     /// 检查除法形式 f(x)/g(y) 或 g(y)/f(x)
-    auto pow = std::dynamic_pointer_cast<PowerNode>(rhs->root);
+    auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(rhs));
     if (pow) {
-        auto exp_node = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
+        auto exp_node = std::dynamic_pointer_cast<const NumberNode>(pow->exponent());
         if (exp_node) {
-            double exp_val = try_eval_double(std::make_shared<SymbolicExpr>(pow->exponent));
+            double exp_val = try_eval_double(lamina::detail::make_expression_ptr(pow->exponent()));
             int eq;
             lmmc_double_nearly_equal_tol(exp_val, -1.0, 1e-12, 1e-12, &eq);
             if (eq) {
                 /// rhs = base^(-1) = 1/base; 若 base 仅含一个变量则可分离
-                bool base_x = depends_on_var(pow->base, x);
-                bool base_y = depends_on_var(pow->base, y);
+                bool base_x = depends_on_var(pow->base(), x);
+                bool base_y = depends_on_var(pow->base(), y);
                 if ((base_x && !base_y) || (!base_x && base_y)) return true;
             }
         }
@@ -117,12 +287,12 @@ bool is_separable(
 
 bool is_linear_first_order(
     const std::shared_ptr<SymbolicExpr>& rhs,
-    const std::string& x,
+    const std::string&,
     const std::string& y,
     std::shared_ptr<SymbolicExpr>& P,
     std::shared_ptr<SymbolicExpr>& Q)
 {
-    if (!rhs || !rhs->root) {
+    if (!rhs || !lamina::detail::node(rhs)) {
         P = SymbolicExpr::number(0);
         Q = SymbolicExpr::number(0);
         return true;
@@ -133,7 +303,7 @@ bool is_linear_first_order(
     /// 即 rhs 关于 y 是线性的: rhs = A(x) + B(x)*y，其中 Q = A, P = -B
 
     /// 若 rhs 不依赖 y，则 P=0, Q=rhs
-    if (!depends_on_var(rhs->root, y)) {
+    if (!depends_on_var(lamina::detail::node(rhs), y)) {
         P = SymbolicExpr::number(0);
         Q = rhs;
         return true;
@@ -141,7 +311,7 @@ bool is_linear_first_order(
 
     /// 对 rhs 关于 y 求导，若结果不依赖 y，则 rhs 关于 y 是线性的
     auto drhs_dy = rhs->differentiate(y);
-    if (!drhs_dy || depends_on_var(drhs_dy->root, y)) {
+    if (!drhs_dy || depends_on_var(lamina::detail::node(drhs_dy), y)) {
         return false;
     }
 
@@ -151,7 +321,7 @@ bool is_linear_first_order(
     if (!A) return false;
 
     /// 验证 A 不依赖 y
-    if (depends_on_var(A->root, y)) return false;
+    if (depends_on_var(lamina::detail::node(A), y)) return false;
 
     /// B(x) = drhs_dy（已验证不依赖 y）
     /// 线性形式: y' = A(x) + B(x)*y  →  y' - B(x)*y = A(x)  →  y' + (-B(x))*y = A(x)
@@ -170,7 +340,7 @@ bool is_homogeneous_ode(
     const std::string& x,
     const std::string& y)
 {
-    if (!rhs || !rhs->root) return false;
+    if (!rhs || !lamina::detail::node(rhs)) return false;
 
     /// 齐次方程: f(tx, ty) = f(x, y) 对所有 t 成立
     /// 用 t=2 进行数值测试：f(2x, 2y) 应等于 f(x, y)
@@ -226,14 +396,14 @@ bool is_homogeneous_ode(
 
 bool is_bernoulli_ode(
     const std::shared_ptr<SymbolicExpr>& rhs,
-    const std::string& x,
+    const std::string&,
     const std::string& y,
     std::shared_ptr<SymbolicExpr>& P,
     std::shared_ptr<SymbolicExpr>& Q,
     int& n)
 {
-    if (!rhs || !rhs->root) return false;
-    if (!depends_on_var(rhs->root, y)) return false;
+    if (!rhs || !lamina::detail::node(rhs)) return false;
+    if (!depends_on_var(lamina::detail::node(rhs), y)) return false;
 
     /// Bernoulli: y' + P(x)*y = Q(x)*y^n  →  y' = -P(x)*y + Q(x)*y^n
     /// 即 rhs = -P(x)*y + Q(x)*y^n = y*(-P(x) + Q(x)*y^{n-1})
@@ -273,7 +443,7 @@ bool is_bernoulli_ode(
         /// 实际上，若 rhs(x,0)=0，则 rhs 含 y 因子
         /// 计算 ∂rhs/∂y|_{y=0} = h(x, 0) = -P(x)
         auto h_at_0 = d1->substitute(y, SymbolicExpr::number(0))->simplify();
-        if (depends_on_var(h_at_0->root, y)) continue;
+        if (depends_on_var(lamina::detail::node(h_at_0), y)) continue;
 
         /// 对于 Bernoulli n=test_n:
         /// rhs = -P*y + Q*y^n
@@ -286,7 +456,7 @@ bool is_bernoulli_ode(
         if (test_n == 2) {
             /// d²rhs/dy² = 2*Q(x) (常数关于 y)
             auto d2_simplified = d2->simplify();
-            if (depends_on_var(d2_simplified->root, y)) continue;
+            if (depends_on_var(lamina::detail::node(d2_simplified), y)) continue;
 
             /// 验证三阶导为零
             auto d3 = d2->differentiate(y)->simplify();
@@ -297,7 +467,7 @@ bool is_bernoulli_ode(
             Q = SymbolicExpr::divide(d2_simplified, SymbolicExpr::number(2))->simplify();
 
             /// 验证 Q 不依赖 y
-            if (depends_on_var(Q->root, y)) continue;
+            if (depends_on_var(lamina::detail::node(Q), y)) continue;
 
             n = 2;
             return true;
@@ -312,7 +482,7 @@ bool is_bernoulli_ode(
             if (!d2_at_0->is_zero()) continue;
 
             auto d3 = d2->differentiate(y)->simplify();
-            if (depends_on_var(d3->root, y)) continue;
+            if (depends_on_var(lamina::detail::node(d3), y)) continue;
 
             auto d4 = d3->differentiate(y)->simplify();
             if (!d4->is_zero()) continue;
@@ -320,7 +490,7 @@ bool is_bernoulli_ode(
             P = SymbolicExpr::multiply(SymbolicExpr::number(-1), h_at_0)->simplify();
             Q = SymbolicExpr::divide(d3, SymbolicExpr::number(6))->simplify();
 
-            if (depends_on_var(Q->root, y)) continue;
+            if (depends_on_var(lamina::detail::node(Q), y)) continue;
 
             n = 3;
             return true;
@@ -354,6 +524,10 @@ bool is_exact_ode(
     auto dN_dx = N->differentiate(x);
 
     if (!dM_dy || !dN_dx) return false;
+
+    dM_dy = dM_dy->simplify();
+    dN_dx = dN_dx->simplify();
+    if (dM_dy->compare(dN_dx) == 0) return true;
 
     /// 计算差值并化简
     auto diff = SymbolicExpr::add(dM_dy,
@@ -391,7 +565,7 @@ bool is_constant_coefficient(
 {
     for (const auto& c : coeffs) {
         if (!c) continue;
-        if (depends_on_var(c->root, x)) return false;
+        if (depends_on_var(lamina::detail::node(c), x)) return false;
     }
     return true;
 }
@@ -421,7 +595,7 @@ bool is_euler_equation(
 
         if (order == 0) {
             /// 零阶项系数应为常数
-            if (depends_on_var(coeffs[i]->root, x)) return false;
+            if (depends_on_var(lamina::detail::node(coeffs[i]), x)) return false;
             double val = try_eval_double(coeffs[i]);
             if (std::isnan(val)) return false;
             euler_consts[i] = val;
@@ -435,7 +609,7 @@ bool is_euler_equation(
             SymbolicExpr::number(order));
         auto ratio = SymbolicExpr::divide(coeffs[i], x_power)->simplify();
 
-        if (depends_on_var(ratio->root, x)) {
+        if (depends_on_var(lamina::detail::node(ratio), x)) {
             /// 数值验证：在 x=1 和 x=2 处检查比值是否相同
             auto at_1 = ratio->substitute(x, SymbolicExpr::number(1.0))->simplify();
             auto at_2 = ratio->substitute(x, SymbolicExpr::number(2.0))->simplify();
@@ -468,7 +642,7 @@ ODEClassification classify_first_order_ode(
     ODEClassification result;
     result.order = 1;
 
-    if (!rhs || !rhs->root) {
+    if (!rhs || !lamina::detail::node(rhs)) {
         result.type = ODEType::Separable;
         return result;
     }
@@ -531,7 +705,7 @@ ODEClassification classify_higher_order_ode(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
     const std::shared_ptr<SymbolicExpr>& forcing,
     const std::string& x,
-    const std::string& y)
+    const std::string&)
 {
     ODEClassification result;
     result.order = static_cast<int>(coeffs.size()) - 1;
@@ -583,6 +757,42 @@ namespace lamina {
 // ============================================================================
 /// solve_homogeneous_ode
 // ============================================================================
+
+ODESolutionResult solve_homogeneous_ode_checked(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context)
+{
+    const std::string operation = "solve_homogeneous_ode";
+    auto valid = validate_ode_expr_var_pair(rhs, x, y, context, operation);
+    if (!valid) return ODESolutionResult::failure(valid.error());
+    auto step = context.consume_steps(12, operation);
+    if (!step) return ODESolutionResult::failure(step.error());
+
+    try {
+        return wrap_ode_solution(solve_homogeneous_ode(rhs, x, y),
+                                 ODEType::Homogeneous,
+                                 operation);
+    } catch (const std::bad_alloc&) {
+        return ODESolutionResult::failure(CasErrc::ResourceLimit,
+                                          "homogeneous ODE allocation failed",
+                                          operation);
+    } catch (const std::exception& e) {
+        return ODESolutionResult::failure(CasErrc::InternalInvariant,
+                                          e.what(),
+                                          operation);
+    }
+}
+
+ODESolutionResult solve_homogeneous_ode_checked(
+    const std::shared_ptr<SymbolicExpr>& rhs,
+    const std::string& x,
+    const std::string& y)
+{
+    ComputationContext context;
+    return solve_homogeneous_ode_checked(rhs, x, y, context);
+}
 
 ODESolution solve_homogeneous_ode(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -644,12 +854,57 @@ ODESolution solve_homogeneous_ode(
 /// solve_bernoulli_ode
 // ============================================================================
 
-ODESolution solve_bernoulli_ode(
+ODESolutionResult solve_bernoulli_ode_checked(
+    const std::shared_ptr<SymbolicExpr>& P,
+    const std::shared_ptr<SymbolicExpr>& Q,
+    int n,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context)
+{
+    const std::string operation = "solve_bernoulli_ode";
+    auto valid = validate_ode_pair_var_pair(P, Q, x, y, context, operation);
+    if (!valid) return ODESolutionResult::failure(valid.error());
+    if (n == 0 || n == 1) {
+        return ODESolutionResult::failure(CasErrc::InvalidArgument,
+                                          "Bernoulli exponent must not be 0 or 1",
+                                          operation);
+    }
+    auto step = context.consume_steps(14, operation);
+    if (!step) return ODESolutionResult::failure(step.error());
+
+    try {
+        return wrap_ode_solution(solve_bernoulli_ode(P, Q, n, x, y),
+                                 ODEType::Bernoulli,
+                                 operation);
+    } catch (const std::bad_alloc&) {
+        return ODESolutionResult::failure(CasErrc::ResourceLimit,
+                                          "Bernoulli ODE allocation failed",
+                                          operation);
+    } catch (const std::exception& e) {
+        return ODESolutionResult::failure(CasErrc::InternalInvariant,
+                                          e.what(),
+                                          operation);
+    }
+}
+
+ODESolutionResult solve_bernoulli_ode_checked(
     const std::shared_ptr<SymbolicExpr>& P,
     const std::shared_ptr<SymbolicExpr>& Q,
     int n,
     const std::string& x,
     const std::string& y)
+{
+    ComputationContext context;
+    return solve_bernoulli_ode_checked(P, Q, n, x, y, context);
+}
+
+ODESolution solve_bernoulli_ode(
+    const std::shared_ptr<SymbolicExpr>& P,
+    const std::shared_ptr<SymbolicExpr>& Q,
+    int n,
+    const std::string& x,
+    const std::string&)
 {
     ODESolution result;
     result.method_used = ODEType::Bernoulli;
@@ -725,7 +980,7 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     /// 尝试 μ = μ(x): (∂M/∂y - ∂N/∂x) / N 仅依赖 x
     if (N && !N->is_zero()) {
         auto ratio_x = SymbolicExpr::divide(diff, N)->simplify();
-        if (!depends_on_var(ratio_x->root, y)) {
+        if (!depends_on_var(lamina::detail::node(ratio_x), y)) {
             /// μ(x) = exp(∫ ratio_x dx)
             auto int_ratio = ratio_x->integrate(x);
             return SymbolicExpr::exp(int_ratio);
@@ -736,7 +991,7 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     if (M && !M->is_zero()) {
         auto neg_diff = SymbolicExpr::multiply(SymbolicExpr::number(-1), diff)->simplify();
         auto ratio_y = SymbolicExpr::divide(neg_diff, M)->simplify();
-        if (!depends_on_var(ratio_y->root, x)) {
+        if (!depends_on_var(lamina::detail::node(ratio_y), x)) {
             /// μ(y) = exp(∫ ratio_y dy)
             auto int_ratio = ratio_y->integrate(y);
             return SymbolicExpr::exp(int_ratio);
@@ -749,6 +1004,44 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
 // ============================================================================
 /// solve_exact_ode
 // ============================================================================
+
+ODESolutionResult solve_exact_ode_checked(
+    const std::shared_ptr<SymbolicExpr>& M,
+    const std::shared_ptr<SymbolicExpr>& N,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context)
+{
+    const std::string operation = "solve_exact_ode";
+    auto valid = validate_ode_pair_var_pair(M, N, x, y, context, operation);
+    if (!valid) return ODESolutionResult::failure(valid.error());
+    auto step = context.consume_steps(18, operation);
+    if (!step) return ODESolutionResult::failure(step.error());
+
+    try {
+        return wrap_ode_solution(solve_exact_ode(M, N, x, y),
+                                 ODEType::Exact,
+                                 operation);
+    } catch (const std::bad_alloc&) {
+        return ODESolutionResult::failure(CasErrc::ResourceLimit,
+                                          "exact ODE allocation failed",
+                                          operation);
+    } catch (const std::exception& e) {
+        return ODESolutionResult::failure(CasErrc::InternalInvariant,
+                                          e.what(),
+                                          operation);
+    }
+}
+
+ODESolutionResult solve_exact_ode_checked(
+    const std::shared_ptr<SymbolicExpr>& M,
+    const std::shared_ptr<SymbolicExpr>& N,
+    const std::string& x,
+    const std::string& y)
+{
+    ComputationContext context;
+    return solve_exact_ode_checked(M, N, x, y, context);
+}
 
 ODESolution solve_exact_ode(
     const std::shared_ptr<SymbolicExpr>& M,
@@ -830,7 +1123,7 @@ struct CharRoot {
  * 对于度数 ≤ 4 的多项式使用解析公式，
  * 对于度数 5-6 使用 Durand-Kerner 迭代法。
  */
-static std::vector<CharRoot> find_characteristic_roots(
+[[maybe_unused]] static std::vector<CharRoot> find_characteristic_roots(
     const std::vector<double>& coeffs)
 {
     int n = static_cast<int>(coeffs.size()) - 1;
@@ -1039,6 +1332,10 @@ static std::shared_ptr<SymbolicExpr> clean_number(double val) {
     return SymbolicExpr::number(val);
 }
 
+static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
+    return forcing && lamina::detail::node(forcing) && !forcing->is_zero();
+}
+
 /**
  * @internal
  * @brief 根据特征根构造齐次通解。
@@ -1046,7 +1343,7 @@ static std::shared_ptr<SymbolicExpr> clean_number(double val) {
  * - 实根 r（重数 m）：C_k * x^k * e^(rx)，k = 0, ..., m-1
  * - 复根 α±βi（重数 m）：x^k * e^(αx) * (C_a*cos(βx) + C_b*sin(βx))
  */
-static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
+[[maybe_unused]] static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
     const std::vector<CharRoot>& roots,
     const std::string& x,
     std::vector<std::string>& constants)
@@ -1135,6 +1432,237 @@ static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
     return solution;
 }
 
+static std::shared_ptr<SymbolicExpr> build_euler_solution(
+    const std::vector<CharRoot>& roots,
+    const std::string& x,
+    std::vector<std::string>& constants)
+{
+    auto x_var = SymbolicExpr::variable(x);
+    auto ln_x = SymbolicExpr::ln(x_var);
+    std::shared_ptr<SymbolicExpr> solution = nullptr;
+    int const_idx = 1;
+
+    for (const auto& root : roots) {
+        for (int k = 0; k < root.multiplicity; ++k) {
+            std::shared_ptr<SymbolicExpr> log_factor = nullptr;
+            if (k > 0) {
+                log_factor = SymbolicExpr::power(ln_x, SymbolicExpr::number(k));
+            }
+
+            if (!root.is_complex) {
+                std::string c_name = "C" + std::to_string(const_idx++);
+                constants.push_back(c_name);
+                auto term = SymbolicExpr::variable(c_name);
+
+                auto exponent = clean_number(root.real_part);
+                term = SymbolicExpr::multiply(
+                    term,
+                    SymbolicExpr::power(x_var, exponent));
+                if (log_factor) {
+                    term = SymbolicExpr::multiply(term, log_factor);
+                }
+                solution = solution ? SymbolicExpr::add(solution, term) : term;
+            } else {
+                std::string ca_name = "C" + std::to_string(const_idx++);
+                std::string cb_name = "C" + std::to_string(const_idx++);
+                constants.push_back(ca_name);
+                constants.push_back(cb_name);
+
+                auto alpha_expr = clean_number(root.real_part);
+                auto beta_expr = clean_number(root.imag_part);
+                auto beta_ln_x = SymbolicExpr::multiply(beta_expr, ln_x);
+                auto trig = SymbolicExpr::add(
+                    SymbolicExpr::multiply(SymbolicExpr::variable(ca_name),
+                                           SymbolicExpr::cos(beta_ln_x)),
+                    SymbolicExpr::multiply(SymbolicExpr::variable(cb_name),
+                                           SymbolicExpr::sin(beta_ln_x)));
+                auto term = SymbolicExpr::multiply(
+                    SymbolicExpr::power(x_var, alpha_expr),
+                    trig);
+                if (log_factor) {
+                    term = SymbolicExpr::multiply(term, log_factor);
+                }
+                solution = solution ? SymbolicExpr::add(solution, term) : term;
+            }
+        }
+    }
+
+    return solution;
+}
+
+ODESolutionResult solve_higher_order_ode_checked(
+    const std::vector<double>& coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context)
+{
+    const std::string operation = "solve_higher_order_ode";
+    auto variables = validate_ode_variables(x, y, context, operation);
+    if (!variables) return ODESolutionResult::failure(variables.error());
+
+    auto coeff_check = validate_numeric_ode_coefficients(coeffs, 2, 7, operation);
+    if (!coeff_check) return ODESolutionResult::failure(coeff_check.error());
+
+    auto budget = context.consume_steps(coeffs.size() * 20 + 20, operation);
+    if (!budget) return ODESolutionResult::failure(budget.error());
+
+    if (has_nonzero_forcing(forcing)) {
+        return ODESolutionResult::failure(
+            CasErrc::Inconclusive,
+            "checked higher-order ODE currently supports homogeneous constant-coefficient equations only",
+            operation);
+    }
+
+    try {
+        return wrap_ode_solution(
+            solve_higher_order_ode(coeffs, forcing, x, y),
+            ODEType::HigherOrder_ConstCoeff,
+            operation);
+    } catch (const std::bad_alloc&) {
+        return ODESolutionResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while solving higher-order ODE",
+            operation);
+    } catch (const std::exception& ex) {
+        return ODESolutionResult::failure(
+            CasErrc::InternalInvariant,
+            ex.what(),
+            operation);
+    }
+}
+
+ODESolutionResult solve_higher_order_ode_checked(
+    const std::vector<double>& coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string& y)
+{
+    ComputationContext context;
+    return solve_higher_order_ode_checked(coeffs, forcing, x, y, context);
+}
+
+ODESolution solve_higher_order_ode(
+    const std::vector<double>& coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string&)
+{
+    ODESolution result;
+    result.method_used = ODEType::HigherOrder_ConstCoeff;
+
+    if (coeffs.size() < 2 || has_nonzero_forcing(forcing)) {
+        result.general_solution = nullptr;
+        return result;
+    }
+
+    auto roots = find_characteristic_roots(coeffs);
+    if (roots.empty()) {
+        result.general_solution = nullptr;
+        return result;
+    }
+
+    result.general_solution = build_homogeneous_solution(roots, x, result.constants);
+    if (result.general_solution) {
+        result.general_solution = result.general_solution->simplify();
+    }
+    return result;
+}
+
+ODESolutionResult solve_euler_ode_checked(
+    const std::vector<double>& euler_coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context)
+{
+    const std::string operation = "solve_euler_ode";
+    auto variables = validate_ode_variables(x, y, context, operation);
+    if (!variables) return ODESolutionResult::failure(variables.error());
+
+    auto coeff_check = validate_numeric_ode_coefficients(euler_coeffs, 3, 4, operation);
+    if (!coeff_check) return ODESolutionResult::failure(coeff_check.error());
+
+    auto budget = context.consume_steps(euler_coeffs.size() * 20 + 20, operation);
+    if (!budget) return ODESolutionResult::failure(budget.error());
+
+    if (has_nonzero_forcing(forcing)) {
+        return ODESolutionResult::failure(
+            CasErrc::Inconclusive,
+            "checked Euler ODE currently supports homogeneous equations only",
+            operation);
+    }
+
+    try {
+        return wrap_ode_solution(
+            solve_euler_ode(euler_coeffs, forcing, x, y),
+            ODEType::Euler,
+            operation);
+    } catch (const std::bad_alloc&) {
+        return ODESolutionResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while solving Euler ODE",
+            operation);
+    } catch (const std::exception& ex) {
+        return ODESolutionResult::failure(
+            CasErrc::InternalInvariant,
+            ex.what(),
+            operation);
+    }
+}
+
+ODESolutionResult solve_euler_ode_checked(
+    const std::vector<double>& euler_coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string& y)
+{
+    ComputationContext context;
+    return solve_euler_ode_checked(euler_coeffs, forcing, x, y, context);
+}
+
+ODESolution solve_euler_ode(
+    const std::vector<double>& euler_coeffs,
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::string& x,
+    const std::string&)
+{
+    ODESolution result;
+    result.method_used = ODEType::Euler;
+
+    if ((euler_coeffs.size() != 3 && euler_coeffs.size() != 4) ||
+        has_nonzero_forcing(forcing)) {
+        result.general_solution = nullptr;
+        return result;
+    }
+
+    std::vector<double> characteristic;
+    if (euler_coeffs.size() == 3) {
+        const double a = euler_coeffs[0];
+        const double b = euler_coeffs[1];
+        const double c = euler_coeffs[2];
+        characteristic = {a, b - a, c};
+    } else {
+        const double a = euler_coeffs[0];
+        const double b = euler_coeffs[1];
+        const double c = euler_coeffs[2];
+        const double d = euler_coeffs[3];
+        characteristic = {a, b - 3.0 * a, 2.0 * a - b + c, d};
+    }
+
+    auto roots = find_characteristic_roots(characteristic);
+    if (roots.empty()) {
+        result.general_solution = nullptr;
+        return result;
+    }
+
+    result.general_solution = build_euler_solution(roots, x, result.constants);
+    if (result.general_solution) {
+        result.general_solution = result.general_solution->simplify();
+    }
+    return result;
+}
+
 /**
  * @internal
  * @brief 检测非齐次项的类型，用于待定系数法。
@@ -1156,6 +1684,48 @@ namespace lamina {
 // ============================================================================
 /// solve_variation_of_parameters
 // ============================================================================
+
+ODESolutionResult solve_variation_of_parameters_checked(
+    const std::shared_ptr<SymbolicExpr>& y1,
+    const std::shared_ptr<SymbolicExpr>& y2,
+    const std::shared_ptr<SymbolicExpr>& g,
+    const std::string& x,
+    ComputationContext& context)
+{
+    const std::string operation = "solve_variation_of_parameters";
+    auto valid = validate_ode_three_expr_one_var(y1, y2, g, x, context, operation);
+    if (!valid) return ODESolutionResult::failure(valid.error());
+
+    auto budget = context.consume_steps(24, operation);
+    if (!budget) return ODESolutionResult::failure(budget.error());
+
+    try {
+        return wrap_ode_solution(
+            solve_variation_of_parameters(y1, y2, g, x),
+            ODEType::HigherOrder_ConstCoeff,
+            operation);
+    } catch (const std::bad_alloc&) {
+        return ODESolutionResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while applying variation of parameters",
+            operation);
+    } catch (const std::exception& ex) {
+        return ODESolutionResult::failure(
+            CasErrc::InternalInvariant,
+            ex.what(),
+            operation);
+    }
+}
+
+ODESolutionResult solve_variation_of_parameters_checked(
+    const std::shared_ptr<SymbolicExpr>& y1,
+    const std::shared_ptr<SymbolicExpr>& y2,
+    const std::shared_ptr<SymbolicExpr>& g,
+    const std::string& x)
+{
+    ComputationContext context;
+    return solve_variation_of_parameters_checked(y1, y2, g, x, context);
+}
 
 ODESolution solve_variation_of_parameters(
     const std::shared_ptr<SymbolicExpr>& y1,
@@ -1276,6 +1846,120 @@ ODESingularityType classify_singular_point(
 // ============================================================================
 /// solve_frobenius
 // ============================================================================
+
+static Result<void> validate_frobenius_regular_singular_domain(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x,
+    const std::string& operation)
+{
+    auto x_var = SymbolicExpr::variable(x);
+    auto x_minus_x0 = SymbolicExpr::add(x_var,
+        SymbolicExpr::multiply(SymbolicExpr::number(-1), x0));
+    auto xp_expr = SymbolicExpr::multiply(x_minus_x0, p)->simplify();
+    auto x2q_expr = SymbolicExpr::multiply(
+        SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
+
+    auto P0_expr = xp_expr->limit(x, x0);
+    auto Q0_expr = x2q_expr->limit(x, x0);
+    double P0 = P0_expr ? try_eval_double(P0_expr) : std::numeric_limits<double>::quiet_NaN();
+    double Q0 = Q0_expr ? try_eval_double(Q0_expr) : std::numeric_limits<double>::quiet_NaN();
+    if (!std::isfinite(P0) || !std::isfinite(Q0)) {
+        return Result<void>::failure(
+            CasErrc::Inconclusive,
+            "Frobenius regular-singular coefficients are outside the checked numeric support domain",
+            operation);
+    }
+
+    double discriminant = (P0 - 1.0) * (P0 - 1.0) - 4.0 * Q0;
+    int zero_discriminant;
+    lmmc_double_nearly_equal_tol(discriminant, 0.0, 1e-12, 1e-12,
+                                 &zero_discriminant);
+    if (discriminant < 0.0 && !zero_discriminant) {
+        return Result<void>::failure(
+            CasErrc::Inconclusive,
+            "Frobenius checked API currently supports real indicial roots only",
+            operation);
+    }
+
+    return Result<void>::success();
+}
+
+FrobeniusSolutionResult solve_frobenius_checked(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x,
+    int order,
+    ComputationContext& context)
+{
+    const std::string operation = "solve_frobenius";
+    auto valid = validate_ode_two_expr_point(p, q, x0, x, context, operation);
+    if (!valid) return FrobeniusSolutionResult::failure(valid.error());
+    if (order < 0 || order > 64) {
+        return FrobeniusSolutionResult::failure(
+            CasErrc::InvalidArgument,
+            "Frobenius truncation order must be between 0 and 64",
+            operation);
+    }
+    auto budget = context.consume_steps(static_cast<std::size_t>(order + 1) * 24 + 24,
+                                        operation);
+    if (!budget) return FrobeniusSolutionResult::failure(budget.error());
+
+    try {
+        auto point_type = classify_singular_point(p, q, x0, x);
+        if (point_type == ODESingularityType::IrregularSingular) {
+            return FrobeniusSolutionResult::failure(
+                CasErrc::Inconclusive,
+                "Frobenius checked API does not support irregular singular points",
+                operation);
+        }
+        if (point_type == ODESingularityType::RegularSingular) {
+            auto regular_domain =
+                validate_frobenius_regular_singular_domain(p, q, x0, x, operation);
+            if (!regular_domain) {
+                return FrobeniusSolutionResult::failure(regular_domain.error());
+            }
+        }
+
+        auto solution = solve_frobenius(p, q, x0, x, order);
+        if (!solution.series_solution || !lamina::detail::node(solution.series_solution)) {
+            return FrobeniusSolutionResult::failure(
+                CasErrc::Inconclusive,
+                "Frobenius solver produced no series in the supported domain",
+                operation);
+        }
+        if (solution.point_type != point_type) {
+            return FrobeniusSolutionResult::failure(
+                CasErrc::InternalInvariant,
+                "Frobenius solver reported an unexpected singularity type",
+                operation);
+        }
+        return FrobeniusSolutionResult::success(std::move(solution));
+    } catch (const std::bad_alloc&) {
+        return FrobeniusSolutionResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while solving Frobenius series",
+            operation);
+    } catch (const std::exception& ex) {
+        return FrobeniusSolutionResult::failure(
+            CasErrc::InternalInvariant,
+            ex.what(),
+            operation);
+    }
+}
+
+FrobeniusSolutionResult solve_frobenius_checked(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x,
+    int order)
+{
+    ComputationContext context;
+    return solve_frobenius_checked(p, q, x0, x, order, context);
+}
 
 FrobeniusSolution solve_frobenius(
     const std::shared_ptr<SymbolicExpr>& p,

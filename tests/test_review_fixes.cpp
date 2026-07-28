@@ -231,31 +231,24 @@ void test_irrational_to_symbolic_complex() {
 }
 
 // =============================================================================
-// 11) MatrixNode::clone preserves nullptr slots in dense storage
+// 11) MatrixNode rejects nullptr slots in dense storage
 // =============================================================================
 void test_matrix_clone_with_null_slot() {
-    TEST_CASE("MatrixNode::clone tolerates nullptr dense entries");
+    TEST_CASE("MatrixNode rejects nullptr dense entries");
 
     MatrixNode::DenseStorage dense;
-    dense.push_back(std::make_shared<NumberNode>(BigInt(1)));
+    dense.push_back(lamina::detail::make_node<NumberNode>(BigInt(1)));
     dense.push_back(nullptr); // intentional empty slot
-    dense.push_back(std::make_shared<NumberNode>(BigInt(2)));
-    dense.push_back(std::make_shared<NumberNode>(BigInt(3)));
+    dense.push_back(lamina::detail::make_node<NumberNode>(BigInt(2)));
+    dense.push_back(lamina::detail::make_node<NumberNode>(BigInt(3)));
 
-    auto m = std::make_shared<MatrixNode>(2, 2, std::move(dense));
-    std::shared_ptr<SymbolicNode> cloned;
+    bool rejected = false;
     try {
-        cloned = m->clone();
-    } catch (...) {
-        std::cerr << "[FAIL] clone threw on null slot" << std::endl;
-        ++g_failures;
-        return;
+        (void)lamina::detail::make_node<MatrixNode>(2, 2, std::move(dense));
+    } catch (const std::invalid_argument&) {
+        rejected = true;
     }
-    EXPECT_TRUE(cloned != nullptr, "clone returned non-null");
-    auto cloned_mat = std::dynamic_pointer_cast<MatrixNode>(cloned);
-    EXPECT_TRUE(cloned_mat != nullptr, "clone result is a MatrixNode");
-    EXPECT_TRUE(cloned_mat->rows == 2 && cloned_mat->cols == 2,
-                "clone preserves shape");
+    EXPECT_TRUE(rejected, "MatrixNode rejects null dense storage slots");
 }
 
 // =============================================================================
@@ -264,21 +257,21 @@ void test_matrix_clone_with_null_slot() {
 void test_numbernode_hash_consistent() {
     TEST_CASE("NumberNode hash matches compare_same_type for equivalent values");
 
-    auto n_int = std::make_shared<NumberNode>(BigInt(1));
-    auto n_rat = std::make_shared<NumberNode>(Rational(1, 1));
-    auto n_dbl = std::make_shared<NumberNode>((lmmc_real_t)1.0);
+    auto n_int = lamina::detail::make_node<NumberNode>(BigInt(1));
+    auto n_rat = lamina::detail::make_node<NumberNode>(Rational(1, 1));
+    auto n_dbl = lamina::detail::make_node<NumberNode>((lmmc_real_t)1.0);
 
-    // 1 == Rational(1,1) == 1.0 must be order-equal.
+    // BigInt and Rational are the same exact domain; approximate doubles are distinct.
     EXPECT_TRUE(n_int->compare(*n_rat) == 0, "BigInt 1 == Rational 1/1");
-    EXPECT_TRUE(n_int->compare(*n_dbl) == 0, "BigInt 1 == double 1.0");
-    EXPECT_TRUE(n_rat->compare(*n_dbl) == 0, "Rational 1/1 == double 1.0");
+    EXPECT_TRUE(n_int->compare(*n_dbl) != 0, "exact BigInt 1 differs structurally from approximate 1.0");
+    EXPECT_TRUE(n_rat->compare(*n_dbl) != 0, "exact Rational 1 differs structurally from approximate 1.0");
 
     // Hash must agree (otherwise equals() short-circuits to false on hash mismatch).
     EXPECT_TRUE(n_int->hash() == n_rat->hash(), "hash(BigInt 1) == hash(Rational 1/1)");
-    EXPECT_TRUE(n_int->hash() == n_dbl->hash(), "hash(BigInt 1) == hash(double 1.0)");
+    EXPECT_TRUE(n_int->hash() != n_dbl->hash(), "exact and approximate hashes are domain-separated");
 
     EXPECT_TRUE(n_int->equals(*n_rat), "equals(BigInt 1, Rational 1/1)");
-    EXPECT_TRUE(n_int->equals(*n_dbl), "equals(BigInt 1, double 1.0)");
+    EXPECT_FALSE(n_int->equals(*n_dbl), "exact BigInt does not equal approximate double structurally");
 }
 
 // =============================================================================
