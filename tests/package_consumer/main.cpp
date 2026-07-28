@@ -101,6 +101,14 @@ int main() {
         std::cerr << "failed to prove LSR i*i == -1\n";
         return 11;
     }
+    auto i_power_two = SymbolicExpr::power(i.value(), SymbolicExpr::number(2));
+    lamina::ComputationContext lsr_power_context;
+    auto i_power_rule = lamina::lsr::equivalent_core(
+        *i_power_two, *SymbolicExpr::number(-1), lsr_power_context);
+    if (!i_power_rule || !i_power_rule.value()) {
+        std::cerr << "failed to prove LSR i^2 == -1\n";
+        return 11;
+    }
     lamina::lsr::EqvOptions exhausted_eqv_options;
     exhausted_eqv_options.budget.max_rewrite_steps = 0;
     lamina::ComputationContext exhausted_eqv_context;

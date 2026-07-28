@@ -188,6 +188,30 @@ bool exact_integer_node(const std::shared_ptr<const SymbolicNode>& node,
     return false;
 }
 
+std::optional<int> exact_small_integer_node(
+    const std::shared_ptr<const SymbolicNode>& node,
+    int min_value,
+    int max_value) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number) return std::nullopt;
+
+    BigInt value;
+    if (std::holds_alternative<BigInt>(number->value())) {
+        value = std::get<BigInt>(number->value());
+    } else if (std::holds_alternative<Rational>(number->value())) {
+        const Rational& rational = std::get<Rational>(number->value());
+        if (!rational.is_integer()) return std::nullopt;
+        value = rational.to_BigInt();
+    } else {
+        return std::nullopt;
+    }
+
+    if (value < BigInt(min_value) || value > BigInt(max_value)) {
+        return std::nullopt;
+    }
+    return value.to_int();
+}
+
 bool trig_square_argument(const std::shared_ptr<const SymbolicNode>& node,
                           FunctionNode::FuncType type,
                           std::shared_ptr<const SymbolicNode>& argument) {
@@ -575,6 +599,25 @@ Result<std::optional<ExprSet>> try_lsr_closed_form_rational_poly_roots(
 
 ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     const auto& node = lamina::detail::node(expression);
+
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto exponent = exact_small_integer_node(power->exponent(), 0, 16);
+        if (exponent) {
+            auto canonical_base = canonicalize_lsr_complex_product(
+                *lamina::detail::make_expression_ptr(power->base()));
+            if (std::dynamic_pointer_cast<const ComplexNode>(
+                    lamina::detail::node(canonical_base))) {
+                auto result = SymbolicExpr::number(1);
+                for (int i = 0; i < *exponent; ++i) {
+                    result = canonicalize_lsr_complex_product(
+                        *SymbolicExpr::multiply(result, canonical_base));
+                }
+                return result->simplify();
+            }
+        }
+        return lamina::detail::make_expression_ptr(node);
+    }
+
     auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node);
     if (!multiply) {
         return lamina::detail::make_expression_ptr(node);
@@ -585,14 +628,18 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     auto imag = SymbolicExpr::number(0);
 
     for (const auto& operand : multiply->operands()) {
+        auto canonical_operand = canonicalize_lsr_complex_product(
+            *lamina::detail::make_expression_ptr(operand));
+        const auto& operand_node = lamina::detail::node(canonical_operand);
         ExprPtr factor_real;
         ExprPtr factor_imag;
-        if (auto complex_operand = std::dynamic_pointer_cast<const ComplexNode>(operand)) {
+        if (auto complex_operand = std::dynamic_pointer_cast<const ComplexNode>(
+                operand_node)) {
             saw_complex = true;
             factor_real = lamina::detail::make_expression_ptr(complex_operand->real());
             factor_imag = lamina::detail::make_expression_ptr(complex_operand->imag());
         } else {
-            factor_real = lamina::detail::make_expression_ptr(operand);
+            factor_real = canonical_operand;
             factor_imag = SymbolicExpr::number(0);
         }
 

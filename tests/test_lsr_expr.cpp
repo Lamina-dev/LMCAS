@@ -49,6 +49,15 @@ int main() {
             *i_squared, *SymbolicExpr::number(-1), complex_equivalence_context);
         EXPECT_TRUE(complex_equivalent && complex_equivalent.value(),
                     "i * i is equivalent to -1 in the LSR core profile");
+
+        auto i_power_two = SymbolicExpr::power(i.value(), SymbolicExpr::number(2));
+        lamina::ComputationContext complex_power_equivalence_context;
+        auto complex_power_equivalent = lamina::lsr::equivalent_core(
+            *i_power_two, *SymbolicExpr::number(-1),
+            complex_power_equivalence_context);
+        EXPECT_TRUE(complex_power_equivalent &&
+                        complex_power_equivalent.value(),
+                    "i^2 is equivalent to -1 in the LSR core profile");
     }
 
     TEST_CASE("LSR evalf is explicit and propagates missing bindings");
