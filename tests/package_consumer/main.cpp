@@ -149,8 +149,19 @@ int main() {
 
     lmmc_complex_t numeric_i;
     lmmc_real_t numeric_abs = 0;
+    lmmc_real_t stats_values[] = {1, 2, 3, 4};
+    lmmc_real_t stats_scaled_values[] = {2, 4, 6, 8};
     if (lmmc_lsr_math_i(&numeric_i) != LMMC_STATUS_OK ||
         lmmc_lsr_math_complex_abs(&numeric_i, &numeric_abs) != LMMC_STATUS_OK ||
+        numeric_abs != 1.0 ||
+        lmmc_lsr_math_log10(1000, &numeric_abs) != LMMC_STATUS_OK ||
+        numeric_abs != 3.0 ||
+        lmmc_lsr_stats_cov(stats_values, stats_scaled_values, 4,
+                           &numeric_abs) != LMMC_STATUS_OK ||
+        numeric_abs <= 3.333333333333 ||
+        numeric_abs >= 3.333333333334 ||
+        lmmc_lsr_stats_corr(stats_values, stats_scaled_values, 4,
+                            &numeric_abs) != LMMC_STATUS_OK ||
         numeric_abs != 1.0 ||
         std::string(lmmc_lsr_error_name(LMMC_STATUS_OUT_OF_RANGE)) !=
             "DomainError") {
