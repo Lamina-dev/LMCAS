@@ -113,6 +113,19 @@ int main() {
         std::cerr << "failed to expose LSR equivalence budget diagnostics\n";
         return 11;
     }
+    auto x_plus_one = SymbolicExpr::add(x, SymbolicExpr::number(1));
+    auto x_plus_one_squared = SymbolicExpr::power(x_plus_one, SymbolicExpr::number(2));
+    auto expanded_square = SymbolicExpr::add(
+        SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
+                          SymbolicExpr::multiply(SymbolicExpr::number(2), x)),
+        SymbolicExpr::number(1));
+    lamina::ComputationContext polynomial_eqv_context;
+    auto polynomial_eqv = lamina::lsr::equivalent_core(
+        *x_plus_one_squared, *expanded_square, polynomial_eqv_context);
+    if (!polynomial_eqv || !polynomial_eqv.value()) {
+        std::cerr << "failed to prove LSR polynomial equivalence example\n";
+        return 11;
+    }
 
     auto lsr_roots = lamina::lsr::solve_expr_set(
         SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),

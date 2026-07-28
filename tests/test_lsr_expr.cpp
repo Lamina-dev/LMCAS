@@ -281,6 +281,30 @@ int main() {
     EXPECT_TRUE(equivalent && equivalent.value(),
                 "equivalent_core proves normalized additive equality");
 
+    auto x_plus_one_squared = SymbolicExpr::power(x_plus_one, SymbolicExpr::number(2));
+    auto x_squared = SymbolicExpr::power(x.value(), SymbolicExpr::number(2));
+    auto two_x = SymbolicExpr::multiply(SymbolicExpr::number(2), x.value());
+    auto expanded_square = SymbolicExpr::add(
+        SymbolicExpr::add(x_squared, two_x), SymbolicExpr::number(1));
+    lamina::ComputationContext polynomial_eqv_context;
+    auto polynomial_equivalent = lamina::lsr::equivalent_core(
+        *x_plus_one_squared, *expanded_square, polynomial_eqv_context);
+    EXPECT_TRUE(polynomial_equivalent && polynomial_equivalent.value(),
+                "equivalent_core proves the LSR polynomial Core example");
+
+    auto y = lamina::lsr::sym("y");
+    auto y_plus_one = SymbolicExpr::add(y.value(), SymbolicExpr::number(1));
+    auto y_plus_one_squared = SymbolicExpr::power(y_plus_one, SymbolicExpr::number(2));
+    auto y_squared = SymbolicExpr::power(y.value(), SymbolicExpr::number(2));
+    auto two_y = SymbolicExpr::multiply(SymbolicExpr::number(2), y.value());
+    auto expanded_y_square = SymbolicExpr::add(
+        SymbolicExpr::add(y_squared, two_y), SymbolicExpr::number(1));
+    lamina::ComputationContext y_polynomial_eqv_context;
+    auto y_polynomial_equivalent = lamina::lsr::equivalent_core(
+        *y_plus_one_squared, *expanded_y_square, y_polynomial_eqv_context);
+    EXPECT_TRUE(y_polynomial_equivalent && y_polynomial_equivalent.value(),
+                "equivalent_core polynomial proof is not hard-coded to x");
+
     lamina::lsr::EqvOptions no_budget;
     no_budget.budget.max_rewrite_steps = 0;
     lamina::ComputationContext no_budget_context;

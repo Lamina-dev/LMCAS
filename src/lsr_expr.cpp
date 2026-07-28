@@ -6,6 +6,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <set>
 #include <utility>
 
 #include "complex_analysis.hpp"
@@ -178,6 +179,83 @@ Result<void> validate_eqv_options(const EqvOptions& options) {
             kEquivalentOperation);
     }
     return Result<void>::success();
+}
+
+void collect_variable_names(
+    const std::shared_ptr<const SymbolicNode>& node,
+    std::set<std::string>& variables) {
+    if (!node) return;
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        variables.insert(variable->name());
+        return;
+    }
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (const auto& operand : add->operands()) {
+            collect_variable_names(operand, variables);
+        }
+        return;
+    }
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& operand : multiply->operands()) {
+            collect_variable_names(operand, variables);
+        }
+        return;
+    }
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        collect_variable_names(power->base(), variables);
+        collect_variable_names(power->exponent(), variables);
+        return;
+    }
+    if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
+        collect_variable_names(complex_node->real(), variables);
+        collect_variable_names(complex_node->imag(), variables);
+    }
+}
+
+Result<std::optional<bool>> prove_rational_polynomial_equivalence(
+    const ExprPtr& difference,
+    ComputationContext& context,
+    const EqvOptions& options) {
+    if (!difference) {
+        return Result<std::optional<bool>>::failure(
+            CasErrc::InternalInvariant,
+            "equivalence difference is null",
+            kEquivalentOperation);
+    }
+
+    if (options.budget.max_rewrite_steps < 4) {
+        return Result<std::optional<bool>>::failure(
+            CasErrc::ResourceLimit,
+            "equivalence rewrite budget exhausted before polynomial normalization",
+            kEquivalentOperation);
+    }
+
+    auto step = context.consume_steps(4, kEquivalentOperation);
+    if (!step) return Result<std::optional<bool>>::failure(step.error());
+
+    auto expanded = difference->expand();
+    if (!expanded || !lamina::detail::node(expanded)) {
+        return Result<std::optional<bool>>::failure(
+            CasErrc::InternalInvariant,
+            "equivalence expansion returned null",
+            kEquivalentOperation);
+    }
+
+    std::set<std::string> variables;
+    collect_variable_names(lamina::detail::node(expanded), variables);
+    if (variables.size() > 1) {
+        return Result<std::optional<bool>>::success(std::nullopt);
+    }
+    const std::string variable = variables.empty() ? "x" : *variables.begin();
+
+    auto recognized = recognize_rational_polynomial(*expanded, variable, context);
+    if (!recognized) {
+        return Result<std::optional<bool>>::failure(recognized.error());
+    }
+    if (!recognized.value()) {
+        return Result<std::optional<bool>>::success(std::nullopt);
+    }
+    return Result<std::optional<bool>>::success(recognized.value()->is_zero());
 }
 
 Rational polynomial_coeff_or_zero(const Polynomial<Rational>& polynomial,
@@ -905,7 +983,19 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
                                          "equivalence difference construction failed",
                                          kEquivalentOperation);
         }
-        return Result<bool>::success(difference->simplify()->is_zero());
+        if (difference->simplify()->is_zero()) {
+            return Result<bool>::success(true);
+        }
+
+        auto polynomial_proof = prove_rational_polynomial_equivalence(
+            difference, context, options);
+        if (!polynomial_proof) {
+            return Result<bool>::failure(polynomial_proof.error());
+        }
+        if (polynomial_proof.value()) {
+            return Result<bool>::success(*polynomial_proof.value());
+        }
+        return Result<bool>::success(false);
     } catch (const std::bad_alloc&) {
         return Result<bool>::failure(CasErrc::ResourceLimit,
                                      "equivalence check allocation failed",
