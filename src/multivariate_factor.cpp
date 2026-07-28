@@ -260,9 +260,9 @@ static std::vector<Polynomial<Rational>> factor_univariate_bridge(
     BigInt target = mignotte * BigInt(2);
     int64_t prime = berl_result.prime;
     int lift_bound = 1;
-    BigInt pk(prime);
+    BigInt pk(static_cast<long long>(prime));
     while (pk <= target && lift_bound < 100) {
-        pk = pk * BigInt(prime);
+        pk = pk * BigInt(static_cast<long long>(prime));
         lift_bound++;
     }
 
