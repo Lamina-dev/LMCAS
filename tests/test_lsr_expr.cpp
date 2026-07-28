@@ -318,15 +318,35 @@ int main() {
                         "EqvBudgetExceeded",
                 "LSR equivalence budget exhaustion exposes EqvBudgetExceeded");
 
+    auto sin_y_squared = SymbolicExpr::power(
+        SymbolicExpr::sin(y.value()), SymbolicExpr::number(2));
+    auto cos_y_squared = SymbolicExpr::power(
+        SymbolicExpr::cos(y.value()), SymbolicExpr::number(2));
+    auto trig_identity = SymbolicExpr::add(sin_y_squared, cos_y_squared);
     lamina::lsr::EqvOptions trig_profile;
     trig_profile.profile = lamina::lsr::EqvProfile::TrigBasic;
     lamina::ComputationContext trig_profile_context;
+    auto trig_equivalent = lamina::lsr::equivalent_core(
+        *trig_identity, *SymbolicExpr::number(1), trig_profile_context,
+        trig_profile);
+    EXPECT_TRUE(trig_equivalent && trig_equivalent.value(),
+                "equivalent_core proves the LSR Trig-Basic sin^2+cos^2 identity");
+
+    lamina::ComputationContext core_trig_context;
+    auto core_trig_equivalent = lamina::lsr::equivalent_core(
+        *trig_identity, *SymbolicExpr::number(1), core_trig_context);
+    EXPECT_TRUE(core_trig_equivalent && !core_trig_equivalent.value(),
+                "Core profile does not silently enable Trig-Basic rules");
+
+    lamina::lsr::EqvOptions exp_log_profile;
+    exp_log_profile.profile = lamina::lsr::EqvProfile::ExpLogBasic;
+    lamina::ComputationContext exp_log_profile_context;
     auto disabled_profile = lamina::lsr::equivalent_core(
-        *one_plus_x, *x_plus_one, trig_profile_context, trig_profile);
+        *one_plus_x, *x_plus_one, exp_log_profile_context, exp_log_profile);
     EXPECT_TRUE(!disabled_profile &&
                     disabled_profile.error().code ==
                         lamina::CasErrc::UnsupportedExpression,
-                "equivalent_core does not silently enable unsupported profiles");
+                "equivalent_core does not silently enable unsupported ExpLog profile");
     EXPECT_TRUE(!disabled_profile &&
                     std::string(lamina::lsr::error_name(disabled_profile.error())) ==
                         "EqvRuleDisabled",

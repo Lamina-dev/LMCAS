@@ -126,6 +126,19 @@ int main() {
         std::cerr << "failed to prove LSR polynomial equivalence example\n";
         return 11;
     }
+    auto trig_identity = SymbolicExpr::add(
+        SymbolicExpr::power(SymbolicExpr::sin(x), SymbolicExpr::number(2)),
+        SymbolicExpr::power(SymbolicExpr::cos(x), SymbolicExpr::number(2)));
+    lamina::lsr::EqvOptions trig_eqv_options;
+    trig_eqv_options.profile = lamina::lsr::EqvProfile::TrigBasic;
+    lamina::ComputationContext trig_eqv_context;
+    auto trig_eqv = lamina::lsr::equivalent_core(
+        *trig_identity, *SymbolicExpr::number(1), trig_eqv_context,
+        trig_eqv_options);
+    if (!trig_eqv || !trig_eqv.value()) {
+        std::cerr << "failed to prove LSR Trig-Basic equivalence example\n";
+        return 11;
+    }
 
     auto lsr_roots = lamina::lsr::solve_expr_set(
         SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),

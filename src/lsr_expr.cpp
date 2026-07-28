@@ -164,7 +164,7 @@ bool is_imaginary_unit_name(const std::string& name) {
 }
 
 Result<void> validate_eqv_options(const EqvOptions& options) {
-    if (options.profile != EqvProfile::Core) {
+    if (options.profile == EqvProfile::ExpLogBasic) {
         return Result<void>::failure(
             CasErrc::UnsupportedExpression,
             "LSR equivalence profile is declared but not implemented by this build",
@@ -179,6 +179,131 @@ Result<void> validate_eqv_options(const EqvOptions& options) {
             kEquivalentOperation);
     }
     return Result<void>::success();
+}
+
+bool exact_integer_node(const std::shared_ptr<const SymbolicNode>& node,
+                        int expected) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number) return false;
+    if (std::holds_alternative<BigInt>(number->value())) {
+        return std::get<BigInt>(number->value()) == BigInt(expected);
+    }
+    if (std::holds_alternative<Rational>(number->value())) {
+        return std::get<Rational>(number->value()) == Rational(expected);
+    }
+    return false;
+}
+
+bool trig_square_argument(const std::shared_ptr<const SymbolicNode>& node,
+                          FunctionNode::FuncType type,
+                          std::shared_ptr<const SymbolicNode>& argument) {
+    auto power = std::dynamic_pointer_cast<const PowerNode>(node);
+    if (!power || !exact_integer_node(power->exponent(), 2)) return false;
+    auto function = std::dynamic_pointer_cast<const FunctionNode>(power->base());
+    if (!function || function->type() != type ||
+        function->arguments().size() != 1) {
+        return false;
+    }
+    argument = function->arguments()[0];
+    return true;
+}
+
+ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& node) {
+    if (!node) return nullptr;
+
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> rewritten;
+        rewritten.reserve(add->operands().size());
+        for (const auto& operand : add->operands()) {
+            auto child = rewrite_trig_basic_identity(operand);
+            rewritten.push_back(lamina::detail::node(child));
+        }
+
+        std::vector<bool> used(rewritten.size(), false);
+        std::vector<std::shared_ptr<const SymbolicNode>> result_nodes;
+        for (std::size_t i = 0; i < rewritten.size(); ++i) {
+            if (used[i]) continue;
+            std::shared_ptr<const SymbolicNode> sin_arg;
+            std::shared_ptr<const SymbolicNode> cos_arg;
+            const bool is_sin_square = trig_square_argument(
+                rewritten[i], FunctionNode::FuncType::Sin, sin_arg);
+            const bool is_cos_square = trig_square_argument(
+                rewritten[i], FunctionNode::FuncType::Cos, cos_arg);
+            bool matched = false;
+            for (std::size_t j = i + 1; j < rewritten.size(); ++j) {
+                if (used[j]) continue;
+                std::shared_ptr<const SymbolicNode> other_arg;
+                if (is_sin_square &&
+                    trig_square_argument(rewritten[j],
+                                         FunctionNode::FuncType::Cos,
+                                         other_arg) &&
+                    sin_arg->equals(*other_arg)) {
+                    matched = true;
+                } else if (is_cos_square &&
+                           trig_square_argument(rewritten[j],
+                                                FunctionNode::FuncType::Sin,
+                                                other_arg) &&
+                           cos_arg->equals(*other_arg)) {
+                    matched = true;
+                }
+                if (matched) {
+                    used[i] = true;
+                    used[j] = true;
+                    result_nodes.push_back(
+                        lamina::detail::node(SymbolicExpr::number(1)));
+                    break;
+                }
+            }
+            if (!matched && !used[i]) {
+                result_nodes.push_back(rewritten[i]);
+            }
+        }
+
+        if (result_nodes.empty()) {
+            return SymbolicExpr::number(0);
+        }
+        return lamina::detail::make_expression_ptr(
+            SymbolicFactory::create_add(std::move(result_nodes)))->simplify();
+    }
+
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
+        operands.reserve(multiply->operands().size());
+        for (const auto& operand : multiply->operands()) {
+            auto child = rewrite_trig_basic_identity(operand);
+            operands.push_back(lamina::detail::node(child));
+        }
+        return lamina::detail::make_expression_ptr(
+            SymbolicFactory::create_multiply(std::move(operands)))->simplify();
+    }
+
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto base = rewrite_trig_basic_identity(power->base());
+        auto exponent = rewrite_trig_basic_identity(power->exponent());
+        return SymbolicExpr::power(base, exponent)->simplify();
+    }
+
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> args;
+        args.reserve(function->arguments().size());
+        for (const auto& argument : function->arguments()) {
+            auto child = rewrite_trig_basic_identity(argument);
+            args.push_back(lamina::detail::node(child));
+        }
+        return lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<FunctionNode>(function->type(),
+                                                    std::move(args)))->simplify();
+    }
+
+    if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
+        auto real_part = rewrite_trig_basic_identity(complex_node->real());
+        auto imag_part = rewrite_trig_basic_identity(complex_node->imag());
+        auto value = complex(real_part, imag_part);
+        if (!value) throw std::runtime_error(value.error().message);
+        return value.value()->simplify();
+    }
+
+    return lamina::detail::make_expression_ptr(node);
 }
 
 void collect_variable_names(
@@ -994,6 +1119,22 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
         }
         if (polynomial_proof.value()) {
             return Result<bool>::success(*polynomial_proof.value());
+        }
+        if (options.profile == EqvProfile::TrigBasic) {
+            if (options.budget.max_rewrite_steps < 8) {
+                return Result<bool>::failure(
+                    CasErrc::ResourceLimit,
+                    "equivalence rewrite budget exhausted before Trig-Basic normalization",
+                    kEquivalentOperation);
+            }
+            auto trig_step = context.consume_steps(8, kEquivalentOperation);
+            if (!trig_step) return Result<bool>::failure(trig_step.error());
+            auto trig_lhs = rewrite_trig_basic_identity(lamina::detail::node(lhs));
+            auto trig_rhs = rewrite_trig_basic_identity(lamina::detail::node(rhs));
+            EqvOptions core_options = options;
+            core_options.profile = EqvProfile::Core;
+            return equivalent_core(*trig_lhs, *trig_rhs, context,
+                                   core_options);
         }
         return Result<bool>::success(false);
     } catch (const std::bad_alloc&) {
