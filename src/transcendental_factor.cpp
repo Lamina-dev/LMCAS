@@ -1220,11 +1220,11 @@ std::vector<Polynomial<Rational>> zassenhaus_combine(
 
     /// 当因子数 > 15 时，使用度数+范数剪枝的组合策略
     if (r > 15) {
-        BigInt mod(prime_power);
+        BigInt mod(static_cast<long long>(prime_power));
         return zc_lll_pruned_combine(poly, lifted_factors, mod);
     }
 
-    BigInt mod(prime_power);
+    BigInt mod(static_cast<long long>(prime_power));
     std::string var = poly.variable_name;
 
     /// 工作副本：当前剩余多项式和因子池
