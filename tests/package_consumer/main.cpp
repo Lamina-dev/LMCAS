@@ -138,7 +138,9 @@ int main() {
     lmmc_real_t numeric_abs = 0;
     if (lmmc_lsr_math_i(&numeric_i) != LMMC_STATUS_OK ||
         lmmc_lsr_math_complex_abs(&numeric_i, &numeric_abs) != LMMC_STATUS_OK ||
-        numeric_abs != 1.0) {
+        numeric_abs != 1.0 ||
+        std::string(lmmc_lsr_error_name(LMMC_STATUS_OUT_OF_RANGE)) !=
+            "DomainError") {
         std::cerr << "failed to call LMMC LSR std.math adapter\n";
         return 15;
     }
