@@ -25,7 +25,7 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_BUILD_BENCHMARKS=OFF
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_BUILD_BENCHMARKS=OFF -DUSE_ASM=OFF
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
@@ -51,7 +51,7 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF -DLMCAS_BUILD_BENCHMARKS=OFF -DLMCAS_WARNINGS_AS_ERRORS=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF -DLMCAS_BUILD_BENCHMARKS=OFF -DLMCAS_WARNINGS_AS_ERRORS=ON -DUSE_ASM=OFF
       - name: Build lmcas
         run: cmake --build build --target lmcas --parallel 2
 
@@ -62,7 +62,7 @@ jobs:
         with:
           submodules: recursive
       - name: Configure
-        run: cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_BUILD_BENCHMARKS=OFF
+        run: cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_BUILD_BENCHMARKS=OFF -DUSE_ASM=OFF
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
@@ -75,7 +75,7 @@ jobs:
         with:
           submodules: recursive
       - name: Configure package build
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF -DLMCAS_BUILD_BENCHMARKS=OFF -DCMAKE_INSTALL_PREFIX="$PWD/dist"
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF -DLMCAS_BUILD_BENCHMARKS=OFF -DUSE_ASM=OFF -DCMAKE_INSTALL_PREFIX="$PWD/dist"
       - name: Build lmcas
         run: cmake --build build --target lmcas --parallel 2
       - name: Install
@@ -94,7 +94,7 @@ jobs:
         with:
           submodules: recursive
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_SANITIZERS=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_SANITIZERS=ON -DUSE_ASM=OFF
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
@@ -110,7 +110,7 @@ jobs:
         with:
           submodules: recursive
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_TSAN=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_TSAN=ON -DUSE_ASM=OFF
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
@@ -127,7 +127,7 @@ jobs:
       - name: Install coverage tool
         run: python3 -m pip install --user gcovr
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_COVERAGE=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_COVERAGE=ON -DUSE_ASM=OFF
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
