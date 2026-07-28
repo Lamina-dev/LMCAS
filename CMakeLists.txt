@@ -100,6 +100,7 @@ add_library(lmcas SHARED
     src/complex_analysis.cpp
     src/differential_geometry.cpp
     src/numerical_integration.cpp
+    src/lmmc_lifecycle.cpp
 )
 
 if(WIN32)
