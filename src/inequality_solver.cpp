@@ -1211,7 +1211,7 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     }
                     return false;
                 };
-                auto check_negative = [&check_positive](const std::shared_ptr<SymbolicExpr>& e) -> bool {
+                auto check_negative = [](const std::shared_ptr<SymbolicExpr>& e) -> bool {
                     if (!e || !lamina::detail::node(e)) return false;
                     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(e))) {
                         int sign = 1;
