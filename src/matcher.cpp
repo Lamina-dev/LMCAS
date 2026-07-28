@@ -201,10 +201,9 @@ bool Matcher::match(const SymbolicExpr& pattern, const SymbolicExpr& target,
 class ReplacementVisitor : public lamina::detail::SymbolicVisitor {
     const MatchMap& bindings;
     std::shared_ptr<const SymbolicNode> result;
-    bool use_rest;
 
 public:
-    ReplacementVisitor(const MatchMap& b, bool use_rest = false) : bindings(b), use_rest(use_rest) {}
+    explicit ReplacementVisitor(const MatchMap& b) : bindings(b) {}
 
     std::shared_ptr<const SymbolicNode> get_result() const { return result; }
 
@@ -381,7 +380,7 @@ public:
 SymbolicExpr Matcher::replace(const SymbolicExpr& template_expr, const MatchMap& bindings, bool use_rest) {
     if (!lamina::detail::node(template_expr)) return template_expr;
 
-    ReplacementVisitor visitor(bindings, false);
+    ReplacementVisitor visitor(bindings);
     lamina::detail::node(template_expr)->accept(visitor);
 
     auto res = lamina::detail::expression_from_node(visitor.get_result());
