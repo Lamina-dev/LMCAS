@@ -1,18 +1,3 @@
-/**
- * @file test_prop_vector_calculus.cpp
- * @brief Property-based tests for vector calculus module.
- *
- * Properties tested:
- *   - Property 6: Directional derivative equals gradient dot unit direction
- *   - Property 7: Gradient components equal partial derivatives
- *   - Property 8: Jacobian entry correctness
- *   - Property 9: Hessian symmetry and correctness
- *   - Property 22: curl(grad(f)) = 0
- *   - Property 23: div(curl(F)) = 0
- *   - Property 24: Laplacian equals divergence of gradient
- *
- * **Validates: Requirements 8.1-11.3, 45.1-47.3, 88.1-88.3**
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -28,9 +13,6 @@ using SE = SymbolicExpr;
 static auto num(int n) { return SE::number(n); }
 static auto var(const std::string& name) { return SE::variable(name); }
 
-// ============================================================
-// Helpers: matrix entry access
-// ============================================================
 
 static std::shared_ptr<SymbolicExpr> get_mat_entry(
     const std::shared_ptr<SymbolicExpr>& mat, size_t r, size_t c)
@@ -57,9 +39,6 @@ static size_t get_mat_cols(const std::shared_ptr<SymbolicExpr>& mat)
     return mn ? mn->cols() : 0;
 }
 
-// ============================================================
-// Generators: random polynomial expressions in multiple variables
-// ============================================================
 
 namespace {
 
@@ -151,10 +130,6 @@ std::optional<double> eval_at_point(const std::shared_ptr<SymbolicExpr>& expr,
 
 } // anonymous namespace
 
-// ============================================================
-// Property 6: Directional derivative equals gradient dot unit direction
-// **Validates: Requirements 8.1, 8.2, 88.1, 88.2**
-// ============================================================
 
 static void test_property_6_directional_derivative() {
     TEST_CASE("Property 6: Directional derivative equals gradient dot unit direction");
@@ -202,10 +177,6 @@ static void test_property_6_directional_derivative() {
     });
 }
 
-// ============================================================
-// Property 7: Gradient components equal partial derivatives
-// **Validates: Requirements 9.1, 9.2, 9.3**
-// ============================================================
 
 static void test_property_7_gradient_components() {
     TEST_CASE("Property 7: Gradient components equal partial derivatives");
@@ -240,10 +211,6 @@ static void test_property_7_gradient_components() {
     });
 }
 
-// ============================================================
-// Property 8: Jacobian entry correctness
-// **Validates: Requirements 10.1, 10.2, 10.3**
-// ============================================================
 
 static void test_property_8_jacobian_entries() {
     TEST_CASE("Property 8: Jacobian entry correctness");
@@ -288,10 +255,6 @@ static void test_property_8_jacobian_entries() {
     });
 }
 
-// ============================================================
-// Property 9: Hessian symmetry and correctness
-// **Validates: Requirements 11.1, 11.2, 11.3**
-// ============================================================
 
 static void test_property_9_hessian_symmetry() {
     TEST_CASE("Property 9: Hessian symmetry and correctness");
@@ -345,10 +308,6 @@ static void test_property_9_hessian_symmetry() {
     });
 }
 
-// ============================================================
-// Property 22: curl(grad(f)) = 0
-// **Validates: Requirements 45.1, 45.2, 45.3, 46.1, 46.2**
-// ============================================================
 
 static void test_property_22_curl_grad_zero() {
     TEST_CASE("Property 22: curl(grad(f)) = 0");
@@ -377,10 +336,6 @@ static void test_property_22_curl_grad_zero() {
     });
 }
 
-// ============================================================
-// Property 23: div(curl(F)) = 0
-// **Validates: Requirements 45.1, 45.3, 46.1, 46.3**
-// ============================================================
 
 static void test_property_23_div_curl_zero() {
     TEST_CASE("Property 23: div(curl(F)) = 0");
@@ -407,10 +362,6 @@ static void test_property_23_div_curl_zero() {
     });
 }
 
-// ============================================================
-// Property 24: Laplacian equals divergence of gradient
-// **Validates: Requirements 47.1, 47.2, 47.3, 88.1, 88.3**
-// ============================================================
 
 static void test_property_24_laplacian_div_grad() {
     TEST_CASE("Property 24: Laplacian equals divergence of gradient");
@@ -446,9 +397,6 @@ static void test_property_24_laplacian_div_grad() {
     });
 }
 
-// ============================================================
-// Property 20: Vector projection perpendicularity
-// ============================================================
 
 static void test_property_20_projection_perpendicular() {
     TEST_CASE("Property 20: Vector projection perpendicularity");
@@ -475,9 +423,6 @@ static void test_property_20_projection_perpendicular() {
     });
 }
 
-// ============================================================
-// Property 21: Mixed product equals determinant
-// ============================================================
 
 static void test_property_21_mixed_product_det() {
     TEST_CASE("Property 21: Mixed product equals determinant");
@@ -507,9 +452,6 @@ static void test_property_21_mixed_product_det() {
     });
 }
 
-// ============================================================
-// Main
-// ============================================================
 
 int main() {
     test_property_6_directional_derivative();

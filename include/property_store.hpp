@@ -157,9 +157,6 @@ public:
         const std::string& symbol,
         const Interval& interval) const;
 
-    // ============================================================
-    // Transcendental classification (Req 8)
-    // ============================================================
 
     /**
      * @brief Declare a symbol as transcendental.
@@ -184,9 +181,6 @@ public:
      */
     bool is_transcendental(const std::string& symbol) const;
 
-    // ============================================================
-    // Finiteness classification (Req 9)
-    // ============================================================
 
     /**
      * @brief Declare finiteness for a symbol.
@@ -211,9 +205,6 @@ public:
      */
     Finiteness get_finiteness(const std::string& symbol) const;
 
-    // ============================================================
-    // Matrix definiteness (Req 10)
-    // ============================================================
 
     /**
      * @brief Declare matrix definiteness for a symbol.
@@ -239,9 +230,6 @@ public:
      */
     Definiteness get_definiteness(const std::string& symbol) const;
 
-    // ============================================================
-    // Periodicity (Req 11)
-    // ============================================================
 
     /**
      * @brief Declare a symbol as periodic with a given period expression.

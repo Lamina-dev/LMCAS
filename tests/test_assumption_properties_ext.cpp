@@ -1,12 +1,3 @@
-/**
- * @file test_assumption_properties_ext.cpp
- * @brief Property tests for periodicity round-trip (Task 5.8).
- *
- * Properties tested:
- * - Property 11: Periodicity round-trip
- *
- * Validates: Requirements 11.2, 11.3
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -26,9 +17,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
@@ -84,10 +72,6 @@ static std::optional<double> extract_numeric(const SymbolicExpr& expr) {
     return std::nullopt;
 }
 
-// ============================================================
-// Property 11: Periodicity round-trip
-// Validates: Requirements 11.2, 11.3
-// ============================================================
 
 static void test_periodicity_declared_symbol_roundtrip() {
     TEST_CASE("Property 11: Declared periodic symbol — get_period returns declared period");
@@ -317,12 +301,8 @@ static void test_periodicity_ln_not_periodic() {
         "ln(x) has no inferred period");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 11: Periodicity round-trip
     test_periodicity_declared_symbol_roundtrip();
     test_periodicity_declared_symbol_various_periods();
     test_periodicity_sin_auto_inferred();

@@ -1524,9 +1524,6 @@ InferenceTriboolResult InferenceEngine::infer_multiply_sign_checked(const void* 
         }
 
         if (all_nonneg_or_nonpos) {
-            // All operands are at least NonNegative or NonPositive (some may be zero)
-            // Req 6.8: even negatives + all remaining NonNeg -> NonNeg
-            // Req 6.9: odd negatives + all remaining NonNeg -> NonPos
             switch (target) {
                 case Sign::NonNegative:
                     return InferenceTriboolResult::success(even_negatives ? Tribool::True : Tribool::False);
@@ -1704,8 +1701,6 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
         // Check if exponent is a NumberNode (needed for several rules)
         auto exp_num = std::dynamic_pointer_cast<const NumberNode>(node.exponent());
 
-        // Rule (Req 7.6): NonNegative base + exponent == 0 -> Positive
-        // x^0 = 1 for any non-negative x (including 0^0 = 1 by convention here)
         if (exp_num && is_zero_number(*exp_num)) {
             Tribool base_nn = inference_value_or_throw(query_sign_of_checked(base_expr, Sign::NonNegative));
             if (base_nn == Tribool::True) {
@@ -1721,7 +1716,6 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
             }
         }
 
-        // Rule (Req 7.1): Positive base + Real exponent -> Positive
         {
             Tribool base_pos = inference_value_or_throw(query_sign_of_checked(base_expr, Sign::Positive));
             if (base_pos == Tribool::True) {
@@ -1739,7 +1733,6 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
             }
         }
 
-        // Rule (Req 7.3): Real base + even integer exponent -> NonNegative
         if (exp_num && is_even_integer_number(*exp_num)) {
             Tribool base_real = inference_value_or_throw(query_domain_of_checked(base_expr, Domain::Real));
             if (base_real == Tribool::True) {
@@ -1753,7 +1746,6 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
             }
         }
 
-        // Rule (Req 7.2): NonNegative base + positive integer exponent -> NonNegative
         if (exp_num && is_positive_integer_number(*exp_num)) {
             Tribool base_nn = inference_value_or_throw(query_sign_of_checked(base_expr, Sign::NonNegative));
             if (base_nn == Tribool::True) {
@@ -1765,7 +1757,6 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
             }
         }
 
-        // Rule (Req 7.5): NonZero base + integer exponent -> NonZero
         if (exp_num && is_integer_number(*exp_num)) {
             Tribool base_nz = inference_value_or_throw(query_sign_of_checked(base_expr, Sign::NonZero));
             if (base_nz == Tribool::True) {
@@ -1777,7 +1768,6 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
             }
         }
 
-        // Default (Req 7.7): cannot determine property
         return InferenceTriboolResult::success(Tribool::Unknown);
     } catch (const InferenceErrorPropagation& ex) {
         return InferenceTriboolResult::failure(ex.error());
@@ -1907,9 +1897,6 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
             }
 
             case FunctionNode::FuncType::Abs: {
-                // abs(Real) -> NonNegative, Real
-                // abs(Positive) -> Positive (Req 18.2: |x| = x when x is Positive)
-                // abs(NonZero) -> Positive (|x| > 0 when x != 0)
                 Tribool arg_real = inference_value_or_throw(query_domain_of_checked(arg_expr, Domain::Real));
                 if (arg_real != Tribool::True) return InferenceTriboolResult::success(Tribool::Unknown);
 
@@ -2676,7 +2663,6 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
     bool both_nonnegative = impl_->ctx.has_sign(x_name, Sign::NonNegative) &&
                             impl_->ctx.has_sign(y_name, Sign::NonNegative);
 
-    // Rule 1 (Req 15.1): ln rule — x > y, both Positive → ln(x) > ln(y)
     if (both_positive) {
         auto ln_x_node = lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Ln,
@@ -2691,7 +2677,6 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
         if (!deduced.has_value()) return deduced;
     }
 
-    // Rule 2 (Req 15.2): sqrt rule — x > y, both Positive → sqrt(x) > sqrt(y)
     if (both_positive) {
         auto sqrt_x_node = lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sqrt,
@@ -2706,7 +2691,6 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
         if (!deduced.has_value()) return deduced;
     }
 
-    // Rule 3 (Req 15.3): exp rule — x > y, both Real → exp(x) > exp(y)
     if (both_real) {
         auto exp_x_node = lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
@@ -2721,8 +2705,6 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
         if (!deduced.has_value()) return deduced;
     }
 
-    // Rule 4 (Req 15.4): power rule — x > y, both NonNegative → x^n > y^n
-    // for each positive integer n appearing in expressions involving x or y
     if (both_nonnegative) {
         std::vector<int> exponents = collect_power_exponents(store, x_name, y_name);
 

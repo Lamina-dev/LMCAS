@@ -14,9 +14,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// 格林定理测试
-// ============================================================
 
 static void test_greens_theorem_constant_field()
 {
@@ -110,9 +107,6 @@ static void test_greens_theorem_quadratic()
     }
 }
 
-// ============================================================
-// 格林定理面积公式测试
-// ============================================================
 
 static void test_greens_area_unit_square()
 {
@@ -172,9 +166,6 @@ static void test_greens_area_ellipse()
     }
 }
 
-// ============================================================
-// 散度定理测试
-// ============================================================
 
 static void test_divergence_theorem_constant_field()
 {
@@ -269,9 +260,6 @@ static void test_divergence_theorem_quadratic_field()
     }
 }
 
-// ============================================================
-// 斯托克斯定理测试
-// ============================================================
 
 static void test_stokes_theorem_constant_curl()
 {
@@ -554,9 +542,6 @@ static void test_integral_theorems_checked_contracts()
                 "checked Stokes theorem reports Inconclusive for unsupported derivatives");
 }
 
-// ============================================================
-// 输入验证测试
-// ============================================================
 
 static void test_greens_theorem_invalid_input()
 {

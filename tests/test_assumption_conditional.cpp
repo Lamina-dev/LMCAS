@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_conditional.cpp
- * @brief Unit tests and property tests for conditional assumptions (Requirement 5).
- *
- * Tests:
- * - assume_conditional stores conditionals in the current scope
- * - Condition evaluation against current state (sign properties, relations)
- * - Conditionals are discarded on scope pop
- * - Null condition/conclusion throws std::invalid_argument
- * - get_active_conditionals retrieves from all scopes
- *
- * Property tests (Task 8.6):
- * - Property 5: Conditional assumption scope semantics — For any conditional
- *   assumption in a pushed scope, the conclusion SHALL be active when condition
- *   is satisfied, Unknown when unverifiable, and discarded after scope pop.
- *
- * **Validates: Requirements 5.2, 5.3, 5.4**
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -27,9 +9,7 @@
 using namespace lamina;
 
 int main() {
-    // =========================================================
     TEST_CASE("assume_conditional_checked rejects non-relational inputs transactionally");
-    // =========================================================
     {
         AssumptionContext ctx;
         SymbolicExpr x = *SymbolicExpr::variable("x");
@@ -61,9 +41,7 @@ int main() {
                     "legacy conditional failure remains transactional");
     }
 
-    // =========================================================
     TEST_CASE("assume_conditional: stores conditional in current scope");
-    // =========================================================
     {
         AssumptionContext ctx;
         auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
@@ -85,9 +63,7 @@ int main() {
         EXPECT_TRUE(lamina::detail::node(conditionals[0].conclusion) != nullptr, "Conclusion is not null");
     }
 
-    // =========================================================
     TEST_CASE("Conditionals discarded on scope pop (Req 5.4)");
-    // =========================================================
     {
         AssumptionContext ctx;
         auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
@@ -119,9 +95,7 @@ int main() {
         EXPECT_TRUE(ctx.get_active_conditionals().size() == 1, "One conditional after pop (child discarded)");
     }
 
-    // =========================================================
     TEST_CASE("evaluate_condition: condition satisfied by sign property (Req 5.2)");
-    // =========================================================
     {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Positive);
@@ -154,9 +128,7 @@ int main() {
                     "x != 0 satisfied when x is Positive");
     }
 
-    // =========================================================
     TEST_CASE("evaluate_condition: condition unverifiable returns Unknown (Req 5.3)");
-    // =========================================================
     {
         AssumptionContext ctx;
         // No assumptions about x
@@ -170,9 +142,7 @@ int main() {
                     "x > 0 is Unknown when no assumptions about x");
     }
 
-    // =========================================================
     TEST_CASE("evaluate_condition: reversed pattern (0 < x) satisfied");
-    // =========================================================
     {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Positive);
@@ -193,9 +163,7 @@ int main() {
                     "0 > x is False when x is Positive");
     }
 
-    // =========================================================
     TEST_CASE("evaluate_condition: condition satisfied by stored relation");
-    // =========================================================
     {
         AssumptionContext ctx;
         auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
@@ -211,9 +179,7 @@ int main() {
                     "x > y satisfied when relation x > y is stored");
     }
 
-    // =========================================================
     TEST_CASE("evaluate_condition: non-relational expression returns Unknown");
-    // =========================================================
     {
         AssumptionContext ctx;
         auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
@@ -221,9 +187,7 @@ int main() {
                     "non-relational expression evaluates to Unknown");
     }
 
-    // =========================================================
     TEST_CASE("evaluate_condition: Negative sign checks");
-    // =========================================================
     {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Negative);
@@ -256,9 +220,7 @@ int main() {
                     "x != 0 satisfied when x is Negative");
     }
 
-    // =========================================================
     TEST_CASE("evaluate_condition: Zero sign checks");
-    // =========================================================
     {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Zero);
@@ -285,9 +247,7 @@ int main() {
                     "x != 0 is False when x is Zero");
     }
 
-    // =========================================================
     TEST_CASE("get_active_conditionals: multi-scope ordering");
-    // =========================================================
     {
         AssumptionContext ctx;
         auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
@@ -326,12 +286,7 @@ int main() {
         ctx.pop();
     }
 
-    // =========================================================
-    // Property-Based Tests: Property 5 — Conditional assumption scope semantics
-    // **Validates: Requirements 5.2, 5.3, 5.4**
-    // =========================================================
 
-    // --- Property 5a: Conclusion active when condition satisfied (Req 5.2) ---
     TEST_CASE("Feature: assumption-system-enhancements, Property 5: Conclusion active when condition satisfied");
     rc::check("Conditional conclusion is active when condition is satisfied by current state", []() {
         AssumptionContext ctx;
@@ -368,7 +323,6 @@ int main() {
         ctx.pop();
     });
 
-    // --- Property 5b: Conclusion Unknown when condition unverifiable (Req 5.3) ---
     TEST_CASE("Feature: assumption-system-enhancements, Property 5: Conclusion Unknown when condition unverifiable");
     rc::check("Conditional conclusion is Unknown when condition cannot be verified", []() {
         AssumptionContext ctx;
@@ -398,7 +352,6 @@ int main() {
         ctx.pop();
     });
 
-    // --- Property 5c: Conditionals discarded after scope pop (Req 5.4) ---
     TEST_CASE("Feature: assumption-system-enhancements, Property 5: Conditionals discarded after scope pop");
     rc::check("Conditional assumptions are discarded when their scope is popped", []() {
         AssumptionContext ctx;
@@ -432,7 +385,6 @@ int main() {
         RC_ASSERT(after_pop_count == root_count);
     });
 
-    // --- Property 5d: Condition satisfied by various sign types ---
     TEST_CASE("Feature: assumption-system-enhancements, Property 5: Condition evaluation with various signs");
     rc::check("Condition evaluation correctly reflects sign properties for various sign types", []() {
         AssumptionContext ctx;

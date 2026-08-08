@@ -21,9 +21,6 @@ int main() {
     auto two = SymbolicExpr::number(2);
     auto three = SymbolicExpr::number(3);
 
-    // =========================================================
-    // PiecewiseNode limit tests
-    // =========================================================
 
     TEST_CASE("Piecewise: right limit selects x>0 branch");
     {
@@ -128,9 +125,6 @@ int main() {
         }
     }
 
-    // =========================================================
-    // Direction-aware sgn(x) limit tests
-    // =========================================================
 
     TEST_CASE("sgn(x) right limit at 0 = 1");
     {
@@ -167,9 +161,6 @@ int main() {
         }
     }
 
-    // =========================================================
-    // Direction-aware |x| limit tests
-    // =========================================================
 
     TEST_CASE("|x| limit at 0 = 0 (from either side)");
     {
@@ -195,9 +186,6 @@ int main() {
         }
     }
 
-    // =========================================================
-    // Direction-aware PowerNode limit tests (0^negative → ±∞)
-    // =========================================================
 
     TEST_CASE("1/x right limit at 0 = +inf");
     {
@@ -279,9 +267,6 @@ int main() {
         }
     }
 
-    // =========================================================
-    // PiecewiseNode with GEQ/LEQ conditions
-    // =========================================================
 
     TEST_CASE("Piecewise with GEQ/LEQ: right limit at boundary");
     {

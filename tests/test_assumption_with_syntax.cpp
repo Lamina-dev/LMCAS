@@ -1,17 +1,3 @@
-/**
- * @file test_assumption_with_syntax.cpp
- * @brief Property tests for with_assumptions scope invariant (Task 8.6).
- *
- * Properties tested:
- * - Property 13: With-assumptions scope invariant — For any callable,
- *   with_assumptions SHALL preserve context depth before and after,
- *   even on exception.
- *
- * **Validates: Requirements 17.2, 17.3**
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -24,9 +10,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Generate a random Domain from the valid set.
 static Domain random_domain() {
@@ -67,12 +50,7 @@ static std::vector<AssumptionDecl> random_decls() {
     return decls;
 }
 
-// ============================================================
-// Property 13: With-assumptions scope invariant
-// **Validates: Requirements 17.2, 17.3**
-// ============================================================
 
-/// Test: with_assumptions preserves depth on normal return (Req 17.2)
 static void test_with_assumptions_preserves_depth_normal() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 13: with_assumptions preserves depth on normal return");
 
@@ -102,7 +80,6 @@ static void test_with_assumptions_preserves_depth_normal() {
     });
 }
 
-/// Test: with_assumptions preserves depth on exception throw (Req 17.3)
 static void test_with_assumptions_preserves_depth_exception() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 13: with_assumptions preserves depth on exception");
 
@@ -255,9 +232,6 @@ static void test_with_assumptions_applies_declarations() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     test_with_assumptions_preserves_depth_normal();

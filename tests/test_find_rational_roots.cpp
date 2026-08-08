@@ -180,7 +180,6 @@ struct PropertyTestResult {
 
 PropertyTestResult test_property7_rational_root_completeness() {
     std::cout << "\n=== Property 7: Rational root completeness ===\n";
-    std::cout << "**Validates: Requirements 4.1, 4.2**\n";
 
     const int NUM_TRIALS = 40;
     int pass_count = 0;

@@ -402,9 +402,6 @@ static void test_div_curl_is_zero()
     }
 }
 
-// ============================================================
-// 雅可比矩阵测试
-// ============================================================
 
 static std::shared_ptr<SymbolicExpr> get_mat_entry(
     const std::shared_ptr<SymbolicExpr>& mat, size_t r, size_t c)
@@ -673,9 +670,6 @@ static void test_jacobian_hessian_checked_contracts()
                 "checked Hessian reports ResourceLimit");
 }
 
-// ============================================================
-// 海森矩阵测试
-// ============================================================
 
 static void test_hessian_quadratic()
 {
@@ -801,9 +795,6 @@ static void test_hessian_single_var()
         "H[0][0] = 6x => 12 at x=2");
 }
 
-// ============================================================
-// 曲线积分测试 (Requirements 48)
-// ============================================================
 
 static void test_curve_integral_scalar_line()
 {
@@ -1159,9 +1150,6 @@ static void test_curve_integral_checked_rejects_implicit_numeric_fallback()
     }
 }
 
-// ============================================================
-// 曲面积分测试 (Requirements 49)
-// ============================================================
 
 static void test_surface_integral_scalar_plane()
 {
@@ -1405,9 +1393,6 @@ static void test_surface_integral_checked_contracts()
                 "checked vector surface integral reports Inconclusive for unsupported derivatives");
 }
 
-// ============================================================
-// 多元极值测试
-// ============================================================
 
 static void test_find_extrema_quadratic_min()
 {
@@ -1530,9 +1515,6 @@ static void test_find_extrema_single_var()
     }
 }
 
-// ============================================================
-// 拉格朗日乘数法测试
-// ============================================================
 
 static void test_lagrange_basic()
 {

@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_query.cpp
- * @brief Property tests for QueryInterface (Property 21).
- *
- * Feature: assumption-system, Property 21: NumberNode direct evaluation
- * Validates: Requirements 10.7
- *
- * For any finite numeric value (BigInt, Rational, or floating-point),
- * the QueryInterface should determine sign and domain properties directly
- * from the numeric value without consulting the PropertyStore, and the
- * results should be mathematically correct.
- */
 
 #include "test_common.hpp"
 #include "query_interface.hpp"
@@ -40,11 +28,6 @@ static SymbolicExpr make_double_expr(double v) {
     return expr;
 }
 
-// ============================================================
-// Test: Positive integers (BigInt)
-// query_positive=True, query_negative=False, query_nonnegative=True,
-// query_integer=True, query_real=True, query_nonzero=True
-// ============================================================
 
 void test_positive_bigint() {
     TEST_CASE("Property 21: Positive BigInt — sign and domain properties");
@@ -72,11 +55,6 @@ void test_positive_bigint() {
     }
 }
 
-// ============================================================
-// Test: Negative integers (BigInt)
-// query_positive=False, query_negative=True, query_nonnegative=False,
-// query_integer=True, query_real=True, query_nonzero=True
-// ============================================================
 
 void test_negative_bigint() {
     TEST_CASE("Property 21: Negative BigInt — sign and domain properties");
@@ -104,11 +82,6 @@ void test_negative_bigint() {
     }
 }
 
-// ============================================================
-// Test: Zero (BigInt(0))
-// query_positive=False, query_negative=False, query_nonnegative=True,
-// query_integer=True, query_real=True, query_nonzero=False
-// ============================================================
 
 void test_zero_bigint() {
     TEST_CASE("Property 21: Zero BigInt — sign and domain properties");
@@ -132,11 +105,6 @@ void test_zero_bigint() {
                 "BigInt(0) query_nonzero=False");
 }
 
-// ============================================================
-// Test: Positive Rational (e.g., 3/2)
-// query_positive=True, query_integer=False (non-integer rational),
-// query_real=True
-// ============================================================
 
 void test_positive_rational() {
     TEST_CASE("Property 21: Positive non-integer Rational — sign and domain properties");
@@ -160,10 +128,6 @@ void test_positive_rational() {
                 "Rational(3/2) query_nonzero=True");
 }
 
-// ============================================================
-// Test: Negative Rational
-// query_negative=True, query_integer=False, query_real=True
-// ============================================================
 
 void test_negative_rational() {
     TEST_CASE("Property 21: Negative non-integer Rational — sign and domain properties");
@@ -187,10 +151,6 @@ void test_negative_rational() {
                 "Rational(-5/3) query_nonzero=True");
 }
 
-// ============================================================
-// Test: Integer Rational (e.g., 4/1)
-// query_integer=True
-// ============================================================
 
 void test_integer_rational() {
     TEST_CASE("Property 21: Integer Rational (4/1) — query_integer=True");
@@ -214,10 +174,6 @@ void test_integer_rational() {
                 "Rational(4/1) query_nonzero=True");
 }
 
-// ============================================================
-// Test: Positive double
-// query_positive=True, query_real=True
-// ============================================================
 
 void test_positive_double() {
     TEST_CASE("Property 21: Positive double — sign and domain properties");
@@ -243,10 +199,6 @@ void test_positive_double() {
     }
 }
 
-// ============================================================
-// Test: Negative double
-// query_negative=True, query_real=True
-// ============================================================
 
 void test_negative_double() {
     TEST_CASE("Property 21: Negative double — sign and domain properties");
@@ -272,10 +224,6 @@ void test_negative_double() {
     }
 }
 
-// ============================================================
-// Test: Zero double (0.0)
-// query_nonzero=False
-// ============================================================
 
 void test_zero_double() {
     TEST_CASE("Property 21: Zero double (0.0) — query_nonzero=False");
@@ -297,10 +245,6 @@ void test_zero_double() {
                 "double(0.0) query_nonzero=False");
 }
 
-// ============================================================
-// Test: Non-integer double (e.g., 2.5)
-// query_integer=False
-// ============================================================
 
 void test_non_integer_double() {
     TEST_CASE("Property 21: Non-integer double (2.5) — query_integer=False");
@@ -328,9 +272,6 @@ void test_non_integer_double() {
                 "double(-1.7) query_real=True");
 }
 
-// ============================================================
-// Additional: Integer double (e.g., 3.0) should report query_integer=True
-// ============================================================
 
 void test_integer_double() {
     TEST_CASE("Property 21: Integer double (3.0) — query_integer=True");
@@ -348,9 +289,6 @@ void test_integer_double() {
                 "double(3.0) query_real=True");
 }
 
-// ============================================================
-// Edge Case Tests (Task 8.3)
-// ============================================================
 
 // Helper: create a SymbolicExpr from a node
 static SymbolicExpr make_expr(std::shared_ptr<const SymbolicNode> node) {
@@ -384,11 +322,6 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
     }
 }
 
-// ============================================================
-// Test: NaN handling (Req 10.11)
-// query_integer → False
-// query_positive, query_negative, query_nonnegative, query_nonzero → Unknown
-// ============================================================
 
 void test_nan_handling() {
     TEST_CASE("NaN handling (Req 10.11)");
@@ -411,12 +344,6 @@ void test_nan_handling() {
                    "NaN: query_nonzero should return Unknown");
 }
 
-// ============================================================
-// Test: Infinity handling (Req 10.11)
-// Positive infinity: query_positive=True, query_negative=False,
-//   query_integer=False, query_nonzero=True
-// Negative infinity: query_negative=True, query_positive=False
-// ============================================================
 
 void test_infinity_handling() {
     TEST_CASE("Infinity handling (Req 10.11)");
@@ -454,10 +381,6 @@ void test_infinity_handling() {
                    "-Infinity: query_positive should return False");
 }
 
-// ============================================================
-// Test: Undeclared variable (Req 10.8)
-// All queries → Unknown
-// ============================================================
 
 void test_undeclared_variable() {
     TEST_CASE("Undeclared variable (Req 10.8)");
@@ -481,9 +404,6 @@ void test_undeclared_variable() {
                    "Undeclared var: query_nonzero should return Unknown");
 }
 
-// ============================================================
-// Test: MatrixNode returns Unknown (Req 10.10)
-// ============================================================
 
 void test_matrix_node() {
     TEST_CASE("MatrixNode returns Unknown (Req 10.10)");
@@ -511,9 +431,6 @@ void test_matrix_node() {
                    "MatrixNode: query_nonzero should return Unknown");
 }
 
-// ============================================================
-// Test: RelationalNode returns Unknown (Req 10.10)
-// ============================================================
 
 void test_relational_node() {
     TEST_CASE("RelationalNode returns Unknown (Req 10.10)");
@@ -539,9 +456,6 @@ void test_relational_node() {
                    "RelationalNode: query_nonzero should return Unknown");
 }
 
-// ============================================================
-// Test: LogicalNode returns Unknown (Req 10.10)
-// ============================================================
 
 void test_logical_node() {
     TEST_CASE("LogicalNode returns Unknown (Req 10.10)");
@@ -642,12 +556,8 @@ void test_checked_query_interface_contracts() {
     }
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Task 8.2: Property 21 — NumberNode direct evaluation
     test_positive_bigint();
     test_negative_bigint();
     test_zero_bigint();
@@ -660,7 +570,6 @@ int main() {
     test_non_integer_double();
     test_integer_double();
 
-    // Task 8.3: Edge cases
     test_nan_handling();
     test_infinity_handling();
     test_undeclared_variable();

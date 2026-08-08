@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_cache.cpp
- * @brief Property tests for QueryInterface caching (Task 6.4).
- *
- * Properties tested:
- * - Property 16: Cache invalidation on state change
- *
- * Validates: Requirements 23.3, 23.4
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- *
- * Note: Cache invalidation hooks (task 8.5) haven't been wired yet, so
- * we test that:
- * - invalidate_cache() clears the cache (call it manually)
- * - After invalidation, queries recompute correctly
- * - The cache stores results (same query twice returns same result efficiently)
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -30,9 +12,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var_node(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -80,10 +59,6 @@ static Domain random_domain() {
     return rc::gen::elementOf(domains);
 }
 
-// ============================================================
-// Property 16: Cache invalidation on state change
-// **Validates: Requirements 23.3, 23.4**
-// ============================================================
 
 // --- Test: invalidate_cache() clears the cache ---
 
@@ -422,12 +397,8 @@ static void test_invalidate_clears_all_entries() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 16: Cache invalidation on state change
     test_invalidate_cache_clears_cache();
     test_cache_stores_results();
     test_invalidation_allows_new_results();

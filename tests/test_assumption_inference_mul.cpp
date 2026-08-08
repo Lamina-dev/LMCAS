@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_inference_mul.cpp
- * @brief Property tests for InferenceEngine multiplication inference (Properties 14-15).
- *
- * Feature: assumption-system
- * Validates: Requirements 6.1-6.9
- *
- * Property 14: Multiplication sign inference
- *   For any MultiplyNode: (a) if any operand is Zero, the product is Zero;
- *   (b) if all operands have definite sign, the product's sign is determined by
- *   the parity of the count of Negative operands (even -> Positive/NonNegative,
- *   odd -> Negative/NonPositive); (c) if any operand has Unknown sign and none
- *   is Zero, the result is Unknown.
- *
- * Property 15: Multiplication domain closure
- *   For any MultiplyNode where all operands are Integer, the product should be
- *   Integer; where all operands are Real (or Integer), the product should be Real.
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -28,9 +10,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers: create nodes and expressions
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
     return lamina::detail::make_node<NumberNode>(BigInt(val));
@@ -54,10 +33,6 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
     return expr;
 }
 
-// ============================================================
-// Property 14a: Zero operand detection
-// **Validates: Requirements 6.3**
-// ============================================================
 
 void test_property14a_single_zero_operand() {
     TEST_CASE("Property 14a: Single zero operand makes product Zero");
@@ -143,11 +118,6 @@ void test_property14a_zero_rational_and_float() {
     }
 }
 
-// ============================================================
-// Property 14b: Sign parity of negatives (using NumberNodes)
-// **Validates: Requirements 6.1, 6.2**
-// The engine can determine sign of NumberNodes directly.
-// ============================================================
 
 void test_property14b_two_positives_product_positive() {
     TEST_CASE("Property 14b: positive * positive = Positive (even negatives)");
@@ -334,7 +304,6 @@ void test_property14b_three_negative_variables() {
         "neg_a * neg_b * neg_c is Negative");
 }
 
-// --- Req 6.7: All NonZero -> product is NonZero ---
 
 void test_property14b_nonzero_variables_product() {
     TEST_CASE("Property 14b: All NonZero variables -> product NonZero (Req 6.7)");
@@ -362,7 +331,6 @@ void test_property14b_nonzero_numbers_product() {
         "3 * (-7) is NonZero");
 }
 
-// --- Req 6.8, 6.9: NonNegative/NonPositive with parity ---
 
 void test_property14b_nonneg_even_negatives() {
     TEST_CASE("Property 14b: NonNeg operands + even negatives -> NonNeg (Req 6.8)");
@@ -398,10 +366,6 @@ void test_property14b_nonpos_odd_negatives() {
         "nonneg * neg: not NonNegative");
 }
 
-// ============================================================
-// Property 14c: Unknown sign propagation
-// **Validates: Requirements 6.4**
-// ============================================================
 
 void test_property14c_unknown_sign_no_zero() {
     TEST_CASE("Property 14c: Unknown sign operands (no zero) -> Unknown");
@@ -457,9 +421,6 @@ void test_property14c_zero_overrides_unknown() {
         "x * 0: NonPositive (zero)");
 }
 
-// ============================================================
-// Property 14: Edge cases
-// ============================================================
 
 void test_property14_empty_operands() {
     TEST_CASE("Property 14: Empty MultiplyNode is rejected");
@@ -535,10 +496,6 @@ void test_property14_many_operands_sign_parity() {
         "1*2*3*4*5: NonZero");
 }
 
-// ============================================================
-// Property 15: Multiplication domain closure
-// **Validates: Requirements 6.5, 6.6**
-// ============================================================
 
 void test_property15_all_integer_numbers() {
     TEST_CASE("Property 15: All integer NumberNodes -> product is Integer");
@@ -722,18 +679,13 @@ void test_property15_rational_not_integer() {
         "Rational(1/2) * 3: Real");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 14a: Zero operand detection (Req 6.3)
     test_property14a_single_zero_operand();
     test_property14a_zero_among_multiple_operands();
     test_property14a_zero_with_positive_numbers();
     test_property14a_zero_rational_and_float();
 
-    // Property 14b: Sign parity with numbers (Req 6.1, 6.2)
     test_property14b_two_positives_product_positive();
     test_property14b_one_negative_product_negative();
     test_property14b_two_negatives_product_positive();
@@ -742,33 +694,27 @@ int main() {
     test_property14b_mixed_positive_negative_even();
     test_property14b_mixed_positive_negative_odd();
 
-    // Property 14b: Sign parity with variables (Req 6.1, 6.2)
     test_property14b_positive_variables_product();
     test_property14b_negative_variables_product();
     test_property14b_pos_neg_variable_product();
     test_property14b_three_negative_variables();
 
-    // Property 14b: NonZero inference (Req 6.7)
     test_property14b_nonzero_variables_product();
     test_property14b_nonzero_numbers_product();
 
-    // Property 14b: NonNeg/NonPos with parity (Req 6.8, 6.9)
     test_property14b_nonneg_even_negatives();
     test_property14b_nonpos_odd_negatives();
 
-    // Property 14c: Unknown sign propagation (Req 6.4)
     test_property14c_unknown_sign_no_zero();
     test_property14c_one_unknown_among_known();
     test_property14c_zero_overrides_unknown();
 
-    // Property 14: Edge cases
     test_property14_empty_operands();
     test_property14_single_positive_number();
     test_property14_single_negative_number();
     test_property14_real_numbers_sign();
     test_property14_many_operands_sign_parity();
 
-    // Property 15: Domain closure (Req 6.5, 6.6)
     test_property15_all_integer_numbers();
     test_property15_all_integer_variables();
     test_property15_mixed_integer_and_number();

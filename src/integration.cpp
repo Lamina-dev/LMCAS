@@ -143,9 +143,6 @@ void IntegrationTable::load_defaults() {
         };
     };
 
-    // ---------------------------------------------------------------
-    // Exponential
-    // ---------------------------------------------------------------
 
     // exp(a*x) -> exp(a*x)/a
     {
@@ -194,9 +191,6 @@ void IntegrationTable::load_defaults() {
             "exp(x)", pat, res, {"_u"}, u_is_var("_u"), 60));
     }
 
-    // ---------------------------------------------------------------
-    // Trigonometric (specific composite patterns first - lower priority)
-    // ---------------------------------------------------------------
 
     // sec(x)^2 -> tan(x)
     {
@@ -327,9 +321,6 @@ void IntegrationTable::load_defaults() {
             "csc(x)", pat, res, {"_u"}, u_is_var("_u"), 60));
     }
 
-    // ---------------------------------------------------------------
-    // Inverse Trigonometric
-    // ---------------------------------------------------------------
 
     // arcsin(x) -> x*arcsin(x) + sqrt(1 - x^2)
     {
@@ -372,9 +363,6 @@ void IntegrationTable::load_defaults() {
             "arctan(x)", pat, res, {"_u"}, u_is_var("_u"), 60));
     }
 
-    // ---------------------------------------------------------------
-    // Hyperbolic
-    // ---------------------------------------------------------------
 
     // sinh(x) -> cosh(x)
     {
@@ -432,9 +420,6 @@ void IntegrationTable::load_defaults() {
             "csch(x)", pat, res, {"_u"}, u_is_var("_u"), 50));
     }
 
-    // ---------------------------------------------------------------
-    // Algebraic forms
-    // ---------------------------------------------------------------
 
     // 1/sqrt(1 - x^2) -> arcsin(x)
     {
@@ -549,9 +534,6 @@ void IntegrationTable::load_defaults() {
             u_is_var_a_indep("_u", "_a"), 50));
     }
 
-    // ---------------------------------------------------------------
-    // Polynomial
-    // ---------------------------------------------------------------
 
     // 1/x  (= x^(-1))  -> ln(x)
     {
@@ -603,9 +585,6 @@ void IntegrationTable::load_defaults() {
             "x", pat, res, {"_u"}, u_is_var("_u"), 90));
     }
 
-    // ---------------------------------------------------------------
-    // Logarithmic
-    // ---------------------------------------------------------------
 
     // ln(x) -> x*ln(x) - x
     {
@@ -628,9 +607,6 @@ void IntegrationTable::load_defaults() {
             "ln(x)/x", pat, res, {"_u"}, u_is_var("_u"), 50));
     }
 
-    // ---------------------------------------------------------------
-    // Additional standard-table forms
-    // ---------------------------------------------------------------
 
     // a^x -> a^x / ln(a)
     {
@@ -857,17 +833,6 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
     return nullptr;
 }
 
-// ---------------------------------------------------------------
-// LinearSubstitutionStrategy
-// ---------------------------------------------------------------
-//
-// Recognises an integrand whose outermost wrapper is a single-argument
-// FunctionNode (e.g. sin/cos/exp/sec(...)) or a PowerNode (e.g. (2x+1)^5,
-// sec(2x+1)^2), and whose inner argument decomposes as a*var + b with a, b
-// constant w.r.t. var and a != 0. It then rewrites the integrand into the
-// "base form" (substituting the inner argument by a fresh dummy variable),
-// looks the base form up via the existing table, and reconstructs the answer
-// as (1/a) * F(a*var + b) where F is the antiderivative returned by the table.
 
 bool LinearSubstitutionStrategy::extract_linear_arg(
     const SymbolicExpr& arg,
@@ -915,10 +880,6 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
 
     using FT = FunctionNode::FuncType;
 
-    // ---------------------------------------------------------------
-    // Step 1: identify the outer wrapper and the inner argument we'll
-    //         try to express as a*var + b.
-    // ---------------------------------------------------------------
     enum class Wrapper { None, Function, PowerOfFunction, PowerOfLinear };
     Wrapper kind = Wrapper::None;
 
@@ -973,9 +934,6 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
         return nullptr;
     }
 
-    // ---------------------------------------------------------------
-    // Step 2: extract a and b from arg = a*var + b.
-    // ---------------------------------------------------------------
     std::shared_ptr<SymbolicExpr> a_coeff, b_coeff;
     if (!arg_expr || !extract_linear_arg(*arg_expr, var, a_coeff, b_coeff)) return nullptr;
 
@@ -986,11 +944,6 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
     bool b_is_zero = b_coeff && b_coeff->is_zero();
     if (a_is_one && b_is_zero) return nullptr;
 
-    // ---------------------------------------------------------------
-    // Step 3: build the "base-form" test expression with a fresh dummy
-    //         variable in place of the linear argument.
-    // ---------------------------------------------------------------
-    // Use a name unlikely to clash with anything in user input or table entries.
     const std::string dummy_name = "__lin_sub_u__";
     auto dummy_var = SymbolicExpr::variable(dummy_name);
 
@@ -1010,20 +963,10 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
     }
     if (!test_expr) return nullptr;
 
-    // ---------------------------------------------------------------
-    // Step 4: look up the base form in the table, treating dummy_name as
-    //         the integration variable. We deliberately use only the
-    //         table-lookup strategy here so that we don't recurse back
-    //         through the full strategy chain.
-    // ---------------------------------------------------------------
     TableLookupStrategy table_only;
     auto F_dummy = table_only.try_integrate(*test_expr, dummy_name, ctx, depth);
     if (!F_dummy) return nullptr;
 
-    // ---------------------------------------------------------------
-    // Step 5: substitute dummy_name -> (a*var + b) in the antiderivative
-    //         and multiply by 1/a.
-    // ---------------------------------------------------------------
     auto F_substituted = F_dummy->substitute(dummy_name, make_expr_ptr(*arg_expr));
     if (!F_substituted) return nullptr;
 
@@ -1193,32 +1136,6 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
     return sym_sub(*uv, *int_vdu);
 }
 
-// ---------------------------------------------------------------
-// TrigCombinationStrategy
-// ---------------------------------------------------------------
-//
-// Handles three families of trigonometric integrands whose argument is
-// exactly the integration variable (linear arguments are handled earlier
-// by LinearSubstitutionStrategy):
-//
-//   1. sin^m(var) * cos^n(var)  (m,n integers >= 0, m+n <= 8)
-//   2. tan^n(var)                (n integer in [2,8])
-//   3. sec^n(var)                (n even integer in [2,8])
-//
-// The sin/cos case dispatches on parity:
-//   - At least one odd power -> peel off one factor, apply 1 = sin^2 + cos^2
-//     to convert the remaining (even) part to a polynomial in u = cos/sin,
-//     and integrate term-by-term.
-//   - Both even -> apply the half-angle identities
-//       sin^2(c x) = (1 - cos(2c x))/2,  cos^2(c x) = (1 + cos(2c x))/2,
-//     expand the resulting binomial product into a polynomial in cos(2c x),
-//     and recurse on each cos^k(2c x) term (the total degree halves each
-//     time, so recursion terminates quickly).
-// tan^n uses tan^n = tan^(n-2)*(sec^2 - 1) recursively, with bases
-// tan^0 = 1 -> x and tan^1 -> -ln(cos(x)).
-// Even-power sec^n uses the reduction
-//     int sec^n = sec^(n-2)*tan/(n-1) + (n-2)/(n-1) * int sec^(n-2)
-// with base sec^2 -> tan(x).
 
 namespace {
 
@@ -1863,7 +1780,6 @@ SymbolicExpr Integrator::integrate(const SymbolicExpr& expr, const std::string& 
         return lamina::detail::expression_from_node(lamina::detail::make_node<PiecewiseNode>(std::move(new_brs), new_def));
     }
 
-    // Apply assumption-aware simplifications to the integrand (Req 12.2, 12.3)
     SymbolicExpr working_expr = apply_assumption_simplifications(expr, var_name, assumption_ctx_);
 
     auto linear_result = apply_linearity(working_expr, var_name);
@@ -1875,7 +1791,6 @@ SymbolicExpr Integrator::integrate(const SymbolicExpr& expr, const std::string& 
 SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::string& var_name,
                                         const SymbolicExpr& lower, const SymbolicExpr& upper) {
 
-    // Apply assumption-aware simplifications to the integrand (Req 12.2, 12.3)
     SymbolicExpr simp_expr_val = *apply_assumption_simplifications(expr, var_name, assumption_ctx_).simplify();
     bool is_inv_x = false;
 
@@ -1942,31 +1857,6 @@ SymbolicExpr Integrator::integrate_def(const SymbolicExpr& expr, const std::stri
     return *result->simplify();
 }
 
-// ---------------------------------------------------------------
-// RationalDecompositionStrategy
-// ---------------------------------------------------------------
-//
-// Handles rational integrands P(x)/Q(x) where deg(Q) >= 3 (lower-degree
-// quadratic cases are caught earlier by PartialFractionStrategy). The
-// algorithm follows the textbook recipe:
-//
-//   1. extract_rational : factor the integrand into (numerator polynomial,
-//      denominator polynomial) over Q. Returns false if the input is not a
-//      rational function (e.g. contains sin, exp, ln, irrational powers).
-//   2. poly_divide      : long-divide P by Q when deg(P) >= deg(Q). The
-//      polynomial quotient is integrated term-by-term via the power rule.
-//   3. factor_denominator : square-free factor Q, peel off rational linear
-//      roots, leaving each leftover factor either linear or an irreducible
-//      quadratic. Refuses to handle higher-degree irreducible factors.
-//   4. solve_coefficients : set up the partial-fraction ansatz with one
-//      unknown per linear power and two unknowns per irreducible quadratic
-//      power, expand into a linear system whose unknowns are the partial
-//      fraction coefficients, and solve via gaussian_eliminate.
-//   5. integrate_term  : integrate each component analytically.
-//
-// On any failure that is not "expression is not rational" we fall back to
-// returning an unevaluated integral node so that the rest of the pipeline
-// is preserved.
 
 namespace {
 
@@ -2765,29 +2655,6 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
     }
 }
 
-// ---------------------------------------------------------------
-// SpecialFunctionStrategy
-// ---------------------------------------------------------------
-//
-// Recognises a small, fixed set of integrand shapes whose antiderivatives are
-// not elementary and instead must be expressed via the special functions erf,
-// Ei, Si, Ci, Li. The inner argument of each pattern is required to be the
-// integration variable itself (or a quadratic c*var^2 with rational c, for the
-// erf branch). More general arguments are reduced first by SubstitutionStrategy
-// or LinearSubstitutionStrategy upstream and so are not handled here.
-//
-// Patterns recognised (var = x):
-//     exp(-x^2)      ->  (sqrt(pi) / 2) * erf(x)
-//     exp(-a*x^2)    ->  (sqrt(pi) / (2*sqrt(a))) * erf(sqrt(a)*x)
-//                        where a is a constant w.r.t. var (assumed positive).
-//     exp(x) / x     ->  Ei(x)
-//     sin(x) / x     ->  Si(x)
-//     cos(x) / x     ->  Ci(x)
-//     1 / ln(x)      ->  Li(x)
-//
-// Builders use FunctionNode with the dedicated FuncType enum values added in
-// task 1.1, so that print_visitor / differentiation_visitor render and
-// differentiate them correctly.
 
 namespace {
 
@@ -2933,14 +2800,12 @@ std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate(
 
     auto v = SymbolicExpr::variable(var);
 
-    // ---- Pattern 1: 1/ln(x) -> Li(x) -------------------------------
     if (sf_is_inv_ln_var(lamina::detail::node(expr), var)) {
         auto li = sf_make_fn(FT::Li, v);
         auto simp = li->simplify();
         return simp ? simp : li;
     }
 
-    // ---- Pattern 2: exp(-x^2) or exp(-a*x^2) -> erf -----------------
     {
         Rational c_rat;
         if (sf_match_exp_neg_quad(lamina::detail::node(expr), var, c_rat)) {
@@ -2961,7 +2826,6 @@ std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate(
         }
     }
 
-    // ---- Patterns 3-5: exp(x)/x, sin(x)/x, cos(x)/x ----------------
     // These all have shape (something)*1/x, where the "something" is a
     // FunctionNode of var. Other 1/x patterns (e.g. 1/x alone, x*1/x) are
     // not our concern.
@@ -2991,23 +2855,6 @@ std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate(
     return nullptr;
 }
 
-// ---------------------------------------------------------------
-// MultipleIntegralEngine
-// ---------------------------------------------------------------
-//
-// Evaluates iterated (multiple) integrals by sequentially applying
-// `Integrator::integrate` (for indefinite steps) or
-// `Integrator::integrate_def` (for definite steps), going from the innermost
-// step (index 0) to the outermost step (last index).
-//
-// If the integrand does not depend on a particular variable that has
-// definite bounds [a, b], we short-circuit the integration step to a
-// straightforward multiplication by (b - a) so we do not turn a constant
-// expression into a fresh formal integral.
-//
-// Whenever a single step yields an expression that still contains an
-// unevaluated `Calculus_Integral` node, we stop further iteration and
-// return the partially-integrated result.
 
 bool MultipleIntegralEngine::validate(const std::vector<IntegrationStep>& steps) const {
     if (steps.empty() || steps.size() > 3) return false;
@@ -3074,9 +2921,6 @@ std::shared_ptr<SymbolicExpr> MultipleIntegralEngine::evaluate(
     return current;
 }
 
-// ================================================================
-/// 万能代换（Weierstrass）策略实现 (任务 15.2)
-// ================================================================
 
 namespace {
 
@@ -3363,9 +3207,6 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
     return result->simplify();
 }
 
-// ================================================================
-/// 三角换元策略实现 (任务 15.1)
-// ================================================================
 
 namespace {
 

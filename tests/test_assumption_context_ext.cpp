@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_context_ext.cpp
- * @brief Unit tests for AssumptionContext extensions (task 8.7).
- *
- * Covers:
- * - Conditional assumptions: active when condition satisfied, discarded on pop
- * - with_assumptions: preserves scope depth on success and exception
- * - Serialization round-trip: empty, single-scope, multi-scope contexts
- * - Malformed deserialization: missing END, unknown keyword, DOMAIN before SCOPE
- *
- * Validates: Requirements 5.2, 5.4, 17.2, 17.3, 20.3, 20.4
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -22,9 +10,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static Interval make_closed_interval(double lo, double hi) {
     auto lower_val = lamina::detail::make_expression_ptr(
@@ -37,9 +22,6 @@ static Interval make_closed_interval(double lo, double hi) {
     return iv;
 }
 
-// ============================================================
-// 1. Conditional assumptions
-// ============================================================
 
 static void test_conditional_active_when_condition_satisfied() {
     TEST_CASE("Conditional active when condition satisfied (Req 5.2)");
@@ -98,9 +80,6 @@ static void test_conditional_discarded_on_pop() {
                 "Conditional discarded after pop");
 }
 
-// ============================================================
-// 2. with_assumptions
-// ============================================================
 
 static void test_with_assumptions_callable_sees_assumptions() {
     TEST_CASE("with_assumptions: callable sees the assumptions (Req 17.2)");
@@ -302,9 +281,6 @@ static void test_checked_interval_and_definiteness_queries() {
                 "legacy positive-definite query unwraps checked failure to Unknown");
 }
 
-// ============================================================
-// 3. Serialization round-trip
-// ============================================================
 
 static void test_serialize_empty_context() {
     TEST_CASE("Serialization round-trip: empty context (Req 20.3)");
@@ -366,9 +342,6 @@ static void test_serialize_multi_scope() {
                 "Restored context has x as Positive from parent scope");
 }
 
-// ============================================================
-// 4. Malformed deserialization
-// ============================================================
 
 static void test_deserialize_missing_end_throws() {
     TEST_CASE("Malformed deserialization: missing END throws with line number (Req 20.4)");
@@ -429,9 +402,6 @@ static void test_deserialize_domain_before_scope_throws() {
                 "Error message mentions 'before SCOPE'");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Conditional assumptions

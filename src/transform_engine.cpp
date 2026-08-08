@@ -18,9 +18,6 @@
 
 namespace lamina {
 
-// ============================================================
-/// 辅助函数
-// ============================================================
 
 static bool te_contains_var(const std::shared_ptr<const SymbolicNode>& node,
                             const std::string& var) {
@@ -308,16 +305,10 @@ static bool te_extract_exp(const std::shared_ptr<SymbolicExpr>& e, const std::st
     return false;
 }
 
-// ============================================================
-/// TransformTable
-// ============================================================
 TransformTable::TransformTable() { init_laplace_pairs(); }
 void TransformTable::add_entry(TransformTableEntry entry) { entries_.push_back(std::move(entry)); }
 void TransformTable::init_laplace_pairs() { /* 变换对通过模式匹配硬编码 */ }
 
-// ============================================================
-/// Laplace 变换查表
-// ============================================================
 static std::shared_ptr<SymbolicExpr> te_laplace_lookup(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
     if (!f || !lamina::detail::node(f)) return nullptr;
@@ -378,9 +369,6 @@ static std::vector<std::shared_ptr<SymbolicExpr>> te_laplace_roc(
     return {};
 }
 
-// ============================================================
-/// laplace_transform
-// ============================================================
 std::shared_ptr<SymbolicExpr> laplace_transform(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
     if (!f || !lamina::detail::node(f)) return nullptr;
@@ -449,9 +437,6 @@ TransformEngineResult laplace_transform_checked(
     return laplace_transform_checked(f, t, s, context);
 }
 
-// ============================================================
-/// inverse_laplace 辅助
-// ============================================================
 static std::shared_ptr<SymbolicExpr> te_inv_power(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
     if (!F || !lamina::detail::node(F)) return nullptr;
@@ -527,9 +512,6 @@ static std::shared_ptr<SymbolicExpr> te_inv_product(
     return nullptr;
 }
 
-// ============================================================
-/// inverse_laplace
-// ============================================================
 std::shared_ptr<SymbolicExpr> inverse_laplace(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
     if (!F || !lamina::detail::node(F)) return nullptr;
@@ -586,10 +568,6 @@ TransformEngineResult inverse_laplace_checked(
     return inverse_laplace_checked(F, s, t, context);
 }
 
-// ============================================================
-/// Fourier 变换 (Task 8.2)
-/// 算法来源: Bracewell, The Fourier Transform and Its Applications, 3rd ed.
-// ============================================================
 
 /**
  * @internal
@@ -795,9 +773,6 @@ TransformEngineResult fourier_transform_checked(
     return fourier_transform_checked(f, t, omega, context);
 }
 
-// ============================================================
-/// inverse_fourier_transform (Task 8.2)
-// ============================================================
 std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& omega, const std::string& t) {
     if (!F || !lamina::detail::node(F)) return nullptr;
@@ -874,9 +849,6 @@ TransformEngineResult inverse_fourier_transform_checked(
     return inverse_fourier_transform_checked(F, omega, t, context);
 }
 
-// ============================================================
-/// convolve (Task 8.2)
-// ============================================================
 std::shared_ptr<SymbolicExpr> convolve(
     const std::shared_ptr<SymbolicExpr>& f, const std::shared_ptr<SymbolicExpr>& g,
     const std::string& var) {
@@ -949,10 +921,6 @@ TransformEngineResult convolve_checked(
     return convolve_checked(f, g, var, context);
 }
 
-// ============================================================
-/// Z 变换 (Task 8.3)
-/// 算法来源: Oppenheim & Willsky, Signals and Systems, 2nd ed., Chapter 10
-// ============================================================
 
 /**
  * @internal

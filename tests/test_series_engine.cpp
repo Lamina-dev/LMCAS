@@ -379,9 +379,6 @@ static void test_series_analysis_checked_contracts() {
                 "checked Laurent observes exhausted step budget");
 }
 
-// ============================================================
-// lim_sup / lim_inf 测试
-// ============================================================
 
 static void test_lim_sup_convergent_sequence() {
     TEST_CASE("lim_sup: convergent sequence 1/n → 0");
@@ -492,9 +489,6 @@ static void test_lim_sup_lim_inf_equal_for_monotone() {
     }
 }
 
-// ============================================================
-// symbolic_sum tests
-// ============================================================
 
 static void test_symbolic_sum_constant() {
     TEST_CASE("symbolic_sum: constant body");
@@ -610,9 +604,6 @@ static void test_symbolic_sum_unevaluated() {
     }
 }
 
-// ============================================================
-// symbolic_product tests
-// ============================================================
 
 static void test_symbolic_product_factorial() {
     TEST_CASE("symbolic_product: product of k from 1 to n = n!");
@@ -673,9 +664,6 @@ static void test_symbolic_product_unevaluated() {
     }
 }
 
-// ============================================================
-// convergence_radius tests (Requirement 22)
-// ============================================================
 
 static void test_convergence_radius_geometric() {
     TEST_CASE("convergence_radius: geometric series ∑x^n has R=1");
@@ -731,9 +719,6 @@ static void test_convergence_radius_single_coeff() {
     // A polynomial (finite terms) has infinite radius of convergence
 }
 
-// ============================================================
-// convergence_test tests (Requirement 23)
-// ============================================================
 
 static void test_convergence_test_geometric_convergent() {
     TEST_CASE("convergence_test: ∑(1/2)^n converges or inconclusive");
@@ -776,9 +761,6 @@ static void test_convergence_test_p_series() {
                 "∑1/n^2: inconclusive by ratio test or convergent by comparison");
 }
 
-// ============================================================
-// Fourier series tests (Requirement 25)
-// ============================================================
 
 static void test_fourier_series_square_wave() {
     TEST_CASE("fourier_series: constant function f(x)=1 over [-pi,pi]");
@@ -815,9 +797,6 @@ static void test_fourier_series_odd_function() {
     }
 }
 
-// ============================================================
-// Laurent series tests (Requirement 26)
-// ============================================================
 
 static void test_laurent_series_1_over_z() {
     TEST_CASE("laurent_series: 1/z around z=0");

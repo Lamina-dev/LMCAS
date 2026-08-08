@@ -1,16 +1,3 @@
-/**
- * @file test_assumption_division_sign.cpp
- * @brief Property tests for InferenceEngine sign inference (Task 5.7).
- *
- * Properties tested:
- * - Property 1: Division sign inference follows sign multiplication table
- * - Property 4: Arithmetic combination sign inference
- *
- * Validates: Requirements 1.1, 1.2, 1.3, 1.4, 4.1, 4.2, 4.3, 4.4, 4.5
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -25,9 +12,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers: create AST nodes
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -93,10 +77,6 @@ static Sign expected_division_sign(Sign num_sign, Sign den_sign) {
     return same_sign ? Sign::Positive : Sign::Negative;
 }
 
-// ============================================================
-// Property 1: Division sign inference follows sign multiplication table
-// **Validates: Requirements 1.1, 1.2**
-// ============================================================
 
 static void test_property1_division_sign_table() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: Division sign inference follows sign multiplication table");
@@ -137,10 +117,6 @@ static void test_property1_division_sign_table() {
     });
 }
 
-// ============================================================
-// Property 1: Unknown denominator sign → Unknown result
-// **Validates: Requirements 1.3**
-// ============================================================
 
 static void test_property1_unknown_denominator_returns_unknown() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: Unknown denominator sign returns Unknown");
@@ -162,10 +138,6 @@ static void test_property1_unknown_denominator_returns_unknown() {
     });
 }
 
-// ============================================================
-// Property 1: Zero denominator → Unknown result
-// **Validates: Requirements 1.4**
-// ============================================================
 
 static void test_property1_zero_denominator_returns_unknown() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: Zero denominator returns Unknown");
@@ -189,10 +161,6 @@ static void test_property1_zero_denominator_returns_unknown() {
     });
 }
 
-// ============================================================
-// Property 1: All four sign combinations verified exhaustively
-// **Validates: Requirements 1.1, 1.2**
-// ============================================================
 
 static void test_property1_all_sign_combinations() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: All four sign combinations");
@@ -235,10 +203,6 @@ static void test_property1_all_sign_combinations() {
     }
 }
 
-// ============================================================
-// Property 4: Arithmetic combination sign inference — AddNode
-// **Validates: Requirements 4.1, 4.2**
-// ============================================================
 
 static void test_property4_add_all_positive_is_positive() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode all GT zero → positive");
@@ -284,10 +248,6 @@ static void test_property4_add_all_nonneg_is_nonneg() {
     });
 }
 
-// ============================================================
-// Property 4: Arithmetic combination sign inference — MultiplyNode
-// **Validates: Requirements 4.3**
-// ============================================================
 
 static void test_property4_multiply_all_positive_is_positive() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: MultiplyNode all GT zero → positive");
@@ -311,12 +271,6 @@ static void test_property4_multiply_all_positive_is_positive() {
     });
 }
 
-// ============================================================
-// Property 4: x GT y with y non-negative → x positive
-// **Validates: Requirements 4.4**
-// This rule applies when checking composite expressions or when
-// the relation store derives sign properties from variable-op-zero patterns.
-// ============================================================
 
 static void test_property4_gt_nonneg_implies_positive() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: x GT y with y NonNegative → x positive");
@@ -342,10 +296,6 @@ static void test_property4_gt_nonneg_implies_positive() {
     });
 }
 
-// ============================================================
-// Property 4: Unknown operand sign → Unknown result
-// **Validates: Requirements 4.5**
-// ============================================================
 
 static void test_property4_unknown_operand_returns_unknown() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: Unknown operand sign → Unknown");
@@ -387,10 +337,6 @@ static void test_property4_unknown_operand_returns_unknown() {
     });
 }
 
-// ============================================================
-// Property 4: AddNode with operands having GT 0 relations → positive
-// **Validates: Requirements 4.1 (via relational constraints)**
-// ============================================================
 
 static void test_property4_add_with_gt_zero_relations() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode operands with GT 0 relations → positive");
@@ -422,9 +368,6 @@ static void test_property4_add_with_gt_zero_relations() {
     });
 }
 
-// ============================================================
-// Property 4: Mixed positive and non-negative in AddNode
-// ============================================================
 
 static void test_property4_add_mixed_pos_nonneg() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode mixed positive/non-negative");
@@ -451,18 +394,13 @@ static void test_property4_add_mixed_pos_nonneg() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 1: Division sign inference
     test_property1_division_sign_table();
     test_property1_unknown_denominator_returns_unknown();
     test_property1_zero_denominator_returns_unknown();
     test_property1_all_sign_combinations();
 
-    // Property 4: Arithmetic combination sign inference
     test_property4_add_all_positive_is_positive();
     test_property4_add_all_nonneg_is_nonneg();
     test_property4_multiply_all_positive_is_positive();

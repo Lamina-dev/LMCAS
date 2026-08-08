@@ -1,22 +1,3 @@
-/**
- * @file test_assumption_simplify.cpp
- * @brief Property tests for assumption-aware simplification (Properties 22-24).
- *
- * Feature: assumption-system, Properties 22-24: Assumption-aware simplification
- * Validates: Requirements 11.1-11.6
- *
- * Property 22: For any variable declared NonNegative, simplifying sqrt(x²) with
- *   the AssumptionContext should produce x; for any variable declared Real (but
- *   not NonNegative), simplifying sqrt(x²) should produce abs(x).
- *
- * Property 23: For any variable declared Positive, simplifying abs(x) should
- *   produce x; for any variable declared Negative, simplifying abs(x) should
- *   produce -x.
- *
- * Property 24: For any expression, simplifying without an AssumptionContext (null
- *   pointer) should produce the same result as the original NormalizationVisitor —
- *   no assumption-based rules should fire.
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -31,9 +12,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Normalize a node with an AssumptionContext.
 static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
@@ -118,10 +96,6 @@ static bool is_negation_of_var(const std::shared_ptr<const SymbolicNode>& node, 
     return is_variable(mul->operands()[1], name);
 }
 
-// ============================================================
-// Property 22: Assumption-aware sqrt(x²) simplification
-// Validates: Requirements 11.1, 11.4
-// ============================================================
 
 void test_sqrt_x_squared_nonnegative() {
     TEST_CASE("Property 22: sqrt(x²) → x when x is NonNegative");
@@ -219,10 +193,6 @@ void test_sqrt_x_squared_natural() {
                 "sqrt(k²) with Natural + NonNegative → k");
 }
 
-// ============================================================
-// Property 23: Assumption-aware abs() simplification
-// Validates: Requirements 11.2, 11.3
-// ============================================================
 
 void test_abs_positive() {
     TEST_CASE("Property 23: abs(x) → x when x is Positive");
@@ -293,10 +263,6 @@ void test_abs_no_assumption() {
                 "abs(x) with no assumption remains abs(x)");
 }
 
-// ============================================================
-// Property 24: Backward-compatible simplification
-// Validates: Requirements 11.5, 11.6
-// ============================================================
 
 void test_backward_compat_sqrt_x_squared() {
     TEST_CASE("Property 24: sqrt(x²) without context produces same result as default NormalizationVisitor");
@@ -438,9 +404,6 @@ void test_backward_compat_null_context_explicit() {
                 "NormalizationVisitor(nullptr) = NormalizationVisitor() for abs(x)");
 }
 
-// ============================================================
-// Additional edge cases for completeness
-// ============================================================
 
 void test_sqrt_x_squared_in_larger_expression() {
     TEST_CASE("Property 22: sqrt(x²) simplifies within a larger expression (Req 11.7)");
@@ -549,25 +512,19 @@ void test_scoped_assumption_simplification() {
                 "sqrt(x²) after pop = root scope result (no simplification)");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 22: Assumption-aware sqrt(x²) simplification
     test_sqrt_x_squared_nonnegative();
     test_sqrt_x_squared_positive();
     test_sqrt_x_squared_real_not_nonneg();
     test_sqrt_x_squared_integer_not_nonneg();
     test_sqrt_x_squared_natural();
 
-    // Property 23: Assumption-aware abs() simplification
     test_abs_positive();
     test_abs_negative();
     test_abs_nonnegative_not_positive();
     test_abs_no_assumption();
 
-    // Property 24: Backward-compatible simplification
     test_backward_compat_sqrt_x_squared();
     test_backward_compat_abs_x();
     test_backward_compat_various_expressions();

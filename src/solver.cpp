@@ -1522,9 +1522,6 @@ std::vector<SymbolicExpr> Solver::elimination_ideal(
     return result;
 }
 
-// ============================================================================
-// solve_with_assumptions — domain-filtered equation solving
-// ============================================================================
 
 namespace {
 

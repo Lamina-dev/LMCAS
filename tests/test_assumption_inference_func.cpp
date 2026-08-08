@@ -1,17 +1,3 @@
-/**
- * @file test_assumption_inference_func.cpp
- * @brief Property tests for function inference in InferenceEngine (Properties 18-20).
- *
- * Feature: assumption-system
- * Validates: Requirements 8.1-8.6, 8.9
- *
- * Tests the InferenceEngine's ability to infer sign and domain properties
- * of FunctionNode expressions based on the properties of their arguments.
- *
- * Property 18: Function property inference — exp
- * Property 19: Function property inference — trig bounds
- * Property 20: Function property inference — abs, ln, sqrt
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -43,12 +29,6 @@ static std::shared_ptr<const SymbolicNode> num_d(double v) {
     return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v));
 }
 
-// ============================================================
-// Property 18: Function property inference — exp
-// For any FunctionNode representing exp() with a Real argument,
-// the result should have both the Positive property and the Real property.
-// Validates: Requirements 8.1
-// ============================================================
 
 void test_exp_real_arg_positive() {
     TEST_CASE("Property 18: exp(x) is Positive when x is Real");
@@ -167,17 +147,6 @@ void test_exp_numeric_arg() {
                 "exp(2) is Real");
 }
 
-// ============================================================
-// Property 19: Function property inference — trig bounds
-// For any FunctionNode representing sin() or cos() with a Real argument,
-// the result should have the Real property and the Bounded property
-// with interval [-1, 1].
-// Validates: Requirements 8.2, 8.3
-//
-// Note: The InferenceEngine returns Real for domain but Unknown for sign
-// (since sin/cos can be positive or negative). The Bounded[-1,1] property
-// is tested through the Real domain query (what IS queryable).
-// ============================================================
 
 void test_sin_real_arg_real_domain() {
     TEST_CASE("Property 19: sin(x) is Real when x is Real");
@@ -319,13 +288,6 @@ void test_cos_numeric_arg() {
                 "cos(0) is Real");
 }
 
-// ============================================================
-// Property 20: Function property inference — abs, ln, sqrt
-// (a) abs() with Real argument → NonNegative and Real
-// (b) ln() with Positive argument → Real
-// (c) sqrt() with NonNegative argument → NonNegative and Real
-// Validates: Requirements 8.4, 8.5, 8.6
-// ============================================================
 
 // --- abs() tests ---
 
@@ -576,9 +538,6 @@ void test_sqrt_numeric_arg() {
                 "sqrt(4) is Real");
 }
 
-// ============================================================
-// Additional: tan(Real) → Real (Req 8.9)
-// ============================================================
 
 void test_tan_real_arg_real_domain() {
     TEST_CASE("Req 8.9: tan(x) is Real when x is Real");
@@ -610,9 +569,6 @@ void test_tan_real_arg_sign_unknown() {
                 "tan(x) Negative is Unknown");
 }
 
-// ============================================================
-// Edge case: Unrecognized function → Unknown (Req 8.7)
-// ============================================================
 
 void test_unrecognized_function() {
     TEST_CASE("Req 8.7: Unrecognized function returns Unknown for all properties");
@@ -637,9 +593,6 @@ void test_unrecognized_function() {
                 "LambertW(x) Integer is Unknown");
 }
 
-// ============================================================
-// Edge case: Insufficient argument properties (Req 8.8)
-// ============================================================
 
 void test_insufficient_arg_properties() {
     TEST_CASE("Req 8.8: Insufficient argument properties → Unknown");
@@ -671,7 +624,6 @@ void test_insufficient_arg_properties() {
 }
 
 int main() {
-    // Property 18: exp
     test_exp_real_arg_positive();
     test_exp_real_arg_real_domain();
     test_exp_real_arg_nonnegative();
@@ -681,7 +633,6 @@ int main() {
     test_exp_no_assumption();
     test_exp_numeric_arg();
 
-    // Property 19: sin/cos
     test_sin_real_arg_real_domain();
     test_sin_real_arg_sign_unknown();
     test_sin_integer_arg();
@@ -693,7 +644,6 @@ int main() {
     test_sin_numeric_arg();
     test_cos_numeric_arg();
 
-    // Property 20: abs, ln, sqrt
     test_abs_real_arg_nonnegative();
     test_abs_real_arg_real_domain();
     test_abs_real_arg_not_negative();
@@ -712,7 +662,6 @@ int main() {
     test_sqrt_no_assumption();
     test_sqrt_numeric_arg();
 
-    // Additional: tan (Req 8.9)
     test_tan_real_arg_real_domain();
     test_tan_real_arg_sign_unknown();
 

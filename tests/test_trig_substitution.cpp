@@ -66,7 +66,6 @@ int main() {
     auto x = SymbolicExpr::variable("x");
     auto x_sq = SymbolicExpr::power(x, num(2));
 
-    // ===== TrigSubstitution (task 15.1) =====
     // ∫ 1/√(1-x²) dx = arcsin(x)  (domain |x|<1)
     {
         auto rad = SymbolicExpr::add(num(1), SymbolicExpr::multiply(num(-1), x_sq));
@@ -98,7 +97,6 @@ int main() {
         check_evaluated("∫√(4-x²)", f, "x");
     }
 
-    // ===== Weierstrass (task 15.2) =====
     // ∫ 1/(1+cos(x)) dx = tan(x/2)
     {
         auto cosx = SymbolicExpr::cos(x);

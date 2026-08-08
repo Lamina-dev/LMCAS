@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_relation_store.cpp
- * @brief Property tests for RelationStore — Property 9: Relation storage with sign property derivation.
- *
- * Feature: assumption-system, Property 9: Relation storage with sign property derivation
- *
- * For any variable name and comparison operator (GT, GEQ, LT, LEQ, NEQ) against zero,
- * storing that relation should mark the variable with the corresponding sign property
- * (Positive, NonNegative, Negative, NonPositive, NonZero respectively).
- *
- * Validates: Requirements 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
- */
 
 #include "test_common.hpp"
 #include "relation_store.hpp"
@@ -34,9 +22,6 @@ static bool check_has_sign(const PropertyStore& ps, const std::string& symbol, S
     return ps.has_sign(symbol, sign);
 }
 
-// ============================================================================
-// Property 9: Relation storage with sign property derivation
-// ============================================================================
 
 void test_gt_zero_derives_positive() {
     TEST_CASE("Property 9: GT against zero derives Positive sign");

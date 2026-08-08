@@ -1,55 +1,3 @@
-// Feature: integration-enhancements, Property 7: Rational function decomposition round-trip
-//
-// Validates: Requirements 4.1, 4.9
-//
-// Property 7: For any rational function P(x)/Q(x) where Q(x) has degree <= 5
-// and all factors of Q(x) are linear or irreducible quadratic with rational
-// coefficients, integrating P(x)/Q(x) and differentiating the result SHALL
-// yield an expression numerically equal to P(x)/Q(x) at 5 sample points
-// (chosen to avoid poles) within tolerance 1e-8.
-//
-// Approach
-// --------
-//   * Catalog of >=10 denominators Q(x) of degree 3..5 whose factorisations
-//     over the rationals consist of linear and irreducible quadratic factors
-//     only. Each denominator is represented twice: once as a list of
-//     polynomial coefficients (low-to-high) for plotting + sample-point
-//     filtering, and once as a SymbolicExpr built bottom-up. Denominators
-//     are deliberately chosen so that the RationalDecompositionStrategy can
-//     factor them; there are no triple-nested irreducible quadratic factors
-//     (e.g. (x^2+1)^2) which the strategy intentionally leaves as
-//     unevaluated integrals per the design.
-//
-//   * Catalog of >=10 numerators P(x) of degree 0..2 with small rational
-//     coefficients.
-//
-//   * 10 denominators x 10 numerators = 100 (P, Q) pairs. The test target
-//     is "at least 100 verified", so the catalog supplies that count exactly
-//     (if any combination is skipped because of an unevaluated integral
-//     output, the test reports the skip but the property still passes
-//     provided the skipped combinations are documented).
-//
-//   * For each pair:
-//       - Build the integrand symbolically as P(x) * (Q(x))^-1.
-//       - Call Integrator::integrate(integrand, "x"). If the result still
-//         contains a Calculus_Integral node, the combination is reported
-//         as "unevaluated" (allowed by the design - e.g. higher powers of
-//         irreducible quadratic factors land in this branch) and is not
-//         counted toward the verified-pair target. Such cases are
-//         documented in the test output.
-//       - Symbolically differentiate the result.
-//       - Pick 5 sample points x by walking a fixed candidate set
-//         {-3.7, -2.7, -1.7, -0.7, 0.3, 0.7, 1.3, 1.7, 2.3, 2.7,
-//          3.3, 3.7, 4.3, 4.7} and keeping only those where Q(x) is
-//         comfortably away from zero (|Q(x)| >= 0.1). If fewer than 5
-//         such points exist, the combination is skipped (extremely
-//         unlikely with the chosen candidate set).
-//       - Evaluate both the integrand and the derivative numerically at
-//         each sample point and compare within tolerance 1e-8.
-//
-//   * Tolerance: 1e-8 as specified by the property (rational round-trips
-//     are more sensitive than the 1e-10 used for trig/exponential cases
-//     because of arctan / ln evaluation near factor boundaries).
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -74,9 +22,6 @@ constexpr double kTolerance = 1e-8;
 constexpr double kPoleGuard = 0.1;
 constexpr int kRequiredSamples = 5;
 
-// --------------------------------------------------------------------------
-// AST helpers
-// --------------------------------------------------------------------------
 
 std::shared_ptr<SymbolicExpr> num_int(long long n) {
     return SymbolicExpr::number(n);
@@ -160,9 +105,6 @@ const std::vector<double>& candidate_sample_points() {
     return S;
 }
 
-// --------------------------------------------------------------------------
-// Catalog of denominators and numerators
-// --------------------------------------------------------------------------
 
 struct Poly {
     std::vector<long long> coeffs;  // low-to-high
@@ -216,9 +158,6 @@ const std::vector<Poly>& numerators() {
     return N;
 }
 
-// --------------------------------------------------------------------------
-// Sample point selection
-// --------------------------------------------------------------------------
 
 std::vector<double> pick_safe_sample_points(const std::vector<long long>& Q_coeffs) {
     std::vector<double> kept;
@@ -232,9 +171,6 @@ std::vector<double> pick_safe_sample_points(const std::vector<long long>& Q_coef
     return kept;
 }
 
-// --------------------------------------------------------------------------
-// Per-combination check
-// --------------------------------------------------------------------------
 
 struct ComboReport {
     bool unevaluated = false;

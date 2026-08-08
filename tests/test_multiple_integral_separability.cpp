@@ -1,43 +1,3 @@
-// Feature: integration-enhancements, Property 9: Multiple integral separability
-//
-// Validates: Requirements 6.10
-//
-// Property 9: For all separable integrands of the form f(x)*g(y) where f
-// depends only on x and g depends only on y, integrated over independent
-// constant bounds [a1, b1] for x and [a2, b2] for y, the
-// MultipleIntegralEngine SHALL produce a result numerically equal to
-// (integral_{a1}^{b1} f(x) dx) * (integral_{a2}^{b2} g(y) dy) within
-// tolerance 1e-10.
-//
-// Approach
-// --------
-//   * Choose 6 unary functions for f and g: x, x^2, x^3, sin(x), cos(x),
-//     exp(x). All are smooth and have no singularities, so constant bounds
-//     in any sub-interval of R are safe.
-//
-//   * Choose 3 sets of constant bounds for each variable: {0,1}, {1,2},
-//     {-1,1}. This yields 6 * 6 * 3 * 3 = 324 separable combinations,
-//     comfortably exceeding the >=100 combinations required by the task.
-//
-//   * For each combination:
-//       1. Build the integrand f(x)*g(y).
-//       2. Use MultipleIntegralEngine to evaluate the iterated integral
-//          with the inner step over x and the outer step over y, both
-//          with definite bounds.
-//       3. Compute the per-variable definite integrals Ix = integrate_def
-//          (f, x, a1, b1) and Iy = integrate_def(g, y, a2, b2) using the
-//          same Integrator instance.
-//       4. Numerically evaluate the engine result and Ix * Iy (after
-//          simplify) using SymbolicExpr::to_numeric and compare within
-//          tolerance 1e-10.
-//
-//   * Combinations whose engine output still contains an unevaluated
-//     Calculus_Integral node, or whose numeric values are not finite, are
-//     reported as SKIPPED (they are outside the property's premise).
-//
-//   * The test FAILS if any combination produces a numeric mismatch above
-//     tolerance, or if fewer than 100 combinations are successfully
-//     verified.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -57,7 +17,6 @@ namespace {
 
 constexpr double kTolerance = 1e-10;
 
-// --------------------- AST helpers -------------------------------
 
 bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
@@ -78,7 +37,6 @@ bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     return false;
 }
 
-// --------------------- Function catalog --------------------------
 
 // Each entry builds f(arg) given the argument expression.
 struct FunctionSpec {
@@ -103,7 +61,6 @@ const std::vector<FunctionSpec>& functions() {
     return F;
 }
 
-// --------------------- Bound catalog -----------------------------
 
 struct BoundSpec {
     long long lo;
@@ -120,7 +77,6 @@ const std::vector<BoundSpec>& bounds() {
     return B;
 }
 
-// --------------------- Per-combination check ---------------------
 
 struct ComboReport {
     bool unevaluated = false;

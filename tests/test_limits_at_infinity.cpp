@@ -10,9 +10,6 @@ int main() {
     auto inf = SymbolicExpr::infinity(1);
     auto neg_inf = SymbolicExpr::infinity(-1);
 
-    // =========================================================================
-    // Requirement 5.1: Rational function degree comparison at infinity
-    // =========================================================================
     TEST_CASE("Rational function: deg(P) < deg(Q) -> 0");
     {
         // lim(x→∞) x / x^2 = lim(x→∞) 1/x = 0
@@ -63,9 +60,6 @@ int main() {
         EXPECT_EQ_EXPR_STR(result, "-2", "lim(x->inf) -2x^2/x^2 = -2");
     }
 
-    // =========================================================================
-    // Requirement 5.2: Growth-rate comparison
-    // =========================================================================
     TEST_CASE("Growth rate: exp(x) dominates polynomial");
     {
         // lim(x→∞) x^2 / exp(x) = 0
@@ -95,9 +89,6 @@ int main() {
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) x^10/exp(x) = 0");
     }
 
-    // =========================================================================
-    // Requirement 5.3: Composed functions
-    // =========================================================================
     TEST_CASE("Composed function: exp(-x) as x->inf");
     {
         // lim(x→∞) exp(-x) = 0
@@ -107,9 +98,6 @@ int main() {
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) exp(-x) = 0");
     }
 
-    // =========================================================================
-    // Requirement 5.4: Limits at negative infinity
-    // =========================================================================
     TEST_CASE("Negative infinity: lim(x->-inf) x^2 / (x^2 + 1) = 1");
     {
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));

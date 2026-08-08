@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_serialization.cpp
- * @brief Property tests for serialization round-trip (Task 8.6).
- *
- * Properties tested:
- * - Property 15: Serialization round-trip — For any valid AssumptionContext,
- *   serialize then deserialize SHALL produce identical query results.
- *
- * **Validates: Requirements 20.3**
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- *
- * Note: Relations and conditionals with complex expressions may not round-trip
- * perfectly (deserialization of complex expressions is deferred), so we focus
- * on simple property round-trips (domain, sign, parity, bounded, transcendental,
- * finiteness, definiteness).
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -29,9 +11,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Generate a random Domain (excluding Complex which is the default).
 static Domain random_domain() {
@@ -84,10 +63,6 @@ static std::string random_var_name(int prefix_id) {
     return "s" + std::to_string(prefix_id) + "_" + std::to_string(rc::gen::inRange(0, 99));
 }
 
-// ============================================================
-// Property 15: Serialization round-trip
-// **Validates: Requirements 20.3**
-// ============================================================
 
 /// Test: Domain round-trip
 static void test_serialization_domain_roundtrip() {
@@ -373,9 +348,6 @@ static void test_checked_deserialization_contracts() {
                 "legacy deserialize maps checked ParseError to invalid_argument");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     test_serialization_domain_roundtrip();

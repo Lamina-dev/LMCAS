@@ -20,9 +20,6 @@ using VectorField = std::vector<std::shared_ptr<SymbolicExpr>>;
 using VectorCalculusExprResult = Result<std::shared_ptr<SymbolicExpr>>;
 using VectorCalculusFieldResult = Result<VectorField>;
 
-// ============================================================
-/// 微分算子 (Requirements 8, 9, 45, 46, 47, 87, 88)
-// ============================================================
 
 /**
  * @brief 计算标量函数的梯度 ∇f。
@@ -148,9 +145,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> directional_derivative(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars,
     const VectorField& direction, int order = 1);
 
-// ============================================================
-/// 雅可比矩阵与海森矩阵 (Requirements 10, 11)
-// ============================================================
 
 /**
  * @brief 计算向量值函数的雅可比矩阵。
@@ -202,9 +196,6 @@ LAMINA_API VectorCalculusExprResult hessian_checked(
 LAMINA_API std::shared_ptr<SymbolicExpr> hessian(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars);
 
-// ============================================================
-/// 曲线积分与曲面积分 (Requirements 48, 49)
-// ============================================================
 
 /**
  * @brief 计算第一类曲线积分（标量场沿曲线的积分）。
@@ -342,9 +333,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> surface_integral_vector(
     const std::shared_ptr<SymbolicExpr>& u_lower, const std::shared_ptr<SymbolicExpr>& u_upper,
     const std::shared_ptr<SymbolicExpr>& v_lower, const std::shared_ptr<SymbolicExpr>& v_upper);
 
-// ============================================================
-/// 积分定理 (Requirements 50, 89, 92, 93)
-// ============================================================
 
 /**
  * @brief 格林定理：计算 ∬_R (∂Q/∂x - ∂P/∂y) dA。
@@ -496,9 +484,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> stokes_theorem(
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& u_bounds,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& v_bounds);
 
-// ============================================================
-/// 多元极值与拉格朗日乘数法 (Requirements 44, 51, 91)
-// ============================================================
 
 /**
  * @brief 临界点信息，包含坐标和分类。
@@ -570,9 +555,6 @@ LAMINA_API std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lag
     const std::vector<std::shared_ptr<SymbolicExpr>>& constraints,
     const std::vector<std::string>& vars);
 
-// ============================================================
-/// 向量代数运算 (Requirements 40, 41, 42)
-// ============================================================
 
 /**
  * @brief 计算两个向量的点积 a·b = ∑aᵢbᵢ。

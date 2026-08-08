@@ -1,17 +1,3 @@
-/**
- * @file test_assumption_examples.cpp
- * @brief Example-based integration tests for the Assumption System.
- *
- * These tests exercise the full pipeline:
- *   1. Create AssumptionContext
- *   2. Declare assumptions (domain, sign, relations)
- *   3. Simplify expressions using NormalizationVisitor with the context
- *   4. Solve equations using solve_with_assumptions
- *   5. Query properties using the convenience API
- *   6. Test scoped push/pop behavior
- *
- * Validates: Requirements 8.7, 9.4, 9.5, 10.11, 12.5
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -32,9 +18,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a VariableNode.
 static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
@@ -144,10 +127,6 @@ static bool solutions_contain_value(
     return false;
 }
 
-// ============================================================
-// Integration Test 1: End-to-end assumption -> simplification
-// Declare assumptions -> simplify expression -> verify result
-// ============================================================
 
 void test_end_to_end_sqrt_x_squared_nonneg() {
     TEST_CASE("Integration: assume x >= 0, simplify sqrt(x^2), get x");
@@ -220,10 +199,6 @@ void test_end_to_end_query_after_assumption() {
                 "End-to-end: x is NOT Negative when Positive");
 }
 
-// ============================================================
-// Integration Test 2: Solver with assumptions
-// Solve equation -> verify filtered solutions
-// ============================================================
 
 void test_solver_with_positive_int_domain() {
     TEST_CASE("Integration: solve x^2 - 4 = 0 with PositiveInt, only x=2");
@@ -264,10 +239,6 @@ void test_solver_with_nonnegative_sign() {
     EXPECT_FALSE(has_neg3, "Solver+assumptions: x^2-9=0 NonNeg excludes x=-3");
 }
 
-// ============================================================
-// Integration Test 3: Nested scopes
-// push -> assume -> query -> pop -> query again -> compare
-// ============================================================
 
 void test_nested_scopes_query_roundtrip() {
     TEST_CASE("Integration: nested scopes push/assume/query/pop/query");
@@ -347,9 +318,6 @@ void test_nested_scopes_simplification_changes() {
                 "Nested scopes: sqrt(x^2) back to original after all pops");
 }
 
-// ============================================================
-// Integration Test 4: Unrecognized function returns Unknown (Req 8.7)
-// ============================================================
 
 void test_unrecognized_function_returns_unknown() {
     TEST_CASE("Req 8.7: Unrecognized function returns Unknown for all properties");
@@ -397,9 +365,6 @@ void test_unrecognized_function_erf() {
                 "Req 8.7: Erf(x) is_integer -> Unknown");
 }
 
-// ============================================================
-// Integration Test 5: Domain filtering excludes all solutions -> empty set (Req 12.5)
-// ============================================================
 
 void test_domain_filtering_all_excluded_empty_set() {
     TEST_CASE("Req 12.5: Domain filtering excludes all solutions -> empty set");
@@ -443,9 +408,6 @@ void test_domain_filtering_positive_int_excludes_all() {
     }
 }
 
-// ============================================================
-// Edge Case: Pop on root scope throws (Req 9.4)
-// ============================================================
 
 void test_pop_on_root_scope_throws() {
     TEST_CASE("Req 9.4: pop() on root scope throws std::runtime_error");
@@ -464,9 +426,6 @@ void test_pop_on_root_scope_throws() {
     EXPECT_TRUE(ctx.depth() == 1, "Req 9.4: depth unchanged after failed pop");
 }
 
-// ============================================================
-// Edge Case: Nesting depth of 128 supported (Req 9.5)
-// ============================================================
 
 void test_nesting_depth_128() {
     TEST_CASE("Req 9.5: Nesting depth of 128 push() calls supported");
@@ -496,9 +455,6 @@ void test_nesting_depth_128() {
                 "Req 9.5: x is Unknown after popping all scopes");
 }
 
-// ============================================================
-// Edge Case: NaN and Infinity handling (Req 10.11)
-// ============================================================
 
 void test_nan_handling() {
     TEST_CASE("Req 10.11: NaN NumberNode -> False for integer, Unknown for sign");
@@ -541,9 +497,6 @@ void test_infinity_handling() {
                 "Req 10.11: -Infinity is_negative -> True");
 }
 
-// ============================================================
-// Integration Test: Combined pipeline
-// ============================================================
 
 void test_combined_pipeline() {
     TEST_CASE("Integration: combined pipeline - assume, simplify, query, solve");
@@ -585,9 +538,6 @@ void test_combined_pipeline() {
     EXPECT_FALSE(has_neg1, "Pipeline: x^2-1=0 with Positive excludes x=-1");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Integration Test 1: End-to-end assumption -> simplification
@@ -604,11 +554,9 @@ int main() {
     test_nested_scopes_query_roundtrip();
     test_nested_scopes_simplification_changes();
 
-    // Integration Test 4: Unrecognized function (Req 8.7)
     test_unrecognized_function_returns_unknown();
     test_unrecognized_function_erf();
 
-    // Integration Test 5: Domain filtering -> empty set (Req 12.5)
     test_domain_filtering_all_excluded_empty_set();
     test_domain_filtering_positive_int_excludes_all();
 

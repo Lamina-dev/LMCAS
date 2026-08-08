@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_inference_pow.cpp
- * @brief Property tests for power expression inference (Properties 16-17).
- *
- * Feature: assumption-system
- * Property 16: Power expression sign inference
- * Property 17: Power expression domain inference
- * Validates: Requirements 7.1-7.5
- *
- * Property 16: For any PowerNode:
- *   (a) Positive base with Real exponent → Positive result
- *   (b) Real base with even integer exponent → NonNegative result
- *   (c) NonNegative base with positive integer exponent → NonNegative result
- *   (d) NonZero base with integer exponent → NonZero result
- *
- * Property 17: For any PowerNode with Real base and integer exponent,
- *   the result should have the Real property.
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -28,9 +10,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helper functions
-// ============================================================
 
 /// Create a VariableNode
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
@@ -54,16 +33,6 @@ static SymbolicExpr make_power_expr(std::shared_ptr<const SymbolicNode> base,
     return expr;
 }
 
-// ============================================================
-// Property 16: Power expression sign inference
-// **Validates: Requirements 7.1, 7.2, 7.3, 7.5**
-//
-// For any PowerNode:
-//   (a) Positive base with Real exponent → Positive result
-//   (b) Real base with even integer exponent → NonNegative result
-//   (c) NonNegative base with positive integer exponent → NonNegative result
-//   (d) NonZero base with integer exponent → NonZero result
-// ============================================================
 
 void test_property16a_positive_base_real_exponent() {
     TEST_CASE("Property 16(a): Positive base + Real exponent -> Positive");
@@ -140,9 +109,6 @@ void test_property16a_numeric_positive_base() {
     }
 }
 
-// ============================================================
-// Property 16(b): Real base + even integer exponent → NonNegative
-// ============================================================
 
 void test_property16b_real_base_even_exponent() {
     TEST_CASE("Property 16(b): Real base + even integer exponent -> NonNegative");
@@ -214,9 +180,6 @@ void test_property16b_randomized_even_exponents() {
     EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-// ============================================================
-// Property 16(c): NonNegative base + positive integer exponent → NonNegative
-// ============================================================
 
 void test_property16c_nonneg_base_positive_int_exponent() {
     TEST_CASE("Property 16(c): NonNegative base + positive integer exponent -> NonNegative");
@@ -268,9 +231,6 @@ void test_property16c_randomized_positive_exponents() {
     EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-// ============================================================
-// Property 16(d): NonZero base + integer exponent → NonZero
-// ============================================================
 
 void test_property16d_nonzero_base_integer_exponent() {
     TEST_CASE("Property 16(d): NonZero base + integer exponent -> NonZero");
@@ -319,9 +279,6 @@ void test_property16d_randomized_integer_exponents() {
     EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-// ============================================================
-// Property 16: Combined / edge cases
-// ============================================================
 
 void test_property16_positive_base_even_exponent_is_positive() {
     TEST_CASE("Property 16: Positive base + even exponent -> Positive (via 16a)");
@@ -393,13 +350,6 @@ void test_property16_negative_base_non_integer_exponent() {
                 "(-x)^1.5 is Unknown for Real");
 }
 
-// ============================================================
-// Property 17: Power expression domain inference
-// **Validates: Requirements 7.4**
-//
-// For any PowerNode with Real base and integer exponent,
-// the result should have the Real property.
-// ============================================================
 
 void test_property17_real_base_integer_exponent_domain() {
     TEST_CASE("Property 17: Real base + integer exponent -> Real domain");
@@ -515,12 +465,8 @@ void test_property17_no_domain_yields_unknown() {
                 "x^2 is Unknown for Real when x has no domain assumption");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 16: Power expression sign inference
     test_property16a_positive_base_real_exponent();
     test_property16a_positive_base_integer_exponent();
     test_property16a_positive_base_real_number_exponent();
@@ -537,7 +483,6 @@ int main() {
     test_property16_no_rule_matches();
     test_property16_negative_base_non_integer_exponent();
 
-    // Property 17: Power expression domain inference
     test_property17_real_base_integer_exponent_domain();
     test_property17_randomized_integer_exponents();
     test_property17_integer_base_integer_exponent();

@@ -24,11 +24,6 @@ static MultiPoly::Term make_term(const std::vector<int>& exponents, const Ration
 
 int main()
 {
-    // ================================================================
-    // 首项系数预计算相关测试
-    // 验证 lc(f, x_main) 的计算和分配逻辑
-    // **Validates: Requirements 6.1, 6.2, 6.3, 6.4**
-    // ================================================================
 
     TEST_CASE("Leading coefficient: constant lc needs no precomputation");
     {
@@ -224,11 +219,6 @@ int main()
                     "after scaling, product of lcs equals lc_eval");
     }
 
-    // ================================================================
-    // 试除验证与因子组合测试
-    // 验证 trial_division 和 factor_combination 的逻辑
-    // **Validates: Requirements 7.1, 7.2, 7.3**
-    // ================================================================
 
     TEST_CASE("Trial division: single factor divides exactly");
     {
@@ -388,12 +378,6 @@ int main()
                     "factor product equals original for 6x^2*y - 3x*y^2");
     }
 
-    // ================================================================
-    // Property 9: Factorization product correctness
-    // constant * ∏(factors[i]^mult[i]) == original
-    // Each factor is primitive with positive leading coefficient
-    // **Validates: Requirements 7.4, 7.5**
-    // ================================================================
 
     TEST_CASE("Feature: multivariate-factorization, Property 9: Factorization product correctness (random factorable bivariate)");
     rc::check("For random products of linear factors, factorization reconstructs original", []() {
@@ -514,11 +498,6 @@ int main()
         RC_ASSERT(reconstructed == poly);
     });
 
-    // ================================================================
-    // Property 10: Linear polynomials are irreducible
-    // degree-1 polynomial returns itself as sole factor
-    // **Validates: Requirements 9.1**
-    // ================================================================
 
     TEST_CASE("Feature: multivariate-factorization, Property 10: Linear polynomials are irreducible (random bivariate linear)");
     rc::check("Linear bivariate polynomial returns itself as sole factor", []() {
@@ -580,11 +559,6 @@ int main()
         RC_ASSERT(reconstructed == poly);
     });
 
-    // ================================================================
-    // Property 11: Difference of squares factorization
-    // a²-b² factors into (a+b)(a-b)
-    // **Validates: Requirements 9.2**
-    // ================================================================
 
     TEST_CASE("Feature: multivariate-factorization, Property 11: Difference of squares factorization (random a^2 - b^2)");
     rc::check("a^2 - b^2 factors into product containing (a+b) and (a-b)", []() {
@@ -682,10 +656,6 @@ int main()
         RC_ASSERT(result.multiplicities[1] == 1);
     });
 
-    // ================================================================
-    // Unit tests for complete factorization
-    // **Validates: Requirements 7.4, 8.1, 8.4, 9.1, 9.2, 9.4**
-    // ================================================================
 
     TEST_CASE("Complete factorization: x^2 - y^2 -> (x+y)(x-y)");
     {

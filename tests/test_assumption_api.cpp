@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_api.cpp
- * @brief Property tests for Convenience API (Property 32).
- *
- * Feature: assumption-system, Property 32: Convenience API equivalence
- * Validates: Requirements 13.1, 13.2, 13.3, 13.4
- *
- * For any variable, domain, sign, and relational expression, calling the
- * convenience methods (assume_domain, assume_sign, assume, is_positive, etc.)
- * should produce identical results to using the underlying PropertyStore,
- * RelationStore, and QueryInterface directly.
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -27,9 +15,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static SymbolicExpr make_var_expr(const std::string& name) {
     auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
@@ -64,11 +49,6 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
     }
 }
 
-// ============================================================
-// Test 1: assume_domain(var, domain) produces same result as
-//         current_properties().declare_domain(var, domain)
-//         — verify with get_domain()
-// ============================================================
 
 void test_assume_domain_equivalence() {
     TEST_CASE("Property 32: assume_domain equivalence with PropertyStore.declare_domain");
@@ -111,11 +91,6 @@ void test_assume_domain_equivalence() {
     }
 }
 
-// ============================================================
-// Test 2: assume_sign(var, sign) produces same result as
-//         current_properties().declare_sign(var, sign)
-//         — verify with has_sign()
-// ============================================================
 
 void test_assume_sign_equivalence() {
     TEST_CASE("Property 32: assume_sign equivalence with PropertyStore.declare_sign");
@@ -160,10 +135,6 @@ void test_assume_sign_equivalence() {
     }
 }
 
-// ============================================================
-// Test 3: assume(relation) stores the relation same as using
-//         RelationStore directly
-// ============================================================
 
 void test_assume_relation_equivalence() {
     TEST_CASE("Property 32: assume(relation) equivalence with RelationStore.add_relation");
@@ -215,10 +186,6 @@ void test_assume_relation_equivalence() {
     }
 }
 
-// ============================================================
-// Test 4: is_positive(expr) returns same as
-//         QueryInterface(ctx).query_positive(expr)
-// ============================================================
 
 void test_is_positive_equivalence() {
     TEST_CASE("Property 32: is_positive equivalence with QueryInterface.query_positive");
@@ -251,10 +218,6 @@ void test_is_positive_equivalence() {
     }
 }
 
-// ============================================================
-// Test 5: is_negative(expr) returns same as
-//         QueryInterface(ctx).query_negative(expr)
-// ============================================================
 
 void test_is_negative_equivalence() {
     TEST_CASE("Property 32: is_negative equivalence with QueryInterface.query_negative");
@@ -285,10 +248,6 @@ void test_is_negative_equivalence() {
     }
 }
 
-// ============================================================
-// Test 6: is_real, is_integer, is_nonnegative, is_nonzero
-//         all equivalent to QueryInterface
-// ============================================================
 
 void test_is_real_equivalence() {
     TEST_CASE("Property 32: is_real equivalence with QueryInterface.query_real");
@@ -396,10 +355,6 @@ void test_is_nonzero_equivalence() {
     }
 }
 
-// ============================================================
-// Additional: Combined scenario — assume_domain + assume_sign
-// then verify queries match between convenience and direct
-// ============================================================
 
 void test_combined_assumptions_equivalence() {
     TEST_CASE("Property 32: Combined domain+sign assumptions — full equivalence");
@@ -451,9 +406,6 @@ void test_combined_assumptions_equivalence() {
                    "Combined: query_nonnegative(n) matches");
 }
 
-// ============================================================
-// Additional: Scoped convenience API — push/pop with convenience methods
-// ============================================================
 
 void test_scoped_convenience_equivalence() {
     TEST_CASE("Property 32: Scoped convenience API — push/pop equivalence");
@@ -485,11 +437,7 @@ void test_scoped_convenience_equivalence() {
                 "Scoped: after pop has_sign(x, Negative) matches (should be false)");
 }
 
-// ============================================================
-// Error case tests (Task 10.3)
-// ============================================================
 
-// --- Req 13.6: Empty variable name throws ---
 
 void test_assume_domain_empty_name_throws() {
     TEST_CASE("Req 13.6: assume_domain with empty name throws std::invalid_argument");
@@ -517,7 +465,6 @@ void test_assume_sign_empty_name_throws() {
     EXPECT_TRUE(threw, "assume_sign(\"\", Sign::Positive) should throw std::invalid_argument");
 }
 
-// --- Req 13.7: Non-relational expression in assume() throws ---
 
 void test_assume_non_relational_expr_throws() {
     TEST_CASE("Req 13.7: assume with AddNode root throws std::invalid_argument");
@@ -538,7 +485,6 @@ void test_assume_non_relational_expr_throws() {
     EXPECT_TRUE(threw, "assume(expr_with_AddNode_root) should throw std::invalid_argument");
 }
 
-// --- Req 13.5: Undeclared variable queries return Unknown ---
 
 void test_is_positive_undeclared_returns_unknown() {
     TEST_CASE("Req 13.5: is_positive on undeclared variable returns Tribool::Unknown");
@@ -687,9 +633,6 @@ void test_checked_assumption_context_contracts() {
     EXPECT_TRUE(negative.has_value(), "checked is_negative succeeds");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Test 1: assume_domain equivalence
@@ -719,16 +662,12 @@ int main() {
     // Scoped equivalence
     test_scoped_convenience_equivalence();
 
-    // --- Task 10.3: Error case tests ---
 
-    // Req 13.6: Empty variable name throws
     test_assume_domain_empty_name_throws();
     test_assume_sign_empty_name_throws();
 
-    // Req 13.7: Non-relational expression in assume() throws
     test_assume_non_relational_expr_throws();
 
-    // Req 13.5: Undeclared variable queries return Unknown
     test_is_positive_undeclared_returns_unknown();
     test_is_negative_undeclared_returns_unknown();
     test_is_nonnegative_undeclared_returns_unknown();

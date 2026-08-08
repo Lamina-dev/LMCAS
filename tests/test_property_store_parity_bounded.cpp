@@ -1,16 +1,3 @@
-/**
- * @file test_property_store_parity_bounded.cpp
- * @brief Unit tests for PropertyStore parity and boundedness declaration.
- *
- * Validates Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7:
- * - Parity declaration (Even, Odd, Unknown)
- * - Boundedness declaration with optional Interval
- * - Auto-promotion to Integer domain when Even or Odd is declared
- * - Contradiction detection for parity (Even vs Odd)
- * - Contradiction detection for boundedness (Bounded vs Unbounded)
- * - Default values: Parity::Unknown, Boundedness::Unknown
- * - Idempotent re-declaration
- */
 
 #include "test_common.hpp"
 #include "property_store.hpp"
@@ -20,9 +7,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Parity tests
-// ============================================================
 
 void test_declare_parity_even() {
     TEST_CASE("Declare parity Even stores Even");
@@ -162,9 +146,6 @@ void test_parity_unknown_can_be_set() {
                 "x parity set to Unknown");
 }
 
-// ============================================================
-// Boundedness tests
-// ============================================================
 
 void test_declare_bounded() {
     TEST_CASE("Declare Bounded stores Bounded");
@@ -341,9 +322,6 @@ void test_interval_queries_preserve_exact_large_endpoints() {
                 "open upper endpoint does not cover the exact large boundary point");
 }
 
-// ============================================================
-// Combined parity + domain interaction tests
-// ============================================================
 
 void test_parity_even_with_integer_domain_already_set() {
     TEST_CASE("Even parity with Integer domain already set is fine");

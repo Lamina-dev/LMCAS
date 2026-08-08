@@ -1,10 +1,3 @@
-/**
- * @file test_inference_engine_ext.cpp
- * @brief Unit tests for InferenceEngine extensions: division sign, subtraction sign,
- *        composite domain inference, depth limit, and cycle detection.
- *
- * Validates: Requirements 1.1, 1.2, 2.1, 2.2, 22.2, 25.2
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -23,9 +16,6 @@ static_assert(sizeof(InferenceEngine) == sizeof(void*),
 static_assert(!std::is_copy_constructible_v<InferenceEngine>,
               "InferenceEngine must not share mutable traversal state by copying");
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
     return lamina::detail::make_node<NumberNode>(BigInt(val));
@@ -75,9 +65,6 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
     return expr;
 }
 
-// ============================================================
-// Division sign inference tests (Requirements 1.1, 1.2)
-// ============================================================
 
 void test_division_positive_over_positive() {
     TEST_CASE("Division: positive / positive → positive");
@@ -169,9 +156,6 @@ void test_division_zero_denominator() {
         "pos / zero: Negative is Unknown");
 }
 
-// ============================================================
-// Subtraction sign inference tests (Requirement 1.1, 1.2)
-// ============================================================
 
 void test_subtraction_positive_minus_negative() {
     TEST_CASE("Subtraction: positive - negative → positive");
@@ -203,9 +187,6 @@ void test_subtraction_negative_minus_positive() {
         "neg - pos is not Positive");
 }
 
-// ============================================================
-// Composite domain inference tests (Requirements 2.1, 2.2)
-// ============================================================
 
 void test_domain_sin_integer() {
     TEST_CASE("Domain: sin(integer) → Real");
@@ -236,7 +217,6 @@ void test_domain_ln_integer() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
     // ln requires positive argument for Real result; Integer domain alone
-    // should suffice per Req 2.3 (ln(Integer) → Real)
     InferenceEngine engine(ctx);
 
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Ln, make_var("x")));
@@ -285,9 +265,6 @@ void test_domain_rational_pow_integer() {
         "rational^2 is Real");
 }
 
-// ============================================================
-// Depth limit tests (Requirement 22.2, 25.2)
-// ============================================================
 
 void test_depth_limit_triggers_unknown() {
     TEST_CASE("Depth limit: deeply nested expression → Unknown");
@@ -360,9 +337,6 @@ void test_depth_limit_nested_addition() {
         "Nested exp with depth limit 1 returns Unknown");
 }
 
-// ============================================================
-// Cycle detection tests (Requirement 22.2)
-// ============================================================
 
 void test_cycle_detection_self_referential() {
     TEST_CASE("Cycle detection: depth limit prevents deep recursion");
@@ -730,12 +704,8 @@ void test_checked_inference_query_contracts() {
     }
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Division sign inference (Req 1.1, 1.2)
     test_division_positive_over_positive();
     test_division_negative_over_negative();
     test_division_positive_over_negative();
@@ -743,11 +713,9 @@ int main() {
     test_division_unknown_denominator();
     test_division_zero_denominator();
 
-    // Subtraction sign inference (Req 1.1, 1.2)
     test_subtraction_positive_minus_negative();
     test_subtraction_negative_minus_positive();
 
-    // Composite domain inference (Req 2.1, 2.2)
     test_domain_sin_integer();
     test_domain_exp_rational();
     test_domain_ln_integer();
@@ -755,12 +723,10 @@ int main() {
     test_domain_integer_pow_natural();
     test_domain_rational_pow_integer();
 
-    // Depth limit (Req 22.2, 25.2)
     test_depth_limit_triggers_unknown();
     test_depth_limit_set_and_get();
     test_depth_limit_nested_addition();
 
-    // Cycle detection (Req 22.2)
     test_cycle_detection_self_referential();
     test_cycle_detection_no_crash_deep_shared();
     test_checked_inference_query_contracts();

@@ -489,9 +489,6 @@ int main()
         EXPECT_TRUE(threw, "exact_div throws on non-exact division");
     }
 
-    // ============================================================
-    // eval tests
-    // ============================================================
 
     TEST_CASE("MultiPoly: eval single variable basic");
     {
@@ -711,9 +708,6 @@ int main()
         EXPECT_TRUE(prod_then_eval == eval_then_prod, "eval is multiplicative homomorphism");
     }
 
-    // ============================================================
-    // numeric_content() tests
-    // ============================================================
 
     TEST_CASE("MultiPoly: numeric_content of zero polynomial");
     {
@@ -776,9 +770,6 @@ int main()
         EXPECT_TRUE(content == Rational(3), "content of -6x+9 is 3");
     }
 
-    // ============================================================
-    // make_primitive() tests
-    // ============================================================
 
     TEST_CASE("MultiPoly: make_primitive of zero polynomial");
     {
@@ -850,9 +841,6 @@ int main()
         EXPECT_TRUE(prim.terms()[1].second == Rational(2), "constant is 2");
     }
 
-    // ============================================================
-    // to_string() tests
-    // ============================================================
 
     TEST_CASE("MultiPoly: to_string of zero polynomial");
     {
@@ -935,12 +923,6 @@ int main()
         EXPECT_TRUE(s == "-x + 1", "to_string with -1 leading coefficient");
     }
 
-    // ============================================================
-    // Property 2: Evaluation is a ring homomorphism
-    // eval(f+g, var=val) == eval(f, var=val) + eval(g, var=val)
-    // eval(f*g, var=val) == eval(f, var=val) * eval(g, var=val)
-    // **Validates: Requirements 1.4, 1.5**
-    // ============================================================
 
     TEST_CASE("Property 2: Additive homomorphism — bivariate pair 1");
     {
@@ -1167,11 +1149,6 @@ int main()
             "P2 multiplicative: eval(f*g, z=0) == eval(f,z=0)*eval(g,z=0) [trivariate 5]");
     }
 
-    // ============================================================
-    // Property 3: Univariate conversion round-trip
-    // from_univariate(p, var).to_univariate() == p
-    // **Validates: Requirements 1.6**
-    // ============================================================
 
     TEST_CASE("Property 3: Univariate round-trip — zero polynomial");
     {
@@ -1290,11 +1267,6 @@ int main()
         EXPECT_TRUE(recovered == original, "reverse round-trip preserves zero MultiPoly");
     }
 
-    // ============================================================
-    // Property 5: Exact division round-trip
-    // For f = g*h, f.exact_div(g) == h AND f.exact_div(h) == g
-    // **Validates: Requirements 1.8**
-    // ============================================================
 
     TEST_CASE("Property 5: exact_div round-trip — simple monomials (x, y)");
     {
@@ -1411,12 +1383,6 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: f/(3x-1) == x/2+1/3");
     }
 
-    // ============================================================
-    // Property 4: Degree computation correctness
-    // total_degree equals max total degree of terms,
-    // degree(var) equals max exponent of var across all terms.
-    // **Validates: Requirements 1.7**
-    // ============================================================
 
     TEST_CASE("Property 4: degree of zero polynomial is -1");
     {
@@ -1571,11 +1537,6 @@ int main()
         EXPECT_TRUE(p.is_homogeneous(), "polynomial is homogeneous");
     }
 
-    // ============================================================
-    // Property 1: Ring axioms — commutativity of addition,
-    //             associativity of multiplication, distributive law
-    // **Validates: Requirements 1.2, 1.3**
-    // ============================================================
 
     TEST_CASE("Property: addition commutativity (a + b == b + a)");
     {

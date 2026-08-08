@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_inference_add.cpp
- * @brief Property tests for addition inference (Properties 12-13).
- *
- * Feature: assumption-system
- * Property 12: Addition sign inference
- * Property 13: Addition domain closure
- * Validates: Requirements 5.1-5.8
- *
- * Tests that the InferenceEngine correctly infers sign and domain properties
- * for AddNode expressions based on the properties of their operands.
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -21,9 +9,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helper functions
-// ============================================================
 
 /// Create a VariableNode wrapped in a shared_ptr<SymbolicNode>
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
@@ -46,16 +31,6 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
     return expr;
 }
 
-// ============================================================
-// Property 12: Addition sign inference
-// **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.7, 5.8**
-//
-// For any AddNode where all operands have a uniform sign property S
-// (Positive, Negative, NonNegative, or NonPositive), the InferenceEngine
-// should infer that same sign property S for the sum; if any operand has
-// Unknown sign, the result should be Unknown; if operands have mixed
-// definite signs, the result should be Unknown.
-// ============================================================
 
 void test_property12_all_positive_operands() {
     TEST_CASE("Property 12: All Positive operands → sum is Positive");
@@ -316,13 +291,6 @@ void test_property12_empty_add_returns_unknown() {
     EXPECT_TRUE(rejected, "Empty AddNode violates the AST invariant");
 }
 
-// ============================================================
-// Property 13: Addition domain closure
-// **Validates: Requirements 5.5, 5.6**
-//
-// For any AddNode where all operands have domain D (Integer or Real),
-// the InferenceEngine should infer domain D for the sum.
-// ============================================================
 
 void test_property13_all_integer_operands() {
     TEST_CASE("Property 13: All Integer operands → sum is Integer");
@@ -490,12 +458,8 @@ void test_property13_nested_addition_domain() {
         "(a + b) + c is Integer when a, b, c are Integer");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 12: Addition sign inference
     test_property12_all_positive_operands();
     test_property12_all_negative_operands();
     test_property12_all_nonnegative_operands();
@@ -509,7 +473,6 @@ int main() {
     test_property12_many_operands_uniform_sign();
     test_property12_empty_add_returns_unknown();
 
-    // Property 13: Addition domain closure
     test_property13_all_integer_operands();
     test_property13_all_real_operands();
     test_property13_integer_implies_real_for_sum();

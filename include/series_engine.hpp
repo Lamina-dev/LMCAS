@@ -16,9 +16,6 @@ namespace lamina {
 using SeriesExprResult = Result<std::shared_ptr<SymbolicExpr>>;
 using PowerSeriesResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
-// ============================================================
-/// 收敛性判定 (Requirements 22, 23)
-// ============================================================
 
 /**
  * @brief 收敛性结果枚举。
@@ -81,9 +78,6 @@ LAMINA_API ConvergenceInfoResult convergence_test_checked(
 LAMINA_API ConvergenceInfo convergence_test(
     const std::shared_ptr<SymbolicExpr>& general_term, const std::string& index_var);
 
-// ============================================================
-/// 幂级数运算 (Requirement 24)
-// ============================================================
 
 /**
  * @brief 幂级数加法：逐项相加。
@@ -138,9 +132,6 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_compose(
     const std::vector<std::shared_ptr<SymbolicExpr>>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& g, int order);
 
-// ============================================================
-/// 傅里叶级数 (Requirement 25)
-// ============================================================
 
 /**
  * @brief 计算函数的傅里叶级数展开。
@@ -160,9 +151,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> fourier_series(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& period, int n_terms);
 
-// ============================================================
-/// 洛朗级数 (Requirement 26)
-// ============================================================
 
 /**
  * @brief 奇点类型枚举。
@@ -250,9 +238,6 @@ LAMINA_API LaurentResult laurent_series_full(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center, int order_neg, int order_pos);
 
-// ============================================================
-/// 渐近展开 (Requirement 27)
-// ============================================================
 
 /**
  * @brief 计算函数在 x→∞ 时的渐近展开。
@@ -268,9 +253,6 @@ LAMINA_API LaurentResult laurent_series_full(
 LAMINA_API std::shared_ptr<SymbolicExpr> asymptotic_expand(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var, int order);
 
-// ============================================================
-/// 符号求和 (Requirements 28, 85)
-// ============================================================
 
 /**
  * @brief 计算符号求和 ∑_{k=lower}^{upper} body(k) 的闭合形式。
@@ -288,9 +270,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_sum(
     const std::shared_ptr<SymbolicExpr>& body, const std::string& index,
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper);
 
-// ============================================================
-/// 符号乘积 (Requirements 67, 94, 95)
-// ============================================================
 
 /**
  * @brief 计算符号乘积 ∏_{k=lower}^{upper} body(k) 的闭合形式。
@@ -308,9 +287,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_product(
     const std::shared_ptr<SymbolicExpr>& body, const std::string& index,
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper);
 
-// ============================================================
-/// 上极限与下极限 (Requirement 66)
-// ============================================================
 
 /**
  * @brief 计算数列的上极限 lim sup aₙ。

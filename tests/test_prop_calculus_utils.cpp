@@ -1,14 +1,3 @@
-/**
- * @file test_prop_calculus_utils.cpp
- * @brief Property-based tests for calculus utilities module.
- *
- * Properties tested:
- *   - Property 10: Logarithmic differentiation equivalence
- *   - Property 36: Asymptotes of rational functions
- *   - Property 37: Curvature formula correctness
- *
- * Validates: Requirements 12.1, 12.3, 15.1, 15.2, 16.1, 90.1, 90.3
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -23,9 +12,6 @@ using SE = SymbolicExpr;
 static auto num(int n) { return SE::number(n); }
 static auto var(const std::string& name) { return SE::variable(name); }
 
-// ============================================================
-// Generators for random polynomial expressions
-// ============================================================
 
 namespace {
 
@@ -137,18 +123,10 @@ RationalFuncData gen_rational_function(const std::string& v) {
 
 } // anonymous namespace
 
-// ============================================================
-// Property 10: Logarithmic differentiation equivalence
-// ============================================================
 
 static void test_property_10_log_differentiation_equivalence() {
     TEST_CASE("Property 10: Logarithmic differentiation equivalence");
 
-    // **Validates: Requirements 12.1, 12.3, 90.1, 90.3**
-    //
-    // For any differentiable expression f that is non-zero,
-    // log_differentiate(f, var) SHALL produce a result algebraically
-    // equivalent to the standard differentiate(f, var).
 
     rc::check("log_differentiate(f, x) == f->differentiate(x) for polynomials", []() {
         auto f = gen_nonzero_polynomial("x");
@@ -184,18 +162,10 @@ static void test_property_10_log_differentiation_equivalence() {
     });
 }
 
-// ============================================================
-// Property 36: Asymptotes of rational functions
-// ============================================================
 
 static void test_property_36_asymptotes_rational() {
     TEST_CASE("Property 36: Asymptotes of rational functions");
 
-    // **Validates: Requirements 15.1, 15.2**
-    //
-    // For any rational function P(x)/Q(x) in lowest terms, the vertical
-    // asymptotes SHALL be at the real zeros of Q(x), and the horizontal
-    // asymptote (if deg(P) <= deg(Q)) SHALL equal the limit at infinity.
 
     rc::check("vertical asymptotes are at denominator zeros", []() {
         auto x = var("x");
@@ -271,19 +241,10 @@ static void test_property_36_asymptotes_rational() {
     });
 }
 
-// ============================================================
-// Property 37: Curvature formula correctness
-// ============================================================
 
 static void test_property_37_curvature_formula() {
     TEST_CASE("Property 37: Curvature formula correctness");
 
-    // **Validates: Requirements 16.1**
-    //
-    // For any twice-differentiable function f(x), curvature(f, x) SHALL
-    // equal |f''(x)| / (1 + f'(x)^2)^(3/2) after simplification.
-    //
-    // Special case: curvature of a circle of radius R should be 1/R.
 
     rc::check("curvature of circle radius R is 1/R", []() {
         // Generate a random radius R in [1, 10]
@@ -362,9 +323,6 @@ static void test_property_37_curvature_formula() {
     });
 }
 
-// ============================================================
-// Property 34: Inflection points
-// ============================================================
 
 static void test_property_34_inflection_points() {
     TEST_CASE("Property 34: Inflection points");
@@ -387,9 +345,6 @@ static void test_property_34_inflection_points() {
     });
 }
 
-// ============================================================
-// Main
-// ============================================================
 
 int main() {
     test_property_10_log_differentiation_equivalence();

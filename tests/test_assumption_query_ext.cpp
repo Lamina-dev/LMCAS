@@ -1,10 +1,3 @@
-/**
- * @file test_assumption_query_ext.cpp
- * @brief Unit tests for QueryInterface extensions: caching, cache invalidation,
- *        query_conditions, matrix definiteness queries, and extended property queries.
- *
- * Validates: Requirements 21.2, 21.3, 23.2, 23.3, 10.5
- */
 
 #include "test_common.hpp"
 #include "query_interface.hpp"
@@ -16,9 +9,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static SymbolicExpr make_var(const std::string& name) {
     auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
@@ -88,9 +78,6 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
     }
 }
 
-// ============================================================
-// Test: Cache hit returns same result without re-inference (Req 23.2)
-// ============================================================
 
 void test_cache_hit_returns_same_result() {
     TEST_CASE("Cache hit returns same result without re-inference (Req 23.2)");
@@ -116,9 +103,6 @@ void test_cache_hit_returns_same_result() {
     EXPECT_TRIBOOL(neg2, Tribool::False, "Second query (cached): x is not Negative");
 }
 
-// ============================================================
-// Test: Cache invalidation on push (Req 23.3)
-// ============================================================
 
 void test_cache_invalidation_on_push() {
     TEST_CASE("Cache invalidation on push (Req 23.3)");
@@ -141,9 +125,6 @@ void test_cache_invalidation_on_push() {
     EXPECT_TRIBOOL(after, Tribool::True, "After invalidate (push): x still Positive");
 }
 
-// ============================================================
-// Test: Cache invalidation on pop (Req 23.3)
-// ============================================================
 
 void test_cache_invalidation_on_pop() {
     TEST_CASE("Cache invalidation on pop (Req 23.3)");
@@ -173,9 +154,6 @@ void test_cache_invalidation_on_pop() {
     EXPECT_TRIBOOL(after_pop, Tribool::Unknown, "After pop: x is Unknown again");
 }
 
-// ============================================================
-// Test: Cache invalidation on assume (Req 23.3)
-// ============================================================
 
 void test_cache_invalidation_on_assume() {
     TEST_CASE("Cache invalidation on assume (Req 23.3)");
@@ -197,9 +175,6 @@ void test_cache_invalidation_on_assume() {
     EXPECT_TRIBOOL(after, Tribool::True, "After assume + invalidate: x is Positive");
 }
 
-// ============================================================
-// Test: query_conditions for simple variable (Req 21.2)
-// ============================================================
 
 void test_query_conditions_simple_variable() {
     TEST_CASE("query_conditions for simple variable (Req 21.2)");
@@ -240,9 +215,6 @@ void test_query_conditions_simple_variable() {
     }
 }
 
-// ============================================================
-// Test: query_conditions for composite expression x - y (Req 21.3)
-// ============================================================
 
 void test_query_conditions_subtraction() {
     TEST_CASE("query_conditions for composite expression x - y (Req 21.3)");
@@ -286,9 +258,6 @@ void test_query_conditions_subtraction() {
     }
 }
 
-// ============================================================
-// Test: query_conditions returns empty for undetermined expressions (Req 21.3)
-// ============================================================
 
 void test_query_conditions_empty_for_complex() {
     TEST_CASE("query_conditions returns empty for undetermined expressions");
@@ -298,9 +267,6 @@ void test_query_conditions_empty_for_complex() {
 
 }
 
-// ============================================================
-// Test: query_positive_definite (Req 10.5)
-// ============================================================
 
 void test_query_positive_definite() {
     TEST_CASE("query_positive_definite (Req 10.5)");
@@ -318,9 +284,6 @@ void test_query_positive_definite() {
                    "M declared PositiveDefinite: query_positive_semidefinite = True (implied)");
 }
 
-// ============================================================
-// Test: query_positive_semidefinite (Req 10.5)
-// ============================================================
 
 void test_query_positive_semidefinite() {
     TEST_CASE("query_positive_semidefinite (Req 10.5)");
@@ -339,9 +302,6 @@ void test_query_positive_semidefinite() {
                    "A declared PSD: query_positive_definite = Unknown");
 }
 
-// ============================================================
-// Test: query_positive_definite for NegativeDefinite (Req 10.5)
-// ============================================================
 
 void test_query_definiteness_negative() {
     TEST_CASE("query_positive_definite for NegativeDefinite matrix (Req 10.5)");
@@ -358,9 +318,6 @@ void test_query_definiteness_negative() {
                    "N declared NegDef: query_positive_semidefinite = False");
 }
 
-// ============================================================
-// Test: query_positive_definite for undeclared symbol
-// ============================================================
 
 void test_query_definiteness_undeclared() {
     TEST_CASE("query_positive_definite for undeclared symbol");
@@ -375,9 +332,6 @@ void test_query_definiteness_undeclared() {
                    "Undeclared: query_positive_semidefinite = Unknown");
 }
 
-// ============================================================
-// Test: query_algebraic (Req 8.5 via QueryInterface)
-// ============================================================
 
 void test_query_algebraic() {
     TEST_CASE("query_algebraic");
@@ -400,9 +354,6 @@ void test_query_algebraic() {
                    "y undeclared: query_algebraic = Unknown");
 }
 
-// ============================================================
-// Test: query_transcendental
-// ============================================================
 
 void test_query_transcendental() {
     TEST_CASE("query_transcendental");
@@ -419,9 +370,6 @@ void test_query_transcendental() {
                    "pi_sym declared Transcendental: query_algebraic = False");
 }
 
-// ============================================================
-// Test: query_finite
-// ============================================================
 
 void test_query_finite() {
     TEST_CASE("query_finite");
@@ -445,9 +393,6 @@ void test_query_finite() {
                    "b undeclared: query_divergent = Unknown");
 }
 
-// ============================================================
-// Test: query_divergent
-// ============================================================
 
 void test_query_divergent() {
     TEST_CASE("query_divergent");
@@ -464,9 +409,6 @@ void test_query_divergent() {
                    "d declared Divergent: query_finite = False");
 }
 
-// ============================================================
-// Test: query_periodic for declared periodic symbol
-// ============================================================
 
 void test_query_periodic_declared() {
     TEST_CASE("query_periodic for declared periodic symbol");
@@ -484,9 +426,6 @@ void test_query_periodic_declared() {
                    "f declared periodic: query_periodic = True");
 }
 
-// ============================================================
-// Test: query_periodic for sin/cos/tan (auto-inferred)
-// ============================================================
 
 void test_query_periodic_trig() {
     TEST_CASE("query_periodic for sin/cos/tan (auto-inferred)");
@@ -506,9 +445,6 @@ void test_query_periodic_trig() {
                    "tan(x): query_periodic = True");
 }
 
-// ============================================================
-// Test: get_period for sin/cos/tan
-// ============================================================
 
 void test_get_period_trig() {
     TEST_CASE("get_period for sin/cos/tan");
@@ -537,9 +473,6 @@ void test_get_period_trig() {
     }
 }
 
-// ============================================================
-// Test: get_period returns nullopt for non-periodic
-// ============================================================
 
 void test_get_period_non_periodic() {
     TEST_CASE("get_period returns nullopt for non-periodic expression");
@@ -640,9 +573,6 @@ void test_checked_extended_query_contracts() {
 
 }
 
-// ============================================================
-// Test: Cache works across multiple property types
-// ============================================================
 
 void test_cache_multiple_properties() {
     TEST_CASE("Cache works across multiple property types");
@@ -674,24 +604,18 @@ void test_cache_multiple_properties() {
     EXPECT_TRIBOOL(qi.query_integer(x_expr), Tribool::True, "x Integer after invalidate");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Cache tests (Req 23.2, 23.3)
     test_cache_hit_returns_same_result();
     test_cache_invalidation_on_push();
     test_cache_invalidation_on_pop();
     test_cache_invalidation_on_assume();
     test_cache_multiple_properties();
 
-    // query_conditions tests (Req 21.2, 21.3)
     test_query_conditions_simple_variable();
     test_query_conditions_subtraction();
     test_query_conditions_empty_for_complex();
 
-    // Matrix definiteness tests (Req 10.5)
     test_query_positive_definite();
     test_query_positive_semidefinite();
     test_query_definiteness_negative();

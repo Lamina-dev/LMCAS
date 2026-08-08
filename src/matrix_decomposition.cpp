@@ -768,9 +768,6 @@ std::shared_ptr<SymbolicExpr> matrix_exp(
     return SymbolicExpr::multiply(P, SymbolicExpr::multiply(expD, P_inv));
 }
 
-// ============================================================
-/// 迹与秩 (Requirements 52, 58)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> matrix_trace(const std::shared_ptr<SymbolicExpr>& A) {
     auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
@@ -825,9 +822,6 @@ int matrix_rank(const std::shared_ptr<SymbolicExpr>& A) {
     return rank;
 }
 
-// ============================================================
-/// Gram-Schmidt 正交化 (Requirement 57)
-// ============================================================
 
 std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
     const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& vectors,
@@ -869,9 +863,6 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
     return basis;
 }
 
-// ============================================================
-/// 矩阵对数 (Requirement 69)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A) {
     auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
@@ -920,9 +911,6 @@ std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A)
     return SymbolicExpr::multiply(P, SymbolicExpr::multiply(logDm, P_inv));
 }
 
-// ============================================================
-/// Kronecker 积 (Requirement 70)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
     const std::shared_ptr<SymbolicExpr>& B) {
@@ -944,9 +932,6 @@ std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
     return SymbolicExpr::matrix(grid);
 }
 
-// ============================================================
-/// 矩阵范数 (Requirement 71)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A,
     const std::string& type) {
@@ -1062,9 +1047,6 @@ std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A
     return nullptr;
 }
 
-// ============================================================
-/// 二次型 (Requirement 59)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -1121,9 +1103,6 @@ std::string classify_quadratic_form(const std::shared_ptr<SymbolicExpr>& A) {
     return "indefinite";
 }
 
-// ============================================================
-/// Jordan 标准型 (Requirement 56)
-// ============================================================
 
 JordanDecompositionResult jordan_form_checked(
     const std::shared_ptr<SymbolicExpr>& A,

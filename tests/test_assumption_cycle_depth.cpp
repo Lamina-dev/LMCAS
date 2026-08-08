@@ -1,13 +1,3 @@
-/**
- * @file test_assumption_cycle_depth.cpp
- * @brief Property tests for cycle detection and depth limit (Task 5.8).
- *
- * Properties tested:
- * - Property 17: Cycle detection prevents infinite recursion
- * - Property 18: Depth limit returns Unknown without side effects
- *
- * Validates: Requirements 22.2, 22.3, 22.4, 25.2, 25.4
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -21,9 +11,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
@@ -90,10 +77,6 @@ static std::pair<SymbolicExpr, SymbolicExpr> make_structurally_identical_distinc
     return {lamina::detail::expression_from_node(mul), lamina::detail::expression_from_node(add1)};
 }
 
-// ============================================================
-// Property 17: Cycle detection prevents infinite recursion
-// Validates: Requirements 22.2, 22.3, 22.4
-// ============================================================
 
 static void test_cycle_shared_node_returns_unknown() {
     TEST_CASE("Property 17: Shared node (same pointer) in expression returns Unknown without crash");
@@ -242,10 +225,6 @@ static void test_cycle_detection_different_query_types() {
         "query_integer on shared expr completes");
 }
 
-// ============================================================
-// Property 18: Depth limit returns Unknown without side effects
-// Validates: Requirements 25.2, 25.4
-// ============================================================
 
 static void test_depth_limit_returns_unknown() {
     TEST_CASE("Property 18: Expression exceeding max depth returns Unknown");
@@ -466,12 +445,8 @@ static void test_depth_limit_multiple_variables() {
         "Deep multi-variable expression returns Unknown at depth limit");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 17: Cycle detection prevents infinite recursion
     test_cycle_shared_node_returns_unknown();
     test_cycle_detection_no_false_positive_distinct_nodes();
     test_cycle_detection_multiply_shared_operand();
@@ -479,7 +454,6 @@ int main() {
     test_cycle_detection_preserves_state_after_query();
     test_cycle_detection_different_query_types();
 
-    // Property 18: Depth limit returns Unknown without side effects
     test_depth_limit_returns_unknown();
     test_depth_limit_no_exception();
     test_depth_limit_within_limit_works();

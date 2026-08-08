@@ -1,17 +1,3 @@
-/**
- * @file test_assumption_integration.cpp
- * @brief Property tests for integration subsystem backward compatibility (Task 11.6).
- *
- * Property tested:
- * - Property 19: Integration subsystem backward compatibility — For any call
- *   without AssumptionContext (nullptr), behavior SHALL be identical to current
- *   implementation.
- *
- * Validates: Requirements 12.4, 13.4, 14.4, 15.4, 16.4
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -30,9 +16,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -55,10 +38,6 @@ static std::string node_to_string(const std::shared_ptr<const SymbolicNode>& nod
     return pv.get_result();
 }
 
-// ============================================================
-// Property 19: Integrator with nullptr context produces same results
-// **Validates: Requirements 12.4**
-// ============================================================
 
 static void test_property19_integrator_nullptr_backward_compat() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 19: Integrator with nullptr context produces same results as before");
@@ -138,10 +117,6 @@ static void test_property19_integrator_trig_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: LimitVisitor with nullptr context produces same results
-// **Validates: Requirements 13.4**
-// ============================================================
 
 static void test_property19_limit_nullptr_backward_compat() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 19: LimitVisitor with nullptr context produces same results as before");
@@ -227,10 +202,6 @@ static void test_property19_limit_trig_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: Series expansion with nullptr context produces same results
-// **Validates: Requirements 14.4**
-// ============================================================
 
 static void test_property19_series_nullptr_backward_compat() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 19: Series expansion with nullptr context produces same results as before");
@@ -290,10 +261,6 @@ static void test_property19_series_sin_cos_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: ODE solver with nullptr context produces same results
-// **Validates: Requirements 15.4**
-// ============================================================
 
 static void test_property19_ode_nullptr_backward_compat() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 19: ODE solver with nullptr context produces same results as before");
@@ -364,10 +331,6 @@ static void test_property19_ode_linear_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: Matcher with nullptr context produces same results
-// **Validates: Requirements 16.4**
-// ============================================================
 
 static void test_property19_matcher_nullptr_backward_compat() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 19: Matcher with nullptr context produces same results as before");
@@ -473,28 +436,20 @@ static void test_property19_rewrite_engine_nullptr() {
     }
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 19: Integrator backward compatibility (Req 12.4)
     test_property19_integrator_nullptr_backward_compat();
     test_property19_integrator_trig_nullptr();
 
-    // Property 19: LimitVisitor backward compatibility (Req 13.4)
     test_property19_limit_nullptr_backward_compat();
     test_property19_limit_trig_nullptr();
 
-    // Property 19: Series expansion backward compatibility (Req 14.4)
     test_property19_series_nullptr_backward_compat();
     test_property19_series_sin_cos_nullptr();
 
-    // Property 19: ODE solver backward compatibility (Req 15.4)
     test_property19_ode_nullptr_backward_compat();
     test_property19_ode_linear_nullptr();
 
-    // Property 19: Matcher backward compatibility (Req 16.4)
     test_property19_matcher_nullptr_backward_compat();
     test_property19_rewrite_engine_nullptr();
 
