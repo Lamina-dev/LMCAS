@@ -86,6 +86,9 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
         if (variable->name() == "e") {
             return make_approx(std::exp(1.0));
         }
+        if (variable->name() == "phi") {
+            return make_approx((1.0 + std::sqrt(5.0)) / 2.0);
+        }
         auto it = bindings.find(variable->name());
         if (it == bindings.end()) {
             return failure(CasErrc::UnboundSymbol,

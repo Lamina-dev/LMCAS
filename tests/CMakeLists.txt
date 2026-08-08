@@ -1,6 +1,6 @@
 macro(lmcas_add_test TARGET_NAME SOURCE_FILE)
     add_executable(${TARGET_NAME} ${SOURCE_FILE})
-    target_link_libraries(${TARGET_NAME} PRIVATE lmcas LammpCore lmmc)
+    target_link_libraries(${TARGET_NAME} PRIVATE lmcas)
     add_test(NAME ${TARGET_NAME} COMMAND ${TARGET_NAME})
     # Ensure test binaries go to the standard output directory
     set_target_properties(${TARGET_NAME} PROPERTIES

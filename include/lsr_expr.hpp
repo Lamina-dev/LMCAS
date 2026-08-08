@@ -43,6 +43,14 @@ struct EqvOptions {
     EqvBudget budget = {};
 };
 
+LAMINA_API Result<EqvProfile> eqv_profile_from_name(const std::string& name);
+LAMINA_API Result<void> set_eqv_profile(EqvOptions& options,
+                                        const std::string& name);
+LAMINA_API Result<void> set_eqv_budget(EqvOptions& options,
+                                       std::size_t steps,
+                                       std::size_t depth,
+                                       std::size_t growth);
+
 class LAMINA_API ExprSet {
 public:
     ExprSet() = default;
@@ -75,6 +83,12 @@ LAMINA_API ExprResult integer(const BigInt& value);
 LAMINA_API ExprResult rational(const Rational& value);
 LAMINA_API ExprResult approx_real(double value);
 
+LAMINA_API ExprResult pi();
+LAMINA_API ExprResult e();
+LAMINA_API ExprResult phi();
+
+LAMINA_API ExprResult i();
+LAMINA_API ExprResult I();
 LAMINA_API ExprResult imaginary_unit();
 LAMINA_API ExprResult complex(ExprPtr real, ExprPtr imag);
 LAMINA_API ExprResult real(const ExprPtr& expression,
@@ -123,6 +137,24 @@ LAMINA_API ExprSetResult solve_expr_set(const ExprPtr& equation,
 LAMINA_API ExprSetResult solve_expr_set(const ExprPtr& equation,
                                         const std::string& variable,
                                         const SolveOptions& options = {});
+
+LAMINA_API ExprSetResult roots(const ExprPtr& expression,
+                               const std::string& variable,
+                               ComputationContext& context,
+                               const SolveOptions& options = {});
+
+LAMINA_API ExprSetResult roots(const ExprPtr& expression,
+                               const std::string& variable,
+                               const SolveOptions& options = {});
+
+LAMINA_API ExprSetResult solve(const ExprPtr& equation,
+                               const std::string& variable,
+                               ComputationContext& context,
+                               const SolveOptions& options = {});
+
+LAMINA_API ExprSetResult solve(const ExprPtr& equation,
+                               const std::string& variable,
+                               const SolveOptions& options = {});
 
 LAMINA_API const char* error_name(CasErrc code) noexcept;
 LAMINA_API const char* error_name(const CasError& error) noexcept;

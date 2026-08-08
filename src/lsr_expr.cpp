@@ -9,6 +9,7 @@
 #include <set>
 #include <utility>
 
+#include "assumption_context.hpp"
 #include "complex_analysis.hpp"
 #include "poly_utils.hpp"
 #include "symbolic_ast.hpp"
@@ -20,6 +21,7 @@ constexpr const char* kSymOperation = "lsr.sym";
 constexpr const char* kIntegerOperation = "lsr.integer";
 constexpr const char* kRationalOperation = "lsr.rational";
 constexpr const char* kApproxOperation = "lsr.approx_real";
+constexpr const char* kConstantOperation = "lsr.constant";
 constexpr const char* kImaginaryOperation = "lsr.imaginary_unit";
 constexpr const char* kComplexOperation = "lsr.complex";
 constexpr const char* kRealOperation = "lsr.real";
@@ -30,6 +32,7 @@ constexpr const char* kEquivalentOperation = "lsr.equivalent_core";
 constexpr const char* kEquivalentProfileOperation = "lsr.equivalent_core.profile";
 constexpr const char* kExprSetOperation = "lsr.expr_set";
 constexpr const char* kSolveExprSetOperation = "lsr.solve_expr_set";
+constexpr const char* kEvalfOperation = "lsr.evalf";
 constexpr const char* kEvalComplexOperation = "lsr.eval_complex";
 
 ExprResult expression_failure(CasErrc code, std::string message,
@@ -40,6 +43,13 @@ ExprResult expression_failure(CasErrc code, std::string message,
 ExprSetResult expr_set_failure(CasErrc code, std::string message,
                                const char* operation) {
     return ExprSetResult::failure(code, std::move(message), operation);
+}
+
+Result<EqvProfile> eqv_profile_failure(std::string message) {
+    return Result<EqvProfile>::failure(
+        CasErrc::UnsupportedExpression,
+        std::move(message),
+        kEquivalentProfileOperation);
 }
 
 Result<ApproxComplex> complex_failure(CasErrc code, std::string message,
@@ -156,7 +166,7 @@ bool is_integer_double(double value) {
 
 bool is_reserved_symbol_name(const std::string& name) {
     return name == "i" || name == "I" || name == "pi" || name == "π" ||
-           name == "e";
+           name == "e" || name == "phi";
 }
 
 bool is_imaginary_unit_name(const std::string& name) {
@@ -224,6 +234,29 @@ bool trig_square_argument(const std::shared_ptr<const SymbolicNode>& node,
     }
     argument = function->arguments()[0];
     return true;
+}
+
+std::optional<ExprPtr> unwrap_trig_negated_argument(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node);
+    if (!multiply) return std::nullopt;
+
+    bool found_negative_one = false;
+    std::vector<std::shared_ptr<const SymbolicNode>> remaining;
+    remaining.reserve(multiply->operands().size());
+    for (const auto& operand : multiply->operands()) {
+        if (!found_negative_one && exact_integer_node(operand, -1)) {
+            found_negative_one = true;
+            continue;
+        }
+        remaining.push_back(operand);
+    }
+    if (!found_negative_one || remaining.empty()) return std::nullopt;
+    if (remaining.size() == 1) {
+        return lamina::detail::make_expression_ptr(remaining.front());
+    }
+    return lamina::detail::make_expression_ptr(
+        SymbolicFactory::create_multiply(std::move(remaining)))->simplify();
 }
 
 ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& node) {
@@ -308,6 +341,21 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
             auto child = rewrite_trig_basic_identity(argument);
             args.push_back(lamina::detail::node(child));
         }
+
+        if (args.size() == 1) {
+            auto positive_arg = unwrap_trig_negated_argument(args[0]);
+            if (positive_arg && *positive_arg) {
+                if (function->type() == FunctionNode::FuncType::Sin) {
+                    return SymbolicExpr::multiply(
+                        SymbolicExpr::number(-1),
+                        SymbolicExpr::sin(*positive_arg))->simplify();
+                }
+                if (function->type() == FunctionNode::FuncType::Cos) {
+                    return SymbolicExpr::cos(*positive_arg)->simplify();
+                }
+            }
+        }
+
         return lamina::detail::make_expression_ptr(
             lamina::detail::make_node<FunctionNode>(function->type(),
                                                     std::move(args)))->simplify();
@@ -325,14 +373,15 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
 }
 
 ExprPtr rewrite_exp_log_basic_identity(
-    const std::shared_ptr<const SymbolicNode>& node) {
+    const std::shared_ptr<const SymbolicNode>& node,
+    const AssumptionContext* assumptions) {
     if (!node) return nullptr;
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         std::vector<std::shared_ptr<const SymbolicNode>> operands;
         operands.reserve(add->operands().size());
         for (const auto& operand : add->operands()) {
-            auto child = rewrite_exp_log_basic_identity(operand);
+            auto child = rewrite_exp_log_basic_identity(operand, assumptions);
             operands.push_back(lamina::detail::node(child));
         }
         return lamina::detail::make_expression_ptr(
@@ -343,7 +392,7 @@ ExprPtr rewrite_exp_log_basic_identity(
         std::vector<std::shared_ptr<const SymbolicNode>> operands;
         operands.reserve(multiply->operands().size());
         for (const auto& operand : multiply->operands()) {
-            auto child = rewrite_exp_log_basic_identity(operand);
+            auto child = rewrite_exp_log_basic_identity(operand, assumptions);
             operands.push_back(lamina::detail::node(child));
         }
         return lamina::detail::make_expression_ptr(
@@ -351,8 +400,8 @@ ExprPtr rewrite_exp_log_basic_identity(
     }
 
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        auto base = rewrite_exp_log_basic_identity(power->base());
-        auto exponent = rewrite_exp_log_basic_identity(power->exponent());
+        auto base = rewrite_exp_log_basic_identity(power->base(), assumptions);
+        auto exponent = rewrite_exp_log_basic_identity(power->exponent(), assumptions);
         return SymbolicExpr::power(base, exponent)->simplify();
     }
 
@@ -360,7 +409,7 @@ ExprPtr rewrite_exp_log_basic_identity(
         std::vector<std::shared_ptr<const SymbolicNode>> args;
         args.reserve(function->arguments().size());
         for (const auto& argument : function->arguments()) {
-            auto child = rewrite_exp_log_basic_identity(argument);
+            auto child = rewrite_exp_log_basic_identity(argument, assumptions);
             args.push_back(lamina::detail::node(child));
         }
 
@@ -372,6 +421,21 @@ ExprPtr rewrite_exp_log_basic_identity(
             args.size() == 1 && exact_integer_node(args[0], 1)) {
             return SymbolicExpr::number(0);
         }
+        if (function->type() == FunctionNode::FuncType::Exp &&
+            args.size() == 1) {
+            auto inner_ln = std::dynamic_pointer_cast<const FunctionNode>(args[0]);
+            if (inner_ln && inner_ln->type() == FunctionNode::FuncType::Ln &&
+                inner_ln->arguments().size() == 1) {
+                auto ln_arg = lamina::detail::make_expression_ptr(
+                    inner_ln->arguments()[0]);
+                const bool known_positive = inner_ln->arguments()[0]->is_positive() ||
+                    (assumptions &&
+                     assumptions->is_positive(*ln_arg) == Tribool::True);
+                if (known_positive) {
+                    return ln_arg->simplify();
+                }
+            }
+        }
 
         return lamina::detail::make_expression_ptr(
             lamina::detail::make_node<FunctionNode>(function->type(),
@@ -379,8 +443,10 @@ ExprPtr rewrite_exp_log_basic_identity(
     }
 
     if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        auto real_part = rewrite_exp_log_basic_identity(complex_node->real());
-        auto imag_part = rewrite_exp_log_basic_identity(complex_node->imag());
+        auto real_part = rewrite_exp_log_basic_identity(complex_node->real(),
+                                                        assumptions);
+        auto imag_part = rewrite_exp_log_basic_identity(complex_node->imag(),
+                                                        assumptions);
         auto value = complex(real_part, imag_part);
         if (!value) throw std::runtime_error(value.error().message);
         return value.value()->simplify();
@@ -516,6 +582,11 @@ Result<std::optional<ExprSet>> try_lsr_closed_form_rational_poly_roots(
     if (!equation) {
         return Result<std::optional<ExprSet>>::failure(
             CasErrc::InvalidArgument, "equation cannot be null",
+            kSolveExprSetOperation);
+    }
+    if (variable.empty()) {
+        return Result<std::optional<ExprSet>>::failure(
+            CasErrc::InvalidArgument, "solve variable cannot be empty",
             kSolveExprSetOperation);
     }
 
@@ -723,6 +794,12 @@ Result<ApproxComplex> evaluate_complex_node(
             *lamina::detail::make_expression_ptr(power->exponent()),
             bindings, context);
         if (!exponent) return eval_complex_failure(exponent.error());
+        if (!exponent.value().is_finite() ||
+            !std::isfinite(exponent.value().value)) {
+            return complex_failure(CasErrc::NumericFailure,
+                                   "complex power exponent must be finite",
+                                   kEvalComplexOperation);
+        }
         const double exponent_value = exponent.value().value;
         if (!is_integer_double(exponent_value) ||
             std::abs(exponent_value) > 64.0) {
@@ -748,6 +825,45 @@ Result<ApproxComplex> evaluate_complex_node(
 }
 
 } // namespace
+
+Result<EqvProfile> eqv_profile_from_name(const std::string& name) {
+    if (name == "Core") {
+        return Result<EqvProfile>::success(EqvProfile::Core);
+    }
+    if (name == "Trig-Basic") {
+        return Result<EqvProfile>::success(EqvProfile::TrigBasic);
+    }
+    if (name == "ExpLog-Basic") {
+        return Result<EqvProfile>::success(EqvProfile::ExpLogBasic);
+    }
+    return eqv_profile_failure("unsupported equivalence profile: " + name);
+}
+
+Result<void> set_eqv_profile(EqvOptions& options,
+                             const std::string& name) {
+    auto profile = eqv_profile_from_name(name);
+    if (!profile) {
+        return Result<void>::failure(profile.error());
+    }
+    options.profile = profile.value();
+    return Result<void>::success();
+}
+
+Result<void> set_eqv_budget(EqvOptions& options,
+                            std::size_t steps,
+                            std::size_t depth,
+                            std::size_t growth) {
+    EqvOptions candidate = options;
+    candidate.budget.max_rewrite_steps = steps;
+    candidate.budget.max_rewrite_depth = depth;
+    candidate.budget.max_node_growth_factor = growth;
+    auto valid = validate_eqv_options(candidate);
+    if (!valid) {
+        return valid;
+    }
+    options = candidate;
+    return Result<void>::success();
+}
 
 ExprSet::ExprSet(std::vector<ExprPtr> elements)
     : elements_(std::move(elements)) {}
@@ -907,6 +1023,45 @@ ExprResult approx_real(double value) {
     }
 }
 
+ExprResult constant_symbol(const char* name) {
+    try {
+        auto expression = SymbolicExpr::variable(name);
+        if (!expression || !lamina::detail::node(expression)) {
+            return expression_failure(CasErrc::InternalInvariant,
+                                      "constant factory returned null",
+                                      kConstantOperation);
+        }
+        return ExprResult::success(std::move(expression));
+    } catch (const std::bad_alloc&) {
+        return expression_failure(CasErrc::ResourceLimit,
+                                  "constant allocation failed",
+                                  kConstantOperation);
+    } catch (const std::exception& error) {
+        return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                  kConstantOperation);
+    }
+}
+
+ExprResult pi() {
+    return constant_symbol("pi");
+}
+
+ExprResult e() {
+    return constant_symbol("e");
+}
+
+ExprResult phi() {
+    return constant_symbol("phi");
+}
+
+ExprResult i() {
+    return imaginary_unit();
+}
+
+ExprResult I() {
+    return imaginary_unit();
+}
+
 ExprResult imaginary_unit() {
     auto zero = integer(0);
     if (!zero) return ExprResult::failure(zero.error());
@@ -1001,7 +1156,16 @@ ExprResult abs(const ExprPtr& expression) {
 Result<ApproxReal> evalf(const SymbolicExpr& expression,
                          const NumericBindings& bindings,
                          ComputationContext& context) {
-    return evaluate_numeric(expression, bindings, context);
+    auto evaluated = evaluate_numeric(expression, bindings, context);
+    if (!evaluated) return evaluated;
+    if (!evaluated.value().is_finite() ||
+        !std::isfinite(evaluated.value().value)) {
+        return Result<ApproxReal>::failure(
+            CasErrc::NumericFailure,
+            "LSR evalf produced a non-finite result",
+            kEvalfOperation);
+    }
+    return evaluated;
 }
 
 Result<ApproxReal> evalf(const SymbolicExpr& expression,
@@ -1122,6 +1286,34 @@ ExprSetResult solve_expr_set(const ExprPtr& equation,
                              const SolveOptions& options) {
     ComputationContext context;
     return solve_expr_set(equation, variable, context, options);
+}
+
+ExprSetResult roots(const ExprPtr& expression,
+                    const std::string& variable,
+                    ComputationContext& context,
+                    const SolveOptions& options) {
+    return solve_expr_set(expression, variable, context, options);
+}
+
+ExprSetResult roots(const ExprPtr& expression,
+                    const std::string& variable,
+                    const SolveOptions& options) {
+    ComputationContext context;
+    return roots(expression, variable, context, options);
+}
+
+ExprSetResult solve(const ExprPtr& equation,
+                    const std::string& variable,
+                    ComputationContext& context,
+                    const SolveOptions& options) {
+    return solve_expr_set(equation, variable, context, options);
+}
+
+ExprSetResult solve(const ExprPtr& equation,
+                    const std::string& variable,
+                    const SolveOptions& options) {
+    ComputationContext context;
+    return solve(equation, variable, context, options);
 }
 
 const char* error_name(CasErrc code) noexcept {
@@ -1252,9 +1444,9 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
             auto exp_log_step = context.consume_steps(8, kEquivalentOperation);
             if (!exp_log_step) return Result<bool>::failure(exp_log_step.error());
             auto exp_log_lhs = rewrite_exp_log_basic_identity(
-                lamina::detail::node(lhs));
+                lamina::detail::node(lhs), context.assumptions().get());
             auto exp_log_rhs = rewrite_exp_log_basic_identity(
-                lamina::detail::node(rhs));
+                lamina::detail::node(rhs), context.assumptions().get());
             EqvOptions core_options = options;
             core_options.profile = EqvProfile::Core;
             return equivalent_core(*exp_log_lhs, *exp_log_rhs, context,

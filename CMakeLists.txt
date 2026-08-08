@@ -125,15 +125,14 @@ endif()
 
 target_include_directories(lmcas PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LMMC/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_link_libraries(lmcas
     PUBLIC LammpCore
-    PRIVATE
-    $<BUILD_INTERFACE:lmmc>
+    PRIVATE lmmc
 )
 
 if(LMCAS_ENABLE_SANITIZERS OR LMCAS_ENABLE_TSAN)
@@ -165,14 +164,14 @@ endif()
 # ============================================================
 if(LMCAS_BUILD_BENCHMARKS)
     add_executable(benchmark_all benchmarks/benchmark_all.cpp)
-    target_link_libraries(benchmark_all PRIVATE lmcas LammpCore)
+    target_link_libraries(benchmark_all PRIVATE lmcas)
     target_compile_definitions(benchmark_all PRIVATE _SYMBOLIC_BENCHMARK)
 endif()
 
 # ============================================================
 # Install / package config
 # ============================================================
-install(TARGETS lmcas lmmc
+install(TARGETS lmcas
     EXPORT LMCASTargets
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
