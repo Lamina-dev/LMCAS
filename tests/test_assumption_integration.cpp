@@ -1,17 +1,3 @@
-/**
- * @file test_assumption_integration.cpp
- * @brief Property tests for integration subsystem backward compatibility (Task 11.6).
- *
- * Property tested:
- * - Property 19: Integration subsystem backward compatibility — For any call
- *   without AssumptionContext (nullptr), behavior SHALL be identical to current
- *   implementation.
- *
- * Validates: Requirements 12.4, 13.4, 14.4, 15.4, 16.4
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -30,9 +16,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -55,13 +38,9 @@ static std::string node_to_string(const std::shared_ptr<const SymbolicNode>& nod
     return pv.get_result();
 }
 
-// ============================================================
-// Property 19: Integrator with nullptr context produces same results
-// **Validates: Requirements 12.4**
-// ============================================================
 
-static void test_property19_integrator_nullptr_backward_compat() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: Integrator with nullptr context produces same results as before");
+static void test_integrator_nullptr_backward_compat() {
+    TEST_CASE("Integrator with nullptr context produces same results as before");
 
     rc::check("Integrator with nullptr context is identical to default Integrator for polynomial integrands", []() {
         // Generate a random polynomial integrand: a*x^n where a in [1,5], n in [0,4]
@@ -90,8 +69,8 @@ static void test_property19_integrator_nullptr_backward_compat() {
     });
 }
 
-static void test_property19_integrator_trig_nullptr() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: Integrator nullptr for trig functions");
+static void test_integrator_trig_nullptr() {
+    TEST_CASE("Integrator nullptr for trig functions");
 
     // Test sin(x), cos(x), exp(x) — known integrals
     {
@@ -138,13 +117,9 @@ static void test_property19_integrator_trig_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: LimitVisitor with nullptr context produces same results
-// **Validates: Requirements 13.4**
-// ============================================================
 
-static void test_property19_limit_nullptr_backward_compat() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: LimitVisitor with nullptr context produces same results as before");
+static void test_limit_nullptr_backward_compat() {
+    TEST_CASE("LimitVisitor with nullptr context produces same results as before");
 
     rc::check("LimitVisitor with nullptr context is identical to default LimitVisitor", []() {
         // Generate a random polynomial: a*x + b where a in [1,5], b in [-3,3]
@@ -180,8 +155,8 @@ static void test_property19_limit_nullptr_backward_compat() {
     });
 }
 
-static void test_property19_limit_trig_nullptr() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: LimitVisitor nullptr for trig at 0");
+static void test_limit_trig_nullptr() {
+    TEST_CASE("LimitVisitor nullptr for trig at 0");
 
     // lim x→0 sin(x) = 0
     {
@@ -227,13 +202,9 @@ static void test_property19_limit_trig_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: Series expansion with nullptr context produces same results
-// **Validates: Requirements 14.4**
-// ============================================================
 
-static void test_property19_series_nullptr_backward_compat() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: Series expansion with nullptr context produces same results as before");
+static void test_series_nullptr_backward_compat() {
+    TEST_CASE("Series expansion with nullptr context produces same results as before");
 
     rc::check("Series expansion with nullptr context is identical to default for exp(x)", []() {
         int order = rc::gen::inRange(2, 6);
@@ -255,8 +226,8 @@ static void test_property19_series_nullptr_backward_compat() {
     });
 }
 
-static void test_property19_series_sin_cos_nullptr() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: Series nullptr for sin/cos");
+static void test_series_sin_cos_nullptr() {
+    TEST_CASE("Series nullptr for sin/cos");
 
     // sin(x) series at 0, order 5
     {
@@ -290,13 +261,9 @@ static void test_property19_series_sin_cos_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: ODE solver with nullptr context produces same results
-// **Validates: Requirements 15.4**
-// ============================================================
 
-static void test_property19_ode_nullptr_backward_compat() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: ODE solver with nullptr context produces same results as before");
+static void test_ode_nullptr_backward_compat() {
+    TEST_CASE("ODE solver with nullptr context produces same results as before");
 
     // Test solve_separable_ode: dy/dx = x/y
     {
@@ -331,8 +298,8 @@ static void test_property19_ode_nullptr_backward_compat() {
     }
 }
 
-static void test_property19_ode_linear_nullptr() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: ODE linear solvers with nullptr");
+static void test_ode_linear_nullptr() {
+    TEST_CASE("ODE linear solvers with nullptr");
 
     // Test solve_linear1_ode: dy/dx + 2*y = 0
     {
@@ -364,13 +331,9 @@ static void test_property19_ode_linear_nullptr() {
     }
 }
 
-// ============================================================
-// Property 19: Matcher with nullptr context produces same results
-// **Validates: Requirements 16.4**
-// ============================================================
 
-static void test_property19_matcher_nullptr_backward_compat() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: Matcher with nullptr context produces same results as before");
+static void test_matcher_nullptr_backward_compat() {
+    TEST_CASE("Matcher with nullptr context produces same results as before");
 
     rc::check("Matcher::match with nullptr context is identical to default match", []() {
         // Generate a random pattern: wildcard + number
@@ -410,8 +373,8 @@ static void test_property19_matcher_nullptr_backward_compat() {
     });
 }
 
-static void test_property19_rewrite_engine_nullptr() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 19: RewriteEngine with nullptr context");
+static void test_rewrite_engine_nullptr() {
+    TEST_CASE("RewriteEngine with nullptr context");
 
     // Test that RewriteEngine with nullptr context behaves identically to default
     // Rule: x + 0 -> x
@@ -473,30 +436,22 @@ static void test_property19_rewrite_engine_nullptr() {
     }
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 19: Integrator backward compatibility (Req 12.4)
-    test_property19_integrator_nullptr_backward_compat();
-    test_property19_integrator_trig_nullptr();
+    test_integrator_nullptr_backward_compat();
+    test_integrator_trig_nullptr();
 
-    // Property 19: LimitVisitor backward compatibility (Req 13.4)
-    test_property19_limit_nullptr_backward_compat();
-    test_property19_limit_trig_nullptr();
+    test_limit_nullptr_backward_compat();
+    test_limit_trig_nullptr();
 
-    // Property 19: Series expansion backward compatibility (Req 14.4)
-    test_property19_series_nullptr_backward_compat();
-    test_property19_series_sin_cos_nullptr();
+    test_series_nullptr_backward_compat();
+    test_series_sin_cos_nullptr();
 
-    // Property 19: ODE solver backward compatibility (Req 15.4)
-    test_property19_ode_nullptr_backward_compat();
-    test_property19_ode_linear_nullptr();
+    test_ode_nullptr_backward_compat();
+    test_ode_linear_nullptr();
 
-    // Property 19: Matcher backward compatibility (Req 16.4)
-    test_property19_matcher_nullptr_backward_compat();
-    test_property19_rewrite_engine_nullptr();
+    test_matcher_nullptr_backward_compat();
+    test_rewrite_engine_nullptr();
 
     return TEST_REPORT();
 }

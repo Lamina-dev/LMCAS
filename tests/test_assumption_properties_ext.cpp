@@ -1,12 +1,3 @@
-/**
- * @file test_assumption_properties_ext.cpp
- * @brief Property tests for periodicity round-trip (Task 5.8).
- *
- * Properties tested:
- * - Property 11: Periodicity round-trip
- *
- * Validates: Requirements 11.2, 11.3
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -26,9 +17,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
@@ -84,13 +72,9 @@ static std::optional<double> extract_numeric(const SymbolicExpr& expr) {
     return std::nullopt;
 }
 
-// ============================================================
-// Property 11: Periodicity round-trip
-// Validates: Requirements 11.2, 11.3
-// ============================================================
 
 static void test_periodicity_declared_symbol_roundtrip() {
-    TEST_CASE("Property 11: Declared periodic symbol — get_period returns declared period");
+    TEST_CASE("Declared periodic symbol — get_period returns declared period");
 
     AssumptionContext ctx;
     auto period_expr = make_number_expr(5.0);
@@ -118,7 +102,7 @@ static void test_periodicity_declared_symbol_roundtrip() {
 }
 
 static void test_periodicity_declared_symbol_various_periods() {
-    TEST_CASE("Property 11: Multiple symbols with different periods — round-trip");
+    TEST_CASE("Multiple symbols with different periods — round-trip");
 
     AssumptionContext ctx;
 
@@ -173,7 +157,7 @@ static void test_periodicity_declared_symbol_various_periods() {
 }
 
 static void test_periodicity_sin_auto_inferred() {
-    TEST_CASE("Property 11: sin(x) has auto-inferred period 2*pi");
+    TEST_CASE("sin(x) has auto-inferred period 2*pi");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -197,7 +181,7 @@ static void test_periodicity_sin_auto_inferred() {
 }
 
 static void test_periodicity_cos_auto_inferred() {
-    TEST_CASE("Property 11: cos(x) has auto-inferred period 2*pi");
+    TEST_CASE("cos(x) has auto-inferred period 2*pi");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -219,7 +203,7 @@ static void test_periodicity_cos_auto_inferred() {
 }
 
 static void test_periodicity_tan_auto_inferred() {
-    TEST_CASE("Property 11: tan(x) has auto-inferred period pi");
+    TEST_CASE("tan(x) has auto-inferred period pi");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -241,7 +225,7 @@ static void test_periodicity_tan_auto_inferred() {
 }
 
 static void test_periodicity_non_periodic_function() {
-    TEST_CASE("Property 11: exp(x) is NOT periodic");
+    TEST_CASE("exp(x) is NOT periodic");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -258,7 +242,7 @@ static void test_periodicity_non_periodic_function() {
 }
 
 static void test_periodicity_non_periodic_variable() {
-    TEST_CASE("Property 11: Undeclared variable is not periodic");
+    TEST_CASE("Undeclared variable is not periodic");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -275,7 +259,7 @@ static void test_periodicity_non_periodic_variable() {
 }
 
 static void test_periodicity_property_store_roundtrip() {
-    TEST_CASE("Property 11: PropertyStore declare_periodic / get_period / is_periodic round-trip");
+    TEST_CASE("PropertyStore declare_periodic / get_period / is_periodic round-trip");
 
     PropertyStore store;
 
@@ -301,7 +285,7 @@ static void test_periodicity_property_store_roundtrip() {
 }
 
 static void test_periodicity_ln_not_periodic() {
-    TEST_CASE("Property 11: ln(x) is NOT periodic");
+    TEST_CASE("ln(x) is NOT periodic");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -317,12 +301,8 @@ static void test_periodicity_ln_not_periodic() {
         "ln(x) has no inferred period");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 11: Periodicity round-trip
     test_periodicity_declared_symbol_roundtrip();
     test_periodicity_declared_symbol_various_periods();
     test_periodicity_sin_auto_inferred();

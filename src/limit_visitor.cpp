@@ -262,9 +262,6 @@ int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
     return 0;
 }
 
-// ============================================================================
-/// PiecewiseNode limit handling and direction-aware sign evaluation
-// ============================================================================
 
 /**
  * @brief 处理分段函数节点的极限。
@@ -461,9 +458,6 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_abs_li
 }
 
 
-// ============================================================================
-/// Limits at infinity enhancements
-// ============================================================================
 
 /**
  * @brief 判断当前极限点是否为正无穷。

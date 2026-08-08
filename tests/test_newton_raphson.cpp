@@ -437,7 +437,7 @@ int main() {
         EXPECT_TRUE(intervals.size() == 2, "x^2-2 should have 2 isolated real roots");
     }
 
-    TEST_CASE("Property 9: Sturm sequence root count accuracy");
+    TEST_CASE("Sturm sequence root count accuracy");
     {
         const int NUM_TRIALS = 60;
         int pass_count = 0;
@@ -466,7 +466,7 @@ int main() {
 
             if (!count_matches) {
                 std::ostringstream msg;
-                msg << "Property 9 Trial " << trial << ": Sturm found "
+                msg << "Trial " << trial << ": Sturm found "
                     << sturm_count << " roots, expected " << expected_distinct_real_roots
                     << " distinct real roots (degree " << deg << ", roots: [";
                 for (size_t k = 0; k < all_roots.size(); ++k) {
@@ -495,7 +495,7 @@ int main() {
                 if (!contains_known_root) {
                     intervals_valid = false;
                     std::ostringstream msg;
-                    msg << "Property 9 Trial " << trial
+                    msg << "Trial " << trial
                         << ": interval [" << lo << "," << hi
                         << "] does not contain any known root. Known roots: [";
                     bool first = true;
@@ -552,7 +552,7 @@ int main() {
 
                 if (closed_form_count > sturm_count) {
                     std::ostringstream msg;
-                    msg << "Property 9 Trial " << trial
+                    msg << "Trial " << trial
                         << ": closed-form found " << closed_form_count
                         << " real roots but Sturm only found " << sturm_count
                         << " (degree " << deg << ")";
@@ -568,13 +568,13 @@ int main() {
 
         {
             std::ostringstream msg;
-            msg << "Property 9: Sturm root count accuracy: " << pass_count
+            msg << "Sturm root count accuracy: " << pass_count
                 << "/" << NUM_TRIALS << " trials passed";
             EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
         }
     }
 
-    TEST_CASE("Property 8: Newton-Raphson residual bound");
+    TEST_CASE("Newton-Raphson residual bound");
     {
         const int NUM_TRIALS = 35;
         const lmmc_real_t TOLERANCE = 1e-12;
@@ -624,7 +624,7 @@ int main() {
                     if (residual >= TOLERANCE * 100) {
                         trial_ok = false;
                         std::ostringstream msg;
-                        msg << "Property 8 Trial " << trial << ": root=" << result->value
+                        msg << "Trial " << trial << ": root=" << result->value
                             << " residual=" << residual << " >= " << (TOLERANCE * 100)
                             << " (degree " << deg << ", roots: [";
                         for (size_t k = 0; k < known_roots.size(); ++k) {
@@ -644,7 +644,7 @@ int main() {
 
         {
             std::ostringstream msg;
-            msg << "Property 8: Newton residual bound: " << pass_count
+            msg << "Newton residual bound: " << pass_count
                 << "/" << NUM_TRIALS << " trials passed ("
                 << total_roots_checked << " roots checked, tolerance=" << TOLERANCE << ")";
             EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());

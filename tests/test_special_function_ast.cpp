@@ -1,28 +1,3 @@
-// Feature: integration-enhancements, Property 8: Special function AST node correctness
-//
-// Validates: Requirements 5.7
-//
-// Property 8: For any recognized special function integrand pattern
-// (exp(-x^2), exp(x)/x, sin(x)/x, cos(x)/x, 1/ln(x)), the integration result
-// SHALL contain a FunctionNode whose `type` field matches the expected
-// FuncType enum value (Erf, Ei, Si, Ci, Li respectively).
-//
-// Approach
-// --------
-//   * For each (integrand, expected FuncType) pair listed below, build the
-//     integrand expression by AST construction, invoke
-//     Integrator::integrate, then walk the resulting AST recursively and
-//     check that *some* FunctionNode in the tree has the expected type.
-//   * The five required patterns:
-//       exp(-x^2)   -> FuncType::Erf
-//       exp(x)/x    -> FuncType::Ei
-//       sin(x)/x    -> FuncType::Si
-//       cos(x)/x    -> FuncType::Ci
-//       1/ln(x)     -> FuncType::Li
-//   * One scaled bonus pattern is also exercised:
-//       exp(-2*x^2) -> FuncType::Erf (with scaled argument sqrt(2)*x)
-//   * For each case the test reports both the matched FuncType (success) or
-//     the full result AST (failure) so failures are diagnosable.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -182,7 +157,7 @@ void verify_case(const Case& c) {
 } // anonymous namespace
 
 int main() {
-    TEST_CASE("Property 8: Special function AST node correctness");
+    TEST_CASE("Special function AST node correctness");
 
     for (const auto& c : cases()) {
         verify_case(c);

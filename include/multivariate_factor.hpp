@@ -48,9 +48,7 @@ struct MultiFactorResult {
  */
 LAMINA_API MultiFactorResult factor_multivariate(const MultiPoly& poly);
 
-/// ---------------------------------------------------------------------------
 /// 内部算法组件（供测试使用）
-/// ---------------------------------------------------------------------------
 
 /**
  * @brief 计算多元容度
@@ -152,9 +150,7 @@ LAMINA_API std::vector<MultiPoly> multivariate_diophantine(
     const Rational& eval_point,
     int degree_bound);
 
-/// ---------------------------------------------------------------------------
 /// 快速路径检测（detail 命名空间）
-/// ---------------------------------------------------------------------------
 
 namespace detail {
 

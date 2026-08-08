@@ -1,14 +1,3 @@
-/**
- * @file test_assumption_relation_ext.cpp
- * @brief Unit tests for RelationStore extensions: reversed patterns, transitive closure, and cap.
- *
- * Tests:
- *   - Reversed patterns for all five operators (0 LT var → Positive, etc.)
- *   - Transitive chain of 3+ relations (x GT y, y GT z → x GT z stored)
- *   - 64-relation cap behavior (create enough relations to trigger the cap, verify it stops)
- *
- * Validates: Requirements 3.5, 24.1, 24.2, 24.3, 24.4, 24.5
- */
 
 #include "test_common.hpp"
 #include "relation_store.hpp"
@@ -29,12 +18,9 @@ static SymbolicExpr make_zero() {
     return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 }
 
-// ============================================================================
-// Reversed pattern tests (Requirement 24)
-// ============================================================================
 
 void test_reversed_0_lt_var_positive() {
-    TEST_CASE("Reversed: 0 LT var → Positive (Req 24.1)");
+    TEST_CASE("Reversed: 0 LT var → Positive");
 
     RelationStore rs;
     PropertyStore ps;
@@ -54,7 +40,7 @@ void test_reversed_0_lt_var_positive() {
 }
 
 void test_reversed_0_gt_var_negative() {
-    TEST_CASE("Reversed: 0 GT var → Negative (Req 24.2)");
+    TEST_CASE("Reversed: 0 GT var → Negative");
 
     RelationStore rs;
     PropertyStore ps;
@@ -74,7 +60,7 @@ void test_reversed_0_gt_var_negative() {
 }
 
 void test_reversed_0_geq_var_nonpositive() {
-    TEST_CASE("Reversed: 0 GEQ var → NonPositive (Req 24.3)");
+    TEST_CASE("Reversed: 0 GEQ var → NonPositive");
 
     RelationStore rs;
     PropertyStore ps;
@@ -90,7 +76,7 @@ void test_reversed_0_geq_var_nonpositive() {
 }
 
 void test_reversed_0_leq_var_nonnegative() {
-    TEST_CASE("Reversed: 0 LEQ var → NonNegative (Req 24.4)");
+    TEST_CASE("Reversed: 0 LEQ var → NonNegative");
 
     RelationStore rs;
     PropertyStore ps;
@@ -106,7 +92,7 @@ void test_reversed_0_leq_var_nonnegative() {
 }
 
 void test_reversed_0_neq_var_nonzero() {
-    TEST_CASE("Reversed: 0 NEQ var → NonZero (Req 24.5)");
+    TEST_CASE("Reversed: 0 NEQ var → NonZero");
 
     RelationStore rs;
     PropertyStore ps;
@@ -151,12 +137,9 @@ void test_reversed_all_operators_comprehensive() {
     }
 }
 
-// ============================================================================
-// Transitive closure tests (Requirement 3)
-// ============================================================================
 
 void test_transitive_chain_3_gt() {
-    TEST_CASE("Transitive: x GT y, y GT z → x GT z (Req 3.1)");
+    TEST_CASE("Transitive: x GT y, y GT z → x GT z");
 
     RelationStore rs;
     PropertyStore ps;
@@ -174,7 +157,7 @@ void test_transitive_chain_3_gt() {
 }
 
 void test_transitive_chain_geq_gt() {
-    TEST_CASE("Transitive: x GEQ y, y GT z → x GT z (Req 3.2)");
+    TEST_CASE("Transitive: x GEQ y, y GT z → x GT z");
 
     RelationStore rs;
     PropertyStore ps;
@@ -210,7 +193,7 @@ void test_transitive_chain_gt_geq() {
 }
 
 void test_transitive_chain_geq_geq() {
-    TEST_CASE("Transitive: x GEQ y, y GEQ z → x GEQ z (Req 3.3)");
+    TEST_CASE("Transitive: x GEQ y, y GEQ z → x GEQ z");
 
     RelationStore rs;
     PropertyStore ps;
@@ -270,12 +253,9 @@ void test_transitive_no_closure_for_lt() {
                  "LT does not participate in transitive closure");
 }
 
-// ============================================================================
-// 64-relation cap test (Requirement 3.5)
-// ============================================================================
 
 void test_transitive_cap_64() {
-    TEST_CASE("Transitive: 64-relation cap stops deduction (Req 3.5)");
+    TEST_CASE("Transitive: 64-relation cap stops deduction");
 
     RelationStore rs;
     PropertyStore ps;
@@ -352,12 +332,8 @@ void test_transitive_cap_64() {
                 "Not all 70 star variables should have the deduced relation (cap hit)");
 }
 
-// ============================================================================
-// main
-// ============================================================================
 
 int main() {
-    // Reversed pattern tests (Req 24)
     test_reversed_0_lt_var_positive();
     test_reversed_0_gt_var_negative();
     test_reversed_0_geq_var_nonpositive();
@@ -365,7 +341,6 @@ int main() {
     test_reversed_0_neq_var_nonzero();
     test_reversed_all_operators_comprehensive();
 
-    // Transitive closure tests (Req 3)
     test_transitive_chain_3_gt();
     test_transitive_chain_geq_gt();
     test_transitive_chain_gt_geq();
@@ -373,7 +348,6 @@ int main() {
     test_transitive_chain_4_variables();
     test_transitive_no_closure_for_lt();
 
-    // Cap test (Req 3.5)
     test_transitive_cap_64();
 
     return TEST_REPORT();

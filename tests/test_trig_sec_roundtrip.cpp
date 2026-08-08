@@ -1,29 +1,3 @@
-// Feature: integration-enhancements, Property 6: Trigonometric sec^n round-trip
-//
-// Validates: Requirements 3.8
-//
-// Property 6: For all even integers n with 2 <= n <= 8, integrating sec^n(x)
-// and differentiating the result SHALL yield an expression numerically equal
-// to sec^n(x) at sample points x in {0.3, 0.5, 0.7, 0.9, 1.1} within
-// tolerance 1e-10.
-//
-// Approach
-// --------
-//   * For every even integer n in {2, 4, 6, 8}, build the integrand
-//     sec(x)^n by direct AST construction (FunctionNode of FuncType::Sec
-//     wrapped in a PowerNode).
-//   * Run the integrator and verify the result is closed form (no leftover
-//     unevaluated integral nodes).
-//   * Symbolically differentiate the result via SymbolicExpr::differentiate.
-//   * For each sample point x in {0.3, 0.5, 0.7, 0.9, 1.1}, substitute,
-//     simplify, and numerically evaluate both the integrand sec^n(x) and
-//     the derivative of the antiderivative. test_numeric_eval has been
-//     extended to evaluate FunctionNode::FuncType::Sec via 1/cos(x).
-//   * Sample points where either side returns std::nullopt or non-finite
-//     values (e.g. due to cos(x) crossing zero) are skipped.
-//   * The test FAILS if any (n, x) pair produces a numeric mismatch above
-//     tolerance, or if any n in {2, 4, 6, 8} cannot be verified at any
-//     sample point.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -42,7 +16,6 @@ namespace {
 constexpr const char* kVarName = "x";
 constexpr double kTolerance = 1e-10;
 
-// ----- AST helpers --------------------------------------------------------
 
 std::shared_ptr<SymbolicExpr> sec_of(std::shared_ptr<SymbolicExpr> arg) {
     using FT = FunctionNode::FuncType;
@@ -82,7 +55,6 @@ const std::vector<double>& sample_points() {
     return S;
 }
 
-// ----- Per-n verification -------------------------------------------------
 
 struct NReport {
     bool unevaluated = false;
@@ -164,7 +136,7 @@ NReport verify_n(int n) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 6: Trigonometric sec^n round-trip");
+    TEST_CASE("Trigonometric sec^n round-trip");
 
     const std::vector<int> ns = {2, 4, 6, 8};
 

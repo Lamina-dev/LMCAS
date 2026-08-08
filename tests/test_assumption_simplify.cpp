@@ -1,22 +1,3 @@
-/**
- * @file test_assumption_simplify.cpp
- * @brief Property tests for assumption-aware simplification (Properties 22-24).
- *
- * Feature: assumption-system, Properties 22-24: Assumption-aware simplification
- * Validates: Requirements 11.1-11.6
- *
- * Property 22: For any variable declared NonNegative, simplifying sqrt(x²) with
- *   the AssumptionContext should produce x; for any variable declared Real (but
- *   not NonNegative), simplifying sqrt(x²) should produce abs(x).
- *
- * Property 23: For any variable declared Positive, simplifying abs(x) should
- *   produce x; for any variable declared Negative, simplifying abs(x) should
- *   produce -x.
- *
- * Property 24: For any expression, simplifying without an AssumptionContext (null
- *   pointer) should produce the same result as the original NormalizationVisitor —
- *   no assumption-based rules should fire.
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -31,9 +12,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Normalize a node with an AssumptionContext.
 static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
@@ -118,13 +96,9 @@ static bool is_negation_of_var(const std::shared_ptr<const SymbolicNode>& node, 
     return is_variable(mul->operands()[1], name);
 }
 
-// ============================================================
-// Property 22: Assumption-aware sqrt(x²) simplification
-// Validates: Requirements 11.1, 11.4
-// ============================================================
 
 void test_sqrt_x_squared_nonnegative() {
-    TEST_CASE("Property 22: sqrt(x²) → x when x is NonNegative");
+    TEST_CASE("sqrt(x²) → x when x is NonNegative");
 
     // Test with multiple variable names
     std::vector<std::string> var_names = {"x", "y", "alpha", "t", "var1"};
@@ -145,7 +119,7 @@ void test_sqrt_x_squared_nonnegative() {
 }
 
 void test_sqrt_x_squared_positive() {
-    TEST_CASE("Property 22: sqrt(x²) → x when x is Positive (implies NonNegative)");
+    TEST_CASE("sqrt(x²) → x when x is Positive (implies NonNegative)");
 
     // Positive implies NonNegative, so the same rule should apply
     std::vector<std::string> var_names = {"a", "b", "c"};
@@ -165,7 +139,7 @@ void test_sqrt_x_squared_positive() {
 }
 
 void test_sqrt_x_squared_real_not_nonneg() {
-    TEST_CASE("Property 22: sqrt(x²) → abs(x) when x is Real but not NonNegative");
+    TEST_CASE("sqrt(x²) → abs(x) when x is Real but not NonNegative");
 
     // Declare x as Real only (not NonNegative)
     std::vector<std::string> var_names = {"x", "y", "z", "w"};
@@ -185,7 +159,7 @@ void test_sqrt_x_squared_real_not_nonneg() {
 }
 
 void test_sqrt_x_squared_integer_not_nonneg() {
-    TEST_CASE("Property 22: sqrt(x²) → abs(x) when x is Integer (implies Real) but not NonNegative");
+    TEST_CASE("sqrt(x²) → abs(x) when x is Integer (implies Real) but not NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -201,7 +175,7 @@ void test_sqrt_x_squared_integer_not_nonneg() {
 }
 
 void test_sqrt_x_squared_natural() {
-    TEST_CASE("Property 22: sqrt(x²) → x when x is Natural (NonNegative sign declared)");
+    TEST_CASE("sqrt(x²) → x when x is Natural (NonNegative sign declared)");
 
     AssumptionContext ctx;
     // Natural domain alone may not imply NonNegative sign in the current
@@ -219,13 +193,9 @@ void test_sqrt_x_squared_natural() {
                 "sqrt(k²) with Natural + NonNegative → k");
 }
 
-// ============================================================
-// Property 23: Assumption-aware abs() simplification
-// Validates: Requirements 11.2, 11.3
-// ============================================================
 
 void test_abs_positive() {
-    TEST_CASE("Property 23: abs(x) → x when x is Positive");
+    TEST_CASE("abs(x) → x when x is Positive");
 
     std::vector<std::string> var_names = {"x", "y", "alpha", "t", "var1"};
 
@@ -242,7 +212,7 @@ void test_abs_positive() {
 }
 
 void test_abs_negative() {
-    TEST_CASE("Property 23: abs(x) → -x when x is Negative");
+    TEST_CASE("abs(x) → -x when x is Negative");
 
     std::vector<std::string> var_names = {"x", "y", "z", "w"};
 
@@ -259,7 +229,7 @@ void test_abs_negative() {
 }
 
 void test_abs_nonnegative_not_positive() {
-    TEST_CASE("Property 23: abs(x) unchanged when x is NonNegative but not Positive");
+    TEST_CASE("abs(x) unchanged when x is NonNegative but not Positive");
 
     // NonNegative includes zero, so abs(x) should NOT simplify to x
     // (only Positive triggers the rule per the implementation)
@@ -279,7 +249,7 @@ void test_abs_nonnegative_not_positive() {
 }
 
 void test_abs_no_assumption() {
-    TEST_CASE("Property 23: abs(x) unchanged when x has no sign assumption");
+    TEST_CASE("abs(x) unchanged when x has no sign assumption");
 
     AssumptionContext ctx;
     // No assumptions about x
@@ -293,13 +263,9 @@ void test_abs_no_assumption() {
                 "abs(x) with no assumption remains abs(x)");
 }
 
-// ============================================================
-// Property 24: Backward-compatible simplification
-// Validates: Requirements 11.5, 11.6
-// ============================================================
 
 void test_backward_compat_sqrt_x_squared() {
-    TEST_CASE("Property 24: sqrt(x²) without context produces same result as default NormalizationVisitor");
+    TEST_CASE("sqrt(x²) without context produces same result as default NormalizationVisitor");
 
     // Without an AssumptionContext, sqrt(x²) should NOT be simplified
     // by assumption-based rules
@@ -320,7 +286,7 @@ void test_backward_compat_sqrt_x_squared() {
 }
 
 void test_backward_compat_abs_x() {
-    TEST_CASE("Property 24: abs(x) without context produces same result as default NormalizationVisitor");
+    TEST_CASE("abs(x) without context produces same result as default NormalizationVisitor");
 
     auto abs_x = make_abs(var("x"));
 
@@ -335,7 +301,7 @@ void test_backward_compat_abs_x() {
 }
 
 void test_backward_compat_various_expressions() {
-    TEST_CASE("Property 24: Various expressions without context match default visitor");
+    TEST_CASE("Various expressions without context match default visitor");
 
     // Test a variety of expressions to ensure no assumption rules fire
     std::vector<std::shared_ptr<const SymbolicNode>> expressions = {
@@ -380,7 +346,7 @@ void test_backward_compat_various_expressions() {
 }
 
 void test_backward_compat_no_assumption_rules_fire() {
-    TEST_CASE("Property 24: With context but no relevant assumptions, no rules fire");
+    TEST_CASE("With context but no relevant assumptions, no rules fire");
 
     // Create a context with assumptions for variable "a", but simplify
     // expressions involving variable "x" — no rules should fire for "x"
@@ -407,7 +373,7 @@ void test_backward_compat_no_assumption_rules_fire() {
 }
 
 void test_backward_compat_null_context_explicit() {
-    TEST_CASE("Property 24: NormalizationVisitor(nullptr) behaves like default constructor");
+    TEST_CASE("NormalizationVisitor(nullptr) behaves like default constructor");
 
     // Explicitly passing nullptr should behave identically to default constructor
     auto sqrt_x_sq = make_sqrt(make_power(var("x"), 2));
@@ -438,12 +404,9 @@ void test_backward_compat_null_context_explicit() {
                 "NormalizationVisitor(nullptr) = NormalizationVisitor() for abs(x)");
 }
 
-// ============================================================
-// Additional edge cases for completeness
-// ============================================================
 
 void test_sqrt_x_squared_in_larger_expression() {
-    TEST_CASE("Property 22: sqrt(x²) simplifies within a larger expression (Req 11.7)");
+    TEST_CASE("sqrt(x²) simplifies within a larger expression");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
@@ -484,7 +447,7 @@ void test_sqrt_x_squared_in_larger_expression() {
 }
 
 void test_abs_in_larger_expression() {
-    TEST_CASE("Property 23: abs(x) simplifies within a larger expression (Req 11.7)");
+    TEST_CASE("abs(x) simplifies within a larger expression");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -524,7 +487,7 @@ void test_abs_in_larger_expression() {
 }
 
 void test_scoped_assumption_simplification() {
-    TEST_CASE("Property 22/23: Scoped assumptions affect simplification correctly");
+    TEST_CASE("Scoped assumptions affect simplification correctly");
 
     AssumptionContext ctx;
 
@@ -549,25 +512,19 @@ void test_scoped_assumption_simplification() {
                 "sqrt(x²) after pop = root scope result (no simplification)");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 22: Assumption-aware sqrt(x²) simplification
     test_sqrt_x_squared_nonnegative();
     test_sqrt_x_squared_positive();
     test_sqrt_x_squared_real_not_nonneg();
     test_sqrt_x_squared_integer_not_nonneg();
     test_sqrt_x_squared_natural();
 
-    // Property 23: Assumption-aware abs() simplification
     test_abs_positive();
     test_abs_negative();
     test_abs_nonnegative_not_positive();
     test_abs_no_assumption();
 
-    // Property 24: Backward-compatible simplification
     test_backward_compat_sqrt_x_squared();
     test_backward_compat_abs_x();
     test_backward_compat_various_expressions();

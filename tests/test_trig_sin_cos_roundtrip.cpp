@@ -1,46 +1,3 @@
-// Feature: integration-enhancements, Property 4: Trigonometric sin^m·cos^n round-trip
-//
-// Validates: Requirements 3.1, 3.9
-//
-// Property 4: For all integer pairs (m, n) with m >= 0, n >= 0, and
-// m + n <= 8, integrating sin^m(x)·cos^n(x) and differentiating the
-// result SHALL yield an expression numerically equal to sin^m(x)·cos^n(x)
-// at sample points x in {0.5, 1.0, 1.5, 2.0, 2.5} within tolerance 1e-10.
-//
-// Approach
-// --------
-//   * Iterate (m, n) over all 45 integer pairs with m >= 0, n >= 0,
-//     m + n <= 8 (1 + 2 + ... + 9 = 45 pairs).
-//
-//   * For each pair, build the integrand sin^m(x)·cos^n(x) using the
-//     simplest AST form available:
-//       - m = n = 0  -> 1
-//       - m = k, n = 0 -> sin(x) for k=1, sin(x)^k for k>=2
-//       - m = 0, n = k -> cos(x) for k=1, cos(x)^k for k>=2
-//       - m >= 1, n >= 1 -> sin(x)^m * cos(x)^n
-//     (If the exponent is exactly 1 we skip the PowerNode wrapper so the
-//     expression stays in the canonical shape the trig-combination
-//     strategy expects.)
-//
-//   * Call Integrator::integrate(integrand, "x") to obtain a closed form.
-//     If the integrator returns an unevaluated integral node for any
-//     pair within the property's scope, that's a failure of Requirement
-//     3.1 and the test reports it as such.
-//
-//   * Differentiate the result symbolically.
-//
-//   * Numerically evaluate both the integrand and the derivative at the
-//     sample points x in {0.5, 1.0, 1.5, 2.0, 2.5} and compare within
-//     tolerance 1e-10. test_numeric_eval supports Sin/Cos/Exp/Ln/Sqrt/Abs
-//     plus the algebraic node kinds, which is sufficient for the
-//     antiderivatives produced by TrigCombinationStrategy (multiples of
-//     sin(k*x) / cos(k*x) and rational combinations thereof).
-//
-//   * The test FAILS if any pair produces a numeric mismatch above
-//     tolerance, an unevaluated integral, or a sample point whose values
-//     fail to evaluate (which would indicate the result contains a
-//     function the evaluator cannot handle and therefore the round-trip
-//     cannot be verified).
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -58,7 +15,6 @@ namespace {
 constexpr const char* kVarName = "x";
 constexpr double kTolerance = 1e-10;
 
-// ----- AST construction ---------------------------------------------------
 
 std::shared_ptr<SymbolicExpr> num_int(long long n) {
     return SymbolicExpr::number(n);
@@ -112,7 +68,6 @@ const std::vector<double>& sample_points() {
     return S;
 }
 
-// ----- Per-pair check -----------------------------------------------------
 
 struct PairReport {
     bool failed = false;
@@ -204,7 +159,7 @@ PairReport verify_pair(int m, int n) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 4: Trigonometric sin^m * cos^n round-trip");
+    TEST_CASE("Trigonometric sin^m * cos^n round-trip");
 
     int total_pairs = 0;
     int verified_pairs = 0;

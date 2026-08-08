@@ -1,13 +1,3 @@
-/**
- * @file test_assumption_enums.cpp
- * @brief Unit tests for extended enumerations and data structures (Task 1.3).
- *
- * Tests:
- * - Domain ordering with Algebraic level (specificity chain)
- * - Default values of new SymbolProperties fields
- *
- * Validates: Requirements 8.1, 8.4
- */
 
 #include "test_common.hpp"
 #include "assumption.hpp"
@@ -18,9 +8,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helper: domain specificity (mirrors PropertyStore internal logic)
-// ============================================================
 
 static int domain_specificity(Domain d) {
     switch (d) {
@@ -48,9 +35,6 @@ static std::string domain_name(Domain d) {
     return "?";
 }
 
-// ============================================================
-// Test: Domain ordering with Algebraic level
-// ============================================================
 
 static void test_domain_ordering() {
     TEST_CASE("Domain ordering: Complex < Real < Algebraic < Rational < Integer < Natural < PositiveInt");
@@ -158,9 +142,6 @@ static void test_domain_algebraic_no_downgrade() {
         "z remains Rational after Real declaration (no downgrade)");
 }
 
-// ============================================================
-// Test: Default values of new SymbolProperties fields
-// ============================================================
 
 static void test_default_symbol_properties() {
     TEST_CASE("SymbolProperties defaults: new fields have correct initial values");
@@ -213,9 +194,6 @@ static void test_default_new_fields_via_domain_declaration() {
         "Parity remains Unknown");
 }
 
-// ============================================================
-// Test: Monotonicity enum values exist
-// ============================================================
 
 static void test_monotonicity_enum() {
     TEST_CASE("Monotonicity enum: all values accessible");
@@ -235,9 +213,6 @@ static void test_monotonicity_enum() {
     EXPECT_TRUE(m4 != m5, "NonIncreasing != Unknown");
 }
 
-// ============================================================
-// Test: Definiteness enum values exist
-// ============================================================
 
 static void test_definiteness_enum() {
     TEST_CASE("Definiteness enum: all values accessible");
@@ -256,9 +231,6 @@ static void test_definiteness_enum() {
     EXPECT_TRUE(d2 != d4, "PositiveSemiDefinite != NegativeSemiDefinite");
 }
 
-// ============================================================
-// Test: Finiteness enum values exist
-// ============================================================
 
 static void test_finiteness_enum() {
     TEST_CASE("Finiteness enum: all values accessible");
@@ -272,9 +244,6 @@ static void test_finiteness_enum() {
     EXPECT_TRUE(f2 != f3, "Divergent != Unknown");
 }
 
-// ============================================================
-// Test: All seven Domain values are distinct
-// ============================================================
 
 static void test_all_domains_distinct() {
     TEST_CASE("Domain enum: all seven values are distinct");
@@ -292,9 +261,6 @@ static void test_all_domains_distinct() {
     }
 }
 
-// ============================================================
-// Test: Specificity values are strictly increasing
-// ============================================================
 
 static void test_specificity_strictly_increasing() {
     TEST_CASE("Domain specificity: values are strictly increasing through hierarchy");
@@ -313,9 +279,6 @@ static void test_specificity_strictly_increasing() {
     }
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     test_domain_ordering();

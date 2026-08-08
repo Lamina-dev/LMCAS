@@ -177,7 +177,7 @@ int main() {
         EXPECT_TRUE(sols.empty(), "3=0 equation -> empty (no solution exists)");
     }
 
-    TEST_CASE("Property 3: Root count invariant across strategies");
+    TEST_CASE("Root count invariant across strategies");
     {
         const int NUM_TRIALS = 60;
         int pass_count = 0;
@@ -211,7 +211,7 @@ int main() {
                 pass_count++;
             } else {
                 std::ostringstream msg;
-                msg << "Property 3 Trial " << trial << " degree=" << degree
+                msg << "Trial " << trial << " degree=" << degree
                     << " roots=[";
                 for (int i = 0; i < degree; ++i) {
                     if (i > 0) msg << ",";
@@ -225,13 +225,13 @@ int main() {
 
         {
             std::ostringstream msg;
-            msg << "Property 3: Root count invariant: " << pass_count
+            msg << "Root count invariant: " << pass_count
                 << "/" << NUM_TRIALS << " trials passed";
             EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
         }
     }
 
-    TEST_CASE("Property 13 (Part A): Linear backward compatibility");
+    TEST_CASE("(Part A): Linear backward compatibility");
     {
         const int NUM_LINEAR_TRIALS = 40;
         const double TOL = 1e-10;
@@ -255,7 +255,7 @@ int main() {
 
             if (sols.size() != 1) {
                 std::ostringstream msg;
-                msg << "Property 13 Linear Trial " << trial
+                msg << "Linear Trial " << trial
                     << " (a=" << a_val << ", b=" << b_val
                     << "): expected 1 root, got " << sols.size();
                 EXPECT_TRUE(false, msg.str());
@@ -269,7 +269,7 @@ int main() {
                 linear_pass_count++;
             } else {
                 std::ostringstream msg;
-                msg << "Property 13 Linear Trial " << trial
+                msg << "Linear Trial " << trial
                     << " (a=" << a_val << ", b=" << b_val
                     << "): expected root " << expected_root
                     << ", got " << actual_root;
@@ -279,13 +279,13 @@ int main() {
 
         {
             std::ostringstream msg;
-            msg << "Property 13 Linear: " << linear_pass_count << "/"
+            msg << "Linear: " << linear_pass_count << "/"
                 << NUM_LINEAR_TRIALS << " trials passed";
             EXPECT_TRUE(linear_pass_count == NUM_LINEAR_TRIALS, msg.str());
         }
     }
 
-    TEST_CASE("Property 13 (Part B): Quadratic backward compatibility");
+    TEST_CASE("(Part B): Quadratic backward compatibility");
     {
         const int NUM_QUAD_TRIALS = 40;
         const double TOL = 1e-10;
@@ -330,7 +330,7 @@ int main() {
                     }
                 }
                 std::ostringstream msg;
-                msg << "Property 13 Quadratic Trial " << trial
+                msg << "Quadratic Trial " << trial
                     << " (a=" << a_val << ", b=" << b_val << ", c=" << c_val
                     << ", disc=" << disc
                     << "): expected " << expected_count << " roots, got " << sols.size();
@@ -351,7 +351,7 @@ int main() {
 
                 if (!maybe_residual) {
                     std::ostringstream msg;
-                    msg << "Property 13 Quadratic Trial " << trial
+                    msg << "Quadratic Trial " << trial
                         << " root " << i << ": residual is not real-numerically evaluable"
                         << " (a=" << a_val << ", b=" << b_val << ", c=" << c_val << ")";
                     EXPECT_TRUE(false, msg.str());
@@ -362,7 +362,7 @@ int main() {
                 double residual = *maybe_residual;
                 if (std::abs(residual) >= TOL) {
                     std::ostringstream msg;
-                    msg << "Property 13 Quadratic Trial " << trial
+                    msg << "Quadratic Trial " << trial
                         << " root " << i << ": |f(r)| = " << std::abs(residual)
                         << " >= 1e-10"
                         << " (a=" << a_val << ", b=" << b_val << ", c=" << c_val << ")";
@@ -379,7 +379,7 @@ int main() {
 
         {
             std::ostringstream msg;
-            msg << "Property 13 Quadratic: " << quad_pass_count << "/"
+            msg << "Quadratic: " << quad_pass_count << "/"
                 << NUM_QUAD_TRIALS << " trials passed";
             EXPECT_TRUE(quad_pass_count == NUM_QUAD_TRIALS, msg.str());
         }

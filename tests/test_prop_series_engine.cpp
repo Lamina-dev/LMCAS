@@ -1,25 +1,9 @@
-/**
- * @file test_prop_series_engine.cpp
- * @brief 级数引擎属性测试。
- *
- * 使用随机生成的系数向量和多项式验证以下属性：
- * - Property 13: 幂级数加法逐项相加
- * - Property 14: 幂级数乘法满足柯西乘积
- * - Property 15: 傅里叶级数对称性（偶/奇函数）
- * - Property 16: 符号求和闭合形式验证
- * - Property 35: 等比级数的收敛半径
- *
- * **Validates: Requirements 22.1, 24.1, 24.2, 25.4, 25.5, 28.2, 85.1**
- */
 #include "test_common.hpp"
 #include "series_engine.hpp"
 #include <random>
 #include <chrono>
 #include <cmath>
 
-// ============================================================================
-// Random generation utilities
-// ============================================================================
 
 static std::mt19937 rng(static_cast<unsigned>(
     std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -51,16 +35,9 @@ static std::vector<std::shared_ptr<SymbolicExpr>> rand_coeffs(int len, int max_a
     return coeffs;
 }
 
-// ============================================================================
-// Property 13: Power series addition is component-wise
-// **Validates: Requirements 24.1**
-//
-// For any two coefficient vectors a and b of the same length,
-// power_series_add(a, b)[k] SHALL equal a[k] + b[k] for all valid indices k.
-// ============================================================================
 
-static void test_property13_power_series_addition_componentwise() {
-    TEST_CASE("Property 13: Power series addition is component-wise");
+static void test_power_series_addition_componentwise() {
+    TEST_CASE("Power series addition is component-wise");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -113,22 +90,14 @@ static void test_property13_power_series_addition_componentwise() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 13: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " power series addition trials are component-wise (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Property 14: Power series multiplication satisfies Cauchy product
-// **Validates: Requirements 24.2**
-//
-// For any two coefficient vectors a and b,
-// power_series_multiply(a, b, order)[k] SHALL equal
-// sum_{j=0}^{k} a[j]*b[k-j] for all k < order.
-// ============================================================================
 
-static void test_property14_power_series_multiplication_cauchy() {
-    TEST_CASE("Property 14: Power series multiplication satisfies Cauchy product");
+static void test_power_series_multiplication_cauchy() {
+    TEST_CASE("Power series multiplication satisfies Cauchy product");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -188,27 +157,14 @@ static void test_property14_power_series_multiplication_cauchy() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 14: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " power series multiplication trials satisfy Cauchy product (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Property 15: Fourier series symmetry (even/odd functions)
-// **Validates: Requirements 25.4, 25.5**
-//
-// For any even function f (f(-x) = f(x)), all sine coefficients bk in the
-// Fourier series SHALL be zero. For any odd function f (f(-x) = -f(x)),
-// all cosine coefficients ak SHALL be zero.
-//
-// Since fourier_series() is not yet fully implemented, we verify the
-// underlying parity detection: even functions satisfy f(-x) - f(x) = 0,
-// and odd functions satisfy f(-x) + f(x) = 0. This is the prerequisite
-// that drives the Fourier series symmetry optimization.
-// ============================================================================
 
-static void test_property15_fourier_series_symmetry() {
-    TEST_CASE("Property 15: Fourier series symmetry (even/odd functions)");
+static void test_fourier_series_symmetry() {
+    TEST_CASE("Fourier series symmetry (even/odd functions)");
 
     auto x = SymbolicExpr::variable("x");
     int num_trials = 30;
@@ -322,23 +278,14 @@ static void test_property15_fourier_series_symmetry() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 15: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " Fourier series symmetry (parity) trials passed (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Property 16: Symbolic summation closed form verification
-// **Validates: Requirements 28.2, 85.1**
-//
-// For any polynomial general term of degree d in the summation index k,
-// the closed form returned by symbolic_sum SHALL, when evaluated at a
-// concrete upper bound n, produce the same value as direct summation
-// sum_{k=lower}^{n} f(k).
-// ============================================================================
 
-static void test_property16_symbolic_summation_closed_form() {
-    TEST_CASE("Property 16: Symbolic summation closed form verification");
+static void test_symbolic_summation_closed_form() {
+    TEST_CASE("Symbolic summation closed form verification");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -408,21 +355,14 @@ static void test_property16_symbolic_summation_closed_form() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 16: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " symbolic summation closed form trials verified (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Property 35: Convergence radius for geometric series
-// **Validates: Requirements 22.1**
-//
-// For any geometric series with ratio r (coefficient sequence a_n = r^n),
-// the convergence radius SHALL equal 1/|r|.
-// ============================================================================
 
-static void test_property35_convergence_radius_geometric() {
-    TEST_CASE("Property 35: Convergence radius for geometric series");
+static void test_convergence_radius_geometric() {
+    TEST_CASE("Convergence radius for geometric series");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -473,21 +413,18 @@ static void test_property35_convergence_radius_geometric() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 35: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " geometric series convergence radius trials passed (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Main
-// ============================================================================
 
 int main() {
-    test_property13_power_series_addition_componentwise();
-    test_property14_power_series_multiplication_cauchy();
-    test_property15_fourier_series_symmetry();
-    test_property16_symbolic_summation_closed_form();
-    test_property35_convergence_radius_geometric();
+    test_power_series_addition_componentwise();
+    test_power_series_multiplication_cauchy();
+    test_fourier_series_symmetry();
+    test_symbolic_summation_closed_form();
+    test_convergence_radius_geometric();
 
     return TEST_REPORT();
 }

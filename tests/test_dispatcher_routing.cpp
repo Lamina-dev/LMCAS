@@ -68,7 +68,7 @@ int main() {
     std::mt19937 rng(314159);
     std::uniform_int_distribution<int> coeff_dist(-5, 5);
 
-    TEST_CASE("Property 14A: Linear (deg 1) → ClosedForm, returns exactly 1 root");
+    TEST_CASE("Linear (deg 1) → ClosedForm, returns exactly 1 root");
     {
         const int NUM_TRIALS = 30;
         int pass_count = 0;
@@ -97,7 +97,7 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
     }
 
-    TEST_CASE("Property 14B: Quadratic (deg 2) → ClosedForm, returns exactly 2 roots");
+    TEST_CASE("Quadratic (deg 2) → ClosedForm, returns exactly 2 roots");
     {
         const int NUM_TRIALS = 30;
         int pass_count = 0;
@@ -127,7 +127,7 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
     }
 
-    TEST_CASE("Property 14C: Cubic (deg 3) → ClosedForm, returns exactly 3 roots");
+    TEST_CASE("Cubic (deg 3) → ClosedForm, returns exactly 3 roots");
     {
         const int NUM_TRIALS = 30;
         int pass_count = 0;
@@ -159,7 +159,7 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
     }
 
-    TEST_CASE("Property 14D: Quartic (deg 4) → ClosedForm, returns exactly 4 roots");
+    TEST_CASE("Quartic (deg 4) → ClosedForm, returns exactly 4 roots");
     {
         const int NUM_TRIALS = 30;
         int pass_count = 0;
@@ -192,7 +192,7 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
     }
 
-    TEST_CASE("Property 14E: Degree 5+ → Preprocessing/RootOf");
+    TEST_CASE("Degree 5+ → Preprocessing/RootOf");
     {
         const int NUM_TRIALS = 5;
         int pass_count = 0;
@@ -240,7 +240,7 @@ int main() {
         EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
     }
 
-    TEST_CASE("Property 14F: Transcendental → Transcendental solver");
+    TEST_CASE("Transcendental → Transcendental solver");
     {
         int pass_count = 0;
         int total_tests = 0;
@@ -311,7 +311,7 @@ int main() {
         EXPECT_TRUE(pass_count == total_tests, msg.str());
     }
 
-    TEST_CASE("Property 14G: Numeric fallback with allow_numeric=true");
+    TEST_CASE("Numeric fallback with allow_numeric=true");
     {
         int pass_count = 0;
         int total_tests = 0;
@@ -377,7 +377,7 @@ int main() {
         EXPECT_TRUE(pass_count == total_tests, msg.str());
     }
 
-    TEST_CASE("Property 14H: Priority order - polynomial before transcendental");
+    TEST_CASE("Priority order - polynomial before transcendental");
     {
         int pass_count = 0;
         const int NUM_TRIALS = 20;

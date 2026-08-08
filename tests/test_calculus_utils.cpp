@@ -20,9 +20,6 @@ static std::shared_ptr<SymbolicExpr> bigint_num(const BigInt& n) {
 }
 
 int main() {
-    // =========================================================
-    // continuity_at 测试 (Requirement 7)
-    // =========================================================
     TEST_CASE("continuity_at: polynomial is continuous everywhere");
     {
         // f(x) = x^2 is continuous at x=1
@@ -79,9 +76,6 @@ int main() {
                     "null input returns Essential");
     }
 
-    // =========================================================
-    // asymptotes 测试 (Requirement 15)
-    // =========================================================
     TEST_CASE("asymptotes: 1/x has vertical at x=0, horizontal at y=0");
     {
         // f(x) = 1/x: vertical asymptote at x=0, horizontal at y=0
@@ -250,9 +244,6 @@ int main() {
                     "legacy asymptotes keeps empty-result compatibility on checked failure");
     }
 
-    // =========================================================
-    // log_differentiate 测试
-    // =========================================================
     TEST_CASE("log_differentiate: x^2");
     {
         // d/dx[x^2] = 2x
@@ -311,9 +302,6 @@ int main() {
         }
     }
 
-    // =========================================================
-    // differential 测试
-    // =========================================================
     TEST_CASE("differential: x^3");
     {
         // d(x^3)/dx = 3x^2
@@ -343,9 +331,6 @@ int main() {
         std::cout << "  differential(sin(x)): " << result->to_string() << std::endl;
     }
 
-    // =========================================================
-    // total_differential 测试
-    // =========================================================
     TEST_CASE("total_differential: x^2 + y^2");
     {
         // df = 2x dx + 2y dy
@@ -391,9 +376,6 @@ int main() {
         EXPECT_EQ_STR(result[2].second, "z", "third var is z");
     }
 
-    // =========================================================
-    // inverse_function 测试
-    // =========================================================
     TEST_CASE("inverse_function: f(x) = 2x + 1, solve for y=5");
     {
         // f(x) = 2x + 1, f^{-1}(5) = 2
@@ -466,9 +448,6 @@ int main() {
                     "checked inverse function observes exhausted step budget");
     }
 
-    // =========================================================
-    // inverse_derivative 测试
-    // =========================================================
     TEST_CASE("inverse_derivative: f(x) = 2x + 1 at point=5");
     {
         // f(x) = 2x+1, f'(x) = 2, f^{-1}(5) = 2
@@ -574,9 +553,6 @@ int main() {
                     "checked inverse derivative observes exhausted step budget");
     }
 
-    // =========================================================
-    // Edge cases
-    // =========================================================
     TEST_CASE("log_differentiate: null input");
     {
         auto result = lamina::log_differentiate(nullptr, "x");

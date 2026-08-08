@@ -18,9 +18,6 @@ int main() {
     auto neg_one = SymbolicExpr::number(-1);
     auto inf = SymbolicExpr::infinity(1);
 
-    // =========================================================================
-    // Requirement 3.1: Taylor fallback when L'Hôpital exceeds max depth
-    // =========================================================================
 
     // --- Test 1: lim(x→0) (sin(x) - x) / x^3 = -1/6 ---
     // Requires 3 L'Hôpital applications (0/0 each time) or Taylor fallback
@@ -44,9 +41,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Requirement 3.2: Taylor expansion to sufficient order (4 to 8)
-    // =========================================================================
 
     // --- Test 2: lim(x→0) (1 - cos(x)) / x^2 = 1/2 ---
     // Classic Taylor expansion: cos(x) = 1 - x²/2 + x⁴/24 - ...
@@ -94,9 +88,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Requirement 3.3: Ratio of leading terms gives limit
-    // =========================================================================
 
     // --- Test 4: lim(x→0) sin(x)/x = 1 ---
     // sin(x) = x - x³/6 + ..., leading term is x; denominator leading term is x
@@ -135,9 +126,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Requirement 3.4: Expansion at infinity via x = 1/t substitution
-    // =========================================================================
 
     // --- Test 6: lim(x→∞) sin(1/x) / (1/x) = 1 ---
     // Expressed as a direct quotient so L'Hôpital/Taylor path is triggered.

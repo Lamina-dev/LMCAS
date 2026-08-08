@@ -1,50 +1,3 @@
-// Feature: integration-enhancements, Property 3: Linear substitution round-trip
-//
-// Validates: Requirements 2.1, 2.10
-//
-// Property 3: For every table entry with pattern f(x) and antiderivative
-// F(x), and for any non-zero rational constant a and rational constant b,
-// integrating f(a*x + b) and differentiating the result SHALL yield an
-// expression numerically equal to f(a*x + b) at 5 sample points within
-// tolerance 1e-10. The test iterates over at least 100 combinations of
-// (table entry, a, b).
-//
-// Approach
-// --------
-//   * Hand-pick a curated subset of base integrand patterns f(t):
-//       sin(t), cos(t), exp(t), t^2, t^3, 1/t, sin(t)^2, cos(t)^2.
-//     Each pattern has an antiderivative F(t) in the default integration
-//     table whose value AND whose derivative are expressible using only the
-//     subset of FunctionNode types that test_numeric_eval understands
-//     (Sin, Cos, Tan, Exp, Ln, Sqrt, Abs) plus the algebraic node kinds.
-//
-//   * Iterate over a fixed grid of (a, b) pairs (a non-zero rational, b
-//     rational), 25 pairs per pattern, yielding 200 (pattern, a, b)
-//     combinations total. We only require >= 100 to be successfully
-//     verified by round-trip.
-//
-//   * For each combination:
-//       - Build the integrand f(a*x + b) by AST construction.
-//       - Call Integrator::integrate(integrand, "x") to obtain a closed
-//         form. Combinations that produce an unevaluated integral node
-//         (i.e. the integrator could not solve them) are counted but not
-//         used as evidence; the property is conditional on "F has a known
-//         antiderivative" so an unevaluated result is a non-applicable
-//         outcome rather than a failure.
-//       - Symbolically differentiate the result.
-//       - Evaluate both the integrand and the derivative at the sample
-//         points x in {0.5, 1.0, 1.5, 2.0, 2.5}. Sample points where
-//         either side returns nullopt or non-finite values (typically
-//         due to a*x + b crossing a domain boundary) are skipped.
-//       - The combination is "verified" if at least one sample point
-//         produced a successful comparison and no sample point produced
-//         a numeric mismatch above tolerance.
-//
-//   * Tolerance: 1e-10 as specified by the property.
-//
-//   * The test FAILS if any combination produces a numeric mismatch
-//     above tolerance (round-trip violation), or if fewer than 100
-//     combinations are successfully verified.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -65,7 +18,6 @@ namespace {
 constexpr const char* kVarName = "x";
 constexpr double kTolerance = 1e-10;
 
-// ----- AST helpers --------------------------------------------------------
 
 std::shared_ptr<SymbolicExpr> num_rat(long long n, long long d) {
     return SymbolicExpr::number(Rational(BigInt(n), BigInt(d)));
@@ -94,7 +46,6 @@ bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     return false;
 }
 
-// ----- Pattern catalog ----------------------------------------------------
 
 // A pattern is a builder that takes a sub-expression `arg` and produces
 // f(arg) as a fresh SymbolicExpr. We deliberately restrict ourselves to
@@ -133,7 +84,6 @@ const std::vector<Pattern>& patterns() {
     return P;
 }
 
-// ----- (a, b) grid --------------------------------------------------------
 
 struct ABPair {
     std::shared_ptr<SymbolicExpr> a;
@@ -175,7 +125,6 @@ const std::vector<double>& sample_points() {
     return S;
 }
 
-// ----- Per-combination check ---------------------------------------------
 
 struct ComboReport {
     bool unevaluated = false;   // integrator returned an unevaluated integral
@@ -268,7 +217,7 @@ ComboReport verify_combo(const Pattern& pat, const ABPair& ab) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 3: Linear substitution round-trip");
+    TEST_CASE("Linear substitution round-trip");
 
     int total_combos = 0;
     int verified_combos = 0;

@@ -12,7 +12,6 @@ int main()
     auto x = SymbolicExpr::variable("x");
     auto t = SymbolicExpr::variable("t");
 
-    // ===== curvature tests =====
 
     TEST_CASE("curvature: y = x^2 at x=0 should be 2");
     {
@@ -94,7 +93,6 @@ int main()
         }
     }
 
-    // ===== surface_area_revolution tests =====
 
     TEST_CASE("surface_area_revolution_x: sphere from y=sqrt(r^2-x^2)");
     {

@@ -517,9 +517,6 @@ VectorCalculusFieldResult vector_calculus_wrap_field(
 
 } // namespace
 
-// ============================================================
-/// 梯度 ∇f (Requirement 9)
-// ============================================================
 
 VectorCalculusFieldResult gradient_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -569,9 +566,6 @@ VectorField gradient(const std::shared_ptr<SymbolicExpr>& f,
     return result;
 }
 
-// ============================================================
-/// 散度 ∇·F (Requirement 45)
-// ============================================================
 
 VectorCalculusExprResult divergence_checked(
     const VectorField& F,
@@ -634,9 +628,6 @@ std::shared_ptr<SymbolicExpr> divergence(const VectorField& F,
     return sum->simplify();
 }
 
-// ============================================================
-/// 旋度 ∇×F (Requirement 46)
-// ============================================================
 
 VectorCalculusFieldResult curl_checked(
     const VectorField& F,
@@ -728,9 +719,6 @@ VectorField curl(const VectorField& F,
     return VectorField{curl_x, curl_y, curl_z};
 }
 
-// ============================================================
-/// 拉普拉斯算子 ∇²f (Requirement 47)
-// ============================================================
 
 VectorCalculusExprResult laplacian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -793,9 +781,6 @@ std::shared_ptr<SymbolicExpr> laplacian(const std::shared_ptr<SymbolicExpr>& f,
     return sum->simplify();
 }
 
-// ============================================================
-/// 方向导数 (Requirement 8, 87, 88)
-// ============================================================
 
 /**
  * @internal
@@ -954,9 +939,6 @@ std::shared_ptr<SymbolicExpr> directional_derivative(
     return result;
 }
 
-// ============================================================
-/// 雅可比矩阵 (Requirement 10)
-// ============================================================
 
 VectorCalculusExprResult jacobian_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& functions,
@@ -1013,9 +995,6 @@ std::shared_ptr<SymbolicExpr> jacobian(
     return SymbolicExpr::matrix(grid);
 }
 
-// ============================================================
-/// 海森矩阵 (Requirement 11)
-// ============================================================
 
 VectorCalculusExprResult hessian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -1077,9 +1056,6 @@ std::shared_ptr<SymbolicExpr> hessian(
     return SymbolicExpr::matrix(grid);
 }
 
-// ============================================================
-/// 曲线积分与曲面积分辅助函数
-// ============================================================
 
 /**
  * @internal
@@ -1676,9 +1652,6 @@ static VectorCalculusExprResult stokes_theorem_strict(
     return vector_calculus_multiple_integral_strict(dot_product, steps, operation);
 }
 
-// ============================================================
-/// 第一类曲线积分 (Requirement 48.1, 48.3, 48.4)
-// ============================================================
 
 VectorCalculusExprResult curve_integral_scalar_checked(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
@@ -1772,9 +1745,6 @@ std::shared_ptr<SymbolicExpr> curve_integral_scalar(
     return vector_calculus_integrate_with_fallback(integrand, t, a, b);
 }
 
-// ============================================================
-/// 第二类曲线积分 (Requirement 48.2)
-// ============================================================
 
 VectorCalculusExprResult curve_integral_vector_checked(
     const VectorField& F, const VectorField& parametrization,
@@ -1873,9 +1843,6 @@ std::shared_ptr<SymbolicExpr> curve_integral_vector(
     return vector_calculus_integrate_with_fallback(dot_product, t, a, b);
 }
 
-// ============================================================
-/// 曲面积分辅助：计算 r_u × r_v (Requirement 49.3)
-// ============================================================
 
 /**
  * @internal
@@ -1928,9 +1895,6 @@ static VectorField vector_calculus_cross_product_partials(
     return VectorField{cross_x, cross_y, cross_z};
 }
 
-// ============================================================
-/// 第一类曲面积分 (Requirement 49.1, 49.3)
-// ============================================================
 
 VectorCalculusExprResult surface_integral_scalar_checked(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
@@ -2038,9 +2002,6 @@ std::shared_ptr<SymbolicExpr> surface_integral_scalar(
     return nullptr;
 }
 
-// ============================================================
-/// 第二类曲面积分 (Requirement 49.2, 49.3)
-// ============================================================
 
 VectorCalculusExprResult surface_integral_vector_checked(
     const VectorField& F, const VectorField& parametrization,
@@ -2152,9 +2113,6 @@ std::shared_ptr<SymbolicExpr> surface_integral_vector(
     return nullptr;
 }
 
-// ============================================================
-/// 格林定理 (Requirements 50.1, 89.1, 89.2, 89.3)
-// ============================================================
 
 VectorCalculusExprResult greens_theorem_checked(
     const std::shared_ptr<SymbolicExpr>& P,
@@ -2255,9 +2213,6 @@ std::shared_ptr<SymbolicExpr> greens_theorem(
     return nullptr;
 }
 
-// ============================================================
-/// 格林定理面积公式 (Requirement 50.4, 89.2)
-// ============================================================
 
 VectorCalculusExprResult greens_theorem_area_checked(
     const VectorField& parametrization,
@@ -2356,9 +2311,6 @@ std::shared_ptr<SymbolicExpr> greens_theorem_area(
     return area;
 }
 
-// ============================================================
-/// 散度定理 / 高斯定理 (Requirements 50.2, 92.1, 92.2, 92.3)
-// ============================================================
 
 VectorCalculusExprResult divergence_theorem_checked(
     const VectorField& F,
@@ -2448,9 +2400,6 @@ std::shared_ptr<SymbolicExpr> divergence_theorem(
     return nullptr;
 }
 
-// ============================================================
-/// 斯托克斯定理 (Requirements 50.3, 93.1, 93.2, 93.3)
-// ============================================================
 
 VectorCalculusExprResult stokes_theorem_checked(
     const VectorField& F,
@@ -2574,9 +2523,6 @@ std::shared_ptr<SymbolicExpr> stokes_theorem(
     return nullptr;
 }
 
-// ============================================================
-/// 多元极值 (Requirements 44, 51, 91)
-// ============================================================
 
 /**
  * @internal
@@ -2865,9 +2811,6 @@ std::vector<CriticalPoint> find_extrema(
     return result;
 }
 
-// ============================================================
-/// 拉格朗日乘数法 (Requirement 44)
-// ============================================================
 
 static LagrangeResult lagrange_multipliers_strict(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -3171,9 +3114,6 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
     return result;
 }
 
-// ============================================================
-/// 向量代数运算 (Requirements 40, 41, 42)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> dot_product(const VectorField& a, const VectorField& b)
 {

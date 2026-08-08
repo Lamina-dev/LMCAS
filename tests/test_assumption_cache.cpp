@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_cache.cpp
- * @brief Property tests for QueryInterface caching (Task 6.4).
- *
- * Properties tested:
- * - Property 16: Cache invalidation on state change
- *
- * Validates: Requirements 23.3, 23.4
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- *
- * Note: Cache invalidation hooks (task 8.5) haven't been wired yet, so
- * we test that:
- * - invalidate_cache() clears the cache (call it manually)
- * - After invalidation, queries recompute correctly
- * - The cache stores results (same query twice returns same result efficiently)
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -30,9 +12,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var_node(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -80,15 +59,11 @@ static Domain random_domain() {
     return rc::gen::elementOf(domains);
 }
 
-// ============================================================
-// Property 16: Cache invalidation on state change
-// **Validates: Requirements 23.3, 23.4**
-// ============================================================
 
 // --- Test: invalidate_cache() clears the cache ---
 
 static void test_invalidate_cache_clears_cache() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: invalidate_cache() clears the cache");
+    TEST_CASE("invalidate_cache() clears the cache");
 
     rc::check("After invalidate_cache(), queries recompute and return correct results", []() {
         std::string var_name = "x_" + std::to_string(rc::gen::inRange(0, 999));
@@ -118,7 +93,7 @@ static void test_invalidate_cache_clears_cache() {
 // --- Test: Cache stores results (same query returns same result) ---
 
 static void test_cache_stores_results() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: Cache stores results — repeated queries return same result");
+    TEST_CASE("Cache stores results — repeated queries return same result");
 
     rc::check("Repeated queries on the same expression return the same cached result", []() {
         std::string var_name = "v_" + std::to_string(rc::gen::inRange(0, 999));
@@ -152,7 +127,7 @@ static void test_cache_stores_results() {
 // --- Test: After invalidation, queries that would return different results do so ---
 
 static void test_invalidation_allows_new_results() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: After invalidation, new assumptions produce new results");
+    TEST_CASE("After invalidation, new assumptions produce new results");
 
     rc::check("After invalidate_cache() and new assumptions, queries return updated results", []() {
         std::string var_name = "z_" + std::to_string(rc::gen::inRange(0, 999));
@@ -181,7 +156,7 @@ static void test_invalidation_allows_new_results() {
 // --- Test: invalidate_cache on scope push (manual invalidation) ---
 
 static void test_invalidation_on_scope_push() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: Cache invalidation on scope push");
+    TEST_CASE("Cache invalidation on scope push");
 
     rc::check("After push_scope and invalidate_cache(), queries recompute with new scope", []() {
         std::string var_name = "p_" + std::to_string(rc::gen::inRange(0, 999));
@@ -215,7 +190,7 @@ static void test_invalidation_on_scope_push() {
 // --- Test: invalidate_cache on scope pop (manual invalidation) ---
 
 static void test_invalidation_on_scope_pop() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: Cache invalidation on scope pop");
+    TEST_CASE("Cache invalidation on scope pop");
 
     rc::check("After pop_scope and invalidate_cache(), queries revert to parent scope results", []() {
         std::string var_name = "q_" + std::to_string(rc::gen::inRange(0, 999));
@@ -250,7 +225,7 @@ static void test_invalidation_on_scope_pop() {
 // --- Test: invalidate_cache on assume_domain (manual invalidation) ---
 
 static void test_invalidation_on_assume_domain() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: Cache invalidation on assume_domain");
+    TEST_CASE("Cache invalidation on assume_domain");
 
     rc::check("After assume_domain and invalidate_cache(), domain queries return updated results", []() {
         std::string var_name = "d_" + std::to_string(rc::gen::inRange(0, 999));
@@ -276,7 +251,7 @@ static void test_invalidation_on_assume_domain() {
 // --- Test: invalidate_cache on assume (add_relation) ---
 
 static void test_invalidation_on_assume_relation() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: Cache invalidation on assume (add_relation)");
+    TEST_CASE("Cache invalidation on assume (add_relation)");
 
     rc::check("After assume(relation) and invalidate_cache(), sign queries return updated results", []() {
         std::string var_name = "r_" + std::to_string(rc::gen::inRange(0, 999));
@@ -308,7 +283,7 @@ static void test_invalidation_on_assume_relation() {
 // --- Test: Multiple invalidations maintain correctness ---
 
 static void test_multiple_invalidations_correct() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: Multiple invalidations maintain correctness");
+    TEST_CASE("Multiple invalidations maintain correctness");
 
     rc::check("Multiple cycles of assume + invalidate produce correct results each time", []() {
         std::string var_name = "m_" + std::to_string(rc::gen::inRange(0, 999));
@@ -345,7 +320,7 @@ static void test_multiple_invalidations_correct() {
 // --- Test: Cache works across different property types independently ---
 
 static void test_cache_different_property_types() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: Cache works across different property types");
+    TEST_CASE("Cache works across different property types");
 
     rc::check("Different property queries on the same expression are cached independently", []() {
         std::string var_name = "t_" + std::to_string(rc::gen::inRange(0, 999));
@@ -391,7 +366,7 @@ static void test_cache_different_property_types() {
 // --- Test: invalidate_cache clears ALL entries (not just one property type) ---
 
 static void test_invalidate_clears_all_entries() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 16: invalidate_cache clears all entries");
+    TEST_CASE("invalidate_cache clears all entries");
 
     rc::check("invalidate_cache() clears cache for all expressions and property types", []() {
         AssumptionContext ctx;
@@ -422,12 +397,8 @@ static void test_invalidate_clears_all_entries() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 16: Cache invalidation on state change
     test_invalidate_cache_clears_cache();
     test_cache_stores_results();
     test_invalidation_allows_new_results();

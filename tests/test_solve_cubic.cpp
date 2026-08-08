@@ -293,7 +293,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Property 1: Cubic root verification");
+    TEST_CASE("Cubic root verification");
 
     {
         const double RESIDUAL_TOL = 1e-10;
@@ -316,7 +316,7 @@ int main() {
 
             if (roots.size() != 3) {
                 std::ostringstream msg;
-                msg << "Property 1 Trial " << trial << " (a=" << a_val << ", b=" << b_val
+                msg << "Trial " << trial << " (a=" << a_val << ", b=" << b_val
                     << ", c=" << c_val << ", d=" << d_val
                     << "): expected 3 roots, got " << roots.size();
                 EXPECT_TRUE(false, msg.str());
@@ -336,7 +336,7 @@ int main() {
                 if (std::abs(residual) >= RESIDUAL_TOL) {
                     trial_ok = false;
                     std::ostringstream msg;
-                    msg << "Property 1 Trial " << trial << " root " << i
+                    msg << "Trial " << trial << " root " << i
                         << " (a=" << a_val << ", b=" << b_val
                         << ", c=" << c_val << ", d=" << d_val
                         << "): |f(r)| = " << std::abs(residual) << " >= 1e-10"
@@ -351,14 +351,14 @@ int main() {
 
         {
             std::ostringstream msg;
-            msg << "Property 1: Cubic root verification: " << cubic_verify_pass_count
+            msg << "Cubic root verification: " << cubic_verify_pass_count
                 << "/" << NUM_CUBIC_TRIALS << " trials passed ("
                 << cubic_verify_total_roots << " real roots verified)";
             EXPECT_TRUE(cubic_verify_pass_count == NUM_CUBIC_TRIALS, msg.str());
         }
     }
 
-    TEST_CASE("Property 4: Vieta's formulas for cubics");
+    TEST_CASE("Vieta's formulas for cubics");
 
     const double TOLERANCE = 1e-8;
     const int NUM_TRIALS = 60;

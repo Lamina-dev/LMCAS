@@ -757,6 +757,7 @@ public:
         Sgn,                                 ///< 符号函数 sgn(x) ∈ {-1, 0, 1}
         Floor,                               ///< 下取整 ⌊x⌋
         Ceil,                                ///< 上取整 ⌈x⌉
+        Round,                               ///< 四舍五入 round(x)
         RealPart,                            ///< 实部 Re(z)
         ImagPart,                            ///< 虚部 Im(z)
         Conjugate,                           ///< 共轭 conj(z)

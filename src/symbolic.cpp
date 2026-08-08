@@ -995,9 +995,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate_legacy(const std::stri
     return differentiate(var_name);
 }
 
-/// ---------------------------------------------------------------------------
 /// 多元因式分解辅助函数
-/// ---------------------------------------------------------------------------
 
 /**
  * @internal

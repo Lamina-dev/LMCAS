@@ -1,33 +1,3 @@
-// Feature: integration-enhancements, Property 5: Trigonometric tan^n round-trip
-//
-// Validates: Requirements 3.7
-//
-// Property 5: For all integers n with 2 <= n <= 8, integrating tan^n(x) and
-// differentiating the result SHALL yield an expression numerically equal to
-// tan^n(x) at sample points x = 0.3, 0.5, 0.7, 0.9, 1.1 within tolerance
-// 1e-10.
-//
-// Approach
-// --------
-//   * For each integer n in [2, 8]:
-//       - Build the integrand tan(x)^n via AST construction.
-//       - Call Integrator::integrate(integrand, "x") to obtain a closed
-//         form. If the integrator leaves an unevaluated integral node, the
-//         entry is reported as UNEVAL (outside the property scope) and
-//         counted toward an explicit failure of the property — Property 5
-//         requires that the strategy succeed on the entire range 2..8.
-//       - Symbolically differentiate the antiderivative.
-//       - Evaluate both the integrand and the derivative at the sample
-//         points x in {0.3, 0.5, 0.7, 0.9, 1.1}, all of which are strictly
-//         less than pi/2 ~ 1.5708 so tan(x) is finite. Sample points
-//         where either side returns nullopt or a non-finite value are
-//         skipped, but every n must produce at least one matching sample
-//         within tolerance.
-//       - The test FAILS if any (n, x) pair produces a numeric mismatch
-//         above tolerance, or if the integrator fails to evaluate any n in
-//         [2, 8].
-//
-//   * Tolerance: 1e-10 as specified by the property.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -45,7 +15,6 @@ namespace {
 constexpr const char* kVarName = "x";
 constexpr double kTolerance = 1e-10;
 
-// ----- AST helpers --------------------------------------------------------
 
 bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
@@ -71,7 +40,6 @@ const std::vector<double>& sample_points() {
     return S;
 }
 
-// ----- Per-n check --------------------------------------------------------
 
 struct NReport {
     bool unevaluated = false;   // integrator returned an unevaluated integral
@@ -106,7 +74,6 @@ NReport verify_n(int n) {
         return rep;
     }
 
-    // Property 5 requires the integrator to succeed for all n in [2, 8].
     if (has_integral_node(lamina::detail::node(result))) {
         rep.unevaluated = true;
         rep.detail = "integrator left an unevaluated integral: "
@@ -164,7 +131,7 @@ NReport verify_n(int n) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 5: Trigonometric tan^n round-trip");
+    TEST_CASE("Trigonometric tan^n round-trip");
 
     int total = 0;
     int verified = 0;
@@ -184,7 +151,7 @@ int main() {
             ++unevaluated;
             std::cerr << "[FAIL] " << prefix << " : " << rep.detail << std::endl;
             EXPECT_TRUE(false, prefix + ": integrator left unevaluated integral "
-                                        "(Property 5 requires success on n in [2,8])");
+                                        "(requires success on n in [2,8])");
         } else if (rep.matches > 0) {
             ++verified;
             std::ostringstream oss;

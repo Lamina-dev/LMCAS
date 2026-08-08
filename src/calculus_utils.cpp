@@ -95,9 +95,6 @@ Result<void> calculus_utils_validate_expr_bounds(
 
 } // namespace
 
-// ============================================================
-/// 内部辅助函数（连续性・渐近线）
-// ============================================================
 
 /**
  * @internal
@@ -446,9 +443,6 @@ static bool calculus_utils_oblique_from_rational(
     }
 }
 
-// ============================================================
-/// 连续性判定 (Requirement 7)
-// ============================================================
 
 ContinuityType continuity_at(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
@@ -497,9 +491,6 @@ ContinuityType continuity_at(
     return ContinuityType::Continuous;
 }
 
-// ============================================================
-/// 渐近线分析 (Requirement 15)
-// ============================================================
 
 AsymptoteAnalysisResult asymptotes_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
@@ -513,7 +504,6 @@ AsymptoteAnalysisResult asymptotes_checked(
     auto pos_inf = SymbolicExpr::infinity(1);
     auto neg_inf = SymbolicExpr::infinity(-1);
 
-    // ========== 垂直渐近线 ==========
     /// 提取分母，求解分母 = 0 的点
     auto denominator = calculus_utils_extract_denominator(f);
     if (denominator) {
@@ -574,7 +564,6 @@ AsymptoteAnalysisResult asymptotes_checked(
         }
     }
 
-    // ========== 水平渐近线 ==========
     /// 计算 x→+∞ 和 x→-∞ 的极限
     auto lim_pos = f->limit(var, pos_inf);
     auto lim_neg = f->limit(var, neg_inf);
@@ -596,7 +585,6 @@ AsymptoteAnalysisResult asymptotes_checked(
         }
     }
 
-    // ========== 斜渐近线 ==========
     /// 仅当对应方向无水平渐近线时才检查斜渐近线
     auto x_expr = SymbolicExpr::variable(var);
 
@@ -676,9 +664,6 @@ AsymptoteResult asymptotes(
     return std::move(checked.value());
 }
 
-// ============================================================
-/// 对数微分、微分、全微分、反函数 (Requirements 12, 13, 14, 77)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> log_differentiate(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
@@ -938,9 +923,6 @@ std::vector<std::shared_ptr<SymbolicExpr>> inverse_function(
     return std::move(checked.value());
 }
 
-// ============================================================
-/// 内部辅助函数（曲率・旋转体表面积）
-// ============================================================
 
 /// 构造绝对值表达式 |expr|
 static std::shared_ptr<SymbolicExpr> calculus_utils_make_abs(
@@ -1081,9 +1063,6 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_integrate_with_fallback(
     return calculus_utils_numerical_definite(integrand, var, a, b);
 }
 
-// ============================================================
-/// 曲率 (Requirement 16)
-// ============================================================
 
 SymbolicExprResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
@@ -1235,9 +1214,6 @@ std::shared_ptr<SymbolicExpr> curvature_parametric(
     return checked.value();
 }
 
-// ============================================================
-/// 拐点 (Requirement 34)
-// ============================================================
 
 SymbolicExprVectorResult inflection_points_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
@@ -1326,9 +1302,6 @@ std::vector<std::shared_ptr<SymbolicExpr>> inflection_points(
     return std::move(checked.value());
 }
 
-// ============================================================
-/// 旋转体表面积 (Requirement 17)
-// ============================================================
 
 SymbolicExprResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,

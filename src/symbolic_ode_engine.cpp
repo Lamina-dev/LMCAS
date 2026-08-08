@@ -15,9 +15,6 @@
 
 namespace lamina {
 
-// ============================================================================
-/// 辅助函数
-// ============================================================================
 
 /**
  * @internal
@@ -228,9 +225,6 @@ static Result<void> validate_ode_two_expr_point(
     return !depends_on_var(lamina::detail::node(expr), other_var);
 }
 
-// ============================================================================
-/// is_separable
-// ============================================================================
 
 bool is_separable(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -281,9 +275,6 @@ bool is_separable(
     return false;
 }
 
-// ============================================================================
-/// is_linear_first_order
-// ============================================================================
 
 bool is_linear_first_order(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -331,9 +322,6 @@ bool is_linear_first_order(
     return true;
 }
 
-// ============================================================================
-/// is_homogeneous_ode
-// ============================================================================
 
 bool is_homogeneous_ode(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -390,9 +378,6 @@ bool is_homogeneous_ode(
     return false;
 }
 
-// ============================================================================
-/// is_bernoulli_ode
-// ============================================================================
 
 bool is_bernoulli_ode(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -507,9 +492,6 @@ bool is_bernoulli_ode(
     return false;
 }
 
-// ============================================================================
-/// is_exact_ode
-// ============================================================================
 
 bool is_exact_ode(
     const std::shared_ptr<SymbolicExpr>& M,
@@ -555,9 +537,6 @@ bool is_exact_ode(
     return false;
 }
 
-// ============================================================================
-/// is_constant_coefficient
-// ============================================================================
 
 bool is_constant_coefficient(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
@@ -570,9 +549,6 @@ bool is_constant_coefficient(
     return true;
 }
 
-// ============================================================================
-/// is_euler_equation
-// ============================================================================
 
 bool is_euler_equation(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
@@ -630,9 +606,6 @@ bool is_euler_equation(
     return true;
 }
 
-// ============================================================================
-/// classify_first_order_ode
-// ============================================================================
 
 ODEClassification classify_first_order_ode(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -697,9 +670,6 @@ ODEClassification classify_first_order_ode(
     return result;
 }
 
-// ============================================================================
-/// classify_higher_order_ode
-// ============================================================================
 
 ODEClassification classify_higher_order_ode(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
@@ -748,15 +718,9 @@ ODEClassification classify_higher_order_ode(
 
 } // namespace lamina
 
-// ============================================================================
-/// 一阶 ODE 求解方法实现
-// ============================================================================
 
 namespace lamina {
 
-// ============================================================================
-/// solve_homogeneous_ode
-// ============================================================================
 
 ODESolutionResult solve_homogeneous_ode_checked(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -850,9 +814,6 @@ ODESolution solve_homogeneous_ode(
     return result;
 }
 
-// ============================================================================
-/// solve_bernoulli_ode
-// ============================================================================
 
 ODESolutionResult solve_bernoulli_ode_checked(
     const std::shared_ptr<SymbolicExpr>& P,
@@ -951,9 +912,6 @@ ODESolution solve_bernoulli_ode(
     return result;
 }
 
-// ============================================================================
-/// find_integrating_factor
-// ============================================================================
 
 std::shared_ptr<SymbolicExpr> find_integrating_factor(
     const std::shared_ptr<SymbolicExpr>& M,
@@ -1001,9 +959,6 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     return nullptr;
 }
 
-// ============================================================================
-/// solve_exact_ode
-// ============================================================================
 
 ODESolutionResult solve_exact_ode_checked(
     const std::shared_ptr<SymbolicExpr>& M,
@@ -1099,9 +1054,6 @@ ODESolution solve_exact_ode(
 
 } // namespace lamina
 
-// ============================================================================
-/// 高阶常系数 ODE 求解
-// ============================================================================
 
 namespace lamina {
 
@@ -1675,15 +1627,9 @@ ODESolution solve_euler_ode(
 
 } // namespace lamina
 
-// ============================================================================
-/// 参数变分法与 Frobenius 级数解实现
-// ============================================================================
 
 namespace lamina {
 
-// ============================================================================
-/// solve_variation_of_parameters
-// ============================================================================
 
 ODESolutionResult solve_variation_of_parameters_checked(
     const std::shared_ptr<SymbolicExpr>& y1,
@@ -1795,9 +1741,6 @@ ODESolution solve_variation_of_parameters(
     return result;
 }
 
-// ============================================================================
-/// classify_singular_point
-// ============================================================================
 
 ODESingularityType classify_singular_point(
     const std::shared_ptr<SymbolicExpr>& p,
@@ -1843,9 +1786,6 @@ ODESingularityType classify_singular_point(
     return ODESingularityType::IrregularSingular;
 }
 
-// ============================================================================
-/// solve_frobenius
-// ============================================================================
 
 static Result<void> validate_frobenius_regular_singular_domain(
     const std::shared_ptr<SymbolicExpr>& p,

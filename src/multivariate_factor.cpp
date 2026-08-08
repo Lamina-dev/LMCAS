@@ -12,15 +12,9 @@
 #include <set>
 #include <stdexcept>
 namespace lamina {
-// ============================================================
-/// 前向声明
-// ============================================================
 static MultiPoly truncate_mod_var(const MultiPoly& poly, const std::string& var,
                                   int degree_bound);
 
-// ============================================================
-/// 内部辅助函数
-// ============================================================
 static std::map<int, MultiPoly>
 extract_coefficients(const MultiPoly& poly, const std::string& main_var)
 {
@@ -130,9 +124,6 @@ static MultiPoly lagrange_interpolate(const std::vector<Rational>& points,
     }
     return result;
 }
-// ============================================================
-/// 求值点选择
-// ============================================================
 
 /**
  * @internal
@@ -451,9 +442,6 @@ static std::vector<Polynomial<Rational>> factor_univariate_bridge(
     return false;
 }
 
-// ============================================================
-/// 试除验证与因子组合
-// ============================================================
 
 /**
  * @internal
@@ -645,9 +633,6 @@ static std::vector<Polynomial<Rational>> factor_univariate_bridge(
     return true_factors;
 }
 
-// ============================================================
-/// 结果组装
-// ============================================================
 
 /**
  * @internal
@@ -795,9 +780,6 @@ static std::vector<Polynomial<Rational>> factor_univariate_bridge(
     return result;
 }
 
-// ============================================================
-/// 公共 API
-// ============================================================
 MultiFactorResult factor_multivariate(const MultiPoly& poly)
 {
     if (poly.is_zero()) return {Rational(0), {}, {}};
@@ -1029,8 +1011,6 @@ MultiFactorResult factor_multivariate(const MultiPoly& poly)
         return *hb;
     }
 
-    /// --- 回退：返回原多项式作为不可约因子 ---
-    /// （完整 Wang-EEZ 流程将在 task 10 中实现）
     Rational nc = poly.numeric_content();
     MultiPoly prim = poly.make_primitive();
     /// make_primitive() 确保首项系数为正。若原多项式首项系数为负，

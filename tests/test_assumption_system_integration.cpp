@@ -1,16 +1,3 @@
-/**
- * @file test_assumption_system_integration.cpp
- * @brief Unit tests for system integration of AssumptionContext with subsystems.
- *
- * Tests:
- * 1. Integrator with positive variable simplifies |x| to x
- * 2. LimitVisitor with positive variable resolves sign ambiguity
- * 3. ODE solver with positive dep var selects positive branch
- * 4. Matcher with assumption context evaluates conditions
- * 5. All subsystems with nullptr behave identically to current
- *
- * Validates: Requirements 12.2, 12.3, 13.2, 15.2, 16.2
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -28,9 +15,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -102,13 +86,9 @@ static bool contains_abs(const std::shared_ptr<const SymbolicNode>& node) {
     return false;
 }
 
-// ============================================================
-// Test 1: Integrator with positive variable simplifies |x| to x
-// (Requirement 12.2)
-// ============================================================
 
 static void test_integrator_positive_simplifies_abs() {
-    TEST_CASE("Integrator: positive variable simplifies |x| to x (Req 12.2)");
+    TEST_CASE("Integrator: positive variable simplifies |x| to x");
 
     // Create integrand: |x|
     auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
@@ -132,7 +112,7 @@ static void test_integrator_positive_simplifies_abs() {
 }
 
 static void test_integrator_no_context_preserves_abs() {
-    TEST_CASE("Integrator: no context preserves |x| behavior (Req 12.4)");
+    TEST_CASE("Integrator: no context preserves |x| behavior");
 
     // Create integrand: |x|
     auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
@@ -152,13 +132,9 @@ static void test_integrator_no_context_preserves_abs() {
                 "Integration without context produces a result");
 }
 
-// ============================================================
-// Test 2: LimitVisitor with positive variable resolves sign ambiguity
-// (Requirement 13.2)
-// ============================================================
 
 static void test_limit_visitor_positive_resolves_sign() {
-    TEST_CASE("LimitVisitor: positive variable resolves sign ambiguity (Req 13.2)");
+    TEST_CASE("LimitVisitor: positive variable resolves sign ambiguity");
 
     // Compute limit of 1/x as x → 0+ with x known Positive.
     // The LimitVisitor should use the assumption to determine the sign.
@@ -200,7 +176,7 @@ static void test_limit_visitor_positive_resolves_sign() {
 }
 
 static void test_limit_visitor_nullptr_same_behavior() {
-    TEST_CASE("LimitVisitor: nullptr context same as current behavior (Req 13.4)");
+    TEST_CASE("LimitVisitor: nullptr context same as current behavior");
 
     // Compute limit of x^2 as x → 2 without context
     auto x_squared = lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2));
@@ -225,13 +201,9 @@ static void test_limit_visitor_nullptr_same_behavior() {
     EXPECT_EQ_STR(s1, s2, "LimitVisitor with no ctx and nullptr produce same result");
 }
 
-// ============================================================
-// Test 3: ODE solver with positive dep var selects positive branch
-// (Requirement 15.2)
-// ============================================================
 
 static void test_ode_solver_positive_branch() {
-    TEST_CASE("ODE solver: positive dep var selects positive branch (Req 15.2)");
+    TEST_CASE("ODE solver: positive dep var selects positive branch");
 
     // Solve dy/dx = x*y with y declared Positive
     auto x = SymbolicExpr::variable("x");
@@ -256,7 +228,7 @@ static void test_ode_solver_positive_branch() {
 }
 
 static void test_ode_solver_nullptr_no_abs() {
-    TEST_CASE("ODE solver: nullptr context identical to current (Req 15.4)");
+    TEST_CASE("ODE solver: nullptr context identical to current");
 
     // Solve dy/dx = x*y without context
     auto x = SymbolicExpr::variable("x");
@@ -275,13 +247,9 @@ static void test_ode_solver_nullptr_no_abs() {
     EXPECT_EQ_STR(s1, s2, "ODE solver with nullptr and default produce same result");
 }
 
-// ============================================================
-// Test 4: Matcher with assumption context evaluates conditions
-// (Requirement 16.2)
-// ============================================================
 
 static void test_matcher_assumption_condition_matches() {
-    TEST_CASE("Matcher: assumption_condition matches when context has variable Positive (Req 16.2)");
+    TEST_CASE("Matcher: assumption_condition matches when context has variable Positive");
 
     // Create a rule with assumption_condition that checks if wildcard "A" is Positive
     auto pattern = lamina::detail::expression_from_node(make_var("A"));
@@ -324,7 +292,7 @@ static void test_matcher_assumption_condition_matches() {
 }
 
 static void test_matcher_assumption_condition_no_match_without_context() {
-    TEST_CASE("Matcher: assumption_condition fails without context (Req 16.4)");
+    TEST_CASE("Matcher: assumption_condition fails without context");
 
     // Same rule as above
     auto pattern = lamina::detail::expression_from_node(make_var("A"));
@@ -355,7 +323,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
 }
 
 static void test_matcher_rewrite_engine_with_context() {
-    TEST_CASE("Matcher: RewriteEngine uses assumption context during apply (Req 16.3)");
+    TEST_CASE("Matcher: RewriteEngine uses assumption context during apply");
 
     // Create a rule: abs(A) → A when A is Positive
     auto abs_A = lamina::detail::expression_from_node(make_abs(make_var("A")));
@@ -392,13 +360,9 @@ static void test_matcher_rewrite_engine_with_context() {
                  "RewriteEngine removes abs(x) when x is Positive");
 }
 
-// ============================================================
-// Test 5: All subsystems with nullptr behave identically to current
-// (Requirements 12.4, 13.4, 15.4, 16.4)
-// ============================================================
 
 static void test_integrator_nullptr_identical() {
-    TEST_CASE("Integrator: nullptr identical to no context (Req 12.4)");
+    TEST_CASE("Integrator: nullptr identical to no context");
 
     // Integrate x^2
     auto integrand = lamina::detail::expression_from_node(lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2)));
@@ -417,7 +381,7 @@ static void test_integrator_nullptr_identical() {
 }
 
 static void test_ode_solver_nullptr_identical() {
-    TEST_CASE("ODE solver: nullptr identical to default (Req 15.4)");
+    TEST_CASE("ODE solver: nullptr identical to default");
 
     auto x = SymbolicExpr::variable("x");
     auto y = SymbolicExpr::variable("y");
@@ -433,7 +397,7 @@ static void test_ode_solver_nullptr_identical() {
 }
 
 static void test_matcher_nullptr_identical() {
-    TEST_CASE("Matcher: nullptr identical to no context (Req 16.4)");
+    TEST_CASE("Matcher: nullptr identical to no context");
 
     auto pattern = lamina::detail::expression_from_node(make_var("A"));
     auto target = lamina::detail::expression_from_node(make_var("x"));
@@ -462,9 +426,6 @@ static void test_matcher_nullptr_identical() {
     EXPECT_TRUE(same_bindings, "Matcher bindings identical with default and nullptr");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Test 1: Integrator with positive variable

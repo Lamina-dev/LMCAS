@@ -1,13 +1,3 @@
-/**
- * @file test_multivariate_sqfree.cpp
- * @brief 多元无平方因子分解的属性测试与单元测试。
- *
- * Property 7: Square-free decomposition correctness
- * - product of components^multiplicity equals original (up to constant)
- * - each component is square-free: gcd(fᵢ, ∂fᵢ/∂main_var) is constant
- *
- * **Validates: Requirements 3.1, 3.2**
- */
 
 #include "test_common.hpp"
 #include "multivariate_factor.hpp"
@@ -134,12 +124,8 @@ static bool verify_sqfree_decomp(const MultiPoly& original,
 
 int main()
 {
-    // ================================================================
-    // Property 7: Square-free decomposition correctness
-    // **Validates: Requirements 3.1, 3.2**
-    // ================================================================
 
-    TEST_CASE("Property 7: already square-free polynomial (x^2 - y^2)");
+    TEST_CASE("already square-free polynomial (x^2 - y^2)");
     {
         // x^2 - y^2 = (x+y)(x-y), already square-free
         std::vector<std::string> vars = {"x", "y"};
@@ -159,7 +145,7 @@ int main()
                     "x^2 - y^2: single component (already square-free)");
     }
 
-    TEST_CASE("Property 7: polynomial with squared factor (x+y)^2*(x-y)");
+    TEST_CASE("polynomial with squared factor (x+y)^2*(x-y)");
     {
         // f = (x+y)^2 * (x-y) = (x^2 + 2xy + y^2)(x - y)
         //   = x^3 + 2x^2*y + x*y^2 - x^2*y - 2x*y^2 - y^3
@@ -189,7 +175,7 @@ int main()
                     "(x+y)^2*(x-y): product matches and components are square-free");
     }
 
-    TEST_CASE("Property 7: polynomial with cubed factor (x+1)^3");
+    TEST_CASE("polynomial with cubed factor (x+1)^3");
     {
         // f = (x+1)^3 = x^3 + 3x^2 + 3x + 1
         std::vector<std::string> vars = {"x", "y"};
@@ -210,7 +196,7 @@ int main()
                     "(x+1)^3: product matches and components are square-free");
     }
 
-    TEST_CASE("Property 7: univariate with repeated roots (x-1)^2*(x+1)");
+    TEST_CASE("univariate with repeated roots (x-1)^2*(x+1)");
     {
         // f = (x-1)^2 * (x+1) = (x^2 - 2x + 1)(x + 1)
         //   = x^3 - x^2 - x + 1
@@ -239,7 +225,7 @@ int main()
                     "(x-1)^2*(x+1): product matches and components are square-free");
     }
 
-    TEST_CASE("Property 7: constant polynomial");
+    TEST_CASE("constant polynomial");
     {
         std::vector<std::string> vars = {"x", "y"};
         MultiPoly f(Rational(42), vars);
@@ -253,7 +239,7 @@ int main()
                     "constant 42: first component is constant");
     }
 
-    TEST_CASE("Property 7: linear polynomial (x + 2y + 3)");
+    TEST_CASE("linear polynomial (x + 2y + 3)");
     {
         // Linear in x → already square-free
         std::vector<std::string> vars = {"x", "y"};
@@ -272,7 +258,7 @@ int main()
                     "x + 2y + 3: single component (linear, already square-free)");
     }
 
-    TEST_CASE("Property 7: polynomial with squared and cubed factors (x+1)^2*(x-1)^3");
+    TEST_CASE("polynomial with squared and cubed factors (x+1)^2*(x-1)^3");
     {
         // f = (x+1)^2 * (x-1)^3
         std::vector<std::string> vars = {"x"};
@@ -298,7 +284,7 @@ int main()
                     "(x+1)^2*(x-1)^3: product matches and components are square-free");
     }
 
-    TEST_CASE("Property 7: multivariate with squared factor (x+y+1)^2*(x-y)");
+    TEST_CASE("multivariate with squared factor (x+y+1)^2*(x-y)");
     {
         // f = (x+y+1)^2 * (x-y)
         std::vector<std::string> vars = {"x", "y"};
@@ -325,7 +311,7 @@ int main()
                     "(x+y+1)^2*(x-y): product matches and components are square-free");
     }
 
-    TEST_CASE("Property 7: zero polynomial");
+    TEST_CASE("zero polynomial");
     {
         MultiPoly f;  // zero polynomial
 
@@ -338,10 +324,6 @@ int main()
                     "zero poly: first component is zero");
     }
 
-    // ================================================================
-    // Unit tests: verify specific component assignments
-    // **Validates: Requirements 3.1, 3.2**
-    // ================================================================
 
     TEST_CASE("unit: (x+y)^2*(x-y) component[0]=(x-y), component[1]=(x+y)");
     {

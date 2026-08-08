@@ -1,13 +1,3 @@
-// Feature: integration-enhancements, Property 1: Integration table priority ordering invariant
-//
-// Validates: Requirements 1.9
-//
-// Property 1: For every Category in IntegrationTable, the entries returned by
-// get_entries(cat) must be sorted in non-decreasing order of their `priority`
-// field. add_entry() is documented to maintain this invariant after insertion;
-// load_defaults() populates the table with all built-in rules, so iterating
-// every category and inspecting get_entries() exercises the invariant across
-// the entire default rule set.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -71,7 +61,7 @@ void check_priority_order(const IntegrationTable& table,
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 1: Integration table priority ordering invariant");
+    TEST_CASE("Integration table priority ordering invariant");
 
     // Phase 1: defaults loaded by the IntegrationTable ctor.
     {
@@ -85,7 +75,6 @@ int main() {
     // priorities (interleaved high/low values) into every category and
     // re-checking. This validates that add_entry preserves the ordering even
     // when called many times with non-monotonic priorities, which is the
-    // operational guarantee Requirement 1.9 relies on.
     {
         IntegrationTable table;
         const std::vector<int> priorities = {

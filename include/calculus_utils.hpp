@@ -14,9 +14,6 @@
 
 namespace lamina {
 
-// ============================================================
-/// 连续性判定 (Requirement 7)
-// ============================================================
 
 /**
  * @brief 连续性类型枚举。
@@ -42,9 +39,6 @@ LAMINA_API ContinuityType continuity_at(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point);
 
-// ============================================================
-/// 渐近线分析 (Requirement 15)
-// ============================================================
 
 /**
  * @brief 渐近线分析结果。
@@ -84,9 +78,6 @@ LAMINA_API AsymptoteAnalysisResult asymptotes_checked(
 LAMINA_API AsymptoteResult asymptotes(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
-// ============================================================
-/// 对数微分、微分、全微分、反函数 (Requirements 12, 13, 14, 77)
-// ============================================================
 
 /**
  * @brief 对数微分法：计算 f 关于 var 的导数。
@@ -189,9 +180,6 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inverse_function(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& y);
 
-// ============================================================
-/// 曲率 (Requirement 16)
-// ============================================================
 
 /**
  * @brief 计算显式曲线 y = f(x) 的曲率 κ = |f''| / (1 + f'²)^(3/2)
@@ -235,9 +223,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> curvature_parametric(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t);
 
-// ============================================================
-/// 拐点 (Requirement 34)
-// ============================================================
 
 /**
  * @brief 计算函数 y = f(x) 的拐点（二阶导数为零的点）。
@@ -259,9 +244,6 @@ LAMINA_API SymbolicExprVectorResult inflection_points_checked(
 LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inflection_points(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
-// ============================================================
-/// 旋转体表面积 (Requirement 17)
-// ============================================================
 
 /**
  * @brief 计算曲线 y = f(x) 绕 x 轴旋转所得旋转面的面积

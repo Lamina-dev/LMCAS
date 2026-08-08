@@ -944,9 +944,6 @@ std::shared_ptr<SymbolicExpr> symbolic_product(
     return lamina::detail::make_expression_ptr(lamina::detail::make_node<ProductNode_Op>(lamina::detail::node(body), index, lamina::detail::node(lower), lamina::detail::node(upper)));
 }
 
-// ============================================================
-/// lim sup / lim inf (Requirement 66)
-// ============================================================
 
 std::shared_ptr<SymbolicExpr> lim_sup(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n) {

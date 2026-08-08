@@ -215,6 +215,7 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
             case FunctionNode::FuncType::Sgn: result = (x > 0.0) - (x < 0.0); break;
             case FunctionNode::FuncType::Floor: result = std::floor(x); break;
             case FunctionNode::FuncType::Ceil: result = std::ceil(x); break;
+            case FunctionNode::FuncType::Round: result = std::round(x); break;
             case FunctionNode::FuncType::Erf: result = std::erf(x); break;
             case FunctionNode::FuncType::LambertW: {
                 lmmc_real_t value = 0.0;

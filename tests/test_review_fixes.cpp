@@ -51,9 +51,6 @@ void EXPECT_THROWS(F&& fn, const std::string& msg) {
     ++g_failures;
 }
 
-// =============================================================================
-// 1) BigInt::to_int saturation for single-limb magnitudes
-// =============================================================================
 void test_bigint_to_int_saturation() {
     TEST_CASE("BigInt::to_int saturates instead of truncating");
 
@@ -81,9 +78,6 @@ void test_bigint_to_int_saturation() {
     EXPECT_TRUE(huge_neg.to_int() == INT_MIN, "-1.2e18 -> INT_MIN");
 }
 
-// =============================================================================
-// 2) BigInt(string) rejects non-digit characters
-// =============================================================================
 void test_bigint_string_validation() {
     TEST_CASE("BigInt(string) rejects invalid characters");
 
@@ -108,9 +102,6 @@ void test_bigint_string_validation() {
     EXPECT_TRUE(BigInt("-").is_zero(), "lone minus -> 0");
 }
 
-// =============================================================================
-// 3) Rational(string) preserves sign on early-return paths
-// =============================================================================
 void test_rational_string_sign() {
     TEST_CASE("Rational(string) keeps the sign for integer / scientific literals");
 
@@ -122,9 +113,6 @@ void test_rational_string_sign() {
     EXPECT_EQ_STR(Rational("-1e-2").to_string(), "-1/100", "-1e-2 = -1/100");
 }
 
-// =============================================================================
-// 4) Endpoint default-initializes its bool fields
-// =============================================================================
 void test_endpoint_default_init() {
     TEST_CASE("Endpoint default constructor zero-initializes bool fields");
 
@@ -135,9 +123,6 @@ void test_endpoint_default_init() {
     EXPECT_TRUE(ep.value == nullptr, "value defaults to null");
 }
 
-// =============================================================================
-// 5) Value(string) carries a real String type and 6) is_numeric excludes Symbolic
-// =============================================================================
 void test_value_string_and_numeric() {
     TEST_CASE("Value string handling and is_numeric semantics");
 
@@ -163,9 +148,6 @@ void test_value_string_and_numeric() {
     EXPECT_TRUE(!a.is_numeric(), "string is NOT numeric");
 }
 
-// =============================================================================
-// 7) Value::as_rational / as_irrational do not truncate large BigInt
-// =============================================================================
 void test_value_as_rational_no_truncate() {
     TEST_CASE("Value::as_rational preserves large BigInt magnitude");
 
@@ -181,9 +163,6 @@ void test_value_as_rational_no_truncate() {
     EXPECT_TRUE(small.as_rational() == Rational(7), "small BigInt round-trips");
 }
 
-// =============================================================================
-// 8) Polynomial throws on mismatched variable names for nonzero operands
-// =============================================================================
 void test_polynomial_variable_mismatch() {
     TEST_CASE("Polynomial::operator+ / - rejects mismatched non-zero operands");
 
@@ -207,9 +186,6 @@ void test_polynomial_variable_mismatch() {
     EXPECT_TRUE(b.coeffs == py.coeffs, "0_x + py has py's coefficients");
 }
 
-// =============================================================================
-// 10) Irrational::to_symbolic rebuilds COMPLEX combinations fully
-// =============================================================================
 void test_irrational_to_symbolic_complex() {
     TEST_CASE("Irrational::to_symbolic reconstructs full COMPLEX combinations");
 
@@ -230,9 +206,6 @@ void test_irrational_to_symbolic_complex() {
     EXPECT_TRUE(sym2 != nullptr, "constant-only to_symbolic returns non-null");
 }
 
-// =============================================================================
-// 11) MatrixNode rejects nullptr slots in dense storage
-// =============================================================================
 void test_matrix_clone_with_null_slot() {
     TEST_CASE("MatrixNode rejects nullptr dense entries");
 
@@ -251,9 +224,6 @@ void test_matrix_clone_with_null_slot() {
     EXPECT_TRUE(rejected, "MatrixNode rejects null dense storage slots");
 }
 
-// =============================================================================
-// 12) NumberNode hash is consistent with compare_same_type
-// =============================================================================
 void test_numbernode_hash_consistent() {
     TEST_CASE("NumberNode hash matches compare_same_type for equivalent values");
 
@@ -274,9 +244,6 @@ void test_numbernode_hash_consistent() {
     EXPECT_FALSE(n_int->equals(*n_dbl), "exact BigInt does not equal approximate double structurally");
 }
 
-// =============================================================================
-// 13) symbolic_to_poly only expands integer non-negative exponents
-// =============================================================================
 void test_symbolic_to_poly_integer_exponents() {
     TEST_CASE("symbolic_to_poly does not expand x^(1/2) or x^(-1) as polynomials");
 
@@ -312,9 +279,6 @@ void test_symbolic_to_poly_integer_exponents() {
     EXPECT_TRUE(p_fhalf.is_zero(), "x^0.5 (double) is not a polynomial");
 }
 
-// =============================================================================
-// 14) extract_coeff_value<BigInt> stops silently truncating non-integer floats
-// =============================================================================
 void test_extract_coeff_no_silent_truncate() {
     TEST_CASE("extract_coeff_value<BigInt> does not silently truncate floats");
 
@@ -336,9 +300,6 @@ void test_extract_coeff_no_silent_truncate() {
     EXPECT_TRUE(b3 == BigInt(0), "3/2 -> BigInt(0) sentinel");
 }
 
-// =============================================================================
-// 15) PiecewiseIntervalResult::single_solution requires single case
-// =============================================================================
 void test_single_solution_strict() {
     TEST_CASE("PiecewiseIntervalResult::single_solution requires is_single()");
 

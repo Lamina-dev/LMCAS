@@ -21,9 +21,6 @@ namespace lamina {
 
 using TransformEngineResult = Result<TransformResult>;
 
-// ============================================================
-/// 变换表 (Transform Table)
-// ============================================================
 
 /**
  * @brief 变换表条目，存储一对时域/频域对应关系。
@@ -67,9 +64,6 @@ private:
     void init_laplace_pairs();
 };
 
-// ============================================================
-/// Laplace 变换 (Requirements 37, 86)
-// ============================================================
 
 /**
  * @brief 计算函数的 Laplace 变换 ℒ{f(t)} = F(s)。
@@ -139,9 +133,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> inverse_laplace(
     const std::string& s,
     const std::string& t);
 
-// ============================================================
-/// Fourier 变换 (Requirements 63, 64)
-// ============================================================
 
 /**
  * @brief 计算函数的 Fourier 变换 F{f(t)} = F(ω)。
@@ -221,9 +212,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> convolve(
     const std::shared_ptr<SymbolicExpr>& g,
     const std::string& var);
 
-// ============================================================
-/// Z 变换 (Requirement 65)
-// ============================================================
 
 /**
  * @brief 计算序列的 Z 变换 Z{f[n]} = F(z)。

@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_context_ext.cpp
- * @brief Unit tests for AssumptionContext extensions (task 8.7).
- *
- * Covers:
- * - Conditional assumptions: active when condition satisfied, discarded on pop
- * - with_assumptions: preserves scope depth on success and exception
- * - Serialization round-trip: empty, single-scope, multi-scope contexts
- * - Malformed deserialization: missing END, unknown keyword, DOMAIN before SCOPE
- *
- * Validates: Requirements 5.2, 5.4, 17.2, 17.3, 20.3, 20.4
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -22,9 +10,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static Interval make_closed_interval(double lo, double hi) {
     auto lower_val = lamina::detail::make_expression_ptr(
@@ -37,12 +22,9 @@ static Interval make_closed_interval(double lo, double hi) {
     return iv;
 }
 
-// ============================================================
-// 1. Conditional assumptions
-// ============================================================
 
 static void test_conditional_active_when_condition_satisfied() {
-    TEST_CASE("Conditional active when condition satisfied (Req 5.2)");
+    TEST_CASE("Conditional active when condition satisfied");
 
     AssumptionContext ctx;
 
@@ -73,7 +55,7 @@ static void test_conditional_active_when_condition_satisfied() {
 }
 
 static void test_conditional_discarded_on_pop() {
-    TEST_CASE("Conditional discarded on scope pop (Req 5.4)");
+    TEST_CASE("Conditional discarded on scope pop");
 
     AssumptionContext ctx;
 
@@ -98,12 +80,9 @@ static void test_conditional_discarded_on_pop() {
                 "Conditional discarded after pop");
 }
 
-// ============================================================
-// 2. with_assumptions
-// ============================================================
 
 static void test_with_assumptions_callable_sees_assumptions() {
-    TEST_CASE("with_assumptions: callable sees the assumptions (Req 17.2)");
+    TEST_CASE("with_assumptions: callable sees the assumptions");
 
     AssumptionContext ctx;
     int initial_depth = ctx.depth();
@@ -124,7 +103,7 @@ static void test_with_assumptions_callable_sees_assumptions() {
 }
 
 static void test_with_assumptions_preserves_depth_on_success() {
-    TEST_CASE("with_assumptions: depth same before and after on success (Req 17.2)");
+    TEST_CASE("with_assumptions: depth same before and after on success");
 
     AssumptionContext ctx;
     int depth_before = ctx.depth();
@@ -142,7 +121,7 @@ static void test_with_assumptions_preserves_depth_on_success() {
 }
 
 static void test_with_assumptions_preserves_depth_on_exception() {
-    TEST_CASE("with_assumptions: depth restored on exception (Req 17.3)");
+    TEST_CASE("with_assumptions: depth restored on exception");
 
     AssumptionContext ctx;
     int depth_before = ctx.depth();
@@ -302,12 +281,9 @@ static void test_checked_interval_and_definiteness_queries() {
                 "legacy positive-definite query unwraps checked failure to Unknown");
 }
 
-// ============================================================
-// 3. Serialization round-trip
-// ============================================================
 
 static void test_serialize_empty_context() {
-    TEST_CASE("Serialization round-trip: empty context (Req 20.3)");
+    TEST_CASE("Serialization round-trip: empty context");
 
     AssumptionContext ctx;
     std::string serialized = ctx.serialize();
@@ -320,7 +296,7 @@ static void test_serialize_empty_context() {
 }
 
 static void test_serialize_single_scope_with_domain_and_sign() {
-    TEST_CASE("Serialization round-trip: single scope with domain+sign (Req 20.3)");
+    TEST_CASE("Serialization round-trip: single scope with domain+sign");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -337,7 +313,7 @@ static void test_serialize_single_scope_with_domain_and_sign() {
 }
 
 static void test_serialize_multi_scope() {
-    TEST_CASE("Serialization round-trip: multi-scope (Req 20.3)");
+    TEST_CASE("Serialization round-trip: multi-scope");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
@@ -366,12 +342,9 @@ static void test_serialize_multi_scope() {
                 "Restored context has x as Positive from parent scope");
 }
 
-// ============================================================
-// 4. Malformed deserialization
-// ============================================================
 
 static void test_deserialize_missing_end_throws() {
-    TEST_CASE("Malformed deserialization: missing END throws with line number (Req 20.4)");
+    TEST_CASE("Malformed deserialization: missing END throws with line number");
 
     std::string malformed = "SCOPE 0\nDOMAIN x Real\n";
     // No END terminator
@@ -392,7 +365,7 @@ static void test_deserialize_missing_end_throws() {
 }
 
 static void test_deserialize_unknown_keyword_throws() {
-    TEST_CASE("Malformed deserialization: unknown keyword throws (Req 20.4)");
+    TEST_CASE("Malformed deserialization: unknown keyword throws");
 
     std::string malformed = "SCOPE 0\nFOOBAR x Real\nEND\n";
 
@@ -411,7 +384,7 @@ static void test_deserialize_unknown_keyword_throws() {
 }
 
 static void test_deserialize_domain_before_scope_throws() {
-    TEST_CASE("Malformed deserialization: DOMAIN before SCOPE throws (Req 20.4)");
+    TEST_CASE("Malformed deserialization: DOMAIN before SCOPE throws");
 
     std::string malformed = "DOMAIN x Real\nSCOPE 0\nEND\n";
 
@@ -429,9 +402,6 @@ static void test_deserialize_domain_before_scope_throws() {
                 "Error message mentions 'before SCOPE'");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Conditional assumptions

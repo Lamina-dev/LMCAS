@@ -29,9 +29,6 @@ static double eval_at2(const Expr& e, const std::string& v1, double x1,
     return sub->simplify()->to_numeric();
 }
 
-// ============================================================
-// Fourier 变换测试
-// ============================================================
 
 static void test_fourier_gaussian() {
     TEST_CASE("fourier_transform: Gaussian e^(-t^2)");
@@ -196,9 +193,6 @@ static void test_fourier_unknown_returns_unevaluated() {
     EXPECT_TRUE(tn != nullptr, "Unknown function returns unevaluated TransformNode");
 }
 
-// ============================================================
-// 逆 Fourier 变换测试
-// ============================================================
 
 static void test_inverse_fourier_gaussian() {
     TEST_CASE("inverse_fourier_transform: Gaussian e^(-omega^2)");
@@ -236,9 +230,6 @@ static void test_inverse_fourier_constant_returns_unevaluated() {
     }
 }
 
-// ============================================================
-// 卷积测试
-// ============================================================
 
 static void test_convolve_returns_result() {
     TEST_CASE("convolve: two functions returns a result");
@@ -265,9 +256,6 @@ static void test_convolve_null_inputs() {
     EXPECT_TRUE(result == nullptr, "Null g returns null");
 }
 
-// ============================================================
-// Laplace 变换测试（基础验证）
-// ============================================================
 
 static void test_laplace_constant() {
     TEST_CASE("laplace_transform: constant c -> c/s");
@@ -345,9 +333,6 @@ static void test_laplace_t_power() {
     EXPECT_NEAR(eval_at(result, "s", 2.0), 0.25, 1e-6, "L{t^2}(s=2) = 2/8 = 0.25");
 }
 
-// ============================================================
-// Z 变换测试（基础验证）
-// ============================================================
 
 static void test_z_transform_constant() {
     TEST_CASE("z_transform: constant c -> c*z/(z-1)");
@@ -508,9 +493,6 @@ static void test_transform_checked_contracts() {
                 "checked convolution reports Inconclusive for unsupported integrals");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Fourier transform tests

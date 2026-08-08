@@ -178,9 +178,8 @@ struct PropertyTestResult {
     std::string first_failure_msg;
 };
 
-PropertyTestResult test_property7_rational_root_completeness() {
-    std::cout << "\n=== Property 7: Rational root completeness ===\n";
-    std::cout << "**Validates: Requirements 4.1, 4.2**\n";
+PropertyTestResult test_rational_root_completeness() {
+    std::cout << "\n=== Rational root completeness ===\n";
 
     const int NUM_TRIALS = 40;
     int pass_count = 0;
@@ -284,7 +283,7 @@ PropertyTestResult test_property7_rational_root_completeness() {
         }
     }
 
-    std::cout << "Property 7: Rational root completeness: " << pass_count
+    std::cout << "Rational root completeness: " << pass_count
               << "/" << NUM_TRIALS << " trials passed\n";
 
     return {pass_count, NUM_TRIALS, first_failure};
@@ -305,11 +304,12 @@ int main() {
     test_constant_polynomial();
     test_degree_stops_at_4();
 
-    auto result = test_property7_rational_root_completeness();
+    auto result = test_rational_root_completeness();
 
     if (result.trials_passed < result.trials_total) {
-        std::cerr << "\nProperty 7 FAILED: " << result.trials_passed << "/"
-                  << result.trials_total << " trials passed\n";
+        std::cerr << "\nRational root completeness failed: "
+                  << result.trials_passed << "/" << result.trials_total
+                  << " trials passed\n";
         if (!result.first_failure_msg.empty()) {
             std::cerr << "First failure: " << result.first_failure_msg << "\n";
         }

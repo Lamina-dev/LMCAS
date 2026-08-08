@@ -1,13 +1,3 @@
-/**
- * @file test_property_store_sign.cpp
- * @brief Unit tests for PropertyStore sign declaration with implication and contradiction detection.
- *
- * Validates Requirements 2.1, 2.2, 2.3, 2.4, 2.6:
- * - Sign declaration stores the sign and all implied signs
- * - Contradiction pairs are detected and throw std::invalid_argument
- * - Idempotent re-declaration (same sign already present → no-op)
- * - Zero implies Integer domain
- */
 
 #include "test_common.hpp"
 #include "property_store.hpp"

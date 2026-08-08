@@ -424,8 +424,6 @@ inline AssumptionVoidResult apply_assumption_decl_checked(
  * @param callable Function to invoke under the temporary assumptions
  * @return The result of invoking callable()
  *
- * @note Supports domain, sign, and relational assumptions (Req 17.4).
- * @note Preserves context depth before and after, even on exception (Req 17.2, 17.3).
  */
 template<typename F>
 auto with_assumptions(AssumptionContext& ctx,

@@ -1,19 +1,3 @@
-/**
- * @file test_assumption_property_store.cpp
- * @brief Unified property tests for PropertyStore (Properties 1-8).
- *
- * Feature: assumption-system
- * Validates: Requirements 1.1-1.5, 2.1-2.4, 2.6, 3.1-3.7
- *
- * Property 1: Domain declaration round-trip and idempotence
- * Property 2: Domain hierarchy implication
- * Property 3: Domain specificity preservation
- * Property 4: Domain-sign contradiction detection
- * Property 5: Sign declaration with implication
- * Property 6: Sign contradiction detection
- * Property 7: Parity declaration with domain auto-promotion
- * Property 8: Boundedness declaration consistency
- */
 
 #include "test_common.hpp"
 #include "property_store.hpp"
@@ -25,9 +9,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helper: all Domain values for exhaustive iteration
-// ============================================================
 
 static const std::vector<Domain> ALL_DOMAINS = {
     Domain::Complex, Domain::Real, Domain::Algebraic, Domain::Rational,
@@ -82,13 +63,9 @@ static std::string sign_name(Sign s) {
     return "?";
 }
 
-// ============================================================
-// Property 1: Domain declaration round-trip and idempotence
-// **Validates: Requirements 1.1, 1.5**
-// ============================================================
 
-void test_property1_domain_roundtrip_all() {
-    TEST_CASE("Property 1: Domain declaration round-trip for all domains and symbols");
+void test_domain_roundtrip_all() {
+    TEST_CASE("Domain declaration round-trip for all domains and symbols");
     // For any valid symbol and any Domain, declaring then querying returns
     // at least as specific as declared.
     for (const auto& sym : TEST_SYMBOLS) {
@@ -105,8 +82,8 @@ void test_property1_domain_roundtrip_all() {
     }
 }
 
-void test_property1_idempotence() {
-    TEST_CASE("Property 1: Re-declaring same domain is idempotent");
+void test_idempotence() {
+    TEST_CASE("Re-declaring same domain is idempotent");
     for (const auto& sym : TEST_SYMBOLS) {
         for (Domain d : ALL_DOMAINS) {
             PropertyStore store;
@@ -121,13 +98,9 @@ void test_property1_idempotence() {
     }
 }
 
-// ============================================================
-// Property 2: Domain hierarchy implication
-// **Validates: Requirements 1.2**
-// ============================================================
 
-void test_property2_hierarchy_implication() {
-    TEST_CASE("Property 2: Declaring domain D implies all ancestor domains return True");
+void test_hierarchy_implication() {
+    TEST_CASE("Declaring domain D implies all ancestor domains return True");
     // For each domain D, after declaring it, has_domain should return true
     // for D and all less-specific (ancestor) domains.
     for (const auto& sym : TEST_SYMBOLS) {
@@ -147,8 +120,8 @@ void test_property2_hierarchy_implication() {
     }
 }
 
-void test_property2_non_ancestors_false() {
-    TEST_CASE("Property 2: Domains more specific than declared return False");
+void test_non_ancestors_false() {
+    TEST_CASE("Domains more specific than declared return False");
     for (Domain d : ALL_DOMAINS) {
         PropertyStore store;
         store.declare_domain("x", d);
@@ -163,13 +136,9 @@ void test_property2_non_ancestors_false() {
     }
 }
 
-// ============================================================
-// Property 3: Domain specificity preservation
-// **Validates: Requirements 1.3**
-// ============================================================
 
-void test_property3_specificity_preservation() {
-    TEST_CASE("Property 3: Declaring less-specific domain after more-specific is no-op");
+void test_specificity_preservation() {
+    TEST_CASE("Declaring less-specific domain after more-specific is no-op");
     // For each pair (D_specific, D_ancestor) where D_ancestor < D_specific,
     // declaring D_specific then D_ancestor should leave domain at D_specific.
     for (const auto& sym : TEST_SYMBOLS) {
@@ -192,8 +161,8 @@ void test_property3_specificity_preservation() {
     }
 }
 
-void test_property3_more_specific_upgrades() {
-    TEST_CASE("Property 3: Declaring more-specific domain upgrades");
+void test_more_specific_upgrades() {
+    TEST_CASE("Declaring more-specific domain upgrades");
     // Declaring a more-specific domain should upgrade.
     PropertyStore store;
     store.declare_domain("x", Domain::Real);
@@ -208,13 +177,9 @@ void test_property3_more_specific_upgrades() {
         "x upgraded to PositiveInt");
 }
 
-// ============================================================
-// Property 4: Domain-sign contradiction detection
-// **Validates: Requirements 1.4**
-// ============================================================
 
-void test_property4_natural_negative_contradiction() {
-    TEST_CASE("Property 4: Natural + Negative sign throws");
+void test_natural_negative_contradiction() {
+    TEST_CASE("Natural + Negative sign throws");
     PropertyStore store;
     store.declare_sign("x", Sign::Negative);
 
@@ -230,8 +195,8 @@ void test_property4_natural_negative_contradiction() {
         "x domain unchanged after failed Natural declaration");
 }
 
-void test_property4_positiveint_negative_contradiction() {
-    TEST_CASE("Property 4: PositiveInt + Negative sign throws");
+void test_positiveint_negative_contradiction() {
+    TEST_CASE("PositiveInt + Negative sign throws");
     PropertyStore store;
     store.declare_sign("x", Sign::Negative);
 
@@ -244,8 +209,8 @@ void test_property4_positiveint_negative_contradiction() {
     EXPECT_TRUE(threw, "PositiveInt domain with Negative sign throws");
 }
 
-void test_property4_positiveint_zero_contradiction() {
-    TEST_CASE("Property 4: PositiveInt + Zero sign throws");
+void test_positiveint_zero_contradiction() {
+    TEST_CASE("PositiveInt + Zero sign throws");
     PropertyStore store;
     store.declare_sign("x", Sign::Zero);
 
@@ -258,8 +223,8 @@ void test_property4_positiveint_zero_contradiction() {
     EXPECT_TRUE(threw, "PositiveInt domain with Zero sign throws");
 }
 
-void test_property4_positiveint_nonpositive_contradiction() {
-    TEST_CASE("Property 4: PositiveInt + NonPositive sign throws");
+void test_positiveint_nonpositive_contradiction() {
+    TEST_CASE("PositiveInt + NonPositive sign throws");
     PropertyStore store;
     store.declare_sign("x", Sign::NonPositive);
 
@@ -272,8 +237,8 @@ void test_property4_positiveint_nonpositive_contradiction() {
     EXPECT_TRUE(threw, "PositiveInt domain with NonPositive sign throws");
 }
 
-void test_property4_natural_implied_negative_contradiction() {
-    TEST_CASE("Property 4: Natural + implied Negative (from Negative declaration) throws");
+void test_natural_implied_negative_contradiction() {
+    TEST_CASE("Natural + implied Negative (from Negative declaration) throws");
     PropertyStore store;
     // Declaring Negative implies NonPositive and NonZero
     store.declare_sign("y", Sign::Negative);
@@ -287,8 +252,8 @@ void test_property4_natural_implied_negative_contradiction() {
     EXPECT_TRUE(threw, "Natural domain with implied Negative sign throws");
 }
 
-void test_property4_compatible_domain_sign_no_throw() {
-    TEST_CASE("Property 4: Compatible domain-sign pairs do not throw");
+void test_compatible_domain_sign_no_throw() {
+    TEST_CASE("Compatible domain-sign pairs do not throw");
     // Natural + Positive is fine
     {
         PropertyStore store;
@@ -323,13 +288,9 @@ void test_property4_compatible_domain_sign_no_throw() {
     }
 }
 
-// ============================================================
-// Property 5: Sign declaration with implication
-// **Validates: Requirements 2.1, 2.2, 2.4**
-// ============================================================
 
-void test_property5_positive_implications() {
-    TEST_CASE("Property 5: Positive implies NonNegative and NonZero");
+void test_positive_implications() {
+    TEST_CASE("Positive implies NonNegative and NonZero");
     for (const auto& sym : TEST_SYMBOLS) {
         PropertyStore store;
         store.declare_sign(sym, Sign::Positive);
@@ -342,8 +303,8 @@ void test_property5_positive_implications() {
     }
 }
 
-void test_property5_negative_implications() {
-    TEST_CASE("Property 5: Negative implies NonPositive and NonZero");
+void test_negative_implications() {
+    TEST_CASE("Negative implies NonPositive and NonZero");
     PropertyStore store;
     store.declare_sign("x", Sign::Negative);
     EXPECT_TRUE(store.has_sign("x", Sign::Negative), "x has Negative");
@@ -351,8 +312,8 @@ void test_property5_negative_implications() {
     EXPECT_TRUE(store.has_sign("x", Sign::NonZero), "x has NonZero (implied)");
 }
 
-void test_property5_zero_implications() {
-    TEST_CASE("Property 5: Zero implies NonNegative, NonPositive, and Integer domain");
+void test_zero_implications() {
+    TEST_CASE("Zero implies NonNegative, NonPositive, and Integer domain");
     PropertyStore store;
     store.declare_sign("x", Sign::Zero);
     EXPECT_TRUE(store.has_sign("x", Sign::Zero), "x has Zero");
@@ -362,8 +323,8 @@ void test_property5_zero_implications() {
         "x has Integer domain (implied by Zero)");
 }
 
-void test_property5_nonneg_nonpos_nonzero_no_extra() {
-    TEST_CASE("Property 5: NonNegative/NonPositive/NonZero have no further implications");
+void test_nonneg_nonpos_nonzero_no_extra() {
+    TEST_CASE("NonNegative/NonPositive/NonZero have no further implications");
     {
         PropertyStore store;
         store.declare_sign("a", Sign::NonNegative);
@@ -384,8 +345,8 @@ void test_property5_nonneg_nonpos_nonzero_no_extra() {
     }
 }
 
-void test_property5_redeclaration_noop() {
-    TEST_CASE("Property 5: Re-declaring same sign is no-op");
+void test_redeclaration_noop() {
+    TEST_CASE("Re-declaring same sign is no-op");
     for (Sign s : ALL_SIGNS) {
         PropertyStore store;
         store.declare_sign("x", s);
@@ -398,8 +359,8 @@ void test_property5_redeclaration_noop() {
     }
 }
 
-void test_property5_redeclare_implied_sign_noop() {
-    TEST_CASE("Property 5: Re-declaring an implied sign is no-op");
+void test_redeclare_implied_sign_noop() {
+    TEST_CASE("Re-declaring an implied sign is no-op");
     PropertyStore store;
     store.declare_sign("x", Sign::Positive);
     auto signs_before = store.get_signs("x");
@@ -410,10 +371,6 @@ void test_property5_redeclare_implied_sign_noop() {
         "Re-declaring implied NonNegative after Positive is no-op");
 }
 
-// ============================================================
-// Property 6: Sign contradiction detection
-// **Validates: Requirements 2.3, 2.6**
-// ============================================================
 
 // Contradiction pairs to test exhaustively
 static const std::vector<std::pair<Sign, Sign>> CONTRADICTION_PAIRS = {
@@ -428,8 +385,8 @@ static const std::vector<std::pair<Sign, Sign>> CONTRADICTION_PAIRS = {
     {Sign::NonZero, Sign::Zero},
 };
 
-void test_property6_all_contradiction_pairs() {
-    TEST_CASE("Property 6: All contradiction pairs throw std::invalid_argument");
+void test_all_contradiction_pairs() {
+    TEST_CASE("All contradiction pairs throw std::invalid_argument");
     for (const auto& [s1, s2] : CONTRADICTION_PAIRS) {
         PropertyStore store;
         store.declare_sign("x", s1);
@@ -448,8 +405,8 @@ void test_property6_all_contradiction_pairs() {
     }
 }
 
-void test_property6_implied_contradiction() {
-    TEST_CASE("Property 6: Contradiction via implied signs");
+void test_implied_contradiction() {
+    TEST_CASE("Contradiction via implied signs");
     // Positive implies NonNegative; then declaring Negative should fail
     // because Negative contradicts NonNegative
     PropertyStore store;
@@ -465,8 +422,8 @@ void test_property6_implied_contradiction() {
         "x still has Positive after failed Negative declaration");
 }
 
-void test_property6_compatible_signs_no_throw() {
-    TEST_CASE("Property 6: Compatible sign pairs do not throw");
+void test_compatible_signs_no_throw() {
+    TEST_CASE("Compatible sign pairs do not throw");
     // NonNegative + NonZero are compatible
     {
         PropertyStore store;
@@ -485,13 +442,9 @@ void test_property6_compatible_signs_no_throw() {
     }
 }
 
-// ============================================================
-// Property 7: Parity declaration with domain auto-promotion
-// **Validates: Requirements 3.1, 3.3, 3.4, 3.7**
-// ============================================================
 
-void test_property7_even_promotes_to_integer() {
-    TEST_CASE("Property 7: Even parity auto-promotes to Integer domain");
+void test_even_promotes_to_integer() {
+    TEST_CASE("Even parity auto-promotes to Integer domain");
     for (const auto& sym : TEST_SYMBOLS) {
         PropertyStore store;
         // Default domain is Complex
@@ -503,8 +456,8 @@ void test_property7_even_promotes_to_integer() {
     }
 }
 
-void test_property7_odd_promotes_to_integer() {
-    TEST_CASE("Property 7: Odd parity auto-promotes to Integer domain");
+void test_odd_promotes_to_integer() {
+    TEST_CASE("Odd parity auto-promotes to Integer domain");
     PropertyStore store;
     store.declare_parity("x", Parity::Odd);
     EXPECT_TRUE(store.get_parity("x") == Parity::Odd, "x has Odd parity");
@@ -512,8 +465,8 @@ void test_property7_odd_promotes_to_integer() {
         "x promoted to Integer by Odd parity");
 }
 
-void test_property7_parity_does_not_demote() {
-    TEST_CASE("Property 7: Parity does not demote more-specific domain");
+void test_parity_does_not_demote() {
+    TEST_CASE("Parity does not demote more-specific domain");
     // Natural is more specific than Integer
     PropertyStore store;
     store.declare_domain("x", Domain::Natural);
@@ -522,8 +475,8 @@ void test_property7_parity_does_not_demote() {
         "x domain remains Natural (more specific than Integer)");
 }
 
-void test_property7_parity_idempotent() {
-    TEST_CASE("Property 7: Re-declaring same parity is no-op");
+void test_parity_idempotent() {
+    TEST_CASE("Re-declaring same parity is no-op");
     PropertyStore store;
     store.declare_parity("x", Parity::Even);
     store.declare_parity("x", Parity::Even);
@@ -537,8 +490,8 @@ void test_property7_parity_idempotent() {
         "y still Odd after re-declaration");
 }
 
-void test_property7_parity_contradiction() {
-    TEST_CASE("Property 7: Contradictory parity throws");
+void test_parity_contradiction() {
+    TEST_CASE("Contradictory parity throws");
     // Even then Odd
     {
         PropertyStore store;
@@ -569,20 +522,16 @@ void test_property7_parity_contradiction() {
     }
 }
 
-void test_property7_default_parity_unknown() {
-    TEST_CASE("Property 7: Default parity is Unknown");
+void test_default_parity_unknown() {
+    TEST_CASE("Default parity is Unknown");
     PropertyStore store;
     EXPECT_TRUE(store.get_parity("undeclared") == Parity::Unknown,
         "Undeclared symbol has Unknown parity");
 }
 
-// ============================================================
-// Property 8: Boundedness declaration consistency
-// **Validates: Requirements 3.2, 3.5, 3.7**
-// ============================================================
 
-void test_property8_bounded_stored() {
-    TEST_CASE("Property 8: Declaring Bounded stores Bounded");
+void test_bounded_stored() {
+    TEST_CASE("Declaring Bounded stores Bounded");
     for (const auto& sym : TEST_SYMBOLS) {
         PropertyStore store;
         store.declare_bounded(sym, Boundedness::Bounded);
@@ -591,16 +540,16 @@ void test_property8_bounded_stored() {
     }
 }
 
-void test_property8_unbounded_stored() {
-    TEST_CASE("Property 8: Declaring Unbounded stores Unbounded");
+void test_unbounded_stored() {
+    TEST_CASE("Declaring Unbounded stores Unbounded");
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Unbounded);
     EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Unbounded,
         "x has Unbounded");
 }
 
-void test_property8_bounded_with_interval() {
-    TEST_CASE("Property 8: Bounded with interval stores bounds");
+void test_bounded_with_interval() {
+    TEST_CASE("Bounded with interval stores bounds");
     PropertyStore store;
 
     auto lower_val = lamina::detail::make_expression_ptr(
@@ -619,8 +568,8 @@ void test_property8_bounded_with_interval() {
         "x has bounds stored");
 }
 
-void test_property8_idempotent() {
-    TEST_CASE("Property 8: Re-declaring same boundedness is no-op");
+void test_idempotent() {
+    TEST_CASE("Re-declaring same boundedness is no-op");
     {
         PropertyStore store;
         store.declare_bounded("x", Boundedness::Bounded);
@@ -637,8 +586,8 @@ void test_property8_idempotent() {
     }
 }
 
-void test_property8_contradiction_bounded_unbounded() {
-    TEST_CASE("Property 8: Bounded then Unbounded throws");
+void test_contradiction_bounded_unbounded() {
+    TEST_CASE("Bounded then Unbounded throws");
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Bounded);
 
@@ -653,8 +602,8 @@ void test_property8_contradiction_bounded_unbounded() {
         "x remains Bounded after failed Unbounded declaration");
 }
 
-void test_property8_contradiction_unbounded_bounded() {
-    TEST_CASE("Property 8: Unbounded then Bounded throws");
+void test_contradiction_unbounded_bounded() {
+    TEST_CASE("Unbounded then Bounded throws");
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Unbounded);
 
@@ -669,8 +618,8 @@ void test_property8_contradiction_unbounded_bounded() {
         "x remains Unbounded after failed Bounded declaration");
 }
 
-void test_property8_default_unknown() {
-    TEST_CASE("Property 8: Default boundedness is Unknown");
+void test_default_unknown() {
+    TEST_CASE("Default boundedness is Unknown");
     PropertyStore store;
     EXPECT_TRUE(store.get_boundedness("undeclared") == Boundedness::Unknown,
         "Undeclared symbol has Unknown boundedness");
@@ -678,9 +627,6 @@ void test_property8_default_unknown() {
         "Undeclared symbol has no bounds");
 }
 
-// ============================================================
-// Cross-property interaction tests
-// ============================================================
 
 void test_cross_domain_sign_interaction() {
     TEST_CASE("Cross: Domain Natural then sign Negative throws (reverse direction)");
@@ -733,60 +679,49 @@ void test_default_domain_complex() {
         "has_domain returns true for Complex on undeclared symbol");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 1: Domain declaration round-trip and idempotence
-    test_property1_domain_roundtrip_all();
-    test_property1_idempotence();
+    test_domain_roundtrip_all();
+    test_idempotence();
 
-    // Property 2: Domain hierarchy implication
-    test_property2_hierarchy_implication();
-    test_property2_non_ancestors_false();
+    test_hierarchy_implication();
+    test_non_ancestors_false();
 
-    // Property 3: Domain specificity preservation
-    test_property3_specificity_preservation();
-    test_property3_more_specific_upgrades();
+    test_specificity_preservation();
+    test_more_specific_upgrades();
 
-    // Property 4: Domain-sign contradiction detection
-    test_property4_natural_negative_contradiction();
-    test_property4_positiveint_negative_contradiction();
-    test_property4_positiveint_zero_contradiction();
-    test_property4_positiveint_nonpositive_contradiction();
-    test_property4_natural_implied_negative_contradiction();
-    test_property4_compatible_domain_sign_no_throw();
+    test_natural_negative_contradiction();
+    test_positiveint_negative_contradiction();
+    test_positiveint_zero_contradiction();
+    test_positiveint_nonpositive_contradiction();
+    test_natural_implied_negative_contradiction();
+    test_compatible_domain_sign_no_throw();
 
-    // Property 5: Sign declaration with implication
-    test_property5_positive_implications();
-    test_property5_negative_implications();
-    test_property5_zero_implications();
-    test_property5_nonneg_nonpos_nonzero_no_extra();
-    test_property5_redeclaration_noop();
-    test_property5_redeclare_implied_sign_noop();
+    test_positive_implications();
+    test_negative_implications();
+    test_zero_implications();
+    test_nonneg_nonpos_nonzero_no_extra();
+    test_redeclaration_noop();
+    test_redeclare_implied_sign_noop();
 
-    // Property 6: Sign contradiction detection
-    test_property6_all_contradiction_pairs();
-    test_property6_implied_contradiction();
-    test_property6_compatible_signs_no_throw();
+    test_all_contradiction_pairs();
+    test_implied_contradiction();
+    test_compatible_signs_no_throw();
 
-    // Property 7: Parity declaration with domain auto-promotion
-    test_property7_even_promotes_to_integer();
-    test_property7_odd_promotes_to_integer();
-    test_property7_parity_does_not_demote();
-    test_property7_parity_idempotent();
-    test_property7_parity_contradiction();
-    test_property7_default_parity_unknown();
+    test_even_promotes_to_integer();
+    test_odd_promotes_to_integer();
+    test_parity_does_not_demote();
+    test_parity_idempotent();
+    test_parity_contradiction();
+    test_default_parity_unknown();
 
-    // Property 8: Boundedness declaration consistency
-    test_property8_bounded_stored();
-    test_property8_unbounded_stored();
-    test_property8_bounded_with_interval();
-    test_property8_idempotent();
-    test_property8_contradiction_bounded_unbounded();
-    test_property8_contradiction_unbounded_bounded();
-    test_property8_default_unknown();
+    test_bounded_stored();
+    test_unbounded_stored();
+    test_bounded_with_interval();
+    test_idempotent();
+    test_contradiction_bounded_unbounded();
+    test_contradiction_unbounded_bounded();
+    test_default_unknown();
 
     // Cross-property interaction tests
     test_cross_domain_sign_interaction();

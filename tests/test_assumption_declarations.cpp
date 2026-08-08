@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_declarations.cpp
- * @brief Unit tests for PropertyStore declaration methods (Task 2.5).
- *
- * Tests:
- * - Continuity/differentiability overlap detection
- * - Monotonicity storage and retrieval
- * - Periodicity storage and retrieval
- * - All contradiction scenarios produce correct exception messages
- *
- * Validates: Requirements 6.4, 7.1, 7.2, 11.2
- */
 
 #include "test_common.hpp"
 #include "assumption.hpp"
@@ -21,9 +9,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers: create intervals for testing
-// ============================================================
 
 static Interval make_closed_interval(double lo, double hi) {
     auto lower_val = lamina::detail::make_expression_ptr(
@@ -47,9 +32,6 @@ static Interval make_open_interval(double lo, double hi) {
     return iv;
 }
 
-// ============================================================
-// Tests: Continuity/Differentiability overlap detection (Req 6.4)
-// ============================================================
 
 static void test_continuous_only_on_differentiable_overlap_throws() {
     TEST_CASE("Continuity overlap: declaring continuous-only on interval overlapping differentiable throws");
@@ -176,9 +158,6 @@ static void test_non_overlapping_intervals_no_conflict() {
     EXPECT_FALSE(threw, "Disjoint intervals do not conflict");
 }
 
-// ============================================================
-// Tests: Monotonicity storage and retrieval (Req 7.1, 7.2)
-// ============================================================
 
 static void test_monotonicity_declare_and_retrieve_increasing() {
     TEST_CASE("Monotonicity: declare increasing and retrieve");
@@ -292,9 +271,6 @@ static void test_monotonicity_entire_line() {
         "Entire line declaration covers any finite sub-interval");
 }
 
-// ============================================================
-// Tests: Periodicity storage and retrieval (Req 11.2)
-// ============================================================
 
 static void test_periodicity_declare_and_retrieve() {
     TEST_CASE("Periodicity: declare periodic and retrieve period");
@@ -376,9 +352,6 @@ static void test_periodicity_different_symbols() {
     }
 }
 
-// ============================================================
-// Tests: Contradiction scenarios (various requirements)
-// ============================================================
 
 static void test_contradiction_finite_divergent() {
     TEST_CASE("Contradiction: Finite then Divergent throws");
@@ -566,9 +539,6 @@ static void test_contradiction_parity_even_odd() {
     EXPECT_TRUE(threw, "Even + Odd throws");
 }
 
-// ============================================================
-// Tests: Finiteness implies Bounded (Req 9.3)
-// ============================================================
 
 static void test_finite_implies_bounded() {
     TEST_CASE("Finiteness: Finite implies Bounded");
@@ -670,9 +640,6 @@ static void test_checked_interval_property_contracts() {
                 "checked monotonicity query retrieves the proven declaration");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Continuity/differentiability overlap detection

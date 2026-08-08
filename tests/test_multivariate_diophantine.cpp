@@ -1,12 +1,3 @@
-/**
- * @file test_multivariate_diophantine.cpp
- * @brief 多元丢番图方程求解器的属性测试与单元测试。
- *
- * Property 8: Multivariate diophantine solver correctness
- * s₁*f₁ + ... + sᵣ*fᵣ ≡ c modulo ideal
- *
- * **Validates: Requirements 5.2**
- */
 
 #include "test_common.hpp"
 #include "multivariate_factor.hpp"
@@ -52,13 +43,8 @@ static bool verify_diophantine_solution(
 
 int main()
 {
-    // ================================================================
-    // Property 8: Multivariate diophantine solver correctness
-    // s₁*f₁ + ... + sᵣ*fᵣ ≡ c modulo ideal
-    // **Validates: Requirements 5.2**
-    // ================================================================
 
-    TEST_CASE("Property 8: Two coprime linear factors, target = 1");
+    TEST_CASE("Two coprime linear factors, target = 1");
     {
         // f₁ = x+1, f₂ = x-1, target = 1
         // 求解 s₁*(x+1) + s₂*(x-1) = 1
@@ -88,7 +74,7 @@ int main()
                     "s1*(x+1) + s2*(x-1) == 1");
     }
 
-    TEST_CASE("Property 8: Two coprime linear factors, target = x");
+    TEST_CASE("Two coprime linear factors, target = x");
     {
         // f₁ = x+1, f₂ = x-1, target = x
         // 求解 s₁*(x+1) + s₂*(x-1) = x
@@ -120,7 +106,7 @@ int main()
                     "s1*(x+1) + s2*(x-1) == x");
     }
 
-    TEST_CASE("Property 8: Three coprime factors, target = 1");
+    TEST_CASE("Three coprime factors, target = 1");
     {
         // f₁ = x, f₂ = x+1, f₃ = x-1, target = 1
         // 求解 s₁*x + s₂*(x+1) + s₃*(x-1) = 1
@@ -154,7 +140,7 @@ int main()
                     "s1*x + s2*(x+1) + s3*(x-1) == 1");
     }
 
-    TEST_CASE("Property 8: Factors with higher degree, target = 1");
+    TEST_CASE("Factors with higher degree, target = 1");
     {
         // f₁ = x²+1, f₂ = x+1, target = 1
         // 求解 s₁*(x²+1) + s₂*(x+1) = 1
@@ -183,7 +169,7 @@ int main()
                     "s1*(x^2+1) + s2*(x+1) == 1");
     }
 
-    TEST_CASE("Property 8: Non-trivial target, two coprime factors");
+    TEST_CASE("Non-trivial target, two coprime factors");
     {
         // f₁ = x+1, f₂ = x+2, target = x+3
         // 求解 s₁*(x+1) + s₂*(x+2) = x+3
@@ -216,7 +202,7 @@ int main()
                     "s1*(x+1) + s2*(x+2) == x+3");
     }
 
-    TEST_CASE("Property 8: Target = 0 gives all-zero solution");
+    TEST_CASE("Target = 0 gives all-zero solution");
     {
         // f₁ = x+1, f₂ = x-1, target = 0
         // 求解 s₁*(x+1) + s₂*(x-1) = 0
@@ -258,7 +244,7 @@ int main()
                     "zero target: s1*(x+1) + s2*(x-1) == 0");
     }
 
-    TEST_CASE("Property 8: Two quadratic coprime factors, target = 1");
+    TEST_CASE("Two quadratic coprime factors, target = 1");
     {
         // f₁ = x²+1, f₂ = x²+x+1, target = 1
         // These are coprime since gcd(x²+1, x²+x+1) = 1
@@ -289,10 +275,6 @@ int main()
                     "s1*(x^2+1) + s2*(x^2+x+1) == 1");
     }
 
-    // ================================================================
-    // Unit Test: Degree constraints verification
-    // deg(s_i) < deg(product/f_i) for each solution component
-    // ================================================================
 
     TEST_CASE("Diophantine degree constraints: deg(s_i) < deg(product/f_i)");
     {
@@ -374,10 +356,6 @@ int main()
                     "higher deg constraint: sum equals target");
     }
 
-    // ================================================================
-    // Unit Tests: Known solutions for diophantine solver
-    // **Validates: Requirements 5.2**
-    // ================================================================
 
     TEST_CASE("Unit: Two-factor f1=x, f2=x+1, target=1, known solution s1=-1, s2=1");
     {
@@ -512,10 +490,6 @@ int main()
         }
     }
 
-    // ================================================================
-    // Unit Tests for Task 6.3: Specific expected solutions
-    // **Validates: Requirements 5.2**
-    // ================================================================
 
     TEST_CASE("Unit: Two-factor f1=x+1, f2=x-1, target=1 — known solution s1=1/2, s2=-1/2");
     {
@@ -731,14 +705,8 @@ int main()
                     "tight degree bound: s2 is constant");
     }
 
-    // ================================================================
-    // Property 8: Multivariate diophantine solver correctness
-    // (Property-based test using rc::check)
-    // s₁*f₁ + ... + sᵣ*fᵣ ≡ c modulo ideal
-    // **Validates: Requirements 5.2**
-    // ================================================================
 
-    TEST_CASE("Feature: multivariate-factorization, Property 8: Diophantine solver correctness (random coprime pairs)");
+    TEST_CASE("Diophantine solver correctness (random coprime pairs)");
     rc::check("For random coprime linear factor pairs, s1*f1 + s2*f2 == target", []() {
         // Generate two coprime linear factors: f1 = x + a, f2 = x + b with a != b
         std::vector<std::string> vars = {"x"};
@@ -775,7 +743,7 @@ int main()
         RC_ASSERT(sum == target);
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 8: Diophantine solver correctness (random linear target)");
+    TEST_CASE("Diophantine solver correctness (random linear target)");
     rc::check("For coprime linear factors with linear target, s1*f1 + s2*f2 == target", []() {
         // Generate two coprime linear factors: f1 = x + a, f2 = x + b with a != b
         std::vector<std::string> vars = {"x"};
@@ -817,7 +785,7 @@ int main()
         RC_ASSERT(sum == target);
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 8: Diophantine solver correctness (three coprime factors)");
+    TEST_CASE("Diophantine solver correctness (three coprime factors)");
     rc::check("For three coprime linear factors, s1*f1 + s2*f2 + s3*f3 == target", []() {
         // Generate three coprime linear factors: fi = x + ai with distinct ai
         std::vector<std::string> vars = {"x"};
@@ -858,7 +826,7 @@ int main()
         RC_ASSERT(sum == target);
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 8: Diophantine solver correctness (quadratic and linear coprime)");
+    TEST_CASE("Diophantine solver correctness (quadratic and linear coprime)");
     rc::check("For coprime quadratic+linear factors, s1*f1 + s2*f2 == target", []() {
         // f1 = x^2 + a (quadratic), f2 = x + b (linear), coprime when b^2 + a != 0
         std::vector<std::string> vars = {"x"};
@@ -892,7 +860,7 @@ int main()
         RC_ASSERT(sum == target);
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 8: Diophantine solver correctness (degree constraint)");
+    TEST_CASE("Diophantine solver correctness (degree constraint)");
     rc::check("Solution components satisfy degree constraints: deg(si) < deg(product/fi)", []() {
         // f1 = x + a, f2 = x + b with a != b
         std::vector<std::string> vars = {"x"};

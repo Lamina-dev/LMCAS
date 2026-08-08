@@ -53,9 +53,6 @@ static MultiPoly embed_content(const MultiPoly& content,
 
 int main()
 {
-    // ================================================================
-    // multivariate_content 基本测试
-    // ================================================================
 
     TEST_CASE("multivariate_content: zero polynomial returns zero");
     {
@@ -175,10 +172,6 @@ int main()
                       "content of x^2*y + x^2*z w.r.t. x is y + z");
     }
 
-    // ================================================================
-    // 以下测试依赖 multivariate_gcd 的正确实现（任务 3.4）
-    // 当前 multivariate_gcd 为桩实现，这些测试预期在 3.4 完成后通过
-    // ================================================================
 
     TEST_CASE("multivariate_content: x^2*y + x*y (content = y) [requires GCD]");
     {
@@ -226,9 +219,6 @@ int main()
                       "content of 2x^2*y + 4x*y^2 w.r.t. x is 2y");
     }
 
-    // ================================================================
-    // multivariate_gcd 单元测试
-    // ================================================================
 
     TEST_CASE("multivariate_gcd: gcd(x^2*y + x*y^2, x*y) == x*y");
     {
@@ -356,14 +346,8 @@ int main()
                       "gcd(12, 8) == 4");
     }
 
-    // ================================================================
-    // Property 6: Content/primitive part decomposition
-    // content(f, x) * primitive_part(f, x) == f
-    // content divides every coefficient of f viewed as univariate in x
-    // **Validates: Requirements 2.1, 2.2**
-    // ================================================================
 
-    TEST_CASE("Property 6: trivial content (x^2 + x + 1, content = 1)");
+    TEST_CASE("trivial content (x^2 + x + 1, content = 1)");
     {
         // poly = x^2 + x + 1, main_var = "x"
         // All coefficients are constants (1, 1, 1), content = 1
@@ -382,7 +366,7 @@ int main()
         EXPECT_TRUE(content.is_constant(), "content of x^2+x+1 is trivial (constant)");
     }
 
-    TEST_CASE("Property 6: non-trivial content (x^2*y + x*y, content = y)");
+    TEST_CASE("non-trivial content (x^2*y + x*y, content = y)");
     {
         // poly = x^2*y + x*y, main_var = "x"
         // coeff(x^2) = y, coeff(x^1) = y → content = gcd(y, y) = y
@@ -412,7 +396,7 @@ int main()
         EXPECT_TRUE(divides_x1, "content divides coeff(x^1) for x^2*y + x*y");
     }
 
-    TEST_CASE("Property 6: numeric content (6*x^2 + 4*x, content = 2)");
+    TEST_CASE("numeric content (6*x^2 + 4*x, content = 2)");
     {
         // poly = 6*x^2 + 4*x, main_var = "x"
         // coeff(x^2) = 6, coeff(x^1) = 4 → content = gcd(6, 4) = 2
@@ -430,7 +414,7 @@ int main()
         EXPECT_TRUE(content.is_constant(), "content of 6x^2+4x is constant");
     }
 
-    TEST_CASE("Property 6: trivariate polynomial (x^2*y*z + x*y*z^2, content = y*z)");
+    TEST_CASE("trivariate polynomial (x^2*y*z + x*y*z^2, content = y*z)");
     {
         // poly = x^2*y*z + x*y*z^2, main_var = "x"
         // coeff(x^2) = y*z, coeff(x^1) = y*z^2 → content = gcd(y*z, y*z^2) = y*z
@@ -459,7 +443,7 @@ int main()
         EXPECT_TRUE(div1, "content divides coeff(x^1) for trivariate poly");
     }
 
-    TEST_CASE("Property 6: mixed numeric and polynomial content (2*x^2*y + 4*x*y^2, content = 2y)");
+    TEST_CASE("mixed numeric and polynomial content (2*x^2*y + 4*x*y^2, content = 2y)");
     {
         // poly = 2*x^2*y + 4*x*y^2, main_var = "x"
         // coeff(x^2) = 2y, coeff(x^1) = 4y^2 → content = gcd(2y, 4y^2) = 2y
@@ -488,7 +472,7 @@ int main()
         EXPECT_TRUE(div1, "content divides coeff(x^1) for 2x^2*y + 4x*y^2");
     }
 
-    TEST_CASE("Property 6: single term polynomial (x^3*y^2*z, content = y^2*z)");
+    TEST_CASE("single term polynomial (x^3*y^2*z, content = y^2*z)");
     {
         // poly = x^3*y^2*z, main_var = "x"
         // Only one coefficient: coeff(x^3) = y^2*z → content = y^2*z
@@ -504,7 +488,7 @@ int main()
         EXPECT_TRUE(product == f, "content * primitive_part == f for single term x^3*y^2*z");
     }
 
-    TEST_CASE("Property 6: constant polynomial (content = poly itself)");
+    TEST_CASE("constant polynomial (content = poly itself)");
     {
         // poly = 7, main_var = "x"
         // Constant polynomial has degree 0 in x, content = poly itself
@@ -517,7 +501,7 @@ int main()
         EXPECT_TRUE(product == f, "content * primitive_part == f for constant 7");
     }
 
-    TEST_CASE("Property 6: three-term trivariate (x^3*y + x^2*y*z + x*y*z^2, content = y)");
+    TEST_CASE("three-term trivariate (x^3*y + x^2*y*z + x*y*z^2, content = y)");
     {
         // poly = x^3*y + x^2*y*z + x*y*z^2, main_var = "x"
         // coeff(x^3) = y, coeff(x^2) = y*z, coeff(x^1) = y*z^2

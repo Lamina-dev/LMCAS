@@ -1,18 +1,3 @@
-/**
- * @file test_assumption_diagnostics.cpp
- * @brief Property tests for conflict diagnostics (Task 9.3).
- *
- * Property tested:
- * - Property 20: Conflict diagnostics contain required information
- *
- * For any contradiction, the exception message SHALL contain the symbol name,
- * existing property, and new conflicting property.
- *
- * Validates: Requirements 19.1, 19.2, 19.3
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -26,9 +11,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Generate a random variable name for property tests
 static std::string random_var_name() {
@@ -127,13 +109,9 @@ static CrossConstraint random_cross_constraint() {
     return rc::gen::elementOf(conflicts);
 }
 
-// ============================================================
-// Property 20: Domain contradiction messages contain required info
-// **Validates: Requirements 19.1**
-// ============================================================
 
-static void test_property20_domain_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Domain contradiction contains symbol and domains");
+static void test_domain_contradiction_message() {
+    TEST_CASE("Domain contradiction contains symbol and domains");
 
     rc::check("For any domain contradiction (Transcendental then sub-Real), "
               "the exception message contains the symbol name and both domains", []() {
@@ -168,13 +146,9 @@ static void test_property20_domain_contradiction_message() {
     });
 }
 
-// ============================================================
-// Property 20: Sign contradiction messages contain required info
-// **Validates: Requirements 19.2**
-// ============================================================
 
-static void test_property20_sign_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Sign contradiction contains symbol and signs");
+static void test_sign_contradiction_message() {
+    TEST_CASE("Sign contradiction contains symbol and signs");
 
     rc::check("For any sign contradiction (e.g., Positive then Negative), "
               "the exception message contains the symbol name and both signs", []() {
@@ -208,13 +182,9 @@ static void test_property20_sign_contradiction_message() {
     });
 }
 
-// ============================================================
-// Property 20: Cross-constraint conflict messages contain required info
-// **Validates: Requirements 19.3**
-// ============================================================
 
-static void test_property20_cross_constraint_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Cross-constraint conflict contains symbol, domain, and sign");
+static void test_cross_constraint_message() {
+    TEST_CASE("Cross-constraint conflict contains symbol, domain, and sign");
 
     rc::check("For any cross-constraint conflict (e.g., Natural + Negative), "
               "the exception message contains the symbol name and explains both", []() {
@@ -248,13 +218,9 @@ static void test_property20_cross_constraint_message() {
     });
 }
 
-// ============================================================
-// Property 20: Finiteness contradiction messages contain required info
-// (Additional coverage for contradiction diagnostics)
-// ============================================================
 
-static void test_property20_finiteness_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Finiteness contradiction contains symbol info");
+static void test_finiteness_contradiction_message() {
+    TEST_CASE("Finiteness contradiction contains symbol info");
 
     rc::check("For any Finite+Divergent contradiction, "
               "the exception message contains the symbol name", []() {
@@ -288,12 +254,9 @@ static void test_property20_finiteness_contradiction_message() {
     });
 }
 
-// ============================================================
-// Property 20: Definiteness contradiction messages contain required info
-// ============================================================
 
-static void test_property20_definiteness_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Definiteness contradiction contains symbol info");
+static void test_definiteness_contradiction_message() {
+    TEST_CASE("Definiteness contradiction contains symbol info");
 
     rc::check("For any PositiveDefinite+NegativeDefinite contradiction, "
               "the exception message contains the symbol name", []() {
@@ -329,17 +292,13 @@ static void test_property20_definiteness_contradiction_message() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 20: Conflict diagnostics contain required information
-    test_property20_domain_contradiction_message();
-    test_property20_sign_contradiction_message();
-    test_property20_cross_constraint_message();
-    test_property20_finiteness_contradiction_message();
-    test_property20_definiteness_contradiction_message();
+    test_domain_contradiction_message();
+    test_sign_contradiction_message();
+    test_cross_constraint_message();
+    test_finiteness_contradiction_message();
+    test_definiteness_contradiction_message();
 
     return TEST_REPORT();
 }

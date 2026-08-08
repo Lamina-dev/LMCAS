@@ -107,9 +107,6 @@ void test_large_coefficients() {
     EXPECT_TRUE(result.empty(), "legacy hensel_lift unwraps missing factors for large coefficients");
 }
 
-// ============================================================
-// 二因子二次 Hensel 提升测试 (Task 4.2)
-// ============================================================
 
 namespace {
 
@@ -457,9 +454,6 @@ void test_hensel_lift_via_api_x2_minus_1() {
                 "checked hensel_lift rejects mod-p factors whose product is not the input");
 }
 
-// ============================================================
-// 多因子 Hensel 提升测试 (Task 4.3)
-// ============================================================
 
 /**
  * @brief 测试 3 因子提升：x³ - x = x(x-1)(x+1) mod 5，提升到 mod 25。
@@ -625,9 +619,6 @@ void test_multi_factor_lift_symmetric_coeffs() {
     EXPECT_TRUE(match, "product of 3 lifted factors = f (mod 25)");
 }
 
-// ============================================================
-// 系数对称表示测试 (Task 4.4)
-// ============================================================
 
 /**
  * @brief 验证对称模归约的基本正确性。
@@ -941,7 +932,6 @@ int main() {
     test_edge_cases();
     test_large_coefficients();
 
-    // Task 4.2: Two-factor quadratic Hensel lifting tests
     test_hensel_lift_x2_minus_1_mod3();
     test_hensel_lift_x2_plus_3x_plus_2_mod5();
     test_hensel_lift_non_exact_mod3();
@@ -949,12 +939,10 @@ int main() {
     test_hensel_lift_cubic();
     test_hensel_lift_via_api_x2_minus_1();
 
-    // Task 4.3: Multi-factor Hensel lifting tests
     test_multi_factor_lift_3_factors();
     test_multi_factor_lift_2_factors_via_api();
     test_multi_factor_lift_symmetric_coeffs();
 
-    // Task 4.4: Coefficient symmetric representation tests
     test_symmetric_repr_basic_range();
     test_symmetric_repr_large_coefficients();
     test_symmetric_repr_roundtrip();

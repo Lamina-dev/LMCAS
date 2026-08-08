@@ -1,23 +1,9 @@
-/**
- * @file test_prop_limits.cpp
- * @brief LimitVisitor 增强功能的属性测试。
- *
- * 使用随机生成的多项式系数、有界函数等验证以下属性：
- * - Property 3: 不定式解析终止性
- * - Property 4: 有理函数无穷极限遵循次数规则
- * - Property 5: 有界振荡函数的夹逼定理
- *
- * **Validates: Requirements 2.1-2.6, 5.1, 6.1, 6.3**
- */
 #include "test_common.hpp"
 #include "visitors/limit_visitor.hpp"
 #include <random>
 #include <chrono>
 #include <functional>
 
-// ============================================================================
-// Random generation utilities
-// ============================================================================
 
 static std::mt19937 rng(static_cast<unsigned>(
     std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -74,17 +60,9 @@ static std::vector<int> rand_poly_coeffs(int degree, int max_coeff = 4) {
     return coeffs;
 }
 
-// ============================================================================
-// Property 3: Indeterminate form resolution terminates
-// **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6**
-//
-// For any expression that evaluates to an indeterminate form at a limit point,
-// the LimitVisitor SHALL either return a finite value, ±∞, or nullptr —
-// never crash or loop indefinitely.
-// ============================================================================
 
-static void test_property3_indeterminate_termination() {
-    TEST_CASE("Property 3: Indeterminate form resolution terminates");
+static void test_indeterminate_termination() {
+    TEST_CASE("Indeterminate form resolution terminates");
 
     auto x = SymbolicExpr::variable("x");
     auto zero = SymbolicExpr::number(0);
@@ -178,23 +156,14 @@ static void test_property3_indeterminate_termination() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 3: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " indeterminate form trials terminated without crash (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Property 4: Rational function limit at infinity follows degree rule
-// **Validates: Requirements 5.1**
-//
-// For any rational function P(x)/Q(x) where deg(P) and deg(Q) are known:
-// - If deg(P) < deg(Q): limit = 0
-// - If deg(P) = deg(Q): limit = leading_coeff(P) / leading_coeff(Q)
-// - If deg(P) > deg(Q): limit = ±∞
-// ============================================================================
 
-static void test_property4_rational_degree_rule() {
-    TEST_CASE("Property 4: Rational function limit at infinity follows degree rule");
+static void test_rational_degree_rule() {
+    TEST_CASE("Rational function limit at infinity follows degree rule");
 
     auto x = SymbolicExpr::variable("x");
     auto inf = SymbolicExpr::infinity(1);
@@ -268,21 +237,14 @@ static void test_property4_rational_degree_rule() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 4: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " rational function degree rule trials passed (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Property 5: Squeeze theorem for bounded oscillation
-// **Validates: Requirements 6.1, 6.3**
-//
-// For any expression of the form f(x)·g(x) where f(x)→0 as x→a and g is
-// bounded (sin or cos of any argument), the limit as x→a SHALL be zero.
-// ============================================================================
 
-static void test_property5_squeeze_bounded_oscillation() {
-    TEST_CASE("Property 5: Squeeze theorem for bounded oscillation");
+static void test_squeeze_bounded_oscillation() {
+    TEST_CASE("Squeeze theorem for bounded oscillation");
 
     auto x = SymbolicExpr::variable("x");
     auto zero = SymbolicExpr::number(0);
@@ -339,19 +301,16 @@ static void test_property5_squeeze_bounded_oscillation() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 5: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " squeeze theorem trials returned 0 (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
-// ============================================================================
-// Main
-// ============================================================================
 
 int main() {
-    test_property3_indeterminate_termination();
-    test_property4_rational_degree_rule();
-    test_property5_squeeze_bounded_oscillation();
+    test_indeterminate_termination();
+    test_rational_degree_rule();
+    test_squeeze_bounded_oscillation();
 
     return TEST_REPORT();
 }

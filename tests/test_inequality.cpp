@@ -446,7 +446,7 @@ int main() {
         EXPECT_TRUE(result.is_empty(), "sin(x) >= 0 should return empty (non-polynomial)");
     }
 
-    TEST_CASE("Property 2: Solution Soundness - points in solution set satisfy inequality");
+    TEST_CASE("Solution Soundness - points in solution set satisfy inequality");
     {
         std::mt19937 rng(42);
         const int NUM_ITERATIONS = 100;
@@ -558,7 +558,7 @@ int main() {
 
                 if (!satisfies(value, type)) {
                     std::ostringstream oss;
-                    oss << "Property 2 FAIL: iter=" << iter
+                    oss << "FAIL: iter=" << iter
                         << " point=" << point << " poly_value=" << value
                         << " type=" << static_cast<int>(type)
                         << " poly=[";
@@ -577,12 +577,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 2: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed solution soundness";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 3: Solution Completeness - points outside solution set violate inequality");
+    TEST_CASE("Solution Completeness - points outside solution set violate inequality");
     {
         std::mt19937 rng(123);
         const int NUM_ITERATIONS = 100;
@@ -696,7 +696,7 @@ int main() {
 
                 if (satisfies(value, type)) {
                     std::ostringstream oss;
-                    oss << "Property 3 FAIL: iter=" << iter
+                    oss << "FAIL: iter=" << iter
                         << " point=" << point << " poly_value=" << value
                         << " type=" << static_cast<int>(type)
                         << " solution=" << solution.to_string()
@@ -716,12 +716,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 3: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed solution completeness";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 7: Endpoint Correctness (Strict vs Non-strict)");
+    TEST_CASE("Endpoint Correctness (Strict vs Non-strict)");
     {
         std::mt19937 rng(777);
         const int NUM_ITERATIONS = 100;
@@ -770,7 +770,7 @@ int main() {
 
                     if (root_in_solution) {
                         std::ostringstream oss;
-                        oss << "Property 7 FAIL (strict): iter=" << iter
+                        oss << "FAIL (strict): iter=" << iter
                             << " root=" << r << " is in solution but shouldn't be"
                             << " poly=" << poly->to_string()
                             << " type=" << (int)ineq_type;
@@ -782,7 +782,7 @@ int main() {
 
                     if (!root_in_solution) {
                         std::ostringstream oss;
-                        oss << "Property 7 FAIL (non-strict): iter=" << iter
+                        oss << "FAIL (non-strict): iter=" << iter
                             << " root=" << r << " is NOT in solution but should be"
                             << " poly=" << poly->to_string()
                             << " type=" << (int)ineq_type;
@@ -797,12 +797,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 7: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed endpoint correctness (strict vs non-strict)";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 8: Multiplicity Sign Change Correctness");
+    TEST_CASE("Multiplicity Sign Change Correctness");
     {
         std::mt19937 rng(888);
         const int NUM_ITERATIONS = 100;
@@ -859,7 +859,7 @@ int main() {
 
                 if (left_sign != right_sign) {
                     std::ostringstream oss;
-                    oss << "Property 8 FAIL (even mult): iter=" << iter
+                    oss << "FAIL (even mult): iter=" << iter
                         << " root=" << root << " mult=" << multiplicity
                         << " left_sign=" << left_sign << " right_sign=" << right_sign
                         << " left_val=" << left_val << " right_val=" << right_val;
@@ -870,7 +870,7 @@ int main() {
 
                 if (left_sign == right_sign) {
                     std::ostringstream oss;
-                    oss << "Property 8 FAIL (odd mult): iter=" << iter
+                    oss << "FAIL (odd mult): iter=" << iter
                         << " root=" << root << " mult=" << multiplicity
                         << " left_sign=" << left_sign << " right_sign=" << right_sign
                         << " left_val=" << left_val << " right_val=" << right_val;
@@ -883,12 +883,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 8: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed multiplicity sign change correctness";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 11: Parametric Inequality Consistency");
+    TEST_CASE("Parametric Inequality Consistency");
     {
         std::mt19937 rng(1111);
         const int NUM_ITERATIONS = 100;
@@ -1141,7 +1141,7 @@ int main() {
 
                     if (!near_root) {
                         std::ostringstream oss;
-                        oss << "Property 11 FAIL: iter=" << iter
+                        oss << "FAIL: iter=" << iter
                             << " a=" << a_val << " p=" << p_val << " q=" << q_val
                             << " type=" << static_cast<int>(ineq_type)
                             << " point=" << test_point
@@ -1160,7 +1160,7 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 11: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed parametric inequality consistency";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }

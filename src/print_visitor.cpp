@@ -117,6 +117,7 @@ void PrintVisitor::visit(const FunctionNode& node) {
         case FunctionNode::FuncType::Sgn: buffer << "sgn"; break;
         case FunctionNode::FuncType::Floor: buffer << "floor"; break;
         case FunctionNode::FuncType::Ceil: buffer << "ceil"; break;
+        case FunctionNode::FuncType::Round: buffer << "round"; break;
         case FunctionNode::FuncType::RealPart: buffer << "re"; break;
         case FunctionNode::FuncType::ImagPart: buffer << "im"; break;
         case FunctionNode::FuncType::Conjugate: buffer << "conj"; break;

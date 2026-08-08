@@ -153,9 +153,6 @@ public:
     }
 };
 
-// ============================================================================
-/// Inline implementations
-// ============================================================================
 
 inline bool LimitVisitor::is_inf(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return false;

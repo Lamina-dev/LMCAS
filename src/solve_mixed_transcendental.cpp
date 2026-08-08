@@ -19,9 +19,6 @@
 
 namespace lamina {
 
-// ============================================================================
-/// contains_transcendental_of_var
-// ============================================================================
 
 /**
  * @internal
@@ -144,9 +141,6 @@ bool contains_transcendental_of_var(
     return detector.found;
 }
 
-// ============================================================================
-/// is_polynomial_after_substitution
-// ============================================================================
 
 /**
  * @internal
@@ -241,9 +235,6 @@ bool is_polynomial_after_substitution(
     return true;
 }
 
-// ============================================================================
-/// determine_search_interval
-// ============================================================================
 
 
 /**
@@ -502,9 +493,6 @@ std::optional<SearchInterval> determine_search_interval(
     return SearchInterval{lo, hi};
 }
 
-// ============================================================================
-/// isolate_roots
-// ============================================================================
 
 /**
  * @internal
@@ -873,9 +861,6 @@ std::vector<IsolatedInterval> isolate_roots(
     return result;
 }
 
-// ============================================================================
-/// deduplicate_roots
-// ============================================================================
 
 std::vector<lmmc_real_t> deduplicate_roots(
     std::vector<NumericRoot>& roots,
@@ -923,9 +908,6 @@ std::vector<lmmc_real_t> deduplicate_roots(
     return result;
 }
 
-// ============================================================================
-/// refine_root — 根精化：带区间约束的 Newton-Raphson + 二分法回退
-// ============================================================================
 
 /**
  * @internal
@@ -1166,9 +1148,6 @@ std::optional<NumericRoot> refine_root(
     return std::nullopt;
 }
 
-// ============================================================================
-/// assemble_results — 将 lmmc_real_t 根值转换为 NumberNode 表达式
-// ============================================================================
 
 /**
  * @internal
@@ -1195,9 +1174,6 @@ static std::vector<std::shared_ptr<SymbolicExpr>> assemble_results(
     return results;
 }
 
-// ============================================================================
-/// solve_mixed_transcendental — 完整编排器
-// ============================================================================
 
 /**
  * @internal
@@ -1360,7 +1336,6 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
         return assemble_results(deduplicated);
 
     } catch (...) {
-        /// Requirement 8.5: 不传播异常
         return {};
     }
 }

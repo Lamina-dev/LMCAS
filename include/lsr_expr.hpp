@@ -17,6 +17,18 @@ using Expr = SymbolicExpr;
 using ExprPtr = std::shared_ptr<SymbolicExpr>;
 using ExprResult = Result<ExprPtr>;
 
+struct ExprMatchBinding {
+    std::string name;
+    ExprPtr value;
+};
+
+struct ExprMatch {
+    bool matched = false;
+    std::vector<ExprMatchBinding> bindings;
+};
+
+using ExprMatchResult = Result<ExprMatch>;
+
 struct ApproxComplex {
     ApproxReal real;
     ApproxReal imag;
@@ -77,6 +89,28 @@ private:
 
 using ExprSetResult = Result<ExprSet>;
 
+enum class NumberDomain {
+    Integers,
+    Rationals,
+    Reals,
+    Complexes,
+    Expressions
+};
+
+class LAMINA_API NumberDomainSet {
+public:
+    explicit NumberDomainSet(NumberDomain domain) : domain_(domain) {}
+
+    NumberDomain domain() const noexcept { return domain_; }
+    const char* name() const noexcept;
+    bool subset_of(const NumberDomainSet& other) const noexcept;
+
+    Result<bool> contains(const ExprPtr& element) const;
+
+private:
+    NumberDomain domain_;
+};
+
 LAMINA_API ExprResult sym(const std::string& name);
 LAMINA_API ExprResult integer(long long value);
 LAMINA_API ExprResult integer(const BigInt& value);
@@ -91,6 +125,80 @@ LAMINA_API ExprResult i();
 LAMINA_API ExprResult I();
 LAMINA_API ExprResult imaginary_unit();
 LAMINA_API ExprResult complex(ExprPtr real, ExprPtr imag);
+LAMINA_API ExprResult add(const ExprPtr& lhs,
+                          const ExprPtr& rhs,
+                          ComputationContext& context);
+LAMINA_API ExprResult add(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult sub(const ExprPtr& lhs,
+                          const ExprPtr& rhs,
+                          ComputationContext& context);
+LAMINA_API ExprResult sub(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult mul(const ExprPtr& lhs,
+                          const ExprPtr& rhs,
+                          ComputationContext& context);
+LAMINA_API ExprResult mul(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult div(const ExprPtr& numerator,
+                          const ExprPtr& denominator,
+                          ComputationContext& context);
+LAMINA_API ExprResult div(const ExprPtr& numerator,
+                          const ExprPtr& denominator);
+LAMINA_API ExprResult neg(const ExprPtr& expression,
+                          ComputationContext& context);
+LAMINA_API ExprResult neg(const ExprPtr& expression);
+LAMINA_API ExprResult eq(const ExprPtr& lhs,
+                         const ExprPtr& rhs,
+                         ComputationContext& context);
+LAMINA_API ExprResult eq(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult sqrt(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult sqrt(const ExprPtr& expression);
+LAMINA_API ExprResult pow(const ExprPtr& base,
+                          const ExprPtr& exponent,
+                          ComputationContext& context);
+LAMINA_API ExprResult pow(const ExprPtr& base, const ExprPtr& exponent);
+LAMINA_API ExprResult sin(const ExprPtr& expression,
+                          ComputationContext& context);
+LAMINA_API ExprResult sin(const ExprPtr& expression);
+LAMINA_API ExprResult cos(const ExprPtr& expression,
+                          ComputationContext& context);
+LAMINA_API ExprResult cos(const ExprPtr& expression);
+LAMINA_API ExprResult tan(const ExprPtr& expression,
+                          ComputationContext& context);
+LAMINA_API ExprResult tan(const ExprPtr& expression);
+LAMINA_API ExprResult asin(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult asin(const ExprPtr& expression);
+LAMINA_API ExprResult acos(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult acos(const ExprPtr& expression);
+LAMINA_API ExprResult atan(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult atan(const ExprPtr& expression);
+LAMINA_API ExprResult exp(const ExprPtr& expression,
+                          ComputationContext& context);
+LAMINA_API ExprResult exp(const ExprPtr& expression);
+LAMINA_API ExprResult log(const ExprPtr& expression,
+                          ComputationContext& context);
+LAMINA_API ExprResult log(const ExprPtr& expression);
+LAMINA_API ExprResult log10(const ExprPtr& expression,
+                            ComputationContext& context);
+LAMINA_API ExprResult log10(const ExprPtr& expression);
+LAMINA_API ExprResult floor(const ExprPtr& expression,
+                            ComputationContext& context);
+LAMINA_API ExprResult floor(const ExprPtr& expression);
+LAMINA_API ExprResult ceil(const ExprPtr& expression,
+                           ComputationContext& context);
+LAMINA_API ExprResult ceil(const ExprPtr& expression);
+LAMINA_API ExprResult round(const ExprPtr& expression,
+                            ComputationContext& context);
+LAMINA_API ExprResult round(const ExprPtr& expression);
+LAMINA_API ExprResult clamp(const ExprPtr& expression,
+                            const ExprPtr& lower,
+                            const ExprPtr& upper,
+                            ComputationContext& context);
+LAMINA_API ExprResult clamp(const ExprPtr& expression,
+                            const ExprPtr& lower,
+                            const ExprPtr& upper);
 LAMINA_API ExprResult real(const ExprPtr& expression,
                            ComputationContext& context);
 LAMINA_API ExprResult real(const ExprPtr& expression);
@@ -103,6 +211,35 @@ LAMINA_API ExprResult conj(const ExprPtr& expression);
 LAMINA_API ExprResult abs(const ExprPtr& expression,
                           ComputationContext& context);
 LAMINA_API ExprResult abs(const ExprPtr& expression);
+LAMINA_API ExprResult simplify(const ExprPtr& expression,
+                               ComputationContext& context);
+LAMINA_API ExprResult simplify(const ExprPtr& expression);
+LAMINA_API ExprResult expand(const ExprPtr& expression,
+                             ComputationContext& context);
+LAMINA_API ExprResult expand(const ExprPtr& expression);
+LAMINA_API ExprResult differentiate(const ExprPtr& expression,
+                                    const std::string& variable,
+                                    ComputationContext& context);
+LAMINA_API ExprResult differentiate(const ExprPtr& expression,
+                                    const std::string& variable);
+
+LAMINA_API ExprResult substitute(const ExprPtr& expression,
+                                 const std::string& variable,
+                                 const ExprPtr& value,
+                                 ComputationContext& context);
+
+LAMINA_API ExprResult substitute(const ExprPtr& expression,
+                                 const std::string& variable,
+                                 const ExprPtr& value);
+
+LAMINA_API ExprMatchResult expr_match(const ExprPtr& pattern,
+                                      const ExprPtr& target,
+                                      const std::vector<std::string>& wildcards,
+                                      ComputationContext& context);
+
+LAMINA_API ExprMatchResult expr_match(const ExprPtr& pattern,
+                                      const ExprPtr& target,
+                                      const std::vector<std::string>& wildcards);
 
 LAMINA_API Result<ApproxReal> evalf(const SymbolicExpr& expression,
                                     const NumericBindings& bindings,
@@ -128,6 +265,31 @@ LAMINA_API SolveResult solve_set(const ExprPtr& equation,
                                  const SolveOptions& options = {});
 
 LAMINA_API ExprSetResult expr_set(std::vector<ExprPtr> elements);
+LAMINA_API NumberDomainSet integers();
+LAMINA_API NumberDomainSet rationals();
+LAMINA_API NumberDomainSet reals();
+LAMINA_API NumberDomainSet complexes();
+LAMINA_API NumberDomainSet expressions();
+LAMINA_API Result<bool> domain_contains(const NumberDomainSet& domain,
+                                        const ExprPtr& element);
+LAMINA_API Result<bool> domain_subset(const NumberDomainSet& lhs,
+                                      const NumberDomainSet& rhs);
+LAMINA_API Result<bool> expr_set_contains(const ExprSet& set,
+                                          const ExprPtr& element);
+LAMINA_API Result<bool> expr_set_not_contains(const ExprSet& set,
+                                              const ExprPtr& element);
+LAMINA_API Result<bool> expr_set_subset(const ExprSet& lhs,
+                                        const ExprSet& rhs);
+LAMINA_API Result<bool> expr_set_subset_domain(const ExprSet& set,
+                                               const NumberDomainSet& domain);
+LAMINA_API ExprSetResult expr_set_union(const ExprSet& lhs,
+                                        const ExprSet& rhs);
+LAMINA_API ExprSetResult expr_set_intersection(const ExprSet& lhs,
+                                               const ExprSet& rhs);
+LAMINA_API ExprSetResult expr_set_difference(const ExprSet& lhs,
+                                             const ExprSet& rhs);
+LAMINA_API ExprSetResult expr_set_symmetric_difference(const ExprSet& lhs,
+                                                       const ExprSet& rhs);
 
 LAMINA_API ExprSetResult solve_expr_set(const ExprPtr& equation,
                                         const std::string& variable,

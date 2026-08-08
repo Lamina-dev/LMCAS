@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_interval.cpp
- * @brief Tests for interval propagation through arithmetic operations (Properties 26-27).
- *
- * Feature: assumption-system
- * Property 26: Interval propagation through arithmetic
- * Property 27: Division by zero-containing interval
- * Validates: Requirements 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7
- *
- * Tests that the InferenceEngine correctly propagates interval bounds through
- * addition, subtraction, multiplication, squaring, division, and trig functions.
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -23,9 +11,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helper functions
-// ============================================================
 
 /// Create a VariableNode wrapped in a shared_ptr<SymbolicNode>
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
@@ -92,9 +77,6 @@ static double get_upper(const Interval& iv) {
     return 0.0;
 }
 
-// ============================================================
-// Test: Addition [a,b] + [c,d] → [a+c, b+d]
-// ============================================================
 
 void test_addition_propagation() {
     TEST_CASE("Addition: [1,3] + [2,5] = [3,8]");
@@ -161,10 +143,6 @@ void test_numeric_expression_endpoint_propagation() {
     }
 }
 
-// ============================================================
-// Test: Subtraction [a,b] - [c,d] → [a-d, b-c]
-// Subtraction is represented as x + (-1)*y in the AST
-// ============================================================
 
 void test_subtraction_propagation() {
     TEST_CASE("Subtraction: [1,5] - [2,3] = [-2,3]");
@@ -189,9 +167,6 @@ void test_subtraction_propagation() {
     }
 }
 
-// ============================================================
-// Test: Multiplication [a,b] * [c,d] → [min(ac,ad,bc,bd), max(ac,ad,bc,bd)]
-// ============================================================
 
 void test_multiplication_propagation() {
     TEST_CASE("Multiplication: [2,3] * [4,5] = [8,15]");
@@ -234,9 +209,6 @@ void test_multiplication_mixed_signs() {
     }
 }
 
-// ============================================================
-// Test: Squaring [a,b]^2 where a >= 0 → [a^2, b^2]
-// ============================================================
 
 void test_squaring_nonnegative() {
     TEST_CASE("Squaring: [2,5]^2 = [4,25] (a>=0)");
@@ -292,9 +264,6 @@ void test_squaring_nonpositive() {
     }
 }
 
-// ============================================================
-// Test: Division [a,b] / [c,d] where c > 0, a >= 0 → [a/d, b/c]
-// ============================================================
 
 void test_division_positive() {
     TEST_CASE("Division: [2,6] / [1,3] = [2/3, 6]");
@@ -318,9 +287,6 @@ void test_division_positive() {
     }
 }
 
-// ============================================================
-// Test: Division where divisor contains zero → unbounded (nullopt)
-// ============================================================
 
 void test_division_by_zero_containing() {
     TEST_CASE("Division: [1,5] / [-1,2] = unbounded (divisor contains zero)");
@@ -357,9 +323,6 @@ void test_division_by_zero_at_boundary() {
     EXPECT_FALSE(result.has_value(), "Division by interval containing zero at boundary returns nullopt");
 }
 
-// ============================================================
-// Test: sin/cos of bounded input → [-1, 1]
-// ============================================================
 
 void test_sin_propagation() {
     TEST_CASE("sin([0, 6.28]) = [-1, 1]");
@@ -401,9 +364,6 @@ void test_cos_propagation() {
     }
 }
 
-// ============================================================
-// Test: NumberNode produces point interval
-// ============================================================
 
 void test_number_node_propagation() {
     TEST_CASE("NumberNode 5.0 produces [5, 5]");
@@ -421,9 +381,6 @@ void test_number_node_propagation() {
     }
 }
 
-// ============================================================
-// Test: Variable without bounds returns nullopt
-// ============================================================
 
 void test_unbounded_variable() {
     TEST_CASE("Variable without bounds returns nullopt");
@@ -437,9 +394,6 @@ void test_unbounded_variable() {
     EXPECT_FALSE(result.has_value(), "Unbounded variable returns nullopt");
 }
 
-// ============================================================
-// Main
-// ============================================================
 
 int main() {
     // Addition

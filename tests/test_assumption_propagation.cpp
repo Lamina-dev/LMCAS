@@ -1,20 +1,3 @@
-/**
- * @file test_assumption_propagation.cpp
- * @brief Property tests for automatic propagation at query time (Task 9.3).
- *
- * Property tested:
- * - Property 14: Automatic propagation at query time
- *
- * For any Real variable, is_nonnegative(x²) SHALL be True.
- * For any Integer variable, is_integer(x²) SHALL be True.
- * For any Positive variable, query_positive(|x|) SHALL be True.
- * Propagation is lazy: no properties stored on x² at declaration time.
- *
- * Validates: Requirements 18.1, 18.3, 18.4
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -28,9 +11,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers: create AST nodes
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -96,13 +76,9 @@ static Domain random_integer_domain() {
     return rc::gen::elementOf(int_domains);
 }
 
-// ============================================================
-// Property 14: For any variable declared Real, query_nonnegative on x² returns True
-// **Validates: Requirements 18.1**
-// ============================================================
 
-static void test_property14_real_var_x_squared_nonnegative() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Real variable x² is non-negative");
+static void test_real_var_x_squared_nonnegative() {
+    TEST_CASE("Real variable x² is non-negative");
 
     rc::check("For any variable declared Real (or more specific), "
               "query_nonnegative on x² returns True", []() {
@@ -120,13 +96,9 @@ static void test_property14_real_var_x_squared_nonnegative() {
     });
 }
 
-// ============================================================
-// Property 14: For any Integer variable, query_integer on x² returns True
-// **Validates: Requirements 18.3**
-// ============================================================
 
-static void test_property14_integer_var_x_squared_integer() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Integer variable x² has Integer domain");
+static void test_integer_var_x_squared_integer() {
+    TEST_CASE("Integer variable x² has Integer domain");
 
     rc::check("For any variable declared Integer (or more specific), "
               "query_integer on x² returns True", []() {
@@ -144,13 +116,9 @@ static void test_property14_integer_var_x_squared_integer() {
     });
 }
 
-// ============================================================
-// Property 14: For any Positive variable, query_positive on |x| returns True
-// **Validates: Requirements 18.1 (propagation of sign through abs)**
-// ============================================================
 
-static void test_property14_positive_var_abs_positive() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Positive variable |x| is positive");
+static void test_positive_var_abs_positive() {
+    TEST_CASE("Positive variable |x| is positive");
 
     rc::check("For any variable declared Positive and Real, "
               "query_positive on |x| returns True", []() {
@@ -170,13 +138,9 @@ static void test_property14_positive_var_abs_positive() {
     });
 }
 
-// ============================================================
-// Property 14: Propagation is lazy — no properties stored on x² at declaration time
-// **Validates: Requirements 18.4**
-// ============================================================
 
-static void test_property14_propagation_is_lazy() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Propagation is lazy (query-time only)");
+static void test_propagation_is_lazy() {
+    TEST_CASE("Propagation is lazy (query-time only)");
 
     rc::check("After declaring a variable Real, the PropertyStore does not "
               "contain any entry for x² — propagation happens at query time only", []() {
@@ -206,16 +170,12 @@ static void test_property14_propagation_is_lazy() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 14: Automatic propagation at query time
-    test_property14_real_var_x_squared_nonnegative();
-    test_property14_integer_var_x_squared_integer();
-    test_property14_positive_var_abs_positive();
-    test_property14_propagation_is_lazy();
+    test_real_var_x_squared_nonnegative();
+    test_integer_var_x_squared_integer();
+    test_positive_var_abs_positive();
+    test_propagation_is_lazy();
 
     return TEST_REPORT();
 }

@@ -1,22 +1,3 @@
-/**
- * @file test_assumption_propagation_unit.cpp
- * @brief Unit tests for automatic propagation and conflict diagnostics (task 9.4).
- *
- * Propagation tests:
- * - Real variable → x² non-negative
- * - Integer variable → x² Integer domain
- * - Positive variable → |x| positive
- * - Negative variable → |x| positive
- * - NonZero variable → |x| positive
- *
- * Diagnostics tests:
- * - Transcendental + Integer → exception with expected substrings
- * - Positive + Negative → exception with expected substrings
- * - Natural + Negative → exception with expected substrings
- * - PositiveInt + Zero → exception with expected substrings
- *
- * Validates: Requirements 18.1, 18.2, 18.3, 19.1, 19.2, 19.3, 19.4
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -31,9 +12,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
     return lamina::detail::make_node<VariableNode>(name);
@@ -59,12 +37,9 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
     return expr;
 }
 
-// ============================================================
-// Propagation tests (Requirements 18.1, 18.2, 18.3)
-// ============================================================
 
 static void test_x_squared_nonnegative_when_real() {
-    TEST_CASE("Propagation: x² non-negative when x is Real (Req 18.1)");
+    TEST_CASE("Propagation: x² non-negative when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -78,7 +53,7 @@ static void test_x_squared_nonnegative_when_real() {
 }
 
 static void test_x_squared_integer_when_integer() {
-    TEST_CASE("Propagation: x² Integer when x is Integer (Req 18.3)");
+    TEST_CASE("Propagation: x² Integer when x is Integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
@@ -92,7 +67,7 @@ static void test_x_squared_integer_when_integer() {
 }
 
 static void test_abs_positive_when_x_positive() {
-    TEST_CASE("Propagation: |x| positive when x is Positive (Req 18.2)");
+    TEST_CASE("Propagation: |x| positive when x is Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -136,12 +111,9 @@ static void test_abs_positive_when_x_nonzero() {
                 "|x| is Positive when x is NonZero");
 }
 
-// ============================================================
-// Diagnostics tests (Requirements 19.1, 19.2, 19.3, 19.4)
-// ============================================================
 
 static void test_diagnostic_transcendental_then_integer() {
-    TEST_CASE("Diagnostics: Transcendental + Integer contradiction (Req 19.1)");
+    TEST_CASE("Diagnostics: Transcendental + Integer contradiction");
 
     AssumptionContext ctx;
     ctx.current_properties().declare_transcendental("x");
@@ -169,7 +141,7 @@ static void test_diagnostic_transcendental_then_integer() {
 }
 
 static void test_diagnostic_positive_then_negative() {
-    TEST_CASE("Diagnostics: Positive + Negative contradiction (Req 19.2)");
+    TEST_CASE("Diagnostics: Positive + Negative contradiction");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -197,7 +169,7 @@ static void test_diagnostic_positive_then_negative() {
 }
 
 static void test_diagnostic_natural_then_negative() {
-    TEST_CASE("Diagnostics: Natural + Negative contradiction (Req 19.3)");
+    TEST_CASE("Diagnostics: Natural + Negative contradiction");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Natural);
@@ -217,7 +189,7 @@ static void test_diagnostic_natural_then_negative() {
 }
 
 static void test_diagnostic_positiveint_then_zero() {
-    TEST_CASE("Diagnostics: PositiveInt + Zero contradiction (Req 19.3)");
+    TEST_CASE("Diagnostics: PositiveInt + Zero contradiction");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
@@ -244,19 +216,14 @@ static void test_diagnostic_positiveint_then_zero() {
                 "Exception message mentions Zero or NonPositive");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Propagation tests (Req 18.1, 18.2, 18.3)
     test_x_squared_nonnegative_when_real();
     test_x_squared_integer_when_integer();
     test_abs_positive_when_x_positive();
     test_abs_positive_when_x_negative();
     test_abs_positive_when_x_nonzero();
 
-    // Diagnostics tests (Req 19.1, 19.2, 19.3, 19.4)
     test_diagnostic_transcendental_then_integer();
     test_diagnostic_positive_then_negative();
     test_diagnostic_natural_then_negative();
