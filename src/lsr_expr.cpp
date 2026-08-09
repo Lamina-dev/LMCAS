@@ -24,7 +24,6 @@ constexpr const char* kIntegerOperation = "lsr.integer";
 constexpr const char* kRationalOperation = "lsr.rational";
 constexpr const char* kApproxOperation = "lsr.approx_real";
 constexpr const char* kConstantOperation = "lsr.constant";
-constexpr const char* kImaginaryOperation = "lsr.imaginary_unit";
 constexpr const char* kComplexOperation = "lsr.complex";
 constexpr const char* kExprOperation = "lsr.expr_op";
 constexpr const char* kMathOperation = "lsr.math";
