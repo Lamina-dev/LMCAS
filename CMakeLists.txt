@@ -10,6 +10,8 @@ option(LMCAS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSan
 option(LMCAS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMCAS_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
 option(LMCAS_WARNINGS_AS_ERRORS "Treat LMCAS compiler warnings as errors" OFF)
+set(LMCAS_USE_LAMMP_ASM "AUTO" CACHE STRING "LAMMP assembly backend: AUTO | ON | OFF")
+set_property(CACHE LMCAS_USE_LAMMP_ASM PROPERTY STRINGS AUTO ON OFF)
 
 if(LMCAS_ENABLE_SANITIZERS AND LMCAS_ENABLE_TSAN)
     message(FATAL_ERROR "LMCAS_ENABLE_SANITIZERS and LMCAS_ENABLE_TSAN are mutually exclusive")
@@ -34,6 +36,13 @@ if(WIN32)
     add_compile_definitions(LAMMP_WINDOWS)
 endif()
 
+if(LMCAS_USE_LAMMP_ASM STREQUAL "ON")
+    set(USE_ASM ON CACHE BOOL "Enable x64 assembly optimization (require NASM)" FORCE)
+elseif(LMCAS_USE_LAMMP_ASM STREQUAL "OFF")
+    set(USE_ASM OFF CACHE BOOL "Enable x64 assembly optimization (require NASM)" FORCE)
+elseif(NOT LMCAS_USE_LAMMP_ASM STREQUAL "AUTO")
+    message(FATAL_ERROR "LMCAS_USE_LAMMP_ASM must be AUTO, ON, or OFF")
+endif()
 add_subdirectory(LMMC/LAMMP EXCLUDE_FROM_ALL)
 
 if(UNIX)
