@@ -1,6 +1,7 @@
 #include "parametric_solver.hpp"
 #include "solver.hpp"
 #include "poly_utils.hpp"
+#include "symbolic_ast.hpp"
 #include <algorithm>
 #include <set>
 
@@ -63,7 +64,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
 ParametricSolver::solve_linear_parametric(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
-    const std::vector<std::string>& parameters)
+    const std::vector<std::string>&)
 {
     size_t m = equations.size();
     size_t n = unknowns.size();
@@ -187,7 +188,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
 ParametricSolver::solve_polynomial_parametric(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
-    const std::vector<std::string>& parameters)
+    const std::vector<std::string>&)
 {
     if (equations.empty() || unknowns.empty()) {
 
@@ -201,7 +202,7 @@ ParametricSolver::solve_polynomial_parametric(
     std::vector<SymbolicExpr> input_polys;
     input_polys.reserve(equations.size());
     for (const auto& eq : equations) {
-        if (eq && eq->root) {
+        if (eq && lamina::detail::node(eq)) {
             auto simplified = eq->simplify();
             if (simplified && !simplified->is_zero()) {
                 input_polys.push_back(*simplified);
@@ -223,7 +224,7 @@ ParametricSolver::solve_polynomial_parametric(
     std::vector<std::shared_ptr<SymbolicExpr>> basis;
     basis.reserve(G_basis.size());
     for (const auto& g : G_basis) {
-        auto g_ptr = std::make_shared<SymbolicExpr>(g);
+        auto g_ptr = lamina::detail::make_expression_ptr(g);
         auto simp = g_ptr->simplify();
         if (simp && !simp->is_zero()) {
             basis.push_back(simp);

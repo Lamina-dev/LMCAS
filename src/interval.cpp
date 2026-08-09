@@ -1,5 +1,7 @@
 #include "../include/interval.hpp"
+#include "../include/symbolic_ast.hpp"
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <limits>
 #include <sstream>
@@ -7,6 +9,359 @@
 #include <cctype>
 
 namespace lamina {
+
+namespace {
+
+constexpr const char* kCheckedIntervalOperation = "normalize_intervals";
+
+struct ComparableEndpoint {
+    int infinity = 0;
+    Rational rational{};
+    Rational radical_coefficient{};
+    Rational radicand{};
+};
+
+struct CheckedInterval {
+    Interval interval;
+    ComparableEndpoint lower;
+    ComparableEndpoint upper;
+};
+
+Result<Rational> exact_double_rational(double value,
+                                       ComputationContext& context,
+                                       const std::string& operation) {
+    if (!std::isfinite(value)) {
+        return Result<Rational>::failure(
+            CasErrc::NumericFailure,
+            "finite interval endpoint evaluated to NaN or infinity",
+            operation);
+    }
+    if (value == 0.0) return Result<Rational>::success(Rational(0));
+
+    int exponent = 0;
+    const double fraction = std::frexp(value, &exponent);
+    const auto mantissa = static_cast<std::int64_t>(std::ldexp(fraction, 53));
+    const int binary_exponent = exponent - 53;
+    const std::size_t required_bits = binary_exponent < 0
+        ? static_cast<std::size_t>(-binary_exponent) + 1
+        : static_cast<std::size_t>(binary_exponent) + 54;
+    if (required_bits > context.limits().max_integer_bits) {
+        return Result<Rational>::failure(
+            CasErrc::ResourceLimit,
+            "IEEE endpoint conversion exceeds the integer bit budget",
+            operation);
+    }
+
+    BigInt numerator(static_cast<long long>(mantissa));
+    BigInt denominator(1);
+    if (binary_exponent >= 0) {
+        numerator <<= static_cast<mp_size_t>(binary_exponent);
+    } else {
+        denominator <<= static_cast<mp_size_t>(-binary_exponent);
+    }
+    return Result<Rational>::success(Rational(numerator, denominator));
+}
+
+std::optional<Rational> exact_number_value(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number) return std::nullopt;
+    if (std::holds_alternative<BigInt>(number->value())) {
+        return Rational(std::get<BigInt>(number->value()));
+    }
+    if (std::holds_alternative<Rational>(number->value())) {
+        return std::get<Rational>(number->value());
+    }
+    return std::nullopt;
+}
+
+std::optional<ComparableEndpoint> parse_quadratic_surd(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    if (!node) return std::nullopt;
+    if (auto number = exact_number_value(node)) {
+        return ComparableEndpoint{0, *number, Rational(0), Rational(0)};
+    }
+
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (function->type() != FunctionNode::FuncType::Sqrt ||
+            function->arguments().size() != 1) {
+            return std::nullopt;
+        }
+        auto radicand = exact_number_value(function->arguments()[0]);
+        if (!radicand || *radicand <= Rational(0)) return std::nullopt;
+        return ComparableEndpoint{0, Rational(0), Rational(1), *radicand};
+    }
+
+    auto combine_add = [](const ComparableEndpoint& left,
+                          const ComparableEndpoint& right)
+        -> std::optional<ComparableEndpoint> {
+        if (left.infinity != 0 || right.infinity != 0) return std::nullopt;
+        if (left.radical_coefficient != Rational(0) &&
+            right.radical_coefficient != Rational(0) &&
+            left.radicand != right.radicand) {
+            return std::nullopt;
+        }
+        const Rational radicand = left.radical_coefficient != Rational(0)
+            ? left.radicand : right.radicand;
+        return ComparableEndpoint{
+            0,
+            left.rational + right.rational,
+            left.radical_coefficient + right.radical_coefficient,
+            radicand};
+    };
+
+    auto combine_multiply = [](const ComparableEndpoint& left,
+                               const ComparableEndpoint& right)
+        -> std::optional<ComparableEndpoint> {
+        if (left.infinity != 0 || right.infinity != 0) return std::nullopt;
+        const bool left_radical = left.radical_coefficient != Rational(0);
+        const bool right_radical = right.radical_coefficient != Rational(0);
+        if (left_radical && right_radical && left.radicand != right.radicand) {
+            return std::nullopt;
+        }
+        const Rational radicand = left_radical ? left.radicand : right.radicand;
+        const Rational rational = left.rational * right.rational +
+            left.radical_coefficient * right.radical_coefficient * radicand;
+        const Rational coefficient =
+            left.rational * right.radical_coefficient +
+            left.radical_coefficient * right.rational;
+        return ComparableEndpoint{0, rational, coefficient, radicand};
+    };
+
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        ComparableEndpoint result{0, Rational(0), Rational(0), Rational(0)};
+        for (const auto& operand : add->operands()) {
+            auto parsed = parse_quadratic_surd(operand);
+            if (!parsed) return std::nullopt;
+            auto combined = combine_add(result, *parsed);
+            if (!combined) return std::nullopt;
+            result = std::move(*combined);
+        }
+        return result;
+    }
+
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        ComparableEndpoint result{0, Rational(1), Rational(0), Rational(0)};
+        for (const auto& operand : multiply->operands()) {
+            auto parsed = parse_quadratic_surd(operand);
+            if (!parsed) return std::nullopt;
+            auto combined = combine_multiply(result, *parsed);
+            if (!combined) return std::nullopt;
+            result = std::move(*combined);
+        }
+        return result;
+    }
+
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto exponent = exact_number_value(power->exponent());
+        if (!exponent) return std::nullopt;
+        if (*exponent == Rational(1, 2)) {
+            auto radicand = exact_number_value(power->base());
+            if (!radicand || *radicand <= Rational(0)) return std::nullopt;
+            return ComparableEndpoint{0, Rational(0), Rational(1), *radicand};
+        }
+        auto base = parse_quadratic_surd(power->base());
+        if (!base || *exponent != Rational(-1)) return std::nullopt;
+        const Rational norm = base->rational * base->rational -
+            base->radical_coefficient * base->radical_coefficient * base->radicand;
+        if (norm == Rational(0)) return std::nullopt;
+        return ComparableEndpoint{
+            0,
+            base->rational / norm,
+            (Rational(0) - base->radical_coefficient) / norm,
+            base->radicand};
+    }
+
+    return std::nullopt;
+}
+
+int rational_sign(const Rational& value) {
+    if (value == Rational(0)) return 0;
+    return value.get_numerator().IsNegative() ? -1 : 1;
+}
+
+int quadratic_surd_sign(const Rational& rational,
+                        const Rational& coefficient,
+                        const Rational& radicand) {
+    const int rational_part_sign = rational_sign(rational);
+    const int radical_part_sign = rational_sign(coefficient);
+    if (radical_part_sign == 0) return rational_part_sign;
+    if (rational_part_sign == 0 || rational_part_sign == radical_part_sign) {
+        return radical_part_sign;
+    }
+
+    const Rational rational_square = rational * rational;
+    const Rational radical_square = coefficient * coefficient * radicand;
+    if (rational_square == radical_square) return 0;
+    if (rational_part_sign > 0) {
+        return rational_square > radical_square ? 1 : -1;
+    }
+    return radical_square > rational_square ? 1 : -1;
+}
+
+Result<int> compare_comparable(const ComparableEndpoint& left,
+                               const ComparableEndpoint& right,
+                               const std::string& operation) {
+    if (left.infinity < right.infinity) return Result<int>::success(-1);
+    if (left.infinity > right.infinity) return Result<int>::success(1);
+    if (left.infinity != 0) return Result<int>::success(0);
+
+    const bool left_radical = left.radical_coefficient != Rational(0);
+    const bool right_radical = right.radical_coefficient != Rational(0);
+    if (!left_radical && !right_radical) {
+        if (left.rational < right.rational) return Result<int>::success(-1);
+        if (left.rational > right.rational) return Result<int>::success(1);
+        return Result<int>::success(0);
+    }
+    if (left_radical && right_radical && left.radicand != right.radicand) {
+        return Result<int>::failure(
+            CasErrc::Inconclusive,
+            "exact comparison across distinct quadratic extensions is not proven",
+            operation);
+    }
+    const Rational radicand = left_radical ? left.radicand : right.radicand;
+    return Result<int>::success(quadratic_surd_sign(
+        left.rational - right.rational,
+        left.radical_coefficient - right.radical_coefficient,
+        radicand));
+}
+
+Result<ComparableEndpoint> comparable_endpoint(
+    const Endpoint& endpoint,
+    ComputationContext& context,
+    const std::string& operation) {
+    auto step = context.consume_steps(1, operation);
+    if (!step) return Result<ComparableEndpoint>::failure(step.error());
+
+    if (endpoint.is_neg_infinity && endpoint.is_pos_infinity) {
+        return Result<ComparableEndpoint>::failure(
+            CasErrc::InvalidArgument,
+            "an endpoint cannot be both negative and positive infinity",
+            operation);
+    }
+    if (endpoint.is_neg_infinity || endpoint.is_pos_infinity) {
+        if (endpoint.value) {
+            return Result<ComparableEndpoint>::failure(
+                CasErrc::InvalidArgument,
+                "infinite endpoints cannot also contain a finite value",
+                operation);
+        }
+        if (!endpoint.is_open) {
+            return Result<ComparableEndpoint>::failure(
+                CasErrc::InvalidArgument,
+                "infinite interval endpoints must be open",
+                operation);
+        }
+        return Result<ComparableEndpoint>::success(
+            ComparableEndpoint{endpoint.is_neg_infinity ? -1 : 1,
+                               Rational(0), Rational(0), Rational(0)});
+    }
+    if (!endpoint.value || !lamina::detail::node(endpoint.value)) {
+        return Result<ComparableEndpoint>::failure(
+            CasErrc::InvalidArgument,
+            "finite interval endpoint must contain an expression",
+            operation);
+    }
+
+    auto simplified = endpoint.value->simplify();
+    if (!simplified || !lamina::detail::node(simplified)) {
+        return Result<ComparableEndpoint>::failure(
+            CasErrc::InternalInvariant,
+            "interval endpoint simplification produced a null expression",
+            operation);
+    }
+
+    if (auto number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
+        if (std::holds_alternative<BigInt>(number->value())) {
+            return Result<ComparableEndpoint>::success(ComparableEndpoint{
+                0, Rational(std::get<BigInt>(number->value())),
+                Rational(0), Rational(0)});
+        }
+        if (std::holds_alternative<Rational>(number->value())) {
+            return Result<ComparableEndpoint>::success(ComparableEndpoint{
+                0, std::get<Rational>(number->value()), Rational(0), Rational(0)});
+        }
+        auto rational = exact_double_rational(
+            std::get<lmmc_real_t>(number->value()), context, operation);
+        if (!rational) return Result<ComparableEndpoint>::failure(rational.error());
+        return Result<ComparableEndpoint>::success(
+            ComparableEndpoint{0, std::move(rational.value()),
+                               Rational(0), Rational(0)});
+    }
+
+    if (auto surd = parse_quadratic_surd(lamina::detail::node(simplified))) {
+        return Result<ComparableEndpoint>::success(std::move(*surd));
+    }
+
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(simplified))) {
+        return Result<ComparableEndpoint>::failure(
+            CasErrc::UnboundSymbol,
+            "interval endpoint contains unbound symbol '" + variable->name() + "'",
+            operation);
+    }
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(simplified))) {
+        if (function->arguments().size() == 1) {
+            auto argument = exact_number_value(function->arguments()[0]);
+            if (argument &&
+                ((function->type() == FunctionNode::FuncType::Ln &&
+                  *argument <= Rational(0)) ||
+                 (function->type() == FunctionNode::FuncType::Sqrt &&
+                  *argument < Rational(0)))) {
+                return Result<ComparableEndpoint>::failure(
+                    CasErrc::DomainError,
+                    "interval endpoint is outside the real function domain",
+                    operation);
+            }
+        }
+    }
+    return Result<ComparableEndpoint>::failure(
+        CasErrc::Inconclusive,
+        "exact ordering of a symbolic interval endpoint is not proven",
+        operation);
+}
+
+Result<std::vector<CheckedInterval>> checked_interval_views(
+    const std::vector<Interval>& intervals,
+    ComputationContext& context,
+    const std::string& operation) {
+    auto normalized = normalize_intervals_checked(intervals, context);
+    if (!normalized) {
+        return Result<std::vector<CheckedInterval>>::failure(normalized.error());
+    }
+
+    std::vector<CheckedInterval> checked;
+    auto normalized_intervals = std::move(normalized.value());
+    checked.reserve(normalized_intervals.size());
+    for (auto& interval : normalized_intervals) {
+        auto lower = comparable_endpoint(interval.lower, context, operation);
+        if (!lower) return Result<std::vector<CheckedInterval>>::failure(lower.error());
+        auto upper = comparable_endpoint(interval.upper, context, operation);
+        if (!upper) return Result<std::vector<CheckedInterval>>::failure(upper.error());
+        checked.push_back(CheckedInterval{
+            std::move(interval), std::move(lower.value()), std::move(upper.value())});
+    }
+    return Result<std::vector<CheckedInterval>>::success(std::move(checked));
+}
+
+Endpoint complement_lower_from_upper(const Endpoint& upper) {
+    Endpoint lower;
+    lower.value = upper.value;
+    lower.is_open = !upper.is_open;
+    lower.is_neg_infinity = false;
+    lower.is_pos_infinity = false;
+    return lower;
+}
+
+Endpoint complement_upper_from_lower(const Endpoint& lower) {
+    Endpoint upper;
+    upper.value = lower.value;
+    upper.is_open = !lower.is_open;
+    upper.is_neg_infinity = false;
+    upper.is_pos_infinity = false;
+    return upper;
+}
+
+} // namespace
 
 Endpoint Endpoint::neg_inf() {
     return Endpoint{nullptr, true, true, false};
@@ -24,74 +379,14 @@ Endpoint Endpoint::open(std::shared_ptr<SymbolicExpr> val) {
     return Endpoint{std::move(val), true, false, false};
 }
 
-// True iff `ep` is a finite-valued endpoint whose value is a concrete number
-// node (BigInt / Rational / lmmc_real_t). Endpoints with a symbolic value
-// (e.g. depending on parameters) cannot be compared numerically, so the
-// normalization / merging logic must not collapse them based on `to_numeric()`,
-// which silently returns 0.0 for unevaluable expressions.
-static bool endpoint_is_numeric(const Endpoint& ep) {
-    if (ep.is_neg_infinity || ep.is_pos_infinity) return true;
-    if (!ep.value || !ep.value->root) return false;
-    return ep.value->is_number();
-}
-
-static double endpoint_numeric_value(const Endpoint& ep) {
-    if (ep.is_neg_infinity) return -std::numeric_limits<double>::infinity();
-    if (ep.is_pos_infinity) return std::numeric_limits<double>::infinity();
-    if (ep.value) return ep.value->to_numeric();
-    return 0.0;
-}
-
 bool Interval::contains(double value) const {
-
-    if (lower.is_neg_infinity) {
-
-    } else {
-        // Symbolic lower bound: cannot test numerically.
-        if (!endpoint_is_numeric(lower)) return false;
-        double lo = endpoint_numeric_value(lower);
-        if (lower.is_open) {
-            if (value <= lo) return false;
-        } else {
-            if (value < lo) return false;
-        }
-    }
-
-    if (upper.is_pos_infinity) {
-
-    } else {
-        if (!endpoint_is_numeric(upper)) return false;
-        double hi = endpoint_numeric_value(upper);
-        if (upper.is_open) {
-            if (value >= hi) return false;
-        } else {
-            if (value > hi) return false;
-        }
-    }
-
-    return true;
+    auto result = interval_contains_checked(*this, value);
+    return result ? result.value() : false;
 }
 
 bool Interval::is_empty() const {
-
-    if (lower.is_neg_infinity || upper.is_pos_infinity) return false;
-    if (lower.is_pos_infinity) return true;
-    if (upper.is_neg_infinity) return true;
-
-    // If either endpoint is a symbolic expression depending on parameters,
-    // we cannot decide emptiness purely from numeric comparison; assume
-    // non-empty (the worst-case caller will rely on syntactic structure).
-    if (!endpoint_is_numeric(lower) || !endpoint_is_numeric(upper)) {
-        return false;
-    }
-
-    double lo = endpoint_numeric_value(lower);
-    double hi = endpoint_numeric_value(upper);
-
-    if (lo > hi) return true;
-    if (lo == hi && (lower.is_open || upper.is_open)) return true;
-
-    return false;
+    auto result = interval_is_empty_checked(*this);
+    return result ? result.value() : false;
 }
 
 bool Interval::is_entire_line() const {
@@ -121,6 +416,23 @@ IntervalUnion IntervalUnion::from_single(const Interval& iv) {
     return IntervalUnion(std::vector<Interval>{iv});
 }
 
+Result<IntervalUnion> IntervalUnion::from_intervals_checked(
+    std::vector<Interval> intervals,
+    ComputationContext& context) {
+    auto normalized = normalize_intervals_checked(std::move(intervals), context);
+    if (!normalized) {
+        return Result<IntervalUnion>::failure(normalized.error());
+    }
+    return Result<IntervalUnion>::success(
+        from_checked_normalized(std::move(normalized.value())));
+}
+
+Result<IntervalUnion> IntervalUnion::from_intervals_checked(
+    std::vector<Interval> intervals) {
+    ComputationContext context;
+    return from_intervals_checked(std::move(intervals), context);
+}
+
 IntervalUnion IntervalUnion::empty() {
     return IntervalUnion();
 }
@@ -148,251 +460,324 @@ const std::vector<Interval>& IntervalUnion::intervals() const {
     return intervals_;
 }
 
-static int compare_endpoints_lower(const Endpoint& a, const Endpoint& b) {
-
-    if (a.is_neg_infinity && b.is_neg_infinity) return 0;
-    if (a.is_neg_infinity) return -1;
-    if (b.is_neg_infinity) return 1;
-
-    if (a.is_pos_infinity && b.is_pos_infinity) return 0;
-    if (a.is_pos_infinity) return 1;
-    if (b.is_pos_infinity) return -1;
-
-    bool a_num = endpoint_is_numeric(a);
-    bool b_num = endpoint_is_numeric(b);
-    if (!a_num || !b_num) {
-        // 不要用 to_string() 给符号端点造伪数值序——后续 intersect()/normalize()
-        // 会把这里的返回值当成真实大小关系，进而把不可比的端点错误合并。
-        // 这里只在两侧"结构相等"时返回 0；否则用 SymbolicNode::compare 给出
-        // 一个确定但纯结构性的 tie-breaker，仅用于 std::sort 的严格弱序需求。
-        if (a_num) return -1;
-        if (b_num) return 1;
-        if (a.value && b.value && a.value->root && b.value->root) {
-            int c = a.value->root->compare(*b.value->root);
-            if (c != 0) return c;
-        } else if (a.value != b.value) {
-            return (a.value < b.value) ? -1 : 1;
-        }
-        if (a.is_open && !b.is_open) return 1;
-        if (!a.is_open && b.is_open) return -1;
-        return 0;
-    }
-
-    double va = endpoint_numeric_value(a);
-    double vb = endpoint_numeric_value(b);
-
-    if (va < vb) return -1;
-    if (va > vb) return 1;
-
-    if (a.is_open && !b.is_open) return 1;
-    if (!a.is_open && b.is_open) return -1;
-    return 0;
-}
-
-static int compare_endpoints_upper(const Endpoint& a, const Endpoint& b) {
-    if (a.is_pos_infinity && b.is_pos_infinity) return 0;
-    if (a.is_pos_infinity) return 1;
-    if (b.is_pos_infinity) return -1;
-
-    if (a.is_neg_infinity && b.is_neg_infinity) return 0;
-    if (a.is_neg_infinity) return -1;
-    if (b.is_neg_infinity) return 1;
-
-    bool a_num = endpoint_is_numeric(a);
-    bool b_num = endpoint_is_numeric(b);
-    if (!a_num || !b_num) {
-        // 同 lower 比较：避免 to_string 造伪序，仅用结构性 compare 维持稳定排序。
-        if (a_num) return -1;
-        if (b_num) return 1;
-        if (a.value && b.value && a.value->root && b.value->root) {
-            int c = a.value->root->compare(*b.value->root);
-            if (c != 0) return c;
-        } else if (a.value != b.value) {
-            return (a.value < b.value) ? -1 : 1;
-        }
-        if (!a.is_open && b.is_open) return 1;
-        if (a.is_open && !b.is_open) return -1;
-        return 0;
-    }
-
-    double va = endpoint_numeric_value(a);
-    double vb = endpoint_numeric_value(b);
-
-    if (va < vb) return -1;
-    if (va > vb) return 1;
-
-    if (!a.is_open && b.is_open) return 1;
-    if (a.is_open && !b.is_open) return -1;
-    return 0;
-}
-
-static bool can_merge(const Interval& a, const Interval& b) {
-
-    if (a.upper.is_pos_infinity) return true;
-    if (b.lower.is_neg_infinity) return true;
-
-    if (a.upper.is_neg_infinity || b.lower.is_pos_infinity) return false;
-
-    // If either side is symbolic we cannot prove the intervals are adjacent
-    // or overlapping numerically; refuse to merge.
-    if (!endpoint_is_numeric(a.upper) || !endpoint_is_numeric(b.lower)) {
-        return false;
-    }
-
-    double au = endpoint_numeric_value(a.upper);
-    double bl = endpoint_numeric_value(b.lower);
-
-    if (au > bl) return true;
-    if (au == bl) {
-
-        return !a.upper.is_open || !b.lower.is_open;
-    }
-    return false;
-}
-
-static Endpoint max_upper(const Endpoint& a, const Endpoint& b) {
-    int cmp = compare_endpoints_upper(a, b);
-    return (cmp >= 0) ? a : b;
+IntervalUnion IntervalUnion::from_checked_normalized(std::vector<Interval> intervals) {
+    IntervalUnion result;
+    result.intervals_ = std::move(intervals);
+    return result;
 }
 
 void IntervalUnion::normalize() {
-
-    intervals_.erase(
-        std::remove_if(intervals_.begin(), intervals_.end(),
-                       [](const Interval& iv) { return iv.is_empty(); }),
-        intervals_.end());
-
-    if (intervals_.empty()) return;
-
-    std::sort(intervals_.begin(), intervals_.end(),
-              [](const Interval& a, const Interval& b) {
-                  return compare_endpoints_lower(a.lower, b.lower) < 0;
-              });
-
-    std::vector<Interval> merged;
-    merged.push_back(intervals_[0]);
-
-    for (size_t i = 1; i < intervals_.size(); ++i) {
-        Interval& current = merged.back();
-        const Interval& next = intervals_[i];
-
-        if (can_merge(current, next)) {
-
-            current.upper = max_upper(current.upper, next.upper);
-        } else {
-            merged.push_back(next);
-        }
+    auto normalized = normalize_intervals_checked(intervals_);
+    if (normalized) {
+        intervals_ = std::move(normalized.value());
     }
-
-    intervals_ = std::move(merged);
 }
 
-IntervalUnion IntervalUnion::intersect(const IntervalUnion& other) const {
-    if (intervals_.empty() || other.intervals_.empty()) {
-        return IntervalUnion::empty();
-    }
+Result<IntervalUnion> IntervalUnion::intersect_checked(
+    const IntervalUnion& other,
+    ComputationContext& context) const {
+    constexpr const char* operation = "interval_union_intersect";
+    auto left = checked_interval_views(intervals_, context, operation);
+    if (!left) return Result<IntervalUnion>::failure(left.error());
+    auto right = checked_interval_views(other.intervals_, context, operation);
+    if (!right) return Result<IntervalUnion>::failure(right.error());
 
+    const auto& a_intervals = left.value();
+    const auto& b_intervals = right.value();
     std::vector<Interval> result;
-    size_t i = 0, j = 0;
+    std::size_t i = 0;
+    std::size_t j = 0;
+    while (i < a_intervals.size() && j < b_intervals.size()) {
+        const auto& a = a_intervals[i];
+        const auto& b = b_intervals[j];
+        auto lower_order = compare_comparable(a.lower, b.lower, operation);
+        if (!lower_order) return Result<IntervalUnion>::failure(lower_order.error());
+        auto upper_order = compare_comparable(a.upper, b.upper, operation);
+        if (!upper_order) return Result<IntervalUnion>::failure(upper_order.error());
+        const bool use_a_lower = lower_order.value() >= 0;
+        const bool use_a_upper = upper_order.value() <= 0;
 
-    while (i < intervals_.size() && j < other.intervals_.size()) {
-        const Interval& a = intervals_[i];
-        const Interval& b = other.intervals_[j];
-
-        Endpoint lo = (compare_endpoints_lower(a.lower, b.lower) >= 0) ? a.lower : b.lower;
-
-        Endpoint hi = (compare_endpoints_upper(a.upper, b.upper) <= 0) ? a.upper : b.upper;
-
-        Interval candidate{lo, hi};
-        if (!candidate.is_empty()) {
-            result.push_back(candidate);
+        Interval candidate{
+            use_a_lower ? a.interval.lower : b.interval.lower,
+            use_a_upper ? a.interval.upper : b.interval.upper
+        };
+        auto empty = interval_is_empty_checked(candidate, context);
+        if (!empty) return Result<IntervalUnion>::failure(empty.error());
+        if (!empty.value()) {
+            result.push_back(std::move(candidate));
         }
 
-        if (compare_endpoints_upper(a.upper, b.upper) < 0) {
+        if (upper_order.value() < 0) {
             ++i;
         } else {
             ++j;
         }
     }
 
-    IntervalUnion res;
-    res.intervals_ = std::move(result);
-    return res;
+    auto normalized = normalize_intervals_checked(std::move(result), context);
+    if (!normalized) return Result<IntervalUnion>::failure(normalized.error());
+    return Result<IntervalUnion>::success(
+        IntervalUnion::from_checked_normalized(std::move(normalized.value())));
 }
 
-IntervalUnion IntervalUnion::unite(const IntervalUnion& other) const {
+Result<IntervalUnion> IntervalUnion::intersect_checked(
+    const IntervalUnion& other) const {
+    ComputationContext context;
+    return intersect_checked(other, context);
+}
+
+Result<IntervalUnion> IntervalUnion::unite_checked(
+    const IntervalUnion& other,
+    ComputationContext& context) const {
+    constexpr const char* operation = "interval_union_unite";
     std::vector<Interval> all;
     all.reserve(intervals_.size() + other.intervals_.size());
     all.insert(all.end(), intervals_.begin(), intervals_.end());
     all.insert(all.end(), other.intervals_.begin(), other.intervals_.end());
-    return IntervalUnion(std::move(all));
+
+    auto step = context.consume_steps(all.size(), operation);
+    if (!step) return Result<IntervalUnion>::failure(step.error());
+    auto normalized = normalize_intervals_checked(std::move(all), context);
+    if (!normalized) return Result<IntervalUnion>::failure(normalized.error());
+    return Result<IntervalUnion>::success(
+        IntervalUnion::from_checked_normalized(std::move(normalized.value())));
 }
 
-IntervalUnion IntervalUnion::complement() const {
+Result<IntervalUnion> IntervalUnion::unite_checked(
+    const IntervalUnion& other) const {
+    ComputationContext context;
+    return unite_checked(other, context);
+}
 
-    if (intervals_.empty()) {
-        return IntervalUnion::entire_line();
+Result<IntervalUnion> IntervalUnion::complement_checked(
+    ComputationContext& context) const {
+    constexpr const char* operation = "interval_union_complement";
+    auto checked = checked_interval_views(intervals_, context, operation);
+    if (!checked) return Result<IntervalUnion>::failure(checked.error());
+    const auto& intervals = checked.value();
+
+    if (intervals.empty()) {
+        return Result<IntervalUnion>::success(
+            IntervalUnion::from_checked_normalized({Interval::entire_line()}));
     }
-
-    if (is_entire_line()) {
-        return IntervalUnion::empty();
+    if (intervals.size() == 1 &&
+        intervals[0].interval.lower.is_neg_infinity &&
+        intervals[0].interval.upper.is_pos_infinity) {
+        return Result<IntervalUnion>::success(IntervalUnion::from_checked_normalized({}));
     }
 
     std::vector<Interval> result;
-
-    const Interval& first = intervals_[0];
+    const Interval& first = intervals.front().interval;
     if (!first.lower.is_neg_infinity) {
-        Endpoint gap_upper;
-        gap_upper.value = first.lower.value;
-        gap_upper.is_open = !first.lower.is_open;
-        gap_upper.is_neg_infinity = false;
-        gap_upper.is_pos_infinity = false;
-
-        Interval gap{Endpoint::neg_inf(), gap_upper};
-        if (!gap.is_empty()) {
-            result.push_back(gap);
-        }
+        result.push_back(Interval{
+            Endpoint::neg_inf(),
+            complement_upper_from_lower(first.lower)
+        });
     }
 
-    for (size_t i = 0; i + 1 < intervals_.size(); ++i) {
-        const Interval& curr = intervals_[i];
-        const Interval& next = intervals_[i + 1];
-
-        Endpoint gap_lower;
-        gap_lower.value = curr.upper.value;
-        gap_lower.is_open = !curr.upper.is_open;
-        gap_lower.is_neg_infinity = false;
-        gap_lower.is_pos_infinity = false;
-
-        Endpoint gap_upper;
-        gap_upper.value = next.lower.value;
-        gap_upper.is_open = !next.lower.is_open;
-        gap_upper.is_neg_infinity = false;
-        gap_upper.is_pos_infinity = false;
-
-        Interval gap{gap_lower, gap_upper};
-        if (!gap.is_empty()) {
-            result.push_back(gap);
-        }
+    for (std::size_t i = 0; i + 1 < intervals.size(); ++i) {
+        const Interval& current = intervals[i].interval;
+        const Interval& next = intervals[i + 1].interval;
+        result.push_back(Interval{
+            complement_lower_from_upper(current.upper),
+            complement_upper_from_lower(next.lower)
+        });
     }
 
-    const Interval& last = intervals_.back();
+    const Interval& last = intervals.back().interval;
     if (!last.upper.is_pos_infinity) {
-        Endpoint gap_lower;
-        gap_lower.value = last.upper.value;
-        gap_lower.is_open = !last.upper.is_open;
-        gap_lower.is_neg_infinity = false;
-        gap_lower.is_pos_infinity = false;
+        result.push_back(Interval{
+            complement_lower_from_upper(last.upper),
+            Endpoint::pos_inf()
+        });
+    }
 
-        Interval gap{gap_lower, Endpoint::pos_inf()};
-        if (!gap.is_empty()) {
-            result.push_back(gap);
+    auto normalized = normalize_intervals_checked(std::move(result), context);
+    if (!normalized) return Result<IntervalUnion>::failure(normalized.error());
+    return Result<IntervalUnion>::success(
+        IntervalUnion::from_checked_normalized(std::move(normalized.value())));
+}
+
+Result<IntervalUnion> IntervalUnion::complement_checked() const {
+    ComputationContext context;
+    return complement_checked(context);
+}
+
+Result<bool> interval_contains_checked(
+    const Interval& interval,
+    double value,
+    ComputationContext& context) {
+    constexpr const char* operation = "interval_contains";
+    auto point_step = context.consume_steps(1, operation);
+    if (!point_step) return Result<bool>::failure(point_step.error());
+    auto point = exact_double_rational(value, context, operation);
+    if (!point) return Result<bool>::failure(point.error());
+    const ComparableEndpoint point_key{
+        0, std::move(point.value()), Rational(0), Rational(0)};
+
+    auto lower = comparable_endpoint(interval.lower, context, operation);
+    if (!lower) return Result<bool>::failure(lower.error());
+    auto upper = comparable_endpoint(interval.upper, context, operation);
+    if (!upper) return Result<bool>::failure(upper.error());
+
+    auto lower_cmp = compare_comparable(point_key, lower.value(), operation);
+    if (!lower_cmp) return Result<bool>::failure(lower_cmp.error());
+    if (lower_cmp.value() < 0 ||
+        (lower_cmp.value() == 0 && interval.lower.is_open)) {
+        return Result<bool>::success(false);
+    }
+    auto upper_cmp = compare_comparable(point_key, upper.value(), operation);
+    if (!upper_cmp) return Result<bool>::failure(upper_cmp.error());
+    if (upper_cmp.value() > 0 ||
+        (upper_cmp.value() == 0 && interval.upper.is_open)) {
+        return Result<bool>::success(false);
+    }
+    return Result<bool>::success(true);
+}
+
+Result<bool> interval_contains_checked(
+    const Interval& interval,
+    double value) {
+    ComputationContext context;
+    return interval_contains_checked(interval, value, context);
+}
+
+Result<bool> interval_is_empty_checked(
+    const Interval& interval,
+    ComputationContext& context) {
+    constexpr const char* operation = "interval_is_empty";
+    auto lower = comparable_endpoint(interval.lower, context, operation);
+    if (!lower) return Result<bool>::failure(lower.error());
+    auto upper = comparable_endpoint(interval.upper, context, operation);
+    if (!upper) return Result<bool>::failure(upper.error());
+    auto comparison = compare_comparable(
+        lower.value(), upper.value(), operation);
+    if (!comparison) return Result<bool>::failure(comparison.error());
+    return Result<bool>::success(
+        comparison.value() > 0 ||
+        (comparison.value() == 0 &&
+         (interval.lower.is_open || interval.upper.is_open)));
+}
+
+Result<bool> interval_is_empty_checked(const Interval& interval) {
+    ComputationContext context;
+    return interval_is_empty_checked(interval, context);
+}
+
+Result<std::vector<Interval>> normalize_intervals_checked(
+    std::vector<Interval> intervals,
+    ComputationContext& context) {
+    struct CheckedInterval {
+        Interval interval;
+        ComparableEndpoint lower;
+        ComparableEndpoint upper;
+    };
+
+    std::vector<CheckedInterval> checked;
+    checked.reserve(intervals.size());
+    for (auto& interval : intervals) {
+        auto lower = comparable_endpoint(
+            interval.lower, context, kCheckedIntervalOperation);
+        if (!lower) return Result<std::vector<Interval>>::failure(lower.error());
+        auto upper = comparable_endpoint(
+            interval.upper, context, kCheckedIntervalOperation);
+        if (!upper) return Result<std::vector<Interval>>::failure(upper.error());
+        auto comparison = compare_comparable(
+            lower.value(), upper.value(), kCheckedIntervalOperation);
+        if (!comparison) {
+            return Result<std::vector<Interval>>::failure(comparison.error());
+        }
+        const bool empty = comparison.value() > 0 ||
+            (comparison.value() == 0 &&
+             (interval.lower.is_open || interval.upper.is_open));
+        if (!empty) {
+            checked.push_back(CheckedInterval{
+                std::move(interval), std::move(lower.value()), std::move(upper.value())});
         }
     }
 
-    IntervalUnion res;
-    res.intervals_ = std::move(result);
-    return res;
+    for (std::size_t i = 1; i < checked.size(); ++i) {
+        std::size_t position = i;
+        while (position > 0) {
+            auto comparison = compare_comparable(
+                checked[position - 1].lower,
+                checked[position].lower,
+                kCheckedIntervalOperation);
+            if (!comparison) {
+                return Result<std::vector<Interval>>::failure(comparison.error());
+            }
+            const bool out_of_order = comparison.value() > 0 ||
+                (comparison.value() == 0 &&
+                 checked[position - 1].interval.lower.is_open &&
+                 !checked[position].interval.lower.is_open);
+            if (!out_of_order) break;
+            std::swap(checked[position - 1], checked[position]);
+            --position;
+        }
+    }
+
+    std::vector<CheckedInterval> merged;
+    merged.reserve(checked.size());
+    for (auto& next : checked) {
+        if (merged.empty()) {
+            merged.push_back(std::move(next));
+            continue;
+        }
+
+        CheckedInterval& current = merged.back();
+        auto boundary = compare_comparable(
+            current.upper, next.lower, kCheckedIntervalOperation);
+        if (!boundary) {
+            return Result<std::vector<Interval>>::failure(boundary.error());
+        }
+        const bool overlaps = boundary.value() > 0 ||
+            (boundary.value() == 0 &&
+             (!current.interval.upper.is_open || !next.interval.lower.is_open));
+        if (!overlaps) {
+            merged.push_back(std::move(next));
+            continue;
+        }
+
+        auto upper_comparison = compare_comparable(
+            current.upper, next.upper, kCheckedIntervalOperation);
+        if (!upper_comparison) {
+            return Result<std::vector<Interval>>::failure(upper_comparison.error());
+        }
+        if (upper_comparison.value() < 0 ||
+            (upper_comparison.value() == 0 && current.interval.upper.is_open &&
+             !next.interval.upper.is_open)) {
+            current.interval.upper = std::move(next.interval.upper);
+            current.upper = std::move(next.upper);
+        }
+    }
+
+    std::vector<Interval> result;
+    result.reserve(merged.size());
+    for (auto& interval : merged) {
+        result.push_back(std::move(interval.interval));
+    }
+    return Result<std::vector<Interval>>::success(std::move(result));
+}
+
+Result<std::vector<Interval>> normalize_intervals_checked(
+    std::vector<Interval> intervals) {
+    ComputationContext context;
+    return normalize_intervals_checked(std::move(intervals), context);
+}
+
+IntervalUnion IntervalUnion::intersect(const IntervalUnion& other) const {
+    auto result = intersect_checked(other);
+    return result ? result.value() : IntervalUnion::empty();
+}
+
+IntervalUnion IntervalUnion::unite(const IntervalUnion& other) const {
+    auto result = unite_checked(other);
+    return result ? result.value() : IntervalUnion::empty();
+}
+
+IntervalUnion IntervalUnion::complement() const {
+    auto result = complement_checked();
+    return result ? result.value() : IntervalUnion::empty();
 }
 
 std::string IntervalUnion::to_string() const {
@@ -461,12 +846,10 @@ static size_t skip_ws(const std::string& str, size_t pos) {
 
 static std::shared_ptr<SymbolicExpr> parse_numeric_value(const std::string& str, size_t& pos) {
     size_t start = pos;
-    bool has_sign = false;
     bool has_digit = false;
     bool has_dot = false;
 
     if (pos < str.size() && (str[pos] == '-' || str[pos] == '+')) {
-        has_sign = true;
         ++pos;
     }
 
@@ -609,26 +992,26 @@ std::shared_ptr<SymbolicExpr> IntervalUnion::to_expr(const std::string& var) con
         return nullptr;
     }
 
-    auto var_node = SymbolicExpr::variable(var)->root;
+    auto var_node = lamina::detail::node(SymbolicExpr::variable(var));
 
-    auto interval_to_expr = [&](const Interval& iv) -> std::shared_ptr<SymbolicNode> {
-        std::shared_ptr<SymbolicNode> lower_cond = nullptr;
-        std::shared_ptr<SymbolicNode> upper_cond = nullptr;
+    auto interval_to_expr = [&](const Interval& iv) -> std::shared_ptr<const SymbolicNode> {
+        std::shared_ptr<const SymbolicNode> lower_cond = nullptr;
+        std::shared_ptr<const SymbolicNode> upper_cond = nullptr;
 
         if (!iv.lower.is_neg_infinity) {
-            auto bound = iv.lower.value ? iv.lower.value->root : std::make_shared<NumberNode>(0.0);
+            auto bound = iv.lower.value ? lamina::detail::node(iv.lower.value) : lamina::detail::make_node<NumberNode>(0.0);
             RelationalNode::Op op = iv.lower.is_open ? RelationalNode::Op::GT : RelationalNode::Op::GEQ;
-            lower_cond = std::make_shared<RelationalNode>(var_node, bound, op);
+            lower_cond = lamina::detail::make_node<RelationalNode>(var_node, bound, op);
         }
 
         if (!iv.upper.is_pos_infinity) {
-            auto bound = iv.upper.value ? iv.upper.value->root : std::make_shared<NumberNode>(0.0);
+            auto bound = iv.upper.value ? lamina::detail::node(iv.upper.value) : lamina::detail::make_node<NumberNode>(0.0);
             RelationalNode::Op op = iv.upper.is_open ? RelationalNode::Op::LT : RelationalNode::Op::LEQ;
-            upper_cond = std::make_shared<RelationalNode>(var_node, bound, op);
+            upper_cond = lamina::detail::make_node<RelationalNode>(var_node, bound, op);
         }
 
         if (lower_cond && upper_cond) {
-            return std::make_shared<LogicalNode>(lower_cond, upper_cond, LogicalNode::Op::And);
+            return lamina::detail::make_node<LogicalNode>(lower_cond, upper_cond, LogicalNode::Op::And);
         } else if (lower_cond) {
             return lower_cond;
         } else if (upper_cond) {
@@ -647,14 +1030,14 @@ std::shared_ptr<SymbolicExpr> IntervalUnion::to_expr(const std::string& var) con
     if (intervals_.size() == 1) {
         auto node = interval_to_expr(intervals_[0]);
         if (!node) return nullptr;
-        return std::make_shared<SymbolicExpr>(node);
+        return lamina::detail::make_expression_ptr(node);
     }
 
     auto result = interval_to_expr(intervals_[0]);
     for (size_t i = 1; i < intervals_.size(); ++i) {
         auto next = interval_to_expr(intervals_[i]);
         if (result && next) {
-            result = std::make_shared<LogicalNode>(result, next, LogicalNode::Op::Or);
+            result = lamina::detail::make_node<LogicalNode>(result, next, LogicalNode::Op::Or);
         } else if (next) {
             result = next;
         }
@@ -662,7 +1045,7 @@ std::shared_ptr<SymbolicExpr> IntervalUnion::to_expr(const std::string& var) con
     }
 
     if (!result) return nullptr;
-    return std::make_shared<SymbolicExpr>(result);
+    return lamina::detail::make_expression_ptr(result);
 }
 
 }

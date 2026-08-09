@@ -1,8 +1,8 @@
 #include "poly_utils.hpp"
 #include "polynomial.hpp"
 #include "symbolic.hpp"
+#include "test_common.hpp"
 #include <iostream>
-#include <cassert>
 
 using namespace lamina;
 
@@ -29,10 +29,13 @@ void test_bridge() {
     for (const auto& c : poly.coeffs) std::cout << c.ToString() << " ";
     std::cout << std::endl;
 
-    assert(poly.degree() == 2);
-    assert(poly.coeffs[0] == BigInt(1));
-    assert(poly.coeffs[1] == BigInt(2));
-    assert(poly.coeffs[2] == BigInt(1));
+    EXPECT_TRUE(poly.degree() == 2, "symbolic_to_poly preserves degree");
+    EXPECT_TRUE(poly.coeffs.size() >= 3, "symbolic_to_poly returns three coefficients");
+    if (poly.coeffs.size() >= 3) {
+        EXPECT_TRUE(poly.coeffs[0] == BigInt(1), "constant coefficient is 1");
+        EXPECT_TRUE(poly.coeffs[1] == BigInt(2), "linear coefficient is 2");
+        EXPECT_TRUE(poly.coeffs[2] == BigInt(1), "quadratic coefficient is 1");
+    }
 
     Polynomial<BigInt> poly2({BigInt(1), BigInt(1)}, "x");
 
@@ -41,7 +44,7 @@ void test_bridge() {
     for (const auto& c : gcd.coeffs) std::cout << c.ToString() << " ";
     std::cout << std::endl;
 
-    assert(gcd.degree() == 1);
+    EXPECT_TRUE(gcd.degree() == 1, "Polynomial::gcd finds shared linear factor");
 
     auto res_expr = poly_to_symbolic(gcd);
     std::cout << "Result Symbolic: " << res_expr->to_string() << std::endl;
@@ -54,9 +57,8 @@ void test_bridge() {
 
     std::cout << "SymbolicExpr::poly_gcd result: " << sgcd->to_string() << std::endl;
 
-    if (sgcd->is_one() && !expr->is_one() && !sp2->is_one()) {
-        std::cerr << "Warning: poly_gcd returned 1, expected something else (unless coprime, but here they share x+1)." << std::endl;
-    }
+    EXPECT_TRUE(!(sgcd->is_one() && !expr->is_one() && !sp2->is_one()),
+                "SymbolicExpr::poly_gcd does not silently return 1 for expressions sharing x+1");
 
     std::cout << "Bridge Test Passed." << std::endl;
 }
@@ -65,8 +67,7 @@ int main() {
     try {
         test_bridge();
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
     }
-    return 0;
+    return TEST_REPORT();
 }

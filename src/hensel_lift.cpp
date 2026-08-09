@@ -19,12 +19,10 @@
 #include <cstdint>
 #include <cmath>
 #include <algorithm>
+#include <exception>
 
 namespace lamina {
 
-// ============================================================
-/// 文件局部辅助函数
-// ============================================================
 
 /**
  * @brief 计算二项式系数 C(n, k)。
@@ -381,6 +379,69 @@ hl_poly_divmod(const std::vector<BigInt>& a,
     return {quotient, rem};
 }
 
+static bool hl_is_prime(int64_t value) {
+    if (value < 2) return false;
+    if (value == 2) return true;
+    if (value % 2 == 0) return false;
+    for (int64_t divisor = 3; divisor <= value / divisor; divisor += 2) {
+        if (value % divisor == 0) return false;
+    }
+    return true;
+}
+
+static bool hl_coeff_vectors_equal(std::vector<BigInt> left,
+                                   std::vector<BigInt> right) {
+    while (!left.empty() && left.back().is_zero()) left.pop_back();
+    while (!right.empty() && right.back().is_zero()) right.pop_back();
+    const std::size_t size = std::max(left.size(), right.size());
+    left.resize(size, BigInt(0));
+    right.resize(size, BigInt(0));
+    return left == right;
+}
+
+static Result<void> hl_validate_lift_inputs(
+    const Polynomial<BigInt>& poly,
+    const std::vector<std::vector<BigInt>>& factor_vecs,
+    int64_t prime) {
+    constexpr const char* operation = "hensel_lift";
+    if (!hl_is_prime(prime)) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "Hensel lifting requires a prime modulus",
+                                     operation);
+    }
+    if (poly.is_zero() || poly.degree() <= 0) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "Hensel lifting requires a non-constant polynomial",
+                                     operation);
+    }
+    if (factor_vecs.empty()) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "Hensel lifting requires at least one mod-p factor",
+                                     operation);
+    }
+    for (const auto& factor : factor_vecs) {
+        if (factor.empty()) {
+            return Result<void>::failure(CasErrc::InvalidArgument,
+                                         "Hensel lifting factor cannot be zero",
+                                         operation);
+        }
+    }
+
+    const BigInt modulus(static_cast<long long>(prime));
+    std::vector<BigInt> product{BigInt(1)};
+    for (const auto& factor : factor_vecs) {
+        product = hl_poly_mul_mod(product, factor, modulus);
+    }
+    std::vector<BigInt> reduced_f = poly.coeffs;
+    hl_reduce_coeffs(reduced_f, modulus);
+    if (!hl_coeff_vectors_equal(product, reduced_f)) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "mod-p factors do not multiply to the input polynomial",
+                                     operation);
+    }
+    return Result<void>::success();
+}
+
 /// HenselLiftPair 结构体已在 transcendental_factor.hpp 中声明
 
 /**
@@ -639,9 +700,6 @@ static std::vector<std::vector<BigInt>> hl_multi_factor_lift(
     return lifted_factors;
 }
 
-// ============================================================
-/// 公共 API 实现
-// ============================================================
 
 /**
  * @brief Hensel 提升：将模 p 因子提升到 mod p^k。
@@ -660,22 +718,12 @@ static std::vector<std::vector<BigInt>> hl_multi_factor_lift(
  * @param[in] lift_bound  提升次数上界 k（若为 0 则自动计算）
  * @return 提升后的整系数因子列表（系数在对称表示 [-p^k/2, p^k/2] 下）
  */
-std::vector<Polynomial<BigInt>> hensel_lift(
+HenselLiftResult hensel_lift_checked(
     const Polynomial<BigInt>& poly,
     const std::vector<Polynomial<ModInt>>& mod_factors,
     int64_t prime,
     int lift_bound) {
-
-    /// 空输入或无因子：直接返回
-    if (poly.is_zero() || mod_factors.empty()) {
-        return {};
-    }
-
-    /// 若调用方未指定提升界，则自动计算
-    int k = lift_bound;
-    if (k <= 0) {
-        k = hl_compute_lift_height(poly, prime);
-    }
+    constexpr const char* operation = "hensel_lift";
 
     /// 将原始多项式转换为系数向量
     std::vector<BigInt> f_vec = poly.coeffs;
@@ -692,8 +740,24 @@ std::vector<Polynomial<BigInt>> hensel_lift(
         factor_vecs.push_back(std::move(fv));
     }
 
+    auto valid = hl_validate_lift_inputs(poly, factor_vecs, prime);
+    if (!valid) return HenselLiftResult::failure(valid.error());
+
+    /// 若调用方未指定提升界，则自动计算
+    int k = lift_bound;
+    if (k <= 0) {
+        k = hl_compute_lift_height(poly, prime);
+    }
+
     /// 执行多因子 Hensel 提升
-    auto lifted_vecs = hl_multi_factor_lift(f_vec, factor_vecs, prime, k);
+    std::vector<std::vector<BigInt>> lifted_vecs;
+    try {
+        lifted_vecs = hl_multi_factor_lift(f_vec, factor_vecs, prime, k);
+    } catch (const std::exception& ex) {
+        return HenselLiftResult::failure(CasErrc::InternalInvariant,
+                                         ex.what(),
+                                         operation);
+    }
 
     /// 将结果转换回 Polynomial<BigInt>
     std::vector<Polynomial<BigInt>> result;
@@ -702,7 +766,16 @@ std::vector<Polynomial<BigInt>> hensel_lift(
         result.emplace_back(std::move(lv), poly.variable_name);
     }
 
-    return result;
+    return HenselLiftResult::success(std::move(result));
+}
+
+std::vector<Polynomial<BigInt>> hensel_lift(
+    const Polynomial<BigInt>& poly,
+    const std::vector<Polynomial<ModInt>>& mod_factors,
+    int64_t prime,
+    int lift_bound) {
+    auto result = hensel_lift_checked(poly, mod_factors, prime, lift_bound);
+    return result ? result.value() : std::vector<Polynomial<BigInt>>{};
 }
 
 } // namespace lamina

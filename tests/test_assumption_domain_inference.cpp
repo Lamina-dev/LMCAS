@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_domain_inference.cpp
- * @brief Property tests for InferenceEngine composite domain inference (Task 5.7).
- *
- * Properties tested:
- * - Property 2: Composite domain inference follows domain rules
- *
- * Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -23,34 +11,30 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers: create AST nodes
-// ============================================================
 
-static std::shared_ptr<SymbolicNode> make_var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
-static std::shared_ptr<SymbolicNode> make_power(
-    std::shared_ptr<SymbolicNode> base,
-    std::shared_ptr<SymbolicNode> exp) {
-    return std::make_shared<PowerNode>(std::move(base), std::move(exp));
+static std::shared_ptr<const SymbolicNode> make_power(
+    std::shared_ptr<const SymbolicNode> base,
+    std::shared_ptr<const SymbolicNode> exp) {
+    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exp));
 }
 
-static std::shared_ptr<SymbolicNode> make_function(
+static std::shared_ptr<const SymbolicNode> make_function(
     FunctionNode::FuncType type,
-    std::shared_ptr<SymbolicNode> arg) {
-    return std::make_shared<FunctionNode>(
-        type, std::vector<std::shared_ptr<SymbolicNode>>{std::move(arg)});
+    std::shared_ptr<const SymbolicNode> arg) {
+    return lamina::detail::make_node<FunctionNode>(
+        type, std::vector<std::shared_ptr<const SymbolicNode>>{std::move(arg)});
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<SymbolicNode> node) {
-    SymbolicExpr expr;
-    expr.root = std::move(node);
+static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
+    auto expr = lamina::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -74,10 +58,6 @@ static Domain random_natural_domain() {
     return rc::gen::boolean() ? Domain::Natural : Domain::PositiveInt;
 }
 
-// ============================================================
-// Property 2: sin/cos/tan(Integer|Real) → Real
-// **Validates: Requirements 2.1**
-// ============================================================
 
 static void test_property2_trig_integer_or_real_gives_real() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: sin/cos/tan(Integer|Real) → Real");
@@ -107,10 +87,6 @@ static void test_property2_trig_integer_or_real_gives_real() {
     });
 }
 
-// ============================================================
-// Property 2: exp(Rational|Real) → Real
-// **Validates: Requirements 2.2**
-// ============================================================
 
 static void test_property2_exp_rational_or_real_gives_real() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: exp(Rational|Real) → Real");
@@ -130,10 +106,6 @@ static void test_property2_exp_rational_or_real_gives_real() {
     });
 }
 
-// ============================================================
-// Property 2: ln(Integer) → Real
-// **Validates: Requirements 2.3**
-// ============================================================
 
 static void test_property2_ln_integer_gives_real() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: ln(Integer) → Real");
@@ -152,10 +124,6 @@ static void test_property2_ln_integer_gives_real() {
     });
 }
 
-// ============================================================
-// Property 2: sqrt(NonNeg Real) → Real
-// **Validates: Requirements 2.4**
-// ============================================================
 
 static void test_property2_sqrt_nonneg_real_gives_real() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: sqrt(NonNeg Real) → Real");
@@ -175,10 +143,6 @@ static void test_property2_sqrt_nonneg_real_gives_real() {
     });
 }
 
-// ============================================================
-// Property 2: Integer^Natural → Integer
-// **Validates: Requirements 2.5**
-// ============================================================
 
 static void test_property2_integer_power_natural_gives_integer() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: Integer^Natural → Integer");
@@ -198,10 +162,6 @@ static void test_property2_integer_power_natural_gives_integer() {
     });
 }
 
-// ============================================================
-// Property 2: Integer^0 → Integer (x^0 = 1)
-// **Validates: Requirements 2.5 (edge case)**
-// ============================================================
 
 static void test_property2_integer_power_zero_gives_integer() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: Integer^0 → Integer");
@@ -220,10 +180,6 @@ static void test_property2_integer_power_zero_gives_integer() {
     });
 }
 
-// ============================================================
-// Property 2: Rational^Integer → Rational (via Real inference)
-// **Validates: Requirements 2.6**
-// ============================================================
 
 static void test_property2_rational_power_integer_gives_real() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: Rational^Integer → Real");
@@ -244,9 +200,6 @@ static void test_property2_rational_power_integer_gives_real() {
     });
 }
 
-// ============================================================
-// Property 2: Unknown domain argument → Unknown result
-// ============================================================
 
 static void test_property2_unknown_domain_gives_unknown() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: Unknown domain argument → Unknown");
@@ -273,9 +226,6 @@ static void test_property2_unknown_domain_gives_unknown() {
     });
 }
 
-// ============================================================
-// Property 2: Comprehensive domain inference for all trig functions
-// ============================================================
 
 static void test_property2_all_trig_with_integer() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 2: All trig(Integer) → Real");
@@ -356,12 +306,8 @@ static void test_property2_power_negative_exponent_not_integer() {
         "Integer^(-1) → Integer is Unknown (not guaranteed)");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 2: Composite domain inference
     test_property2_trig_integer_or_real_gives_real();
     test_property2_exp_rational_or_real_gives_real();
     test_property2_ln_integer_gives_real();

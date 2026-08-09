@@ -12,33 +12,33 @@
 static std::shared_ptr<SymbolicExpr> num_expr(int n) { return SymbolicExpr::number(n); }
 
 static double eval_numeric_expr(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !expr->root) return 0.0;
+    if (!expr || !lamina::detail::node(expr)) return 0.0;
 
-    if (auto n = std::dynamic_pointer_cast<NumberNode>(expr->root)) {
-        if (std::holds_alternative<lmmc_real_t>(n->value)) return std::get<lmmc_real_t>(n->value);
-        if (std::holds_alternative<BigInt>(n->value)) return std::get<BigInt>(n->value).to_double();
-        if (std::holds_alternative<Rational>(n->value)) return std::get<Rational>(n->value).to_double();
+    if (auto n = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+        if (std::holds_alternative<lmmc_real_t>(n->value())) return std::get<lmmc_real_t>(n->value());
+        if (std::holds_alternative<BigInt>(n->value())) return std::get<BigInt>(n->value()).to_double();
+        if (std::holds_alternative<Rational>(n->value())) return std::get<Rational>(n->value()).to_double();
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(expr->root)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
         double result = 0.0;
-        for (auto& op : add->operands) {
-            result += eval_numeric_expr(std::make_shared<SymbolicExpr>(op));
+        for (auto& op : add->operands()) {
+            result += eval_numeric_expr(lamina::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr->root)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
         double result = 1.0;
-        for (auto& op : mul->operands) {
-            result *= eval_numeric_expr(std::make_shared<SymbolicExpr>(op));
+        for (auto& op : mul->operands()) {
+            result *= eval_numeric_expr(lamina::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto pow_node = std::dynamic_pointer_cast<PowerNode>(expr->root)) {
-        double base = eval_numeric_expr(std::make_shared<SymbolicExpr>(pow_node->base));
-        double exp = eval_numeric_expr(std::make_shared<SymbolicExpr>(pow_node->exponent));
+    if (auto pow_node = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
+        double base = eval_numeric_expr(lamina::detail::make_expression_ptr(pow_node->base()));
+        double exp = eval_numeric_expr(lamina::detail::make_expression_ptr(pow_node->exponent()));
         if (base < 0.0 && std::abs(exp - std::round(exp)) > 1e-15) {
             double denom = std::round(1.0 / exp);
             if (std::abs(exp * denom - 1.0) < 1e-12 && ((int)denom % 2 == 1)) {
@@ -49,10 +49,10 @@ static double eval_numeric_expr(const std::shared_ptr<SymbolicExpr>& expr) {
         return std::pow(base, exp);
     }
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(expr->root)) {
-        if (func->arguments.size() == 1) {
-            double arg = eval_numeric_expr(std::make_shared<SymbolicExpr>(func->arguments[0]));
-            switch (func->type) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+        if (func->arguments().size() == 1) {
+            double arg = eval_numeric_expr(lamina::detail::make_expression_ptr(func->arguments()[0]));
+            switch (func->type()) {
                 case FunctionNode::FuncType::Sin: return std::sin(arg);
                 case FunctionNode::FuncType::Cos: return std::cos(arg);
                 case FunctionNode::FuncType::Tan: return std::tan(arg);
@@ -70,7 +70,7 @@ static double eval_numeric_expr(const std::shared_ptr<SymbolicExpr>& expr) {
         }
     }
 
-    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr->root)) {
+    if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
         return std::nan("");
     }
 
@@ -98,6 +98,149 @@ static double eval_poly_at_double(const lamina::Polynomial<Rational>& poly, doub
 }
 
 int main() {
+    TEST_CASE("Checked numeric root errors are preserved");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto f = SymbolicExpr::add(x, y);
+        auto df = SymbolicExpr::number(1);
+
+        lamina::SolveOptions opts;
+        opts.tolerance = 1e-12;
+        opts.max_newton_iterations = 10;
+
+        lamina::ComputationContext unbound_context;
+        auto unbound = lamina::newton_raphson_checked(
+            f, df, "x", 0.0, unbound_context, opts);
+        EXPECT_TRUE(!unbound && unbound.error().code == lamina::CasErrc::UnboundSymbol,
+                    "unbound symbols return UnboundSymbol");
+
+        auto log_f = SymbolicExpr::ln(x);
+        auto log_df = SymbolicExpr::divide(SymbolicExpr::number(1), x);
+        lamina::ComputationContext domain_context;
+        auto domain = lamina::newton_raphson_checked(
+            log_f, log_df, "x", -1.0, domain_context, opts);
+        EXPECT_TRUE(!domain && domain.error().code == lamina::CasErrc::DomainError,
+                    "domain failures return DomainError");
+
+        lamina::CancellationToken cancellation;
+        cancellation.cancel();
+        lamina::ComputationContext cancelled_context({}, cancellation);
+        auto cancelled = lamina::newton_raphson_checked(
+            x, df, "x", 1.0, cancelled_context, opts);
+        EXPECT_TRUE(!cancelled && cancelled.error().code == lamina::CasErrc::Cancelled,
+                    "cancelled computations return Cancelled");
+
+        lamina::ResourceLimits limits;
+        limits.max_steps = 1;
+        lamina::ComputationContext limited_context(limits);
+        auto limited = lamina::newton_raphson_checked(
+            x, df, "x", 1.0, limited_context, opts);
+        EXPECT_TRUE(!limited && limited.error().code == lamina::CasErrc::ResourceLimit,
+                    "step exhaustion returns ResourceLimit");
+
+        lamina::ComputationContext invalid_context;
+        auto invalid = lamina::bisection_checked(
+            x, "x", 2.0, 1.0, invalid_context, opts);
+        EXPECT_TRUE(!invalid && invalid.error().code == lamina::CasErrc::InvalidArgument,
+                    "invalid brackets return InvalidArgument");
+
+        auto default_domain = lamina::newton_raphson_checked(
+            log_f, log_df, "x", -1.0, opts);
+        EXPECT_TRUE(!default_domain &&
+                        default_domain.error().code == lamina::CasErrc::DomainError,
+                    "default-context Newton preserves DomainError");
+
+        auto default_invalid = lamina::bisection_checked(
+            x, "x", 2.0, 1.0, opts);
+        EXPECT_TRUE(!default_invalid &&
+                        default_invalid.error().code == lamina::CasErrc::InvalidArgument,
+                    "default-context bisection preserves InvalidArgument");
+
+        auto default_bracket_domain = lamina::newton_raphson_checked(
+            log_f, log_df, "x", -1.0, -2.0, 2.0, opts);
+        EXPECT_TRUE(!default_bracket_domain &&
+                        default_bracket_domain.error().code == lamina::CasErrc::DomainError,
+                    "default-context bracketed Newton preserves DomainError");
+
+        auto legacy_domain = lamina::newton_raphson(log_f, log_df, "x", -1.0, opts);
+        EXPECT_TRUE(!legacy_domain.has_value(),
+                    "legacy Newton still unwraps errors to nullopt");
+
+        lamina::ComputationContext solve_unbound_context;
+        auto solve_unbound = lamina::solve_numeric_checked(
+            f, "x", solve_unbound_context, opts);
+        EXPECT_TRUE(!solve_unbound &&
+                        solve_unbound.error().code == lamina::CasErrc::UnboundSymbol,
+                    "checked solve preserves coefficient binding failures");
+
+        auto default_context_unbound = lamina::solve_numeric_checked(f, "x", opts);
+        EXPECT_TRUE(!default_context_unbound &&
+                        default_context_unbound.error().code == lamina::CasErrc::UnboundSymbol,
+                    "default-context checked solve preserves coefficient binding failures");
+
+        auto legacy_unbound = lamina::solve_numeric(f, "x", opts);
+        EXPECT_TRUE(legacy_unbound.empty(),
+                    "legacy solve_numeric still unwraps errors to an empty vector");
+
+        lamina::ComputationContext solve_cancelled_context({}, cancellation);
+        auto solve_cancelled = lamina::solve_numeric_checked(
+            x, "x", solve_cancelled_context, opts);
+        EXPECT_TRUE(!solve_cancelled &&
+                        solve_cancelled.error().code == lamina::CasErrc::Cancelled,
+                    "checked solve observes cancellation before isolation");
+
+        lamina::ResourceLimits solve_limits;
+        solve_limits.max_steps = 1;
+        lamina::ComputationContext solve_limited_context(solve_limits);
+        auto solve_limited = lamina::solve_numeric_checked(
+            x, "x", solve_limited_context, opts);
+        EXPECT_TRUE(!solve_limited &&
+                        solve_limited.error().code == lamina::CasErrc::ResourceLimit,
+                    "checked solve accounts for interval refinement steps");
+
+        lamina::SolveOptions no_roots_opts = opts;
+        no_roots_opts.max_roots = 0;
+        lamina::ComputationContext no_roots_context;
+        auto no_roots = lamina::solve_numeric_checked(
+            x, "x", no_roots_context, no_roots_opts);
+        EXPECT_TRUE(no_roots && no_roots.value().empty(),
+                    "zero root limit returns no candidates");
+
+        lamina::ResourceLimits expansion_limits;
+        expansion_limits.max_expansion_terms = 1;
+        lamina::ComputationContext exact_expansion_context(expansion_limits);
+        auto exact_linear = SymbolicExpr::add(x, SymbolicExpr::number(1));
+        auto exact_expansion = lamina::solve_numeric_checked(
+            exact_linear, "x", exact_expansion_context, opts);
+        EXPECT_TRUE(!exact_expansion &&
+                        exact_expansion.error().code == lamina::CasErrc::ResourceLimit,
+                    "exact polynomial recognition enforces expansion limits");
+
+        auto approximate_linear = SymbolicExpr::add(
+            SymbolicExpr::multiply(SymbolicExpr::number(0.5), x),
+            SymbolicExpr::number(-1));
+        lamina::ComputationContext approximate_context(expansion_limits);
+        auto approximate = lamina::solve_numeric_checked(
+            approximate_linear, "x", approximate_context, opts);
+        EXPECT_TRUE(approximate && approximate.value().size() == 1,
+                    "ApproxReal coefficients stay on the explicit numeric path");
+        if (approximate && approximate.value().size() == 1) {
+            EXPECT_TRUE(std::abs(approximate.value()[0].value - 2.0) < opts.tolerance,
+                        "approximate linear root is numerically verified");
+        }
+
+        lamina::ResourceLimits exponent_limits;
+        exponent_limits.max_expansion_terms = 10;
+        lamina::ComputationContext exponent_context(exponent_limits);
+        auto large_power = SymbolicExpr::power(x, SymbolicExpr::number(BigInt(1000)));
+        auto exponent_limited = lamina::solve_numeric_checked(
+            large_power, "x", exponent_context, opts);
+        EXPECT_TRUE(!exponent_limited &&
+                        exponent_limited.error().code == lamina::CasErrc::ResourceLimit,
+                    "large exact powers fail before polynomial expansion");
+    }
+
     TEST_CASE("Newton-Raphson - Basic convergence (x^2 - 2)");
     {
 
@@ -647,6 +790,10 @@ int main() {
 
             EXPECT_TRUE(roots.size() == 2,
                 "Polynomial x^2-4 should find 2 roots via Sturm path");
+            for (const auto& root : roots) {
+                EXPECT_TRUE(root.residual <= opts.tolerance * 100.0,
+                    "Every solve_numeric polynomial candidate is residual-verified");
+            }
         }
     }
 

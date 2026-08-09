@@ -1,27 +1,46 @@
 #include "solve_polynomial.hpp"
+#include "symbolic_ast.hpp"
 #include "root_of_utils.hpp"
 #include "poly_utils.hpp"
+#include "numeric_evaluation.hpp"
 #include <cmath>
 #include <algorithm>
+#include <optional>
 #include <stdexcept>
 
 namespace lamina {
 
 static bool is_purely_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !expr->root) return true;
+    if (!expr || !lamina::detail::node(expr)) return true;
 
-    struct VarDetector : public SymbolicVisitor {
+    struct VarDetector : public lamina::detail::SymbolicVisitor {
         bool has_var = false;
-        void visit(NumberNode&) override {}
-        void visit(VariableNode&) override { has_var = true; }
-        void visit(AddNode& n) override { for (auto& op : n.operands) { if (has_var) return; op->accept(*this); } }
-        void visit(MultiplyNode& n) override { for (auto& op : n.operands) { if (has_var) return; op->accept(*this); } }
-        void visit(PowerNode& n) override { n.base->accept(*this); if (!has_var) n.exponent->accept(*this); }
-        void visit(FunctionNode& n) override { for (auto& arg : n.arguments) { if (has_var) return; arg->accept(*this); } }
-        void visit(MatrixNode&) override {}
+        void visit(const NumberNode&) override {}
+        void visit(const VariableNode&) override { has_var = true; }
+        void visit(const AddNode& n) override { for (auto& op : n.operands()) { if (has_var) return; op->accept(*this); } }
+        void visit(const MultiplyNode& n) override { for (auto& op : n.operands()) { if (has_var) return; op->accept(*this); } }
+        void visit(const PowerNode& n) override { n.base()->accept(*this); if (!has_var) n.exponent()->accept(*this); }
+        void visit(const FunctionNode& n) override { for (auto& arg : n.arguments()) { if (has_var) return; arg->accept(*this); } }
+        void visit(const MatrixNode&) override {}
+        void visit(const RelationalNode& n) override { n.left()->accept(*this); if (!has_var) n.right()->accept(*this); }
+        void visit(const LogicalNode& n) override { n.left()->accept(*this); if (!has_var && n.right()) n.right()->accept(*this); }
+        void visit(const PiecewiseNode& n) override {
+            for (const auto& branch : n.branches()) {
+                if (has_var) return;
+                branch.expression->accept(*this);
+                if (!has_var) branch.condition->accept(*this);
+            }
+            if (!has_var && n.default_expr()) n.default_expr()->accept(*this);
+        }
+        void visit(const SummationNode& n) override { n.body()->accept(*this); if (!has_var) n.lower_bound()->accept(*this); if (!has_var) n.upper_bound()->accept(*this); }
+        void visit(const ProductNode_Op& n) override { n.body()->accept(*this); if (!has_var) n.lower_bound()->accept(*this); if (!has_var) n.upper_bound()->accept(*this); }
+        void visit(const TransformNode& n) override { n.body()->accept(*this); }
+        void visit(const QuantifierNode& n) override { n.domain()->accept(*this); if (!has_var) n.predicate()->accept(*this); }
+        void visit(const SetBuilderNode& n) override { n.domain()->accept(*this); if (!has_var) n.predicate()->accept(*this); }
+        void visit(const ComplexNode& n) override { n.real()->accept(*this); if (!has_var) n.imag()->accept(*this); }
     } detector;
 
-    expr->root->accept(detector);
+    lamina::detail::node(expr)->accept(detector);
     return !detector.has_var;
 }
 
@@ -29,11 +48,11 @@ static std::shared_ptr<SymbolicExpr> cbrt_expr(const std::shared_ptr<SymbolicExp
     return SymbolicExpr::power(x, SymbolicExpr::number(Rational(1, 3)));
 }
 
-static std::shared_ptr<SymbolicExpr> acos_expr(const std::shared_ptr<SymbolicExpr>& x) {
-    return std::make_shared<SymbolicExpr>(
-        std::make_shared<FunctionNode>(
+[[maybe_unused]] static std::shared_ptr<SymbolicExpr> acos_expr(const std::shared_ptr<SymbolicExpr>& x) {
+    return lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::ArcCos,
-            std::vector<std::shared_ptr<SymbolicNode>>{x->root}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(x)}));
 }
 
 static std::shared_ptr<SymbolicExpr> negate(const std::shared_ptr<SymbolicExpr>& x) {
@@ -45,12 +64,43 @@ static std::shared_ptr<SymbolicExpr> sub(const std::shared_ptr<SymbolicExpr>& a,
 }
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
-static std::shared_ptr<SymbolicExpr> num_r(int p, int q) { return SymbolicExpr::number(Rational(p, q)); }
+[[maybe_unused]] static std::shared_ptr<SymbolicExpr> num_r(int p, int q) { return SymbolicExpr::number(Rational(p, q)); }
+
+static std::optional<double> finite_numeric_value(const std::shared_ptr<SymbolicExpr>& expr) {
+    if (!expr) return std::nullopt;
+    ComputationContext context;
+    auto evaluated = evaluate_numeric(*expr, NumericBindings{}, context);
+    if (!evaluated || !evaluated.value().is_finite() ||
+        !std::isfinite(evaluated.value().value)) {
+        return std::nullopt;
+    }
+    auto simplified = expr->simplify();
+    if (simplified && lamina::detail::node(simplified)) {
+        if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
+            if (std::holds_alternative<Rational>(num->value())) {
+                const auto& value = std::get<Rational>(num->value());
+                if (!value.get_numerator().is_zero() && evaluated.value().value == 0.0) {
+                    return std::nullopt;
+                }
+            } else if (std::holds_alternative<BigInt>(num->value())) {
+                const auto& value = std::get<BigInt>(num->value());
+                if (!value.is_zero() && evaluated.value().value == 0.0) {
+                    return std::nullopt;
+                }
+            }
+        }
+    }
+    return evaluated.value().value;
+}
 
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_quadratic_internal(
     const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
     const std::shared_ptr<SymbolicExpr>& c);
+
+static bool convert_to_rational_poly(
+    const Polynomial<SymbolicPolyCoeff>& sym_poly,
+    Polynomial<Rational>& out_poly);
 
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_linear_internal(
     const std::shared_ptr<SymbolicExpr>& a,
@@ -71,12 +121,15 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_quadratic_internal(
 
     auto b2 = SymbolicExpr::power(b, num(2));
     auto four_ac = SymbolicExpr::multiply(num(4), SymbolicExpr::multiply(a, c));
-    auto delta = sub(b2, four_ac);
+    auto delta = sub(b2, four_ac)->simplify();
 
-    auto sqrt_delta = SymbolicExpr::sqrt(delta);
     auto neg_b = negate(b);
     auto two_a = SymbolicExpr::multiply(num(2), a);
+    if (delta && delta->is_zero()) {
+        return { SymbolicExpr::divide(neg_b, two_a)->simplify() };
+    }
 
+    auto sqrt_delta = SymbolicExpr::sqrt(delta);
     auto x1 = SymbolicExpr::divide(SymbolicExpr::add(neg_b, sqrt_delta), two_a)->simplify();
     auto x2 = SymbolicExpr::divide(sub(neg_b, sqrt_delta), two_a)->simplify();
 
@@ -88,7 +141,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
     const std::shared_ptr<SymbolicExpr>& b,
     const std::shared_ptr<SymbolicExpr>& c,
     const std::shared_ptr<SymbolicExpr>& d,
-    const std::string& var) {
+    const std::string&) {
 
     auto a_simp = a->simplify();
     if (a_simp->get_number_value_is_zero()) {
@@ -125,10 +178,15 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
 
     std::vector<std::shared_ptr<SymbolicExpr>> roots;
 
-    if (all_numeric) {
+    auto p_checked = finite_numeric_value(p);
+    auto q_checked = finite_numeric_value(q);
+    auto shift_checked = finite_numeric_value(shift);
 
-        double p_val = p->to_numeric();
-        double q_val = q->to_numeric();
+    if (all_numeric && p_checked && q_checked && shift_checked) {
+
+        double p_val = *p_checked;
+        double q_val = *q_checked;
+        double shift_val = *shift_checked;
 
         double D = (q_val / 2.0) * (q_val / 2.0) + (p_val / 3.0) * (p_val / 3.0) * (p_val / 3.0);
 
@@ -136,14 +194,12 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
 
         if (std::abs(p_val) < eps && std::abs(q_val) < eps) {
 
-            double shift_val = shift->to_numeric();
             auto root = SymbolicExpr::number(-shift_val);
             roots = { root, root, root };
         } else if (std::abs(D) < eps) {
 
             double q_half_val = q_val / 2.0;
             double cbrt_q_half_val = std::cbrt(q_half_val);
-            double shift_val = shift->to_numeric();
 
             double t1_val = -2.0 * cbrt_q_half_val;
 
@@ -163,8 +219,6 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
 
             double u_val = std::cbrt(u_arg_val);
             double v_val = std::cbrt(v_arg_val);
-
-            double shift_val = shift->to_numeric();
 
             double t1_val = u_val + v_val;
             double x1_val = t1_val - shift_val;
@@ -194,10 +248,8 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
             double theta_val = std::acos(cos_arg);
             double two_cbrt_r = 2.0 * std::cbrt(r_val);
 
-            double shift_val = shift->to_numeric();
-
             for (int k = 0; k < 3; ++k) {
-                double angle = (theta_val + 2.0 * k * M_PI) / 3.0;
+                double angle = (theta_val + 2.0 * k * LMMC_CONST_PI) / 3.0;
                 double t_k_val = two_cbrt_r * std::cos(angle);
                 double x_k_val = t_k_val - shift_val;
                 roots.push_back(SymbolicExpr::number(x_k_val));
@@ -239,15 +291,19 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_biquadratic(
     const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
     const std::shared_ptr<SymbolicExpr>& c,
-    const std::string& var) {
+    const std::string&) {
 
     bool all_numeric = is_purely_numeric(a) && is_purely_numeric(b) && is_purely_numeric(c);
 
-    if (all_numeric) {
+    auto a_checked = finite_numeric_value(a);
+    auto b_checked = finite_numeric_value(b);
+    auto c_checked = finite_numeric_value(c);
 
-        double av = a->to_numeric();
-        double bv = b->to_numeric();
-        double cv = c->to_numeric();
+    if (all_numeric && a_checked && b_checked && c_checked && *a_checked != 0.0) {
+
+        double av = *a_checked;
+        double bv = *b_checked;
+        double cv = *c_checked;
 
         double disc = bv * bv - 4.0 * av * cv;
         double sqrt_disc = std::sqrt(std::abs(disc));
@@ -311,6 +367,26 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_quartic(
         return solve_cubic(b, c, d, e, var);
     }
 
+    {
+        Polynomial<SymbolicPolyCoeff> symbolic_poly(
+            {SymbolicPolyCoeff(e), SymbolicPolyCoeff(d), SymbolicPolyCoeff(c),
+             SymbolicPolyCoeff(b), SymbolicPolyCoeff(a)},
+            var);
+        Polynomial<Rational> rational_poly;
+        if (convert_to_rational_poly(symbolic_poly, rational_poly) &&
+            rational_poly.degree() == 4) {
+            auto rational_roots = find_rational_roots(rational_poly);
+            if (rational_roots.size() == 4) {
+                std::vector<std::shared_ptr<SymbolicExpr>> proven_roots;
+                proven_roots.reserve(rational_roots.size());
+                for (const auto& root : rational_roots) {
+                    proven_roots.push_back(SymbolicExpr::number(root));
+                }
+                return proven_roots;
+            }
+        }
+    }
+
     auto b_simp = b->simplify();
     auto d_simp = d->simplify();
     if (b_simp->get_number_value_is_zero() && d_simp->get_number_value_is_zero()) {
@@ -320,18 +396,32 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_quartic(
     bool all_numeric = is_purely_numeric(a) && is_purely_numeric(b) &&
                        is_purely_numeric(c) && is_purely_numeric(d) && is_purely_numeric(e);
 
-    if (all_numeric) {
+    auto a_checked = finite_numeric_value(a);
+    auto b_checked = finite_numeric_value(b);
+    auto c_checked = finite_numeric_value(c);
+    auto d_checked = finite_numeric_value(d);
+    auto e_checked = finite_numeric_value(e);
 
-        double av = a->to_numeric();
-        double bv = b->to_numeric();
-        double cv = c->to_numeric();
-        double dv = d->to_numeric();
-        double ev = e->to_numeric();
+    if (all_numeric && a_checked && b_checked && c_checked && d_checked && e_checked &&
+        *a_checked != 0.0) {
+
+        double av = *a_checked;
+        double bv = *b_checked;
+        double cv = *c_checked;
+        double dv = *d_checked;
+        double ev = *e_checked;
 
         double shift_val = bv / (4.0 * av);
         double p_val = (8.0*av*cv - 3.0*bv*bv) / (8.0*av*av);
         double q_val = (bv*bv*bv - 4.0*av*bv*cv + 8.0*av*av*dv) / (8.0*av*av*av);
         double r_val = (-3.0*bv*bv*bv*bv + 256.0*av*av*av*ev - 64.0*av*av*bv*dv + 16.0*av*bv*bv*cv) / (256.0*av*av*av*av);
+
+        if (!std::isfinite(shift_val) || !std::isfinite(p_val) ||
+            !std::isfinite(q_val) || !std::isfinite(r_val)) {
+            all_numeric = false;
+        }
+
+        if (all_numeric) {
 
         const double eps = 1e-12;
 
@@ -383,10 +473,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_quartic(
         bool found_m = false;
 
         for (const auto& root : cubic_roots) {
-            double val = root->to_numeric();
-            if (std::isfinite(val) && val > eps) {
-                if (!found_m || val > m_val) {
-                    m_val = val;
+            auto maybe_val = finite_numeric_value(root);
+            if (maybe_val && *maybe_val > eps) {
+                if (!found_m || *maybe_val > m_val) {
+                    m_val = *maybe_val;
                     found_m = true;
                 }
             }
@@ -394,10 +484,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_quartic(
 
         if (!found_m) {
             for (const auto& root : cubic_roots) {
-                double val = root->to_numeric();
-                if (std::isfinite(val) && std::abs(val) > eps) {
-                    if (!found_m || std::abs(val) > std::abs(m_val)) {
-                        m_val = val;
+                auto maybe_val = finite_numeric_value(root);
+                if (maybe_val && std::abs(*maybe_val) > eps) {
+                    if (!found_m || std::abs(*maybe_val) > std::abs(m_val)) {
+                        m_val = *maybe_val;
                         found_m = true;
                     }
                 }
@@ -405,16 +495,16 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_quartic(
         }
 
         if (!found_m && !cubic_roots.empty()) {
-            m_val = cubic_roots[0]->to_numeric();
-            found_m = true;
+            auto maybe_val = finite_numeric_value(cubic_roots[0]);
+            if (maybe_val) {
+                m_val = *maybe_val;
+                found_m = true;
+            }
         }
 
         if (!found_m) return {};
 
         if (m_val < 0) {
-
-            double abs_2m = std::abs(2.0 * m_val);
-            double s_abs = std::sqrt(abs_2m);
 
             auto shift_expr = SymbolicExpr::number(shift_val);
             auto m_expr = SymbolicExpr::number(m_val);
@@ -492,6 +582,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_quartic(
         }
 
         return results;
+        }
     }
 
     auto a2 = SymbolicExpr::power(a, num(2));
@@ -700,40 +791,57 @@ static bool convert_to_rational_poly(
 
         auto simplified = coeff_expr->simplify();
 
-        if (simplified->root) {
-            struct VarCheck : public SymbolicVisitor {
+        if (lamina::detail::node(simplified)) {
+            struct VarCheck : public lamina::detail::SymbolicVisitor {
                 bool found = false;
-                void visit(NumberNode&) override {}
-                void visit(VariableNode&) override { found = true; }
-                void visit(AddNode& n) override { for (auto& op : n.operands) { if (found) return; op->accept(*this); } }
-                void visit(MultiplyNode& n) override { for (auto& op : n.operands) { if (found) return; op->accept(*this); } }
-                void visit(PowerNode& n) override { n.base->accept(*this); if (!found) n.exponent->accept(*this); }
-                void visit(FunctionNode& n) override { for (auto& arg : n.arguments) { if (found) return; arg->accept(*this); } }
-                void visit(MatrixNode&) override {}
+                void visit(const NumberNode&) override {}
+                void visit(const VariableNode&) override { found = true; }
+                void visit(const AddNode& n) override { for (auto& op : n.operands()) { if (found) return; op->accept(*this); } }
+                void visit(const MultiplyNode& n) override { for (auto& op : n.operands()) { if (found) return; op->accept(*this); } }
+                void visit(const PowerNode& n) override { n.base()->accept(*this); if (!found) n.exponent()->accept(*this); }
+                void visit(const FunctionNode& n) override { for (auto& arg : n.arguments()) { if (found) return; arg->accept(*this); } }
+                void visit(const MatrixNode&) override {}
+                void visit(const RelationalNode& n) override { n.left()->accept(*this); if (!found) n.right()->accept(*this); }
+                void visit(const LogicalNode& n) override { n.left()->accept(*this); if (!found && n.right()) n.right()->accept(*this); }
+                void visit(const PiecewiseNode& n) override {
+                    for (const auto& branch : n.branches()) {
+                        if (found) return;
+                        branch.expression->accept(*this);
+                        if (!found) branch.condition->accept(*this);
+                    }
+                    if (!found && n.default_expr()) n.default_expr()->accept(*this);
+                }
+                void visit(const SummationNode& n) override { n.body()->accept(*this); if (!found) n.lower_bound()->accept(*this); if (!found) n.upper_bound()->accept(*this); }
+                void visit(const ProductNode_Op& n) override { n.body()->accept(*this); if (!found) n.lower_bound()->accept(*this); if (!found) n.upper_bound()->accept(*this); }
+                void visit(const TransformNode& n) override { n.body()->accept(*this); }
+                void visit(const QuantifierNode& n) override { n.domain()->accept(*this); if (!found) n.predicate()->accept(*this); }
+                void visit(const SetBuilderNode& n) override { n.domain()->accept(*this); if (!found) n.predicate()->accept(*this); }
+                void visit(const ComplexNode& n) override { n.real()->accept(*this); if (!found) n.imag()->accept(*this); }
             } checker;
-            simplified->root->accept(checker);
+            lamina::detail::node(simplified)->accept(checker);
             if (checker.found) return false;
         }
 
-        if (auto num_node = std::dynamic_pointer_cast<NumberNode>(simplified->root)) {
-            if (std::holds_alternative<Rational>(num_node->value)) {
-                out_poly.coeffs[i] = std::get<Rational>(num_node->value);
-            } else if (std::holds_alternative<BigInt>(num_node->value)) {
-                out_poly.coeffs[i] = Rational(std::get<BigInt>(num_node->value));
+        if (auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
+            if (std::holds_alternative<Rational>(num_node->value())) {
+                out_poly.coeffs[i] = std::get<Rational>(num_node->value());
+            } else if (std::holds_alternative<BigInt>(num_node->value())) {
+                out_poly.coeffs[i] = Rational(std::get<BigInt>(num_node->value()));
             } else {
-                out_poly.coeffs[i] = Rational::from_double(std::get<double>(num_node->value));
+                out_poly.coeffs[i] = Rational::from_double(std::get<double>(num_node->value()));
             }
         } else if (simplified->is_zero()) {
             out_poly.coeffs[i] = Rational(0);
         } else if (simplified->is_one()) {
             out_poly.coeffs[i] = Rational(1);
         } else {
-
-            double val = simplified->to_numeric();
-            if (std::isnan(val) || std::isinf(val)) {
+            ComputationContext context;
+            auto evaluated = evaluate_numeric(*simplified, NumericBindings{}, context);
+            if (!evaluated || !evaluated.value().is_finite() ||
+                !std::isfinite(evaluated.value().value)) {
                 return false;
             }
-            out_poly.coeffs[i] = Rational::from_double(val);
+            out_poly.coeffs[i] = Rational::from_double(evaluated.value().value);
         }
     }
 

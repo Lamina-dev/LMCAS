@@ -1,16 +1,3 @@
-/**
- * @file test_assumption_system_integration.cpp
- * @brief Unit tests for system integration of AssumptionContext with subsystems.
- *
- * Tests:
- * 1. Integrator with positive variable simplifies |x| to x
- * 2. LimitVisitor with positive variable resolves sign ambiguity
- * 3. ODE solver with positive dep var selects positive branch
- * 4. Matcher with assumption context evaluates conditions
- * 5. All subsystems with nullptr behave identically to current
- *
- * Validates: Requirements 12.2, 12.3, 13.2, 15.2, 16.2
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -28,91 +15,83 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
-static std::shared_ptr<SymbolicNode> make_var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
-static std::shared_ptr<SymbolicNode> make_abs(const std::shared_ptr<SymbolicNode>& arg) {
-    return std::make_shared<FunctionNode>(
+static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const SymbolicNode>& arg) {
+    return lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Abs,
-        std::vector<std::shared_ptr<SymbolicNode>>{arg});
+        std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
-static SymbolicExpr wrap(std::shared_ptr<SymbolicNode> node) {
-    return SymbolicExpr(std::move(node));
+static SymbolicExpr wrap(std::shared_ptr<const SymbolicNode> node) {
+    return lamina::detail::expression_from_node(std::move(node));
 }
 
 /// Check if an AST contains an abs() node wrapping the given variable.
-static bool contains_abs_of(const std::shared_ptr<SymbolicNode>& node, const std::string& var_name) {
+static bool contains_abs_of(const std::shared_ptr<const SymbolicNode>& node, const std::string& var_name) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Abs && fn->arguments.size() == 1) {
-            if (auto vn = std::dynamic_pointer_cast<VariableNode>(fn->arguments[0])) {
-                if (vn->name == var_name) return true;
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Abs && fn->arguments().size() == 1) {
+            if (auto vn = std::dynamic_pointer_cast<const VariableNode>(fn->arguments()[0])) {
+                if (vn->name() == var_name) return true;
             }
         }
-        for (auto& arg : fn->arguments) {
+        for (auto& arg : fn->arguments()) {
             if (contains_abs_of(arg, var_name)) return true;
         }
     }
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (contains_abs_of(op, var_name)) return true;
     }
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (contains_abs_of(op, var_name)) return true;
     }
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (contains_abs_of(pow->base, var_name)) return true;
-        if (contains_abs_of(pow->exponent, var_name)) return true;
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (contains_abs_of(pow->base(), var_name)) return true;
+        if (contains_abs_of(pow->exponent(), var_name)) return true;
     }
     return false;
 }
 
 /// Check if an AST contains an abs() node anywhere.
-static bool contains_abs(const std::shared_ptr<SymbolicNode>& node) {
+static bool contains_abs(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Abs) return true;
-        for (auto& arg : fn->arguments) {
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Abs) return true;
+        for (auto& arg : fn->arguments()) {
             if (contains_abs(arg)) return true;
         }
     }
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (contains_abs(op)) return true;
     }
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (contains_abs(op)) return true;
     }
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (contains_abs(pow->base)) return true;
-        if (contains_abs(pow->exponent)) return true;
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (contains_abs(pow->base())) return true;
+        if (contains_abs(pow->exponent())) return true;
     }
     return false;
 }
 
-// ============================================================
-// Test 1: Integrator with positive variable simplifies |x| to x
-// (Requirement 12.2)
-// ============================================================
 
 static void test_integrator_positive_simplifies_abs() {
     TEST_CASE("Integrator: positive variable simplifies |x| to x (Req 12.2)");
 
     // Create integrand: |x|
-    SymbolicExpr integrand(make_abs(make_var("x")));
-
+    auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
     // Set up assumption context with x Positive
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -128,7 +107,7 @@ static void test_integrator_positive_simplifies_abs() {
 
     // The result should NOT contain abs(x) since x is positive, |x| = x
     // So integrating x gives x^2/2
-    EXPECT_FALSE(contains_abs_of(result.root, "x"),
+    EXPECT_FALSE(contains_abs_of(lamina::detail::node(result), "x"),
                  "Integration result does not contain abs(x) when x is Positive");
 }
 
@@ -136,8 +115,7 @@ static void test_integrator_no_context_preserves_abs() {
     TEST_CASE("Integrator: no context preserves |x| behavior (Req 12.4)");
 
     // Create integrand: |x|
-    SymbolicExpr integrand(make_abs(make_var("x")));
-
+    auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
     // Integrate without assumption context (nullptr)
     Integrator integrator;
     // No set_assumption_context call — defaults to nullptr
@@ -150,14 +128,10 @@ static void test_integrator_no_context_preserves_abs() {
     // a result that still references abs (or an unevaluated integral).
     // The key point is it should NOT simplify |x| to x without assumptions.
     // We verify the result is produced (non-empty) — backward compatibility.
-    EXPECT_TRUE(result.root != nullptr,
+    EXPECT_TRUE(lamina::detail::node(result) != nullptr,
                 "Integration without context produces a result");
 }
 
-// ============================================================
-// Test 2: LimitVisitor with positive variable resolves sign ambiguity
-// (Requirement 13.2)
-// ============================================================
 
 static void test_limit_visitor_positive_resolves_sign() {
     TEST_CASE("LimitVisitor: positive variable resolves sign ambiguity (Req 13.2)");
@@ -169,10 +143,10 @@ static void test_limit_visitor_positive_resolves_sign() {
     ctx.assume_domain("x", Domain::Real);
 
     // Build 1/x = x^(-1) = MultiplyNode([1, PowerNode(x, -1)])
-    auto one_over_x = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{
+    auto one_over_x = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{
             make_number(1),
-            std::make_shared<PowerNode>(make_var("x"), make_number(-1))
+            lamina::detail::make_node<PowerNode>(make_var("x"), make_number(-1))
         });
 
     auto point = make_number(0);
@@ -182,7 +156,7 @@ static void test_limit_visitor_positive_resolves_sign() {
     one_over_x->accept(visitor_with_ctx);
     auto result_with_ctx = visitor_with_ctx.get_result();
 
-    std::string result_str = result_with_ctx ? SymbolicExpr(result_with_ctx).to_string() : "null";
+    std::string result_str = result_with_ctx ? lamina::detail::expression_from_node(result_with_ctx).to_string() : "null";
     std::cout << "  Limit of 1/x as x->0+ with x Positive: " << result_str << std::endl;
 
     // The result should be +infinity (positive infinity)
@@ -192,8 +166,8 @@ static void test_limit_visitor_positive_resolves_sign() {
 
     // Verify it's positive infinity (not negative)
     bool is_positive_inf = false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(result_with_ctx)) {
-        if (fn->type == FunctionNode::FuncType::Infinity) {
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(result_with_ctx)) {
+        if (fn->type() == FunctionNode::FuncType::Infinity) {
             is_positive_inf = true;
         }
     }
@@ -205,7 +179,7 @@ static void test_limit_visitor_nullptr_same_behavior() {
     TEST_CASE("LimitVisitor: nullptr context same as current behavior (Req 13.4)");
 
     // Compute limit of x^2 as x → 2 without context
-    auto x_squared = std::make_shared<PowerNode>(make_var("x"), make_number(2));
+    auto x_squared = lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2));
     auto point = make_number(2);
 
     // Without context
@@ -218,8 +192,8 @@ static void test_limit_visitor_nullptr_same_behavior() {
     x_squared->accept(visitor_null_ctx);
     auto result_null_ctx = visitor_null_ctx.get_result();
 
-    std::string s1 = result_no_ctx ? SymbolicExpr(result_no_ctx).to_string() : "null";
-    std::string s2 = result_null_ctx ? SymbolicExpr(result_null_ctx).to_string() : "null";
+    std::string s1 = result_no_ctx ? lamina::detail::expression_from_node(result_no_ctx).to_string() : "null";
+    std::string s2 = result_null_ctx ? lamina::detail::expression_from_node(result_null_ctx).to_string() : "null";
 
     std::cout << "  Limit of x^2 as x->2 (no ctx): " << s1 << std::endl;
     std::cout << "  Limit of x^2 as x->2 (nullptr): " << s2 << std::endl;
@@ -227,10 +201,6 @@ static void test_limit_visitor_nullptr_same_behavior() {
     EXPECT_EQ_STR(s1, s2, "LimitVisitor with no ctx and nullptr produce same result");
 }
 
-// ============================================================
-// Test 3: ODE solver with positive dep var selects positive branch
-// (Requirement 15.2)
-// ============================================================
 
 static void test_ode_solver_positive_branch() {
     TEST_CASE("ODE solver: positive dep var selects positive branch (Req 15.2)");
@@ -253,7 +223,7 @@ static void test_ode_solver_positive_branch() {
     // positive branch preference
     EXPECT_TRUE(result_with_ctx != nullptr,
                 "ODE solver with positive dep var produces a result");
-    EXPECT_TRUE(contains_abs(result_with_ctx->root),
+    EXPECT_TRUE(contains_abs(lamina::detail::node(result_with_ctx)),
                 "ODE solver with positive dep var contains abs() wrapper");
 }
 
@@ -277,17 +247,13 @@ static void test_ode_solver_nullptr_no_abs() {
     EXPECT_EQ_STR(s1, s2, "ODE solver with nullptr and default produce same result");
 }
 
-// ============================================================
-// Test 4: Matcher with assumption context evaluates conditions
-// (Requirement 16.2)
-// ============================================================
 
 static void test_matcher_assumption_condition_matches() {
     TEST_CASE("Matcher: assumption_condition matches when context has variable Positive (Req 16.2)");
 
     // Create a rule with assumption_condition that checks if wildcard "A" is Positive
-    auto pattern = SymbolicExpr(make_var("A"));
-    auto replacement = SymbolicExpr(make_var("A"));
+    auto pattern = lamina::detail::expression_from_node(make_var("A"));
+    auto replacement = lamina::detail::expression_from_node(make_var("A"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     // The assumption_condition checks if the bound expression is Positive
@@ -306,7 +272,7 @@ static void test_matcher_assumption_condition_matches() {
     ctx.assume_domain("x", Domain::Real);
 
     // Create target expression: x
-    auto target = SymbolicExpr(make_var("x"));
+    auto target = lamina::detail::expression_from_node(make_var("x"));
 
     // Use RewriteEngine with assumption context
     RewriteEngine engine;
@@ -329,8 +295,8 @@ static void test_matcher_assumption_condition_no_match_without_context() {
     TEST_CASE("Matcher: assumption_condition fails without context (Req 16.4)");
 
     // Same rule as above
-    auto pattern = SymbolicExpr(make_var("A"));
-    auto replacement = SymbolicExpr(make_var("A"));
+    auto pattern = lamina::detail::expression_from_node(make_var("A"));
+    auto replacement = lamina::detail::expression_from_node(make_var("A"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     auto assumption_cond = [](const MatchMap& bindings, const AssumptionContext* ctx) -> bool {
@@ -343,7 +309,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
     Rule rule(pattern, replacement, wildcards, assumption_cond);
 
     // Target: x (but no context)
-    auto target = SymbolicExpr(make_var("x"));
+    auto target = lamina::detail::expression_from_node(make_var("x"));
 
     MatchMap bindings;
     bool matched = Matcher::match(pattern, target, wildcards, bindings, nullptr);
@@ -360,8 +326,8 @@ static void test_matcher_rewrite_engine_with_context() {
     TEST_CASE("Matcher: RewriteEngine uses assumption context during apply (Req 16.3)");
 
     // Create a rule: abs(A) → A when A is Positive
-    auto abs_A = SymbolicExpr(make_abs(make_var("A")));
-    auto just_A = SymbolicExpr(make_var("A"));
+    auto abs_A = lamina::detail::expression_from_node(make_abs(make_var("A")));
+    auto just_A = lamina::detail::expression_from_node(make_var("A"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     auto assumption_cond = [](const MatchMap& bindings, const AssumptionContext* ctx) -> bool {
@@ -383,28 +349,23 @@ static void test_matcher_rewrite_engine_with_context() {
     engine.set_assumption_context(&ctx);
 
     // Apply to abs(x)
-    auto input = SymbolicExpr(make_abs(make_var("x")));
+    auto input = lamina::detail::expression_from_node(make_abs(make_var("x")));
     auto result = engine.apply(input);
 
     std::string result_str = result.to_string();
     std::cout << "  RewriteEngine abs(x) with x Positive: " << result_str << std::endl;
 
     // The result should be x (abs removed because x is Positive)
-    EXPECT_FALSE(contains_abs(result.root),
+    EXPECT_FALSE(contains_abs(lamina::detail::node(result)),
                  "RewriteEngine removes abs(x) when x is Positive");
 }
 
-// ============================================================
-// Test 5: All subsystems with nullptr behave identically to current
-// (Requirements 12.4, 13.4, 15.4, 16.4)
-// ============================================================
 
 static void test_integrator_nullptr_identical() {
     TEST_CASE("Integrator: nullptr identical to no context (Req 12.4)");
 
     // Integrate x^2
-    SymbolicExpr integrand(std::make_shared<PowerNode>(make_var("x"), make_number(2)));
-
+    auto integrand = lamina::detail::expression_from_node(lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2)));
     Integrator integrator1;
     // No context set (default nullptr)
     auto result1 = integrator1.integrate(integrand, "x");
@@ -438,8 +399,8 @@ static void test_ode_solver_nullptr_identical() {
 static void test_matcher_nullptr_identical() {
     TEST_CASE("Matcher: nullptr identical to no context (Req 16.4)");
 
-    auto pattern = SymbolicExpr(make_var("A"));
-    auto target = SymbolicExpr(make_var("x"));
+    auto pattern = lamina::detail::expression_from_node(make_var("A"));
+    auto target = lamina::detail::expression_from_node(make_var("x"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     MatchMap bindings1;
@@ -465,9 +426,6 @@ static void test_matcher_nullptr_identical() {
     EXPECT_TRUE(same_bindings, "Matcher bindings identical with default and nullptr");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Test 1: Integrator with positive variable

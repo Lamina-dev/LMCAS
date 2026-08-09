@@ -5,8 +5,8 @@
 ## 1. 环境准备
 
 确保你的系统已安装：
-- **CMake** (3.14 或更高版本)
-- **C++ 编译器** (支持 C++17，如 GCC 9+, Clang 10+, MSVC 2019+)
+- **CMake** (3.16 或更高版本)
+- **C++ 编译器** (支持 C++17，如 GCC 9+, Clang 10+ 或 MinGW；MSVC 暂不支持)
 
 ## 2. 获取代码与构建
 
@@ -18,7 +18,7 @@ cmake ..
 cmake --build . --config Release
 ```
 
-构建完成后，你会得到 `lmcas` 动态库（或静态库）以及 `LammpCore` 依赖库。
+构建完成后，你会得到 `lmcas` 库。当前 `BigInt` 公开头仍需要 `LammpCore` 作为兼容链接依赖；LMMC 不作为 LMCAS 包的公开 target 暴露。
 
 ## 3. 编写第一个程序
 

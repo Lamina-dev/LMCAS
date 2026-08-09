@@ -1,43 +1,3 @@
-// Feature: integration-enhancements, Property 9: Multiple integral separability
-//
-// Validates: Requirements 6.10
-//
-// Property 9: For all separable integrands of the form f(x)*g(y) where f
-// depends only on x and g depends only on y, integrated over independent
-// constant bounds [a1, b1] for x and [a2, b2] for y, the
-// MultipleIntegralEngine SHALL produce a result numerically equal to
-// (integral_{a1}^{b1} f(x) dx) * (integral_{a2}^{b2} g(y) dy) within
-// tolerance 1e-10.
-//
-// Approach
-// --------
-//   * Choose 6 unary functions for f and g: x, x^2, x^3, sin(x), cos(x),
-//     exp(x). All are smooth and have no singularities, so constant bounds
-//     in any sub-interval of R are safe.
-//
-//   * Choose 3 sets of constant bounds for each variable: {0,1}, {1,2},
-//     {-1,1}. This yields 6 * 6 * 3 * 3 = 324 separable combinations,
-//     comfortably exceeding the >=100 combinations required by the task.
-//
-//   * For each combination:
-//       1. Build the integrand f(x)*g(y).
-//       2. Use MultipleIntegralEngine to evaluate the iterated integral
-//          with the inner step over x and the outer step over y, both
-//          with definite bounds.
-//       3. Compute the per-variable definite integrals Ix = integrate_def
-//          (f, x, a1, b1) and Iy = integrate_def(g, y, a2, b2) using the
-//          same Integrator instance.
-//       4. Numerically evaluate the engine result and Ix * Iy (after
-//          simplify) using SymbolicExpr::to_numeric and compare within
-//          tolerance 1e-10.
-//
-//   * Combinations whose engine output still contains an unevaluated
-//     Calculus_Integral node, or whose numeric values are not finite, are
-//     reported as SKIPPED (they are outside the property's premise).
-//
-//   * The test FAILS if any combination produces a numeric mismatch above
-//     tolerance, or if fewer than 100 combinations are successfully
-//     verified.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -57,28 +17,26 @@ namespace {
 
 constexpr double kTolerance = 1e-10;
 
-// --------------------- AST helpers -------------------------------
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
 
-// --------------------- Function catalog --------------------------
 
 // Each entry builds f(arg) given the argument expression.
 struct FunctionSpec {
@@ -103,7 +61,6 @@ const std::vector<FunctionSpec>& functions() {
     return F;
 }
 
-// --------------------- Bound catalog -----------------------------
 
 struct BoundSpec {
     long long lo;
@@ -120,7 +77,6 @@ const std::vector<BoundSpec>& bounds() {
     return B;
 }
 
-// --------------------- Per-combination check ---------------------
 
 struct ComboReport {
     bool unevaluated = false;
@@ -177,28 +133,31 @@ ComboReport verify_combo(const FunctionSpec& f,
         rep.detail = "engine.evaluate returned null";
         return rep;
     }
-    if (has_integral_node(engine_result->root)) {
+    if (has_integral_node(lamina::detail::node(engine_result))) {
         rep.unevaluated = true;
         rep.detail = "engine result contains unevaluated integral";
         return rep;
     }
 
     // Compute Ix = integrate_def(f, x, x_lo, x_hi)
-    SymbolicExpr Ix, Iy;
+    std::shared_ptr<SymbolicExpr> Ix;
+    std::shared_ptr<SymbolicExpr> Iy;
     try {
         // Build f(x) and g(y) afresh (they were consumed when wrapped as
         // children of the multiply node above; rebuild for safety).
         auto fx2 = f.build(SymbolicExpr::variable("x"));
         auto gy2 = g.build(SymbolicExpr::variable("y"));
-        Ix = integrator.integrate_def(*fx2, "x", *x_lo, *x_hi);
-        Iy = integrator.integrate_def(*gy2, "y", *y_lo, *y_hi);
+        Ix = lamina::detail::make_expression_ptr(
+            integrator.integrate_def(*fx2, "x", *x_lo, *x_hi));
+        Iy = lamina::detail::make_expression_ptr(
+            integrator.integrate_def(*gy2, "y", *y_lo, *y_hi));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception in integrate_def: ") + e.what();
         return rep;
     }
 
-    if (has_integral_node(Ix.root) || has_integral_node(Iy.root)) {
+    if (has_integral_node(lamina::detail::node(Ix)) || has_integral_node(lamina::detail::node(Iy))) {
         rep.unevaluated = true;
         rep.detail = "per-variable integrate_def left unevaluated integral";
         return rep;
@@ -208,8 +167,8 @@ ComboReport verify_combo(const FunctionSpec& f,
     auto engine_simp = engine_result->simplify();
     if (!engine_simp) engine_simp = engine_result;
 
-    auto Ix_simp = Ix.simplify();
-    auto Iy_simp = Iy.simplify();
+    auto Ix_simp = Ix->simplify();
+    auto Iy_simp = Iy->simplify();
     if (!Ix_simp || !Iy_simp) {
         rep.failed = true;
         rep.detail = "simplify of per-variable integral returned null";

@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_BUILD_BENCHMARKS=OFF -DUSE_ASM=OFF
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 120
+
+  warnings-as-errors:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF -DLMCAS_BUILD_BENCHMARKS=OFF -DLMCAS_WARNINGS_AS_ERRORS=ON -DUSE_ASM=OFF
+      - name: Build lmcas
+        run: cmake --build build --target lmcas --parallel 2
+
+  mingw:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_BUILD_BENCHMARKS=OFF -DUSE_ASM=OFF
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 120
+
+  package-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure package build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF -DLMCAS_BUILD_BENCHMARKS=OFF -DUSE_ASM=OFF -DCMAKE_INSTALL_PREFIX="$PWD/dist"
+      - name: Build lmcas
+        run: cmake --build build --target lmcas --parallel 2
+      - name: Install
+        run: cmake --install build
+      - name: Configure consumer
+        run: cmake -S tests/package_consumer -B build-consumer -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PWD/dist"
+      - name: Build consumer
+        run: cmake --build build-consumer --parallel 2
+      - name: Run consumer
+        run: ./build-consumer/lmcas_package_consumer
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_SANITIZERS=ON -DUSE_ASM=OFF
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp:print_suppressions=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --timeout 120
+
+  thread-sanitizer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_TSAN=ON -DUSE_ASM=OFF
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --timeout 120
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install coverage tool
+        run: python3 -m pip install --user gcovr
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DLMCAS_ENABLE_COVERAGE=ON -DUSE_ASM=OFF
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 120
+      - name: Generate coverage report
+        run: python3 -m gcovr --root . --filter 'src/.*' --filter 'include/.*' --exclude 'LMMC/.*' --xml-pretty --xml coverage.xml --html-details coverage.html
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            coverage.html
+            coverage.*.html

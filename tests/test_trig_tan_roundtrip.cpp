@@ -1,33 +1,3 @@
-// Feature: integration-enhancements, Property 5: Trigonometric tan^n round-trip
-//
-// Validates: Requirements 3.7
-//
-// Property 5: For all integers n with 2 <= n <= 8, integrating tan^n(x) and
-// differentiating the result SHALL yield an expression numerically equal to
-// tan^n(x) at sample points x = 0.3, 0.5, 0.7, 0.9, 1.1 within tolerance
-// 1e-10.
-//
-// Approach
-// --------
-//   * For each integer n in [2, 8]:
-//       - Build the integrand tan(x)^n via AST construction.
-//       - Call Integrator::integrate(integrand, "x") to obtain a closed
-//         form. If the integrator leaves an unevaluated integral node, the
-//         entry is reported as UNEVAL (outside the property scope) and
-//         counted toward an explicit failure of the property — Property 5
-//         requires that the strategy succeed on the entire range 2..8.
-//       - Symbolically differentiate the antiderivative.
-//       - Evaluate both the integrand and the derivative at the sample
-//         points x in {0.3, 0.5, 0.7, 0.9, 1.1}, all of which are strictly
-//         less than pi/2 ~ 1.5708 so tan(x) is finite. Sample points
-//         where either side returns nullopt or a non-finite value are
-//         skipped, but every n must produce at least one matching sample
-//         within tolerance.
-//       - The test FAILS if any (n, x) pair produces a numeric mismatch
-//         above tolerance, or if the integrator fails to evaluate any n in
-//         [2, 8].
-//
-//   * Tolerance: 1e-10 as specified by the property.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -45,23 +15,22 @@ namespace {
 constexpr const char* kVarName = "x";
 constexpr double kTolerance = 1e-10;
 
-// ----- AST helpers --------------------------------------------------------
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
@@ -71,7 +40,6 @@ const std::vector<double>& sample_points() {
     return S;
 }
 
-// ----- Per-n check --------------------------------------------------------
 
 struct NReport {
     bool unevaluated = false;   // integrator returned an unevaluated integral
@@ -97,24 +65,23 @@ NReport verify_n(int n) {
 
     // Integrate.
     Integrator integ;
-    SymbolicExpr result;
+    std::shared_ptr<SymbolicExpr> result;
     try {
-        result = integ.integrate(*integrand_ptr, kVarName);
+        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand_ptr, kVarName));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception during integration: ") + e.what();
         return rep;
     }
 
-    // Property 5 requires the integrator to succeed for all n in [2, 8].
-    if (has_integral_node(result.root)) {
+    if (has_integral_node(lamina::detail::node(result))) {
         rep.unevaluated = true;
         rep.detail = "integrator left an unevaluated integral: "
-                     + result.to_string();
+                     + result->to_string();
         return rep;
     }
 
-    auto deriv = result.differentiate(kVarName);
+    auto deriv = result->differentiate(kVarName);
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
@@ -153,7 +120,7 @@ NReport verify_n(int n) {
                 << ": integrand=" << *pv
                 << " vs d/dx(result)=" << *dv
                 << " |delta|=" << delta
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             break;
         }
@@ -190,7 +157,7 @@ int main() {
             std::ostringstream oss;
             oss << prefix << ": " << rep.matches << " match(es), "
                 << rep.skipped << " skipped point(s)";
-            EXPECT_TRUE(true, oss.str());
+            EXPECT_TRUE(!rep.failed && !rep.unevaluated && rep.matches > 0, oss.str());
         } else {
             ++failed;
             std::cerr << "[FAIL] " << prefix

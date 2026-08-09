@@ -209,30 +209,105 @@ void test_complex_nth_root() {
 
     // Test n=2: square roots of 4
     {
-        auto c = SymbolicExpr::number(4);
+        auto c = SymbolicExpr::number(4.0);
         auto roots = lamina::solve_complex_nth_root(c, 2);
         EXPECT_TRUE(roots.size() == 2, "sqrt(4) returns exactly 2 roots");
     }
 
     // Test n=3: cube roots of 8
     {
-        auto c = SymbolicExpr::number(8);
+        auto c = SymbolicExpr::number(8.0);
         auto roots = lamina::solve_complex_nth_root(c, 3);
         EXPECT_TRUE(roots.size() == 3, "cbrt(8) returns exactly 3 roots");
     }
 
     // Test n=4: fourth roots of 16
     {
-        auto c = SymbolicExpr::number(16);
+        auto c = SymbolicExpr::number(16.0);
         auto roots = lamina::solve_complex_nth_root(c, 4);
         EXPECT_TRUE(roots.size() == 4, "4th root of 16 returns exactly 4 roots");
     }
 
     // Test n=5: fifth roots of 32
     {
-        auto c = SymbolicExpr::number(32);
+        auto c = SymbolicExpr::number(32.0);
         auto roots = lamina::solve_complex_nth_root(c, 5);
         EXPECT_TRUE(roots.size() == 5, "5th root of 32 returns exactly 5 roots");
+    }
+}
+
+void test_checked_complex_contracts() {
+    TEST_CASE("Checked Symbolic Complex: validates inputs and propagates context errors");
+
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+    auto two = SymbolicExpr::number(2);
+    auto approx_four = SymbolicExpr::number(4.0);
+
+    auto a = lamina::make_complex(one, two);
+    auto b = lamina::make_complex(two, one);
+
+    {
+        auto sum = lamina::complex_add_checked(a, b);
+        EXPECT_TRUE(sum.has_value(), "checked complex_add succeeds for valid inputs");
+        EXPECT_TRUE(sum.value().real && sum.value().imag,
+                    "checked complex_add returns non-null components");
+    }
+
+    {
+        auto bad = lamina::make_complex(nullptr, one);
+        auto result = lamina::complex_mul_checked(bad, b);
+        EXPECT_TRUE(!result.has_value() &&
+                    result.error().code == lamina::CasErrc::InvalidArgument,
+                    "checked complex_mul rejects null components");
+    }
+
+    {
+        auto zero_complex = lamina::make_complex(zero, zero);
+        auto result = lamina::complex_div_checked(a, zero_complex);
+        EXPECT_TRUE(!result.has_value() &&
+                    result.error().code == lamina::CasErrc::DomainError,
+                    "checked complex_div rejects exact zero denominator");
+    }
+
+    {
+        auto roots = lamina::solve_complex_nth_root_checked(approx_four, 2);
+        EXPECT_TRUE(roots.has_value() && roots.value().size() == 2,
+                    "checked complex nth root accepts explicit approximate real input");
+    }
+
+    {
+        auto exact = lamina::solve_complex_nth_root_checked(SymbolicExpr::number(4), 2);
+        EXPECT_TRUE(!exact.has_value() &&
+                    exact.error().code == lamina::CasErrc::Inconclusive,
+                    "checked complex nth root does not implicitly float exact integers");
+    }
+
+    {
+        auto bad_order = lamina::solve_complex_nth_root_checked(approx_four, 0);
+        EXPECT_TRUE(!bad_order.has_value() &&
+                    bad_order.error().code == lamina::CasErrc::InvalidArgument,
+                    "checked complex nth root rejects non-positive degree");
+    }
+
+    {
+        lamina::CancellationToken token;
+        token.cancel();
+        lamina::ComputationContext cancelled_context({}, token);
+        auto cancelled = lamina::complex_conj_checked(a, cancelled_context);
+        EXPECT_TRUE(!cancelled.has_value() &&
+                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                    "checked complex_conj observes cancellation");
+    }
+
+    {
+        lamina::ResourceLimits limits;
+        limits.max_steps = 1;
+        lamina::ComputationContext limited_context(limits);
+        auto limited = lamina::complex_abs_checked(a, limited_context);
+        EXPECT_TRUE(!limited.has_value() &&
+                    limited.error().code == lamina::CasErrc::ResourceLimit,
+                    "checked complex_abs observes step budget");
     }
 }
 
@@ -302,6 +377,7 @@ int main() {
         test_complex_arg();
         test_complex_polar_forms();
         test_complex_nth_root();
+        test_checked_complex_contracts();
         test_complex_quadratic();
         test_complex_locus();
     } catch (const std::exception& e) {

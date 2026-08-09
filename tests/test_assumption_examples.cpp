@@ -1,17 +1,3 @@
-/**
- * @file test_assumption_examples.cpp
- * @brief Example-based integration tests for the Assumption System.
- *
- * These tests exercise the full pipeline:
- *   1. Create AssumptionContext
- *   2. Declare assumptions (domain, sign, relations)
- *   3. Simplify expressions using NormalizationVisitor with the context
- *   4. Solve equations using solve_with_assumptions
- *   5. Query properties using the convenience API
- *   6. Test scoped push/pop behavior
- *
- * Validates: Requirements 8.7, 9.4, 9.5, 10.11, 12.5
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -32,43 +18,40 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a VariableNode.
-static std::shared_ptr<SymbolicNode> var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
 /// Create a NumberNode from int.
-static std::shared_ptr<SymbolicNode> num(int v) {
-    return std::make_shared<NumberNode>(BigInt(v));
+static std::shared_ptr<const SymbolicNode> num(int v) {
+    return lamina::detail::make_node<NumberNode>(BigInt(v));
 }
 
 /// Create sqrt(expr) as FunctionNode(Sqrt, {expr}).
-static std::shared_ptr<SymbolicNode> make_sqrt(const std::shared_ptr<SymbolicNode>& arg) {
-    return std::make_shared<FunctionNode>(
+static std::shared_ptr<const SymbolicNode> make_sqrt(const std::shared_ptr<const SymbolicNode>& arg) {
+    return lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sqrt,
-        std::vector<std::shared_ptr<SymbolicNode>>{arg});
+        std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
 /// Create abs(expr) as FunctionNode(Abs, {expr}).
-static std::shared_ptr<SymbolicNode> make_abs(const std::shared_ptr<SymbolicNode>& arg) {
-    return std::make_shared<FunctionNode>(
+static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const SymbolicNode>& arg) {
+    return lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Abs,
-        std::vector<std::shared_ptr<SymbolicNode>>{arg});
+        std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
 /// Create x^n as PowerNode(x, NumberNode(n)).
-static std::shared_ptr<SymbolicNode> make_power(
-    const std::shared_ptr<SymbolicNode>& base, int exp) {
-    return std::make_shared<PowerNode>(base, num(exp));
+static std::shared_ptr<const SymbolicNode> make_power(
+    const std::shared_ptr<const SymbolicNode>& base, int exp) {
+    return lamina::detail::make_node<PowerNode>(base, num(exp));
 }
 
 /// Normalize a node with an AssumptionContext.
-static std::shared_ptr<SymbolicNode> normalize_with_ctx(
-    const std::shared_ptr<SymbolicNode>& node,
+static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
+    const std::shared_ptr<const SymbolicNode>& node,
     const AssumptionContext& ctx) {
     NormalizationVisitor v(&ctx);
     node->accept(v);
@@ -76,55 +59,55 @@ static std::shared_ptr<SymbolicNode> normalize_with_ctx(
 }
 
 /// Check if a node is a VariableNode with the given name.
-static bool is_variable(const std::shared_ptr<SymbolicNode>& node, const std::string& name) {
-    auto v = std::dynamic_pointer_cast<VariableNode>(node);
-    return v && v->name == name;
+static bool is_variable(const std::shared_ptr<const SymbolicNode>& node, const std::string& name) {
+    auto v = std::dynamic_pointer_cast<const VariableNode>(node);
+    return v && v->name() == name;
 }
 
 /// Check if a node is abs(x) — FunctionNode(Abs, {VariableNode(name)}).
-static bool is_abs_of_var(const std::shared_ptr<SymbolicNode>& node, const std::string& name) {
-    auto func = std::dynamic_pointer_cast<FunctionNode>(node);
-    if (!func || func->type != FunctionNode::FuncType::Abs) return false;
-    if (func->arguments.size() != 1) return false;
-    return is_variable(func->arguments[0], name);
+static bool is_abs_of_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& name) {
+    auto func = std::dynamic_pointer_cast<const FunctionNode>(node);
+    if (!func || func->type() != FunctionNode::FuncType::Abs) return false;
+    if (func->arguments().size() != 1) return false;
+    return is_variable(func->arguments()[0], name);
 }
 
 /// Check if a node represents -x (i.e., MultiplyNode({-1, x})).
-static bool is_negation_of_var(const std::shared_ptr<SymbolicNode>& node, const std::string& name) {
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(node);
-    if (!mul || mul->operands.size() != 2) return false;
+static bool is_negation_of_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& name) {
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node);
+    if (!mul || mul->operands().size() != 2) return false;
 
-    auto n = std::dynamic_pointer_cast<NumberNode>(mul->operands[0]);
+    auto n = std::dynamic_pointer_cast<const NumberNode>(mul->operands()[0]);
     if (!n) return false;
 
     bool is_neg_one = false;
-    if (std::holds_alternative<BigInt>(n->value))
-        is_neg_one = (std::get<BigInt>(n->value) == BigInt(-1));
-    else if (std::holds_alternative<lmmc_real_t>(n->value))
-        is_neg_one = (std::get<lmmc_real_t>(n->value) == -1.0);
-    else if (std::holds_alternative<Rational>(n->value))
-        is_neg_one = (std::get<Rational>(n->value) == Rational(-1));
+    if (std::holds_alternative<BigInt>(n->value()))
+        is_neg_one = (std::get<BigInt>(n->value()) == BigInt(-1));
+    else if (std::holds_alternative<lmmc_real_t>(n->value()))
+        is_neg_one = (std::get<lmmc_real_t>(n->value()) == -1.0);
+    else if (std::holds_alternative<Rational>(n->value()))
+        is_neg_one = (std::get<Rational>(n->value()) == Rational(-1));
 
     if (!is_neg_one) return false;
-    return is_variable(mul->operands[1], name);
+    return is_variable(mul->operands()[1], name);
 }
 
 /// Try to extract a numeric double value from a solution expression.
 static bool try_numeric(const std::shared_ptr<SymbolicExpr>& expr, double& out) {
-    if (!expr || !expr->root) return false;
-    auto n = std::dynamic_pointer_cast<NumberNode>(expr->root);
+    if (!expr || !lamina::detail::node(expr)) return false;
+    auto n = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
     if (!n) return false;
 
-    if (std::holds_alternative<BigInt>(n->value)) {
-        out = std::get<BigInt>(n->value).to_double();
+    if (std::holds_alternative<BigInt>(n->value())) {
+        out = std::get<BigInt>(n->value()).to_double();
         return true;
     }
-    if (std::holds_alternative<Rational>(n->value)) {
-        out = std::get<Rational>(n->value).to_double();
+    if (std::holds_alternative<Rational>(n->value())) {
+        out = std::get<Rational>(n->value()).to_double();
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(n->value)) {
-        out = std::get<lmmc_real_t>(n->value);
+    if (std::holds_alternative<lmmc_real_t>(n->value())) {
+        out = std::get<lmmc_real_t>(n->value());
         return true;
     }
     return false;
@@ -144,10 +127,6 @@ static bool solutions_contain_value(
     return false;
 }
 
-// ============================================================
-// Integration Test 1: End-to-end assumption -> simplification
-// Declare assumptions -> simplify expression -> verify result
-// ============================================================
 
 void test_end_to_end_sqrt_x_squared_nonneg() {
     TEST_CASE("Integration: assume x >= 0, simplify sqrt(x^2), get x");
@@ -173,17 +152,17 @@ void test_end_to_end_abs_negative_var() {
     auto abs_x = make_abs(var("x"));
     auto result = normalize_with_ctx(abs_x, ctx);
 
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(result);
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(result);
     EXPECT_TRUE(mul != nullptr, "End-to-end: abs(x) with x<0 is a MultiplyNode");
-    if (mul && mul->operands.size() == 2) {
-        auto coeff = std::dynamic_pointer_cast<NumberNode>(mul->operands[0]);
+    if (mul && mul->operands().size() == 2) {
+        auto coeff = std::dynamic_pointer_cast<const NumberNode>(mul->operands()[0]);
         bool is_neg_one = false;
         if (coeff) {
-            if (std::holds_alternative<BigInt>(coeff->value))
-                is_neg_one = (std::get<BigInt>(coeff->value) == BigInt(-1));
+            if (std::holds_alternative<BigInt>(coeff->value()))
+                is_neg_one = (std::get<BigInt>(coeff->value()) == BigInt(-1));
         }
         EXPECT_TRUE(is_neg_one, "End-to-end: abs(x) with x<0 has coefficient -1");
-        EXPECT_TRUE(is_variable(mul->operands[1], "x"),
+        EXPECT_TRUE(is_variable(mul->operands()[1], "x"),
                     "End-to-end: abs(x) with x<0 has variable x");
     }
 }
@@ -209,9 +188,7 @@ void test_end_to_end_query_after_assumption() {
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
 
-    SymbolicExpr x_expr;
-    x_expr.root = var("x");
-
+    auto x_expr = lamina::detail::expression_from_node(var("x"));
     EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
                 "End-to-end: x is Positive after assume_sign(Positive)");
     EXPECT_TRUE(ctx.is_nonnegative(x_expr) == Tribool::True,
@@ -222,10 +199,6 @@ void test_end_to_end_query_after_assumption() {
                 "End-to-end: x is NOT Negative when Positive");
 }
 
-// ============================================================
-// Integration Test 2: Solver with assumptions
-// Solve equation -> verify filtered solutions
-// ============================================================
 
 void test_solver_with_positive_int_domain() {
     TEST_CASE("Integration: solve x^2 - 4 = 0 with PositiveInt, only x=2");
@@ -266,18 +239,12 @@ void test_solver_with_nonnegative_sign() {
     EXPECT_FALSE(has_neg3, "Solver+assumptions: x^2-9=0 NonNeg excludes x=-3");
 }
 
-// ============================================================
-// Integration Test 3: Nested scopes
-// push -> assume -> query -> pop -> query again -> compare
-// ============================================================
 
 void test_nested_scopes_query_roundtrip() {
     TEST_CASE("Integration: nested scopes push/assume/query/pop/query");
 
     AssumptionContext ctx;
-    SymbolicExpr x_expr;
-    x_expr.root = var("x");
-
+    auto x_expr = lamina::detail::expression_from_node(var("x"));
     // Root scope: x has no assumptions
     EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::Unknown,
                 "Nested scopes: x is Unknown in root scope");
@@ -293,8 +260,7 @@ void test_nested_scopes_query_roundtrip() {
     ctx.push();
     ctx.assume_domain("y", Domain::Integer);
 
-    SymbolicExpr y_expr;
-    y_expr.root = var("y");
+    auto y_expr = lamina::detail::expression_from_node(var("y"));
     EXPECT_TRUE(ctx.is_integer(y_expr) == Tribool::True,
                 "Nested scopes: y is Integer in scope 2");
     // x Positive is visible via read-through (has_sign reads all scopes)
@@ -352,9 +318,6 @@ void test_nested_scopes_simplification_changes() {
                 "Nested scopes: sqrt(x^2) back to original after all pops");
 }
 
-// ============================================================
-// Integration Test 4: Unrecognized function returns Unknown (Req 8.7)
-// ============================================================
 
 void test_unrecognized_function_returns_unknown() {
     TEST_CASE("Req 8.7: Unrecognized function returns Unknown for all properties");
@@ -364,12 +327,10 @@ void test_unrecognized_function_returns_unknown() {
     ctx.assume_sign("x", Sign::Positive);
 
     // LambertW is not in the recognized built-in list for property inference
-    auto lambert_w = std::make_shared<FunctionNode>(
+    auto lambert_w = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::LambertW,
-        std::vector<std::shared_ptr<SymbolicNode>>{var("x")});
-    SymbolicExpr expr;
-    expr.root = lambert_w;
-
+        std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
+    auto expr = lamina::detail::expression_from_node(lambert_w);
     EXPECT_TRUE(ctx.is_positive(expr) == Tribool::Unknown,
                 "Req 8.7: LambertW(x) is_positive -> Unknown");
     EXPECT_TRUE(ctx.is_negative(expr) == Tribool::Unknown,
@@ -390,12 +351,10 @@ void test_unrecognized_function_erf() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
 
-    auto erf_x = std::make_shared<FunctionNode>(
+    auto erf_x = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Erf,
-        std::vector<std::shared_ptr<SymbolicNode>>{var("x")});
-    SymbolicExpr expr;
-    expr.root = erf_x;
-
+        std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
+    auto expr = lamina::detail::expression_from_node(erf_x);
     EXPECT_TRUE(ctx.is_positive(expr) == Tribool::Unknown,
                 "Req 8.7: Erf(x) is_positive -> Unknown");
     EXPECT_TRUE(ctx.is_negative(expr) == Tribool::Unknown,
@@ -406,9 +365,6 @@ void test_unrecognized_function_erf() {
                 "Req 8.7: Erf(x) is_integer -> Unknown");
 }
 
-// ============================================================
-// Integration Test 5: Domain filtering excludes all solutions -> empty set (Req 12.5)
-// ============================================================
 
 void test_domain_filtering_all_excluded_empty_set() {
     TEST_CASE("Req 12.5: Domain filtering excludes all solutions -> empty set");
@@ -452,9 +408,6 @@ void test_domain_filtering_positive_int_excludes_all() {
     }
 }
 
-// ============================================================
-// Edge Case: Pop on root scope throws (Req 9.4)
-// ============================================================
 
 void test_pop_on_root_scope_throws() {
     TEST_CASE("Req 9.4: pop() on root scope throws std::runtime_error");
@@ -473,9 +426,6 @@ void test_pop_on_root_scope_throws() {
     EXPECT_TRUE(ctx.depth() == 1, "Req 9.4: depth unchanged after failed pop");
 }
 
-// ============================================================
-// Edge Case: Nesting depth of 128 supported (Req 9.5)
-// ============================================================
 
 void test_nesting_depth_128() {
     TEST_CASE("Req 9.5: Nesting depth of 128 push() calls supported");
@@ -491,8 +441,7 @@ void test_nesting_depth_128() {
 
     // Declare something in the deepest scope
     ctx.assume_sign("x", Sign::Positive);
-    SymbolicExpr x_expr;
-    x_expr.root = var("x");
+    auto x_expr = lamina::detail::expression_from_node(var("x"));
     EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
                 "Req 9.5: Can declare and query at depth 129");
 
@@ -506,9 +455,6 @@ void test_nesting_depth_128() {
                 "Req 9.5: x is Unknown after popping all scopes");
 }
 
-// ============================================================
-// Edge Case: NaN and Infinity handling (Req 10.11)
-// ============================================================
 
 void test_nan_handling() {
     TEST_CASE("Req 10.11: NaN NumberNode -> False for integer, Unknown for sign");
@@ -516,10 +462,8 @@ void test_nan_handling() {
     AssumptionContext ctx;
 
     double nan_val = std::numeric_limits<double>::quiet_NaN();
-    auto nan_node = std::make_shared<NumberNode>(static_cast<lmmc_real_t>(nan_val));
-    SymbolicExpr nan_expr;
-    nan_expr.root = nan_node;
-
+    auto nan_node = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(nan_val));
+    auto nan_expr = lamina::detail::expression_from_node(nan_node);
     EXPECT_TRUE(ctx.is_integer(nan_expr) == Tribool::False,
                 "Req 10.11: NaN is_integer -> False");
     EXPECT_TRUE(ctx.is_positive(nan_expr) == Tribool::Unknown,
@@ -534,32 +478,25 @@ void test_infinity_handling() {
     AssumptionContext ctx;
 
     // Positive infinity: FunctionNode(Infinity, {})
-    auto pos_inf = std::make_shared<FunctionNode>(
+    auto pos_inf = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Infinity,
-        std::vector<std::shared_ptr<SymbolicNode>>{});
-    SymbolicExpr pos_inf_expr;
-    pos_inf_expr.root = pos_inf;
-
+        std::vector<std::shared_ptr<const SymbolicNode>>{});
+    auto pos_inf_expr = lamina::detail::expression_from_node(pos_inf);
     EXPECT_TRUE(ctx.is_integer(pos_inf_expr) == Tribool::False,
                 "Req 10.11: +Infinity is_integer -> False");
     EXPECT_TRUE(ctx.is_positive(pos_inf_expr) == Tribool::True,
                 "Req 10.11: +Infinity is_positive -> True");
 
     // Negative infinity: MultiplyNode(-1, Infinity)
-    auto neg_inf = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{num(-1), pos_inf});
-    SymbolicExpr neg_inf_expr;
-    neg_inf_expr.root = neg_inf;
-
+    auto neg_inf = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{num(-1), pos_inf});
+    auto neg_inf_expr = lamina::detail::expression_from_node(neg_inf);
     EXPECT_TRUE(ctx.is_integer(neg_inf_expr) == Tribool::False,
                 "Req 10.11: -Infinity is_integer -> False");
     EXPECT_TRUE(ctx.is_negative(neg_inf_expr) == Tribool::True,
                 "Req 10.11: -Infinity is_negative -> True");
 }
 
-// ============================================================
-// Integration Test: Combined pipeline
-// ============================================================
 
 void test_combined_pipeline() {
     TEST_CASE("Integration: combined pipeline - assume, simplify, query, solve");
@@ -571,8 +508,7 @@ void test_combined_pipeline() {
     ctx.assume_sign("x", Sign::Positive);
 
     // Step 2: Query properties
-    SymbolicExpr x_expr;
-    x_expr.root = var("x");
+    auto x_expr = lamina::detail::expression_from_node(var("x"));
     EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
                 "Pipeline: x is Positive");
     EXPECT_TRUE(ctx.is_real(x_expr) == Tribool::True,
@@ -602,9 +538,6 @@ void test_combined_pipeline() {
     EXPECT_FALSE(has_neg1, "Pipeline: x^2-1=0 with Positive excludes x=-1");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Integration Test 1: End-to-end assumption -> simplification
@@ -621,11 +554,9 @@ int main() {
     test_nested_scopes_query_roundtrip();
     test_nested_scopes_simplification_changes();
 
-    // Integration Test 4: Unrecognized function (Req 8.7)
     test_unrecognized_function_returns_unknown();
     test_unrecognized_function_erf();
 
-    // Integration Test 5: Domain filtering -> empty set (Req 12.5)
     test_domain_filtering_all_excluded_empty_set();
     test_domain_filtering_positive_int_excludes_all();
 

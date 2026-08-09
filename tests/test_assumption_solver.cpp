@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_solver.cpp
- * @brief Property tests for solver domain filtering (Property 25).
- *
- * Feature: assumption-system, Property 25: Solver domain filtering
- * Validates: Requirements 12.1, 12.2, 12.3, 12.4
- *
- * Property 25: For any equation and variable with a domain assumption
- *   (Real, PositiveInt, NonNegative, etc.), the solver should return only
- *   solutions that satisfy the domain constraint; without an AssumptionContext,
- *   all solutions should be returned unchanged.
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -26,26 +14,23 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Try to extract a numeric double value from a solution expression.
 static bool try_numeric(const std::shared_ptr<SymbolicExpr>& expr, double& out) {
-    if (!expr || !expr->root) return false;
-    auto num = std::dynamic_pointer_cast<NumberNode>(expr->root);
+    if (!expr || !lamina::detail::node(expr)) return false;
+    auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
     if (!num) return false;
 
-    if (std::holds_alternative<BigInt>(num->value)) {
-        out = std::get<BigInt>(num->value).to_double();
+    if (std::holds_alternative<BigInt>(num->value())) {
+        out = std::get<BigInt>(num->value()).to_double();
         return true;
     }
-    if (std::holds_alternative<Rational>(num->value)) {
-        out = std::get<Rational>(num->value).to_double();
+    if (std::holds_alternative<Rational>(num->value())) {
+        out = std::get<Rational>(num->value()).to_double();
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(num->value)) {
-        out = std::get<lmmc_real_t>(num->value);
+    if (std::holds_alternative<lmmc_real_t>(num->value())) {
+        out = std::get<lmmc_real_t>(num->value());
         return true;
     }
     return false;
@@ -70,30 +55,30 @@ static bool any_solution_contains_imaginary(
     const std::vector<std::shared_ptr<SymbolicExpr>>& solutions)
 {
     for (const auto& sol : solutions) {
-        if (!sol || !sol->root) continue;
+        if (!sol || !lamina::detail::node(sol)) continue;
         // Check for FunctionNode(Sqrt, negative number)
-        auto func = std::dynamic_pointer_cast<FunctionNode>(sol->root);
-        if (func && func->type == FunctionNode::FuncType::Sqrt && func->arguments.size() == 1) {
-            auto num = std::dynamic_pointer_cast<NumberNode>(func->arguments[0]);
+        auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(sol));
+        if (func && func->type() == FunctionNode::FuncType::Sqrt && func->arguments().size() == 1) {
+            auto num = std::dynamic_pointer_cast<const NumberNode>(func->arguments()[0]);
             if (num) {
-                if (std::holds_alternative<BigInt>(num->value) &&
-                    std::get<BigInt>(num->value).IsNegative()) return true;
-                if (std::holds_alternative<Rational>(num->value) &&
-                    std::get<Rational>(num->value) < Rational(0)) return true;
-                if (std::holds_alternative<lmmc_real_t>(num->value) &&
-                    std::get<lmmc_real_t>(num->value) < 0.0) return true;
+                if (std::holds_alternative<BigInt>(num->value()) &&
+                    std::get<BigInt>(num->value()).IsNegative()) return true;
+                if (std::holds_alternative<Rational>(num->value()) &&
+                    std::get<Rational>(num->value()) < Rational(0)) return true;
+                if (std::holds_alternative<lmmc_real_t>(num->value()) &&
+                    std::get<lmmc_real_t>(num->value()) < 0.0) return true;
             }
         }
         // Also check MultiplyNode containing sqrt(-1)
-        auto mul = std::dynamic_pointer_cast<MultiplyNode>(sol->root);
+        auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(sol));
         if (mul) {
-            for (const auto& op : mul->operands) {
-                auto f = std::dynamic_pointer_cast<FunctionNode>(op);
-                if (f && f->type == FunctionNode::FuncType::Sqrt && f->arguments.size() == 1) {
-                    auto n = std::dynamic_pointer_cast<NumberNode>(f->arguments[0]);
+            for (const auto& op : mul->operands()) {
+                auto f = std::dynamic_pointer_cast<const FunctionNode>(op);
+                if (f && f->type() == FunctionNode::FuncType::Sqrt && f->arguments().size() == 1) {
+                    auto n = std::dynamic_pointer_cast<const NumberNode>(f->arguments()[0]);
                     if (n) {
-                        if (std::holds_alternative<BigInt>(n->value) &&
-                            std::get<BigInt>(n->value).IsNegative()) return true;
+                        if (std::holds_alternative<BigInt>(n->value()) &&
+                            std::get<BigInt>(n->value()).IsNegative()) return true;
                     }
                 }
             }
@@ -118,12 +103,6 @@ static std::shared_ptr<SymbolicExpr> make_x_squared_plus(const std::string& var,
     return eq;
 }
 
-// ============================================================
-// Test Case 1: Solve x² - 4 = 0 (solutions: x=2, x=-2)
-// With Real domain: both returned.
-// With PositiveInt: only x=2.
-// With NonNegative sign: only x=2.
-// ============================================================
 
 void test_x_squared_minus_4_real_domain() {
     TEST_CASE("Property 25: x²-4=0 with Real domain → both x=2 and x=-2 returned");
@@ -181,11 +160,6 @@ void test_x_squared_minus_4_nonnegative_sign() {
     EXPECT_FALSE(has_neg2, "x²-4=0 NonNegative sign: does NOT contain x=-2");
 }
 
-// ============================================================
-// Test Case 2: Solve x² + 1 = 0 (solutions: x=i, x=-i)
-// With Real domain: empty set (imaginary excluded).
-// Without context: both returned.
-// ============================================================
 
 void test_x_squared_plus_1_real_domain() {
     TEST_CASE("Property 25: x²+1=0 with Real domain → empty set (imaginary excluded)");
@@ -215,11 +189,6 @@ void test_x_squared_plus_1_no_context() {
                 "x²+1=0 no context: at least 1 solution returned (imaginary)");
 }
 
-// ============================================================
-// Test Case 3: Solve x² - 1 = 0 (solutions: x=1, x=-1)
-// With Positive sign: only x=1.
-// With Negative sign: only x=-1.
-// ============================================================
 
 void test_x_squared_minus_1_positive_sign() {
     TEST_CASE("Property 25: x²-1=0 with Positive sign → only x=1");
@@ -257,9 +226,6 @@ void test_x_squared_minus_1_negative_sign() {
     EXPECT_TRUE(has_neg1, "x²-1=0 Negative sign: contains x=-1");
 }
 
-// ============================================================
-// Test Case 4: No context (nullptr): all solutions returned unfiltered.
-// ============================================================
 
 void test_no_context_all_solutions_returned() {
     TEST_CASE("Property 25: No context (nullptr) → all solutions returned unfiltered");
@@ -291,9 +257,6 @@ void test_no_context_x_squared_minus_1() {
     EXPECT_TRUE(has_neg1, "x²-1=0 no context: contains x=-1");
 }
 
-// ============================================================
-// Test Case 5: All solutions filtered → empty result set.
-// ============================================================
 
 void test_all_solutions_filtered_empty_result() {
     TEST_CASE("Property 25: All solutions filtered → empty result set");
@@ -342,9 +305,6 @@ void test_all_solutions_filtered_positive_int() {
     }
 }
 
-// ============================================================
-// Additional property tests
-// ============================================================
 
 void test_natural_domain_excludes_negative() {
     TEST_CASE("Property 25: x²-4=0 with Natural domain → only x=2 (non-negative integer)");
@@ -416,9 +376,6 @@ void test_nonpositive_sign_filtering() {
     EXPECT_TRUE(has_neg2, "x²-4=0 NonPositive sign: contains x=-2");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
     // Test Case 1: x²-4=0 with various domain/sign constraints

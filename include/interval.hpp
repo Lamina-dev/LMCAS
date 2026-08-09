@@ -3,6 +3,7 @@
  * @brief 区间与区间并集 IntervalUnion，用于不等式解集表示。
  */
 #pragma once
+#include "computation_context.hpp"
 #include "symbolic.hpp"
 #include <vector>
 #include <string>
@@ -10,6 +11,8 @@
 #include <optional>
 
 namespace lamina {
+
+class InequalitySolver;
 
 /** @brief 不等式类型 */
 enum class InequalityType {
@@ -115,6 +118,15 @@ public:
      */
     static IntervalUnion from_single(const Interval& iv);
 
+    /** @brief Validate and construct an interval union with an explicit context. */
+    static Result<IntervalUnion> from_intervals_checked(
+        std::vector<Interval> intervals,
+        ComputationContext& context);
+
+    /** @brief Validate and construct an interval union with a default context. */
+    static Result<IntervalUnion> from_intervals_checked(
+        std::vector<Interval> intervals);
+
     /**
      * @brief 构造空集
      * @return 空的区间并集
@@ -135,6 +147,19 @@ public:
     IntervalUnion intersect(const IntervalUnion& other) const;
 
     /**
+     * @brief Checked intersection with explicit endpoint-validation errors.
+     * @param other 另一个区间并集
+     * @param context 计算上下文和资源预算
+     * @return 成功时返回交集；端点不可比较或资源耗尽时返回错误
+     */
+    Result<IntervalUnion> intersect_checked(
+        const IntervalUnion& other,
+        ComputationContext& context) const;
+
+    /** @brief Checked intersection with a default computation context. */
+    Result<IntervalUnion> intersect_checked(const IntervalUnion& other) const;
+
+    /**
      * @brief 与另一个并集求并
      * @param other 另一个区间并集
      * @return 并集结果
@@ -142,10 +167,33 @@ public:
     IntervalUnion unite(const IntervalUnion& other) const;
 
     /**
+     * @brief Checked union with exact endpoint ordering.
+     * @param other 另一个区间并集
+     * @param context 计算上下文和资源预算
+     * @return 成功时返回并集；端点不可比较或资源耗尽时返回错误
+     */
+    Result<IntervalUnion> unite_checked(
+        const IntervalUnion& other,
+        ComputationContext& context) const;
+
+    /** @brief Checked union with a default computation context. */
+    Result<IntervalUnion> unite_checked(const IntervalUnion& other) const;
+
+    /**
      * @brief 求补集
      * @return 补集结果
      */
     IntervalUnion complement() const;
+
+    /**
+     * @brief Checked complement with exact endpoint ordering.
+     * @param context 计算上下文和资源预算
+     * @return 成功时返回补集；端点不可比较或资源耗尽时返回错误
+     */
+    Result<IntervalUnion> complement_checked(ComputationContext& context) const;
+
+    /** @brief Checked complement with a default computation context. */
+    Result<IntervalUnion> complement_checked() const;
 
     /**
      * @brief 判断数值是否在并集内
@@ -193,8 +241,45 @@ public:
     std::shared_ptr<SymbolicExpr> to_expr(const std::string& var) const;
 
 private:
+    friend class InequalitySolver;
+
     std::vector<Interval> intervals_;
     void normalize();
+    static IntervalUnion from_checked_normalized(std::vector<Interval> intervals);
 };
+
+/** @brief Checked numeric membership test for an interval. */
+LAMINA_API Result<bool> interval_contains_checked(
+    const Interval& interval,
+    double value,
+    ComputationContext& context);
+
+/** @brief Checked numeric membership test with a default context. */
+LAMINA_API Result<bool> interval_contains_checked(
+    const Interval& interval,
+    double value);
+
+/** @brief Checked emptiness decision for an interval. */
+LAMINA_API Result<bool> interval_is_empty_checked(
+    const Interval& interval,
+    ComputationContext& context);
+
+/** @brief Checked emptiness decision with a default context. */
+LAMINA_API Result<bool> interval_is_empty_checked(const Interval& interval);
+
+/**
+ * @brief Validate, sort, remove empty intervals, and merge proven overlaps.
+ *
+ * Exact endpoints remain exact. Approximate endpoints are ordered by their
+ * exact IEEE binary values. Any incomparable or invalid endpoint returns an
+ * error before a normalized list is produced.
+ */
+LAMINA_API Result<std::vector<Interval>> normalize_intervals_checked(
+    std::vector<Interval> intervals,
+    ComputationContext& context);
+
+/** @brief Checked interval normalization with a default context. */
+LAMINA_API Result<std::vector<Interval>> normalize_intervals_checked(
+    std::vector<Interval> intervals);
 
 }

@@ -4,37 +4,38 @@
 #include <random>
 #include <sstream>
 #include <algorithm>
+#include <string>
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
 static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !expr->root) return 0.0;
+    if (!expr || !lamina::detail::node(expr)) return 0.0;
 
-    if (auto n = std::dynamic_pointer_cast<NumberNode>(expr->root)) {
-        if (std::holds_alternative<lmmc_real_t>(n->value)) return std::get<lmmc_real_t>(n->value);
-        if (std::holds_alternative<BigInt>(n->value)) return std::get<BigInt>(n->value).to_double();
-        if (std::holds_alternative<Rational>(n->value)) return std::get<Rational>(n->value).to_double();
+    if (auto n = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+        if (std::holds_alternative<lmmc_real_t>(n->value())) return std::get<lmmc_real_t>(n->value());
+        if (std::holds_alternative<BigInt>(n->value())) return std::get<BigInt>(n->value()).to_double();
+        if (std::holds_alternative<Rational>(n->value())) return std::get<Rational>(n->value()).to_double();
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(expr->root)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
         double result = 0.0;
-        for (auto& op : add->operands) {
-            result += eval_numeric(std::make_shared<SymbolicExpr>(op));
+        for (auto& op : add->operands()) {
+            result += eval_numeric(lamina::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr->root)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
         double result = 1.0;
-        for (auto& op : mul->operands) {
-            result *= eval_numeric(std::make_shared<SymbolicExpr>(op));
+        for (auto& op : mul->operands()) {
+            result *= eval_numeric(lamina::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(expr->root)) {
-        double base = eval_numeric(std::make_shared<SymbolicExpr>(pow->base));
-        double exp = eval_numeric(std::make_shared<SymbolicExpr>(pow->exponent));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
+        double base = eval_numeric(lamina::detail::make_expression_ptr(pow->base()));
+        double exp = eval_numeric(lamina::detail::make_expression_ptr(pow->exponent()));
 
         if (base < 0.0 && std::abs(exp - std::round(exp)) > 1e-15) {
             double denom = std::round(1.0 / exp);
@@ -46,10 +47,10 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
         return std::pow(base, exp);
     }
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(expr->root)) {
-        if (func->arguments.size() == 1) {
-            double arg = eval_numeric(std::make_shared<SymbolicExpr>(func->arguments[0]));
-            switch (func->type) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+        if (func->arguments().size() == 1) {
+            double arg = eval_numeric(lamina::detail::make_expression_ptr(func->arguments()[0]));
+            switch (func->type()) {
                 case FunctionNode::FuncType::Sin: return std::sin(arg);
                 case FunctionNode::FuncType::Cos: return std::cos(arg);
                 case FunctionNode::FuncType::Tan: return std::tan(arg);
@@ -67,7 +68,7 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
         }
     }
 
-    if (auto var = std::dynamic_pointer_cast<VariableNode>(expr->root)) {
+    if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
         return std::nan("");
     }
 
@@ -235,6 +236,33 @@ int main() {
             EXPECT_TRUE(has_power_expr,
                 "Symbolic: roots expressed using power/sqrt expressions");
         }
+    }
+
+    TEST_CASE("Cubic exact huge coefficient avoids unsafe numeric underflow");
+    {
+        std::string huge_digits = "1" + std::string(400, '0');
+        auto roots = lamina::solve_cubic(
+            SymbolicExpr::number(BigInt(huge_digits)),
+            num(0),
+            num(0),
+            num(-1),
+            "x");
+
+        EXPECT_TRUE(roots.size() == 3,
+            "huge exact cubic should still return the symbolic cubic roots");
+
+        int zero_roots = 0;
+        for (const auto& root : roots) {
+            std::string text = root ? root->to_string() : "";
+            EXPECT_TRUE(text.find("inf") == std::string::npos &&
+                        text.find("nan") == std::string::npos,
+                "huge exact cubic roots should not contain fabricated inf/nan");
+            if (root && root->simplify()->is_zero()) {
+                ++zero_roots;
+            }
+        }
+        EXPECT_TRUE(zero_roots < 3,
+            "huge exact cubic must not collapse nonzero roots to triple zero");
     }
 
     TEST_CASE("Cubic a=0 Delegation to Quadratic: 0*x^3 + 2*x^2 - 4*x + 2 = 0");

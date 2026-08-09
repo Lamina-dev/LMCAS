@@ -1,29 +1,3 @@
-// Feature: integration-enhancements, Property 6: Trigonometric sec^n round-trip
-//
-// Validates: Requirements 3.8
-//
-// Property 6: For all even integers n with 2 <= n <= 8, integrating sec^n(x)
-// and differentiating the result SHALL yield an expression numerically equal
-// to sec^n(x) at sample points x in {0.3, 0.5, 0.7, 0.9, 1.1} within
-// tolerance 1e-10.
-//
-// Approach
-// --------
-//   * For every even integer n in {2, 4, 6, 8}, build the integrand
-//     sec(x)^n by direct AST construction (FunctionNode of FuncType::Sec
-//     wrapped in a PowerNode).
-//   * Run the integrator and verify the result is closed form (no leftover
-//     unevaluated integral nodes).
-//   * Symbolically differentiate the result via SymbolicExpr::differentiate.
-//   * For each sample point x in {0.3, 0.5, 0.7, 0.9, 1.1}, substitute,
-//     simplify, and numerically evaluate both the integrand sec^n(x) and
-//     the derivative of the antiderivative. test_numeric_eval has been
-//     extended to evaluate FunctionNode::FuncType::Sec via 1/cos(x).
-//   * Sample points where either side returns std::nullopt or non-finite
-//     values (e.g. due to cos(x) crossing zero) are skipped.
-//   * The test FAILS if any (n, x) pair produces a numeric mismatch above
-//     tolerance, or if any n in {2, 4, 6, 8} cannot be verified at any
-//     sample point.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -42,14 +16,13 @@ namespace {
 constexpr const char* kVarName = "x";
 constexpr double kTolerance = 1e-10;
 
-// ----- AST helpers --------------------------------------------------------
 
 std::shared_ptr<SymbolicExpr> sec_of(std::shared_ptr<SymbolicExpr> arg) {
     using FT = FunctionNode::FuncType;
-    return std::make_shared<SymbolicExpr>(
-        std::make_shared<FunctionNode>(
+    return lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<FunctionNode>(
             FT::Sec,
-            std::vector<std::shared_ptr<SymbolicNode>>{arg->root}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(arg)}));
 }
 
 std::shared_ptr<SymbolicExpr> sec_pow(std::shared_ptr<SymbolicExpr> arg, int n) {
@@ -58,21 +31,21 @@ std::shared_ptr<SymbolicExpr> sec_pow(std::shared_ptr<SymbolicExpr> arg, int n) 
     return SymbolicExpr::power(s, SymbolicExpr::number(n));
 }
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
@@ -82,7 +55,6 @@ const std::vector<double>& sample_points() {
     return S;
 }
 
-// ----- Per-n verification -------------------------------------------------
 
 struct NReport {
     bool unevaluated = false;
@@ -99,22 +71,22 @@ NReport verify_n(int n) {
     auto integrand = sec_pow(x_var, n);
 
     Integrator integ;
-    SymbolicExpr result;
+    std::shared_ptr<SymbolicExpr> result;
     try {
-        result = integ.integrate(*integrand, kVarName);
+        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand, kVarName));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception during integration: ") + e.what();
         return rep;
     }
 
-    if (has_integral_node(result.root)) {
+    if (has_integral_node(lamina::detail::node(result))) {
         rep.unevaluated = true;
-        rep.detail = "unevaluated integral in result: " + result.to_string();
+        rep.detail = "unevaluated integral in result: " + result->to_string();
         return rep;
     }
 
-    auto deriv = result.differentiate(kVarName);
+    auto deriv = result->differentiate(kVarName);
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
@@ -153,7 +125,7 @@ NReport verify_n(int n) {
                 << ": integrand=" << *pv
                 << " vs d/dx(result)=" << *dv
                 << " |delta|=" << delta
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             break;
         }
@@ -195,7 +167,7 @@ int main() {
             std::ostringstream oss;
             oss << prefix << ": " << rep.matches << " match(es), "
                 << rep.skipped << " skipped point(s)";
-            EXPECT_TRUE(true, oss.str());
+            EXPECT_TRUE(!rep.failed && !rep.unevaluated && rep.matches > 0, oss.str());
         } else {
             // No sample point produced an evaluable comparison. For sec^n
             // with n in {2,4,6,8} on the chosen sample points, sec is well

@@ -1,14 +1,22 @@
 #include "../include/symbolic_ode.hpp"
+#include "symbolic_ast.hpp"
 #include "../include/symbolic.hpp"
 #include "../include/assumption_context.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include <cmath>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 
 namespace lamina {
+
+namespace {
+
+constexpr const char* kSolveLinear2OdeOperation = "solve_linear2_ode";
+
+} // namespace
 
 /// Check if the dependent variable is known Positive in the given context.
 static bool dep_var_is_positive(const std::string& y, const AssumptionContext* ctx) {
@@ -25,10 +33,10 @@ static bool expr_is_nonzero(const std::shared_ptr<SymbolicExpr>& expr, const Ass
 
 /// Wrap an expression in abs() to signal positive-branch preference.
 static std::shared_ptr<SymbolicExpr> make_abs(std::shared_ptr<SymbolicExpr> expr) {
-    return std::make_shared<SymbolicExpr>(
-        std::make_shared<FunctionNode>(
+    return lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Abs,
-            std::vector<std::shared_ptr<SymbolicNode>>{expr->root}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(expr)}));
 }
 
 // solve_separable_ode
@@ -154,10 +162,10 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
 
     if (!fx->is_zero()) {
         // Particular-solution computation for non-homogeneous case is not yet
-        // implemented. Fail loudly instead of returning the homogeneous solution
-        // disguised as the full general solution.
+        // within the legacy support domain. Fail loudly instead of returning
+        // the homogeneous solution disguised as the full general solution.
         throw std::logic_error(
-            "solve_linear2_ode: non-homogeneous case (f(x) != 0) is not implemented");
+            "solve_linear2_ode: non-homogeneous case is outside the current support domain");
     }
 
     // When the dependent variable is known Positive, prefer positive branch.
@@ -166,6 +174,68 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     }
 
     return yh;
+}
+
+Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
+    double a, double b, double c,
+    std::shared_ptr<SymbolicExpr> fx,
+    const std::string& x,
+    const std::string& y,
+    ComputationContext& context,
+    const AssumptionContext* ctx
+) {
+    auto step = context.consume_steps(1, kSolveLinear2OdeOperation);
+    if (!step) return Result<std::shared_ptr<SymbolicExpr>>::failure(step.error());
+
+    if (!fx || !lamina::detail::node(fx)) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            CasErrc::InvalidArgument,
+            "forcing expression must not be null",
+            kSolveLinear2OdeOperation);
+    }
+    if (x.empty() || y.empty()) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            CasErrc::InvalidArgument,
+            "ODE variables must not be empty",
+            kSolveLinear2OdeOperation);
+    }
+
+    try {
+        if (!fx->is_zero()) {
+            return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                CasErrc::Inconclusive,
+                "non-homogeneous second-order constant-coefficient ODEs are outside the current support domain",
+                kSolveLinear2OdeOperation);
+        }
+
+        return Result<std::shared_ptr<SymbolicExpr>>::success(
+            solve_linear2_ode(a, b, c, std::move(fx), x, y, ctx));
+    } catch (const std::invalid_argument& ex) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            CasErrc::InvalidArgument, ex.what(), kSolveLinear2OdeOperation);
+    } catch (const std::bad_alloc&) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            CasErrc::ResourceLimit,
+            "ODE solving allocation failed",
+            kSolveLinear2OdeOperation);
+    } catch (const std::logic_error& ex) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            CasErrc::Inconclusive, ex.what(), kSolveLinear2OdeOperation);
+    } catch (const std::exception& ex) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            CasErrc::InternalInvariant, ex.what(), kSolveLinear2OdeOperation);
+    }
+}
+
+Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
+    double a, double b, double c,
+    std::shared_ptr<SymbolicExpr> fx,
+    const std::string& x,
+    const std::string& y,
+    const AssumptionContext* ctx
+) {
+    ComputationContext context;
+    return solve_linear2_ode_checked(a, b, c, std::move(fx), x, y, context, ctx);
 }
 
 }

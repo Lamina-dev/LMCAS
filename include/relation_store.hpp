@@ -12,13 +12,15 @@
 #include <string>
 #include <memory>
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
 #include "assumption.hpp"
+#include "result.hpp"
 
 namespace lamina {
 
 // Forward declaration — PropertyStore may not yet be compiled
 class PropertyStore;
+
+using RelationStoreResult = Result<void>;
 
 /**
  * @brief A stored relational constraint between two symbolic expressions.
@@ -26,7 +28,7 @@ class PropertyStore;
 struct Relation {
     SymbolicExpr lhs;          ///< Left-hand side expression
     SymbolicExpr rhs;          ///< Right-hand side expression
-    RelationalNode::Op op;     ///< Relational operator (GT, LT, GEQ, LEQ, NEQ, EQ)
+    RelationOp op;             ///< Relational operator (GT, LT, GEQ, LEQ, NEQ, EQ)
 };
 
 /**
@@ -48,8 +50,8 @@ public:
     /**
      * @brief Store a relation and optionally derive sign properties.
      *
-     * If the LHS is a single VariableNode and the RHS is a NumberNode with value 0,
-     * the corresponding sign property is declared on the PropertyStore.
+     * If the relation compares one variable with exact zero, the corresponding
+     * sign property is declared on the PropertyStore.
      *
      * @param lhs Left-hand side expression
      * @param rhs Right-hand side expression
@@ -57,7 +59,18 @@ public:
      * @param prop_store PropertyStore to notify for simple variable > 0 patterns
      */
     void add_relation(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-                      RelationalNode::Op op, PropertyStore& prop_store);
+                      RelationOp op, PropertyStore& prop_store);
+
+    /**
+     * @brief Checked relation insertion with explicit failure reporting.
+     *
+     * Applies the relation plus derived property declarations transactionally.
+     * On failure, neither this store nor the PropertyStore is modified.
+     */
+    RelationStoreResult add_relation_checked(const SymbolicExpr& lhs,
+                                             const SymbolicExpr& rhs,
+                                             RelationOp op,
+                                             PropertyStore& prop_store);
 
     /**
      * @brief Retrieve all stored relations.
@@ -76,7 +89,7 @@ public:
      * @return true if the relation is found in the store
      */
     bool has_relation(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-                      RelationalNode::Op op) const;
+                      RelationOp op) const;
 
     /**
      * @brief Clear all stored relations (used during scope pop).
@@ -86,14 +99,19 @@ public:
 private:
     std::vector<Relation> relations_;
 
+    void add_relation_unchecked(const SymbolicExpr& lhs,
+                                const SymbolicExpr& rhs,
+                                RelationOp op,
+                                PropertyStore& prop_store);
+
     /// Maximum number of new relations deduced per add_relation call via transitive closure.
     static constexpr int MAX_TRANSITIVE_DEDUCTIONS = 64;
 
     /**
      * @brief Detect reversed "0 op variable" patterns and derive sign properties.
      *
-     * When the LHS is a NumberNode with value 0 and the RHS is a VariableNode,
-     * the operator semantics are reversed to derive the variable's sign:
+     * When exact zero appears on the left and a variable on the right, the
+     * operator semantics are reversed to derive the variable's sign:
      *   - 0 LT  var → var is Positive   (0 < var means var > 0)
      *   - 0 GT  var → var is Negative   (0 > var means var < 0)
      *   - 0 GEQ var → var is NonPositive (0 >= var means var <= 0)
@@ -106,7 +124,7 @@ private:
      * @param prop_store PropertyStore to update with derived sign
      */
     void detect_reversed_pattern(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-                                 RelationalNode::Op op, PropertyStore& prop_store);
+                                 RelationOp op, PropertyStore& prop_store);
 
     /**
      * @brief Compute transitive closure after adding a new relation.

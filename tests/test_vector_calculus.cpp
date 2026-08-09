@@ -402,33 +402,95 @@ static void test_div_curl_is_zero()
     }
 }
 
-// ============================================================
-// 雅可比矩阵测试
-// ============================================================
 
 static std::shared_ptr<SymbolicExpr> get_mat_entry(
     const std::shared_ptr<SymbolicExpr>& mat, size_t r, size_t c)
 {
-    if (!mat || !mat->root) return nullptr;
-    auto mn = std::dynamic_pointer_cast<MatrixNode>(mat->root);
+    if (!mat || !lamina::detail::node(mat)) return nullptr;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
     if (!mn) return nullptr;
     auto node = mn->get(r, c);
     if (!node) return SymbolicExpr::number(0);
-    return std::make_shared<SymbolicExpr>(node);
+    return lamina::detail::make_expression_ptr(node);
 }
 
 static size_t get_mat_rows(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !mat->root) return 0;
-    auto mn = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    return mn ? mn->rows : 0;
+    if (!mat || !lamina::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    return mn ? mn->rows() : 0;
 }
 
 static size_t get_mat_cols(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !mat->root) return 0;
-    auto mn = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    return mn ? mn->cols : 0;
+    if (!mat || !lamina::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    return mn ? mn->cols() : 0;
+}
+
+static void test_vector_calculus_checked_contracts()
+{
+    TEST_CASE("vector_calculus checked APIs: explicit errors and cancellation");
+
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::power(y, SymbolicExpr::number(2)));
+
+    auto grad = gradient_checked(f, {"x", "y"});
+    EXPECT_TRUE(grad.has_value(), "checked gradient succeeds");
+    if (grad) {
+        EXPECT_TRUE(grad.value().size() == 2, "checked gradient returns two components");
+    }
+
+    auto null_grad = gradient_checked(nullptr, {"x"});
+    EXPECT_TRUE(!null_grad.has_value(), "checked gradient rejects null expression");
+    EXPECT_TRUE(null_grad.error().code == CasErrc::InvalidArgument,
+                "checked gradient reports InvalidArgument");
+
+    std::shared_ptr<SymbolicExpr> null_root;
+    VectorField bad_field = {x, null_root};
+    auto bad_div = divergence_checked(bad_field, {"x", "y"});
+    EXPECT_TRUE(!bad_div.has_value(), "checked divergence rejects null component");
+    EXPECT_TRUE(bad_div.error().code == CasErrc::InvalidArgument,
+                "checked divergence reports InvalidArgument for null component");
+
+    VectorField two_d = {x, y};
+    auto bad_curl = curl_checked(two_d, {"x"});
+    EXPECT_TRUE(!bad_curl.has_value(), "checked curl rejects dimension mismatch");
+    EXPECT_TRUE(bad_curl.error().code == CasErrc::InvalidArgument,
+                "checked curl reports InvalidArgument for dimension mismatch");
+
+    auto empty_lap = laplacian_checked(f, {});
+    EXPECT_TRUE(!empty_lap.has_value(), "checked laplacian rejects empty variables");
+    EXPECT_TRUE(empty_lap.error().code == CasErrc::InvalidArgument,
+                "checked laplacian reports InvalidArgument for empty variables");
+
+    VectorField zero_dir = {SymbolicExpr::number(0), SymbolicExpr::number(0)};
+    auto zero_direction = directional_derivative_checked(f, {"x", "y"}, zero_dir);
+    EXPECT_TRUE(!zero_direction.has_value(),
+                "checked directional derivative rejects zero direction");
+    EXPECT_TRUE(zero_direction.error().code == CasErrc::DomainError,
+                "checked directional derivative reports DomainError for zero direction");
+    EXPECT_TRUE(directional_derivative(f, {"x", "y"}, zero_dir) == nullptr,
+                "legacy directional derivative unwraps zero direction to nullptr");
+
+    lamina::CancellationToken cancellation;
+    lamina::ComputationContext cancelled_context({}, cancellation);
+    cancellation.cancel();
+    auto cancelled = gradient_checked(f, {"x"}, cancelled_context);
+    EXPECT_TRUE(!cancelled.has_value(), "checked gradient observes cancellation");
+    EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+                "checked gradient reports Cancelled");
+
+    lamina::ResourceLimits limits;
+    limits.max_steps = 0;
+    lamina::ComputationContext limited_context(limits);
+    auto limited = laplacian_checked(f, {"x"}, limited_context);
+    EXPECT_TRUE(!limited.has_value(), "checked laplacian observes exhausted step budget");
+    EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+                "checked laplacian reports ResourceLimit");
 }
 
 static void test_jacobian_square()
@@ -545,9 +607,69 @@ static void test_jacobian_wide()
         "J[0][2] = 3");
 }
 
-// ============================================================
-// 海森矩阵测试
-// ============================================================
+static void test_jacobian_hessian_checked_contracts()
+{
+    TEST_CASE("Jacobian/Hessian checked APIs: explicit errors and context");
+
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::power(y, SymbolicExpr::number(2)));
+
+    auto checked_J = jacobian_checked({f}, {"x", "y"});
+    EXPECT_TRUE(checked_J.has_value(), "checked Jacobian succeeds");
+    if (checked_J) {
+        EXPECT_TRUE(get_mat_rows(checked_J.value()) == 1,
+                    "checked Jacobian has one row");
+        EXPECT_TRUE(get_mat_cols(checked_J.value()) == 2,
+                    "checked Jacobian has two columns");
+    }
+
+    auto checked_H = hessian_checked(f, {"x", "y"});
+    EXPECT_TRUE(checked_H.has_value(), "checked Hessian succeeds");
+    if (checked_H) {
+        EXPECT_TRUE(get_mat_rows(checked_H.value()) == 2,
+                    "checked Hessian has two rows");
+        EXPECT_TRUE(get_mat_cols(checked_H.value()) == 2,
+                    "checked Hessian has two columns");
+    }
+
+    auto empty_functions = jacobian_checked({}, {"x"});
+    EXPECT_TRUE(!empty_functions.has_value(),
+                "checked Jacobian rejects empty function list");
+    EXPECT_TRUE(empty_functions.error().code == CasErrc::InvalidArgument,
+                "checked Jacobian reports InvalidArgument for empty functions");
+
+    std::shared_ptr<SymbolicExpr> null_root;
+    auto null_function = jacobian_checked({null_root}, {"x"});
+    EXPECT_TRUE(!null_function.has_value(),
+                "checked Jacobian rejects null function");
+    EXPECT_TRUE(null_function.error().code == CasErrc::InvalidArgument,
+                "checked Jacobian reports InvalidArgument for null function");
+
+    auto empty_vars = hessian_checked(f, {});
+    EXPECT_TRUE(!empty_vars.has_value(), "checked Hessian rejects empty variables");
+    EXPECT_TRUE(empty_vars.error().code == CasErrc::InvalidArgument,
+                "checked Hessian reports InvalidArgument for empty variables");
+
+    lamina::CancellationToken cancellation;
+    lamina::ComputationContext cancelled_context({}, cancellation);
+    cancellation.cancel();
+    auto cancelled = jacobian_checked({f}, {"x"}, cancelled_context);
+    EXPECT_TRUE(!cancelled.has_value(), "checked Jacobian observes cancellation");
+    EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+                "checked Jacobian reports Cancelled");
+
+    lamina::ResourceLimits limits;
+    limits.max_steps = 1;
+    lamina::ComputationContext limited_context(limits);
+    auto limited = hessian_checked(f, {"x"}, limited_context);
+    EXPECT_TRUE(!limited.has_value(), "checked Hessian observes exhausted step budget");
+    EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+                "checked Hessian reports ResourceLimit");
+}
+
 
 static void test_hessian_quadratic()
 {
@@ -673,9 +795,6 @@ static void test_hessian_single_var()
         "H[0][0] = 6x => 12 at x=2");
 }
 
-// ============================================================
-// 曲线积分测试 (Requirements 48)
-// ============================================================
 
 static void test_curve_integral_scalar_line()
 {
@@ -844,9 +963,193 @@ static void test_curve_integral_vector_3d()
     }
 }
 
-// ============================================================
-// 曲面积分测试 (Requirements 49)
-// ============================================================
+static void test_curve_integral_checked_contracts()
+{
+    TEST_CASE("curve_integral checked APIs: explicit errors and context");
+
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto t_var = SymbolicExpr::variable("t");
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+
+    VectorField line = {
+        t_var,
+        SymbolicExpr::multiply(SymbolicExpr::number(2), t_var)
+    };
+
+    auto scalar_ok = curve_integral_scalar_checked(
+        SymbolicExpr::number(1), line, "t", zero, one);
+    EXPECT_TRUE(scalar_ok.has_value(), "checked scalar curve integral succeeds");
+    if (scalar_ok) {
+        auto val = test_numeric_eval(scalar_ok.value());
+        EXPECT_TRUE(val.has_value(), "checked scalar curve integral is numeric");
+        if (val.has_value()) {
+            EXPECT_NEAR(*val, std::sqrt(5.0), 1e-6,
+                        "checked scalar curve integral equals sqrt(5)");
+        }
+    }
+
+    VectorField field = {
+        SymbolicExpr::multiply(SymbolicExpr::number(2), x),
+        SymbolicExpr::multiply(SymbolicExpr::number(2), y)
+    };
+    VectorField diagonal = {t_var, t_var};
+    auto vector_ok = curve_integral_vector_checked(field, diagonal, "t", zero, one);
+    EXPECT_TRUE(vector_ok.has_value(), "checked vector curve integral succeeds");
+    if (vector_ok) {
+        auto val = test_numeric_eval(vector_ok.value());
+        EXPECT_TRUE(val.has_value(), "checked vector curve integral is numeric");
+        if (val.has_value()) {
+            EXPECT_NEAR(*val, 2.0, 1e-6,
+                        "checked vector curve integral equals 2");
+        }
+    }
+
+    auto null_scalar = curve_integral_scalar_checked(nullptr, line, "t", zero, one);
+    EXPECT_TRUE(!null_scalar.has_value(),
+                "checked scalar curve integral rejects null scalar field");
+    EXPECT_TRUE(null_scalar.error().code == CasErrc::InvalidArgument,
+                "checked scalar curve integral reports InvalidArgument for null scalar");
+
+    std::shared_ptr<SymbolicExpr> null_root;
+    VectorField bad_param = {t_var, null_root};
+    auto null_param = curve_integral_scalar_checked(
+        SymbolicExpr::number(1), bad_param, "t", zero, one);
+    EXPECT_TRUE(!null_param.has_value(),
+                "checked scalar curve integral rejects null parametrization");
+    EXPECT_TRUE(null_param.error().code == CasErrc::InvalidArgument,
+                "checked scalar curve integral reports InvalidArgument for null parametrization");
+
+    VectorField one_dim = {t_var};
+    auto bad_dim = curve_integral_scalar_checked(
+        SymbolicExpr::number(1), one_dim, "t", zero, one);
+    EXPECT_TRUE(!bad_dim.has_value(),
+                "checked scalar curve integral rejects unsupported dimension");
+    EXPECT_TRUE(bad_dim.error().code == CasErrc::InvalidArgument,
+                "checked scalar curve integral reports InvalidArgument for unsupported dimension");
+
+    auto empty_param_name = curve_integral_scalar_checked(
+        SymbolicExpr::number(1), line, "", zero, one);
+    EXPECT_TRUE(!empty_param_name.has_value(),
+                "checked scalar curve integral rejects empty parameter name");
+    EXPECT_TRUE(empty_param_name.error().code == CasErrc::InvalidArgument,
+                "checked scalar curve integral reports InvalidArgument for empty parameter");
+
+    auto null_bound = curve_integral_scalar_checked(
+        SymbolicExpr::number(1), line, "t", nullptr, one);
+    EXPECT_TRUE(!null_bound.has_value(),
+                "checked scalar curve integral rejects null bounds");
+    EXPECT_TRUE(null_bound.error().code == CasErrc::InvalidArgument,
+                "checked scalar curve integral reports InvalidArgument for null bounds");
+
+    VectorField bad_field = {x, null_root};
+    auto null_field_component = curve_integral_vector_checked(
+        bad_field, diagonal, "t", zero, one);
+    EXPECT_TRUE(!null_field_component.has_value(),
+                "checked vector curve integral rejects null field components");
+    EXPECT_TRUE(null_field_component.error().code == CasErrc::InvalidArgument,
+                "checked vector curve integral reports InvalidArgument for null field");
+
+    auto mismatch = curve_integral_vector_checked(field, {t_var, t_var, t_var},
+                                                 "t", zero, one);
+    EXPECT_TRUE(!mismatch.has_value(),
+                "checked vector curve integral rejects dimension mismatch");
+    EXPECT_TRUE(mismatch.error().code == CasErrc::InvalidArgument,
+                "checked vector curve integral reports InvalidArgument for dimension mismatch");
+
+    lamina::CancellationToken cancellation;
+    lamina::ComputationContext cancelled_context({}, cancellation);
+    cancellation.cancel();
+    auto cancelled = curve_integral_scalar_checked(
+        SymbolicExpr::number(1), line, "t", zero, one, cancelled_context);
+    EXPECT_TRUE(!cancelled.has_value(),
+                "checked scalar curve integral observes cancellation");
+    EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+                "checked scalar curve integral reports Cancelled");
+
+    lamina::ResourceLimits limits;
+    limits.max_steps = 1;
+    lamina::ComputationContext limited_context(limits);
+    auto limited = curve_integral_vector_checked(field, diagonal, "t", zero, one,
+                                                 limited_context);
+    EXPECT_TRUE(!limited.has_value(),
+                "checked vector curve integral observes exhausted step budget");
+    EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+                "checked vector curve integral reports ResourceLimit");
+
+    auto unsupported_derivative = SymbolicExpr::eq(t_var, zero);
+    VectorField unsupported_path = {unsupported_derivative, t_var};
+    auto unsupported_scalar = curve_integral_scalar_checked(
+        SymbolicExpr::number(1), unsupported_path, "t", zero, one);
+    EXPECT_TRUE(!unsupported_scalar.has_value(),
+                "checked scalar curve integral rejects unsupported path derivatives");
+    EXPECT_TRUE(unsupported_scalar.error().code == CasErrc::Inconclusive,
+                "checked scalar curve integral reports Inconclusive for unsupported derivatives");
+
+    auto unsupported_vector = curve_integral_vector_checked(
+        field, unsupported_path, "t", zero, one);
+    EXPECT_TRUE(!unsupported_vector.has_value(),
+                "checked vector curve integral rejects unsupported path derivatives");
+    EXPECT_TRUE(unsupported_vector.error().code == CasErrc::Inconclusive,
+                "checked vector curve integral reports Inconclusive for unsupported derivatives");
+}
+
+static void test_curve_integral_numeric_fallback_failure_is_inconclusive()
+{
+    TEST_CASE("curve_integral checked APIs: numeric fallback failure is inconclusive");
+
+    auto x = SymbolicExpr::variable("x");
+    auto w = SymbolicExpr::variable("w");
+    auto t = SymbolicExpr::variable("t");
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+
+    auto unsupported = SymbolicExpr::sin(SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)), w));
+    VectorField line = {t, SymbolicExpr::number(0)};
+
+    auto legacy = curve_integral_scalar(
+        unsupported, line, "t", zero, one);
+    EXPECT_TRUE(legacy == nullptr,
+                "legacy curve integral returns null when fallback cannot evaluate samples");
+
+    auto checked = curve_integral_scalar_checked(
+        unsupported, line, "t", zero, one);
+    EXPECT_TRUE(!checked.has_value(),
+                "checked curve integral rejects unsupported numeric fallback samples");
+    if (!checked.has_value()) {
+        EXPECT_TRUE(checked.error().code == CasErrc::Inconclusive,
+                    "checked curve integral reports Inconclusive for unsupported samples");
+    }
+}
+
+static void test_curve_integral_checked_rejects_implicit_numeric_fallback()
+{
+    TEST_CASE("curve_integral checked APIs: implicit numeric fallback is inconclusive");
+
+    auto x = SymbolicExpr::variable("x");
+    auto t = SymbolicExpr::variable("t");
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+
+    auto fresnel_like = SymbolicExpr::sin(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)));
+    VectorField line = {t, SymbolicExpr::number(0)};
+
+    auto legacy = curve_integral_scalar(fresnel_like, line, "t", zero, one);
+    EXPECT_TRUE(legacy != nullptr,
+                "legacy curve integral may use numeric fallback for non-elementary integrals");
+
+    auto checked = curve_integral_scalar_checked(fresnel_like, line, "t", zero, one);
+    EXPECT_TRUE(!checked.has_value(),
+                "checked curve integral rejects implicit numeric fallback");
+    if (!checked.has_value()) {
+        EXPECT_TRUE(checked.error().code == CasErrc::Inconclusive,
+                    "checked curve integral reports Inconclusive when exact integral is unsupported");
+    }
+}
+
 
 static void test_surface_integral_scalar_plane()
 {
@@ -948,9 +1251,148 @@ static void test_surface_integral_vector_zero_flux()
     }
 }
 
-// ============================================================
-// 多元极值测试
-// ============================================================
+static void test_surface_integral_checked_contracts()
+{
+    TEST_CASE("surface_integral checked APIs: explicit errors and context");
+
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto u_var = SymbolicExpr::variable("u");
+    auto v_var = SymbolicExpr::variable("v");
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+
+    VectorField plane = {u_var, v_var, SymbolicExpr::number(0)};
+
+    auto scalar_ok = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), plane, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(scalar_ok.has_value(), "checked scalar surface integral succeeds");
+    if (scalar_ok) {
+        auto val = test_numeric_eval(scalar_ok.value());
+        EXPECT_TRUE(val.has_value(), "checked scalar surface integral is numeric");
+        if (val.has_value()) {
+            EXPECT_NEAR(*val, 1.0, 1e-6,
+                        "checked scalar surface integral equals 1");
+        }
+    }
+
+    VectorField flux_field = {
+        SymbolicExpr::number(0),
+        SymbolicExpr::number(0),
+        SymbolicExpr::number(1)
+    };
+    auto vector_ok = surface_integral_vector_checked(
+        flux_field, plane, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(vector_ok.has_value(), "checked vector surface integral succeeds");
+    if (vector_ok) {
+        auto val = test_numeric_eval(vector_ok.value());
+        EXPECT_TRUE(val.has_value(), "checked vector surface integral is numeric");
+        if (val.has_value()) {
+            EXPECT_NEAR(*val, 1.0, 1e-6,
+                        "checked vector surface integral equals 1");
+        }
+    }
+
+    auto null_scalar = surface_integral_scalar_checked(
+        nullptr, plane, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(!null_scalar.has_value(),
+                "checked scalar surface integral rejects null scalar field");
+    EXPECT_TRUE(null_scalar.error().code == CasErrc::InvalidArgument,
+                "checked scalar surface integral reports InvalidArgument for null scalar");
+
+    std::shared_ptr<SymbolicExpr> null_root;
+    VectorField bad_param = {u_var, null_root, SymbolicExpr::number(0)};
+    auto null_param = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), bad_param, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(!null_param.has_value(),
+                "checked scalar surface integral rejects null parametrization");
+    EXPECT_TRUE(null_param.error().code == CasErrc::InvalidArgument,
+                "checked scalar surface integral reports InvalidArgument for null parametrization");
+
+    VectorField bad_dim = {x, y};
+    auto dim_error = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), bad_dim, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(!dim_error.has_value(),
+                "checked scalar surface integral rejects non-3D parametrization");
+    EXPECT_TRUE(dim_error.error().code == CasErrc::InvalidArgument,
+                "checked scalar surface integral reports InvalidArgument for non-3D parametrization");
+
+    auto empty_parameter = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), plane, "", "v", zero, one, zero, one);
+    EXPECT_TRUE(!empty_parameter.has_value(),
+                "checked scalar surface integral rejects empty parameter name");
+    EXPECT_TRUE(empty_parameter.error().code == CasErrc::InvalidArgument,
+                "checked scalar surface integral reports InvalidArgument for empty parameter");
+
+    auto same_parameter = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), plane, "u", "u", zero, one, zero, one);
+    EXPECT_TRUE(!same_parameter.has_value(),
+                "checked scalar surface integral rejects duplicate parameter names");
+    EXPECT_TRUE(same_parameter.error().code == CasErrc::InvalidArgument,
+                "checked scalar surface integral reports InvalidArgument for duplicate parameters");
+
+    auto null_bound = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), plane, "u", "v", zero, nullptr, zero, one);
+    EXPECT_TRUE(!null_bound.has_value(),
+                "checked scalar surface integral rejects null bounds");
+    EXPECT_TRUE(null_bound.error().code == CasErrc::InvalidArgument,
+                "checked scalar surface integral reports InvalidArgument for null bounds");
+
+    VectorField bad_field = {SymbolicExpr::number(0), null_root, SymbolicExpr::number(1)};
+    auto null_field_component = surface_integral_vector_checked(
+        bad_field, plane, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(!null_field_component.has_value(),
+                "checked vector surface integral rejects null field components");
+    EXPECT_TRUE(null_field_component.error().code == CasErrc::InvalidArgument,
+                "checked vector surface integral reports InvalidArgument for null field");
+
+    auto field_dim_error = surface_integral_vector_checked(
+        {SymbolicExpr::number(0), SymbolicExpr::number(1)},
+        plane, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(!field_dim_error.has_value(),
+                "checked vector surface integral rejects non-3D vector field");
+    EXPECT_TRUE(field_dim_error.error().code == CasErrc::InvalidArgument,
+                "checked vector surface integral reports InvalidArgument for non-3D field");
+
+    lamina::CancellationToken cancellation;
+    lamina::ComputationContext cancelled_context({}, cancellation);
+    cancellation.cancel();
+    auto cancelled = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), plane, "u", "v", zero, one, zero, one,
+        cancelled_context);
+    EXPECT_TRUE(!cancelled.has_value(),
+                "checked scalar surface integral observes cancellation");
+    EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+                "checked scalar surface integral reports Cancelled");
+
+    lamina::ResourceLimits limits;
+    limits.max_steps = 1;
+    lamina::ComputationContext limited_context(limits);
+    auto limited = surface_integral_vector_checked(
+        flux_field, plane, "u", "v", zero, one, zero, one, limited_context);
+    EXPECT_TRUE(!limited.has_value(),
+                "checked vector surface integral observes exhausted step budget");
+    EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+                "checked vector surface integral reports ResourceLimit");
+
+    auto unsupported_derivative = SymbolicExpr::eq(u_var, zero);
+    VectorField unsupported_surface = {unsupported_derivative, v_var, zero};
+    auto unsupported_scalar = surface_integral_scalar_checked(
+        SymbolicExpr::number(1), unsupported_surface, "u", "v",
+        zero, one, zero, one);
+    EXPECT_TRUE(!unsupported_scalar.has_value(),
+                "checked scalar surface integral rejects unsupported surface derivatives");
+    EXPECT_TRUE(unsupported_scalar.error().code == CasErrc::Inconclusive,
+                "checked scalar surface integral reports Inconclusive for unsupported derivatives");
+
+    auto unsupported_vector = surface_integral_vector_checked(
+        flux_field, unsupported_surface, "u", "v", zero, one, zero, one);
+    EXPECT_TRUE(!unsupported_vector.has_value(),
+                "checked vector surface integral rejects unsupported surface derivatives");
+    EXPECT_TRUE(unsupported_vector.error().code == CasErrc::Inconclusive,
+                "checked vector surface integral reports Inconclusive for unsupported derivatives");
+}
+
 
 static void test_find_extrema_quadratic_min()
 {
@@ -1073,9 +1515,6 @@ static void test_find_extrema_single_var()
     }
 }
 
-// ============================================================
-// 拉格朗日乘数法测试
-// ============================================================
 
 static void test_lagrange_basic()
 {
@@ -1147,6 +1586,108 @@ static void test_lagrange_linear_constraint()
     }
 }
 
+static void test_extrema_lagrange_checked_contracts()
+{
+    TEST_CASE("Extrema/Lagrange checked APIs: explicit errors and candidate verification");
+
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+
+    auto parabola = SymbolicExpr::add(
+        SymbolicExpr::add(
+            SymbolicExpr::power(x, SymbolicExpr::number(2)),
+            SymbolicExpr::multiply(SymbolicExpr::number(-2), x)),
+        SymbolicExpr::number(1));
+    auto extrema = find_extrema_checked(parabola, {"x"});
+    EXPECT_TRUE(extrema.has_value(), "checked extrema succeeds for single-variable quadratic");
+    if (extrema) {
+        EXPECT_TRUE(!extrema.value().empty(), "checked extrema returns a critical point");
+        EXPECT_TRUE(extrema.value()[0].classification == "minimum",
+                    "checked extrema classifies quadratic minimum");
+    }
+
+    auto objective = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::power(y, SymbolicExpr::number(2)));
+    auto constraint = SymbolicExpr::add(SymbolicExpr::add(x, y), SymbolicExpr::number(-1));
+    auto lagrange = lagrange_multipliers_checked(objective, {constraint}, {"x", "y"});
+    EXPECT_TRUE(lagrange.has_value(), "checked Lagrange succeeds for linear constraint");
+    if (lagrange) {
+        EXPECT_TRUE(!lagrange.value().empty(), "checked Lagrange returns candidates");
+        auto x_val = lagrange.value()[0].at("x")->simplify();
+        auto y_val = lagrange.value()[0].at("y")->simplify();
+        auto xn = test_numeric_eval(x_val);
+        auto yn = test_numeric_eval(y_val);
+        EXPECT_TRUE(xn.has_value() && yn.has_value(),
+                    "checked Lagrange candidate is numeric");
+        if (xn.has_value() && yn.has_value()) {
+            EXPECT_NEAR(*xn, 0.5, 1e-8, "checked Lagrange x = 1/2");
+            EXPECT_NEAR(*yn, 0.5, 1e-8, "checked Lagrange y = 1/2");
+        }
+    }
+
+    auto null_extrema = find_extrema_checked(nullptr, {"x"});
+    EXPECT_TRUE(!null_extrema.has_value(), "checked extrema rejects null expression");
+    EXPECT_TRUE(null_extrema.error().code == CasErrc::InvalidArgument,
+                "checked extrema reports InvalidArgument for null expression");
+
+    std::shared_ptr<SymbolicExpr> null_root;
+    auto null_root_extrema = find_extrema_checked(null_root, {"x"});
+    EXPECT_TRUE(!null_root_extrema.has_value(),
+                "checked extrema rejects null expression");
+    EXPECT_TRUE(null_root_extrema.error().code == CasErrc::InvalidArgument,
+                "checked extrema reports InvalidArgument for null expression");
+
+    auto duplicate_vars = find_extrema_checked(objective, {"x", "x"});
+    EXPECT_TRUE(!duplicate_vars.has_value(), "checked extrema rejects duplicate variables");
+    EXPECT_TRUE(duplicate_vars.error().code == CasErrc::InvalidArgument,
+                "checked extrema reports InvalidArgument for duplicate variables");
+
+    auto unsupported_objective = SymbolicExpr::eq(x, SymbolicExpr::number(0));
+    auto unsupported_extrema = find_extrema_checked(unsupported_objective, {"x"});
+    EXPECT_TRUE(!unsupported_extrema.has_value(),
+                "checked extrema rejects unsupported objective derivatives");
+    EXPECT_TRUE(unsupported_extrema.error().code == CasErrc::Inconclusive,
+                "checked extrema reports Inconclusive for unsupported derivatives");
+
+    auto empty_constraints = lagrange_multipliers_checked(objective, {}, {"x", "y"});
+    EXPECT_TRUE(!empty_constraints.has_value(),
+                "checked Lagrange rejects empty constraints");
+    EXPECT_TRUE(empty_constraints.error().code == CasErrc::InvalidArgument,
+                "checked Lagrange reports InvalidArgument for empty constraints");
+
+    auto null_constraint = lagrange_multipliers_checked(objective, {null_root}, {"x", "y"});
+    EXPECT_TRUE(!null_constraint.has_value(),
+                "checked Lagrange rejects null constraints");
+    EXPECT_TRUE(null_constraint.error().code == CasErrc::InvalidArgument,
+                "checked Lagrange reports InvalidArgument for null constraints");
+
+    auto unsupported_lagrange = lagrange_multipliers_checked(
+        unsupported_objective, {constraint}, {"x", "y"});
+    EXPECT_TRUE(!unsupported_lagrange.has_value(),
+                "checked Lagrange rejects unsupported stationarity derivatives");
+    EXPECT_TRUE(unsupported_lagrange.error().code == CasErrc::Inconclusive,
+                "checked Lagrange reports Inconclusive for unsupported derivatives");
+
+    lamina::CancellationToken cancellation;
+    lamina::ComputationContext cancelled_context({}, cancellation);
+    cancellation.cancel();
+    auto cancelled = find_extrema_checked(parabola, {"x"}, cancelled_context);
+    EXPECT_TRUE(!cancelled.has_value(), "checked extrema observes cancellation");
+    EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+                "checked extrema reports Cancelled");
+
+    lamina::ResourceLimits limits;
+    limits.max_steps = 1;
+    lamina::ComputationContext limited_context(limits);
+    auto limited = lagrange_multipliers_checked(objective, {constraint}, {"x", "y"},
+                                                limited_context);
+    EXPECT_TRUE(!limited.has_value(),
+                "checked Lagrange observes exhausted step budget");
+    EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+                "checked Lagrange reports ResourceLimit");
+}
+
 
 int main()
 {
@@ -1165,11 +1706,13 @@ int main()
     test_directional_derivative_zero_vector();
     test_directional_derivative_higher_order();
     test_div_curl_is_zero();
+    test_vector_calculus_checked_contracts();
 
     // Jacobian tests
     test_jacobian_square();
     test_jacobian_non_square();
     test_jacobian_wide();
+    test_jacobian_hessian_checked_contracts();
 
     // Hessian tests
     test_hessian_quadratic();
@@ -1182,11 +1725,15 @@ int main()
     test_curve_integral_vector_conservative();
     test_curve_integral_vector_work();
     test_curve_integral_vector_3d();
+    test_curve_integral_checked_contracts();
+    test_curve_integral_numeric_fallback_failure_is_inconclusive();
+    test_curve_integral_checked_rejects_implicit_numeric_fallback();
 
     // Surface integral tests
     test_surface_integral_scalar_plane();
     test_surface_integral_vector_flux();
     test_surface_integral_vector_zero_flux();
+    test_surface_integral_checked_contracts();
 
     // Extrema tests
     test_find_extrema_quadratic_min();
@@ -1198,6 +1745,7 @@ int main()
     // Lagrange multiplier tests
     test_lagrange_basic();
     test_lagrange_linear_constraint();
+    test_extrema_lagrange_checked_contracts();
 
     return TEST_REPORT();
 }

@@ -29,9 +29,6 @@ static double eval_at2(const Expr& e, const std::string& v1, double x1,
     return sub->simplify()->to_numeric();
 }
 
-// ============================================================
-// Fourier 变换测试
-// ============================================================
 
 static void test_fourier_gaussian() {
     TEST_CASE("fourier_transform: Gaussian e^(-t^2)");
@@ -46,7 +43,7 @@ static void test_fourier_gaussian() {
 
     // ℱ{e^(-t²)} = sqrt(π) * e^(-ω²/4)
     // Check it's not an unevaluated TransformNode
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Result is evaluated (not TransformNode)");
 
     std::string s = result->to_string();
@@ -70,7 +67,7 @@ static void test_fourier_gaussian_with_coeff() {
     auto result = lamina::fourier_transform(f, "t", "omega");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Result is evaluated (not TransformNode)");
 
     std::string s = result->to_string();
@@ -82,10 +79,10 @@ static void test_fourier_exp_decay() {
 
     auto t = var("t");
     auto a = var("a");
-    auto abs_t = std::make_shared<SymbolicExpr>(
-        std::make_shared<FunctionNode>(
+    auto abs_t = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Abs,
-            std::vector<std::shared_ptr<SymbolicNode>>{t->root}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(t)}));
     auto neg_a_abs_t = SymbolicExpr::multiply(num(-1),
         SymbolicExpr::multiply(a, abs_t));
     auto f = SymbolicExpr::exp(neg_a_abs_t);
@@ -93,7 +90,7 @@ static void test_fourier_exp_decay() {
     auto result = lamina::fourier_transform(f, "t", "omega");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Result is evaluated (not TransformNode)");
 
     // ℱ{e^(-a|t|)} = 2a/(a² + ω²)
@@ -117,7 +114,7 @@ static void test_fourier_causal_exp() {
     auto result = lamina::fourier_transform(f, "t", "omega");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Result is evaluated (not TransformNode)");
 
     // ℱ{e^(-at)} = 1/(a + iω)
@@ -132,10 +129,10 @@ static void test_fourier_constant_returns_unevaluated() {
     auto result = lamina::fourier_transform(f, "t", "omega");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn != nullptr, "Constant returns unevaluated TransformNode");
     if (tn) {
-        EXPECT_TRUE(tn->transform_type == TransformNode::TransformType::Fourier,
+        EXPECT_TRUE(tn->transform_type() == TransformNode::TransformType::Fourier,
             "Transform type is Fourier");
     }
 }
@@ -156,7 +153,7 @@ static void test_fourier_linearity() {
     auto result = lamina::fourier_transform(f, "t", "omega");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Sum of Gaussians is evaluated");
 
     std::string s = result->to_string();
@@ -175,7 +172,7 @@ static void test_fourier_with_constant_factor() {
     auto result = lamina::fourier_transform(f, "t", "omega");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "3*Gaussian is evaluated");
 
     std::string s = result->to_string();
@@ -192,13 +189,10 @@ static void test_fourier_unknown_returns_unevaluated() {
     auto result = lamina::fourier_transform(f, "t", "omega");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn != nullptr, "Unknown function returns unevaluated TransformNode");
 }
 
-// ============================================================
-// 逆 Fourier 变换测试
-// ============================================================
 
 static void test_inverse_fourier_gaussian() {
     TEST_CASE("inverse_fourier_transform: Gaussian e^(-omega^2)");
@@ -211,7 +205,7 @@ static void test_inverse_fourier_gaussian() {
     auto result = lamina::inverse_fourier_transform(F, "omega", "t");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Gaussian inverse is evaluated");
 
     std::string s = result->to_string();
@@ -228,17 +222,14 @@ static void test_inverse_fourier_constant_returns_unevaluated() {
     auto result = lamina::inverse_fourier_transform(F, "omega", "t");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn != nullptr, "Constant returns unevaluated InverseFourier");
     if (tn) {
-        EXPECT_TRUE(tn->transform_type == TransformNode::TransformType::InverseFourier,
+        EXPECT_TRUE(tn->transform_type() == TransformNode::TransformType::InverseFourier,
             "Transform type is InverseFourier");
     }
 }
 
-// ============================================================
-// 卷积测试
-// ============================================================
 
 static void test_convolve_returns_result() {
     TEST_CASE("convolve: two functions returns a result");
@@ -265,9 +256,6 @@ static void test_convolve_null_inputs() {
     EXPECT_TRUE(result == nullptr, "Null g returns null");
 }
 
-// ============================================================
-// Laplace 变换测试（基础验证）
-// ============================================================
 
 static void test_laplace_constant() {
     TEST_CASE("laplace_transform: constant c -> c/s");
@@ -275,7 +263,7 @@ static void test_laplace_constant() {
     auto result = lamina::laplace_transform(num(5), "t", "s");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Constant Laplace is evaluated");
 
     std::string s = result->to_string();
@@ -295,7 +283,7 @@ static void test_laplace_exp() {
     auto result = lamina::laplace_transform(f, "t", "s");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "e^(at) Laplace is evaluated");
 
     std::string s = result->to_string();
@@ -316,7 +304,7 @@ static void test_laplace_sin() {
     auto result = lamina::laplace_transform(f, "t", "s");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "sin(at) Laplace is evaluated");
 
     std::string s = result->to_string();
@@ -335,7 +323,7 @@ static void test_laplace_t_power() {
     auto result = lamina::laplace_transform(t_sq, "t", "s");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "t^2 Laplace is evaluated");
 
     // ℒ{t²} = 2/s³
@@ -345,9 +333,6 @@ static void test_laplace_t_power() {
     EXPECT_NEAR(eval_at(result, "s", 2.0), 0.25, 1e-6, "L{t^2}(s=2) = 2/8 = 0.25");
 }
 
-// ============================================================
-// Z 变换测试（基础验证）
-// ============================================================
 
 static void test_z_transform_constant() {
     TEST_CASE("z_transform: constant c -> c*z/(z-1)");
@@ -355,7 +340,7 @@ static void test_z_transform_constant() {
     auto result = lamina::z_transform(num(3), "n", "z");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "Constant Z-transform is evaluated");
 
     std::string s = result->to_string();
@@ -374,7 +359,7 @@ static void test_z_transform_exp_sequence() {
     auto result = lamina::z_transform(f, "n", "z");
     EXPECT_TRUE(result != nullptr, "Result is not null");
 
-    auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+    auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
     EXPECT_TRUE(tn == nullptr, "a^n Z-transform is evaluated");
 
     std::string s = result->to_string();
@@ -384,9 +369,130 @@ static void test_z_transform_exp_sequence() {
                 "Z{2^n}(z=4) = 4/(4-2) = 2");
 }
 
-// ============================================================
-// main
-// ============================================================
+static void test_transform_checked_contracts() {
+    TEST_CASE("transform_engine checked APIs: explicit errors, context, and inconclusive support domains");
+
+    auto t = var("t");
+    auto s = var("s");
+
+    auto laplace = lamina::laplace_transform_checked(num(5), "t", "s");
+    EXPECT_TRUE(laplace.has_value(), "checked Laplace succeeds for constants");
+    if (laplace) {
+        EXPECT_TRUE(laplace.value().expression.value != nullptr,
+                    "checked Laplace returns an expression");
+        EXPECT_TRUE(laplace.value().roc.size() == 1,
+                    "checked Laplace reports ROC for constant input");
+        if (!laplace.value().roc.empty()) {
+            auto roc = std::dynamic_pointer_cast<const RelationalNode>(
+                lamina::detail::node(laplace.value().roc[0]));
+            EXPECT_TRUE(roc != nullptr && roc->op() == RelationalNode::Op::GT,
+                        "checked Laplace ROC is a greater-than condition");
+            auto lhs = roc ? std::dynamic_pointer_cast<const VariableNode>(roc->left()) : nullptr;
+            auto rhs = roc ? std::dynamic_pointer_cast<const NumberNode>(roc->right()) : nullptr;
+            EXPECT_TRUE(lhs != nullptr && lhs->name() == "s" &&
+                            rhs != nullptr && rhs->is_zero(),
+                        "checked Laplace constant ROC is s > 0");
+        }
+    }
+
+    auto unknown = lamina::fourier_transform_checked(SymbolicExpr::ln(t), "t", "omega");
+    EXPECT_TRUE(!unknown.has_value(),
+                "checked Fourier rejects unsupported closed forms");
+    EXPECT_TRUE(unknown.error().code == lamina::CasErrc::Inconclusive,
+                "checked Fourier reports Inconclusive for unevaluated transform nodes");
+
+    auto unsupported_inverse = lamina::inverse_fourier_transform_checked(num(1), "omega", "t");
+    EXPECT_TRUE(!unsupported_inverse.has_value(),
+                "checked inverse Fourier rejects unevaluated transform nodes");
+    EXPECT_TRUE(unsupported_inverse.error().code == lamina::CasErrc::Inconclusive,
+                "checked inverse Fourier reports Inconclusive for unsupported constants");
+
+    auto null_input = lamina::laplace_transform_checked(nullptr, "t", "s");
+    EXPECT_TRUE(!null_input.has_value(), "checked Laplace rejects null input");
+    EXPECT_TRUE(null_input.error().code == lamina::CasErrc::InvalidArgument,
+                "checked Laplace reports InvalidArgument for null input");
+
+    auto empty_var = lamina::inverse_laplace_checked(s, "", "t");
+    EXPECT_TRUE(!empty_var.has_value(), "checked inverse Laplace rejects empty variable");
+    EXPECT_TRUE(empty_var.error().code == lamina::CasErrc::InvalidArgument,
+                "checked inverse Laplace reports InvalidArgument for empty variable");
+
+    auto same_var = lamina::z_transform_checked(t, "n", "n");
+    EXPECT_TRUE(!same_var.has_value(), "checked Z transform rejects same input/output variable");
+    EXPECT_TRUE(same_var.error().code == lamina::CasErrc::InvalidArgument,
+                "checked Z transform reports InvalidArgument for same variables");
+
+    auto z_const = lamina::z_transform_checked(num(5), "n", "z");
+    EXPECT_TRUE(z_const.has_value(), "checked Z transform succeeds for constants");
+    if (z_const) {
+        EXPECT_TRUE(z_const.value().roc.size() == 1,
+                    "checked Z constant reports one ROC condition");
+        auto roc = z_const.value().roc.empty() ? nullptr :
+            std::dynamic_pointer_cast<const RelationalNode>(
+                lamina::detail::node(z_const.value().roc[0]));
+        EXPECT_TRUE(roc != nullptr && roc->op() == RelationalNode::Op::GT,
+                    "checked Z constant ROC is a greater-than condition");
+        auto lhs_abs = roc ? std::dynamic_pointer_cast<const FunctionNode>(roc->left()) : nullptr;
+        auto rhs_expr = roc ? lamina::detail::make_expression_ptr(roc->right()) : nullptr;
+        auto abs_arg = (lhs_abs && lhs_abs->arguments().size() == 1) ?
+            std::dynamic_pointer_cast<const VariableNode>(lhs_abs->arguments()[0]) : nullptr;
+        EXPECT_TRUE(lhs_abs != nullptr && lhs_abs->type() == FunctionNode::FuncType::Abs &&
+                        abs_arg != nullptr && abs_arg->name() == "z" &&
+                        rhs_expr != nullptr && rhs_expr->is_one(),
+                    "checked Z constant ROC is abs(z) > 1");
+    }
+
+    auto z_exp = lamina::z_transform_checked(SymbolicExpr::power(num(2), var("n")), "n", "z");
+    EXPECT_TRUE(z_exp.has_value(), "checked Z transform succeeds for a^n");
+    if (z_exp) {
+        EXPECT_TRUE(z_exp.value().roc.size() == 1,
+                    "checked Z exponential reports one ROC condition");
+        auto roc = z_exp.value().roc.empty() ? nullptr :
+            std::dynamic_pointer_cast<const RelationalNode>(
+                lamina::detail::node(z_exp.value().roc[0]));
+        auto lhs_abs = roc ? std::dynamic_pointer_cast<const FunctionNode>(roc->left()) : nullptr;
+        auto rhs_abs = roc ? std::dynamic_pointer_cast<const FunctionNode>(roc->right()) : nullptr;
+        auto lhs_arg = (lhs_abs && lhs_abs->arguments().size() == 1) ?
+            std::dynamic_pointer_cast<const VariableNode>(lhs_abs->arguments()[0]) : nullptr;
+        auto rhs_arg = (rhs_abs && rhs_abs->arguments().size() == 1) ?
+            rhs_abs->arguments()[0] : nullptr;
+        EXPECT_TRUE(roc != nullptr && roc->op() == RelationalNode::Op::GT &&
+                        lhs_abs != nullptr && lhs_abs->type() == FunctionNode::FuncType::Abs &&
+                        rhs_abs != nullptr && rhs_abs->type() == FunctionNode::FuncType::Abs &&
+                        lhs_arg != nullptr && lhs_arg->name() == "z" &&
+                        rhs_arg != nullptr &&
+                        rhs_arg->equals(*lamina::detail::node(num(2))),
+                    "checked Z exponential ROC is abs(z) > abs(2)");
+    }
+
+    lamina::CancellationToken cancellation;
+    lamina::ComputationContext cancelled_context({}, cancellation);
+    cancellation.cancel();
+    auto cancelled = lamina::fourier_transform_checked(t, "t", "omega", cancelled_context);
+    EXPECT_TRUE(!cancelled.has_value(), "checked Fourier observes cancellation");
+    EXPECT_TRUE(cancelled.error().code == lamina::CasErrc::Cancelled,
+                "checked Fourier reports Cancelled");
+
+    lamina::ResourceLimits limits;
+    limits.max_steps = 0;
+    lamina::ComputationContext limited_context(limits);
+    auto limited = lamina::convolve_checked(t, t, "t", limited_context);
+    EXPECT_TRUE(!limited.has_value(), "checked convolution observes exhausted step budget");
+    EXPECT_TRUE(limited.error().code == lamina::CasErrc::ResourceLimit,
+                "checked convolution reports ResourceLimit");
+
+    auto convolution_null = lamina::convolve_checked(nullptr, t, "t");
+    EXPECT_TRUE(!convolution_null.has_value(), "checked convolution rejects null input");
+    EXPECT_TRUE(convolution_null.error().code == lamina::CasErrc::InvalidArgument,
+                "checked convolution reports InvalidArgument for null input");
+
+    auto unsupported_convolution = lamina::convolve_checked(SymbolicExpr::ln(t), t, "t");
+    EXPECT_TRUE(!unsupported_convolution.has_value(),
+                "checked convolution rejects unevaluated integral results");
+    EXPECT_TRUE(unsupported_convolution.error().code == lamina::CasErrc::Inconclusive,
+                "checked convolution reports Inconclusive for unsupported integrals");
+}
+
 
 int main() {
     // Fourier transform tests
@@ -416,9 +522,10 @@ int main() {
     // Z transform tests
     test_z_transform_constant();
     test_z_transform_exp_sequence();
+    test_transform_checked_contracts();
 
     std::cout << "\n===================================================\n";
     std::cout << "Results: " << g_passes << " passed, "
               << g_failures << " failed\n";
-    return g_failures > 0 ? 1 : 0;
+    return TEST_REPORT();
 }

@@ -9,11 +9,74 @@
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
 static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !expr->root) return std::nan("");
+    if (!expr || !lamina::detail::node(expr)) return std::nan("");
     return expr->to_numeric();
 }
 
 int main() {
+
+    TEST_CASE("RootOf - Checked evaluation preserves failure semantics");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto exact_poly = SymbolicExpr::add(SymbolicExpr::power(x, num(2)), num(-4));
+
+        lamina::ComputationContext valid_context;
+        auto valid = lamina::rootof_evaluate_checked(
+            SymbolicExpr::root_of(exact_poly, "x", 0), valid_context);
+        EXPECT_TRUE(valid && std::abs(valid.value() + 2.0) < 1e-10,
+                    "checked RootOf verifies an exact real root");
+
+        lamina::ComputationContext invalid_index_context;
+        auto invalid_index = lamina::rootof_evaluate_checked(
+            SymbolicExpr::root_of(exact_poly, "x", 2), invalid_index_context);
+        EXPECT_TRUE(!invalid_index &&
+                        invalid_index.error().code == lamina::CasErrc::InvalidArgument,
+                    "out-of-range RootOf index is InvalidArgument");
+
+        auto complex_poly = SymbolicExpr::add(SymbolicExpr::power(x, num(2)), num(1));
+        lamina::ComputationContext complex_context;
+        auto complex_root = lamina::rootof_evaluate_checked(
+            SymbolicExpr::root_of(complex_poly, "x", 0), complex_context);
+        EXPECT_TRUE(!complex_root &&
+                        complex_root.error().code == lamina::CasErrc::Inconclusive,
+                    "complex RootOf is outside the double evaluation support domain");
+
+        auto parametric_poly = SymbolicExpr::add(
+            SymbolicExpr::power(x, num(2)), SymbolicExpr::variable("a"));
+        lamina::ComputationContext parametric_context;
+        auto parametric = lamina::rootof_evaluate_checked(
+            SymbolicExpr::root_of(parametric_poly, "x", 0), parametric_context);
+        EXPECT_TRUE(!parametric &&
+                        parametric.error().code == lamina::CasErrc::Inconclusive,
+                    "parametric RootOf is explicitly inconclusive");
+
+        auto approximate_poly = SymbolicExpr::add(
+            SymbolicExpr::power(x, num(2)), SymbolicExpr::number(-4.0));
+        lamina::ComputationContext approximate_context;
+        auto approximate = lamina::rootof_evaluate_checked(
+            SymbolicExpr::root_of(approximate_poly, "x", 0), approximate_context);
+        EXPECT_TRUE(!approximate &&
+                        approximate.error().code == lamina::CasErrc::Inconclusive,
+                    "ApproxReal coefficients are not silently exactified");
+
+        lamina::CancellationToken cancellation;
+        cancellation.cancel();
+        lamina::ComputationContext cancelled_context({}, cancellation);
+        auto cancelled = lamina::rootof_evaluate_checked(
+            SymbolicExpr::root_of(exact_poly, "x", 0), cancelled_context);
+        EXPECT_TRUE(!cancelled &&
+                        cancelled.error().code == lamina::CasErrc::Cancelled,
+                    "checked RootOf observes cancellation");
+
+        lamina::ResourceLimits limits;
+        limits.max_steps = 1;
+        lamina::ComputationContext limited_context(limits);
+        auto limited = lamina::rootof_evaluate_checked(
+            SymbolicExpr::root_of(exact_poly, "x", 0), limited_context);
+        EXPECT_TRUE(!limited &&
+                        limited.error().code == lamina::CasErrc::ResourceLimit,
+                    "checked RootOf enforces traversal budgets");
+    }
 
     TEST_CASE("RootOf - Out-of-range index k >= degree returns nullopt");
     {
@@ -134,6 +197,17 @@ int main() {
         double val1 = eval_numeric(simplified_k1);
         EXPECT_TRUE(!std::isnan(val1) && std::abs(val1 - 2.0) < 1e-10,
             "rootof_simplify(x^2-4, x, 1) = 2");
+    }
+
+    TEST_CASE("RootOf - Simplify preserves unsupported non-polynomial input");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto unsupported = SymbolicExpr::add(
+            SymbolicExpr::power(x, num(2)), SymbolicExpr::sin(x));
+        auto rootof = SymbolicExpr::root_of(unsupported, "x", 0);
+        auto simplified = lamina::rootof_simplify(rootof);
+        EXPECT_TRUE(simplified && lamina::detail::node(simplified) == lamina::detail::node(rootof),
+                    "non-polynomial terms are not silently discarded");
     }
 
     TEST_CASE("RootOf - Simplify degree-3 polynomial to closed-form");

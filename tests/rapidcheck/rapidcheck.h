@@ -38,9 +38,6 @@ inline std::mt19937& global_rng() {
 /// Reset the RNG seed (call between test runs if needed).
 inline void seed(uint32_t s) { global_rng().seed(s); }
 
-// ============================================================
-// Generators: produce random values of various types
-// ============================================================
 
 namespace gen {
 
@@ -76,9 +73,6 @@ T elementOf(const std::vector<T>& vec) {
 
 } // namespace gen
 
-// ============================================================
-// Arbitrary: type-based random generation
-// ============================================================
 
 template<typename T>
 struct Arbitrary;
@@ -115,9 +109,6 @@ struct Arbitrary<std::string> {
     }
 };
 
-// ============================================================
-// RC_ASSERT macro
-// ============================================================
 
 #define RC_ASSERT(expr) \
     do { \
@@ -131,9 +122,6 @@ struct Arbitrary<std::string> {
 
 #define RC_CLASSIFY(cond, label) (void)(cond)
 
-// ============================================================
-// check: run a property test with N iterations
-// ============================================================
 
 namespace detail {
 

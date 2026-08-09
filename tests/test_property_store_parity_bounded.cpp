@@ -1,27 +1,12 @@
-/**
- * @file test_property_store_parity_bounded.cpp
- * @brief Unit tests for PropertyStore parity and boundedness declaration.
- *
- * Validates Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7:
- * - Parity declaration (Even, Odd, Unknown)
- * - Boundedness declaration with optional Interval
- * - Auto-promotion to Integer domain when Even or Odd is declared
- * - Contradiction detection for parity (Even vs Odd)
- * - Contradiction detection for boundedness (Bounded vs Unbounded)
- * - Default values: Parity::Unknown, Boundedness::Unknown
- * - Idempotent re-declaration
- */
 
 #include "test_common.hpp"
 #include "property_store.hpp"
 #include "interval.hpp"
 #include <stdexcept>
+#include <string>
 
 using namespace lamina;
 
-// ============================================================
-// Parity tests
-// ============================================================
 
 void test_declare_parity_even() {
     TEST_CASE("Declare parity Even stores Even");
@@ -161,9 +146,6 @@ void test_parity_unknown_can_be_set() {
                 "x parity set to Unknown");
 }
 
-// ============================================================
-// Boundedness tests
-// ============================================================
 
 void test_declare_bounded() {
     TEST_CASE("Declare Bounded stores Bounded");
@@ -195,10 +177,10 @@ void test_declare_bounded_with_interval() {
     TEST_CASE("Declare Bounded with Interval stores bounds");
     PropertyStore store;
 
-    auto lower_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(0)));
-    auto upper_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(10)));
+    auto lower_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);
@@ -279,10 +261,10 @@ void test_boundedness_unknown_can_be_set() {
     TEST_CASE("Setting boundedness to Unknown is allowed and clears bounds");
     PropertyStore store;
 
-    auto lower_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(0)));
-    auto upper_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(10)));
+    auto lower_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);
@@ -305,9 +287,41 @@ void test_undeclared_symbol_has_no_bounds() {
                  "Undeclared symbol has no bounds");
 }
 
-// ============================================================
-// Combined parity + domain interaction tests
-// ============================================================
+void test_interval_queries_preserve_exact_large_endpoints() {
+    TEST_CASE("PropertyStore interval queries preserve exact large endpoints");
+    PropertyStore store;
+    const BigInt two_to_53("9007199254740992");
+    const BigInt next_integer = two_to_53 + BigInt(1);
+
+    Interval first_point = Interval::point(SymbolicExpr::number(two_to_53));
+    Interval second_point = Interval::point(SymbolicExpr::number(next_integer));
+    store.declare_differentiable("f", first_point);
+    bool threw = false;
+    try {
+        store.declare_continuous("f", second_point);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    EXPECT_TRUE(!threw,
+                "adjacent large integer points do not falsely overlap after exact comparison");
+
+    Interval closed_span{
+        Endpoint::closed(SymbolicExpr::number(two_to_53)),
+        Endpoint::closed(SymbolicExpr::number(next_integer))
+    };
+    store.declare_continuous("g", closed_span);
+    EXPECT_TRUE(store.is_continuous("g", second_point),
+                "closed span covers its exact large upper endpoint");
+
+    Interval open_upper_span{
+        Endpoint::closed(SymbolicExpr::number(two_to_53)),
+        Endpoint::open(SymbolicExpr::number(next_integer))
+    };
+    store.declare_continuous("h", open_upper_span);
+    EXPECT_TRUE(!store.is_continuous("h", second_point),
+                "open upper endpoint does not cover the exact large boundary point");
+}
+
 
 void test_parity_even_with_integer_domain_already_set() {
     TEST_CASE("Even parity with Integer domain already set is fine");
@@ -349,6 +363,7 @@ int main() {
     test_boundedness_contradiction_unbounded_then_bounded();
     test_boundedness_unknown_can_be_set();
     test_undeclared_symbol_has_no_bounds();
+    test_interval_queries_preserve_exact_large_endpoints();
 
     // Combined tests
     test_parity_even_with_integer_domain_already_set();

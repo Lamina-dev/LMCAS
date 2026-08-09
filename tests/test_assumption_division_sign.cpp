@@ -1,16 +1,3 @@
-/**
- * @file test_assumption_division_sign.cpp
- * @brief Property tests for InferenceEngine sign inference (Task 5.7).
- *
- * Properties tested:
- * - Property 1: Division sign inference follows sign multiplication table
- * - Property 4: Arithmetic combination sign inference
- *
- * Validates: Requirements 1.1, 1.2, 1.3, 1.4, 4.1, 4.2, 4.3, 4.4, 4.5
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -25,37 +12,33 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers: create AST nodes
-// ============================================================
 
-static std::shared_ptr<SymbolicNode> make_var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
-static std::shared_ptr<SymbolicNode> make_power(
-    std::shared_ptr<SymbolicNode> base,
-    std::shared_ptr<SymbolicNode> exp) {
-    return std::make_shared<PowerNode>(std::move(base), std::move(exp));
+static std::shared_ptr<const SymbolicNode> make_power(
+    std::shared_ptr<const SymbolicNode> base,
+    std::shared_ptr<const SymbolicNode> exp) {
+    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exp));
 }
 
-static std::shared_ptr<SymbolicNode> make_multiply(
-    std::vector<std::shared_ptr<SymbolicNode>> ops) {
-    return std::make_shared<MultiplyNode>(std::move(ops));
+static std::shared_ptr<const SymbolicNode> make_multiply(
+    std::vector<std::shared_ptr<const SymbolicNode>> ops) {
+    return lamina::detail::make_node<MultiplyNode>(std::move(ops));
 }
 
-static std::shared_ptr<SymbolicNode> make_add(
-    std::vector<std::shared_ptr<SymbolicNode>> ops) {
-    return std::make_shared<AddNode>(std::move(ops));
+static std::shared_ptr<const SymbolicNode> make_add(
+    std::vector<std::shared_ptr<const SymbolicNode>> ops) {
+    return lamina::detail::make_node<AddNode>(std::move(ops));
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<SymbolicNode> node) {
-    SymbolicExpr expr;
-    expr.root = std::move(node);
+static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
+    auto expr = lamina::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -94,10 +77,6 @@ static Sign expected_division_sign(Sign num_sign, Sign den_sign) {
     return same_sign ? Sign::Positive : Sign::Negative;
 }
 
-// ============================================================
-// Property 1: Division sign inference follows sign multiplication table
-// **Validates: Requirements 1.1, 1.2**
-// ============================================================
 
 static void test_property1_division_sign_table() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: Division sign inference follows sign multiplication table");
@@ -138,10 +117,6 @@ static void test_property1_division_sign_table() {
     });
 }
 
-// ============================================================
-// Property 1: Unknown denominator sign → Unknown result
-// **Validates: Requirements 1.3**
-// ============================================================
 
 static void test_property1_unknown_denominator_returns_unknown() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: Unknown denominator sign returns Unknown");
@@ -163,10 +138,6 @@ static void test_property1_unknown_denominator_returns_unknown() {
     });
 }
 
-// ============================================================
-// Property 1: Zero denominator → Unknown result
-// **Validates: Requirements 1.4**
-// ============================================================
 
 static void test_property1_zero_denominator_returns_unknown() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: Zero denominator returns Unknown");
@@ -190,10 +161,6 @@ static void test_property1_zero_denominator_returns_unknown() {
     });
 }
 
-// ============================================================
-// Property 1: All four sign combinations verified exhaustively
-// **Validates: Requirements 1.1, 1.2**
-// ============================================================
 
 static void test_property1_all_sign_combinations() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 1: All four sign combinations");
@@ -236,10 +203,6 @@ static void test_property1_all_sign_combinations() {
     }
 }
 
-// ============================================================
-// Property 4: Arithmetic combination sign inference — AddNode
-// **Validates: Requirements 4.1, 4.2**
-// ============================================================
 
 static void test_property4_add_all_positive_is_positive() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode all GT zero → positive");
@@ -247,7 +210,7 @@ static void test_property4_add_all_positive_is_positive() {
     rc::check("For any AddNode where all operands are GT zero, sum is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "x" + std::to_string(i);
@@ -269,7 +232,7 @@ static void test_property4_add_all_nonneg_is_nonneg() {
     rc::check("For any AddNode where all operands are GEQ zero, sum is non-negative", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "x" + std::to_string(i);
@@ -285,10 +248,6 @@ static void test_property4_add_all_nonneg_is_nonneg() {
     });
 }
 
-// ============================================================
-// Property 4: Arithmetic combination sign inference — MultiplyNode
-// **Validates: Requirements 4.3**
-// ============================================================
 
 static void test_property4_multiply_all_positive_is_positive() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: MultiplyNode all GT zero → positive");
@@ -296,7 +255,7 @@ static void test_property4_multiply_all_positive_is_positive() {
     rc::check("For any MultiplyNode where all operands are GT zero, product is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "x" + std::to_string(i);
@@ -312,12 +271,6 @@ static void test_property4_multiply_all_positive_is_positive() {
     });
 }
 
-// ============================================================
-// Property 4: x GT y with y non-negative → x positive
-// **Validates: Requirements 4.4**
-// This rule applies when checking composite expressions or when
-// the relation store derives sign properties from variable-op-zero patterns.
-// ============================================================
 
 static void test_property4_gt_nonneg_implies_positive() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: x GT y with y NonNegative → x positive");
@@ -328,28 +281,21 @@ static void test_property4_gt_nonneg_implies_positive() {
         AssumptionContext ctx;
 
         // Add relation x > 0 — this triggers sign derivation in RelationStore
-        auto x_var = std::make_shared<VariableNode>(x_name);
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
-        auto rel_node = std::make_shared<RelationalNode>(
+        auto x_var = lamina::detail::make_node<VariableNode>(x_name);
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto rel_node = lamina::detail::make_node<RelationalNode>(
             x_var, zero_node, RelationalNode::Op::GT);
-        SymbolicExpr rel_expr;
-        rel_expr.root = rel_node;
+        auto rel_expr = lamina::detail::expression_from_node(rel_node);
         ctx.assume(rel_expr);
 
         InferenceEngine engine(ctx);
 
-        SymbolicExpr x_expr;
-        x_expr.root = make_var(x_name);
-
+        auto x_expr = lamina::detail::expression_from_node(make_var(x_name));
         // x > 0 should derive Positive sign for x in the PropertyStore
         RC_ASSERT(engine.query_positive(x_expr) == Tribool::True);
     });
 }
 
-// ============================================================
-// Property 4: Unknown operand sign → Unknown result
-// **Validates: Requirements 4.5**
-// ============================================================
 
 static void test_property4_unknown_operand_returns_unknown() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: Unknown operand sign → Unknown");
@@ -359,7 +305,7 @@ static void test_property4_unknown_operand_returns_unknown() {
         int num_operands = rc::gen::inRange(2, 4);
 
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         // Make all but one operand positive, leave one undetermined
         for (int i = 0; i < num_operands; ++i) {
@@ -373,7 +319,7 @@ static void test_property4_unknown_operand_returns_unknown() {
 
         InferenceEngine engine(ctx);
 
-        std::shared_ptr<SymbolicNode> node;
+        std::shared_ptr<const SymbolicNode> node;
         if (use_add) {
             node = make_add(operands);
         } else {
@@ -391,10 +337,6 @@ static void test_property4_unknown_operand_returns_unknown() {
     });
 }
 
-// ============================================================
-// Property 4: AddNode with operands having GT 0 relations → positive
-// **Validates: Requirements 4.1 (via relational constraints)**
-// ============================================================
 
 static void test_property4_add_with_gt_zero_relations() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode operands with GT 0 relations → positive");
@@ -402,20 +344,19 @@ static void test_property4_add_with_gt_zero_relations() {
     rc::check("For any AddNode where all operands have x GT 0 relations, sum is positive", []() {
         int num_operands = rc::gen::inRange(2, 4);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "r" + std::to_string(i);
             operands.push_back(make_var(name));
 
             // Add relation: r_i > 0
-            auto var_node = std::make_shared<VariableNode>(name);
-            auto rel_node = std::make_shared<RelationalNode>(
+            auto var_node = lamina::detail::make_node<VariableNode>(name);
+            auto rel_node = lamina::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GT);
-            SymbolicExpr rel_expr;
-            rel_expr.root = rel_node;
+            auto rel_expr = lamina::detail::expression_from_node(rel_node);
             ctx.assume(rel_expr);
         }
 
@@ -427,9 +368,6 @@ static void test_property4_add_with_gt_zero_relations() {
     });
 }
 
-// ============================================================
-// Property 4: Mixed positive and non-negative in AddNode
-// ============================================================
 
 static void test_property4_add_mixed_pos_nonneg() {
     TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode mixed positive/non-negative");
@@ -437,7 +375,7 @@ static void test_property4_add_mixed_pos_nonneg() {
     rc::check("AddNode with at least one positive and rest non-negative is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
         AssumptionContext ctx;
-        std::vector<std::shared_ptr<SymbolicNode>> operands;
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
         // All operands are positive (which implies non-negative)
         for (int i = 0; i < num_operands; ++i) {
@@ -456,18 +394,13 @@ static void test_property4_add_mixed_pos_nonneg() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 1: Division sign inference
     test_property1_division_sign_table();
     test_property1_unknown_denominator_returns_unknown();
     test_property1_zero_denominator_returns_unknown();
     test_property1_all_sign_combinations();
 
-    // Property 4: Arithmetic combination sign inference
     test_property4_add_all_positive_is_positive();
     test_property4_add_all_nonneg_is_nonneg();
     test_property4_multiply_all_positive_is_positive();

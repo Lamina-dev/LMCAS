@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_property_rules.cpp
- * @brief Property tests for PropertyStore implication and contradiction rules (Task 2.4).
- *
- * Properties tested:
- * - Property 6: Differentiability implies continuity
- * - Property 8: Transcendental/Algebraic contradiction detection
- * - Property 9: Finiteness implies boundedness
- * - Property 10: Matrix definiteness implication and contradiction
- *
- * Validates: Requirements 6.3, 8.3, 8.4, 9.3, 9.4, 10.2, 10.3
- */
 
 #include "test_common.hpp"
 #include "property_store.hpp"
@@ -21,16 +9,13 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a closed interval [lo, hi] from numeric values.
 static Interval make_closed_interval(double lo, double hi) {
-    auto lo_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::closed(lo_expr);
     iv.upper = Endpoint::closed(hi_expr);
@@ -39,10 +24,10 @@ static Interval make_closed_interval(double lo, double hi) {
 
 /// Create an open interval (lo, hi) from numeric values.
 static Interval make_open_interval(double lo, double hi) {
-    auto lo_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::open(lo_expr);
     iv.upper = Endpoint::open(hi_expr);
@@ -60,10 +45,6 @@ static bool throws_invalid_argument(F&& f) {
     }
 }
 
-// ============================================================
-// Property 6: Differentiability implies continuity
-// Validates: Requirements 6.3
-// ============================================================
 
 static void test_differentiable_implies_continuous_closed_interval() {
     TEST_CASE("Property 6: Differentiable on [0,1] implies continuous on [0,1]");
@@ -154,10 +135,6 @@ static void test_continuous_only_not_differentiable() {
         "Continuous-only on [0,1] => is_differentiable false");
 }
 
-// ============================================================
-// Property 8: Transcendental/Algebraic contradiction detection
-// Validates: Requirements 8.3, 8.4
-// ============================================================
 
 static void test_transcendental_rejects_algebraic() {
     TEST_CASE("Property 8: Transcendental symbol rejects Algebraic declaration");
@@ -298,10 +275,6 @@ static void test_transcendental_allows_complex_declaration() {
         "Transcendental symbol remains Real after Complex declaration");
 }
 
-// ============================================================
-// Property 9: Finiteness implies boundedness
-// Validates: Requirements 9.3, 9.4
-// ============================================================
 
 static void test_finite_implies_bounded() {
     TEST_CASE("Property 9: Declaring Finite implies Bounded");
@@ -375,10 +348,6 @@ static void test_finite_multiple_symbols() {
     EXPECT_TRUE(store.get_boundedness("c") == Boundedness::Bounded, "c is Bounded");
 }
 
-// ============================================================
-// Property 10: Matrix definiteness implication and contradiction
-// Validates: Requirements 10.2, 10.3
-// ============================================================
 
 static void test_positive_definite_implies_positive_semidefinite() {
     TEST_CASE("Property 10: PositiveDefinite implies PositiveSemiDefinite queryable");
@@ -501,12 +470,8 @@ static void test_definiteness_idempotent() {
         "PositiveDefinite declared twice remains PositiveDefinite");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 6: Differentiability implies continuity
     test_differentiable_implies_continuous_closed_interval();
     test_differentiable_implies_continuous_open_interval();
     test_differentiable_implies_continuous_subinterval();
@@ -514,7 +479,6 @@ int main() {
     test_differentiable_multiple_symbols();
     test_continuous_only_not_differentiable();
 
-    // Property 8: Transcendental/Algebraic contradiction detection
     test_transcendental_rejects_algebraic();
     test_transcendental_rejects_rational();
     test_transcendental_rejects_integer();
@@ -528,7 +492,6 @@ int main() {
     test_transcendental_allows_real_declaration();
     test_transcendental_allows_complex_declaration();
 
-    // Property 9: Finiteness implies boundedness
     test_finite_implies_bounded();
     test_finite_then_divergent_throws();
     test_divergent_then_finite_throws();
@@ -536,7 +499,6 @@ int main() {
     test_finite_idempotent();
     test_finite_multiple_symbols();
 
-    // Property 10: Matrix definiteness implication and contradiction
     test_positive_definite_implies_positive_semidefinite();
     test_positive_definite_plus_negative_definite_throws();
     test_negative_definite_plus_positive_definite_throws();

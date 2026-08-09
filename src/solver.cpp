@@ -1,5 +1,7 @@
 #include "solver.hpp"
+#include "symbolic_ast.hpp"
 #include "poly_utils.hpp"
+#include "poly_utils_internal.hpp"
 #include "assumption_context.hpp"
 #include <iostream>
 #include <vector>
@@ -65,24 +67,24 @@ void gaussian_eliminate(std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>&
 }
 
 static std::shared_ptr<SymbolicExpr> to_ptr(const SymbolicExpr& expr) {
-    return std::make_shared<SymbolicExpr>(expr);
+    return lamina::detail::make_expression_ptr(expr);
 }
 
-static bool get_integer_value(const std::shared_ptr<SymbolicNode>& node, long long& value) {
-    auto num = std::dynamic_pointer_cast<NumberNode>(node);
+static bool get_integer_value(const std::shared_ptr<const SymbolicNode>& node, long long& value) {
+    auto num = std::dynamic_pointer_cast<const NumberNode>(node);
     if (!num) return false;
-    if (std::holds_alternative<BigInt>(num->value)) {
-        value = std::get<BigInt>(num->value).to_int();
+    if (std::holds_alternative<BigInt>(num->value())) {
+        value = std::get<BigInt>(num->value()).to_int();
         return true;
     }
-    if (std::holds_alternative<Rational>(num->value)) {
-        const auto& r = std::get<Rational>(num->value);
+    if (std::holds_alternative<Rational>(num->value())) {
+        const auto& r = std::get<Rational>(num->value());
         if (!r.is_integer()) return false;
         value = r.to_BigInt().to_int();
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(num->value)) {
-        lmmc_real_t d = std::get<lmmc_real_t>(num->value);
+    if (std::holds_alternative<lmmc_real_t>(num->value())) {
+        lmmc_real_t d = std::get<lmmc_real_t>(num->value());
         int eq;
         lmmc_double_nearly_equal_tol(d, std::round(d), 1e-12, 1e-12, &eq);
         if (!eq) return false;
@@ -92,82 +94,83 @@ static bool get_integer_value(const std::shared_ptr<SymbolicNode>& node, long lo
     return false;
 }
 
-static std::shared_ptr<NumberNode> add_number_nodes(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
-    if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
+static std::shared_ptr<const NumberNode> add_number_nodes(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
+    if (std::holds_alternative<lmmc_real_t>(a->value()) || std::holds_alternative<lmmc_real_t>(b->value())) {
         auto to_real = [](const auto& v) {
             if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
             if (std::holds_alternative<Rational>(v)) return (lmmc_real_t)std::get<Rational>(v).to_double();
             return (lmmc_real_t)std::get<BigInt>(v).to_double();
         };
-        lmmc_real_t r1 = to_real(a->value);
-        lmmc_real_t r2 = to_real(b->value);
-        return std::make_shared<NumberNode>(r1 + r2);
+        lmmc_real_t r1 = to_real(a->value());
+        lmmc_real_t r2 = to_real(b->value());
+        return lamina::detail::make_node<NumberNode>(r1 + r2);
     }
 
-    if (std::holds_alternative<Rational>(a->value) || std::holds_alternative<Rational>(b->value)) {
-        Rational r1 = std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value) : Rational(std::get<BigInt>(a->value));
-        Rational r2 = std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value) : Rational(std::get<BigInt>(b->value));
-        return std::make_shared<NumberNode>(r1 + r2);
+    if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
+        Rational r1 = std::holds_alternative<Rational>(a->value()) ? std::get<Rational>(a->value()) : Rational(std::get<BigInt>(a->value()));
+        Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) : Rational(std::get<BigInt>(b->value()));
+        return lamina::detail::make_node<NumberNode>(r1 + r2);
     }
 
-    return std::make_shared<NumberNode>(std::get<BigInt>(a->value) + std::get<BigInt>(b->value));
+    return lamina::detail::make_node<NumberNode>(std::get<BigInt>(a->value()) + std::get<BigInt>(b->value()));
 }
 
-static std::shared_ptr<NumberNode> multiply_number_nodes(const std::shared_ptr<NumberNode>& a, const std::shared_ptr<NumberNode>& b) {
-    if (std::holds_alternative<lmmc_real_t>(a->value) || std::holds_alternative<lmmc_real_t>(b->value)) {
+static std::shared_ptr<const NumberNode> multiply_number_nodes(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
+    if (std::holds_alternative<lmmc_real_t>(a->value()) || std::holds_alternative<lmmc_real_t>(b->value())) {
         auto to_real = [](const auto& v) {
             if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
             if (std::holds_alternative<Rational>(v)) return (lmmc_real_t)std::get<Rational>(v).to_double();
             return (lmmc_real_t)std::get<BigInt>(v).to_double();
         };
-        lmmc_real_t r1 = to_real(a->value);
-        lmmc_real_t r2 = to_real(b->value);
-        return std::make_shared<NumberNode>(r1 * r2);
+        lmmc_real_t r1 = to_real(a->value());
+        lmmc_real_t r2 = to_real(b->value());
+        return lamina::detail::make_node<NumberNode>(r1 * r2);
     }
 
-    if (std::holds_alternative<Rational>(a->value) || std::holds_alternative<Rational>(b->value)) {
-        Rational r1 = std::holds_alternative<Rational>(a->value) ? std::get<Rational>(a->value) : Rational(std::get<BigInt>(a->value));
-        Rational r2 = std::holds_alternative<Rational>(b->value) ? std::get<Rational>(b->value) : Rational(std::get<BigInt>(b->value));
-        return std::make_shared<NumberNode>(r1 * r2);
+    if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
+        Rational r1 = std::holds_alternative<Rational>(a->value()) ? std::get<Rational>(a->value()) : Rational(std::get<BigInt>(a->value()));
+        Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) : Rational(std::get<BigInt>(b->value()));
+        return lamina::detail::make_node<NumberNode>(r1 * r2);
     }
 
-    return std::make_shared<NumberNode>(std::get<BigInt>(a->value) * std::get<BigInt>(b->value));
+    return lamina::detail::make_node<NumberNode>(std::get<BigInt>(a->value()) * std::get<BigInt>(b->value()));
 }
 
 struct NodeLess {
-    bool operator()(const std::shared_ptr<SymbolicNode>& a, const std::shared_ptr<SymbolicNode>& b) const {
+    bool operator()(const std::shared_ptr<const SymbolicNode>& a, const std::shared_ptr<const SymbolicNode>& b) const {
         if (!a || !b) return a < b;
         return a->compare(*b) < 0;
     }
 };
 
 static std::shared_ptr<SymbolicExpr> multiply_no_expand(
-    const std::shared_ptr<SymbolicNode>& term,
-    const std::vector<std::shared_ptr<SymbolicNode>>& den_factors
+    const std::shared_ptr<const SymbolicNode>& term,
+    const std::vector<std::shared_ptr<const SymbolicNode>>& den_factors
 ) {
-    std::vector<std::shared_ptr<SymbolicNode>> factors;
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(term)) {
-        factors.insert(factors.end(), mul->operands.begin(), mul->operands.end());
+    std::vector<std::shared_ptr<const SymbolicNode>> factors;
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(term)) {
+        factors.insert(factors.end(), mul->operands().begin(), mul->operands().end());
     } else if (term) {
         factors.push_back(term);
     }
     factors.insert(factors.end(), den_factors.begin(), den_factors.end());
 
-    auto const_acc = std::make_shared<NumberNode>(BigInt(1));
-    std::map<std::shared_ptr<SymbolicNode>, std::shared_ptr<NumberNode>, NodeLess> bases;
+    std::shared_ptr<const NumberNode> const_acc =
+        lamina::detail::make_node<NumberNode>(BigInt(1));
+    std::map<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const NumberNode>, NodeLess> bases;
 
     for (const auto& op : factors) {
         if (!op) continue;
-        if (auto num = std::dynamic_pointer_cast<NumberNode>(op)) {
+        if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
             const_acc = multiply_number_nodes(const_acc, num);
             continue;
         }
 
-        std::shared_ptr<SymbolicNode> base = op;
-        std::shared_ptr<NumberNode> exp = std::make_shared<NumberNode>(BigInt(1));
-        if (auto pow = std::dynamic_pointer_cast<PowerNode>(op)) {
-            base = pow->base;
-            if (auto e_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent)) {
+        std::shared_ptr<const SymbolicNode> base = op;
+        std::shared_ptr<const NumberNode> exp = lamina::detail::make_node<NumberNode>(BigInt(1));
+        if (auto pow = std::dynamic_pointer_cast<const PowerNode>(op)) {
+            base = pow->base();
+            if (auto e_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
                 exp = e_num;
             }
         }
@@ -180,105 +183,105 @@ static std::shared_ptr<SymbolicExpr> multiply_no_expand(
         }
     }
 
-    std::vector<std::shared_ptr<SymbolicNode>> final_ops;
+    std::vector<std::shared_ptr<const SymbolicNode>> final_ops;
     if (!const_acc->is_one()) final_ops.push_back(const_acc);
 
     for (const auto& [base, exp] : bases) {
         if (exp->is_zero()) continue;
         if (exp->is_one()) final_ops.push_back(base);
-        else final_ops.push_back(std::make_shared<PowerNode>(base, exp));
+        else final_ops.push_back(lamina::detail::make_node<PowerNode>(base, exp));
     }
 
     if (final_ops.empty()) return SymbolicExpr::number(1);
-    if (final_ops.size() == 1) return std::make_shared<SymbolicExpr>(final_ops[0]);
-    return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(final_ops));
+    if (final_ops.size() == 1) return lamina::detail::make_expression_ptr(final_ops[0]);
+    return lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(final_ops));
 }
 
-static bool is_polynomial_node(const std::shared_ptr<SymbolicNode>& node) {
+static bool is_polynomial_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (std::dynamic_pointer_cast<NumberNode>(node)) return true;
-    if (std::dynamic_pointer_cast<VariableNode>(node)) return true;
+    if (std::dynamic_pointer_cast<const NumberNode>(node)) return true;
+    if (std::dynamic_pointer_cast<const VariableNode>(node)) return true;
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (const auto& op : add->operands) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (const auto& op : add->operands()) {
             if (!is_polynomial_node(op)) return false;
         }
         return true;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (const auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& op : mul->operands()) {
             if (!is_polynomial_node(op)) return false;
         }
         return true;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         long long exp = 0;
-        if (!get_integer_value(pow->exponent, exp)) return false;
+        if (!get_integer_value(pow->exponent(), exp)) return false;
         if (exp < 0) return false;
-        return is_polynomial_node(pow->base);
+        return is_polynomial_node(pow->base());
     }
 
     return false;
 }
 
-static std::shared_ptr<SymbolicExpr> multiply_factors(const std::vector<std::shared_ptr<SymbolicNode>>& factors) {
+static std::shared_ptr<SymbolicExpr> multiply_factors(const std::vector<std::shared_ptr<const SymbolicNode>>& factors) {
     if (factors.empty()) return SymbolicExpr::number(1);
-    auto res = std::make_shared<SymbolicExpr>(factors[0]);
+    auto res = lamina::detail::make_expression_ptr(factors[0]);
     for (size_t i = 1; i < factors.size(); ++i) {
-        res = SymbolicExpr::multiply(res, std::make_shared<SymbolicExpr>(factors[i]));
+        res = SymbolicExpr::multiply(res, lamina::detail::make_expression_ptr(factors[i]));
     }
     return res->simplify();
 }
 
 static bool collect_denominator_factors(
-    const std::shared_ptr<SymbolicNode>& node,
-    std::vector<std::shared_ptr<SymbolicNode>>& den_factors,
+    const std::shared_ptr<const SymbolicNode>& node,
+    std::vector<std::shared_ptr<const SymbolicNode>>& den_factors,
     std::vector<std::shared_ptr<SymbolicExpr>>& den_constraints
 ) {
     if (!node) return false;
 
-    if (std::dynamic_pointer_cast<NumberNode>(node) || std::dynamic_pointer_cast<VariableNode>(node)) {
+    if (std::dynamic_pointer_cast<const NumberNode>(node) || std::dynamic_pointer_cast<const VariableNode>(node)) {
         return true;
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (const auto& op : add->operands) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (const auto& op : add->operands()) {
             if (!collect_denominator_factors(op, den_factors, den_constraints)) return false;
         }
         return true;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (const auto& op : mul->operands) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& op : mul->operands()) {
             if (!collect_denominator_factors(op, den_factors, den_constraints)) return false;
         }
         return true;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         long long exp = 0;
-        if (!get_integer_value(pow->exponent, exp)) return false;
+        if (!get_integer_value(pow->exponent(), exp)) return false;
 
         if (exp < 0) {
-            if (!is_polynomial_node(pow->base)) return false;
+            if (!is_polynomial_node(pow->base())) return false;
             long long k = -exp;
             if (k == 1) {
-                den_factors.push_back(pow->base);
+                den_factors.push_back(pow->base());
             } else {
-                den_factors.push_back(SymbolicFactory::create_power(pow->base, SymbolicFactory::create_number(BigInt(k))));
+                den_factors.push_back(SymbolicFactory::create_power(pow->base(), SymbolicFactory::create_number(BigInt(k))));
             }
-            den_constraints.push_back(std::make_shared<SymbolicExpr>(pow->base));
+            den_constraints.push_back(lamina::detail::make_expression_ptr(pow->base()));
             return true;
         }
 
-        if (!collect_denominator_factors(pow->base, den_factors, den_constraints)) return false;
+        if (!collect_denominator_factors(pow->base(), den_factors, den_constraints)) return false;
         return true;
     }
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        for (const auto& arg : func->arguments) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        for (const auto& arg : func->arguments()) {
             if (!collect_denominator_factors(arg, den_factors, den_constraints)) return false;
         }
         return true;
@@ -292,28 +295,29 @@ static std::pair<SymbolicExpr, SymbolicExpr> isolate_linear_coeff(const Symbolic
     auto expr_ptr = to_ptr(expr);
     auto A_ptr = expr_ptr->differentiate(var);
 
-    std::vector<std::shared_ptr<SymbolicNode>> mops;
-    mops.push_back(A_ptr->root);
+    std::vector<std::shared_ptr<const SymbolicNode>> mops;
+    mops.push_back(lamina::detail::node(A_ptr));
     mops.push_back(SymbolicFactory::create_variable(var));
     auto term_Ax = SymbolicFactory::create_multiply(mops);
 
-    std::vector<std::shared_ptr<SymbolicNode>> nops;
+    std::vector<std::shared_ptr<const SymbolicNode>> nops;
     nops.push_back(SymbolicFactory::create_number(BigInt(-1)));
     nops.push_back(term_Ax);
     auto neg_term = SymbolicFactory::create_multiply(nops);
 
-    std::vector<std::shared_ptr<SymbolicNode>> aops;
-    aops.push_back(expr.root);
+    std::vector<std::shared_ptr<const SymbolicNode>> aops;
+    aops.push_back(lamina::detail::node(expr));
     aops.push_back(neg_term);
     auto B_node = SymbolicFactory::create_add(aops);
 
-    SymbolicExpr B_expr(B_node);
+    auto B_expr = lamina::detail::expression_from_node(B_node);
     auto B_simp = to_ptr(B_expr)->simplify();
 
-    SymbolicExpr A_expr(A_ptr->root);
+    auto A_expr = lamina::detail::expression_from_node(lamina::detail::node(A_ptr));
     auto A_simp = to_ptr(A_expr)->simplify();
 
-    return {SymbolicExpr(A_simp->root), SymbolicExpr(B_simp->root)};
+    return {lamina::detail::expression_from_node(lamina::detail::node(A_simp)),
+            lamina::detail::expression_from_node(lamina::detail::node(B_simp))};
 }
 
 std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
@@ -333,16 +337,16 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
 
         for (size_t j = 0; j < num_vars; ++j) {
             auto [coeff, remainder] = isolate_linear_coeff(constant_part, variables[j]);
-            matrix[i][j] = std::make_shared<SymbolicExpr>(coeff);
+            matrix[i][j] = lamina::detail::make_expression_ptr(coeff);
 
             constant_part = remainder;
         }
 
-        std::vector<std::shared_ptr<SymbolicNode>> ops;
+        std::vector<std::shared_ptr<const SymbolicNode>> ops;
         ops.push_back(SymbolicFactory::create_number(BigInt(-1)));
-        ops.push_back(constant_part.root);
+        ops.push_back(lamina::detail::node(constant_part));
         auto neg_const = SymbolicFactory::create_multiply(ops);
-        matrix[i][num_vars] = std::make_shared<SymbolicExpr>(neg_const);
+        matrix[i][num_vars] = lamina::detail::make_expression_ptr(neg_const);
     }
 
     std::vector<size_t> pivot_col_for_row;
@@ -356,24 +360,25 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
             SymbolicExpr val = *matrix[i][num_vars];
             for (size_t j = pcol + 1; j < num_vars; ++j) {
                 SymbolicExpr c = *matrix[i][j];
-                if (!c.root->is_zero()) {
+                if (!lamina::detail::node(c)->is_zero()) {
 
-                    std::vector<std::shared_ptr<SymbolicNode>> mops;
-                    mops.push_back(c.root);
+                    std::vector<std::shared_ptr<const SymbolicNode>> mops;
+                    mops.push_back(lamina::detail::node(c));
                     mops.push_back(SymbolicFactory::create_variable(variables[j]));
                     auto term = SymbolicFactory::create_multiply(mops);
 
-                    std::vector<std::shared_ptr<SymbolicNode>> nops;
+                    std::vector<std::shared_ptr<const SymbolicNode>> nops;
                     nops.push_back(SymbolicFactory::create_number(BigInt(-1)));
                     nops.push_back(term);
 
-                    std::vector<std::shared_ptr<SymbolicNode>> aops;
-                    aops.push_back(val.root);
+                    std::vector<std::shared_ptr<const SymbolicNode>> aops;
+                    aops.push_back(lamina::detail::node(val));
                     aops.push_back(SymbolicFactory::create_multiply(nops));
-                    val = SymbolicExpr(SymbolicFactory::create_add(aops));
+                    val = lamina::detail::expression_from_node(
+                        SymbolicFactory::create_add(aops));
                 }
             }
-            solution[variables[pcol]] = val;
+            solution.insert_or_assign(variables[pcol], std::move(val));
         }
     }
 
@@ -509,20 +514,20 @@ namespace {
 
     struct PolyContext;
 
-    class PolyBuilder : public SymbolicVisitor {
+    class PolyBuilder : public lamina::detail::SymbolicVisitor {
         std::vector<std::string> vars;
 
         std::vector<std::string>& ext_vars;
 
         std::unordered_map<std::string, size_t>& transcendental_map;
 
-        std::unordered_map<size_t, std::shared_ptr<SymbolicNode>>* aux_to_node;
+        std::unordered_map<size_t, std::shared_ptr<const SymbolicNode>>* aux_to_node;
         Poly result;
         bool strict_mode;
 
-        size_t get_or_create_aux_var(const std::shared_ptr<SymbolicNode>& node) {
+        size_t get_or_create_aux_var(const std::shared_ptr<const SymbolicNode>& node) {
 
-            SymbolicExpr tmp(node);
+            auto tmp = lamina::detail::expression_from_node(node);
             std::string key = tmp.to_string();
 
             auto it = transcendental_map.find(key);
@@ -541,6 +546,18 @@ namespace {
             return idx;
         }
 
+        void represent_as_aux_or_fail(const std::shared_ptr<const SymbolicNode>& node) {
+            if (strict_mode) {
+                failed = true;
+                return;
+            }
+            size_t idx = get_or_create_aux_var(node);
+            result = Poly(ext_vars.size());
+            Monomial m(ext_vars.size(), 0);
+            m[idx] = 1;
+            result.add_term(m, Rational(1));
+        }
+
     public:
 
         PolyBuilder(const std::vector<std::string>& v, PolyContext& ctx, bool strict = false);
@@ -555,7 +572,7 @@ namespace {
         PolyBuilder(const std::vector<std::string>& v,
                     std::vector<std::string>& ext_v,
                     std::unordered_map<std::string, size_t>& trans_map,
-                    std::unordered_map<size_t, std::shared_ptr<SymbolicNode>>* aux_map,
+                    std::unordered_map<size_t, std::shared_ptr<const SymbolicNode>>* aux_map,
                     bool strict = false)
             : vars(v), ext_vars(ext_v), transcendental_map(trans_map),
               aux_to_node(aux_map), result(ext_v.size()), strict_mode(strict) {}
@@ -563,22 +580,22 @@ namespace {
         Poly get_result() const { return result; }
         bool failed = false;
 
-        void visit(NumberNode& node) override {
+        void visit(const NumberNode& node) override {
             result = Poly(ext_vars.size());
 
-            if (std::holds_alternative<Rational>(node.value)) {
-                result.add_term(std::vector<int>(ext_vars.size(), 0), std::get<Rational>(node.value));
-            } else if (std::holds_alternative<BigInt>(node.value)) {
-                result.add_term(std::vector<int>(ext_vars.size(), 0), Rational(std::get<BigInt>(node.value)));
-            } else if (std::holds_alternative<lmmc_real_t>(node.value)) {
-                result.add_term(std::vector<int>(ext_vars.size(), 0), Rational((long long)std::get<lmmc_real_t>(node.value)));
+            if (std::holds_alternative<Rational>(node.value())) {
+                result.add_term(std::vector<int>(ext_vars.size(), 0), std::get<Rational>(node.value()));
+            } else if (std::holds_alternative<BigInt>(node.value())) {
+                result.add_term(std::vector<int>(ext_vars.size(), 0), Rational(std::get<BigInt>(node.value())));
+            } else if (std::holds_alternative<lmmc_real_t>(node.value())) {
+                result.add_term(std::vector<int>(ext_vars.size(), 0), Rational((long long)std::get<lmmc_real_t>(node.value())));
             }
         }
 
-        void visit(VariableNode& node) override {
+        void visit(const VariableNode& node) override {
             result = Poly(ext_vars.size());
 
-            auto it = std::find(ext_vars.begin(), ext_vars.end(), node.name);
+            auto it = std::find(ext_vars.begin(), ext_vars.end(), node.name());
             if (it != ext_vars.end()) {
                 Monomial m(ext_vars.size(), 0);
                 m[std::distance(ext_vars.begin(), it)] = 1;
@@ -589,7 +606,7 @@ namespace {
                     failed = true;
                     return;
                 }
-                size_t idx = get_or_create_aux_var(std::make_shared<VariableNode>(node.name));
+                size_t idx = get_or_create_aux_var(lamina::detail::make_node<VariableNode>(node.name()));
 
                 result = Poly(ext_vars.size());
                 Monomial m(ext_vars.size(), 0);
@@ -598,9 +615,9 @@ namespace {
             }
         }
 
-        void visit(AddNode& node) override {
+        void visit(const AddNode& node) override {
             Poly sum(ext_vars.size());
-            for (auto& op : node.operands) {
+            for (auto& op : node.operands()) {
                 PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
                 op->accept(b);
                 if (b.failed) { failed = true; return; }
@@ -629,11 +646,11 @@ namespace {
             result = sum;
         }
 
-        void visit(MultiplyNode& node) override {
+        void visit(const MultiplyNode& node) override {
             Poly prod(ext_vars.size());
             prod.add_term(std::vector<int>(ext_vars.size(), 0), Rational(1));
 
-            for (auto& op : node.operands) {
+            for (auto& op : node.operands()) {
                 PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
                 op->accept(b);
                 if (b.failed) { failed = true; return; }
@@ -661,18 +678,18 @@ namespace {
             result = prod;
         }
 
-        void visit(PowerNode& node) override {
+        void visit(const PowerNode& node) override {
             PolyBuilder b_base(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
-            node.base->accept(b_base);
+            node.base()->accept(b_base);
             if (b_base.failed) { failed = true; return; }
             Poly base = b_base.get_result();
 
             long long exp = 0;
             bool is_integer_exp = false;
-            if (node.exponent->is_number()) {
-                auto num_node = std::dynamic_pointer_cast<NumberNode>(node.exponent);
+            if (node.exponent()->is_number()) {
+                auto num_node = std::dynamic_pointer_cast<const NumberNode>(node.exponent());
                 if (num_node) {
-                    const auto& val = num_node->value;
+                    const auto& val = num_node->value();
                     if (std::holds_alternative<BigInt>(val)) {
                         exp = std::get<BigInt>(val).to_int();
                         is_integer_exp = true;
@@ -699,7 +716,7 @@ namespace {
 
                 if (strict_mode) { failed = true; return; }
                 size_t idx = get_or_create_aux_var(
-                    std::make_shared<PowerNode>(node.base, node.exponent));
+                    lamina::detail::make_node<PowerNode>(node.base(), node.exponent()));
                 result = Poly(ext_vars.size());
                 Monomial m(ext_vars.size(), 0);
                 m[idx] = 1;
@@ -731,7 +748,7 @@ namespace {
 
                 if (strict_mode) { failed = true; return; }
                 size_t idx = get_or_create_aux_var(
-                    std::make_shared<PowerNode>(node.base, node.exponent));
+                    lamina::detail::make_node<PowerNode>(node.base(), node.exponent()));
                 result = Poly(ext_vars.size());
                 Monomial m(ext_vars.size(), 0);
                 m[idx] = 1;
@@ -739,12 +756,12 @@ namespace {
             }
         }
 
-        void visit(FunctionNode& node) override {
+        void visit(const FunctionNode& node) override {
 
             if (strict_mode) { failed = true; return; }
 
             bool depends_on_vars = false;
-            for (const auto& arg : node.arguments) {
+            for (const auto& arg : node.arguments()) {
                 for (const auto& v : vars) {
                     if (depends_on_var(arg, v)) {
                         depends_on_vars = true;
@@ -756,22 +773,22 @@ namespace {
 
             if (!depends_on_vars) {
 
-                SymbolicExpr func_expr(std::make_shared<FunctionNode>(node.type, node.arguments));
+                auto func_expr = lamina::detail::expression_from_node(lamina::detail::make_node<FunctionNode>(node.type(), node.arguments()));
                 auto simplified = func_expr.simplify();
                 if (simplified && simplified->is_number()) {
-                    auto nn = std::dynamic_pointer_cast<NumberNode>(simplified->root);
+                    auto nn = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified));
                     if (nn) {
 
-                        if (std::holds_alternative<Rational>(nn->value)) {
+                        if (std::holds_alternative<Rational>(nn->value())) {
                             result = Poly(ext_vars.size());
                             result.add_term(std::vector<int>(ext_vars.size(), 0),
-                                            std::get<Rational>(nn->value));
+                                            std::get<Rational>(nn->value()));
                             return;
                         }
-                        if (std::holds_alternative<BigInt>(nn->value)) {
+                        if (std::holds_alternative<BigInt>(nn->value())) {
                             result = Poly(ext_vars.size());
                             result.add_term(std::vector<int>(ext_vars.size(), 0),
-                                            Rational(std::get<BigInt>(nn->value)));
+                                            Rational(std::get<BigInt>(nn->value())));
                             return;
                         }
 
@@ -780,31 +797,49 @@ namespace {
             }
 
             size_t idx = get_or_create_aux_var(
-                std::make_shared<FunctionNode>(node.type, node.arguments));
+                lamina::detail::make_node<FunctionNode>(node.type(), node.arguments()));
             result = Poly(ext_vars.size());
             Monomial m(ext_vars.size(), 0);
             m[idx] = 1;
             result.add_term(m, Rational(1));
         }
 
-        void visit(MatrixNode& node) override {
-            if (strict_mode) { failed = true; return; }
-            result = Poly(ext_vars.size());
+        void visit(const MatrixNode& node) override {
+            represent_as_aux_or_fail(node.clone());
         }
-        void visit(RelationalNode& node) override {
-            if (strict_mode) { failed = true; return; }
-            result = Poly(ext_vars.size());
+        void visit(const RelationalNode& node) override {
+            represent_as_aux_or_fail(node.clone());
         }
-        void visit(LogicalNode& node) override {
-            if (strict_mode) { failed = true; return; }
-            result = Poly(ext_vars.size());
+        void visit(const LogicalNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const PiecewiseNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const SummationNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const ProductNode_Op& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const TransformNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const QuantifierNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const SetBuilderNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const ComplexNode& node) override {
+            represent_as_aux_or_fail(node.clone());
         }
     };
 
     struct PolyContext {
         std::vector<std::string> ext_vars;
         std::unordered_map<std::string, size_t> transcendental_map;
-        std::unordered_map<size_t, std::shared_ptr<SymbolicNode>> aux_to_node;
+        std::unordered_map<size_t, std::shared_ptr<const SymbolicNode>> aux_to_node;
         size_t num_original_vars;
 
         PolyContext(const std::vector<std::string>& vars)
@@ -817,27 +852,27 @@ namespace {
 
     Poly to_poly(const SymbolicExpr& expr, PolyContext& ctx) {
         PolyBuilder b(ctx.ext_vars, ctx);
-        expr.root->accept(b);
+        lamina::detail::node(expr)->accept(b);
         return b.get_result();
     }
 
-    Poly to_poly(const SymbolicExpr& expr, const std::vector<std::string>& vars) {
+    [[maybe_unused]] Poly to_poly(const SymbolicExpr& expr, const std::vector<std::string>& vars) {
 
         std::vector<std::string> ext_vars = vars;
         std::unordered_map<std::string, size_t> trans_map;
         PolyBuilder b(vars, ext_vars, trans_map);
-        expr.root->accept(b);
+        lamina::detail::node(expr)->accept(b);
         return b.get_result();
     }
 
-    SymbolicExpr from_poly(const Poly& p, const std::vector<std::string>& vars) {
-        if (p.terms.empty()) return SymbolicExpr(SymbolicFactory::create_number(BigInt(0)));
+    [[maybe_unused]] SymbolicExpr from_poly(const Poly& p, const std::vector<std::string>& vars) {
+        if (p.terms.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
 
-        std::vector<std::shared_ptr<SymbolicNode>> add_ops;
+        std::vector<std::shared_ptr<const SymbolicNode>> add_ops;
 
         for (auto const& [m, c] : p.terms) {
 
-            std::vector<std::shared_ptr<SymbolicNode>> mul_ops;
+            std::vector<std::shared_ptr<const SymbolicNode>> mul_ops;
 
             if (c.get_denominator() == BigInt(1)) {
                 mul_ops.push_back(SymbolicFactory::create_number(c.get_numerator()));
@@ -866,19 +901,19 @@ namespace {
             }
         }
 
-        if (add_ops.empty()) return SymbolicExpr(SymbolicFactory::create_number(BigInt(0)));
-        if (add_ops.size() == 1) return SymbolicExpr(add_ops[0]);
-        return SymbolicExpr(SymbolicFactory::create_add(add_ops));
+        if (add_ops.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
+        if (add_ops.size() == 1) return lamina::detail::expression_from_node(add_ops[0]);
+        return lamina::detail::expression_from_node(SymbolicFactory::create_add(add_ops));
     }
 
     SymbolicExpr from_poly_ext(const Poly& p, const PolyContext& ctx,
-                               const std::vector<std::string>& original_vars) {
-        if (p.terms.empty()) return SymbolicExpr(SymbolicFactory::create_number(BigInt(0)));
+                               const std::vector<std::string>&) {
+        if (p.terms.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
 
-        std::vector<std::shared_ptr<SymbolicNode>> add_ops;
+        std::vector<std::shared_ptr<const SymbolicNode>> add_ops;
 
         for (auto const& [m, c] : p.terms) {
-            std::vector<std::shared_ptr<SymbolicNode>> mul_ops;
+            std::vector<std::shared_ptr<const SymbolicNode>> mul_ops;
 
             if (c.get_denominator() == BigInt(1)) {
                 mul_ops.push_back(SymbolicFactory::create_number(c.get_numerator()));
@@ -889,7 +924,7 @@ namespace {
             for (size_t i = 0; i < m.size() && i < ctx.ext_vars.size(); ++i) {
                 if (m[i] > 0) {
 
-                    std::shared_ptr<SymbolicNode> var_node;
+                    std::shared_ptr<const SymbolicNode> var_node;
                     if (i < ctx.num_original_vars) {
                         var_node = SymbolicFactory::create_variable(ctx.ext_vars[i]);
                     } else {
@@ -922,9 +957,9 @@ namespace {
             }
         }
 
-        if (add_ops.empty()) return SymbolicExpr(SymbolicFactory::create_number(BigInt(0)));
-        if (add_ops.size() == 1) return SymbolicExpr(add_ops[0]);
-        return SymbolicExpr(SymbolicFactory::create_add(add_ops));
+        if (add_ops.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
+        if (add_ops.size() == 1) return lamina::detail::expression_from_node(add_ops[0]);
+        return lamina::detail::expression_from_node(SymbolicFactory::create_add(add_ops));
     }
 
     Poly reduce(Poly p, const std::vector<Poly>& G) {
@@ -1133,31 +1168,31 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
     cleared_equations.reserve(equations.size());
 
     for (const auto& eq : equations) {
-        if (!eq.root) return {};
+        if (!lamina::detail::node(eq)) return {};
 
-        std::vector<std::shared_ptr<SymbolicNode>> den_factors;
+        std::vector<std::shared_ptr<const SymbolicNode>> den_factors;
         std::vector<std::shared_ptr<SymbolicExpr>> den_local_constraints;
-        if (!collect_denominator_factors(eq.root, den_factors, den_local_constraints)) return {};
+        if (!collect_denominator_factors(lamina::detail::node(eq), den_factors, den_local_constraints)) return {};
 
         auto denom_expr = multiply_factors(den_factors);
         auto cleared = to_ptr(eq);
         if (!den_factors.empty()) {
-            if (auto add = std::dynamic_pointer_cast<AddNode>(cleared->root)) {
-                std::vector<std::shared_ptr<SymbolicNode>> new_ops;
-                new_ops.reserve(add->operands.size());
-                for (const auto& op : add->operands) {
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(cleared))) {
+                std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+                new_ops.reserve(add->operands().size());
+                for (const auto& op : add->operands()) {
                     auto prod = multiply_no_expand(op, den_factors);
-                    new_ops.push_back(prod->root);
+                    new_ops.push_back(lamina::detail::node(prod));
                 }
-                cleared = std::make_shared<SymbolicExpr>(std::make_shared<AddNode>(new_ops));
+                cleared = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(new_ops));
             } else {
-                cleared = multiply_no_expand(cleared->root, den_factors);
+                cleared = multiply_no_expand(lamina::detail::node(cleared), den_factors);
             }
         } else {
             cleared = cleared->simplify();
         }
 
-        if (!cleared || !cleared->root || !is_polynomial_node(cleared->root)) return {};
+        if (!cleared || !lamina::detail::node(cleared) || !is_polynomial_node(lamina::detail::node(cleared))) return {};
         cleared_equations.push_back(*cleared);
 
         for (const auto& c : den_local_constraints) {
@@ -1166,7 +1201,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
     }
 
     if (cleared_equations.size() == 1 && variables.size() == 1) {
-        auto roots = SymbolicExpr::solve(std::make_shared<SymbolicExpr>(cleared_equations[0]), variables[0]);
+        auto roots = SymbolicExpr::solve(lamina::detail::make_expression_ptr(cleared_equations[0]), variables[0]);
         std::vector<std::map<std::string, SymbolicExpr>> single_solutions;
         for (const auto& r : roots) {
             single_solutions.push_back({{variables[0], *r}});
@@ -1180,7 +1215,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
             for (const auto& den : denom_constraints) {
                 auto sub = den;
                 for (const auto& [name, val] : sol) {
-                    sub = sub->substitute(name, std::make_shared<SymbolicExpr>(val));
+                    sub = sub->substitute(name, lamina::detail::make_expression_ptr(val));
                     if (!sub) break;
                 }
                 if (!sub) continue;
@@ -1200,7 +1235,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
     std::vector<std::shared_ptr<SymbolicExpr>> basis;
     basis.reserve(G_basis.size());
     for (const auto& g : G_basis) {
-        auto g_ptr = std::make_shared<SymbolicExpr>(g);
+        auto g_ptr = lamina::detail::make_expression_ptr(g);
         auto simp = g_ptr->simplify();
         if (simp && !simp->is_zero()) {
             basis.push_back(simp);
@@ -1218,7 +1253,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
                               const std::map<std::string, SymbolicExpr>& subs) {
         auto res = expr;
         for (const auto& [name, val] : subs) {
-            res = res->substitute(name, std::make_shared<SymbolicExpr>(val));
+            res = res->substitute(name, lamina::detail::make_expression_ptr(val));
             if (!res) return std::shared_ptr<SymbolicExpr>(nullptr);
         }
         return res->simplify();
@@ -1283,7 +1318,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
 
         if (!curr_var_appears) {
             auto next_partial = partial;
-            next_partial[curr_var] = *SymbolicExpr::variable(curr_var);
+            next_partial.insert_or_assign(curr_var, *SymbolicExpr::variable(curr_var));
             return self(self, var_pos - 1, next_partial);
         }
 
@@ -1295,7 +1330,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
         std::vector<std::map<std::string, SymbolicExpr>> results;
         for (const auto& r : roots) {
             auto next_partial = partial;
-            next_partial[curr_var] = *r;
+            next_partial.insert_or_assign(curr_var, *r);
             auto sub_res = self(self, var_pos - 1, next_partial);
             results.insert(results.end(), sub_res.begin(), sub_res.end());
         }
@@ -1315,7 +1350,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
         for (const auto& den : denom_constraints) {
             auto sub = den;
             for (const auto& [name, val] : sol) {
-                sub = sub->substitute(name, std::make_shared<SymbolicExpr>(val));
+                sub = sub->substitute(name, lamina::detail::make_expression_ptr(val));
                 if (!sub) break;
             }
             if (!sub) continue;
@@ -1487,9 +1522,6 @@ std::vector<SymbolicExpr> Solver::elimination_ideal(
     return result;
 }
 
-// ============================================================================
-// solve_with_assumptions — domain-filtered equation solving
-// ============================================================================
 
 namespace {
 
@@ -1499,58 +1531,58 @@ namespace {
  * The imaginary unit in LMCAS is represented as sqrt(-1), i.e., a FunctionNode
  * with type Sqrt and a single argument that is a NumberNode with value -1.
  */
-class ContainsImaginaryVisitor : public SymbolicVisitor {
+class ContainsImaginaryVisitor : public lamina::detail::SymbolicVisitor {
 public:
     bool found = false;
 
-    void visit(NumberNode&) override {}
-    void visit(VariableNode&) override {}
+    void visit(const NumberNode&) override {}
+    void visit(const VariableNode&) override {}
 
-    void visit(AddNode& node) override {
-        for (auto& op : node.operands) {
+    void visit(const AddNode& node) override {
+        for (auto& op : node.operands()) {
             if (found) return;
             op->accept(*this);
         }
     }
 
-    void visit(MultiplyNode& node) override {
-        for (auto& op : node.operands) {
+    void visit(const MultiplyNode& node) override {
+        for (auto& op : node.operands()) {
             if (found) return;
             op->accept(*this);
         }
     }
 
-    void visit(PowerNode& node) override {
+    void visit(const PowerNode& node) override {
         if (found) return;
 
         // Check if this is a negative base raised to a fractional exponent
         // (e.g., (-4)^0.5 which produces an imaginary result)
-        auto base_num = std::dynamic_pointer_cast<NumberNode>(node.base);
-        auto exp_num = std::dynamic_pointer_cast<NumberNode>(node.exponent);
+        auto base_num = std::dynamic_pointer_cast<const NumberNode>(node.base());
+        auto exp_num = std::dynamic_pointer_cast<const NumberNode>(node.exponent());
         if (base_num && exp_num) {
             double base_val = 0.0;
             bool base_is_numeric = false;
-            if (std::holds_alternative<BigInt>(base_num->value)) {
-                base_val = std::get<BigInt>(base_num->value).to_double();
+            if (std::holds_alternative<BigInt>(base_num->value())) {
+                base_val = std::get<BigInt>(base_num->value()).to_double();
                 base_is_numeric = true;
-            } else if (std::holds_alternative<Rational>(base_num->value)) {
-                base_val = std::get<Rational>(base_num->value).to_double();
+            } else if (std::holds_alternative<Rational>(base_num->value())) {
+                base_val = std::get<Rational>(base_num->value()).to_double();
                 base_is_numeric = true;
-            } else if (std::holds_alternative<lmmc_real_t>(base_num->value)) {
-                base_val = std::get<lmmc_real_t>(base_num->value);
+            } else if (std::holds_alternative<lmmc_real_t>(base_num->value())) {
+                base_val = std::get<lmmc_real_t>(base_num->value());
                 base_is_numeric = true;
             }
 
             double exp_val = 0.0;
             bool exp_is_numeric = false;
-            if (std::holds_alternative<BigInt>(exp_num->value)) {
-                exp_val = std::get<BigInt>(exp_num->value).to_double();
+            if (std::holds_alternative<BigInt>(exp_num->value())) {
+                exp_val = std::get<BigInt>(exp_num->value()).to_double();
                 exp_is_numeric = true;
-            } else if (std::holds_alternative<Rational>(exp_num->value)) {
-                exp_val = std::get<Rational>(exp_num->value).to_double();
+            } else if (std::holds_alternative<Rational>(exp_num->value())) {
+                exp_val = std::get<Rational>(exp_num->value()).to_double();
                 exp_is_numeric = true;
-            } else if (std::holds_alternative<lmmc_real_t>(exp_num->value)) {
-                exp_val = std::get<lmmc_real_t>(exp_num->value);
+            } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
+                exp_val = std::get<lmmc_real_t>(exp_num->value());
                 exp_is_numeric = true;
             }
 
@@ -1566,28 +1598,28 @@ public:
             }
         }
 
-        node.base->accept(*this);
+        node.base()->accept(*this);
         if (found) return;
-        node.exponent->accept(*this);
+        node.exponent()->accept(*this);
     }
 
-    void visit(FunctionNode& node) override {
+    void visit(const FunctionNode& node) override {
         // Check if this is sqrt(-1) — the imaginary unit
-        if (node.type == FunctionNode::FuncType::Sqrt && node.arguments.size() == 1) {
-            auto num = std::dynamic_pointer_cast<NumberNode>(node.arguments[0]);
+        if (node.type() == FunctionNode::FuncType::Sqrt && node.arguments().size() == 1) {
+            auto num = std::dynamic_pointer_cast<const NumberNode>(node.arguments()[0]);
             if (num) {
-                if (std::holds_alternative<BigInt>(num->value)) {
-                    if (std::get<BigInt>(num->value) == BigInt(-1)) {
+                if (std::holds_alternative<BigInt>(num->value())) {
+                    if (std::get<BigInt>(num->value()) == BigInt(-1)) {
                         found = true;
                         return;
                     }
-                } else if (std::holds_alternative<Rational>(num->value)) {
-                    if (std::get<Rational>(num->value) == Rational(-1)) {
+                } else if (std::holds_alternative<Rational>(num->value())) {
+                    if (std::get<Rational>(num->value()) == Rational(-1)) {
                         found = true;
                         return;
                     }
-                } else if (std::holds_alternative<lmmc_real_t>(num->value)) {
-                    lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+                } else if (std::holds_alternative<lmmc_real_t>(num->value())) {
+                    lmmc_real_t v = std::get<lmmc_real_t>(num->value());
                     int eq;
                     lmmc_double_nearly_equal(v, -1.0, &eq);
                     if (eq) {
@@ -1598,21 +1630,21 @@ public:
             }
         }
         // Also check for sqrt of any negative number (produces imaginary result)
-        if (node.type == FunctionNode::FuncType::Sqrt && node.arguments.size() == 1) {
-            auto num = std::dynamic_pointer_cast<NumberNode>(node.arguments[0]);
+        if (node.type() == FunctionNode::FuncType::Sqrt && node.arguments().size() == 1) {
+            auto num = std::dynamic_pointer_cast<const NumberNode>(node.arguments()[0]);
             if (num) {
-                if (std::holds_alternative<BigInt>(num->value)) {
-                    if (std::get<BigInt>(num->value).IsNegative()) {
+                if (std::holds_alternative<BigInt>(num->value())) {
+                    if (std::get<BigInt>(num->value()).IsNegative()) {
                         found = true;
                         return;
                     }
-                } else if (std::holds_alternative<Rational>(num->value)) {
-                    if (std::get<Rational>(num->value) < Rational(0)) {
+                } else if (std::holds_alternative<Rational>(num->value())) {
+                    if (std::get<Rational>(num->value()) < Rational(0)) {
                         found = true;
                         return;
                     }
-                } else if (std::holds_alternative<lmmc_real_t>(num->value)) {
-                    lmmc_real_t v = std::get<lmmc_real_t>(num->value);
+                } else if (std::holds_alternative<lmmc_real_t>(num->value())) {
+                    lmmc_real_t v = std::get<lmmc_real_t>(num->value());
                     if (std::isfinite(v) && v < 0.0) {
                         found = true;
                         return;
@@ -1621,40 +1653,102 @@ public:
             }
         }
         // Recurse into arguments
-        for (auto& arg : node.arguments) {
+        for (auto& arg : node.arguments()) {
             if (found) return;
             arg->accept(*this);
         }
     }
 
-    void visit(MatrixNode&) override {}
+    void visit(const MatrixNode& node) override {
+        if (std::holds_alternative<MatrixNode::DenseStorage>(node.storage())) {
+            for (auto& item : std::get<MatrixNode::DenseStorage>(node.storage())) {
+                if (found) return;
+                if (item) item->accept(*this);
+            }
+        } else {
+            for (auto& [idx, item] : std::get<MatrixNode::SparseStorage>(node.storage())) {
+                (void)idx;
+                if (found) return;
+                if (item) item->accept(*this);
+            }
+        }
+    }
+
+    void visit(const RelationalNode& node) override {
+        node.left()->accept(*this);
+        if (!found) node.right()->accept(*this);
+    }
+
+    void visit(const LogicalNode& node) override {
+        node.left()->accept(*this);
+        if (!found && node.right()) node.right()->accept(*this);
+    }
+
+    void visit(const PiecewiseNode& node) override {
+        for (const auto& branch : node.branches()) {
+            if (found) return;
+            branch.expression->accept(*this);
+            if (!found) branch.condition->accept(*this);
+        }
+        if (!found && node.default_expr()) node.default_expr()->accept(*this);
+    }
+
+    void visit(const SummationNode& node) override {
+        node.body()->accept(*this);
+        if (!found) node.lower_bound()->accept(*this);
+        if (!found) node.upper_bound()->accept(*this);
+    }
+
+    void visit(const ProductNode_Op& node) override {
+        node.body()->accept(*this);
+        if (!found) node.lower_bound()->accept(*this);
+        if (!found) node.upper_bound()->accept(*this);
+    }
+
+    void visit(const TransformNode& node) override {
+        node.body()->accept(*this);
+    }
+
+    void visit(const QuantifierNode& node) override {
+        node.domain()->accept(*this);
+        if (!found) node.predicate()->accept(*this);
+    }
+
+    void visit(const SetBuilderNode& node) override {
+        node.domain()->accept(*this);
+        if (!found) node.predicate()->accept(*this);
+    }
+
+    void visit(const ComplexNode&) override {
+        found = true;
+    }
 };
 
 /// Check if a solution expression contains imaginary components (sqrt of negative).
 static bool contains_imaginary(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !expr->root) return false;
+    if (!expr || !lamina::detail::node(expr)) return false;
     ContainsImaginaryVisitor visitor;
-    expr->root->accept(visitor);
+    lamina::detail::node(expr)->accept(visitor);
     return visitor.found;
 }
 
 /// Try to extract a numeric double value from a solution expression.
 /// Returns true if the expression is a pure numeric value, and sets out_value.
 static bool try_get_numeric_value(const std::shared_ptr<SymbolicExpr>& expr, double& out_value) {
-    if (!expr || !expr->root) return false;
-    auto num = std::dynamic_pointer_cast<NumberNode>(expr->root);
+    if (!expr || !lamina::detail::node(expr)) return false;
+    auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
     if (!num) return false;
 
-    if (std::holds_alternative<BigInt>(num->value)) {
-        out_value = std::get<BigInt>(num->value).to_double();
+    if (std::holds_alternative<BigInt>(num->value())) {
+        out_value = std::get<BigInt>(num->value()).to_double();
         return true;
     }
-    if (std::holds_alternative<Rational>(num->value)) {
-        out_value = std::get<Rational>(num->value).to_double();
+    if (std::holds_alternative<Rational>(num->value())) {
+        out_value = std::get<Rational>(num->value()).to_double();
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(num->value)) {
-        out_value = std::get<lmmc_real_t>(num->value);
+    if (std::holds_alternative<lmmc_real_t>(num->value())) {
+        out_value = std::get<lmmc_real_t>(num->value());
         return true;
     }
     return false;

@@ -1,16 +1,7 @@
-/**
- * @file test_property_store_sign.cpp
- * @brief Unit tests for PropertyStore sign declaration with implication and contradiction detection.
- *
- * Validates Requirements 2.1, 2.2, 2.3, 2.4, 2.6:
- * - Sign declaration stores the sign and all implied signs
- * - Contradiction pairs are detected and throw std::invalid_argument
- * - Idempotent re-declaration (same sign already present → no-op)
- * - Zero implies Integer domain
- */
 
 #include "test_common.hpp"
 #include "property_store.hpp"
+#include "symbolic.hpp"
 #include <stdexcept>
 
 using namespace lamina;
@@ -328,6 +319,121 @@ void test_zero_domain_promotion_does_not_override_more_specific() {
     EXPECT_TRUE(store.has_sign("x", Sign::Zero), "x has Zero");
 }
 
+void test_checked_property_store_contracts() {
+    TEST_CASE("PropertyStore checked declarations: explicit errors and transactional state");
+
+    PropertyStore store;
+
+    auto bad_symbol = store.declare_sign_checked("", Sign::Positive);
+    EXPECT_TRUE(!bad_symbol.has_value(), "checked declare_sign rejects empty symbol");
+    EXPECT_TRUE(bad_symbol.error().code == CasErrc::InvalidArgument,
+                "checked declare_sign reports InvalidArgument for empty symbol");
+    EXPECT_FALSE(store.has_sign("", Sign::Positive),
+                 "failed checked declare_sign does not create empty-symbol fact");
+
+    auto positive = store.declare_sign_checked("x", Sign::Positive);
+    EXPECT_TRUE(positive.has_value(), "checked declare_sign succeeds");
+    EXPECT_TRUE(store.has_sign("x", Sign::Positive),
+                "checked declare_sign stores declared sign");
+
+    auto contradiction = store.declare_sign_checked("x", Sign::Negative);
+    EXPECT_TRUE(!contradiction.has_value(), "checked declare_sign rejects contradiction");
+    EXPECT_TRUE(contradiction.error().code == CasErrc::InvalidArgument,
+                "checked declare_sign reports InvalidArgument for contradiction");
+    EXPECT_TRUE(store.has_sign("x", Sign::Positive),
+                "failed checked declare_sign preserves previous sign");
+    EXPECT_FALSE(store.has_sign("x", Sign::Negative),
+                 "failed checked declare_sign does not apply conflicting sign");
+
+    auto domain = store.declare_domain_checked("n", Domain::Integer);
+    EXPECT_TRUE(domain.has_value(), "checked declare_domain succeeds");
+    EXPECT_TRUE(store.has_domain("n", Domain::Integer),
+                "checked declare_domain stores domain");
+
+    auto parity = store.declare_parity_checked("n", Parity::Even);
+    EXPECT_TRUE(parity.has_value(), "checked declare_parity succeeds");
+    auto parity_conflict = store.declare_parity_checked("n", Parity::Odd);
+    EXPECT_TRUE(!parity_conflict.has_value(), "checked declare_parity rejects contradiction");
+    EXPECT_TRUE(parity_conflict.error().code == CasErrc::InvalidArgument,
+                "checked declare_parity reports InvalidArgument for contradiction");
+    EXPECT_TRUE(store.get_parity("n") == Parity::Even,
+                "failed checked declare_parity preserves previous parity");
+
+    auto bounded = store.declare_bounded_checked("f", Boundedness::Bounded);
+    EXPECT_TRUE(bounded.has_value(), "checked declare_bounded succeeds");
+    auto bounded_conflict = store.declare_bounded_checked("f", Boundedness::Unbounded);
+    EXPECT_TRUE(!bounded_conflict.has_value(),
+                "checked declare_bounded rejects contradiction");
+    EXPECT_TRUE(store.get_boundedness("f") == Boundedness::Bounded,
+                "failed checked declare_bounded preserves previous boundedness");
+
+    auto transcendental = store.declare_transcendental_checked("t");
+    EXPECT_TRUE(transcendental.has_value(), "checked declare_transcendental succeeds");
+    auto algebraic_conflict = store.declare_domain_checked("t", Domain::Algebraic);
+    EXPECT_TRUE(!algebraic_conflict.has_value(),
+                "checked declare_domain rejects transcendental/algebraic conflict");
+    EXPECT_TRUE(store.is_transcendental("t"),
+                "failed checked declare_domain preserves transcendental marker");
+
+    auto finite = store.declare_finiteness_checked("seq", Finiteness::Finite);
+    EXPECT_TRUE(finite.has_value(), "checked declare_finiteness succeeds");
+    auto divergent = store.declare_finiteness_checked("seq", Finiteness::Divergent);
+    EXPECT_TRUE(!divergent.has_value(),
+                "checked declare_finiteness rejects contradiction");
+    EXPECT_TRUE(store.get_finiteness("seq") == Finiteness::Finite,
+                "failed checked declare_finiteness preserves previous finiteness");
+
+    auto pd = store.declare_definiteness_checked("A", Definiteness::PositiveDefinite);
+    EXPECT_TRUE(pd.has_value(), "checked declare_definiteness succeeds");
+    auto indefinite = store.declare_definiteness_checked("A", Definiteness::Indefinite);
+    EXPECT_TRUE(!indefinite.has_value(),
+                "checked declare_definiteness rejects contradiction");
+    EXPECT_TRUE(store.get_definiteness("A") == Definiteness::PositiveDefinite,
+                "failed checked declare_definiteness preserves previous definiteness");
+
+    auto null_period = store.declare_periodic_checked("g", nullptr);
+    EXPECT_TRUE(!null_period.has_value(), "checked declare_periodic rejects null period");
+    EXPECT_TRUE(null_period.error().code == CasErrc::InvalidArgument,
+                "checked declare_periodic reports InvalidArgument for null period");
+    EXPECT_FALSE(store.is_periodic("g"),
+                 "failed checked declare_periodic does not mark symbol periodic");
+
+    auto period = store.declare_periodic_checked("g", SymbolicExpr::number(2));
+    EXPECT_TRUE(period.has_value(), "checked declare_periodic succeeds");
+    EXPECT_TRUE(store.is_periodic("g"), "checked declare_periodic stores period");
+}
+
+void test_legacy_declarations_delegate_transactionally() {
+    TEST_CASE("PropertyStore legacy declarations delegate transactionally");
+
+    PropertyStore store;
+    store.declare_sign("x", Sign::Positive);
+    const auto symbols_before = store.get_all_symbols();
+
+    bool contradiction_threw = false;
+    try {
+        store.declare_sign("x", Sign::Negative);
+    } catch (const std::invalid_argument&) {
+        contradiction_threw = true;
+    }
+    EXPECT_TRUE(contradiction_threw,
+                "legacy sign declaration maps checked contradiction to invalid_argument");
+    EXPECT_TRUE(store.has_sign("x", Sign::Positive),
+                "legacy sign failure preserves the established sign");
+    EXPECT_FALSE(store.has_sign("x", Sign::Negative),
+                 "legacy sign failure does not commit a contradictory sign");
+
+    bool empty_threw = false;
+    try {
+        store.declare_domain("", Domain::Real);
+    } catch (const std::invalid_argument&) {
+        empty_threw = true;
+    }
+    EXPECT_TRUE(empty_threw, "legacy domain declaration rejects an empty symbol");
+    EXPECT_TRUE(store.get_all_symbols() == symbols_before,
+                "failed legacy declaration does not create an empty property record");
+}
+
 int main() {
     test_positive_implies_nonnegative_and_nonzero();
     test_negative_implies_nonpositive_and_nonzero();
@@ -351,6 +457,8 @@ int main() {
     test_get_signs_returns_all_stored();
     test_undeclared_symbol_has_no_signs();
     test_zero_domain_promotion_does_not_override_more_specific();
+    test_checked_property_store_contracts();
+    test_legacy_declarations_delegate_transactionally();
 
     return TEST_REPORT();
 }

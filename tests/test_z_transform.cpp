@@ -61,7 +61,7 @@ int main() {
         EXPECT_TRUE(result != nullptr, "Z{sin(w*n)} should not be null");
         // Verify it's not an unevaluated node
         EXPECT_FALSE(
-            std::dynamic_pointer_cast<TransformNode>(result->root) != nullptr,
+            std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
             "Z{sin(w*n)} should be evaluated (not unevaluated)");
         // Check the result contains expected components
         auto str = result->simplify()->to_string();
@@ -77,7 +77,7 @@ int main() {
         auto result = z_transform(f_n, "n", "z");
         EXPECT_TRUE(result != nullptr, "Z{cos(w*n)} should not be null");
         EXPECT_FALSE(
-            std::dynamic_pointer_cast<TransformNode>(result->root) != nullptr,
+            std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
             "Z{cos(w*n)} should be evaluated");
         auto str = result->simplify()->to_string();
         EXPECT_CONTAINS(str, {"z", "cos"}, "Z{cos(w*n)} contains z and cos");
@@ -106,7 +106,7 @@ int main() {
         auto result = z_transform(f_n, "n", "z");
         EXPECT_TRUE(result != nullptr, "Z{1+n} should not be null");
         EXPECT_FALSE(
-            std::dynamic_pointer_cast<TransformNode>(result->root) != nullptr,
+            std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
             "Z{1+n} should be evaluated");
     }
 
@@ -121,7 +121,7 @@ int main() {
         auto result = z_transform(f_n, "n", "z");
         EXPECT_TRUE(result != nullptr, "Z{3*a^n} should not be null");
         EXPECT_FALSE(
-            std::dynamic_pointer_cast<TransformNode>(result->root) != nullptr,
+            std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
             "Z{3*a^n} should be evaluated");
     }
 
@@ -132,11 +132,11 @@ int main() {
         auto f_n = SymbolicExpr::ln(n);
         auto result = z_transform(f_n, "n", "z");
         EXPECT_TRUE(result != nullptr, "Z{ln(n)} should not be null");
-        auto tn = std::dynamic_pointer_cast<TransformNode>(result->root);
+        auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
         EXPECT_TRUE(tn != nullptr, "Z{ln(n)} should be unevaluated TransformNode");
         if (tn) {
             EXPECT_TRUE(
-                tn->transform_type == TransformNode::TransformType::ZTransform,
+                tn->transform_type() == TransformNode::TransformType::ZTransform,
                 "Transform type should be ZTransform");
         }
     }
@@ -150,7 +150,7 @@ int main() {
         auto result = z_transform(f_n, "n", "z");
         EXPECT_TRUE(result != nullptr, "Z{n*a^n} should not be null");
         EXPECT_FALSE(
-            std::dynamic_pointer_cast<TransformNode>(result->root) != nullptr,
+            std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
             "Z{n*a^n} should be evaluated");
         auto str = result->simplify()->to_string();
         EXPECT_CONTAINS(str, {"z", "a"}, "Z{n*a^n} contains z and a");

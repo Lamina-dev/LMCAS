@@ -1,46 +1,3 @@
-// Feature: integration-enhancements, Property 4: Trigonometric sin^m·cos^n round-trip
-//
-// Validates: Requirements 3.1, 3.9
-//
-// Property 4: For all integer pairs (m, n) with m >= 0, n >= 0, and
-// m + n <= 8, integrating sin^m(x)·cos^n(x) and differentiating the
-// result SHALL yield an expression numerically equal to sin^m(x)·cos^n(x)
-// at sample points x in {0.5, 1.0, 1.5, 2.0, 2.5} within tolerance 1e-10.
-//
-// Approach
-// --------
-//   * Iterate (m, n) over all 45 integer pairs with m >= 0, n >= 0,
-//     m + n <= 8 (1 + 2 + ... + 9 = 45 pairs).
-//
-//   * For each pair, build the integrand sin^m(x)·cos^n(x) using the
-//     simplest AST form available:
-//       - m = n = 0  -> 1
-//       - m = k, n = 0 -> sin(x) for k=1, sin(x)^k for k>=2
-//       - m = 0, n = k -> cos(x) for k=1, cos(x)^k for k>=2
-//       - m >= 1, n >= 1 -> sin(x)^m * cos(x)^n
-//     (If the exponent is exactly 1 we skip the PowerNode wrapper so the
-//     expression stays in the canonical shape the trig-combination
-//     strategy expects.)
-//
-//   * Call Integrator::integrate(integrand, "x") to obtain a closed form.
-//     If the integrator returns an unevaluated integral node for any
-//     pair within the property's scope, that's a failure of Requirement
-//     3.1 and the test reports it as such.
-//
-//   * Differentiate the result symbolically.
-//
-//   * Numerically evaluate both the integrand and the derivative at the
-//     sample points x in {0.5, 1.0, 1.5, 2.0, 2.5} and compare within
-//     tolerance 1e-10. test_numeric_eval supports Sin/Cos/Exp/Ln/Sqrt/Abs
-//     plus the algebraic node kinds, which is sufficient for the
-//     antiderivatives produced by TrigCombinationStrategy (multiples of
-//     sin(k*x) / cos(k*x) and rational combinations thereof).
-//
-//   * The test FAILS if any pair produces a numeric mismatch above
-//     tolerance, an unevaluated integral, or a sample point whose values
-//     fail to evaluate (which would indicate the result contains a
-//     function the evaluator cannot handle and therefore the round-trip
-//     cannot be verified).
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -58,7 +15,6 @@ namespace {
 constexpr const char* kVarName = "x";
 constexpr double kTolerance = 1e-10;
 
-// ----- AST construction ---------------------------------------------------
 
 std::shared_ptr<SymbolicExpr> num_int(long long n) {
     return SymbolicExpr::number(n);
@@ -88,21 +44,21 @@ std::shared_ptr<SymbolicExpr> build_integrand(int m, int n) {
     return SymbolicExpr::multiply(sin_part, cos_part);
 }
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
@@ -112,7 +68,6 @@ const std::vector<double>& sample_points() {
     return S;
 }
 
-// ----- Per-pair check -----------------------------------------------------
 
 struct PairReport {
     bool failed = false;
@@ -131,22 +86,22 @@ PairReport verify_pair(int m, int n) {
     }
 
     Integrator integ;
-    SymbolicExpr result;
+    std::shared_ptr<SymbolicExpr> result;
     try {
-        result = integ.integrate(*integrand, kVarName);
+        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand, kVarName));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception during integration: ") + e.what();
         return rep;
     }
 
-    if (has_integral_node(result.root)) {
+    if (has_integral_node(lamina::detail::node(result))) {
         rep.failed = true;
-        rep.detail = "integrator returned unevaluated integral: " + result.to_string();
+        rep.detail = "integrator returned unevaluated integral: " + result->to_string();
         return rep;
     }
 
-    auto deriv = result.differentiate(kVarName);
+    auto deriv = result->differentiate(kVarName);
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
@@ -166,7 +121,7 @@ PairReport verify_pair(int m, int n) {
             rep.failed = true;
             std::ostringstream oss;
             oss << "x=" << xv << ": substitute returned null"
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             return rep;
         }
@@ -179,7 +134,7 @@ PairReport verify_pair(int m, int n) {
             rep.failed = true;
             std::ostringstream oss;
             oss << "x=" << xv << ": numeric evaluation failed"
-                << " | result=" << result.to_string()
+                << " | result=" << result->to_string()
                 << " | derivative=" << deriv_simp->to_string();
             rep.detail = oss.str();
             return rep;
@@ -192,7 +147,7 @@ PairReport verify_pair(int m, int n) {
                 << ": integrand=" << *pv
                 << " vs d/dx(result)=" << *dv
                 << " |delta|=" << delta
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             return rep;
         }
@@ -228,7 +183,7 @@ int main() {
                 total_matches += rep.matches;
                 std::ostringstream oss;
                 oss << label.str() << ": " << rep.matches << " sample point(s) matched";
-                EXPECT_TRUE(true, oss.str());
+                EXPECT_TRUE(!rep.failed && rep.matches > 0, oss.str());
             }
         }
     }

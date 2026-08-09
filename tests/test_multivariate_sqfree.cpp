@@ -1,13 +1,3 @@
-/**
- * @file test_multivariate_sqfree.cpp
- * @brief 多元无平方因子分解的属性测试与单元测试。
- *
- * Property 7: Square-free decomposition correctness
- * - product of components^multiplicity equals original (up to constant)
- * - each component is square-free: gcd(fᵢ, ∂fᵢ/∂main_var) is constant
- *
- * **Validates: Requirements 3.1, 3.2**
- */
 
 #include "test_common.hpp"
 #include "multivariate_factor.hpp"
@@ -134,10 +124,6 @@ static bool verify_sqfree_decomp(const MultiPoly& original,
 
 int main()
 {
-    // ================================================================
-    // Property 7: Square-free decomposition correctness
-    // **Validates: Requirements 3.1, 3.2**
-    // ================================================================
 
     TEST_CASE("Property 7: already square-free polynomial (x^2 - y^2)");
     {
@@ -338,10 +324,6 @@ int main()
                     "zero poly: first component is zero");
     }
 
-    // ================================================================
-    // Unit tests: verify specific component assignments
-    // **Validates: Requirements 3.1, 3.2**
-    // ================================================================
 
     TEST_CASE("unit: (x+y)^2*(x-y) component[0]=(x-y), component[1]=(x+y)");
     {

@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_api.cpp
- * @brief Property tests for Convenience API (Property 32).
- *
- * Feature: assumption-system, Property 32: Convenience API equivalence
- * Validates: Requirements 13.1, 13.2, 13.3, 13.4
- *
- * For any variable, domain, sign, and relational expression, calling the
- * convenience methods (assume_domain, assume_sign, assume, is_positive, etc.)
- * should produce identical results to using the underlying PropertyStore,
- * RelationStore, and QueryInterface directly.
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -27,28 +15,22 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static SymbolicExpr make_var_expr(const std::string& name) {
-    SymbolicExpr expr;
-    expr.root = std::make_shared<VariableNode>(name);
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
     return expr;
 }
 
 static SymbolicExpr make_num_expr(int v) {
-    SymbolicExpr expr;
-    expr.root = std::make_shared<NumberNode>(BigInt(v));
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(v)));
     return expr;
 }
 
 static SymbolicExpr make_relation_expr(const std::string& var_name,
                                        RelationalNode::Op op, int rhs_val) {
-    auto lhs = std::make_shared<VariableNode>(var_name);
-    auto rhs = std::make_shared<NumberNode>(BigInt(rhs_val));
-    SymbolicExpr expr;
-    expr.root = std::make_shared<RelationalNode>(lhs, rhs, op);
+    auto lhs = lamina::detail::make_node<VariableNode>(var_name);
+    auto rhs = lamina::detail::make_node<NumberNode>(BigInt(rhs_val));
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(lhs, rhs, op));
     return expr;
 }
 
@@ -67,11 +49,6 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
     }
 }
 
-// ============================================================
-// Test 1: assume_domain(var, domain) produces same result as
-//         current_properties().declare_domain(var, domain)
-//         — verify with get_domain()
-// ============================================================
 
 void test_assume_domain_equivalence() {
     TEST_CASE("Property 32: assume_domain equivalence with PropertyStore.declare_domain");
@@ -114,11 +91,6 @@ void test_assume_domain_equivalence() {
     }
 }
 
-// ============================================================
-// Test 2: assume_sign(var, sign) produces same result as
-//         current_properties().declare_sign(var, sign)
-//         — verify with has_sign()
-// ============================================================
 
 void test_assume_sign_equivalence() {
     TEST_CASE("Property 32: assume_sign equivalence with PropertyStore.declare_sign");
@@ -163,10 +135,6 @@ void test_assume_sign_equivalence() {
     }
 }
 
-// ============================================================
-// Test 3: assume(relation) stores the relation same as using
-//         RelationStore directly
-// ============================================================
 
 void test_assume_relation_equivalence() {
     TEST_CASE("Property 32: assume(relation) equivalence with RelationStore.add_relation");
@@ -218,10 +186,6 @@ void test_assume_relation_equivalence() {
     }
 }
 
-// ============================================================
-// Test 4: is_positive(expr) returns same as
-//         QueryInterface(ctx).query_positive(expr)
-// ============================================================
 
 void test_is_positive_equivalence() {
     TEST_CASE("Property 32: is_positive equivalence with QueryInterface.query_positive");
@@ -254,10 +218,6 @@ void test_is_positive_equivalence() {
     }
 }
 
-// ============================================================
-// Test 5: is_negative(expr) returns same as
-//         QueryInterface(ctx).query_negative(expr)
-// ============================================================
 
 void test_is_negative_equivalence() {
     TEST_CASE("Property 32: is_negative equivalence with QueryInterface.query_negative");
@@ -288,10 +248,6 @@ void test_is_negative_equivalence() {
     }
 }
 
-// ============================================================
-// Test 6: is_real, is_integer, is_nonnegative, is_nonzero
-//         all equivalent to QueryInterface
-// ============================================================
 
 void test_is_real_equivalence() {
     TEST_CASE("Property 32: is_real equivalence with QueryInterface.query_real");
@@ -399,10 +355,6 @@ void test_is_nonzero_equivalence() {
     }
 }
 
-// ============================================================
-// Additional: Combined scenario — assume_domain + assume_sign
-// then verify queries match between convenience and direct
-// ============================================================
 
 void test_combined_assumptions_equivalence() {
     TEST_CASE("Property 32: Combined domain+sign assumptions — full equivalence");
@@ -454,9 +406,6 @@ void test_combined_assumptions_equivalence() {
                    "Combined: query_nonnegative(n) matches");
 }
 
-// ============================================================
-// Additional: Scoped convenience API — push/pop with convenience methods
-// ============================================================
 
 void test_scoped_convenience_equivalence() {
     TEST_CASE("Property 32: Scoped convenience API — push/pop equivalence");
@@ -488,11 +437,7 @@ void test_scoped_convenience_equivalence() {
                 "Scoped: after pop has_sign(x, Negative) matches (should be false)");
 }
 
-// ============================================================
-// Error case tests (Task 10.3)
-// ============================================================
 
-// --- Req 13.6: Empty variable name throws ---
 
 void test_assume_domain_empty_name_throws() {
     TEST_CASE("Req 13.6: assume_domain with empty name throws std::invalid_argument");
@@ -520,33 +465,17 @@ void test_assume_sign_empty_name_throws() {
     EXPECT_TRUE(threw, "assume_sign(\"\", Sign::Positive) should throw std::invalid_argument");
 }
 
-// --- Req 13.7: Non-relational expression in assume() throws ---
-
-void test_assume_null_expr_throws() {
-    TEST_CASE("Req 13.7: assume with null expression throws std::invalid_argument");
-
-    AssumptionContext ctx;
-    SymbolicExpr null_expr;  // default-constructed, root is nullptr
-    bool threw = false;
-    try {
-        ctx.assume(null_expr);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "assume(null_expr) should throw std::invalid_argument");
-}
 
 void test_assume_non_relational_expr_throws() {
     TEST_CASE("Req 13.7: assume with AddNode root throws std::invalid_argument");
 
     AssumptionContext ctx;
     // Create an expression with AddNode root (x + y)
-    auto x = std::make_shared<VariableNode>("x");
-    auto y = std::make_shared<VariableNode>("y");
-    auto add = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{x, y});
-    SymbolicExpr add_expr(add);
-
+    auto x = lamina::detail::make_node<VariableNode>("x");
+    auto y = lamina::detail::make_node<VariableNode>("y");
+    auto add = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{x, y});
+    auto add_expr = lamina::detail::expression_from_node(add);
     bool threw = false;
     try {
         ctx.assume(add_expr);
@@ -556,7 +485,6 @@ void test_assume_non_relational_expr_throws() {
     EXPECT_TRUE(threw, "assume(expr_with_AddNode_root) should throw std::invalid_argument");
 }
 
-// --- Req 13.5: Undeclared variable queries return Unknown ---
 
 void test_is_positive_undeclared_returns_unknown() {
     TEST_CASE("Req 13.5: is_positive on undeclared variable returns Tribool::Unknown");
@@ -618,9 +546,93 @@ void test_is_nonzero_undeclared_returns_unknown() {
                 "is_nonzero(undeclared_beta) should return Tribool::Unknown");
 }
 
-// ============================================================
-// main
-// ============================================================
+void test_checked_assumption_context_contracts() {
+    TEST_CASE("AssumptionContext checked APIs: explicit errors and successful queries");
+
+    AssumptionContext ctx;
+    uint64_t generation = ctx.cache_generation();
+
+    auto bad_domain = ctx.assume_domain_checked("", Domain::Real);
+    EXPECT_TRUE(!bad_domain.has_value(), "checked assume_domain rejects empty variable");
+    EXPECT_TRUE(bad_domain.error().code == CasErrc::InvalidArgument,
+                "checked assume_domain reports InvalidArgument");
+    EXPECT_TRUE(ctx.cache_generation() == generation,
+                "failed checked assume_domain does not mutate generation");
+
+    auto ok_domain = ctx.assume_domain_checked("x", Domain::Real);
+    EXPECT_TRUE(ok_domain.has_value(), "checked assume_domain succeeds");
+    EXPECT_TRUE(ctx.has_domain("x", Domain::Real),
+                "checked assume_domain updates domain facts");
+
+    generation = ctx.cache_generation();
+    auto bad_sign = ctx.assume_sign_checked("", Sign::Positive);
+    EXPECT_TRUE(!bad_sign.has_value(), "checked assume_sign rejects empty variable");
+    EXPECT_TRUE(bad_sign.error().code == CasErrc::InvalidArgument,
+                "checked assume_sign reports InvalidArgument");
+    EXPECT_TRUE(ctx.cache_generation() == generation,
+                "failed checked assume_sign does not mutate generation");
+
+    auto ok_sign = ctx.assume_sign_checked("x", Sign::Positive);
+    EXPECT_TRUE(ok_sign.has_value(), "checked assume_sign succeeds");
+
+    auto natural = ctx.assume_domain_checked("n", Domain::Natural);
+    EXPECT_TRUE(natural.has_value(), "checked assume_domain stores Natural domain");
+    generation = ctx.cache_generation();
+    auto sign_conflict = ctx.assume_sign_checked("n", Sign::Negative);
+    EXPECT_TRUE(!sign_conflict.has_value(),
+                "checked assume_sign rejects a domain/sign contradiction");
+    EXPECT_TRUE(sign_conflict.error().code == CasErrc::InvalidArgument,
+                "checked assume_sign reports InvalidArgument for contradiction");
+    EXPECT_TRUE(ctx.cache_generation() == generation,
+                "failed checked assume_sign does not advance cache generation");
+    EXPECT_FALSE(ctx.has_sign("n", Sign::Negative),
+                 "failed checked assume_sign does not commit a contradictory sign");
+
+    SymbolicExpr x = make_var_expr("x");
+    auto positive = ctx.is_positive_checked(x);
+    EXPECT_TRUE(positive.has_value(), "checked is_positive succeeds");
+    if (positive) {
+        EXPECT_TRUE(positive.value() == Tribool::True,
+                    "checked is_positive sees declared positive sign");
+    }
+
+    auto relation = make_relation_expr("x", RelationalNode::Op::GT, 0);
+    auto relation_result = ctx.assume_checked(relation);
+    EXPECT_TRUE(relation_result.has_value(), "checked assume accepts relational expression");
+
+    generation = ctx.cache_generation();
+    const auto relation_count = ctx.current_relations().get_relations().size();
+    auto conflict_relation = make_relation_expr("x", RelationalNode::Op::LT, 0);
+    auto conflict_result = ctx.assume_checked(conflict_relation);
+    EXPECT_TRUE(!conflict_result.has_value(),
+                "checked assume rejects relation with contradictory derived property");
+    EXPECT_TRUE(conflict_result.error().code == CasErrc::InvalidArgument,
+                "checked assume reports InvalidArgument for contradictory relation");
+    EXPECT_TRUE(ctx.cache_generation() == generation,
+                "failed checked assume does not mutate generation");
+    EXPECT_TRUE(ctx.current_relations().get_relations().size() == relation_count,
+                "failed checked assume does not store contradictory relation");
+    EXPECT_FALSE(ctx.current_relations().has_relation(
+                     make_var_expr("x"), make_num_expr(0), RelationalNode::Op::LT),
+                 "failed checked assume leaves relation store unchanged");
+    EXPECT_FALSE(ctx.has_sign("x", Sign::Negative),
+                 "failed checked assume does not apply contradictory sign");
+
+    auto bad_relation = ctx.assume_checked(x);
+    EXPECT_TRUE(!bad_relation.has_value(), "checked assume rejects non-relational expression");
+    EXPECT_TRUE(bad_relation.error().code == CasErrc::InvalidArgument,
+                "checked assume reports InvalidArgument for non-relational expression");
+
+    auto nonzero = ctx.is_nonzero_checked(x);
+    EXPECT_TRUE(nonzero.has_value(), "checked is_nonzero succeeds");
+    auto integer = ctx.is_integer_checked(x);
+    EXPECT_TRUE(integer.has_value(), "checked is_integer succeeds");
+    auto nonnegative = ctx.is_nonnegative_checked(x);
+    EXPECT_TRUE(nonnegative.has_value(), "checked is_nonnegative succeeds");
+    auto negative = ctx.is_negative_checked(x);
+    EXPECT_TRUE(negative.has_value(), "checked is_negative succeeds");
+}
+
 
 int main() {
     // Test 1: assume_domain equivalence
@@ -650,23 +662,19 @@ int main() {
     // Scoped equivalence
     test_scoped_convenience_equivalence();
 
-    // --- Task 10.3: Error case tests ---
 
-    // Req 13.6: Empty variable name throws
     test_assume_domain_empty_name_throws();
     test_assume_sign_empty_name_throws();
 
-    // Req 13.7: Non-relational expression in assume() throws
-    test_assume_null_expr_throws();
     test_assume_non_relational_expr_throws();
 
-    // Req 13.5: Undeclared variable queries return Unknown
     test_is_positive_undeclared_returns_unknown();
     test_is_negative_undeclared_returns_unknown();
     test_is_nonnegative_undeclared_returns_unknown();
     test_is_real_undeclared_returns_unknown();
     test_is_integer_undeclared_returns_unknown();
     test_is_nonzero_undeclared_returns_unknown();
+    test_checked_assumption_context_contracts();
 
     return TEST_REPORT();
 }

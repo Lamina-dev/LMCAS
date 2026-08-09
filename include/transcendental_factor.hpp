@@ -12,6 +12,7 @@
 #include "modular_arithmetic.hpp"
 #include "bigint.hpp"
 #include "rational.hpp"
+#include "result.hpp"
 
 #include <memory>
 #include <string>
@@ -102,6 +103,21 @@ LAMINA_API BerlekampResult berlekamp_factor(
  * @internal
  */
 LAMINA_API std::vector<Polynomial<BigInt>> hensel_lift(
+    const Polynomial<BigInt>& poly,
+    const std::vector<Polynomial<ModInt>>& mod_factors,
+    int64_t prime,
+    int lift_bound);
+
+using HenselLiftResult = Result<std::vector<Polynomial<BigInt>>>;
+
+/**
+ * @brief Checked Hensel lifting with explicit precondition failures.
+ *
+ * Empty factor lists, invalid primes, zero/constant input polynomials, zero
+ * factors, and mod-p factor products that do not match the original polynomial
+ * are reported as CasError instead of being silently accepted as empty output.
+ */
+LAMINA_API HenselLiftResult hensel_lift_checked(
     const Polynomial<BigInt>& poly,
     const std::vector<Polynomial<ModInt>>& mod_factors,
     int64_t prime,

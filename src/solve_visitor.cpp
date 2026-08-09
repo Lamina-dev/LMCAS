@@ -22,6 +22,140 @@ std::shared_ptr<SymbolicExpr> get_coeff(const Polynomial<SymbolicPolyCoeff>& p, 
     return p.coeffs[deg].val;
 }
 
+static bool solve_is_minus_one(const std::shared_ptr<const NumberNode>& number) {
+    if (!number) return false;
+    if (std::holds_alternative<BigInt>(number->value())) {
+        return std::get<BigInt>(number->value()) == BigInt(-1);
+    }
+    if (std::holds_alternative<Rational>(number->value())) {
+        return std::get<Rational>(number->value()) == Rational(-1);
+    }
+    return std::get<lmmc_real_t>(number->value()) == -1.0;
+}
+
+static bool solve_contains_rootof_node(const std::shared_ptr<const SymbolicNode>& node) {
+    if (!node) return false;
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (function->type() == FunctionNode::FuncType::RootOf) return true;
+        for (const auto& arg : function->arguments()) {
+            if (solve_contains_rootof_node(arg)) return true;
+        }
+        return false;
+    }
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (const auto& operand : add->operands()) {
+            if (solve_contains_rootof_node(operand)) return true;
+        }
+        return false;
+    }
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& operand : multiply->operands()) {
+            if (solve_contains_rootof_node(operand)) return true;
+        }
+        return false;
+    }
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        return solve_contains_rootof_node(power->base()) ||
+               solve_contains_rootof_node(power->exponent());
+    }
+    if (auto relation = std::dynamic_pointer_cast<const RelationalNode>(node)) {
+        return solve_contains_rootof_node(relation->left()) ||
+               solve_contains_rootof_node(relation->right());
+    }
+    return false;
+}
+
+static std::vector<std::shared_ptr<SymbolicExpr>> solve_filter_rootof_results(
+    std::vector<std::shared_ptr<SymbolicExpr>> results,
+    const SolveOptions& opts) {
+    if (opts.return_rootof) return results;
+
+    std::vector<std::shared_ptr<SymbolicExpr>> filtered;
+    filtered.reserve(results.size());
+    for (auto& result : results) {
+        if (!result || !solve_contains_rootof_node(lamina::detail::node(result))) {
+            filtered.push_back(std::move(result));
+        }
+    }
+    return filtered;
+}
+
+static std::shared_ptr<const SymbolicNode> solve_simplify_with_nonzero_pivots(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    if (!node) return node;
+
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
+        operands.reserve(add->operands().size());
+        for (const auto& operand : add->operands()) {
+            operands.push_back(solve_simplify_with_nonzero_pivots(operand));
+        }
+        return lamina::detail::make_node<AddNode>(std::move(operands));
+    }
+
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        return lamina::detail::make_node<PowerNode>(
+            solve_simplify_with_nonzero_pivots(power->base()),
+            solve_simplify_with_nonzero_pivots(power->exponent()));
+    }
+
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
+        operands.reserve(multiply->operands().size());
+        for (const auto& operand : multiply->operands()) {
+            auto simplified = solve_simplify_with_nonzero_pivots(operand);
+            if (auto nested = std::dynamic_pointer_cast<const MultiplyNode>(simplified)) {
+                operands.insert(operands.end(), nested->operands().begin(), nested->operands().end());
+            } else {
+                operands.push_back(simplified);
+            }
+        }
+
+        std::vector<bool> consumed(operands.size(), false);
+        for (size_t i = 0; i < operands.size(); ++i) {
+            if (consumed[i]) continue;
+            auto reciprocal = std::dynamic_pointer_cast<const PowerNode>(operands[i]);
+            auto exponent = reciprocal ? std::dynamic_pointer_cast<const NumberNode>(reciprocal->exponent()) : nullptr;
+            if (!reciprocal || !solve_is_minus_one(exponent)) continue;
+
+            for (size_t j = 0; j < operands.size(); ++j) {
+                if (i == j || consumed[j]) continue;
+                if (reciprocal->base()->compare(*operands[j]) == 0) {
+                    consumed[i] = true;
+                    consumed[j] = true;
+                    break;
+                }
+            }
+        }
+
+        std::vector<std::shared_ptr<const SymbolicNode>> remaining;
+        for (size_t i = 0; i < operands.size(); ++i) {
+            if (!consumed[i]) remaining.push_back(operands[i]);
+        }
+        if (remaining.empty()) return lamina::detail::make_node<NumberNode>(BigInt(1));
+        if (remaining.size() == 1) return remaining.front();
+        return lamina::detail::make_node<MultiplyNode>(std::move(remaining));
+    }
+
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> args;
+        args.reserve(function->arguments().size());
+        for (const auto& arg : function->arguments()) {
+            args.push_back(solve_simplify_with_nonzero_pivots(arg));
+        }
+        return lamina::detail::make_node<FunctionNode>(function->type(), std::move(args));
+    }
+
+    return node;
+}
+
+static std::shared_ptr<SymbolicExpr> solve_simplify_solution_value(
+    const std::shared_ptr<SymbolicExpr>& expr) {
+    if (!expr || !lamina::detail::node(expr)) return expr;
+    auto node = solve_simplify_with_nonzero_pivots(lamina::detail::node(expr));
+    return lamina::detail::make_expression_ptr(node)->simplify();
+}
+
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_polynomial_closed(
     const Polynomial<SymbolicPolyCoeff>& poly,
     const std::string& var) {
@@ -79,21 +213,119 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_polynomial_closed(
     return {};
 }
 
-std::vector<std::shared_ptr<SymbolicExpr>> lamina::solve_dispatch(
+lamina::SolveResult lamina::solve_dispatch_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    ComputationContext& context,
+    const SolveOptions& opts) {
+    constexpr const char* operation = "solve_dispatch";
+    if (!expr || !lamina::detail::node(expr)) {
+        return SolveResult::failure(
+            CasErrc::InvalidArgument, "equation expression cannot be null", operation);
+    }
+    if (var.empty()) {
+        return SolveResult::failure(
+            CasErrc::InvalidArgument, "solve variable cannot be empty", operation);
+    }
+
+    auto step = context.consume_steps(1, operation);
+    if (!step) return SolveResult::failure(step.error());
+
+    std::shared_ptr<SymbolicExpr> f_expr = expr;
+    if (auto relation = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(expr))) {
+        if (relation->op() != RelationalNode::Op::EQ) {
+            return SolveResult::failure(
+                CasErrc::InvalidArgument,
+                "solve_dispatch_checked accepts equations, not inequalities",
+                operation);
+        }
+        auto left = lamina::detail::make_expression_ptr(relation->left());
+        auto right = lamina::detail::make_expression_ptr(relation->right());
+        f_expr = SymbolicExpr::add(
+            left, SymbolicExpr::multiply(SymbolicExpr::number(-1), right));
+    }
+
+    auto polynomial = recognize_rational_polynomial(*f_expr, var, context);
+    if (!polynomial) return SolveResult::failure(polynomial.error());
+    if (polynomial.value()) {
+        const auto& exact = *polynomial.value();
+        if (exact.is_zero()) {
+            return SolveResult::success(SolutionSet::universal());
+        }
+        if (exact.degree() == 0) {
+            return SolveResult::success(SolutionSet::empty());
+        }
+
+        std::vector<FiniteSolution> solutions;
+        solutions.reserve(static_cast<std::size_t>(exact.degree()));
+        for (int index = 0; index < exact.degree(); ++index) {
+            auto root_step = context.consume_steps(1, operation);
+            if (!root_step) return SolveResult::failure(root_step.error());
+            solutions.push_back(FiniteSolution{
+                SymbolicExpr::root_of(f_expr, var, index), 1, {}});
+        }
+        return SolveResult::success(SolutionSet::finite(std::move(solutions)));
+    }
+
+    if (!opts.allow_numeric) {
+        return SolveResult::success(SolutionSet::inconclusive(
+            "expression is outside the exact rational-polynomial support domain"));
+    }
+
+    auto numeric = solve_numeric_checked(f_expr, var, context, opts);
+    if (!numeric) return SolveResult::failure(numeric.error());
+    if (numeric.value().empty()) {
+        return SolveResult::success(SolutionSet::inconclusive(
+            "numeric iteration produced no verified candidate"));
+    }
+
+    std::vector<FiniteSolution> solutions;
+    solutions.reserve(numeric.value().size());
+    for (const auto& root : numeric.value()) {
+        solutions.push_back(FiniteSolution{
+            SymbolicExpr::number(root.value), 1, {}});
+    }
+    return SolveResult::success(SolutionSet::finite(std::move(solutions)));
+}
+
+lamina::SolveResult lamina::solve_dispatch_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts) {
+    ComputationContext context;
+    return solve_dispatch_checked(expr, var, context, opts);
+}
 
-    if (!expr) return {};
+lamina::SolveVectorResult lamina::solve_dispatch_vector_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    ComputationContext& context,
+    const SolveOptions& opts) {
+
+    constexpr const char* operation = "solve_dispatch_vector";
+    if (!expr || !lamina::detail::node(expr)) {
+        return SolveVectorResult::failure(CasErrc::InvalidArgument,
+                                          "expression cannot be null",
+                                          operation);
+    }
+    if (var.empty()) {
+        return SolveVectorResult::failure(CasErrc::InvalidArgument,
+                                          "solve variable cannot be empty",
+                                          operation);
+    }
 
     auto simplified = expr->simplify();
-    if (!simplified) return {};
+    if (!simplified || !lamina::detail::node(simplified)) {
+        return SolveVectorResult::failure(CasErrc::InvalidArgument,
+                                          "expression simplification failed",
+                                          operation);
+    }
 
     std::shared_ptr<SymbolicExpr> f_expr = simplified;
-    if (auto rel = std::dynamic_pointer_cast<RelationalNode>(simplified->root)) {
-        if (rel->op == RelationalNode::Op::EQ) {
-            auto L = std::make_shared<SymbolicExpr>(rel->left);
-            auto R = std::make_shared<SymbolicExpr>(rel->right);
+    if (auto rel = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(simplified))) {
+        if (rel->op() == RelationalNode::Op::EQ) {
+            auto L = lamina::detail::make_expression_ptr(rel->left());
+            auto R = lamina::detail::make_expression_ptr(rel->right());
             f_expr = SymbolicExpr::add(L, SymbolicExpr::multiply(R, SymbolicExpr::number(-1)));
         }
     }
@@ -103,57 +335,88 @@ std::vector<std::shared_ptr<SymbolicExpr>> lamina::solve_dispatch(
 
         if (poly.degree() <= 4) {
             auto results = solve_polynomial_closed(poly, var);
-            if (!results.empty()) return results;
+            results = solve_filter_rootof_results(std::move(results), opts);
+            if (!results.empty()) return SolveVectorResult::success(std::move(results));
         }
 
         if (poly.degree() > 4) {
             auto results = solve_by_factoring(poly, var);
-            if (!results.empty()) return results;
+            results = solve_filter_rootof_results(std::move(results), opts);
+            if (!results.empty()) return SolveVectorResult::success(std::move(results));
 
             if (opts.return_rootof) {
-                return make_rootof_solutions(poly, var);
+                return SolveVectorResult::success(make_rootof_solutions(poly, var));
             }
         }
     }
 
     auto trans_results = solve_transcendental(f_expr, var);
-    if (!trans_results.empty()) return trans_results;
+    if (!trans_results.empty()) return SolveVectorResult::success(std::move(trans_results));
 
     /// 混合超越方程路径：含超越函数且换元无法化为多项式时，委托给混合求解器
     if (contains_transcendental_of_var(f_expr, var)) {
         auto sub_result = detect_trans_substitutions(f_expr, var);
         if (sub_result.mappings.empty() || !is_polynomial_after_substitution(sub_result)) {
             if (opts.allow_numeric) {
-                return solve_mixed_transcendental(f_expr, var, opts);
+                auto mixed_results = solve_mixed_transcendental(f_expr, var, opts);
+                if (!mixed_results.empty()) {
+                    return SolveVectorResult::success(std::move(mixed_results));
+                }
+                return SolveVectorResult::failure(
+                    CasErrc::Inconclusive,
+                    "mixed transcendental numeric search produced no verified vector result",
+                    operation);
             }
-            /// allow_numeric 为 false 时不调用数值求解，落入后续逻辑
+            return SolveVectorResult::failure(
+                CasErrc::Inconclusive,
+                "mixed transcendental equation is outside the checked vector support domain",
+                operation);
         }
     }
 
     if (opts.allow_numeric) {
-        auto numeric_roots = solve_numeric(f_expr, var, opts);
-        if (!numeric_roots.empty()) {
+        auto numeric_roots = solve_numeric_checked(f_expr, var, context, opts);
+        if (!numeric_roots) return SolveVectorResult::failure(numeric_roots.error());
+        if (!numeric_roots.value().empty()) {
 
             std::vector<std::shared_ptr<SymbolicExpr>> results;
-            results.reserve(numeric_roots.size());
-            for (const auto& nr : numeric_roots) {
+            results.reserve(numeric_roots.value().size());
+            for (const auto& nr : numeric_roots.value()) {
                 results.push_back(SymbolicExpr::number(nr.value));
             }
-            return results;
+            return SolveVectorResult::success(std::move(results));
         }
     }
 
-    return {};
+    return SolveVectorResult::success({});
+}
+
+lamina::SolveVectorResult lamina::solve_dispatch_vector_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts) {
+    ComputationContext context;
+    return solve_dispatch_vector_checked(expr, var, context, opts);
+}
+
+std::vector<std::shared_ptr<SymbolicExpr>> lamina::solve_dispatch(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts) {
+
+    ComputationContext context;
+    auto result = solve_dispatch_vector_checked(expr, var, context, opts);
+    return result ? result.value() : std::vector<std::shared_ptr<SymbolicExpr>>{};
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var_name) {
     if (!eq) return {};
     auto simplified_eq = eq->simplify();
 
-    if (auto rel = std::dynamic_pointer_cast<RelationalNode>(simplified_eq->root)) {
-        if (rel->op != RelationalNode::Op::EQ) {
-            auto L = std::make_shared<SymbolicExpr>(rel->left);
-            auto R = std::make_shared<SymbolicExpr>(rel->right);
+    if (auto rel = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(simplified_eq))) {
+        if (rel->op() != RelationalNode::Op::EQ) {
+            auto L = lamina::detail::make_expression_ptr(rel->left());
+            auto R = lamina::detail::make_expression_ptr(rel->right());
             auto diff = SymbolicExpr::add(L, SymbolicExpr::multiply(R, SymbolicExpr::number(-1)));
 
             auto poly = symbolic_to_poly<SymbolicPolyCoeff>(diff, var_name);
@@ -171,20 +434,20 @@ std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<S
 
                     try {
                         auto a_simp = a->simplify();
-                        if (auto num_a = std::dynamic_pointer_cast<NumberNode>(a_simp->root)) {
-                            if (std::holds_alternative<double>(num_a->value)) {
-                                 if (std::get<double>(num_a->value) < 0) flip = true;
-                            } else if (std::holds_alternative<BigInt>(num_a->value)) {
-                                 if (std::get<BigInt>(num_a->value).IsNegative()) flip = true;
-                            } else if (std::holds_alternative<Rational>(num_a->value)) {
-                                 if (std::get<Rational>(num_a->value).get_numerator().IsNegative()) flip = true;
+                        if (auto num_a = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(a_simp))) {
+                            if (std::holds_alternative<double>(num_a->value())) {
+                                 if (std::get<double>(num_a->value()) < 0) flip = true;
+                            } else if (std::holds_alternative<BigInt>(num_a->value())) {
+                                 if (std::get<BigInt>(num_a->value()).IsNegative()) flip = true;
+                            } else if (std::holds_alternative<Rational>(num_a->value())) {
+                                 if (std::get<Rational>(num_a->value()).get_numerator().IsNegative()) flip = true;
                             }
                         }
                     } catch(...) {}
 
-                    RelationalNode::Op new_op = rel->op;
+                    RelationalNode::Op new_op = rel->op();
                     if (flip) {
-                        switch(rel->op) {
+                        switch(rel->op()) {
                             case RelationalNode::Op::LT: new_op = RelationalNode::Op::GT; break;
                             case RelationalNode::Op::GT: new_op = RelationalNode::Op::LT; break;
                             case RelationalNode::Op::LEQ: new_op = RelationalNode::Op::GEQ; break;
@@ -194,10 +457,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::solve(std::shared_ptr<S
                     }
 
                     auto rhs = SymbolicExpr::multiply(neg_b, a_inv)->simplify();
-                    auto var_node = std::make_shared<VariableNode>(var_name);
-                    auto res_node = std::make_shared<RelationalNode>(var_node, rhs->root, new_op);
+                    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
+                    auto res_node = lamina::detail::make_node<RelationalNode>(var_node, lamina::detail::node(rhs), new_op);
 
-                    return { std::make_shared<SymbolicExpr>(res_node) };
+                    return { lamina::detail::make_expression_ptr(res_node) };
                 }
             }
             return {};
@@ -240,7 +503,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::
     for(size_t r=0; r<m; ++r) {
         size_t pivot_col = pivot_col_for_row[r];
         if (pivot_col != (size_t)-1) {
-            solution[vars[pivot_col]] = A[r][n];
+            solution[vars[pivot_col]] = solve_simplify_solution_value(A[r][n]);
         }
     }
     return { solution };
@@ -254,17 +517,17 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::determinant(const std::shared_ptr<SymbolicExpr>& mat) {
-    if (!mat || mat->get_type() != Type::Matrix) return SymbolicExpr::number(0);
-    auto mat_node = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    if (!mat_node || mat_node->rows != mat_node->cols) return SymbolicExpr::number(0);
+    if (!mat) return SymbolicExpr::number(0);
+    auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat_node || mat_node->rows() != mat_node->cols()) return SymbolicExpr::number(0);
 
-    size_t n = mat_node->rows;
-    if (n == 1) return std::make_shared<SymbolicExpr>(mat_node->get(0,0));
+    size_t n = mat_node->rows();
+    if (n == 1) return lamina::detail::make_expression_ptr(mat_node->get(0,0));
     if (n == 2) {
-        auto a = std::make_shared<SymbolicExpr>(mat_node->get(0,0));
-        auto b = std::make_shared<SymbolicExpr>(mat_node->get(0,1));
-        auto c = std::make_shared<SymbolicExpr>(mat_node->get(1,0));
-        auto d = std::make_shared<SymbolicExpr>(mat_node->get(1,1));
+        auto a = lamina::detail::make_expression_ptr(mat_node->get(0,0));
+        auto b = lamina::detail::make_expression_ptr(mat_node->get(0,1));
+        auto c = lamina::detail::make_expression_ptr(mat_node->get(1,0));
+        auto d = lamina::detail::make_expression_ptr(mat_node->get(1,1));
         return SymbolicExpr::add(SymbolicExpr::multiply(a,d), SymbolicExpr::multiply(SymbolicExpr::multiply(b,c), SymbolicExpr::number(-1)))->simplify();
     }
 
@@ -272,7 +535,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::determinant(const std::shared_ptr<Sy
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> A(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
         for(size_t i=0; i<n; ++i) {
             for(size_t j=0; j<n; ++j) {
-                A[i][j] = std::make_shared<SymbolicExpr>(mat_node->get(i,j));
+                A[i][j] = lamina::detail::make_expression_ptr(mat_node->get(i,j));
             }
         }
 
@@ -317,7 +580,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::determinant(const std::shared_ptr<Sy
 
     std::vector<std::shared_ptr<SymbolicExpr>> terms;
     for(size_t c=0; c<n; ++c) {
-        auto elem = std::make_shared<SymbolicExpr>(mat_node->get(0,c));
+        auto elem = lamina::detail::make_expression_ptr(mat_node->get(0,c));
         if (elem->is_zero()) continue;
 
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> minor_data;
@@ -325,7 +588,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::determinant(const std::shared_ptr<Sy
             std::vector<std::shared_ptr<SymbolicExpr>> row;
             for(size_t k=0; k<n; ++k) {
                 if (k == c) continue;
-                row.push_back(std::make_shared<SymbolicExpr>(mat_node->get(r,k)));
+                row.push_back(lamina::detail::make_expression_ptr(mat_node->get(r,k)));
             }
             minor_data.push_back(row);
         }
@@ -344,16 +607,17 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::determinant(const std::shared_ptr<Sy
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::charpoly(const std::shared_ptr<SymbolicExpr>& mat, const std::string& lambda_name) {
-    if (!mat || mat->get_type() != Type::Matrix) return SymbolicExpr::number(0);
-    auto mat_node = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    size_t n = mat_node->rows;
+    if (!mat) return SymbolicExpr::number(0);
+    auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat_node) return SymbolicExpr::number(0);
+    size_t n = mat_node->rows();
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> data(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
     auto lambda = SymbolicExpr::variable(lambda_name);
 
     for(size_t i=0; i<n; ++i) {
         for(size_t j=0; j<n; ++j) {
-            auto val = std::make_shared<SymbolicExpr>(mat_node->get(i,j));
+            auto val = lamina::detail::make_expression_ptr(mat_node->get(i,j));
             if (i == j) {
                 data[i][j] = SymbolicExpr::add(val, SymbolicExpr::multiply(lambda, SymbolicExpr::number(-1)));
             } else {
@@ -381,8 +645,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::eigenvalues(const std::shared_ptr<Sy
         }
     }
 
-    std::vector<std::shared_ptr<SymbolicNode>> vec_nodes;
-    for(auto& s : distinct_solutions) vec_nodes.push_back(s->root);
+    std::vector<std::shared_ptr<const SymbolicNode>> vec_nodes;
+    for(auto& s : distinct_solutions) vec_nodes.push_back(lamina::detail::node(s));
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> mat_data;
     mat_data.push_back(distinct_solutions);
@@ -394,19 +658,20 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr
 
     std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr<SymbolicExpr>>>> result;
 
-    if (!evals_expr || (evals_expr->get_type() != SymbolicExpr::Type::Matrix && evals_expr->get_type() != SymbolicExpr::Type::Vector)) {
+    auto mat_node = evals_expr ? std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(evals_expr)) : nullptr;
+    if (!mat_node) {
         return {};
     }
 
-    auto mat_node = std::dynamic_pointer_cast<MatrixNode>(evals_expr->root);
-    size_t num_evals = mat_node->cols;
+    size_t num_evals = mat_node->cols();
 
-    auto A_node = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    size_t n = A_node->rows;
+    auto A_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!A_node) return {};
+    size_t n = A_node->rows();
 
     for(size_t i=0; i<num_evals; ++i) {
         auto lambda_node = mat_node->get(0, i);
-        auto lambda = std::make_shared<SymbolicExpr>(lambda_node);
+        auto lambda = lamina::detail::make_expression_ptr(lambda_node);
 
         std::vector<std::shared_ptr<SymbolicExpr>> equations;
         std::vector<std::string> vars;
@@ -415,7 +680,7 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr
         for(size_t i=0; i<n; ++i) {
             std::vector<std::shared_ptr<SymbolicExpr>> terms;
             for(size_t j=0; j<n; ++j) {
-                auto a_ij = std::make_shared<SymbolicExpr>(A_node->get(i,j));
+                auto a_ij = lamina::detail::make_expression_ptr(A_node->get(i,j));
                 std::shared_ptr<SymbolicExpr> coeff;
                 if (i == j) {
                     coeff = SymbolicExpr::add(a_ij, SymbolicExpr::multiply(lambda, SymbolicExpr::number(-1)));
@@ -495,17 +760,17 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::transpose(const std::shared_ptr<SymbolicExpr>& mat) {
-    if (!mat || (mat->get_type() != Type::Matrix && mat->get_type() != Type::Vector)) return mat;
-
-    auto m_node = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    size_t r = m_node->rows;
-    size_t c = m_node->cols;
+    if (!mat) return mat;
+    auto m_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!m_node) return mat;
+    size_t r = m_node->rows();
+    size_t c = m_node->cols();
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> new_data(c, std::vector<std::shared_ptr<SymbolicExpr>>(r));
 
     for(size_t i=0; i<r; ++i) {
         for(size_t j=0; j<c; ++j) {
-            new_data[j][i] = std::make_shared<SymbolicExpr>(m_node->get(i,j));
+            new_data[j][i] = lamina::detail::make_expression_ptr(m_node->get(i,j));
         }
     }
 
@@ -513,16 +778,16 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::transpose(const std::shared_ptr<Symb
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::rref(const std::shared_ptr<SymbolicExpr>& mat) {
-    if (!mat || (mat->get_type() != Type::Matrix && mat->get_type() != Type::Vector)) return mat;
-
-    auto m_node = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    size_t rows = m_node->rows;
-    size_t cols = m_node->cols;
+    if (!mat) return mat;
+    auto m_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!m_node) return mat;
+    size_t rows = m_node->rows();
+    size_t cols = m_node->cols();
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> data(rows, std::vector<std::shared_ptr<SymbolicExpr>>(cols));
     for(size_t i=0; i<rows; ++i) {
         for(size_t j=0; j<cols; ++j) {
-            data[i][j] = std::make_shared<SymbolicExpr>(m_node->get(i,j));
+            data[i][j] = lamina::detail::make_expression_ptr(m_node->get(i,j));
         }
     }
 
@@ -574,17 +839,17 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::rref(const std::shared_ptr<SymbolicE
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::inverse(const std::shared_ptr<SymbolicExpr>& mat) {
-    if (!mat || mat->get_type() != Type::Matrix) return nullptr;
-
-    auto m_node = std::dynamic_pointer_cast<MatrixNode>(mat->root);
-    size_t n = m_node->rows;
-    if (n != m_node->cols) return nullptr;
+    if (!mat) return nullptr;
+    auto m_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!m_node) return nullptr;
+    size_t n = m_node->rows();
+    if (n != m_node->cols()) return nullptr;
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> aug_data(n, std::vector<std::shared_ptr<SymbolicExpr>>(2*n));
 
     for(size_t i=0; i<n; ++i) {
         for(size_t j=0; j<n; ++j) {
-            aug_data[i][j] = std::make_shared<SymbolicExpr>(m_node->get(i,j));
+            aug_data[i][j] = lamina::detail::make_expression_ptr(m_node->get(i,j));
         }
         for(size_t j=0; j<n; ++j) {
             aug_data[i][n+j] = (i==j ? SymbolicExpr::number(1) : SymbolicExpr::number(0));
@@ -595,17 +860,17 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::inverse(const std::shared_ptr<Symbol
     auto rref_mat = rref(aug_mat);
 
     if (!rref_mat) return nullptr;
-    auto rref_node = std::dynamic_pointer_cast<MatrixNode>(rref_mat->root);
+    auto rref_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(rref_mat));
 
     for(size_t i=0; i<n; ++i) {
-        auto diag = std::make_shared<SymbolicExpr>(rref_node->get(i,i))->simplify();
-        if (!diag->root->is_one()) return nullptr;
+        auto diag = lamina::detail::make_expression_ptr(rref_node->get(i,i))->simplify();
+        if (!lamina::detail::node(diag)->is_one()) return nullptr;
     }
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> inv_data(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
     for(size_t i=0; i<n; ++i) {
         for(size_t j=0; j<n; ++j) {
-             inv_data[i][j] = std::make_shared<SymbolicExpr>(rref_node->get(i, n+j));
+             inv_data[i][j] = lamina::detail::make_expression_ptr(rref_node->get(i, n+j));
         }
     }
 

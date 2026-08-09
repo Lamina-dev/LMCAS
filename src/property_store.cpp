@@ -4,6 +4,7 @@
  */
 
 #include "property_store.hpp"
+#include "symbolic_ast.hpp"
 #include <algorithm>
 #include <limits>
 #include <sstream>
@@ -37,6 +38,61 @@ std::string sign_str(Sign s) {
         case Sign::NonZero:     return "NonZero";
     }
     return "Unknown";
+}
+
+PropertyStoreResult invalid_empty_symbol(const std::string& operation) {
+    return PropertyStoreResult::failure(
+        CasErrc::InvalidArgument, "symbol name must not be empty", operation);
+}
+
+[[noreturn]] void throw_legacy_property_error(const CasError& error) {
+    if (error.code == CasErrc::InvalidArgument) {
+        throw std::invalid_argument(error.message);
+    }
+    if (error.code == CasErrc::ResourceLimit) {
+        throw std::bad_alloc();
+    }
+    throw std::runtime_error(error.message);
+}
+
+template <typename F>
+PropertyStoreResult checked_property_update(PropertyStore& store,
+                                            const std::string& symbol,
+                                            const std::string& operation,
+                                            F&& update) {
+    if (symbol.empty()) {
+        return invalid_empty_symbol(operation);
+    }
+    try {
+        PropertyStore candidate = store;
+        update(candidate);
+        store = std::move(candidate);
+    } catch (const std::bad_alloc&) {
+        return PropertyStoreResult::failure(
+            CasErrc::ResourceLimit, "property-store allocation failed", operation);
+    } catch (const std::invalid_argument& ex) {
+        return PropertyStoreResult::failure(CasErrc::InvalidArgument, ex.what(), operation);
+    } catch (const std::exception& ex) {
+        return PropertyStoreResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
+    }
+    return PropertyStoreResult::success();
+}
+
+PropertyStoreResult validate_property_interval(const Interval& interval,
+                                               ComputationContext& context,
+                                               const std::string& operation) {
+    auto normalized = normalize_intervals_checked({interval}, context);
+    if (!normalized) {
+        return PropertyStoreResult::failure(
+            normalized.error().code, normalized.error().message, operation);
+    }
+    if (normalized.value().empty()) {
+        return PropertyStoreResult::failure(
+            CasErrc::InvalidArgument,
+            "property declaration interval must not be empty",
+            operation);
+    }
+    return PropertyStoreResult::success();
 }
 
 } // anonymous namespace
@@ -182,7 +238,7 @@ void PropertyStore::check_domain_sign_consistency(const std::string& symbol,
 
 // declare_domain
 
-void PropertyStore::declare_domain(const std::string& symbol, Domain domain) {
+void PropertyStore::declare_domain_unchecked(const std::string& symbol, Domain domain) {
     auto& props = properties_[symbol];
 
     // Idempotent: same domain already set -> no-op
@@ -212,9 +268,25 @@ void PropertyStore::declare_domain(const std::string& symbol, Domain domain) {
     props.most_specific_domain = domain;
 }
 
+void PropertyStore::declare_domain(const std::string& symbol, Domain domain) {
+    auto result = declare_domain_checked(symbol, domain);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_domain_checked(
+    const std::string& symbol,
+    Domain domain) {
+    return checked_property_update(*this, symbol, "declare_domain",
+        [&](PropertyStore& candidate) {
+            candidate.declare_domain_unchecked(symbol, domain);
+        });
+}
+
 // declare_sign
 
-void PropertyStore::declare_sign(const std::string& symbol, Sign sign) {
+void PropertyStore::declare_sign_unchecked(const std::string& symbol, Sign sign) {
     auto& props = properties_[symbol];
 
     // Idempotent: if sign already present, no-op
@@ -273,9 +345,25 @@ void PropertyStore::declare_sign(const std::string& symbol, Sign sign) {
     }
 }
 
+void PropertyStore::declare_sign(const std::string& symbol, Sign sign) {
+    auto result = declare_sign_checked(symbol, sign);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_sign_checked(
+    const std::string& symbol,
+    Sign sign) {
+    return checked_property_update(*this, symbol, "declare_sign",
+        [&](PropertyStore& candidate) {
+            candidate.declare_sign_unchecked(symbol, sign);
+        });
+}
+
 // declare_parity
 
-void PropertyStore::declare_parity(const std::string& symbol, Parity parity) {
+void PropertyStore::declare_parity_unchecked(const std::string& symbol, Parity parity) {
     auto& props = properties_[symbol];
 
     // Idempotent: same parity already set -> no-op
@@ -303,10 +391,27 @@ void PropertyStore::declare_parity(const std::string& symbol, Parity parity) {
     props.parity = parity;
 }
 
+void PropertyStore::declare_parity(const std::string& symbol, Parity parity) {
+    auto result = declare_parity_checked(symbol, parity);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_parity_checked(
+    const std::string& symbol,
+    Parity parity) {
+    return checked_property_update(*this, symbol, "declare_parity",
+        [&](PropertyStore& candidate) {
+            candidate.declare_parity_unchecked(symbol, parity);
+        });
+}
+
 // declare_bounded
 
-void PropertyStore::declare_bounded(const std::string& symbol, Boundedness bounded,
-                                    std::optional<Interval> bounds) {
+void PropertyStore::declare_bounded_unchecked(const std::string& symbol,
+                                              Boundedness bounded,
+                                              std::optional<Interval> bounds) {
     auto& props = properties_[symbol];
 
     // Idempotent: same boundedness already set -> no-op
@@ -332,6 +437,25 @@ void PropertyStore::declare_bounded(const std::string& symbol, Boundedness bound
     if (bounds.has_value()) {
         props.bounds = bounds;
     }
+}
+
+void PropertyStore::declare_bounded(const std::string& symbol,
+                                    Boundedness bounded,
+                                    std::optional<Interval> bounds) {
+    auto result = declare_bounded_checked(symbol, bounded, std::move(bounds));
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_bounded_checked(
+    const std::string& symbol,
+    Boundedness bounded,
+    std::optional<Interval> bounds) {
+    return checked_property_update(*this, symbol, "declare_bounded",
+        [&](PropertyStore& candidate) {
+            candidate.declare_bounded_unchecked(symbol, bounded, bounds);
+        });
 }
 
 // Query methods
@@ -397,49 +521,42 @@ bool PropertyStore::has_domain(const std::string& symbol, Domain domain) const {
 
 // Interval overlap detection (private helper)
 
-/**
- * Helper: returns true if two intervals have a non-empty intersection.
- * Uses numeric comparison of endpoints.
- */
-static bool intervals_overlap_impl(const Interval& a, const Interval& b) {
-    // If either is empty, no overlap.
-    if (a.is_empty() || b.is_empty()) return false;
-
-    // If both are entire line, they overlap.
-    if (a.is_entire_line() || b.is_entire_line()) return true;
-
-    // Get numeric bounds for comparison.
-    auto get_lower = [](const Interval& iv) -> double {
-        if (iv.lower.is_neg_infinity) return -std::numeric_limits<double>::infinity();
-        if (iv.lower.value) return iv.lower.value->to_numeric();
-        return 0.0;
-    };
-    auto get_upper = [](const Interval& iv) -> double {
-        if (iv.upper.is_pos_infinity) return std::numeric_limits<double>::infinity();
-        if (iv.upper.value) return iv.upper.value->to_numeric();
-        return 0.0;
-    };
-
-    double a_lo = get_lower(a), a_hi = get_upper(a);
-    double b_lo = get_lower(b), b_hi = get_upper(b);
-
-    // No overlap if one ends before the other starts.
-    if (a_hi < b_lo || b_hi < a_lo) return false;
-
-    // Boundary cases: if they touch at a single point, check open/closed.
-    if (a_hi == b_lo) {
-        // Overlap only if a's upper is closed AND b's lower is closed.
-        return !a.upper.is_open && !b.lower.is_open;
+static bool endpoints_equivalent(const Endpoint& left, const Endpoint& right) {
+    if (left.is_open != right.is_open ||
+        left.is_neg_infinity != right.is_neg_infinity ||
+        left.is_pos_infinity != right.is_pos_infinity) {
+        return false;
     }
-    if (b_hi == a_lo) {
-        return !b.upper.is_open && !a.lower.is_open;
+    if (!left.value || !right.value) {
+        return left.value == right.value;
     }
-
-    return true;
+    if (!lamina::detail::node(left.value) || !lamina::detail::node(right.value)) {
+        return lamina::detail::node(left.value) == lamina::detail::node(right.value);
+    }
+    return lamina::detail::node(left.value)->compare(*lamina::detail::node(right.value)) == 0;
 }
 
-bool PropertyStore::intervals_overlap(const Interval& a, const Interval& b) const {
-    return intervals_overlap_impl(a, b);
+static bool intervals_equivalent(const Interval& left, const Interval& right) {
+    return endpoints_equivalent(left.lower, right.lower) &&
+           endpoints_equivalent(left.upper, right.upper);
+}
+
+/**
+ * Helper: returns true if two intervals have a non-empty intersection.
+ * Endpoint ordering is delegated to checked interval operations; unsupported
+ * endpoints are treated conservatively as not proven to overlap.
+ */
+static Result<bool> intervals_overlap_checked_impl(
+    const Interval& a,
+    const Interval& b,
+    ComputationContext& context) {
+    auto left = IntervalUnion::from_intervals_checked({a}, context);
+    if (!left) return Result<bool>::failure(left.error());
+    auto right = IntervalUnion::from_intervals_checked({b}, context);
+    if (!right) return Result<bool>::failure(right.error());
+    auto intersection = left.value().intersect_checked(right.value(), context);
+    if (!intersection) return Result<bool>::failure(intersection.error());
+    return Result<bool>::success(!intersection.value().is_empty());
 }
 
 /**
@@ -447,141 +564,328 @@ bool PropertyStore::intervals_overlap(const Interval& a, const Interval& b) cons
  * outer covers inner iff outer.lower <= inner.lower AND inner.upper <= outer.upper
  * (with appropriate open/closed boundary handling).
  */
-static bool interval_covers_impl(const Interval& outer, const Interval& inner) {
-    if (inner.is_empty()) return true;
-    if (outer.is_entire_line()) return true;
-    if (outer.is_empty()) return false;
+static Result<bool> interval_covers_checked_impl(
+    const Interval& outer,
+    const Interval& inner,
+    ComputationContext& context) {
+    auto normalized_outer = IntervalUnion::from_intervals_checked({outer}, context);
+    if (!normalized_outer) {
+        return Result<bool>::failure(normalized_outer.error());
+    }
+    auto normalized_inner = IntervalUnion::from_intervals_checked({inner}, context);
+    if (!normalized_inner) {
+        return Result<bool>::failure(normalized_inner.error());
+    }
+    if (normalized_inner.value().is_empty()) return Result<bool>::success(true);
+    if (normalized_outer.value().is_empty()) return Result<bool>::success(false);
 
-    auto get_lower = [](const Interval& iv) -> double {
-        if (iv.lower.is_neg_infinity) return -std::numeric_limits<double>::infinity();
-        if (iv.lower.value) return iv.lower.value->to_numeric();
-        return 0.0;
-    };
-    auto get_upper = [](const Interval& iv) -> double {
-        if (iv.upper.is_pos_infinity) return std::numeric_limits<double>::infinity();
-        if (iv.upper.value) return iv.upper.value->to_numeric();
-        return 0.0;
-    };
-
-    double o_lo = get_lower(outer), o_hi = get_upper(outer);
-    double i_lo = get_lower(inner), i_hi = get_upper(inner);
-
-    // Check lower bound: outer.lower must be <= inner.lower
-    if (o_lo > i_lo) return false;
-    if (o_lo == i_lo && outer.lower.is_open && !inner.lower.is_open) return false;
-
-    // Check upper bound: outer.upper must be >= inner.upper
-    if (o_hi < i_hi) return false;
-    if (o_hi == i_hi && outer.upper.is_open && !inner.upper.is_open) return false;
-
-    return true;
-}
-
-bool PropertyStore::interval_covers(const Interval& outer, const Interval& inner) const {
-    return interval_covers_impl(outer, inner);
+    auto intersection = normalized_outer.value().intersect_checked(
+        normalized_inner.value(), context);
+    if (!intersection) {
+        return Result<bool>::failure(intersection.error());
+    }
+    const auto& intersection_intervals = intersection.value().intervals();
+    const auto& inner_intervals = normalized_inner.value().intervals();
+    if (intersection_intervals.size() != inner_intervals.size()) {
+        return Result<bool>::success(false);
+    }
+    for (std::size_t i = 0; i < inner_intervals.size(); ++i) {
+        if (!intervals_equivalent(intersection_intervals[i], inner_intervals[i])) {
+            return Result<bool>::success(false);
+        }
+    }
+    return Result<bool>::success(true);
 }
 
 // Continuity and differentiability declarations
 
 void PropertyStore::declare_continuous(const std::string& symbol, const Interval& interval) {
-    auto& props = properties_[symbol];
-
-    // Check for contradictions with existing declarations.
-    // Declaring continuous-only on an interval that overlaps with an existing
-    // differentiable declaration is a downgrade contradiction.
-    for (const auto& decl : props.continuity_decls) {
-        if (intervals_overlap_impl(decl.interval, interval)) {
-            if (decl.is_differentiable) {
-                // Existing differentiable declaration on overlapping interval.
-                // Declaring continuous-only would be a downgrade — contradiction.
-                throw std::invalid_argument(
-                    "Contradiction for symbol '" + symbol +
-                    "': cannot declare continuous-only on interval overlapping "
-                    "an existing differentiable declaration");
-            }
-            // Existing continuous-only on overlapping interval — idempotent, no conflict.
-        }
+    auto result = declare_continuous_checked(symbol, interval);
+    if (!result) {
+        throw_legacy_property_error(result.error());
     }
+}
 
-    // Store the declaration.
-    props.continuity_decls.push_back({interval, false});
+PropertyStoreResult PropertyStore::declare_continuous_checked(
+    const std::string& symbol,
+    const Interval& interval,
+    ComputationContext& context) {
+    constexpr const char* operation = "declare_continuous";
+    if (symbol.empty()) return invalid_empty_symbol(operation);
+    auto valid = validate_property_interval(interval, context, operation);
+    if (!valid) return valid;
+
+    try {
+        PropertyStore candidate = *this;
+        auto& declarations = candidate.properties_[symbol].continuity_decls;
+        for (const auto& declaration : declarations) {
+            if (!declaration.is_differentiable &&
+                intervals_equivalent(declaration.interval, interval)) {
+                return PropertyStoreResult::success();
+            }
+            auto overlap = intervals_overlap_checked_impl(
+                declaration.interval, interval, context);
+            if (!overlap) {
+                return PropertyStoreResult::failure(
+                    overlap.error().code, overlap.error().message, operation);
+            }
+            if (overlap.value() && declaration.is_differentiable) {
+                return PropertyStoreResult::failure(
+                    CasErrc::InvalidArgument,
+                    "Contradiction for symbol '" + symbol +
+                        "': continuous-only declaration overlaps an existing "
+                        "differentiable declaration",
+                    operation);
+            }
+        }
+        declarations.push_back({interval, false});
+        *this = std::move(candidate);
+    } catch (const std::bad_alloc&) {
+        return PropertyStoreResult::failure(
+            CasErrc::ResourceLimit, "property-store allocation failed", operation);
+    } catch (const std::exception& ex) {
+        return PropertyStoreResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+    return PropertyStoreResult::success();
+}
+
+PropertyStoreResult PropertyStore::declare_continuous_checked(
+    const std::string& symbol,
+    const Interval& interval) {
+    ComputationContext context;
+    return declare_continuous_checked(symbol, interval, context);
 }
 
 void PropertyStore::declare_differentiable(const std::string& symbol, const Interval& interval) {
-    auto& props = properties_[symbol];
+    auto result = declare_differentiable_checked(symbol, interval);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
 
-    // Check for contradictions with existing declarations.
-    // Declaring differentiable on an interval that overlaps with an existing
-    // continuous-only declaration is an upgrade — that's fine.
-    // Declaring differentiable on an interval that overlaps with an existing
-    // differentiable declaration is idempotent — also fine.
-    // No contradiction cases for upgrading to differentiable.
+PropertyStoreResult PropertyStore::declare_differentiable_checked(
+    const std::string& symbol,
+    const Interval& interval,
+    ComputationContext& context) {
+    constexpr const char* operation = "declare_differentiable";
+    if (symbol.empty()) return invalid_empty_symbol(operation);
+    auto valid = validate_property_interval(interval, context, operation);
+    if (!valid) return valid;
 
-    // Store the differentiable declaration (implies continuous).
-    props.continuity_decls.push_back({interval, true});
+    try {
+        PropertyStore candidate = *this;
+        auto& declarations = candidate.properties_[symbol].continuity_decls;
+        for (const auto& declaration : declarations) {
+            if (declaration.is_differentiable &&
+                intervals_equivalent(declaration.interval, interval)) {
+                return PropertyStoreResult::success();
+            }
+        }
+        declarations.push_back({interval, true});
+        *this = std::move(candidate);
+    } catch (const std::bad_alloc&) {
+        return PropertyStoreResult::failure(
+            CasErrc::ResourceLimit, "property-store allocation failed", operation);
+    } catch (const std::exception& ex) {
+        return PropertyStoreResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+    return PropertyStoreResult::success();
+}
+
+PropertyStoreResult PropertyStore::declare_differentiable_checked(
+    const std::string& symbol,
+    const Interval& interval) {
+    ComputationContext context;
+    return declare_differentiable_checked(symbol, interval, context);
 }
 
 bool PropertyStore::is_continuous(const std::string& symbol, const Interval& interval) const {
+    auto result = is_continuous_checked(symbol, interval);
+    return result && result.value();
+}
+
+Result<bool> PropertyStore::is_continuous_checked(
+    const std::string& symbol,
+    const Interval& interval,
+    ComputationContext& context) const {
+    constexpr const char* operation = "is_continuous";
+    if (symbol.empty()) {
+        return Result<bool>::failure(
+            CasErrc::InvalidArgument, "symbol name must not be empty", operation);
+    }
+    auto valid = validate_property_interval(interval, context, operation);
+    if (!valid) return Result<bool>::failure(valid.error());
+
     auto it = properties_.find(symbol);
     if (it == properties_.end()) {
-        return false;
+        return Result<bool>::success(false);
     }
 
-    // A symbol is continuous on the queried interval if any stored declaration
-    // (continuous or differentiable) covers the queried interval.
     for (const auto& decl : it->second.continuity_decls) {
-        if (interval_covers_impl(decl.interval, interval)) {
-            return true;
+        auto covers = interval_covers_checked_impl(decl.interval, interval, context);
+        if (!covers) {
+            return Result<bool>::failure(
+                covers.error().code, covers.error().message, operation);
         }
+        if (covers.value()) return Result<bool>::success(true);
     }
+    return Result<bool>::success(false);
+}
 
-    return false;
+Result<bool> PropertyStore::is_continuous_checked(
+    const std::string& symbol,
+    const Interval& interval) const {
+    ComputationContext context;
+    return is_continuous_checked(symbol, interval, context);
 }
 
 bool PropertyStore::is_differentiable(const std::string& symbol, const Interval& interval) const {
+    auto result = is_differentiable_checked(symbol, interval);
+    return result && result.value();
+}
+
+Result<bool> PropertyStore::is_differentiable_checked(
+    const std::string& symbol,
+    const Interval& interval,
+    ComputationContext& context) const {
+    constexpr const char* operation = "is_differentiable";
+    if (symbol.empty()) {
+        return Result<bool>::failure(
+            CasErrc::InvalidArgument, "symbol name must not be empty", operation);
+    }
+    auto valid = validate_property_interval(interval, context, operation);
+    if (!valid) return Result<bool>::failure(valid.error());
+
     auto it = properties_.find(symbol);
     if (it == properties_.end()) {
-        return false;
+        return Result<bool>::success(false);
     }
 
-    // A symbol is differentiable on the queried interval only if a differentiable
-    // declaration covers the queried interval.
     for (const auto& decl : it->second.continuity_decls) {
-        if (decl.is_differentiable && interval_covers_impl(decl.interval, interval)) {
-            return true;
+        if (!decl.is_differentiable) continue;
+        auto covers = interval_covers_checked_impl(decl.interval, interval, context);
+        if (!covers) {
+            return Result<bool>::failure(
+                covers.error().code, covers.error().message, operation);
         }
+        if (covers.value()) return Result<bool>::success(true);
     }
+    return Result<bool>::success(false);
+}
 
-    return false;
+Result<bool> PropertyStore::is_differentiable_checked(
+    const std::string& symbol,
+    const Interval& interval) const {
+    ComputationContext context;
+    return is_differentiable_checked(symbol, interval, context);
 }
 
 // Monotonicity declarations
 
 void PropertyStore::declare_monotonicity(const std::string& symbol, const std::string& variable,
                                          const Interval& interval, Monotonicity mono) {
-    auto& props = properties_[symbol];
-    props.monotonicity_decls.push_back({variable, interval, mono});
+    auto result = declare_monotonicity_checked(symbol, variable, interval, mono);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_monotonicity_checked(
+    const std::string& symbol,
+    const std::string& variable,
+    const Interval& interval,
+    Monotonicity mono,
+    ComputationContext& context) {
+    constexpr const char* operation = "declare_monotonicity";
+    if (symbol.empty()) return invalid_empty_symbol(operation);
+    if (variable.empty()) {
+        return PropertyStoreResult::failure(
+            CasErrc::InvalidArgument, "variable name must not be empty", operation);
+    }
+    auto valid = validate_property_interval(interval, context, operation);
+    if (!valid) return valid;
+
+    try {
+        PropertyStore candidate = *this;
+        auto& declarations = candidate.properties_[symbol].monotonicity_decls;
+        for (const auto& declaration : declarations) {
+            if (declaration.variable == variable && declaration.type == mono &&
+                intervals_equivalent(declaration.interval, interval)) {
+                return PropertyStoreResult::success();
+            }
+        }
+        declarations.push_back({variable, interval, mono});
+        *this = std::move(candidate);
+    } catch (const std::bad_alloc&) {
+        return PropertyStoreResult::failure(
+            CasErrc::ResourceLimit, "property-store allocation failed", operation);
+    } catch (const std::exception& ex) {
+        return PropertyStoreResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+    return PropertyStoreResult::success();
+}
+
+PropertyStoreResult PropertyStore::declare_monotonicity_checked(
+    const std::string& symbol,
+    const std::string& variable,
+    const Interval& interval,
+    Monotonicity mono) {
+    ComputationContext context;
+    return declare_monotonicity_checked(symbol, variable, interval, mono, context);
 }
 
 Monotonicity PropertyStore::get_monotonicity(const std::string& symbol, const std::string& variable,
                                              const Interval& interval) const {
+    auto result = get_monotonicity_checked(symbol, variable, interval);
+    return result ? result.value() : Monotonicity::Unknown;
+}
+
+Result<Monotonicity> PropertyStore::get_monotonicity_checked(
+    const std::string& symbol,
+    const std::string& variable,
+    const Interval& interval,
+    ComputationContext& context) const {
+    constexpr const char* operation = "get_monotonicity";
+    if (symbol.empty() || variable.empty()) {
+        return Result<Monotonicity>::failure(
+            CasErrc::InvalidArgument,
+            symbol.empty() ? "symbol name must not be empty" : "variable name must not be empty",
+            operation);
+    }
+    auto valid = validate_property_interval(interval, context, operation);
+    if (!valid) return Result<Monotonicity>::failure(valid.error());
+
     auto it = properties_.find(symbol);
     if (it == properties_.end()) {
-        return Monotonicity::Unknown;
+        return Result<Monotonicity>::success(Monotonicity::Unknown);
     }
 
     for (const auto& decl : it->second.monotonicity_decls) {
-        if (decl.variable == variable && interval_covers_impl(decl.interval, interval)) {
-            return decl.type;
+        if (decl.variable != variable) continue;
+        auto covers = interval_covers_checked_impl(decl.interval, interval, context);
+        if (!covers) {
+            return Result<Monotonicity>::failure(
+                covers.error().code, covers.error().message, operation);
         }
+        if (covers.value()) return Result<Monotonicity>::success(decl.type);
     }
+    return Result<Monotonicity>::success(Monotonicity::Unknown);
+}
 
-    return Monotonicity::Unknown;
+Result<Monotonicity> PropertyStore::get_monotonicity_checked(
+    const std::string& symbol,
+    const std::string& variable,
+    const Interval& interval) const {
+    ComputationContext context;
+    return get_monotonicity_checked(symbol, variable, interval, context);
 }
 
 // Transcendental classification
 
-void PropertyStore::declare_transcendental(const std::string& symbol) {
+void PropertyStore::declare_transcendental_unchecked(const std::string& symbol) {
     auto& props = properties_[symbol];
 
     // Idempotent: already transcendental → no-op
@@ -607,6 +911,21 @@ void PropertyStore::declare_transcendental(const std::string& symbol) {
     props.transcendental = true;
 }
 
+void PropertyStore::declare_transcendental(const std::string& symbol) {
+    auto result = declare_transcendental_checked(symbol);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_transcendental_checked(
+    const std::string& symbol) {
+    return checked_property_update(*this, symbol, "declare_transcendental",
+        [&](PropertyStore& candidate) {
+            candidate.declare_transcendental_unchecked(symbol);
+        });
+}
+
 bool PropertyStore::is_transcendental(const std::string& symbol) const {
     auto it = properties_.find(symbol);
     if (it == properties_.end()) {
@@ -617,7 +936,7 @@ bool PropertyStore::is_transcendental(const std::string& symbol) const {
 
 // Finiteness classification
 
-void PropertyStore::declare_finiteness(const std::string& symbol, Finiteness f) {
+void PropertyStore::declare_finiteness_unchecked(const std::string& symbol, Finiteness f) {
     auto& props = properties_[symbol];
 
     // Idempotent: same value → no-op
@@ -642,8 +961,24 @@ void PropertyStore::declare_finiteness(const std::string& symbol, Finiteness f) 
 
     // Implication: Finite → Bounded
     if (f == Finiteness::Finite) {
-        declare_bounded(symbol, Boundedness::Bounded);
+        declare_bounded_unchecked(symbol, Boundedness::Bounded, std::nullopt);
     }
+}
+
+void PropertyStore::declare_finiteness(const std::string& symbol, Finiteness f) {
+    auto result = declare_finiteness_checked(symbol, f);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_finiteness_checked(
+    const std::string& symbol,
+    Finiteness f) {
+    return checked_property_update(*this, symbol, "declare_finiteness",
+        [&](PropertyStore& candidate) {
+            candidate.declare_finiteness_unchecked(symbol, f);
+        });
 }
 
 Finiteness PropertyStore::get_finiteness(const std::string& symbol) const {
@@ -656,7 +991,7 @@ Finiteness PropertyStore::get_finiteness(const std::string& symbol) const {
 
 // Matrix definiteness
 
-void PropertyStore::declare_definiteness(const std::string& symbol, Definiteness d) {
+void PropertyStore::declare_definiteness_unchecked(const std::string& symbol, Definiteness d) {
     auto& props = properties_[symbol];
 
     // Idempotent: same value → no-op
@@ -734,6 +1069,22 @@ void PropertyStore::declare_definiteness(const std::string& symbol, Definiteness
     props.definiteness = d;
 }
 
+void PropertyStore::declare_definiteness(const std::string& symbol, Definiteness d) {
+    auto result = declare_definiteness_checked(symbol, d);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_definiteness_checked(
+    const std::string& symbol,
+    Definiteness d) {
+    return checked_property_update(*this, symbol, "declare_definiteness",
+        [&](PropertyStore& candidate) {
+            candidate.declare_definiteness_unchecked(symbol, d);
+        });
+}
+
 Definiteness PropertyStore::get_definiteness(const std::string& symbol) const {
     auto it = properties_.find(symbol);
     if (it == properties_.end()) {
@@ -744,14 +1095,36 @@ Definiteness PropertyStore::get_definiteness(const std::string& symbol) const {
 
 // Periodicity
 
-void PropertyStore::declare_periodic(const std::string& symbol,
-                                     const std::shared_ptr<SymbolicExpr>& period) {
+void PropertyStore::declare_periodic_unchecked(
+    const std::string& symbol,
+    const std::shared_ptr<SymbolicExpr>& period) {
     if (!period) {
         throw std::invalid_argument(
             "declare_periodic: period must not be null for symbol '" + symbol + "'");
     }
     auto& props = properties_[symbol];
     props.period = period;
+}
+
+void PropertyStore::declare_periodic(const std::string& symbol,
+                                     const std::shared_ptr<SymbolicExpr>& period) {
+    auto result = declare_periodic_checked(symbol, period);
+    if (!result) {
+        throw_legacy_property_error(result.error());
+    }
+}
+
+PropertyStoreResult PropertyStore::declare_periodic_checked(
+    const std::string& symbol,
+    const std::shared_ptr<SymbolicExpr>& period) {
+    if (!period) {
+        return PropertyStoreResult::failure(
+            CasErrc::InvalidArgument, "period must not be null", "declare_periodic");
+    }
+    return checked_property_update(*this, symbol, "declare_periodic",
+        [&](PropertyStore& candidate) {
+            candidate.declare_periodic_unchecked(symbol, period);
+        });
 }
 
 std::optional<std::shared_ptr<SymbolicExpr>> PropertyStore::get_period(

@@ -266,9 +266,6 @@ void test_multiple_constraints() {
     EXPECT_TRUE(result.constraints.size() == 2, "should detect 2 constraints (Pythagorean + inverse)");
 }
 
-// ============================================================
-// 表达式替换测试
-// ============================================================
 
 void test_substitution_sin_plus_x() {
     TEST_CASE("substitution: sin(x) + x → u0 + x");
@@ -328,9 +325,6 @@ void test_substitution_no_transcendental() {
     EXPECT_EQ_STR(poly_str, orig_str, "poly_expr should equal original expression");
 }
 
-// ============================================================
-// 多项式构造测试 (Task 2.1)
-// ============================================================
 
 void test_build_poly_single_indeterminate() {
     TEST_CASE("tf_build_polynomial: single indeterminate u0^2 + u0 + 1");
@@ -488,9 +482,6 @@ void test_build_poly_non_polynomial_fails() {
     EXPECT_FALSE(result.success, "non-polynomial expression should fail");
 }
 
-// ============================================================
-// 多项式验证测试 (Task 2.2)
-// ============================================================
 
 void test_validate_valid_polynomial() {
     TEST_CASE("validation: valid polynomial u0^2 + 3*u0 - 2 passes");
@@ -629,9 +620,6 @@ void test_validate_valid_multivariate_polynomial() {
     EXPECT_TRUE(result.success, "valid multivariate polynomial should pass validation");
 }
 
-// ============================================================
-// 无平方因子预处理测试 (Task 2.3)
-// ============================================================
 
 void test_square_free_already_square_free() {
     TEST_CASE("tf_square_free: already square-free polynomial x^2 - 1");
@@ -713,9 +701,6 @@ void test_square_free_zero_polynomial() {
     EXPECT_TRUE(result.square_free.is_zero(), "square-free part of zero is zero");
 }
 
-// ============================================================
-// Berlekamp Q 矩阵构造测试 (Task 3.2)
-// ============================================================
 
 void test_berlekamp_linear_poly() {
     TEST_CASE("berlekamp_factor: linear polynomial x + 1 → single factor");
@@ -818,9 +803,6 @@ void test_berlekamp_specified_prime() {
     EXPECT_TRUE(result.factors.size() >= 1, "should return at least 1 factor");
 }
 
-// ============================================================
-// 零空间计算测试 (Task 3.3)
-// ============================================================
 
 void test_null_space_x2_minus_1_mod3() {
     TEST_CASE("null space: x^2 - 1 mod 3 → dim = 2 (two factors)");
@@ -916,9 +898,6 @@ void test_null_space_basis_vectors_in_kernel() {
     }
 }
 
-// ============================================================
-// 因子分裂测试 (Task 3.4)
-// ============================================================
 
 void test_split_x2_minus_1_mod3() {
     TEST_CASE("factor splitting: x^2 - 1 mod 3 → (x+2)(x+1) in F_3");
@@ -1044,9 +1023,6 @@ void test_split_x4_minus_1_mod5() {
     EXPECT_TRUE(total_deg == 4, "total degree should be 4");
 }
 
-// ============================================================
-// Zassenhaus 因子组合测试 (Task 5.1)
-// ============================================================
 
 void test_zassenhaus_single_factor() {
     TEST_CASE("zassenhaus_combine: single lifted factor → returns original poly");
@@ -1201,9 +1177,6 @@ void test_zassenhaus_quadratic_times_linear() {
     }
 }
 
-// ============================================================
-// Zassenhaus 早期终止测试 (Task 5.3)
-// ============================================================
 
 void test_zassenhaus_early_termination_irreducible() {
     TEST_CASE("zassenhaus early termination: irreducible polynomial (all subsets checked)");
@@ -1332,9 +1305,6 @@ void test_zassenhaus_early_termination_degree_one_input() {
     EXPECT_TRUE(result[0].degree() == 1, "factor should be linear");
 }
 
-// ============================================================
-// Zassenhaus 有理重构测试 (Task 5.2)
-// ============================================================
 
 void test_zassenhaus_rational_reconstruction_integer_coeffs() {
     TEST_CASE("zassenhaus_combine with rational_reconstruction: integer coefficients still work");
@@ -1438,9 +1408,6 @@ void test_zassenhaus_rational_reconstruction_with_rational_poly() {
     }
 }
 
-// ============================================================
-// LLL 剪枝路径测试 (Task 5.4)
-// ============================================================
 
 void test_zassenhaus_pruned_path_triggered() {
     TEST_CASE("zassenhaus_combine: pruned path triggered for >15 factors");
@@ -1511,9 +1478,6 @@ void test_zassenhaus_pruned_path_correctness() {
     }
 }
 
-// ============================================================
-// 逆换元测试 (Task 6.1)
-// ============================================================
 
 void test_back_substitute_u0_plus_x_to_sin_x_plus_x() {
     TEST_CASE("back-substitution: u0 + x → sin(x) + x (mapping u0 → sin(x))");
@@ -1701,9 +1665,6 @@ void test_back_substitute_roundtrip() {
         "roundtrip should contain cos");
 }
 
-// ============================================================
-// 因子化简与常数提取测试 (Task 6.2)
-// ============================================================
 
 void test_simplify_factors_extract_constant_from_product() {
     TEST_CASE("tf_simplify_factors: [2*sin(x), x+1] → [2, sin(x), x+1]");
@@ -1844,9 +1805,6 @@ void test_simplify_factors_simplify_called() {
     EXPECT_TRUE(found_x, "x + 0 should simplify to x");
 }
 
-// ============================================================
-// 乘积结构检测测试 (Task 7.1)
-// ============================================================
 
 void test_mult_structure_x_times_sin_x() {
     TEST_CASE("multiplicative structure: x * sin(x) → [x, sin(x)]");
@@ -1913,9 +1871,6 @@ void test_mult_structure_sum_not_product() {
     EXPECT_TRUE(factors.size() == 1, "sum expression should not be split by multiplicative detection");
 }
 
-// ============================================================
-// 线性不可约检测测试 (Task 7.2)
-// ============================================================
 
 void test_linear_irreducible_sin_plus_x() {
     TEST_CASE("linear irreducibility: sin(x) + x → irreducible");
@@ -1994,9 +1949,6 @@ void test_linear_irreducible_sin_times_x_not_sum() {
     EXPECT_TRUE(factors.size() == 2, "sin(x) * x should be split into 2 factors by multiplicative detection");
 }
 
-// ============================================================
-// 指数分离测试 (Task 7.3)
-// ============================================================
 
 void test_exp_separation_exp_x_times_x_plus_exp_x() {
     TEST_CASE("exponential separation: exp(x)*x + exp(x) → [exp(x), x+1]");
@@ -2047,7 +1999,6 @@ void test_exp_separation_product_not_sum() {
     TEST_CASE("exponential separation: exp(x) * sin(x) → handled by multiplicative detection, not exp separation");
 
     auto x = SymbolicExpr::variable("x");
-    // exp(x) * sin(x) — already a product, handled by task 7.1
     auto expr = SymbolicExpr::multiply(SymbolicExpr::exp(x), SymbolicExpr::sin(x));
 
     auto factors = factor_transcendental(expr, "x");
@@ -2087,9 +2038,6 @@ void test_exp_separation_three_terms() {
     EXPECT_TRUE(has_exp, "should contain exp(x) as a factor");
 }
 
-// ============================================================
-// Task 7.4: 毕达哥拉斯恒等式化简测试
-// ============================================================
 
 void test_pythagorean_sin2_cos2_to_1() {
     TEST_CASE("Pythagorean simplification: sin²(x) + cos²(x) → 1");
@@ -2209,9 +2157,6 @@ void test_pythagorean_no_matching_cos() {
     EXPECT_TRUE(has_sin, "sin²(x) + x should remain unchanged (no matching cos²)");
 }
 
-// ============================================================
-// 完整管线端到端测试 (Task 8.4)
-// ============================================================
 
 void test_full_pipeline_sin2_minus_x2() {
     TEST_CASE("full pipeline: sin²(x) - x² = (sin(x)+x)(sin(x)-x)");
@@ -2305,7 +2250,6 @@ int main() {
     test_substitution_sin_squared_minus_x_squared();
     test_substitution_no_transcendental();
 
-    // Task 2.1: 多项式构造测试
     test_build_poly_single_indeterminate();
     test_build_poly_single_indeterminate_with_rational_coeffs();
     test_build_poly_constant_expression();
@@ -2315,7 +2259,6 @@ int main() {
     test_build_poly_from_substitution_result();
     test_build_poly_non_polynomial_fails();
 
-    // Task 2.2: 多项式验证测试
     test_validate_valid_polynomial();
     test_validate_remaining_sin_fails();
     test_validate_remaining_cos_fails();
@@ -2326,7 +2269,6 @@ int main() {
     test_validate_transcendental_in_original_var_fails();
     test_validate_valid_multivariate_polynomial();
 
-    // Task 2.3: 无平方因子预处理测试
     test_square_free_already_square_free();
     test_square_free_repeated_root();
     test_square_free_higher_multiplicity();
@@ -2334,7 +2276,6 @@ int main() {
     test_square_free_linear_polynomial();
     test_square_free_zero_polynomial();
 
-    // Task 3.2: Berlekamp Q 矩阵构造测试
     test_berlekamp_linear_poly();
     test_berlekamp_quadratic_irreducible();
     test_berlekamp_x2_minus_1_mod3();
@@ -2342,14 +2283,12 @@ int main() {
     test_berlekamp_constant_poly();
     test_berlekamp_specified_prime();
 
-    // Task 3.3: 零空间计算测试
     test_null_space_x2_minus_1_mod3();
     test_null_space_x2_plus_x_plus_1_mod2();
     test_null_space_x3_minus_x_mod5();
     test_null_space_linear_poly();
     test_null_space_basis_vectors_in_kernel();
 
-    // Task 3.4: 因子分裂测试
     test_split_x2_minus_1_mod3();
     test_split_x3_minus_x_mod5();
     test_split_irreducible_x2_plus_x_plus_1_mod2();
@@ -2357,7 +2296,6 @@ int main() {
     test_split_product_verification_mod5();
     test_split_x4_minus_1_mod5();
 
-    // Task 5.1: Zassenhaus 因子组合测试
     test_zassenhaus_single_factor();
     test_zassenhaus_two_linear_factors();
     test_zassenhaus_irreducible_quadratic();
@@ -2366,22 +2304,18 @@ int main() {
     test_zassenhaus_zero_polynomial();
     test_zassenhaus_quadratic_times_linear();
 
-    // Task 5.2: 有理重构测试
     test_zassenhaus_rational_reconstruction_integer_coeffs();
     test_zassenhaus_rational_reconstruction_with_rational_poly();
 
-    // Task 5.3: 早期終止测试
     test_zassenhaus_early_termination_irreducible();
     test_zassenhaus_early_termination_remaining_irreducible();
     test_zassenhaus_early_termination_linear_remaining();
     test_zassenhaus_early_termination_single_active_factor();
     test_zassenhaus_early_termination_degree_one_input();
 
-    // Task 5.4: LLL 剪枝路径测试
     test_zassenhaus_pruned_path_triggered();
     test_zassenhaus_pruned_path_correctness();
 
-    // Task 6.1: 逆换元测试
     test_back_substitute_u0_plus_x_to_sin_x_plus_x();
     test_back_substitute_u0_squared_minus_x_squared();
     test_back_substitute_multiple_mappings();
@@ -2389,7 +2323,6 @@ int main() {
     test_back_substitute_no_mappings();
     test_back_substitute_roundtrip();
 
-    // Task 6.2: 因子化简与常数提取测试
     test_simplify_factors_extract_constant_from_product();
     test_simplify_factors_no_constants();
     test_simplify_factors_pure_constant_factor();
@@ -2397,33 +2330,28 @@ int main() {
     test_simplify_factors_constant_one_not_added();
     test_simplify_factors_simplify_called();
 
-    // Task 7.1: 乘积结构检测测试
     test_mult_structure_x_times_sin_x();
     test_mult_structure_x2_times_exp_times_cos();
     test_mult_structure_with_constant();
     test_mult_structure_sum_not_product();
 
-    // Task 7.2: 线性不可约检测测试
     test_linear_irreducible_sin_plus_x();
     test_linear_irreducible_2sin_3x_1();
     test_linear_irreducible_sin_cos_x();
     test_linear_irreducible_sin_squared_not_linear();
     test_linear_irreducible_sin_times_x_not_sum();
 
-    // Task 7.3: 指数分离测试
     test_exp_separation_exp_x_times_x_plus_exp_x();
     test_exp_separation_no_common_exp();
     test_exp_separation_product_not_sum();
     test_exp_separation_three_terms();
 
-    // Task 7.4: 毕达哥拉斯恒等式化简测试
     test_pythagorean_sin2_cos2_to_1();
     test_pythagorean_sin2_cos2_plus_x();
     test_pythagorean_common_coefficient();
     test_pythagorean_different_args_unchanged();
     test_pythagorean_no_matching_cos();
 
-    // Task 8.4: 完整管线端到端测试
     test_full_pipeline_sin2_minus_x2();
     test_full_pipeline_exp_times_x();
     test_full_pipeline_irreducible_sin_plus_x();

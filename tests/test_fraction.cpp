@@ -1,3 +1,4 @@
+#include "test_common.hpp"
 #include "symbolic.hpp"
 #include <iostream>
 #include <cassert>
@@ -14,32 +15,32 @@ std::shared_ptr<SymbolicExpr> var(const std::string& name) {
 }
 
 void test_fraction_arithmetic() {
-    std::cout << "--- Fraction Arithmetic ---" << std::endl;
+    TEST_CASE("Fraction arithmetic");
 
     auto half = SymbolicExpr::divide(num(1), num(2));
     auto third = SymbolicExpr::divide(num(1), num(3));
     auto sum = SymbolicExpr::add(half, third)->simplify();
 
-    std::cout << "1/2 + 1/3 = " << sum->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(sum, "5/6", "1/2 + 1/3 = 5/6");
 }
 
 void test_negative_power() {
-    std::cout << "--- Negative Power ---" << std::endl;
+    TEST_CASE("Negative powers");
 
     auto base = num(2);
     auto exponent = num(-2);
     auto res = SymbolicExpr::power(base, exponent)->simplify();
 
-    std::cout << "pow(2, -2) = " << res->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(res, "1/4", "2^-2 = 1/4");
 
     auto base3 = num(3);
     auto exp_neg1 = num(-1);
     auto res2 = SymbolicExpr::power(base3, exp_neg1)->simplify();
-    std::cout << "pow(3, -1) = " << res2->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(res2, "1/3", "3^-1 = 1/3");
 }
 
 void test_fraction_mixed_with_var() {
-    std::cout << "--- Mixed with Var ---" << std::endl;
+    TEST_CASE("Fraction coefficients with variables");
 
     auto half = SymbolicExpr::divide(num(1), num(2));
     auto third = SymbolicExpr::divide(num(1), num(3));
@@ -49,24 +50,24 @@ void test_fraction_mixed_with_var() {
     auto term2 = SymbolicExpr::multiply(third, x);
     auto res = SymbolicExpr::add(term1, term2)->simplify();
 
-    std::cout << "(1/2)x + (1/3)x = " << res->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(res, "(5/6)*x", "(1/2)x + (1/3)x = (5/6)x");
 }
 
 void test_rational_simplification() {
-    std::cout << "--- Rational Simplification ---" << std::endl;
+    TEST_CASE("Rational simplification");
 
     auto six = num(6);
     auto twelve = num(12);
     auto res = SymbolicExpr::divide(six, twelve)->simplify();
-    std::cout << "6/12 = " << res->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(res, "1/2", "6/12 simplifies to 1/2");
 
     auto half = SymbolicExpr::divide(num(1), num(2));
     auto sq = SymbolicExpr::power(half, num(2))->simplify();
-    std::cout << "(1/2)^2 = " << sq->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(sq, "1/4", "(1/2)^2 = 1/4");
 }
 
 void test_fraction_matrix() {
-    std::cout << "--- Fraction Matrix ---" << std::endl;
+    TEST_CASE("Fraction matrix operations");
 
     auto m11 = SymbolicExpr::divide(num(1), num(2));
     auto m12 = SymbolicExpr::divide(num(1), num(3));
@@ -81,7 +82,7 @@ void test_fraction_matrix() {
     auto mat = SymbolicExpr::matrix(elements);
     auto det = SymbolicExpr::determinant(mat)->simplify();
 
-    std::cout << "det([[1/2, 1/3], [1/4, 1/5]]) = " << det->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(det, "1/60", "det([[1/2, 1/3], [1/4, 1/5]]) = 1/60");
 
     auto i1 = num(1); auto i2 = num(2);
     auto i3 = num(3); auto i4 = num(4);
@@ -89,7 +90,7 @@ void test_fraction_matrix() {
     auto mat_inv = SymbolicExpr::matrix(inv_elems);
     auto inv = SymbolicExpr::inverse(mat_inv)->simplify();
 
-    std::cout << "inv([[1, 2], [3, 4]]) = " << inv->to_string() << std::endl;
+    EXPECT_EQ_EXPR_STR(inv, "[[-2, 1], [3/2, -1/2]]", "inverse of [[1, 2], [3, 4]] is exact");
 }
 
 int main() {
@@ -103,5 +104,5 @@ int main() {
         std::cerr << "Exception: " << e.what() << std::endl;
         return 1;
     }
-    return 0;
+    return TEST_REPORT();
 }

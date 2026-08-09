@@ -1,30 +1,3 @@
-// Feature: integration-enhancements, Property 2: Integration table entry round-trip
-//
-// Validates: Requirements 1.11
-//
-// Property 2: For each entry in the IntegrationTable after load_defaults(),
-// instantiating the pattern's wildcards with concrete numeric values,
-// differentiating the correspondingly instantiated result expression with
-// respect to x, and numerically evaluating SHALL yield a value equal to the
-// instantiated pattern at sample points x in {0.5, 1.0, 1.5, 2.0, 2.5} within
-// tolerance 1e-10.
-//
-// Approach:
-//   * Walk every category and every entry returned by IntegrationTable.
-//   * Build a MatchMap binding the well-known wildcards _u, _a, _n to concrete
-//     values (_u -> integration variable x, _a -> 2, _n -> 3).
-//   * Use Matcher::replace to instantiate both pattern and result.
-//   * Differentiate the instantiated result via SymbolicExpr::differentiate.
-//   * For each sample point, substitute x in both pattern and derivative,
-//     numeric-eval via test_numeric_eval, and compare within tolerance.
-//   * Allow individual sample points where either side returns std::nullopt
-//     (e.g. domain violations like ln(0) or sqrt of a negative); skip the
-//     point and continue.
-//   * Entries whose pattern/result use functions outside the test_numeric_eval
-//     domain (e.g. sec, csc, cot, hyperbolic, inverse trig) yield nullopt at
-//     every point. These entries are reported as SKIPPED, not failed.
-//   * The test fails as soon as any entry produces a numerically observable
-//     mismatch.
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -88,8 +61,8 @@ EntryReport verify_entry(const IntegrationEntry& entry) {
     SymbolicExpr pat_inst = Matcher::replace(entry.pattern, bindings, false);
     SymbolicExpr res_inst = Matcher::replace(entry.result,  bindings, false);
 
-    auto pattern = std::make_shared<SymbolicExpr>(pat_inst);
-    auto result  = std::make_shared<SymbolicExpr>(res_inst);
+    auto pattern = lamina::detail::make_expression_ptr(pat_inst);
+    auto result  = lamina::detail::make_expression_ptr(res_inst);
 
     auto pattern_simp = pattern->simplify();
     auto result_simp  = result->simplify();
@@ -201,7 +174,7 @@ int main() {
                 std::ostringstream oss;
                 oss << prefix << ": " << rep.matches << " match(es), "
                     << rep.skipped_points << " skipped point(s)";
-                EXPECT_TRUE(true, oss.str());
+                EXPECT_TRUE(rep.checked && !rep.failed && rep.matches > 0, oss.str());
             }
         }
     }

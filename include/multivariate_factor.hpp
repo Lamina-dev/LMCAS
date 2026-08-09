@@ -12,22 +12,13 @@
  */
 #pragma once
 
+#include "lamina_export.hpp"
 #include "multivariate_poly.hpp"
 
 #include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
-
-#ifdef _WIN32
-#ifdef LAMINA_CORE_EXPORTS
-#define LAMINA_API __declspec(dllexport)
-#else
-#define LAMINA_API __declspec(dllimport)
-#endif
-#else
-#define LAMINA_API
-#endif
 
 namespace lamina {
 
@@ -57,9 +48,7 @@ struct MultiFactorResult {
  */
 LAMINA_API MultiFactorResult factor_multivariate(const MultiPoly& poly);
 
-/// ---------------------------------------------------------------------------
 /// 内部算法组件（供测试使用）
-/// ---------------------------------------------------------------------------
 
 /**
  * @brief 计算多元容度
@@ -161,9 +150,7 @@ LAMINA_API std::vector<MultiPoly> multivariate_diophantine(
     const Rational& eval_point,
     int degree_bound);
 
-/// ---------------------------------------------------------------------------
 /// 快速路径检测（detail 命名空间）
-/// ---------------------------------------------------------------------------
 
 namespace detail {
 

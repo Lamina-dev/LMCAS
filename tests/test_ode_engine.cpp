@@ -8,9 +8,6 @@
 
 using namespace lamina;
 
-// ============================================================================
-// 齐次 ODE 测试
-// ============================================================================
 
 void test_homogeneous_ode() {
     TEST_CASE("Homogeneous ODE: y' = y/x");
@@ -66,9 +63,6 @@ void test_homogeneous_ode() {
     }
 }
 
-// ============================================================================
-// Bernoulli ODE 测试
-// ============================================================================
 
 void test_bernoulli_ode() {
     TEST_CASE("Bernoulli ODE: y' + y = y^2 (P=1, Q=1, n=2)");
@@ -115,9 +109,6 @@ void test_bernoulli_ode() {
     }
 }
 
-// ============================================================================
-// 恰当 ODE 测试
-// ============================================================================
 
 void test_exact_ode() {
     TEST_CASE("Exact ODE: (2x + y)dx + (x + 2y)dy = 0");
@@ -188,9 +179,194 @@ void test_exact_ode() {
     }
 }
 
-// ============================================================================
-// 积分因子测试
-// ============================================================================
+void test_first_order_ode_checked_contracts() {
+    TEST_CASE("First-order ODE checked APIs: explicit errors and context");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto rhs = SymbolicExpr::divide(y, x);
+        auto sol = solve_homogeneous_ode_checked(rhs, "x", "y");
+        EXPECT_TRUE(sol.has_value(), "checked homogeneous ODE succeeds");
+        if (sol) {
+            EXPECT_TRUE(sol.value().general_solution != nullptr,
+                "checked homogeneous ODE returns solution");
+            EXPECT_TRUE(sol.value().method_used == ODEType::Homogeneous,
+                "checked homogeneous ODE reports Homogeneous");
+        }
+    }
+
+    {
+        auto P = SymbolicExpr::number(1);
+        auto Q = SymbolicExpr::number(1);
+        auto sol = solve_bernoulli_ode_checked(P, Q, 2, "x", "y");
+        EXPECT_TRUE(sol.has_value(), "checked Bernoulli ODE succeeds");
+        if (sol) {
+            EXPECT_TRUE(sol.value().general_solution != nullptr,
+                "checked Bernoulli ODE returns solution");
+            EXPECT_TRUE(sol.value().method_used == ODEType::Bernoulli,
+                "checked Bernoulli ODE reports Bernoulli");
+        }
+    }
+
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto M = SymbolicExpr::add(
+            SymbolicExpr::multiply(SymbolicExpr::number(2), x), y);
+        auto N = SymbolicExpr::add(
+            x, SymbolicExpr::multiply(SymbolicExpr::number(2), y));
+        auto sol = solve_exact_ode_checked(M, N, "x", "y");
+        EXPECT_TRUE(sol.has_value(), "checked exact ODE succeeds");
+        if (sol) {
+            EXPECT_TRUE(sol.value().general_solution != nullptr,
+                "checked exact ODE returns solution");
+            EXPECT_TRUE(sol.value().method_used == ODEType::Exact,
+                "checked exact ODE reports Exact");
+        }
+    }
+
+    {
+        auto x = SymbolicExpr::variable("x");
+        std::shared_ptr<SymbolicExpr> null_root;
+        auto null_rhs = solve_homogeneous_ode_checked(null_root, "x", "y");
+        EXPECT_TRUE(!null_rhs.has_value(),
+            "checked homogeneous ODE rejects null rhs");
+        EXPECT_TRUE(null_rhs.error().code == CasErrc::InvalidArgument,
+            "checked homogeneous ODE reports InvalidArgument for null rhs");
+
+        auto same_vars = solve_homogeneous_ode_checked(x, "x", "x");
+        EXPECT_TRUE(!same_vars.has_value(),
+            "checked homogeneous ODE rejects duplicate variable names");
+        EXPECT_TRUE(same_vars.error().code == CasErrc::InvalidArgument,
+            "checked homogeneous ODE reports InvalidArgument for duplicate variables");
+
+        auto bad_n = solve_bernoulli_ode_checked(x, x, 1, "x", "y");
+        EXPECT_TRUE(!bad_n.has_value(),
+            "checked Bernoulli ODE rejects n=1");
+        EXPECT_TRUE(bad_n.error().code == CasErrc::InvalidArgument,
+            "checked Bernoulli ODE reports InvalidArgument for n=1");
+
+        auto null_exact = solve_exact_ode_checked(x, null_root, "x", "y");
+        EXPECT_TRUE(!null_exact.has_value(),
+            "checked exact ODE rejects null N");
+        EXPECT_TRUE(null_exact.error().code == CasErrc::InvalidArgument,
+            "checked exact ODE reports InvalidArgument for null N");
+    }
+
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto rhs = SymbolicExpr::divide(y, x);
+
+        lamina::CancellationToken cancellation;
+        lamina::ComputationContext cancelled_context({}, cancellation);
+        cancellation.cancel();
+        auto cancelled = solve_homogeneous_ode_checked(rhs, "x", "y",
+                                                       cancelled_context);
+        EXPECT_TRUE(!cancelled.has_value(),
+            "checked homogeneous ODE observes cancellation");
+        EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+            "checked homogeneous ODE reports Cancelled");
+
+        lamina::ResourceLimits limits;
+        limits.max_steps = 1;
+        lamina::ComputationContext limited_context(limits);
+        auto limited = solve_exact_ode_checked(y, x, "x", "y", limited_context);
+        EXPECT_TRUE(!limited.has_value(),
+            "checked exact ODE observes exhausted step budget");
+        EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+            "checked exact ODE reports ResourceLimit");
+    }
+}
+
+void test_higher_order_euler_checked_contracts() {
+    TEST_CASE("Higher-order and Euler ODE checked APIs: explicit support domain");
+    {
+        auto high = solve_higher_order_ode_checked(
+            {1.0, 0.0, 1.0}, nullptr, "x", "y");
+        EXPECT_TRUE(high.has_value(),
+            "checked homogeneous constant-coefficient ODE succeeds");
+        if (high) {
+            EXPECT_TRUE(high.value().general_solution != nullptr,
+                "checked higher-order ODE returns a solution");
+            EXPECT_TRUE(high.value().method_used == ODEType::HigherOrder_ConstCoeff,
+                "checked higher-order ODE reports constant-coefficient method");
+            EXPECT_TRUE(high.value().constants.size() == 2,
+                "checked higher-order ODE returns two integration constants");
+            std::string s = high.value().general_solution->to_string();
+            EXPECT_CONTAINS(s, {"C1"}, "higher-order solution contains C1");
+            EXPECT_CONTAINS(s, {"C2"}, "higher-order solution contains C2");
+        }
+    }
+
+    {
+        auto euler = solve_euler_ode_checked(
+            {1.0, 1.0, -1.0}, nullptr, "x", "y");
+        EXPECT_TRUE(euler.has_value(),
+            "checked homogeneous Euler ODE succeeds");
+        if (euler) {
+            EXPECT_TRUE(euler.value().general_solution != nullptr,
+                "checked Euler ODE returns a solution");
+            EXPECT_TRUE(euler.value().method_used == ODEType::Euler,
+                "checked Euler ODE reports Euler method");
+            EXPECT_TRUE(euler.value().constants.size() == 2,
+                "checked Euler ODE returns two integration constants");
+            std::string s = euler.value().general_solution->to_string();
+            EXPECT_CONTAINS(s, {"C1"}, "Euler solution contains C1");
+            EXPECT_CONTAINS(s, {"C2"}, "Euler solution contains C2");
+        }
+    }
+
+    {
+        auto bad_coeffs = solve_higher_order_ode_checked({}, nullptr, "x", "y");
+        EXPECT_TRUE(!bad_coeffs.has_value(),
+            "checked higher-order ODE rejects empty coefficient list");
+        EXPECT_TRUE(bad_coeffs.error().code == CasErrc::InvalidArgument,
+            "checked higher-order ODE reports InvalidArgument for empty coefficients");
+
+        auto bad_leading = solve_higher_order_ode_checked({0.0, 1.0}, nullptr, "x", "y");
+        EXPECT_TRUE(!bad_leading.has_value(),
+            "checked higher-order ODE rejects zero leading coefficient");
+        EXPECT_TRUE(bad_leading.error().code == CasErrc::InvalidArgument,
+            "checked higher-order ODE reports InvalidArgument for zero leading coefficient");
+
+        auto same_vars = solve_euler_ode_checked({1.0, 1.0, -1.0}, nullptr, "x", "x");
+        EXPECT_TRUE(!same_vars.has_value(),
+            "checked Euler ODE rejects duplicate variables");
+        EXPECT_TRUE(same_vars.error().code == CasErrc::InvalidArgument,
+            "checked Euler ODE reports InvalidArgument for duplicate variables");
+
+        auto unsupported_forcing = solve_higher_order_ode_checked(
+            {1.0, 0.0, 1.0}, SymbolicExpr::number(1), "x", "y");
+        EXPECT_TRUE(!unsupported_forcing.has_value(),
+            "checked higher-order ODE rejects nonhomogeneous forcing outside support domain");
+        EXPECT_TRUE(unsupported_forcing.error().code == CasErrc::Inconclusive,
+            "checked higher-order ODE reports Inconclusive for unsupported forcing");
+    }
+
+    {
+        lamina::CancellationToken cancellation;
+        lamina::ComputationContext cancelled_context({}, cancellation);
+        cancellation.cancel();
+        auto cancelled = solve_higher_order_ode_checked(
+            {1.0, 0.0, 1.0}, nullptr, "x", "y", cancelled_context);
+        EXPECT_TRUE(!cancelled.has_value(),
+            "checked higher-order ODE observes cancellation");
+        EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+            "checked higher-order ODE reports Cancelled");
+
+        lamina::ResourceLimits limits;
+        limits.max_steps = 1;
+        lamina::ComputationContext limited_context(limits);
+        auto limited = solve_euler_ode_checked(
+            {1.0, 1.0, -1.0}, nullptr, "x", "y", limited_context);
+        EXPECT_TRUE(!limited.has_value(),
+            "checked Euler ODE observes exhausted step budget");
+        EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+            "checked Euler ODE reports ResourceLimit");
+    }
+}
+
 
 void test_integrating_factor() {
     TEST_CASE("Integrating factor: (2y)dx + (x)dy = 0 (not exact, μ(x) exists)");
@@ -241,9 +417,6 @@ void test_integrating_factor() {
     }
 }
 
-// ============================================================================
-// 分类测试
-// ============================================================================
 
 void test_classification() {
     TEST_CASE("Classification: y' = y/x → Homogeneous");
@@ -276,9 +449,6 @@ void test_classification() {
     }
 }
 
-// ============================================================================
-// 参数变分法测试
-// ============================================================================
 
 void test_variation_of_parameters() {
     TEST_CASE("Variation of Parameters: y'' + y = sec(x)");
@@ -348,9 +518,6 @@ void test_variation_of_parameters() {
     }
 }
 
-// ============================================================================
-// Frobenius 方法测试
-// ============================================================================
 
 void test_frobenius() {
     TEST_CASE("Frobenius: classify ordinary point (y'' + y = 0 at x=0)");
@@ -451,15 +618,123 @@ void test_frobenius() {
     }
 }
 
+void test_vop_frobenius_checked_contracts() {
+    TEST_CASE("Variation of Parameters and Frobenius checked APIs: explicit support domain");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y1 = SymbolicExpr::cos(x);
+        auto y2 = SymbolicExpr::sin(x);
+        auto g = SymbolicExpr::sin(x);
+
+        auto sol = solve_variation_of_parameters_checked(y1, y2, g, "x");
+        EXPECT_TRUE(sol.has_value(),
+            "checked variation of parameters succeeds for independent homogeneous solutions");
+        if (sol) {
+            EXPECT_TRUE(sol.value().general_solution != nullptr,
+                "checked variation of parameters returns a particular solution");
+            EXPECT_TRUE(sol.value().method_used == ODEType::HigherOrder_ConstCoeff,
+                "checked variation of parameters reports higher-order method family");
+        }
+
+        auto dependent = solve_variation_of_parameters_checked(x, x, g, "x");
+        EXPECT_TRUE(!dependent.has_value(),
+            "checked variation of parameters rejects zero Wronskian as unsupported");
+        EXPECT_TRUE(dependent.error().code == CasErrc::Inconclusive,
+            "checked variation of parameters reports Inconclusive for zero Wronskian");
+
+        std::shared_ptr<SymbolicExpr> null_expr;
+        auto invalid = solve_variation_of_parameters_checked(null_expr, y2, g, "x");
+        EXPECT_TRUE(!invalid.has_value(),
+            "checked variation of parameters rejects null input");
+        EXPECT_TRUE(invalid.error().code == CasErrc::InvalidArgument,
+            "checked variation of parameters reports InvalidArgument for null input");
+    }
+
+    {
+        auto p = SymbolicExpr::number(0);
+        auto q = SymbolicExpr::number(1);
+        auto x0 = SymbolicExpr::number(0);
+        auto sol = solve_frobenius_checked(p, q, x0, "x", 6);
+        EXPECT_TRUE(sol.has_value(),
+            "checked Frobenius succeeds at an ordinary point");
+        if (sol) {
+            EXPECT_TRUE(sol.value().series_solution != nullptr,
+                "checked Frobenius returns a series");
+            EXPECT_TRUE(sol.value().point_type == ODESingularityType::Ordinary,
+                "checked Frobenius reports ordinary point");
+            EXPECT_TRUE(sol.value().truncation_order == 6,
+                "checked Frobenius preserves truncation order");
+        }
+    }
+
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto p = SymbolicExpr::number(0);
+        auto q = SymbolicExpr::divide(SymbolicExpr::number(1),
+            SymbolicExpr::power(x, SymbolicExpr::number(3)));
+        auto x0 = SymbolicExpr::number(0);
+        auto sol = solve_frobenius_checked(p, q, x0, "x", 4);
+        EXPECT_TRUE(!sol.has_value(),
+            "checked Frobenius rejects irregular singular point");
+        EXPECT_TRUE(sol.error().code == CasErrc::Inconclusive,
+            "checked Frobenius reports Inconclusive for irregular singular point");
+
+        auto bad_order = solve_frobenius_checked(p, q, x0, "x", -1);
+        EXPECT_TRUE(!bad_order.has_value(),
+            "checked Frobenius rejects negative truncation order");
+        EXPECT_TRUE(bad_order.error().code == CasErrc::InvalidArgument,
+            "checked Frobenius reports InvalidArgument for negative order");
+
+        std::shared_ptr<SymbolicExpr> null_expr;
+        auto invalid = solve_frobenius_checked(null_expr, q, x0, "x", 4);
+        EXPECT_TRUE(!invalid.has_value(),
+            "checked Frobenius rejects null coefficient");
+        EXPECT_TRUE(invalid.error().code == CasErrc::InvalidArgument,
+            "checked Frobenius reports InvalidArgument for null coefficient");
+    }
+
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y1 = SymbolicExpr::cos(x);
+        auto y2 = SymbolicExpr::sin(x);
+        auto g = SymbolicExpr::sin(x);
+
+        lamina::CancellationToken cancellation;
+        lamina::ComputationContext cancelled_context({}, cancellation);
+        cancellation.cancel();
+        auto cancelled = solve_variation_of_parameters_checked(
+            y1, y2, g, "x", cancelled_context);
+        EXPECT_TRUE(!cancelled.has_value(),
+            "checked variation of parameters observes cancellation");
+        EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
+            "checked variation of parameters reports Cancelled");
+
+        lamina::ResourceLimits limits;
+        limits.max_steps = 1;
+        lamina::ComputationContext limited_context(limits);
+        auto p = SymbolicExpr::number(0);
+        auto q = SymbolicExpr::number(1);
+        auto x0 = SymbolicExpr::number(0);
+        auto limited = solve_frobenius_checked(p, q, x0, "x", 6, limited_context);
+        EXPECT_TRUE(!limited.has_value(),
+            "checked Frobenius observes exhausted step budget");
+        EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
+            "checked Frobenius reports ResourceLimit");
+    }
+}
+
 int main() {
     try {
         test_homogeneous_ode();
         test_bernoulli_ode();
         test_exact_ode();
+        test_first_order_ode_checked_contracts();
+        test_higher_order_euler_checked_contracts();
         test_integrating_factor();
         test_classification();
         test_variation_of_parameters();
         test_frobenius();
+        test_vop_frobenius_checked_contracts();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;
         g_failures++;

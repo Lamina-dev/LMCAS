@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <random>
 #include <sstream>
+#include <string>
 
 static double eval_quartic(double a, double b, double c, double d, double e, double x) {
     return a*x*x*x*x + b*x*x*x + c*x*x + d*x + e;
@@ -131,6 +132,32 @@ int main() {
             "Biquadratic roots should be {-2, -1, 1, 2} (got {"
             + std::to_string(vals[0]) + ", " + std::to_string(vals[1]) + ", "
             + std::to_string(vals[2]) + ", " + std::to_string(vals[3]) + "})");
+    }
+
+    TEST_CASE("Solve Biquadratic - exact huge coefficient avoids unsafe numeric conversion");
+    {
+        std::string huge_digits = "1" + std::string(400, '0');
+        auto roots = lamina::solve_biquadratic(
+            SymbolicExpr::number(BigInt(huge_digits)),
+            SymbolicExpr::number(0),
+            SymbolicExpr::number(-1),
+            "x");
+
+        EXPECT_TRUE(roots.size() == 4,
+            "huge exact biquadratic should return symbolic square-root roots");
+
+        int zero_roots = 0;
+        for (const auto& root : roots) {
+            std::string text = root ? root->to_string() : "";
+            EXPECT_TRUE(text.find("inf") == std::string::npos &&
+                        text.find("nan") == std::string::npos,
+                "huge exact biquadratic roots should not contain fabricated inf/nan");
+            if (root && root->simplify()->is_zero()) {
+                ++zero_roots;
+            }
+        }
+        EXPECT_TRUE(zero_roots < 4,
+            "huge exact biquadratic must not collapse nonzero roots to zero");
     }
 
     TEST_CASE("Solve Quartic - q=0 after depression (non-biquadratic)");

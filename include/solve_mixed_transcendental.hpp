@@ -117,7 +117,7 @@ LAMINA_API std::optional<SearchInterval> determine_search_interval(
  * @param[in] opts       求解选项（max_roots、tolerance）
  * @return 隔离子区间列表
  */
-LAMINA_API LAMINA_API std::vector<IsolatedInterval> isolate_roots(
+LAMINA_API std::vector<IsolatedInterval> isolate_roots(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var,
@@ -135,7 +135,7 @@ LAMINA_API LAMINA_API std::vector<IsolatedInterval> isolate_roots(
  * @param[in]     max_roots 最大返回根数（-1 表示不限制）
  * @return 去重、排序后的根值列表
  */
-LAMINA_API LAMINA_API std::vector<lmmc_real_t> deduplicate_roots(
+LAMINA_API std::vector<lmmc_real_t> deduplicate_roots(
     std::vector<NumericRoot>& roots,
     lmmc_real_t tolerance,
     int max_roots);

@@ -116,7 +116,8 @@ void test_linear2_nonhomogeneous() {
     TEST_CASE("Linear 2nd Order ODE Non-homogeneous: y'' - 3y' + 2y = e^(3x)");
     {
         // a=1, b=-3, c=2, f(x) = e^(3x)
-        // Note: The current implementation throws std::logic_error for non-homogeneous case
+        // Note: The legacy implementation throws std::logic_error for the
+        // unsupported non-homogeneous case.
         auto x = SymbolicExpr::variable("x");
         auto three_x = SymbolicExpr::multiply(SymbolicExpr::number(3), x);
         auto fx = SymbolicExpr::exp(three_x);
@@ -130,9 +131,68 @@ void test_linear2_nonhomogeneous() {
             // Non-homogeneous case is not yet implemented — this is expected
             threw = true;
         }
-        if (threw) {
-            EXPECT_TRUE(true, "linear2 nonhomogeneous correctly throws logic_error (not yet implemented)");
+        EXPECT_TRUE(threw, "legacy linear2 nonhomogeneous throws instead of returning a false solution");
+    }
+}
+
+void test_linear2_checked_contracts() {
+    TEST_CASE("Checked Linear 2nd Order ODE: homogeneous success and explicit failures");
+    {
+        auto fx = SymbolicExpr::number(0);
+        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, fx, "x", "y");
+        EXPECT_TRUE(result.has_value(), "checked linear2 homogeneous succeeds");
+        if (result) {
+            EXPECT_TRUE(result.value() != nullptr, "checked linear2 homogeneous returns expression");
+            EXPECT_CONTAINS(result.value()->to_string(), {"C"},
+                            "checked linear2 homogeneous contains integration constants");
         }
+    }
+
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto three_x = SymbolicExpr::multiply(SymbolicExpr::number(3), x);
+        auto fx = SymbolicExpr::exp(three_x);
+        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, fx, "x", "y");
+        EXPECT_TRUE(!result.has_value(), "checked linear2 nonhomogeneous is not a success");
+        EXPECT_TRUE(result.error().code == lamina::CasErrc::Inconclusive,
+                    "checked linear2 nonhomogeneous reports Inconclusive");
+    }
+
+    {
+        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, nullptr, "x", "y");
+        EXPECT_TRUE(!result.has_value(), "checked linear2 rejects null forcing expression");
+        EXPECT_TRUE(result.error().code == lamina::CasErrc::InvalidArgument,
+                    "checked linear2 null forcing reports InvalidArgument");
+    }
+
+    {
+        auto fx = SymbolicExpr::number(0);
+        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, fx, "", "y");
+        EXPECT_TRUE(!result.has_value(), "checked linear2 rejects empty independent variable");
+        EXPECT_TRUE(result.error().code == lamina::CasErrc::InvalidArgument,
+                    "checked linear2 empty variable reports InvalidArgument");
+    }
+
+    {
+        lamina::CancellationToken cancellation;
+        lamina::ComputationContext context({}, cancellation);
+        cancellation.cancel();
+        auto result = lamina::solve_linear2_ode_checked(
+            1, -3, 2, SymbolicExpr::number(0), "x", "y", context);
+        EXPECT_TRUE(!result.has_value(), "checked linear2 observes cancellation");
+        EXPECT_TRUE(result.error().code == lamina::CasErrc::Cancelled,
+                    "checked linear2 cancellation reports Cancelled");
+    }
+
+    {
+        lamina::ResourceLimits limits;
+        limits.max_steps = 0;
+        lamina::ComputationContext context(limits);
+        auto result = lamina::solve_linear2_ode_checked(
+            1, -3, 2, SymbolicExpr::number(0), "x", "y", context);
+        EXPECT_TRUE(!result.has_value(), "checked linear2 observes exhausted step budget");
+        EXPECT_TRUE(result.error().code == lamina::CasErrc::ResourceLimit,
+                    "checked linear2 exhausted budget reports ResourceLimit");
     }
 }
 
@@ -142,6 +202,7 @@ int main() {
         test_linear1_ode();
         test_linear2_ode();
         test_linear2_nonhomogeneous();
+        test_linear2_checked_contracts();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;
         g_failures++;

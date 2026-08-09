@@ -16,9 +16,6 @@ int main() {
     auto neg_one = SymbolicExpr::number(-1);
     auto inf = SymbolicExpr::infinity(1);
 
-    // =========================================================================
-    // Requirement 2.1: 0×∞ indeterminate form
-    // =========================================================================
 
     // --- Test 1: lim(x→0+) x·ln(x) = 0 ---
     // This is 0×(-∞), rewrite as ln(x)/(1/x) and apply L'Hôpital
@@ -43,9 +40,6 @@ int main() {
         if (lim) EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*e^(-x), x->inf) = 0");
     }
 
-    // =========================================================================
-    // Requirement 2.2: ∞−∞ indeterminate form
-    // =========================================================================
 
     // --- Test 3: lim(x→0) (1/x - 1/sin(x)) ---
     // This is ∞−∞, combine into (sin(x) - x)/(x·sin(x))
@@ -80,14 +74,14 @@ int main() {
             } else {
                 // Accept symbolic form like -1/2
                 std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(true, "limit(x - sqrt(x^2+x), x->inf) computed (symbolic)");
+                EXPECT_TRUE(lim->to_string().find("-") != std::string::npos &&
+                                (lim->to_string().find("1/2") != std::string::npos ||
+                                 lim->to_string().find("0.5") != std::string::npos),
+                            "limit(x - sqrt(x^2+x), x->inf) computed symbolically as -1/2");
             }
         }
     }
 
-    // =========================================================================
-    // Requirement 2.3: 1^∞ indeterminate form
-    // =========================================================================
 
     // --- Test 5: lim(x→∞) (1 + 1/x)^x = e ---
     // Classic 1^∞ form, result is e
@@ -112,9 +106,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Requirement 2.4: 0⁰ indeterminate form
-    // =========================================================================
 
     // --- Test 6: lim(x→0+) x^x = 1 ---
     // 0⁰ form, use exp(x·ln(x)) → exp(0) = 1
@@ -133,9 +124,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Requirement 2.5: ∞⁰ indeterminate form
-    // =========================================================================
 
     // --- Test 7: lim(x→∞) x^(1/x) = 1 ---
     // ∞⁰ form, use exp((1/x)·ln(x)) → exp(0) = 1
@@ -155,9 +143,6 @@ int main() {
         }
     }
 
-    // =========================================================================
-    // Requirement 2.6: L'Hôpital depth limit with Taylor fallback
-    // =========================================================================
 
     // --- Test 8: lim(x→0) (sin(x) - x) / x^3 = -1/6 ---
     // Requires multiple L'Hôpital applications or Taylor fallback
@@ -176,7 +161,9 @@ int main() {
                 EXPECT_NEAR(*val, -1.0/6.0, 1e-6, "limit((sin(x)-x)/x^3, x->0) = -1/6");
             } else {
                 std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(true, "limit((sin(x)-x)/x^3, x->0) computed");
+                EXPECT_TRUE(lim->to_string().find("-") != std::string::npos &&
+                                lim->to_string().find("6") != std::string::npos,
+                            "limit((sin(x)-x)/x^3, x->0) computed symbolically as -1/6");
             }
         }
     }

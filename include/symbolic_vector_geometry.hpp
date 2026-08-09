@@ -3,6 +3,8 @@
  * @brief 向量几何：点积、叉积、夹角、直线与平面交点、异面直线距离。
  */
 #pragma once
+#include "computation_context.hpp"
+#include "result.hpp"
 #include "symbolic.hpp"
 #include <memory>
 #include <string>
@@ -10,12 +12,28 @@
 
 namespace lamina {
 
+using VectorExprResult = Result<std::shared_ptr<SymbolicExpr>>;
+using VectorExprListResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
+using VectorAngleResult = Result<double>;
+using VectorStringResult = Result<std::string>;
+
 /**
  * @brief 计算两个符号向量的点积
  * @param a 向量 a 的各分量
  * @param b 向量 b 的各分量
  * @return 点积结果的符号表达式
  */
+LAMINA_API VectorExprResult vector_dot_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& b,
+    ComputationContext& context
+);
+
+LAMINA_API VectorExprResult vector_dot_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& b
+);
+
 LAMINA_API std::shared_ptr<SymbolicExpr> vector_dot(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
@@ -27,6 +45,17 @@ LAMINA_API std::shared_ptr<SymbolicExpr> vector_dot(
  * @param b 向量 b 的各分量
  * @return 叉积结果向量的各分量
  */
+LAMINA_API VectorExprListResult vector_cross_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& b,
+    ComputationContext& context
+);
+
+LAMINA_API VectorExprListResult vector_cross_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& b
+);
+
 LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
@@ -38,6 +67,17 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> vector_cross(
  * @param b 向量 b 的各分量
  * @return 夹角的数值（弧度）
  */
+LAMINA_API VectorAngleResult vector_angle_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& b,
+    ComputationContext& context
+);
+
+LAMINA_API VectorAngleResult vector_angle_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& b
+);
+
 LAMINA_API double vector_angle(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
@@ -49,11 +89,15 @@ struct LineSymbolic {
     std::vector<std::shared_ptr<SymbolicExpr>> direction;  ///< 方向向量
 };
 
+using LineSymbolicResult = Result<LineSymbolic>;
+
 /** @brief 符号平面，由法向量和常数 d 定义（ax + by + cz = d） */
 struct PlaneSymbolic {
     std::vector<std::shared_ptr<SymbolicExpr>> normal;  ///< 法向量
     std::shared_ptr<SymbolicExpr> d;                    ///< 常数项
 };
+
+using PlaneSymbolicResult = Result<PlaneSymbolic>;
 
 /**
  * @brief 由一般方程系数构造平面 ax + by + cz = d
@@ -83,6 +127,17 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
     const PlaneSymbolic& plane
 );
 
+LAMINA_API VectorExprListResult line_plane_intersection_checked(
+    const LineSymbolic& line,
+    const PlaneSymbolic& plane,
+    ComputationContext& context
+);
+
+LAMINA_API VectorExprListResult line_plane_intersection_checked(
+    const LineSymbolic& line,
+    const PlaneSymbolic& plane
+);
+
 /**
  * @brief 计算点到平面的距离
  * @param point 空间点坐标
@@ -90,6 +145,17 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
  * @return 距离的符号表达式
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> point_plane_distance(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point,
+    const PlaneSymbolic& plane
+);
+
+LAMINA_API VectorExprResult point_plane_distance_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point,
+    const PlaneSymbolic& plane,
+    ComputationContext& context
+);
+
+LAMINA_API VectorExprResult point_plane_distance_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const PlaneSymbolic& plane
 );
@@ -105,6 +171,17 @@ LAMINA_API std::shared_ptr<SymbolicExpr> skew_lines_distance(
     const LineSymbolic& l2
 );
 
+LAMINA_API VectorExprResult skew_lines_distance_checked(
+    const LineSymbolic& l1,
+    const LineSymbolic& l2,
+    ComputationContext& context
+);
+
+LAMINA_API VectorExprResult skew_lines_distance_checked(
+    const LineSymbolic& l1,
+    const LineSymbolic& l2
+);
+
 /**
  * @brief 由两点构造直线（点 + 方向向量）。
  * @param p1 第一个点
@@ -112,6 +189,17 @@ LAMINA_API std::shared_ptr<SymbolicExpr> skew_lines_distance(
  * @return 直线（point = p1, direction = p2 - p1）
  */
 LAMINA_API LineSymbolic line_from_two_points(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p2
+);
+
+LAMINA_API LineSymbolicResult line_from_two_points_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p2,
+    ComputationContext& context
+);
+
+LAMINA_API LineSymbolicResult line_from_two_points_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
     const std::vector<std::shared_ptr<SymbolicExpr>>& p2
 );
@@ -129,6 +217,19 @@ LAMINA_API PlaneSymbolic plane_from_three_points(
     const std::vector<std::shared_ptr<SymbolicExpr>>& p3
 );
 
+LAMINA_API PlaneSymbolicResult plane_from_three_points_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p2,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p3,
+    ComputationContext& context
+);
+
+LAMINA_API PlaneSymbolicResult plane_from_three_points_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p2,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& p3
+);
+
 /**
  * @brief 计算两平面之间的二面角 arccos(|n₁·n₂| / (|n₁||n₂|))。
  * @param p1 第一个平面
@@ -136,6 +237,17 @@ LAMINA_API PlaneSymbolic plane_from_three_points(
  * @return 二面角表达式（弧度）
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> dihedral_angle(
+    const PlaneSymbolic& p1,
+    const PlaneSymbolic& p2
+);
+
+LAMINA_API VectorExprResult dihedral_angle_checked(
+    const PlaneSymbolic& p1,
+    const PlaneSymbolic& p2,
+    ComputationContext& context
+);
+
+LAMINA_API VectorExprResult dihedral_angle_checked(
     const PlaneSymbolic& p1,
     const PlaneSymbolic& p2
 );
@@ -154,6 +266,15 @@ struct SurfaceSymbolic {
  */
 LAMINA_API std::string classify_quadric(const SurfaceSymbolic& surf);
 
+LAMINA_API VectorStringResult classify_quadric_checked(
+    const SurfaceSymbolic& surf,
+    ComputationContext& context
+);
+
+LAMINA_API VectorStringResult classify_quadric_checked(
+    const SurfaceSymbolic& surf
+);
+
 /**
  * @brief 计算曲面在某点的单位法向量 ∇F/|∇F|。
  * @param surf 隐式曲面
@@ -165,6 +286,17 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> surface_normal(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point
 );
 
+LAMINA_API VectorExprListResult surface_normal_checked(
+    const SurfaceSymbolic& surf,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point,
+    ComputationContext& context
+);
+
+LAMINA_API VectorExprListResult surface_normal_checked(
+    const SurfaceSymbolic& surf,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point
+);
+
 /**
  * @brief 计算曲面在某点的切平面。
  * @param surf 隐式曲面
@@ -172,6 +304,17 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> surface_normal(
  * @return 切平面（法向量 = ∇F(point)）
  */
 LAMINA_API PlaneSymbolic tangent_plane(
+    const SurfaceSymbolic& surf,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point
+);
+
+LAMINA_API PlaneSymbolicResult tangent_plane_checked(
+    const SurfaceSymbolic& surf,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& point,
+    ComputationContext& context
+);
+
+LAMINA_API PlaneSymbolicResult tangent_plane_checked(
     const SurfaceSymbolic& surf,
     const std::vector<std::shared_ptr<SymbolicExpr>>& point
 );

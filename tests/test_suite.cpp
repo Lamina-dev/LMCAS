@@ -9,13 +9,11 @@
 #include "../include/visitors/print_visitor.hpp"
 #include "../include/visitors/differentiation_visitor.hpp"
 #include "../include/visitors/normalization_visitor.hpp"
+#include "test_common.hpp"
 
-static int g_suite_failures = 0;
-
-void check(const std::string& name, const std::shared_ptr<SymbolicNode>& node, const std::string& expected = "") {
+void check(const std::string& name, const std::shared_ptr<const SymbolicNode>& node, const std::string& expected = "") {
     if (!node) {
-        std::cerr << "[FAIL] " << name << ": Node is NULL" << std::endl;
-        g_suite_failures++;
+        EXPECT_TRUE(false, name + ": node is not null");
         return;
     }
 
@@ -24,20 +22,20 @@ void check(const std::string& name, const std::shared_ptr<SymbolicNode>& node, c
     std::string result = pv.get_result();
 
     if (!expected.empty() && result != expected) {
-        std::cerr << "[FAIL] " << name << ": Expected '" << expected << "', got '" << result << "'" << std::endl;
-        g_suite_failures++;
+        EXPECT_EQ_STR(result, expected, name);
     } else {
         std::cout << "[PASS] " << name << ": " << result << std::endl;
+        g_passes++;
     }
 }
 
-std::shared_ptr<SymbolicNode> diff(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
+std::shared_ptr<const SymbolicNode> diff(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     DifferentiationVisitor dv(var);
     node->accept(dv);
     return dv.get_result();
 }
 
-std::shared_ptr<SymbolicNode> normalize(const std::shared_ptr<SymbolicNode>& node) {
+std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const SymbolicNode>& node) {
     NormalizationVisitor nv;
     node->accept(nv);
     return nv.get_result();
@@ -46,17 +44,17 @@ std::shared_ptr<SymbolicNode> normalize(const std::shared_ptr<SymbolicNode>& nod
 void test_basic_arithmetic() {
     std::cout << "\n--- Testing Basic Arithmetic Nodes ---" << std::endl;
 
-    auto n1 = std::make_shared<NumberNode>(1.0);
-    auto n2 = std::make_shared<NumberNode>(2.0);
-    std::vector<std::shared_ptr<SymbolicNode>> add_ops = {n1, n2};
-    auto add = std::make_shared<AddNode>(std::move(add_ops));
+    auto n1 = lamina::detail::make_node<NumberNode>(1.0);
+    auto n2 = lamina::detail::make_node<NumberNode>(2.0);
+    std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {n1, n2};
+    auto add = lamina::detail::make_node<AddNode>(std::move(add_ops));
 
     check("1 + 2", add, "1 + 2");
 
-    auto x = std::make_shared<VariableNode>("x");
-    auto y = std::make_shared<VariableNode>("y");
-    std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {x, y};
-    auto mul = std::make_shared<MultiplyNode>(std::move(mul_ops));
+    auto x = lamina::detail::make_node<VariableNode>("x");
+    auto y = lamina::detail::make_node<VariableNode>("y");
+    std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {x, y};
+    auto mul = lamina::detail::make_node<MultiplyNode>(std::move(mul_ops));
 
     check("x * y", mul, "x*y");
 }
@@ -64,43 +62,43 @@ void test_basic_arithmetic() {
 void test_differentiation() {
     std::cout << "\n--- Testing Differentiation ---" << std::endl;
 
-    auto x = std::make_shared<VariableNode>("x");
+    auto x = lamina::detail::make_node<VariableNode>("x");
 
     check("d/dx(x)", diff(x, "x"), "1");
 
-    auto n5 = std::make_shared<NumberNode>(5.0);
+    auto n5 = lamina::detail::make_node<NumberNode>(5.0);
     check("d/dx(5)", diff(n5, "x"), "0");
 
-    std::vector<std::shared_ptr<SymbolicNode>> add_ops = {x, n5};
-    auto add = std::make_shared<AddNode>(std::move(add_ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {x, n5};
+    auto add = lamina::detail::make_node<AddNode>(std::move(add_ops));
     check("d/dx(x + 5)", diff(add, "x"), "1");
 
-    auto n2 = std::make_shared<NumberNode>(2.0);
-    auto pow = std::make_shared<PowerNode>(x, n2);
+    auto n2 = lamina::detail::make_node<NumberNode>(2.0);
+    auto pow = lamina::detail::make_node<PowerNode>(x, n2);
 
     check("d/dx(x^2)", diff(pow, "x"));
 
-    std::vector<std::shared_ptr<SymbolicNode>> sin_args = {x};
-    auto sin_x = std::make_shared<FunctionNode>(FunctionNode::FuncType::Sin, sin_args);
+    std::vector<std::shared_ptr<const SymbolicNode>> sin_args = {x};
+    auto sin_x = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, sin_args);
     check("d/dx(sin(x))", diff(sin_x, "x"));
 }
 
 void test_normalization_expansion() {
     std::cout << "\n--- Testing Normalization (Expansion) ---" << std::endl;
 
-    auto a = std::make_shared<VariableNode>("a");
-    auto b = std::make_shared<VariableNode>("b");
-    auto c = std::make_shared<VariableNode>("c");
-    auto d = std::make_shared<VariableNode>("d");
+    auto a = lamina::detail::make_node<VariableNode>("a");
+    auto b = lamina::detail::make_node<VariableNode>("b");
+    auto c = lamina::detail::make_node<VariableNode>("c");
+    auto d = lamina::detail::make_node<VariableNode>("d");
 
-    std::vector<std::shared_ptr<SymbolicNode>> ab_ops = {a, b};
-    auto a_plus_b = std::make_shared<AddNode>(std::move(ab_ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> ab_ops = {a, b};
+    auto a_plus_b = lamina::detail::make_node<AddNode>(std::move(ab_ops));
 
-    std::vector<std::shared_ptr<SymbolicNode>> cd_ops = {c, d};
-    auto c_plus_d = std::make_shared<AddNode>(std::move(cd_ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> cd_ops = {c, d};
+    auto c_plus_d = lamina::detail::make_node<AddNode>(std::move(cd_ops));
 
-    std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {a_plus_b, c_plus_d};
-    auto expr = std::make_shared<MultiplyNode>(std::move(mul_ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {a_plus_b, c_plus_d};
+    auto expr = lamina::detail::make_node<MultiplyNode>(std::move(mul_ops));
 
     check("Original: (a+b)*(c+d)", expr);
 
@@ -112,17 +110,17 @@ void test_normalization_expansion() {
 void test_normalization_simplification() {
     std::cout << "\n--- Testing Normalization (Simplification) ---" << std::endl;
 
-    auto x = std::make_shared<VariableNode>("x");
-    auto zero = std::make_shared<NumberNode>(0.0);
-    std::vector<std::shared_ptr<SymbolicNode>> mul_ops = {x, zero};
-    auto mul = std::make_shared<MultiplyNode>(std::move(mul_ops));
+    auto x = lamina::detail::make_node<VariableNode>("x");
+    auto zero = lamina::detail::make_node<NumberNode>(0.0);
+    std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {x, zero};
+    auto mul = lamina::detail::make_node<MultiplyNode>(std::move(mul_ops));
 
     check("x * 0", normalize(mul), "0");
 
-    auto n2 = std::make_shared<NumberNode>(2.0);
-    auto n3 = std::make_shared<NumberNode>(3.0);
-    std::vector<std::shared_ptr<SymbolicNode>> add_ops = {n2, n3, x};
-    auto add = std::make_shared<AddNode>(std::move(add_ops));
+    auto n2 = lamina::detail::make_node<NumberNode>(2.0);
+    auto n3 = lamina::detail::make_node<NumberNode>(3.0);
+    std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {n2, n3, x};
+    auto add = lamina::detail::make_node<AddNode>(std::move(add_ops));
 
     check("2 + 3 + x", normalize(add), "x + 5");
 }
@@ -134,15 +132,9 @@ int main() {
         test_normalization_expansion();
         test_normalization_simplification();
 
-        if (g_suite_failures == 0) {
-            std::cout << "\nAll Test Sections Completed." << std::endl;
-            return 0;
-        } else {
-            std::cerr << "\n" << g_suite_failures << " test(s) failed." << std::endl;
-            return 1;
-        }
+        std::cout << "\nAll Test Sections Completed." << std::endl;
     } catch (const std::exception& e) {
-        std::cerr << "Top level exception: " << e.what() << std::endl;
-        return 1;
+        EXPECT_TRUE(false, std::string("top level exception: ") + e.what());
     }
+    return TEST_REPORT();
 }

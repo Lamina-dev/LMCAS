@@ -1,15 +1,3 @@
-/**
- * @file test_assumption_declarations.cpp
- * @brief Unit tests for PropertyStore declaration methods (Task 2.5).
- *
- * Tests:
- * - Continuity/differentiability overlap detection
- * - Monotonicity storage and retrieval
- * - Periodicity storage and retrieval
- * - All contradiction scenarios produce correct exception messages
- *
- * Validates: Requirements 6.4, 7.1, 7.2, 11.2
- */
 
 #include "test_common.hpp"
 #include "assumption.hpp"
@@ -21,15 +9,12 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers: create intervals for testing
-// ============================================================
 
 static Interval make_closed_interval(double lo, double hi) {
-    auto lower_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lower_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto upper_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::closed(lower_val);
     iv.upper = Endpoint::closed(upper_val);
@@ -37,19 +22,16 @@ static Interval make_closed_interval(double lo, double hi) {
 }
 
 static Interval make_open_interval(double lo, double hi) {
-    auto lower_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lower_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto upper_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::open(lower_val);
     iv.upper = Endpoint::open(upper_val);
     return iv;
 }
 
-// ============================================================
-// Tests: Continuity/Differentiability overlap detection (Req 6.4)
-// ============================================================
 
 static void test_continuous_only_on_differentiable_overlap_throws() {
     TEST_CASE("Continuity overlap: declaring continuous-only on interval overlapping differentiable throws");
@@ -176,9 +158,6 @@ static void test_non_overlapping_intervals_no_conflict() {
     EXPECT_FALSE(threw, "Disjoint intervals do not conflict");
 }
 
-// ============================================================
-// Tests: Monotonicity storage and retrieval (Req 7.1, 7.2)
-// ============================================================
 
 static void test_monotonicity_declare_and_retrieve_increasing() {
     TEST_CASE("Monotonicity: declare increasing and retrieve");
@@ -292,9 +271,6 @@ static void test_monotonicity_entire_line() {
         "Entire line declaration covers any finite sub-interval");
 }
 
-// ============================================================
-// Tests: Periodicity storage and retrieval (Req 11.2)
-// ============================================================
 
 static void test_periodicity_declare_and_retrieve() {
     TEST_CASE("Periodicity: declare periodic and retrieve period");
@@ -302,8 +278,8 @@ static void test_periodicity_declare_and_retrieve() {
     PropertyStore store;
 
     // Create a period expression: 2*pi (represented as a constant for simplicity)
-    auto period = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(6.283185307)));
+    auto period = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.283185307)));
 
     store.declare_periodic("sin_x", period);
 
@@ -329,10 +305,10 @@ static void test_periodicity_overwrite_period() {
 
     PropertyStore store;
 
-    auto period1 = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
-    auto period2 = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
+    auto period1 = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
+    auto period2 = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
 
     store.declare_periodic("f", period1);
     EXPECT_TRUE(store.is_periodic("f"), "f is periodic after first declaration");
@@ -353,10 +329,10 @@ static void test_periodicity_different_symbols() {
 
     PropertyStore store;
 
-    auto period_sin = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
-    auto period_tan = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
+    auto period_sin = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
+    auto period_tan = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
 
     store.declare_periodic("sin_x", period_sin);
     store.declare_periodic("tan_x", period_tan);
@@ -376,9 +352,6 @@ static void test_periodicity_different_symbols() {
     }
 }
 
-// ============================================================
-// Tests: Contradiction scenarios (various requirements)
-// ============================================================
 
 static void test_contradiction_finite_divergent() {
     TEST_CASE("Contradiction: Finite then Divergent throws");
@@ -566,9 +539,6 @@ static void test_contradiction_parity_even_odd() {
     EXPECT_TRUE(threw, "Even + Odd throws");
 }
 
-// ============================================================
-// Tests: Finiteness implies Bounded (Req 9.3)
-// ============================================================
 
 static void test_finite_implies_bounded() {
     TEST_CASE("Finiteness: Finite implies Bounded");
@@ -580,9 +550,96 @@ static void test_finite_implies_bounded() {
         "Declaring Finite auto-sets Bounded");
 }
 
-// ============================================================
-// main
-// ============================================================
+static void test_checked_interval_property_contracts() {
+    TEST_CASE("Checked interval properties propagate validation, budgets, and conflicts");
+
+    PropertyStore store;
+    Interval interval = make_closed_interval(0.0, 10.0);
+
+    auto empty_symbol = store.declare_continuous_checked("", interval);
+    EXPECT_TRUE(!empty_symbol && empty_symbol.error().code == CasErrc::InvalidArgument,
+                "checked continuity rejects an empty symbol");
+    EXPECT_TRUE(store.get_all_symbols().empty(),
+                "failed checked continuity creates no property record");
+
+    auto empty_interval = store.declare_continuous_checked("f", Interval::empty());
+    EXPECT_TRUE(!empty_interval && empty_interval.error().code == CasErrc::InvalidArgument,
+                "checked continuity rejects an empty interval");
+    EXPECT_TRUE(store.get_all_symbols().empty(),
+                "empty-interval failure is transactional");
+
+    auto differentiable = store.declare_differentiable_checked("f", interval);
+    EXPECT_TRUE(differentiable.has_value(),
+                "checked differentiability accepts a valid interval");
+    const auto declaration_count = store.get_continuity_decls("f").size();
+    auto duplicate = store.declare_differentiable_checked("f", interval);
+    EXPECT_TRUE(duplicate.has_value(), "exact duplicate differentiability is idempotent");
+    EXPECT_TRUE(store.get_continuity_decls("f").size() == declaration_count,
+                "idempotent checked declaration does not duplicate state");
+
+    auto downgrade = store.declare_continuous_checked("f", interval);
+    EXPECT_TRUE(!downgrade && downgrade.error().code == CasErrc::InvalidArgument,
+                "checked continuity rejects a differentiability downgrade");
+    EXPECT_TRUE(store.get_continuity_decls("f").size() == declaration_count,
+                "failed checked downgrade preserves declaration state");
+
+    PropertyStore boundary_store;
+    Interval left = make_closed_interval(0.0, 5.0);
+    Interval open_touch{
+        Endpoint::open(SymbolicExpr::number(5.0)),
+        Endpoint::closed(SymbolicExpr::number(10.0))};
+    Interval closed_touch = make_closed_interval(5.0, 10.0);
+    EXPECT_TRUE(boundary_store.declare_differentiable_checked("edge", left).has_value(),
+                "boundary test stores differentiability");
+    auto disjoint_touch = boundary_store.declare_continuous_checked("edge", open_touch);
+    EXPECT_TRUE(disjoint_touch.has_value(),
+                "open touching boundary is correctly treated as non-overlapping");
+    auto overlapping_touch = boundary_store.declare_continuous_checked("edge", closed_touch);
+    EXPECT_TRUE(!overlapping_touch &&
+                    overlapping_touch.error().code == CasErrc::InvalidArgument,
+                "closed touching boundary is correctly treated as overlapping");
+
+    Interval symbolic{
+        Endpoint::closed(SymbolicExpr::variable("a")),
+        Endpoint::closed(SymbolicExpr::variable("b"))};
+    auto symbolic_declaration = store.declare_continuous_checked("g", symbolic);
+    EXPECT_TRUE(!symbolic_declaration &&
+                    symbolic_declaration.error().code == CasErrc::UnboundSymbol,
+                "checked continuity propagates unbound symbolic endpoints");
+    auto symbolic_query = store.is_continuous_checked("f", symbolic);
+    EXPECT_TRUE(!symbolic_query && symbolic_query.error().code == CasErrc::UnboundSymbol,
+                "checked continuity query propagates endpoint errors");
+
+    CancellationToken cancellation;
+    cancellation.cancel();
+    ComputationContext cancelled_context({}, cancellation);
+    auto cancelled = store.declare_monotonicity_checked(
+        "g", "x", interval, Monotonicity::Increasing, cancelled_context);
+    EXPECT_TRUE(!cancelled && cancelled.error().code == CasErrc::Cancelled,
+                "checked monotonicity observes cancellation");
+    EXPECT_TRUE(store.get_monotonicity_decls("g").empty(),
+                "cancelled monotonicity declaration stores no state");
+
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext limited_context(limits);
+    auto limited = store.declare_differentiable_checked(
+        "h", interval, limited_context);
+    EXPECT_TRUE(!limited && limited.error().code == CasErrc::ResourceLimit,
+                "checked differentiability observes the step budget");
+
+    auto empty_variable = store.declare_monotonicity_checked(
+        "f", "", interval, Monotonicity::Increasing);
+    EXPECT_TRUE(!empty_variable && empty_variable.error().code == CasErrc::InvalidArgument,
+                "checked monotonicity rejects an empty variable");
+    auto monotonic = store.declare_monotonicity_checked(
+        "f", "x", interval, Monotonicity::Increasing);
+    EXPECT_TRUE(monotonic.has_value(), "checked monotonicity stores a valid declaration");
+    auto queried = store.get_monotonicity_checked("f", "x", interval);
+    EXPECT_TRUE(queried && queried.value() == Monotonicity::Increasing,
+                "checked monotonicity query retrieves the proven declaration");
+}
+
 
 int main() {
     // Continuity/differentiability overlap detection
@@ -625,6 +682,7 @@ int main() {
 
     // Finiteness implication
     test_finite_implies_bounded();
+    test_checked_interval_property_contracts();
 
     return TEST_REPORT();
 }

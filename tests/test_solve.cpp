@@ -20,8 +20,8 @@ int main() {
         auto solutions = SymbolicExpr::solve_system({eq1, eq2}, {"x", "y"});
         EXPECT_TRUE(solutions.size() == 1, "Solutions size should be 1");
         if (solutions.size() > 0) {
-            EXPECT_EQ_EXPR(solutions[0]["x"], SymbolicExpr::number(2), "x should be 2");
-            EXPECT_EQ_EXPR(solutions[0]["y"], SymbolicExpr::number(1), "y should be 1");
+            EXPECT_EQ_EXPR(solutions[0].at("x"), SymbolicExpr::number(2), "x should be 2");
+            EXPECT_EQ_EXPR(solutions[0].at("y"), SymbolicExpr::number(1), "y should be 1");
         }
     }
 
@@ -39,15 +39,14 @@ int main() {
 
         if (solutions.size() > 0) {
 
-            auto check_x = SymbolicExpr::add(solutions[0]["x"], SymbolicExpr::number(-1))->simplify();
+            auto check_x = SymbolicExpr::add(solutions[0].at("x"), SymbolicExpr::number(-1))->simplify();
             EXPECT_TRUE(check_x->is_zero(), "x should verify to 1");
 
             auto expected_y2 = SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::power(a, SymbolicExpr::number(-1)));
-            auto check_y = SymbolicExpr::add(solutions[0]["y"], SymbolicExpr::multiply(expected_y2, SymbolicExpr::number(-1)))->simplify();
+            auto check_y = SymbolicExpr::add(solutions[0].at("y"), SymbolicExpr::multiply(expected_y2, SymbolicExpr::number(-1)))->simplify();
 
-            if (check_y->is_zero()) {
-                EXPECT_TRUE(true, "y verified");
-            } else {
+            EXPECT_TRUE(check_y->is_zero(), "y should verify to -1/a");
+            if (!check_y->is_zero()) {
                 std::cout << "Values for y check: " << check_y->to_string() << std::endl;
             }
         }
@@ -92,8 +91,8 @@ int main() {
         auto left = SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), x), SymbolicExpr::number(-6));
         auto right = SymbolicExpr::number(0);
 
-        auto rel_node = std::make_shared<RelationalNode>(left->root, right->root, RelationalNode::Op::GT);
-        auto eq = std::make_shared<SymbolicExpr>(std::static_pointer_cast<SymbolicNode>(rel_node));
+        auto rel_node = lamina::detail::make_node<RelationalNode>(lamina::detail::node(left), lamina::detail::node(right), RelationalNode::Op::GT);
+        auto eq = lamina::detail::make_expression_ptr(std::static_pointer_cast<const SymbolicNode>(rel_node));
 
         auto solutions = SymbolicExpr::solve(eq, "x");
 

@@ -1,13 +1,3 @@
-/**
- * @file test_assumption_cycle_depth.cpp
- * @brief Property tests for cycle detection and depth limit (Task 5.8).
- *
- * Properties tested:
- * - Property 17: Cycle detection prevents infinite recursion
- * - Property 18: Depth limit returns Unknown without side effects
- *
- * Validates: Requirements 22.2, 22.3, 22.4, 25.2, 25.4
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -21,79 +11,72 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return SymbolicExpr(std::make_shared<VariableNode>(name));
+    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
 }
 
 /// Create a deeply nested expression: f(f(f(...f(x)...))) with given depth.
 /// Uses exp as the nesting function.
 static SymbolicExpr make_deeply_nested(const std::string& var_name, int depth) {
-    auto node = std::make_shared<VariableNode>(var_name);
-    std::shared_ptr<SymbolicNode> current = node;
+    auto node = lamina::detail::make_node<VariableNode>(var_name);
+    std::shared_ptr<const SymbolicNode> current = node;
     for (int i = 0; i < depth; ++i) {
-        current = std::make_shared<FunctionNode>(
+        current = lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
-            std::vector<std::shared_ptr<SymbolicNode>>{current});
+            std::vector<std::shared_ptr<const SymbolicNode>>{current});
     }
-    return SymbolicExpr(current);
+    return lamina::detail::expression_from_node(current);
 }
 
 /// Create a nested AddNode expression: ((x + x) + (x + x)) + ... with given depth.
 /// Each level doubles the tree width, creating exponential node count but linear depth.
 static SymbolicExpr make_nested_add(const std::string& var_name, int depth) {
-    auto var_node = std::make_shared<VariableNode>(var_name);
-    std::shared_ptr<SymbolicNode> current = var_node;
+    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
+    std::shared_ptr<const SymbolicNode> current = var_node;
     for (int i = 0; i < depth; ++i) {
-        current = std::make_shared<AddNode>(
-            std::vector<std::shared_ptr<SymbolicNode>>{current, var_node});
+        current = lamina::detail::make_node<AddNode>(
+            std::vector<std::shared_ptr<const SymbolicNode>>{current, var_node});
     }
-    return SymbolicExpr(current);
+    return lamina::detail::expression_from_node(current);
 }
 
 /// Create a self-referential expression by sharing the same node pointer at multiple
 /// positions in the tree. This tests cycle detection via pointer identity.
 static SymbolicExpr make_shared_subexpr() {
     // Create a shared sub-expression node
-    auto x = std::make_shared<VariableNode>("x");
-    auto shared_add = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{x, x});
+    auto x = lamina::detail::make_node<VariableNode>("x");
+    auto shared_add = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{x, x});
 
     // Use the same shared_add node in two positions of a multiply
     // This creates a DAG (not a tree), where the same pointer appears twice.
-    auto mul = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{shared_add, shared_add});
+    auto mul = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{shared_add, shared_add});
 
-    return SymbolicExpr(mul);
+    return lamina::detail::expression_from_node(mul);
 }
 
 /// Create two structurally identical but distinct (different pointer) nodes.
 /// This tests that cycle detection does NOT produce false positives.
 static std::pair<SymbolicExpr, SymbolicExpr> make_structurally_identical_distinct() {
     // Two separate AddNode instances with the same structure
-    auto x1 = std::make_shared<VariableNode>("x");
-    auto x2 = std::make_shared<VariableNode>("x");
+    auto x1 = lamina::detail::make_node<VariableNode>("x");
+    auto x2 = lamina::detail::make_node<VariableNode>("x");
 
-    auto add1 = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{x1, x1});
-    auto add2 = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{x2, x2});
+    auto add1 = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{x1, x1});
+    auto add2 = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{x2, x2});
 
     // Multiply using two distinct but structurally identical nodes
-    auto mul = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{add1, add2});
+    auto mul = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{add1, add2});
 
-    return {SymbolicExpr(mul), SymbolicExpr(add1)};
+    return {lamina::detail::expression_from_node(mul), lamina::detail::expression_from_node(add1)};
 }
 
-// ============================================================
-// Property 17: Cycle detection prevents infinite recursion
-// Validates: Requirements 22.2, 22.3, 22.4
-// ============================================================
 
 static void test_cycle_shared_node_returns_unknown() {
     TEST_CASE("Property 17: Shared node (same pointer) in expression returns Unknown without crash");
@@ -149,11 +132,10 @@ static void test_cycle_detection_multiply_shared_operand() {
     InferenceEngine engine(ctx);
 
     // Create x^2 as multiply(x, x) using the SAME variable node pointer
-    auto x_node = std::make_shared<VariableNode>("x");
-    auto mul = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node, x_node});
-    SymbolicExpr expr(mul);
-
+    auto x_node = lamina::detail::make_node<VariableNode>("x");
+    auto mul = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node, x_node});
+    auto expr = lamina::detail::expression_from_node(mul);
     // Query should complete. x*x with x Positive should be Positive.
     Tribool result = engine.query_positive(expr);
 
@@ -173,16 +155,15 @@ static void test_cycle_detection_nested_function_shared_arg() {
     InferenceEngine engine(ctx);
 
     // Create exp(x) using a shared x node, then add(exp(x), exp(x)) using same exp node
-    auto x_node = std::make_shared<VariableNode>("x");
-    auto exp_node = std::make_shared<FunctionNode>(
+    auto x_node = lamina::detail::make_node<VariableNode>("x");
+    auto exp_node = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Exp,
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
 
     // Use the same exp_node pointer twice in an AddNode
-    auto add = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{exp_node, exp_node});
-    SymbolicExpr expr(add);
-
+    auto add = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{exp_node, exp_node});
+    auto expr = lamina::detail::expression_from_node(add);
     // exp(x) is always positive, so exp(x) + exp(x) should be positive.
     // But cycle detection may trigger on the shared exp_node.
     Tribool result = engine.query_positive(expr);
@@ -244,10 +225,6 @@ static void test_cycle_detection_different_query_types() {
         "query_integer on shared expr completes");
 }
 
-// ============================================================
-// Property 18: Depth limit returns Unknown without side effects
-// Validates: Requirements 25.2, 25.4
-// ============================================================
 
 static void test_depth_limit_returns_unknown() {
     TEST_CASE("Property 18: Expression exceeding max depth returns Unknown");
@@ -449,19 +426,18 @@ static void test_depth_limit_multiple_variables() {
     engine.set_max_depth(4);
 
     // Create exp(exp(exp(exp(exp(a + b)))))
-    auto a_node = std::make_shared<VariableNode>("a");
-    auto b_node = std::make_shared<VariableNode>("b");
-    auto add = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{a_node, b_node});
+    auto a_node = lamina::detail::make_node<VariableNode>("a");
+    auto b_node = lamina::detail::make_node<VariableNode>("b");
+    auto add = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{a_node, b_node});
 
-    std::shared_ptr<SymbolicNode> current = add;
+    std::shared_ptr<const SymbolicNode> current = add;
     for (int i = 0; i < 5; ++i) {
-        current = std::make_shared<FunctionNode>(
+        current = lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
-            std::vector<std::shared_ptr<SymbolicNode>>{current});
+            std::vector<std::shared_ptr<const SymbolicNode>>{current});
     }
-    SymbolicExpr expr(current);
-
+    auto expr = lamina::detail::expression_from_node(current);
     Tribool result = engine.query_positive(expr);
 
     // Should return Unknown due to depth limit
@@ -469,12 +445,8 @@ static void test_depth_limit_multiple_variables() {
         "Deep multi-variable expression returns Unknown at depth limit");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 17: Cycle detection prevents infinite recursion
     test_cycle_shared_node_returns_unknown();
     test_cycle_detection_no_false_positive_distinct_nodes();
     test_cycle_detection_multiply_shared_operand();
@@ -482,7 +454,6 @@ int main() {
     test_cycle_detection_preserves_state_after_query();
     test_cycle_detection_different_query_types();
 
-    // Property 18: Depth limit returns Unknown without side effects
     test_depth_limit_returns_unknown();
     test_depth_limit_no_exception();
     test_depth_limit_within_limit_works();

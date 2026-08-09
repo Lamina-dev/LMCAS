@@ -1,5 +1,6 @@
 #include "../include/symbolic.hpp"
 #include "../include/matcher.hpp"
+#include "test_common.hpp"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -7,7 +8,7 @@
 using namespace lamina;
 
 std::shared_ptr<SymbolicExpr> mk_wildcard(const std::string& name) {
-    return std::make_shared<SymbolicExpr>(wildcard(name));
+    return lamina::detail::make_expression_ptr(wildcard(name));
 }
 
 bool test_commutative_add() {
@@ -29,7 +30,7 @@ bool test_commutative_add() {
         return false;
     }
 
-    std::cout << "Matched: x=" << results["x"].to_string() << ", y=" << results["y"].to_string() << std::endl;
+    std::cout << "Matched: x=" << results.at("x").to_string() << ", y=" << results.at("y").to_string() << std::endl;
     return true;
 }
 
@@ -51,7 +52,7 @@ bool test_commutative_mul() {
         std::cout << "Failed to match A*B with y*x" << std::endl;
         return false;
     }
-     std::cout << "Matched: A=" << results["A"].to_string() << ", B=" << results["B"].to_string() << std::endl;
+     std::cout << "Matched: A=" << results.at("A").to_string() << ", B=" << results.at("B").to_string() << std::endl;
     return true;
 }
 
@@ -81,36 +82,20 @@ bool test_commutative_nested() {
          return false;
     }
 
-    std::cout << "Matched: x=" << results["x"].to_string() << std::endl;
-    return results["x"].to_string() == "y";
+    std::cout << "Matched: x=" << results.at("x").to_string() << std::endl;
+    return results.at("x").to_string() == "y";
 }
 
 bool test_subset_match();
 
 int main() {
     std::cerr << "Starting matcher tests..." << std::endl;
-    bool pass = true;
-    if (!test_commutative_add()) {
-        std::cerr << "test_commutative_add failed" << std::endl;
-        pass = false;
-    }
-    if (!test_commutative_mul()) {
-        std::cerr << "test_commutative_mul failed" << std::endl;
-        pass = false;
-    }
-    if (!test_commutative_nested()) {
-        std::cerr << "test_commutative_nested failed" << std::endl;
-        pass = false;
-    }
-    if (!test_subset_match()) {
-        std::cerr << "test_subset_match failed" << std::endl;
-        pass = false;
-    }
+    EXPECT_TRUE(test_commutative_add(), "commutative addition matcher");
+    EXPECT_TRUE(test_commutative_mul(), "commutative multiplication matcher");
+    EXPECT_TRUE(test_commutative_nested(), "nested commutative matcher");
+    EXPECT_TRUE(test_subset_match(), "subset AddNode matcher");
 
-    if (pass) std::cerr << "All matcher tests passed!" << std::endl;
-    else std::cerr << "Some matcher tests failed." << std::endl;
-
-    return pass ? 0 : 1;
+    return TEST_REPORT();
 }
 
 bool test_subset_match() {
@@ -124,12 +109,12 @@ bool test_subset_match() {
     auto vc = SymbolicExpr::variable("c");
     auto vd = SymbolicExpr::variable("d");
 
-    std::vector<std::shared_ptr<SymbolicNode>> ops;
-    ops.push_back(va->root);
-    ops.push_back(vb->root);
-    ops.push_back(vc->root);
-    ops.push_back(vd->root);
-    auto target = SymbolicExpr(SymbolicFactory::create_add(ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> ops;
+    ops.push_back(lamina::detail::node(va));
+    ops.push_back(lamina::detail::node(vb));
+    ops.push_back(lamina::detail::node(vc));
+    ops.push_back(lamina::detail::node(vd));
+    auto target = lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
 
     MatchMap results;
     std::unordered_set<std::string> w = {"A", "B"};
@@ -144,6 +129,6 @@ bool test_subset_match() {
         return false;
     }
 
-    std::cout << "Remainder: " << results["__Add_REST__"].to_string() << std::endl;
+    std::cout << "Remainder: " << results.at("__Add_REST__").to_string() << std::endl;
     return true;
 }

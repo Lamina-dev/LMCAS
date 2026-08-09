@@ -1,26 +1,8 @@
-/**
- * @file test_assumption_simplify.cpp
- * @brief Property tests for assumption-aware simplification (Properties 22-24).
- *
- * Feature: assumption-system, Properties 22-24: Assumption-aware simplification
- * Validates: Requirements 11.1-11.6
- *
- * Property 22: For any variable declared NonNegative, simplifying sqrt(x²) with
- *   the AssumptionContext should produce x; for any variable declared Real (but
- *   not NonNegative), simplifying sqrt(x²) should produce abs(x).
- *
- * Property 23: For any variable declared Positive, simplifying abs(x) should
- *   produce x; for any variable declared Negative, simplifying abs(x) should
- *   produce -x.
- *
- * Property 24: For any expression, simplifying without an AssumptionContext (null
- *   pointer) should produce the same result as the original NormalizationVisitor —
- *   no assumption-based rules should fire.
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
 #include "visitors/normalization_visitor.hpp"
+#include "visitors/print_visitor.hpp"
 #include "symbolic_ast.hpp"
 #include "bigint.hpp"
 #include "rational.hpp"
@@ -30,13 +12,10 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Normalize a node with an AssumptionContext.
-static std::shared_ptr<SymbolicNode> normalize_with_ctx(
-    const std::shared_ptr<SymbolicNode>& node,
+static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
+    const std::shared_ptr<const SymbolicNode>& node,
     const AssumptionContext& ctx) {
     NormalizationVisitor v(&ctx);
     node->accept(v);
@@ -44,83 +23,79 @@ static std::shared_ptr<SymbolicNode> normalize_with_ctx(
 }
 
 /// Normalize a node without any AssumptionContext (backward-compatible).
-static std::shared_ptr<SymbolicNode> normalize_no_ctx(
-    const std::shared_ptr<SymbolicNode>& node) {
+static std::shared_ptr<const SymbolicNode> normalize_no_ctx(
+    const std::shared_ptr<const SymbolicNode>& node) {
     NormalizationVisitor v;
     node->accept(v);
     return v.get_result();
 }
 
 /// Create a VariableNode.
-static std::shared_ptr<SymbolicNode> var(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
 /// Create a NumberNode from int.
-static std::shared_ptr<SymbolicNode> num(int v) {
-    return std::make_shared<NumberNode>(BigInt(v));
+static std::shared_ptr<const SymbolicNode> num(int v) {
+    return lamina::detail::make_node<NumberNode>(BigInt(v));
 }
 
 /// Create sqrt(expr) as FunctionNode(Sqrt, {expr}).
-static std::shared_ptr<SymbolicNode> make_sqrt(const std::shared_ptr<SymbolicNode>& arg) {
-    return std::make_shared<FunctionNode>(
+static std::shared_ptr<const SymbolicNode> make_sqrt(const std::shared_ptr<const SymbolicNode>& arg) {
+    return lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sqrt,
-        std::vector<std::shared_ptr<SymbolicNode>>{arg});
+        std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
 /// Create abs(expr) as FunctionNode(Abs, {expr}).
-static std::shared_ptr<SymbolicNode> make_abs(const std::shared_ptr<SymbolicNode>& arg) {
-    return std::make_shared<FunctionNode>(
+static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const SymbolicNode>& arg) {
+    return lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Abs,
-        std::vector<std::shared_ptr<SymbolicNode>>{arg});
+        std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
 /// Create x^n as PowerNode(x, NumberNode(n)).
-static std::shared_ptr<SymbolicNode> make_power(
-    const std::shared_ptr<SymbolicNode>& base, int exp) {
-    return std::make_shared<PowerNode>(base, num(exp));
+static std::shared_ptr<const SymbolicNode> make_power(
+    const std::shared_ptr<const SymbolicNode>& base, int exp) {
+    return lamina::detail::make_node<PowerNode>(base, num(exp));
 }
 
 /// Check if a node is a VariableNode with the given name.
-static bool is_variable(const std::shared_ptr<SymbolicNode>& node, const std::string& name) {
-    auto v = std::dynamic_pointer_cast<VariableNode>(node);
-    return v && v->name == name;
+static bool is_variable(const std::shared_ptr<const SymbolicNode>& node, const std::string& name) {
+    auto v = std::dynamic_pointer_cast<const VariableNode>(node);
+    return v && v->name() == name;
 }
 
 /// Check if a node is abs(x) — FunctionNode(Abs, {VariableNode(name)}).
-static bool is_abs_of_var(const std::shared_ptr<SymbolicNode>& node, const std::string& name) {
-    auto func = std::dynamic_pointer_cast<FunctionNode>(node);
-    if (!func || func->type != FunctionNode::FuncType::Abs) return false;
-    if (func->arguments.size() != 1) return false;
-    return is_variable(func->arguments[0], name);
+static bool is_abs_of_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& name) {
+    auto func = std::dynamic_pointer_cast<const FunctionNode>(node);
+    if (!func || func->type() != FunctionNode::FuncType::Abs) return false;
+    if (func->arguments().size() != 1) return false;
+    return is_variable(func->arguments()[0], name);
 }
 
 /// Check if a node represents -x (i.e., MultiplyNode({-1, x})).
-static bool is_negation_of_var(const std::shared_ptr<SymbolicNode>& node, const std::string& name) {
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(node);
-    if (!mul || mul->operands.size() != 2) return false;
+static bool is_negation_of_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& name) {
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node);
+    if (!mul || mul->operands().size() != 2) return false;
 
     // Check for -1 * x pattern
-    auto n = std::dynamic_pointer_cast<NumberNode>(mul->operands[0]);
+    auto n = std::dynamic_pointer_cast<const NumberNode>(mul->operands()[0]);
     if (!n) return false;
 
     bool is_neg_one = false;
-    if (std::holds_alternative<BigInt>(n->value)) {
-        is_neg_one = (std::get<BigInt>(n->value) == BigInt(-1));
-    } else if (std::holds_alternative<lmmc_real_t>(n->value)) {
-        is_neg_one = (std::get<lmmc_real_t>(n->value) == -1.0);
-    } else if (std::holds_alternative<Rational>(n->value)) {
-        is_neg_one = (std::get<Rational>(n->value) == Rational(-1));
+    if (std::holds_alternative<BigInt>(n->value())) {
+        is_neg_one = (std::get<BigInt>(n->value()) == BigInt(-1));
+    } else if (std::holds_alternative<lmmc_real_t>(n->value())) {
+        is_neg_one = (std::get<lmmc_real_t>(n->value()) == -1.0);
+    } else if (std::holds_alternative<Rational>(n->value())) {
+        is_neg_one = (std::get<Rational>(n->value()) == Rational(-1));
     }
 
     if (!is_neg_one) return false;
-    return is_variable(mul->operands[1], name);
+    return is_variable(mul->operands()[1], name);
 }
 
-// ============================================================
-// Property 22: Assumption-aware sqrt(x²) simplification
-// Validates: Requirements 11.1, 11.4
-// ============================================================
 
 void test_sqrt_x_squared_nonnegative() {
     TEST_CASE("Property 22: sqrt(x²) → x when x is NonNegative");
@@ -218,10 +193,6 @@ void test_sqrt_x_squared_natural() {
                 "sqrt(k²) with Natural + NonNegative → k");
 }
 
-// ============================================================
-// Property 23: Assumption-aware abs() simplification
-// Validates: Requirements 11.2, 11.3
-// ============================================================
 
 void test_abs_positive() {
     TEST_CASE("Property 23: abs(x) → x when x is Positive");
@@ -287,15 +258,11 @@ void test_abs_no_assumption() {
     auto result = normalize_with_ctx(abs_x, ctx);
 
     // Should remain as abs(x) since no sign info is available
-    auto func = std::dynamic_pointer_cast<FunctionNode>(result);
-    EXPECT_TRUE(func != nullptr && func->type == FunctionNode::FuncType::Abs,
+    auto func = std::dynamic_pointer_cast<const FunctionNode>(result);
+    EXPECT_TRUE(func != nullptr && func->type() == FunctionNode::FuncType::Abs,
                 "abs(x) with no assumption remains abs(x)");
 }
 
-// ============================================================
-// Property 24: Backward-compatible simplification
-// Validates: Requirements 11.5, 11.6
-// ============================================================
 
 void test_backward_compat_sqrt_x_squared() {
     TEST_CASE("Property 24: sqrt(x²) without context produces same result as default NormalizationVisitor");
@@ -337,15 +304,15 @@ void test_backward_compat_various_expressions() {
     TEST_CASE("Property 24: Various expressions without context match default visitor");
 
     // Test a variety of expressions to ensure no assumption rules fire
-    std::vector<std::shared_ptr<SymbolicNode>> expressions = {
+    std::vector<std::shared_ptr<const SymbolicNode>> expressions = {
         // Simple variable
         var("x"),
         // Number
         num(42),
         // x + y
-        std::make_shared<AddNode>(std::vector<std::shared_ptr<SymbolicNode>>{var("x"), var("y")}),
+        lamina::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{var("x"), var("y")}),
         // x * y
-        std::make_shared<MultiplyNode>(std::vector<std::shared_ptr<SymbolicNode>>{var("x"), var("y")}),
+        lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{var("x"), var("y")}),
         // x^3
         make_power(var("x"), 3),
         // sqrt(x)
@@ -355,13 +322,13 @@ void test_backward_compat_various_expressions() {
         // sqrt(y^2)
         make_sqrt(make_power(var("y"), 2)),
         // sin(x)
-        std::make_shared<FunctionNode>(
+        lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sin,
-            std::vector<std::shared_ptr<SymbolicNode>>{var("x")}),
+            std::vector<std::shared_ptr<const SymbolicNode>>{var("x")}),
         // exp(x)
-        std::make_shared<FunctionNode>(
+        lamina::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
-            std::vector<std::shared_ptr<SymbolicNode>>{var("x")}),
+            std::vector<std::shared_ptr<const SymbolicNode>>{var("x")}),
     };
 
     for (size_t i = 0; i < expressions.size(); ++i) {
@@ -437,9 +404,6 @@ void test_backward_compat_null_context_explicit() {
                 "NormalizationVisitor(nullptr) = NormalizationVisitor() for abs(x)");
 }
 
-// ============================================================
-// Additional edge cases for completeness
-// ============================================================
 
 void test_sqrt_x_squared_in_larger_expression() {
     TEST_CASE("Property 22: sqrt(x²) simplifies within a larger expression (Req 11.7)");
@@ -449,21 +413,21 @@ void test_sqrt_x_squared_in_larger_expression() {
 
     // Build: sqrt(x²) + 1
     auto sqrt_x_sq = make_sqrt(make_power(var("x"), 2));
-    auto expr = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{sqrt_x_sq, num(1)});
+    auto expr = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{sqrt_x_sq, num(1)});
 
     auto result = normalize_with_ctx(expr, ctx);
 
     // The result should be x + 1
-    auto add = std::dynamic_pointer_cast<AddNode>(result);
+    auto add = std::dynamic_pointer_cast<const AddNode>(result);
     if (add) {
         // Check that the result contains x and 1 (order may vary)
         bool has_x = false;
         bool has_one = false;
-        for (const auto& op : add->operands) {
+        for (const auto& op : add->operands()) {
             if (is_variable(op, "x")) has_x = true;
-            if (auto n = std::dynamic_pointer_cast<NumberNode>(op)) {
-                if (std::holds_alternative<BigInt>(n->value) && std::get<BigInt>(n->value) == BigInt(1))
+            if (auto n = std::dynamic_pointer_cast<const NumberNode>(op)) {
+                if (std::holds_alternative<BigInt>(n->value()) && std::get<BigInt>(n->value()) == BigInt(1))
                     has_one = true;
             }
         }
@@ -471,7 +435,14 @@ void test_sqrt_x_squared_in_larger_expression() {
                     "sqrt(x²) + 1 with NonNegative x → x + 1");
     } else {
         // Might be simplified differently, just check it's not still sqrt(x²) + 1
-        EXPECT_TRUE(true, "sqrt(x²) + 1 simplified (non-AddNode result)");
+        PrintVisitor pv;
+        if (result) result->accept(pv);
+        const auto result_str = pv.get_result();
+        EXPECT_TRUE(result != nullptr &&
+                        result_str.find("sqrt") == std::string::npos &&
+                        result_str.find("x") != std::string::npos &&
+                        result_str.find("1") != std::string::npos,
+                    "sqrt(x²) + 1 simplified (non-AddNode result)");
     }
 }
 
@@ -483,20 +454,20 @@ void test_abs_in_larger_expression() {
 
     // Build: 2 * abs(x)
     auto abs_x = make_abs(var("x"));
-    auto expr = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{num(2), abs_x});
+    auto expr = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{num(2), abs_x});
 
     auto result = normalize_with_ctx(expr, ctx);
 
     // The result should be 2 * x
-    auto mul = std::dynamic_pointer_cast<MultiplyNode>(result);
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(result);
     if (mul) {
         bool has_x = false;
         bool has_two = false;
-        for (const auto& op : mul->operands) {
+        for (const auto& op : mul->operands()) {
             if (is_variable(op, "x")) has_x = true;
-            if (auto n = std::dynamic_pointer_cast<NumberNode>(op)) {
-                if (std::holds_alternative<BigInt>(n->value) && std::get<BigInt>(n->value) == BigInt(2))
+            if (auto n = std::dynamic_pointer_cast<const NumberNode>(op)) {
+                if (std::holds_alternative<BigInt>(n->value()) && std::get<BigInt>(n->value()) == BigInt(2))
                     has_two = true;
             }
         }
@@ -504,7 +475,14 @@ void test_abs_in_larger_expression() {
                     "2 * abs(x) with Positive x → 2 * x");
     } else {
         // Could be simplified to just a variable if 2*x normalizes differently
-        EXPECT_TRUE(true, "2 * abs(x) simplified (non-MultiplyNode result)");
+        PrintVisitor pv;
+        if (result) result->accept(pv);
+        const auto result_str = pv.get_result();
+        EXPECT_TRUE(result != nullptr &&
+                        result_str.find("abs") == std::string::npos &&
+                        result_str.find("x") != std::string::npos &&
+                        result_str.find("2") != std::string::npos,
+                    "2 * abs(x) simplified (non-MultiplyNode result)");
     }
 }
 
@@ -534,25 +512,19 @@ void test_scoped_assumption_simplification() {
                 "sqrt(x²) after pop = root scope result (no simplification)");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 22: Assumption-aware sqrt(x²) simplification
     test_sqrt_x_squared_nonnegative();
     test_sqrt_x_squared_positive();
     test_sqrt_x_squared_real_not_nonneg();
     test_sqrt_x_squared_integer_not_nonneg();
     test_sqrt_x_squared_natural();
 
-    // Property 23: Assumption-aware abs() simplification
     test_abs_positive();
     test_abs_negative();
     test_abs_nonnegative_not_positive();
     test_abs_no_assumption();
 
-    // Property 24: Backward-compatible simplification
     test_backward_compat_sqrt_x_squared();
     test_backward_compat_abs_x();
     test_backward_compat_various_expressions();

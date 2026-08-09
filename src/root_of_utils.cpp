@@ -1,10 +1,13 @@
 #include "root_of_utils.hpp"
 #include "newton_raphson.hpp"
+#include "numeric_evaluation.hpp"
 #include "solve_polynomial.hpp"
 #include "symbolic_ast.hpp"
+#include "poly_utils_internal.hpp"
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <limits>
 
 namespace lamina {
 
@@ -66,194 +69,128 @@ std::vector<std::shared_ptr<SymbolicExpr>> make_rootof_solutions(
     return solutions;
 }
 
-static bool expr_has_free_variables(const std::shared_ptr<SymbolicNode>& node) {
-    if (!node) return false;
-
-    struct VarCheckVisitor : public SymbolicVisitor {
-        bool found = false;
-        void visit(NumberNode&) override {}
-        void visit(VariableNode&) override { found = true; }
-        void visit(AddNode& n) override { for (auto& op : n.operands) { if (found) return; op->accept(*this); } }
-        void visit(MultiplyNode& n) override { for (auto& op : n.operands) { if (found) return; op->accept(*this); } }
-        void visit(PowerNode& n) override { n.base->accept(*this); if (!found) n.exponent->accept(*this); }
-        void visit(FunctionNode& n) override { for (auto& arg : n.arguments) { if (found) return; arg->accept(*this); } }
-        void visit(MatrixNode& n) override {
-            if (std::holds_alternative<MatrixNode::DenseStorage>(n.storage)) {
-                for (auto& item : std::get<MatrixNode::DenseStorage>(n.storage)) {
-                    if (item) { item->accept(*this); if (found) return; }
-                }
-            } else {
-                for (auto& [idx, item] : std::get<MatrixNode::SparseStorage>(n.storage)) {
-                    item->accept(*this); if (found) return;
-                }
-            }
-        }
-    } visitor;
-    node->accept(visitor);
-    return visitor.found;
-}
-
-static bool try_convert_to_rational_poly(
-    const Polynomial<SymbolicPolyCoeff>& sym_poly,
-    Polynomial<Rational>& out_poly)
-{
-    out_poly = Polynomial<Rational>(sym_poly.variable_name);
-    out_poly.coeffs.resize(sym_poly.coeffs.size(), Rational(0));
-
-    for (size_t i = 0; i < sym_poly.coeffs.size(); ++i) {
-        auto coeff_expr = sym_poly.coeffs[i].val;
-        if (!coeff_expr) {
-            out_poly.coeffs[i] = Rational(0);
-            continue;
-        }
-
-        auto simplified = coeff_expr->simplify();
-
-        if (expr_has_free_variables(simplified->root)) {
-            return false;
-        }
-
-        if (auto num_node = std::dynamic_pointer_cast<NumberNode>(simplified->root)) {
-            if (std::holds_alternative<Rational>(num_node->value)) {
-                out_poly.coeffs[i] = std::get<Rational>(num_node->value);
-            } else if (std::holds_alternative<BigInt>(num_node->value)) {
-                out_poly.coeffs[i] = Rational(std::get<BigInt>(num_node->value));
-            } else {
-
-                out_poly.coeffs[i] = Rational::from_double(std::get<lmmc_real_t>(num_node->value));
-            }
-        } else {
-
-            lmmc_real_t val = simplified->to_numeric();
-            if (std::isnan(val) || std::isinf(val)) {
-                return false;
-            }
-            out_poly.coeffs[i] = Rational::from_double(val);
-        }
-    }
-
-    out_poly.trim();
-    return true;
-}
-
 std::optional<lmmc_real_t> rootof_evaluate(
     const std::shared_ptr<SymbolicExpr>& rootof_expr)
 {
-    if (!rootof_expr || !rootof_expr->root) return std::nullopt;
+    ComputationContext context;
+    auto result = rootof_evaluate_checked(rootof_expr, context);
+    return result ? std::optional<lmmc_real_t>(result.value()) : std::nullopt;
+}
 
-    auto func_node = std::dynamic_pointer_cast<FunctionNode>(rootof_expr->root);
-    if (!func_node || func_node->type != FunctionNode::FuncType::RootOf) {
-        return std::nullopt;
+RootOfEvaluationResult rootof_evaluate_checked(
+    const std::shared_ptr<SymbolicExpr>& rootof_expr,
+    ComputationContext& context)
+{
+    constexpr const char* operation = "rootof_evaluate";
+    if (!rootof_expr || !lamina::detail::node(rootof_expr)) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InvalidArgument, "RootOf expression cannot be null", operation);
     }
 
-    if (func_node->arguments.size() != 3) {
-        return std::nullopt;
+    auto func_node = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(rootof_expr));
+    if (!func_node || func_node->type() != FunctionNode::FuncType::RootOf) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InvalidArgument, "expression is not a RootOf", operation);
     }
 
-    auto poly_node = func_node->arguments[0];
-    auto var_node = func_node->arguments[1];
-    auto index_node = func_node->arguments[2];
+    if (func_node->arguments().size() != 3) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InternalInvariant, "RootOf must contain three arguments", operation);
+    }
 
-    auto var_sym = std::dynamic_pointer_cast<VariableNode>(var_node);
-    if (!var_sym) return std::nullopt;
-    std::string var = var_sym->name;
+    auto poly_node = func_node->arguments()[0];
+    auto var_node = func_node->arguments()[1];
+    auto index_node = func_node->arguments()[2];
 
-    auto idx_num = std::dynamic_pointer_cast<NumberNode>(index_node);
-    if (!idx_num) return std::nullopt;
+    auto var_sym = std::dynamic_pointer_cast<const VariableNode>(var_node);
+    if (!var_sym || var_sym->name().empty()) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InvalidArgument, "RootOf variable must be a named symbol", operation);
+    }
+    std::string var = var_sym->name();
 
-    int k = 0;
-    if (std::holds_alternative<BigInt>(idx_num->value)) {
-        k = std::get<BigInt>(idx_num->value).to_int();
-    } else if (std::holds_alternative<Rational>(idx_num->value)) {
-        k = static_cast<int>(std::get<Rational>(idx_num->value).to_double());
+    auto idx_num = std::dynamic_pointer_cast<const NumberNode>(index_node);
+    if (!idx_num || std::holds_alternative<lmmc_real_t>(idx_num->value())) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InvalidArgument, "RootOf index must be an exact integer", operation);
+    }
+
+    BigInt index;
+    if (std::holds_alternative<BigInt>(idx_num->value())) {
+        index = std::get<BigInt>(idx_num->value());
     } else {
-        k = static_cast<int>(std::get<lmmc_real_t>(idx_num->value));
+        const Rational& rational = std::get<Rational>(idx_num->value());
+        if (!rational.is_integer()) {
+            return RootOfEvaluationResult::failure(
+                CasErrc::InvalidArgument, "RootOf index must be an integer", operation);
+        }
+        index = rational.to_BigInt();
+    }
+    auto index_value = index.try_to_int64();
+    if (!index_value || *index_value < 0) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InvalidArgument, "RootOf index is negative or too large", operation);
     }
 
-    auto poly_expr = std::make_shared<SymbolicExpr>(poly_node);
-    auto sym_poly = symbolic_to_poly<SymbolicPolyCoeff>(poly_expr, var);
-
-    int degree = sym_poly.degree();
-    if (degree <= 0) return std::nullopt;
-
-    if (k < 0 || k >= degree) {
-        return std::nullopt;
+    auto poly_expr = lamina::detail::make_expression_ptr(poly_node);
+    auto recognized = recognize_rational_polynomial(*poly_expr, var, context);
+    if (!recognized) return RootOfEvaluationResult::failure(recognized.error());
+    if (!recognized.value()) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::Inconclusive,
+            "RootOf numeric evaluation supports exact rational polynomials only",
+            operation);
+    }
+    const Polynomial<Rational>& rat_poly = *recognized.value();
+    const int degree = rat_poly.degree();
+    if (degree <= 0) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InvalidArgument, "RootOf polynomial must have positive degree", operation);
+    }
+    if (*index_value >= degree) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::InvalidArgument, "RootOf index exceeds polynomial degree", operation);
     }
 
-    Polynomial<Rational> rat_poly;
-    if (!try_convert_to_rational_poly(sym_poly, rat_poly)) {
-
-        return std::nullopt;
-    }
-
+    auto isolation_step = context.consume_steps(
+        static_cast<std::size_t>(degree), operation);
+    if (!isolation_step) return RootOfEvaluationResult::failure(isolation_step.error());
     auto intervals = isolate_real_roots(rat_poly);
-
-    int num_real_roots = static_cast<int>(intervals.size());
-
-    if (k >= num_real_roots) {
-        return std::nullopt;
+    if (static_cast<int>(intervals.size()) != degree) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::Inconclusive,
+            "RootOf double evaluation currently requires every root to be real",
+            operation);
     }
 
-    const auto& interval = intervals[k];
-
-    lmmc_real_t x0 = (interval.first.to_double() + interval.second.to_double()) / 2.0;
-
-    auto f_expr = poly_expr->simplify();
-    auto df_expr = f_expr->differentiate(var);
-    if (!df_expr) {
-
-        return x0;
-    }
-    df_expr = df_expr->simplify();
+    const auto& interval = intervals[static_cast<std::size_t>(*index_value)];
+    const lmmc_real_t lo = interval.first.to_double();
+    const lmmc_real_t hi = interval.second.to_double();
+    const lmmc_real_t x0 = (lo + hi) / 2.0;
+    auto df_expr = poly_expr->differentiate(var);
 
     SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
-
-    auto result = newton_raphson(f_expr, df_expr, var, x0, opts);
-    if (result.has_value()) {
-        return result->value;
+    auto refined = newton_raphson_checked(
+        poly_expr, df_expr, var, x0, lo, hi, context, opts);
+    if (!refined) return RootOfEvaluationResult::failure(refined.error());
+    if (!refined.value()) {
+        return RootOfEvaluationResult::failure(
+            CasErrc::Inconclusive, "isolated RootOf could not be numerically verified", operation);
     }
-
-    lmmc_real_t lo = interval.first.to_double();
-    lmmc_real_t hi = interval.second.to_double();
-
-    for (int iter = 0; iter < 200; ++iter) {
-        lmmc_real_t mid = (lo + hi) / 2.0;
-        auto fmid_expr = f_expr->substitute(var, SymbolicExpr::number(mid));
-        lmmc_real_t fmid = fmid_expr->to_numeric();
-
-        if (std::abs(fmid) < 1e-12) {
-            return mid;
-        }
-
-        auto flo_expr = f_expr->substitute(var, SymbolicExpr::number(lo));
-        lmmc_real_t flo = flo_expr->to_numeric();
-
-        if ((flo > 0) != (fmid > 0)) {
-            hi = mid;
-        } else {
-            lo = mid;
-        }
-    }
-
-    return (lo + hi) / 2.0;
+    return RootOfEvaluationResult::success(refined.value()->value);
 }
 
 static std::pair<std::complex<double>, bool> try_eval_complex(
     const std::shared_ptr<SymbolicExpr>& expr)
 {
-    if (!expr || !expr->root) return {{0.0, 0.0}, false};
+    if (!expr || !lamina::detail::node(expr)) return {{0.0, 0.0}, false};
 
-    lmmc_real_t val = expr->to_numeric();
-    if (!std::isnan(val) && !std::isinf(val)) {
-        return {{val, 0.0}, true};
-    }
-
-    auto simplified = expr->simplify();
-    val = simplified->to_numeric();
-    if (!std::isnan(val) && !std::isinf(val)) {
-        return {{val, 0.0}, true};
+    ComputationContext context;
+    auto evaluated = evaluate_numeric(*expr, {}, context);
+    if (evaluated && evaluated.value().is_finite()) {
+        return {{evaluated.value().value, 0.0}, true};
     }
 
     return {{0.0, 0.0}, false};
@@ -387,41 +324,95 @@ static std::vector<std::shared_ptr<SymbolicExpr>> sort_roots_by_convention(
     return sorted;
 }
 
+static bool is_structural_polynomial(const std::shared_ptr<const SymbolicNode>& node,
+                                     const std::string& variable) {
+    if (!node) return false;
+    if (!depends_on_var(node, variable)) return true;
+
+    if (auto symbol = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        return symbol->name() == variable;
+    }
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        return std::all_of(add->operands().begin(), add->operands().end(),
+            [&](const auto& operand) {
+                return is_structural_polynomial(operand, variable);
+            });
+    }
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        return std::all_of(multiply->operands().begin(), multiply->operands().end(),
+            [&](const auto& operand) {
+                return is_structural_polynomial(operand, variable);
+            });
+    }
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto exponent_node = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
+        if (!exponent_node || std::holds_alternative<lmmc_real_t>(exponent_node->value())) {
+            return false;
+        }
+        BigInt exponent;
+        if (std::holds_alternative<BigInt>(exponent_node->value())) {
+            exponent = std::get<BigInt>(exponent_node->value());
+        } else {
+            const Rational& rational = std::get<Rational>(exponent_node->value());
+            if (!rational.is_integer()) return false;
+            exponent = rational.to_BigInt();
+        }
+        auto value = exponent.try_to_int64();
+        return value && *value > 0 && *value < 1000 &&
+               is_structural_polynomial(power->base(), variable);
+    }
+    return false;
+}
+
+static std::optional<int> exact_root_index(const std::shared_ptr<const SymbolicNode>& node) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number || std::holds_alternative<lmmc_real_t>(number->value())) {
+        return std::nullopt;
+    }
+    BigInt index;
+    if (std::holds_alternative<BigInt>(number->value())) {
+        index = std::get<BigInt>(number->value());
+    } else {
+        const Rational& rational = std::get<Rational>(number->value());
+        if (!rational.is_integer()) return std::nullopt;
+        index = rational.to_BigInt();
+    }
+    auto value = index.try_to_int64();
+    if (!value || *value < 0 || *value > std::numeric_limits<int>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<int>(*value);
+}
+
 std::shared_ptr<SymbolicExpr> rootof_simplify(
     const std::shared_ptr<SymbolicExpr>& rootof_expr)
 {
-    if (!rootof_expr || !rootof_expr->root) return rootof_expr;
+    if (!rootof_expr || !lamina::detail::node(rootof_expr)) return rootof_expr;
 
-    auto func_node = std::dynamic_pointer_cast<FunctionNode>(rootof_expr->root);
-    if (!func_node || func_node->type != FunctionNode::FuncType::RootOf) {
+    auto func_node = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(rootof_expr));
+    if (!func_node || func_node->type() != FunctionNode::FuncType::RootOf) {
         return rootof_expr;
     }
 
-    if (func_node->arguments.size() != 3) {
+    if (func_node->arguments().size() != 3) {
         return rootof_expr;
     }
 
-    auto poly_node = func_node->arguments[0];
-    auto var_node = func_node->arguments[1];
-    auto index_node = func_node->arguments[2];
+    auto poly_node = func_node->arguments()[0];
+    auto var_node = func_node->arguments()[1];
+    auto index_node = func_node->arguments()[2];
 
-    auto var_sym = std::dynamic_pointer_cast<VariableNode>(var_node);
+    auto var_sym = std::dynamic_pointer_cast<const VariableNode>(var_node);
     if (!var_sym) return rootof_expr;
-    std::string var = var_sym->name;
+    std::string var = var_sym->name();
 
-    auto idx_num = std::dynamic_pointer_cast<NumberNode>(index_node);
-    if (!idx_num) return rootof_expr;
+    auto index = exact_root_index(index_node);
+    if (!index) return rootof_expr;
+    const int k = *index;
 
-    int k = 0;
-    if (std::holds_alternative<BigInt>(idx_num->value)) {
-        k = std::get<BigInt>(idx_num->value).to_int();
-    } else if (std::holds_alternative<Rational>(idx_num->value)) {
-        k = static_cast<int>(std::get<Rational>(idx_num->value).to_double());
-    } else {
-        k = static_cast<int>(std::get<lmmc_real_t>(idx_num->value));
-    }
+    if (!is_structural_polynomial(poly_node, var)) return rootof_expr;
 
-    auto poly_expr = std::make_shared<SymbolicExpr>(poly_node);
+    auto poly_expr = lamina::detail::make_expression_ptr(poly_node);
     auto sym_poly = symbolic_to_poly<SymbolicPolyCoeff>(poly_expr, var);
 
     int degree = sym_poly.degree();

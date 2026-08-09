@@ -1,19 +1,3 @@
-/**
- * @file test_assumption_property_store.cpp
- * @brief Unified property tests for PropertyStore (Properties 1-8).
- *
- * Feature: assumption-system
- * Validates: Requirements 1.1-1.5, 2.1-2.4, 2.6, 3.1-3.7
- *
- * Property 1: Domain declaration round-trip and idempotence
- * Property 2: Domain hierarchy implication
- * Property 3: Domain specificity preservation
- * Property 4: Domain-sign contradiction detection
- * Property 5: Sign declaration with implication
- * Property 6: Sign contradiction detection
- * Property 7: Parity declaration with domain auto-promotion
- * Property 8: Boundedness declaration consistency
- */
 
 #include "test_common.hpp"
 #include "property_store.hpp"
@@ -25,9 +9,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helper: all Domain values for exhaustive iteration
-// ============================================================
 
 static const std::vector<Domain> ALL_DOMAINS = {
     Domain::Complex, Domain::Real, Domain::Algebraic, Domain::Rational,
@@ -82,10 +63,6 @@ static std::string sign_name(Sign s) {
     return "?";
 }
 
-// ============================================================
-// Property 1: Domain declaration round-trip and idempotence
-// **Validates: Requirements 1.1, 1.5**
-// ============================================================
 
 void test_property1_domain_roundtrip_all() {
     TEST_CASE("Property 1: Domain declaration round-trip for all domains and symbols");
@@ -121,10 +98,6 @@ void test_property1_idempotence() {
     }
 }
 
-// ============================================================
-// Property 2: Domain hierarchy implication
-// **Validates: Requirements 1.2**
-// ============================================================
 
 void test_property2_hierarchy_implication() {
     TEST_CASE("Property 2: Declaring domain D implies all ancestor domains return True");
@@ -163,10 +136,6 @@ void test_property2_non_ancestors_false() {
     }
 }
 
-// ============================================================
-// Property 3: Domain specificity preservation
-// **Validates: Requirements 1.3**
-// ============================================================
 
 void test_property3_specificity_preservation() {
     TEST_CASE("Property 3: Declaring less-specific domain after more-specific is no-op");
@@ -208,10 +177,6 @@ void test_property3_more_specific_upgrades() {
         "x upgraded to PositiveInt");
 }
 
-// ============================================================
-// Property 4: Domain-sign contradiction detection
-// **Validates: Requirements 1.4**
-// ============================================================
 
 void test_property4_natural_negative_contradiction() {
     TEST_CASE("Property 4: Natural + Negative sign throws");
@@ -323,10 +288,6 @@ void test_property4_compatible_domain_sign_no_throw() {
     }
 }
 
-// ============================================================
-// Property 5: Sign declaration with implication
-// **Validates: Requirements 2.1, 2.2, 2.4**
-// ============================================================
 
 void test_property5_positive_implications() {
     TEST_CASE("Property 5: Positive implies NonNegative and NonZero");
@@ -410,10 +371,6 @@ void test_property5_redeclare_implied_sign_noop() {
         "Re-declaring implied NonNegative after Positive is no-op");
 }
 
-// ============================================================
-// Property 6: Sign contradiction detection
-// **Validates: Requirements 2.3, 2.6**
-// ============================================================
 
 // Contradiction pairs to test exhaustively
 static const std::vector<std::pair<Sign, Sign>> CONTRADICTION_PAIRS = {
@@ -485,10 +442,6 @@ void test_property6_compatible_signs_no_throw() {
     }
 }
 
-// ============================================================
-// Property 7: Parity declaration with domain auto-promotion
-// **Validates: Requirements 3.1, 3.3, 3.4, 3.7**
-// ============================================================
 
 void test_property7_even_promotes_to_integer() {
     TEST_CASE("Property 7: Even parity auto-promotes to Integer domain");
@@ -576,10 +529,6 @@ void test_property7_default_parity_unknown() {
         "Undeclared symbol has Unknown parity");
 }
 
-// ============================================================
-// Property 8: Boundedness declaration consistency
-// **Validates: Requirements 3.2, 3.5, 3.7**
-// ============================================================
 
 void test_property8_bounded_stored() {
     TEST_CASE("Property 8: Declaring Bounded stores Bounded");
@@ -603,10 +552,10 @@ void test_property8_bounded_with_interval() {
     TEST_CASE("Property 8: Bounded with interval stores bounds");
     PropertyStore store;
 
-    auto lower_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(0)));
-    auto upper_val = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(10)));
+    auto lower_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);
@@ -678,9 +627,6 @@ void test_property8_default_unknown() {
         "Undeclared symbol has no bounds");
 }
 
-// ============================================================
-// Cross-property interaction tests
-// ============================================================
 
 void test_cross_domain_sign_interaction() {
     TEST_CASE("Cross: Domain Natural then sign Negative throws (reverse direction)");
@@ -733,24 +679,17 @@ void test_default_domain_complex() {
         "has_domain returns true for Complex on undeclared symbol");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 1: Domain declaration round-trip and idempotence
     test_property1_domain_roundtrip_all();
     test_property1_idempotence();
 
-    // Property 2: Domain hierarchy implication
     test_property2_hierarchy_implication();
     test_property2_non_ancestors_false();
 
-    // Property 3: Domain specificity preservation
     test_property3_specificity_preservation();
     test_property3_more_specific_upgrades();
 
-    // Property 4: Domain-sign contradiction detection
     test_property4_natural_negative_contradiction();
     test_property4_positiveint_negative_contradiction();
     test_property4_positiveint_zero_contradiction();
@@ -758,7 +697,6 @@ int main() {
     test_property4_natural_implied_negative_contradiction();
     test_property4_compatible_domain_sign_no_throw();
 
-    // Property 5: Sign declaration with implication
     test_property5_positive_implications();
     test_property5_negative_implications();
     test_property5_zero_implications();
@@ -766,12 +704,10 @@ int main() {
     test_property5_redeclaration_noop();
     test_property5_redeclare_implied_sign_noop();
 
-    // Property 6: Sign contradiction detection
     test_property6_all_contradiction_pairs();
     test_property6_implied_contradiction();
     test_property6_compatible_signs_no_throw();
 
-    // Property 7: Parity declaration with domain auto-promotion
     test_property7_even_promotes_to_integer();
     test_property7_odd_promotes_to_integer();
     test_property7_parity_does_not_demote();
@@ -779,7 +715,6 @@ int main() {
     test_property7_parity_contradiction();
     test_property7_default_parity_unknown();
 
-    // Property 8: Boundedness declaration consistency
     test_property8_bounded_stored();
     test_property8_unbounded_stored();
     test_property8_bounded_with_interval();

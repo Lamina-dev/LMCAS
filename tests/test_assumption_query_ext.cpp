@@ -1,10 +1,3 @@
-/**
- * @file test_assumption_query_ext.cpp
- * @brief Unit tests for QueryInterface extensions: caching, cache invalidation,
- *        query_conditions, matrix definiteness queries, and extended property queries.
- *
- * Validates: Requirements 21.2, 21.3, 23.2, 23.3, 10.5
- */
 
 #include "test_common.hpp"
 #include "query_interface.hpp"
@@ -16,66 +9,57 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static SymbolicExpr make_var(const std::string& name) {
-    SymbolicExpr expr;
-    expr.root = std::make_shared<VariableNode>(name);
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
     return expr;
 }
 
 static SymbolicExpr make_int(int v) {
-    SymbolicExpr expr;
-    expr.root = std::make_shared<NumberNode>(BigInt(v));
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(v)));
     return expr;
 }
 
 /// Build x - y as AddNode([x, MultiplyNode([-1, y])])
 static SymbolicExpr make_subtraction(const std::string& lhs, const std::string& rhs) {
-    auto x_node = std::make_shared<VariableNode>(lhs);
-    auto y_node = std::make_shared<VariableNode>(rhs);
-    auto neg_one = std::make_shared<NumberNode>(BigInt(-1));
-    auto neg_y = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{neg_one, y_node});
-    auto add = std::make_shared<AddNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node, neg_y});
-    SymbolicExpr expr;
-    expr.root = add;
+    auto x_node = lamina::detail::make_node<VariableNode>(lhs);
+    auto y_node = lamina::detail::make_node<VariableNode>(rhs);
+    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
+    auto neg_y = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, y_node});
+    auto add = lamina::detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node, neg_y});
+    auto expr = lamina::detail::expression_from_node(add);
     return expr;
 }
 
 /// Build sin(x) as FunctionNode(Sin, [VariableNode(x)])
 static SymbolicExpr make_sin(const std::string& var_name) {
-    auto x_node = std::make_shared<VariableNode>(var_name);
-    auto sin_node = std::make_shared<FunctionNode>(
+    auto x_node = lamina::detail::make_node<VariableNode>(var_name);
+    auto sin_node = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sin,
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
-    SymbolicExpr expr;
-    expr.root = sin_node;
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
+    auto expr = lamina::detail::expression_from_node(sin_node);
     return expr;
 }
 
 /// Build cos(x) as FunctionNode(Cos, [VariableNode(x)])
 static SymbolicExpr make_cos(const std::string& var_name) {
-    auto x_node = std::make_shared<VariableNode>(var_name);
-    auto cos_node = std::make_shared<FunctionNode>(
+    auto x_node = lamina::detail::make_node<VariableNode>(var_name);
+    auto cos_node = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Cos,
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
-    SymbolicExpr expr;
-    expr.root = cos_node;
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
+    auto expr = lamina::detail::expression_from_node(cos_node);
     return expr;
 }
 
 /// Build tan(x) as FunctionNode(Tan, [VariableNode(x)])
 static SymbolicExpr make_tan(const std::string& var_name) {
-    auto x_node = std::make_shared<VariableNode>(var_name);
-    auto tan_node = std::make_shared<FunctionNode>(
+    auto x_node = lamina::detail::make_node<VariableNode>(var_name);
+    auto tan_node = lamina::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Tan,
-        std::vector<std::shared_ptr<SymbolicNode>>{x_node});
-    SymbolicExpr expr;
-    expr.root = tan_node;
+        std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
+    auto expr = lamina::detail::expression_from_node(tan_node);
     return expr;
 }
 
@@ -94,9 +78,6 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
     }
 }
 
-// ============================================================
-// Test: Cache hit returns same result without re-inference (Req 23.2)
-// ============================================================
 
 void test_cache_hit_returns_same_result() {
     TEST_CASE("Cache hit returns same result without re-inference (Req 23.2)");
@@ -122,9 +103,6 @@ void test_cache_hit_returns_same_result() {
     EXPECT_TRIBOOL(neg2, Tribool::False, "Second query (cached): x is not Negative");
 }
 
-// ============================================================
-// Test: Cache invalidation on push (Req 23.3)
-// ============================================================
 
 void test_cache_invalidation_on_push() {
     TEST_CASE("Cache invalidation on push (Req 23.3)");
@@ -147,9 +125,6 @@ void test_cache_invalidation_on_push() {
     EXPECT_TRIBOOL(after, Tribool::True, "After invalidate (push): x still Positive");
 }
 
-// ============================================================
-// Test: Cache invalidation on pop (Req 23.3)
-// ============================================================
 
 void test_cache_invalidation_on_pop() {
     TEST_CASE("Cache invalidation on pop (Req 23.3)");
@@ -179,9 +154,6 @@ void test_cache_invalidation_on_pop() {
     EXPECT_TRIBOOL(after_pop, Tribool::Unknown, "After pop: x is Unknown again");
 }
 
-// ============================================================
-// Test: Cache invalidation on assume (Req 23.3)
-// ============================================================
 
 void test_cache_invalidation_on_assume() {
     TEST_CASE("Cache invalidation on assume (Req 23.3)");
@@ -203,9 +175,6 @@ void test_cache_invalidation_on_assume() {
     EXPECT_TRIBOOL(after, Tribool::True, "After assume + invalidate: x is Positive");
 }
 
-// ============================================================
-// Test: query_conditions for simple variable (Req 21.2)
-// ============================================================
 
 void test_query_conditions_simple_variable() {
     TEST_CASE("query_conditions for simple variable (Req 21.2)");
@@ -246,9 +215,6 @@ void test_query_conditions_simple_variable() {
     }
 }
 
-// ============================================================
-// Test: query_conditions for composite expression x - y (Req 21.3)
-// ============================================================
 
 void test_query_conditions_subtraction() {
     TEST_CASE("query_conditions for composite expression x - y (Req 21.3)");
@@ -292,9 +258,6 @@ void test_query_conditions_subtraction() {
     }
 }
 
-// ============================================================
-// Test: query_conditions returns empty for undetermined expressions (Req 21.3)
-// ============================================================
 
 void test_query_conditions_empty_for_complex() {
     TEST_CASE("query_conditions returns empty for undetermined expressions");
@@ -302,16 +265,8 @@ void test_query_conditions_empty_for_complex() {
     AssumptionContext ctx;
     QueryInterface qi(ctx);
 
-    // Null expression
-    SymbolicExpr null_expr;
-    auto conditions = qi.query_conditions(null_expr, Sign::Positive);
-    EXPECT_TRUE(conditions.empty(),
-                "Null expression should return empty conditions");
 }
 
-// ============================================================
-// Test: query_positive_definite (Req 10.5)
-// ============================================================
 
 void test_query_positive_definite() {
     TEST_CASE("query_positive_definite (Req 10.5)");
@@ -329,9 +284,6 @@ void test_query_positive_definite() {
                    "M declared PositiveDefinite: query_positive_semidefinite = True (implied)");
 }
 
-// ============================================================
-// Test: query_positive_semidefinite (Req 10.5)
-// ============================================================
 
 void test_query_positive_semidefinite() {
     TEST_CASE("query_positive_semidefinite (Req 10.5)");
@@ -350,9 +302,6 @@ void test_query_positive_semidefinite() {
                    "A declared PSD: query_positive_definite = Unknown");
 }
 
-// ============================================================
-// Test: query_positive_definite for NegativeDefinite (Req 10.5)
-// ============================================================
 
 void test_query_definiteness_negative() {
     TEST_CASE("query_positive_definite for NegativeDefinite matrix (Req 10.5)");
@@ -369,9 +318,6 @@ void test_query_definiteness_negative() {
                    "N declared NegDef: query_positive_semidefinite = False");
 }
 
-// ============================================================
-// Test: query_positive_definite for undeclared symbol
-// ============================================================
 
 void test_query_definiteness_undeclared() {
     TEST_CASE("query_positive_definite for undeclared symbol");
@@ -386,9 +332,6 @@ void test_query_definiteness_undeclared() {
                    "Undeclared: query_positive_semidefinite = Unknown");
 }
 
-// ============================================================
-// Test: query_algebraic (Req 8.5 via QueryInterface)
-// ============================================================
 
 void test_query_algebraic() {
     TEST_CASE("query_algebraic");
@@ -411,9 +354,6 @@ void test_query_algebraic() {
                    "y undeclared: query_algebraic = Unknown");
 }
 
-// ============================================================
-// Test: query_transcendental
-// ============================================================
 
 void test_query_transcendental() {
     TEST_CASE("query_transcendental");
@@ -430,9 +370,6 @@ void test_query_transcendental() {
                    "pi_sym declared Transcendental: query_algebraic = False");
 }
 
-// ============================================================
-// Test: query_finite
-// ============================================================
 
 void test_query_finite() {
     TEST_CASE("query_finite");
@@ -456,9 +393,6 @@ void test_query_finite() {
                    "b undeclared: query_divergent = Unknown");
 }
 
-// ============================================================
-// Test: query_divergent
-// ============================================================
 
 void test_query_divergent() {
     TEST_CASE("query_divergent");
@@ -475,17 +409,14 @@ void test_query_divergent() {
                    "d declared Divergent: query_finite = False");
 }
 
-// ============================================================
-// Test: query_periodic for declared periodic symbol
-// ============================================================
 
 void test_query_periodic_declared() {
     TEST_CASE("query_periodic for declared periodic symbol");
 
     AssumptionContext ctx;
     // Declare f as periodic with period 2*pi (represented as a number for simplicity)
-    auto period_expr = std::make_shared<SymbolicExpr>();
-    period_expr->root = std::make_shared<NumberNode>(BigInt(6));  // Simplified period
+    auto period_expr = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(6)));  // Simplified period
     ctx.current_properties().declare_periodic("f", period_expr);
 
     QueryInterface qi(ctx);
@@ -495,9 +426,6 @@ void test_query_periodic_declared() {
                    "f declared periodic: query_periodic = True");
 }
 
-// ============================================================
-// Test: query_periodic for sin/cos/tan (auto-inferred)
-// ============================================================
 
 void test_query_periodic_trig() {
     TEST_CASE("query_periodic for sin/cos/tan (auto-inferred)");
@@ -517,9 +445,6 @@ void test_query_periodic_trig() {
                    "tan(x): query_periodic = True");
 }
 
-// ============================================================
-// Test: get_period for sin/cos/tan
-// ============================================================
 
 void test_get_period_trig() {
     TEST_CASE("get_period for sin/cos/tan");
@@ -548,9 +473,6 @@ void test_get_period_trig() {
     }
 }
 
-// ============================================================
-// Test: get_period returns nullopt for non-periodic
-// ============================================================
 
 void test_get_period_non_periodic() {
     TEST_CASE("get_period returns nullopt for non-periodic expression");
@@ -563,16 +485,94 @@ void test_get_period_non_periodic() {
     EXPECT_TRUE(!period.has_value(),
                 "Variable x (undeclared periodic) should have no period");
 
-    // Null expression
-    SymbolicExpr null_expr;
-    auto null_period = qi.get_period(null_expr);
-    EXPECT_TRUE(!null_period.has_value(),
-                "Null expression should have no period");
 }
 
-// ============================================================
-// Test: Cache works across multiple property types
-// ============================================================
+void test_checked_extended_query_contracts() {
+    TEST_CASE("QueryInterface checked extended queries: explicit errors and values");
+
+    AssumptionContext ctx;
+    ctx.assume_domain("a", Domain::Algebraic);
+    ctx.current_properties().declare_transcendental("tau");
+    ctx.current_properties().declare_finiteness("finite_symbol", Finiteness::Finite);
+    ctx.current_properties().declare_finiteness("divergent_symbol", Finiteness::Divergent);
+    ctx.current_properties().declare_periodic("periodic_symbol", lamina::detail::make_expression_ptr(make_int(6)));
+    ctx.current_properties().declare_definiteness("M", Definiteness::PositiveDefinite);
+
+    QueryInterface qi(ctx);
+
+    auto algebraic = qi.query_algebraic_checked(make_var("a"));
+    EXPECT_TRUE(algebraic.has_value(), "checked query_algebraic succeeds");
+    if (algebraic) {
+        EXPECT_TRUE(algebraic.value() == Tribool::True,
+                    "checked query_algebraic returns True for algebraic symbol");
+    }
+
+    auto transcendental = qi.query_transcendental_checked(make_var("tau"));
+    EXPECT_TRUE(transcendental.has_value(), "checked query_transcendental succeeds");
+    if (transcendental) {
+        EXPECT_TRUE(transcendental.value() == Tribool::True,
+                    "checked query_transcendental returns True for transcendental symbol");
+    }
+
+    auto finite = qi.query_finite_checked(make_var("finite_symbol"));
+    EXPECT_TRUE(finite.has_value(), "checked query_finite succeeds");
+    if (finite) {
+        EXPECT_TRUE(finite.value() == Tribool::True,
+                    "checked query_finite returns True for finite symbol");
+    }
+
+    auto divergent = qi.query_divergent_checked(make_var("divergent_symbol"));
+    EXPECT_TRUE(divergent.has_value(), "checked query_divergent succeeds");
+    if (divergent) {
+        EXPECT_TRUE(divergent.value() == Tribool::True,
+                    "checked query_divergent returns True for divergent symbol");
+    }
+
+    auto periodic = qi.query_periodic_checked(make_var("periodic_symbol"));
+    EXPECT_TRUE(periodic.has_value(), "checked query_periodic succeeds");
+    if (periodic) {
+        EXPECT_TRUE(periodic.value() == Tribool::True,
+                    "checked query_periodic returns True for periodic symbol");
+    }
+
+    auto period = qi.get_period_checked(make_var("periodic_symbol"));
+    EXPECT_TRUE(period.has_value(), "checked get_period succeeds");
+    if (period) {
+        EXPECT_TRUE(period.value().has_value(),
+                    "checked get_period returns a declared period");
+    }
+
+    auto positive_definite = qi.query_positive_definite_checked(make_var("M"));
+    EXPECT_TRUE(positive_definite.has_value(), "checked query_positive_definite succeeds");
+    if (positive_definite) {
+        EXPECT_TRUE(positive_definite.value() == Tribool::True,
+                    "checked query_positive_definite returns True for PD symbol");
+    }
+
+    auto positive_semidefinite = qi.query_positive_semidefinite_checked(make_var("M"));
+    EXPECT_TRUE(positive_semidefinite.has_value(), "checked query_positive_semidefinite succeeds");
+    if (positive_semidefinite) {
+        EXPECT_TRUE(positive_semidefinite.value() == Tribool::True,
+                    "checked query_positive_semidefinite returns True for PD symbol");
+    }
+
+    auto conditions = qi.query_conditions_checked(make_var("x"), Sign::Positive);
+    EXPECT_TRUE(conditions.has_value(), "checked query_conditions succeeds");
+    if (conditions) {
+        EXPECT_TRUE(conditions.value().size() == 1,
+                    "checked query_conditions preserves simple-variable conditions");
+    }
+
+    auto unsupported_conditions = qi.query_conditions_checked(make_int(1), Sign::Positive);
+    EXPECT_TRUE(unsupported_conditions.has_value(),
+                "checked query_conditions accepts valid unsupported expressions");
+    if (unsupported_conditions) {
+        EXPECT_TRUE(unsupported_conditions.value().empty(),
+                    "checked query_conditions returns empty set for unsupported expressions");
+    }
+
+}
+
 
 void test_cache_multiple_properties() {
     TEST_CASE("Cache works across multiple property types");
@@ -604,24 +604,18 @@ void test_cache_multiple_properties() {
     EXPECT_TRIBOOL(qi.query_integer(x_expr), Tribool::True, "x Integer after invalidate");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Cache tests (Req 23.2, 23.3)
     test_cache_hit_returns_same_result();
     test_cache_invalidation_on_push();
     test_cache_invalidation_on_pop();
     test_cache_invalidation_on_assume();
     test_cache_multiple_properties();
 
-    // query_conditions tests (Req 21.2, 21.3)
     test_query_conditions_simple_variable();
     test_query_conditions_subtraction();
     test_query_conditions_empty_for_complex();
 
-    // Matrix definiteness tests (Req 10.5)
     test_query_positive_definite();
     test_query_positive_semidefinite();
     test_query_definiteness_negative();
@@ -636,6 +630,7 @@ int main() {
     test_query_periodic_trig();
     test_get_period_trig();
     test_get_period_non_periodic();
+    test_checked_extended_query_contracts();
 
     return TEST_REPORT();
 }

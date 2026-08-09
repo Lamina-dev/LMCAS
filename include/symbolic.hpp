@@ -4,9 +4,10 @@
  */
 #pragma once
 #define _USE_MATH_DEFINES
+#include "lamina_export.hpp"
 #include "bigint.hpp"
+#include "conditional_result.hpp"
 #include "rational.hpp"
-#include "symbolic_ast.hpp"
 #include <memory>
 #include <string>
 #include <variant>
@@ -17,24 +18,31 @@
 #include <functional>
 #include <iostream>
 #include <cstdlib>
+#include <stdexcept>
 
-// Forward declaration for optional assumption context parameter
-namespace lamina { class AssumptionContext; }
+class SymbolicExpr;
+
+namespace lamina {
+class AssumptionContext;
+
+/** @brief Stable relational operator used by public APIs. */
+enum class RelationOp {
+    EQ,
+    NEQ,
+    LT,
+    GT,
+    LEQ,
+    GEQ
+};
+
+namespace detail {
+struct SymbolicExprAccess;
+} // namespace detail
+} // namespace lamina
 
 #ifndef _SYMBOLIC_DEBUG
 
 #define _SYMBOLIC_DEBUG 0
-#endif
-#ifndef LAMINA_API
-#ifdef _WIN32
-#ifdef LAMINA_CORE_EXPORTS
-#define LAMINA_API __declspec(dllexport)
-#else
-#define LAMINA_API __declspec(dllimport)
-#endif
-#else
-#define LAMINA_API
-#endif
 #endif
 
 
@@ -81,9 +89,19 @@ inline std::ostream &debug_stream() {
  * 矩阵运算、方程求解等符号计算功能。
  */
 class LAMINA_API SymbolicExpr : public std::enable_shared_from_this<SymbolicExpr> {
-public:
+private:
+    struct Impl;
+    std::shared_ptr<const Impl> impl_;
 
-	std::shared_ptr<SymbolicNode> root; ///< AST 根节点
+    explicit SymbolicExpr(std::shared_ptr<const Impl> impl) : impl_(std::move(impl)) {
+        if (!impl_) {
+            throw std::invalid_argument("SymbolicExpr requires a non-null implementation");
+        }
+    }
+
+    friend struct lamina::detail::SymbolicExprAccess;
+
+public:
 
     /** @brief 表达式类型枚举（已废弃，保留用于兼容） */
     enum class Type {
@@ -114,22 +132,8 @@ public:
 
     };
 
-    /**
-     * @brief 从 AST 节点构造表达式。
-     * @param node AST 根节点
-     */
-    explicit SymbolicExpr(std::shared_ptr<SymbolicNode> node) : root(std::move(node)) {}
-
-    /** @brief 默认构造，根节点为空。 */
-    SymbolicExpr() : root(nullptr) {}
-
-    [[deprecated("Use SymbolicExpr(shared_ptr<SymbolicNode>) instead")]]
-    SymbolicExpr(Type t) {
-
-		if (t == Type::Number) root = std::make_shared<NumberNode>(0);
-		else if (t == Type::Variable) root = std::make_shared<VariableNode>("");
-
-    }
+    SymbolicExpr() = delete;
+    SymbolicExpr(Type) = delete;
 
     /**
      * @brief 与另一个表达式进行全序比较。
@@ -314,16 +318,16 @@ public:
      */
     std::shared_ptr<SymbolicExpr> cancel() const;
 
-    [[deprecated("Use SymbolicNode directly")]]
+    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
     Type get_type() const;
 
-    [[deprecated("Use SymbolicNode directly")]]
+    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
     std::vector<std::shared_ptr<SymbolicExpr>> get_operands() const;
 
-    [[deprecated("Use SymbolicNode directly")]]
+    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
     std::variant<int, ::BigInt, ::Rational> get_number_value() const;
 
-    [[deprecated("Use SymbolicNode directly")]]
+    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
     std::string get_identifier() const;
 
     /**
@@ -331,70 +335,49 @@ public:
      * @param n 整数值
      * @return 数值表达式
      */
-    static std::shared_ptr<SymbolicExpr> number(int n) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<NumberNode>(BigInt(n)));
-    }
+    static std::shared_ptr<SymbolicExpr> number(int n);
 
     /**
      * @brief 创建 long long 数值表达式。
      * @param n 整数值
      * @return 数值表达式
      */
-    static std::shared_ptr<SymbolicExpr> number(long long n) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<NumberNode>(BigInt(n)));
-    }
+    static std::shared_ptr<SymbolicExpr> number(long long n);
 
     /**
      * @brief 创建浮点数值表达式。
      * @param n 浮点值
      * @return 数值表达式
      */
-    static std::shared_ptr<SymbolicExpr> number(double n) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<NumberNode>(static_cast<lmmc_real_t>(n)));
-    }
+    static std::shared_ptr<SymbolicExpr> number(double n);
 
     /**
      * @brief 创建大整数数值表达式。
      * @param bi 大整数
      * @return 数值表达式
      */
-    static std::shared_ptr<SymbolicExpr> number(const ::BigInt& bi) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<NumberNode>(bi));
-    }
+    static std::shared_ptr<SymbolicExpr> number(const ::BigInt& bi);
 
     /**
      * @brief 创建有理数数值表达式。
      * @param r 有理数
      * @return 数值表达式
      */
-    static std::shared_ptr<SymbolicExpr> number(const ::Rational& r) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<NumberNode>(r));
-    }
+    static std::shared_ptr<SymbolicExpr> number(const ::Rational& r);
 
 	/**
 	 * @brief 创建无穷大表达式。
 	 * @param k 正数表示正无穷，负数表示负无穷
 	 * @return 无穷大表达式
 	 */
-	static std::shared_ptr<SymbolicExpr> infinity(int k = 1) {
-		auto inf_node = std::make_shared<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<SymbolicNode>>{});
-		auto inf_expr = std::make_shared<SymbolicExpr>(inf_node);
-		if (k < 0) {
-			return SymbolicExpr::multiply(SymbolicExpr::number(-1), inf_expr);
-		}
-		return inf_expr;
-	}
+	static std::shared_ptr<SymbolicExpr> infinity(int k = 1);
 
     /**
      * @brief 创建平方根表达式，等价于 operand^(1/2)。
      * @param operand 被开方数
      * @return 平方根表达式
      */
-    static std::shared_ptr<SymbolicExpr> sqrt(std::shared_ptr<SymbolicExpr> operand) {
-
-        auto half = std::make_shared<NumberNode>(Rational(1, 2));
-        return std::make_shared<SymbolicExpr>(std::make_shared<PowerNode>(operand->root, half));
-    }
+    static std::shared_ptr<SymbolicExpr> sqrt(std::shared_ptr<SymbolicExpr> operand);
 
     /**
      * @brief 创建乘法表达式。
@@ -402,10 +385,7 @@ public:
      * @param right 右操作数
      * @return 乘积表达式
      */
-    static std::shared_ptr<SymbolicExpr> multiply(std::shared_ptr<SymbolicExpr> left, std::shared_ptr<SymbolicExpr> right) {
-        std::vector<std::shared_ptr<SymbolicNode>> ops = {left->root, right->root};
-        return std::make_shared<SymbolicExpr>(std::make_shared<MultiplyNode>(ops));
-    }
+    static std::shared_ptr<SymbolicExpr> multiply(std::shared_ptr<SymbolicExpr> left, std::shared_ptr<SymbolicExpr> right);
 
     /**
      * @brief 创建加法表达式。
@@ -413,10 +393,7 @@ public:
      * @param right 右操作数
      * @return 和表达式
      */
-    static std::shared_ptr<SymbolicExpr> add(std::shared_ptr<SymbolicExpr> left, std::shared_ptr<SymbolicExpr> right) {
-        std::vector<std::shared_ptr<SymbolicNode>> ops = {left->root, right->root};
-        return std::make_shared<SymbolicExpr>(std::make_shared<AddNode>(ops));
-    }
+    static std::shared_ptr<SymbolicExpr> add(std::shared_ptr<SymbolicExpr> left, std::shared_ptr<SymbolicExpr> right);
 
     /**
      * @brief 创建幂运算表达式。
@@ -424,64 +401,49 @@ public:
      * @param exponent 指数
      * @return 幂表达式
      */
-    static std::shared_ptr<SymbolicExpr> power(std::shared_ptr<SymbolicExpr> base, std::shared_ptr<SymbolicExpr> exponent) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<PowerNode>(base->root, exponent->root));
-    }
+    static std::shared_ptr<SymbolicExpr> power(std::shared_ptr<SymbolicExpr> base, std::shared_ptr<SymbolicExpr> exponent);
 
     /**
      * @brief 创建正弦函数表达式。
      * @param op 参数表达式
      * @return sin(op)
      */
-    static std::shared_ptr<SymbolicExpr> sin(std::shared_ptr<SymbolicExpr> op) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Sin, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> sin(std::shared_ptr<SymbolicExpr> op);
 
     /**
      * @brief 创建余弦函数表达式。
      * @param op 参数表达式
      * @return cos(op)
      */
-    static std::shared_ptr<SymbolicExpr> cos(std::shared_ptr<SymbolicExpr> op) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Cos, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> cos(std::shared_ptr<SymbolicExpr> op);
 
     /**
      * @brief 创建正切函数表达式。
      * @param op 参数表达式
      * @return tan(op)
      */
-    static std::shared_ptr<SymbolicExpr> tan(std::shared_ptr<SymbolicExpr> op) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Tan, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> tan(std::shared_ptr<SymbolicExpr> op);
 
     /**
      * @brief 创建自然对数表达式。
      * @param op 参数表达式
      * @return ln(op)
      */
-    static std::shared_ptr<SymbolicExpr> ln(std::shared_ptr<SymbolicExpr> op) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Ln, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> ln(std::shared_ptr<SymbolicExpr> op);
 
     /**
      * @brief 创建指数函数表达式 e^op。
      * @param op 指数参数
      * @return exp(op)
      */
-    static std::shared_ptr<SymbolicExpr> exp(std::shared_ptr<SymbolicExpr> op) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Exp, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> exp(std::shared_ptr<SymbolicExpr> op);
 
     /**
      * @brief 创建 Lambert W 函数表达式。
      * @param op 参数表达式
      * @return W(op)
      */
-    static std::shared_ptr<SymbolicExpr> lambertw(std::shared_ptr<SymbolicExpr> op) {
-        if (!op) return nullptr;
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::LambertW, std::vector<std::shared_ptr<SymbolicNode>>{op->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> lambertw(std::shared_ptr<SymbolicExpr> op);
 
     /**
      * @brief 创建以指定底数的对数表达式。
@@ -489,9 +451,7 @@ public:
      * @param base 底数
      * @return log_base(val)
      */
-    static std::shared_ptr<SymbolicExpr> log(std::shared_ptr<SymbolicExpr> val, std::shared_ptr<SymbolicExpr> base) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Log, std::vector<std::shared_ptr<SymbolicNode>>{val->root, base->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> log(std::shared_ptr<SymbolicExpr> val, std::shared_ptr<SymbolicExpr> base);
 
     /**
      * @brief 创建双参数反正切表达式 atan2(y, x)。
@@ -499,9 +459,7 @@ public:
      * @param x x 坐标
      * @return atan2 表达式
      */
-    static std::shared_ptr<SymbolicExpr> atan2(std::shared_ptr<SymbolicExpr> y, std::shared_ptr<SymbolicExpr> x) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::Atan2, std::vector<std::shared_ptr<SymbolicNode>>{y->root, x->root}));
-    }
+    static std::shared_ptr<SymbolicExpr> atan2(std::shared_ptr<SymbolicExpr> y, std::shared_ptr<SymbolicExpr> x);
 
     /**
      * @brief 创建 RootOf 表达式，表示多项式的第 index 个根。
@@ -510,13 +468,7 @@ public:
      * @param index 根的索引
      * @return RootOf 表达式
      */
-    static std::shared_ptr<SymbolicExpr> root_of(std::shared_ptr<SymbolicExpr> poly, const std::string& var, int index) {
-        if (!poly) return nullptr;
-        auto v = SymbolicExpr::variable(var);
-        auto k = SymbolicExpr::number(index);
-        std::vector<std::shared_ptr<SymbolicNode>> args = {poly->root, v->root, k->root};
-        return std::make_shared<SymbolicExpr>(std::make_shared<FunctionNode>(FunctionNode::FuncType::RootOf, args));
-    }
+    static std::shared_ptr<SymbolicExpr> root_of(std::shared_ptr<SymbolicExpr> poly, const std::string& var, int index);
 
 	/**
 	 * @brief 创建等式关系表达式 lhs = rhs。
@@ -524,9 +476,7 @@ public:
 	 * @param rhs 右侧表达式
 	 * @return 等式表达式
 	 */
-	static std::shared_ptr<SymbolicExpr> eq(std::shared_ptr<SymbolicExpr> lhs, std::shared_ptr<SymbolicExpr> rhs) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<RelationalNode>(lhs->root, rhs->root, RelationalNode::Op::EQ));
-    }
+	static std::shared_ptr<SymbolicExpr> eq(std::shared_ptr<SymbolicExpr> lhs, std::shared_ptr<SymbolicExpr> rhs);
 
     /**
      * @brief 计算表达式关于指定变量的不定积分。
@@ -534,10 +484,7 @@ public:
      * @param var 积分变量名
      * @return 积分结果
      */
-    static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var) {
-        if (!op) return nullptr;
-        return op->integrate(var);
-    }
+    static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var);
 
     /**
      * @brief 计算表达式的极限。
@@ -546,34 +493,21 @@ public:
      * @param target 趋近目标值
      * @return 极限结果
      */
-    static std::shared_ptr<SymbolicExpr> limit_func(std::shared_ptr<SymbolicExpr> op, const std::string& var, std::shared_ptr<SymbolicExpr> target) {
-        if (!op) return nullptr;
-        return op->limit(var, target);
-    }
+    static std::shared_ptr<SymbolicExpr> limit_func(std::shared_ptr<SymbolicExpr> op, const std::string& var, std::shared_ptr<SymbolicExpr> target);
 
     /**
      * @brief 从二维元素列表创建矩阵表达式。
      * @param elements 二维表达式数组，elements[i][j] 为第 i 行第 j 列元素
      * @return 矩阵表达式
      */
-    static std::shared_ptr<SymbolicExpr> matrix(const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& elements) {
-        std::vector<std::vector<std::shared_ptr<SymbolicNode>>> node_elements;
-		for(const auto& row : elements) {
-			std::vector<std::shared_ptr<SymbolicNode>> node_row;
-			for(const auto& elem : row) node_row.push_back(elem->root);
-			node_elements.push_back(node_row);
-		}
-        return std::make_shared<SymbolicExpr>(std::make_shared<MatrixNode>(node_elements));
-    }
+    static std::shared_ptr<SymbolicExpr> matrix(const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& elements);
 
     /**
      * @brief 创建变量表达式。
      * @param name 变量名
      * @return 变量表达式
      */
-    static std::shared_ptr<SymbolicExpr> variable(const std::string& name) {
-        return std::make_shared<SymbolicExpr>(std::make_shared<VariableNode>(name));
-    }
+    static std::shared_ptr<SymbolicExpr> variable(const std::string& name);
 
     /**
      * @brief 对表达式进行化简。
@@ -615,110 +549,45 @@ public:
     std::string to_string() const;
 
     /** @brief 判断表达式是否为数值节点。 */
-    bool is_number() const {
-		return root && root->is_number();
-	}
+    bool is_number() const;
 
     /** @brief 判断表达式数值是否为零。 */
-    bool get_number_value_is_zero() const {
-        return root && root->is_zero();
-    }
+    bool get_number_value_is_zero() const;
 
     /** @brief 判断表达式是否为大整数类型。 */
-    bool is_big_int() const {
-		if (!is_number()) return false;
-		auto node = std::dynamic_pointer_cast<NumberNode>(root);
-		return node && std::holds_alternative<BigInt>(node->value);
-	}
+    bool is_big_int() const;
 
     /** @brief 判断表达式是否为有理数类型。 */
-    bool is_rational() const {
-		if (!is_number()) return false;
-		auto node = std::dynamic_pointer_cast<NumberNode>(root);
-		return node && std::holds_alternative<Rational>(node->value);
-	}
+    bool is_rational() const;
 
     /** @brief 判断表达式是否为整数（包括 BigInt、整数 Rational、近似整数浮点）。 */
-    bool is_int() const {
-		if (!is_number()) return false;
-		auto node = std::dynamic_pointer_cast<NumberNode>(root);
-		if (!node) return false;
-
-		if (std::holds_alternative<BigInt>(node->value)) return true;
-
-		if (std::holds_alternative<Rational>(node->value)) {
-		    return std::get<Rational>(node->value).is_integer();
-		}
-
-		if (std::holds_alternative<lmmc_real_t>(node->value)) {
-		    lmmc_real_t v = std::get<lmmc_real_t>(node->value);
-		    lmmc_real_t rounded = std::round(v);
-		    int eq;
-		    lmmc_double_nearly_equal_tol(v, rounded, 1e-12, 1e-12, &eq);
-		    return eq != 0;
-		}
-
-		return false;
-	}
+    bool is_int() const;
 
     /**
      * @brief 获取数值表达式的值。
      * @return 数值（int、BigInt 或 Rational）
      * @throws std::runtime_error 表达式不是数值时抛出
      */
-    std::variant<int, ::BigInt, ::Rational> get_number() const {
-        if (is_number()) {
-            auto node = std::dynamic_pointer_cast<NumberNode>(root);
-			if (std::holds_alternative<BigInt>(node->value)) return std::get<BigInt>(node->value);
-			if (std::holds_alternative<Rational>(node->value)) return std::get<Rational>(node->value);
+    std::variant<int, ::BigInt, ::Rational> get_number() const;
 
-			return (int)std::get<lmmc_real_t>(node->value);
-        }
-        throw std::runtime_error("Expression is not a number");
-    }
-
-    int get_int() const {
-        if (!is_int()) throw std::runtime_error("Expression is not an integer");
-        auto node = std::dynamic_pointer_cast<NumberNode>(root);
-        if (!node) throw std::runtime_error("Expression is not an integer");
-        if (std::holds_alternative<BigInt>(node->value)) return std::get<BigInt>(node->value).to_int();
-        if (std::holds_alternative<Rational>(node->value)) return std::get<Rational>(node->value).to_BigInt().to_int();
-        if (std::holds_alternative<lmmc_real_t>(node->value)) return static_cast<int>(std::get<lmmc_real_t>(node->value));
-        return 0;
-    }
+    int get_int() const;
     /**
      * @brief 获取大整数值。
      * @return BigInt 值
      * @throws std::runtime_error 表达式不是 BigInt 时抛出
      */
-    ::BigInt get_big_int() const {
-        if (is_big_int()) {
-             auto node = std::dynamic_pointer_cast<NumberNode>(root);
-             return std::get<BigInt>(node->value);
-        }
-        throw std::runtime_error("Expression is not a BigInt");
-    }
+    ::BigInt get_big_int() const;
     /**
      * @brief 获取有理数值。
      * @return Rational 值
      * @throws std::runtime_error 表达式不是 Rational 时抛出
      */
-    ::Rational get_rational() const {
-        if (is_rational()) {
-             auto node = std::dynamic_pointer_cast<NumberNode>(root);
-             return std::get<Rational>(node->value);
-        }
-        throw std::runtime_error("Expression is not a Rational");
-    }
+    ::Rational get_rational() const;
     /**
      * @brief 将数值表达式转换为 Rational（BigInt 也会转换）。
      * @return 有理数值，非数值类型返回 Rational(0)
      */
-    ::Rational convert_rational() const {
-		if (is_rational()) return get_rational();
-		if (is_big_int()) return Rational(get_big_int());
-		return Rational(0);
-	}
+    ::Rational convert_rational() const;
 
     /**
      * @brief 将表达式求值为浮点数。
@@ -726,13 +595,3 @@ public:
      */
     lmmc_real_t to_numeric() const;
 };
-
-#include "matrix_decomposition.hpp"
-#include "complex_analysis.hpp"
-#include "differential_geometry.hpp"
-#include "numerical_integration.hpp"
-#include "vector_calculus.hpp"
-#include "transform_engine.hpp"
-#include "series_engine.hpp"
-#include "symbolic_ode_engine.hpp"
-#include "calculus_utils.hpp"

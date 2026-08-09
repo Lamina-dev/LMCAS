@@ -18,23 +18,23 @@ LMCAS/
 │   └── ...
 ├── tests/              # 单元测试
 ├── benchmarks/         # 性能测试
-├── LAMMP/              # 子模块：Lamina MP (BigInt)
+├── LMMC/               # 子模块：Lamina 数值库，内部携带 LAMMP
 └── CMakeLists.txt      # CMake 构建配置
 ```
 
 ## 构建
 
 ### 要求
-*   **CMake**: 3.14+
-*   **编译器**: MSVC 2019+, GCC 9+, Clang 10+ (需支持 C++17)
+*   **CMake**: 3.16+
+*   **编译器**: GCC 9+, Clang 10+ 或 MinGW (需支持 C++17；MSVC 暂不支持)
 
-### Visual Studio (Windows)
+### MinGW / Windows
 
 ```powershell
 mkdir build
 cd build
 
-cmake ..
+cmake .. -G "MinGW Makefiles"
 
 cmake --build . --config Debug
 
@@ -42,7 +42,7 @@ cmake --build . --config Debug
 .\bin\Debug\test_proof.exe
 ```
 
-注意：如果在运行可执行文件时遇到 DLL 缺失错误，请确保 (lib)LammpCore.dll 和 (lib)lmcas.dll 位于可执行文件同级目录，或将 uild/bin/Debug 添加到系统 PATH。
+注意：如果在运行可执行文件时遇到 DLL 缺失错误，请确保 `lmcas` 和 `LammpCore` 运行库位于可执行文件同级目录，或将 `build/bin` 添加到系统 PATH。
 
 ### Linux / macOS
 

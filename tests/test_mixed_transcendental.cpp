@@ -1,11 +1,5 @@
-// Feature: mixed-transcendental-solver, Property 1: Classification correctness
-// **Validates: Requirements 1.1, 1.5**
 
-// Feature: mixed-transcendental-solver, Property 2: Routing correctness for reducible expressions
-// **Validates: Requirements 1.2, 1.3**
 
-// Feature: mixed-transcendental-solver, Property 12: allow_numeric gate
-// **Validates: Requirements 7.2**
 
 #include "test_common.hpp"
 #include "solve_mixed_transcendental.hpp"
@@ -123,8 +117,6 @@ void test_classification_pure_polynomial() {
         "x^3 - 2*x + 1 should NOT contain transcendental of var x (pure polynomial)");
 }
 
-// Feature: mixed-transcendental-solver, Property 12: allow_numeric gate
-// **Validates: Requirements 7.2**
 void test_allow_numeric_false_returns_empty() {
     TEST_CASE("Property 12: allow_numeric=false on mixed transcendental → empty vector");
 
@@ -145,8 +137,6 @@ void test_allow_numeric_false_returns_empty() {
         "solve_dispatch with allow_numeric=false on x*sin(x)-1 should return empty vector");
 }
 
-// Feature: mixed-transcendental-solver, Property 12: allow_numeric gate
-// **Validates: Requirements 7.2**
 void test_allow_numeric_true_permits_solving() {
     TEST_CASE("Property 12: allow_numeric=true on mixed transcendental → solver invoked");
 
@@ -177,8 +167,6 @@ void test_allow_numeric_true_permits_solving() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 12: allow_numeric gate
-// **Validates: Requirements 7.2**
 void test_allow_numeric_false_cos_equation_returns_empty() {
     TEST_CASE("Property 12: allow_numeric=false on x*cos(x)+x^2*sin(x)-1 → empty vector");
 
@@ -205,8 +193,6 @@ void test_allow_numeric_false_cos_equation_returns_empty() {
         "solve_dispatch with allow_numeric=false on x*cos(x)+x^2*sin(x)-1 should return empty vector");
 }
 
-// Feature: mixed-transcendental-solver, Property 2: Routing correctness for reducible expressions
-// **Validates: Requirements 1.2, 1.3**
 void test_routing_pure_polynomial_not_hybrid() {
     TEST_CASE("Property 2: Pure polynomial x^2 - 4 = 0 routes to polynomial solver, not hybrid");
 
@@ -247,8 +233,6 @@ void test_routing_pure_polynomial_not_hybrid() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 2: Routing correctness for reducible expressions
-// **Validates: Requirements 1.2, 1.3**
 void test_routing_transcendental_substitution_not_hybrid() {
     TEST_CASE("Property 2: exp(x) - 2 = 0 routes to transcendental solver, not hybrid");
 
@@ -287,14 +271,13 @@ void test_routing_transcendental_substitution_not_hybrid() {
                 // Accept symbolic result — the key property is that it was found
                 // without allow_numeric, confirming the transcendental path handled it
                 std::cout << "  [INFO] Root is symbolic: " << results[0]->to_string() << std::endl;
-                EXPECT_TRUE(true, "Transcendental path produced a symbolic result (not hybrid)");
+                EXPECT_TRUE(results[0] != nullptr && !results[0]->to_string().empty(),
+                            "Transcendental path produced a symbolic result (not hybrid)");
             }
         }
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 2: Routing correctness for reducible expressions
-// **Validates: Requirements 1.2, 1.3**
 void test_routing_polynomial_with_allow_numeric_false() {
     TEST_CASE("Property 2: Pure polynomial x^2 - 4 = 0 solved even with allow_numeric=false");
 
@@ -332,8 +315,6 @@ void test_routing_polynomial_with_allow_numeric_false() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 13: Backward compatibility
-// **Validates: Requirements 7.4**
 void test_backward_compat_cubic_polynomial() {
     TEST_CASE("Property 13: Cubic x^3 - 6x^2 + 11x - 6 = 0 produces roots {1, 2, 3} via polynomial path");
 
@@ -400,8 +381,6 @@ void test_backward_compat_cubic_polynomial() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 13: Backward compatibility
-// **Validates: Requirements 7.4**
 void test_backward_compat_transcendental_substitution() {
     TEST_CASE("Property 13: exp(x) - 2 = 0 still solved via transcendental path with hybrid integrated");
 
@@ -450,10 +429,6 @@ void test_backward_compat_transcendental_substitution() {
         "allow_numeric flag should not change result count for reducible transcendental");
 }
 
-// ============================================================================
-// determine_search_interval tests
-// **Validates: Requirements 4.1, 4.2, 4.3, 4.4, 4.5, 8.4**
-// ============================================================================
 
 void test_search_interval_user_specified() {
     TEST_CASE("determine_search_interval: user-specified interval [2, 5]");
@@ -712,8 +687,6 @@ void test_search_interval_user_overrides_periodic() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 9: Periodic extension covers two full periods
-// **Validates: Requirements 4.4**
 void test_property9_sin_x_plus_x_two_periods() {
     TEST_CASE("Property 9: sin(x) + x → k=1, period=2π, interval spans at least 4π ≈ 12.57");
 
@@ -742,8 +715,6 @@ void test_property9_sin_x_plus_x_two_periods() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 9: Periodic extension covers two full periods
-// **Validates: Requirements 4.4**
 void test_property9_cos_half_x_minus_x_two_periods() {
     TEST_CASE("Property 9: cos(0.5*x) - x → k=0.5, period=4π, interval spans at least 8π ≈ 25.13");
 
@@ -771,8 +742,6 @@ void test_property9_cos_half_x_minus_x_two_periods() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 9: Periodic extension covers two full periods
-// **Validates: Requirements 4.4**
 void test_property9_tan_x_plus_x_two_periods() {
     TEST_CASE("Property 9: tan(x) + x → k=1, period=π (tan), interval spans at least 2π ≈ 6.28");
 
@@ -797,8 +766,6 @@ void test_property9_tan_x_plus_x_two_periods() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 9: Periodic extension covers two full periods
-// **Validates: Requirements 4.4**
 void test_property9_sin_small_k_clamped() {
     TEST_CASE("Property 9: sin(0.1*x) + x/100 → k=0.1, period=20π, 2 periods span=125.66, half_span=62.83");
 
@@ -832,8 +799,6 @@ void test_property9_sin_small_k_clamped() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 9: Periodic extension covers two full periods
-// **Validates: Requirements 4.4**
 void test_property9_sin_x_squared_nonlinear_default() {
     TEST_CASE("Property 9: sin(x^2) + x → non-linear argument, default [-10, 10]");
 
@@ -856,8 +821,6 @@ void test_property9_sin_x_squared_nonlinear_default() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 5: Max roots limit respected
-// **Validates: Requirements 2.4**
 void test_property5_max_roots_2_sin_x() {
     TEST_CASE("Property 5: sin(x) on [-10,10] with max_roots=2 → at most 2 intervals");
 
@@ -881,8 +844,6 @@ void test_property5_max_roots_2_sin_x() {
         " intervals, expected at most 2");
 }
 
-// Feature: mixed-transcendental-solver, Property 5: Max roots limit respected
-// **Validates: Requirements 2.4**
 void test_property5_max_roots_1_sin_x() {
     TEST_CASE("Property 5: sin(x) on [-10,10] with max_roots=1 → at most 1 interval");
 
@@ -905,8 +866,6 @@ void test_property5_max_roots_1_sin_x() {
         " intervals, expected at most 1");
 }
 
-// Feature: mixed-transcendental-solver, Property 5: Max roots limit respected
-// **Validates: Requirements 2.4**
 void test_property5_max_roots_unlimited_sin_x() {
     TEST_CASE("Property 5: sin(x) on [-10,10] with max_roots=-1 (unlimited) → finds multiple roots");
 
@@ -931,8 +890,6 @@ void test_property5_max_roots_unlimited_sin_x() {
         " intervals, expected at least 3 (unlimited mode)");
 }
 
-// Feature: mixed-transcendental-solver, Property 5: Max roots limit respected
-// **Validates: Requirements 2.4**
 void test_property5_max_roots_3_cos_x_minus_half() {
     TEST_CASE("Property 5: cos(x)-0.5 on [-10,10] with max_roots=3 → at most 3 intervals");
 
@@ -963,8 +920,6 @@ void test_property5_max_roots_3_cos_x_minus_half() {
         " intervals, expected at most 3");
 }
 
-// Feature: mixed-transcendental-solver, Property 4: Minimum subdivision width
-// **Validates: Requirements 2.2**
 void test_property4_min_width_sin_x_plus_x_over_10() {
     TEST_CASE("Property 4: sin(x) + x/10 on [-10, 10] → all intervals have width >= 1e-6");
 
@@ -992,8 +947,6 @@ void test_property4_min_width_sin_x_plus_x_over_10() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 4: Minimum subdivision width
-// **Validates: Requirements 2.2**
 void test_property4_min_width_tan_x_minus_x() {
     TEST_CASE("Property 4: tan(x) - x on [-5, 5] → all intervals have width >= 1e-6");
 
@@ -1021,8 +974,6 @@ void test_property4_min_width_tan_x_minus_x() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 4: Minimum subdivision width
-// **Validates: Requirements 2.2**
 void test_property4_min_width_narrow_interval() {
     TEST_CASE("Property 4: sin(x) + x/10 on [0, 0.001] → intervals still respect width >= 1e-6");
 
@@ -1050,8 +1001,6 @@ void test_property4_min_width_narrow_interval() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 3: Root isolation sign-change invariant
-// **Validates: Requirements 2.1**
 
 /// Helper: evaluate f(val) = expr->substitute(var, number(val))->to_numeric()
 static std::optional<double> eval_at(const std::shared_ptr<SymbolicExpr>& expr,
@@ -1069,13 +1018,13 @@ static std::optional<double> eval_at(const std::shared_ptr<SymbolicExpr>& expr,
 /// Helper: compute derivative of expr with respect to var using DifferentiationVisitor
 static std::shared_ptr<SymbolicExpr> compute_derivative(
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
-    if (!expr || !expr->root) return nullptr;
+    if (!expr || !lamina::detail::node(expr)) return nullptr;
     try {
         DifferentiationVisitor dv(var);
-        expr->root->accept(dv);
+        lamina::detail::node(expr)->accept(dv);
         auto result_node = dv.get_result();
         if (!result_node) return nullptr;
-        return std::make_shared<SymbolicExpr>(result_node);
+        return lamina::detail::make_expression_ptr(result_node);
     } catch (...) {
         return nullptr;
     }
@@ -1207,8 +1156,6 @@ void test_property3_sign_change_x_cos_x_minus_1() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 6: No sign changes yields empty result
-// **Validates: Requirements 2.6**
 void test_property6_x_squared_plus_one_always_positive() {
     TEST_CASE("Property 6: x^2 + 1 on [-10, 10] → always positive, isolate_roots returns empty");
 
@@ -1231,8 +1178,6 @@ void test_property6_x_squared_plus_one_always_positive() {
         "x^2 + 1 is always positive on [-10, 10], isolate_roots should return empty");
 }
 
-// Feature: mixed-transcendental-solver, Property 6: No sign changes yields empty result
-// **Validates: Requirements 2.6**
 void test_property6_exp_x_plus_one_always_positive() {
     TEST_CASE("Property 6: exp(x) + 1 on [-10, 10] → always positive, isolate_roots returns empty");
 
@@ -1255,8 +1200,6 @@ void test_property6_exp_x_plus_one_always_positive() {
         "exp(x) + 1 is always positive on [-10, 10], isolate_roots should return empty");
 }
 
-// Feature: mixed-transcendental-solver, Property 6: No sign changes yields empty result
-// **Validates: Requirements 2.6**
 void test_property6_neg_x_squared_minus_one_always_negative() {
     TEST_CASE("Property 6: -(x^2 + 1) on [-10, 10] → always negative, isolate_roots returns empty");
 
@@ -1282,8 +1225,6 @@ void test_property6_neg_x_squared_minus_one_always_negative() {
         "-(x^2 + 1) is always negative on [-10, 10], isolate_roots should return empty");
 }
 
-// Feature: mixed-transcendental-solver, Property 6: No sign changes yields empty result
-// **Validates: Requirements 2.6**
 void test_property6_sin_x_plus_five_always_positive() {
     TEST_CASE("Property 6: sin(x) + 5 on [-10, 10] → always positive, isolate_roots returns empty");
 
@@ -1306,10 +1247,6 @@ void test_property6_sin_x_plus_five_always_positive() {
         "sin(x) + 5 is always positive on [-10, 10], isolate_roots should return empty");
 }
 
-// ============================================================================
-// refine_root tests
-// **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 8.3**
-// ============================================================================
 
 void test_refine_root_sin_x_newton_raphson() {
     TEST_CASE("refine_root: sin(x) on [3.0, 3.5] with derivative → converges to π");
@@ -1491,8 +1428,6 @@ void test_refine_root_max_iterations_exceeded() {
               << (result.has_value() ? "converged" : "did not converge") << std::endl;
 }
 
-// Feature: mixed-transcendental-solver, Property 11: Output sorted ascending
-// **Validates: Requirements 5.4, 6.3**
 
 void test_property11_deduplicate_roots_ascending_order() {
     TEST_CASE("Property 11: deduplicate_roots produces strictly ascending output");
@@ -1532,8 +1467,6 @@ void test_property11_deduplicate_roots_ascending_order() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 11: Output sorted ascending
-// **Validates: Requirements 5.4, 6.3**
 void test_property11_pipeline_sin_x_ascending() {
     TEST_CASE("Property 11: sin(x) on [-10, 10] pipeline → roots in ascending order");
 
@@ -1578,8 +1511,6 @@ void test_property11_pipeline_sin_x_ascending() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 11: Output sorted ascending
-// **Validates: Requirements 5.4, 6.3**
 void test_property11_pipeline_cos_x_ascending() {
     TEST_CASE("Property 11: cos(x) on [-10, 10] pipeline → roots in ascending order");
 
@@ -1624,8 +1555,6 @@ void test_property11_pipeline_cos_x_ascending() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 11: Output sorted ascending
-// **Validates: Requirements 5.4, 6.3**
 void test_property11_deduplicate_with_duplicates_ascending() {
     TEST_CASE("Property 11: deduplicate_roots with near-duplicates → ascending after merge");
 
@@ -1659,8 +1588,6 @@ void test_property11_deduplicate_with_duplicates_ascending() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 8: Roots within specified search interval
-// **Validates: Requirements 4.2**
 void test_property8_roots_within_interval_sin_x() {
     TEST_CASE("Property 8: sin(x) on [-3, 3] → all refined roots within [-3, 3]");
 
@@ -1718,8 +1645,6 @@ void test_property8_roots_within_interval_sin_x() {
         "sin(x) on [-4,4] should find at least one root (0, ±π are in range)");
 }
 
-// Feature: mixed-transcendental-solver, Property 8: Roots within specified search interval
-// **Validates: Requirements 4.2**
 void test_property8_roots_within_interval_cos_x_minus_half() {
     TEST_CASE("Property 8: cos(x) - 0.5 on [0, 5] → all refined roots within [0, 5]");
 
@@ -1765,8 +1690,6 @@ void test_property8_roots_within_interval_cos_x_minus_half() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 7: Output validity invariant
-// **Validates: Requirements 3.2, 3.5, 3.6, 6.1, 7.3**
 
 void test_property7_output_validity_sin_x_refined_roots() {
     TEST_CASE("Property 7: isolate_roots + refine_root on sin(x) [-10,10] → all roots finite, |f(root)| < tol, convertible to NumberNode");
@@ -1809,8 +1732,8 @@ void test_property7_output_validity_sin_x_refined_roots() {
             auto number_expr = SymbolicExpr::number(root_result->value);
             EXPECT_TRUE(number_expr != nullptr,
                 "Root " + std::to_string(i) + " should be convertible to SymbolicExpr");
-            if (number_expr && number_expr->root) {
-                auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+            if (number_expr && lamina::detail::node(number_expr)) {
+                auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
                 EXPECT_TRUE(as_number != nullptr,
                     "Root " + std::to_string(i) + " expression should be a NumberNode");
             }
@@ -1862,10 +1785,10 @@ void test_property7_output_validity_exp_x_minus_x_minus_2() {
 
             // (c) Can be converted to NumberNode
             auto number_expr = SymbolicExpr::number(root_result->value);
-            EXPECT_TRUE(number_expr != nullptr && number_expr->root != nullptr,
+            EXPECT_TRUE(number_expr != nullptr && lamina::detail::node(number_expr) != nullptr,
                 "Root " + std::to_string(i) + " should produce a valid SymbolicExpr");
-            if (number_expr && number_expr->root) {
-                auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+            if (number_expr && lamina::detail::node(number_expr)) {
+                auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
                 EXPECT_TRUE(as_number != nullptr,
                     "Root " + std::to_string(i) + " expression root should be NumberNode");
             }
@@ -1913,10 +1836,10 @@ void test_property7_max_roots_limit_after_deduplication() {
             std::to_string(deduped[i]) + " should be finite");
 
         auto number_expr = SymbolicExpr::number(deduped[i]);
-        EXPECT_TRUE(number_expr != nullptr && number_expr->root != nullptr,
+        EXPECT_TRUE(number_expr != nullptr && lamina::detail::node(number_expr) != nullptr,
             "Deduplicated root " + std::to_string(i) + " should be convertible to NumberNode");
-        if (number_expr && number_expr->root) {
-            auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+        if (number_expr && lamina::detail::node(number_expr)) {
+            auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
             EXPECT_TRUE(as_number != nullptr,
                 "Deduplicated root " + std::to_string(i) + " expression should be NumberNode");
         }
@@ -1963,7 +1886,7 @@ void test_property7_output_validity_x_cos_x_minus_1() {
 
             // (c) NumberNode representation
             auto number_expr = SymbolicExpr::number(root_result->value);
-            auto as_number = std::dynamic_pointer_cast<NumberNode>(number_expr->root);
+            auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
             EXPECT_TRUE(as_number != nullptr,
                 "Root " + std::to_string(i) + " should be representable as NumberNode");
 
@@ -1981,9 +1904,6 @@ void test_property7_output_validity_x_cos_x_minus_1() {
     }
 }
 
-// ============================================================================
-// Result assembly tests (Requirements 6.1, 6.2, 6.3, 6.4)
-// ============================================================================
 
 void test_assemble_results_basic() {
     TEST_CASE("Result assembly: deduplicate roots then convert to NumberNode expressions");
@@ -2022,7 +1942,8 @@ void test_assemble_results_basic() {
     for (size_t i = 0; i < results.size(); ++i) {
         EXPECT_TRUE(results[i] != nullptr,
             "Result " + std::to_string(i) + " should not be null");
-        auto num = std::dynamic_pointer_cast<NumberNode>(results[i]->root);
+        auto num = std::dynamic_pointer_cast<const NumberNode>(
+            lamina::detail::node(results[i]));
         EXPECT_TRUE(num != nullptr,
             "Result " + std::to_string(i) + " root should be a NumberNode");
     }
@@ -2113,8 +2034,6 @@ void test_assemble_results_with_duplicates() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 10: Deduplication invariant
-// **Validates: Requirements 5.1**
 
 void test_property10_deduplicate_roots_direct() {
     TEST_CASE("Property 10: deduplicate_roots removes duplicates within 10*tolerance");
@@ -2258,8 +2177,6 @@ void test_property10_deduplicate_pipeline_sin_x() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 16: Factored expression root completeness
-// **Validates: Requirements 9.2**
 
 void test_property16_factored_sin_x_minus_half_times_x_minus_3() {
     TEST_CASE("Property 16: (sin(x) - 0.5) * (x - 3) on [0, 4] → roots from BOTH factors");
@@ -2325,8 +2242,6 @@ void test_property16_factored_sin_x_minus_half_times_x_minus_3() {
         "Should find root from factor x-3 at x = 3");
 }
 
-// Feature: mixed-transcendental-solver, Property 16: Factored expression root completeness
-// **Validates: Requirements 9.2**
 
 void test_property16_factored_sin_x_times_cos_x() {
     TEST_CASE("Property 16: sin(x) * cos(x) on [-10, 10] → roots from BOTH sin and cos factors");
@@ -2397,11 +2312,6 @@ void test_property16_factored_sin_x_times_cos_x() {
         "Should find root from cos(x) factor at x = 3π/2 ≈ " + std::to_string(3.0 * M_PI / 2.0));
 }
 
-// ============================================================================
-// Feature: mixed-transcendental-solver, Property 15: No unhandled exceptions
-// **Validates: Requirements 8.5**
-// Exception safety tests (Requirements 8.2, 8.5)
-// ============================================================================
 
 void test_exception_safety_division_by_zero_expression() {
     TEST_CASE("Exception safety: expression causing division by zero returns empty, not throw");
@@ -2578,8 +2488,6 @@ void test_exception_safety_extreme_values() {
     }
 }
 
-// Feature: mixed-transcendental-solver, Property 14: No variable dependence yields empty result
-// **Validates: Requirements 8.1**
 void test_no_variable_dependence_returns_empty() {
     TEST_CASE("Property 14: expression without solve variable returns empty vector");
 
@@ -2630,11 +2538,6 @@ void test_no_variable_dependence_other_variable() {
         "Expression sin(y)+y has no dependence on x, should return empty vector");
 }
 
-// ============================================================================
-// End-to-end known-root equation tests (Task 11.1)
-// Call solve_mixed_transcendental directly and verify correct roots.
-// **Validates: Requirements 1.1, 1.2, 1.3, 2.1, 3.2, 4.1, 4.4, 8.1, 8.2, 8.3, 9.2**
-// ============================================================================
 
 void test_e2e_sin_x_plus_x_root_at_zero() {
     TEST_CASE("E2E: sin(x) - x/2 = 0 → roots near ±1.895");
@@ -2803,21 +2706,17 @@ int main() {
     test_classification_tan_linear_arg();
     test_classification_pure_polynomial();
 
-    // Property 12: allow_numeric gate tests
     test_allow_numeric_false_returns_empty();
     test_allow_numeric_true_permits_solving();
     test_allow_numeric_false_cos_equation_returns_empty();
 
-    // Property 2: Routing correctness for reducible expressions
     test_routing_pure_polynomial_not_hybrid();
     test_routing_transcendental_substitution_not_hybrid();
     test_routing_polynomial_with_allow_numeric_false();
 
-    // Property 13: Backward compatibility
     test_backward_compat_cubic_polynomial();
     test_backward_compat_transcendental_substitution();
 
-    // determine_search_interval tests (Requirements 4.1-4.5, 8.4)
     test_search_interval_user_specified();
     test_search_interval_user_invalid_lo_ge_hi();
     test_search_interval_user_invalid_equal();
@@ -2832,36 +2731,30 @@ int main() {
     test_search_interval_cos_2x_plus_1();
     test_search_interval_user_overrides_periodic();
 
-    // Property 9: Periodic extension covers two full periods
     test_property9_sin_x_plus_x_two_periods();
     test_property9_cos_half_x_minus_x_two_periods();
     test_property9_tan_x_plus_x_two_periods();
     test_property9_sin_small_k_clamped();
     test_property9_sin_x_squared_nonlinear_default();
 
-    // Property 4: Minimum subdivision width
     test_property4_min_width_sin_x_plus_x_over_10();
     test_property4_min_width_tan_x_minus_x();
     test_property4_min_width_narrow_interval();
 
-    // Property 5: Max roots limit respected
     test_property5_max_roots_2_sin_x();
     test_property5_max_roots_1_sin_x();
     test_property5_max_roots_unlimited_sin_x();
     test_property5_max_roots_3_cos_x_minus_half();
 
-    // Property 3: Root isolation sign-change invariant
     test_property3_sign_change_sin_x_plus_x_div_10();
     test_property3_sign_change_exp_x_minus_x_minus_2();
     test_property3_sign_change_x_cos_x_minus_1();
 
-    // Property 6: No sign changes yields empty result
     test_property6_x_squared_plus_one_always_positive();
     test_property6_exp_x_plus_one_always_positive();
     test_property6_neg_x_squared_minus_one_always_negative();
     test_property6_sin_x_plus_five_always_positive();
 
-    // Root refinement tests (Requirements 3.1-3.6, 8.3)
     test_refine_root_sin_x_newton_raphson();
     test_refine_root_sin_x_bisection_fallback();
     test_refine_root_exp_x_minus_x_minus_2();
@@ -2870,50 +2763,41 @@ int main() {
     test_refine_root_derivative_zero_bisection_step();
     test_refine_root_max_iterations_exceeded();
 
-    // Property 11: Output sorted ascending
     test_property11_deduplicate_roots_ascending_order();
     test_property11_pipeline_sin_x_ascending();
     test_property11_pipeline_cos_x_ascending();
     test_property11_deduplicate_with_duplicates_ascending();
 
-    // Property 8: Roots within specified search interval
     test_property8_roots_within_interval_sin_x();
     test_property8_roots_within_interval_cos_x_minus_half();
 
-    // Property 7: Output validity invariant
     test_property7_output_validity_sin_x_refined_roots();
     test_property7_output_validity_exp_x_minus_x_minus_2();
     test_property7_max_roots_limit_after_deduplication();
     test_property7_output_validity_x_cos_x_minus_1();
 
-    // Result assembly tests (Requirements 6.1, 6.2, 6.3, 6.4)
     test_assemble_results_basic();
     test_assemble_results_empty();
     test_assemble_results_with_duplicates();
 
-    // Property 10: Deduplication invariant
     test_property10_deduplicate_roots_direct();
     test_property10_deduplicate_roots_no_duplicates();
     test_property10_deduplicate_roots_all_duplicates();
     test_property10_deduplicate_pipeline_sin_x();
 
-    // Property 16: Factored expression root completeness
     test_property16_factored_sin_x_minus_half_times_x_minus_3();
     test_property16_factored_sin_x_times_cos_x();
 
-    // Property 15: No unhandled exceptions (Requirements 8.2, 8.5)
     test_exception_safety_division_by_zero_expression();
     test_exception_safety_ln_negative_domain();
     test_exception_safety_tan_near_singularity();
     test_exception_safety_nullptr_expression();
     test_exception_safety_extreme_values();
 
-    // Property 14: No variable dependence yields empty result (Requirement 8.1)
     test_no_variable_dependence_returns_empty();
     test_no_variable_dependence_constant_expression();
     test_no_variable_dependence_other_variable();
 
-    // End-to-end known-root equation tests (Task 11.1)
     test_e2e_sin_x_plus_x_root_at_zero();
     test_e2e_exp_x_minus_x_minus_2();
     test_e2e_x_cos_x_minus_1();

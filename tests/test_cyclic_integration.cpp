@@ -4,6 +4,7 @@
 #include "integration.hpp"
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
+#include "test_common.hpp"
 
 using namespace lamina;
 
@@ -11,9 +12,9 @@ bool test_cyclic_ibp() {
     std::cout << "Test Case: Cyclic IBP (e^x * sin(x))" << std::endl;
 
     auto x = *(SymbolicExpr::variable("x"));
-    auto ex = *(SymbolicExpr::exp(std::make_shared<SymbolicExpr>(x)));
-    auto sinx = *(SymbolicExpr::sin(std::make_shared<SymbolicExpr>(x)));
-    auto expr = *(SymbolicExpr::multiply(std::make_shared<SymbolicExpr>(ex), std::make_shared<SymbolicExpr>(sinx)));
+    auto ex = *(SymbolicExpr::exp(lamina::detail::make_expression_ptr(x)));
+    auto sinx = *(SymbolicExpr::sin(lamina::detail::make_expression_ptr(x)));
+    auto expr = *(SymbolicExpr::multiply(lamina::detail::make_expression_ptr(ex), lamina::detail::make_expression_ptr(sinx)));
 
     std::cout << "Integration of: " << expr.to_string() << std::endl;
     Integrator integrator;
@@ -23,20 +24,20 @@ bool test_cyclic_ibp() {
     auto diff = result.differentiate("x")->simplify();
     std::cout << "Derivative of result: " << diff->to_string() << std::endl;
 
-    auto diff_check = SymbolicExpr::add(diff, SymbolicExpr::multiply(std::make_shared<SymbolicExpr>(expr), SymbolicExpr::number(-1)))->simplify();
+    auto diff_check = test_normalized_delta(diff, lamina::detail::make_expression_ptr(expr));
 
-    if (diff_check->is_zero()) {
+    if (diff_check && diff_check->is_zero()) {
         std::cout << "[PASS]" << std::endl;
         return true;
     } else {
-        std::cout << "[FAIL] Derivative check failed." << std::endl;
+        std::cout << "[FAIL] Derivative check failed: "
+                  << (diff_check ? diff_check->to_string() : "null") << std::endl;
         return false;
     }
 }
 
 int main() {
-    bool all_passed = true;
-    if (!test_cyclic_ibp()) all_passed = false;
+    EXPECT_TRUE(test_cyclic_ibp(), "cyclic IBP result differentiates back to the integrand");
 
-    return all_passed ? 0 : 1;
+    return TEST_REPORT();
 }

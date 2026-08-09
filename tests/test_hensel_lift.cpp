@@ -23,11 +23,12 @@ void test_mignotte_bound_simple() {
     Polynomial<BigInt> poly(std::vector<BigInt>{BigInt(-1), BigInt(0), BigInt(1)}, "x");
 
     std::vector<Polynomial<ModInt>> empty_factors;
-    auto result = hensel_lift(poly, empty_factors, 3, 0);
-    EXPECT_TRUE(result.empty(), "hensel_lift stub returns empty for empty factors");
+    auto checked = hensel_lift_checked(poly, empty_factors, 3, 0);
+    EXPECT_TRUE(!checked && checked.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects empty factor lists");
 
-    auto result2 = hensel_lift(poly, empty_factors, 3, 0);
-    EXPECT_TRUE(result2.empty(), "hensel_lift stub returns empty (auto lift_bound)");
+    auto legacy = hensel_lift(poly, empty_factors, 3, 0);
+    EXPECT_TRUE(legacy.empty(), "legacy hensel_lift unwraps empty factor errors");
 }
 
 /**
@@ -43,8 +44,8 @@ void test_lift_height_increases_with_degree() {
     auto r1 = hensel_lift(f1, empty_factors, 5, 0);
     auto r2 = hensel_lift(f2, empty_factors, 5, 0);
 
-    EXPECT_TRUE(r1.empty(), "hensel_lift stub for x^2-1");
-    EXPECT_TRUE(r2.empty(), "hensel_lift stub for x^4-1");
+    EXPECT_TRUE(r1.empty(), "legacy hensel_lift unwraps missing factors for x^2-1");
+    EXPECT_TRUE(r2.empty(), "legacy hensel_lift unwraps missing factors for x^4-1");
 }
 
 /**
@@ -57,7 +58,7 @@ void test_mignotte_bound_larger_coefficients() {
 
     std::vector<Polynomial<ModInt>> empty_factors;
     auto result = hensel_lift(poly, empty_factors, 7, 0);
-    EXPECT_TRUE(result.empty(), "hensel_lift stub for 6x^3+5x^2-4x+3");
+    EXPECT_TRUE(result.empty(), "legacy hensel_lift unwraps missing factors for larger coefficients");
 }
 
 /**
@@ -68,16 +69,26 @@ void test_edge_cases() {
 
     Polynomial<BigInt> zero_poly("x");
     std::vector<Polynomial<ModInt>> empty_factors;
+    auto checked_zero = hensel_lift_checked(zero_poly, empty_factors, 5, 0);
+    EXPECT_TRUE(!checked_zero && checked_zero.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects zero polynomials");
     auto r1 = hensel_lift(zero_poly, empty_factors, 5, 0);
-    EXPECT_TRUE(r1.empty(), "hensel_lift returns empty for zero polynomial");
+    EXPECT_TRUE(r1.empty(), "legacy hensel_lift unwraps zero-polynomial errors");
 
     Polynomial<BigInt> const_poly(std::vector<BigInt>{BigInt(42)}, "x");
+    auto checked_constant = hensel_lift_checked(const_poly, empty_factors, 5, 0);
+    EXPECT_TRUE(!checked_constant && checked_constant.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects constant polynomials");
     auto r2 = hensel_lift(const_poly, empty_factors, 5, 0);
-    EXPECT_TRUE(r2.empty(), "hensel_lift returns empty for constant polynomial");
+    EXPECT_TRUE(r2.empty(), "legacy hensel_lift unwraps constant-polynomial errors");
 
     Polynomial<BigInt> poly(std::vector<BigInt>{BigInt(-1), BigInt(0), BigInt(1)}, "x");
     auto r3 = hensel_lift(poly, empty_factors, 3, 5);
-    EXPECT_TRUE(r3.empty(), "hensel_lift stub with explicit lift_bound=5");
+    EXPECT_TRUE(r3.empty(), "legacy hensel_lift unwraps missing factors with explicit lift_bound");
+
+    auto invalid_prime = hensel_lift_checked(poly, empty_factors, 1, 0);
+    EXPECT_TRUE(!invalid_prime && invalid_prime.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects invalid prime before computing lift height");
 }
 
 /**
@@ -93,12 +104,9 @@ void test_large_coefficients() {
 
     std::vector<Polynomial<ModInt>> empty_factors;
     auto result = hensel_lift(poly, empty_factors, 7, 0);
-    EXPECT_TRUE(result.empty(), "hensel_lift stub for large coefficient polynomial");
+    EXPECT_TRUE(result.empty(), "legacy hensel_lift unwraps missing factors for large coefficients");
 }
 
-// ============================================================
-// 二因子二次 Hensel 提升测试 (Task 4.2)
-// ============================================================
 
 namespace {
 
@@ -417,19 +425,35 @@ void test_hensel_lift_cubic() {
  * @brief 测试通过公共 hensel_lift API 间接验证。
  */
 void test_hensel_lift_via_api_x2_minus_1() {
-    TEST_CASE("hensel_lift API: x^2 - 1 with empty factors mod 3");
+    TEST_CASE("hensel_lift API: x^2 - 1 rejects empty factors and lifts valid factors");
 
     Polynomial<BigInt> poly(std::vector<BigInt>{BigInt(-1), BigInt(0), BigInt(1)}, "x");
 
-    // hensel_lift with empty factors should return empty
     std::vector<Polynomial<ModInt>> mod_factors;
-    auto result = hensel_lift(poly, mod_factors, 3, 2);
-    EXPECT_TRUE(result.empty(), "hensel_lift API call returns empty for no factors");
+    auto checked_empty = hensel_lift_checked(poly, mod_factors, 3, 2);
+    EXPECT_TRUE(!checked_empty && checked_empty.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift reports missing mod-p factors");
+
+    int64_t p = 3;
+    Polynomial<ModInt> f1("x");
+    f1.coeffs = {ModInt(1, p), ModInt(1, p)};
+    Polynomial<ModInt> f2("x");
+    f2.coeffs = {ModInt(2, p), ModInt(1, p)};
+    mod_factors = {f1, f2};
+    auto checked = hensel_lift_checked(poly, mod_factors, p, 2);
+    EXPECT_TRUE(checked && checked.value().size() == 2,
+                "checked hensel_lift lifts valid mod-p factors");
+    auto legacy = hensel_lift(poly, mod_factors, p, 2);
+    EXPECT_TRUE(legacy.size() == 2,
+                "legacy hensel_lift still unwraps successful checked results");
+
+    Polynomial<ModInt> bad_factor("x");
+    bad_factor.coeffs = {ModInt(0, p), ModInt(1, p)};
+    auto mismatch = hensel_lift_checked(poly, {f1, bad_factor}, p, 2);
+    EXPECT_TRUE(!mismatch && mismatch.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects mod-p factors whose product is not the input");
 }
 
-// ============================================================
-// 多因子 Hensel 提升测试 (Task 4.3)
-// ============================================================
 
 /**
  * @brief 测试 3 因子提升：x³ - x = x(x-1)(x+1) mod 5，提升到 mod 25。
@@ -595,9 +619,6 @@ void test_multi_factor_lift_symmetric_coeffs() {
     EXPECT_TRUE(match, "product of 3 lifted factors = f (mod 25)");
 }
 
-// ============================================================
-// 系数对称表示测试 (Task 4.4)
-// ============================================================
 
 /**
  * @brief 验证对称模归约的基本正确性。
@@ -911,7 +932,6 @@ int main() {
     test_edge_cases();
     test_large_coefficients();
 
-    // Task 4.2: Two-factor quadratic Hensel lifting tests
     test_hensel_lift_x2_minus_1_mod3();
     test_hensel_lift_x2_plus_3x_plus_2_mod5();
     test_hensel_lift_non_exact_mod3();
@@ -919,12 +939,10 @@ int main() {
     test_hensel_lift_cubic();
     test_hensel_lift_via_api_x2_minus_1();
 
-    // Task 4.3: Multi-factor Hensel lifting tests
     test_multi_factor_lift_3_factors();
     test_multi_factor_lift_2_factors_via_api();
     test_multi_factor_lift_symmetric_coeffs();
 
-    // Task 4.4: Coefficient symmetric representation tests
     test_symmetric_repr_basic_range();
     test_symmetric_repr_large_coefficients();
     test_symmetric_repr_roundtrip();

@@ -7,6 +7,9 @@
 #include "lmmc/numeric.h"
 #include "bigint.hpp"
 #include <iomanip>
+#include <cctype>
+#include <cmath>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -16,8 +19,53 @@
 /** @brief 精确有理数类，以 BigInt 分子/分母表示，构造时自动约分 */
 class Rational {
 private:
+    static constexpr std::size_t max_literal_bytes = 1'048'576;
+    static constexpr std::size_t max_decimal_scale = 1'000'000;
+
     BigInt numerator;
     BigInt denominator;
+
+    static BigInt pow10(std::size_t exponent) {
+        if (exponent > max_decimal_scale) {
+            throw std::length_error("Rational decimal scale exceeds safety limit");
+        }
+        if (exponent == 0) return BigInt(1);
+        return BigInt(10).power(static_cast<unsigned long>(exponent));
+    }
+
+    static bool power_leq(BigInt base, unsigned long exponent,
+                          const BigInt& limit) {
+        BigInt result(1);
+        while (exponent != 0) {
+            if ((exponent & 1UL) != 0) {
+                result *= base;
+                if (result > limit) return false;
+            }
+            exponent >>= 1UL;
+            if (exponent != 0) {
+                base *= base;
+                if (base > limit) base = limit + BigInt(1);
+            }
+        }
+        return result <= limit;
+    }
+
+    static BigInt integer_nth_root(const BigInt& value, unsigned long degree) {
+        if (degree == 0) throw std::domain_error("Zeroth root is undefined");
+        if (value < BigInt(0)) throw std::domain_error("Root input must be non-negative");
+        if (value <= BigInt(1) || degree == 1) return value;
+
+        BigInt low(0);
+        BigInt high(1);
+        while (power_leq(high, degree, value)) high *= BigInt(2);
+
+        while (high - low > BigInt(1)) {
+            BigInt mid = (low + high) / BigInt(2);
+            if (power_leq(mid, degree, value)) low = std::move(mid);
+            else high = std::move(mid);
+        }
+        return low;
+    }
 
     void simplify() {
         if (!denominator) {
@@ -75,138 +123,103 @@ public:
      * @brief 从字符串构造有理数，支持小数、科学计数法、循环小数
      * @param num 数字字符串
      */
-    Rational(const std::string& num):Rational() {
-        if (num.empty() || num == "0") return;
-        BigInt &up = numerator, &down = denominator;
-        BigInt BigInt0to10[11];
-        for (int i = 0; i < 11; i++) BigInt0to10[i] = BigInt(i);
-        uint64_t i = 0;
-        if (num[i] == '-') i++;
-        while (i < num.size() && num[i] != '.' && num[i] != 'e' && num[i] != 'E') {
-            up *= BigInt0to10[10];
-            up += BigInt0to10[num[i] - '0'];
-            i++;
+    explicit Rational(const std::string& num) : Rational() {
+        if (num.empty()) throw std::invalid_argument("Rational literal is empty");
+        if (num.size() > max_literal_bytes) {
+            throw std::length_error("Rational literal exceeds safety limit");
         }
-        if (i == num.size() || num[i] == 'e' || num[i] == 'E') {
-            if (i != num.size() && (num[i] == 'e' || num[i] == 'E')) {
-                i++;
-                if (num[i] == '-') {
-                    i++;
-                    down *= BigInt0to10[10].power(BigInt(std::string(num.begin() + i, num.end())));
-                } else {
-                    up *= BigInt0to10[10].power(BigInt(std::string(num.begin() + i, num.end())));
+
+        std::size_t pos = 0;
+        bool negative = false;
+        if (num[pos] == '+' || num[pos] == '-') {
+            negative = num[pos] == '-';
+            if (++pos == num.size()) {
+                throw std::invalid_argument("Rational literal has no digits");
+            }
+        }
+
+        auto read_digits = [&](std::string& output) {
+            while (pos < num.size() &&
+                   std::isdigit(static_cast<unsigned char>(num[pos]))) {
+                output.push_back(num[pos++]);
+            }
+        };
+
+        std::string integer_digits;
+        std::string fractional_digits;
+        std::string repeating_digits;
+        read_digits(integer_digits);
+
+        bool has_decimal_point = false;
+        if (pos < num.size() && num[pos] == '.') {
+            has_decimal_point = true;
+            ++pos;
+            read_digits(fractional_digits);
+        }
+
+        if (pos < num.size() && num[pos] == '(') {
+            if (!has_decimal_point) {
+                throw std::invalid_argument("Repeating decimal section requires a decimal point");
+            }
+            ++pos;
+            read_digits(repeating_digits);
+            if (repeating_digits.empty() || pos >= num.size() || num[pos] != ')') {
+                throw std::invalid_argument("Invalid repeating decimal section");
+            }
+            ++pos;
+        }
+
+        if (integer_digits.empty() && fractional_digits.empty()) {
+            throw std::invalid_argument("Rational literal has no digits");
+        }
+
+        long long exponent = 0;
+        if (pos < num.size() && (num[pos] == 'e' || num[pos] == 'E')) {
+            ++pos;
+            bool exponent_negative = false;
+            if (pos < num.size() && (num[pos] == '+' || num[pos] == '-')) {
+                exponent_negative = num[pos] == '-';
+                ++pos;
+            }
+            if (pos == num.size() ||
+                !std::isdigit(static_cast<unsigned char>(num[pos]))) {
+                throw std::invalid_argument("Rational exponent has no digits");
+            }
+            while (pos < num.size() &&
+                   std::isdigit(static_cast<unsigned char>(num[pos]))) {
+                const int digit = num[pos++] - '0';
+                if (exponent > static_cast<long long>(max_decimal_scale / 10) ||
+                    exponent * 10 + digit > static_cast<long long>(max_decimal_scale)) {
+                    throw std::length_error("Rational exponent exceeds safety limit");
                 }
+                exponent = exponent * 10 + digit;
             }
-            // 早退路径仍要应用初始负号并 simplify，否则像 "-3"、"-2e4" 会丢符号。
-            if (num[0] == '-') up = BigInt(0) - up;
-            simplify();
-            return ;
-        }
-        i++;
-        std::vector<short> n;
-        while (i < num.size() && num[i] != '.' && num[i] != 'e' && num[i] != 'E') {
-            n.emplace_back(num[i] - '0');
-            i++;
-        }
-        if (i == num.size() || ((num[i] == 'e' || num[i] == 'E'))) {
-
-            for (short& i: n) {
-                up *= BigInt0to10[10];
-                down *= BigInt0to10[10];
-                up += BigInt0to10[i];
-            }
-        } else {
-
-            std::pair<uint64_t, uint64_t> xun = detect_repeating_pattern(n);
-
-            BigInt xup = BigInt(0), xdown = BigInt(0);
-            for (uint64_t i = xun.first; i <= xun.second; i++) {
-                xup *= BigInt0to10[10];
-                xup += BigInt0to10[n[i]];
-                xdown *= BigInt0to10[10];
-                xdown += BigInt0to10[9];
-            }
-
-            for (uint64_t i = 0; i < xun.first; i++) {
-                up *= BigInt0to10[10];
-                up += BigInt0to10[n[i]];
-                down *= BigInt0to10[10];
-            }
-
-            up = up * xdown;
-            down = down * xdown;
-
-            up = up + xup;
+            if (exponent_negative) exponent = -exponent;
         }
 
-        if (i != num.size() && (num[i] == 'e' || num[i] == 'E')) {
-            i++;
-            if (num[i] == '-') {
-                i++;
-                down *= BigInt0to10[10].power(BigInt(std::string(num.begin() + i, num.end())));
-            } else {
-                up *= BigInt0to10[10].power(BigInt(std::string(num.begin() + i, num.end())));
-            }
+        if (pos != num.size()) {
+            throw std::invalid_argument("Invalid character in Rational literal");
         }
 
-        if (num[0] == '-') up = BigInt(0) - up;
+        if (integer_digits.empty()) integer_digits = "0";
+        const std::string non_repeating = integer_digits + fractional_digits;
+        numerator = BigInt(non_repeating);
+        denominator = pow10(fractional_digits.size());
 
+        if (!repeating_digits.empty()) {
+            const BigInt repeat_scale = pow10(repeating_digits.size());
+            const BigInt repeat_factor = repeat_scale - BigInt(1);
+            numerator = numerator * repeat_factor + BigInt(repeating_digits);
+            denominator *= repeat_factor;
+        }
+
+        if (exponent > 0) {
+            numerator *= pow10(static_cast<std::size_t>(exponent));
+        } else if (exponent < 0) {
+            denominator *= pow10(static_cast<std::size_t>(-exponent));
+        }
+        if (negative) numerator = -numerator;
         simplify();
-    }
-
-private:
-    /**
-     * @brief 检测小数位序列中的循环节起止位置
-     * @param n 小数位数字序列
-     * @return pair(循环节起始索引, 循环节结束索引)
-     */
-    std::pair<uint64_t, uint64_t> detect_repeating_pattern(std::vector<short>& n) {
-
-        uint64_t h1[10] = {};
-        uint64_t h2[10] = {};
-
-        for (short& i: n) h1[i]++;
-        bool flag = true;
-
-        for (uint64_t i = 0; i < n.size(); i++) {
-            flag = true;
-            for (int j = 0; j < 10; j++) {
-                if ((h1[j] - h2[j]) & 1) {
-                    flag = false;
-                    break;
-                }
-            }
-            if (flag) {
-                uint64_t i1 = i + 1, i2 = n.size();
-                uint64_t ti1, ti2;
-                bool ok = true;
-                while (!((i2 - i1) & 1) && ok) {
-
-                    ti1 = i1;
-                    ti2 = i1 + ((i2 - i1) >> 1);
-                    while (ti2 < i2) {
-                        if (n[ti1] != n[ti2]) {
-                            ok = false;
-                            break;
-                        }
-                        ti1++;
-                        ti2++;
-                    }
-                    if (ok) {
-                        i2 = i1 + ((i2 - i1) >> 1);
-                    } else if (i2 == n.size()) {
-                        break;
-                    } else {
-                        return {i1, i2 - 1};
-                    }
-                }
-                if (ok) {
-                    return {i1 - 1, i2 - 1};
-                }
-            }
-            h2[n[i]]++;
-        }
-        return {n.size() - 1, n.size() - 1};
     }
 
 public:
@@ -217,6 +230,9 @@ public:
      * @return 对应的精确有理数
      */
     static Rational from_double(double value) {
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument("Cannot construct Rational from NaN or infinity");
+        }
         if (value == 0.0) {
             return Rational();
         }
@@ -337,7 +353,7 @@ public:
         if (n == 0) return (numerator / denominator).ToString();
         if (n > 0) {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n));
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)));
             BigInt scaled = numerator * pow10n / denominator;
             bool negative = scaled < BigInt(0);
             if (negative) scaled = scaled * BigInt(-1);
@@ -350,7 +366,7 @@ public:
             return re;
         } else {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n).Abs());
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)).Abs());
             std::string re = (numerator / (denominator * pow10n)).ToString();
             if (re.size() == 1 && re[0] == '0') return re;
             for (; n < 0; n++) re.push_back('0');
@@ -373,13 +389,13 @@ private:
         if (n == 0) return;
         if (n > 0) {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n));
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)));
             numerator *= pow10n;
             numerator /= denominator;
             denominator = pow10n;
         } else {
             BigInt pow10n(10);
-            pow10n = pow10n.power(BigInt(n).Abs());
+            pow10n = pow10n.power(BigInt(static_cast<long long>(n)).Abs());
             denominator *= pow10n;
             numerator /= denominator;
             numerator *= pow10n;
@@ -394,22 +410,31 @@ public:
      * @param n 精度位数
      */
     inline void sqrt_self(int64_t n) {
-        if (numerator < BigInt(0)) throw std::runtime_error("Sqrt negative number");
-        Rational t(numerator * denominator);
-
-        const int64_t nadd1 = n + 1;
-        const BigInt ten(10);
-        Rational ans( (t * t + Rational(6) * t + Rational(1))  /  (Rational(4) * (t + Rational(1))) );
-        Rational temp;
-        while (temp.numerator / ten != ans.numerator / ten) {
-            temp = (ans + t / ans) / 2;
-            temp.floor_without_sim(nadd1);
-            ans = (temp + t / temp) / 2;
-            ans.floor_without_sim(nadd1);
+        if (n < 0) throw std::invalid_argument("Square-root precision must be non-negative");
+        if (numerator < BigInt(0)) throw std::domain_error("Square root of a negative Rational");
+        if (numerator == BigInt(0)) {
+            denominator = BigInt(1);
+            return;
         }
-        numerator = ans.numerator;
-        denominator *= ans.denominator;
-        floor(n);
+        if (static_cast<std::size_t>(n) > max_decimal_scale / 2) {
+            throw std::length_error("Square-root precision exceeds safety limit");
+        }
+
+        BigInt numerator_root = numerator.sqrt();
+        BigInt denominator_root = denominator.sqrt();
+        if (numerator_root * numerator_root == numerator &&
+            denominator_root * denominator_root == denominator) {
+            numerator = std::move(numerator_root);
+            denominator = std::move(denominator_root);
+            simplify();
+            return;
+        }
+
+        const BigInt scale = pow10(static_cast<std::size_t>(n));
+        const BigInt scaled = numerator * scale * scale / denominator;
+        numerator = scaled.sqrt();
+        denominator = scale;
+        simplify();
     }
 
     /**
@@ -429,25 +454,25 @@ public:
      * @param n 精度位数
      */
     inline void radicand_self(const BigInt& radical, int64_t n) {
-        if (numerator < BigInt(0) && (radical % BigInt(2) == BigInt(0))) throw std::runtime_error("Radicand negative number");
-        Rational t(numerator * denominator.power(radical - BigInt(1)));
+        if (radical <= BigInt(0)) throw std::domain_error("Root degree must be positive");
+        if (radical > BigInt(1024)) throw std::length_error("Root degree exceeds safety limit");
+        if (n < 0) throw std::invalid_argument("Root precision must be non-negative");
 
-        const int64_t nadd1 = n + 1;
-        const Rational rat_radical(radical);
-        const BigInt ten(10);
-        Rational ans(Rational(t.numerator,radical) * (Rational(radical - BigInt(1)) + Rational(t.numerator, t.numerator.power(radical))));
-
-        Rational temp;
-        while (temp.numerator / ten != ans.numerator / ten) {
-            temp = ans / rat_radical * ((rat_radical - Rational(1)) + (t / ans.power(radical)));
-            temp.floor_without_sim(nadd1);
-            ans = temp / rat_radical * ((rat_radical - Rational(1)) + (t / temp.power(radical)));
-            ans.floor_without_sim(nadd1);
+        const unsigned long degree = static_cast<unsigned long>(radical.to_int());
+        const bool negative = numerator < BigInt(0);
+        if (negative && (degree % 2UL) == 0) {
+            throw std::domain_error("Even root of a negative Rational");
+        }
+        if (static_cast<std::size_t>(n) > max_decimal_scale / degree) {
+            throw std::length_error("Root precision exceeds safety limit");
         }
 
-        numerator = ans.numerator;
-        denominator *= ans.denominator;
-        floor(n);
+        const BigInt scale = pow10(static_cast<std::size_t>(n));
+        const BigInt scaled = numerator.Abs() * scale.power(degree) / denominator;
+        numerator = integer_nth_root(scaled, degree);
+        if (negative) numerator = -numerator;
+        denominator = scale;
+        simplify();
     }
 
     /**
@@ -480,11 +505,26 @@ public:
      */
     lmmc_real_t to_double() const {
         if (is_zero()) return 0.0;
-        // Direct computation: numerator / denominator as floating point
-        lmmc_real_t num_d = numerator.to_double();
-        lmmc_real_t den_d = denominator.to_double();
-        if (den_d == 0.0) return 0.0;
-        return num_d / den_d;
+        const std::string num_text = numerator.Abs().ToString();
+        const std::string den_text = denominator.ToString();
+        const std::size_t num_digits = std::min<std::size_t>(18, num_text.size());
+        const std::size_t den_digits = std::min<std::size_t>(18, den_text.size());
+        const long double num_head = std::stold(num_text.substr(0, num_digits));
+        const long double den_head = std::stold(den_text.substr(0, den_digits));
+        const long long decimal_shift =
+            static_cast<long long>(num_text.size()) - static_cast<long long>(num_digits) -
+            static_cast<long long>(den_text.size()) + static_cast<long long>(den_digits);
+        long double value = (num_head / den_head) *
+                            std::pow(10.0L, static_cast<long double>(decimal_shift));
+        if (numerator.IsNegative()) value = -value;
+        const lmmc_real_t converted = static_cast<lmmc_real_t>(value);
+        if (!std::isfinite(converted)) {
+            throw std::overflow_error("Rational cannot be represented as a finite double");
+        }
+        if (converted == 0.0) {
+            throw std::underflow_error("Rational underflow during double conversion");
+        }
+        return converted;
     }
 
     /** @brief 有理数加法 */

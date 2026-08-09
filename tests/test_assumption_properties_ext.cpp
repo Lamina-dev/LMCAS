@@ -1,12 +1,3 @@
-/**
- * @file test_assumption_properties_ext.cpp
- * @brief Property tests for periodicity round-trip (Task 5.8).
- *
- * Properties tested:
- * - Property 11: Periodicity round-trip
- *
- * Validates: Requirements 11.2, 11.3
- */
 
 #include "test_common.hpp"
 #include "inference_engine.hpp"
@@ -26,55 +17,52 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return SymbolicExpr(std::make_shared<VariableNode>(name));
+    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
 }
 
 /// Create a FunctionNode expression (e.g., sin(x), cos(x), tan(x)).
 static SymbolicExpr make_func(FunctionNode::FuncType type, const std::string& var_name) {
-    auto var_node = std::make_shared<VariableNode>(var_name);
-    auto func_node = std::make_shared<FunctionNode>(
-        type, std::vector<std::shared_ptr<SymbolicNode>>{var_node});
-    return SymbolicExpr(func_node);
+    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
+    auto func_node = lamina::detail::make_node<FunctionNode>(
+        type, std::vector<std::shared_ptr<const SymbolicNode>>{var_node});
+    return lamina::detail::expression_from_node(func_node);
 }
 
 /// Create a numeric SymbolicExpr from a double value.
 static std::shared_ptr<SymbolicExpr> make_number_expr(double val) {
-    return std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(static_cast<lmmc_real_t>(val)));
+    return lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val)));
 }
 
 /// Extract a numeric value from a SymbolicExpr (if it's a simple number or product).
 static std::optional<double> extract_numeric(const SymbolicExpr& expr) {
-    if (!expr.root) return std::nullopt;
+    if (!lamina::detail::node(expr)) return std::nullopt;
 
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(expr.root)) {
-        if (std::holds_alternative<lmmc_real_t>(num->value))
-            return std::get<lmmc_real_t>(num->value);
-        if (std::holds_alternative<BigInt>(num->value))
-            return std::get<BigInt>(num->value).to_double();
-        if (std::holds_alternative<Rational>(num->value))
-            return std::get<Rational>(num->value).to_double();
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+        if (std::holds_alternative<lmmc_real_t>(num->value()))
+            return std::get<lmmc_real_t>(num->value());
+        if (std::holds_alternative<BigInt>(num->value()))
+            return std::get<BigInt>(num->value()).to_double();
+        if (std::holds_alternative<Rational>(num->value()))
+            return std::get<Rational>(num->value()).to_double();
         return std::nullopt;
     }
 
     // Handle MultiplyNode (e.g., 2*pi)
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(expr.root)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
         double product = 1.0;
-        for (const auto& op : mul->operands) {
-            auto num = std::dynamic_pointer_cast<NumberNode>(op);
+        for (const auto& op : mul->operands()) {
+            auto num = std::dynamic_pointer_cast<const NumberNode>(op);
             if (!num) return std::nullopt;
-            if (std::holds_alternative<lmmc_real_t>(num->value))
-                product *= std::get<lmmc_real_t>(num->value);
-            else if (std::holds_alternative<BigInt>(num->value))
-                product *= std::get<BigInt>(num->value).to_double();
-            else if (std::holds_alternative<Rational>(num->value))
-                product *= std::get<Rational>(num->value).to_double();
+            if (std::holds_alternative<lmmc_real_t>(num->value()))
+                product *= std::get<lmmc_real_t>(num->value());
+            else if (std::holds_alternative<BigInt>(num->value()))
+                product *= std::get<BigInt>(num->value()).to_double();
+            else if (std::holds_alternative<Rational>(num->value()))
+                product *= std::get<Rational>(num->value()).to_double();
             else
                 return std::nullopt;
         }
@@ -84,10 +72,6 @@ static std::optional<double> extract_numeric(const SymbolicExpr& expr) {
     return std::nullopt;
 }
 
-// ============================================================
-// Property 11: Periodicity round-trip
-// Validates: Requirements 11.2, 11.3
-// ============================================================
 
 static void test_periodicity_declared_symbol_roundtrip() {
     TEST_CASE("Property 11: Declared periodic symbol — get_period returns declared period");
@@ -317,12 +301,8 @@ static void test_periodicity_ln_not_periodic() {
         "ln(x) has no inferred period");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 11: Periodicity round-trip
     test_periodicity_declared_symbol_roundtrip();
     test_periodicity_declared_symbol_various_periods();
     test_periodicity_sin_auto_inferred();

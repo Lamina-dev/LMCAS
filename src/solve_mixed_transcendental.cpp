@@ -4,6 +4,7 @@
  */
 #include "solve_mixed_transcendental.hpp"
 #include "poly_utils.hpp"
+#include "poly_utils_internal.hpp"
 #include "solve_polynomial.hpp"
 #include "solve_transcendental.hpp"
 #include "symbolic_ast.hpp"
@@ -18,9 +19,6 @@
 
 namespace lamina {
 
-// ============================================================================
-/// contains_transcendental_of_var
-// ============================================================================
 
 /**
  * @internal
@@ -43,54 +41,87 @@ bool contains_transcendental_of_var(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var)
 {
-    if (!expr || !expr->root) return false;
+    if (!expr || !lamina::detail::node(expr)) return false;
 
-    struct TranscendentalDetector : public SymbolicVisitor {
+    struct TranscendentalDetector : public lamina::detail::SymbolicVisitor {
         const std::string& target_var;
         bool found = false;
 
         explicit TranscendentalDetector(const std::string& v) : target_var(v) {}
 
-        void visit(NumberNode&) override {}
-        void visit(VariableNode&) override {}
-        void visit(MatrixNode&) override {}
-        void visit(RelationalNode& n) override {
+        void visit(const NumberNode&) override {}
+        void visit(const VariableNode&) override {}
+        void visit(const MatrixNode&) override {}
+        void visit(const RelationalNode& n) override {
             if (found) return;
-            if (n.left) n.left->accept(*this);
-            if (!found && n.right) n.right->accept(*this);
+            if (n.left()) n.left()->accept(*this);
+            if (!found && n.right()) n.right()->accept(*this);
         }
-        void visit(LogicalNode& n) override {
+        void visit(const LogicalNode& n) override {
             if (found) return;
-            if (n.left) n.left->accept(*this);
-            if (!found && n.right) n.right->accept(*this);
+            if (n.left()) n.left()->accept(*this);
+            if (!found && n.right()) n.right()->accept(*this);
+        }
+        void visit(const PiecewiseNode& n) override {
+            for (const auto& branch : n.branches()) {
+                if (found) return;
+                branch.expression->accept(*this);
+                if (!found) branch.condition->accept(*this);
+            }
+            if (!found && n.default_expr()) n.default_expr()->accept(*this);
+        }
+        void visit(const SummationNode& n) override {
+            n.body()->accept(*this);
+            if (!found) n.lower_bound()->accept(*this);
+            if (!found) n.upper_bound()->accept(*this);
+        }
+        void visit(const ProductNode_Op& n) override {
+            n.body()->accept(*this);
+            if (!found) n.lower_bound()->accept(*this);
+            if (!found) n.upper_bound()->accept(*this);
+        }
+        void visit(const TransformNode& n) override {
+            n.body()->accept(*this);
+        }
+        void visit(const QuantifierNode& n) override {
+            n.domain()->accept(*this);
+            if (!found) n.predicate()->accept(*this);
+        }
+        void visit(const SetBuilderNode& n) override {
+            n.domain()->accept(*this);
+            if (!found) n.predicate()->accept(*this);
+        }
+        void visit(const ComplexNode& n) override {
+            n.real()->accept(*this);
+            if (!found) n.imag()->accept(*this);
         }
 
-        void visit(AddNode& n) override {
-            for (auto& op : n.operands) {
+        void visit(const AddNode& n) override {
+            for (auto& op : n.operands()) {
                 if (found) return;
                 op->accept(*this);
             }
         }
 
-        void visit(MultiplyNode& n) override {
-            for (auto& op : n.operands) {
+        void visit(const MultiplyNode& n) override {
+            for (auto& op : n.operands()) {
                 if (found) return;
                 op->accept(*this);
             }
         }
 
-        void visit(PowerNode& n) override {
+        void visit(const PowerNode& n) override {
             if (found) return;
-            n.base->accept(*this);
-            if (!found) n.exponent->accept(*this);
+            n.base()->accept(*this);
+            if (!found) n.exponent()->accept(*this);
         }
 
-        void visit(FunctionNode& n) override {
+        void visit(const FunctionNode& n) override {
             if (found) return;
 
-            if (is_transcendental_func(n.type)) {
+            if (is_transcendental_func(n.type())) {
                 /// 检查参数是否依赖目标变量
-                for (auto& arg : n.arguments) {
+                for (auto& arg : n.arguments()) {
                     if (depends_on_var(arg, target_var)) {
                         found = true;
                         return;
@@ -99,20 +130,17 @@ bool contains_transcendental_of_var(
             }
 
             /// 递归检查参数子树（可能嵌套超越函数）
-            for (auto& arg : n.arguments) {
+            for (auto& arg : n.arguments()) {
                 if (found) return;
                 arg->accept(*this);
             }
         }
     } detector(var);
 
-    expr->root->accept(detector);
+    lamina::detail::node(expr)->accept(detector);
     return detector.found;
 }
 
-// ============================================================================
-/// is_polynomial_after_substitution
-// ============================================================================
 
 /**
  * @internal
@@ -124,18 +152,18 @@ bool contains_transcendental_of_var(
  * @param[in] var  变量名
  * @return 关于 var 的次数；-1 表示非多项式结构
  */
-static int degree_in_var(const std::shared_ptr<SymbolicNode>& node, const std::string& var) {
+static int degree_in_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     if (!node) return 0;
 
     if (!depends_on_var(node, var)) return 0;
 
-    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
-        return (v->name == var) ? 1 : 0;
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        return (v->name() == var) ? 1 : 0;
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         int max_deg = 0;
-        for (const auto& op : add->operands) {
+        for (const auto& op : add->operands()) {
             int d = degree_in_var(op, var);
             if (d < 0) return -1;
             max_deg = std::max(max_deg, d);
@@ -143,9 +171,9 @@ static int degree_in_var(const std::shared_ptr<SymbolicNode>& node, const std::s
         return max_deg;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int total_deg = 0;
-        for (const auto& op : mul->operands) {
+        for (const auto& op : mul->operands()) {
             int d = degree_in_var(op, var);
             if (d < 0) return -1;
             total_deg += d;
@@ -153,22 +181,22 @@ static int degree_in_var(const std::shared_ptr<SymbolicNode>& node, const std::s
         return total_deg;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        auto exp_num = std::dynamic_pointer_cast<NumberNode>(pow->exponent);
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent());
         if (!exp_num) return -1;
 
         int e_val = -1;
-        if (std::holds_alternative<BigInt>(exp_num->value)) {
-            const auto& bi = std::get<BigInt>(exp_num->value);
+        if (std::holds_alternative<BigInt>(exp_num->value())) {
+            const auto& bi = std::get<BigInt>(exp_num->value());
             if (!bi.IsNegative()) e_val = bi.to_int();
-        } else if (std::holds_alternative<Rational>(exp_num->value)) {
-            const auto& r = std::get<Rational>(exp_num->value);
+        } else if (std::holds_alternative<Rational>(exp_num->value())) {
+            const auto& r = std::get<Rational>(exp_num->value());
             if (r.is_integer()) {
                 BigInt bi = r.to_BigInt();
                 if (!bi.IsNegative()) e_val = bi.to_int();
             }
-        } else if (std::holds_alternative<lmmc_real_t>(exp_num->value)) {
-            lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value);
+        } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
+            lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value());
             if (std::isfinite(d) && d >= 0 && d == std::floor(d) && d < 1000.0) {
                 e_val = static_cast<int>(d);
             }
@@ -176,13 +204,13 @@ static int degree_in_var(const std::shared_ptr<SymbolicNode>& node, const std::s
 
         if (e_val < 0) return -1;
 
-        int base_deg = degree_in_var(pow->base, var);
+        int base_deg = degree_in_var(pow->base(), var);
         if (base_deg < 0) return -1;
         return base_deg * e_val;
     }
 
     /// FunctionNode 依赖 var 意味着非多项式结构
-    if (std::dynamic_pointer_cast<FunctionNode>(node)) {
+    if (std::dynamic_pointer_cast<const FunctionNode>(node)) {
         return -1;
     }
 
@@ -193,9 +221,9 @@ bool is_polynomial_after_substitution(
     const TransSubstitutionResult& sub_result)
 {
     if (sub_result.mappings.empty()) return false;
-    if (!sub_result.poly_expr || !sub_result.poly_expr->root) return false;
+    if (!sub_result.poly_expr || !lamina::detail::node(sub_result.poly_expr)) return false;
 
-    const auto& root = sub_result.poly_expr->root;
+    const auto& root = lamina::detail::node(sub_result.poly_expr);
 
     for (const auto& m : sub_result.mappings) {
         if (depends_on_var(root, m.indeterminate)) {
@@ -207,13 +235,7 @@ bool is_polynomial_after_substitution(
     return true;
 }
 
-// ============================================================================
-/// determine_search_interval
-// ============================================================================
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 /**
  * @internal
@@ -221,18 +243,18 @@ bool is_polynomial_after_substitution(
  * @param[in] node 数值节点
  * @return 浮点值；非数值节点返回 NaN
  */
-static lmmc_real_t extract_real_value(const std::shared_ptr<SymbolicNode>& node) {
-    auto num = std::dynamic_pointer_cast<NumberNode>(node);
+static lmmc_real_t extract_real_value(const std::shared_ptr<const SymbolicNode>& node) {
+    auto num = std::dynamic_pointer_cast<const NumberNode>(node);
     if (!num) return std::numeric_limits<lmmc_real_t>::quiet_NaN();
 
-    if (std::holds_alternative<lmmc_real_t>(num->value)) {
-        return std::get<lmmc_real_t>(num->value);
+    if (std::holds_alternative<lmmc_real_t>(num->value())) {
+        return std::get<lmmc_real_t>(num->value());
     }
-    if (std::holds_alternative<Rational>(num->value)) {
-        return static_cast<lmmc_real_t>(std::get<Rational>(num->value).to_double());
+    if (std::holds_alternative<Rational>(num->value())) {
+        return static_cast<lmmc_real_t>(std::get<Rational>(num->value()).to_double());
     }
-    if (std::holds_alternative<BigInt>(num->value)) {
-        return static_cast<lmmc_real_t>(std::get<BigInt>(num->value).to_double());
+    if (std::holds_alternative<BigInt>(num->value())) {
+        return static_cast<lmmc_real_t>(std::get<BigInt>(num->value()).to_double());
     }
     return std::numeric_limits<lmmc_real_t>::quiet_NaN();
 }
@@ -252,29 +274,29 @@ static lmmc_real_t extract_real_value(const std::shared_ptr<SymbolicNode>& node)
  * @return 线性系数 k；非线性时返回 NaN
  */
 static lmmc_real_t extract_linear_coefficient(
-    const std::shared_ptr<SymbolicNode>& node,
+    const std::shared_ptr<const SymbolicNode>& node,
     const std::string& var)
 {
     if (!node || !depends_on_var(node, var)) return 0.0;
 
     /// 模式 1: 变量本身 → k = 1
-    if (auto v = std::dynamic_pointer_cast<VariableNode>(node)) {
-        if (v->name == var) return 1.0;
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (v->name() == var) return 1.0;
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
     /// 模式 2: 乘法节点 k*x
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         /// 检查是否恰好是 数值 * 变量 的形式
-        if (mul->operands.size() == 2) {
-            std::shared_ptr<SymbolicNode> num_part = nullptr;
-            std::shared_ptr<SymbolicNode> var_part = nullptr;
+        if (mul->operands().size() == 2) {
+            std::shared_ptr<const SymbolicNode> num_part = nullptr;
+            std::shared_ptr<const SymbolicNode> var_part = nullptr;
 
-            for (const auto& op : mul->operands) {
+            for (const auto& op : mul->operands()) {
                 if (op->is_number()) {
                     num_part = op;
-                } else if (auto vn = std::dynamic_pointer_cast<VariableNode>(op)) {
-                    if (vn->name == var) var_part = op;
+                } else if (auto vn = std::dynamic_pointer_cast<const VariableNode>(op)) {
+                    if (vn->name() == var) var_part = op;
                 }
             }
 
@@ -287,11 +309,11 @@ static lmmc_real_t extract_linear_coefficient(
     }
 
     /// 模式 3: 加法节点 k*x + c
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         lmmc_real_t coeff = std::numeric_limits<lmmc_real_t>::quiet_NaN();
         bool found_var_term = false;
 
-        for (const auto& op : add->operands) {
+        for (const auto& op : add->operands()) {
             if (!depends_on_var(op, var)) {
                 /// 常数项，跳过
                 continue;
@@ -334,7 +356,7 @@ static bool is_periodic_func(FunctionNode::FuncType t) {
  * 对每个 sin/cos/tan 节点，若其参数为 k*x + c 形式，
  * 计算周期（sin/cos: 2π/|k|, tan: π/|k|）。
  */
-struct PeriodicCollector : public SymbolicVisitor {
+struct PeriodicCollector : public lamina::detail::SymbolicVisitor {
     const std::string& target_var;
     lmmc_real_t max_period = 0.0;
     bool found_periodic = false;
@@ -342,48 +364,80 @@ struct PeriodicCollector : public SymbolicVisitor {
 
     explicit PeriodicCollector(const std::string& v) : target_var(v) {}
 
-    void visit(NumberNode&) override {}
-    void visit(VariableNode&) override {}
-    void visit(MatrixNode&) override {}
-    void visit(RelationalNode& n) override {
-        if (n.left) n.left->accept(*this);
-        if (n.right) n.right->accept(*this);
+    void visit(const NumberNode&) override {}
+    void visit(const VariableNode&) override {}
+    void visit(const MatrixNode&) override {}
+    void visit(const RelationalNode& n) override {
+        if (n.left()) n.left()->accept(*this);
+        if (n.right()) n.right()->accept(*this);
     }
-    void visit(LogicalNode& n) override {
-        if (n.left) n.left->accept(*this);
-        if (n.right) n.right->accept(*this);
+    void visit(const LogicalNode& n) override {
+        if (n.left()) n.left()->accept(*this);
+        if (n.right()) n.right()->accept(*this);
+    }
+    void visit(const PiecewiseNode& n) override {
+        for (const auto& branch : n.branches()) {
+            branch.expression->accept(*this);
+            branch.condition->accept(*this);
+        }
+        if (n.default_expr()) n.default_expr()->accept(*this);
+    }
+    void visit(const SummationNode& n) override {
+        n.body()->accept(*this);
+        n.lower_bound()->accept(*this);
+        n.upper_bound()->accept(*this);
+    }
+    void visit(const ProductNode_Op& n) override {
+        n.body()->accept(*this);
+        n.lower_bound()->accept(*this);
+        n.upper_bound()->accept(*this);
+    }
+    void visit(const TransformNode& n) override {
+        n.body()->accept(*this);
+    }
+    void visit(const QuantifierNode& n) override {
+        n.domain()->accept(*this);
+        n.predicate()->accept(*this);
+    }
+    void visit(const SetBuilderNode& n) override {
+        n.domain()->accept(*this);
+        n.predicate()->accept(*this);
+    }
+    void visit(const ComplexNode& n) override {
+        n.real()->accept(*this);
+        n.imag()->accept(*this);
     }
 
-    void visit(AddNode& n) override {
-        for (auto& op : n.operands) op->accept(*this);
+    void visit(const AddNode& n) override {
+        for (auto& op : n.operands()) op->accept(*this);
     }
 
-    void visit(MultiplyNode& n) override {
-        for (auto& op : n.operands) op->accept(*this);
+    void visit(const MultiplyNode& n) override {
+        for (auto& op : n.operands()) op->accept(*this);
     }
 
-    void visit(PowerNode& n) override {
-        n.base->accept(*this);
-        n.exponent->accept(*this);
+    void visit(const PowerNode& n) override {
+        n.base()->accept(*this);
+        n.exponent()->accept(*this);
     }
 
-    void visit(FunctionNode& n) override {
-        if (is_periodic_func(n.type)) {
+    void visit(const FunctionNode& n) override {
+        if (is_periodic_func(n.type())) {
             /// 检查参数是否依赖目标变量
-            if (!n.arguments.empty() && depends_on_var(n.arguments[0], target_var)) {
+            if (!n.arguments().empty() && depends_on_var(n.arguments()[0], target_var)) {
                 found_periodic = true;
 
-                lmmc_real_t k = extract_linear_coefficient(n.arguments[0], target_var);
+                lmmc_real_t k = extract_linear_coefficient(n.arguments()[0], target_var);
                 if (std::isnan(k) || k == 0.0) {
                     /// 非线性参数
                     has_nonlinear_periodic = true;
                 } else {
                     lmmc_real_t period = 0.0;
-                    if (n.type == FunctionNode::FuncType::Tan) {
-                        period = M_PI / std::fabs(k);
+                    if (n.type() == FunctionNode::FuncType::Tan) {
+                        period = LMMC_CONST_PI / std::fabs(k);
                     } else {
                         /// sin/cos
-                        period = 2.0 * M_PI / std::fabs(k);
+                        period = 2.0 * LMMC_CONST_PI / std::fabs(k);
                     }
                     if (period > max_period) {
                         max_period = period;
@@ -393,7 +447,7 @@ struct PeriodicCollector : public SymbolicVisitor {
         }
 
         /// 递归检查参数子树
-        for (auto& arg : n.arguments) {
+        for (auto& arg : n.arguments()) {
             arg->accept(*this);
         }
     }
@@ -415,9 +469,9 @@ std::optional<SearchInterval> determine_search_interval(
     lmmc_real_t lo = -10.0;
     lmmc_real_t hi = 10.0;
 
-    if (expr && expr->root) {
+    if (expr && lamina::detail::node(expr)) {
         PeriodicCollector collector(var);
-        expr->root->accept(collector);
+        lamina::detail::node(expr)->accept(collector);
 
         if (collector.found_periodic && !collector.has_nonlinear_periodic && collector.max_period > 0.0) {
             /// 扩展区间覆盖 2 个完整周期（对称于 0）
@@ -439,9 +493,6 @@ std::optional<SearchInterval> determine_search_interval(
     return SearchInterval{lo, hi};
 }
 
-// ============================================================================
-/// isolate_roots
-// ============================================================================
 
 /**
  * @internal
@@ -462,26 +513,26 @@ std::optional<SearchInterval> determine_search_interval(
  * 处理 NumberNode、FunctionNode、AddNode、MultiplyNode、PowerNode。
  * 若遇到无法求值的节点（如 VariableNode），返回 NaN。
  */
-static lmmc_real_t recursive_eval(const std::shared_ptr<SymbolicNode>& node) {
+static lmmc_real_t recursive_eval(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return 0.0;
 
-    if (auto num = std::dynamic_pointer_cast<NumberNode>(node)) {
-        if (std::holds_alternative<lmmc_real_t>(num->value))
-            return std::get<lmmc_real_t>(num->value);
-        if (std::holds_alternative<BigInt>(num->value))
-            return static_cast<lmmc_real_t>(std::get<BigInt>(num->value).to_double());
-        if (std::holds_alternative<Rational>(num->value))
-            return static_cast<lmmc_real_t>(std::get<Rational>(num->value).to_double());
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
+        if (std::holds_alternative<lmmc_real_t>(num->value()))
+            return std::get<lmmc_real_t>(num->value());
+        if (std::holds_alternative<BigInt>(num->value()))
+            return static_cast<lmmc_real_t>(std::get<BigInt>(num->value()).to_double());
+        if (std::holds_alternative<Rational>(num->value()))
+            return static_cast<lmmc_real_t>(std::get<Rational>(num->value()).to_double());
         return 0.0;
     }
 
-    if (std::dynamic_pointer_cast<VariableNode>(node)) {
+    if (std::dynamic_pointer_cast<const VariableNode>(node)) {
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
-    if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         lmmc_real_t sum = 0.0;
-        for (const auto& op : add->operands) {
+        for (const auto& op : add->operands()) {
             lmmc_real_t v = recursive_eval(op);
             if (std::isnan(v)) return v;
             sum += v;
@@ -489,9 +540,9 @@ static lmmc_real_t recursive_eval(const std::shared_ptr<SymbolicNode>& node) {
         return sum;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         lmmc_real_t product = 1.0;
-        for (const auto& op : mul->operands) {
+        for (const auto& op : mul->operands()) {
             lmmc_real_t v = recursive_eval(op);
             if (std::isnan(v)) return v;
             product *= v;
@@ -499,9 +550,9 @@ static lmmc_real_t recursive_eval(const std::shared_ptr<SymbolicNode>& node) {
         return product;
     }
 
-    if (auto pw = std::dynamic_pointer_cast<PowerNode>(node)) {
-        lmmc_real_t base = recursive_eval(pw->base);
-        lmmc_real_t exp = recursive_eval(pw->exponent);
+    if (auto pw = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        lmmc_real_t base = recursive_eval(pw->base());
+        lmmc_real_t exp = recursive_eval(pw->exponent());
         if (std::isnan(base) || std::isnan(exp))
             return std::numeric_limits<lmmc_real_t>::quiet_NaN();
         if (base == 0.0 && exp < 0.0)
@@ -509,11 +560,11 @@ static lmmc_real_t recursive_eval(const std::shared_ptr<SymbolicNode>& node) {
         return std::pow(base, exp);
     }
 
-    if (auto func = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (func->arguments.size() == 1) {
-            lmmc_real_t arg = recursive_eval(func->arguments[0]);
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (func->arguments().size() == 1) {
+            lmmc_real_t arg = recursive_eval(func->arguments()[0]);
             if (std::isnan(arg)) return arg;
-            switch (func->type) {
+            switch (func->type()) {
                 case FunctionNode::FuncType::Sin: return std::sin(arg);
                 case FunctionNode::FuncType::Cos: return std::cos(arg);
                 case FunctionNode::FuncType::Tan: return std::tan(arg);
@@ -549,9 +600,9 @@ static lmmc_real_t recursive_eval(const std::shared_ptr<SymbolicNode>& node) {
                 default: break;
             }
         }
-        if (func->arguments.size() == 2 && func->type == FunctionNode::FuncType::Atan2) {
-            lmmc_real_t y = recursive_eval(func->arguments[0]);
-            lmmc_real_t x_val = recursive_eval(func->arguments[1]);
+        if (func->arguments().size() == 2 && func->type() == FunctionNode::FuncType::Atan2) {
+            lmmc_real_t y = recursive_eval(func->arguments()[0]);
+            lmmc_real_t x_val = recursive_eval(func->arguments()[1]);
             if (std::isnan(y) || std::isnan(x_val)) return std::numeric_limits<lmmc_real_t>::quiet_NaN();
             return std::atan2(y, x_val);
         }
@@ -567,9 +618,9 @@ static lmmc_real_t evaluate_at(
 {
     try {
         auto substituted = expr->substitute(var, SymbolicExpr::number(static_cast<double>(x)));
-        if (!substituted || !substituted->root)
+        if (!substituted || !lamina::detail::node(substituted))
             return std::numeric_limits<lmmc_real_t>::quiet_NaN();
-        lmmc_real_t val = recursive_eval(substituted->root);
+        lmmc_real_t val = recursive_eval(lamina::detail::node(substituted));
         if (!std::isfinite(val)) return std::numeric_limits<lmmc_real_t>::quiet_NaN();
         return val;
     } catch (...) {
@@ -810,9 +861,6 @@ std::vector<IsolatedInterval> isolate_roots(
     return result;
 }
 
-// ============================================================================
-/// deduplicate_roots
-// ============================================================================
 
 std::vector<lmmc_real_t> deduplicate_roots(
     std::vector<NumericRoot>& roots,
@@ -860,9 +908,6 @@ std::vector<lmmc_real_t> deduplicate_roots(
     return result;
 }
 
-// ============================================================================
-/// refine_root — 根精化：带区间约束的 Newton-Raphson + 二分法回退
-// ============================================================================
 
 /**
  * @internal
@@ -993,8 +1038,6 @@ std::optional<NumericRoot> refine_root(
         }
     }
 
-    lmmc_real_t prev_residual = std::numeric_limits<lmmc_real_t>::max();
-
     for (int i = 1; i <= max_iter; ++i) {
         lmmc_real_t fx = evaluate_at(expr, var, x);
 
@@ -1037,7 +1080,6 @@ std::optional<NumericRoot> refine_root(
                 }
             }
             x = (lo + hi) * 0.5;
-            prev_residual = residual;
             continue;
         }
 
@@ -1067,7 +1109,6 @@ std::optional<NumericRoot> refine_root(
                     f_lo = fx;
                 }
                 x = x_new;
-                prev_residual = residual;
                 continue;
             }
         }
@@ -1087,7 +1128,6 @@ std::optional<NumericRoot> refine_root(
                 }
             }
             x = (lo + hi) * 0.5;
-            prev_residual = residual;
         }
 
         /// 区间宽度收敛
@@ -1108,9 +1148,6 @@ std::optional<NumericRoot> refine_root(
     return std::nullopt;
 }
 
-// ============================================================================
-/// assemble_results — 将 lmmc_real_t 根值转换为 NumberNode 表达式
-// ============================================================================
 
 /**
  * @internal
@@ -1137,9 +1174,6 @@ static std::vector<std::shared_ptr<SymbolicExpr>> assemble_results(
     return results;
 }
 
-// ============================================================================
-/// solve_mixed_transcendental — 完整编排器
-// ============================================================================
 
 /**
  * @internal
@@ -1164,12 +1198,12 @@ static std::vector<NumericRoot> numerical_path(
     /// 计算导数
     std::shared_ptr<SymbolicExpr> derivative = nullptr;
     try {
-        if (factor && factor->root) {
+        if (factor && lamina::detail::node(factor)) {
             DifferentiationVisitor dv(var);
-            factor->root->accept(dv);
+            lamina::detail::node(factor)->accept(dv);
             auto deriv_node = dv.get_result();
             if (deriv_node) {
-                derivative = std::make_shared<SymbolicExpr>(deriv_node);
+                derivative = lamina::detail::make_expression_ptr(deriv_node);
             }
         }
     } catch (...) {
@@ -1197,7 +1231,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
 {
     try {
         /// 1. 早期退出：表达式不依赖变量
-        if (!expr || !expr->root || !depends_on_var(expr->root, var)) {
+        if (!expr || !lamina::detail::node(expr) || !depends_on_var(lamina::detail::node(expr), var)) {
             return {};
         }
 
@@ -1226,10 +1260,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
         if (!is_single_factor_same_as_input && factors.size() > 1) {
             /// 多因子：对每个因子独立求解
             for (const auto& factor : factors) {
-                if (!factor || !factor->root) continue;
+                if (!factor || !lamina::detail::node(factor)) continue;
 
                 /// 跳过不依赖变量的因子（常数因子）
-                if (!depends_on_var(factor->root, var)) continue;
+                if (!depends_on_var(lamina::detail::node(factor), var)) continue;
 
                 /// (a) 尝试转换为多项式
                 bool solved_as_poly = false;
@@ -1243,8 +1277,8 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                             if (!root_expr) continue;
                             /// 提取数值
                             auto simplified = root_expr->simplify();
-                            if (!simplified || !simplified->root) continue;
-                            lmmc_real_t val = recursive_eval(simplified->root);
+                            if (!simplified || !lamina::detail::node(simplified)) continue;
+                            lmmc_real_t val = recursive_eval(lamina::detail::node(simplified));
                             if (std::isfinite(val)) {
                                 /// 验证根在搜索区间内
                                 if (val >= interval.lo && val <= interval.hi) {
@@ -1270,8 +1304,8 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                         for (const auto& root_expr : trans_roots) {
                             if (!root_expr) continue;
                             auto simplified = root_expr->simplify();
-                            if (!simplified || !simplified->root) continue;
-                            lmmc_real_t val = recursive_eval(simplified->root);
+                            if (!simplified || !lamina::detail::node(simplified)) continue;
+                            lmmc_real_t val = recursive_eval(lamina::detail::node(simplified));
                             if (std::isfinite(val)) {
                                 if (val >= interval.lo && val <= interval.hi) {
                                     lmmc_real_t residual = std::fabs(evaluate_at(expr, var, val));
@@ -1302,7 +1336,6 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
         return assemble_results(deduplicated);
 
     } catch (...) {
-        /// Requirement 8.5: 不传播异常
         return {};
     }
 }

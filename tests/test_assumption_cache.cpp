@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_cache.cpp
- * @brief Property tests for QueryInterface caching (Task 6.4).
- *
- * Properties tested:
- * - Property 16: Cache invalidation on state change
- *
- * Validates: Requirements 23.3, 23.4
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- *
- * Note: Cache invalidation hooks (task 8.5) haven't been wired yet, so
- * we test that:
- * - invalidate_cache() clears the cache (call it manually)
- * - After invalidation, queries recompute correctly
- * - The cache stores results (same query twice returns same result efficiently)
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -30,44 +12,38 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
-static std::shared_ptr<SymbolicNode> make_var_node(const std::string& name) {
-    return std::make_shared<VariableNode>(name);
+static std::shared_ptr<const SymbolicNode> make_var_node(const std::string& name) {
+    return lamina::detail::make_node<VariableNode>(name);
 }
 
 static SymbolicExpr make_var_expr(const std::string& name) {
-    SymbolicExpr expr;
-    expr.root = make_var_node(name);
+    auto expr = lamina::detail::expression_from_node(make_var_node(name));
     return expr;
 }
 
-static std::shared_ptr<SymbolicNode> make_number(int val) {
-    return std::make_shared<NumberNode>(BigInt(val));
+static std::shared_ptr<const SymbolicNode> make_number(int val) {
+    return lamina::detail::make_node<NumberNode>(BigInt(val));
 }
 
 /// Build a division expression: numerator_var / denominator_var
 static SymbolicExpr make_division(const std::string& num_var, const std::string& den_var) {
     auto num = make_var_node(num_var);
     auto den = make_var_node(den_var);
-    auto den_inv = std::make_shared<PowerNode>(den, make_number(-1));
-    auto mul = std::make_shared<MultiplyNode>(
-        std::vector<std::shared_ptr<SymbolicNode>>{num, den_inv});
-    SymbolicExpr expr;
-    expr.root = mul;
+    auto den_inv = lamina::detail::make_node<PowerNode>(den, make_number(-1));
+    auto mul = lamina::detail::make_node<MultiplyNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{num, den_inv});
+    auto expr = lamina::detail::expression_from_node(mul);
     return expr;
 }
 
 /// Build an AddNode expression from variable names
 static SymbolicExpr make_add_expr(const std::vector<std::string>& var_names) {
-    std::vector<std::shared_ptr<SymbolicNode>> operands;
+    std::vector<std::shared_ptr<const SymbolicNode>> operands;
     for (const auto& name : var_names) {
         operands.push_back(make_var_node(name));
     }
-    SymbolicExpr expr;
-    expr.root = std::make_shared<AddNode>(std::move(operands));
+    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<AddNode>(std::move(operands)));
     return expr;
 }
 
@@ -83,10 +59,6 @@ static Domain random_domain() {
     return rc::gen::elementOf(domains);
 }
 
-// ============================================================
-// Property 16: Cache invalidation on state change
-// **Validates: Requirements 23.3, 23.4**
-// ============================================================
 
 // --- Test: invalidate_cache() clears the cache ---
 
@@ -293,12 +265,11 @@ static void test_invalidation_on_assume_relation() {
         RC_ASSERT(result_before == Tribool::Unknown);
 
         // Add relation: var > 0 (which derives Positive sign)
-        auto var_node = std::make_shared<VariableNode>(var_name);
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
-        auto rel_node = std::make_shared<RelationalNode>(
+        auto var_node = lamina::detail::make_node<VariableNode>(var_name);
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto rel_node = lamina::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT);
-        SymbolicExpr rel_expr;
-        rel_expr.root = rel_node;
+        auto rel_expr = lamina::detail::expression_from_node(rel_node);
         ctx.assume(rel_expr);
 
         qi.invalidate_cache();
@@ -426,12 +397,8 @@ static void test_invalidate_clears_all_entries() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 16: Cache invalidation on state change
     test_invalidate_cache_clears_cache();
     test_cache_stores_results();
     test_invalidation_allows_new_results();

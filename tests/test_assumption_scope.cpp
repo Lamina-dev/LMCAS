@@ -1,13 +1,3 @@
-/**
- * @file test_assumption_scope.cpp
- * @brief Property tests for AssumptionContext scope management (Properties 10-11).
- *
- * Feature: assumption-system
- * Validates: Requirements 9.1-9.3, 9.6, 9.7
- *
- * Property 10: Scope push/pop round-trip
- * Property 11: Scope shadowing
- */
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -20,9 +10,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 static const std::vector<Domain> ALL_DOMAINS = {
     Domain::Complex, Domain::Real, Domain::Algebraic, Domain::Rational,
@@ -63,16 +50,6 @@ static std::string sign_name(Sign s) {
     return "?";
 }
 
-// ============================================================
-// Property 10: Scope push/pop round-trip
-// **Validates: Requirements 9.1, 9.2, 9.3, 9.7**
-//
-// For any set of property and relation declarations made within
-// a pushed scope, popping that scope should restore all query
-// results to exactly the values they returned before the push
-// was called; declarations in the child scope should not be
-// visible after pop.
-// ============================================================
 
 void test_property10_domain_roundtrip() {
     TEST_CASE("Property 10: Domain declarations in child scope not visible after pop");
@@ -174,10 +151,10 @@ void test_property10_relation_roundtrip() {
     AssumptionContext ctx;
 
     // Create a simple relation: x > 0
-    auto var_x = std::make_shared<SymbolicExpr>(
-        std::make_shared<VariableNode>("x"));
-    auto zero = std::make_shared<SymbolicExpr>(
-        std::make_shared<NumberNode>(BigInt(0)));
+    auto var_x = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<VariableNode>("x"));
+    auto zero = lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(BigInt(0)));
 
     // Before push: no relations, no sign for x
     EXPECT_TRUE(ctx.current_relations().get_relations().empty(),
@@ -308,16 +285,6 @@ void test_property10_depth_changes() {
     EXPECT_TRUE(ctx.depth() == 1, "Depth is 1 after second pop");
 }
 
-// ============================================================
-// Property 11: Scope shadowing
-// **Validates: Requirements 9.6**
-//
-// For any symbol with a property declared in a parent scope,
-// declaring a different (non-contradictory) property for the
-// same symbol in a child scope should shadow the parent's value
-// for queries within the child scope, while the parent's value
-// remains accessible after pop.
-// ============================================================
 
 void test_property11_domain_shadowing() {
     TEST_CASE("Property 11: Child scope domain shadows parent domain");
@@ -612,12 +579,8 @@ void test_property11_different_symbols_independent() {
         "y is Integer after pop (unchanged)");
 }
 
-// ============================================================
-// main
-// ============================================================
 
 int main() {
-    // Property 10: Scope push/pop round-trip
     test_property10_domain_roundtrip();
     test_property10_sign_roundtrip();
     test_property10_parity_roundtrip();
@@ -628,7 +591,6 @@ int main() {
     test_property10_nested_push_pop_roundtrip();
     test_property10_depth_changes();
 
-    // Property 11: Scope shadowing
     test_property11_domain_shadowing();
     test_property11_sign_shadowing();
     test_property11_parity_shadowing();

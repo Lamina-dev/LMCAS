@@ -1,21 +1,3 @@
-/**
- * @file test_assumption_serialization.cpp
- * @brief Property tests for serialization round-trip (Task 8.6).
- *
- * Properties tested:
- * - Property 15: Serialization round-trip — For any valid AssumptionContext,
- *   serialize then deserialize SHALL produce identical query results.
- *
- * **Validates: Requirements 20.3**
- *
- * Uses rapidcheck (header-only, vendored in tests/rapidcheck/) for
- * property-based testing with random input generation.
- *
- * Note: Relations and conditionals with complex expressions may not round-trip
- * perfectly (deserialization of complex expressions is deferred), so we focus
- * on simple property round-trips (domain, sign, parity, bounded, transcendental,
- * finiteness, definiteness).
- */
 
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
@@ -29,9 +11,6 @@
 
 using namespace lamina;
 
-// ============================================================
-// Helpers
-// ============================================================
 
 /// Generate a random Domain (excluding Complex which is the default).
 static Domain random_domain() {
@@ -84,10 +63,6 @@ static std::string random_var_name(int prefix_id) {
     return "s" + std::to_string(prefix_id) + "_" + std::to_string(rc::gen::inRange(0, 99));
 }
 
-// ============================================================
-// Property 15: Serialization round-trip
-// **Validates: Requirements 20.3**
-// ============================================================
 
 /// Test: Domain round-trip
 static void test_serialization_domain_roundtrip() {
@@ -292,12 +267,11 @@ static void test_serialization_simple_relation_roundtrip() {
         std::string var = random_var_name(8);
 
         // Create a simple relation: var > 0
-        auto var_node = std::make_shared<VariableNode>(var);
-        auto zero_node = std::make_shared<NumberNode>(BigInt(0));
-        auto rel_node = std::make_shared<RelationalNode>(
+        auto var_node = lamina::detail::make_node<VariableNode>(var);
+        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto rel_node = lamina::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT);
-        SymbolicExpr rel_expr;
-        rel_expr.root = rel_node;
+        auto rel_expr = lamina::detail::expression_from_node(rel_node);
         ctx.assume(rel_expr);
 
         std::string serialized = ctx.serialize();
@@ -325,9 +299,55 @@ static void test_serialization_empty_roundtrip() {
     });
 }
 
-// ============================================================
-// main
-// ============================================================
+static void test_checked_deserialization_contracts() {
+    TEST_CASE("Feature: assumption-system-enhancements, checked deserialization errors");
+
+    AssumptionContext ctx;
+    ctx.assume_sign("x", Sign::Positive);
+    auto rel_node = lamina::detail::make_node<RelationalNode>(
+        lamina::detail::make_node<VariableNode>("x"),
+        lamina::detail::make_node<NumberNode>(BigInt(0)),
+        RelationalNode::Op::GT);
+    auto relation = lamina::detail::expression_from_node(rel_node);
+    ctx.assume(relation);
+
+    auto ok = AssumptionContext::deserialize_checked(ctx.serialize());
+    EXPECT_TRUE(ok.has_value(), "checked deserialize accepts serialized context");
+    if (ok) {
+        EXPECT_TRUE(ok.value().has_sign("x", Sign::Positive),
+                    "checked deserialize preserves positive sign");
+    }
+
+    auto malformed = AssumptionContext::deserialize_checked("SCOPE 0\nRELATION x 0\nEND\n");
+    EXPECT_TRUE(!malformed.has_value(), "checked deserialize rejects malformed relation");
+    EXPECT_TRUE(malformed.error().code == CasErrc::ParseError,
+                "checked deserialize reports ParseError for malformed input");
+
+    auto contradictory = AssumptionContext::deserialize_checked(
+        "SCOPE 0\nSIGN x Positive\nRELATION x LT 0\nEND\n");
+    EXPECT_TRUE(!contradictory.has_value(),
+                "checked deserialize rejects contradictory derived relation property");
+    EXPECT_TRUE(contradictory.error().code == CasErrc::ParseError,
+                "checked deserialize maps relation contradiction to ParseError");
+
+    auto property_contradiction = AssumptionContext::deserialize_checked(
+        "SCOPE 0\nDOMAIN n Natural\nSIGN n Negative\nEND\n");
+    EXPECT_TRUE(!property_contradiction.has_value(),
+                "checked deserialize rejects contradictory property declarations");
+    EXPECT_TRUE(property_contradiction.error().code == CasErrc::ParseError,
+                "checked deserialize maps property contradiction to ParseError");
+
+    bool legacy_threw = false;
+    try {
+        (void)AssumptionContext::deserialize(
+            "SCOPE 0\nDOMAIN n Natural\nSIGN n Negative\nEND\n");
+    } catch (const std::invalid_argument&) {
+        legacy_threw = true;
+    }
+    EXPECT_TRUE(legacy_threw,
+                "legacy deserialize maps checked ParseError to invalid_argument");
+}
+
 
 int main() {
     test_serialization_domain_roundtrip();
@@ -341,6 +361,7 @@ int main() {
     test_serialization_combined_properties_roundtrip();
     test_serialization_simple_relation_roundtrip();
     test_serialization_empty_roundtrip();
+    test_checked_deserialization_contracts();
 
     return TEST_REPORT();
 }

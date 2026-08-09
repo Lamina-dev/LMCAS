@@ -3,9 +3,12 @@
  * @brief 符号复数运算：加减乘除、共轭、模、辐角、极坐标形式。
  */
 #pragma once
+#include "computation_context.hpp"
+#include "result.hpp"
 #include "symbolic.hpp"
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace lamina {
 
@@ -14,6 +17,10 @@ struct ComplexSymbolic {
     std::shared_ptr<SymbolicExpr> real;  ///< 实部
     std::shared_ptr<SymbolicExpr> imag;  ///< 虚部
 };
+
+using ComplexSymbolicResult = Result<ComplexSymbolic>;
+using ComplexExprResult = Result<std::shared_ptr<SymbolicExpr>>;
+using ComplexRootsResult = Result<std::vector<ComplexSymbolic>>;
 
 /**
  * @brief 构造符号复数
@@ -36,6 +43,15 @@ inline ComplexSymbolic make_complex(
  */
 LAMINA_API ComplexSymbolic complex_add(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
+LAMINA_API ComplexSymbolicResult complex_add_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b,
+    ComputationContext& context);
+
+LAMINA_API ComplexSymbolicResult complex_add_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b);
+
 /**
  * @brief 复数减法
  * @param a 被减数
@@ -43,6 +59,15 @@ LAMINA_API ComplexSymbolic complex_add(const ComplexSymbolic& a, const ComplexSy
  * @return 差
  */
 LAMINA_API ComplexSymbolic complex_sub(const ComplexSymbolic& a, const ComplexSymbolic& b);
+
+LAMINA_API ComplexSymbolicResult complex_sub_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b,
+    ComputationContext& context);
+
+LAMINA_API ComplexSymbolicResult complex_sub_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b);
 
 /**
  * @brief 复数乘法
@@ -52,6 +77,15 @@ LAMINA_API ComplexSymbolic complex_sub(const ComplexSymbolic& a, const ComplexSy
  */
 LAMINA_API ComplexSymbolic complex_mul(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
+LAMINA_API ComplexSymbolicResult complex_mul_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b,
+    ComputationContext& context);
+
+LAMINA_API ComplexSymbolicResult complex_mul_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b);
+
 /**
  * @brief 复数除法
  * @param a 被除数
@@ -60,12 +94,27 @@ LAMINA_API ComplexSymbolic complex_mul(const ComplexSymbolic& a, const ComplexSy
  */
 LAMINA_API ComplexSymbolic complex_div(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
+LAMINA_API ComplexSymbolicResult complex_div_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b,
+    ComputationContext& context);
+
+LAMINA_API ComplexSymbolicResult complex_div_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b);
+
 /**
  * @brief 计算复数的共轭
  * @param z 输入复数
  * @return 共轭复数
  */
 LAMINA_API ComplexSymbolic complex_conj(const ComplexSymbolic& z);
+
+LAMINA_API ComplexSymbolicResult complex_conj_checked(
+    const ComplexSymbolic& z,
+    ComputationContext& context);
+
+LAMINA_API ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z);
 
 /**
  * @brief 计算复数的模
@@ -74,12 +123,24 @@ LAMINA_API ComplexSymbolic complex_conj(const ComplexSymbolic& z);
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> complex_abs(const ComplexSymbolic& z);
 
+LAMINA_API ComplexExprResult complex_abs_checked(
+    const ComplexSymbolic& z,
+    ComputationContext& context);
+
+LAMINA_API ComplexExprResult complex_abs_checked(const ComplexSymbolic& z);
+
 /**
  * @brief 计算复数的辐角
  * @param z 输入复数
  * @return 辐角的符号表达式
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z);
+
+LAMINA_API ComplexExprResult complex_arg_checked(
+    const ComplexSymbolic& z,
+    ComputationContext& context);
+
+LAMINA_API ComplexExprResult complex_arg_checked(const ComplexSymbolic& z);
 
 /**
  * @brief 将极坐标形式转换为指数形式复数 r*e^(i*theta)
@@ -92,6 +153,15 @@ LAMINA_API ComplexSymbolic complex_exp_form(
     std::shared_ptr<SymbolicExpr> theta
 );
 
+LAMINA_API ComplexSymbolicResult complex_exp_form_checked(
+    std::shared_ptr<SymbolicExpr> r,
+    std::shared_ptr<SymbolicExpr> theta,
+    ComputationContext& context);
+
+LAMINA_API ComplexSymbolicResult complex_exp_form_checked(
+    std::shared_ptr<SymbolicExpr> r,
+    std::shared_ptr<SymbolicExpr> theta);
+
 /**
  * @brief 将极坐标形式转换为三角形式复数 r*(cos(theta) + i*sin(theta))
  * @param r 模
@@ -103,6 +173,15 @@ LAMINA_API ComplexSymbolic complex_trig_form(
     std::shared_ptr<SymbolicExpr> theta
 );
 
+LAMINA_API ComplexSymbolicResult complex_trig_form_checked(
+    std::shared_ptr<SymbolicExpr> r,
+    std::shared_ptr<SymbolicExpr> theta,
+    ComputationContext& context);
+
+LAMINA_API ComplexSymbolicResult complex_trig_form_checked(
+    std::shared_ptr<SymbolicExpr> r,
+    std::shared_ptr<SymbolicExpr> theta);
+
 /**
  * @brief 求复数 c 的 n 次方根
  * @param c 被开方的复数表达式
@@ -113,6 +192,15 @@ LAMINA_API std::vector<ComplexSymbolic> solve_complex_nth_root(
     std::shared_ptr<SymbolicExpr> c,
     int n
 );
+
+LAMINA_API ComplexRootsResult solve_complex_nth_root_checked(
+    std::shared_ptr<SymbolicExpr> c,
+    int n,
+    ComputationContext& context);
+
+LAMINA_API ComplexRootsResult solve_complex_nth_root_checked(
+    std::shared_ptr<SymbolicExpr> c,
+    int n);
 
 /**
  * @brief 求复系数一元二次方程 az^2 + bz + c = 0 的根

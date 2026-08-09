@@ -1,10 +1,23 @@
 #include "test_common.hpp"
+#include "numeric_evaluation.hpp"
 #include "solver.hpp"
 #include "solve_strategies.hpp"
 #include <cmath>
 #include <random>
 #include <sstream>
 #include <algorithm>
+#include <optional>
+
+static std::optional<double> real_numeric_value(const std::shared_ptr<SymbolicExpr>& expr) {
+    if (!expr) return std::nullopt;
+    lamina::ComputationContext context;
+    auto evaluated = lamina::evaluate_numeric(*expr, lamina::NumericBindings{}, context);
+    if (!evaluated || !evaluated.value().is_finite() ||
+        !std::isfinite(evaluated.value().value)) {
+        return std::nullopt;
+    }
+    return evaluated.value().value;
+}
 
 int main() {
 
@@ -41,7 +54,7 @@ int main() {
         auto sols = lamina::Solver::solve_polynomial_system(eqs, {"x"});
         EXPECT_TRUE(sols.size() == 1, "rational system solutions size");
         if (!sols.empty()) {
-            auto x_val = std::make_shared<SymbolicExpr>(sols[0]["x"]);
+            auto x_val = lamina::detail::make_expression_ptr(sols[0].at("x"));
             EXPECT_EQ_EXPR(x_val, SymbolicExpr::number(2), "rational system x=2");
         }
     }
@@ -113,7 +126,13 @@ int main() {
         opts_no_rootof.allow_numeric = false;
         auto sols_no_rootof = lamina::solve_dispatch(eq, "x", opts_no_rootof);
 
-        EXPECT_TRUE(true, "return_rootof=false accepted without exception");
+        bool has_rootof = false;
+        for (const auto& sol : sols_no_rootof) {
+            if (sol && sol->to_string().find("rootof") != std::string::npos) {
+                has_rootof = true;
+            }
+        }
+        EXPECT_TRUE(!has_rootof, "return_rootof=false suppresses RootOf emission");
     }
 
     TEST_CASE("Dispatcher: simplification converts f(x)=g(x) to f(x)-g(x)=0");
@@ -303,9 +322,9 @@ int main() {
 
                     auto res1 = expr->substitute("x", sols[0])->simplify();
                     auto res2 = expr->substitute("x", sols[1])->simplify();
-                    double r1_val = res1->to_numeric();
-                    double r2_val = res2->to_numeric();
-                    if (std::abs(r1_val) < TOL && std::abs(r2_val) < TOL) {
+                    auto r1_val = real_numeric_value(res1);
+                    auto r2_val = real_numeric_value(res2);
+                    if (r1_val && r2_val && std::abs(*r1_val) < TOL && std::abs(*r2_val) < TOL) {
                         quad_pass_count++;
                         continue;
                     }
@@ -323,23 +342,24 @@ int main() {
             for (size_t i = 0; i < sols.size(); ++i) {
 
                 auto residual_expr = expr->substitute("x", sols[i])->simplify();
-                double residual = residual_expr->to_numeric();
+                auto maybe_residual = real_numeric_value(residual_expr);
 
-                if (disc < 0 && (std::isnan(residual) || std::abs(residual) < 1e-6)) {
+                if (disc < 0 && (!maybe_residual || std::abs(*maybe_residual) < 1e-6)) {
 
                     continue;
                 }
 
-                if (std::isnan(residual) || std::isinf(residual)) {
+                if (!maybe_residual) {
                     std::ostringstream msg;
                     msg << "Property 13 Quadratic Trial " << trial
-                        << " root " << i << ": residual evaluation returned NaN/Inf"
+                        << " root " << i << ": residual is not real-numerically evaluable"
                         << " (a=" << a_val << ", b=" << b_val << ", c=" << c_val << ")";
                     EXPECT_TRUE(false, msg.str());
                     trial_ok = false;
                     break;
                 }
 
+                double residual = *maybe_residual;
                 if (std::abs(residual) >= TOL) {
                     std::ostringstream msg;
                     msg << "Property 13 Quadratic Trial " << trial

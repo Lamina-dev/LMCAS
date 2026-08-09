@@ -1,9 +1,30 @@
 #include "matrix_decomposition.hpp"
 #include "test_common.hpp"
+#include <string>
+#include <variant>
+#include <vector>
 
 using namespace lamina;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
+static std::shared_ptr<SymbolicExpr> bigint_num(const BigInt& n) {
+    return lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<NumberNode>(
+            std::variant<BigInt, Rational, lmmc_real_t>{std::in_place_type<BigInt>, n}));
+}
+
+static std::shared_ptr<SymbolicExpr> exact_dense_matrix(
+    size_t rows,
+    size_t cols,
+    const std::vector<std::shared_ptr<SymbolicExpr>>& entries) {
+    MatrixNode::DenseStorage storage;
+    storage.reserve(entries.size());
+    for (const auto& entry : entries) {
+        storage.push_back(lamina::detail::node(entry));
+    }
+    return lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<MatrixNode>(rows, cols, std::move(storage)));
+}
 
 static std::shared_ptr<SymbolicExpr> mat2(int a, int b, int c, int d) {
     return SymbolicExpr::matrix({{num(a), num(b)}, {num(c), num(d)}});
@@ -71,11 +92,11 @@ int main() {
         auto A = mat2(1,2, 3,4);
         auto B = mat2(0,1, 1,0);
         auto K = kronecker(A, B);
-        auto kn = std::dynamic_pointer_cast<MatrixNode>(K->root);
-        EXPECT_TRUE(kn && kn->rows == 4 && kn->cols == 4, "kron(2x2,2x2) is 4x4");
+        auto kn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(K));
+        EXPECT_TRUE(kn && kn->rows() == 4 && kn->cols() == 4, "kron(2x2,2x2) is 4x4");
         // top-left block = 1*B => [[0,1],[1,0]]; element (0,1) = 1
-        EXPECT_EQ_EXPR(std::make_shared<SymbolicExpr>(kn->get(0,1)), num(1), "kron element (0,1)=1");
-        EXPECT_EQ_EXPR(std::make_shared<SymbolicExpr>(kn->get(0,0)), num(0), "kron element (0,0)=0");
+        EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(kn->get(0,1)), num(1), "kron element (0,1)=1");
+        EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(kn->get(0,0)), num(0), "kron element (0,0)=0");
     }
 
     // ---- Frobenius norm ----
@@ -94,16 +115,39 @@ int main() {
         EXPECT_EQ_EXPR(ninf->simplify(), num(7), "inf-norm = max row sum = 3+4 = 7");
     }
 
+    // ---- exact large norm comparisons ----
+    {
+        const BigInt two_to_53("9007199254740992");
+        const BigInt next_integer = two_to_53 + BigInt(1);
+        auto A = exact_dense_matrix(2, 2, {
+            bigint_num(two_to_53), bigint_num(next_integer),
+            num(0), num(0)
+        });
+        auto n1 = matrix_norm(A, "1");
+        std::string n1_text = n1 ? n1->to_string() : "<null>";
+        EXPECT_TRUE(n1 && n1->to_string().find(next_integer.to_string()) != std::string::npos,
+                    "1-norm keeps exact large column-sum ordering, got " + n1_text);
+
+        auto B = exact_dense_matrix(2, 2, {
+            bigint_num(two_to_53), num(0),
+            bigint_num(next_integer), num(0)
+        });
+        auto ninf = matrix_norm(B, "inf");
+        std::string ninf_text = ninf ? ninf->to_string() : "<null>";
+        EXPECT_TRUE(ninf && ninf->to_string().find(next_integer.to_string()) != std::string::npos,
+                    "inf-norm keeps exact large row-sum ordering, got " + ninf_text);
+    }
+
     // ---- matrix_exp of zero is identity ----
     {
         auto Z = mat2(0,0, 0,0);
         auto E = matrix_exp(Z);
-        auto en = std::dynamic_pointer_cast<MatrixNode>(E->root);
+        auto en = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(E));
         if (en) {
-            EXPECT_EQ_EXPR(std::make_shared<SymbolicExpr>(en->get(0,0))->simplify(), num(1), "exp(0)[0,0]=1");
-            EXPECT_EQ_EXPR(std::make_shared<SymbolicExpr>(en->get(0,1))->simplify(), num(0), "exp(0)[0,1]=0");
+            EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(en->get(0,0))->simplify(), num(1), "exp(0)[0,0]=1");
+            EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(en->get(0,1))->simplify(), num(0), "exp(0)[0,1]=0");
         } else {
-            EXPECT_TRUE(true, "matrix_exp returned non-matrix fallback (acceptable)");
+            EXPECT_TRUE(false, "matrix_exp of zero must return an explicit matrix");
         }
     }
 
@@ -134,11 +178,155 @@ int main() {
                 auto recon = SymbolicExpr::multiply(P, SymbolicExpr::multiply(J, Pinv))->simplify();
                 EXPECT_EQ_EXPR(recon, A->simplify(), "P J P^-1 == A");
             } else {
-                EXPECT_TRUE(true, "P not invertible (acceptable)");
+                EXPECT_TRUE(false, "Jordan basis matrix P must be invertible");
             }
         } else {
-            EXPECT_TRUE(true, "jordan_form not available for this matrix (acceptable)");
+            EXPECT_TRUE(false, "Jordan form must exist for a diagonal matrix");
         }
+    }
+
+    // ---- checked decomposition APIs: success and explicit errors ----
+    {
+        auto A = mat2(4,3, 6,3);
+        auto lu = lu_decomposition_checked(A);
+        EXPECT_TRUE(lu.has_value(), "checked LU succeeds");
+        if (lu) {
+            auto prod = SymbolicExpr::multiply(lu.value().L, lu.value().U)->simplify();
+            EXPECT_EQ_EXPR(prod, A->simplify(), "checked LU reconstructs A");
+        }
+
+        auto qr = qr_decomposition_checked(mat2(1,0, 0,1));
+        EXPECT_TRUE(qr.has_value(), "checked QR succeeds on identity");
+        if (qr) {
+            EXPECT_TRUE(qr.value().Q != nullptr && qr.value().R != nullptr,
+                        "checked QR returns Q and R");
+        }
+
+        auto chol = cholesky_decomposition_checked(mat2(4,0, 0,9));
+        EXPECT_TRUE(chol.has_value(), "checked Cholesky succeeds on diagonal SPD matrix");
+        if (chol) {
+            EXPECT_TRUE(chol.value().L != nullptr, "checked Cholesky returns L");
+        }
+
+        auto jordan = jordan_form_checked(mat2(2,0, 0,3));
+        EXPECT_TRUE(jordan.has_value(), "checked Jordan succeeds on diagonal matrix");
+        if (jordan) {
+            EXPECT_TRUE(jordan.value().J != nullptr && jordan.value().P != nullptr,
+                        "checked Jordan returns J and P");
+            auto Pinv = SymbolicExpr::inverse(jordan.value().P);
+            EXPECT_TRUE(Pinv != nullptr, "checked Jordan returns invertible P");
+            if (Pinv) {
+                auto reconstructed = SymbolicExpr::multiply(
+                    jordan.value().P,
+                    SymbolicExpr::multiply(jordan.value().J, Pinv))->simplify();
+                EXPECT_EQ_EXPR(reconstructed, mat2(2,0, 0,3)->simplify(),
+                               "checked Jordan reconstructs exact diagonal input");
+            }
+        }
+
+        auto svd = svd_decomposition_checked(mat2(2,0, 0,3));
+        EXPECT_TRUE(svd.has_value(), "checked SVD succeeds on exact nonnegative diagonal matrix");
+        if (svd) {
+            auto reconstructed = SymbolicExpr::multiply(
+                svd.value().U,
+                SymbolicExpr::multiply(svd.value().S, SymbolicExpr::transpose(svd.value().V)))->simplify();
+            EXPECT_EQ_EXPR(reconstructed, mat2(2,0, 0,3)->simplify(),
+                           "checked SVD reconstructs exact diagonal input");
+        }
+    }
+
+    {
+        auto non_square = SymbolicExpr::matrix({{num(1), num(2)}});
+        auto bad_lu = lu_decomposition_checked(non_square);
+        EXPECT_TRUE(!bad_lu && bad_lu.error().code == CasErrc::InvalidArgument,
+                    "checked LU rejects non-square matrix");
+
+        auto needs_pivot_lu = lu_decomposition_checked(mat2(0,1, 1,0));
+        EXPECT_TRUE(!needs_pivot_lu && needs_pivot_lu.error().code == CasErrc::Inconclusive,
+                    "checked LU reports Inconclusive when no-pivot minors vanish");
+
+        auto x = SymbolicExpr::variable("x");
+        auto symbolic_lu_input = SymbolicExpr::matrix({{x, num(1)}, {num(1), num(1)}});
+        auto symbolic_lu = lu_decomposition_checked(symbolic_lu_input);
+        EXPECT_TRUE(!symbolic_lu && symbolic_lu.error().code == CasErrc::Inconclusive,
+                    "checked LU requires proven exact rational no-pivot support");
+
+        auto bad_qr = qr_decomposition_checked(num(1));
+        EXPECT_TRUE(!bad_qr && bad_qr.error().code == CasErrc::InvalidArgument,
+                    "checked QR rejects non-matrix input");
+
+        auto dependent_qr = qr_decomposition_checked(mat2(1,0, 2,0));
+        EXPECT_TRUE(!dependent_qr && dependent_qr.error().code == CasErrc::Inconclusive,
+                    "checked QR reports Inconclusive for rank-deficient columns");
+
+        auto wide_qr = qr_decomposition_checked(
+            SymbolicExpr::matrix({{num(1), num(0), num(0)}, {num(0), num(1), num(0)}}));
+        EXPECT_TRUE(!wide_qr && wide_qr.error().code == CasErrc::Inconclusive,
+                    "checked QR reports Inconclusive outside tall/full-column-rank support");
+
+        auto symbolic_qr_input = SymbolicExpr::matrix({{x, num(0)}, {num(0), num(1)}});
+        auto symbolic_qr = qr_decomposition_checked(symbolic_qr_input);
+        EXPECT_TRUE(!symbolic_qr && symbolic_qr.error().code == CasErrc::Inconclusive,
+                    "checked QR requires proven exact rational full-column-rank support");
+
+        auto null_chol = cholesky_decomposition_checked(nullptr);
+        EXPECT_TRUE(!null_chol && null_chol.error().code == CasErrc::InvalidArgument,
+                    "checked Cholesky rejects null input");
+
+        auto non_spd_chol = cholesky_decomposition_checked(mat2(-1,0, 0,1));
+        EXPECT_TRUE(!non_spd_chol && non_spd_chol.error().code == CasErrc::DomainError,
+                    "checked Cholesky rejects proven non-SPD matrices");
+
+        auto semidefinite_chol = cholesky_decomposition_checked(mat2(1,0, 0,0));
+        EXPECT_TRUE(!semidefinite_chol && semidefinite_chol.error().code == CasErrc::DomainError,
+                    "checked Cholesky rejects positive semidefinite matrices");
+
+        auto symbolic_spd = SymbolicExpr::matrix({{x, num(0)}, {num(0), num(1)}});
+        auto symbolic_chol = cholesky_decomposition_checked(symbolic_spd);
+        EXPECT_TRUE(!symbolic_chol && symbolic_chol.error().code == CasErrc::Inconclusive,
+                    "checked Cholesky requires a proven exact rational SPD matrix");
+
+        auto bad_jordan = jordan_form_checked(non_square);
+        EXPECT_TRUE(!bad_jordan && bad_jordan.error().code == CasErrc::InvalidArgument,
+                    "checked Jordan rejects non-square matrix");
+
+        auto non_diagonal_jordan = jordan_form_checked(mat2(1,1, 0,1));
+        EXPECT_TRUE(!non_diagonal_jordan &&
+                    non_diagonal_jordan.error().code == CasErrc::Inconclusive,
+                    "checked Jordan reports Inconclusive for unverified non-diagonal input");
+
+        auto symbolic_jordan = jordan_form_checked(symbolic_spd);
+        EXPECT_TRUE(!symbolic_jordan && symbolic_jordan.error().code == CasErrc::Inconclusive,
+                    "checked Jordan requires proven exact rational diagonal support");
+
+        auto non_diagonal_svd = svd_decomposition_checked(mat2(1,1, 0,1));
+        EXPECT_TRUE(!non_diagonal_svd && non_diagonal_svd.error().code == CasErrc::Inconclusive,
+                    "checked SVD reports Inconclusive for unverified non-diagonal input");
+
+        auto negative_diagonal_svd = svd_decomposition_checked(mat2(-1,0, 0,1));
+        EXPECT_TRUE(!negative_diagonal_svd &&
+                    negative_diagonal_svd.error().code == CasErrc::Inconclusive,
+                    "checked SVD reports Inconclusive outside nonnegative diagonal support");
+
+        auto symbolic_svd = svd_decomposition_checked(symbolic_spd);
+        EXPECT_TRUE(!symbolic_svd && symbolic_svd.error().code == CasErrc::Inconclusive,
+                    "checked SVD requires proven exact rational diagonal support");
+    }
+
+    {
+        CancellationToken token;
+        token.cancel();
+        ComputationContext cancelled_context({}, token);
+        auto cancelled = lu_decomposition_checked(mat2(1,0, 0,1), cancelled_context);
+        EXPECT_TRUE(!cancelled && cancelled.error().code == CasErrc::Cancelled,
+                    "checked LU observes cancellation");
+
+        ResourceLimits limits;
+        limits.max_steps = 1;
+        ComputationContext limited_context(limits);
+        auto limited = jordan_form_checked(mat2(2,0, 0,3), limited_context);
+        EXPECT_TRUE(!limited && limited.error().code == CasErrc::ResourceLimit,
+                    "checked Jordan observes exhausted step budget");
     }
 
     return TEST_REPORT();

@@ -1,14 +1,3 @@
-/**
- * @file test_assumption_relation_ext.cpp
- * @brief Unit tests for RelationStore extensions: reversed patterns, transitive closure, and cap.
- *
- * Tests:
- *   - Reversed patterns for all five operators (0 LT var → Positive, etc.)
- *   - Transitive chain of 3+ relations (x GT y, y GT z → x GT z stored)
- *   - 64-relation cap behavior (create enough relations to trigger the cap, verify it stops)
- *
- * Validates: Requirements 3.5, 24.1, 24.2, 24.3, 24.4, 24.5
- */
 
 #include "test_common.hpp"
 #include "relation_store.hpp"
@@ -21,17 +10,14 @@ using namespace lamina;
 
 /// Helper: create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return SymbolicExpr(std::make_shared<VariableNode>(name));
+    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
 }
 
 /// Helper: create a SymbolicExpr wrapping a NumberNode with value 0.
 static SymbolicExpr make_zero() {
-    return SymbolicExpr(std::make_shared<NumberNode>(BigInt(0)));
+    return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
 }
 
-// ============================================================================
-// Reversed pattern tests (Requirement 24)
-// ============================================================================
 
 void test_reversed_0_lt_var_positive() {
     TEST_CASE("Reversed: 0 LT var → Positive (Req 24.1)");
@@ -151,9 +137,6 @@ void test_reversed_all_operators_comprehensive() {
     }
 }
 
-// ============================================================================
-// Transitive closure tests (Requirement 3)
-// ============================================================================
 
 void test_transitive_chain_3_gt() {
     TEST_CASE("Transitive: x GT y, y GT z → x GT z (Req 3.1)");
@@ -270,9 +253,6 @@ void test_transitive_no_closure_for_lt() {
                  "LT does not participate in transitive closure");
 }
 
-// ============================================================================
-// 64-relation cap test (Requirement 3.5)
-// ============================================================================
 
 void test_transitive_cap_64() {
     TEST_CASE("Transitive: 64-relation cap stops deduction (Req 3.5)");
@@ -352,12 +332,8 @@ void test_transitive_cap_64() {
                 "Not all 70 star variables should have the deduced relation (cap hit)");
 }
 
-// ============================================================================
-// main
-// ============================================================================
 
 int main() {
-    // Reversed pattern tests (Req 24)
     test_reversed_0_lt_var_positive();
     test_reversed_0_gt_var_negative();
     test_reversed_0_geq_var_nonpositive();
@@ -365,7 +341,6 @@ int main() {
     test_reversed_0_neq_var_nonzero();
     test_reversed_all_operators_comprehensive();
 
-    // Transitive closure tests (Req 3)
     test_transitive_chain_3_gt();
     test_transitive_chain_geq_gt();
     test_transitive_chain_gt_geq();
@@ -373,7 +348,6 @@ int main() {
     test_transitive_chain_4_variables();
     test_transitive_no_closure_for_lt();
 
-    // Cap test (Req 3.5)
     test_transitive_cap_64();
 
     return TEST_REPORT();

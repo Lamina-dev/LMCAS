@@ -1,6 +1,7 @@
 #include "../include/symbolic.hpp"
 #include "../include/matcher.hpp"
 #include "../include/visitors/print_visitor.hpp"
+#include "test_common.hpp"
 #include <iostream>
 #include <cassert>
 
@@ -62,19 +63,10 @@ bool test_cos_2x() {
 }
 
 int main() {
-    bool pass = true;
     std::cout << "Starting tests..." << std::endl;
-    if (!test_sin_sq_add_cos_sq()) { std::cout << "FAIL: sin^2 + cos^2" << std::endl; pass = false; }
-    else { std::cout << "PASS: sin^2 + cos^2" << std::endl; }
+    EXPECT_TRUE(test_sin_sq_add_cos_sq(), "sin^2 + cos^2 simplifies to 1");
+    EXPECT_TRUE(test_sin_2x(), "sin(2x) rewrites to 2*sin(x)*cos(x)");
+    EXPECT_TRUE(test_cos_2x(), "cos(2x) rewrites to cos(x)^2 - sin(x)^2");
 
-    if (!test_sin_2x()) { std::cout << "FAIL: sin(2x)" << std::endl; pass = false; }
-    else { std::cout << "PASS: sin(2x)" << std::endl; }
-
-    if (!test_cos_2x()) { std::cout << "FAIL: cos(2x)" << std::endl; pass = false; }
-    else { std::cout << "PASS: cos(2x)" << std::endl; }
-
-    if (pass) std::cout << "All tests passed!" << std::endl;
-    else std::cout << "Some tests failed." << std::endl;
-
-    return pass ? 0 : 1;
+    return TEST_REPORT();
 }

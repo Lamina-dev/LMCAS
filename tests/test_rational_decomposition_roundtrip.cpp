@@ -1,55 +1,3 @@
-// Feature: integration-enhancements, Property 7: Rational function decomposition round-trip
-//
-// Validates: Requirements 4.1, 4.9
-//
-// Property 7: For any rational function P(x)/Q(x) where Q(x) has degree <= 5
-// and all factors of Q(x) are linear or irreducible quadratic with rational
-// coefficients, integrating P(x)/Q(x) and differentiating the result SHALL
-// yield an expression numerically equal to P(x)/Q(x) at 5 sample points
-// (chosen to avoid poles) within tolerance 1e-8.
-//
-// Approach
-// --------
-//   * Catalog of >=10 denominators Q(x) of degree 3..5 whose factorisations
-//     over the rationals consist of linear and irreducible quadratic factors
-//     only. Each denominator is represented twice: once as a list of
-//     polynomial coefficients (low-to-high) for plotting + sample-point
-//     filtering, and once as a SymbolicExpr built bottom-up. Denominators
-//     are deliberately chosen so that the RationalDecompositionStrategy can
-//     factor them; there are no triple-nested irreducible quadratic factors
-//     (e.g. (x^2+1)^2) which the strategy intentionally leaves as
-//     unevaluated integrals per the design.
-//
-//   * Catalog of >=10 numerators P(x) of degree 0..2 with small rational
-//     coefficients.
-//
-//   * 10 denominators x 10 numerators = 100 (P, Q) pairs. The test target
-//     is "at least 100 verified", so the catalog supplies that count exactly
-//     (if any combination is skipped because of an unevaluated integral
-//     output, the test reports the skip but the property still passes
-//     provided the skipped combinations are documented).
-//
-//   * For each pair:
-//       - Build the integrand symbolically as P(x) * (Q(x))^-1.
-//       - Call Integrator::integrate(integrand, "x"). If the result still
-//         contains a Calculus_Integral node, the combination is reported
-//         as "unevaluated" (allowed by the design - e.g. higher powers of
-//         irreducible quadratic factors land in this branch) and is not
-//         counted toward the verified-pair target. Such cases are
-//         documented in the test output.
-//       - Symbolically differentiate the result.
-//       - Pick 5 sample points x by walking a fixed candidate set
-//         {-3.7, -2.7, -1.7, -0.7, 0.3, 0.7, 1.3, 1.7, 2.3, 2.7,
-//          3.3, 3.7, 4.3, 4.7} and keeping only those where Q(x) is
-//         comfortably away from zero (|Q(x)| >= 0.1). If fewer than 5
-//         such points exist, the combination is skipped (extremely
-//         unlikely with the chosen candidate set).
-//       - Evaluate both the integrand and the derivative numerically at
-//         each sample point and compare within tolerance 1e-8.
-//
-//   * Tolerance: 1e-8 as specified by the property (rational round-trips
-//     are more sensitive than the 1e-10 used for trig/exponential cases
-//     because of arctan / ln evaluation near factor boundaries).
 
 #include "test_common.hpp"
 #include "integration.hpp"
@@ -74,9 +22,6 @@ constexpr double kTolerance = 1e-8;
 constexpr double kPoleGuard = 0.1;
 constexpr int kRequiredSamples = 5;
 
-// --------------------------------------------------------------------------
-// AST helpers
-// --------------------------------------------------------------------------
 
 std::shared_ptr<SymbolicExpr> num_int(long long n) {
     return SymbolicExpr::number(n);
@@ -131,21 +76,21 @@ double poly_eval(const std::vector<long long>& coeffs, double x) {
     return y;
 }
 
-bool has_integral_node(const std::shared_ptr<SymbolicNode>& node) {
+bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<FunctionNode>(node)) {
-        if (fn->type == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (auto& a : fn->arguments)
+    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
+        for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
-    } else if (auto add = std::dynamic_pointer_cast<AddNode>(node)) {
-        for (auto& op : add->operands)
+    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (auto& op : add->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto mul = std::dynamic_pointer_cast<MultiplyNode>(node)) {
-        for (auto& op : mul->operands)
+    } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (auto& op : mul->operands())
             if (has_integral_node(op)) return true;
-    } else if (auto pow = std::dynamic_pointer_cast<PowerNode>(node)) {
-        if (has_integral_node(pow->base)) return true;
-        if (has_integral_node(pow->exponent)) return true;
+    } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        if (has_integral_node(pow->base())) return true;
+        if (has_integral_node(pow->exponent())) return true;
     }
     return false;
 }
@@ -160,9 +105,6 @@ const std::vector<double>& candidate_sample_points() {
     return S;
 }
 
-// --------------------------------------------------------------------------
-// Catalog of denominators and numerators
-// --------------------------------------------------------------------------
 
 struct Poly {
     std::vector<long long> coeffs;  // low-to-high
@@ -216,9 +158,6 @@ const std::vector<Poly>& numerators() {
     return N;
 }
 
-// --------------------------------------------------------------------------
-// Sample point selection
-// --------------------------------------------------------------------------
 
 std::vector<double> pick_safe_sample_points(const std::vector<long long>& Q_coeffs) {
     std::vector<double> kept;
@@ -232,9 +171,6 @@ std::vector<double> pick_safe_sample_points(const std::vector<long long>& Q_coef
     return kept;
 }
 
-// --------------------------------------------------------------------------
-// Per-combination check
-// --------------------------------------------------------------------------
 
 struct ComboReport {
     bool unevaluated = false;
@@ -264,9 +200,9 @@ ComboReport verify_combo(const Poly& P, const Poly& Q) {
 
     // Integrate.
     Integrator integ;
-    SymbolicExpr result;
+    std::shared_ptr<SymbolicExpr> result;
     try {
-        result = integ.integrate(*integrand, kVarName);
+        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand, kVarName));
     } catch (const std::exception& e) {
         rep.failed = true;
         rep.detail = std::string("exception during integration: ") + e.what();
@@ -278,13 +214,13 @@ ComboReport verify_combo(const Poly& P, const Poly& Q) {
     // requires a higher power of an irreducible quadratic. Such cases fall
     // outside the property's conditional scope ("Q has degree <= 5 with
     // linear/irreducible quadratic factors"), but we still report them.
-    if (has_integral_node(result.root)) {
+    if (has_integral_node(lamina::detail::node(result))) {
         rep.unevaluated = true;
         rep.detail = "integrator left unevaluated integral";
         return rep;
     }
 
-    auto deriv = result.differentiate(kVarName);
+    auto deriv = result->differentiate(kVarName);
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
@@ -314,7 +250,7 @@ ComboReport verify_combo(const Poly& P, const Poly& Q) {
             rep.failed = true;
             std::ostringstream oss;
             oss << "x=" << xv << ": substitute returned null"
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             return rep;
         }
@@ -327,7 +263,7 @@ ComboReport verify_combo(const Poly& P, const Poly& Q) {
             rep.failed = true;
             std::ostringstream oss;
             oss << "x=" << xv << ": numeric evaluation failed"
-                << " | result=" << result.to_string()
+                << " | result=" << result->to_string()
                 << " | derivative=" << deriv_simp->to_string();
             rep.detail = oss.str();
             return rep;
@@ -340,7 +276,7 @@ ComboReport verify_combo(const Poly& P, const Poly& Q) {
                 << ": integrand=" << *pv
                 << " vs d/dx(result)=" << *dv
                 << " |delta|=" << delta
-                << " | result=" << result.to_string();
+                << " | result=" << result->to_string();
             rep.detail = oss.str();
             return rep;
         }
@@ -384,7 +320,7 @@ int main() {
                 std::ostringstream oss;
                 oss << prefix << ": " << rep.matches
                     << " sample point(s) matched within tolerance " << kTolerance;
-                EXPECT_TRUE(true, oss.str());
+                EXPECT_TRUE(!rep.failed && !rep.unevaluated && rep.matches > 0, oss.str());
             }
         }
     }

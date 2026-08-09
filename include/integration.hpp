@@ -33,7 +33,6 @@ struct LAMINA_API IntegrationEntry {
 
     int priority = 100;                  ///< 优先级，数值越小越优先
 
-    IntegrationEntry() = default;
     IntegrationEntry(std::string name, SymbolicExpr pat, SymbolicExpr res,
                      std::unordered_set<std::string> wc,
                      std::function<bool(const MatchMap&, const std::string& var)> cond = nullptr,
@@ -460,7 +459,6 @@ public:
      * @return 积分结果表达式
      */
     SymbolicExpr integrate(const SymbolicExpr& expr, const std::string& var_name);
-
     /**
      * @brief 计算定积分
      * @param expr 被积表达式

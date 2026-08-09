@@ -1,37 +1,37 @@
 #include "../include/solver.hpp"
+#include "test_common.hpp"
 #include <iostream>
-#include <cassert>
 
 using namespace lamina;
 
 SymbolicExpr var(const std::string& name) {
-    return SymbolicExpr(SymbolicFactory::create_variable(name));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_variable(name));
 }
 
 SymbolicExpr num(int n) {
-    return SymbolicExpr(SymbolicFactory::create_number(BigInt(n)));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(n)));
 }
 
 SymbolicExpr operator+(const SymbolicExpr& a, const SymbolicExpr& b) {
 
-    std::vector<std::shared_ptr<SymbolicNode>> ops = {a.root, b.root};
-    return SymbolicExpr(SymbolicFactory::create_add(ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> ops = {lamina::detail::node(a), lamina::detail::node(b)};
+    return lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
 }
 
 SymbolicExpr operator*(const SymbolicExpr& a, const SymbolicExpr& b) {
-    std::vector<std::shared_ptr<SymbolicNode>> ops = {a.root, b.root};
-    return SymbolicExpr(SymbolicFactory::create_multiply(ops));
+    std::vector<std::shared_ptr<const SymbolicNode>> ops = {lamina::detail::node(a), lamina::detail::node(b)};
+    return lamina::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
 }
 
 SymbolicExpr operator-(const SymbolicExpr& a, const SymbolicExpr& b) {
-    std::vector<std::shared_ptr<SymbolicNode>> ops = {SymbolicFactory::create_number(BigInt(-1)), b.root};
+    std::vector<std::shared_ptr<const SymbolicNode>> ops = {SymbolicFactory::create_number(BigInt(-1)), lamina::detail::node(b)};
     auto neg = SymbolicFactory::create_multiply(ops);
-    std::vector<std::shared_ptr<SymbolicNode>> aops = {a.root, neg};
-    return SymbolicExpr(SymbolicFactory::create_add(aops));
+    std::vector<std::shared_ptr<const SymbolicNode>> aops = {lamina::detail::node(a), neg};
+    return lamina::detail::expression_from_node(SymbolicFactory::create_add(aops));
 }
 
 SymbolicExpr pow(const SymbolicExpr& a, int n) {
-    return SymbolicExpr(SymbolicFactory::create_power(a.root, SymbolicFactory::create_number(BigInt(n))));
+    return lamina::detail::expression_from_node(SymbolicFactory::create_power(lamina::detail::node(a), SymbolicFactory::create_number(BigInt(n))));
 }
 
 void test_groebner_basis_simple() {
@@ -49,8 +49,10 @@ void test_groebner_basis_simple() {
     auto G = Solver::groebner_basis(F, vars);
 
     std::cout << "Basis size: " << G.size() << std::endl;
+    EXPECT_TRUE(!G.empty(), "simple Groebner basis is non-empty");
     for (const auto& g : G) {
         std::cout << "  " << g.to_string() << std::endl;
+        EXPECT_TRUE(!g.to_string().empty(), "simple Groebner basis element is printable");
     }
 
 }
@@ -70,8 +72,10 @@ void test_groebner_basis_circle() {
      auto G = Solver::groebner_basis(F, vars);
 
      std::cout << "Basis size: " << G.size() << std::endl;
+     EXPECT_TRUE(!G.empty(), "circle-line Groebner basis is non-empty");
      for (const auto& g : G) {
          std::cout << "  " << g.to_string() << std::endl;
+         EXPECT_TRUE(!g.to_string().empty(), "circle-line Groebner basis element is printable");
      }
 }
 
@@ -80,8 +84,7 @@ int main() {
         test_groebner_basis_simple();
         test_groebner_basis_circle();
     } catch (const std::exception& e) {
-        std::cerr << "Test failed: " << e.what() << std::endl;
-        return 1;
+        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
     }
-    return 0;
+    return TEST_REPORT();
 }

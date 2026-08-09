@@ -3,15 +3,15 @@
  * @brief QueryInterface class — unified tri-state query API for property questions on arbitrary expressions.
  *
  * The QueryInterface is the single public entry point for property queries on SymbolicExpr trees.
- * It handles special cases (null root, NaN, Infinity, Matrix, Relational, Logical nodes) and
+ * It handles special cases (NaN, Infinity, Matrix, Relational, Logical nodes) and
  * delegates to the InferenceEngine for NumberNode, VariableNode, and composite node queries.
  */
 #pragma once
 
 #include "assumption.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
 #include "relation_store.hpp"
+#include "result.hpp"
 #include <unordered_map>
 #include <functional>
 #include <vector>
@@ -23,6 +23,9 @@ namespace lamina {
 // Forward declaration
 class AssumptionContext;
 class InferenceEngine;
+
+using QueryTriboolResult = Result<Tribool>;
+using QueryPeriodResult = Result<std::optional<SymbolicExpr>>;
 
 /**
  * @brief Identifies which property is being queried, used as part of the cache key.
@@ -47,7 +50,7 @@ enum class PropType {
 /**
  * @brief Cache key combining an expression's structural hash with the property type.
  *
- * Uses SymbolicNode::hash() for structural equality — two structurally identical
+ * Uses the expression structural hash — two structurally identical
  * expressions will produce the same hash regardless of pointer identity.
  */
 struct CacheKey {
@@ -65,7 +68,8 @@ struct CacheKey {
 struct CacheKeyHash {
     std::size_t operator()(const CacheKey& key) const {
         std::size_t seed = key.expression_hash;
-        hash_combine(seed, static_cast<std::size_t>(key.property));
+        seed ^= static_cast<std::size_t>(key.property) + 0x9e3779b9U
+            + (seed << 6U) + (seed >> 2U);
         return seed;
     }
 };
@@ -76,7 +80,8 @@ struct CacheKeyHash {
  * Provides query_positive, query_negative, query_nonnegative, query_real,
  * query_integer, and query_nonzero methods that return Tribool results.
  *
- * Results are cached by (expression_hash, property_type) to avoid redundant inference.
+ * Results are bucketed by (expression_hash, property_type) and then verified by
+ * structural equality, so a hash collision cannot return another expression's fact.
  * The cache must be invalidated on any mutation to the AssumptionContext (push/pop/assume).
  *
  * Dispatch logic:
@@ -100,20 +105,38 @@ public:
     /// Query whether the expression is positive (> 0).
     Tribool query_positive(const SymbolicExpr& expr) const;
 
+    /// Checked positive query with explicit error propagation.
+    QueryTriboolResult query_positive_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is negative (< 0).
     Tribool query_negative(const SymbolicExpr& expr) const;
+
+    /// Checked negative query with explicit error propagation.
+    QueryTriboolResult query_negative_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is non-negative (>= 0).
     Tribool query_nonnegative(const SymbolicExpr& expr) const;
 
+    /// Checked non-negative query with explicit error propagation.
+    QueryTriboolResult query_nonnegative_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is real.
     Tribool query_real(const SymbolicExpr& expr) const;
+
+    /// Checked real-domain query with explicit error propagation.
+    QueryTriboolResult query_real_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is an integer.
     Tribool query_integer(const SymbolicExpr& expr) const;
 
+    /// Checked integer-domain query with explicit error propagation.
+    QueryTriboolResult query_integer_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is non-zero (!= 0).
     Tribool query_nonzero(const SymbolicExpr& expr) const;
+
+    /// Checked non-zero query with explicit error propagation.
+    QueryTriboolResult query_nonzero_checked(const SymbolicExpr& expr) const;
 
     /// @}
 
@@ -123,17 +146,32 @@ public:
     /// Query whether the expression is algebraic (root of a polynomial with rational coefficients).
     Tribool query_algebraic(const SymbolicExpr& expr) const;
 
+    /// Checked algebraic query with explicit error propagation.
+    QueryTriboolResult query_algebraic_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is transcendental (real but not algebraic).
     Tribool query_transcendental(const SymbolicExpr& expr) const;
+
+    /// Checked transcendental query with explicit error propagation.
+    QueryTriboolResult query_transcendental_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression has a finite value/limit.
     Tribool query_finite(const SymbolicExpr& expr) const;
 
+    /// Checked finite-value query with explicit error propagation.
+    QueryTriboolResult query_finite_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression diverges.
     Tribool query_divergent(const SymbolicExpr& expr) const;
 
+    /// Checked divergent-value query with explicit error propagation.
+    QueryTriboolResult query_divergent_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression is periodic.
     Tribool query_periodic(const SymbolicExpr& expr) const;
+
+    /// Checked periodic query with explicit error propagation.
+    QueryTriboolResult query_periodic_checked(const SymbolicExpr& expr) const;
 
     /**
      * @brief Get the period of an expression, if known.
@@ -142,11 +180,20 @@ public:
      */
     std::optional<SymbolicExpr> get_period(const SymbolicExpr& expr) const;
 
+    /// Checked period query with explicit error propagation.
+    QueryPeriodResult get_period_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression (matrix symbol) is positive definite.
     Tribool query_positive_definite(const SymbolicExpr& expr) const;
 
+    /// Checked positive-definite query with explicit error propagation.
+    QueryTriboolResult query_positive_definite_checked(const SymbolicExpr& expr) const;
+
     /// Query whether the expression (matrix symbol) is positive semidefinite.
     Tribool query_positive_semidefinite(const SymbolicExpr& expr) const;
+
+    /// Checked positive-semidefinite query with explicit error propagation.
+    QueryTriboolResult query_positive_semidefinite_checked(const SymbolicExpr& expr) const;
 
     /// @}
 
@@ -173,6 +220,8 @@ public:
         std::vector<Relation> relational_conditions;
     };
 
+    using QueryConditionSetsResult = Result<std::vector<ConditionSet>>;
+
     /**
      * @brief Query sufficient conditions for a target sign property to hold on an expression.
      *
@@ -190,32 +239,40 @@ public:
      */
     std::vector<ConditionSet> query_conditions(const SymbolicExpr& expr, Sign target) const;
 
+    /// Checked condition query with explicit error propagation.
+    QueryConditionSetsResult query_conditions_checked(const SymbolicExpr& expr, Sign target) const;
+
 private:
+    struct CacheEntry {
+        SymbolicExpr expression;
+        Tribool result;
+    };
+
     const AssumptionContext& ctx_;
 
     /// The cache generation at the time of last cache validation.
     /// If ctx_.cache_generation() differs, the cache is stale and must be cleared.
     mutable uint64_t observed_generation_;
 
-    /// Query result cache: (expression_hash, property_type) → Tribool.
+    /// Query result cache: (expression_hash, property_type) → collision bucket.
     /// Mutable because queries are logically const but populate the cache.
-    mutable std::unordered_map<CacheKey, Tribool, CacheKeyHash> cache_;
+    mutable std::unordered_map<CacheKey, std::vector<CacheEntry>, CacheKeyHash> cache_;
 
     /// Check if the root node is a special case that should return Unknown immediately.
     /// Returns true if the node is null, MatrixNode, RelationalNode, or LogicalNode.
-    bool is_unhandled_type(const std::shared_ptr<SymbolicNode>& node) const;
+    bool is_unhandled_type(const SymbolicExpr& expression) const;
 
     /// Check if a NumberNode holds NaN.
-    bool is_nan_number(const NumberNode& node) const;
+    bool is_nan_number(const SymbolicExpr& expression) const;
 
     /// Check if a FunctionNode represents infinity (FuncType::Infinity).
-    bool is_infinity_node(const std::shared_ptr<SymbolicNode>& node) const;
+    bool is_infinity_node(const SymbolicExpr& expression) const;
 
     /// Determine the sign of an infinity expression.
     /// Positive infinity: FunctionNode::Infinity directly.
     /// Negative infinity: MultiplyNode(-1, FunctionNode::Infinity).
     /// Returns +1 for positive infinity, -1 for negative infinity, 0 if indeterminate.
-    int get_infinity_sign(const std::shared_ptr<SymbolicNode>& node) const;
+    int get_infinity_sign(const SymbolicExpr& expression) const;
 
     /**
      * @brief Look up a cached result or compute, cache, and return it.
@@ -226,6 +283,17 @@ private:
      */
     Tribool cached_query(const SymbolicExpr& expr, PropType prop,
                          const std::function<Tribool()>& compute) const;
+
+    QueryTriboolResult cached_query_checked(
+        const SymbolicExpr& expr,
+        PropType prop,
+        const std::string& operation,
+        const std::function<Tribool()>& compute) const;
+
+    std::optional<SymbolicExpr> get_period_impl(const SymbolicExpr& expr) const;
+    std::vector<ConditionSet> query_conditions_impl(
+        const SymbolicExpr& expr,
+        Sign target) const;
 };
 
 } // namespace lamina
