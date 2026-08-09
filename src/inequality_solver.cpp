@@ -1186,6 +1186,10 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
             bool swapped = false;
             auto d = SymbolicExpr::add(symbolic_roots[0],
                 SymbolicExpr::multiply(symbolic_roots[1], SymbolicExpr::number(-1)))->simplify();
+            if (!d) {
+                std::sort(symbolic_roots.begin(), symbolic_roots.end(), root_less_than);
+                swapped = true;
+            } else {
             /// 如果差值可以求值为正数，说明 root[0] > root[1]，需要交换
             if (auto dv = try_checked_numeric_constant(*d)) {
                 if (*dv > 0) { std::swap(symbolic_roots[0], symbolic_roots[1]); swapped = true; }
@@ -1275,6 +1279,7 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     /// already in correct order
                     swapped = false;
                 }
+            }
             }
             if (!swapped) {
                 /// Fallback: 对于 a>0 的二次多项式，solve_quadratic_internal 返回
