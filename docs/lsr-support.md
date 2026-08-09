@@ -25,7 +25,7 @@ LMMC 通过 `include/lmmc/lsr_stdlib.h` 暴露 C ABI 适配层，当前覆盖：
 - `std.math`：`pi`、`e`、`phi`、初等实函数、复数 `i/I`、`complex`、`real`、`imag`、`conj`、复数 `abs`。
 - table 键辅助：有限 `num`、有限 `complex`、`text` 与 `bool` 的相等和哈希，数值哈希规范化 `+0.0/-0.0`。
 - `std.constants`：LSR-002 中列出的物理与化学常量，含名称、数值、单位和按索引枚举。
-- `std.stats`：均值、中位数、方差、标准差、分位数、协方差和相关系数。
+- `std.stats`：均值、中位数、方差、标准差、分位数、协方差、相关系数；normal、t、chi2、F、gamma、beta 分布的密度、CDF 和分位数适配；binomial、poisson 分布的 PMF 和 CDF 适配。
 - `std.random`：显式 RNG 与默认 RNG 的种子、均匀采样、整数采样、正态采样和向量抽样。
 - `std.units`：标准库形状的数值单位转换、通用单位转换、SI 基准剥离、当前刻度剥离、普通数值及单位字符串的无量纲判断和 LSR-008 错误名。
 - `std.linalg`：shape、eye、diag、转置、伴随、行列式、逆、秩、迹、左右求解、eig/svd 表视图、向量与矩阵广播运算、关系广播。

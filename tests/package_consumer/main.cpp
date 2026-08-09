@@ -1348,6 +1348,12 @@ int main() {
         lmmc_lsr_stats_corr(stats_values, stats_scaled, 4, &lmmc_out) !=
             LMMC_STATUS_OK ||
         std::abs(lmmc_out - 1.0) > 1e-12 ||
+        lmmc_lsr_stats_normal_pdf(0.0, 0.0, 1.0, &lmmc_out) !=
+            LMMC_STATUS_OK ||
+        std::abs(lmmc_out - 0.3989422804014327) > 1e-12 ||
+        lmmc_lsr_stats_binomial_pmf(2, 4, 0.5, &lmmc_out) !=
+            LMMC_STATUS_OK ||
+        std::abs(lmmc_out - 0.375) > 1e-12 ||
         lmmc_lsr_stats_mean(stats_values, 0, &lmmc_out) !=
             LMMC_STATUS_EMPTY_INPUT) {
         std::cerr << "failed to call installed LMMC LSR stats adapters\n";
