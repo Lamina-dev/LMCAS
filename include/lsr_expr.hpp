@@ -112,6 +112,7 @@ private:
 };
 
 LAMINA_API ExprResult sym(const std::string& name);
+LAMINA_API ExprResult parse_expr(const std::string& source);
 LAMINA_API ExprResult integer(long long value);
 LAMINA_API ExprResult integer(const BigInt& value);
 LAMINA_API ExprResult rational(const Rational& value);
