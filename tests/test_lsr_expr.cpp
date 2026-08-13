@@ -8,6 +8,29 @@ int main() {
     auto x = lamina::lsr::sym("x");
     EXPECT_TRUE(x.has_value(), "ordinary symbol can be created");
 
+    TEST_CASE("LSR expression parser constructs core Expr syntax");
+
+    auto parsed_polynomial = lamina::lsr::parse_expr("x^2 + 1");
+    EXPECT_TRUE(parsed_polynomial.has_value(),
+                "parser accepts exponent and addition syntax");
+    EXPECT_EQ_EXPR_STR(parsed_polynomial.value(), "x^2 + 1",
+                       "parser builds polynomial expression");
+
+    auto parsed_complex = lamina::lsr::parse_expr("x + 2*i");
+    EXPECT_TRUE(parsed_complex.has_value(),
+                "parser accepts reserved imaginary unit");
+    EXPECT_CONTAINS(parsed_complex.value()->to_string(), {"I", "x"},
+                    "parser builds complex expression with imaginary unit");
+
+    auto parsed_function = lamina::lsr::parse_expr("sin(x)^2 + cos(x)^2");
+    EXPECT_TRUE(parsed_function.has_value(),
+                "parser accepts common mathematical functions");
+
+    auto parsed_invalid = lamina::lsr::parse_expr("x +");
+    EXPECT_TRUE(!parsed_invalid &&
+                    parsed_invalid.error().code == lamina::CasErrc::ParseError,
+                "parser reports malformed input as ParseError");
+
     auto reserved_i = lamina::lsr::sym("i");
     EXPECT_TRUE(!reserved_i &&
                     reserved_i.error().code == lamina::CasErrc::InvalidArgument,

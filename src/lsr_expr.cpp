@@ -1,6 +1,7 @@
 #include "lsr_expr.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <exception>
 #include <limits>
@@ -25,6 +26,7 @@ constexpr const char* kRationalOperation = "lsr.rational";
 constexpr const char* kApproxOperation = "lsr.approx_real";
 constexpr const char* kConstantOperation = "lsr.constant";
 constexpr const char* kComplexOperation = "lsr.complex";
+constexpr const char* kParseOperation = "lsr.parse_expr";
 constexpr const char* kExprOperation = "lsr.expr_op";
 constexpr const char* kMathOperation = "lsr.math";
 constexpr const char* kRealOperation = "lsr.real";
@@ -168,6 +170,255 @@ bool is_integer_double(double value) {
 bool is_imaginary_unit_name(const std::string& name) {
     return name == "i" || name == "I";
 }
+
+class ExprParser {
+public:
+    explicit ExprParser(std::string source) : source_(std::move(source)) {}
+
+    ExprResult parse() {
+        skip_space();
+        if (eof()) {
+            return fail("empty expression");
+        }
+        auto result = parse_equality();
+        if (!result) return result;
+        skip_space();
+        if (!eof()) {
+            return fail("unexpected token '" + std::string(1, peek()) + "'");
+        }
+        return result;
+    }
+
+private:
+    std::string source_;
+    std::size_t pos_ = 0;
+
+    bool eof() const noexcept { return pos_ >= source_.size(); }
+
+    char peek() const noexcept {
+        return eof() ? '\0' : source_[pos_];
+    }
+
+    bool match(char c) {
+        skip_space();
+        if (peek() != c) return false;
+        ++pos_;
+        return true;
+    }
+
+    bool match_text(const char* text) {
+        skip_space();
+        const std::size_t start = pos_;
+        for (const char* p = text; *p; ++p) {
+            if (pos_ >= source_.size() || source_[pos_] != *p) {
+                pos_ = start;
+                return false;
+            }
+            ++pos_;
+        }
+        return true;
+    }
+
+    void skip_space() noexcept {
+        while (!eof() &&
+               std::isspace(static_cast<unsigned char>(source_[pos_]))) {
+            ++pos_;
+        }
+    }
+
+    ExprResult fail(std::string message) const {
+        return expression_failure(
+            CasErrc::ParseError,
+            std::move(message) + " at byte " + std::to_string(pos_),
+            kParseOperation);
+    }
+
+    static bool is_ident_start(unsigned char c) noexcept {
+        return std::isalpha(c) || c == '_' || c >= 0x80;
+    }
+
+    static bool is_ident_continue(unsigned char c) noexcept {
+        return std::isalnum(c) || c == '_' || c >= 0x80;
+    }
+
+    ExprResult parse_equality() {
+        auto lhs = parse_additive();
+        if (!lhs) return lhs;
+        while (match_text("==")) {
+            auto rhs = parse_additive();
+            if (!rhs) return rhs;
+            lhs = eq(lhs.value(), rhs.value());
+            if (!lhs) return lhs;
+        }
+        return lhs;
+    }
+
+    ExprResult parse_additive() {
+        auto lhs = parse_multiplicative();
+        if (!lhs) return lhs;
+        while (true) {
+            if (match('+')) {
+                auto rhs = parse_multiplicative();
+                if (!rhs) return rhs;
+                lhs = add(lhs.value(), rhs.value());
+            } else if (match('-')) {
+                auto rhs = parse_multiplicative();
+                if (!rhs) return rhs;
+                lhs = sub(lhs.value(), rhs.value());
+            } else {
+                return lhs;
+            }
+            if (!lhs) return lhs;
+        }
+    }
+
+    ExprResult parse_multiplicative() {
+        auto lhs = parse_power();
+        if (!lhs) return lhs;
+        while (true) {
+            if (match('*')) {
+                if (match('*')) {
+                    --pos_;
+                    --pos_;
+                    return lhs;
+                }
+                auto rhs = parse_power();
+                if (!rhs) return rhs;
+                lhs = mul(lhs.value(), rhs.value());
+            } else if (match('/')) {
+                auto rhs = parse_power();
+                if (!rhs) return rhs;
+                lhs = div(lhs.value(), rhs.value());
+            } else {
+                return lhs;
+            }
+            if (!lhs) return lhs;
+        }
+    }
+
+    ExprResult parse_power() {
+        auto base = parse_unary();
+        if (!base) return base;
+        if (match('^') || match_text("**")) {
+            auto exponent = parse_power();
+            if (!exponent) return exponent;
+            return pow(base.value(), exponent.value());
+        }
+        return base;
+    }
+
+    ExprResult parse_unary() {
+        if (match('+')) return parse_unary();
+        if (match('-')) {
+            auto operand = parse_unary();
+            if (!operand) return operand;
+            return neg(operand.value());
+        }
+        return parse_primary();
+    }
+
+    ExprResult parse_primary() {
+        skip_space();
+        if (match('(')) {
+            auto inner = parse_equality();
+            if (!inner) return inner;
+            if (!match(')')) return fail("expected ')'");
+            return inner;
+        }
+        if (std::isdigit(static_cast<unsigned char>(peek())) || peek() == '.') {
+            return parse_number();
+        }
+        if (is_ident_start(static_cast<unsigned char>(peek()))) {
+            return parse_identifier_or_call();
+        }
+        return fail("expected expression");
+    }
+
+    ExprResult parse_number() {
+        skip_space();
+        const std::size_t start = pos_;
+        bool saw_digit = false;
+        while (std::isdigit(static_cast<unsigned char>(peek()))) {
+            saw_digit = true;
+            ++pos_;
+        }
+        if (peek() == '.') {
+            ++pos_;
+            while (std::isdigit(static_cast<unsigned char>(peek()))) {
+                saw_digit = true;
+                ++pos_;
+            }
+        }
+        if (!saw_digit) return fail("invalid number literal");
+        if (peek() == 'e' || peek() == 'E') {
+            ++pos_;
+            if (peek() == '+' || peek() == '-') ++pos_;
+            bool saw_exp_digit = false;
+            while (std::isdigit(static_cast<unsigned char>(peek()))) {
+                saw_exp_digit = true;
+                ++pos_;
+            }
+            if (!saw_exp_digit) return fail("invalid number exponent");
+        }
+        try {
+            return rational(Rational(source_.substr(start, pos_ - start)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "number literal allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::ParseError, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    std::string parse_identifier() {
+        skip_space();
+        const std::size_t start = pos_;
+        if (!is_ident_start(static_cast<unsigned char>(peek()))) return {};
+        ++pos_;
+        while (is_ident_continue(static_cast<unsigned char>(peek()))) ++pos_;
+        return source_.substr(start, pos_ - start);
+    }
+
+    ExprResult parse_identifier_or_call() {
+        auto name = parse_identifier();
+        if (name.empty()) return fail("expected identifier");
+        skip_space();
+        if (match('(')) {
+            auto argument = parse_equality();
+            if (!argument) return argument;
+            if (!match(')')) return fail("expected ')'");
+            return apply_function(name, argument.value());
+        }
+        if (name == "pi" || name == "π") return pi();
+        if (name == "e") return e();
+        if (name == "phi") return phi();
+        if (is_imaginary_unit_name(name)) return imaginary_unit();
+        return sym(name);
+    }
+
+    ExprResult apply_function(const std::string& name, const ExprPtr& argument) {
+        if (name == "sin") return sin(argument);
+        if (name == "cos") return cos(argument);
+        if (name == "tan") return tan(argument);
+        if (name == "asin") return asin(argument);
+        if (name == "acos") return acos(argument);
+        if (name == "atan") return atan(argument);
+        if (name == "sqrt") return sqrt(argument);
+        if (name == "exp") return exp(argument);
+        if (name == "log" || name == "ln") return log(argument);
+        if (name == "log10") return log10(argument);
+        if (name == "floor") return floor(argument);
+        if (name == "ceil") return ceil(argument);
+        if (name == "round") return round(argument);
+        if (name == "abs") return abs(argument);
+        if (name == "real") return real(argument);
+        if (name == "imag") return imag(argument);
+        if (name == "conj") return conj(argument);
+        return fail("unknown function '" + name + "'");
+    }
+};
 
 int domain_rank(NumberDomain domain) noexcept {
     switch (domain) {
@@ -1130,6 +1381,19 @@ Result<bool> NumberDomainSet::contains(const ExprPtr& element) const {
                             kNumberDomainOperation);
     }
     return domain_contains_node(domain_, lamina::detail::node(element));
+}
+
+ExprResult parse_expr(const std::string& source) {
+    try {
+        return ExprParser(source).parse();
+    } catch (const std::bad_alloc&) {
+        return expression_failure(CasErrc::ResourceLimit,
+                                  "expression parse allocation failed",
+                                  kParseOperation);
+    } catch (const std::exception& error) {
+        return expression_failure(CasErrc::ParseError, error.what(),
+                                  kParseOperation);
+    }
 }
 
 Result<ApproxReal> evalf(const SymbolicExpr& expression,
