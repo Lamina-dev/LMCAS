@@ -11,7 +11,6 @@
 
 namespace lamina {
 
-using ComplexExprResult = Result<std::shared_ptr<SymbolicExpr>>;
 using ComplexBoolResult = Result<bool>;
 
 /**
@@ -22,7 +21,7 @@ using ComplexBoolResult = Result<bool>;
  * @param order 极点的阶数（默认为1，简单极点）
  * @return 留数的符号表达式
  */
-LAMINA_API ComplexExprResult calculate_residue_checked(
+LAMINA_API ExpressionResult calculate_residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -33,7 +32,7 @@ LAMINA_API ComplexExprResult calculate_residue_checked(
 /**
  * @brief 使用默认计算上下文计算留数，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API ComplexExprResult calculate_residue_checked(
+LAMINA_API ExpressionResult calculate_residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -55,7 +54,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> calculate_residue(
  * @param n 阶数
  * @return 积分结果的符号表达式
  */
-LAMINA_API ComplexExprResult cauchy_integral_checked(
+LAMINA_API ExpressionResult cauchy_integral_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -66,7 +65,7 @@ LAMINA_API ComplexExprResult cauchy_integral_checked(
 /**
  * @brief 使用默认计算上下文应用柯西积分公式，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API ComplexExprResult cauchy_integral_checked(
+LAMINA_API ExpressionResult cauchy_integral_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -100,7 +99,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> analytic_continuation(
  * @param expr 输入表达式
  * @return 实部表达式
  */
-LAMINA_API ComplexExprResult real_part_checked(
+LAMINA_API ExpressionResult real_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     ComputationContext& context
 );
@@ -108,7 +107,7 @@ LAMINA_API ComplexExprResult real_part_checked(
 /**
  * @brief 使用默认计算上下文提取表达式实部，并显式报告无效输入。
  */
-LAMINA_API ComplexExprResult real_part_checked(
+LAMINA_API ExpressionResult real_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr
 );
 
@@ -121,7 +120,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> real_part(
  * @param expr 输入表达式
  * @return 虚部表达式
  */
-LAMINA_API ComplexExprResult imag_part_checked(
+LAMINA_API ExpressionResult imag_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     ComputationContext& context
 );
@@ -129,7 +128,7 @@ LAMINA_API ComplexExprResult imag_part_checked(
 /**
  * @brief 使用默认计算上下文提取表达式虚部，并显式报告无效输入。
  */
-LAMINA_API ComplexExprResult imag_part_checked(
+LAMINA_API ExpressionResult imag_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr
 );
 
@@ -142,7 +141,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> imag_part(
  * @param expr 输入表达式
  * @return 共轭表达式
  */
-LAMINA_API ComplexExprResult conjugate_checked(
+LAMINA_API ExpressionResult conjugate_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     ComputationContext& context
 );
@@ -150,7 +149,7 @@ LAMINA_API ComplexExprResult conjugate_checked(
 /**
  * @brief 使用默认计算上下文计算共轭，并显式报告无效输入。
  */
-LAMINA_API ComplexExprResult conjugate_checked(
+LAMINA_API ExpressionResult conjugate_checked(
     const std::shared_ptr<SymbolicExpr>& expr
 );
 
@@ -189,7 +188,7 @@ LAMINA_API bool is_analytic(
 /**
  * @brief calculate_residue 的别名，匹配规范命名 residue。
  */
-LAMINA_API ComplexExprResult residue_checked(
+LAMINA_API ExpressionResult residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -197,7 +196,7 @@ LAMINA_API ComplexExprResult residue_checked(
     ComputationContext& context
 );
 
-LAMINA_API ComplexExprResult residue_checked(
+LAMINA_API ExpressionResult residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,

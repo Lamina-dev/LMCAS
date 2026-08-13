@@ -156,7 +156,6 @@ public:
         const IntervalUnion& other,
         ComputationContext& context) const;
 
-    /** @brief Checked intersection with a default computation context. */
     Result<IntervalUnion> intersect_checked(const IntervalUnion& other) const;
 
     /**
@@ -176,7 +175,6 @@ public:
         const IntervalUnion& other,
         ComputationContext& context) const;
 
-    /** @brief Checked union with a default computation context. */
     Result<IntervalUnion> unite_checked(const IntervalUnion& other) const;
 
     /**
@@ -192,7 +190,6 @@ public:
      */
     Result<IntervalUnion> complement_checked(ComputationContext& context) const;
 
-    /** @brief Checked complement with a default computation context. */
     Result<IntervalUnion> complement_checked() const;
 
     /**
@@ -254,7 +251,6 @@ LAMINA_API Result<bool> interval_contains_checked(
     double value,
     ComputationContext& context);
 
-/** @brief Checked numeric membership test with a default context. */
 LAMINA_API Result<bool> interval_contains_checked(
     const Interval& interval,
     double value);
@@ -264,7 +260,6 @@ LAMINA_API Result<bool> interval_is_empty_checked(
     const Interval& interval,
     ComputationContext& context);
 
-/** @brief Checked emptiness decision with a default context. */
 LAMINA_API Result<bool> interval_is_empty_checked(const Interval& interval);
 
 /**
@@ -278,7 +273,6 @@ LAMINA_API Result<std::vector<Interval>> normalize_intervals_checked(
     std::vector<Interval> intervals,
     ComputationContext& context);
 
-/** @brief Checked interval normalization with a default context. */
 LAMINA_API Result<std::vector<Interval>> normalize_intervals_checked(
     std::vector<Interval> intervals);
 

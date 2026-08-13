@@ -213,7 +213,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_polynomial_closed(
     return {};
 }
 
-lamina::SolveResult lamina::solve_dispatch_checked(
+lamina::SolveResult lamina::solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     ComputationContext& context,
@@ -236,7 +236,7 @@ lamina::SolveResult lamina::solve_dispatch_checked(
         if (relation->op() != RelationalNode::Op::EQ) {
             return SolveResult::failure(
                 CasErrc::InvalidArgument,
-                "solve_dispatch_checked accepts equations, not inequalities",
+                "solve_equation accepts equations, not inequalities",
                 operation);
         }
         auto left = lamina::detail::make_expression_ptr(relation->left());
@@ -288,12 +288,12 @@ lamina::SolveResult lamina::solve_dispatch_checked(
     return SolveResult::success(SolutionSet::finite(std::move(solutions)));
 }
 
-lamina::SolveResult lamina::solve_dispatch_checked(
+lamina::SolveResult lamina::solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts) {
     ComputationContext context;
-    return solve_dispatch_checked(expr, var, context, opts);
+    return solve_equation(expr, var, context, opts);
 }
 
 lamina::SolveVectorResult lamina::solve_dispatch_vector_checked(
@@ -301,7 +301,6 @@ lamina::SolveVectorResult lamina::solve_dispatch_vector_checked(
     const std::string& var,
     ComputationContext& context,
     const SolveOptions& opts) {
-
     constexpr const char* operation = "solve_dispatch_vector";
     if (!expr || !lamina::detail::node(expr)) {
         return SolveVectorResult::failure(CasErrc::InvalidArgument,
@@ -324,39 +323,40 @@ lamina::SolveVectorResult lamina::solve_dispatch_vector_checked(
     std::shared_ptr<SymbolicExpr> f_expr = simplified;
     if (auto rel = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(simplified))) {
         if (rel->op() == RelationalNode::Op::EQ) {
-            auto L = lamina::detail::make_expression_ptr(rel->left());
-            auto R = lamina::detail::make_expression_ptr(rel->right());
-            f_expr = SymbolicExpr::add(L, SymbolicExpr::multiply(R, SymbolicExpr::number(-1)));
+            auto left = lamina::detail::make_expression_ptr(rel->left());
+            auto right = lamina::detail::make_expression_ptr(rel->right());
+            f_expr = SymbolicExpr::add(
+                left, SymbolicExpr::multiply(right, SymbolicExpr::number(-1)));
         }
     }
 
-    auto poly = symbolic_to_poly<SymbolicPolyCoeff>(f_expr, var);
-    if (!poly.is_zero() && poly.degree() >= 1) {
-
-        if (poly.degree() <= 4) {
-            auto results = solve_polynomial_closed(poly, var);
+    auto polynomial = symbolic_to_poly<SymbolicPolyCoeff>(f_expr, var);
+    if (!polynomial.is_zero() && polynomial.degree() >= 1) {
+        if (polynomial.degree() <= 4) {
+            auto results = solve_polynomial_closed(polynomial, var);
             results = solve_filter_rootof_results(std::move(results), opts);
             if (!results.empty()) return SolveVectorResult::success(std::move(results));
         }
 
-        if (poly.degree() > 4) {
-            auto results = solve_by_factoring(poly, var);
+        if (polynomial.degree() > 4) {
+            auto results = solve_by_factoring(polynomial, var);
             results = solve_filter_rootof_results(std::move(results), opts);
             if (!results.empty()) return SolveVectorResult::success(std::move(results));
 
             if (opts.return_rootof) {
-                return SolveVectorResult::success(make_rootof_solutions(poly, var));
+                return SolveVectorResult::success(make_rootof_solutions(polynomial, var));
             }
         }
     }
 
-    auto trans_results = solve_transcendental(f_expr, var);
-    if (!trans_results.empty()) return SolveVectorResult::success(std::move(trans_results));
+    auto transcendental_results = solve_transcendental(f_expr, var);
+    if (!transcendental_results.empty()) {
+        return SolveVectorResult::success(std::move(transcendental_results));
+    }
 
-    /// 混合超越方程路径：含超越函数且换元无法化为多项式时，委托给混合求解器
     if (contains_transcendental_of_var(f_expr, var)) {
-        auto sub_result = detect_trans_substitutions(f_expr, var);
-        if (sub_result.mappings.empty() || !is_polynomial_after_substitution(sub_result)) {
+        auto substitution = detect_trans_substitutions(f_expr, var);
+        if (substitution.mappings.empty() || !is_polynomial_after_substitution(substitution)) {
             if (opts.allow_numeric) {
                 auto mixed_results = solve_mixed_transcendental(f_expr, var, opts);
                 if (!mixed_results.empty()) {
@@ -369,7 +369,7 @@ lamina::SolveVectorResult lamina::solve_dispatch_vector_checked(
             }
             return SolveVectorResult::failure(
                 CasErrc::Inconclusive,
-                "mixed transcendental equation is outside the checked vector support domain",
+                "mixed transcendental equation is outside the finite-vector support domain",
                 operation);
         }
     }
@@ -378,11 +378,10 @@ lamina::SolveVectorResult lamina::solve_dispatch_vector_checked(
         auto numeric_roots = solve_numeric_checked(f_expr, var, context, opts);
         if (!numeric_roots) return SolveVectorResult::failure(numeric_roots.error());
         if (!numeric_roots.value().empty()) {
-
             std::vector<std::shared_ptr<SymbolicExpr>> results;
             results.reserve(numeric_roots.value().size());
-            for (const auto& nr : numeric_roots.value()) {
-                results.push_back(SymbolicExpr::number(nr.value));
+            for (const auto& root : numeric_roots.value()) {
+                results.push_back(SymbolicExpr::number(root.value));
             }
             return SolveVectorResult::success(std::move(results));
         }

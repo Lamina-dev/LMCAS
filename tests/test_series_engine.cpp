@@ -652,15 +652,15 @@ static void test_symbolic_product_pochhammer() {
 }
 
 static void test_symbolic_product_unevaluated() {
-    TEST_CASE("symbolic_product: returns ProductNode_Op when no closed form");
+    TEST_CASE("symbolic_product: returns ProductNode when no closed form");
     auto k = var("k");
     auto n = var("n");
     auto body = SymbolicExpr::sin(k);
     auto result = lamina::symbolic_product(body, "k", num(1), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
-        auto pn = std::dynamic_pointer_cast<const ProductNode_Op>(lamina::detail::node(result));
-        EXPECT_TRUE(pn != nullptr, "result is ProductNode_Op for sin(k)");
+        auto pn = std::dynamic_pointer_cast<const ProductNode>(lamina::detail::node(result));
+        EXPECT_TRUE(pn != nullptr, "result is ProductNode for sin(k)");
     }
 }
 

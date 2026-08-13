@@ -313,7 +313,7 @@ int main() {
         }
     }
 
-    TEST_CASE("ProductNode_Op normalization");
+    TEST_CASE("ProductNode normalization");
     {
         // Product(1*x, k=1..n) should normalize body to x
         auto x = lamina::detail::make_node<VariableNode>("x");
@@ -323,14 +323,14 @@ int main() {
         auto lower = lamina::detail::make_node<NumberNode>(BigInt(1));
         auto upper = lamina::detail::make_node<VariableNode>("n");
 
-        auto prod = lamina::detail::make_node<ProductNode_Op>(body, "k", lower, upper);
+        auto prod = lamina::detail::make_node<ProductNode>(body, "k", lower, upper);
         auto result = normalize(prod);
 
-        auto prod_result = std::dynamic_pointer_cast<const ProductNode_Op>(result);
-        EXPECT_TRUE(prod_result != nullptr, "ProductNode_Op normalization returns ProductNode_Op");
+        auto prod_result = std::dynamic_pointer_cast<const ProductNode>(result);
+        EXPECT_TRUE(prod_result != nullptr, "ProductNode normalization returns ProductNode");
         if (prod_result) {
             auto var = std::dynamic_pointer_cast<const VariableNode>(prod_result->body());
-            EXPECT_TRUE(var != nullptr && var->name() == "x", "ProductNode_Op body = x");
+            EXPECT_TRUE(var != nullptr && var->name() == "x", "ProductNode body = x");
         }
     }
 

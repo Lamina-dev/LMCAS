@@ -3,7 +3,7 @@
 #include "numeric_evaluation.hpp"
 #include "solve_polynomial.hpp"
 #include "symbolic_ast.hpp"
-#include "poly_utils_internal.hpp"
+#include "internal/expression_analysis.hpp"
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -327,7 +327,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> sort_roots_by_convention(
 static bool is_structural_polynomial(const std::shared_ptr<const SymbolicNode>& node,
                                      const std::string& variable) {
     if (!node) return false;
-    if (!depends_on_var(node, variable)) return true;
+    if (!expression_depends_on_variable(node, variable)) return true;
 
     if (auto symbol = std::dynamic_pointer_cast<const VariableNode>(node)) {
         return symbol->name() == variable;

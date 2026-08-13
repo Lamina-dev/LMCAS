@@ -36,8 +36,8 @@ LAMINA_API std::vector<NumericRoot> solve_numeric(
  * @brief Numerically solve in the supported univariate domain.
  *
  * Polynomial inputs use Sturm isolation followed by checked refinement.
- * Other inputs require a Newton initial value (zero is used for compatibility
- * when none is supplied). Evaluation, cancellation, and resource failures are
+ * Other inputs require a Newton initial value; zero is used when none is
+ * supplied. Evaluation, cancellation, and resource failures are
  * returned to the caller.
  */
 LAMINA_API NumericRootsResult solve_numeric_checked(
@@ -47,11 +47,7 @@ LAMINA_API NumericRootsResult solve_numeric_checked(
     const SolveOptions& opts = {});
 
 /**
- * @brief Checked numeric solve with a default, non-shared computation context.
- *
- * This is the migration path for callers of solve_numeric() that need explicit
- * CasError propagation but do not need to provide custom budgets, cancellation,
- * or diagnostics.
+ * @brief Numerically solves using an isolated default computation context.
  */
 LAMINA_API NumericRootsResult solve_numeric_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -93,7 +89,6 @@ LAMINA_API NumericRootResult newton_raphson_checked(
     ComputationContext& context,
     const SolveOptions& opts);
 
-/** @brief Checked Newton-Raphson with a default computation context. */
 LAMINA_API NumericRootResult newton_raphson_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::shared_ptr<SymbolicExpr>& df,
@@ -134,7 +129,6 @@ LAMINA_API NumericRootResult newton_raphson_checked(
     ComputationContext& context,
     const SolveOptions& opts);
 
-/** @brief Checked bracketed Newton-Raphson with a default computation context. */
 LAMINA_API NumericRootResult newton_raphson_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::shared_ptr<SymbolicExpr>& df,
@@ -171,7 +165,6 @@ LAMINA_API NumericRootResult bisection_checked(
     ComputationContext& context,
     const SolveOptions& opts);
 
-/** @brief Checked bisection with a default computation context. */
 LAMINA_API NumericRootResult bisection_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,

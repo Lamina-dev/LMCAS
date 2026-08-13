@@ -1521,6 +1521,13 @@ int main() {
                     std::string(lamina::lsr::error_name(exhausted_eqv.error())) ==
                         "EqvBudgetExceeded",
                 "LSR equivalence budget exhaustion exposes EqvBudgetExceeded");
+    lamina::ComputationContext lsr_no_budget_context;
+    auto lsr_exhausted_eqv = lamina::lsr::equivalent(
+        *one_plus_x, *x_plus_one, lsr_no_budget_context, no_budget);
+    EXPECT_TRUE(lsr_exhausted_eqv && !lsr_exhausted_eqv.value(),
+                "LSR equivalent returns false when the proof budget is exhausted");
+    EXPECT_TRUE(!lsr_no_budget_context.diagnostics().empty(),
+                "LSR equivalent records a diagnostic for budget exhaustion");
 
     auto sin_y_squared = SymbolicExpr::power(
         SymbolicExpr::sin(y.value()), SymbolicExpr::number(2));
@@ -1561,6 +1568,12 @@ int main() {
         *trig_identity, *SymbolicExpr::number(1), core_trig_context);
     EXPECT_TRUE(core_trig_equivalent && !core_trig_equivalent.value(),
                 "Core profile does not silently enable Trig-Basic rules");
+    lamina::ComputationContext lsr_trig_profile_context;
+    auto lsr_trig_equivalent = lamina::lsr::equivalent(
+        *trig_identity, *SymbolicExpr::number(1), lsr_trig_profile_context,
+        trig_profile);
+    EXPECT_TRUE(lsr_trig_equivalent && lsr_trig_equivalent.value(),
+                "LSR equivalent proves enabled Trig-Basic rules");
 
     lamina::lsr::EqvOptions exp_log_profile;
     auto exp_log_configured =

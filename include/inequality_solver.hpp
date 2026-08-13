@@ -72,7 +72,6 @@ public:
         const std::string& variable,
         ComputationContext& context);
 
-    /** @brief Checked inequality solving with a default computation context. */
     static Result<IntervalUnion> solve_inequality_checked(
         const std::shared_ptr<SymbolicExpr>& expr,
         InequalityType type,
@@ -91,7 +90,6 @@ public:
         const std::string& variable,
         ComputationContext& context);
 
-    /** @brief Checked inequality conjunction with a default context. */
     static Result<IntervalUnion> solve_inequalities_checked(
         const std::vector<std::pair<std::shared_ptr<SymbolicExpr>,
                                      InequalityType>>& inequalities,

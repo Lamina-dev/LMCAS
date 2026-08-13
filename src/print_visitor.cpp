@@ -208,7 +208,7 @@ void PrintVisitor::visit(const SummationNode& node) {
     buffer << ")";
 }
 
-void PrintVisitor::visit(const ProductNode_Op& node) {
+void PrintVisitor::visit(const ProductNode& node) {
     buffer << "\xce\xa0(";
     node.body()->accept(*this);
     buffer << ", " << node.index_var() << "=";
@@ -266,6 +266,38 @@ void PrintVisitor::visit(const SetBuilderNode& node) {
     buffer << " | ";
     node.predicate()->accept(*this);
     buffer << "}";
+}
+
+void PrintVisitor::visit(const FiniteSetNode& node) {
+    buffer << "{";
+    for (std::size_t index = 0; index < node.elements().size(); ++index) {
+        if (index != 0) buffer << ", ";
+        node.elements()[index]->accept(*this);
+    }
+    buffer << "}";
+}
+
+void PrintVisitor::visit(const IntervalNode& node) {
+    buffer << (node.lower_closed() ? "[" : "(");
+    node.lower()->accept(*this);
+    buffer << ", ";
+    node.upper()->accept(*this);
+    buffer << (node.upper_closed() ? "]" : ")");
+}
+
+void PrintVisitor::visit(const MembershipNode& node) {
+    node.element()->accept(*this);
+    buffer << " in ";
+    node.set()->accept(*this);
+}
+
+void PrintVisitor::visit(const QuantityNode& node) {
+    node.value()->accept(*this);
+    buffer << "<";
+    buffer << (node.display_unit().empty()
+                   ? node.dimension().to_string()
+                   : node.display_unit());
+    buffer << ">";
 }
 
 void PrintVisitor::visit(const ComplexNode& node) {

@@ -2,7 +2,7 @@
 #include "symbolic_ast.hpp"
 #include "../include/numeric_evaluation.hpp"
 #include "../include/poly_utils.hpp"
-#include "poly_utils_internal.hpp"
+#include "internal/expression_analysis.hpp"
 #include "../include/solve_polynomial.hpp"
 #include "../include/solve_strategies.hpp"
 #include <algorithm>
@@ -714,7 +714,7 @@ IntervalUnion InequalitySolver::solve_inequality(
     auto poly = symbolic_to_poly<SymbolicPolyCoeff>(expr, variable);
     if (poly.is_zero()) {
 
-        if (depends_on_var(lamina::detail::node(expr), variable)) {
+        if (expression_depends_on_variable(lamina::detail::node(expr), variable)) {
             return IntervalUnion::empty();
         }
 
@@ -750,7 +750,7 @@ IntervalUnion InequalitySolver::solve_inequality(
 
     {
         auto poly_rat = symbolic_to_poly<Rational>(expr, variable);
-        if (poly_rat.is_zero() && depends_on_var(lamina::detail::node(expr), variable)) {
+        if (poly_rat.is_zero() && expression_depends_on_variable(lamina::detail::node(expr), variable)) {
 
             return IntervalUnion::empty();
         }
@@ -841,7 +841,7 @@ IntervalUnion InequalitySolver::solve_rational_inequality(
 
     {
         auto num_poly_rat = symbolic_to_poly<Rational>(numerator, variable);
-        if (num_poly_rat.is_zero() && depends_on_var(lamina::detail::node(numerator), variable)) {
+        if (num_poly_rat.is_zero() && expression_depends_on_variable(lamina::detail::node(numerator), variable)) {
             return IntervalUnion::empty();
         }
 
@@ -849,7 +849,7 @@ IntervalUnion InequalitySolver::solve_rational_inequality(
 
     {
         auto den_poly_rat = symbolic_to_poly<Rational>(denominator, variable);
-        if (den_poly_rat.is_zero() && depends_on_var(lamina::detail::node(denominator), variable)) {
+        if (den_poly_rat.is_zero() && expression_depends_on_variable(lamina::detail::node(denominator), variable)) {
             return IntervalUnion::empty();
         }
 
@@ -1090,7 +1090,7 @@ static bool depends_on_any_param(const std::shared_ptr<SymbolicExpr>& expr,
                                   const std::vector<std::string>& parameters) {
     if (!expr || !lamina::detail::node(expr)) return false;
     for (const auto& param : parameters) {
-        if (depends_on_var(lamina::detail::node(expr), param)) return true;
+        if (expression_depends_on_variable(lamina::detail::node(expr), param)) return true;
     }
     return false;
 }
@@ -1143,7 +1143,7 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
 
     if (poly.is_zero()) {
 
-        if (depends_on_var(lamina::detail::node(expr), variable)) {
+        if (expression_depends_on_variable(lamina::detail::node(expr), variable)) {
 
             return result;
         }

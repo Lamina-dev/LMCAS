@@ -1,6 +1,5 @@
 
 #include "test_common.hpp"
-#include "rapidcheck/rapidcheck.h"
 #include "assumption_context.hpp"
 #include "integration.hpp"
 #include "visitors/differentiation_visitor.hpp"
@@ -39,13 +38,11 @@ static std::string node_to_string(const std::shared_ptr<const SymbolicNode>& nod
 }
 
 
-static void test_integrator_nullptr_backward_compat() {
-    TEST_CASE("Integrator with nullptr context produces same results as before");
+static void test_integrator_compatibility_entrypoint() {
+    TEST_CASE("Integrator compatibility entry point delegates to checked integration");
 
-    rc::check("Integrator with nullptr context is identical to default Integrator for polynomial integrands", []() {
-        // Generate a random polynomial integrand: a*x^n where a in [1,5], n in [0,4]
-        int a = rc::gen::inRange(1, 6);
-        int n = rc::gen::inRange(0, 5);
+    for (int a = 1; a <= 5; ++a) {
+        for (int n = 0; n <= 4; ++n) {
 
         // Build expression: a * x^n
         auto x_node = make_var("x");
@@ -59,14 +56,19 @@ static void test_integrator_nullptr_backward_compat() {
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(integrand, "x");
 
-        // Integrator with explicit nullptr context
+        // Integrator with explicit computation context and no assumptions
         Integrator integrator_nullptr;
-        integrator_nullptr.set_assumption_context(nullptr);
-        auto result_nullptr = integrator_nullptr.integrate(integrand, "x");
+        ComputationContext context;
+        auto checked = integrator_nullptr.integrate_checked(integrand, "x", context);
+        EXPECT_TRUE(checked.has_value(), "checked polynomial integration succeeds");
+        if (!checked) continue;
+        auto result_nullptr = checked.value();
 
         // Results must be identical
-        RC_ASSERT(result_default.to_string() == result_nullptr.to_string());
-    });
+        EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
+                      "compatibility and checked polynomial integration agree");
+        }
+    }
 }
 
 static void test_integrator_trig_nullptr() {
@@ -81,8 +83,11 @@ static void test_integrator_trig_nullptr() {
         auto result_default = integrator_default.integrate(*sin_x, "x");
 
         Integrator integrator_nullptr;
-        integrator_nullptr.set_assumption_context(nullptr);
-        auto result_nullptr = integrator_nullptr.integrate(*sin_x, "x");
+        ComputationContext context;
+        auto checked = integrator_nullptr.integrate_checked(*sin_x, "x", context);
+        EXPECT_TRUE(checked.has_value(), "checked sin integration succeeds");
+        if (!checked) return;
+        auto result_nullptr = checked.value();
 
         EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
                       "sin(x) integral: default == nullptr context");
@@ -95,8 +100,11 @@ static void test_integrator_trig_nullptr() {
         auto result_default = integrator_default.integrate(*cos_x, "x");
 
         Integrator integrator_nullptr;
-        integrator_nullptr.set_assumption_context(nullptr);
-        auto result_nullptr = integrator_nullptr.integrate(*cos_x, "x");
+        ComputationContext context;
+        auto checked = integrator_nullptr.integrate_checked(*cos_x, "x", context);
+        EXPECT_TRUE(checked.has_value(), "checked cos integration succeeds");
+        if (!checked) return;
+        auto result_nullptr = checked.value();
 
         EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
                       "cos(x) integral: default == nullptr context");
@@ -109,8 +117,11 @@ static void test_integrator_trig_nullptr() {
         auto result_default = integrator_default.integrate(*exp_x, "x");
 
         Integrator integrator_nullptr;
-        integrator_nullptr.set_assumption_context(nullptr);
-        auto result_nullptr = integrator_nullptr.integrate(*exp_x, "x");
+        ComputationContext context;
+        auto checked = integrator_nullptr.integrate_checked(*exp_x, "x", context);
+        EXPECT_TRUE(checked.has_value(), "checked exp integration succeeds");
+        if (!checked) return;
+        auto result_nullptr = checked.value();
 
         EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
                       "exp(x) integral: default == nullptr context");
@@ -121,10 +132,8 @@ static void test_integrator_trig_nullptr() {
 static void test_limit_nullptr_backward_compat() {
     TEST_CASE("LimitVisitor with nullptr context produces same results as before");
 
-    rc::check("LimitVisitor with nullptr context is identical to default LimitVisitor", []() {
-        // Generate a random polynomial: a*x + b where a in [1,5], b in [-3,3]
-        int a = rc::gen::inRange(1, 6);
-        int b = rc::gen::inRange(-3, 4);
+    for (int a = 1; a <= 5; ++a) {
+        for (int b = -3; b <= 3; ++b) {
 
         // Build expression: a*x + b
         auto x_node = make_var("x");
@@ -151,8 +160,10 @@ static void test_limit_nullptr_backward_compat() {
         std::string str_default = node_to_string(result_default);
         std::string str_nullptr = node_to_string(result_nullptr);
 
-        RC_ASSERT(str_default == str_nullptr);
-    });
+        EXPECT_EQ_STR(str_default, str_nullptr,
+                      "default and explicit empty-assumption limits agree");
+        }
+    }
 }
 
 static void test_limit_trig_nullptr() {
@@ -206,8 +217,7 @@ static void test_limit_trig_nullptr() {
 static void test_series_nullptr_backward_compat() {
     TEST_CASE("Series expansion with nullptr context produces same results as before");
 
-    rc::check("Series expansion with nullptr context is identical to default for exp(x)", []() {
-        int order = rc::gen::inRange(2, 6);
+    for (int order = 2; order <= 5; ++order) {
 
         auto x = SymbolicExpr::variable("x");
         auto exp_x = SymbolicExpr::exp(x);
@@ -222,8 +232,9 @@ static void test_series_nullptr_backward_compat() {
         std::string str_default = result_default ? result_default->to_string() : "null";
         std::string str_nullptr = result_nullptr ? result_nullptr->to_string() : "null";
 
-        RC_ASSERT(str_default == str_nullptr);
-    });
+        EXPECT_EQ_STR(str_default, str_nullptr,
+                      "default and explicit empty-assumption series agree");
+    }
 }
 
 static void test_series_sin_cos_nullptr() {
@@ -335,9 +346,7 @@ static void test_ode_linear_nullptr() {
 static void test_matcher_nullptr_backward_compat() {
     TEST_CASE("Matcher with nullptr context produces same results as before");
 
-    rc::check("Matcher::match with nullptr context is identical to default match", []() {
-        // Generate a random pattern: wildcard + number
-        int num_val = rc::gen::inRange(1, 10);
+    for (int num_val = 1; num_val <= 9; ++num_val) {
 
         // Pattern: _a + num_val
         auto wc = lamina::detail::make_node<VariableNode>("_a");
@@ -358,19 +367,23 @@ static void test_matcher_nullptr_backward_compat() {
 
         // Match with explicit nullptr context
         MatchMap results_nullptr;
-        bool matched_nullptr = Matcher::match(pattern, target, wildcards, results_nullptr, nullptr);
+        bool matched_nullptr = Matcher::match(pattern, target, wildcards, results_nullptr);
 
-        RC_ASSERT(matched_default == matched_nullptr);
+        EXPECT_TRUE(matched_default == matched_nullptr,
+                    "repeated structural matching is deterministic");
 
         if (matched_default && matched_nullptr) {
             // Verify bindings are identical
-            RC_ASSERT(results_default.size() == results_nullptr.size());
+            EXPECT_TRUE(results_default.size() == results_nullptr.size(),
+                        "repeated matching produces the same binding count");
             for (auto& [key, val] : results_default) {
-                RC_ASSERT(results_nullptr.count(key) > 0);
-                RC_ASSERT(val.to_string() == results_nullptr.at(key).to_string());
+                EXPECT_TRUE(results_nullptr.count(key) > 0,
+                            "repeated matching preserves binding names");
+                EXPECT_EQ_STR(val.to_string(), results_nullptr.at(key).to_string(),
+                              "repeated matching preserves binding values");
             }
         }
-    });
+    }
 }
 
 static void test_rewrite_engine_nullptr() {
@@ -397,11 +410,14 @@ static void test_rewrite_engine_nullptr() {
         engine_default.add_rule(rule);
         auto result_default = engine_default.apply(target, 10);
 
-        // RewriteEngine with explicit nullptr context
+        // RewriteEngine with an explicit context without assumptions
         RewriteEngine engine_nullptr;
         engine_nullptr.add_rule(rule);
-        engine_nullptr.set_assumption_context(nullptr);
-        auto result_nullptr = engine_nullptr.apply(target, 10);
+        ComputationContext context;
+        auto checked = engine_nullptr.apply_checked(target, context, 10);
+        EXPECT_TRUE(checked.has_value(), "checked rewrite succeeds");
+        if (!checked) return;
+        auto result_nullptr = checked.value();
 
         EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
                       "RewriteEngine y+0: default == nullptr context");
@@ -428,8 +444,11 @@ static void test_rewrite_engine_nullptr() {
 
         RewriteEngine engine_nullptr;
         engine_nullptr.add_rule(rule);
-        engine_nullptr.set_assumption_context(nullptr);
-        auto result_nullptr = engine_nullptr.apply(target, 10);
+        ComputationContext context;
+        auto checked = engine_nullptr.apply_checked(target, context, 10);
+        EXPECT_TRUE(checked.has_value(), "checked rewrite succeeds");
+        if (!checked) return;
+        auto result_nullptr = checked.value();
 
         EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
                       "RewriteEngine z*1: default == nullptr context");
@@ -438,7 +457,7 @@ static void test_rewrite_engine_nullptr() {
 
 
 int main() {
-    test_integrator_nullptr_backward_compat();
+    test_integrator_compatibility_entrypoint();
     test_integrator_trig_nullptr();
 
     test_limit_nullptr_backward_compat();

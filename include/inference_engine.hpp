@@ -94,7 +94,6 @@ public:
      */
     Tribool query_algebraic(const SymbolicExpr& expr) const;
 
-    /// Checked algebraic query for direct InferenceEngine callers.
     InferenceTriboolResult query_algebraic_checked(const SymbolicExpr& expr) const;
 
     /**
@@ -108,7 +107,6 @@ public:
      */
     Tribool query_transcendental(const SymbolicExpr& expr) const;
 
-    /// Checked transcendental query for direct InferenceEngine callers.
     InferenceTriboolResult query_transcendental_checked(const SymbolicExpr& expr) const;
 
     /**
@@ -122,7 +120,6 @@ public:
      */
     Tribool query_finite(const SymbolicExpr& expr) const;
 
-    /// Checked finite-value query for direct InferenceEngine callers.
     InferenceTriboolResult query_finite_checked(const SymbolicExpr& expr) const;
 
     /**
@@ -136,7 +133,6 @@ public:
      */
     Tribool query_divergent(const SymbolicExpr& expr) const;
 
-    /// Checked divergent-value query for direct InferenceEngine callers.
     InferenceTriboolResult query_divergent_checked(const SymbolicExpr& expr) const;
 
     /// @}
@@ -169,7 +165,6 @@ public:
      */
     Tribool query_periodic(const SymbolicExpr& expr) const;
 
-    /// Checked periodic query for direct InferenceEngine callers.
     InferenceTriboolResult query_periodic_checked(const SymbolicExpr& expr) const;
 
     /**
@@ -183,7 +178,6 @@ public:
      */
     std::optional<SymbolicExpr> infer_period(const SymbolicExpr& expr) const;
 
-    /// Checked period inference for direct InferenceEngine callers.
     InferencePeriodResult infer_period_checked(const SymbolicExpr& expr) const;
 
     /**
@@ -226,7 +220,7 @@ public:
                                   PropertyStore& prop_store, int depth = 0);
 
     /**
-     * @brief Checked monotonicity deduction with explicit relation-store failures.
+     * @brief Applies monotonicity deductions transactionally.
      *
      * Deduced relations are inserted through RelationStore::add_relation_checked.
      * If any derived relation contradicts stored properties, the failing insert

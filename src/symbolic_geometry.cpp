@@ -61,28 +61,28 @@ bool contains_unevaluated_integral(const std::shared_ptr<const SymbolicNode>& no
     return false;
 }
 
-GeometryExprResult simplify_geometry_checked(std::shared_ptr<SymbolicExpr> expr,
+ExpressionResult simplify_geometry_checked(std::shared_ptr<SymbolicExpr> expr,
                                              const std::string& operation,
                                              const std::string& message)
 {
     if (!expr || !lamina::detail::node(expr)) {
-        return GeometryExprResult::failure(CasErrc::Inconclusive,
+        return ExpressionResult::failure(CasErrc::Inconclusive,
                                            message, operation);
     }
     auto simplified = expr->simplify();
     if (!simplified || !lamina::detail::node(simplified)) {
-        return GeometryExprResult::failure(CasErrc::Inconclusive,
+        return ExpressionResult::failure(CasErrc::Inconclusive,
                                            message, operation);
     }
     if (contains_unevaluated_integral(lamina::detail::node(simplified))) {
-        return GeometryExprResult::failure(CasErrc::Inconclusive,
+        return ExpressionResult::failure(CasErrc::Inconclusive,
                                            "geometry integral is outside the supported domain",
                                            operation);
     }
-    return GeometryExprResult::success(std::move(simplified));
+    return ExpressionResult::success(std::move(simplified));
 }
 
-GeometryExprResult differentiate_geometry_checked(
+ExpressionResult differentiate_geometry_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& variable,
     const std::string& operation)
@@ -93,14 +93,14 @@ GeometryExprResult differentiate_geometry_checked(
             derivative, operation,
             "geometry derivative is outside the supported domain");
     } catch (const std::exception&) {
-        return GeometryExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "geometry derivative is outside the supported domain",
             operation);
     }
 }
 
-GeometryExprResult definite_integral_geometry_checked(
+ExpressionResult definite_integral_geometry_checked(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower_bound,
@@ -108,7 +108,7 @@ GeometryExprResult definite_integral_geometry_checked(
     const std::string& operation)
 {
     if (!integrand || !lamina::detail::node(integrand)) {
-        return GeometryExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "geometry integrand is outside the supported domain",
             operation);
@@ -116,7 +116,7 @@ GeometryExprResult definite_integral_geometry_checked(
     auto integral = integrand->integrate(variable);
     if (!integral || !lamina::detail::node(integral) ||
         contains_unevaluated_integral(lamina::detail::node(integral))) {
-        return GeometryExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "geometry integral is outside the supported domain",
             operation);
@@ -152,7 +152,7 @@ std::shared_ptr<SymbolicExpr> squared_profile(const std::shared_ptr<SymbolicExpr
     return SymbolicExpr::power(f, SymbolicExpr::number(2))->simplify();
 }
 
-GeometryExprResult volume_of_revolution_checked_impl(
+ExpressionResult volume_of_revolution_checked_impl(
     std::shared_ptr<SymbolicExpr> f,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -161,10 +161,10 @@ GeometryExprResult volume_of_revolution_checked_impl(
     const std::string& operation)
 {
     auto valid = validate_geometry_inputs(f, a, b, context, operation);
-    if (!valid) return GeometryExprResult::failure(valid.error());
+    if (!valid) return ExpressionResult::failure(valid.error());
 
     auto step = context.consume_steps(8, operation);
-    if (!step) return GeometryExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
 
     try {
         auto pi = SymbolicExpr::variable("pi");
@@ -172,16 +172,16 @@ GeometryExprResult volume_of_revolution_checked_impl(
         return definite_integral_geometry_checked(
             integrand, variable, a, b, operation);
     } catch (const std::bad_alloc&) {
-        return GeometryExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "symbolic geometry allocation failed",
                                            operation);
     } catch (const std::exception& e) {
-        return GeometryExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            e.what(), operation);
     }
 }
 
-GeometryExprResult arc_length_checked_impl(
+ExpressionResult arc_length_checked_impl(
     std::shared_ptr<SymbolicExpr> f,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -190,10 +190,10 @@ GeometryExprResult arc_length_checked_impl(
     const std::string& operation)
 {
     auto valid = validate_geometry_inputs(f, a, b, context, operation);
-    if (!valid) return GeometryExprResult::failure(valid.error());
+    if (!valid) return ExpressionResult::failure(valid.error());
 
     auto step = context.consume_steps(10, operation);
-    if (!step) return GeometryExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
 
     try {
         auto derivative_result = differentiate_geometry_checked(f, variable, operation);
@@ -204,18 +204,18 @@ GeometryExprResult arc_length_checked_impl(
         return definite_integral_geometry_checked(
             integrand, variable, a, b, operation);
     } catch (const std::bad_alloc&) {
-        return GeometryExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "symbolic geometry allocation failed",
                                            operation);
     } catch (const std::exception& e) {
-        return GeometryExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            e.what(), operation);
     }
 }
 
 }
 
-GeometryExprResult volume_of_revolution_x_checked(
+ExpressionResult volume_of_revolution_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -226,7 +226,7 @@ GeometryExprResult volume_of_revolution_x_checked(
         context, "volume_of_revolution_x");
 }
 
-GeometryExprResult volume_of_revolution_x_checked(
+ExpressionResult volume_of_revolution_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -245,7 +245,7 @@ std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
     return result ? result.value() : nullptr;
 }
 
-GeometryExprResult arc_length_x_checked(
+ExpressionResult arc_length_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -256,7 +256,7 @@ GeometryExprResult arc_length_x_checked(
         context, "arc_length_x");
 }
 
-GeometryExprResult arc_length_x_checked(
+ExpressionResult arc_length_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -274,7 +274,7 @@ std::shared_ptr<SymbolicExpr> arc_length_x(
     return result ? result.value() : nullptr;
 }
 
-GeometryExprResult volume_of_revolution_y_checked(
+ExpressionResult volume_of_revolution_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -285,7 +285,7 @@ GeometryExprResult volume_of_revolution_y_checked(
         context, "volume_of_revolution_y");
 }
 
-GeometryExprResult volume_of_revolution_y_checked(
+ExpressionResult volume_of_revolution_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -304,7 +304,7 @@ std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
     return result ? result.value() : nullptr;
 }
 
-GeometryExprResult arc_length_y_checked(
+ExpressionResult arc_length_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -315,7 +315,7 @@ GeometryExprResult arc_length_y_checked(
         context, "arc_length_y");
 }
 
-GeometryExprResult arc_length_y_checked(
+ExpressionResult arc_length_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b

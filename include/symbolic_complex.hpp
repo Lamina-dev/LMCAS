@@ -19,7 +19,6 @@ struct ComplexSymbolic {
 };
 
 using ComplexSymbolicResult = Result<ComplexSymbolic>;
-using ComplexExprResult = Result<std::shared_ptr<SymbolicExpr>>;
 using ComplexRootsResult = Result<std::vector<ComplexSymbolic>>;
 
 /**
@@ -123,11 +122,11 @@ LAMINA_API ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z);
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> complex_abs(const ComplexSymbolic& z);
 
-LAMINA_API ComplexExprResult complex_abs_checked(
+LAMINA_API ExpressionResult complex_abs_checked(
     const ComplexSymbolic& z,
     ComputationContext& context);
 
-LAMINA_API ComplexExprResult complex_abs_checked(const ComplexSymbolic& z);
+LAMINA_API ExpressionResult complex_abs_checked(const ComplexSymbolic& z);
 
 /**
  * @brief 计算复数的辐角
@@ -136,11 +135,11 @@ LAMINA_API ComplexExprResult complex_abs_checked(const ComplexSymbolic& z);
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z);
 
-LAMINA_API ComplexExprResult complex_arg_checked(
+LAMINA_API ExpressionResult complex_arg_checked(
     const ComplexSymbolic& z,
     ComputationContext& context);
 
-LAMINA_API ComplexExprResult complex_arg_checked(const ComplexSymbolic& z);
+LAMINA_API ExpressionResult complex_arg_checked(const ComplexSymbolic& z);
 
 /**
  * @brief 将极坐标形式转换为指数形式复数 r*e^(i*theta)

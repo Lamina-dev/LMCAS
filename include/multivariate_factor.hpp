@@ -78,7 +78,8 @@ LAMINA_API MultiPoly multivariate_primitive_part(const MultiPoly& poly,
 /**
  * @brief 计算多元多项式 GCD
  *
- * 采用子结式 PRS（Polynomial Remainder Sequence）算法计算两个多元多项式的最大公因式。
+ * 采用递归求值-插值算法，避开降次的坏求值点，并对恢复的
+ * 候选多项式执行精确整除验证。
  *
  * @param[in] a 第一个多项式
  * @param[in] b 第二个多项式

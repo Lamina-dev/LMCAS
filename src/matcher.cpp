@@ -192,8 +192,7 @@ static bool match_recursive(const std::shared_ptr<const SymbolicNode>& p_node,
 
 bool Matcher::match(const SymbolicExpr& pattern, const SymbolicExpr& target,
                   const std::unordered_set<std::string>& wildcards,
-                  MatchMap& results,
-                  const AssumptionContext* /*ctx*/) {
+                  MatchMap& results) {
     if (!lamina::detail::node(pattern)) return !lamina::detail::node(target);
     return match_recursive(lamina::detail::node(pattern), lamina::detail::node(target), wildcards, results);
 }
@@ -314,7 +313,7 @@ public:
         result = lamina::detail::make_node<SummationNode>(body, node.index_var(), lower, upper);
     }
 
-    void visit(const ProductNode_Op& node) override {
+    void visit(const ProductNode& node) override {
         node.lower_bound()->accept(*this);
         auto lower = result;
         node.upper_bound()->accept(*this);
@@ -326,7 +325,7 @@ public:
             node.body()->accept(*this);
             body = result;
         }
-        result = lamina::detail::make_node<ProductNode_Op>(body, node.index_var(), lower, upper);
+        result = lamina::detail::make_node<ProductNode>(body, node.index_var(), lower, upper);
     }
 
     void visit(const TransformNode& node) override {
@@ -374,6 +373,32 @@ public:
         node.imag()->accept(*this);
         auto imag = result;
         result = SymbolicFactory::create_complex(real, imag);
+    }
+    void visit(const FiniteSetNode& node) override {
+        std::vector<std::shared_ptr<const SymbolicNode>> elements;
+        for (const auto& element : node.elements()) {
+            element->accept(*this);
+            elements.push_back(result);
+        }
+        result = lamina::detail::make_node<FiniteSetNode>(std::move(elements));
+    }
+    void visit(const IntervalNode& node) override {
+        node.lower()->accept(*this);
+        auto lower = result;
+        node.upper()->accept(*this);
+        result = lamina::detail::make_node<IntervalNode>(
+            lower, result, node.lower_closed(), node.upper_closed());
+    }
+    void visit(const MembershipNode& node) override {
+        node.element()->accept(*this);
+        auto element = result;
+        node.set()->accept(*this);
+        result = lamina::detail::make_node<MembershipNode>(element, result);
+    }
+    void visit(const QuantityNode& node) override {
+        node.value()->accept(*this);
+        result = lamina::detail::make_node<QuantityNode>(
+            result, node.dimension(), node.scale_to_base(), node.display_unit());
     }
 };
 
@@ -430,28 +455,26 @@ void RewriteEngine::add_rule(const Rule& rule) {
     rules.push_back(rule);
 }
 
-void RewriteEngine::set_assumption_context(const AssumptionContext* ctx) {
-    assumption_ctx_ = ctx;
-}
-
 class RewriteVisitor : public lamina::detail::SymbolicVisitor {
 public:
-    RewriteEngine& engine;
+    const RewriteEngine& engine;
+    ComputationContext& context;
     std::shared_ptr<const SymbolicNode> result;
     bool changed = false;
 
-    RewriteVisitor(RewriteEngine& e) : engine(e) {}
+    RewriteVisitor(const RewriteEngine& e, ComputationContext& ctx)
+        : engine(e), context(ctx) {}
 
     std::shared_ptr<const SymbolicNode> get_result() const { return result; }
 
     std::shared_ptr<const SymbolicNode> try_match(std::shared_ptr<const SymbolicNode> node) {
         auto current_expr = lamina::detail::expression_from_node(node);
         const auto& rules = engine.get_rules();
-        const AssumptionContext* ctx = engine.get_assumption_context();
+        const AssumptionContext* ctx = context.assumptions().get();
         for (const auto& rule : rules) {
             MatchMap bindings;
 
-            if (Matcher::match(rule.pattern, current_expr, rule.wildcards, bindings, ctx)) {
+            if (Matcher::match(rule.pattern, current_expr, rule.wildcards, bindings)) {
 
                 // Evaluate condition: prefer assumption_condition when context is available
                 if (rule.assumption_condition && ctx) {
@@ -675,13 +698,13 @@ public:
                        child_changed, original_changed);
     }
 
-    void visit(const ProductNode_Op& node) override {
+    void visit(const ProductNode& node) override {
         bool original_changed = changed;
         bool child_changed = false;
         auto body = visit_child(node.body(), child_changed);
         auto lower = visit_child(node.lower_bound(), child_changed);
         auto upper = visit_child(node.upper_bound(), child_changed);
-        finish_rewrite(lamina::detail::make_node<ProductNode_Op>(body, node.index_var(), lower, upper),
+        finish_rewrite(lamina::detail::make_node<ProductNode>(body, node.index_var(), lower, upper),
                        child_changed, original_changed);
     }
 
@@ -722,25 +745,93 @@ public:
         finish_rewrite(SymbolicFactory::create_complex(real, imag),
                        child_changed, original_changed);
     }
+    void visit(const FiniteSetNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        std::vector<std::shared_ptr<const SymbolicNode>> elements;
+        for (const auto& element : node.elements()) {
+            elements.push_back(visit_child(element, child_changed));
+        }
+        finish_rewrite(lamina::detail::make_node<FiniteSetNode>(std::move(elements)),
+                       child_changed, original_changed);
+    }
+    void visit(const IntervalNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        auto lower = visit_child(node.lower(), child_changed);
+        auto upper = visit_child(node.upper(), child_changed);
+        finish_rewrite(lamina::detail::make_node<IntervalNode>(
+                           lower, upper, node.lower_closed(), node.upper_closed()),
+                       child_changed, original_changed);
+    }
+    void visit(const MembershipNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        auto element = visit_child(node.element(), child_changed);
+        auto set = visit_child(node.set(), child_changed);
+        finish_rewrite(lamina::detail::make_node<MembershipNode>(element, set),
+                       child_changed, original_changed);
+    }
+    void visit(const QuantityNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        auto value = visit_child(node.value(), child_changed);
+        finish_rewrite(lamina::detail::make_node<QuantityNode>(
+                           value, node.dimension(), node.scale_to_base(), node.display_unit()),
+                       child_changed, original_changed);
+    }
 };
 
-SymbolicExpr RewriteEngine::apply_step(const SymbolicExpr& expr) {
-    if (!lamina::detail::node(expr)) return expr;
-    RewriteVisitor v(*this);
+Result<SymbolicExpr> RewriteEngine::apply_step_checked(
+    const SymbolicExpr& expr,
+    ComputationContext& context) const {
+    auto budget = context.consume_steps(1, "rewrite.apply_step");
+    if (!budget) return Result<SymbolicExpr>::failure(budget.error());
+    if (!lamina::detail::node(expr)) {
+        return Result<SymbolicExpr>::failure(
+            CasErrc::InvalidArgument, "rewrite expression must not be null",
+            "rewrite.apply_step");
+    }
+    RewriteVisitor v(*this, context);
     lamina::detail::node(expr)->accept(v);
-    return lamina::detail::expression_from_node(v.get_result());
+    return Result<SymbolicExpr>::success(
+        lamina::detail::expression_from_node(v.get_result()));
 }
 
-SymbolicExpr RewriteEngine::apply(const SymbolicExpr& expr, int max_iterations) {
+Result<SymbolicExpr> RewriteEngine::apply_checked(
+    const SymbolicExpr& expr,
+    ComputationContext& context,
+    int max_iterations) const {
+    if (max_iterations < 0) {
+        return Result<SymbolicExpr>::failure(
+            CasErrc::InvalidArgument, "rewrite iteration count must be non-negative",
+            "rewrite.apply");
+    }
     SymbolicExpr current = expr;
     for (int i = 0; i < max_iterations; ++i) {
-        SymbolicExpr next = apply_step(current);
+        auto next_result = apply_step_checked(current, context);
+        if (!next_result) return next_result;
+        SymbolicExpr next = std::move(next_result.value());
         if (lamina::detail::node(next)->equals(*lamina::detail::node(current))) {
-            return current;
+            return Result<SymbolicExpr>::success(std::move(current));
         }
         current = next;
     }
-    return current;
+    return Result<SymbolicExpr>::success(std::move(current));
+}
+
+SymbolicExpr RewriteEngine::apply_step(const SymbolicExpr& expr) const {
+    ComputationContext context;
+    auto result = apply_step_checked(expr, context);
+    if (!result) throw std::runtime_error(result.error().message);
+    return std::move(result.value());
+}
+
+SymbolicExpr RewriteEngine::apply(const SymbolicExpr& expr, int max_iterations) const {
+    ComputationContext context;
+    auto result = apply_checked(expr, context, max_iterations);
+    if (!result) throw std::runtime_error(result.error().message);
+    return std::move(result.value());
 }
 
 }

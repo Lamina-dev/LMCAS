@@ -33,11 +33,15 @@ static bool is_purely_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
             if (!has_var && n.default_expr()) n.default_expr()->accept(*this);
         }
         void visit(const SummationNode& n) override { n.body()->accept(*this); if (!has_var) n.lower_bound()->accept(*this); if (!has_var) n.upper_bound()->accept(*this); }
-        void visit(const ProductNode_Op& n) override { n.body()->accept(*this); if (!has_var) n.lower_bound()->accept(*this); if (!has_var) n.upper_bound()->accept(*this); }
+        void visit(const ProductNode& n) override { n.body()->accept(*this); if (!has_var) n.lower_bound()->accept(*this); if (!has_var) n.upper_bound()->accept(*this); }
         void visit(const TransformNode& n) override { n.body()->accept(*this); }
         void visit(const QuantifierNode& n) override { n.domain()->accept(*this); if (!has_var) n.predicate()->accept(*this); }
         void visit(const SetBuilderNode& n) override { n.domain()->accept(*this); if (!has_var) n.predicate()->accept(*this); }
         void visit(const ComplexNode& n) override { n.real()->accept(*this); if (!has_var) n.imag()->accept(*this); }
+        void visit(const FiniteSetNode& n) override { for (const auto& e : n.elements()) { if (has_var) return; e->accept(*this); } }
+        void visit(const IntervalNode& n) override { n.lower()->accept(*this); if (!has_var) n.upper()->accept(*this); }
+        void visit(const MembershipNode& n) override { n.element()->accept(*this); if (!has_var) n.set()->accept(*this); }
+        void visit(const QuantityNode& n) override { n.value()->accept(*this); }
     } detector;
 
     lamina::detail::node(expr)->accept(detector);
@@ -812,11 +816,15 @@ static bool convert_to_rational_poly(
                     if (!found && n.default_expr()) n.default_expr()->accept(*this);
                 }
                 void visit(const SummationNode& n) override { n.body()->accept(*this); if (!found) n.lower_bound()->accept(*this); if (!found) n.upper_bound()->accept(*this); }
-                void visit(const ProductNode_Op& n) override { n.body()->accept(*this); if (!found) n.lower_bound()->accept(*this); if (!found) n.upper_bound()->accept(*this); }
+                void visit(const ProductNode& n) override { n.body()->accept(*this); if (!found) n.lower_bound()->accept(*this); if (!found) n.upper_bound()->accept(*this); }
                 void visit(const TransformNode& n) override { n.body()->accept(*this); }
                 void visit(const QuantifierNode& n) override { n.domain()->accept(*this); if (!found) n.predicate()->accept(*this); }
                 void visit(const SetBuilderNode& n) override { n.domain()->accept(*this); if (!found) n.predicate()->accept(*this); }
                 void visit(const ComplexNode& n) override { n.real()->accept(*this); if (!found) n.imag()->accept(*this); }
+                void visit(const FiniteSetNode& n) override { for (const auto& e : n.elements()) { if (found) return; e->accept(*this); } }
+                void visit(const IntervalNode& n) override { n.lower()->accept(*this); if (!found) n.upper()->accept(*this); }
+                void visit(const MembershipNode& n) override { n.element()->accept(*this); if (!found) n.set()->accept(*this); }
+                void visit(const QuantityNode& n) override { n.value()->accept(*this); }
             } checker;
             lamina::detail::node(simplified)->accept(checker);
             if (checker.found) return false;

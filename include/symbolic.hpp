@@ -16,14 +16,15 @@
 #include <algorithm>
 #include <map>
 #include <functional>
-#include <iostream>
-#include <cstdlib>
 #include <stdexcept>
 
 class SymbolicExpr;
 
 namespace lamina {
 class AssumptionContext;
+
+/** Result of an operation that produces a symbolic expression. */
+using ExpressionResult = Result<std::shared_ptr<SymbolicExpr>>;
 
 /** @brief Stable relational operator used by public APIs. */
 enum class RelationOp {
@@ -39,48 +40,6 @@ namespace detail {
 struct SymbolicExprAccess;
 } // namespace detail
 } // namespace lamina
-
-#ifndef _SYMBOLIC_DEBUG
-
-#define _SYMBOLIC_DEBUG 0
-#endif
-
-
-class _NullBuffer : public std::streambuf {
-public:
-	int overflow(int c) override { return c; }
-};
-
-static _NullBuffer _null_buffer;
-static std::ostream _null_stream(&_null_buffer);
-
-inline bool symbolic_debug_default_enabled() {
-#if _SYMBOLIC_DEBUG
-	return true;
-#else
-	return false;
-#endif
-}
-
-inline bool symbolic_debug_runtime_enabled() {
-	static int state = -1;
-	if (state != -1) return state == 1;
-
-	const char *ev = std::getenv("LAMINA_SYMBOLIC_DEBUG");
-	if (ev) {
-		if (ev[0] == '1') state = 1;
-		else state = 0;
-	} else {
-		state = symbolic_debug_default_enabled() ? 1 : 0;
-	}
-	return state == 1;
-}
-
-inline std::ostream &debug_stream() {
-	return symbolic_debug_runtime_enabled() ? std::cerr : _null_stream;
-}
-
-#define err_stream debug_stream()
 
 /**
  * @brief 符号表达式主类，封装 AST 根节点并提供运算、化简、求解等接口。
@@ -165,7 +124,9 @@ public:
      * @brief 计算两个多项式表达式的最大公因式。
      * @param a 第一个多项式
      * @param b 第二个多项式
-     * @return GCD 表达式
+     * @return 首一 GCD 表达式；非精确有理多项式返回 nullptr
+     * @deprecated Use lamina::symbolic_polynomial_gcd to preserve errors and
+     *             resource-limit information.
      */
     static std::shared_ptr<SymbolicExpr> poly_gcd(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 
@@ -318,16 +279,16 @@ public:
      */
     std::shared_ptr<SymbolicExpr> cancel() const;
 
-    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
+    [[deprecated("Inspect expressions through public predicates and operations")]]
     Type get_type() const;
 
-    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
+    [[deprecated("Construct and transform expressions through public operations")]]
     std::vector<std::shared_ptr<SymbolicExpr>> get_operands() const;
 
-    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
+    [[deprecated("Use numeric evaluation or public numeric predicates")]]
     std::variant<int, ::BigInt, ::Rational> get_number_value() const;
 
-    [[deprecated("Compatibility API; use stable SymbolicExpr queries")]]
+    [[deprecated("Use expression substitution and public symbol predicates")]]
     std::string get_identifier() const;
 
     /**
@@ -527,12 +488,6 @@ public:
      * @return 导数表达式
      */
     std::shared_ptr<SymbolicExpr> differentiate(const std::string& var_name) const;
-
-private:
-
-   std::shared_ptr<SymbolicExpr> differentiate_legacy(const std::string& var_name) const;
-
-public:
 
     /**
      * @brief 求解方程，返回指定变量的所有解。

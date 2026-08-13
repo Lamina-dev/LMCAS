@@ -11,8 +11,6 @@
 
 namespace lamina {
 
-using GeometryExprResult = Result<std::shared_ptr<SymbolicExpr>>;
-
 /**
  * @brief 计算函数 f(x) 绕 x 轴旋转所得旋转体的体积
  * @param fx 被旋转的函数表达式 f(x)
@@ -20,7 +18,7 @@ using GeometryExprResult = Result<std::shared_ptr<SymbolicExpr>>;
  * @param b 积分上限
  * @return 旋转体体积的符号表达式
  */
-LAMINA_API GeometryExprResult volume_of_revolution_x_checked(
+LAMINA_API ExpressionResult volume_of_revolution_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -30,7 +28,7 @@ LAMINA_API GeometryExprResult volume_of_revolution_x_checked(
 /**
  * @brief 使用默认计算上下文计算绕 x 轴旋转体体积，并显式报告无效输入。
  */
-LAMINA_API GeometryExprResult volume_of_revolution_x_checked(
+LAMINA_API ExpressionResult volume_of_revolution_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -49,7 +47,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
  * @param b 区间右端点
  * @return 弧长的符号表达式
  */
-LAMINA_API GeometryExprResult arc_length_x_checked(
+LAMINA_API ExpressionResult arc_length_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -59,7 +57,7 @@ LAMINA_API GeometryExprResult arc_length_x_checked(
 /**
  * @brief 使用默认计算上下文计算 x 方向弧长，并显式报告无效输入。
  */
-LAMINA_API GeometryExprResult arc_length_x_checked(
+LAMINA_API ExpressionResult arc_length_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -78,7 +76,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> arc_length_x(
  * @param b 积分上限
  * @return 旋转体体积的符号表达式
  */
-LAMINA_API GeometryExprResult volume_of_revolution_y_checked(
+LAMINA_API ExpressionResult volume_of_revolution_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -88,7 +86,7 @@ LAMINA_API GeometryExprResult volume_of_revolution_y_checked(
 /**
  * @brief 使用默认计算上下文计算绕 y 轴旋转体体积，并显式报告无效输入。
  */
-LAMINA_API GeometryExprResult volume_of_revolution_y_checked(
+LAMINA_API ExpressionResult volume_of_revolution_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -107,7 +105,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
  * @param b 区间右端点
  * @return 弧长的符号表达式
  */
-LAMINA_API GeometryExprResult arc_length_y_checked(
+LAMINA_API ExpressionResult arc_length_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
@@ -117,7 +115,7 @@ LAMINA_API GeometryExprResult arc_length_y_checked(
 /**
  * @brief 使用默认计算上下文计算 y 方向弧长，并显式报告无效输入。
  */
-LAMINA_API GeometryExprResult arc_length_y_checked(
+LAMINA_API ExpressionResult arc_length_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b

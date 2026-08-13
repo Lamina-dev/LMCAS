@@ -3,7 +3,7 @@
 #include "solve_strategies.hpp"
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
-#include "poly_utils_internal.hpp"
+#include "internal/expression_analysis.hpp"
 #include "lmmc/config.h"
 #include <cmath>
 #include <vector>
@@ -58,7 +58,7 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
     if (!expr || !lamina::detail::node(expr)) return std::nullopt;
 
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-        if (func->arguments().size() == 1 && depends_on_var(func->arguments()[0], var)) {
+        if (func->arguments().size() == 1 && expression_depends_on_variable(func->arguments()[0], var)) {
             auto ft = func->type();
             if (ft == FunctionNode::FuncType::Sin || ft == FunctionNode::FuncType::Cos ||
                 ft == FunctionNode::FuncType::Tan || ft == FunctionNode::FuncType::Exp ||
@@ -81,7 +81,7 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
         for (auto& op : add->operands()) {
 
             if (auto f = std::dynamic_pointer_cast<const FunctionNode>(op)) {
-                if (f->arguments().size() == 1 && depends_on_var(f->arguments()[0], var)) {
+                if (f->arguments().size() == 1 && expression_depends_on_variable(f->arguments()[0], var)) {
                     auto ft = f->type();
                     if ((ft == FunctionNode::FuncType::Sin || ft == FunctionNode::FuncType::Cos ||
                          ft == FunctionNode::FuncType::Tan || ft == FunctionNode::FuncType::Exp ||
@@ -98,7 +98,7 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
                 std::vector<std::shared_ptr<const SymbolicNode>> coeff_parts;
                 for (auto& mop : mul->operands()) {
                     if (auto f = std::dynamic_pointer_cast<const FunctionNode>(mop)) {
-                        if (f->arguments().size() == 1 && depends_on_var(f->arguments()[0], var)) {
+                        if (f->arguments().size() == 1 && expression_depends_on_variable(f->arguments()[0], var)) {
                             auto ft = f->type();
                             if (ft == FunctionNode::FuncType::Sin || ft == FunctionNode::FuncType::Cos ||
                                 ft == FunctionNode::FuncType::Tan || ft == FunctionNode::FuncType::Exp ||
@@ -109,14 +109,14 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
                     }
                     coeff_parts.push_back(mop);
                 }
-                if (mf && !func_term && !depends_on_var(SymbolicFactory::create_multiply(coeff_parts), var)) {
+                if (mf && !func_term && !expression_depends_on_variable(SymbolicFactory::create_multiply(coeff_parts), var)) {
                     func_term = mf;
                     func_coeff = SymbolicFactory::create_multiply(coeff_parts);
                     continue;
                 }
             }
 
-            if (!depends_on_var(op, var)) {
+            if (!expression_depends_on_variable(op, var)) {
                 const_terms.push_back(op);
             } else {
 
@@ -150,7 +150,7 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
         for (auto& op : mul->operands()) {
             if (auto f = std::dynamic_pointer_cast<const FunctionNode>(op)) {
-                if (f->arguments().size() == 1 && depends_on_var(f->arguments()[0], var)) {
+                if (f->arguments().size() == 1 && expression_depends_on_variable(f->arguments()[0], var)) {
                     auto ft = f->type();
                     if (ft == FunctionNode::FuncType::Sin || ft == FunctionNode::FuncType::Cos ||
                         ft == FunctionNode::FuncType::Tan || ft == FunctionNode::FuncType::Exp ||
@@ -204,7 +204,7 @@ static std::optional<LambertWPattern> decompose_lambert_w_pattern(
                         g_node = lamina::detail::make_node<MultiplyNode>(remaining);
                     }
 
-                    if (nodes_equal(g_node, exp_arg) && depends_on_var(g_node, var)) {
+                    if (nodes_equal(g_node, exp_arg) && expression_depends_on_variable(g_node, var)) {
                         return lamina::detail::make_expression_ptr(g_node);
                     }
                 }
@@ -233,7 +233,7 @@ static std::optional<LambertWPattern> decompose_lambert_w_pattern(
                     continue;
                 }
             }
-            if (!depends_on_var(op, var)) {
+            if (!expression_depends_on_variable(op, var)) {
                 const_terms.push_back(op);
             } else {
                 has_other_var_terms = true;
@@ -272,7 +272,7 @@ static std::optional<ExpBasePattern> decompose_exp_base_pattern(
     auto check_power_is_a_to_g = [&](const std::shared_ptr<const PowerNode>& pow)
         -> std::optional<std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>> {
 
-        if (!depends_on_var(pow->base(), var) && depends_on_var(pow->exponent(), var)) {
+        if (!expression_depends_on_variable(pow->base(), var) && expression_depends_on_variable(pow->exponent(), var)) {
             auto base_expr = lamina::detail::make_expression_ptr(pow->base());
             auto exp_expr = lamina::detail::make_expression_ptr(pow->exponent());
 
@@ -307,7 +307,7 @@ static std::optional<ExpBasePattern> decompose_exp_base_pattern(
                     continue;
                 }
             }
-            if (!depends_on_var(op, var)) {
+            if (!expression_depends_on_variable(op, var)) {
                 const_terms.push_back(op);
             } else {
                 has_other_var_terms = true;
@@ -575,7 +575,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> invert_substitution_h(
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(h_expr))) {
         if (auto v = std::dynamic_pointer_cast<const VariableNode>(pow->base())) {
-            if (v->name() == var && !depends_on_var(pow->exponent(), var)) {
+            if (v->name() == var && !expression_depends_on_variable(pow->exponent(), var)) {
                 if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
                     int n = 0;
                     if (std::holds_alternative<BigInt>(exp_num->value()))
@@ -739,7 +739,7 @@ static void collect_transcendental_subexprs(
     if (!node) return;
 
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (func->arguments().size() == 1 && depends_on_var(func->arguments()[0], var)) {
+        if (func->arguments().size() == 1 && expression_depends_on_variable(func->arguments()[0], var)) {
             auto ft = func->type();
             if (ft == FunctionNode::FuncType::Exp ||
                 ft == FunctionNode::FuncType::Sin ||
@@ -756,7 +756,7 @@ static void collect_transcendental_subexprs(
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        if (depends_on_var(pow->base(), var) && !depends_on_var(pow->exponent(), var)) {
+        if (expression_depends_on_variable(pow->base(), var) && !expression_depends_on_variable(pow->exponent(), var)) {
             if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
                 int e_val = 0;
                 if (std::holds_alternative<BigInt>(exp_num->value()))
@@ -936,7 +936,7 @@ std::optional<SubstitutionResult> detect_substitution(
 
     if (!expr || !lamina::detail::node(expr)) return std::nullopt;
 
-    if (!depends_on_var(lamina::detail::node(expr), var)) return std::nullopt;
+    if (!expression_depends_on_variable(lamina::detail::node(expr), var)) return std::nullopt;
 
     const std::string u_var = "_u_subst";
 
@@ -1012,7 +1012,7 @@ std::optional<SubstitutionResult> detect_substitution(
         auto substituted_expr = lamina::detail::make_expression_ptr(substituted_node);
         substituted_expr = substituted_expr->simplify();
 
-        if (!depends_on_var(lamina::detail::node(substituted_expr), var)) {
+        if (!expression_depends_on_variable(lamina::detail::node(substituted_expr), var)) {
 
             auto poly = symbolic_to_poly<SymbolicPolyCoeff>(substituted_expr, u_var);
             if (!poly.is_zero() && poly.degree() >= 2) {
@@ -1026,7 +1026,7 @@ std::optional<SubstitutionResult> detect_substitution(
         auto rewritten_expr = lamina::detail::make_expression_ptr(rewritten_node);
         rewritten_expr = rewritten_expr->simplify();
 
-        if (!depends_on_var(lamina::detail::node(rewritten_expr), var)) {
+        if (!expression_depends_on_variable(lamina::detail::node(rewritten_expr), var)) {
 
             auto poly = symbolic_to_poly<SymbolicPolyCoeff>(rewritten_expr, u_var);
             if (!poly.is_zero() && poly.degree() >= 2) {

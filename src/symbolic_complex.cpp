@@ -206,18 +206,18 @@ std::shared_ptr<SymbolicExpr> complex_abs(const ComplexSymbolic& z) {
     auto checked = complex_abs_checked(z);
     return checked ? checked.value() : nullptr;
 }
-ComplexExprResult complex_abs_checked(const ComplexSymbolic& z, ComputationContext& context) {
+ExpressionResult complex_abs_checked(const ComplexSymbolic& z, ComputationContext& context) {
     auto vz = validate_complex_symbolic(z, "z", context, kComplexAbsOperation);
-    if (!vz) return ComplexExprResult::failure(vz.error());
+    if (!vz) return ExpressionResult::failure(vz.error());
     auto budget = context.consume_steps(8, kComplexAbsOperation);
-    if (!budget) return ComplexExprResult::failure(budget.error());
+    if (!budget) return ExpressionResult::failure(budget.error());
     return checked_construct<std::shared_ptr<SymbolicExpr>>([&]() {
         return SymbolicExpr::sqrt(SymbolicExpr::add(
             SymbolicExpr::power(z.real, SymbolicExpr::number(2)),
             SymbolicExpr::power(z.imag, SymbolicExpr::number(2))));
     }, kComplexAbsOperation);
 }
-ComplexExprResult complex_abs_checked(const ComplexSymbolic& z) {
+ExpressionResult complex_abs_checked(const ComplexSymbolic& z) {
     ComputationContext context;
     return complex_abs_checked(z, context);
 }
@@ -226,16 +226,16 @@ std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z) {
     auto checked = complex_arg_checked(z);
     return checked ? checked.value() : nullptr;
 }
-ComplexExprResult complex_arg_checked(const ComplexSymbolic& z, ComputationContext& context) {
+ExpressionResult complex_arg_checked(const ComplexSymbolic& z, ComputationContext& context) {
     auto vz = validate_complex_symbolic(z, "z", context, kComplexArgOperation);
-    if (!vz) return ComplexExprResult::failure(vz.error());
+    if (!vz) return ExpressionResult::failure(vz.error());
     auto budget = context.consume_steps(4, kComplexArgOperation);
-    if (!budget) return ComplexExprResult::failure(budget.error());
+    if (!budget) return ExpressionResult::failure(budget.error());
     return checked_construct<std::shared_ptr<SymbolicExpr>>([&]() {
         return SymbolicExpr::atan2(z.imag, z.real);
     }, kComplexArgOperation);
 }
-ComplexExprResult complex_arg_checked(const ComplexSymbolic& z) {
+ExpressionResult complex_arg_checked(const ComplexSymbolic& z) {
     ComputationContext context;
     return complex_arg_checked(z, context);
 }
