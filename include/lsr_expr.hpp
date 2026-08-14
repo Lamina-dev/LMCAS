@@ -9,6 +9,8 @@
 #include "numeric_evaluation.hpp"
 #include "rational.hpp"
 #include "solve_strategies.hpp"
+#include "quantity.hpp"
+#include "symbolic_set.hpp"
 #include "symbolic.hpp"
 
 namespace lamina::lsr {
@@ -72,6 +74,7 @@ public:
     bool empty() const noexcept { return elements_.empty(); }
     std::size_t size() const noexcept { return elements_.size(); }
     const std::vector<ExprPtr>& elements() const noexcept { return elements_; }
+    const ExprPtr& expression() const noexcept { return expression_; }
 
     bool contains(const SymbolicExpr& expression) const;
     bool subset_of(const ExprSet& other) const;
@@ -82,9 +85,10 @@ public:
     ExprSet symmetric_difference(const ExprSet& other) const;
 
 private:
-    explicit ExprSet(std::vector<ExprPtr> elements);
+    ExprSet(std::vector<ExprPtr> elements, ExprPtr expression);
 
     std::vector<ExprPtr> elements_;
+    ExprPtr expression_;
 };
 
 using ExprSetResult = Result<ExprSet>;
@@ -138,6 +142,23 @@ LAMINA_API ExprResult logical_or(const ExprPtr& lhs, const ExprPtr& rhs);
 LAMINA_API ExprResult logical_not(const ExprPtr& expression);
 LAMINA_API ExprResult membership(const ExprPtr& element,
                                  const ExprPtr& set, bool negated = false);
+LAMINA_API ExprResult with_unit(const ExprPtr& value,
+                                const std::string& unit,
+                                ComputationContext& context);
+LAMINA_API ExprResult convert_to_unit(const ExprPtr& quantity,
+                                      const std::string& unit,
+                                      ComputationContext& context);
+LAMINA_API ExprResult strip_to_base_value(const ExprPtr& quantity,
+                                          ComputationContext& context);
+LAMINA_API ExprResult strip_to_display_value(const ExprPtr& quantity,
+                                             ComputationContext& context);
+LAMINA_API ExprResult finite_set(std::vector<ExprPtr> elements,
+                                 ComputationContext& context);
+LAMINA_API ExprResult interval(const ExprPtr& lower, const ExprPtr& upper,
+                               bool lower_closed, bool upper_closed,
+                               ComputationContext& context);
+LAMINA_API ExprResult member(const ExprPtr& element, const ExprPtr& set,
+                             ComputationContext& context);
 LAMINA_API ExprResult add(const ExprPtr& lhs,
                           const ExprPtr& rhs,
                           ComputationContext& context);
@@ -345,5 +366,14 @@ LAMINA_API Result<bool> equivalent_core(const SymbolicExpr& lhs,
                                         const SymbolicExpr& rhs,
                                         ComputationContext& context,
                                         const EqvOptions& options);
+
+LAMINA_API Result<bool> equivalent(const SymbolicExpr& lhs,
+                                   const SymbolicExpr& rhs,
+                                   ComputationContext& context);
+
+LAMINA_API Result<bool> equivalent(const SymbolicExpr& lhs,
+                                   const SymbolicExpr& rhs,
+                                   ComputationContext& context,
+                                   const EqvOptions& options);
 
 } // namespace lamina::lsr

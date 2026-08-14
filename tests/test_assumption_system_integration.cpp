@@ -99,8 +99,14 @@ static void test_integrator_positive_simplifies_abs() {
 
     // Integrate with assumption context
     Integrator integrator;
-    integrator.set_assumption_context(&ctx);
-    auto result = integrator.integrate(integrand, "x");
+    ComputationContext integration_context;
+    auto set_integration_assumptions = integration_context.set_assumptions(
+        std::make_shared<AssumptionContext>(ctx));
+    EXPECT_TRUE(set_integration_assumptions.has_value(),
+                "integration assumptions attach to context");
+    auto integrated = integrator.integrate_checked(integrand, "x", integration_context);
+    EXPECT_TRUE(integrated.has_value(), "context-aware integration succeeds");
+    auto result = integrated.value();
 
     std::string result_str = result.to_string();
     std::cout << "  Integration of |x| with x Positive: " << result_str << std::endl;
@@ -277,11 +283,10 @@ static void test_matcher_assumption_condition_matches() {
     // Use RewriteEngine with assumption context
     RewriteEngine engine;
     engine.add_rule(rule);
-    engine.set_assumption_context(&ctx);
 
     // The rule should match because x is Positive in the context
     MatchMap bindings;
-    bool matched = Matcher::match(pattern, target, wildcards, bindings, &ctx);
+    bool matched = Matcher::match(pattern, target, wildcards, bindings);
 
     EXPECT_TRUE(matched, "Matcher matches pattern against target");
 
@@ -312,7 +317,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
     auto target = lamina::detail::expression_from_node(make_var("x"));
 
     MatchMap bindings;
-    bool matched = Matcher::match(pattern, target, wildcards, bindings, nullptr);
+    bool matched = Matcher::match(pattern, target, wildcards, bindings);
 
     EXPECT_TRUE(matched, "Matcher still matches structurally without context");
 
@@ -346,11 +351,16 @@ static void test_matcher_rewrite_engine_with_context() {
 
     RewriteEngine engine;
     engine.add_rule(rule);
-    engine.set_assumption_context(&ctx);
+    ComputationContext computation_context;
+    auto assumptions = std::make_shared<AssumptionContext>(ctx);
+    auto set_assumptions = computation_context.set_assumptions(assumptions);
+    EXPECT_TRUE(set_assumptions.has_value(), "rewrite assumptions attach to context");
 
     // Apply to abs(x)
     auto input = lamina::detail::expression_from_node(make_abs(make_var("x")));
-    auto result = engine.apply(input);
+    auto checked_result = engine.apply_checked(input, computation_context);
+    EXPECT_TRUE(checked_result.has_value(), "context-aware rewrite succeeds");
+    auto result = checked_result.value();
 
     std::string result_str = result.to_string();
     std::cout << "  RewriteEngine abs(x) with x Positive: " << result_str << std::endl;
@@ -371,8 +381,11 @@ static void test_integrator_nullptr_identical() {
     auto result1 = integrator1.integrate(integrand, "x");
 
     Integrator integrator2;
-    integrator2.set_assumption_context(nullptr);
-    auto result2 = integrator2.integrate(integrand, "x");
+    ComputationContext integration_context2;
+    auto result2_checked = integrator2.integrate_checked(
+        integrand, "x", integration_context2);
+    EXPECT_TRUE(result2_checked.has_value(), "integration without assumptions succeeds");
+    auto result2 = result2_checked.value();
 
     std::string s1 = result1.to_string();
     std::string s2 = result2.to_string();
@@ -407,7 +420,7 @@ static void test_matcher_nullptr_identical() {
     bool matched1 = Matcher::match(pattern, target, wildcards, bindings1);
 
     MatchMap bindings2;
-    bool matched2 = Matcher::match(pattern, target, wildcards, bindings2, nullptr);
+    bool matched2 = Matcher::match(pattern, target, wildcards, bindings2);
 
     EXPECT_TRUE(matched1 == matched2,
                 "Matcher::match with default and nullptr produce same match result");

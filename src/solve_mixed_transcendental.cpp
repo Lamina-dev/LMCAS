@@ -4,7 +4,7 @@
  */
 #include "solve_mixed_transcendental.hpp"
 #include "poly_utils.hpp"
-#include "poly_utils_internal.hpp"
+#include "internal/expression_analysis.hpp"
 #include "solve_polynomial.hpp"
 #include "solve_transcendental.hpp"
 #include "symbolic_ast.hpp"
@@ -75,7 +75,7 @@ bool contains_transcendental_of_var(
             if (!found) n.lower_bound()->accept(*this);
             if (!found) n.upper_bound()->accept(*this);
         }
-        void visit(const ProductNode_Op& n) override {
+        void visit(const ProductNode& n) override {
             n.body()->accept(*this);
             if (!found) n.lower_bound()->accept(*this);
             if (!found) n.upper_bound()->accept(*this);
@@ -95,6 +95,10 @@ bool contains_transcendental_of_var(
             n.real()->accept(*this);
             if (!found) n.imag()->accept(*this);
         }
+        void visit(const FiniteSetNode& n) override { for (const auto& e : n.elements()) { if (found) return; e->accept(*this); } }
+        void visit(const IntervalNode& n) override { n.lower()->accept(*this); if (!found) n.upper()->accept(*this); }
+        void visit(const MembershipNode& n) override { n.element()->accept(*this); if (!found) n.set()->accept(*this); }
+        void visit(const QuantityNode& n) override { n.value()->accept(*this); }
 
         void visit(const AddNode& n) override {
             for (auto& op : n.operands()) {
@@ -122,7 +126,7 @@ bool contains_transcendental_of_var(
             if (is_transcendental_func(n.type())) {
                 /// 检查参数是否依赖目标变量
                 for (auto& arg : n.arguments()) {
-                    if (depends_on_var(arg, target_var)) {
+                    if (expression_depends_on_variable(arg, target_var)) {
                         found = true;
                         return;
                     }
@@ -155,7 +159,7 @@ bool contains_transcendental_of_var(
 static int degree_in_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     if (!node) return 0;
 
-    if (!depends_on_var(node, var)) return 0;
+    if (!expression_depends_on_variable(node, var)) return 0;
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
         return (v->name() == var) ? 1 : 0;
@@ -226,7 +230,7 @@ bool is_polynomial_after_substitution(
     const auto& root = lamina::detail::node(sub_result.poly_expr);
 
     for (const auto& m : sub_result.mappings) {
-        if (depends_on_var(root, m.indeterminate)) {
+        if (expression_depends_on_variable(root, m.indeterminate)) {
             int deg = degree_in_var(root, m.indeterminate);
             if (deg < 0) return false;
         }
@@ -277,7 +281,7 @@ static lmmc_real_t extract_linear_coefficient(
     const std::shared_ptr<const SymbolicNode>& node,
     const std::string& var)
 {
-    if (!node || !depends_on_var(node, var)) return 0.0;
+    if (!node || !expression_depends_on_variable(node, var)) return 0.0;
 
     /// 模式 1: 变量本身 → k = 1
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
@@ -314,7 +318,7 @@ static lmmc_real_t extract_linear_coefficient(
         bool found_var_term = false;
 
         for (const auto& op : add->operands()) {
-            if (!depends_on_var(op, var)) {
+            if (!expression_depends_on_variable(op, var)) {
                 /// 常数项，跳过
                 continue;
             }
@@ -387,7 +391,7 @@ struct PeriodicCollector : public lamina::detail::SymbolicVisitor {
         n.lower_bound()->accept(*this);
         n.upper_bound()->accept(*this);
     }
-    void visit(const ProductNode_Op& n) override {
+    void visit(const ProductNode& n) override {
         n.body()->accept(*this);
         n.lower_bound()->accept(*this);
         n.upper_bound()->accept(*this);
@@ -407,6 +411,10 @@ struct PeriodicCollector : public lamina::detail::SymbolicVisitor {
         n.real()->accept(*this);
         n.imag()->accept(*this);
     }
+    void visit(const FiniteSetNode& n) override { for (const auto& e : n.elements()) e->accept(*this); }
+    void visit(const IntervalNode& n) override { n.lower()->accept(*this); n.upper()->accept(*this); }
+    void visit(const MembershipNode& n) override { n.element()->accept(*this); n.set()->accept(*this); }
+    void visit(const QuantityNode& n) override { n.value()->accept(*this); }
 
     void visit(const AddNode& n) override {
         for (auto& op : n.operands()) op->accept(*this);
@@ -424,7 +432,7 @@ struct PeriodicCollector : public lamina::detail::SymbolicVisitor {
     void visit(const FunctionNode& n) override {
         if (is_periodic_func(n.type())) {
             /// 检查参数是否依赖目标变量
-            if (!n.arguments().empty() && depends_on_var(n.arguments()[0], target_var)) {
+            if (!n.arguments().empty() && expression_depends_on_variable(n.arguments()[0], target_var)) {
                 found_periodic = true;
 
                 lmmc_real_t k = extract_linear_coefficient(n.arguments()[0], target_var);
@@ -1231,7 +1239,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
 {
     try {
         /// 1. 早期退出：表达式不依赖变量
-        if (!expr || !lamina::detail::node(expr) || !depends_on_var(lamina::detail::node(expr), var)) {
+        if (!expr || !lamina::detail::node(expr) || !expression_depends_on_variable(lamina::detail::node(expr), var)) {
             return {};
         }
 
@@ -1263,7 +1271,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                 if (!factor || !lamina::detail::node(factor)) continue;
 
                 /// 跳过不依赖变量的因子（常数因子）
-                if (!depends_on_var(lamina::detail::node(factor), var)) continue;
+                if (!expression_depends_on_variable(lamina::detail::node(factor), var)) continue;
 
                 /// (a) 尝试转换为多项式
                 bool solved_as_poly = false;

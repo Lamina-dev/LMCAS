@@ -1,5 +1,7 @@
 #include "polynomial.hpp"
 #include "bigint.hpp"
+#include "poly_utils.hpp"
+#include "symbolic.hpp"
 #include "test_common.hpp"
 #include <iostream>
 #include <vector>
@@ -75,9 +77,98 @@ void test_gcd_primitive() {
 
 }
 
+void test_symbolic_polynomial_gcd() {
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto one = SymbolicExpr::number(1);
+    auto common = SymbolicExpr::add(x, y);
+    auto lhs = SymbolicExpr::multiply(
+        common, SymbolicExpr::add(x, one))->expand();
+    auto rhs = SymbolicExpr::multiply(
+        common, SymbolicExpr::add(y, one))->expand();
+
+    ComputationContext context;
+    auto result = symbolic_polynomial_gcd(*lhs, *rhs, context);
+    EXPECT_TRUE(result.has_value(),
+                "symbolic GCD accepts exact multivariate polynomials");
+    if (result) {
+        auto difference = SymbolicExpr::add(
+            result.value(), SymbolicExpr::multiply(common, SymbolicExpr::number(-1)));
+        EXPECT_TRUE(difference->expand()->simplify()->is_zero(),
+                    "multivariate symbolic GCD recovers x + y");
+    }
+
+    auto quadratic_common = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::add(SymbolicExpr::multiply(x, y),
+                          SymbolicExpr::power(y, SymbolicExpr::number(2))));
+    auto harder_lhs = SymbolicExpr::multiply(
+        quadratic_common, SymbolicExpr::add(x, SymbolicExpr::number(2)))->expand();
+    auto harder_rhs = SymbolicExpr::multiply(
+        quadratic_common, SymbolicExpr::add(y, SymbolicExpr::number(3)))->expand();
+    ComputationContext harder_context;
+    auto harder_result = symbolic_polynomial_gcd(
+        *harder_lhs, *harder_rhs, harder_context);
+    EXPECT_TRUE(harder_result.has_value(),
+                "symbolic GCD recovers a non-linear multivariate factor");
+    if (harder_result) {
+        auto difference = SymbolicExpr::add(
+            harder_result.value(),
+            SymbolicExpr::multiply(quadratic_common, SymbolicExpr::number(-1)));
+        EXPECT_TRUE(difference->expand()->simplify()->is_zero(),
+                    "non-linear multivariate symbolic GCD is maximal");
+    }
+
+    auto half = SymbolicExpr::number(Rational(1, 2));
+    auto rational_common = SymbolicExpr::add(x, half);
+    auto rational_lhs = SymbolicExpr::multiply(
+        rational_common, SymbolicExpr::add(x, SymbolicExpr::number(2)));
+    auto rational_rhs = SymbolicExpr::multiply(
+        rational_common, SymbolicExpr::add(x, SymbolicExpr::number(3)));
+    ComputationContext rational_context;
+    auto rational_result = symbolic_polynomial_gcd(
+        *rational_lhs, *rational_rhs, rational_context);
+    EXPECT_TRUE(rational_result.has_value(),
+                "symbolic GCD accepts exact rational coefficients");
+    if (rational_result) {
+        auto difference = SymbolicExpr::add(
+            rational_result.value(),
+            SymbolicExpr::multiply(rational_common, SymbolicExpr::number(-1)));
+        EXPECT_TRUE(difference->expand()->simplify()->is_zero(),
+                    "rational symbolic GCD is monic");
+    }
+
+    auto sine = SymbolicExpr::sin(x);
+    ComputationContext unsupported_context;
+    auto unsupported = symbolic_polynomial_gcd(*sine, *lhs, unsupported_context);
+    EXPECT_TRUE(!unsupported &&
+                    unsupported.error().code == CasErrc::UnsupportedExpression,
+                "symbolic GCD rejects non-polynomial expressions");
+    EXPECT_TRUE(SymbolicExpr::poly_gcd(sine, lhs) == nullptr,
+                "legacy symbolic GCD does not report unsupported input as one");
+
+    auto approximate = SymbolicExpr::add(
+        x, SymbolicExpr::number(static_cast<lmmc_real_t>(0.5)));
+    ComputationContext approximate_context;
+    auto approximate_result = symbolic_polynomial_gcd(
+        *approximate, *lhs, approximate_context);
+    EXPECT_TRUE(!approximate_result &&
+                    approximate_result.error().code ==
+                        CasErrc::UnsupportedExpression,
+                "symbolic GCD rejects approximate coefficients");
+
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext limited_context(limits);
+    auto limited = symbolic_polynomial_gcd(*lhs, *rhs, limited_context);
+    EXPECT_TRUE(!limited && limited.error().code == CasErrc::ResourceLimit,
+                "symbolic GCD observes the computation step budget");
+}
+
 int main() {
     try {
         test_gcd_primitive();
+        test_symbolic_polynomial_gcd();
     } catch (const std::exception& e) {
         EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
     }

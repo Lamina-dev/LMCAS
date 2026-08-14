@@ -11,7 +11,6 @@
 #include "assumption.hpp"
 #include "property_store.hpp"
 #include "relation_store.hpp"
-#include "query_interface.hpp"
 #include "result.hpp"
 #include <vector>
 #include <string>
@@ -96,27 +95,25 @@ public:
     /// Get interval bounds for a symbol (read-through).
     std::optional<Interval> get_bounds(const std::string& symbol) const;
 
-    // --- Convenience declaration API ---
-
     /// Declare domain for a variable in the current scope.
     /// Throws std::invalid_argument if variable name is empty.
     void assume_domain(const std::string& variable, Domain domain);
 
-    /// Checked domain declaration for migration away from exception-only APIs.
+    /** @brief Declares a domain and reports invalid or contradictory input. */
     AssumptionVoidResult assume_domain_checked(const std::string& variable, Domain domain);
 
     /// Declare sign for a variable in the current scope.
     /// Throws std::invalid_argument if variable name is empty.
     void assume_sign(const std::string& variable, Sign sign);
 
-    /// Checked sign declaration for migration away from exception-only APIs.
+    /** @brief Declares a sign and reports invalid or contradictory input. */
     AssumptionVoidResult assume_sign_checked(const std::string& variable, Sign sign);
 
     /// Store a relational constraint. The expression's root must be a RelationalNode.
     /// Throws std::invalid_argument if expression is null/empty or root is not RelationalNode.
     void assume(const SymbolicExpr& relation);
 
-    /// Checked relation declaration for migration away from exception-only APIs.
+    /** @brief Stores a relation and reports invalid or contradictory input. */
     AssumptionVoidResult assume_checked(const SymbolicExpr& relation);
 
     /**
@@ -133,7 +130,7 @@ public:
      */
     void assume_conditional(const SymbolicExpr& condition, const SymbolicExpr& conclusion);
 
-    /// Checked conditional declaration for migration away from exception-only APIs.
+    /** @brief Stores a guarded conclusion and reports invalid input. */
     AssumptionVoidResult assume_conditional_checked(
         const SymbolicExpr& condition,
         const SymbolicExpr& conclusion);
@@ -168,42 +165,42 @@ public:
      */
     Tribool evaluate_condition(const SymbolicExpr& condition) const;
 
-    // --- Convenience query API (delegates to QueryInterface) ---
+    // --- Expression property queries ---
 
     /// Query whether the expression is positive (> 0).
     Tribool is_positive(const SymbolicExpr& expr) const;
 
-    /// Checked positive query for migration away from exception-only APIs.
+    /** @brief Queries positivity and propagates computation failures. */
     AssumptionTriboolResult is_positive_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is negative (< 0).
     Tribool is_negative(const SymbolicExpr& expr) const;
 
-    /// Checked negative query for migration away from exception-only APIs.
+    /** @brief Queries negativity and propagates computation failures. */
     AssumptionTriboolResult is_negative_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is non-negative (>= 0).
     Tribool is_nonnegative(const SymbolicExpr& expr) const;
 
-    /// Checked non-negative query for migration away from exception-only APIs.
+    /** @brief Queries non-negativity and propagates computation failures. */
     AssumptionTriboolResult is_nonnegative_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is real.
     Tribool is_real(const SymbolicExpr& expr) const;
 
-    /// Checked real-domain query for migration away from exception-only APIs.
+    /** @brief Queries real-domain membership and propagates computation failures. */
     AssumptionTriboolResult is_real_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is an integer.
     Tribool is_integer(const SymbolicExpr& expr) const;
 
-    /// Checked integer-domain query for migration away from exception-only APIs.
+    /** @brief Queries integer-domain membership and propagates computation failures. */
     AssumptionTriboolResult is_integer_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is non-zero (!= 0).
     Tribool is_nonzero(const SymbolicExpr& expr) const;
 
-    /// Checked non-zero query for migration away from exception-only APIs.
+    /** @brief Queries nonzero status and propagates computation failures. */
     AssumptionTriboolResult is_nonzero_checked(const SymbolicExpr& expr) const;
 
     /**
@@ -241,7 +238,7 @@ public:
      */
     Tribool is_continuous(const std::string& symbol, const Interval& interval) const;
 
-    /// Checked continuity query for migration away from bare Tribool APIs.
+    /** @brief Queries interval continuity and propagates computation failures. */
     AssumptionTriboolResult is_continuous_checked(
         const std::string& symbol,
         const Interval& interval) const;
@@ -254,7 +251,7 @@ public:
      */
     Tribool is_differentiable(const std::string& symbol, const Interval& interval) const;
 
-    /// Checked differentiability query for migration away from bare Tribool APIs.
+    /** @brief Queries interval differentiability and propagates computation failures. */
     AssumptionTriboolResult is_differentiable_checked(
         const std::string& symbol,
         const Interval& interval) const;
@@ -266,7 +263,7 @@ public:
      */
     Tribool is_positive_definite(const std::string& symbol) const;
 
-    /// Checked positive-definite query for migration away from bare Tribool APIs.
+    /** @brief Queries positive definiteness and propagates computation failures. */
     AssumptionTriboolResult is_positive_definite_checked(const std::string& symbol) const;
 
     /**
@@ -276,7 +273,7 @@ public:
      */
     Tribool is_positive_semidefinite(const std::string& symbol) const;
 
-    /// Checked positive-semidefinite query for migration away from bare Tribool APIs.
+    /** @brief Queries positive semidefiniteness and propagates computation failures. */
     AssumptionTriboolResult is_positive_semidefinite_checked(const std::string& symbol) const;
 
     /**
@@ -316,8 +313,6 @@ public:
     /// Incremented on every state mutation (push, pop, assume_domain, assume_sign, assume).
     uint64_t cache_generation() const { return cache_generation_; }
 };
-
-// with_assumptions: scoped assumption application with RAII safety
 
 /**
  * @brief Declaration of an assumption to apply within a with_assumptions block.
@@ -456,10 +451,10 @@ auto with_assumptions(AssumptionContext& ctx,
 }
 
 /**
- * @brief Checked scoped assumption application for non-void callables.
+ * @brief Applies assumptions for the duration of a non-void callable.
  *
- * Applies declarations with checked APIs and returns CasError on declaration or
- * callable failure. The temporary scope is always popped before returning.
+ * Returns `CasError` on declaration or callable failure. The scope is always
+ * removed before returning.
  */
 template<typename F>
 auto with_assumptions_checked(AssumptionContext& ctx,
@@ -492,7 +487,7 @@ auto with_assumptions_checked(AssumptionContext& ctx,
 }
 
 /**
- * @brief Checked scoped assumption application for void callables.
+ * @brief Applies assumptions for the duration of a void callable.
  */
 template<typename F>
 auto with_assumptions_checked(AssumptionContext& ctx,

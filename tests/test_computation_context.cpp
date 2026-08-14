@@ -64,6 +64,34 @@ int main() {
     EXPECT_TRUE(diagnostic_context.diagnostics().size() == 1,
                 "failed diagnostic insertion does not mutate collection");
 
+    TEST_CASE("DiagnosticEngine is the only diagnostic dispatch point");
+    std::size_t consumed = 0;
+    diagnostic_context.set_diagnostic_consumer(
+        [&](const Diagnostic& diagnostic) {
+            if (diagnostic.operation == "test_consumer") ++consumed;
+        });
+    ResourceLimits consumer_limits;
+    consumer_limits.max_diagnostics = 2;
+    ComputationContext consumer_context(consumer_limits);
+    consumer_context.set_diagnostic_consumer(
+        [&](const Diagnostic&) { ++consumed; });
+    auto emitted = consumer_context.add_diagnostic(
+        {DiagnosticSeverity::Info, "test_consumer", "event"});
+    EXPECT_TRUE(emitted.has_value() && consumed == 1,
+                "context diagnostics are dispatched by DiagnosticEngine");
+
+    TEST_CASE("Diagnostic consumer failures preserve engine state");
+    ComputationContext failing_consumer_context;
+    failing_consumer_context.set_diagnostic_consumer(
+        [](const Diagnostic&) { throw std::runtime_error("consumer failure"); });
+    auto consumer_failure = failing_consumer_context.add_diagnostic(
+        {DiagnosticSeverity::Error, "test_consumer_failure", "event"});
+    EXPECT_TRUE(!consumer_failure &&
+                    consumer_failure.error().code == CasErrc::InternalInvariant,
+                "consumer exceptions become CasError values");
+    EXPECT_TRUE(failing_consumer_context.diagnostics().empty(),
+                "failed dispatch does not retain a partial diagnostic");
+
     TEST_CASE("Cross-thread context use is rejected");
     ComputationContext thread_context;
     CasErrc thread_error = CasErrc::Cancelled;

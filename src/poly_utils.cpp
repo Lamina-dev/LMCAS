@@ -1,5 +1,5 @@
 #include "poly_utils.hpp"
-#include "poly_utils_internal.hpp"
+#include "internal/expression_analysis.hpp"
 #include "symbolic_ast.hpp"
 
 #include <algorithm>
@@ -214,109 +214,9 @@ Rational extract_coeff_value<Rational>(
     return Rational(0);
 }
 
-bool depends_on_var(
-    const std::shared_ptr<const SymbolicNode>& node,
-    const std::string& variable) {
-    if (!node) return false;
-
-    struct DependencyVisitor final : lamina::detail::SymbolicVisitor {
-        std::string variable;
-        bool found = false;
-
-        void visit(const NumberNode&) override {}
-        void visit(const VariableNode& value) override {
-            found = value.name() == variable;
-        }
-        void visit(const AddNode& value) override {
-            visit_children(value.operands());
-        }
-        void visit(const MultiplyNode& value) override {
-            visit_children(value.operands());
-        }
-        void visit(const PowerNode& value) override {
-            value.base()->accept(*this);
-            if (!found) value.exponent()->accept(*this);
-        }
-        void visit(const FunctionNode& value) override {
-            visit_children(value.arguments());
-        }
-        void visit(const MatrixNode& value) override {
-            if (std::holds_alternative<MatrixNode::DenseStorage>(value.storage())) {
-                visit_children(std::get<MatrixNode::DenseStorage>(value.storage()));
-                return;
-            }
-            for (const auto& entry :
-                 std::get<MatrixNode::SparseStorage>(value.storage())) {
-                entry.second->accept(*this);
-                if (found) return;
-            }
-        }
-        void visit(const RelationalNode& value) override {
-            value.left()->accept(*this);
-            if (!found) value.right()->accept(*this);
-        }
-        void visit(const LogicalNode& value) override {
-            value.left()->accept(*this);
-            if (!found) value.right()->accept(*this);
-        }
-        void visit(const PiecewiseNode& value) override {
-            for (const auto& branch : value.branches()) {
-                branch.expression->accept(*this);
-                if (found) return;
-                branch.condition->accept(*this);
-                if (found) return;
-            }
-            if (value.default_expr()) value.default_expr()->accept(*this);
-        }
-        void visit(const SummationNode& value) override {
-            value.lower_bound()->accept(*this);
-            if (found) return;
-            value.upper_bound()->accept(*this);
-            if (found || value.index_var() == variable) return;
-            value.body()->accept(*this);
-        }
-        void visit(const ProductNode_Op& value) override {
-            value.lower_bound()->accept(*this);
-            if (found) return;
-            value.upper_bound()->accept(*this);
-            if (found || value.index_var() == variable) return;
-            value.body()->accept(*this);
-        }
-        void visit(const TransformNode& value) override {
-            if (value.source_var() != variable) value.body()->accept(*this);
-            if (!found && value.target_var() == variable) found = true;
-        }
-        void visit(const QuantifierNode& value) override {
-            value.domain()->accept(*this);
-            if (found || value.bound_var() == variable) return;
-            value.predicate()->accept(*this);
-        }
-        void visit(const SetBuilderNode& value) override {
-            value.domain()->accept(*this);
-            if (found || value.element_var() == variable) return;
-            value.predicate()->accept(*this);
-        }
-        void visit(const ComplexNode& value) override {
-            value.real()->accept(*this);
-            if (!found) value.imag()->accept(*this);
-        }
-
-        void visit_children(
-            const std::vector<std::shared_ptr<const SymbolicNode>>& children) {
-            for (const auto& child : children) {
-                child->accept(*this);
-                if (found) return;
-            }
-        }
-    } visitor;
-
-    visitor.variable = variable;
-    node->accept(visitor);
-    return visitor.found;
-}
-
 bool contains(const SymbolicExpr& expression, const std::string& variable) {
-    return depends_on_var(lamina::detail::node(expression), variable);
+    return expression_depends_on_variable(
+        lamina::detail::node(expression), variable);
 }
 
 template <typename T>
@@ -325,7 +225,7 @@ Polynomial<T> symbolic_to_poly_recursive(
     const std::string& variable) {
     if (!node) return Polynomial<T>(variable);
 
-    if (!depends_on_var(node, variable)) {
+    if (!expression_depends_on_variable(node, variable)) {
         return Polynomial<T>({extract_coeff_value<T>(
             lamina::detail::make_expression_ptr(node))}, variable);
     }

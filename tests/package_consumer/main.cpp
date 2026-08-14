@@ -21,7 +21,7 @@ int main() {
     }
 
     lamina::ComputationContext context;
-    auto solved = lamina::solve_dispatch_checked(
+    auto solved = lamina::solve_equation(
         expr, "x", context, lamina::SolveOptions{});
     if (!solved || solved.value().kind() != lamina::SolutionSet::Kind::Finite ||
         solved.value().finite_solutions().size() != 1) {
@@ -420,6 +420,14 @@ int main() {
         std::cerr << "failed to expose LSR equivalence budget diagnostics\n";
         return 11;
     }
+    lamina::ComputationContext lsr_exhausted_eqv_context;
+    auto lsr_exhausted_eqv = lamina::lsr::equivalent(
+        *i_squared, *SymbolicExpr::number(-1), lsr_exhausted_eqv_context,
+        exhausted_eqv_options);
+    if (!lsr_exhausted_eqv || lsr_exhausted_eqv.value()) {
+        std::cerr << "failed to return false for exhausted LSR equivalence\n";
+        return 11;
+    }
     auto x_plus_zero = SymbolicExpr::add(x, SymbolicExpr::number(0));
     lamina::ComputationContext identity_eqv_context;
     auto identity_eqv =
@@ -474,6 +482,14 @@ int main() {
         trig_eqv_options);
     if (!trig_eqv || !trig_eqv.value()) {
         std::cerr << "failed to prove LSR Trig-Basic equivalence example\n";
+        return 11;
+    }
+    lamina::ComputationContext lsr_trig_eqv_context;
+    auto lsr_trig_eqv = lamina::lsr::equivalent(
+        *trig_identity, *SymbolicExpr::number(1), lsr_trig_eqv_context,
+        trig_eqv_options);
+    if (!lsr_trig_eqv || !lsr_trig_eqv.value()) {
+        std::cerr << "failed to prove LSR equivalent Trig-Basic example\n";
         return 11;
     }
     lamina::ComputationContext core_trig_eqv_context;
@@ -1465,6 +1481,7 @@ int main() {
     lmmc_mat_t scalar_div_mat = {0, 0, 0, nullptr, 0};
     lmmc_mat_t mat_pow_elem = {0, 0, 0, nullptr, 0};
     lmmc_mat_t mat_pow_scalar = {0, 0, 0, nullptr, 0};
+    lmmc_mat_t mat_pow_int = {0, 0, 0, nullptr, 0};
     lmmc_mat_t mat_scale = {0, 0, 0, nullptr, 0};
     lmmc_lsr_eig_table_t eig_table = {};
     lmmc_lsr_svd_table_t svd_table = {};
@@ -1658,6 +1675,14 @@ int main() {
         mat_pow_scalar.data[1] != 4.0 ||
         mat_pow_scalar.data[mat_pow_scalar.stride] != 9.0 ||
         mat_pow_scalar.data[mat_pow_scalar.stride + 1] != 16.0 ||
+        lmmc_lsr_linalg_mat_pow_int(&matrix, 2, &mat_pow_int) !=
+            LMMC_STATUS_OK ||
+        mat_pow_int.rows != 2 || mat_pow_int.cols != 2 ||
+        !mat_pow_int.data ||
+        mat_pow_int.data[0] != 7.0 ||
+        mat_pow_int.data[1] != 10.0 ||
+        mat_pow_int.data[mat_pow_int.stride] != 15.0 ||
+        mat_pow_int.data[mat_pow_int.stride + 1] != 22.0 ||
         lmmc_lsr_linalg_mat_compare_scalar(&matrix,
                                            LMMC_LSR_COMPARE_GE,
                                            3.0,
@@ -1734,6 +1759,7 @@ int main() {
         lmmc_mat_destroy(&scalar_div_mat);
         lmmc_mat_destroy(&mat_pow_elem);
         lmmc_mat_destroy(&mat_pow_scalar);
+        lmmc_mat_destroy(&mat_pow_int);
         lmmc_mat_destroy(&mat_scale);
         lmmc_lsr_eig_table_destroy(&eig_table);
         lmmc_lsr_svd_table_destroy(&svd_table);
@@ -1771,6 +1797,7 @@ int main() {
     lmmc_mat_destroy(&scalar_div_mat);
     lmmc_mat_destroy(&mat_pow_elem);
     lmmc_mat_destroy(&mat_pow_scalar);
+    lmmc_mat_destroy(&mat_pow_int);
     lmmc_mat_destroy(&mat_scale);
     lmmc_lsr_eig_table_destroy(&eig_table);
     lmmc_lsr_svd_table_destroy(&svd_table);

@@ -105,37 +105,31 @@ public:
     /// Query whether the expression is positive (> 0).
     Tribool query_positive(const SymbolicExpr& expr) const;
 
-    /// Checked positive query with explicit error propagation.
     QueryTriboolResult query_positive_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is negative (< 0).
     Tribool query_negative(const SymbolicExpr& expr) const;
 
-    /// Checked negative query with explicit error propagation.
     QueryTriboolResult query_negative_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is non-negative (>= 0).
     Tribool query_nonnegative(const SymbolicExpr& expr) const;
 
-    /// Checked non-negative query with explicit error propagation.
     QueryTriboolResult query_nonnegative_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is real.
     Tribool query_real(const SymbolicExpr& expr) const;
 
-    /// Checked real-domain query with explicit error propagation.
     QueryTriboolResult query_real_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is an integer.
     Tribool query_integer(const SymbolicExpr& expr) const;
 
-    /// Checked integer-domain query with explicit error propagation.
     QueryTriboolResult query_integer_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is non-zero (!= 0).
     Tribool query_nonzero(const SymbolicExpr& expr) const;
 
-    /// Checked non-zero query with explicit error propagation.
     QueryTriboolResult query_nonzero_checked(const SymbolicExpr& expr) const;
 
     /// @}
@@ -146,31 +140,26 @@ public:
     /// Query whether the expression is algebraic (root of a polynomial with rational coefficients).
     Tribool query_algebraic(const SymbolicExpr& expr) const;
 
-    /// Checked algebraic query with explicit error propagation.
     QueryTriboolResult query_algebraic_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is transcendental (real but not algebraic).
     Tribool query_transcendental(const SymbolicExpr& expr) const;
 
-    /// Checked transcendental query with explicit error propagation.
     QueryTriboolResult query_transcendental_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression has a finite value/limit.
     Tribool query_finite(const SymbolicExpr& expr) const;
 
-    /// Checked finite-value query with explicit error propagation.
     QueryTriboolResult query_finite_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression diverges.
     Tribool query_divergent(const SymbolicExpr& expr) const;
 
-    /// Checked divergent-value query with explicit error propagation.
     QueryTriboolResult query_divergent_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is periodic.
     Tribool query_periodic(const SymbolicExpr& expr) const;
 
-    /// Checked periodic query with explicit error propagation.
     QueryTriboolResult query_periodic_checked(const SymbolicExpr& expr) const;
 
     /**
@@ -180,19 +169,16 @@ public:
      */
     std::optional<SymbolicExpr> get_period(const SymbolicExpr& expr) const;
 
-    /// Checked period query with explicit error propagation.
     QueryPeriodResult get_period_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression (matrix symbol) is positive definite.
     Tribool query_positive_definite(const SymbolicExpr& expr) const;
 
-    /// Checked positive-definite query with explicit error propagation.
     QueryTriboolResult query_positive_definite_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression (matrix symbol) is positive semidefinite.
     Tribool query_positive_semidefinite(const SymbolicExpr& expr) const;
 
-    /// Checked positive-semidefinite query with explicit error propagation.
     QueryTriboolResult query_positive_semidefinite_checked(const SymbolicExpr& expr) const;
 
     /// @}
@@ -239,7 +225,6 @@ public:
      */
     std::vector<ConditionSet> query_conditions(const SymbolicExpr& expr, Sign target) const;
 
-    /// Checked condition query with explicit error propagation.
     QueryConditionSetsResult query_conditions_checked(const SymbolicExpr& expr, Sign target) const;
 
 private:

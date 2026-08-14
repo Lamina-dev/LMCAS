@@ -10,7 +10,7 @@
 
 void run_test(const std::string& name, const SymbolicExpr& expr, const std::string& var) {
     std::cout << "--------------------------------------------------------" << std::endl;
-    std::cout << "TEST: " << name << std::endl;
+    std::cout << "case: " << name << std::endl;
     std::cout << "Expr: " << expr.to_string() << std::endl;
 
     try {

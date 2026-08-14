@@ -314,50 +314,50 @@ std::optional<int> supported_laurent_integer_power(
 } // namespace
 
 /// Stubs for functions not yet fully implemented in this task
-SeriesExprResult convergence_radius_checked(
+ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var,
     ComputationContext& context)
 {
     const std::string operation = "convergence_radius";
     auto var_check = validate_series_variable(var, context, operation);
-    if (!var_check) return SeriesExprResult::failure(var_check.error());
+    if (!var_check) return ExpressionResult::failure(var_check.error());
     if (coefficients.empty()) {
-        return SeriesExprResult::failure(CasErrc::InvalidArgument,
+        return ExpressionResult::failure(CasErrc::InvalidArgument,
                                          "coefficient list cannot be empty",
                                          operation);
     }
     auto coeff_check = validate_power_series_coefficients(coefficients, operation, "series");
-    if (!coeff_check) return SeriesExprResult::failure(coeff_check.error());
+    if (!coeff_check) return ExpressionResult::failure(coeff_check.error());
     if (has_symbolic_nonzero_coefficient(coefficients)) {
-        return SeriesExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "convergence radius for symbolic coefficients is outside the current support domain",
             operation);
     }
     auto budget = context.consume_steps(coefficients.size() * 4 + 4, operation);
-    if (!budget) return SeriesExprResult::failure(budget.error());
+    if (!budget) return ExpressionResult::failure(budget.error());
     try {
         auto radius = convergence_radius(coefficients, var);
         if (!radius || !lamina::detail::node(radius)) {
-            return SeriesExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "convergence radius could not be constructed in the supported domain",
                 operation);
         }
-        return SeriesExprResult::success(radius);
+        return ExpressionResult::success(radius);
     } catch (const std::bad_alloc&) {
-        return SeriesExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                          "allocation failed while calculating convergence radius",
                                          operation);
     } catch (const std::exception& ex) {
-        return SeriesExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                          ex.what(),
                                          operation);
     }
 }
 
-SeriesExprResult convergence_radius_checked(
+ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var)
 {
@@ -699,7 +699,7 @@ std::shared_ptr<SymbolicExpr> laurent_series(
     return full.series;
 }
 
-SeriesExprResult laurent_series_checked(
+ExpressionResult laurent_series_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -708,11 +708,11 @@ SeriesExprResult laurent_series_checked(
     ComputationContext& context)
 {
     auto full = laurent_series_full_checked(f, var, center, order_neg, order_pos, context);
-    if (!full) return SeriesExprResult::failure(full.error());
-    return SeriesExprResult::success(full.value().series);
+    if (!full) return ExpressionResult::failure(full.error());
+    return ExpressionResult::success(full.value().series);
 }
 
-SeriesExprResult laurent_series_checked(
+ExpressionResult laurent_series_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -941,7 +941,7 @@ std::shared_ptr<SymbolicExpr> symbolic_product(
             return result->simplify();
         }
     }
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<ProductNode_Op>(lamina::detail::node(body), index, lamina::detail::node(lower), lamina::detail::node(upper)));
+    return lamina::detail::make_expression_ptr(lamina::detail::make_node<ProductNode>(lamina::detail::node(body), index, lamina::detail::node(lower), lamina::detail::node(upper)));
 }
 
 

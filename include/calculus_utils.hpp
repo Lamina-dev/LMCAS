@@ -51,7 +51,6 @@ struct AsymptoteResult {
 };
 
 using AsymptoteAnalysisResult = Result<AsymptoteResult>;
-using SymbolicExprResult = Result<std::shared_ptr<SymbolicExpr>>;
 using SymbolicExprVectorResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
 /**
@@ -122,7 +121,7 @@ LAMINA_API std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> to
  *
  * Checked API 只在反函数候选唯一且 f'(x₀) 可构造、非零时成功。
  */
-LAMINA_API SymbolicExprResult inverse_derivative_checked(
+LAMINA_API ExpressionResult inverse_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point,
     ComputationContext& context);
@@ -130,14 +129,14 @@ LAMINA_API SymbolicExprResult inverse_derivative_checked(
 /**
  * @brief 使用默认计算上下文计算反函数导数，并显式报告失败语义。
  */
-LAMINA_API SymbolicExprResult inverse_derivative_checked(
+LAMINA_API ExpressionResult inverse_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point);
 
 /**
  * @brief 计算反函数导数 (f⁻¹)'(point) = 1 / f'(f⁻¹(point))。
  *
- * Legacy wrapper 先求解 f(x) = point 得到第一个 x₀，再计算
+ * The convenience overload 先求解 f(x) = point 得到第一个 x₀，再计算
  * 1/f'(x₀)。若 f'(x₀) = 0 则返回 nullptr。
  *
  * @param[in] f     函数表达式
@@ -169,7 +168,7 @@ LAMINA_API SymbolicExprVectorResult inverse_function_checked(
 /**
  * @brief 求解反函数 f⁻¹(y)，即求解方程 f(x) = y 关于 x 的所有解。
  *
- * Legacy wrapper 利用现有求解器将 f(var) - y = 0 求解，返回所有分支。
+ * The convenience overload 利用现有求解器将 f(var) - y = 0 求解，返回所有分支。
  *
  * @param[in] f   函数表达式
  * @param[in] var 变量名
@@ -187,14 +186,14 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inverse_function(
  * @param[in] var 自变量名称
  * @return 曲率的符号表达式
  */
-LAMINA_API SymbolicExprResult curvature_checked(
+LAMINA_API ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context);
 
 /**
  * @brief 使用默认计算上下文计算显式曲线曲率，并显式报告无效输入。
  */
-LAMINA_API SymbolicExprResult curvature_checked(
+LAMINA_API ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 LAMINA_API std::shared_ptr<SymbolicExpr> curvature(
@@ -207,7 +206,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> curvature(
  * @param[in] t 参数变量名称
  * @return 曲率的符号表达式
  */
-LAMINA_API SymbolicExprResult curvature_parametric_checked(
+LAMINA_API ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t,
     ComputationContext& context);
@@ -215,7 +214,7 @@ LAMINA_API SymbolicExprResult curvature_parametric_checked(
 /**
  * @brief 使用默认计算上下文计算参数曲线曲率，并显式报告无效输入和零速度。
  */
-LAMINA_API SymbolicExprResult curvature_parametric_checked(
+LAMINA_API ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t);
 
@@ -252,7 +251,7 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inflection_points(
  * Checked API 只接受可精确求值的符号定积分；超出支持域返回
  * `CasErrc::Inconclusive`。
  */
-LAMINA_API SymbolicExprResult surface_area_revolution_x_checked(
+LAMINA_API ExpressionResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context);
@@ -260,14 +259,14 @@ LAMINA_API SymbolicExprResult surface_area_revolution_x_checked(
 /**
  * @brief 使用默认计算上下文计算绕 x 轴旋转面积，并显式报告失败语义。
  */
-LAMINA_API SymbolicExprResult surface_area_revolution_x_checked(
+LAMINA_API ExpressionResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 
 /**
  * @brief 计算曲线 y = f(x) 绕 x 轴旋转所得旋转面的面积。
  *
- * Legacy wrapper 先尝试符号积分，若失败则回退到数值积分。
+ * The convenience overload 先尝试符号积分，若失败则回退到数值积分。
  *
  * @param[in] f 曲线函数表达式 f(x)
  * @param[in] var 自变量名称
@@ -286,7 +285,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> surface_area_revolution_x(
  * Checked API 只接受可精确求值的符号定积分；超出支持域返回
  * `CasErrc::Inconclusive`。
  */
-LAMINA_API SymbolicExprResult surface_area_revolution_y_checked(
+LAMINA_API ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context);
@@ -294,14 +293,14 @@ LAMINA_API SymbolicExprResult surface_area_revolution_y_checked(
 /**
  * @brief 使用默认计算上下文计算绕 y 轴旋转面积，并显式报告失败语义。
  */
-LAMINA_API SymbolicExprResult surface_area_revolution_y_checked(
+LAMINA_API ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 
 /**
  * @brief 计算曲线 y = f(x) 绕 y 轴旋转所得旋转面的面积。
  *
- * Legacy wrapper 先尝试符号积分，若失败则回退到数值积分。
+ * The convenience overload 先尝试符号积分，若失败则回退到数值积分。
  *
  * @param[in] f 曲线函数表达式 f(x)
  * @param[in] var 自变量名称

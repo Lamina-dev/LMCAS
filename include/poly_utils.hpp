@@ -20,7 +20,7 @@ namespace lamina {
  * @brief Convert a symbolic expression to a univariate polynomial.
  *
  * The stable API supports BigInt, Rational, and SymbolicPolyCoeff
- * coefficients. Expressions outside the legacy conversion domain produce the
+ * coefficients. Expressions outside the supported conversion domain produce the
  * zero polynomial; callers that require proof must use
  * recognize_rational_polynomial().
  */
@@ -41,6 +41,26 @@ LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
 
 using OptionalRationalPolynomial = std::optional<Polynomial<Rational>>;
 
+using SymbolicGcdResult = Result<std::shared_ptr<SymbolicExpr>>;
+
+/**
+ * Compute the monic GCD of two exact rational multivariate polynomials.
+ *
+ * The expressions may contain any number of symbolic variables, exact integer
+ * or rational coefficients, addition, multiplication, and nonnegative integer
+ * powers. Approximate numbers and non-polynomial nodes are rejected. A
+ * successful result is verified to divide both inputs exactly.
+ */
+LAMINA_API SymbolicGcdResult symbolic_polynomial_gcd(
+    const SymbolicExpr& lhs,
+    const SymbolicExpr& rhs,
+    ComputationContext& context);
+
+/** Return the positive coefficient content of an exact rational polynomial. */
+LAMINA_API Result<Rational> symbolic_polynomial_content(
+    const SymbolicExpr& expression,
+    ComputationContext& context);
+
 /**
  * @brief Prove that an expression is an exact univariate rational polynomial.
  *
@@ -53,7 +73,7 @@ LAMINA_API Result<OptionalRationalPolynomial> recognize_rational_polynomial(
     const std::string& variable,
     ComputationContext& context);
 
-/** @brief Symbolic expression coefficient for legacy polynomial algorithms. */
+/** @brief Symbolic expression coefficient for symbolic polynomial algorithms. */
 struct SymbolicPolyCoeff {
     std::shared_ptr<SymbolicExpr> val;
 

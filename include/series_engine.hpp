@@ -13,7 +13,6 @@
 
 namespace lamina {
 
-using SeriesExprResult = Result<std::shared_ptr<SymbolicExpr>>;
 using PowerSeriesResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
 
@@ -45,12 +44,12 @@ using ConvergenceInfoResult = Result<ConvergenceInfo>;
  * @param[in] var 级数变量名
  * @return 收敛半径表达式（可能为数值、∞ 或符号表达式）
  */
-LAMINA_API SeriesExprResult convergence_radius_checked(
+LAMINA_API ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var,
     ComputationContext& context);
 
-LAMINA_API SeriesExprResult convergence_radius_checked(
+LAMINA_API ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var);
 
@@ -190,7 +189,7 @@ using LaurentSeriesResult = Result<LaurentResult>;
  * @param[in] order_pos 正幂次最大阶数
  * @return 洛朗级数表达式
  */
-LAMINA_API SeriesExprResult laurent_series_checked(
+LAMINA_API ExpressionResult laurent_series_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -198,7 +197,7 @@ LAMINA_API SeriesExprResult laurent_series_checked(
     int order_pos,
     ComputationContext& context);
 
-LAMINA_API SeriesExprResult laurent_series_checked(
+LAMINA_API ExpressionResult laurent_series_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -275,7 +274,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_sum(
  * @brief 计算符号乘积 ∏_{k=lower}^{upper} body(k) 的闭合形式。
  *
  * 对望远镜乘积和阶乘/Pochhammer 符号使用已知公式。
- * 无法求得闭合形式时返回未求值的 ProductNode_Op。
+ * 无法求得闭合形式时返回未求值的 ProductNode。
  *
  * @param[in] body 通项表达式
  * @param[in] index 乘积指标变量名

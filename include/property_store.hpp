@@ -39,26 +39,26 @@ public:
     /// Declare domain for a symbol. Throws std::invalid_argument on contradiction.
     void declare_domain(const std::string& symbol, Domain domain);
 
-    /// Checked domain declaration for migration away from exception-only APIs.
+    /** @brief Declares a domain and reports contradictions. */
     PropertyStoreResult declare_domain_checked(const std::string& symbol, Domain domain);
 
     /// Declare sign for a symbol. Throws std::invalid_argument on contradiction.
     void declare_sign(const std::string& symbol, Sign sign);
 
-    /// Checked sign declaration for migration away from exception-only APIs.
+    /** @brief Declares a sign and reports contradictions. */
     PropertyStoreResult declare_sign_checked(const std::string& symbol, Sign sign);
 
     /// Declare parity for a symbol. Throws std::invalid_argument on contradiction.
     void declare_parity(const std::string& symbol, Parity parity);
 
-    /// Checked parity declaration for migration away from exception-only APIs.
+    /** @brief Declares parity and reports contradictions. */
     PropertyStoreResult declare_parity_checked(const std::string& symbol, Parity parity);
 
     /// Declare boundedness for a symbol, optionally with interval bounds.
     void declare_bounded(const std::string& symbol, Boundedness bounded,
                          std::optional<Interval> bounds = std::nullopt);
 
-    /// Checked boundedness declaration for migration away from exception-only APIs.
+    /** @brief Declares boundedness and reports contradictions. */
     PropertyStoreResult declare_bounded_checked(
         const std::string& symbol,
         Boundedness bounded,
@@ -171,7 +171,7 @@ public:
      */
     void declare_transcendental(const std::string& symbol);
 
-    /// Checked transcendental declaration for migration away from exception-only APIs.
+    /** @brief Declares transcendence and reports domain contradictions. */
     PropertyStoreResult declare_transcendental_checked(const std::string& symbol);
 
     /**
@@ -195,7 +195,7 @@ public:
      */
     void declare_finiteness(const std::string& symbol, Finiteness f);
 
-    /// Checked finiteness declaration for migration away from exception-only APIs.
+    /** @brief Declares finiteness and reports contradictions. */
     PropertyStoreResult declare_finiteness_checked(const std::string& symbol, Finiteness f);
 
     /**
@@ -220,7 +220,7 @@ public:
      */
     void declare_definiteness(const std::string& symbol, Definiteness d);
 
-    /// Checked definiteness declaration for migration away from exception-only APIs.
+    /** @brief Declares matrix definiteness and reports contradictions. */
     PropertyStoreResult declare_definiteness_checked(const std::string& symbol, Definiteness d);
 
     /**
@@ -239,7 +239,7 @@ public:
     void declare_periodic(const std::string& symbol,
                           const std::shared_ptr<SymbolicExpr>& period);
 
-    /// Checked periodic declaration for migration away from exception-only APIs.
+    /** @brief Declares periodicity and reports invalid periods. */
     PropertyStoreResult declare_periodic_checked(
         const std::string& symbol,
         const std::shared_ptr<SymbolicExpr>& period);

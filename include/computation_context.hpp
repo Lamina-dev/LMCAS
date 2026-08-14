@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <new>
 #include <string>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "result.hpp"
+#include "unit.hpp"
 
 namespace lamina {
 
@@ -33,6 +35,48 @@ struct Diagnostic {
     std::string message;
 };
 
+class DiagnosticEngine {
+public:
+    using Consumer = std::function<void(const Diagnostic&)>;
+
+    explicit DiagnosticEngine(std::size_t limit, Consumer consumer = {})
+        : limit_(limit), consumer_(std::move(consumer)) {}
+
+    Result<void> emit(Diagnostic diagnostic) {
+        if (diagnostics_.size() >= limit_) {
+            return Result<void>::failure(CasErrc::ResourceLimit,
+                                         "diagnostic budget exhausted",
+                                         diagnostic.operation);
+        }
+        bool inserted = false;
+        try {
+            diagnostics_.push_back(std::move(diagnostic));
+            inserted = true;
+            if (consumer_) consumer_(diagnostics_.back());
+        } catch (const std::bad_alloc&) {
+            if (inserted) diagnostics_.pop_back();
+            return Result<void>::failure(CasErrc::ResourceLimit,
+                                         "diagnostic allocation failed");
+        } catch (...) {
+            if (inserted) diagnostics_.pop_back();
+            return Result<void>::failure(CasErrc::InternalInvariant,
+                                         "diagnostic consumer failed");
+        }
+        return Result<void>::success();
+    }
+
+    void set_consumer(Consumer consumer) { consumer_ = std::move(consumer); }
+
+    const std::vector<Diagnostic>& diagnostics() const noexcept {
+        return diagnostics_;
+    }
+
+private:
+    std::size_t limit_;
+    Consumer consumer_;
+    std::vector<Diagnostic> diagnostics_;
+};
+
 class CancellationToken {
 public:
     CancellationToken() : cancelled_(std::make_shared<std::atomic<bool>>(false)) {}
@@ -51,7 +95,8 @@ public:
     explicit ComputationContext(ResourceLimits limits = {},
                                 CancellationToken cancellation = {})
         : limits_(limits), cancellation_(std::move(cancellation)),
-          owner_thread_(std::this_thread::get_id()) {}
+          owner_thread_(std::this_thread::get_id()),
+          diagnostic_engine_(limits.max_diagnostics) {}
 
     ComputationContext(const ComputationContext&) = delete;
     ComputationContext& operator=(const ComputationContext&) = delete;
@@ -102,26 +147,30 @@ public:
     Result<void> add_diagnostic(Diagnostic diagnostic) {
         auto access = check_access(diagnostic.operation);
         if (!access) return access;
-        if (diagnostics_.size() >= limits_.max_diagnostics) {
-            return Result<void>::failure(CasErrc::ResourceLimit,
-                                         "diagnostic budget exhausted",
-                                         diagnostic.operation);
-        }
-        try {
-            diagnostics_.push_back(std::move(diagnostic));
-        } catch (const std::bad_alloc&) {
-            return Result<void>::failure(CasErrc::ResourceLimit,
-                                         "diagnostic allocation failed");
-        }
-        return Result<void>::success();
+        return diagnostic_engine_.emit(std::move(diagnostic));
     }
 
     const ResourceLimits& limits() const noexcept { return limits_; }
     std::size_t steps_used() const noexcept { return steps_used_; }
     std::size_t nodes_created() const noexcept { return nodes_created_; }
     std::size_t recursion_depth() const noexcept { return recursion_depth_; }
-    const std::vector<Diagnostic>& diagnostics() const noexcept { return diagnostics_; }
+    const std::vector<Diagnostic>& diagnostics() const noexcept {
+        return diagnostic_engine_.diagnostics();
+    }
+    const DiagnosticEngine& diagnostic_engine() const noexcept {
+        return diagnostic_engine_;
+    }
+    Result<void> set_diagnostic_consumer(
+        DiagnosticEngine::Consumer consumer,
+        const std::string& operation = {}) {
+        auto access = check_access(operation);
+        if (!access) return access;
+        diagnostic_engine_.set_consumer(std::move(consumer));
+        return Result<void>::success();
+    }
     const CancellationToken& cancellation() const noexcept { return cancellation_; }
+    UnitSystem& units() noexcept { return units_; }
+    const UnitSystem& units() const noexcept { return units_; }
 
     Result<void> set_assumptions(
         std::shared_ptr<const AssumptionContext> assumptions,
@@ -157,7 +206,8 @@ private:
     std::size_t steps_used_ = 0;
     std::size_t nodes_created_ = 0;
     std::size_t recursion_depth_ = 0;
-    std::vector<Diagnostic> diagnostics_;
+    DiagnosticEngine diagnostic_engine_;
+    UnitSystem units_;
 };
 
 } // namespace lamina

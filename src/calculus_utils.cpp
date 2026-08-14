@@ -507,7 +507,7 @@ AsymptoteAnalysisResult asymptotes_checked(
     /// 提取分母，求解分母 = 0 的点
     auto denominator = calculus_utils_extract_denominator(f);
     if (denominator) {
-        auto solved_zeros = solve_dispatch_checked(denominator, var, context, SolveOptions{});
+        auto solved_zeros = solve_equation(denominator, var, context, SolveOptions{});
         if (!solved_zeros) return AsymptoteAnalysisResult::failure(solved_zeros.error());
 
         const auto& zero_set = solved_zeros.value();
@@ -710,16 +710,16 @@ SymbolicExprVectorResult inverse_function_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& y, ComputationContext& context);
 
-SymbolicExprResult inverse_derivative_checked(
+ExpressionResult inverse_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point,
     ComputationContext& context)
 {
     const std::string operation = "inverse_derivative";
     auto input = calculus_utils_validate_expr_target(f, var, point, context, operation);
-    if (!input) return SymbolicExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     auto step = context.consume_steps(4, operation);
-    if (!step) return SymbolicExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
 
     try {
         auto eq = SymbolicExpr::add(
@@ -732,7 +732,7 @@ SymbolicExprResult inverse_derivative_checked(
         if (inverse) {
             candidates = inverse.value();
         } else {
-            return SymbolicExprResult::failure(inverse.error());
+            return ExpressionResult::failure(inverse.error());
         }
 
         std::vector<std::shared_ptr<SymbolicExpr>> real_candidates;
@@ -741,7 +741,7 @@ SymbolicExprResult inverse_derivative_checked(
             std::shared_ptr<SymbolicExpr> real_candidate;
             auto status = calculus_utils_extract_real_candidate(candidate, real_candidate);
             if (status == CalculusRealCandidateStatus::Inconclusive) {
-                return SymbolicExprResult::failure(
+                return ExpressionResult::failure(
                     CasErrc::Inconclusive,
                     "inverse derivative candidate reality could not be proven",
                     operation);
@@ -753,7 +753,7 @@ SymbolicExprResult inverse_derivative_checked(
             auto residual = eq->substitute(var, real_candidate);
             auto simplified_residual = residual ? residual->simplify() : nullptr;
             if (!simplified_residual || !lamina::detail::node(simplified_residual)) {
-                return SymbolicExprResult::failure(
+                return ExpressionResult::failure(
                     CasErrc::InternalInvariant,
                     "inverse derivative candidate verification produced a null residual",
                     operation);
@@ -775,13 +775,13 @@ SymbolicExprResult inverse_derivative_checked(
         candidates = std::move(real_candidates);
 
         if (candidates.empty()) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::DomainError,
                 "inverse point is outside the proven range",
                 operation);
         }
         if (candidates.size() != 1) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "inverse derivative requires a unique inverse branch",
                 operation);
@@ -789,7 +789,7 @@ SymbolicExprResult inverse_derivative_checked(
 
         auto f_prime = f->differentiate(var);
         if (!f_prime || !lamina::detail::node(f_prime)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "inverse derivative could not construct the derivative",
                 operation);
@@ -798,14 +798,14 @@ SymbolicExprResult inverse_derivative_checked(
         auto f_prime_at_x0 = f_prime->substitute(var, candidates[0]);
         auto simplified_derivative = f_prime_at_x0 ? f_prime_at_x0->simplify() : nullptr;
         if (!simplified_derivative || !lamina::detail::node(simplified_derivative)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "inverse derivative substitution produced a null expression",
                 operation);
         }
 
         if (simplified_derivative->is_zero()) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::DomainError,
                 "inverse derivative is undefined where f' is zero",
                 operation);
@@ -814,23 +814,23 @@ SymbolicExprResult inverse_derivative_checked(
         auto result = SymbolicExpr::divide(SymbolicExpr::number(1), simplified_derivative);
         auto simplified = result ? result->simplify() : nullptr;
         if (!simplified || !lamina::detail::node(simplified)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "inverse derivative result construction failed",
                 operation);
         }
-        return SymbolicExprResult::success(simplified);
+        return ExpressionResult::success(simplified);
     } catch (const std::bad_alloc&) {
-        return SymbolicExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "inverse derivative allocation failed",
                                            operation);
     } catch (const std::exception& e) {
-        return SymbolicExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            e.what(), operation);
     }
 }
 
-SymbolicExprResult inverse_derivative_checked(
+ExpressionResult inverse_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point)
 {
@@ -854,7 +854,7 @@ SymbolicExprVectorResult inverse_function_checked(
         auto simplified_eq = eq ? eq->simplify() : nullptr;
         if (simplified_eq && lamina::detail::node(simplified_eq)) eq = simplified_eq;
 
-        auto solved = solve_dispatch_checked(eq, var, context, SolveOptions{});
+        auto solved = solve_equation(eq, var, context, SolveOptions{});
         if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
         const auto& solutions = solved.value();
@@ -1064,25 +1064,25 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_integrate_with_fallback(
 }
 
 
-SymbolicExprResult curvature_checked(
+ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context)
 {
     const std::string operation = "curvature";
     auto input = calculus_utils_validate_expr(f, var, context, operation);
-    if (!input) return SymbolicExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
 
     /// f' = df/dvar
     auto f_prime = f->differentiate(var);
     if (!f_prime || !lamina::detail::node(f_prime)) {
-        return SymbolicExprResult::failure(CasErrc::UnsupportedExpression,
+        return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "first derivative could not be constructed",
                                            operation);
     }
     /// f'' = d²f/dvar²
     auto f_double_prime = f_prime->differentiate(var);
     if (!f_double_prime || !lamina::detail::node(f_double_prime)) {
-        return SymbolicExprResult::failure(CasErrc::UnsupportedExpression,
+        return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "second derivative could not be constructed",
                                            operation);
     }
@@ -1090,7 +1090,7 @@ SymbolicExprResult curvature_checked(
     /// |f''|
     auto abs_f_pp = calculus_utils_make_abs(f_double_prime);
     if (!abs_f_pp || !lamina::detail::node(abs_f_pp)) {
-        return SymbolicExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            "absolute value node construction failed",
                                            operation);
     }
@@ -1106,10 +1106,10 @@ SymbolicExprResult curvature_checked(
     /// κ = |f''| / (1 + f'²)^(3/2)
     auto result = SymbolicExpr::divide(abs_f_pp, denom);
     auto simplified = result->simplify();
-    return SymbolicExprResult::success(simplified ? simplified : result);
+    return ExpressionResult::success(simplified ? simplified : result);
 }
 
-SymbolicExprResult curvature_checked(
+ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
 {
     ComputationContext context;
@@ -1124,25 +1124,25 @@ std::shared_ptr<SymbolicExpr> curvature(
     return checked.value();
 }
 
-SymbolicExprResult curvature_parametric_checked(
+ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t,
     ComputationContext& context)
 {
     const std::string operation = "curvature_parametric";
     auto input = calculus_utils_validate_two_exprs(x_t, y_t, t, context, operation);
-    if (!input) return SymbolicExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
 
     /// x' = dx/dt, x'' = d²x/dt²
     auto x_prime = x_t->differentiate(t);
     if (!x_prime || !lamina::detail::node(x_prime)) {
-        return SymbolicExprResult::failure(CasErrc::UnsupportedExpression,
+        return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "x derivative could not be constructed",
                                            operation);
     }
     auto x_double_prime = x_prime->differentiate(t);
     if (!x_double_prime || !lamina::detail::node(x_double_prime)) {
-        return SymbolicExprResult::failure(CasErrc::UnsupportedExpression,
+        return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "x second derivative could not be constructed",
                                            operation);
     }
@@ -1150,19 +1150,19 @@ SymbolicExprResult curvature_parametric_checked(
     /// y' = dy/dt, y'' = d²y/dt²
     auto y_prime = y_t->differentiate(t);
     if (!y_prime || !lamina::detail::node(y_prime)) {
-        return SymbolicExprResult::failure(CasErrc::UnsupportedExpression,
+        return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "y derivative could not be constructed",
                                            operation);
     }
     auto y_double_prime = y_prime->differentiate(t);
     if (!y_double_prime || !lamina::detail::node(y_double_prime)) {
-        return SymbolicExprResult::failure(CasErrc::UnsupportedExpression,
+        return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "y second derivative could not be constructed",
                                            operation);
     }
 
     if (x_prime->is_zero() && y_prime->is_zero()) {
-        return SymbolicExprResult::failure(CasErrc::DomainError,
+        return ExpressionResult::failure(CasErrc::DomainError,
                                            "parametric curvature is undefined for zero velocity",
                                            operation);
     }
@@ -1177,7 +1177,7 @@ SymbolicExprResult curvature_parametric_checked(
     /// |x'y'' - y'x''|
     auto abs_cross = calculus_utils_make_abs(cross_term);
     if (!abs_cross || !lamina::detail::node(abs_cross)) {
-        return SymbolicExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            "absolute value node construction failed",
                                            operation);
     }
@@ -1194,10 +1194,10 @@ SymbolicExprResult curvature_parametric_checked(
     /// κ = |x'y'' - y'x''| / (x'² + y'²)^(3/2)
     auto result = SymbolicExpr::divide(abs_cross, denom);
     auto simplified = result->simplify();
-    return SymbolicExprResult::success(simplified ? simplified : result);
+    return ExpressionResult::success(simplified ? simplified : result);
 }
 
-SymbolicExprResult curvature_parametric_checked(
+ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t)
 {
@@ -1242,7 +1242,7 @@ SymbolicExprVectorResult inflection_points_checked(
     auto equation = f_double_prime->simplify();
     if (!equation || !lamina::detail::node(equation)) equation = f_double_prime;
 
-    auto solved = solve_dispatch_checked(equation, var, context, SolveOptions{});
+    auto solved = solve_equation(equation, var, context, SolveOptions{});
     if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
     const auto& solutions = solved.value();
@@ -1265,10 +1265,10 @@ SymbolicExprVectorResult inflection_points_checked(
     }
 
     if (solutions.kind() == SolutionSet::Kind::Inconclusive) {
-        auto legacy_candidates = SymbolicExpr::solve(equation, var);
+        auto candidates = SymbolicExpr::solve(equation, var);
         std::vector<std::shared_ptr<SymbolicExpr>> verified;
-        verified.reserve(legacy_candidates.size());
-        for (const auto& candidate : legacy_candidates) {
+        verified.reserve(candidates.size());
+        for (const auto& candidate : candidates) {
             if (!candidate || !lamina::detail::node(candidate)) continue;
             auto residual = equation->substitute(var, candidate);
             auto simplified = residual ? residual->simplify() : nullptr;
@@ -1303,21 +1303,21 @@ std::vector<std::shared_ptr<SymbolicExpr>> inflection_points(
 }
 
 
-SymbolicExprResult surface_area_revolution_x_checked(
+ExpressionResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context)
 {
     const std::string operation = "surface_area_revolution_x";
     auto input = calculus_utils_validate_expr_bounds(f, var, a, b, context, operation);
-    if (!input) return SymbolicExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     auto step = context.consume_steps(8, operation);
-    if (!step) return SymbolicExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
 
     try {
         auto f_prime = f->differentiate(var);
         if (!f_prime || !lamina::detail::node(f_prime)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface derivative is outside the supported domain",
                 operation);
@@ -1328,7 +1328,7 @@ SymbolicExprResult surface_area_revolution_x_checked(
         auto arc_factor = SymbolicExpr::sqrt(one_plus_fp_sq);
         auto abs_f = calculus_utils_make_abs(f);
         if (!abs_f || !lamina::detail::node(abs_f)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "absolute value node construction failed",
                 operation);
@@ -1337,7 +1337,7 @@ SymbolicExprResult surface_area_revolution_x_checked(
 
         auto integral = calculus_utils_try_symbolic_definite(integrand, var, a, b);
         if (!integral || !lamina::detail::node(integral)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface area integral could not be evaluated exactly",
                 operation);
@@ -1347,18 +1347,18 @@ SymbolicExprResult surface_area_revolution_x_checked(
             SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
         auto result = SymbolicExpr::multiply(two_pi, integral);
         auto simplified = result->simplify();
-        return SymbolicExprResult::success(simplified ? simplified : result);
+        return ExpressionResult::success(simplified ? simplified : result);
     } catch (const std::bad_alloc&) {
-        return SymbolicExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",
                                            operation);
     } catch (const std::exception& e) {
-        return SymbolicExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            e.what(), operation);
     }
 }
 
-SymbolicExprResult surface_area_revolution_x_checked(
+ExpressionResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b)
 {
@@ -1396,21 +1396,21 @@ std::shared_ptr<SymbolicExpr> surface_area_revolution_x(
     return simplified ? simplified : result;
 }
 
-SymbolicExprResult surface_area_revolution_y_checked(
+ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context)
 {
     const std::string operation = "surface_area_revolution_y";
     auto input = calculus_utils_validate_expr_bounds(f, var, a, b, context, operation);
-    if (!input) return SymbolicExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     auto step = context.consume_steps(8, operation);
-    if (!step) return SymbolicExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
 
     try {
         auto f_prime = f->differentiate(var);
         if (!f_prime || !lamina::detail::node(f_prime)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface derivative is outside the supported domain",
                 operation);
@@ -1422,7 +1422,7 @@ SymbolicExprResult surface_area_revolution_y_checked(
         auto var_expr = SymbolicExpr::variable(var);
         auto abs_var = calculus_utils_make_abs(var_expr);
         if (!abs_var || !lamina::detail::node(abs_var)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "absolute value node construction failed",
                 operation);
@@ -1431,7 +1431,7 @@ SymbolicExprResult surface_area_revolution_y_checked(
 
         auto integral = calculus_utils_try_symbolic_definite(integrand, var, a, b);
         if (!integral || !lamina::detail::node(integral)) {
-            return SymbolicExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface area integral could not be evaluated exactly",
                 operation);
@@ -1441,18 +1441,18 @@ SymbolicExprResult surface_area_revolution_y_checked(
             SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
         auto result = SymbolicExpr::multiply(two_pi, integral);
         auto simplified = result->simplify();
-        return SymbolicExprResult::success(simplified ? simplified : result);
+        return ExpressionResult::success(simplified ? simplified : result);
     } catch (const std::bad_alloc&) {
-        return SymbolicExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",
                                            operation);
     } catch (const std::exception& e) {
-        return SymbolicExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            e.what(), operation);
     }
 }
 
-SymbolicExprResult surface_area_revolution_y_checked(
+ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b)
 {

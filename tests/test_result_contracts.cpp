@@ -53,7 +53,7 @@ int main() {
         SymbolicExpr::power(x, SymbolicExpr::number(2)),
         SymbolicExpr::number(1));
     lamina::ComputationContext exact_context;
-    auto exact = lamina::solve_dispatch_checked(
+    auto exact = lamina::solve_equation(
         x2_plus_one, "x", exact_context, lamina::SolveOptions{});
     EXPECT_TRUE(exact && exact.value().kind() == lamina::SolutionSet::Kind::Finite,
                 "exact polynomial produces a finite RootOf set");
@@ -66,14 +66,14 @@ int main() {
     }
 
     lamina::ComputationContext empty_context;
-    auto no_solution = lamina::solve_dispatch_checked(
+    auto no_solution = lamina::solve_equation(
         SymbolicExpr::number(1), "x", empty_context, lamina::SolveOptions{});
     EXPECT_TRUE(no_solution &&
                     no_solution.value().kind() == lamina::SolutionSet::Kind::Empty,
                 "nonzero constant equation has an empty solution set");
 
     lamina::ComputationContext universal_context;
-    auto universal = lamina::solve_dispatch_checked(
+    auto universal = lamina::solve_equation(
         SymbolicExpr::number(0), "x", universal_context, lamina::SolveOptions{});
     EXPECT_TRUE(universal &&
                     universal.value().kind() == lamina::SolutionSet::Kind::Universal,
@@ -82,13 +82,13 @@ int main() {
     auto sine_equation = SymbolicExpr::add(
         SymbolicExpr::sin(x), SymbolicExpr::number(Rational(-1, 2)));
     lamina::ComputationContext unsupported_context;
-    auto unsupported = lamina::solve_dispatch_checked(
+    auto unsupported = lamina::solve_equation(
         sine_equation, "x", unsupported_context, lamina::SolveOptions{});
     EXPECT_TRUE(unsupported &&
                     unsupported.value().kind() == lamina::SolutionSet::Kind::Inconclusive,
                 "unsupported symbolic equation is not reported as empty");
 
-    auto default_unsupported = lamina::solve_dispatch_checked(
+    auto default_unsupported = lamina::solve_equation(
         sine_equation, "x", lamina::SolveOptions{});
     EXPECT_TRUE(default_unsupported &&
                     default_unsupported.value().kind() == lamina::SolutionSet::Kind::Inconclusive,
@@ -99,7 +99,7 @@ int main() {
     numeric_options.has_initial_guess = true;
     numeric_options.initial_guess = 0.5;
     lamina::ComputationContext numeric_context;
-    auto numeric = lamina::solve_dispatch_checked(
+    auto numeric = lamina::solve_equation(
         sine_equation, "x", numeric_context, numeric_options);
     EXPECT_TRUE(numeric && numeric.value().kind() == lamina::SolutionSet::Kind::Finite &&
                     numeric.value().finite_solutions().size() == 1,
@@ -109,12 +109,12 @@ int main() {
 
     auto unbound_equation = SymbolicExpr::add(x, SymbolicExpr::variable("a"));
     lamina::ComputationContext unbound_context;
-    auto unbound = lamina::solve_dispatch_checked(
+    auto unbound = lamina::solve_equation(
         unbound_equation, "x", unbound_context, numeric_options);
     EXPECT_TRUE(!unbound && unbound.error().code == lamina::CasErrc::UnboundSymbol,
                 "unbound coefficients propagate as UnboundSymbol");
 
-    auto default_unbound = lamina::solve_dispatch_checked(
+    auto default_unbound = lamina::solve_equation(
         unbound_equation, "x", numeric_options);
     EXPECT_TRUE(!default_unbound &&
                     default_unbound.error().code == lamina::CasErrc::UnboundSymbol,
@@ -123,7 +123,7 @@ int main() {
     lamina::CancellationToken cancellation;
     cancellation.cancel();
     lamina::ComputationContext cancelled_context({}, cancellation);
-    auto cancelled = lamina::solve_dispatch_checked(
+    auto cancelled = lamina::solve_equation(
         x2_plus_one, "x", cancelled_context, lamina::SolveOptions{});
     EXPECT_TRUE(!cancelled && cancelled.error().code == lamina::CasErrc::Cancelled,
                 "dispatcher observes cancellation");
@@ -131,7 +131,7 @@ int main() {
     lamina::ResourceLimits limits;
     limits.max_steps = 1;
     lamina::ComputationContext limited_context(limits);
-    auto limited = lamina::solve_dispatch_checked(
+    auto limited = lamina::solve_equation(
         x2_plus_one, "x", limited_context, lamina::SolveOptions{});
     EXPECT_TRUE(!limited && limited.error().code == lamina::CasErrc::ResourceLimit,
                 "dispatcher enforces shared step budgets");

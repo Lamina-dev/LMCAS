@@ -45,7 +45,7 @@ PropertyStoreResult invalid_empty_symbol(const std::string& operation) {
         CasErrc::InvalidArgument, "symbol name must not be empty", operation);
 }
 
-[[noreturn]] void throw_legacy_property_error(const CasError& error) {
+[[noreturn]] void throw_property_error(const CasError& error) {
     if (error.code == CasErrc::InvalidArgument) {
         throw std::invalid_argument(error.message);
     }
@@ -271,7 +271,7 @@ void PropertyStore::declare_domain_unchecked(const std::string& symbol, Domain d
 void PropertyStore::declare_domain(const std::string& symbol, Domain domain) {
     auto result = declare_domain_checked(symbol, domain);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -348,7 +348,7 @@ void PropertyStore::declare_sign_unchecked(const std::string& symbol, Sign sign)
 void PropertyStore::declare_sign(const std::string& symbol, Sign sign) {
     auto result = declare_sign_checked(symbol, sign);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -394,7 +394,7 @@ void PropertyStore::declare_parity_unchecked(const std::string& symbol, Parity p
 void PropertyStore::declare_parity(const std::string& symbol, Parity parity) {
     auto result = declare_parity_checked(symbol, parity);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -444,7 +444,7 @@ void PropertyStore::declare_bounded(const std::string& symbol,
                                     std::optional<Interval> bounds) {
     auto result = declare_bounded_checked(symbol, bounded, std::move(bounds));
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -602,7 +602,7 @@ static Result<bool> interval_covers_checked_impl(
 void PropertyStore::declare_continuous(const std::string& symbol, const Interval& interval) {
     auto result = declare_continuous_checked(symbol, interval);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -660,7 +660,7 @@ PropertyStoreResult PropertyStore::declare_continuous_checked(
 void PropertyStore::declare_differentiable(const std::string& symbol, const Interval& interval) {
     auto result = declare_differentiable_checked(symbol, interval);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -788,7 +788,7 @@ void PropertyStore::declare_monotonicity(const std::string& symbol, const std::s
                                          const Interval& interval, Monotonicity mono) {
     auto result = declare_monotonicity_checked(symbol, variable, interval, mono);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -914,7 +914,7 @@ void PropertyStore::declare_transcendental_unchecked(const std::string& symbol) 
 void PropertyStore::declare_transcendental(const std::string& symbol) {
     auto result = declare_transcendental_checked(symbol);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -968,7 +968,7 @@ void PropertyStore::declare_finiteness_unchecked(const std::string& symbol, Fini
 void PropertyStore::declare_finiteness(const std::string& symbol, Finiteness f) {
     auto result = declare_finiteness_checked(symbol, f);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -1072,7 +1072,7 @@ void PropertyStore::declare_definiteness_unchecked(const std::string& symbol, De
 void PropertyStore::declare_definiteness(const std::string& symbol, Definiteness d) {
     auto result = declare_definiteness_checked(symbol, d);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 
@@ -1110,7 +1110,7 @@ void PropertyStore::declare_periodic(const std::string& symbol,
                                      const std::shared_ptr<SymbolicExpr>& period) {
     auto result = declare_periodic_checked(symbol, period);
     if (!result) {
-        throw_legacy_property_error(result.error());
+        throw_property_error(result.error());
     }
 }
 

@@ -12,6 +12,12 @@ enum class CasErrc {
     ParseError,
     UnboundSymbol,
     DomainError,
+    DimensionMismatch,
+    UnitInvalid,
+    UnitStripTypeMismatch,
+    SetElementTypeMismatch,
+    SetOperandTypeMismatch,
+    SetElementNotHashable,
     UnsupportedExpression,
     Inconclusive,
     ResourceLimit,
@@ -25,6 +31,20 @@ struct CasError {
     std::string message;
     std::string operation;
 };
+
+namespace detail {
+
+class ResultPropagation final {
+public:
+    explicit ResultPropagation(CasError error) : error_(std::move(error)) {}
+
+    const CasError& error() const noexcept { return error_; }
+
+private:
+    CasError error_;
+};
+
+} // namespace detail
 
 template <typename T>
 class Result {
@@ -74,6 +94,16 @@ private:
 
     std::variant<T, CasError> storage_;
 };
+
+namespace detail {
+
+template <typename T>
+T propagate_result(Result<T> result) {
+    if (!result) throw ResultPropagation(result.error());
+    return std::move(result.value());
+}
+
+} // namespace detail
 
 template <>
 class Result<void> {

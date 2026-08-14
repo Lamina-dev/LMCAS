@@ -12,7 +12,6 @@
 
 namespace lamina {
 
-using VectorExprResult = Result<std::shared_ptr<SymbolicExpr>>;
 using VectorExprListResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 using VectorAngleResult = Result<double>;
 using VectorStringResult = Result<std::string>;
@@ -23,13 +22,13 @@ using VectorStringResult = Result<std::string>;
  * @param b 向量 b 的各分量
  * @return 点积结果的符号表达式
  */
-LAMINA_API VectorExprResult vector_dot_checked(
+LAMINA_API ExpressionResult vector_dot_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b,
     ComputationContext& context
 );
 
-LAMINA_API VectorExprResult vector_dot_checked(
+LAMINA_API ExpressionResult vector_dot_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 );
@@ -149,13 +148,13 @@ LAMINA_API std::shared_ptr<SymbolicExpr> point_plane_distance(
     const PlaneSymbolic& plane
 );
 
-LAMINA_API VectorExprResult point_plane_distance_checked(
+LAMINA_API ExpressionResult point_plane_distance_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const PlaneSymbolic& plane,
     ComputationContext& context
 );
 
-LAMINA_API VectorExprResult point_plane_distance_checked(
+LAMINA_API ExpressionResult point_plane_distance_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const PlaneSymbolic& plane
 );
@@ -171,13 +170,13 @@ LAMINA_API std::shared_ptr<SymbolicExpr> skew_lines_distance(
     const LineSymbolic& l2
 );
 
-LAMINA_API VectorExprResult skew_lines_distance_checked(
+LAMINA_API ExpressionResult skew_lines_distance_checked(
     const LineSymbolic& l1,
     const LineSymbolic& l2,
     ComputationContext& context
 );
 
-LAMINA_API VectorExprResult skew_lines_distance_checked(
+LAMINA_API ExpressionResult skew_lines_distance_checked(
     const LineSymbolic& l1,
     const LineSymbolic& l2
 );
@@ -241,13 +240,13 @@ LAMINA_API std::shared_ptr<SymbolicExpr> dihedral_angle(
     const PlaneSymbolic& p2
 );
 
-LAMINA_API VectorExprResult dihedral_angle_checked(
+LAMINA_API ExpressionResult dihedral_angle_checked(
     const PlaneSymbolic& p1,
     const PlaneSymbolic& p2,
     ComputationContext& context
 );
 
-LAMINA_API VectorExprResult dihedral_angle_checked(
+LAMINA_API ExpressionResult dihedral_angle_checked(
     const PlaneSymbolic& p1,
     const PlaneSymbolic& p2
 );
