@@ -368,6 +368,7 @@ class VariablesVisitor : public lamina::detail::SymbolicVisitor {
 public:
     std::set<std::string> vars;
 
+    void visit(const BooleanNode&) override {}
     void visit(const NumberNode&) override {}
     void visit(const VariableNode& node) override {
         if (!is_bound(node.name())) {
@@ -441,6 +442,20 @@ public:
         node.real()->accept(*this);
         node.imag()->accept(*this);
     }
+    void visit(const FiniteSetNode& node) override {
+        for (const auto& element : node.elements()) element->accept(*this);
+    }
+    void visit(const IntervalNode& node) override {
+        node.lower()->accept(*this);
+        node.upper()->accept(*this);
+    }
+    void visit(const MembershipNode& node) override {
+        node.element()->accept(*this);
+        node.set()->accept(*this);
+    }
+    void visit(const UninterpretedFunctionNode& node) override {
+        for (const auto& argument : node.arguments()) argument->accept(*this);
+    }
 };
 
 class SubstituteVisitor : public lamina::detail::SymbolicVisitor {
@@ -453,6 +468,10 @@ public:
         : var_name(std::move(v)), new_val(std::move(val)) {}
 
     std::shared_ptr<const SymbolicNode> get_result() const { return result; }
+
+    void visit(const BooleanNode& node) override {
+        result = node.clone();
+    }
 
     void visit(const NumberNode& node) override {
         result = node.clone();
@@ -640,6 +659,41 @@ public:
 
         result = lamina::detail::make_node<SetBuilderNode>(
             node.element_var(), new_domain, new_predicate);
+    }
+    void visit(const FiniteSetNode& node) override {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_elements;
+        new_elements.reserve(node.elements().size());
+        for (const auto& element : node.elements()) {
+            element->accept(*this);
+            new_elements.push_back(result);
+        }
+        result = lamina::detail::make_node<FiniteSetNode>(std::move(new_elements));
+    }
+    void visit(const IntervalNode& node) override {
+        node.lower()->accept(*this);
+        auto lower = result;
+        node.upper()->accept(*this);
+        auto upper = result;
+        result = lamina::detail::make_node<IntervalNode>(
+            lower, upper, node.lower_bound(), node.upper_bound());
+    }
+    void visit(const MembershipNode& node) override {
+        node.element()->accept(*this);
+        auto element = result;
+        node.set()->accept(*this);
+        auto set = result;
+        result = lamina::detail::make_node<MembershipNode>(
+            element, set, node.negated());
+    }
+    void visit(const UninterpretedFunctionNode& node) override {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_arguments;
+        new_arguments.reserve(node.arguments().size());
+        for (const auto& argument : node.arguments()) {
+            argument->accept(*this);
+            new_arguments.push_back(result);
+        }
+        result = lamina::detail::make_node<UninterpretedFunctionNode>(
+            node.name(), std::move(new_arguments));
     }
 };
 

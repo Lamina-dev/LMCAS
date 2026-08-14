@@ -11,6 +11,10 @@ void PrintVisitor::visit(const NumberNode& node) {
     }
 }
 
+void PrintVisitor::visit(const BooleanNode& node) {
+    buffer << (node.value() ? "true" : "false");
+}
+
 void PrintVisitor::visit(const VariableNode& node) {
     buffer << node.name();
 }
@@ -165,19 +169,19 @@ void PrintVisitor::visit(const RelationalNode& node) {
 
 void PrintVisitor::visit(const LogicalNode& node) {
     if (node.op() == LogicalNode::Op::Not) {
-        buffer << "(¬";
+        buffer << "(not ";
         node.left()->accept(*this);
         buffer << ")";
     } else if (node.op() == LogicalNode::Op::Implies) {
         buffer << "(";
         node.left()->accept(*this);
-        buffer << " \xe2\x87\x92 ";
+        buffer << " implies ";
         node.right()->accept(*this);
         buffer << ")";
     } else {
         buffer << "(";
         node.left()->accept(*this);
-        buffer << " " << LogicalNode::op_to_string(node.op()) << " ";
+        buffer << " " << (node.op() == LogicalNode::Op::And ? "and" : "or") << " ";
         node.right()->accept(*this);
         buffer << ")";
     }
@@ -274,4 +278,36 @@ void PrintVisitor::visit(const ComplexNode& node) {
     buffer << " + ";
     node.imag()->accept(*this);
     buffer << "*I)";
+}
+
+void PrintVisitor::visit(const FiniteSetNode& node) {
+    buffer << "{";
+    for (size_t i = 0; i < node.elements().size(); ++i) {
+        if (i > 0) buffer << ", ";
+        node.elements()[i]->accept(*this);
+    }
+    buffer << "}";
+}
+
+void PrintVisitor::visit(const IntervalNode& node) {
+    buffer << (node.lower_bound() == IntervalNode::Bound::Closed ? "[" : "(");
+    node.lower()->accept(*this);
+    buffer << ", ";
+    node.upper()->accept(*this);
+    buffer << (node.upper_bound() == IntervalNode::Bound::Closed ? "]" : ")");
+}
+
+void PrintVisitor::visit(const MembershipNode& node) {
+    node.element()->accept(*this);
+    buffer << (node.negated() ? " not in " : " in ");
+    node.set()->accept(*this);
+}
+
+void PrintVisitor::visit(const UninterpretedFunctionNode& node) {
+    buffer << node.name() << "(";
+    for (size_t i = 0; i < node.arguments().size(); ++i) {
+        if (i > 0) buffer << ", ";
+        node.arguments()[i]->accept(*this);
+    }
+    buffer << ")";
 }

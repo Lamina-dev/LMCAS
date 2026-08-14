@@ -25,6 +25,7 @@
 #include <utility>
 
 class SymbolicNode;
+class BooleanNode;
 class NumberNode;
 class VariableNode;
 class AddNode;
@@ -34,6 +35,10 @@ class FunctionNode;
 class MatrixNode;
 class RelationalNode;
 class LogicalNode;
+class FiniteSetNode;
+class IntervalNode;
+class MembershipNode;
+class UninterpretedFunctionNode;
 class TransformNode;
 class QuantifierNode;
 class SetBuilderNode;
@@ -237,6 +242,9 @@ public:
 
     virtual ~SymbolicVisitor() = default;
 
+    virtual void visit(const BooleanNode&) {
+        throw std::runtime_error("BooleanNode is not supported by this visitor");
+    }
     virtual void visit(const NumberNode& node) = 0;
     virtual void visit(const VariableNode& node) = 0;
     virtual void visit(const AddNode& node) = 0;
@@ -253,6 +261,18 @@ public:
     virtual void visit(const QuantifierNode& node) = 0;
     virtual void visit(const SetBuilderNode& node) = 0;
     virtual void visit(const ComplexNode& node) = 0;
+    virtual void visit(const FiniteSetNode&) {
+        throw std::runtime_error("FiniteSetNode is not supported by this visitor");
+    }
+    virtual void visit(const IntervalNode&) {
+        throw std::runtime_error("IntervalNode is not supported by this visitor");
+    }
+    virtual void visit(const MembershipNode&) {
+        throw std::runtime_error("MembershipNode is not supported by this visitor");
+    }
+    virtual void visit(const UninterpretedFunctionNode&) {
+        throw std::runtime_error("UninterpretedFunctionNode is not supported by this visitor");
+    }
 };
 
 } // namespace lamina::detail
@@ -319,6 +339,41 @@ public:
      * @brief 创建复数节点，自动简化（若虚部为 0，则返回实部）。
      */
     static std::shared_ptr<const SymbolicNode> create_complex(std::shared_ptr<const SymbolicNode> real, std::shared_ptr<const SymbolicNode> imag);
+};
+
+class BooleanNode : public SymbolicNode {
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const bool value_;
+
+    explicit BooleanNode(bool value) : value_(value) {}
+
+public:
+    bool value() const noexcept { return value_; }
+
+    int type_priority() const override { return -20; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, static_cast<std::size_t>(value_));
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const BooleanNode&>(other);
+        if (value_ == o.value_) return 0;
+        return value_ ? 1 : -1;
+    }
+
+public:
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<BooleanNode>(value_);
+    }
 };
 
 /**
@@ -1705,6 +1760,252 @@ public:
     std::shared_ptr<const SymbolicNode> clone() const override {
         return lamina::detail::make_node<SetBuilderNode>(
             element_var_, domain_->clone(), predicate_->clone());
+    }
+};
+
+class FiniteSetNode : public SymbolicNode {
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::vector<std::shared_ptr<const SymbolicNode>> elements_;
+
+    explicit FiniteSetNode(std::vector<std::shared_ptr<const SymbolicNode>> elements)
+        : elements_(std::move(elements)) {
+        for (const auto& element : elements_) {
+            if (!element) {
+                throw std::invalid_argument("FiniteSetNode element cannot be null");
+            }
+        }
+    }
+
+public:
+    const std::vector<std::shared_ptr<const SymbolicNode>>& elements() const noexcept {
+        return elements_;
+    }
+
+    int type_priority() const override { return 104; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, elements_.size());
+        for (const auto& element : elements_) {
+            hash_combine(seed, element->hash());
+        }
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const FiniteSetNode&>(other);
+        if (elements_.size() != o.elements_.size()) {
+            return elements_.size() < o.elements_.size() ? -1 : 1;
+        }
+        for (size_t i = 0; i < elements_.size(); ++i) {
+            int cmp = elements_[i]->compare(*o.elements_[i]);
+            if (cmp != 0) return cmp;
+        }
+        return 0;
+    }
+
+public:
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_elements;
+        new_elements.reserve(elements_.size());
+        for (const auto& element : elements_) {
+            new_elements.push_back(element->clone());
+        }
+        return lamina::detail::make_node<FiniteSetNode>(std::move(new_elements));
+    }
+};
+
+class IntervalNode : public SymbolicNode {
+public:
+    enum class Bound {
+        Open,
+        Closed
+    };
+
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::shared_ptr<const SymbolicNode> lower_;
+    const std::shared_ptr<const SymbolicNode> upper_;
+    const Bound lower_bound_;
+    const Bound upper_bound_;
+
+    IntervalNode(std::shared_ptr<const SymbolicNode> lower,
+                 std::shared_ptr<const SymbolicNode> upper,
+                 Bound lower_bound,
+                 Bound upper_bound)
+        : lower_(std::move(lower)),
+          upper_(std::move(upper)),
+          lower_bound_(lower_bound),
+          upper_bound_(upper_bound) {
+        if (!lower_ || !upper_) {
+            throw std::invalid_argument("IntervalNode bounds cannot be null");
+        }
+    }
+
+public:
+    const std::shared_ptr<const SymbolicNode>& lower() const noexcept { return lower_; }
+    const std::shared_ptr<const SymbolicNode>& upper() const noexcept { return upper_; }
+    Bound lower_bound() const noexcept { return lower_bound_; }
+    Bound upper_bound() const noexcept { return upper_bound_; }
+
+    int type_priority() const override { return 105; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, lower_->hash());
+        hash_combine(seed, upper_->hash());
+        hash_combine(seed, static_cast<std::size_t>(lower_bound_));
+        hash_combine(seed, static_cast<std::size_t>(upper_bound_));
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const IntervalNode&>(other);
+        if (lower_bound_ != o.lower_bound_) {
+            return static_cast<int>(lower_bound_) < static_cast<int>(o.lower_bound_) ? -1 : 1;
+        }
+        if (upper_bound_ != o.upper_bound_) {
+            return static_cast<int>(upper_bound_) < static_cast<int>(o.upper_bound_) ? -1 : 1;
+        }
+        int cmp = lower_->compare(*o.lower_);
+        if (cmp != 0) return cmp;
+        return upper_->compare(*o.upper_);
+    }
+
+public:
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<IntervalNode>(
+            lower_->clone(), upper_->clone(), lower_bound_, upper_bound_);
+    }
+};
+
+class MembershipNode : public SymbolicNode {
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::shared_ptr<const SymbolicNode> element_;
+    const std::shared_ptr<const SymbolicNode> set_;
+    const bool negated_;
+
+    MembershipNode(std::shared_ptr<const SymbolicNode> element,
+                   std::shared_ptr<const SymbolicNode> set,
+                   bool negated)
+        : element_(std::move(element)), set_(std::move(set)), negated_(negated) {
+        if (!element_ || !set_) {
+            throw std::invalid_argument("MembershipNode operands cannot be null");
+        }
+    }
+
+public:
+    const std::shared_ptr<const SymbolicNode>& element() const noexcept { return element_; }
+    const std::shared_ptr<const SymbolicNode>& set() const noexcept { return set_; }
+    bool negated() const noexcept { return negated_; }
+
+    int type_priority() const override { return 106; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, element_->hash());
+        hash_combine(seed, set_->hash());
+        hash_combine(seed, static_cast<std::size_t>(negated_));
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const MembershipNode&>(other);
+        if (negated_ != o.negated_) return negated_ ? 1 : -1;
+        int cmp = element_->compare(*o.element_);
+        if (cmp != 0) return cmp;
+        return set_->compare(*o.set_);
+    }
+
+public:
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        return lamina::detail::make_node<MembershipNode>(
+            element_->clone(), set_->clone(), negated_);
+    }
+};
+
+class UninterpretedFunctionNode : public SymbolicNode {
+private:
+    LAMINA_AST_NODE_FACTORY_FRIEND;
+
+    const std::string name_;
+    const std::vector<std::shared_ptr<const SymbolicNode>> arguments_;
+
+    UninterpretedFunctionNode(std::string name,
+                              std::vector<std::shared_ptr<const SymbolicNode>> arguments)
+        : name_(std::move(name)), arguments_(std::move(arguments)) {
+        if (name_.empty()) {
+            throw std::invalid_argument("UninterpretedFunctionNode name cannot be empty");
+        }
+        for (const auto& argument : arguments_) {
+            if (!argument) {
+                throw std::invalid_argument("UninterpretedFunctionNode argument cannot be null");
+            }
+        }
+    }
+
+public:
+    const std::string& name() const noexcept { return name_; }
+    const std::vector<std::shared_ptr<const SymbolicNode>>& arguments() const noexcept {
+        return arguments_;
+    }
+
+    int type_priority() const override { return 107; }
+
+protected:
+    std::size_t compute_hash() const override {
+        std::size_t seed = 0;
+        hash_combine(seed, type_priority());
+        hash_combine(seed, std::hash<std::string>{}(name_));
+        hash_combine(seed, arguments_.size());
+        for (const auto& argument : arguments_) {
+            hash_combine(seed, argument->hash());
+        }
+        return seed;
+    }
+
+    int compare_same_type(const SymbolicNode& other) const override {
+        const auto& o = static_cast<const UninterpretedFunctionNode&>(other);
+        int cmp = name_.compare(o.name_);
+        if (cmp != 0) return cmp;
+        if (arguments_.size() != o.arguments_.size()) {
+            return arguments_.size() < o.arguments_.size() ? -1 : 1;
+        }
+        for (size_t i = 0; i < arguments_.size(); ++i) {
+            cmp = arguments_[i]->compare(*o.arguments_[i]);
+            if (cmp != 0) return cmp;
+        }
+        return 0;
+    }
+
+public:
+    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+
+    std::shared_ptr<const SymbolicNode> clone() const override {
+        std::vector<std::shared_ptr<const SymbolicNode>> new_arguments;
+        new_arguments.reserve(arguments_.size());
+        for (const auto& argument : arguments_) {
+            new_arguments.push_back(argument->clone());
+        }
+        return lamina::detail::make_node<UninterpretedFunctionNode>(
+            name_, std::move(new_arguments));
     }
 };
 

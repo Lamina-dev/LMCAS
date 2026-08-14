@@ -22,6 +22,7 @@ public:
     }
 
     void visit(const NumberNode& node) override;
+    void visit(const BooleanNode& node) override;
     void visit(const VariableNode& node) override;
     void visit(const AddNode& node) override;
     void visit(const MultiplyNode& node) override;
@@ -37,6 +38,10 @@ public:
     void visit(const QuantifierNode& node) override;
     void visit(const SetBuilderNode& node) override;
     void visit(const ComplexNode& node) override;
+    void visit(const FiniteSetNode& node) override;
+    void visit(const IntervalNode& node) override;
+    void visit(const MembershipNode& node) override;
+    void visit(const UninterpretedFunctionNode& node) override;
 
 private:
     std::stringstream buffer;

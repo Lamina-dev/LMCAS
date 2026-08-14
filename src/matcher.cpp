@@ -375,6 +375,41 @@ public:
         auto imag = result;
         result = SymbolicFactory::create_complex(real, imag);
     }
+    void visit(const FiniteSetNode& node) override {
+        std::vector<std::shared_ptr<const SymbolicNode>> elements;
+        elements.reserve(node.elements().size());
+        for (const auto& element : node.elements()) {
+            element->accept(*this);
+            elements.push_back(result);
+        }
+        result = lamina::detail::make_node<FiniteSetNode>(std::move(elements));
+    }
+    void visit(const IntervalNode& node) override {
+        node.lower()->accept(*this);
+        auto lower = result;
+        node.upper()->accept(*this);
+        auto upper = result;
+        result = lamina::detail::make_node<IntervalNode>(
+            lower, upper, node.lower_bound(), node.upper_bound());
+    }
+    void visit(const MembershipNode& node) override {
+        node.element()->accept(*this);
+        auto element = result;
+        node.set()->accept(*this);
+        auto set = result;
+        result = lamina::detail::make_node<MembershipNode>(
+            element, set, node.negated());
+    }
+    void visit(const UninterpretedFunctionNode& node) override {
+        std::vector<std::shared_ptr<const SymbolicNode>> arguments;
+        arguments.reserve(node.arguments().size());
+        for (const auto& argument : node.arguments()) {
+            argument->accept(*this);
+            arguments.push_back(result);
+        }
+        result = lamina::detail::make_node<UninterpretedFunctionNode>(
+            node.name(), std::move(arguments));
+    }
 };
 
 SymbolicExpr Matcher::replace(const SymbolicExpr& template_expr, const MatchMap& bindings, bool use_rest) {
@@ -720,6 +755,47 @@ public:
         auto real = visit_child(node.real(), child_changed);
         auto imag = visit_child(node.imag(), child_changed);
         finish_rewrite(SymbolicFactory::create_complex(real, imag),
+                       child_changed, original_changed);
+    }
+    void visit(const FiniteSetNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        std::vector<std::shared_ptr<const SymbolicNode>> elements;
+        elements.reserve(node.elements().size());
+        for (const auto& element : node.elements()) {
+            elements.push_back(visit_child(element, child_changed));
+        }
+        finish_rewrite(lamina::detail::make_node<FiniteSetNode>(std::move(elements)),
+                       child_changed, original_changed);
+    }
+    void visit(const IntervalNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        auto lower = visit_child(node.lower(), child_changed);
+        auto upper = visit_child(node.upper(), child_changed);
+        finish_rewrite(lamina::detail::make_node<IntervalNode>(
+                           lower, upper, node.lower_bound(), node.upper_bound()),
+                       child_changed, original_changed);
+    }
+    void visit(const MembershipNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        auto element = visit_child(node.element(), child_changed);
+        auto set = visit_child(node.set(), child_changed);
+        finish_rewrite(lamina::detail::make_node<MembershipNode>(
+                           element, set, node.negated()),
+                       child_changed, original_changed);
+    }
+    void visit(const UninterpretedFunctionNode& node) override {
+        bool original_changed = changed;
+        bool child_changed = false;
+        std::vector<std::shared_ptr<const SymbolicNode>> arguments;
+        arguments.reserve(node.arguments().size());
+        for (const auto& argument : node.arguments()) {
+            arguments.push_back(visit_child(argument, child_changed));
+        }
+        finish_rewrite(lamina::detail::make_node<UninterpretedFunctionNode>(
+                           node.name(), std::move(arguments)),
                        child_changed, original_changed);
     }
 };

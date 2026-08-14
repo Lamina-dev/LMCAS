@@ -26,6 +26,49 @@ int main() {
     EXPECT_TRUE(parsed_function.has_value(),
                 "parser accepts common mathematical functions");
 
+    auto parsed_relation = lamina::lsr::parse_expr("x > 0 and x < 1");
+    EXPECT_TRUE(parsed_relation.has_value(),
+                "parser accepts relational logical expressions");
+    EXPECT_CONTAINS(parsed_relation.value()->to_string(), {"and", "x", "0", "1"},
+                    "parser prints logical expressions with ASCII operators");
+
+    auto parsed_multi_arg = lamina::lsr::parse_expr("max(x, y, 0)");
+    EXPECT_TRUE(parsed_multi_arg.has_value(),
+                "parser accepts supported multi-argument functions");
+
+    auto parsed_log_base = lamina::lsr::parse_expr("log(x, 10)");
+    EXPECT_TRUE(parsed_log_base.has_value(),
+                "parser accepts two-argument log");
+
+    auto parsed_pow_star = lamina::lsr::parse_expr("x**2");
+    EXPECT_TRUE(!parsed_pow_star &&
+                    parsed_pow_star.error().code == lamina::CasErrc::ParseError,
+                "parser rejects ** power syntax");
+
+    auto parsed_set_literal = lamina::lsr::parse_expr("{-1, 1}");
+    EXPECT_TRUE(parsed_set_literal.has_value(),
+                "parser accepts finite set literals");
+    EXPECT_CONTAINS(parsed_set_literal.value()->to_string(), {"{", "1", "}"},
+                    "parser prints finite set literals");
+
+    auto parsed_interval = lamina::lsr::parse_expr("[0, 1)");
+    EXPECT_TRUE(parsed_interval.has_value(),
+                "parser accepts half-open interval literals");
+    EXPECT_EQ_EXPR_STR(parsed_interval.value(), "[0, 1)",
+                       "parser prints half-open interval literals");
+
+    auto parsed_membership = lamina::lsr::parse_expr("x in {-1, 1}");
+    EXPECT_TRUE(parsed_membership.has_value(),
+                "parser accepts membership expressions");
+    EXPECT_CONTAINS(parsed_membership.value()->to_string(), {"x", "in", "{"},
+                    "parser prints membership expressions");
+
+    auto parsed_unknown_call = lamina::lsr::parse_expr("f(x, y)");
+    EXPECT_TRUE(parsed_unknown_call.has_value(),
+                "parser accepts uninterpreted symbolic function calls");
+    EXPECT_EQ_EXPR_STR(parsed_unknown_call.value(), "f(x, y)",
+                       "parser prints uninterpreted symbolic function calls");
+
     auto parsed_invalid = lamina::lsr::parse_expr("x +");
     EXPECT_TRUE(!parsed_invalid &&
                     parsed_invalid.error().code == lamina::CasErrc::ParseError,

@@ -126,6 +126,18 @@ LAMINA_API ExprResult i();
 LAMINA_API ExprResult I();
 LAMINA_API ExprResult imaginary_unit();
 LAMINA_API ExprResult complex(ExprPtr real, ExprPtr imag);
+LAMINA_API ExprResult function(const std::string& name,
+                               std::vector<ExprPtr> arguments);
+LAMINA_API ExprResult finite_set(std::vector<ExprPtr> elements);
+LAMINA_API ExprResult interval(ExprPtr lower, ExprPtr upper,
+                               bool lower_closed, bool upper_closed);
+LAMINA_API ExprResult relation(const ExprPtr& lhs, const ExprPtr& rhs,
+                               RelationOp op);
+LAMINA_API ExprResult logical_and(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult logical_or(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult logical_not(const ExprPtr& expression);
+LAMINA_API ExprResult membership(const ExprPtr& element,
+                                 const ExprPtr& set, bool negated = false);
 LAMINA_API ExprResult add(const ExprPtr& lhs,
                           const ExprPtr& rhs,
                           ComputationContext& context);
