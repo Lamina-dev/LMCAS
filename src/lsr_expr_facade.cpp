@@ -215,12 +215,12 @@ ExprResult checked_transform_expr(const ExprPtr& expression,
 }
 
 bool is_reserved_symbol_name(const std::string& name) {
-    return name == "i" || name == "I" || name == "pi" || name == "π" ||
+    return name == "I" || name == "pi" || name == "π" ||
            name == "e" || name == "phi";
 }
 
 bool is_imaginary_unit_name(const std::string& name) {
-    return name == "i" || name == "I";
+    return name == "I";
 }
 
 ExprResult require_dimensionless(const ExprPtr& expression,
@@ -850,6 +850,66 @@ ExprResult substitute(const ExprPtr& expression,
     return substitute(expression, variable, value, context);
 }
 
+BindingResult binding(ExprPtr symbol, ExprPtr value) {
+    if (!symbol || !lamina::detail::node(symbol)) {
+        return BindingResult::failure(
+            CasErrc::InvalidArgument, "binding symbol cannot be null",
+            kSubstituteOperation);
+    }
+    if (!value || !lamina::detail::node(value)) {
+        return BindingResult::failure(
+            CasErrc::InvalidArgument, "binding value cannot be null",
+            kSubstituteOperation);
+    }
+    if (!std::dynamic_pointer_cast<const VariableNode>(
+            lamina::detail::node(symbol))) {
+        return BindingResult::failure(
+            CasErrc::InvalidArgument,
+            "binding left-hand side must be a symbol",
+            kSubstituteOperation);
+    }
+    return BindingResult::success(Binding{std::move(symbol), std::move(value)});
+}
+
+ExprResult substitute(const ExprPtr& expression,
+                      const Binding& replacement,
+                      ComputationContext& context) {
+    auto checked = binding(replacement.symbol, replacement.value);
+    if (!checked) return ExprResult::failure(checked.error());
+    const auto variable = std::dynamic_pointer_cast<const VariableNode>(
+        lamina::detail::node(checked.value().symbol));
+    return substitute(expression, variable->name(), checked.value().value, context);
+}
+
+ExprResult substitute(const ExprPtr& expression,
+                      const Binding& replacement) {
+    ComputationContext context;
+    return substitute(expression, replacement, context);
+}
+
+ExprResult substitute(const ExprPtr& expression,
+                      const std::vector<Binding>& replacements,
+                      ComputationContext& context) {
+    if (!expression || !lamina::detail::node(expression)) {
+        return expression_failure(CasErrc::InvalidArgument,
+                                  "expression cannot be null",
+                                  kSubstituteOperation);
+    }
+    auto result = expression;
+    for (const auto& replacement : replacements) {
+        auto next = substitute(result, replacement, context);
+        if (!next) return next;
+        result = std::move(next.value());
+    }
+    return ExprResult::success(std::move(result));
+}
+
+ExprResult substitute(const ExprPtr& expression,
+                      const std::vector<Binding>& replacements) {
+    ComputationContext context;
+    return substitute(expression, replacements, context);
+}
+
 ExprMatchResult expr_match(const ExprPtr& pattern,
                            const ExprPtr& target,
                            const std::vector<std::string>& wildcards,
@@ -979,10 +1039,33 @@ ExprResult relation(const ExprPtr& lhs, const ExprPtr& rhs, RelationOp op) {
         return ExprResult::success(lamina::detail::make_expression_ptr(
             lamina::detail::make_node<RelationalNode>(
                 lamina::detail::node(lhs), lamina::detail::node(rhs), op)));
+    } catch (const std::bad_alloc&) {
+        return expression_failure(CasErrc::ResourceLimit,
+                                  "relation allocation failed", operation);
     } catch (const std::exception& error) {
         return expression_failure(CasErrc::InvalidArgument,
                                   error.what(), operation);
     }
+}
+
+ExprResult ne(const ExprPtr& lhs, const ExprPtr& rhs) {
+    return relation(lhs, rhs, RelationOp::NEQ);
+}
+
+ExprResult lt(const ExprPtr& lhs, const ExprPtr& rhs) {
+    return relation(lhs, rhs, RelationOp::LT);
+}
+
+ExprResult le(const ExprPtr& lhs, const ExprPtr& rhs) {
+    return relation(lhs, rhs, RelationOp::LEQ);
+}
+
+ExprResult gt(const ExprPtr& lhs, const ExprPtr& rhs) {
+    return relation(lhs, rhs, RelationOp::GT);
+}
+
+ExprResult ge(const ExprPtr& lhs, const ExprPtr& rhs) {
+    return relation(lhs, rhs, RelationOp::GEQ);
 }
 
 namespace {
@@ -997,6 +1080,10 @@ ExprResult logical_expression(const ExprPtr& lhs, const ExprPtr& rhs,
             lamina::detail::make_node<LogicalNode>(
                 lamina::detail::node(lhs),
                 rhs ? lamina::detail::node(rhs) : nullptr, op)));
+    } catch (const std::bad_alloc&) {
+        return expression_failure(CasErrc::ResourceLimit,
+                                  "logical expression allocation failed",
+                                  operation);
     } catch (const std::exception& error) {
         return expression_failure(CasErrc::InvalidArgument,
                                   error.what(), operation);

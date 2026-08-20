@@ -19,6 +19,13 @@ using Expr = SymbolicExpr;
 using ExprPtr = std::shared_ptr<SymbolicExpr>;
 using ExprResult = Result<ExprPtr>;
 
+struct Binding {
+    ExprPtr symbol;
+    ExprPtr value;
+};
+
+using BindingResult = Result<Binding>;
+
 struct ExprMatchBinding {
     std::string name;
     ExprPtr value;
@@ -137,6 +144,11 @@ LAMINA_API ExprResult interval(ExprPtr lower, ExprPtr upper,
                                bool lower_closed, bool upper_closed);
 LAMINA_API ExprResult relation(const ExprPtr& lhs, const ExprPtr& rhs,
                                RelationOp op);
+LAMINA_API ExprResult ne(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult lt(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult le(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult gt(const ExprPtr& lhs, const ExprPtr& rhs);
+LAMINA_API ExprResult ge(const ExprPtr& lhs, const ExprPtr& rhs);
 LAMINA_API ExprResult logical_and(const ExprPtr& lhs, const ExprPtr& rhs);
 LAMINA_API ExprResult logical_or(const ExprPtr& lhs, const ExprPtr& rhs);
 LAMINA_API ExprResult logical_not(const ExprPtr& expression);
@@ -265,6 +277,22 @@ LAMINA_API ExprResult substitute(const ExprPtr& expression,
 LAMINA_API ExprResult substitute(const ExprPtr& expression,
                                  const std::string& variable,
                                  const ExprPtr& value);
+
+LAMINA_API BindingResult binding(ExprPtr symbol, ExprPtr value);
+
+LAMINA_API ExprResult substitute(const ExprPtr& expression,
+                                 const Binding& binding,
+                                 ComputationContext& context);
+
+LAMINA_API ExprResult substitute(const ExprPtr& expression,
+                                 const Binding& binding);
+
+LAMINA_API ExprResult substitute(const ExprPtr& expression,
+                                 const std::vector<Binding>& bindings,
+                                 ComputationContext& context);
+
+LAMINA_API ExprResult substitute(const ExprPtr& expression,
+                                 const std::vector<Binding>& bindings);
 
 LAMINA_API ExprMatchResult expr_match(const ExprPtr& pattern,
                                       const ExprPtr& target,

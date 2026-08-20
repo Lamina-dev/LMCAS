@@ -108,11 +108,9 @@ int main() {
         std::cerr << "failed to expose LSR complex type diagnostics\n";
         return 10;
     }
-    auto reserved_i = lamina::lsr::sym("i");
-    if (reserved_i ||
-        std::string(lamina::lsr::error_name(reserved_i.error())) !=
-            "ImaginaryUnitReserved") {
-        std::cerr << "failed to expose LSR diagnostic names\n";
+    auto ordinary_i = lamina::lsr::sym("i");
+    if (!ordinary_i || ordinary_i.value()->to_string() != "i") {
+        std::cerr << "failed to allow lowercase i as an ordinary symbol\n";
         return 10;
     }
     auto reserved_I = lamina::lsr::sym("I");
@@ -379,8 +377,8 @@ int main() {
     lamina::ComputationContext legacy_i_context;
     auto legacy_i_rule = lamina::lsr::equivalent_core(
         *legacy_i_squared, *SymbolicExpr::number(-1), legacy_i_context);
-    if (!legacy_i_rule || !legacy_i_rule.value()) {
-        std::cerr << "failed to normalize legacy Expr i in LSR equivalence\n";
+    if (!legacy_i_rule || legacy_i_rule.value()) {
+        std::cerr << "ordinary Expr i was treated as the imaginary unit\n";
         return 11;
     }
     lamina::lsr::EqvOptions valid_budget_options;
@@ -805,20 +803,27 @@ int main() {
         !lsr_domain_exact || !lsr_domain_exact.value() ||
         !lsr_domain_real || !lsr_domain_real.value() ||
         !lsr_domain_complex || !lsr_domain_complex.value() ||
-        !lsr_domain_legacy_i || !lsr_domain_legacy_i.value() ||
-        !lsr_domain_legacy_i_not_real ||
-        lsr_domain_legacy_i_not_real.value() ||
-        !lsr_domain_legacy_complex_arithmetic ||
-        !lsr_domain_legacy_complex_arithmetic.value() ||
+        lsr_domain_legacy_i ||
+        std::string(lamina::lsr::error_name(
+            lsr_domain_legacy_i.error())) != "Inconclusive" ||
+        lsr_domain_legacy_i_not_real ||
+        std::string(lamina::lsr::error_name(
+            lsr_domain_legacy_i_not_real.error())) != "Inconclusive" ||
+        lsr_domain_legacy_complex_arithmetic ||
+        std::string(lamina::lsr::error_name(
+            lsr_domain_legacy_complex_arithmetic.error())) != "Inconclusive" ||
         !lsr_domain_expr_symbol || !lsr_domain_expr_symbol.value() ||
         !lsr_set_subset_r || !lsr_set_subset_r.value() ||
         !lsr_set_subset_c || !lsr_set_subset_c.value() ||
         !lsr_complex_set_subset_r || lsr_complex_set_subset_r.value() ||
         !lsr_complex_set_subset_c || !lsr_complex_set_subset_c.value() ||
-        !lsr_legacy_i_set_subset_c ||
-        !lsr_legacy_i_set_subset_c.value() ||
-        !lsr_legacy_complex_arithmetic_set_subset_c ||
-        !lsr_legacy_complex_arithmetic_set_subset_c.value() ||
+        lsr_legacy_i_set_subset_c ||
+        std::string(lamina::lsr::error_name(
+            lsr_legacy_i_set_subset_c.error())) != "Inconclusive" ||
+        lsr_legacy_complex_arithmetic_set_subset_c ||
+        std::string(lamina::lsr::error_name(
+            lsr_legacy_complex_arithmetic_set_subset_c.error())) !=
+            "Inconclusive" ||
         !lsr_unknown_set_subset_expr ||
         !lsr_unknown_set_subset_expr.value() ||
         lsr_unknown_set_subset_r ||
@@ -971,14 +976,22 @@ int main() {
     auto three_plus_four_i = SymbolicExpr::add(SymbolicExpr::number(3),
                                                four_i.value());
     auto lowered_complex = lamina::lsr::eval_complex(*three_plus_four_i);
-    auto lowered_legacy_i = lamina::lsr::eval_complex(*legacy_i);
+    auto lowered_ordinary_i = lamina::lsr::eval_complex(*legacy_i);
     if (!lowered_complex || !lowered_complex.value().is_finite() ||
         lowered_complex.value().real.value != 3.0 ||
-        lowered_complex.value().imag.value != 4.0 ||
-        !lowered_legacy_i || !lowered_legacy_i.value().is_finite() ||
-        lowered_legacy_i.value().real.value != 0.0 ||
-        lowered_legacy_i.value().imag.value != 1.0) {
+        lowered_complex.value().imag.value != 4.0) {
         std::cerr << "failed to explicitly lower LSR Expr to complex\n";
+        return 13;
+    }
+    if (lowered_ordinary_i ||
+        lowered_ordinary_i.error().code != lamina::CasErrc::UnboundSymbol) {
+        std::cerr << "ordinary lowercase i complex lowering returned ";
+        if (lowered_ordinary_i) {
+            std::cerr << "a value\n";
+        } else {
+            std::cerr << lamina::lsr::error_name(lowered_ordinary_i.error())
+                      << "\n";
+        }
         return 13;
     }
     auto ordinary_multiply_complex = SymbolicExpr::add(

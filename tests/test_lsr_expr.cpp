@@ -16,7 +16,7 @@ int main() {
     EXPECT_EQ_EXPR_STR(parsed_polynomial.value(), "x^2 + 1",
                        "parser builds polynomial expression");
 
-    auto parsed_complex = lamina::lsr::parse_expr("x + 2*i");
+    auto parsed_complex = lamina::lsr::parse_expr("x + 2*I");
     EXPECT_TRUE(parsed_complex.has_value(),
                 "parser accepts reserved imaginary unit");
     EXPECT_CONTAINS(parsed_complex.value()->to_string(), {"I", "x"},
@@ -31,6 +31,15 @@ int main() {
                 "parser accepts relational logical expressions");
     EXPECT_CONTAINS(parsed_relation.value()->to_string(), {"and", "x", "0", "1"},
                     "parser prints logical expressions with ASCII operators");
+
+    auto relation_rhs = lamina::lsr::integer(2);
+    auto named_ne = lamina::lsr::ne(x.value(), relation_rhs.value());
+    auto named_lt = lamina::lsr::lt(x.value(), relation_rhs.value());
+    auto named_le = lamina::lsr::le(x.value(), relation_rhs.value());
+    auto named_gt = lamina::lsr::gt(x.value(), relation_rhs.value());
+    auto named_ge = lamina::lsr::ge(x.value(), relation_rhs.value());
+    EXPECT_TRUE(named_ne && named_lt && named_le && named_gt && named_ge,
+                "named relational factories construct all non-equality relations");
 
     auto parsed_multi_arg = lamina::lsr::parse_expr("max(x, y, 0)");
     EXPECT_TRUE(parsed_multi_arg.has_value(),
@@ -74,23 +83,18 @@ int main() {
                     parsed_invalid.error().code == lamina::CasErrc::ParseError,
                 "parser reports malformed input as ParseError");
 
-    auto reserved_i = lamina::lsr::sym("i");
-    EXPECT_TRUE(!reserved_i &&
-                    reserved_i.error().code == lamina::CasErrc::InvalidArgument,
-                "i is the imaginary unit and cannot be shadowed as a symbol");
-    EXPECT_TRUE(!reserved_i &&
-                    std::string(lamina::lsr::error_name(reserved_i.error())) ==
-                        "ImaginaryUnitReserved",
-                "LSR diagnostic name preserves reserved imaginary unit errors");
+    auto ordinary_i = lamina::lsr::sym("i");
+    EXPECT_TRUE(ordinary_i && ordinary_i.value()->to_string() == "i",
+                "lowercase i is an ordinary symbolic identifier");
 
     auto reserved_I = lamina::lsr::sym("I");
     EXPECT_TRUE(!reserved_I &&
                     reserved_I.error().code == lamina::CasErrc::InvalidArgument,
-                "I is the imaginary unit alias and cannot be shadowed as a symbol");
+                "uppercase I is the imaginary unit and cannot be shadowed as a symbol");
     EXPECT_TRUE(!reserved_I &&
                     std::string(lamina::lsr::error_name(reserved_I.error())) ==
                         "ImaginaryUnitReserved",
-                "LSR diagnostic name preserves reserved imaginary unit alias errors");
+                "LSR diagnostic name preserves reserved imaginary unit errors");
 
     auto reserved_pi = lamina::lsr::sym("pi");
     EXPECT_TRUE(!reserved_pi &&
@@ -547,7 +551,7 @@ int main() {
 
     auto variable_i = SymbolicExpr::variable("i");
     EXPECT_TRUE(i && !lamina::lsr::structurally_equal(*i.value(), *variable_i),
-                "legacy variable(\"i\") is not structurally the imaginary unit");
+                "ordinary variable(\"i\") is not structurally the imaginary unit");
 
     if (i) {
         auto i_squared = SymbolicExpr::multiply(i.value(), i.value());
@@ -572,8 +576,8 @@ int main() {
         auto legacy_i_equivalent = lamina::lsr::equivalent_core(
             *legacy_i_squared, *SymbolicExpr::number(-1),
             legacy_i_equivalence_context);
-        EXPECT_TRUE(legacy_i_equivalent && legacy_i_equivalent.value(),
-                    "legacy variable(\"i\") follows the LSR i*i == -1 rule in equivalence");
+        EXPECT_TRUE(legacy_i_equivalent && !legacy_i_equivalent.value(),
+                    "ordinary variable(\"i\") does not follow the imaginary-unit multiplication rule");
 
         auto legacy_i_plus_one = SymbolicExpr::add(variable_i,
                                                    SymbolicExpr::number(1));
@@ -584,8 +588,8 @@ int main() {
             *legacy_i_plus_one, *one_plus_canonical_i,
             legacy_i_add_context);
         EXPECT_TRUE(legacy_i_add_equivalent &&
-                        legacy_i_add_equivalent.value(),
-                    "legacy variable(\"i\") normalizes inside LSR additive equivalence");
+                        !legacy_i_add_equivalent.value(),
+                    "ordinary variable(\"i\") remains distinct inside additive equivalence");
     }
 
     TEST_CASE("LSR evalf is explicit and propagates missing bindings");
@@ -652,6 +656,47 @@ int main() {
                 "substituted Expr can be explicitly evaluated");
     EXPECT_NEAR(substituted_value.value().value, 5.0, 0.0,
                 "substitute(x + 2, x => 3) evaluates to 5");
+
+    auto typed_binding = lamina::lsr::binding(
+        x.value(), SymbolicExpr::number(3));
+    EXPECT_TRUE(typed_binding.has_value(),
+                "Expr Binding can be constructed from a symbol and Expr value");
+    auto typed_substitution = typed_binding
+        ? lamina::lsr::substitute(linear, typed_binding.value())
+        : lamina::lsr::ExprResult::failure(
+              lamina::CasErrc::InternalInvariant,
+              "typed binding construction failed", "test");
+    EXPECT_TRUE(typed_substitution && substituted &&
+                    lamina::lsr::structurally_equal(
+                        *typed_substitution.value(), *substituted.value()),
+                "substitute accepts an Expr Binding without a string variable name");
+
+    auto y_symbol = lamina::lsr::sym("y");
+    auto y_binding = lamina::lsr::binding(
+        y_symbol.value(), SymbolicExpr::number(4));
+    auto x_plus_y = SymbolicExpr::add(x.value(), y_symbol.value());
+    auto batch_substitution = typed_binding && y_binding
+        ? lamina::lsr::substitute(
+              x_plus_y,
+              std::vector<lamina::lsr::Binding>{typed_binding.value(),
+                                                y_binding.value()})
+        : lamina::lsr::ExprResult::failure(
+              lamina::CasErrc::InternalInvariant,
+              "binding list construction failed", "test");
+    auto batch_value = batch_substitution
+        ? lamina::lsr::evalf(*batch_substitution.value())
+        : lamina::Result<lamina::ApproxReal>::failure(
+              lamina::CasErrc::InternalInvariant,
+              "binding list substitution failed", "test");
+    EXPECT_TRUE(batch_value && batch_value.value().value == 7.0,
+                "substitute accepts a deterministic list of Expr bindings");
+
+    auto invalid_binding = lamina::lsr::binding(
+        SymbolicExpr::number(1), SymbolicExpr::number(2));
+    EXPECT_TRUE(!invalid_binding &&
+                    invalid_binding.error().code ==
+                        lamina::CasErrc::InvalidArgument,
+                "Expr Binding rejects a non-symbol left-hand side");
 
     auto unchanged_substitution = lamina::lsr::substitute(
         linear, "y", SymbolicExpr::number(9));
@@ -824,18 +869,15 @@ int main() {
     EXPECT_NEAR(real_as_complex.value().imag.value, 0.0, 0.0,
                 "eval_complex promotes real expression with zero imaginary component");
 
-    auto legacy_i_complex =
+    auto lowercase_i_complex =
         lamina::lsr::eval_complex(*SymbolicExpr::variable("i"));
     auto legacy_upper_i_complex =
         lamina::lsr::eval_complex(*SymbolicExpr::variable("I"));
-    EXPECT_TRUE(legacy_i_complex && legacy_i_complex.value().is_finite() &&
+    EXPECT_TRUE(!lowercase_i_complex &&
+                    lowercase_i_complex.error().code == lamina::CasErrc::UnboundSymbol &&
                     legacy_upper_i_complex &&
                     legacy_upper_i_complex.value().is_finite(),
-                "eval_complex treats legacy i/I Expr variables as the imaginary unit");
-    EXPECT_NEAR(legacy_i_complex.value().real.value, 0.0, 0.0,
-                "legacy i has zero real component");
-    EXPECT_NEAR(legacy_i_complex.value().imag.value, 1.0, 0.0,
-                "legacy i has unit imaginary component");
+                "eval_complex treats lowercase i as a symbol and uppercase I as the imaginary unit");
     EXPECT_NEAR(legacy_upper_i_complex.value().imag.value, 1.0, 0.0,
                 "legacy I aliases the imaginary unit during complex evaluation");
 
@@ -1220,17 +1262,23 @@ int main() {
                 "R rejects explicit non-real complex values");
     EXPECT_TRUE(c_contains_i && c_contains_i.value(),
                 "C contains explicit complex values");
-    EXPECT_TRUE(r_contains_legacy_i && !r_contains_legacy_i.value(),
-                "R rejects legacy i variables under the LSR complex boundary");
-    EXPECT_TRUE(c_contains_legacy_i && c_contains_legacy_i.value() &&
+    EXPECT_TRUE(!r_contains_legacy_i &&
+                    r_contains_legacy_i.error().code ==
+                        lamina::CasErrc::Inconclusive,
+                "R membership for ordinary i is undecidable without assumptions");
+    EXPECT_TRUE(!c_contains_legacy_i &&
+                    c_contains_legacy_i.error().code ==
+                        lamina::CasErrc::Inconclusive &&
                     c_contains_legacy_upper_i &&
                     c_contains_legacy_upper_i.value(),
-                "C contains legacy i/I variables under the LSR complex boundary");
-    EXPECT_TRUE(c_contains_legacy_four_i &&
-                    c_contains_legacy_four_i.value() &&
-                    c_contains_legacy_three_plus_four_i &&
-                    c_contains_legacy_three_plus_four_i.value(),
-                "C contains legacy arithmetic expressions built from i/I");
+                "ordinary i is undecidable while reserved I belongs to C");
+    EXPECT_TRUE(!c_contains_legacy_four_i &&
+                    c_contains_legacy_four_i.error().code ==
+                        lamina::CasErrc::Inconclusive &&
+                    !c_contains_legacy_three_plus_four_i &&
+                    c_contains_legacy_three_plus_four_i.error().code ==
+                        lamina::CasErrc::Inconclusive,
+                "arithmetic expressions built from ordinary i remain undecidable");
     EXPECT_TRUE(expr_contains_symbol && expr_contains_symbol.value(),
                 "Expr contains symbolic expressions");
 
@@ -1301,11 +1349,14 @@ int main() {
                 "set<Expr> subset facade rejects non-real complex members");
     EXPECT_TRUE(complex_subset_c && complex_subset_c.value(),
                 "set<Expr> subset facade accepts explicit complex members in C");
-    EXPECT_TRUE(legacy_complex_subset_c && legacy_complex_subset_c.value(),
-                "set<Expr> subset facade accepts legacy i members in C");
-    EXPECT_TRUE(legacy_complex_arithmetic_subset_c &&
-                    legacy_complex_arithmetic_subset_c.value(),
-                "set<Expr> subset facade accepts legacy complex arithmetic members in C");
+    EXPECT_TRUE(!legacy_complex_subset_c &&
+                    legacy_complex_subset_c.error().code ==
+                        lamina::CasErrc::Inconclusive,
+                "set<Expr> subset facade keeps ordinary i membership undecidable");
+    EXPECT_TRUE(!legacy_complex_arithmetic_subset_c &&
+                    legacy_complex_arithmetic_subset_c.error().code ==
+                        lamina::CasErrc::Inconclusive,
+                "set<Expr> subset facade keeps ordinary i arithmetic undecidable");
     EXPECT_TRUE(!unknown_subset_r &&
                     unknown_subset_r.error().code ==
                         lamina::CasErrc::Inconclusive,

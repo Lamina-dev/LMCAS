@@ -168,7 +168,7 @@ bool is_integer_double(double value) {
 }
 
 bool is_imaginary_unit_name(const std::string& name) {
-    return name == "i" || name == "I";
+    return name == "I";
 }
 
 class ExprParser {
