@@ -133,7 +133,6 @@ LAMINA_API ExprResult pi();
 LAMINA_API ExprResult e();
 LAMINA_API ExprResult phi();
 
-LAMINA_API ExprResult i();
 LAMINA_API ExprResult I();
 LAMINA_API ExprResult imaginary_unit();
 LAMINA_API ExprResult complex(ExprPtr real, ExprPtr imag);
@@ -157,9 +156,17 @@ LAMINA_API ExprResult membership(const ExprPtr& element,
 LAMINA_API ExprResult with_unit(const ExprPtr& value,
                                 const std::string& unit,
                                 ComputationContext& context);
+LAMINA_API ExprResult with_unit_definition(const ExprPtr& value,
+                                           std::string display_unit,
+                                           UnitDefinition definition,
+                                           ComputationContext& context);
 LAMINA_API ExprResult convert_to_unit(const ExprPtr& quantity,
                                       const std::string& unit,
                                       ComputationContext& context);
+LAMINA_API ExprResult convert_to_unit_definition(const ExprPtr& quantity,
+                                                 std::string display_unit,
+                                                 UnitDefinition definition,
+                                                 ComputationContext& context);
 LAMINA_API ExprResult strip_to_base_value(const ExprPtr& quantity,
                                           ComputationContext& context);
 LAMINA_API ExprResult strip_to_display_value(const ExprPtr& quantity,

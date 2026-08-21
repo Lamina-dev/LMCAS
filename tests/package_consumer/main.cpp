@@ -88,12 +88,10 @@ int main() {
         std::cerr << "failed to construct LSR imaginary unit\n";
         return 10;
     }
-    auto lsr_lower_i = lamina::lsr::i();
     auto lsr_upper_i = lamina::lsr::I();
-    if (!lsr_lower_i || !lsr_upper_i ||
-        !lamina::lsr::structurally_equal(*i.value(), *lsr_lower_i.value()) ||
+    if (!lsr_upper_i ||
         !lamina::lsr::structurally_equal(*i.value(), *lsr_upper_i.value())) {
-        std::cerr << "failed to expose LSR imaginary unit aliases\n";
+        std::cerr << "failed to expose std.math.I\n";
         return 10;
     }
     auto null_real_complex =

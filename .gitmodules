@@ -1,3 +1,4 @@
 [submodule "LMMC"]
 	path = LMMC
 	url = https://github.com/Lamina-dev/LMMC.git
+	branch = main

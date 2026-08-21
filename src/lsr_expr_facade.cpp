@@ -359,10 +359,6 @@ ExprResult phi() {
     return constant_symbol("phi");
 }
 
-ExprResult i() {
-    return imaginary_unit();
-}
-
 ExprResult I() {
     return imaginary_unit();
 }

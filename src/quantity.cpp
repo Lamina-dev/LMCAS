@@ -105,6 +105,26 @@ QuantityResult attach_unit(const std::shared_ptr<SymbolicExpr>& value,
                          definition.value().scale_to_base, unit);
 }
 
+QuantityResult attach_unit(const std::shared_ptr<SymbolicExpr>& value,
+                           std::string display_unit,
+                           UnitDefinition definition,
+                           ComputationContext& context) {
+    auto step = context.consume_steps(1, kOperation);
+    if (!step) return QuantityResult::failure(step.error());
+    if (!value || !detail::node(value)) {
+        return failure(CasErrc::InvalidArgument, "quantity value cannot be null");
+    }
+    if (std::dynamic_pointer_cast<const QuantityNode>(detail::node(value))) {
+        return failure(CasErrc::UnitInvalid, "a quantity cannot receive a second unit");
+    }
+    if (display_unit.empty() || definition.scale_to_base <= Rational(0)) {
+        return failure(CasErrc::UnitInvalid, "resolved unit definition is invalid");
+    }
+    return make_quantity(detail::node(value), std::move(definition.dimension),
+                         std::move(definition.scale_to_base),
+                         std::move(display_unit));
+}
+
 QuantityResult convert_unit(const std::shared_ptr<SymbolicExpr>& expression,
                             const std::string& target_unit,
                             ComputationContext& context) {
@@ -130,9 +150,10 @@ QuantityResult convert_unit(const std::shared_ptr<SymbolicExpr>& expression,
                          target.value().scale_to_base, target_unit);
 }
 
-QuantityResult strip_unit(const std::shared_ptr<SymbolicExpr>& expression,
-                          UnitStripMode mode,
-                          ComputationContext& context) {
+QuantityResult convert_unit(const std::shared_ptr<SymbolicExpr>& expression,
+                            std::string display_unit,
+                            UnitDefinition definition,
+                            ComputationContext& context) {
     auto step = context.consume_steps(1, kOperation);
     if (!step) return QuantityResult::failure(step.error());
     auto quantity = expression
@@ -140,8 +161,35 @@ QuantityResult strip_unit(const std::shared_ptr<SymbolicExpr>& expression,
         : nullptr;
     if (!quantity) {
         return failure(CasErrc::UnitStripTypeMismatch,
-                       "unit stripping requires a quantity expression");
+                       "unit conversion requires a quantity expression");
     }
+    if (display_unit.empty() || definition.scale_to_base <= Rational(0)) {
+        return failure(CasErrc::UnitInvalid, "resolved unit definition is invalid");
+    }
+    if (quantity->dimension() != definition.dimension) {
+        return failure(CasErrc::DimensionMismatch,
+                       "unit conversion requires equal dimensions");
+    }
+    const Rational factor = quantity->scale_to_base() / definition.scale_to_base;
+    auto value = SymbolicFactory::create_multiply(
+        {quantity->value(), rational_node(factor)});
+    return make_quantity(std::move(value), std::move(definition.dimension),
+                         std::move(definition.scale_to_base),
+                         std::move(display_unit));
+}
+
+QuantityResult strip_unit(const std::shared_ptr<SymbolicExpr>& expression,
+                          UnitStripMode mode,
+                          ComputationContext& context) {
+    auto step = context.consume_steps(1, kOperation);
+    if (!step) return QuantityResult::failure(step.error());
+    if (!expression || !detail::node(expression)) {
+        return failure(CasErrc::InvalidArgument,
+                       "unit stripping requires an expression");
+    }
+    auto quantity = std::dynamic_pointer_cast<const QuantityNode>(
+        detail::node(expression));
+    if (!quantity) return QuantityResult::success(expression);
     auto value = mode == UnitStripMode::BaseValue
         ? SymbolicFactory::create_multiply(
               {quantity->value(), rational_node(quantity->scale_to_base())})

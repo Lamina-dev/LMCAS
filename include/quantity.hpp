@@ -22,13 +22,27 @@ LAMINA_API QuantityResult attach_unit(
     const std::string& unit,
     ComputationContext& context);
 
+/** Attaches a resolved unit definition. */
+LAMINA_API QuantityResult attach_unit(
+    const std::shared_ptr<SymbolicExpr>& value,
+    std::string display_unit,
+    UnitDefinition definition,
+    ComputationContext& context);
+
 /** Converts a quantity to a declared unit of the same dimension. */
 LAMINA_API QuantityResult convert_unit(
     const std::shared_ptr<SymbolicExpr>& quantity,
     const std::string& target_unit,
     ComputationContext& context);
 
-/** Removes a quantity annotation using an explicit scale policy. */
+/** Converts to a resolved unit definition. */
+LAMINA_API QuantityResult convert_unit(
+    const std::shared_ptr<SymbolicExpr>& quantity,
+    std::string display_unit,
+    UnitDefinition definition,
+    ComputationContext& context);
+
+/** Removes a quantity annotation using the requested scale. */
 LAMINA_API QuantityResult strip_unit(
     const std::shared_ptr<SymbolicExpr>& quantity,
     UnitStripMode mode,

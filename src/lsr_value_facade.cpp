@@ -9,9 +9,23 @@ ExprResult with_unit(const ExprPtr& value, const std::string& unit,
     return attach_unit(value, unit, context);
 }
 
+ExprResult with_unit_definition(const ExprPtr& value,
+                                std::string display_unit,
+                                UnitDefinition definition,
+                                ComputationContext& context) {
+    return attach_unit(value, std::move(display_unit), std::move(definition), context);
+}
+
 ExprResult convert_to_unit(const ExprPtr& quantity, const std::string& unit,
                            ComputationContext& context) {
     return convert_unit(quantity, unit, context);
+}
+
+ExprResult convert_to_unit_definition(const ExprPtr& quantity,
+                                      std::string display_unit,
+                                      UnitDefinition definition,
+                                      ComputationContext& context) {
+    return convert_unit(quantity, std::move(display_unit), std::move(definition), context);
 }
 
 ExprResult strip_to_base_value(const ExprPtr& quantity,

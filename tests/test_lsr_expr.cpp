@@ -96,6 +96,24 @@ int main() {
                         "ImaginaryUnitReserved",
                 "LSR diagnostic name preserves reserved imaginary unit errors");
 
+    TEST_CASE("LSR facade accepts resolved unit definitions");
+    lamina::ComputationContext unit_context;
+    lamina::UnitDefinition level{
+        lamina::DimensionSignature::base("user::score"), Rational(100)};
+    lamina::UnitDefinition score{
+        lamina::DimensionSignature::base("user::score"), Rational(1)};
+    auto three = lamina::lsr::integer(3);
+    auto points = lamina::lsr::with_unit_definition(
+        three.value(), "level", level, unit_context);
+    EXPECT_TRUE(points.has_value(), "attach resolved unit");
+    auto converted = lamina::lsr::convert_to_unit_definition(
+        points.value(), "score", score, unit_context);
+    EXPECT_TRUE(converted.has_value(), "convert resolved unit");
+    auto display = lamina::lsr::strip_to_display_value(
+        converted.value(), unit_context);
+    EXPECT_TRUE(display && display.value()->simplify()->to_string() == "300",
+                "preserve target magnitude");
+
     auto reserved_pi = lamina::lsr::sym("pi");
     EXPECT_TRUE(!reserved_pi &&
                     reserved_pi.error().code == lamina::CasErrc::InvalidArgument,
@@ -504,22 +522,16 @@ int main() {
                         lamina::CasErrc::ResourceLimit,
                 "std.math Expr wrappers observe the computation budget");
 
-    TEST_CASE("LSR imaginary unit is canonical complex zero plus one i");
+    TEST_CASE("LSR imaginary unit is complex zero plus one I");
 
     auto i = lamina::lsr::imaginary_unit();
     EXPECT_TRUE(i.has_value(), "imaginary unit can be constructed");
-    auto lower_i = lamina::lsr::i();
     auto upper_i = lamina::lsr::I();
-    EXPECT_TRUE(lower_i.has_value(), "std.math.i Expr alias can be constructed");
-    EXPECT_TRUE(upper_i.has_value(), "std.math.I Expr alias can be constructed");
-    EXPECT_TRUE(i && lower_i &&
-                    lamina::lsr::structurally_equal(*i.value(),
-                                                    *lower_i.value()),
-                "std.math.i aliases the canonical imaginary unit");
+    EXPECT_TRUE(upper_i.has_value(), "std.math.I Expr can be constructed");
     EXPECT_TRUE(i && upper_i &&
                     lamina::lsr::structurally_equal(*i.value(),
                                                     *upper_i.value()),
-                "std.math.I aliases the canonical imaginary unit");
+                "std.math.I is the imaginary unit");
 
     auto explicit_i = lamina::lsr::complex(SymbolicExpr::number(0),
                                            SymbolicExpr::number(1));
@@ -559,7 +571,7 @@ int main() {
         auto complex_equivalent = lamina::lsr::equivalent_core(
             *i_squared, *SymbolicExpr::number(-1), complex_equivalence_context);
         EXPECT_TRUE(complex_equivalent && complex_equivalent.value(),
-                    "i * i is equivalent to -1 in the LSR core profile");
+                    "I * I is equivalent to -1 in the LSR core profile");
 
         auto i_power_two = SymbolicExpr::power(i.value(), SymbolicExpr::number(2));
         lamina::ComputationContext complex_power_equivalence_context;
@@ -568,7 +580,7 @@ int main() {
             complex_power_equivalence_context);
         EXPECT_TRUE(complex_power_equivalent &&
                         complex_power_equivalent.value(),
-                    "i^2 is equivalent to -1 in the LSR core profile");
+                    "I^2 is equivalent to -1 in the LSR core profile");
 
         auto legacy_i_squared =
             SymbolicExpr::multiply(variable_i, variable_i);
@@ -871,15 +883,15 @@ int main() {
 
     auto lowercase_i_complex =
         lamina::lsr::eval_complex(*SymbolicExpr::variable("i"));
-    auto legacy_upper_i_complex =
+    auto upper_i_complex =
         lamina::lsr::eval_complex(*SymbolicExpr::variable("I"));
     EXPECT_TRUE(!lowercase_i_complex &&
                     lowercase_i_complex.error().code == lamina::CasErrc::UnboundSymbol &&
-                    legacy_upper_i_complex &&
-                    legacy_upper_i_complex.value().is_finite(),
+                    upper_i_complex &&
+                    upper_i_complex.value().is_finite(),
                 "eval_complex treats lowercase i as a symbol and uppercase I as the imaginary unit");
-    EXPECT_NEAR(legacy_upper_i_complex.value().imag.value, 1.0, 0.0,
-                "legacy I aliases the imaginary unit during complex evaluation");
+    EXPECT_NEAR(upper_i_complex.value().imag.value, 1.0, 0.0,
+                "I is the imaginary unit during complex evaluation");
 
     auto four_i = lamina::lsr::complex(SymbolicExpr::number(0),
                                        SymbolicExpr::number(4));
@@ -887,11 +899,11 @@ int main() {
                                                four_i.value());
     auto lowered_complex = lamina::lsr::eval_complex(*three_plus_four_i);
     EXPECT_TRUE(lowered_complex && lowered_complex.value().is_finite(),
-                "eval_complex lowers 3 + 4i");
+                "eval_complex lowers 3 + 4I");
     EXPECT_NEAR(lowered_complex.value().real.value, 3.0, 0.0,
-                "eval_complex computes real part of 3 + 4i");
+                "eval_complex computes real part of 3 + 4I");
     EXPECT_NEAR(lowered_complex.value().imag.value, 4.0, 0.0,
-                "eval_complex computes imaginary part of 3 + 4i");
+                "eval_complex computes imaginary part of 3 + 4I");
 
     if (i) {
         auto ordinary_multiply_complex = SymbolicExpr::add(
@@ -901,7 +913,7 @@ int main() {
             lamina::lsr::eval_complex(*ordinary_multiply_complex);
         EXPECT_TRUE(lowered_ordinary_multiply &&
                         lowered_ordinary_multiply.value().is_finite(),
-                    "eval_complex lowers the LSR 3 + 4 * i ordinary multiplication form");
+                    "eval_complex lowers the LSR 3 + 4 * I ordinary multiplication form");
         EXPECT_NEAR(lowered_ordinary_multiply.value().real.value, 3.0, 0.0,
                     "ordinary multiplication complex form preserves real part");
         EXPECT_NEAR(lowered_ordinary_multiply.value().imag.value, 4.0, 0.0,
@@ -910,11 +922,11 @@ int main() {
         auto i_power_two = SymbolicExpr::power(i.value(), SymbolicExpr::number(2));
         auto lowered_i_squared = lamina::lsr::eval_complex(*i_power_two);
         EXPECT_TRUE(lowered_i_squared && lowered_i_squared.value().is_finite(),
-                    "eval_complex supports the LSR i^2 rule");
+                    "eval_complex supports the LSR I^2 rule");
         EXPECT_NEAR(lowered_i_squared.value().real.value, -1.0, 0.0,
-                    "eval_complex computes i^2 real part");
+                    "eval_complex computes I^2 real part");
         EXPECT_NEAR(lowered_i_squared.value().imag.value, 0.0, 0.0,
-                    "eval_complex computes i^2 imaginary part");
+                    "eval_complex computes I^2 imaginary part");
     }
 
     auto complex_unbound = lamina::lsr::eval_complex(*linear);
@@ -974,30 +986,30 @@ int main() {
     auto real_part = lamina::lsr::real(three_plus_four_i);
     EXPECT_TRUE(real_part && lamina::lsr::structurally_equal(
                                  *real_part.value(), *SymbolicExpr::number(3)),
-                "real(3 + 4i) returns 3");
+                "real(3 + 4I) returns 3");
 
     auto imag_part = lamina::lsr::imag(three_plus_four_i);
     EXPECT_TRUE(imag_part && lamina::lsr::structurally_equal(
                                  *imag_part.value(), *SymbolicExpr::number(4)),
-                "imag(3 + 4i) returns 4");
+                "imag(3 + 4I) returns 4");
 
     auto conjugated = lamina::lsr::conj(three_plus_four_i);
-    EXPECT_TRUE(conjugated.has_value(), "conj(3 + 4i) succeeds");
+    EXPECT_TRUE(conjugated.has_value(), "conj(3 + 4I) succeeds");
     auto expected_conj = lamina::lsr::complex(SymbolicExpr::number(3),
                                              SymbolicExpr::number(-4));
     lamina::ComputationContext conj_context;
     auto conj_equiv = lamina::lsr::equivalent_core(
         *conjugated.value(), *expected_conj.value(), conj_context);
     EXPECT_TRUE(conj_equiv && conj_equiv.value(),
-                "conj(3 + 4i) returns 3 - 4i");
+                "conj(3 + 4I) returns 3 - 4I");
 
     auto complex_abs = lamina::lsr::abs(three_plus_four_i);
-    EXPECT_TRUE(complex_abs.has_value(), "abs(3 + 4i) succeeds");
+    EXPECT_TRUE(complex_abs.has_value(), "abs(3 + 4I) succeeds");
     auto abs_value = lamina::lsr::evalf(*complex_abs.value());
     EXPECT_TRUE(abs_value && abs_value.value().is_finite(),
-                "abs(3 + 4i) can be explicitly numerically evaluated");
+                "abs(3 + 4I) can be explicitly numerically evaluated");
     EXPECT_NEAR(abs_value.value().value, 5.0, 1e-12,
-                "abs(3 + 4i) evaluates to 5");
+                "abs(3 + 4I) evaluates to 5");
 
     auto null_real = lamina::lsr::real(nullptr);
     auto null_imag = lamina::lsr::imag(nullptr);
@@ -1051,7 +1063,7 @@ int main() {
         SymbolicExpr::sin(three_plus_four_i));
     EXPECT_TRUE(!unsupported_real &&
                     unsupported_real.error().code == lamina::CasErrc::Inconclusive,
-                "real(sin(3 + 4i)) reports unsupported complex function split");
+                "real(sin(3 + 4I)) reports unsupported complex function split");
 
     TEST_CASE("LSR solve_set returns mathematical sets");
 

@@ -56,6 +56,30 @@ TEST(QuantityTest, ConvertsAndStripsWithoutApproximation) {
     EXPECT_TRUE(same_length.value());
 }
 
+TEST(QuantityTest, AcceptsResolvedCustomUnits) {
+    ComputationContext context;
+    UnitDefinition level{DimensionSignature::base("user::score"), Rational(100)};
+    UnitDefinition score{DimensionSignature::base("user::score"), Rational(1)};
+
+    auto points = with_unit_definition(exact(3), "level", level, context);
+    ASSERT_TRUE(points);
+    auto converted = convert_to_unit_definition(
+        points.value(), "score", score, context);
+    ASSERT_TRUE(converted);
+
+    auto display = strip_to_display_value(converted.value(), context);
+    ASSERT_TRUE(display);
+    auto simplified = display.value()->simplify();
+    ASSERT_TRUE(simplified);
+    EXPECT_EQ(simplified->to_string(), "300");
+
+    auto mismatch = convert_to_unit_definition(
+        points.value(), "second",
+        UnitDefinition{DimensionSignature::base("s"), Rational(1)}, context);
+    ASSERT_FALSE(mismatch);
+    EXPECT_EQ(mismatch.error().code, CasErrc::DimensionMismatch);
+}
+
 TEST(QuantityTest, EnforcesDimensionRules) {
     ComputationContext context;
     auto metre = with_unit(exact(1), "m", context);
