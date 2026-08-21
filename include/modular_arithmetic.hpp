@@ -209,17 +209,20 @@ public:
      * @return base^exp mod p
      */
     static ModInt pow(ModInt base, int64_t exp) {
+        uint64_t power = 0;
         if (exp < 0) {
             base = base.inverse();
-            exp = -exp;
+            power = static_cast<uint64_t>(-(exp + 1)) + 1;
+        } else {
+            power = static_cast<uint64_t>(exp);
         }
-        if (exp == 0) return ModInt(1, base.modulus());
-
-        uint64_t result = lmmp_powmod_ulong_(
-            static_cast<uint64_t>(base.val_),
-            static_cast<uint64_t>(exp),
-            static_cast<uint64_t>(base.mod_));
-        return ModInt(static_cast<int64_t>(result), base.mod_);
+        ModInt result(1, base.mod_);
+        while (power != 0) {
+            if ((power & 1U) != 0) result = result * base;
+            power >>= 1U;
+            if (power != 0) base = base * base;
+        }
+        return result;
     }
 };
 

@@ -786,7 +786,8 @@ BigInt BigInt::pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod)
              ulong e = exp.is_zero() ? 0 : exp._data[0];
              ulong m = mod._data[0];
 
-             return BigInt(lmmp_powmod_ulong_(b % m, e, m));
+             if ((m & 1U) != 0)
+                 return BigInt(lmmp_powmod_ulong_odd_(b % m, e, m));
          }
 
          BigInt res = 1;
