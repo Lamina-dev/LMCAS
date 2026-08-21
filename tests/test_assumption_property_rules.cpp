@@ -47,7 +47,7 @@ static bool throws_invalid_argument(F&& f) {
 
 
 static void test_differentiable_implies_continuous_closed_interval() {
-    TEST_CASE("Property 6: Differentiable on [0,1] implies continuous on [0,1]");
+    TEST_CASE("Differentiable on [0,1] implies continuous on [0,1]");
 
     PropertyStore store;
     Interval iv = make_closed_interval(0.0, 1.0);
@@ -61,7 +61,7 @@ static void test_differentiable_implies_continuous_closed_interval() {
 }
 
 static void test_differentiable_implies_continuous_open_interval() {
-    TEST_CASE("Property 6: Differentiable on (0,10) implies continuous on (0,10)");
+    TEST_CASE("Differentiable on (0,10) implies continuous on (0,10)");
 
     PropertyStore store;
     Interval iv = make_open_interval(0.0, 10.0);
@@ -73,7 +73,7 @@ static void test_differentiable_implies_continuous_open_interval() {
 }
 
 static void test_differentiable_implies_continuous_subinterval() {
-    TEST_CASE("Property 6: Differentiable on [0,10] implies continuous on [2,5]");
+    TEST_CASE("Differentiable on [0,10] implies continuous on [2,5]");
 
     PropertyStore store;
     Interval outer = make_closed_interval(0.0, 10.0);
@@ -88,7 +88,7 @@ static void test_differentiable_implies_continuous_subinterval() {
 }
 
 static void test_differentiable_implies_continuous_entire_line() {
-    TEST_CASE("Property 6: Differentiable on entire line implies continuous everywhere");
+    TEST_CASE("Differentiable on entire line implies continuous everywhere");
 
     PropertyStore store;
     Interval entire = Interval::entire_line();
@@ -105,7 +105,7 @@ static void test_differentiable_implies_continuous_entire_line() {
 }
 
 static void test_differentiable_multiple_symbols() {
-    TEST_CASE("Property 6: Differentiability implies continuity for multiple symbols");
+    TEST_CASE("Differentiability implies continuity for multiple symbols");
 
     PropertyStore store;
     Interval iv1 = make_closed_interval(0.0, 1.0);
@@ -122,7 +122,7 @@ static void test_differentiable_multiple_symbols() {
 }
 
 static void test_continuous_only_not_differentiable() {
-    TEST_CASE("Property 6: Continuous-only does NOT imply differentiable");
+    TEST_CASE("Continuous-only does NOT imply differentiable");
 
     PropertyStore store;
     Interval iv = make_closed_interval(0.0, 1.0);
@@ -137,7 +137,7 @@ static void test_continuous_only_not_differentiable() {
 
 
 static void test_transcendental_rejects_algebraic() {
-    TEST_CASE("Property 8: Transcendental symbol rejects Algebraic declaration");
+    TEST_CASE("Transcendental symbol rejects Algebraic declaration");
 
     PropertyStore store;
     store.declare_transcendental("pi");
@@ -148,7 +148,7 @@ static void test_transcendental_rejects_algebraic() {
 }
 
 static void test_transcendental_rejects_rational() {
-    TEST_CASE("Property 8: Transcendental symbol rejects Rational declaration");
+    TEST_CASE("Transcendental symbol rejects Rational declaration");
 
     PropertyStore store;
     store.declare_transcendental("e");
@@ -159,7 +159,7 @@ static void test_transcendental_rejects_rational() {
 }
 
 static void test_transcendental_rejects_integer() {
-    TEST_CASE("Property 8: Transcendental symbol rejects Integer declaration");
+    TEST_CASE("Transcendental symbol rejects Integer declaration");
 
     PropertyStore store;
     store.declare_transcendental("tau");
@@ -170,7 +170,7 @@ static void test_transcendental_rejects_integer() {
 }
 
 static void test_transcendental_rejects_natural() {
-    TEST_CASE("Property 8: Transcendental symbol rejects Natural declaration");
+    TEST_CASE("Transcendental symbol rejects Natural declaration");
 
     PropertyStore store;
     store.declare_transcendental("alpha");
@@ -181,7 +181,7 @@ static void test_transcendental_rejects_natural() {
 }
 
 static void test_transcendental_rejects_positive_int() {
-    TEST_CASE("Property 8: Transcendental symbol rejects PositiveInt declaration");
+    TEST_CASE("Transcendental symbol rejects PositiveInt declaration");
 
     PropertyStore store;
     store.declare_transcendental("gamma");
@@ -192,7 +192,7 @@ static void test_transcendental_rejects_positive_int() {
 }
 
 static void test_algebraic_implies_real() {
-    TEST_CASE("Property 8: Algebraic domain implies Real");
+    TEST_CASE("Algebraic domain implies Real");
 
     PropertyStore store;
     store.declare_domain("x", Domain::Algebraic);
@@ -204,7 +204,7 @@ static void test_algebraic_implies_real() {
 }
 
 static void test_transcendental_sets_real_domain() {
-    TEST_CASE("Property 8: Declaring transcendental sets Real domain");
+    TEST_CASE("Declaring transcendental sets Real domain");
 
     PropertyStore store;
     store.declare_transcendental("pi");
@@ -216,7 +216,7 @@ static void test_transcendental_sets_real_domain() {
 }
 
 static void test_algebraic_then_transcendental_throws() {
-    TEST_CASE("Property 8: Algebraic symbol cannot become Transcendental");
+    TEST_CASE("Algebraic symbol cannot become Transcendental");
 
     PropertyStore store;
     store.declare_domain("x", Domain::Algebraic);
@@ -228,7 +228,7 @@ static void test_algebraic_then_transcendental_throws() {
 }
 
 static void test_rational_then_transcendental_throws() {
-    TEST_CASE("Property 8: Rational symbol cannot become Transcendental");
+    TEST_CASE("Rational symbol cannot become Transcendental");
 
     PropertyStore store;
     store.declare_domain("x", Domain::Rational);
@@ -239,7 +239,7 @@ static void test_rational_then_transcendental_throws() {
 }
 
 static void test_integer_then_transcendental_throws() {
-    TEST_CASE("Property 8: Integer symbol cannot become Transcendental");
+    TEST_CASE("Integer symbol cannot become Transcendental");
 
     PropertyStore store;
     store.declare_domain("n", Domain::Integer);
@@ -250,7 +250,7 @@ static void test_integer_then_transcendental_throws() {
 }
 
 static void test_transcendental_allows_real_declaration() {
-    TEST_CASE("Property 8: Transcendental symbol allows Real declaration (no-op)");
+    TEST_CASE("Transcendental symbol allows Real declaration (no-op)");
 
     PropertyStore store;
     store.declare_transcendental("pi");
@@ -264,7 +264,7 @@ static void test_transcendental_allows_real_declaration() {
 }
 
 static void test_transcendental_allows_complex_declaration() {
-    TEST_CASE("Property 8: Transcendental symbol allows Complex declaration (no-op)");
+    TEST_CASE("Transcendental symbol allows Complex declaration (no-op)");
 
     PropertyStore store;
     store.declare_transcendental("e");
@@ -277,7 +277,7 @@ static void test_transcendental_allows_complex_declaration() {
 
 
 static void test_finite_implies_bounded() {
-    TEST_CASE("Property 9: Declaring Finite implies Bounded");
+    TEST_CASE("Declaring Finite implies Bounded");
 
     PropertyStore store;
     store.declare_finiteness("x", Finiteness::Finite);
@@ -289,7 +289,7 @@ static void test_finite_implies_bounded() {
 }
 
 static void test_finite_then_divergent_throws() {
-    TEST_CASE("Property 9: Finite + Divergent throws");
+    TEST_CASE("Finite + Divergent throws");
 
     PropertyStore store;
     store.declare_finiteness("x", Finiteness::Finite);
@@ -300,7 +300,7 @@ static void test_finite_then_divergent_throws() {
 }
 
 static void test_divergent_then_finite_throws() {
-    TEST_CASE("Property 9: Divergent + Finite throws");
+    TEST_CASE("Divergent + Finite throws");
 
     PropertyStore store;
     store.declare_finiteness("y", Finiteness::Divergent);
@@ -311,7 +311,7 @@ static void test_divergent_then_finite_throws() {
 }
 
 static void test_divergent_does_not_imply_bounded() {
-    TEST_CASE("Property 9: Divergent does NOT imply Bounded");
+    TEST_CASE("Divergent does NOT imply Bounded");
 
     PropertyStore store;
     store.declare_finiteness("z", Finiteness::Divergent);
@@ -323,7 +323,7 @@ static void test_divergent_does_not_imply_bounded() {
 }
 
 static void test_finite_idempotent() {
-    TEST_CASE("Property 9: Declaring Finite twice is idempotent");
+    TEST_CASE("Declaring Finite twice is idempotent");
 
     PropertyStore store;
     store.declare_finiteness("x", Finiteness::Finite);
@@ -336,7 +336,7 @@ static void test_finite_idempotent() {
 }
 
 static void test_finite_multiple_symbols() {
-    TEST_CASE("Property 9: Finite implies Bounded for multiple symbols");
+    TEST_CASE("Finite implies Bounded for multiple symbols");
 
     PropertyStore store;
     store.declare_finiteness("a", Finiteness::Finite);
@@ -350,7 +350,7 @@ static void test_finite_multiple_symbols() {
 
 
 static void test_positive_definite_implies_positive_semidefinite() {
-    TEST_CASE("Property 10: PositiveDefinite implies PositiveSemiDefinite queryable");
+    TEST_CASE("PositiveDefinite implies PositiveSemiDefinite queryable");
 
     PropertyStore store;
     store.declare_definiteness("A", Definiteness::PositiveDefinite);
@@ -374,7 +374,7 @@ static void test_positive_definite_implies_positive_semidefinite() {
 }
 
 static void test_positive_definite_plus_negative_definite_throws() {
-    TEST_CASE("Property 10: PositiveDefinite + NegativeDefinite throws");
+    TEST_CASE("PositiveDefinite + NegativeDefinite throws");
 
     PropertyStore store;
     store.declare_definiteness("B", Definiteness::PositiveDefinite);
@@ -385,7 +385,7 @@ static void test_positive_definite_plus_negative_definite_throws() {
 }
 
 static void test_negative_definite_plus_positive_definite_throws() {
-    TEST_CASE("Property 10: NegativeDefinite + PositiveDefinite throws");
+    TEST_CASE("NegativeDefinite + PositiveDefinite throws");
 
     PropertyStore store;
     store.declare_definiteness("C", Definiteness::NegativeDefinite);
@@ -396,7 +396,7 @@ static void test_negative_definite_plus_positive_definite_throws() {
 }
 
 static void test_positive_definite_plus_indefinite_throws() {
-    TEST_CASE("Property 10: PositiveDefinite + Indefinite throws");
+    TEST_CASE("PositiveDefinite + Indefinite throws");
 
     PropertyStore store;
     store.declare_definiteness("D", Definiteness::PositiveDefinite);
@@ -407,7 +407,7 @@ static void test_positive_definite_plus_indefinite_throws() {
 }
 
 static void test_negative_definite_plus_indefinite_throws() {
-    TEST_CASE("Property 10: NegativeDefinite + Indefinite throws");
+    TEST_CASE("NegativeDefinite + Indefinite throws");
 
     PropertyStore store;
     store.declare_definiteness("E", Definiteness::NegativeDefinite);
@@ -418,7 +418,7 @@ static void test_negative_definite_plus_indefinite_throws() {
 }
 
 static void test_negative_definite_implies_negative_semidefinite() {
-    TEST_CASE("Property 10: NegativeDefinite implies NegativeSemiDefinite");
+    TEST_CASE("NegativeDefinite implies NegativeSemiDefinite");
 
     PropertyStore store;
     store.declare_definiteness("F", Definiteness::NegativeDefinite);
@@ -438,7 +438,7 @@ static void test_negative_definite_implies_negative_semidefinite() {
 }
 
 static void test_positive_semidefinite_upgradeable_to_positive_definite() {
-    TEST_CASE("Property 10: PositiveSemiDefinite can be upgraded to PositiveDefinite");
+    TEST_CASE("PositiveSemiDefinite can be upgraded to PositiveDefinite");
 
     PropertyStore store;
     store.declare_definiteness("G", Definiteness::PositiveSemiDefinite);
@@ -449,7 +449,7 @@ static void test_positive_semidefinite_upgradeable_to_positive_definite() {
 }
 
 static void test_positive_definite_plus_negative_semidefinite_throws() {
-    TEST_CASE("Property 10: PositiveDefinite + NegativeSemiDefinite throws");
+    TEST_CASE("PositiveDefinite + NegativeSemiDefinite throws");
 
     PropertyStore store;
     store.declare_definiteness("H", Definiteness::PositiveDefinite);
@@ -460,7 +460,7 @@ static void test_positive_definite_plus_negative_semidefinite_throws() {
 }
 
 static void test_definiteness_idempotent() {
-    TEST_CASE("Property 10: Declaring same definiteness twice is idempotent");
+    TEST_CASE("Declaring same definiteness twice is idempotent");
 
     PropertyStore store;
     store.declare_definiteness("I", Definiteness::PositiveDefinite);

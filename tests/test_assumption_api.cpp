@@ -51,7 +51,7 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
 
 
 void test_assume_domain_equivalence() {
-    TEST_CASE("Property 32: assume_domain equivalence with PropertyStore.declare_domain");
+    TEST_CASE("assume_domain equivalence with PropertyStore.declare_domain");
 
     // Test all domain values
     std::vector<Domain> domains = {
@@ -93,7 +93,7 @@ void test_assume_domain_equivalence() {
 
 
 void test_assume_sign_equivalence() {
-    TEST_CASE("Property 32: assume_sign equivalence with PropertyStore.declare_sign");
+    TEST_CASE("assume_sign equivalence with PropertyStore.declare_sign");
 
     std::vector<Sign> signs = {
         Sign::Positive, Sign::Negative, Sign::NonNegative,
@@ -137,7 +137,7 @@ void test_assume_sign_equivalence() {
 
 
 void test_assume_relation_equivalence() {
-    TEST_CASE("Property 32: assume(relation) equivalence with RelationStore.add_relation");
+    TEST_CASE("assume(relation) equivalence with RelationStore.add_relation");
 
     struct RelTestCase {
         std::string var;
@@ -188,7 +188,7 @@ void test_assume_relation_equivalence() {
 
 
 void test_is_positive_equivalence() {
-    TEST_CASE("Property 32: is_positive equivalence with QueryInterface.query_positive");
+    TEST_CASE("is_positive equivalence with QueryInterface.query_positive");
 
     // Set up context with some assumptions
     AssumptionContext ctx;
@@ -220,7 +220,7 @@ void test_is_positive_equivalence() {
 
 
 void test_is_negative_equivalence() {
-    TEST_CASE("Property 32: is_negative equivalence with QueryInterface.query_negative");
+    TEST_CASE("is_negative equivalence with QueryInterface.query_negative");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -250,7 +250,7 @@ void test_is_negative_equivalence() {
 
 
 void test_is_real_equivalence() {
-    TEST_CASE("Property 32: is_real equivalence with QueryInterface.query_real");
+    TEST_CASE("is_real equivalence with QueryInterface.query_real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -275,7 +275,7 @@ void test_is_real_equivalence() {
 }
 
 void test_is_integer_equivalence() {
-    TEST_CASE("Property 32: is_integer equivalence with QueryInterface.query_integer");
+    TEST_CASE("is_integer equivalence with QueryInterface.query_integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -300,7 +300,7 @@ void test_is_integer_equivalence() {
 }
 
 void test_is_nonnegative_equivalence() {
-    TEST_CASE("Property 32: is_nonnegative equivalence with QueryInterface.query_nonnegative");
+    TEST_CASE("is_nonnegative equivalence with QueryInterface.query_nonnegative");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -328,7 +328,7 @@ void test_is_nonnegative_equivalence() {
 }
 
 void test_is_nonzero_equivalence() {
-    TEST_CASE("Property 32: is_nonzero equivalence with QueryInterface.query_nonzero");
+    TEST_CASE("is_nonzero equivalence with QueryInterface.query_nonzero");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -357,7 +357,7 @@ void test_is_nonzero_equivalence() {
 
 
 void test_combined_assumptions_equivalence() {
-    TEST_CASE("Property 32: Combined domain+sign assumptions — full equivalence");
+    TEST_CASE("Combined domain+sign assumptions — full equivalence");
 
     // Method A: Use convenience API for everything
     AssumptionContext ctx_a;
@@ -408,7 +408,7 @@ void test_combined_assumptions_equivalence() {
 
 
 void test_scoped_convenience_equivalence() {
-    TEST_CASE("Property 32: Scoped convenience API — push/pop equivalence");
+    TEST_CASE("Scoped convenience API — push/pop equivalence");
 
     // Method A: Use convenience API within a pushed scope
     AssumptionContext ctx_a;
@@ -440,7 +440,7 @@ void test_scoped_convenience_equivalence() {
 
 
 void test_assume_domain_empty_name_throws() {
-    TEST_CASE("Req 13.6: assume_domain with empty name throws std::invalid_argument");
+    TEST_CASE("assume_domain with empty name throws std::invalid_argument");
 
     AssumptionContext ctx;
     bool threw = false;
@@ -453,7 +453,7 @@ void test_assume_domain_empty_name_throws() {
 }
 
 void test_assume_sign_empty_name_throws() {
-    TEST_CASE("Req 13.6: assume_sign with empty name throws std::invalid_argument");
+    TEST_CASE("assume_sign with empty name throws std::invalid_argument");
 
     AssumptionContext ctx;
     bool threw = false;
@@ -467,7 +467,7 @@ void test_assume_sign_empty_name_throws() {
 
 
 void test_assume_non_relational_expr_throws() {
-    TEST_CASE("Req 13.7: assume with AddNode root throws std::invalid_argument");
+    TEST_CASE("assume with AddNode root throws std::invalid_argument");
 
     AssumptionContext ctx;
     // Create an expression with AddNode root (x + y)
@@ -487,7 +487,7 @@ void test_assume_non_relational_expr_throws() {
 
 
 void test_is_positive_undeclared_returns_unknown() {
-    TEST_CASE("Req 13.5: is_positive on undeclared variable returns Tribool::Unknown");
+    TEST_CASE("is_positive on undeclared variable returns Tribool::Unknown");
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_var");
@@ -497,7 +497,7 @@ void test_is_positive_undeclared_returns_unknown() {
 }
 
 void test_is_negative_undeclared_returns_unknown() {
-    TEST_CASE("Req 13.5: is_negative on undeclared variable returns Tribool::Unknown");
+    TEST_CASE("is_negative on undeclared variable returns Tribool::Unknown");
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_var");
@@ -507,7 +507,7 @@ void test_is_negative_undeclared_returns_unknown() {
 }
 
 void test_is_nonnegative_undeclared_returns_unknown() {
-    TEST_CASE("Req 13.5: is_nonnegative on undeclared variable returns Tribool::Unknown");
+    TEST_CASE("is_nonnegative on undeclared variable returns Tribool::Unknown");
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_z");
@@ -517,7 +517,7 @@ void test_is_nonnegative_undeclared_returns_unknown() {
 }
 
 void test_is_real_undeclared_returns_unknown() {
-    TEST_CASE("Req 13.5: is_real on undeclared variable returns Tribool::Unknown");
+    TEST_CASE("is_real on undeclared variable returns Tribool::Unknown");
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_w");
@@ -527,7 +527,7 @@ void test_is_real_undeclared_returns_unknown() {
 }
 
 void test_is_integer_undeclared_returns_unknown() {
-    TEST_CASE("Req 13.5: is_integer on undeclared variable returns Tribool::Unknown");
+    TEST_CASE("is_integer on undeclared variable returns Tribool::Unknown");
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_alpha");
@@ -537,7 +537,7 @@ void test_is_integer_undeclared_returns_unknown() {
 }
 
 void test_is_nonzero_undeclared_returns_unknown() {
-    TEST_CASE("Req 13.5: is_nonzero on undeclared variable returns Tribool::Unknown");
+    TEST_CASE("is_nonzero on undeclared variable returns Tribool::Unknown");
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_beta");

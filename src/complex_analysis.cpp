@@ -4,7 +4,7 @@
  */
 #include "complex_analysis.hpp"
 #include "poly_utils.hpp"
-#include "poly_utils_internal.hpp"
+#include "internal/expression_analysis.hpp"
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
 
@@ -58,7 +58,7 @@ bool has_z_dependent_function(const std::shared_ptr<const SymbolicNode>& node,
 {
     if (!node) return false;
     if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        return depends_on_var(node, z);
+        return expression_depends_on_variable(node, z);
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         for (const auto& op : add->operands()) {
@@ -112,7 +112,7 @@ bool has_z_dependent_function(const std::shared_ptr<const SymbolicNode>& node,
                has_z_dependent_function(sum->upper_bound(), z) ||
                (sum->index_var() != z && has_z_dependent_function(sum->body(), z));
     }
-    if (auto product = std::dynamic_pointer_cast<const ProductNode_Op>(node)) {
+    if (auto product = std::dynamic_pointer_cast<const ProductNode>(node)) {
         return has_z_dependent_function(product->lower_bound(), z) ||
                has_z_dependent_function(product->upper_bound(), z) ||
                (product->index_var() != z && has_z_dependent_function(product->body(), z));
@@ -204,7 +204,7 @@ bool has_function_of_explicit_complex(const std::shared_ptr<const SymbolicNode>&
 
 } // namespace
 
-ComplexExprResult calculate_residue_checked(
+ExpressionResult calculate_residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -213,32 +213,32 @@ ComplexExprResult calculate_residue_checked(
 {
     const std::string operation = "calculate_residue";
     auto input = validate_complex_expr_point_input(f, z, z0, order, context, operation);
-    if (!input) return ComplexExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     auto budget = context.consume_steps(static_cast<std::size_t>(order) * 12 + 12,
                                         operation);
-    if (!budget) return ComplexExprResult::failure(budget.error());
+    if (!budget) return ExpressionResult::failure(budget.error());
 
     try {
         auto result = calculate_residue(f, z, z0, order);
         if (!result || !lamina::detail::node(result)) {
-            return ComplexExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "residue could not be constructed in the supported symbolic domain",
                 operation);
         }
-        return ComplexExprResult::success(result);
+        return ExpressionResult::success(result);
     } catch (const std::bad_alloc&) {
-        return ComplexExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                           "allocation failed while calculating residue",
                                           operation);
     } catch (const std::exception& ex) {
-        return ComplexExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           ex.what(),
                                           operation);
     }
 }
 
-ComplexExprResult calculate_residue_checked(
+ExpressionResult calculate_residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -273,7 +273,7 @@ std::shared_ptr<SymbolicExpr> calculate_residue(
     return F->limit(z, z0);
 }
 
-ComplexExprResult cauchy_integral_checked(
+ExpressionResult cauchy_integral_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -282,32 +282,32 @@ ComplexExprResult cauchy_integral_checked(
 {
     const std::string operation = "cauchy_integral";
     auto input = validate_complex_expr_point_input(f, z, z0, n, context, operation);
-    if (!input) return ComplexExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     auto budget = context.consume_steps(static_cast<std::size_t>(n) * 12 + 12,
                                         operation);
-    if (!budget) return ComplexExprResult::failure(budget.error());
+    if (!budget) return ExpressionResult::failure(budget.error());
 
     try {
         auto result = cauchy_integral(f, z, z0, n);
         if (!result || !lamina::detail::node(result)) {
-            return ComplexExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "Cauchy integral formula could not be constructed in the supported symbolic domain",
                 operation);
         }
-        return ComplexExprResult::success(result);
+        return ExpressionResult::success(result);
     } catch (const std::bad_alloc&) {
-        return ComplexExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                           "allocation failed while applying Cauchy integral formula",
                                           operation);
     } catch (const std::exception& ex) {
-        return ComplexExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           ex.what(),
                                           operation);
     }
 }
 
-ComplexExprResult cauchy_integral_checked(
+ExpressionResult cauchy_integral_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -456,13 +456,13 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
 
 } // namespace
 
-ComplexExprResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
+ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
                                     ComputationContext& context) {
     const std::string operation = "real_part";
     auto input = validate_complex_expr_input(expr, context, operation);
-    if (!input) return ComplexExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     if (has_function_of_explicit_complex(lamina::detail::node(expr))) {
-        return ComplexExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "real part of functions with complex arguments is outside the current support domain",
             operation);
@@ -472,14 +472,14 @@ ComplexExprResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     split_real_imag(lamina::detail::node(expr), re, im);
     auto simplified = re ? re->simplify() : nullptr;
     if (!simplified || !lamina::detail::node(simplified)) {
-        return ComplexExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "real part construction failed",
                                           operation);
     }
-    return ComplexExprResult::success(simplified);
+    return ExpressionResult::success(simplified);
 }
 
-ComplexExprResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
+ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
     ComputationContext context;
     return real_part_checked(expr, context);
 }
@@ -490,13 +490,13 @@ std::shared_ptr<SymbolicExpr> real_part(const std::shared_ptr<SymbolicExpr>& exp
     return checked.value();
 }
 
-ComplexExprResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
+ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
                                     ComputationContext& context) {
     const std::string operation = "imag_part";
     auto input = validate_complex_expr_input(expr, context, operation);
-    if (!input) return ComplexExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     if (has_function_of_explicit_complex(lamina::detail::node(expr))) {
-        return ComplexExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "imaginary part of functions with complex arguments is outside the current support domain",
             operation);
@@ -506,14 +506,14 @@ ComplexExprResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     split_real_imag(lamina::detail::node(expr), re, im);
     auto simplified = im ? im->simplify() : nullptr;
     if (!simplified || !lamina::detail::node(simplified)) {
-        return ComplexExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "imaginary part construction failed",
                                           operation);
     }
-    return ComplexExprResult::success(simplified);
+    return ExpressionResult::success(simplified);
 }
 
-ComplexExprResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
+ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
     ComputationContext context;
     return imag_part_checked(expr, context);
 }
@@ -524,13 +524,13 @@ std::shared_ptr<SymbolicExpr> imag_part(const std::shared_ptr<SymbolicExpr>& exp
     return checked.value();
 }
 
-ComplexExprResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
+ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
                                     ComputationContext& context) {
     const std::string operation = "conjugate";
     auto input = validate_complex_expr_input(expr, context, operation);
-    if (!input) return ComplexExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     if (has_function_of_explicit_complex(lamina::detail::node(expr))) {
-        return ComplexExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "conjugate of functions with complex arguments is outside the current support domain",
             operation);
@@ -541,30 +541,30 @@ ComplexExprResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
     /// conj(a+bi) = a - bi
     auto neg_im = SymbolicExpr::multiply(SymbolicExpr::number(-1), im)->simplify();
     if (!re || !lamina::detail::node(re) || !neg_im || !lamina::detail::node(neg_im)) {
-        return ComplexExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "conjugate construction failed",
                                           operation);
     }
     if (lamina::detail::node(neg_im) && lamina::detail::node(neg_im)->is_zero()) {
         auto simplified_re = re->simplify();
         if (!simplified_re || !lamina::detail::node(simplified_re)) {
-            return ComplexExprResult::failure(CasErrc::InternalInvariant,
+            return ExpressionResult::failure(CasErrc::InternalInvariant,
                                               "conjugate construction failed",
                                               operation);
         }
-        return ComplexExprResult::success(simplified_re);
+        return ExpressionResult::success(simplified_re);
     }
     auto cn = SymbolicFactory::create_complex(
         lamina::detail::node(re->simplify()), lamina::detail::node(neg_im));
     if (!cn) {
-        return ComplexExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "conjugate construction failed",
                                           operation);
     }
-    return ComplexExprResult::success(lamina::detail::make_expression_ptr(cn));
+    return ExpressionResult::success(lamina::detail::make_expression_ptr(cn));
 }
 
-ComplexExprResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr) {
+ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr) {
     ComputationContext context;
     return conjugate_checked(expr, context);
 }
@@ -646,7 +646,7 @@ bool is_analytic(const std::shared_ptr<SymbolicExpr>& f, const std::string& z) {
     return lamina::detail::node(cr1) && lamina::detail::node(cr1)->is_zero() && lamina::detail::node(cr2) && lamina::detail::node(cr2)->is_zero();
 }
 
-ComplexExprResult residue_checked(
+ExpressionResult residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -655,7 +655,7 @@ ComplexExprResult residue_checked(
     return calculate_residue_checked(f, z, z0, order, context);
 }
 
-ComplexExprResult residue_checked(
+ExpressionResult residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,

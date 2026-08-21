@@ -27,6 +27,8 @@ void test_modint() {
     ModInt base(2, p);
     ModInt result = ModInt::pow(base, 10);
     EXPECT_TRUE(result.value() == 1024, "ModInt power");
+    EXPECT_TRUE(ModInt::pow(ModInt(2, 10), 5).value() == 2,
+                "ModInt power with even modulus");
 
     ModInt inv = b.inverse();
     EXPECT_TRUE((b * inv).value() == 1, "ModInt inverse");

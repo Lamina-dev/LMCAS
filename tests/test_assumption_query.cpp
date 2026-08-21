@@ -30,7 +30,7 @@ static SymbolicExpr make_double_expr(double v) {
 
 
 void test_positive_bigint() {
-    TEST_CASE("Property 21: Positive BigInt — sign and domain properties");
+    TEST_CASE("Positive BigInt — sign and domain properties");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -57,7 +57,7 @@ void test_positive_bigint() {
 
 
 void test_negative_bigint() {
-    TEST_CASE("Property 21: Negative BigInt — sign and domain properties");
+    TEST_CASE("Negative BigInt — sign and domain properties");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -84,7 +84,7 @@ void test_negative_bigint() {
 
 
 void test_zero_bigint() {
-    TEST_CASE("Property 21: Zero BigInt — sign and domain properties");
+    TEST_CASE("Zero BigInt — sign and domain properties");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -107,7 +107,7 @@ void test_zero_bigint() {
 
 
 void test_positive_rational() {
-    TEST_CASE("Property 21: Positive non-integer Rational — sign and domain properties");
+    TEST_CASE("Positive non-integer Rational — sign and domain properties");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -130,7 +130,7 @@ void test_positive_rational() {
 
 
 void test_negative_rational() {
-    TEST_CASE("Property 21: Negative non-integer Rational — sign and domain properties");
+    TEST_CASE("Negative non-integer Rational — sign and domain properties");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -153,7 +153,7 @@ void test_negative_rational() {
 
 
 void test_integer_rational() {
-    TEST_CASE("Property 21: Integer Rational (4/1) — query_integer=True");
+    TEST_CASE("Integer Rational (4/1) — query_integer=True");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -176,7 +176,7 @@ void test_integer_rational() {
 
 
 void test_positive_double() {
-    TEST_CASE("Property 21: Positive double — sign and domain properties");
+    TEST_CASE("Positive double — sign and domain properties");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -201,7 +201,7 @@ void test_positive_double() {
 
 
 void test_negative_double() {
-    TEST_CASE("Property 21: Negative double — sign and domain properties");
+    TEST_CASE("Negative double — sign and domain properties");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -226,7 +226,7 @@ void test_negative_double() {
 
 
 void test_zero_double() {
-    TEST_CASE("Property 21: Zero double (0.0) — query_nonzero=False");
+    TEST_CASE("Zero double (0.0) — query_nonzero=False");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -247,7 +247,7 @@ void test_zero_double() {
 
 
 void test_non_integer_double() {
-    TEST_CASE("Property 21: Non-integer double (2.5) — query_integer=False");
+    TEST_CASE("Non-integer double (2.5) — query_integer=False");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -274,7 +274,7 @@ void test_non_integer_double() {
 
 
 void test_integer_double() {
-    TEST_CASE("Property 21: Integer double (3.0) — query_integer=True");
+    TEST_CASE("Integer double (3.0) — query_integer=True");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -324,7 +324,7 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
 
 
 void test_nan_handling() {
-    TEST_CASE("NaN handling (Req 10.11)");
+    TEST_CASE("NaN handling");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -346,7 +346,7 @@ void test_nan_handling() {
 
 
 void test_infinity_handling() {
-    TEST_CASE("Infinity handling (Req 10.11)");
+    TEST_CASE("Infinity handling");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -383,7 +383,7 @@ void test_infinity_handling() {
 
 
 void test_undeclared_variable() {
-    TEST_CASE("Undeclared variable (Req 10.8)");
+    TEST_CASE("Undeclared variable");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -406,7 +406,7 @@ void test_undeclared_variable() {
 
 
 void test_matrix_node() {
-    TEST_CASE("MatrixNode returns Unknown (Req 10.10)");
+    TEST_CASE("MatrixNode returns Unknown");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -433,7 +433,7 @@ void test_matrix_node() {
 
 
 void test_relational_node() {
-    TEST_CASE("RelationalNode returns Unknown (Req 10.10)");
+    TEST_CASE("RelationalNode returns Unknown");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -458,7 +458,7 @@ void test_relational_node() {
 
 
 void test_logical_node() {
-    TEST_CASE("LogicalNode returns Unknown (Req 10.10)");
+    TEST_CASE("LogicalNode returns Unknown");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);

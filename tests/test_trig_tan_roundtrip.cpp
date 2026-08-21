@@ -131,7 +131,7 @@ NReport verify_n(int n) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 5: Trigonometric tan^n round-trip");
+    TEST_CASE("Trigonometric tan^n round-trip");
 
     int total = 0;
     int verified = 0;
@@ -151,7 +151,7 @@ int main() {
             ++unevaluated;
             std::cerr << "[FAIL] " << prefix << " : " << rep.detail << std::endl;
             EXPECT_TRUE(false, prefix + ": integrator left unevaluated integral "
-                                        "(Property 5 requires success on n in [2,8])");
+                                        "(requires success on n in [2,8])");
         } else if (rep.matches > 0) {
             ++verified;
             std::ostringstream oss;

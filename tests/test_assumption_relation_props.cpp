@@ -23,7 +23,7 @@ static SymbolicExpr make_zero() {
 
 
 static void test_transitive_gt_gt_chain() {
-    TEST_CASE("Property 3: GT + GT chain deduces GT (x > y, y > z => x > z)");
+    TEST_CASE("GT + GT chain deduces GT (x > y, y > z => x > z)");
 
     RelationStore rs;
     PropertyStore ps;
@@ -42,7 +42,7 @@ static void test_transitive_gt_gt_chain() {
 }
 
 static void test_transitive_geq_gt_chain() {
-    TEST_CASE("Property 3: GEQ + GT chain deduces GT (x >= y, y > z => x > z)");
+    TEST_CASE("GEQ + GT chain deduces GT (x >= y, y > z => x > z)");
 
     RelationStore rs;
     PropertyStore ps;
@@ -61,7 +61,7 @@ static void test_transitive_geq_gt_chain() {
 }
 
 static void test_transitive_gt_geq_chain() {
-    TEST_CASE("Property 3: GT + GEQ chain deduces GT (x > y, y >= z => x > z)");
+    TEST_CASE("GT + GEQ chain deduces GT (x > y, y >= z => x > z)");
 
     RelationStore rs;
     PropertyStore ps;
@@ -80,7 +80,7 @@ static void test_transitive_gt_geq_chain() {
 }
 
 static void test_transitive_geq_geq_chain() {
-    TEST_CASE("Property 3: GEQ + GEQ chain deduces GEQ (x >= y, y >= z => x >= z)");
+    TEST_CASE("GEQ + GEQ chain deduces GEQ (x >= y, y >= z => x >= z)");
 
     RelationStore rs;
     PropertyStore ps;
@@ -99,7 +99,7 @@ static void test_transitive_geq_geq_chain() {
 }
 
 static void test_transitive_longer_chain() {
-    TEST_CASE("Property 3: Longer chain a > b > c > d deduces a > d");
+    TEST_CASE("Longer chain a > b > c > d deduces a > d");
 
     RelationStore rs;
     PropertyStore ps;
@@ -125,7 +125,7 @@ static void test_transitive_longer_chain() {
 }
 
 static void test_transitive_mixed_chain() {
-    TEST_CASE("Property 3: Mixed chain a > b >= c > d deduces a > d");
+    TEST_CASE("Mixed chain a > b >= c > d deduces a > d");
 
     RelationStore rs;
     PropertyStore ps;
@@ -145,7 +145,7 @@ static void test_transitive_mixed_chain() {
 }
 
 static void test_transitive_backward_chaining() {
-    TEST_CASE("Property 3: Backward chaining — adding earlier link deduces relation");
+    TEST_CASE("Backward chaining — adding earlier link deduces relation");
 
     RelationStore rs;
     PropertyStore ps;
@@ -164,7 +164,7 @@ static void test_transitive_backward_chaining() {
 }
 
 static void test_transitive_no_duplicate_deduction() {
-    TEST_CASE("Property 3: Transitive closure does not add duplicate relations");
+    TEST_CASE("Transitive closure does not add duplicate relations");
 
     RelationStore rs;
     PropertyStore ps;
@@ -193,7 +193,7 @@ static void test_transitive_no_duplicate_deduction() {
 }
 
 static void test_transitive_lt_leq_not_transitive() {
-    TEST_CASE("Property 3: LT and LEQ do NOT participate in transitive closure");
+    TEST_CASE("LT and LEQ do NOT participate in transitive closure");
 
     RelationStore rs;
     PropertyStore ps;
@@ -212,7 +212,7 @@ static void test_transitive_lt_leq_not_transitive() {
 }
 
 static void test_transitive_cap_at_64() {
-    TEST_CASE("Property 3: Transitive closure capped at 64 new relations per add_relation");
+    TEST_CASE("Transitive closure capped at 64 new relations per add_relation");
 
     RelationStore rs;
     PropertyStore ps;
@@ -252,7 +252,7 @@ static void test_transitive_cap_at_64() {
 }
 
 static void test_transitive_sign_derivation_from_chain() {
-    TEST_CASE("Property 3: Transitive closure derives sign when chain reaches zero");
+    TEST_CASE("Transitive closure derives sign when chain reaches zero");
 
     RelationStore rs;
     PropertyStore ps;
@@ -278,7 +278,7 @@ static void test_transitive_sign_derivation_from_chain() {
 
 
 static void test_reversed_0_lt_var_positive() {
-    TEST_CASE("Property 12: 0 LT var => var is Positive");
+    TEST_CASE("0 LT var => var is Positive");
 
     RelationStore rs;
     PropertyStore ps;
@@ -298,7 +298,7 @@ static void test_reversed_0_lt_var_positive() {
 }
 
 static void test_reversed_0_gt_var_negative() {
-    TEST_CASE("Property 12: 0 GT var => var is Negative");
+    TEST_CASE("0 GT var => var is Negative");
 
     RelationStore rs;
     PropertyStore ps;
@@ -318,7 +318,7 @@ static void test_reversed_0_gt_var_negative() {
 }
 
 static void test_reversed_0_geq_var_nonpositive() {
-    TEST_CASE("Property 12: 0 GEQ var => var is NonPositive");
+    TEST_CASE("0 GEQ var => var is NonPositive");
 
     RelationStore rs;
     PropertyStore ps;
@@ -334,7 +334,7 @@ static void test_reversed_0_geq_var_nonpositive() {
 }
 
 static void test_reversed_0_leq_var_nonnegative() {
-    TEST_CASE("Property 12: 0 LEQ var => var is NonNegative");
+    TEST_CASE("0 LEQ var => var is NonNegative");
 
     RelationStore rs;
     PropertyStore ps;
@@ -350,7 +350,7 @@ static void test_reversed_0_leq_var_nonnegative() {
 }
 
 static void test_reversed_0_neq_var_nonzero() {
-    TEST_CASE("Property 12: 0 NEQ var => var is NonZero");
+    TEST_CASE("0 NEQ var => var is NonZero");
 
     RelationStore rs;
     PropertyStore ps;
@@ -366,7 +366,7 @@ static void test_reversed_0_neq_var_nonzero() {
 }
 
 static void test_reversed_all_operators_comprehensive() {
-    TEST_CASE("Property 12: All reversed operators mapped correctly");
+    TEST_CASE("All reversed operators mapped correctly");
 
     struct TestCase {
         RelationalNode::Op op;
@@ -396,7 +396,7 @@ static void test_reversed_all_operators_comprehensive() {
 }
 
 static void test_reversed_multiple_variables() {
-    TEST_CASE("Property 12: Reversed pattern works for multiple variables");
+    TEST_CASE("Reversed pattern works for multiple variables");
 
     RelationStore rs;
     PropertyStore ps;
@@ -418,7 +418,7 @@ static void test_reversed_multiple_variables() {
 }
 
 static void test_reversed_non_variable_rhs_no_derivation() {
-    TEST_CASE("Property 12: 0 op composite_expr does NOT derive sign");
+    TEST_CASE("0 op composite_expr does NOT derive sign");
 
     RelationStore rs;
     PropertyStore ps;
@@ -445,7 +445,7 @@ static void test_reversed_non_variable_rhs_no_derivation() {
 }
 
 static void test_reversed_non_zero_lhs_no_derivation() {
-    TEST_CASE("Property 12: Non-zero LHS does NOT trigger reversed pattern");
+    TEST_CASE("Non-zero LHS does NOT trigger reversed pattern");
 
     RelationStore rs;
     PropertyStore ps;
@@ -462,7 +462,7 @@ static void test_reversed_non_zero_lhs_no_derivation() {
 }
 
 static void test_reversed_relation_stored() {
-    TEST_CASE("Property 12: Reversed relations are stored in the RelationStore");
+    TEST_CASE("Reversed relations are stored in the RelationStore");
 
     RelationStore rs;
     PropertyStore ps;
@@ -477,7 +477,7 @@ static void test_reversed_relation_stored() {
 }
 
 static void test_reversed_eq_no_sign_derivation() {
-    TEST_CASE("Property 12: 0 EQ var does NOT derive sign (EQ not mapped)");
+    TEST_CASE("0 EQ var does NOT derive sign (EQ not mapped)");
 
     RelationStore rs;
     PropertyStore ps;

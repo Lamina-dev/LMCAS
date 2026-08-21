@@ -109,7 +109,7 @@ static std::optional<double> numeric_eval(const std::shared_ptr<SymbolicExpr>& e
 
 int main() {
 
-    TEST_CASE("Property 1: Back-substitution Round-trip for parametric 2x2 systems");
+    TEST_CASE("Back-substitution Round-trip for parametric 2x2 systems");
     {
         std::mt19937 rng(42);
         const int NUM_ITERATIONS = 50;
@@ -214,7 +214,7 @@ int main() {
 
                     if (!zero_ok) {
                         std::ostringstream oss;
-                        oss << "Property 1 failed: iter=" << iter
+                        oss << "failed: iter=" << iter
                             << " residual=" << (result ? result->to_string() : "null")
                             << " eq=" << eq->to_string()
                             << " x=" << x_val->to_string()
@@ -231,12 +231,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 1: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed back-substitution round-trip";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 12: Unique solution for non-singular 2x2 numeric systems");
+    TEST_CASE("Unique solution for non-singular 2x2 numeric systems");
     {
         std::mt19937 rng(123);
         const int NUM_ITERATIONS = 50;
@@ -292,7 +292,7 @@ int main() {
 
                         if (!result || !result->is_zero()) {
                             std::ostringstream oss;
-                            oss << "Property 12 back-sub failed: tested=" << tested
+                            oss << "back-sub failed: tested=" << tested
                                 << " det=" << det
                                 << " residual=" << (result ? result->to_string() : "null");
                             EXPECT_TRUE(false, oss.str());
@@ -304,12 +304,12 @@ int main() {
                     if (back_sub_ok) ++pass_count;
                 } else {
                     std::ostringstream oss;
-                    oss << "Property 12: solution missing x or y, tested=" << tested;
+                    oss << "solution missing x or y, tested=" << tested;
                     EXPECT_TRUE(false, oss.str());
                 }
             } else {
                 std::ostringstream oss;
-                oss << "Property 12 failed: expected 1 solution, got " << solutions.size()
+                oss << "failed: expected 1 solution, got " << solutions.size()
                     << " for det=" << det
                     << " system: " << eq1->to_string() << " = 0, " << eq2->to_string() << " = 0";
                 EXPECT_TRUE(false, oss.str());
@@ -317,12 +317,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 12: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed unique solution for non-singular systems";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 10: Backward Compatibility (50 iterations)");
+    TEST_CASE("Backward Compatibility (50 iterations)");
     {
         std::mt19937 rng(77);
         std::uniform_int_distribution<int> coeff_dist(-5, 5);
@@ -437,11 +437,11 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 10: " << passed << " passed, " << skipped
+        summary << "" << passed << " passed, " << skipped
                 << " skipped (det=0) out of 50";
         std::cout << summary.str() << std::endl;
-        EXPECT_TRUE(passed > 0, "Property 10: at least some iterations passed");
-        EXPECT_TRUE(passed + skipped == 50, "Property 10: all iterations accounted for");
+        EXPECT_TRUE(passed > 0, "at least some iterations passed");
+        EXPECT_TRUE(passed + skipped == 50, "all iterations accounted for");
     }
 
     return TEST_REPORT();

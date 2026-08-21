@@ -32,8 +32,8 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
 }
 
 
-void test_property12_all_positive_operands() {
-    TEST_CASE("Property 12: All Positive operands → sum is Positive");
+void test_all_positive_operands() {
+    TEST_CASE("All Positive operands → sum is Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::Positive);
@@ -59,8 +59,8 @@ void test_property12_all_positive_operands() {
     }
 }
 
-void test_property12_all_negative_operands() {
-    TEST_CASE("Property 12: All Negative operands → sum is Negative");
+void test_all_negative_operands() {
+    TEST_CASE("All Negative operands → sum is Negative");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Negative);
@@ -86,8 +86,8 @@ void test_property12_all_negative_operands() {
     }
 }
 
-void test_property12_all_nonnegative_operands() {
-    TEST_CASE("Property 12: All NonNegative operands → sum is NonNegative");
+void test_all_nonnegative_operands() {
+    TEST_CASE("All NonNegative operands → sum is NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::NonNegative);
@@ -113,8 +113,8 @@ void test_property12_all_nonnegative_operands() {
     }
 }
 
-void test_property12_all_nonpositive_operands() {
-    TEST_CASE("Property 12: All NonPositive operands → sum is NonPositive");
+void test_all_nonpositive_operands() {
+    TEST_CASE("All NonPositive operands → sum is NonPositive");
 
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::NonPositive);
@@ -128,8 +128,8 @@ void test_property12_all_nonpositive_operands() {
         "a + b is NonPositive when a, b are NonPositive");
 }
 
-void test_property12_positive_implies_nonnegative_for_sum() {
-    TEST_CASE("Property 12: All Positive operands → sum is also NonNegative");
+void test_positive_implies_nonnegative_for_sum() {
+    TEST_CASE("All Positive operands → sum is also NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::Positive);
@@ -145,8 +145,8 @@ void test_property12_positive_implies_nonnegative_for_sum() {
         "a + b is NonNegative when a, b are Positive (Positive implies NonNegative)");
 }
 
-void test_property12_unknown_operand_yields_unknown() {
-    TEST_CASE("Property 12: Any Unknown operand → result is Unknown");
+void test_unknown_operand_yields_unknown() {
+    TEST_CASE("Any Unknown operand → result is Unknown");
 
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::Positive);
@@ -167,8 +167,8 @@ void test_property12_unknown_operand_yields_unknown() {
         "a + b is Unknown for NonPositive when b has Unknown sign");
 }
 
-void test_property12_mixed_signs_yield_unknown() {
-    TEST_CASE("Property 12: Mixed definite signs → result is Unknown");
+void test_mixed_signs_yield_unknown() {
+    TEST_CASE("Mixed definite signs → result is Unknown");
 
     AssumptionContext ctx;
     ctx.assume_sign("pos", Sign::Positive);
@@ -186,8 +186,8 @@ void test_property12_mixed_signs_yield_unknown() {
         "pos + neg is Unknown for Negative (mixed signs)");
 }
 
-void test_property12_single_operand() {
-    TEST_CASE("Property 12: Single operand AddNode preserves sign");
+void test_single_operand() {
+    TEST_CASE("Single operand AddNode preserves sign");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -203,8 +203,8 @@ void test_property12_single_operand() {
         "Single-operand add(x) is Positive when x is Positive");
 }
 
-void test_property12_with_number_operands() {
-    TEST_CASE("Property 12: Addition with positive number operands");
+void test_sign_with_number_operands() {
+    TEST_CASE("Addition with positive number operands");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -234,8 +234,8 @@ void test_property12_with_number_operands() {
     }
 }
 
-void test_property12_with_variables_and_numbers_mixed() {
-    TEST_CASE("Property 12: Addition with variables and numbers");
+void test_with_variables_and_numbers_mixed() {
+    TEST_CASE("Addition with variables and numbers");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -259,8 +259,8 @@ void test_property12_with_variables_and_numbers_mixed() {
     }
 }
 
-void test_property12_many_operands_uniform_sign() {
-    TEST_CASE("Property 12: Many operands with uniform sign");
+void test_many_operands_uniform_sign() {
+    TEST_CASE("Many operands with uniform sign");
 
     AssumptionContext ctx;
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
@@ -278,8 +278,8 @@ void test_property12_many_operands_uniform_sign() {
         "Sum of 10 Positive variables is Positive");
 }
 
-void test_property12_empty_add_returns_unknown() {
-    TEST_CASE("Property 12: Empty AddNode is rejected");
+void test_empty_add_returns_unknown() {
+    TEST_CASE("Empty AddNode is rejected");
 
     bool rejected = false;
     try {
@@ -292,8 +292,8 @@ void test_property12_empty_add_returns_unknown() {
 }
 
 
-void test_property13_all_integer_operands() {
-    TEST_CASE("Property 13: All Integer operands → sum is Integer");
+void test_all_integer_operands() {
+    TEST_CASE("All Integer operands → sum is Integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("a", Domain::Integer);
@@ -319,8 +319,8 @@ void test_property13_all_integer_operands() {
     }
 }
 
-void test_property13_all_real_operands() {
-    TEST_CASE("Property 13: All Real operands → sum is Real");
+void test_all_real_operands() {
+    TEST_CASE("All Real operands → sum is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -334,8 +334,8 @@ void test_property13_all_real_operands() {
         "x + y is Real when x, y are Real");
 }
 
-void test_property13_integer_implies_real_for_sum() {
-    TEST_CASE("Property 13: All Integer operands → sum is also Real (Integer ⊂ Real)");
+void test_integer_implies_real_for_sum() {
+    TEST_CASE("All Integer operands → sum is also Real (Integer ⊂ Real)");
 
     AssumptionContext ctx;
     ctx.assume_domain("a", Domain::Integer);
@@ -351,8 +351,8 @@ void test_property13_integer_implies_real_for_sum() {
         "a + b is Real when a, b are Integer (Integer implies Real)");
 }
 
-void test_property13_mixed_integer_and_real() {
-    TEST_CASE("Property 13: Mixed Integer and Real → sum is Real but not necessarily Integer");
+void test_mixed_integer_and_real() {
+    TEST_CASE("Mixed Integer and Real → sum is Real but not necessarily Integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("a", Domain::Integer);
@@ -372,8 +372,8 @@ void test_property13_mixed_integer_and_real() {
         "a + b is Unknown for Integer when b is only Real");
 }
 
-void test_property13_unknown_domain_yields_unknown() {
-    TEST_CASE("Property 13: Unknown domain operand → result is Unknown");
+void test_unknown_domain_yields_unknown() {
+    TEST_CASE("Unknown domain operand → result is Unknown");
 
     AssumptionContext ctx;
     ctx.assume_domain("a", Domain::Integer);
@@ -388,8 +388,8 @@ void test_property13_unknown_domain_yields_unknown() {
         "a + b is Unknown for Integer when b has no Integer domain");
 }
 
-void test_property13_with_number_operands() {
-    TEST_CASE("Property 13: Addition with integer number operands");
+void test_domain_with_number_operands() {
+    TEST_CASE("Addition with integer number operands");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -405,8 +405,8 @@ void test_property13_with_number_operands() {
     }
 }
 
-void test_property13_many_integer_operands() {
-    TEST_CASE("Property 13: Many Integer operands → sum is Integer");
+void test_many_integer_operands() {
+    TEST_CASE("Many Integer operands → sum is Integer");
 
     AssumptionContext ctx;
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
@@ -424,8 +424,8 @@ void test_property13_many_integer_operands() {
         "Sum of 8 Integer variables is Integer");
 }
 
-void test_property13_real_with_numbers() {
-    TEST_CASE("Property 13: Real variable + integer number → Real");
+void test_real_with_numbers() {
+    TEST_CASE("Real variable + integer number → Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -439,8 +439,8 @@ void test_property13_real_with_numbers() {
         "x + 3 is Real when x is Real");
 }
 
-void test_property13_nested_addition_domain() {
-    TEST_CASE("Property 13: Nested addition preserves Integer domain");
+void test_nested_addition_domain() {
+    TEST_CASE("Nested addition preserves Integer domain");
 
     AssumptionContext ctx;
     ctx.assume_domain("a", Domain::Integer);
@@ -460,28 +460,28 @@ void test_property13_nested_addition_domain() {
 
 
 int main() {
-    test_property12_all_positive_operands();
-    test_property12_all_negative_operands();
-    test_property12_all_nonnegative_operands();
-    test_property12_all_nonpositive_operands();
-    test_property12_positive_implies_nonnegative_for_sum();
-    test_property12_unknown_operand_yields_unknown();
-    test_property12_mixed_signs_yield_unknown();
-    test_property12_single_operand();
-    test_property12_with_number_operands();
-    test_property12_with_variables_and_numbers_mixed();
-    test_property12_many_operands_uniform_sign();
-    test_property12_empty_add_returns_unknown();
+    test_all_positive_operands();
+    test_all_negative_operands();
+    test_all_nonnegative_operands();
+    test_all_nonpositive_operands();
+    test_positive_implies_nonnegative_for_sum();
+    test_unknown_operand_yields_unknown();
+    test_mixed_signs_yield_unknown();
+    test_single_operand();
+    test_sign_with_number_operands();
+    test_with_variables_and_numbers_mixed();
+    test_many_operands_uniform_sign();
+    test_empty_add_returns_unknown();
 
-    test_property13_all_integer_operands();
-    test_property13_all_real_operands();
-    test_property13_integer_implies_real_for_sum();
-    test_property13_mixed_integer_and_real();
-    test_property13_unknown_domain_yields_unknown();
-    test_property13_with_number_operands();
-    test_property13_many_integer_operands();
-    test_property13_real_with_numbers();
-    test_property13_nested_addition_domain();
+    test_all_integer_operands();
+    test_all_real_operands();
+    test_integer_implies_real_for_sum();
+    test_mixed_integer_and_real();
+    test_unknown_domain_yields_unknown();
+    test_domain_with_number_operands();
+    test_many_integer_operands();
+    test_real_with_numbers();
+    test_nested_addition_domain();
 
     return TEST_REPORT();
 }

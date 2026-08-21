@@ -157,7 +157,7 @@ void verify_case(const Case& c) {
 } // anonymous namespace
 
 int main() {
-    TEST_CASE("Property 8: Special function AST node correctness");
+    TEST_CASE("Special function AST node correctness");
 
     for (const auto& c : cases()) {
         verify_case(c);

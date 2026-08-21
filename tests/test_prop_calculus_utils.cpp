@@ -124,8 +124,8 @@ RationalFuncData gen_rational_function(const std::string& v) {
 } // anonymous namespace
 
 
-static void test_property_10_log_differentiation_equivalence() {
-    TEST_CASE("Property 10: Logarithmic differentiation equivalence");
+static void test_log_differentiation_equivalence() {
+    TEST_CASE("Logarithmic differentiation equivalence");
 
 
     rc::check("log_differentiate(f, x) == f->differentiate(x) for polynomials", []() {
@@ -163,8 +163,8 @@ static void test_property_10_log_differentiation_equivalence() {
 }
 
 
-static void test_property_36_asymptotes_rational() {
-    TEST_CASE("Property 36: Asymptotes of rational functions");
+static void test_asymptotes_rational() {
+    TEST_CASE("Asymptotes of rational functions");
 
 
     rc::check("vertical asymptotes are at denominator zeros", []() {
@@ -242,8 +242,8 @@ static void test_property_36_asymptotes_rational() {
 }
 
 
-static void test_property_37_curvature_formula() {
-    TEST_CASE("Property 37: Curvature formula correctness");
+static void test_curvature_formula() {
+    TEST_CASE("Curvature formula correctness");
 
 
     rc::check("curvature of circle radius R is 1/R", []() {
@@ -324,8 +324,8 @@ static void test_property_37_curvature_formula() {
 }
 
 
-static void test_property_34_inflection_points() {
-    TEST_CASE("Property 34: Inflection points");
+static void test_inflection_points() {
+    TEST_CASE("Inflection points");
 
     rc::check("f''(x) == 0 at inflection points for polynomials", []() {
         auto f = gen_polynomial("x", 3, 4);
@@ -347,10 +347,10 @@ static void test_property_34_inflection_points() {
 
 
 int main() {
-    test_property_10_log_differentiation_equivalence();
-    test_property_34_inflection_points();
-    test_property_36_asymptotes_rational();
-    test_property_37_curvature_formula();
+    test_log_differentiation_equivalence();
+    test_inflection_points();
+    test_asymptotes_rational();
+    test_curvature_formula();
 
     return TEST_REPORT();
 }

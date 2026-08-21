@@ -88,7 +88,7 @@ static bool contains_abs(const std::shared_ptr<const SymbolicNode>& node) {
 
 
 static void test_integrator_positive_simplifies_abs() {
-    TEST_CASE("Integrator: positive variable simplifies |x| to x (Req 12.2)");
+    TEST_CASE("Integrator: positive variable simplifies |x| to x");
 
     // Create integrand: |x|
     auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
@@ -99,8 +99,14 @@ static void test_integrator_positive_simplifies_abs() {
 
     // Integrate with assumption context
     Integrator integrator;
-    integrator.set_assumption_context(&ctx);
-    auto result = integrator.integrate(integrand, "x");
+    ComputationContext integration_context;
+    auto set_integration_assumptions = integration_context.set_assumptions(
+        std::make_shared<AssumptionContext>(ctx));
+    EXPECT_TRUE(set_integration_assumptions.has_value(),
+                "integration assumptions attach to context");
+    auto integrated = integrator.integrate_checked(integrand, "x", integration_context);
+    EXPECT_TRUE(integrated.has_value(), "context-aware integration succeeds");
+    auto result = integrated.value();
 
     std::string result_str = result.to_string();
     std::cout << "  Integration of |x| with x Positive: " << result_str << std::endl;
@@ -112,7 +118,7 @@ static void test_integrator_positive_simplifies_abs() {
 }
 
 static void test_integrator_no_context_preserves_abs() {
-    TEST_CASE("Integrator: no context preserves |x| behavior (Req 12.4)");
+    TEST_CASE("Integrator: no context preserves |x| behavior");
 
     // Create integrand: |x|
     auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
@@ -134,7 +140,7 @@ static void test_integrator_no_context_preserves_abs() {
 
 
 static void test_limit_visitor_positive_resolves_sign() {
-    TEST_CASE("LimitVisitor: positive variable resolves sign ambiguity (Req 13.2)");
+    TEST_CASE("LimitVisitor: positive variable resolves sign ambiguity");
 
     // Compute limit of 1/x as x → 0+ with x known Positive.
     // The LimitVisitor should use the assumption to determine the sign.
@@ -176,7 +182,7 @@ static void test_limit_visitor_positive_resolves_sign() {
 }
 
 static void test_limit_visitor_nullptr_same_behavior() {
-    TEST_CASE("LimitVisitor: nullptr context same as current behavior (Req 13.4)");
+    TEST_CASE("LimitVisitor: nullptr context same as current behavior");
 
     // Compute limit of x^2 as x → 2 without context
     auto x_squared = lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2));
@@ -203,7 +209,7 @@ static void test_limit_visitor_nullptr_same_behavior() {
 
 
 static void test_ode_solver_positive_branch() {
-    TEST_CASE("ODE solver: positive dep var selects positive branch (Req 15.2)");
+    TEST_CASE("ODE solver: positive dep var selects positive branch");
 
     // Solve dy/dx = x*y with y declared Positive
     auto x = SymbolicExpr::variable("x");
@@ -228,7 +234,7 @@ static void test_ode_solver_positive_branch() {
 }
 
 static void test_ode_solver_nullptr_no_abs() {
-    TEST_CASE("ODE solver: nullptr context identical to current (Req 15.4)");
+    TEST_CASE("ODE solver: nullptr context identical to current");
 
     // Solve dy/dx = x*y without context
     auto x = SymbolicExpr::variable("x");
@@ -249,7 +255,7 @@ static void test_ode_solver_nullptr_no_abs() {
 
 
 static void test_matcher_assumption_condition_matches() {
-    TEST_CASE("Matcher: assumption_condition matches when context has variable Positive (Req 16.2)");
+    TEST_CASE("Matcher: assumption_condition matches when context has variable Positive");
 
     // Create a rule with assumption_condition that checks if wildcard "A" is Positive
     auto pattern = lamina::detail::expression_from_node(make_var("A"));
@@ -277,11 +283,10 @@ static void test_matcher_assumption_condition_matches() {
     // Use RewriteEngine with assumption context
     RewriteEngine engine;
     engine.add_rule(rule);
-    engine.set_assumption_context(&ctx);
 
     // The rule should match because x is Positive in the context
     MatchMap bindings;
-    bool matched = Matcher::match(pattern, target, wildcards, bindings, &ctx);
+    bool matched = Matcher::match(pattern, target, wildcards, bindings);
 
     EXPECT_TRUE(matched, "Matcher matches pattern against target");
 
@@ -292,7 +297,7 @@ static void test_matcher_assumption_condition_matches() {
 }
 
 static void test_matcher_assumption_condition_no_match_without_context() {
-    TEST_CASE("Matcher: assumption_condition fails without context (Req 16.4)");
+    TEST_CASE("Matcher: assumption_condition fails without context");
 
     // Same rule as above
     auto pattern = lamina::detail::expression_from_node(make_var("A"));
@@ -312,7 +317,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
     auto target = lamina::detail::expression_from_node(make_var("x"));
 
     MatchMap bindings;
-    bool matched = Matcher::match(pattern, target, wildcards, bindings, nullptr);
+    bool matched = Matcher::match(pattern, target, wildcards, bindings);
 
     EXPECT_TRUE(matched, "Matcher still matches structurally without context");
 
@@ -323,7 +328,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
 }
 
 static void test_matcher_rewrite_engine_with_context() {
-    TEST_CASE("Matcher: RewriteEngine uses assumption context during apply (Req 16.3)");
+    TEST_CASE("Matcher: RewriteEngine uses assumption context during apply");
 
     // Create a rule: abs(A) → A when A is Positive
     auto abs_A = lamina::detail::expression_from_node(make_abs(make_var("A")));
@@ -346,11 +351,16 @@ static void test_matcher_rewrite_engine_with_context() {
 
     RewriteEngine engine;
     engine.add_rule(rule);
-    engine.set_assumption_context(&ctx);
+    ComputationContext computation_context;
+    auto assumptions = std::make_shared<AssumptionContext>(ctx);
+    auto set_assumptions = computation_context.set_assumptions(assumptions);
+    EXPECT_TRUE(set_assumptions.has_value(), "rewrite assumptions attach to context");
 
     // Apply to abs(x)
     auto input = lamina::detail::expression_from_node(make_abs(make_var("x")));
-    auto result = engine.apply(input);
+    auto checked_result = engine.apply_checked(input, computation_context);
+    EXPECT_TRUE(checked_result.has_value(), "context-aware rewrite succeeds");
+    auto result = checked_result.value();
 
     std::string result_str = result.to_string();
     std::cout << "  RewriteEngine abs(x) with x Positive: " << result_str << std::endl;
@@ -362,7 +372,7 @@ static void test_matcher_rewrite_engine_with_context() {
 
 
 static void test_integrator_nullptr_identical() {
-    TEST_CASE("Integrator: nullptr identical to no context (Req 12.4)");
+    TEST_CASE("Integrator: nullptr identical to no context");
 
     // Integrate x^2
     auto integrand = lamina::detail::expression_from_node(lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2)));
@@ -371,8 +381,11 @@ static void test_integrator_nullptr_identical() {
     auto result1 = integrator1.integrate(integrand, "x");
 
     Integrator integrator2;
-    integrator2.set_assumption_context(nullptr);
-    auto result2 = integrator2.integrate(integrand, "x");
+    ComputationContext integration_context2;
+    auto result2_checked = integrator2.integrate_checked(
+        integrand, "x", integration_context2);
+    EXPECT_TRUE(result2_checked.has_value(), "integration without assumptions succeeds");
+    auto result2 = result2_checked.value();
 
     std::string s1 = result1.to_string();
     std::string s2 = result2.to_string();
@@ -381,7 +394,7 @@ static void test_integrator_nullptr_identical() {
 }
 
 static void test_ode_solver_nullptr_identical() {
-    TEST_CASE("ODE solver: nullptr identical to default (Req 15.4)");
+    TEST_CASE("ODE solver: nullptr identical to default");
 
     auto x = SymbolicExpr::variable("x");
     auto y = SymbolicExpr::variable("y");
@@ -397,7 +410,7 @@ static void test_ode_solver_nullptr_identical() {
 }
 
 static void test_matcher_nullptr_identical() {
-    TEST_CASE("Matcher: nullptr identical to no context (Req 16.4)");
+    TEST_CASE("Matcher: nullptr identical to no context");
 
     auto pattern = lamina::detail::expression_from_node(make_var("A"));
     auto target = lamina::detail::expression_from_node(make_var("x"));
@@ -407,7 +420,7 @@ static void test_matcher_nullptr_identical() {
     bool matched1 = Matcher::match(pattern, target, wildcards, bindings1);
 
     MatchMap bindings2;
-    bool matched2 = Matcher::match(pattern, target, wildcards, bindings2, nullptr);
+    bool matched2 = Matcher::match(pattern, target, wildcards, bindings2);
 
     EXPECT_TRUE(matched1 == matched2,
                 "Matcher::match with default and nullptr produce same match result");

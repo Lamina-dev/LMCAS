@@ -217,7 +217,7 @@ ComboReport verify_combo(const Pattern& pat, const ABPair& ab) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 3: Linear substitution round-trip");
+    TEST_CASE("Linear substitution round-trip");
 
     int total_combos = 0;
     int verified_combos = 0;

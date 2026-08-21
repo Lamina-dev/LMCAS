@@ -412,7 +412,7 @@ public:
         unsupported("SummationNode");
     }
 
-    void visit(const ProductNode_Op&) override {
+    void visit(const ProductNode&) override {
         unsupported("ProductNode");
     }
 
@@ -426,5 +426,13 @@ public:
 
     void visit(const SetBuilderNode&) override {
         unsupported("SetBuilderNode");
+    }
+    void visit(const FiniteSetNode&) override { unsupported("FiniteSetNode"); }
+    void visit(const IntervalNode&) override { unsupported("IntervalNode"); }
+    void visit(const MembershipNode&) override { unsupported("MembershipNode"); }
+    void visit(const QuantityNode& node) override {
+        node.value()->accept(*this);
+        result = lamina::detail::make_node<QuantityNode>(
+            result, node.dimension(), node.scale_to_base(), node.display_unit());
     }
 };

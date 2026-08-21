@@ -59,8 +59,8 @@ static Domain random_natural_domain() {
 }
 
 
-static void test_property2_trig_integer_or_real_gives_real() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: sin/cos/tan(Integer|Real) → Real");
+static void test_trig_integer_or_real_gives_real() {
+    TEST_CASE("sin/cos/tan(Integer|Real) → Real");
 
     rc::check("For any trig function with Integer or Real argument, result is Real", []() {
         // Pick a random trig function
@@ -88,8 +88,8 @@ static void test_property2_trig_integer_or_real_gives_real() {
 }
 
 
-static void test_property2_exp_rational_or_real_gives_real() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: exp(Rational|Real) → Real");
+static void test_exp_rational_or_real_gives_real() {
+    TEST_CASE("exp(Rational|Real) → Real");
 
     rc::check("For exp with Rational or Real argument, result is Real", []() {
         Domain arg_domain = random_rational_or_real();
@@ -107,8 +107,8 @@ static void test_property2_exp_rational_or_real_gives_real() {
 }
 
 
-static void test_property2_ln_integer_gives_real() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: ln(Integer) → Real");
+static void test_ln_integer_gives_real() {
+    TEST_CASE("ln(Integer) → Real");
 
     rc::check("For ln with Integer argument, result is Real", []() {
         std::string var_name = "n_" + std::to_string(rc::gen::inRange(0, 999));
@@ -125,8 +125,8 @@ static void test_property2_ln_integer_gives_real() {
 }
 
 
-static void test_property2_sqrt_nonneg_real_gives_real() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: sqrt(NonNeg Real) → Real");
+static void test_sqrt_nonneg_real_gives_real() {
+    TEST_CASE("sqrt(NonNeg Real) → Real");
 
     rc::check("For sqrt with non-negative Real argument, result is Real", []() {
         std::string var_name = "x_" + std::to_string(rc::gen::inRange(0, 999));
@@ -144,8 +144,8 @@ static void test_property2_sqrt_nonneg_real_gives_real() {
 }
 
 
-static void test_property2_integer_power_natural_gives_integer() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: Integer^Natural → Integer");
+static void test_integer_power_natural_gives_integer() {
+    TEST_CASE("Integer^Natural → Integer");
 
     rc::check("For Integer base raised to a positive integer exponent, result is Integer", []() {
         std::string base_name = "b_" + std::to_string(rc::gen::inRange(0, 999));
@@ -163,8 +163,8 @@ static void test_property2_integer_power_natural_gives_integer() {
 }
 
 
-static void test_property2_integer_power_zero_gives_integer() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: Integer^0 → Integer");
+static void test_integer_power_zero_gives_integer() {
+    TEST_CASE("Integer^0 → Integer");
 
     rc::check("For Integer base raised to 0, result is Integer (x^0 = 1)", []() {
         std::string base_name = "b_" + std::to_string(rc::gen::inRange(0, 999));
@@ -181,8 +181,8 @@ static void test_property2_integer_power_zero_gives_integer() {
 }
 
 
-static void test_property2_rational_power_integer_gives_real() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: Rational^Integer → Real");
+static void test_rational_power_integer_gives_real() {
+    TEST_CASE("Rational^Integer → Real");
 
     rc::check("For Rational base raised to integer exponent, result is Real", []() {
         std::string base_name = "r_" + std::to_string(rc::gen::inRange(0, 999));
@@ -201,8 +201,8 @@ static void test_property2_rational_power_integer_gives_real() {
 }
 
 
-static void test_property2_unknown_domain_gives_unknown() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: Unknown domain argument → Unknown");
+static void test_unknown_domain_gives_unknown() {
+    TEST_CASE("Unknown domain argument → Unknown");
 
     rc::check("For functions with unknown domain argument, result domain is Unknown", []() {
         std::vector<FunctionNode::FuncType> funcs = {
@@ -227,8 +227,8 @@ static void test_property2_unknown_domain_gives_unknown() {
 }
 
 
-static void test_property2_all_trig_with_integer() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: All trig(Integer) → Real");
+static void test_all_trig_with_integer() {
+    TEST_CASE("All trig(Integer) → Real");
 
     // sin(Integer) → Real
     {
@@ -256,8 +256,8 @@ static void test_property2_all_trig_with_integer() {
     }
 }
 
-static void test_property2_exp_with_integer() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: exp(Integer) → Real");
+static void test_exp_with_integer() {
+    TEST_CASE("exp(Integer) → Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -266,8 +266,8 @@ static void test_property2_exp_with_integer() {
     EXPECT_TRUE(engine.query_real(expr) == Tribool::True, "exp(Integer) → Real");
 }
 
-static void test_property2_ln_positive_gives_real() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: ln(Positive) → Real");
+static void test_ln_positive_gives_real() {
+    TEST_CASE("ln(Positive) → Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -277,8 +277,8 @@ static void test_property2_ln_positive_gives_real() {
     EXPECT_TRUE(engine.query_real(expr) == Tribool::True, "ln(Positive Real) → Real");
 }
 
-static void test_property2_sqrt_without_nonneg_unknown() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: sqrt without NonNeg → Unknown");
+static void test_sqrt_without_nonneg_unknown() {
+    TEST_CASE("sqrt without NonNeg → Unknown");
 
     // sqrt of a Real variable without NonNegative sign → Unknown
     AssumptionContext ctx;
@@ -290,8 +290,8 @@ static void test_property2_sqrt_without_nonneg_unknown() {
         "sqrt(Real without NonNeg) → Unknown");
 }
 
-static void test_property2_power_negative_exponent_not_integer() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 2: Integer^(-1) not necessarily Integer");
+static void test_power_negative_exponent_not_integer() {
+    TEST_CASE("Integer^(-1) not necessarily Integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -308,21 +308,21 @@ static void test_property2_power_negative_exponent_not_integer() {
 
 
 int main() {
-    test_property2_trig_integer_or_real_gives_real();
-    test_property2_exp_rational_or_real_gives_real();
-    test_property2_ln_integer_gives_real();
-    test_property2_sqrt_nonneg_real_gives_real();
-    test_property2_integer_power_natural_gives_integer();
-    test_property2_integer_power_zero_gives_integer();
-    test_property2_rational_power_integer_gives_real();
-    test_property2_unknown_domain_gives_unknown();
+    test_trig_integer_or_real_gives_real();
+    test_exp_rational_or_real_gives_real();
+    test_ln_integer_gives_real();
+    test_sqrt_nonneg_real_gives_real();
+    test_integer_power_natural_gives_integer();
+    test_integer_power_zero_gives_integer();
+    test_rational_power_integer_gives_real();
+    test_unknown_domain_gives_unknown();
 
     // Additional unit-style tests for completeness
-    test_property2_all_trig_with_integer();
-    test_property2_exp_with_integer();
-    test_property2_ln_positive_gives_real();
-    test_property2_sqrt_without_nonneg_unknown();
-    test_property2_power_negative_exponent_not_integer();
+    test_all_trig_with_integer();
+    test_exp_with_integer();
+    test_ln_positive_gives_real();
+    test_sqrt_without_nonneg_unknown();
+    test_power_negative_exponent_not_integer();
 
     return TEST_REPORT();
 }

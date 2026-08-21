@@ -142,14 +142,14 @@ public:
         result = lamina::detail::make_node<SummationNode>(body, node.index_var(), lower, upper);
     }
 
-    void visit(const ProductNode_Op& node) override {
+    void visit(const ProductNode& node) override {
         node.body()->accept(*this);
         auto body = result;
         node.lower_bound()->accept(*this);
         auto lower = result;
         node.upper_bound()->accept(*this);
         auto upper = result;
-        result = lamina::detail::make_node<ProductNode_Op>(body, node.index_var(), lower, upper);
+        result = lamina::detail::make_node<ProductNode>(body, node.index_var(), lower, upper);
     }
 
     void visit(const TransformNode& node) override {
@@ -173,6 +173,37 @@ public:
         node.predicate()->accept(*this);
         auto predicate = result;
         result = lamina::detail::make_node<SetBuilderNode>(node.element_var(), domain, predicate);
+    }
+
+    void visit(const FiniteSetNode& node) override {
+        std::vector<std::shared_ptr<const SymbolicNode>> elements;
+        elements.reserve(node.elements().size());
+        for (const auto& element : node.elements()) {
+            element->accept(*this);
+            elements.push_back(result);
+        }
+        result = lamina::detail::make_node<FiniteSetNode>(std::move(elements));
+    }
+
+    void visit(const IntervalNode& node) override {
+        node.lower()->accept(*this);
+        auto lower = result;
+        node.upper()->accept(*this);
+        result = lamina::detail::make_node<IntervalNode>(
+            lower, result, node.lower_closed(), node.upper_closed());
+    }
+
+    void visit(const MembershipNode& node) override {
+        node.element()->accept(*this);
+        auto element = result;
+        node.set()->accept(*this);
+        result = lamina::detail::make_node<MembershipNode>(element, result);
+    }
+
+    void visit(const QuantityNode& node) override {
+        node.value()->accept(*this);
+        result = lamina::detail::make_node<QuantityNode>(
+            result, node.dimension(), node.scale_to_base(), node.display_unit());
     }
 
     void visit(const ComplexNode& node) override {

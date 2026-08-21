@@ -75,7 +75,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
 );
 
 /**
- * @brief Checked migration API for second-order constant-coefficient ODEs.
+ * @brief Solves a second-order constant-coefficient ODE.
  *
  * Supported domain currently covers homogeneous equations and first-order
  * degeneracy when a == 0 and b != 0. Non-homogeneous second-order equations

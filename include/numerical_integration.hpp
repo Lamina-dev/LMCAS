@@ -72,7 +72,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> quadrature_gaussian(
  * @brief Checked Gauss-Legendre integration for supported point counts.
  *
  * Supports n = 1, 2, and 3 directly. Larger n falls back to checked composite
- * Simpson with 2n subintervals, matching the legacy wrapper's support domain.
+ * Simpson with 2n subintervals, matching the convenience overload's support domain.
  */
 LAMINA_API Result<ApproxReal> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -135,7 +135,7 @@ LAMINA_API Result<ApproxReal> adaptive_simpson_numeric(
 );
 
 /**
- * @brief Compatibility wrapper for the checked default numeric integrator.
+ * @brief Integrates numerically and returns the approximation as an expression.
  * @param f 被积函数
  * @param var 积分变量
  * @param a 下限
@@ -151,7 +151,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> numerical_integrate(
     int n = 100
 );
 
-/** @brief Checked default numerical integration entry point. */
 LAMINA_API Result<ApproxReal> numerical_integrate_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,

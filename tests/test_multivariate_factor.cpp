@@ -379,7 +379,7 @@ int main()
     }
 
 
-    TEST_CASE("Feature: multivariate-factorization, Property 9: Factorization product correctness (random factorable bivariate)");
+    TEST_CASE("Factorization product correctness (random factorable bivariate)");
     rc::check("For random products of linear factors, factorization reconstructs original", []() {
         // Generate 2-3 random linear factors in {x, y} and verify product correctness
         std::vector<std::string> vars = {"x", "y"};
@@ -418,7 +418,7 @@ int main()
         RC_ASSERT(reconstructed == product);
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 9: Each factor is primitive with positive leading coefficient");
+    TEST_CASE("Each factor is primitive with positive leading coefficient");
     rc::check("Factors from factorization are primitive with positive leading coefficient", []() {
         std::vector<std::string> vars = {"x", "y"};
         // Generate a random quadratic: a*x^2 + b*x*y + c*y^2 + d*x + e*y + f
@@ -456,7 +456,7 @@ int main()
         RC_ASSERT(reconstructed == poly);
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 9: Factorization product correctness (random monomial * linear)");
+    TEST_CASE("Factorization product correctness (random monomial * linear)");
     rc::check("For monomial * linear factor products, factorization reconstructs original", []() {
         std::vector<std::string> vars = {"x", "y"};
         // Generate a monomial factor: x^a * y^b with small exponents
@@ -499,7 +499,7 @@ int main()
     });
 
 
-    TEST_CASE("Feature: multivariate-factorization, Property 10: Linear polynomials are irreducible (random bivariate linear)");
+    TEST_CASE("Linear polynomials are irreducible (random bivariate linear)");
     rc::check("Linear bivariate polynomial returns itself as sole factor", []() {
         std::vector<std::string> vars = {"x", "y"};
         // Generate a random linear polynomial: a*x + b*y + c
@@ -528,7 +528,7 @@ int main()
         RC_ASSERT(reconstructed == poly);
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 10: Linear polynomials are irreducible (random trivariate linear)");
+    TEST_CASE("Linear polynomials are irreducible (random trivariate linear)");
     rc::check("Linear trivariate polynomial returns itself as sole factor", []() {
         std::vector<std::string> vars = {"x", "y", "z"};
         // Generate a random linear polynomial: a*x + b*y + c*z + d
@@ -560,7 +560,7 @@ int main()
     });
 
 
-    TEST_CASE("Feature: multivariate-factorization, Property 11: Difference of squares factorization (random a^2 - b^2)");
+    TEST_CASE("Difference of squares factorization (random a^2 - b^2)");
     rc::check("a^2 - b^2 factors into product containing (a+b) and (a-b)", []() {
         std::vector<std::string> vars = {"x", "y"};
         // Generate random a and b as simple monomials/linear terms
@@ -619,7 +619,7 @@ int main()
         }
     });
 
-    TEST_CASE("Feature: multivariate-factorization, Property 11: Difference of squares with single variables");
+    TEST_CASE("Difference of squares with single variables");
     rc::check("x_i^2 - x_j^2 factors into (x_i + x_j)(x_i - x_j)", []() {
         std::vector<std::string> vars = {"x", "y", "z"};
         // Pick two distinct variable indices

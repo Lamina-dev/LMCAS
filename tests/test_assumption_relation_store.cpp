@@ -24,7 +24,7 @@ static bool check_has_sign(const PropertyStore& ps, const std::string& symbol, S
 
 
 void test_gt_zero_derives_positive() {
-    TEST_CASE("Property 9: GT against zero derives Positive sign");
+    TEST_CASE("GT against zero derives Positive sign");
 
     // Test with multiple variable names
     std::vector<std::string> var_names = {"x", "y", "alpha", "longVariableName", "a1"};
@@ -55,7 +55,7 @@ void test_gt_zero_derives_positive() {
 }
 
 void test_geq_zero_derives_nonnegative() {
-    TEST_CASE("Property 9: GEQ against zero derives NonNegative sign");
+    TEST_CASE("GEQ against zero derives NonNegative sign");
 
     std::vector<std::string> var_names = {"x", "beta", "var_2", "Z", "temp"};
 
@@ -79,7 +79,7 @@ void test_geq_zero_derives_nonnegative() {
 }
 
 void test_lt_zero_derives_negative() {
-    TEST_CASE("Property 9: LT against zero derives Negative sign");
+    TEST_CASE("LT against zero derives Negative sign");
 
     std::vector<std::string> var_names = {"x", "gamma", "n", "val", "q"};
 
@@ -109,7 +109,7 @@ void test_lt_zero_derives_negative() {
 }
 
 void test_leq_zero_derives_nonpositive() {
-    TEST_CASE("Property 9: LEQ against zero derives NonPositive sign");
+    TEST_CASE("LEQ against zero derives NonPositive sign");
 
     std::vector<std::string> var_names = {"x", "delta", "m", "result", "w"};
 
@@ -133,7 +133,7 @@ void test_leq_zero_derives_nonpositive() {
 }
 
 void test_neq_zero_derives_nonzero() {
-    TEST_CASE("Property 9: NEQ against zero derives NonZero sign");
+    TEST_CASE("NEQ against zero derives NonZero sign");
 
     std::vector<std::string> var_names = {"x", "epsilon", "k", "divisor", "p"};
 
@@ -157,7 +157,7 @@ void test_neq_zero_derives_nonzero() {
 }
 
 void test_all_operators_comprehensive() {
-    TEST_CASE("Property 9: All operators mapped correctly for a single variable");
+    TEST_CASE("All operators mapped correctly for a single variable");
 
     // Test all 5 operators on the same variable name (each in a fresh store)
     struct TestCase {
@@ -189,7 +189,7 @@ void test_all_operators_comprehensive() {
 }
 
 void test_composite_relation_no_sign_derivation() {
-    TEST_CASE("Property 9: Composite LHS (non-variable) does not derive sign");
+    TEST_CASE("Composite LHS (non-variable) does not derive sign");
 
     RelationStore rs;
     PropertyStore ps;
@@ -213,7 +213,7 @@ void test_composite_relation_no_sign_derivation() {
 }
 
 void test_nonzero_rhs_no_sign_derivation() {
-    TEST_CASE("Property 9: Non-zero RHS does not derive sign property");
+    TEST_CASE("Non-zero RHS does not derive sign property");
 
     RelationStore rs;
     PropertyStore ps;
@@ -233,7 +233,7 @@ void test_nonzero_rhs_no_sign_derivation() {
 }
 
 void test_relation_stored_regardless_of_pattern() {
-    TEST_CASE("Property 9: Relations are always stored regardless of pattern");
+    TEST_CASE("Relations are always stored regardless of pattern");
 
     RelationStore rs;
     PropertyStore ps;
@@ -255,7 +255,7 @@ void test_relation_stored_regardless_of_pattern() {
 }
 
 void test_clear_removes_all_relations() {
-    TEST_CASE("Property 9: clear() removes all stored relations");
+    TEST_CASE("clear() removes all stored relations");
 
     RelationStore rs;
     PropertyStore ps;

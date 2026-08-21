@@ -34,8 +34,8 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
 }
 
 
-void test_property14a_single_zero_operand() {
-    TEST_CASE("Property 14a: Single zero operand makes product Zero");
+void test_single_zero_operand() {
+    TEST_CASE("Single zero operand makes product Zero");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -55,8 +55,8 @@ void test_property14a_single_zero_operand() {
         "0 * x is not NonZero");
 }
 
-void test_property14a_zero_among_multiple_operands() {
-    TEST_CASE("Property 14a: Zero among multiple operands makes product Zero");
+void test_zero_among_multiple_operands() {
+    TEST_CASE("Zero among multiple operands makes product Zero");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -74,8 +74,8 @@ void test_property14a_zero_among_multiple_operands() {
         "x * 0 * y * z is not Negative");
 }
 
-void test_property14a_zero_with_positive_numbers() {
-    TEST_CASE("Property 14a: Zero with positive number operands");
+void test_zero_with_positive_numbers() {
+    TEST_CASE("Zero with positive number operands");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -90,8 +90,8 @@ void test_property14a_zero_with_positive_numbers() {
         "5 * 0 * 3: NonNegative");
 }
 
-void test_property14a_zero_rational_and_float() {
-    TEST_CASE("Property 14a: Zero as Rational(0) and 0.0 detected");
+void test_zero_rational_and_float() {
+    TEST_CASE("Zero as Rational(0) and 0.0 detected");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -119,8 +119,8 @@ void test_property14a_zero_rational_and_float() {
 }
 
 
-void test_property14b_two_positives_product_positive() {
-    TEST_CASE("Property 14b: positive * positive = Positive (even negatives)");
+void test_two_positives_product_positive() {
+    TEST_CASE("positive * positive = Positive (even negatives)");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -138,8 +138,8 @@ void test_property14b_two_positives_product_positive() {
         "3 * 5 is not NonPositive");
 }
 
-void test_property14b_one_negative_product_negative() {
-    TEST_CASE("Property 14b: positive * negative = Negative (odd negatives)");
+void test_one_negative_product_negative() {
+    TEST_CASE("positive * negative = Negative (odd negatives)");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -157,8 +157,8 @@ void test_property14b_one_negative_product_negative() {
         "3 * (-5) is NonPositive");
 }
 
-void test_property14b_two_negatives_product_positive() {
-    TEST_CASE("Property 14b: negative * negative = Positive (even negatives)");
+void test_two_negatives_product_positive() {
+    TEST_CASE("negative * negative = Positive (even negatives)");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -172,8 +172,8 @@ void test_property14b_two_negatives_product_positive() {
         "(-3) * (-5) is not Negative");
 }
 
-void test_property14b_three_negatives_product_negative() {
-    TEST_CASE("Property 14b: neg * neg * neg = Negative (odd negatives)");
+void test_three_negatives_product_negative() {
+    TEST_CASE("neg * neg * neg = Negative (odd negatives)");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -188,8 +188,8 @@ void test_property14b_three_negatives_product_negative() {
         "(-2)*(-3)*(-4) is Negative");
 }
 
-void test_property14b_four_negatives_product_positive() {
-    TEST_CASE("Property 14b: 4 negatives = Positive (even negatives)");
+void test_four_negatives_product_positive() {
+    TEST_CASE("4 negatives = Positive (even negatives)");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -204,8 +204,8 @@ void test_property14b_four_negatives_product_positive() {
         "(-1)*(-2)*(-3)*(-4) is not Negative");
 }
 
-void test_property14b_mixed_positive_negative_even() {
-    TEST_CASE("Property 14b: pos * neg * pos * neg = Positive (2 negatives)");
+void test_mixed_positive_negative_even() {
+    TEST_CASE("pos * neg * pos * neg = Positive (2 negatives)");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -220,8 +220,8 @@ void test_property14b_mixed_positive_negative_even() {
         "2*(-3)*4*(-5) is not Negative");
 }
 
-void test_property14b_mixed_positive_negative_odd() {
-    TEST_CASE("Property 14b: pos * neg * pos = Negative (1 negative)");
+void test_mixed_positive_negative_odd() {
+    TEST_CASE("pos * neg * pos = Negative (1 negative)");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -238,8 +238,8 @@ void test_property14b_mixed_positive_negative_odd() {
 
 // --- Sign parity with variables that have declared signs ---
 
-void test_property14b_positive_variables_product() {
-    TEST_CASE("Property 14b: Positive variables product is Positive");
+void test_positive_variables_product() {
+    TEST_CASE("Positive variables product is Positive");
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
     ctx.assume_sign("y", Sign::Positive);
@@ -254,8 +254,8 @@ void test_property14b_positive_variables_product() {
         "pos_x * pos_y is not Negative");
 }
 
-void test_property14b_negative_variables_product() {
-    TEST_CASE("Property 14b: Negative variables product is Positive (even neg)");
+void test_negative_variables_product() {
+    TEST_CASE("Negative variables product is Positive (even neg)");
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Negative);
     ctx.assume_sign("y", Sign::Negative);
@@ -270,8 +270,8 @@ void test_property14b_negative_variables_product() {
         "neg_x * neg_y is not Negative");
 }
 
-void test_property14b_pos_neg_variable_product() {
-    TEST_CASE("Property 14b: Positive * Negative variable = Negative (odd neg)");
+void test_pos_neg_variable_product() {
+    TEST_CASE("Positive * Negative variable = Negative (odd neg)");
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
     ctx.assume_sign("y", Sign::Negative);
@@ -286,8 +286,8 @@ void test_property14b_pos_neg_variable_product() {
         "pos_x * neg_y is Negative");
 }
 
-void test_property14b_three_negative_variables() {
-    TEST_CASE("Property 14b: 3 Negative variables = Negative (odd neg)");
+void test_three_negative_variables() {
+    TEST_CASE("3 Negative variables = Negative (odd neg)");
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::Negative);
     ctx.assume_sign("b", Sign::Negative);
@@ -305,8 +305,8 @@ void test_property14b_three_negative_variables() {
 }
 
 
-void test_property14b_nonzero_variables_product() {
-    TEST_CASE("Property 14b: All NonZero variables -> product NonZero (Req 6.7)");
+void test_nonzero_variables_product() {
+    TEST_CASE("All NonZero variables -> product NonZero");
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);  // Positive implies NonZero
     ctx.assume_sign("y", Sign::Negative);  // Negative implies NonZero
@@ -319,8 +319,8 @@ void test_property14b_nonzero_variables_product() {
         "pos_x * neg_y is NonZero");
 }
 
-void test_property14b_nonzero_numbers_product() {
-    TEST_CASE("Property 14b: All nonzero numbers -> product NonZero");
+void test_nonzero_numbers_product() {
+    TEST_CASE("All nonzero numbers -> product NonZero");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -332,8 +332,8 @@ void test_property14b_nonzero_numbers_product() {
 }
 
 
-void test_property14b_nonneg_even_negatives() {
-    TEST_CASE("Property 14b: NonNeg operands + even negatives -> NonNeg (Req 6.8)");
+void test_nonneg_even_negatives() {
+    TEST_CASE("NonNeg operands + even negatives -> NonNeg");
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
     ctx.assume_sign("y", Sign::Negative);
@@ -349,8 +349,8 @@ void test_property14b_nonneg_even_negatives() {
         "nonneg * neg * neg: NonNegative (even negatives)");
 }
 
-void test_property14b_nonpos_odd_negatives() {
-    TEST_CASE("Property 14b: NonNeg operands + odd negatives -> NonPos (Req 6.9)");
+void test_nonpos_odd_negatives() {
+    TEST_CASE("NonNeg operands + odd negatives -> NonPos");
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
     ctx.assume_sign("y", Sign::Negative);
@@ -367,8 +367,8 @@ void test_property14b_nonpos_odd_negatives() {
 }
 
 
-void test_property14c_unknown_sign_no_zero() {
-    TEST_CASE("Property 14c: Unknown sign operands (no zero) -> Unknown");
+void test_unknown_sign_no_zero() {
+    TEST_CASE("Unknown sign operands (no zero) -> Unknown");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -386,8 +386,8 @@ void test_property14c_unknown_sign_no_zero() {
         "x * y: NonPositive Unknown");
 }
 
-void test_property14c_one_unknown_among_known() {
-    TEST_CASE("Property 14c: One Unknown among known-sign operands -> Unknown");
+void test_one_unknown_among_known() {
+    TEST_CASE("One Unknown among known-sign operands -> Unknown");
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
     // y has no sign declared -> Unknown
@@ -402,8 +402,8 @@ void test_property14c_one_unknown_among_known() {
         "pos_x * unknown_y: Negative Unknown");
 }
 
-void test_property14c_zero_overrides_unknown() {
-    TEST_CASE("Property 14c: Zero overrides Unknown sign operands");
+void test_zero_overrides_unknown() {
+    TEST_CASE("Zero overrides Unknown sign operands");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -422,8 +422,8 @@ void test_property14c_zero_overrides_unknown() {
 }
 
 
-void test_property14_empty_operands() {
-    TEST_CASE("Property 14: Empty MultiplyNode is rejected");
+void test_empty_operands() {
+    TEST_CASE("Empty MultiplyNode is rejected");
     bool rejected = false;
     try {
         (void)lamina::detail::make_node<MultiplyNode>(
@@ -434,8 +434,8 @@ void test_property14_empty_operands() {
     EXPECT_TRUE(rejected, "Empty MultiplyNode violates the AST invariant");
 }
 
-void test_property14_single_positive_number() {
-    TEST_CASE("Property 14: Single positive number operand");
+void test_single_positive_number() {
+    TEST_CASE("Single positive number operand");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -449,8 +449,8 @@ void test_property14_single_positive_number() {
         "multiply(7): not Negative");
 }
 
-void test_property14_single_negative_number() {
-    TEST_CASE("Property 14: Single negative number operand");
+void test_single_negative_number() {
+    TEST_CASE("Single negative number operand");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -464,8 +464,8 @@ void test_property14_single_negative_number() {
         "multiply(-7): Negative");
 }
 
-void test_property14_real_numbers_sign() {
-    TEST_CASE("Property 14: Real number operands sign inference");
+void test_real_numbers_sign() {
+    TEST_CASE("Real number operands sign inference");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -480,8 +480,8 @@ void test_property14_real_numbers_sign() {
         "2.5 * (-1.5): Negative");
 }
 
-void test_property14_many_operands_sign_parity() {
-    TEST_CASE("Property 14: 5 positive numbers = Positive");
+void test_many_operands_sign_parity() {
+    TEST_CASE("5 positive numbers = Positive");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -497,8 +497,8 @@ void test_property14_many_operands_sign_parity() {
 }
 
 
-void test_property15_all_integer_numbers() {
-    TEST_CASE("Property 15: All integer NumberNodes -> product is Integer");
+void test_all_integer_numbers() {
+    TEST_CASE("All integer NumberNodes -> product is Integer");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -511,8 +511,8 @@ void test_property15_all_integer_numbers() {
         "3 * (-5) * 7: Integer");
 }
 
-void test_property15_all_integer_variables() {
-    TEST_CASE("Property 15: All Integer-domain variables -> product is Integer");
+void test_all_integer_variables() {
+    TEST_CASE("All Integer-domain variables -> product is Integer");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
     ctx.assume_domain("y", Domain::Integer);
@@ -527,8 +527,8 @@ void test_property15_all_integer_variables() {
         "int_x * int_y * int_z: Integer");
 }
 
-void test_property15_mixed_integer_and_number() {
-    TEST_CASE("Property 15: Integer variable * integer number -> Integer");
+void test_mixed_integer_and_number() {
+    TEST_CASE("Integer variable * integer number -> Integer");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
     InferenceEngine engine(ctx);
@@ -541,8 +541,8 @@ void test_property15_mixed_integer_and_number() {
         "int_x * 5: Integer");
 }
 
-void test_property15_all_real_numbers() {
-    TEST_CASE("Property 15: All real NumberNodes -> product is Real");
+void test_all_real_numbers() {
+    TEST_CASE("All real NumberNodes -> product is Real");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -556,8 +556,8 @@ void test_property15_all_real_numbers() {
         "2.5 * (-1.5) * 3.0: Real");
 }
 
-void test_property15_all_real_variables() {
-    TEST_CASE("Property 15: All Real-domain variables -> product is Real");
+void test_all_real_variables() {
+    TEST_CASE("All Real-domain variables -> product is Real");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
     ctx.assume_domain("y", Domain::Real);
@@ -570,8 +570,8 @@ void test_property15_all_real_variables() {
         "real_x * real_y: Real");
 }
 
-void test_property15_integer_implies_real() {
-    TEST_CASE("Property 15: Integer operands also satisfy Real (Req 6.6)");
+void test_integer_implies_real() {
+    TEST_CASE("Integer operands also satisfy Real");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
     ctx.assume_domain("y", Domain::Integer);
@@ -585,8 +585,8 @@ void test_property15_integer_implies_real() {
         "int_x * int_y: also Real (Integer subset of Real)");
 }
 
-void test_property15_mixed_integer_real_is_real() {
-    TEST_CASE("Property 15: Integer * Real = Real (Req 6.6)");
+void test_mixed_integer_real_is_real() {
+    TEST_CASE("Integer * Real = Real");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
     ctx.assume_domain("y", Domain::Real);
@@ -602,8 +602,8 @@ void test_property15_mixed_integer_real_is_real() {
         "int_x * real_y: Integer is Unknown");
 }
 
-void test_property15_unknown_domain_propagation() {
-    TEST_CASE("Property 15: Unknown domain operand -> Unknown domain result");
+void test_unknown_domain_propagation() {
+    TEST_CASE("Unknown domain operand -> Unknown domain result");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
     // y has no domain declared -> Unknown (defaults to Complex)
@@ -618,8 +618,8 @@ void test_property15_unknown_domain_propagation() {
         "int_x * unknown_y: Real Unknown");
 }
 
-void test_property15_number_and_real_variable() {
-    TEST_CASE("Property 15: Integer number * Real variable = Real");
+void test_number_and_real_variable() {
+    TEST_CASE("Integer number * Real variable = Real");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
     InferenceEngine engine(ctx);
@@ -632,8 +632,8 @@ void test_property15_number_and_real_variable() {
         "5 * real_x: Real");
 }
 
-void test_property15_natural_domain_implies_integer() {
-    TEST_CASE("Property 15: Natural domain variables -> Integer product");
+void test_natural_domain_implies_integer() {
+    TEST_CASE("Natural domain variables -> Integer product");
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Natural);
     ctx.assume_domain("y", Domain::Natural);
@@ -649,8 +649,8 @@ void test_property15_natural_domain_implies_integer() {
         "nat_x * nat_y: Real (Natural implies Real)");
 }
 
-void test_property15_empty_multiply_domain() {
-    TEST_CASE("Property 15: Empty MultiplyNode has no domain query state");
+void test_empty_multiply_domain() {
+    TEST_CASE("Empty MultiplyNode has no domain query state");
     bool rejected = false;
     try {
         (void)lamina::detail::make_node<MultiplyNode>(
@@ -661,8 +661,8 @@ void test_property15_empty_multiply_domain() {
     EXPECT_TRUE(rejected, "Invalid empty products are rejected before inference");
 }
 
-void test_property15_rational_not_integer() {
-    TEST_CASE("Property 15: Rational(1/2) operand -> not Integer");
+void test_rational_not_integer() {
+    TEST_CASE("Rational(1/2) operand -> not Integer");
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
@@ -681,52 +681,52 @@ void test_property15_rational_not_integer() {
 
 
 int main() {
-    test_property14a_single_zero_operand();
-    test_property14a_zero_among_multiple_operands();
-    test_property14a_zero_with_positive_numbers();
-    test_property14a_zero_rational_and_float();
+    test_single_zero_operand();
+    test_zero_among_multiple_operands();
+    test_zero_with_positive_numbers();
+    test_zero_rational_and_float();
 
-    test_property14b_two_positives_product_positive();
-    test_property14b_one_negative_product_negative();
-    test_property14b_two_negatives_product_positive();
-    test_property14b_three_negatives_product_negative();
-    test_property14b_four_negatives_product_positive();
-    test_property14b_mixed_positive_negative_even();
-    test_property14b_mixed_positive_negative_odd();
+    test_two_positives_product_positive();
+    test_one_negative_product_negative();
+    test_two_negatives_product_positive();
+    test_three_negatives_product_negative();
+    test_four_negatives_product_positive();
+    test_mixed_positive_negative_even();
+    test_mixed_positive_negative_odd();
 
-    test_property14b_positive_variables_product();
-    test_property14b_negative_variables_product();
-    test_property14b_pos_neg_variable_product();
-    test_property14b_three_negative_variables();
+    test_positive_variables_product();
+    test_negative_variables_product();
+    test_pos_neg_variable_product();
+    test_three_negative_variables();
 
-    test_property14b_nonzero_variables_product();
-    test_property14b_nonzero_numbers_product();
+    test_nonzero_variables_product();
+    test_nonzero_numbers_product();
 
-    test_property14b_nonneg_even_negatives();
-    test_property14b_nonpos_odd_negatives();
+    test_nonneg_even_negatives();
+    test_nonpos_odd_negatives();
 
-    test_property14c_unknown_sign_no_zero();
-    test_property14c_one_unknown_among_known();
-    test_property14c_zero_overrides_unknown();
+    test_unknown_sign_no_zero();
+    test_one_unknown_among_known();
+    test_zero_overrides_unknown();
 
-    test_property14_empty_operands();
-    test_property14_single_positive_number();
-    test_property14_single_negative_number();
-    test_property14_real_numbers_sign();
-    test_property14_many_operands_sign_parity();
+    test_empty_operands();
+    test_single_positive_number();
+    test_single_negative_number();
+    test_real_numbers_sign();
+    test_many_operands_sign_parity();
 
-    test_property15_all_integer_numbers();
-    test_property15_all_integer_variables();
-    test_property15_mixed_integer_and_number();
-    test_property15_all_real_numbers();
-    test_property15_all_real_variables();
-    test_property15_integer_implies_real();
-    test_property15_mixed_integer_real_is_real();
-    test_property15_unknown_domain_propagation();
-    test_property15_number_and_real_variable();
-    test_property15_natural_domain_implies_integer();
-    test_property15_empty_multiply_domain();
-    test_property15_rational_not_integer();
+    test_all_integer_numbers();
+    test_all_integer_variables();
+    test_mixed_integer_and_number();
+    test_all_real_numbers();
+    test_all_real_variables();
+    test_integer_implies_real();
+    test_mixed_integer_real_is_real();
+    test_unknown_domain_propagation();
+    test_number_and_real_variable();
+    test_natural_domain_implies_integer();
+    test_empty_multiply_domain();
+    test_rational_not_integer();
 
     return TEST_REPORT();
 }

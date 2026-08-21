@@ -51,45 +51,6 @@ static bool te_depends_on(const std::shared_ptr<SymbolicExpr>& e, const std::str
     return e && lamina::detail::node(e) && te_contains_var(lamina::detail::node(e), v);
 }
 
-static bool te_contains_unevaluated_integral(
-    const std::shared_ptr<const SymbolicNode>& node,
-    std::size_t depth = 0) {
-    if (!node || depth > 200) return false;
-    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) {
-            return true;
-        }
-        for (const auto& arg : fn->arguments()) {
-            if (te_contains_unevaluated_integral(arg, depth + 1)) return true;
-        }
-        return false;
-    }
-    if (auto an = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : an->operands()) {
-            if (te_contains_unevaluated_integral(op, depth + 1)) return true;
-        }
-        return false;
-    }
-    if (auto mn = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mn->operands()) {
-            if (te_contains_unevaluated_integral(op, depth + 1)) return true;
-        }
-        return false;
-    }
-    if (auto pn = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return te_contains_unevaluated_integral(pn->base(), depth + 1) ||
-               te_contains_unevaluated_integral(pn->exponent(), depth + 1);
-    }
-    if (auto cn = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        return te_contains_unevaluated_integral(cn->real(), depth + 1) ||
-               te_contains_unevaluated_integral(cn->imag(), depth + 1);
-    }
-    if (auto tn = std::dynamic_pointer_cast<const TransformNode>(node)) {
-        return te_contains_unevaluated_integral(tn->body(), depth + 1);
-    }
-    return false;
-}
-
 static Result<void> te_validate_expr_vars(const std::shared_ptr<SymbolicExpr>& expr,
                                           const std::string& input_var,
                                           const std::string& output_var,
@@ -869,11 +830,16 @@ std::shared_ptr<SymbolicExpr> convolve(
     if (!g_shifted) return nullptr;
 
     auto integrand = SymbolicExpr::multiply(f_tau, g_shifted)->simplify();
-    auto result = integrand->integrate(tau);
-    if (result) {
-        return result->substitute(tau, SymbolicExpr::variable(var));
-    }
-    return nullptr;
+    std::vector<std::shared_ptr<const SymbolicNode>> arguments{
+        lamina::detail::node(integrand),
+        lamina::detail::node(tau_var),
+        lamina::detail::node(SymbolicExpr::infinity(-1)),
+        lamina::detail::node(SymbolicExpr::infinity(1)),
+    };
+    return lamina::detail::make_expression_ptr(
+        lamina::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::Calculus_Integral,
+            std::move(arguments)));
 }
 
 TransformEngineResult convolve_checked(
@@ -886,31 +852,10 @@ TransformEngineResult convolve_checked(
     if (!valid) return TransformEngineResult::failure(valid.error());
     auto step = context.consume_steps(10, operation);
     if (!step) return TransformEngineResult::failure(step.error());
-    try {
-        auto result = convolve(f, g, var);
-        if (!result || !lamina::detail::node(result)) {
-            return TransformEngineResult::failure(
-                CasErrc::Inconclusive,
-                "convolution is outside the supported integration domain",
-                operation);
-        }
-        auto simplified = result->simplify();
-        if (!simplified || !lamina::detail::node(simplified) ||
-            te_contains_unevaluated_integral(lamina::detail::node(simplified))) {
-            return TransformEngineResult::failure(
-                CasErrc::Inconclusive,
-                "convolution integral could not be evaluated in the supported domain",
-                operation);
-        }
-        return te_wrap_transform_result(std::move(simplified), operation);
-    } catch (const std::bad_alloc&) {
-        return TransformEngineResult::failure(CasErrc::ResourceLimit,
-                                              "transform allocation failed",
-                                              operation);
-    } catch (const std::exception& e) {
-        return TransformEngineResult::failure(CasErrc::InternalInvariant,
-                                              e.what(), operation);
-    }
+    return TransformEngineResult::failure(
+        CasErrc::Inconclusive,
+        "verified bilateral convolution is not implemented",
+        operation);
 }
 
 TransformEngineResult convolve_checked(

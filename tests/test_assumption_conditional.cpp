@@ -63,7 +63,7 @@ int main() {
         EXPECT_TRUE(lamina::detail::node(conditionals[0].conclusion) != nullptr, "Conclusion is not null");
     }
 
-    TEST_CASE("Conditionals discarded on scope pop (Req 5.4)");
+    TEST_CASE("Conditionals discarded on scope pop");
     {
         AssumptionContext ctx;
         auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
@@ -95,7 +95,7 @@ int main() {
         EXPECT_TRUE(ctx.get_active_conditionals().size() == 1, "One conditional after pop (child discarded)");
     }
 
-    TEST_CASE("evaluate_condition: condition satisfied by sign property (Req 5.2)");
+    TEST_CASE("evaluate_condition: condition satisfied by sign property");
     {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Positive);
@@ -128,7 +128,7 @@ int main() {
                     "x != 0 satisfied when x is Positive");
     }
 
-    TEST_CASE("evaluate_condition: condition unverifiable returns Unknown (Req 5.3)");
+    TEST_CASE("evaluate_condition: condition unverifiable returns Unknown");
     {
         AssumptionContext ctx;
         // No assumptions about x
@@ -287,7 +287,7 @@ int main() {
     }
 
 
-    TEST_CASE("Feature: assumption-system-enhancements, Property 5: Conclusion active when condition satisfied");
+    TEST_CASE("Conclusion active when condition satisfied");
     rc::check("Conditional conclusion is active when condition is satisfied by current state", []() {
         AssumptionContext ctx;
 
@@ -323,7 +323,7 @@ int main() {
         ctx.pop();
     });
 
-    TEST_CASE("Feature: assumption-system-enhancements, Property 5: Conclusion Unknown when condition unverifiable");
+    TEST_CASE("Conclusion Unknown when condition unverifiable");
     rc::check("Conditional conclusion is Unknown when condition cannot be verified", []() {
         AssumptionContext ctx;
 
@@ -352,7 +352,7 @@ int main() {
         ctx.pop();
     });
 
-    TEST_CASE("Feature: assumption-system-enhancements, Property 5: Conditionals discarded after scope pop");
+    TEST_CASE("Conditionals discarded after scope pop");
     rc::check("Conditional assumptions are discarded when their scope is popped", []() {
         AssumptionContext ctx;
 
@@ -385,7 +385,7 @@ int main() {
         RC_ASSERT(after_pop_count == root_count);
     });
 
-    TEST_CASE("Feature: assumption-system-enhancements, Property 5: Condition evaluation with various signs");
+    TEST_CASE("Condition evaluation with various signs");
     rc::check("Condition evaluation correctly reflects sign properties for various sign types", []() {
         AssumptionContext ctx;
         std::string var = "sv_" + std::to_string(rc::gen::inRange(0, 999));

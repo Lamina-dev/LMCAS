@@ -66,7 +66,7 @@ static std::string random_var_name(int prefix_id) {
 
 /// Test: Domain round-trip
 static void test_serialization_domain_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Domain serialization round-trip");
+    TEST_CASE("Domain serialization round-trip");
 
     rc::check("Domain declarations survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -87,7 +87,7 @@ static void test_serialization_domain_roundtrip() {
 
 /// Test: Sign round-trip
 static void test_serialization_sign_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Sign serialization round-trip");
+    TEST_CASE("Sign serialization round-trip");
 
     rc::check("Sign declarations survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -105,7 +105,7 @@ static void test_serialization_sign_roundtrip() {
 
 /// Test: Parity round-trip
 static void test_serialization_parity_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Parity serialization round-trip");
+    TEST_CASE("Parity serialization round-trip");
 
     rc::check("Parity declarations survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -123,7 +123,7 @@ static void test_serialization_parity_roundtrip() {
 
 /// Test: Boundedness round-trip
 static void test_serialization_boundedness_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Boundedness serialization round-trip");
+    TEST_CASE("Boundedness serialization round-trip");
 
     rc::check("Boundedness declarations survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -141,7 +141,7 @@ static void test_serialization_boundedness_roundtrip() {
 
 /// Test: Transcendental round-trip
 static void test_serialization_transcendental_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Transcendental serialization round-trip");
+    TEST_CASE("Transcendental serialization round-trip");
 
     rc::check("Transcendental declarations survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -160,7 +160,7 @@ static void test_serialization_transcendental_roundtrip() {
 
 /// Test: Finiteness round-trip
 static void test_serialization_finiteness_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Finiteness serialization round-trip");
+    TEST_CASE("Finiteness serialization round-trip");
 
     rc::check("Finiteness declarations survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -183,7 +183,7 @@ static void test_serialization_finiteness_roundtrip() {
 
 /// Test: Definiteness round-trip
 static void test_serialization_definiteness_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Definiteness serialization round-trip");
+    TEST_CASE("Definiteness serialization round-trip");
 
     rc::check("Definiteness declarations survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -201,7 +201,7 @@ static void test_serialization_definiteness_roundtrip() {
 
 /// Test: Multi-scope round-trip
 static void test_serialization_multi_scope_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Multi-scope serialization round-trip");
+    TEST_CASE("Multi-scope serialization round-trip");
 
     rc::check("Multi-scope contexts survive serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -235,7 +235,7 @@ static void test_serialization_multi_scope_roundtrip() {
 
 /// Test: Combined properties on a single symbol round-trip
 static void test_serialization_combined_properties_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Combined properties round-trip");
+    TEST_CASE("Combined properties round-trip");
 
     rc::check("Multiple properties on a single symbol survive round-trip", []() {
         AssumptionContext ctx;
@@ -260,7 +260,7 @@ static void test_serialization_combined_properties_roundtrip() {
 
 /// Test: Simple relation round-trip (variable GT/LT 0)
 static void test_serialization_simple_relation_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Simple relation round-trip");
+    TEST_CASE("Simple relation round-trip");
 
     rc::check("Simple variable-vs-zero relations survive round-trip", []() {
         AssumptionContext ctx;
@@ -284,7 +284,7 @@ static void test_serialization_simple_relation_roundtrip() {
 
 /// Test: Empty context round-trip
 static void test_serialization_empty_roundtrip() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 15: Empty context round-trip");
+    TEST_CASE("Empty context round-trip");
 
     rc::check("Empty context survives serialize/deserialize round-trip", []() {
         AssumptionContext ctx;
@@ -300,7 +300,7 @@ static void test_serialization_empty_roundtrip() {
 }
 
 static void test_checked_deserialization_contracts() {
-    TEST_CASE("Feature: assumption-system-enhancements, checked deserialization errors");
+    TEST_CASE("checked deserialization errors");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);

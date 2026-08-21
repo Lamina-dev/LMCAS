@@ -80,7 +80,7 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
 
 
 void test_cache_hit_returns_same_result() {
-    TEST_CASE("Cache hit returns same result without re-inference (Req 23.2)");
+    TEST_CASE("Cache hit returns same result without re-inference");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -105,7 +105,7 @@ void test_cache_hit_returns_same_result() {
 
 
 void test_cache_invalidation_on_push() {
-    TEST_CASE("Cache invalidation on push (Req 23.3)");
+    TEST_CASE("Cache invalidation on push");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -127,7 +127,7 @@ void test_cache_invalidation_on_push() {
 
 
 void test_cache_invalidation_on_pop() {
-    TEST_CASE("Cache invalidation on pop (Req 23.3)");
+    TEST_CASE("Cache invalidation on pop");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -156,7 +156,7 @@ void test_cache_invalidation_on_pop() {
 
 
 void test_cache_invalidation_on_assume() {
-    TEST_CASE("Cache invalidation on assume (Req 23.3)");
+    TEST_CASE("Cache invalidation on assume");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -177,7 +177,7 @@ void test_cache_invalidation_on_assume() {
 
 
 void test_query_conditions_simple_variable() {
-    TEST_CASE("query_conditions for simple variable (Req 21.2)");
+    TEST_CASE("query_conditions for simple variable");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -217,7 +217,7 @@ void test_query_conditions_simple_variable() {
 
 
 void test_query_conditions_subtraction() {
-    TEST_CASE("query_conditions for composite expression x - y (Req 21.3)");
+    TEST_CASE("query_conditions for composite expression x - y");
 
     AssumptionContext ctx;
     QueryInterface qi(ctx);
@@ -269,7 +269,7 @@ void test_query_conditions_empty_for_complex() {
 
 
 void test_query_positive_definite() {
-    TEST_CASE("query_positive_definite (Req 10.5)");
+    TEST_CASE("query_positive_definite");
 
     AssumptionContext ctx;
     // Declare matrix symbol M as PositiveDefinite
@@ -286,7 +286,7 @@ void test_query_positive_definite() {
 
 
 void test_query_positive_semidefinite() {
-    TEST_CASE("query_positive_semidefinite (Req 10.5)");
+    TEST_CASE("query_positive_semidefinite");
 
     AssumptionContext ctx;
     // Declare matrix symbol A as PositiveSemiDefinite only
@@ -304,7 +304,7 @@ void test_query_positive_semidefinite() {
 
 
 void test_query_definiteness_negative() {
-    TEST_CASE("query_positive_definite for NegativeDefinite matrix (Req 10.5)");
+    TEST_CASE("query_positive_definite for NegativeDefinite matrix");
 
     AssumptionContext ctx;
     ctx.current_properties().declare_definiteness("N", Definiteness::NegativeDefinite);

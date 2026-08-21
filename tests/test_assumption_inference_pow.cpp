@@ -34,8 +34,8 @@ static SymbolicExpr make_power_expr(std::shared_ptr<const SymbolicNode> base,
 }
 
 
-void test_property16a_positive_base_real_exponent() {
-    TEST_CASE("Property 16(a): Positive base + Real exponent -> Positive");
+void test_positive_base_real_exponent() {
+    TEST_CASE("Positive base + Real exponent -> Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -56,8 +56,8 @@ void test_property16a_positive_base_real_exponent() {
                 "x^y is not Negative when x>0 and y is Real");
 }
 
-void test_property16a_positive_base_integer_exponent() {
-    TEST_CASE("Property 16(a): Positive base + integer exponent -> Positive");
+void test_positive_base_integer_exponent() {
+    TEST_CASE("Positive base + integer exponent -> Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -74,8 +74,8 @@ void test_property16a_positive_base_integer_exponent() {
     }
 }
 
-void test_property16a_positive_base_real_number_exponent() {
-    TEST_CASE("Property 16(a): Positive base + real number exponent -> Positive");
+void test_positive_base_real_number_exponent() {
+    TEST_CASE("Positive base + real number exponent -> Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -92,8 +92,8 @@ void test_property16a_positive_base_real_number_exponent() {
     }
 }
 
-void test_property16a_numeric_positive_base() {
-    TEST_CASE("Property 16(a): Numeric positive base + variable Real exponent");
+void test_numeric_positive_base() {
+    TEST_CASE("Numeric positive base + variable Real exponent");
 
     AssumptionContext ctx;
     ctx.assume_domain("y", Domain::Real);
@@ -110,8 +110,8 @@ void test_property16a_numeric_positive_base() {
 }
 
 
-void test_property16b_real_base_even_exponent() {
-    TEST_CASE("Property 16(b): Real base + even integer exponent -> NonNegative");
+void test_real_base_even_exponent() {
+    TEST_CASE("Real base + even integer exponent -> NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -131,8 +131,8 @@ void test_property16b_real_base_even_exponent() {
     }
 }
 
-void test_property16b_real_base_odd_exponent_not_nonneg() {
-    TEST_CASE("Property 16(b): Real base + odd exponent -> NOT necessarily NonNegative");
+void test_real_base_odd_exponent_not_nonneg() {
+    TEST_CASE("Real base + odd exponent -> NOT necessarily NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -150,8 +150,8 @@ void test_property16b_real_base_odd_exponent_not_nonneg() {
     }
 }
 
-void test_property16b_randomized_even_exponents() {
-    TEST_CASE("Property 16(b): Randomized even exponents (100 iterations)");
+void test_randomized_even_exponents() {
+    TEST_CASE("Randomized even exponents (100 iterations)");
 
     std::mt19937 rng(42);
     std::uniform_int_distribution<int> dist(1, 50);
@@ -174,15 +174,15 @@ void test_property16b_randomized_even_exponents() {
         }
     }
 
-    std::string msg = "Property 16(b): " + std::to_string(pass_count) +
+    std::string msg = std::to_string(pass_count) +
                       "/" + std::to_string(NUM_ITERATIONS) +
                       " random even exponents yield NonNegative";
     EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
 
-void test_property16c_nonneg_base_positive_int_exponent() {
-    TEST_CASE("Property 16(c): NonNegative base + positive integer exponent -> NonNegative");
+void test_nonneg_base_positive_int_exponent() {
+    TEST_CASE("NonNegative base + positive integer exponent -> NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
@@ -202,8 +202,8 @@ void test_property16c_nonneg_base_positive_int_exponent() {
     }
 }
 
-void test_property16c_randomized_positive_exponents() {
-    TEST_CASE("Property 16(c): Randomized positive exponents (100 iterations)");
+void test_randomized_positive_exponents() {
+    TEST_CASE("Randomized positive exponents (100 iterations)");
 
     std::mt19937 rng(123);
     std::uniform_int_distribution<int> dist(1, 100);
@@ -225,15 +225,15 @@ void test_property16c_randomized_positive_exponents() {
         }
     }
 
-    std::string msg = "Property 16(c): " + std::to_string(pass_count) +
+    std::string msg = std::to_string(pass_count) +
                       "/" + std::to_string(NUM_ITERATIONS) +
                       " random positive exponents yield NonNegative";
     EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
 
-void test_property16d_nonzero_base_integer_exponent() {
-    TEST_CASE("Property 16(d): NonZero base + integer exponent -> NonZero");
+void test_nonzero_base_integer_exponent() {
+    TEST_CASE("NonZero base + integer exponent -> NonZero");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonZero);
@@ -250,8 +250,8 @@ void test_property16d_nonzero_base_integer_exponent() {
     }
 }
 
-void test_property16d_randomized_integer_exponents() {
-    TEST_CASE("Property 16(d): Randomized integer exponents (100 iterations)");
+void test_nonzero_randomized_integer_exponents() {
+    TEST_CASE("Randomized integer exponents (100 iterations)");
 
     std::mt19937 rng(456);
     std::uniform_int_distribution<int> dist(-50, 50);
@@ -273,15 +273,15 @@ void test_property16d_randomized_integer_exponents() {
         }
     }
 
-    std::string msg = "Property 16(d): " + std::to_string(pass_count) +
+    std::string msg = std::to_string(pass_count) +
                       "/" + std::to_string(NUM_ITERATIONS) +
                       " random integer exponents yield NonZero";
     EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
 
-void test_property16_positive_base_even_exponent_is_positive() {
-    TEST_CASE("Property 16: Positive base + even exponent -> Positive (via 16a)");
+void test_positive_base_even_exponent_is_positive() {
+    TEST_CASE("Positive base + even exponent -> Positive (via 16a)");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -297,8 +297,8 @@ void test_property16_positive_base_even_exponent_is_positive() {
                 "x^2 is NonNegative when x>0");
 }
 
-void test_property16_numeric_base_and_exponent() {
-    TEST_CASE("Property 16: Numeric positive base + integer exponent");
+void test_numeric_base_and_exponent() {
+    TEST_CASE("Numeric positive base + integer exponent");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -316,8 +316,8 @@ void test_property16_numeric_base_and_exponent() {
                 "3^(-2) is Positive");
 }
 
-void test_property16_no_rule_matches() {
-    TEST_CASE("Property 16: No rule matches -> Unknown");
+void test_no_rule_matches() {
+    TEST_CASE("No rule matches -> Unknown");
 
     AssumptionContext ctx;
     // No assumptions about x or y
@@ -334,8 +334,8 @@ void test_property16_no_rule_matches() {
                 "x^y is Unknown for NonZero when no assumptions");
 }
 
-void test_property16_negative_base_non_integer_exponent() {
-    TEST_CASE("Property 16: Negative base + non-integer exponent -> Unknown");
+void test_negative_base_non_integer_exponent() {
+    TEST_CASE("Negative base + non-integer exponent -> Unknown");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Negative);
@@ -351,8 +351,8 @@ void test_property16_negative_base_non_integer_exponent() {
 }
 
 
-void test_property17_real_base_integer_exponent_domain() {
-    TEST_CASE("Property 17: Real base + integer exponent -> Real domain");
+void test_real_base_integer_exponent_domain() {
+    TEST_CASE("Real base + integer exponent -> Real domain");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -369,8 +369,8 @@ void test_property17_real_base_integer_exponent_domain() {
     }
 }
 
-void test_property17_randomized_integer_exponents() {
-    TEST_CASE("Property 17: Randomized integer exponents (100 iterations)");
+void test_domain_randomized_integer_exponents() {
+    TEST_CASE("Randomized integer exponents (100 iterations)");
 
     std::mt19937 rng(789);
     std::uniform_int_distribution<int> dist(-50, 50);
@@ -392,14 +392,14 @@ void test_property17_randomized_integer_exponents() {
         }
     }
 
-    std::string msg = "Property 17: " + std::to_string(pass_count) +
+    std::string msg = std::to_string(pass_count) +
                       "/" + std::to_string(NUM_ITERATIONS) +
                       " random integer exponents yield Real domain";
     EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-void test_property17_integer_base_integer_exponent() {
-    TEST_CASE("Property 17: Integer base + integer exponent -> Real (Integer implies Real)");
+void test_integer_base_integer_exponent() {
+    TEST_CASE("Integer base + integer exponent -> Real (Integer implies Real)");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -416,8 +416,8 @@ void test_property17_integer_base_integer_exponent() {
     }
 }
 
-void test_property17_numeric_base_integer_exponent() {
-    TEST_CASE("Property 17: Numeric base + integer exponent -> Real");
+void test_numeric_base_integer_exponent() {
+    TEST_CASE("Numeric base + integer exponent -> Real");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -436,8 +436,8 @@ void test_property17_numeric_base_integer_exponent() {
                 "5^(-1) is Real");
 }
 
-void test_property17_real_base_non_integer_exponent_unknown() {
-    TEST_CASE("Property 17: Real base + non-integer exponent -> Unknown for Real");
+void test_real_base_non_integer_exponent_unknown() {
+    TEST_CASE("Real base + non-integer exponent -> Unknown for Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -453,8 +453,8 @@ void test_property17_real_base_non_integer_exponent_unknown() {
                 "x^1.5 is Unknown for Real when x is only Real (non-integer exponent)");
 }
 
-void test_property17_no_domain_yields_unknown() {
-    TEST_CASE("Property 17: No domain assumption -> Unknown for Real");
+void test_no_domain_yields_unknown() {
+    TEST_CASE("No domain assumption -> Unknown for Real");
 
     AssumptionContext ctx;
     // No assumptions about x
@@ -467,28 +467,28 @@ void test_property17_no_domain_yields_unknown() {
 
 
 int main() {
-    test_property16a_positive_base_real_exponent();
-    test_property16a_positive_base_integer_exponent();
-    test_property16a_positive_base_real_number_exponent();
-    test_property16a_numeric_positive_base();
-    test_property16b_real_base_even_exponent();
-    test_property16b_real_base_odd_exponent_not_nonneg();
-    test_property16b_randomized_even_exponents();
-    test_property16c_nonneg_base_positive_int_exponent();
-    test_property16c_randomized_positive_exponents();
-    test_property16d_nonzero_base_integer_exponent();
-    test_property16d_randomized_integer_exponents();
-    test_property16_positive_base_even_exponent_is_positive();
-    test_property16_numeric_base_and_exponent();
-    test_property16_no_rule_matches();
-    test_property16_negative_base_non_integer_exponent();
+    test_positive_base_real_exponent();
+    test_positive_base_integer_exponent();
+    test_positive_base_real_number_exponent();
+    test_numeric_positive_base();
+    test_real_base_even_exponent();
+    test_real_base_odd_exponent_not_nonneg();
+    test_randomized_even_exponents();
+    test_nonneg_base_positive_int_exponent();
+    test_randomized_positive_exponents();
+    test_nonzero_base_integer_exponent();
+    test_nonzero_randomized_integer_exponents();
+    test_positive_base_even_exponent_is_positive();
+    test_numeric_base_and_exponent();
+    test_no_rule_matches();
+    test_negative_base_non_integer_exponent();
 
-    test_property17_real_base_integer_exponent_domain();
-    test_property17_randomized_integer_exponents();
-    test_property17_integer_base_integer_exponent();
-    test_property17_numeric_base_integer_exponent();
-    test_property17_real_base_non_integer_exponent_unknown();
-    test_property17_no_domain_yields_unknown();
+    test_real_base_integer_exponent_domain();
+    test_domain_randomized_integer_exponents();
+    test_integer_base_integer_exponent();
+    test_numeric_base_integer_exponent();
+    test_real_base_non_integer_exponent_unknown();
+    test_no_domain_yields_unknown();
 
     return TEST_REPORT();
 }

@@ -81,22 +81,22 @@ Result<void> validate_surface_point(
     return validate_symbolic_vector(point, "surface point", operation);
 }
 
-VectorExprResult simplify_checked(
+ExpressionResult simplify_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& operation,
     const std::string& message)
 {
     if (!expr || !lamina::detail::node(expr)) {
-        return VectorExprResult::failure(CasErrc::Inconclusive, message, operation);
+        return ExpressionResult::failure(CasErrc::Inconclusive, message, operation);
     }
     auto simplified = expr->simplify();
     if (!simplified || !lamina::detail::node(simplified)) {
-        return VectorExprResult::failure(CasErrc::Inconclusive, message, operation);
+        return ExpressionResult::failure(CasErrc::Inconclusive, message, operation);
     }
-    return VectorExprResult::success(std::move(simplified));
+    return ExpressionResult::success(std::move(simplified));
 }
 
-VectorExprResult differentiate_surface_checked(
+ExpressionResult differentiate_surface_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const std::string& operation)
@@ -107,7 +107,7 @@ VectorExprResult differentiate_surface_checked(
             derivative, operation,
             "surface derivative is outside the supported domain");
     } catch (const std::exception&) {
-        return VectorExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "surface derivative is outside the supported domain",
             operation);
@@ -143,7 +143,7 @@ VectorExprListResult surface_gradient_at_point_checked(
     return VectorExprListResult::success(std::move(gradient));
 }
 
-VectorExprResult gradient_norm_sq_checked(
+ExpressionResult gradient_norm_sq_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& gradient,
     const std::string& operation)
 {
@@ -157,7 +157,7 @@ VectorExprResult gradient_norm_sq_checked(
         if (!simplified) return simplified;
         norm_sq = std::move(simplified.value());
     }
-    return VectorExprResult::success(std::move(norm_sq));
+    return ExpressionResult::success(std::move(norm_sq));
 }
 
 Result<void> checked_nonzero_numeric_or_exact(
@@ -291,25 +291,25 @@ std::shared_ptr<SymbolicExpr> vector_dot(
     return checked.value();
 }
 
-VectorExprResult vector_dot_checked(
+ExpressionResult vector_dot_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b,
     ComputationContext& context
 ) {
     const std::string operation = "vector_dot";
     auto input = validate_same_dimension_vectors(a, b, context, operation);
-    if (!input) return VectorExprResult::failure(input.error());
+    if (!input) return ExpressionResult::failure(input.error());
     std::vector<std::shared_ptr<const SymbolicNode>> sum_terms;
     for (size_t i = 0; i < a.size(); ++i) {
         auto step = context.consume_steps(1, operation);
-        if (!step) return VectorExprResult::failure(step.error());
+        if (!step) return ExpressionResult::failure(step.error());
         sum_terms.push_back(lamina::detail::node(SymbolicExpr::multiply(a[i], b[i])));
     }
-    return VectorExprResult::success(
+    return ExpressionResult::success(
         lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(sum_terms)));
 }
 
-VectorExprResult vector_dot_checked(
+ExpressionResult vector_dot_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b
 ) {
@@ -493,7 +493,7 @@ std::shared_ptr<SymbolicExpr> point_plane_distance(
     return checked.value();
 }
 
-VectorExprResult point_plane_distance_checked(
+ExpressionResult point_plane_distance_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const PlaneSymbolic& plane,
     ComputationContext& context
@@ -501,27 +501,27 @@ VectorExprResult point_plane_distance_checked(
     const std::string operation = "point_plane_distance";
     try {
         auto plane_valid = validate_plane_checked(plane, context, operation);
-        if (!plane_valid) return VectorExprResult::failure(plane_valid.error());
+        if (!plane_valid) return ExpressionResult::failure(plane_valid.error());
         if (point.size() != 3) {
-            return VectorExprResult::failure(
+            return ExpressionResult::failure(
                 CasErrc::InvalidArgument,
                 "point-plane distance requires a 3-dimensional point",
                 operation);
         }
         auto point_valid = validate_symbolic_vector(point, "point", operation);
-        if (!point_valid) return VectorExprResult::failure(point_valid.error());
+        if (!point_valid) return ExpressionResult::failure(point_valid.error());
         auto step = context.consume_steps(4, operation);
-        if (!step) return VectorExprResult::failure(step.error());
+        if (!step) return ExpressionResult::failure(step.error());
 
         auto n_dot_r = vector_dot_checked(plane.normal, point, context);
-        if (!n_dot_r) return VectorExprResult::failure(n_dot_r.error());
+        if (!n_dot_r) return ExpressionResult::failure(n_dot_r.error());
         auto norm_sq = vector_dot_checked(plane.normal, plane.normal, context);
-        if (!norm_sq) return VectorExprResult::failure(norm_sq.error());
+        if (!norm_sq) return ExpressionResult::failure(norm_sq.error());
         auto norm_nonzero = checked_nonzero_numeric_or_exact(
             norm_sq.value(), context, operation,
             "plane normal cannot be zero",
             "plane normal nonzero condition cannot be verified");
-        if (!norm_nonzero) return VectorExprResult::failure(norm_nonzero.error());
+        if (!norm_nonzero) return ExpressionResult::failure(norm_nonzero.error());
 
         auto diff = SymbolicExpr::add(
             n_dot_r.value(),
@@ -536,16 +536,16 @@ VectorExprResult point_plane_distance_checked(
             operation,
             "point-plane distance is outside the supported domain");
     } catch (const std::bad_alloc&) {
-        return VectorExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                          "vector geometry allocation failed",
                                          operation);
     } catch (const std::exception& e) {
-        return VectorExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                          e.what(), operation);
     }
 }
 
-VectorExprResult point_plane_distance_checked(
+ExpressionResult point_plane_distance_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const PlaneSymbolic& plane
 ) {
@@ -562,7 +562,7 @@ std::shared_ptr<SymbolicExpr> skew_lines_distance(
     return checked.value();
 }
 
-VectorExprResult skew_lines_distance_checked(
+ExpressionResult skew_lines_distance_checked(
     const LineSymbolic& l1,
     const LineSymbolic& l2,
     ComputationContext& context
@@ -570,11 +570,11 @@ VectorExprResult skew_lines_distance_checked(
     const std::string operation = "skew_lines_distance";
     try {
         auto l1_valid = validate_line_checked(l1, context, operation);
-        if (!l1_valid) return VectorExprResult::failure(l1_valid.error());
+        if (!l1_valid) return ExpressionResult::failure(l1_valid.error());
         auto l2_valid = validate_line_checked(l2, context, operation);
-        if (!l2_valid) return VectorExprResult::failure(l2_valid.error());
+        if (!l2_valid) return ExpressionResult::failure(l2_valid.error());
         auto step = context.consume_steps(8, operation);
-        if (!step) return VectorExprResult::failure(step.error());
+        if (!step) return ExpressionResult::failure(step.error());
 
         std::vector<std::shared_ptr<SymbolicExpr>> a2_minus_a1;
         a2_minus_a1.reserve(3);
@@ -584,17 +584,17 @@ VectorExprResult skew_lines_distance_checked(
                 SymbolicExpr::multiply(SymbolicExpr::number(-1), l1.point[i])));
         }
         auto cross = vector_cross_checked(l1.direction, l2.direction, context);
-        if (!cross) return VectorExprResult::failure(cross.error());
+        if (!cross) return ExpressionResult::failure(cross.error());
         auto cross_norm_sq = vector_dot_checked(cross.value(), cross.value(), context);
-        if (!cross_norm_sq) return VectorExprResult::failure(cross_norm_sq.error());
+        if (!cross_norm_sq) return ExpressionResult::failure(cross_norm_sq.error());
         auto cross_nonzero = checked_nonzero_numeric_or_exact(
             cross_norm_sq.value(), context, operation,
             "skew line distance requires non-parallel directions",
             "cross-product nonzero condition cannot be verified");
-        if (!cross_nonzero) return VectorExprResult::failure(cross_nonzero.error());
+        if (!cross_nonzero) return ExpressionResult::failure(cross_nonzero.error());
         auto cross_norm = SymbolicExpr::sqrt(cross_norm_sq.value());
         auto numerator = vector_dot_checked(a2_minus_a1, cross.value(), context);
-        if (!numerator) return VectorExprResult::failure(numerator.error());
+        if (!numerator) return ExpressionResult::failure(numerator.error());
         auto abs_num = lamina::detail::make_expression_ptr(
             lamina::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Abs,
@@ -605,16 +605,16 @@ VectorExprResult skew_lines_distance_checked(
             operation,
             "skew line distance is outside the supported domain");
     } catch (const std::bad_alloc&) {
-        return VectorExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                          "vector geometry allocation failed",
                                          operation);
     } catch (const std::exception& e) {
-        return VectorExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                          e.what(), operation);
     }
 }
 
-VectorExprResult skew_lines_distance_checked(
+ExpressionResult skew_lines_distance_checked(
     const LineSymbolic& l1,
     const LineSymbolic& l2
 ) {
@@ -782,35 +782,35 @@ std::shared_ptr<SymbolicExpr> dihedral_angle(
     return checked.value();
 }
 
-VectorExprResult dihedral_angle_checked(
+ExpressionResult dihedral_angle_checked(
     const PlaneSymbolic& p1,
     const PlaneSymbolic& p2,
     ComputationContext& context) {
     const std::string operation = "dihedral_angle";
     try {
         auto p1_valid = validate_plane_checked(p1, context, operation);
-        if (!p1_valid) return VectorExprResult::failure(p1_valid.error());
+        if (!p1_valid) return ExpressionResult::failure(p1_valid.error());
         auto p2_valid = validate_plane_checked(p2, context, operation);
-        if (!p2_valid) return VectorExprResult::failure(p2_valid.error());
+        if (!p2_valid) return ExpressionResult::failure(p2_valid.error());
         auto step = context.consume_steps(6, operation);
-        if (!step) return VectorExprResult::failure(step.error());
+        if (!step) return ExpressionResult::failure(step.error());
 
         auto dot = vector_dot_checked(p1.normal, p2.normal, context);
-        if (!dot) return VectorExprResult::failure(dot.error());
+        if (!dot) return ExpressionResult::failure(dot.error());
         auto n1_sq = vector_dot_checked(p1.normal, p1.normal, context);
-        if (!n1_sq) return VectorExprResult::failure(n1_sq.error());
+        if (!n1_sq) return ExpressionResult::failure(n1_sq.error());
         auto n2_sq = vector_dot_checked(p2.normal, p2.normal, context);
-        if (!n2_sq) return VectorExprResult::failure(n2_sq.error());
+        if (!n2_sq) return ExpressionResult::failure(n2_sq.error());
         auto n1_nonzero = checked_nonzero_numeric_or_exact(
             n1_sq.value(), context, operation,
             "first plane normal cannot be zero",
             "first plane normal nonzero condition cannot be verified");
-        if (!n1_nonzero) return VectorExprResult::failure(n1_nonzero.error());
+        if (!n1_nonzero) return ExpressionResult::failure(n1_nonzero.error());
         auto n2_nonzero = checked_nonzero_numeric_or_exact(
             n2_sq.value(), context, operation,
             "second plane normal cannot be zero",
             "second plane normal nonzero condition cannot be verified");
-        if (!n2_nonzero) return VectorExprResult::failure(n2_nonzero.error());
+        if (!n2_nonzero) return ExpressionResult::failure(n2_nonzero.error());
 
         auto n1 = SymbolicExpr::sqrt(n1_sq.value());
         auto n2 = SymbolicExpr::sqrt(n2_sq.value());
@@ -828,16 +828,16 @@ VectorExprResult dihedral_angle_checked(
             operation,
             "dihedral angle is outside the supported domain");
     } catch (const std::bad_alloc&) {
-        return VectorExprResult::failure(CasErrc::ResourceLimit,
+        return ExpressionResult::failure(CasErrc::ResourceLimit,
                                          "vector geometry allocation failed",
                                          operation);
     } catch (const std::exception& e) {
-        return VectorExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                          e.what(), operation);
     }
 }
 
-VectorExprResult dihedral_angle_checked(
+ExpressionResult dihedral_angle_checked(
     const PlaneSymbolic& p1,
     const PlaneSymbolic& p2) {
     ComputationContext context;

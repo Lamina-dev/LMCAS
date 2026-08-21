@@ -143,7 +143,7 @@ const std::vector<CategorySpec>& all_categories() {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 2: Integration table entry round-trip");
+    TEST_CASE("Integration table entry round-trip");
 
     IntegrationTable table;
 

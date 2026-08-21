@@ -61,8 +61,8 @@ static std::vector<int> rand_poly_coeffs(int degree, int max_coeff = 4) {
 }
 
 
-static void test_property3_indeterminate_termination() {
-    TEST_CASE("Property 3: Indeterminate form resolution terminates");
+static void test_indeterminate_termination() {
+    TEST_CASE("Indeterminate form resolution terminates");
 
     auto x = SymbolicExpr::variable("x");
     auto zero = SymbolicExpr::number(0);
@@ -156,14 +156,14 @@ static void test_property3_indeterminate_termination() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 3: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " indeterminate form trials terminated without crash (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
-static void test_property4_rational_degree_rule() {
-    TEST_CASE("Property 4: Rational function limit at infinity follows degree rule");
+static void test_rational_degree_rule() {
+    TEST_CASE("Rational function limit at infinity follows degree rule");
 
     auto x = SymbolicExpr::variable("x");
     auto inf = SymbolicExpr::infinity(1);
@@ -237,14 +237,14 @@ static void test_property4_rational_degree_rule() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 4: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " rational function degree rule trials passed (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
-static void test_property5_squeeze_bounded_oscillation() {
-    TEST_CASE("Property 5: Squeeze theorem for bounded oscillation");
+static void test_squeeze_bounded_oscillation() {
+    TEST_CASE("Squeeze theorem for bounded oscillation");
 
     auto x = SymbolicExpr::variable("x");
     auto zero = SymbolicExpr::number(0);
@@ -301,16 +301,16 @@ static void test_property5_squeeze_bounded_oscillation() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 5: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " squeeze theorem trials returned 0 (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
 int main() {
-    test_property3_indeterminate_termination();
-    test_property4_rational_degree_rule();
-    test_property5_squeeze_bounded_oscillation();
+    test_indeterminate_termination();
+    test_rational_degree_rule();
+    test_squeeze_bounded_oscillation();
 
     return TEST_REPORT();
 }

@@ -110,8 +110,8 @@ static CrossConstraint random_cross_constraint() {
 }
 
 
-static void test_property20_domain_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Domain contradiction contains symbol and domains");
+static void test_domain_contradiction_message() {
+    TEST_CASE("Domain contradiction contains symbol and domains");
 
     rc::check("For any domain contradiction (Transcendental then sub-Real), "
               "the exception message contains the symbol name and both domains", []() {
@@ -147,8 +147,8 @@ static void test_property20_domain_contradiction_message() {
 }
 
 
-static void test_property20_sign_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Sign contradiction contains symbol and signs");
+static void test_sign_contradiction_message() {
+    TEST_CASE("Sign contradiction contains symbol and signs");
 
     rc::check("For any sign contradiction (e.g., Positive then Negative), "
               "the exception message contains the symbol name and both signs", []() {
@@ -183,8 +183,8 @@ static void test_property20_sign_contradiction_message() {
 }
 
 
-static void test_property20_cross_constraint_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Cross-constraint conflict contains symbol, domain, and sign");
+static void test_cross_constraint_message() {
+    TEST_CASE("Cross-constraint conflict contains symbol, domain, and sign");
 
     rc::check("For any cross-constraint conflict (e.g., Natural + Negative), "
               "the exception message contains the symbol name and explains both", []() {
@@ -219,8 +219,8 @@ static void test_property20_cross_constraint_message() {
 }
 
 
-static void test_property20_finiteness_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Finiteness contradiction contains symbol info");
+static void test_finiteness_contradiction_message() {
+    TEST_CASE("Finiteness contradiction contains symbol info");
 
     rc::check("For any Finite+Divergent contradiction, "
               "the exception message contains the symbol name", []() {
@@ -255,8 +255,8 @@ static void test_property20_finiteness_contradiction_message() {
 }
 
 
-static void test_property20_definiteness_contradiction_message() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 20: Definiteness contradiction contains symbol info");
+static void test_definiteness_contradiction_message() {
+    TEST_CASE("Definiteness contradiction contains symbol info");
 
     rc::check("For any PositiveDefinite+NegativeDefinite contradiction, "
               "the exception message contains the symbol name", []() {
@@ -294,11 +294,11 @@ static void test_property20_definiteness_contradiction_message() {
 
 
 int main() {
-    test_property20_domain_contradiction_message();
-    test_property20_sign_contradiction_message();
-    test_property20_cross_constraint_message();
-    test_property20_finiteness_contradiction_message();
-    test_property20_definiteness_contradiction_message();
+    test_domain_contradiction_message();
+    test_sign_contradiction_message();
+    test_cross_constraint_message();
+    test_finiteness_contradiction_message();
+    test_definiteness_contradiction_message();
 
     return TEST_REPORT();
 }

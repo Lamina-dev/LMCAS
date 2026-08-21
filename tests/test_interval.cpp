@@ -152,7 +152,7 @@ int main() {
         EXPECT_TRUE(result->contains(1e10), "Entire line contains 1e10");
     }
 
-    TEST_CASE("Property 9: IntervalUnion Serialization Round-trip");
+    TEST_CASE("IntervalUnion Serialization Round-trip");
     {
         std::mt19937 rng(42);
         const int NUM_ITERATIONS = 100;
@@ -233,12 +233,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 9: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed serialization round-trip";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 4: Set Operations Correctness (intersect/unite/complement sampling)");
+    TEST_CASE("Set Operations Correctness (intersect/unite/complement sampling)");
     {
         std::mt19937 rng(100);
         std::uniform_real_distribution<double> val_dist(-50.0, 50.0);
@@ -286,7 +286,7 @@ int main() {
                 bool expected_intersect = A.contains(x) && B.contains(x);
                 if (in_intersect != expected_intersect) {
                     std::ostringstream oss;
-                    oss << "Property 4 (intersect) failed: iter=" << iter << " x=" << x
+                    oss << "(intersect) failed: iter=" << iter << " x=" << x
                         << " in_intersect=" << in_intersect << " expected=" << expected_intersect;
                     EXPECT_TRUE(false, oss.str());
                     iter_passed = false;
@@ -297,7 +297,7 @@ int main() {
                 bool expected_unite = A.contains(x) || B.contains(x);
                 if (in_unite != expected_unite) {
                     std::ostringstream oss;
-                    oss << "Property 4 (unite) failed: iter=" << iter << " x=" << x
+                    oss << "(unite) failed: iter=" << iter << " x=" << x
                         << " in_unite=" << in_unite << " expected=" << expected_unite;
                     EXPECT_TRUE(false, oss.str());
                     iter_passed = false;
@@ -308,7 +308,7 @@ int main() {
                 bool expected_complement = !A.contains(x);
                 if (in_complement != expected_complement) {
                     std::ostringstream oss;
-                    oss << "Property 4 (complement) failed: iter=" << iter << " x=" << x
+                    oss << "(complement) failed: iter=" << iter << " x=" << x
                         << " in_complement=" << in_complement << " expected=" << expected_complement;
                     EXPECT_TRUE(false, oss.str());
                     iter_passed = false;
@@ -320,12 +320,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 4: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed set operations correctness";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 5: De Morgan's Law (A ∩ complement(A) = ∅, A ∪ complement(A) = ℝ)");
+    TEST_CASE("De Morgan's Law (A ∩ complement(A) = ∅, A ∪ complement(A) = ℝ)");
     {
         std::mt19937 rng(200);
         std::uniform_real_distribution<double> val_dist(-50.0, 50.0);
@@ -362,7 +362,7 @@ int main() {
             IntervalUnion intersection = A.intersect(A_comp);
             if (!intersection.is_empty()) {
                 std::ostringstream oss;
-                oss << "Property 5 (A ∩ complement(A) != ∅): iter=" << iter
+                oss << "(A ∩ complement(A) != ∅): iter=" << iter
                     << " got " << intersection.intervals().size() << " intervals: "
                     << intersection.to_string();
                 EXPECT_TRUE(false, oss.str());
@@ -372,7 +372,7 @@ int main() {
             IntervalUnion union_result = A.unite(A_comp);
             if (!union_result.is_entire_line()) {
                 std::ostringstream oss;
-                oss << "Property 5 (A ∪ complement(A) != ℝ): iter=" << iter
+                oss << "(A ∪ complement(A) != ℝ): iter=" << iter
                     << " got: " << union_result.to_string();
                 EXPECT_TRUE(false, oss.str());
                 continue;
@@ -382,12 +382,12 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 5: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed De Morgan's Law";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }
 
-    TEST_CASE("Property 6: IntervalUnion Invariant (sorted by lower bound, pairwise disjoint)");
+    TEST_CASE("IntervalUnion Invariant (sorted by lower bound, pairwise disjoint)");
     {
         std::mt19937 rng(300);
         std::uniform_real_distribution<double> val_dist(-50.0, 50.0);
@@ -431,7 +431,7 @@ int main() {
                 double curr_lower = get_ep_value(ivs[i].lower);
                 if (prev_lower > curr_lower) {
                     std::ostringstream oss;
-                    oss << "Property 6 (" << label << " not sorted): iter=" << iter
+                    oss << "(" << label << " not sorted): iter=" << iter
                         << " ivs[" << (i-1) << "].lower=" << prev_lower
                         << " > ivs[" << i << "].lower=" << curr_lower;
                     EXPECT_TRUE(false, oss.str());
@@ -441,7 +441,7 @@ int main() {
                 double prev_upper = get_ep_value(ivs[i - 1].upper);
                 if (prev_upper > curr_lower) {
                     std::ostringstream oss;
-                    oss << "Property 6 (" << label << " not disjoint): iter=" << iter
+                    oss << "(" << label << " not disjoint): iter=" << iter
                         << " ivs[" << (i-1) << "].upper=" << prev_upper
                         << " > ivs[" << i << "].lower=" << curr_lower;
                     EXPECT_TRUE(false, oss.str());
@@ -451,7 +451,7 @@ int main() {
                 if (prev_upper == curr_lower &&
                     !ivs[i - 1].upper.is_open && !ivs[i].lower.is_open) {
                     std::ostringstream oss;
-                    oss << "Property 6 (" << label << " adjacent not merged): iter=" << iter
+                    oss << "(" << label << " adjacent not merged): iter=" << iter
                         << " both closed at " << prev_upper;
                     EXPECT_TRUE(false, oss.str());
                     return false;
@@ -480,7 +480,7 @@ int main() {
         }
 
         std::ostringstream summary;
-        summary << "Property 6: " << pass_count << "/" << NUM_ITERATIONS
+        summary << "" << pass_count << "/" << NUM_ITERATIONS
                 << " iterations passed IntervalUnion invariant";
         EXPECT_TRUE(pass_count == NUM_ITERATIONS, summary.str());
     }

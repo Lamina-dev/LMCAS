@@ -159,7 +159,7 @@ PairReport verify_pair(int m, int n) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 4: Trigonometric sin^m * cos^n round-trip");
+    TEST_CASE("Trigonometric sin^m * cos^n round-trip");
 
     int total_pairs = 0;
     int verified_pairs = 0;

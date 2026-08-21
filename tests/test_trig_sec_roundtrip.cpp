@@ -136,7 +136,7 @@ NReport verify_n(int n) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 6: Trigonometric sec^n round-trip");
+    TEST_CASE("Trigonometric sec^n round-trip");
 
     const std::vector<int> ns = {2, 4, 6, 8};
 

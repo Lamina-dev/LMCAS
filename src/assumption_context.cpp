@@ -8,7 +8,7 @@
  */
 
 #include "assumption_context.hpp"
-#include "query_interface.hpp"
+#include "inference_engine.hpp"
 #include "inference_engine.hpp"
 #include "interval.hpp"
 #include "symbolic.hpp"
@@ -19,7 +19,7 @@ namespace lamina {
 
 namespace {
 
-[[noreturn]] void throw_legacy_assumption_error(const CasError& error) {
+[[noreturn]] void throw_assumption_error(const CasError& error) {
     if (error.code == CasErrc::InvalidArgument || error.code == CasErrc::ParseError) {
         throw std::invalid_argument(error.message);
     }
@@ -174,7 +174,7 @@ std::optional<Interval> AssumptionContext::get_bounds(const std::string& symbol)
 void AssumptionContext::assume_conditional(const SymbolicExpr& condition, const SymbolicExpr& conclusion) {
     auto result = assume_conditional_checked(condition, conclusion);
     if (!result) {
-        throw_legacy_assumption_error(result.error());
+        throw_assumption_error(result.error());
     }
 }
 
@@ -325,12 +325,10 @@ Tribool AssumptionContext::evaluate_condition(const SymbolicExpr& condition) con
     return Tribool::Unknown;
 }
 
-// Convenience declaration API
-
 void AssumptionContext::assume_domain(const std::string& variable, Domain domain) {
     auto result = assume_domain_checked(variable, domain);
     if (!result) {
-        throw_legacy_assumption_error(result.error());
+        throw_assumption_error(result.error());
     }
 }
 
@@ -354,7 +352,7 @@ AssumptionVoidResult AssumptionContext::assume_domain_checked(
 void AssumptionContext::assume_sign(const std::string& variable, Sign sign) {
     auto result = assume_sign_checked(variable, sign);
     if (!result) {
-        throw_legacy_assumption_error(result.error());
+        throw_assumption_error(result.error());
     }
 }
 
@@ -381,7 +379,7 @@ void AssumptionContext::assume(const SymbolicExpr& relation) {
         return;
     }
 
-    throw_legacy_assumption_error(result.error());
+    throw_assumption_error(result.error());
 }
 
 AssumptionVoidResult AssumptionContext::assume_checked(const SymbolicExpr& relation) {
@@ -415,11 +413,11 @@ AssumptionVoidResult AssumptionContext::assume_checked(const SymbolicExpr& relat
     return AssumptionVoidResult::success();
 }
 
-// Convenience query API (delegates to QueryInterface)
+// Expression property queries
 
 namespace {
 
-AssumptionTriboolResult assumption_query_result(QueryTriboolResult result) {
+AssumptionTriboolResult assumption_query_result(InferenceTriboolResult result) {
     if (!result) {
         return AssumptionTriboolResult::failure(result.error());
     }
@@ -439,78 +437,72 @@ Tribool AssumptionContext::is_positive(const SymbolicExpr& expr) const {
     if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_positive: expression must not be null/empty");
     }
-    QueryInterface qi(*this);
-    return qi.query_positive(expr);
+    return assumption_query_or_unknown(is_positive_checked(expr));
 }
 
 AssumptionTriboolResult AssumptionContext::is_positive_checked(const SymbolicExpr& expr) const {
-    QueryInterface qi(*this);
-    return assumption_query_result(qi.query_positive_checked(expr));
+    InferenceEngine inference(*this);
+    return assumption_query_result(inference.query_positive_checked(expr));
 }
 
 Tribool AssumptionContext::is_negative(const SymbolicExpr& expr) const {
     if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_negative: expression must not be null/empty");
     }
-    QueryInterface qi(*this);
-    return qi.query_negative(expr);
+    return assumption_query_or_unknown(is_negative_checked(expr));
 }
 
 AssumptionTriboolResult AssumptionContext::is_negative_checked(const SymbolicExpr& expr) const {
-    QueryInterface qi(*this);
-    return assumption_query_result(qi.query_negative_checked(expr));
+    InferenceEngine inference(*this);
+    return assumption_query_result(inference.query_negative_checked(expr));
 }
 
 Tribool AssumptionContext::is_nonnegative(const SymbolicExpr& expr) const {
     if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_nonnegative: expression must not be null/empty");
     }
-    QueryInterface qi(*this);
-    return qi.query_nonnegative(expr);
+    return assumption_query_or_unknown(is_nonnegative_checked(expr));
 }
 
 AssumptionTriboolResult AssumptionContext::is_nonnegative_checked(const SymbolicExpr& expr) const {
-    QueryInterface qi(*this);
-    return assumption_query_result(qi.query_nonnegative_checked(expr));
+    InferenceEngine inference(*this);
+    return assumption_query_result(inference.query_nonnegative_checked(expr));
 }
 
 Tribool AssumptionContext::is_real(const SymbolicExpr& expr) const {
     if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_real: expression must not be null/empty");
     }
-    QueryInterface qi(*this);
-    return qi.query_real(expr);
+    return assumption_query_or_unknown(is_real_checked(expr));
 }
 
 AssumptionTriboolResult AssumptionContext::is_real_checked(const SymbolicExpr& expr) const {
-    QueryInterface qi(*this);
-    return assumption_query_result(qi.query_real_checked(expr));
+    InferenceEngine inference(*this);
+    return assumption_query_result(inference.query_real_checked(expr));
 }
 
 Tribool AssumptionContext::is_integer(const SymbolicExpr& expr) const {
     if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_integer: expression must not be null/empty");
     }
-    QueryInterface qi(*this);
-    return qi.query_integer(expr);
+    return assumption_query_or_unknown(is_integer_checked(expr));
 }
 
 AssumptionTriboolResult AssumptionContext::is_integer_checked(const SymbolicExpr& expr) const {
-    QueryInterface qi(*this);
-    return assumption_query_result(qi.query_integer_checked(expr));
+    InferenceEngine inference(*this);
+    return assumption_query_result(inference.query_integer_checked(expr));
 }
 
 Tribool AssumptionContext::is_nonzero(const SymbolicExpr& expr) const {
     if (!lamina::detail::node(expr)) {
         throw std::invalid_argument("is_nonzero: expression must not be null/empty");
     }
-    QueryInterface qi(*this);
-    return qi.query_nonzero(expr);
+    return assumption_query_or_unknown(is_nonzero_checked(expr));
 }
 
 AssumptionTriboolResult AssumptionContext::is_nonzero_checked(const SymbolicExpr& expr) const {
-    QueryInterface qi(*this);
-    return assumption_query_result(qi.query_nonzero_checked(expr));
+    InferenceEngine inference(*this);
+    return assumption_query_result(inference.query_nonzero_checked(expr));
 }
 
 // Extended query methods (read-through all scopes)
@@ -1341,7 +1333,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
 AssumptionContext AssumptionContext::deserialize(const std::string& data) {
     auto result = deserialize_checked(data);
     if (!result) {
-        throw_legacy_assumption_error(result.error());
+        throw_assumption_error(result.error());
     }
     return std::move(result.value());
 }

@@ -924,7 +924,7 @@ int main()
     }
 
 
-    TEST_CASE("Property 2: Additive homomorphism — bivariate pair 1");
+    TEST_CASE("Additive homomorphism — bivariate pair 1");
     {
         // f = x^2*y + 3, g = 2x*y - y^2, eval x=2
         std::vector<std::string> vars = {"x", "y"};
@@ -946,7 +946,7 @@ int main()
             "P2 additive: eval(f+g, x=2) == eval(f,x=2)+eval(g,x=2) [bivariate 1]");
     }
 
-    TEST_CASE("Property 2: Additive homomorphism — bivariate pair 2");
+    TEST_CASE("Additive homomorphism — bivariate pair 2");
     {
         // f = 5x^3 + x*y, g = -x^3 + 2y^2 + 1, eval y=-1
         std::vector<std::string> vars = {"x", "y"};
@@ -969,7 +969,7 @@ int main()
             "P2 additive: eval(f+g, y=-1) == eval(f,y=-1)+eval(g,y=-1) [bivariate 2]");
     }
 
-    TEST_CASE("Property 2: Additive homomorphism — bivariate pair 3 (rational point)");
+    TEST_CASE("Additive homomorphism — bivariate pair 3 (rational point)");
     {
         // f = 4x^2*y^2, g = 6x*y + 2, eval x=1/2
         std::vector<std::string> vars = {"x", "y"};
@@ -990,7 +990,7 @@ int main()
             "P2 additive: eval(f+g, x=1/2) == eval(f,x=1/2)+eval(g,x=1/2) [bivariate 3]");
     }
 
-    TEST_CASE("Property 2: Additive homomorphism — trivariate pair 4");
+    TEST_CASE("Additive homomorphism — trivariate pair 4");
     {
         // f = x*y*z + z^2, g = 2x*z - y, eval z=3
         std::vector<std::string> vars = {"x", "y", "z"};
@@ -1012,7 +1012,7 @@ int main()
             "P2 additive: eval(f+g, z=3) == eval(f,z=3)+eval(g,z=3) [trivariate 4]");
     }
 
-    TEST_CASE("Property 2: Additive homomorphism — trivariate pair 5 (eval at 0)");
+    TEST_CASE("Additive homomorphism — trivariate pair 5 (eval at 0)");
     {
         // f = x^2 + y^2 + z^2, g = -x^2 + 2y*z + 7, eval x=0
         std::vector<std::string> vars = {"x", "y", "z"};
@@ -1036,7 +1036,7 @@ int main()
             "P2 additive: eval(f+g, x=0) == eval(f,x=0)+eval(g,x=0) [trivariate 5]");
     }
 
-    TEST_CASE("Property 2: Multiplicative homomorphism — bivariate pair 1");
+    TEST_CASE("Multiplicative homomorphism — bivariate pair 1");
     {
         // f = x + y, g = x - y, eval x=3
         std::vector<std::string> vars = {"x", "y"};
@@ -1058,7 +1058,7 @@ int main()
             "P2 multiplicative: eval(f*g, x=3) == eval(f,x=3)*eval(g,x=3) [bivariate 1]");
     }
 
-    TEST_CASE("Property 2: Multiplicative homomorphism — bivariate pair 2");
+    TEST_CASE("Multiplicative homomorphism — bivariate pair 2");
     {
         // f = 2x^2 + y, g = x + 3y^2, eval y=2
         std::vector<std::string> vars = {"x", "y"};
@@ -1080,7 +1080,7 @@ int main()
             "P2 multiplicative: eval(f*g, y=2) == eval(f,y=2)*eval(g,y=2) [bivariate 2]");
     }
 
-    TEST_CASE("Property 2: Multiplicative homomorphism — bivariate pair 3 (rational point)");
+    TEST_CASE("Multiplicative homomorphism — bivariate pair 3 (rational point)");
     {
         // f = x*y + 1, g = x - y + 2, eval x=2/3
         std::vector<std::string> vars = {"x", "y"};
@@ -1103,7 +1103,7 @@ int main()
             "P2 multiplicative: eval(f*g, x=2/3) == eval(f,x=2/3)*eval(g,x=2/3) [bivariate 3]");
     }
 
-    TEST_CASE("Property 2: Multiplicative homomorphism — trivariate pair 4");
+    TEST_CASE("Multiplicative homomorphism — trivariate pair 4");
     {
         // f = x + y + z, g = x*y - z, eval y=-2
         std::vector<std::string> vars = {"x", "y", "z"};
@@ -1126,7 +1126,7 @@ int main()
             "P2 multiplicative: eval(f*g, y=-2) == eval(f,y=-2)*eval(g,y=-2) [trivariate 4]");
     }
 
-    TEST_CASE("Property 2: Multiplicative homomorphism — trivariate pair 5 (eval at 0)");
+    TEST_CASE("Multiplicative homomorphism — trivariate pair 5 (eval at 0)");
     {
         // f = x*z + y^2 + 1, g = 3z - x, eval z=0
         std::vector<std::string> vars = {"x", "y", "z"};
@@ -1150,7 +1150,7 @@ int main()
     }
 
 
-    TEST_CASE("Property 3: Univariate round-trip — zero polynomial");
+    TEST_CASE("Univariate round-trip — zero polynomial");
     {
         // Zero polynomial: from_univariate(zero).to_univariate() == zero
         Polynomial<Rational> p("x");  // zero polynomial
@@ -1159,7 +1159,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves zero polynomial");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip — constant polynomial");
+    TEST_CASE("Univariate round-trip — constant polynomial");
     {
         // Constant: p = 42
         Polynomial<Rational> p(Rational(42), "x");
@@ -1168,7 +1168,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves constant polynomial 42");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip — linear polynomial");
+    TEST_CASE("Univariate round-trip — linear polynomial");
     {
         // Linear: p = 3x + 7
         std::vector<Rational> coeffs = {Rational(7), Rational(3)};
@@ -1178,7 +1178,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves linear polynomial 3x + 7");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip — quadratic polynomial");
+    TEST_CASE("Univariate round-trip — quadratic polynomial");
     {
         // Quadratic: p = 2x^2 - 5x + 1
         std::vector<Rational> coeffs = {Rational(1), Rational(-5), Rational(2)};
@@ -1188,7 +1188,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves quadratic 2x^2 - 5x + 1");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip — high-degree polynomial");
+    TEST_CASE("Univariate round-trip — high-degree polynomial");
     {
         // High-degree: p = x^7 + 3x^4 - 2x + 9
         std::vector<Rational> coeffs = {Rational(9), Rational(-2), Rational(0), Rational(0),
@@ -1199,7 +1199,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves high-degree x^7 + 3x^4 - 2x + 9");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip — rational coefficients");
+    TEST_CASE("Univariate round-trip — rational coefficients");
     {
         // Rational coefficients: p = (1/2)x^3 + (2/3)x - (5/7)
         std::vector<Rational> coeffs = {Rational(-5, 7), Rational(2, 3), Rational(0), Rational(1, 2)};
@@ -1209,7 +1209,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves rational coefficients (1/2)x^3 + (2/3)x - 5/7");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip — monomial (single term)");
+    TEST_CASE("Univariate round-trip — monomial (single term)");
     {
         // Monomial: p = 4x^5
         std::vector<Rational> coeffs = {Rational(0), Rational(0), Rational(0), Rational(0), Rational(0), Rational(4)};
@@ -1219,7 +1219,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves monomial 4x^5");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip — different variable name");
+    TEST_CASE("Univariate round-trip — different variable name");
     {
         // Different variable: p = t^2 + t + 1
         std::vector<Rational> coeffs = {Rational(1), Rational(1), Rational(1)};
@@ -1229,7 +1229,7 @@ int main()
         EXPECT_TRUE(recovered == p, "round-trip preserves variable name 't' in t^2 + t + 1");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip reverse — MultiPoly to univariate and back");
+    TEST_CASE("Univariate round-trip reverse — MultiPoly to univariate and back");
     {
         // Start from MultiPoly: 5x^3 - x^2 + 2
         std::vector<std::string> vars = {"x"};
@@ -1245,7 +1245,7 @@ int main()
         EXPECT_TRUE(recovered == original, "reverse round-trip preserves 5x^3 - x^2 + 2");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip reverse — constant MultiPoly");
+    TEST_CASE("Univariate round-trip reverse — constant MultiPoly");
     {
         // Constant MultiPoly: 13
         std::vector<std::string> vars = {"x"};
@@ -1256,7 +1256,7 @@ int main()
         EXPECT_TRUE(recovered == original, "reverse round-trip preserves constant MultiPoly 13");
     }
 
-    TEST_CASE("Property 3: Univariate round-trip reverse — zero MultiPoly");
+    TEST_CASE("Univariate round-trip reverse — zero MultiPoly");
     {
         // Zero MultiPoly
         std::vector<std::string> vars = {"x"};
@@ -1268,7 +1268,7 @@ int main()
     }
 
 
-    TEST_CASE("Property 5: exact_div round-trip — simple monomials (x, y)");
+    TEST_CASE("exact_div round-trip — simple monomials (x, y)");
     {
         std::vector<std::string> vars = {"x", "y"};
         // g = x, h = y → f = xy
@@ -1282,7 +1282,7 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: (x*y)/y == x");
     }
 
-    TEST_CASE("Property 5: exact_div round-trip — binomials (x+1, x-1)");
+    TEST_CASE("exact_div round-trip — binomials (x+1, x-1)");
     {
         std::vector<std::string> vars = {"x"};
         // g = x+1, h = x-1 → f = x²-1
@@ -1296,7 +1296,7 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: (x^2-1)/(x-1) == x+1");
     }
 
-    TEST_CASE("Property 5: exact_div round-trip — bivariate (x+y, x-y)");
+    TEST_CASE("exact_div round-trip — bivariate (x+y, x-y)");
     {
         std::vector<std::string> vars = {"x", "y"};
         // g = x+y, h = x-y → f = x²-y²
@@ -1310,7 +1310,7 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: (x^2-y^2)/(x-y) == x+y");
     }
 
-    TEST_CASE("Property 5: exact_div round-trip — with coefficients (2x+1, 3x+2)");
+    TEST_CASE("exact_div round-trip — with coefficients (2x+1, 3x+2)");
     {
         std::vector<std::string> vars = {"x"};
         // g = 2x+1, h = 3x+2 → f = 6x²+7x+2
@@ -1324,7 +1324,7 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: (6x^2+7x+2)/(3x+2) == 2x+1");
     }
 
-    TEST_CASE("Property 5: exact_div round-trip — higher degree (x^2+x+1, x-1)");
+    TEST_CASE("exact_div round-trip — higher degree (x^2+x+1, x-1)");
     {
         std::vector<std::string> vars = {"x"};
         // g = x^2+x+1, h = x-1 → f = x³-1
@@ -1339,7 +1339,7 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: (x^3-1)/(x-1) == x^2+x+1");
     }
 
-    TEST_CASE("Property 5: exact_div round-trip — trivariate (x+y+z, x-y)");
+    TEST_CASE("exact_div round-trip — trivariate (x+y+z, x-y)");
     {
         std::vector<std::string> vars = {"x", "y", "z"};
         // g = x+y+z, h = x-y
@@ -1355,7 +1355,7 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: ((x+y+z)*(x-y))/(x-y) == x+y+z");
     }
 
-    TEST_CASE("Property 5: exact_div round-trip — monomial times polynomial (xy, x^2+y)");
+    TEST_CASE("exact_div round-trip — monomial times polynomial (xy, x^2+y)");
     {
         std::vector<std::string> vars = {"x", "y"};
         // g = xy, h = x^2+y → f = x^3*y + x*y^2
@@ -1369,7 +1369,7 @@ int main()
         EXPECT_TRUE(f.exact_div(h) == g, "exact_div: (x^3*y+x*y^2)/(x^2+y) == xy");
     }
 
-    TEST_CASE("Property 5: exact_div round-trip — rational coefficients (x/2+1/3, 3x-1)");
+    TEST_CASE("exact_div round-trip — rational coefficients (x/2+1/3, 3x-1)");
     {
         std::vector<std::string> vars = {"x"};
         // g = (1/2)x + 1/3, h = 3x - 1
@@ -1384,7 +1384,7 @@ int main()
     }
 
 
-    TEST_CASE("Property 4: degree of zero polynomial is -1");
+    TEST_CASE("degree of zero polynomial is -1");
     {
         MultiPoly zero;
         EXPECT_TRUE(zero.total_degree() == -1, "zero poly total_degree is -1");
@@ -1392,7 +1392,7 @@ int main()
         EXPECT_TRUE(zero.degree("y") == -1, "zero poly degree(y) is -1");
     }
 
-    TEST_CASE("Property 4: degree of constant polynomial is 0");
+    TEST_CASE("degree of constant polynomial is 0");
     {
         std::vector<std::string> vars = {"x", "y"};
         MultiPoly c(Rational(42), vars);
@@ -1401,7 +1401,7 @@ int main()
         EXPECT_TRUE(c.degree("y") == 0, "constant poly degree(y) is 0");
     }
 
-    TEST_CASE("Property 4: degree of univariate polynomial");
+    TEST_CASE("degree of univariate polynomial");
     {
         // p = 5x^4 + 3x^2 + 1
         std::vector<std::string> vars = {"x"};
@@ -1416,7 +1416,7 @@ int main()
         EXPECT_TRUE(p.degree("x") == 4, "5x^4+3x^2+1 degree(x) is 4");
     }
 
-    TEST_CASE("Property 4: degree of bivariate polynomial");
+    TEST_CASE("degree of bivariate polynomial");
     {
         // p = 2x^3*y^2 + x*y^5 + 3x^2
         // term degrees: 3+2=5, 1+5=6, 2+0=2
@@ -1436,7 +1436,7 @@ int main()
         EXPECT_TRUE(p.degree("y") == 5, "2x^3y^2+xy^5+3x^2 degree(y) is 5");
     }
 
-    TEST_CASE("Property 4: degree of trivariate polynomial");
+    TEST_CASE("degree of trivariate polynomial");
     {
         // p = x^2*y*z^3 + x*y^4*z + z^7
         // term degrees: 2+1+3=6, 1+4+1=6, 0+0+7=7
@@ -1458,7 +1458,7 @@ int main()
         EXPECT_TRUE(p.degree("z") == 7, "x^2yz^3+xy^4z+z^7 degree(z) is 7");
     }
 
-    TEST_CASE("Property 4: degree with high-degree single term");
+    TEST_CASE("degree with high-degree single term");
     {
         // p = x^10*y^8*z^6 (single term)
         // total_degree = 10+8+6 = 24
@@ -1474,7 +1474,7 @@ int main()
         EXPECT_TRUE(p.degree("z") == 6, "x^10*y^8*z^6 degree(z) is 6");
     }
 
-    TEST_CASE("Property 4: degree for variable not appearing in polynomial");
+    TEST_CASE("degree for variable not appearing in polynomial");
     {
         // p = x^3 + 1 in vars {x, y}
         // degree(y) should be 0 (y appears with exponent 0 in all terms)
@@ -1490,7 +1490,7 @@ int main()
         EXPECT_TRUE(p.degree("y") == 0, "x^3+1 degree(y) is 0 (y not used)");
     }
 
-    TEST_CASE("Property 4: degree consistency with arithmetic");
+    TEST_CASE("degree consistency with arithmetic");
     {
         // Verify: deg(f*g) == deg(f) + deg(g) for total degree
         // f = x^2 + y, g = x*y + 1
@@ -1519,7 +1519,7 @@ int main()
         EXPECT_TRUE(deg_fg == deg_f + deg_g, "deg(f*g) == deg(f) + deg(g)");
     }
 
-    TEST_CASE("Property 4: degree of homogeneous polynomial");
+    TEST_CASE("degree of homogeneous polynomial");
     {
         // p = x^3 + x^2*y + x*y^2 + y^3 (all terms have total degree 3)
         std::vector<std::string> vars = {"x", "y"};
@@ -1538,7 +1538,7 @@ int main()
     }
 
 
-    TEST_CASE("Property: addition commutativity (a + b == b + a)");
+    TEST_CASE("addition commutativity (a + b == b + a)");
     {
         std::vector<std::string> vars = {"x", "y"};
 
@@ -1604,7 +1604,7 @@ int main()
         }
     }
 
-    TEST_CASE("Property: multiplication associativity ((a*b)*c == a*(b*c))");
+    TEST_CASE("multiplication associativity ((a*b)*c == a*(b*c))");
     {
         std::vector<std::string> vars = {"x", "y"};
 
@@ -1660,7 +1660,7 @@ int main()
         }
     }
 
-    TEST_CASE("Property: distributive law (a * (b + c) == a*b + a*c)");
+    TEST_CASE("distributive law (a * (b + c) == a*b + a*c)");
     {
         std::vector<std::string> vars = {"x", "y"};
 

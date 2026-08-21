@@ -162,7 +162,7 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
 
     if (!fx->is_zero()) {
         // Particular-solution computation for non-homogeneous case is not yet
-        // within the legacy support domain. Fail loudly instead of returning
+        // within the supported domain. Fail loudly instead of returning
         // the homogeneous solution disguised as the full general solution.
         throw std::logic_error(
             "solve_linear2_ode: non-homogeneous case is outside the current support domain");

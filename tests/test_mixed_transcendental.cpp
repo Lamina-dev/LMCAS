@@ -118,7 +118,7 @@ void test_classification_pure_polynomial() {
 }
 
 void test_allow_numeric_false_returns_empty() {
-    TEST_CASE("Property 12: allow_numeric=false on mixed transcendental → empty vector");
+    TEST_CASE("allow_numeric=false on mixed transcendental → empty vector");
 
     auto x = SymbolicExpr::variable("x");
     // x*sin(x) - 1 = 0: a mixed transcendental equation with no closed-form solution.
@@ -138,7 +138,7 @@ void test_allow_numeric_false_returns_empty() {
 }
 
 void test_allow_numeric_true_permits_solving() {
-    TEST_CASE("Property 12: allow_numeric=true on mixed transcendental → solver invoked");
+    TEST_CASE("allow_numeric=true on mixed transcendental → solver invoked");
 
     auto x = SymbolicExpr::variable("x");
     // x*sin(x) - 1 = 0: a mixed transcendental equation
@@ -168,7 +168,7 @@ void test_allow_numeric_true_permits_solving() {
 }
 
 void test_allow_numeric_false_cos_equation_returns_empty() {
-    TEST_CASE("Property 12: allow_numeric=false on x*cos(x)+x^2*sin(x)-1 → empty vector");
+    TEST_CASE("allow_numeric=false on x*cos(x)+x^2*sin(x)-1 → empty vector");
 
     auto x = SymbolicExpr::variable("x");
     // x*cos(x) + x^2*sin(x) - 1 = 0: another mixed transcendental equation
@@ -194,7 +194,7 @@ void test_allow_numeric_false_cos_equation_returns_empty() {
 }
 
 void test_routing_pure_polynomial_not_hybrid() {
-    TEST_CASE("Property 2: Pure polynomial x^2 - 4 = 0 routes to polynomial solver, not hybrid");
+    TEST_CASE("Pure polynomial x^2 - 4 = 0 routes to polynomial solver, not hybrid");
 
     auto x = SymbolicExpr::variable("x");
     // x^2 - 4: purely algebraic, no transcendental functions of x
@@ -234,7 +234,7 @@ void test_routing_pure_polynomial_not_hybrid() {
 }
 
 void test_routing_transcendental_substitution_not_hybrid() {
-    TEST_CASE("Property 2: exp(x) - 2 = 0 routes to transcendental solver, not hybrid");
+    TEST_CASE("exp(x) - 2 = 0 routes to transcendental solver, not hybrid");
 
     auto x = SymbolicExpr::variable("x");
     // exp(x) - 2 = 0: reducible via substitution u = exp(x), giving u - 2 = 0 → u = 2 → x = ln(2)
@@ -279,7 +279,7 @@ void test_routing_transcendental_substitution_not_hybrid() {
 }
 
 void test_routing_polynomial_with_allow_numeric_false() {
-    TEST_CASE("Property 2: Pure polynomial x^2 - 4 = 0 solved even with allow_numeric=false");
+    TEST_CASE("Pure polynomial x^2 - 4 = 0 solved even with allow_numeric=false");
 
     auto x = SymbolicExpr::variable("x");
     // x^2 - 4: purely algebraic
@@ -316,7 +316,7 @@ void test_routing_polynomial_with_allow_numeric_false() {
 }
 
 void test_backward_compat_cubic_polynomial() {
-    TEST_CASE("Property 13: Cubic x^3 - 6x^2 + 11x - 6 = 0 produces roots {1, 2, 3} via polynomial path");
+    TEST_CASE("Cubic x^3 - 6x^2 + 11x - 6 = 0 produces roots {1, 2, 3} via polynomial path");
 
     auto x = SymbolicExpr::variable("x");
     // x^3 - 6x^2 + 11x - 6 = (x-1)(x-2)(x-3)
@@ -382,7 +382,7 @@ void test_backward_compat_cubic_polynomial() {
 }
 
 void test_backward_compat_transcendental_substitution() {
-    TEST_CASE("Property 13: exp(x) - 2 = 0 still solved via transcendental path with hybrid integrated");
+    TEST_CASE("exp(x) - 2 = 0 still solved via transcendental path with hybrid integrated");
 
     auto x = SymbolicExpr::variable("x");
     // exp(x) - 2 = 0: reducible via substitution u=exp(x), u-2=0 → x=ln(2)
@@ -687,14 +687,14 @@ void test_search_interval_user_overrides_periodic() {
     }
 }
 
-void test_property9_sin_x_plus_x_two_periods() {
-    TEST_CASE("Property 9: sin(x) + x → k=1, period=2π, interval spans at least 4π ≈ 12.57");
+void test_sin_x_plus_x_two_periods() {
+    TEST_CASE("sin(x) + x → k=1, period=2π, interval spans at least 4π ≈ 12.57");
 
     auto x = SymbolicExpr::variable("x");
     // sin(x) + x: k=1, period = 2π, two full periods = 4π ≈ 12.57
     // The interval must span at least 4π total width.
     // Since 4π ≈ 12.57 > default width of 20 ([-10,10]), the solver should extend.
-    // Actually: the requirement says "span at least 2*(2π/|k|)" = 4π ≈ 12.57.
+    // The intended span is at least 2*(2π/|k|) = 4π ≈ 12.57.
     // The default [-10,10] has width 20 which already covers 12.57.
     // But the design says half_span = period = 2π ≈ 6.28, so interval is [-6.28, 6.28]
     // which has width 12.57. Since default [-10,10] width=20 > 12.57, default is used.
@@ -715,8 +715,8 @@ void test_property9_sin_x_plus_x_two_periods() {
     }
 }
 
-void test_property9_cos_half_x_minus_x_two_periods() {
-    TEST_CASE("Property 9: cos(0.5*x) - x → k=0.5, period=4π, interval spans at least 8π ≈ 25.13");
+void test_cos_half_x_minus_x_two_periods() {
+    TEST_CASE("cos(0.5*x) - x → k=0.5, period=4π, interval spans at least 8π ≈ 25.13");
 
     auto x = SymbolicExpr::variable("x");
     // cos(0.5*x) - x: k=0.5, period = 2π/0.5 = 4π ≈ 12.57
@@ -742,8 +742,8 @@ void test_property9_cos_half_x_minus_x_two_periods() {
     }
 }
 
-void test_property9_tan_x_plus_x_two_periods() {
-    TEST_CASE("Property 9: tan(x) + x → k=1, period=π (tan), interval spans at least 2π ≈ 6.28");
+void test_tan_x_plus_x_two_periods() {
+    TEST_CASE("tan(x) + x → k=1, period=π (tan), interval spans at least 2π ≈ 6.28");
 
     auto x = SymbolicExpr::variable("x");
     // tan(x) + x: k=1, period for tan = π/|k| = π ≈ 3.14
@@ -766,8 +766,8 @@ void test_property9_tan_x_plus_x_two_periods() {
     }
 }
 
-void test_property9_sin_small_k_clamped() {
-    TEST_CASE("Property 9: sin(0.1*x) + x/100 → k=0.1, period=20π, 2 periods span=125.66, half_span=62.83");
+void test_sin_small_k_clamped() {
+    TEST_CASE("sin(0.1*x) + x/100 → k=0.1, period=20π, 2 periods span=125.66, half_span=62.83");
 
     auto x = SymbolicExpr::variable("x");
     // sin(0.1*x) + x/100: k=0.1, period = 2π/0.1 = 20π ≈ 62.83
@@ -799,8 +799,8 @@ void test_property9_sin_small_k_clamped() {
     }
 }
 
-void test_property9_sin_x_squared_nonlinear_default() {
-    TEST_CASE("Property 9: sin(x^2) + x → non-linear argument, default [-10, 10]");
+void test_sin_x_squared_nonlinear_default() {
+    TEST_CASE("sin(x^2) + x → non-linear argument, default [-10, 10]");
 
     auto x = SymbolicExpr::variable("x");
     // sin(x^2) + x: argument x^2 is non-linear in x
@@ -821,8 +821,8 @@ void test_property9_sin_x_squared_nonlinear_default() {
     }
 }
 
-void test_property5_max_roots_2_sin_x() {
-    TEST_CASE("Property 5: sin(x) on [-10,10] with max_roots=2 → at most 2 intervals");
+void test_max_roots_2_sin_x() {
+    TEST_CASE("sin(x) on [-10,10] with max_roots=2 → at most 2 intervals");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -844,8 +844,8 @@ void test_property5_max_roots_2_sin_x() {
         " intervals, expected at most 2");
 }
 
-void test_property5_max_roots_1_sin_x() {
-    TEST_CASE("Property 5: sin(x) on [-10,10] with max_roots=1 → at most 1 interval");
+void test_max_roots_1_sin_x() {
+    TEST_CASE("sin(x) on [-10,10] with max_roots=1 → at most 1 interval");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -866,8 +866,8 @@ void test_property5_max_roots_1_sin_x() {
         " intervals, expected at most 1");
 }
 
-void test_property5_max_roots_unlimited_sin_x() {
-    TEST_CASE("Property 5: sin(x) on [-10,10] with max_roots=-1 (unlimited) → finds multiple roots");
+void test_max_roots_unlimited_sin_x() {
+    TEST_CASE("sin(x) on [-10,10] with max_roots=-1 (unlimited) → finds multiple roots");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -890,8 +890,8 @@ void test_property5_max_roots_unlimited_sin_x() {
         " intervals, expected at least 3 (unlimited mode)");
 }
 
-void test_property5_max_roots_3_cos_x_minus_half() {
-    TEST_CASE("Property 5: cos(x)-0.5 on [-10,10] with max_roots=3 → at most 3 intervals");
+void test_max_roots_3_cos_x_minus_half() {
+    TEST_CASE("cos(x)-0.5 on [-10,10] with max_roots=3 → at most 3 intervals");
 
     auto x = SymbolicExpr::variable("x");
     // cos(x) - 0.5
@@ -920,8 +920,8 @@ void test_property5_max_roots_3_cos_x_minus_half() {
         " intervals, expected at most 3");
 }
 
-void test_property4_min_width_sin_x_plus_x_over_10() {
-    TEST_CASE("Property 4: sin(x) + x/10 on [-10, 10] → all intervals have width >= 1e-6");
+void test_min_width_sin_x_plus_x_over_10() {
+    TEST_CASE("sin(x) + x/10 on [-10, 10] → all intervals have width >= 1e-6");
 
     auto x = SymbolicExpr::variable("x");
     // sin(x) + x/10
@@ -947,8 +947,8 @@ void test_property4_min_width_sin_x_plus_x_over_10() {
     }
 }
 
-void test_property4_min_width_tan_x_minus_x() {
-    TEST_CASE("Property 4: tan(x) - x on [-5, 5] → all intervals have width >= 1e-6");
+void test_min_width_tan_x_minus_x() {
+    TEST_CASE("tan(x) - x on [-5, 5] → all intervals have width >= 1e-6");
 
     auto x = SymbolicExpr::variable("x");
     // tan(x) - x: many roots close together near multiples of π
@@ -974,8 +974,8 @@ void test_property4_min_width_tan_x_minus_x() {
     }
 }
 
-void test_property4_min_width_narrow_interval() {
-    TEST_CASE("Property 4: sin(x) + x/10 on [0, 0.001] → intervals still respect width >= 1e-6");
+void test_min_width_narrow_interval() {
+    TEST_CASE("sin(x) + x/10 on [0, 0.001] → intervals still respect width >= 1e-6");
 
     auto x = SymbolicExpr::variable("x");
     // sin(x) + x/10 on a very narrow search interval [0, 0.001]
@@ -1030,8 +1030,8 @@ static std::shared_ptr<SymbolicExpr> compute_derivative(
     }
 }
 
-void test_property3_sign_change_sin_x_plus_x_div_10() {
-    TEST_CASE("Property 3: sign-change invariant for sin(x) on [-10, 10]");
+void test_sign_change_sin_x_plus_x_div_10() {
+    TEST_CASE("sign-change invariant for sin(x) on [-10, 10]");
 
     auto x = SymbolicExpr::variable("x");
     // f(x) = sin(x): has roots at 0, ±π, ±2π, ±3π within [-10, 10]
@@ -1070,8 +1070,8 @@ void test_property3_sign_change_sin_x_plus_x_div_10() {
     }
 }
 
-void test_property3_sign_change_exp_x_minus_x_minus_2() {
-    TEST_CASE("Property 3: sign-change invariant for exp(x) - x - 2 on [-5, 5]");
+void test_sign_change_exp_x_minus_x_minus_2() {
+    TEST_CASE("sign-change invariant for exp(x) - x - 2 on [-5, 5]");
 
     auto x = SymbolicExpr::variable("x");
     // f(x) = exp(x) - x - 2
@@ -1115,8 +1115,8 @@ void test_property3_sign_change_exp_x_minus_x_minus_2() {
     }
 }
 
-void test_property3_sign_change_x_cos_x_minus_1() {
-    TEST_CASE("Property 3: sign-change invariant for x*cos(x) - 1 on [-10, 10]");
+void test_sign_change_x_cos_x_minus_1() {
+    TEST_CASE("sign-change invariant for x*cos(x) - 1 on [-10, 10]");
 
     auto x = SymbolicExpr::variable("x");
     // f(x) = x*cos(x) - 1: has multiple roots in [-10, 10]
@@ -1156,8 +1156,8 @@ void test_property3_sign_change_x_cos_x_minus_1() {
     }
 }
 
-void test_property6_x_squared_plus_one_always_positive() {
-    TEST_CASE("Property 6: x^2 + 1 on [-10, 10] → always positive, isolate_roots returns empty");
+void test_x_squared_plus_one_always_positive() {
+    TEST_CASE("x^2 + 1 on [-10, 10] → always positive, isolate_roots returns empty");
 
     auto x = SymbolicExpr::variable("x");
     // x^2 + 1 > 0 for all real x
@@ -1178,8 +1178,8 @@ void test_property6_x_squared_plus_one_always_positive() {
         "x^2 + 1 is always positive on [-10, 10], isolate_roots should return empty");
 }
 
-void test_property6_exp_x_plus_one_always_positive() {
-    TEST_CASE("Property 6: exp(x) + 1 on [-10, 10] → always positive, isolate_roots returns empty");
+void test_exp_x_plus_one_always_positive() {
+    TEST_CASE("exp(x) + 1 on [-10, 10] → always positive, isolate_roots returns empty");
 
     auto x = SymbolicExpr::variable("x");
     // exp(x) + 1 > 1 > 0 for all real x (since exp(x) > 0)
@@ -1200,8 +1200,8 @@ void test_property6_exp_x_plus_one_always_positive() {
         "exp(x) + 1 is always positive on [-10, 10], isolate_roots should return empty");
 }
 
-void test_property6_neg_x_squared_minus_one_always_negative() {
-    TEST_CASE("Property 6: -(x^2 + 1) on [-10, 10] → always negative, isolate_roots returns empty");
+void test_neg_x_squared_minus_one_always_negative() {
+    TEST_CASE("-(x^2 + 1) on [-10, 10] → always negative, isolate_roots returns empty");
 
     auto x = SymbolicExpr::variable("x");
     // -(x^2 + 1) = -x^2 - 1 < 0 for all real x
@@ -1225,8 +1225,8 @@ void test_property6_neg_x_squared_minus_one_always_negative() {
         "-(x^2 + 1) is always negative on [-10, 10], isolate_roots should return empty");
 }
 
-void test_property6_sin_x_plus_five_always_positive() {
-    TEST_CASE("Property 6: sin(x) + 5 on [-10, 10] → always positive, isolate_roots returns empty");
+void test_sin_x_plus_five_always_positive() {
+    TEST_CASE("sin(x) + 5 on [-10, 10] → always positive, isolate_roots returns empty");
 
     auto x = SymbolicExpr::variable("x");
     // sin(x) + 5: sin(x) ranges in [-1, 1], so sin(x)+5 ranges in [4, 6] > 0
@@ -1429,8 +1429,8 @@ void test_refine_root_max_iterations_exceeded() {
 }
 
 
-void test_property11_deduplicate_roots_ascending_order() {
-    TEST_CASE("Property 11: deduplicate_roots produces strictly ascending output");
+void test_deduplicate_roots_ascending_order() {
+    TEST_CASE("deduplicate_roots produces strictly ascending output");
 
     // Create a vector of NumericRoot in random (unsorted) order
     std::vector<NumericRoot> roots = {
@@ -1467,8 +1467,8 @@ void test_property11_deduplicate_roots_ascending_order() {
     }
 }
 
-void test_property11_pipeline_sin_x_ascending() {
-    TEST_CASE("Property 11: sin(x) on [-10, 10] pipeline → roots in ascending order");
+void test_pipeline_sin_x_ascending() {
+    TEST_CASE("sin(x) on [-10, 10] pipeline → roots in ascending order");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -1511,8 +1511,8 @@ void test_property11_pipeline_sin_x_ascending() {
     }
 }
 
-void test_property11_pipeline_cos_x_ascending() {
-    TEST_CASE("Property 11: cos(x) on [-10, 10] pipeline → roots in ascending order");
+void test_pipeline_cos_x_ascending() {
+    TEST_CASE("cos(x) on [-10, 10] pipeline → roots in ascending order");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::cos(x);
@@ -1555,8 +1555,8 @@ void test_property11_pipeline_cos_x_ascending() {
     }
 }
 
-void test_property11_deduplicate_with_duplicates_ascending() {
-    TEST_CASE("Property 11: deduplicate_roots with near-duplicates → ascending after merge");
+void test_deduplicate_with_duplicates_ascending() {
+    TEST_CASE("deduplicate_roots with near-duplicates → ascending after merge");
 
     // Create roots with some near-duplicates (within 10*tolerance)
     lmmc_real_t tolerance = 1e-10;
@@ -1588,8 +1588,8 @@ void test_property11_deduplicate_with_duplicates_ascending() {
     }
 }
 
-void test_property8_roots_within_interval_sin_x() {
-    TEST_CASE("Property 8: sin(x) on [-3, 3] → all refined roots within [-3, 3]");
+void test_roots_within_interval_sin_x() {
+    TEST_CASE("sin(x) on [-3, 3] → all refined roots within [-3, 3]");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -1645,8 +1645,8 @@ void test_property8_roots_within_interval_sin_x() {
         "sin(x) on [-4,4] should find at least one root (0, ±π are in range)");
 }
 
-void test_property8_roots_within_interval_cos_x_minus_half() {
-    TEST_CASE("Property 8: cos(x) - 0.5 on [0, 5] → all refined roots within [0, 5]");
+void test_roots_within_interval_cos_x_minus_half() {
+    TEST_CASE("cos(x) - 0.5 on [0, 5] → all refined roots within [0, 5]");
 
     auto x = SymbolicExpr::variable("x");
     // cos(x) - 0.5
@@ -1691,8 +1691,8 @@ void test_property8_roots_within_interval_cos_x_minus_half() {
 }
 
 
-void test_property7_output_validity_sin_x_refined_roots() {
-    TEST_CASE("Property 7: isolate_roots + refine_root on sin(x) [-10,10] → all roots finite, |f(root)| < tol, convertible to NumberNode");
+void test_output_validity_sin_x_refined_roots() {
+    TEST_CASE("isolate_roots + refine_root on sin(x) [-10,10] → all roots finite, |f(root)| < tol, convertible to NumberNode");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -1741,8 +1741,8 @@ void test_property7_output_validity_sin_x_refined_roots() {
     }
 }
 
-void test_property7_output_validity_exp_x_minus_x_minus_2() {
-    TEST_CASE("Property 7: isolate_roots + refine_root on exp(x)-x-2 [-5,5] → output validity");
+void test_output_validity_exp_x_minus_x_minus_2() {
+    TEST_CASE("isolate_roots + refine_root on exp(x)-x-2 [-5,5] → output validity");
 
     auto x = SymbolicExpr::variable("x");
     // exp(x) - x - 2: roots near x ≈ -1.84 and x ≈ 1.146
@@ -1796,8 +1796,8 @@ void test_property7_output_validity_exp_x_minus_x_minus_2() {
     }
 }
 
-void test_property7_max_roots_limit_after_deduplication() {
-    TEST_CASE("Property 7: sin(x) on [-10,10] with max_roots=2 → at most 2 roots after deduplicate_roots");
+void test_max_roots_limit_after_deduplication() {
+    TEST_CASE("sin(x) on [-10,10] with max_roots=2 → at most 2 roots after deduplicate_roots");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -1846,8 +1846,8 @@ void test_property7_max_roots_limit_after_deduplication() {
     }
 }
 
-void test_property7_output_validity_x_cos_x_minus_1() {
-    TEST_CASE("Property 7: isolate_roots + refine_root on x*cos(x)-1 [-10,10] → output validity");
+void test_output_validity_x_cos_x_minus_1() {
+    TEST_CASE("isolate_roots + refine_root on x*cos(x)-1 [-10,10] → output validity");
 
     auto x = SymbolicExpr::variable("x");
     // x*cos(x) - 1: multiple roots in [-10, 10]
@@ -2035,8 +2035,8 @@ void test_assemble_results_with_duplicates() {
 }
 
 
-void test_property10_deduplicate_roots_direct() {
-    TEST_CASE("Property 10: deduplicate_roots removes duplicates within 10*tolerance");
+void test_deduplicate_roots_direct() {
+    TEST_CASE("deduplicate_roots removes duplicates within 10*tolerance");
 
     lmmc_real_t tolerance = 1e-12;
     lmmc_real_t dedup_threshold = 10.0 * tolerance;  // 1e-11
@@ -2068,8 +2068,8 @@ void test_property10_deduplicate_roots_direct() {
     }
 }
 
-void test_property10_deduplicate_roots_no_duplicates() {
-    TEST_CASE("Property 10: deduplicate_roots with well-separated roots keeps all");
+void test_deduplicate_roots_no_duplicates() {
+    TEST_CASE("deduplicate_roots with well-separated roots keeps all");
 
     lmmc_real_t tolerance = 1e-12;
     lmmc_real_t dedup_threshold = 10.0 * tolerance;
@@ -2097,8 +2097,8 @@ void test_property10_deduplicate_roots_no_duplicates() {
     }
 }
 
-void test_property10_deduplicate_roots_all_duplicates() {
-    TEST_CASE("Property 10: deduplicate_roots with all values within threshold → single root");
+void test_deduplicate_roots_all_duplicates() {
+    TEST_CASE("deduplicate_roots with all values within threshold → single root");
 
     lmmc_real_t tolerance = 1e-12;
     lmmc_real_t dedup_threshold = 10.0 * tolerance;
@@ -2118,8 +2118,8 @@ void test_property10_deduplicate_roots_all_duplicates() {
     // Even with a single root, the invariant trivially holds (no pairs to check)
 }
 
-void test_property10_deduplicate_pipeline_sin_x() {
-    TEST_CASE("Property 10: full pipeline sin(x) on [-10,10] → deduplicated roots satisfy invariant");
+void test_deduplicate_pipeline_sin_x() {
+    TEST_CASE("full pipeline sin(x) on [-10,10] → deduplicated roots satisfy invariant");
 
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
@@ -2178,8 +2178,8 @@ void test_property10_deduplicate_pipeline_sin_x() {
 }
 
 
-void test_property16_factored_sin_x_minus_half_times_x_minus_3() {
-    TEST_CASE("Property 16: (sin(x) - 0.5) * (x - 3) on [0, 4] → roots from BOTH factors");
+void test_factored_sin_x_minus_half_times_x_minus_3() {
+    TEST_CASE("(sin(x) - 0.5) * (x - 3) on [0, 4] → roots from BOTH factors");
 
     auto x = SymbolicExpr::variable("x");
     // (sin(x) - 0.5) * (x - 3)
@@ -2243,8 +2243,8 @@ void test_property16_factored_sin_x_minus_half_times_x_minus_3() {
 }
 
 
-void test_property16_factored_sin_x_times_cos_x() {
-    TEST_CASE("Property 16: sin(x) * cos(x) on [-10, 10] → roots from BOTH sin and cos factors");
+void test_factored_sin_x_times_cos_x() {
+    TEST_CASE("sin(x) * cos(x) on [-10, 10] → roots from BOTH sin and cos factors");
 
     auto x = SymbolicExpr::variable("x");
     // sin(x) * cos(x)
@@ -2489,7 +2489,7 @@ void test_exception_safety_extreme_values() {
 }
 
 void test_no_variable_dependence_returns_empty() {
-    TEST_CASE("Property 14: expression without solve variable returns empty vector");
+    TEST_CASE("expression without solve variable returns empty vector");
 
     // sin(3) + 5: no dependence on x at all
     auto expr = SymbolicExpr::add(
@@ -2508,7 +2508,7 @@ void test_no_variable_dependence_returns_empty() {
 }
 
 void test_no_variable_dependence_constant_expression() {
-    TEST_CASE("Property 14: pure constant expression returns empty vector");
+    TEST_CASE("pure constant expression returns empty vector");
 
     // 42: a plain number, no variable at all
     auto expr = SymbolicExpr::number(42);
@@ -2523,7 +2523,7 @@ void test_no_variable_dependence_constant_expression() {
 }
 
 void test_no_variable_dependence_other_variable() {
-    TEST_CASE("Property 14: expression with different variable returns empty vector");
+    TEST_CASE("expression with different variable returns empty vector");
 
     auto y = SymbolicExpr::variable("y");
     // sin(y) + y: depends on y, but NOT on x
@@ -2731,29 +2731,29 @@ int main() {
     test_search_interval_cos_2x_plus_1();
     test_search_interval_user_overrides_periodic();
 
-    test_property9_sin_x_plus_x_two_periods();
-    test_property9_cos_half_x_minus_x_two_periods();
-    test_property9_tan_x_plus_x_two_periods();
-    test_property9_sin_small_k_clamped();
-    test_property9_sin_x_squared_nonlinear_default();
+    test_sin_x_plus_x_two_periods();
+    test_cos_half_x_minus_x_two_periods();
+    test_tan_x_plus_x_two_periods();
+    test_sin_small_k_clamped();
+    test_sin_x_squared_nonlinear_default();
 
-    test_property4_min_width_sin_x_plus_x_over_10();
-    test_property4_min_width_tan_x_minus_x();
-    test_property4_min_width_narrow_interval();
+    test_min_width_sin_x_plus_x_over_10();
+    test_min_width_tan_x_minus_x();
+    test_min_width_narrow_interval();
 
-    test_property5_max_roots_2_sin_x();
-    test_property5_max_roots_1_sin_x();
-    test_property5_max_roots_unlimited_sin_x();
-    test_property5_max_roots_3_cos_x_minus_half();
+    test_max_roots_2_sin_x();
+    test_max_roots_1_sin_x();
+    test_max_roots_unlimited_sin_x();
+    test_max_roots_3_cos_x_minus_half();
 
-    test_property3_sign_change_sin_x_plus_x_div_10();
-    test_property3_sign_change_exp_x_minus_x_minus_2();
-    test_property3_sign_change_x_cos_x_minus_1();
+    test_sign_change_sin_x_plus_x_div_10();
+    test_sign_change_exp_x_minus_x_minus_2();
+    test_sign_change_x_cos_x_minus_1();
 
-    test_property6_x_squared_plus_one_always_positive();
-    test_property6_exp_x_plus_one_always_positive();
-    test_property6_neg_x_squared_minus_one_always_negative();
-    test_property6_sin_x_plus_five_always_positive();
+    test_x_squared_plus_one_always_positive();
+    test_exp_x_plus_one_always_positive();
+    test_neg_x_squared_minus_one_always_negative();
+    test_sin_x_plus_five_always_positive();
 
     test_refine_root_sin_x_newton_raphson();
     test_refine_root_sin_x_bisection_fallback();
@@ -2763,30 +2763,30 @@ int main() {
     test_refine_root_derivative_zero_bisection_step();
     test_refine_root_max_iterations_exceeded();
 
-    test_property11_deduplicate_roots_ascending_order();
-    test_property11_pipeline_sin_x_ascending();
-    test_property11_pipeline_cos_x_ascending();
-    test_property11_deduplicate_with_duplicates_ascending();
+    test_deduplicate_roots_ascending_order();
+    test_pipeline_sin_x_ascending();
+    test_pipeline_cos_x_ascending();
+    test_deduplicate_with_duplicates_ascending();
 
-    test_property8_roots_within_interval_sin_x();
-    test_property8_roots_within_interval_cos_x_minus_half();
+    test_roots_within_interval_sin_x();
+    test_roots_within_interval_cos_x_minus_half();
 
-    test_property7_output_validity_sin_x_refined_roots();
-    test_property7_output_validity_exp_x_minus_x_minus_2();
-    test_property7_max_roots_limit_after_deduplication();
-    test_property7_output_validity_x_cos_x_minus_1();
+    test_output_validity_sin_x_refined_roots();
+    test_output_validity_exp_x_minus_x_minus_2();
+    test_max_roots_limit_after_deduplication();
+    test_output_validity_x_cos_x_minus_1();
 
     test_assemble_results_basic();
     test_assemble_results_empty();
     test_assemble_results_with_duplicates();
 
-    test_property10_deduplicate_roots_direct();
-    test_property10_deduplicate_roots_no_duplicates();
-    test_property10_deduplicate_roots_all_duplicates();
-    test_property10_deduplicate_pipeline_sin_x();
+    test_deduplicate_roots_direct();
+    test_deduplicate_roots_no_duplicates();
+    test_deduplicate_roots_all_duplicates();
+    test_deduplicate_pipeline_sin_x();
 
-    test_property16_factored_sin_x_minus_half_times_x_minus_3();
-    test_property16_factored_sin_x_times_cos_x();
+    test_factored_sin_x_minus_half_times_x_minus_3();
+    test_factored_sin_x_times_cos_x();
 
     test_exception_safety_division_by_zero_expression();
     test_exception_safety_ln_negative_domain();

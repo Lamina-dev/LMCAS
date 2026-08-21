@@ -288,7 +288,7 @@ ComboReport verify_combo(const Poly& P, const Poly& Q) {
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 7: Rational function decomposition round-trip");
+    TEST_CASE("Rational function decomposition round-trip");
 
     int total_combos = 0;
     int verified_combos = 0;

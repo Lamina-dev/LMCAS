@@ -79,7 +79,7 @@ static std::pair<SymbolicExpr, SymbolicExpr> make_structurally_identical_distinc
 
 
 static void test_cycle_shared_node_returns_unknown() {
-    TEST_CASE("Property 17: Shared node (same pointer) in expression returns Unknown without crash");
+    TEST_CASE("Shared node (same pointer) in expression returns Unknown without crash");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -104,7 +104,7 @@ static void test_cycle_shared_node_returns_unknown() {
 }
 
 static void test_cycle_detection_no_false_positive_distinct_nodes() {
-    TEST_CASE("Property 17: Structurally identical but distinct nodes — no false positive");
+    TEST_CASE("Structurally identical but distinct nodes — no false positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -123,7 +123,7 @@ static void test_cycle_detection_no_false_positive_distinct_nodes() {
 }
 
 static void test_cycle_detection_multiply_shared_operand() {
-    TEST_CASE("Property 17: MultiplyNode with same operand pointer twice");
+    TEST_CASE("MultiplyNode with same operand pointer twice");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -147,7 +147,7 @@ static void test_cycle_detection_multiply_shared_operand() {
 }
 
 static void test_cycle_detection_nested_function_shared_arg() {
-    TEST_CASE("Property 17: Nested function with shared argument node");
+    TEST_CASE("Nested function with shared argument node");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -174,7 +174,7 @@ static void test_cycle_detection_nested_function_shared_arg() {
 }
 
 static void test_cycle_detection_preserves_state_after_query() {
-    TEST_CASE("Property 17: Visited set is cleared after top-level query completes");
+    TEST_CASE("Visited set is cleared after top-level query completes");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -195,7 +195,7 @@ static void test_cycle_detection_preserves_state_after_query() {
 }
 
 static void test_cycle_detection_different_query_types() {
-    TEST_CASE("Property 17: Cycle detection works across different query types");
+    TEST_CASE("Cycle detection works across different query types");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -227,7 +227,7 @@ static void test_cycle_detection_different_query_types() {
 
 
 static void test_depth_limit_returns_unknown() {
-    TEST_CASE("Property 18: Expression exceeding max depth returns Unknown");
+    TEST_CASE("Expression exceeding max depth returns Unknown");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -245,7 +245,7 @@ static void test_depth_limit_returns_unknown() {
 }
 
 static void test_depth_limit_no_exception() {
-    TEST_CASE("Property 18: Depth limit does not throw exceptions");
+    TEST_CASE("Depth limit does not throw exceptions");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -271,7 +271,7 @@ static void test_depth_limit_no_exception() {
 }
 
 static void test_depth_limit_within_limit_works() {
-    TEST_CASE("Property 18: Expression within depth limit returns correct result");
+    TEST_CASE("Expression within depth limit returns correct result");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -290,7 +290,7 @@ static void test_depth_limit_within_limit_works() {
 }
 
 static void test_depth_limit_boundary() {
-    TEST_CASE("Property 18: Expression at exact depth limit boundary");
+    TEST_CASE("Expression at exact depth limit boundary");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -317,7 +317,7 @@ static void test_depth_limit_boundary() {
 }
 
 static void test_depth_limit_no_side_effects_on_context() {
-    TEST_CASE("Property 18: Depth limit exceeded does not modify context state");
+    TEST_CASE("Depth limit exceeded does not modify context state");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -351,7 +351,7 @@ static void test_depth_limit_no_side_effects_on_context() {
 }
 
 static void test_depth_limit_subsequent_queries_work() {
-    TEST_CASE("Property 18: After depth limit hit, subsequent shallow queries work");
+    TEST_CASE("After depth limit hit, subsequent shallow queries work");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -373,7 +373,7 @@ static void test_depth_limit_subsequent_queries_work() {
 }
 
 static void test_depth_limit_set_and_get() {
-    TEST_CASE("Property 18: set_max_depth and get_max_depth work correctly");
+    TEST_CASE("set_max_depth and get_max_depth work correctly");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -394,7 +394,7 @@ static void test_depth_limit_set_and_get() {
 }
 
 static void test_depth_limit_add_node_deep() {
-    TEST_CASE("Property 18: Deeply nested AddNode exceeding depth returns Unknown");
+    TEST_CASE("Deeply nested AddNode exceeding depth returns Unknown");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -414,7 +414,7 @@ static void test_depth_limit_add_node_deep() {
 }
 
 static void test_depth_limit_multiple_variables() {
-    TEST_CASE("Property 18: Depth limit with multiple variables in deep expression");
+    TEST_CASE("Depth limit with multiple variables in deep expression");
 
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::Positive);

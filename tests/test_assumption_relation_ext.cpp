@@ -20,7 +20,7 @@ static SymbolicExpr make_zero() {
 
 
 void test_reversed_0_lt_var_positive() {
-    TEST_CASE("Reversed: 0 LT var → Positive (Req 24.1)");
+    TEST_CASE("Reversed: 0 LT var → Positive");
 
     RelationStore rs;
     PropertyStore ps;
@@ -40,7 +40,7 @@ void test_reversed_0_lt_var_positive() {
 }
 
 void test_reversed_0_gt_var_negative() {
-    TEST_CASE("Reversed: 0 GT var → Negative (Req 24.2)");
+    TEST_CASE("Reversed: 0 GT var → Negative");
 
     RelationStore rs;
     PropertyStore ps;
@@ -60,7 +60,7 @@ void test_reversed_0_gt_var_negative() {
 }
 
 void test_reversed_0_geq_var_nonpositive() {
-    TEST_CASE("Reversed: 0 GEQ var → NonPositive (Req 24.3)");
+    TEST_CASE("Reversed: 0 GEQ var → NonPositive");
 
     RelationStore rs;
     PropertyStore ps;
@@ -76,7 +76,7 @@ void test_reversed_0_geq_var_nonpositive() {
 }
 
 void test_reversed_0_leq_var_nonnegative() {
-    TEST_CASE("Reversed: 0 LEQ var → NonNegative (Req 24.4)");
+    TEST_CASE("Reversed: 0 LEQ var → NonNegative");
 
     RelationStore rs;
     PropertyStore ps;
@@ -92,7 +92,7 @@ void test_reversed_0_leq_var_nonnegative() {
 }
 
 void test_reversed_0_neq_var_nonzero() {
-    TEST_CASE("Reversed: 0 NEQ var → NonZero (Req 24.5)");
+    TEST_CASE("Reversed: 0 NEQ var → NonZero");
 
     RelationStore rs;
     PropertyStore ps;
@@ -139,7 +139,7 @@ void test_reversed_all_operators_comprehensive() {
 
 
 void test_transitive_chain_3_gt() {
-    TEST_CASE("Transitive: x GT y, y GT z → x GT z (Req 3.1)");
+    TEST_CASE("Transitive: x GT y, y GT z → x GT z");
 
     RelationStore rs;
     PropertyStore ps;
@@ -157,7 +157,7 @@ void test_transitive_chain_3_gt() {
 }
 
 void test_transitive_chain_geq_gt() {
-    TEST_CASE("Transitive: x GEQ y, y GT z → x GT z (Req 3.2)");
+    TEST_CASE("Transitive: x GEQ y, y GT z → x GT z");
 
     RelationStore rs;
     PropertyStore ps;
@@ -193,7 +193,7 @@ void test_transitive_chain_gt_geq() {
 }
 
 void test_transitive_chain_geq_geq() {
-    TEST_CASE("Transitive: x GEQ y, y GEQ z → x GEQ z (Req 3.3)");
+    TEST_CASE("Transitive: x GEQ y, y GEQ z → x GEQ z");
 
     RelationStore rs;
     PropertyStore ps;
@@ -255,7 +255,7 @@ void test_transitive_no_closure_for_lt() {
 
 
 void test_transitive_cap_64() {
-    TEST_CASE("Transitive: 64-relation cap stops deduction (Req 3.5)");
+    TEST_CASE("Transitive: 64-relation cap stops deduction");
 
     RelationStore rs;
     PropertyStore ps;

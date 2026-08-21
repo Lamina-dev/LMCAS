@@ -326,7 +326,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Task 7.5: ax + b > 0, a > 0 numeric verification");
+    TEST_CASE("ax + b > 0, a > 0 numeric verification");
     {
         auto expr = SymbolicExpr::add(
             SymbolicExpr::multiply(a, x),
@@ -376,7 +376,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Task 7.5: ax + b > 0, a < 0 numeric verification");
+    TEST_CASE("ax + b > 0, a < 0 numeric verification");
     {
         auto expr = SymbolicExpr::add(
             SymbolicExpr::multiply(a, x),
@@ -430,7 +430,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Task 7.5: ax^2 + bx + c >= 0, discriminant depends on parameters");
+    TEST_CASE("ax^2 + bx + c >= 0, discriminant depends on parameters");
     {
 
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
@@ -507,7 +507,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Task 7.5: Degenerate case ax^2 + 3x - 2 > 0 when a=0");
+    TEST_CASE("Degenerate case ax^2 + 3x - 2 > 0 when a=0");
     {
 
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
@@ -554,7 +554,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Task 7.5: Degenerate case ax^2 + 5 > 0 when a=0 (constant remainder)");
+    TEST_CASE("Degenerate case ax^2 + 5 > 0 when a=0 (constant remainder)");
     {
 
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
@@ -575,7 +575,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Task 7.5: ax + b <= 0, a > 0 (non-strict)");
+    TEST_CASE("ax + b <= 0, a > 0 (non-strict)");
     {
         auto expr = SymbolicExpr::add(
             SymbolicExpr::multiply(a, x),
@@ -621,7 +621,7 @@ int main() {
         }
     }
 
-    TEST_CASE("Task 7.5: Degenerate ax^2 + x >= 0 when a=0 (non-strict)");
+    TEST_CASE("Degenerate ax^2 + x >= 0 when a=0 (non-strict)");
     {
 
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));

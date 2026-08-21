@@ -320,7 +320,7 @@ void test_nested_scopes_simplification_changes() {
 
 
 void test_unrecognized_function_returns_unknown() {
-    TEST_CASE("Req 8.7: Unrecognized function returns Unknown for all properties");
+    TEST_CASE("Unrecognized function returns Unknown for all properties");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -332,21 +332,21 @@ void test_unrecognized_function_returns_unknown() {
         std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
     auto expr = lamina::detail::expression_from_node(lambert_w);
     EXPECT_TRUE(ctx.is_positive(expr) == Tribool::Unknown,
-                "Req 8.7: LambertW(x) is_positive -> Unknown");
+                "LambertW(x) is_positive -> Unknown");
     EXPECT_TRUE(ctx.is_negative(expr) == Tribool::Unknown,
-                "Req 8.7: LambertW(x) is_negative -> Unknown");
+                "LambertW(x) is_negative -> Unknown");
     EXPECT_TRUE(ctx.is_nonnegative(expr) == Tribool::Unknown,
-                "Req 8.7: LambertW(x) is_nonnegative -> Unknown");
+                "LambertW(x) is_nonnegative -> Unknown");
     EXPECT_TRUE(ctx.is_real(expr) == Tribool::Unknown,
-                "Req 8.7: LambertW(x) is_real -> Unknown");
+                "LambertW(x) is_real -> Unknown");
     EXPECT_TRUE(ctx.is_integer(expr) == Tribool::Unknown,
-                "Req 8.7: LambertW(x) is_integer -> Unknown");
+                "LambertW(x) is_integer -> Unknown");
     EXPECT_TRUE(ctx.is_nonzero(expr) == Tribool::Unknown,
-                "Req 8.7: LambertW(x) is_nonzero -> Unknown");
+                "LambertW(x) is_nonzero -> Unknown");
 }
 
 void test_unrecognized_function_erf() {
-    TEST_CASE("Req 8.7: Erf (special function) returns Unknown for all properties");
+    TEST_CASE("Erf (special function) returns Unknown for all properties");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -356,18 +356,18 @@ void test_unrecognized_function_erf() {
         std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
     auto expr = lamina::detail::expression_from_node(erf_x);
     EXPECT_TRUE(ctx.is_positive(expr) == Tribool::Unknown,
-                "Req 8.7: Erf(x) is_positive -> Unknown");
+                "Erf(x) is_positive -> Unknown");
     EXPECT_TRUE(ctx.is_negative(expr) == Tribool::Unknown,
-                "Req 8.7: Erf(x) is_negative -> Unknown");
+                "Erf(x) is_negative -> Unknown");
     EXPECT_TRUE(ctx.is_real(expr) == Tribool::Unknown,
-                "Req 8.7: Erf(x) is_real -> Unknown");
+                "Erf(x) is_real -> Unknown");
     EXPECT_TRUE(ctx.is_integer(expr) == Tribool::Unknown,
-                "Req 8.7: Erf(x) is_integer -> Unknown");
+                "Erf(x) is_integer -> Unknown");
 }
 
 
 void test_domain_filtering_all_excluded_empty_set() {
-    TEST_CASE("Req 12.5: Domain filtering excludes all solutions -> empty set");
+    TEST_CASE("Domain filtering excludes all solutions -> empty set");
 
     // x^2 + 1 = 0 has only imaginary solutions (x = i, x = -i)
     // With Real domain, all solutions should be excluded
@@ -381,11 +381,11 @@ void test_domain_filtering_all_excluded_empty_set() {
     auto solutions = solve_with_assumptions(eq, "x", &ctx);
 
     EXPECT_TRUE(solutions.empty(),
-                "Req 12.5: x^2+1=0 with Real domain -> empty set");
+                "x^2+1=0 with Real domain -> empty set");
 }
 
 void test_domain_filtering_positive_int_excludes_all() {
-    TEST_CASE("Req 12.5: x^2 - 2 = 0 with PositiveInt -> empty set (sqrt(2) not integer)");
+    TEST_CASE("x^2 - 2 = 0 with PositiveInt -> empty set (sqrt(2) not integer)");
 
     // x^2 - 2 = 0 -> x = sqrt(2), x = -sqrt(2)
     // Neither is a positive integer
@@ -403,14 +403,14 @@ void test_domain_filtering_positive_int_excludes_all() {
         double v = 0.0;
         if (try_numeric(sol, v)) {
             EXPECT_TRUE(false,
-                        "Req 12.5: No numeric solutions should pass PositiveInt filter");
+                        "No numeric solutions should pass PositiveInt filter");
         }
     }
 }
 
 
 void test_pop_on_root_scope_throws() {
-    TEST_CASE("Req 9.4: pop() on root scope throws std::runtime_error");
+    TEST_CASE("pop() on root scope throws std::runtime_error");
 
     AssumptionContext ctx;
     EXPECT_TRUE(ctx.depth() == 1, "Initial depth is 1 (root scope)");
@@ -422,13 +422,13 @@ void test_pop_on_root_scope_throws() {
         threw = true;
     }
 
-    EXPECT_TRUE(threw, "Req 9.4: pop() on root scope throws std::runtime_error");
-    EXPECT_TRUE(ctx.depth() == 1, "Req 9.4: depth unchanged after failed pop");
+    EXPECT_TRUE(threw, "pop() on root scope throws std::runtime_error");
+    EXPECT_TRUE(ctx.depth() == 1, "depth unchanged after failed pop");
 }
 
 
 void test_nesting_depth_128() {
-    TEST_CASE("Req 9.5: Nesting depth of 128 push() calls supported");
+    TEST_CASE("Nesting depth of 128 push() calls supported");
 
     AssumptionContext ctx;
 
@@ -443,7 +443,7 @@ void test_nesting_depth_128() {
     ctx.assume_sign("x", Sign::Positive);
     auto x_expr = lamina::detail::expression_from_node(var("x"));
     EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
-                "Req 9.5: Can declare and query at depth 129");
+                "Can declare and query at depth 129");
 
     // Pop all 128 scopes
     for (int i = 0; i < 128; ++i) {
@@ -452,12 +452,12 @@ void test_nesting_depth_128() {
 
     EXPECT_TRUE(ctx.depth() == 1, "Depth is 1 after popping all 128 scopes");
     EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::Unknown,
-                "Req 9.5: x is Unknown after popping all scopes");
+                "x is Unknown after popping all scopes");
 }
 
 
 void test_nan_handling() {
-    TEST_CASE("Req 10.11: NaN NumberNode -> False for integer, Unknown for sign");
+    TEST_CASE("NaN NumberNode -> False for integer, Unknown for sign");
 
     AssumptionContext ctx;
 
@@ -465,15 +465,15 @@ void test_nan_handling() {
     auto nan_node = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(nan_val));
     auto nan_expr = lamina::detail::expression_from_node(nan_node);
     EXPECT_TRUE(ctx.is_integer(nan_expr) == Tribool::False,
-                "Req 10.11: NaN is_integer -> False");
+                "NaN is_integer -> False");
     EXPECT_TRUE(ctx.is_positive(nan_expr) == Tribool::Unknown,
-                "Req 10.11: NaN is_positive -> Unknown");
+                "NaN is_positive -> Unknown");
     EXPECT_TRUE(ctx.is_negative(nan_expr) == Tribool::Unknown,
-                "Req 10.11: NaN is_negative -> Unknown");
+                "NaN is_negative -> Unknown");
 }
 
 void test_infinity_handling() {
-    TEST_CASE("Req 10.11: Infinity -> derive sign, False for integer");
+    TEST_CASE("Infinity -> derive sign, False for integer");
 
     AssumptionContext ctx;
 
@@ -483,18 +483,18 @@ void test_infinity_handling() {
         std::vector<std::shared_ptr<const SymbolicNode>>{});
     auto pos_inf_expr = lamina::detail::expression_from_node(pos_inf);
     EXPECT_TRUE(ctx.is_integer(pos_inf_expr) == Tribool::False,
-                "Req 10.11: +Infinity is_integer -> False");
+                "+Infinity is_integer -> False");
     EXPECT_TRUE(ctx.is_positive(pos_inf_expr) == Tribool::True,
-                "Req 10.11: +Infinity is_positive -> True");
+                "+Infinity is_positive -> True");
 
     // Negative infinity: MultiplyNode(-1, Infinity)
     auto neg_inf = lamina::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{num(-1), pos_inf});
     auto neg_inf_expr = lamina::detail::expression_from_node(neg_inf);
     EXPECT_TRUE(ctx.is_integer(neg_inf_expr) == Tribool::False,
-                "Req 10.11: -Infinity is_integer -> False");
+                "-Infinity is_integer -> False");
     EXPECT_TRUE(ctx.is_negative(neg_inf_expr) == Tribool::True,
-                "Req 10.11: -Infinity is_negative -> True");
+                "-Infinity is_negative -> True");
 }
 
 
@@ -561,10 +561,10 @@ int main() {
     test_domain_filtering_positive_int_excludes_all();
 
     // Edge Cases
-    test_pop_on_root_scope_throws();       // Req 9.4
-    test_nesting_depth_128();              // Req 9.5
-    test_nan_handling();                   // Req 10.11
-    test_infinity_handling();              // Req 10.11
+    test_pop_on_root_scope_throws();
+    test_nesting_depth_128();
+    test_nan_handling();
+    test_infinity_handling();
 
     // Combined pipeline test
     test_combined_pipeline();

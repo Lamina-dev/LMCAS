@@ -77,8 +77,8 @@ static Domain random_integer_domain() {
 }
 
 
-static void test_property14_real_var_x_squared_nonnegative() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Real variable x² is non-negative");
+static void test_real_var_x_squared_nonnegative() {
+    TEST_CASE("Real variable x² is non-negative");
 
     rc::check("For any variable declared Real (or more specific), "
               "query_nonnegative on x² returns True", []() {
@@ -97,8 +97,8 @@ static void test_property14_real_var_x_squared_nonnegative() {
 }
 
 
-static void test_property14_integer_var_x_squared_integer() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Integer variable x² has Integer domain");
+static void test_integer_var_x_squared_integer() {
+    TEST_CASE("Integer variable x² has Integer domain");
 
     rc::check("For any variable declared Integer (or more specific), "
               "query_integer on x² returns True", []() {
@@ -117,8 +117,8 @@ static void test_property14_integer_var_x_squared_integer() {
 }
 
 
-static void test_property14_positive_var_abs_positive() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Positive variable |x| is positive");
+static void test_positive_var_abs_positive() {
+    TEST_CASE("Positive variable |x| is positive");
 
     rc::check("For any variable declared Positive and Real, "
               "query_positive on |x| returns True", []() {
@@ -139,8 +139,8 @@ static void test_property14_positive_var_abs_positive() {
 }
 
 
-static void test_property14_propagation_is_lazy() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 14: Propagation is lazy (query-time only)");
+static void test_propagation_is_lazy() {
+    TEST_CASE("Propagation is lazy (query-time only)");
 
     rc::check("After declaring a variable Real, the PropertyStore does not "
               "contain any entry for x² — propagation happens at query time only", []() {
@@ -172,10 +172,10 @@ static void test_property14_propagation_is_lazy() {
 
 
 int main() {
-    test_property14_real_var_x_squared_nonnegative();
-    test_property14_integer_var_x_squared_integer();
-    test_property14_positive_var_abs_positive();
-    test_property14_propagation_is_lazy();
+    test_real_var_x_squared_nonnegative();
+    test_integer_var_x_squared_integer();
+    test_positive_var_abs_positive();
+    test_propagation_is_lazy();
 
     return TEST_REPORT();
 }

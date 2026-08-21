@@ -61,7 +61,7 @@ void check_priority_order(const IntegrationTable& table,
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 1: Integration table priority ordering invariant");
+    TEST_CASE("Integration table priority ordering invariant");
 
     // Phase 1: defaults loaded by the IntegrationTable ctor.
     {

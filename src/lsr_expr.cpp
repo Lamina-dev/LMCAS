@@ -1,16 +1,19 @@
 #include "lsr_expr.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <set>
+#include <unordered_set>
 #include <utility>
 
 #include "assumption_context.hpp"
 #include "complex_analysis.hpp"
+#include "matcher.hpp"
 #include "poly_utils.hpp"
 #include "symbolic_ast.hpp"
 
@@ -22,15 +25,23 @@ constexpr const char* kIntegerOperation = "lsr.integer";
 constexpr const char* kRationalOperation = "lsr.rational";
 constexpr const char* kApproxOperation = "lsr.approx_real";
 constexpr const char* kConstantOperation = "lsr.constant";
-constexpr const char* kImaginaryOperation = "lsr.imaginary_unit";
 constexpr const char* kComplexOperation = "lsr.complex";
+constexpr const char* kParseOperation = "lsr.parse_expr";
+constexpr const char* kExprOperation = "lsr.expr_op";
+constexpr const char* kMathOperation = "lsr.math";
 constexpr const char* kRealOperation = "lsr.real";
 constexpr const char* kImagOperation = "lsr.imag";
 constexpr const char* kConjOperation = "lsr.conj";
 constexpr const char* kAbsOperation = "lsr.abs";
+constexpr const char* kSimplifyOperation = "lsr.simplify";
+constexpr const char* kExpandOperation = "lsr.expand";
+constexpr const char* kDifferentiateOperation = "lsr.differentiate";
+constexpr const char* kSubstituteOperation = "lsr.substitute";
+constexpr const char* kExprMatchOperation = "lsr.expr_match";
 constexpr const char* kEquivalentOperation = "lsr.equivalent_core";
 constexpr const char* kEquivalentProfileOperation = "lsr.equivalent_core.profile";
 constexpr const char* kExprSetOperation = "lsr.expr_set";
+constexpr const char* kNumberDomainOperation = "lsr.number_domain";
 constexpr const char* kSolveExprSetOperation = "lsr.solve_expr_set";
 constexpr const char* kEvalfOperation = "lsr.evalf";
 constexpr const char* kEvalComplexOperation = "lsr.eval_complex";
@@ -43,6 +54,11 @@ ExprResult expression_failure(CasErrc code, std::string message,
 ExprSetResult expr_set_failure(CasErrc code, std::string message,
                                const char* operation) {
     return ExprSetResult::failure(code, std::move(message), operation);
+}
+
+Result<bool> bool_failure(CasErrc code, std::string message,
+                          const char* operation) {
+    return Result<bool>::failure(code, std::move(message), operation);
 }
 
 Result<EqvProfile> eqv_profile_failure(std::string message) {
@@ -59,19 +75,6 @@ Result<ApproxComplex> complex_failure(CasErrc code, std::string message,
 
 Result<ApproxComplex> eval_complex_failure(const CasError& error) {
     return complex_failure(error.code, error.message, kEvalComplexOperation);
-}
-
-ExprResult expr_from_complex_result(const ComplexExprResult& result,
-                                    const char* operation) {
-    if (!result) {
-        return ExprResult::failure(result.error());
-    }
-    if (!result.value() || !lamina::detail::node(result.value())) {
-        return expression_failure(CasErrc::InternalInvariant,
-                                  "complex expression result is null",
-                                  operation);
-    }
-    return ExprResult::success(result.value());
 }
 
 ApproxReal approx_part(double value) {
@@ -164,13 +167,755 @@ bool is_integer_double(double value) {
     return std::isfinite(value) && std::floor(value) == value;
 }
 
-bool is_reserved_symbol_name(const std::string& name) {
-    return name == "i" || name == "I" || name == "pi" || name == "π" ||
-           name == "e" || name == "phi";
+bool is_imaginary_unit_name(const std::string& name) {
+    return name == "I";
 }
 
-bool is_imaginary_unit_name(const std::string& name) {
-    return name == "i" || name == "I";
+class ExprParser {
+public:
+    explicit ExprParser(std::string source) : source_(std::move(source)) {}
+
+    ExprResult parse() {
+        skip_space();
+        if (eof()) {
+            return fail("empty expression");
+        }
+        auto result = parse_logical_or();
+        if (!result) return result;
+        skip_space();
+        if (!eof()) {
+            return fail("unexpected token '" + std::string(1, peek()) + "'");
+        }
+        return result;
+    }
+
+private:
+    std::string source_;
+    std::size_t pos_ = 0;
+
+    bool eof() const noexcept { return pos_ >= source_.size(); }
+
+    char peek() const noexcept {
+        return eof() ? '\0' : source_[pos_];
+    }
+
+    bool match(char c) {
+        skip_space();
+        if (peek() != c) return false;
+        ++pos_;
+        return true;
+    }
+
+    bool match_text(const char* text) {
+        skip_space();
+        const std::size_t start = pos_;
+        for (const char* p = text; *p; ++p) {
+            if (pos_ >= source_.size() || source_[pos_] != *p) {
+                pos_ = start;
+                return false;
+            }
+            ++pos_;
+        }
+        return true;
+    }
+
+    bool match_keyword(const char* text) {
+        skip_space();
+        const std::size_t start = pos_;
+        if (!match_text(text)) return false;
+        if (is_ident_continue(static_cast<unsigned char>(peek()))) {
+            pos_ = start;
+            return false;
+        }
+        return true;
+    }
+
+    void skip_space() noexcept {
+        while (!eof() &&
+               std::isspace(static_cast<unsigned char>(source_[pos_]))) {
+            ++pos_;
+        }
+    }
+
+    ExprResult fail(std::string message) const {
+        return expression_failure(
+            CasErrc::ParseError,
+            std::move(message) + " at byte " + std::to_string(pos_),
+            kParseOperation);
+    }
+
+    ExprResult unsupported(std::string message) const {
+        return expression_failure(
+            CasErrc::UnsupportedExpression,
+            std::move(message) + " at byte " + std::to_string(pos_),
+            kParseOperation);
+    }
+
+    static bool is_ident_start(unsigned char c) noexcept {
+        return std::isalpha(c) || c == '_' || c >= 0x80;
+    }
+
+    static bool is_ident_continue(unsigned char c) noexcept {
+        return std::isalnum(c) || c == '_' || c >= 0x80;
+    }
+
+    ExprResult parse_logical_or() {
+        auto lhs = parse_logical_and();
+        if (!lhs) return lhs;
+        while (match_keyword("or")) {
+            auto rhs = parse_logical_and();
+            if (!rhs) return rhs;
+            lhs = logical(lhs.value(), rhs.value(), LogicalNode::Op::Or);
+            if (!lhs) return lhs;
+        }
+        return lhs;
+    }
+
+    ExprResult parse_logical_and() {
+        auto lhs = parse_logical_not();
+        if (!lhs) return lhs;
+        while (match_keyword("and")) {
+            auto rhs = parse_logical_not();
+            if (!rhs) return rhs;
+            lhs = logical(lhs.value(), rhs.value(), LogicalNode::Op::And);
+            if (!lhs) return lhs;
+        }
+        return lhs;
+    }
+
+    ExprResult parse_logical_not() {
+        if (match_keyword("not") || match('!')) {
+            auto operand = parse_logical_not();
+            if (!operand) return operand;
+            return logical(operand.value(), nullptr, LogicalNode::Op::Not);
+        }
+        return parse_membership();
+    }
+
+    ExprResult parse_membership() {
+        auto lhs = parse_equality();
+        if (!lhs) return lhs;
+        if (match_keyword("in")) {
+            auto rhs = parse_equality();
+            if (!rhs) return rhs;
+            return membership(lhs.value(), rhs.value(), false);
+        }
+        const auto save = pos_;
+        if (match_keyword("not")) {
+            if (match_keyword("in")) {
+                auto rhs = parse_equality();
+                if (!rhs) return rhs;
+                return membership(lhs.value(), rhs.value(), true);
+            }
+            pos_ = save;
+        }
+        return lhs;
+    }
+
+    ExprResult parse_equality() {
+        auto lhs = parse_relational();
+        if (!lhs) return lhs;
+        while (true) {
+            RelationOp op;
+            if (match_text("==")) {
+                op = RelationOp::EQ;
+            } else if (match_text("!=")) {
+                op = RelationOp::NEQ;
+            } else {
+                return lhs;
+            }
+            auto rhs = parse_relational();
+            if (!rhs) return rhs;
+            lhs = relational(lhs.value(), rhs.value(), op);
+            if (!lhs) return lhs;
+        }
+    }
+
+    ExprResult parse_relational() {
+        auto lhs = parse_additive();
+        if (!lhs) return lhs;
+        while (true) {
+            RelationOp op;
+            if (match_text("<=")) {
+                op = RelationOp::LEQ;
+            } else if (match_text(">=")) {
+                op = RelationOp::GEQ;
+            } else if (match('<')) {
+                op = RelationOp::LT;
+            } else if (match('>')) {
+                op = RelationOp::GT;
+            } else {
+                return lhs;
+            }
+            auto rhs = parse_additive();
+            if (!rhs) return rhs;
+            lhs = relational(lhs.value(), rhs.value(), op);
+            if (!lhs) return lhs;
+        }
+    }
+
+    ExprResult parse_additive() {
+        auto lhs = parse_multiplicative();
+        if (!lhs) return lhs;
+        while (true) {
+            if (match('+')) {
+                auto rhs = parse_multiplicative();
+                if (!rhs) return rhs;
+                lhs = add(lhs.value(), rhs.value());
+            } else if (match('-')) {
+                auto rhs = parse_multiplicative();
+                if (!rhs) return rhs;
+                lhs = sub(lhs.value(), rhs.value());
+            } else {
+                return lhs;
+            }
+            if (!lhs) return lhs;
+        }
+    }
+
+    ExprResult parse_multiplicative() {
+        auto lhs = parse_power();
+        if (!lhs) return lhs;
+        while (true) {
+            if (match_text("**")) {
+                return fail("operator '**' is not supported; use '^'");
+            } else if (match('*')) {
+                auto rhs = parse_power();
+                if (!rhs) return rhs;
+                lhs = mul(lhs.value(), rhs.value());
+            } else if (match('/')) {
+                auto rhs = parse_power();
+                if (!rhs) return rhs;
+                lhs = div(lhs.value(), rhs.value());
+            } else {
+                return lhs;
+            }
+            if (!lhs) return lhs;
+        }
+    }
+
+    ExprResult parse_power() {
+        auto base = parse_unary();
+        if (!base) return base;
+        if (match_text("**")) {
+            return fail("operator '**' is not supported; use '^'");
+        }
+        if (match('^')) {
+            auto exponent = parse_power();
+            if (!exponent) return exponent;
+            return pow(base.value(), exponent.value());
+        }
+        return base;
+    }
+
+    ExprResult parse_unary() {
+        if (match('+')) return parse_unary();
+        if (match('-')) {
+            auto operand = parse_unary();
+            if (!operand) return operand;
+            return neg(operand.value());
+        }
+        return parse_primary();
+    }
+
+    ExprResult parse_primary() {
+        skip_space();
+        if (match('(')) {
+            auto inner = parse_logical_or();
+            if (!inner) return inner;
+            if (match(',')) {
+                auto rhs = parse_logical_or();
+                if (!rhs) return rhs;
+                if (!match(')')) return fail("expected ')' after interval");
+                return interval(inner.value(), rhs.value(), false, false);
+            }
+            if (!match(')')) return fail("expected ')'");
+            return inner;
+        }
+        if (match('{')) {
+            return parse_set_literal();
+        }
+        if (match('[')) {
+            return parse_interval_literal(true);
+        }
+        if (std::isdigit(static_cast<unsigned char>(peek())) || peek() == '.') {
+            return parse_number();
+        }
+        if (is_ident_start(static_cast<unsigned char>(peek()))) {
+            return parse_identifier_or_call();
+        }
+        return fail("expected expression");
+    }
+
+    ExprResult parse_set_literal() {
+        std::vector<ExprPtr> elements;
+        if (!match('}')) {
+            while (true) {
+                auto element = parse_logical_or();
+                if (!element) return element;
+                elements.push_back(element.value());
+                if (match('}')) break;
+                if (!match(',')) return fail("expected ',' or '}' in set literal");
+            }
+        }
+        return finite_set(elements);
+    }
+
+    ExprResult parse_interval_literal(bool lower_closed) {
+        auto lower = parse_logical_or();
+        if (!lower) return lower;
+        if (!match(',')) return fail("expected ',' in interval literal");
+        auto upper = parse_logical_or();
+        if (!upper) return upper;
+        bool upper_closed;
+        if (match(']')) {
+            upper_closed = true;
+        } else if (match(')')) {
+            upper_closed = false;
+        } else {
+            return fail("expected ']' or ')' after interval literal");
+        }
+        return interval(lower.value(), upper.value(), lower_closed, upper_closed);
+    }
+
+    ExprResult parse_number() {
+        skip_space();
+        const std::size_t start = pos_;
+        bool saw_digit = false;
+        while (std::isdigit(static_cast<unsigned char>(peek()))) {
+            saw_digit = true;
+            ++pos_;
+        }
+        if (peek() == '.') {
+            ++pos_;
+            while (std::isdigit(static_cast<unsigned char>(peek()))) {
+                saw_digit = true;
+                ++pos_;
+            }
+        }
+        if (!saw_digit) return fail("invalid number literal");
+        if (peek() == 'e' || peek() == 'E') {
+            ++pos_;
+            if (peek() == '+' || peek() == '-') ++pos_;
+            bool saw_exp_digit = false;
+            while (std::isdigit(static_cast<unsigned char>(peek()))) {
+                saw_exp_digit = true;
+                ++pos_;
+            }
+            if (!saw_exp_digit) return fail("invalid number exponent");
+        }
+        try {
+            return rational(Rational(source_.substr(start, pos_ - start)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "number literal allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::ParseError, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    std::string parse_identifier() {
+        skip_space();
+        const std::size_t start = pos_;
+        if (!is_ident_start(static_cast<unsigned char>(peek()))) return {};
+        ++pos_;
+        while (is_ident_continue(static_cast<unsigned char>(peek()))) ++pos_;
+        return source_.substr(start, pos_ - start);
+    }
+
+    ExprResult parse_identifier_or_call() {
+        auto name = parse_identifier();
+        if (name.empty()) return fail("expected identifier");
+        skip_space();
+        if (match('(')) {
+            std::vector<ExprPtr> arguments;
+            bool closed = match(')');
+            if (!closed) {
+                do {
+                    auto argument = parse_logical_or();
+                    if (!argument) return argument;
+                    arguments.push_back(argument.value());
+                    if (match(')')) {
+                        closed = true;
+                        break;
+                    }
+                } while (match(','));
+            }
+            if (!closed) return fail("expected ')'");
+            return apply_function(name, arguments);
+        }
+        if (name == "pi" || name == "π") return pi();
+        if (name == "e") return e();
+        if (name == "phi") return phi();
+        if (is_imaginary_unit_name(name)) return imaginary_unit();
+        return sym(name);
+    }
+
+    ExprResult relational(const ExprPtr& lhs, const ExprPtr& rhs, RelationOp op) {
+        if (!lhs || !rhs) return expression_failure(CasErrc::InvalidArgument,
+                                                    "relational operands cannot be null",
+                                                    kParseOperation);
+        try {
+            auto node = lamina::detail::make_node<RelationalNode>(
+                lamina::detail::node(lhs), lamina::detail::node(rhs), op);
+            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "relational expression allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    ExprResult logical(const ExprPtr& lhs, const ExprPtr& rhs, LogicalNode::Op op) {
+        if (!lhs || (op != LogicalNode::Op::Not && !rhs)) {
+            return expression_failure(CasErrc::InvalidArgument,
+                                      "logical operands cannot be null",
+                                      kParseOperation);
+        }
+        try {
+            auto node = lamina::detail::make_node<LogicalNode>(
+                lamina::detail::node(lhs),
+                rhs ? lamina::detail::node(rhs) : nullptr,
+                op);
+            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "logical expression allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    ExprResult finite_set(const std::vector<ExprPtr>& elements) {
+        try {
+            std::vector<std::shared_ptr<const SymbolicNode>> nodes;
+            nodes.reserve(elements.size());
+            for (const auto& element : elements) {
+                if (!element || !lamina::detail::node(element)) {
+                    return expression_failure(CasErrc::InvalidArgument,
+                                              "set elements cannot be null",
+                                              kParseOperation);
+                }
+                nodes.push_back(lamina::detail::node(element));
+            }
+            auto node = lamina::detail::make_node<FiniteSetNode>(std::move(nodes));
+            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "set expression allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    ExprResult interval(const ExprPtr& lower,
+                        const ExprPtr& upper,
+                        bool lower_closed,
+                        bool upper_closed) {
+        if (!lower || !upper) {
+            return expression_failure(CasErrc::InvalidArgument,
+                                      "interval bounds cannot be null",
+                                      kParseOperation);
+        }
+        try {
+            auto node = lamina::detail::make_node<IntervalNode>(
+                lamina::detail::node(lower), lamina::detail::node(upper),
+                lower_closed, upper_closed);
+            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "interval expression allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    ExprResult membership(const ExprPtr& element,
+                          const ExprPtr& set,
+                          bool negated) {
+        if (!element || !set) {
+            return expression_failure(CasErrc::InvalidArgument,
+                                      "membership operands cannot be null",
+                                      kParseOperation);
+        }
+        try {
+            std::shared_ptr<const SymbolicNode> node =
+                lamina::detail::make_node<MembershipNode>(
+                    lamina::detail::node(element), lamina::detail::node(set));
+            if (negated) {
+                node = lamina::detail::make_node<LogicalNode>(
+                    std::move(node), nullptr, LogicalNode::Op::Not);
+            }
+            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "membership expression allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    ExprResult function_node(const std::string& name,
+                             const std::vector<ExprPtr>& arguments,
+                             FunctionNode::FuncType type) {
+        try {
+            std::vector<std::shared_ptr<const SymbolicNode>> nodes;
+            nodes.reserve(arguments.size());
+            for (const auto& argument : arguments) {
+                if (!argument || !lamina::detail::node(argument)) {
+                    return expression_failure(CasErrc::InvalidArgument,
+                                              "function arguments cannot be null",
+                                              kParseOperation);
+                }
+                nodes.push_back(lamina::detail::node(argument));
+            }
+            auto node = lamina::detail::make_node<FunctionNode>(type, std::move(nodes));
+            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      name + " expression allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                      kParseOperation);
+        }
+    }
+
+    ExprResult require_arity(const std::string& name,
+                             const std::vector<ExprPtr>& arguments,
+                             std::size_t arity,
+                             FunctionNode::FuncType type) {
+        if (arguments.size() != arity) {
+            return fail("function '" + name + "' expects " + std::to_string(arity) + " argument(s)");
+        }
+        return function_node(name, arguments, type);
+    }
+
+    ExprResult apply_function(const std::string& name,
+                              const std::vector<ExprPtr>& arguments) {
+        if (name == "sin" && arguments.size() == 1) return sin(arguments[0]);
+        if (name == "cos" && arguments.size() == 1) return cos(arguments[0]);
+        if (name == "tan" && arguments.size() == 1) return tan(arguments[0]);
+        if (name == "asin" && arguments.size() == 1) return asin(arguments[0]);
+        if (name == "acos" && arguments.size() == 1) return acos(arguments[0]);
+        if (name == "atan" && arguments.size() == 1) return atan(arguments[0]);
+        if (name == "sqrt" && arguments.size() == 1) return sqrt(arguments[0]);
+        if (name == "exp" && arguments.size() == 1) return exp(arguments[0]);
+        if ((name == "ln" || name == "log") && arguments.size() == 1) return log(arguments[0]);
+        if (name == "log" && arguments.size() == 2) {
+            try {
+                auto result = SymbolicExpr::log(arguments[0], arguments[1]);
+                return ExprResult::success(std::move(result));
+            } catch (const std::bad_alloc&) {
+                return expression_failure(CasErrc::ResourceLimit,
+                                          "log expression allocation failed",
+                                          kParseOperation);
+            } catch (const std::exception& error) {
+                return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                          kParseOperation);
+            }
+        }
+        if (name == "atan2" && arguments.size() == 2) {
+            try {
+                auto result = SymbolicExpr::atan2(arguments[0], arguments[1]);
+                return ExprResult::success(std::move(result));
+            } catch (const std::bad_alloc&) {
+                return expression_failure(CasErrc::ResourceLimit,
+                                          "atan2 expression allocation failed",
+                                          kParseOperation);
+            } catch (const std::exception& error) {
+                return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                          kParseOperation);
+            }
+        }
+        if (name == "log10" && arguments.size() == 1) return log10(arguments[0]);
+        if (name == "floor" && arguments.size() == 1) return floor(arguments[0]);
+        if (name == "ceil" && arguments.size() == 1) return ceil(arguments[0]);
+        if (name == "round" && arguments.size() == 1) return round(arguments[0]);
+        if (name == "abs" && arguments.size() == 1) return abs(arguments[0]);
+        if (name == "real" && arguments.size() == 1) return real(arguments[0]);
+        if (name == "imag" && arguments.size() == 1) return imag(arguments[0]);
+        if (name == "conj" && arguments.size() == 1) return conj(arguments[0]);
+        if (name == "max" && !arguments.empty()) {
+            return function_node(name, arguments, FunctionNode::FuncType::Max);
+        }
+        if (name == "min" && !arguments.empty()) {
+            return function_node(name, arguments, FunctionNode::FuncType::Min);
+        }
+        if (name == "clamp" && arguments.size() == 3) {
+            return clamp(arguments[0], arguments[1], arguments[2]);
+        }
+        if (name == "sin" || name == "cos" || name == "tan" ||
+            name == "asin" || name == "acos" || name == "atan" ||
+            name == "sqrt" || name == "exp" || name == "ln" ||
+            name == "log" || name == "log10" || name == "floor" ||
+            name == "ceil" || name == "round" || name == "abs" ||
+            name == "real" || name == "imag" || name == "conj" ||
+            name == "atan2" || name == "clamp") {
+            return fail("invalid argument count for function '" + name + "'");
+        }
+        try {
+            std::vector<std::shared_ptr<const SymbolicNode>> nodes;
+            nodes.reserve(arguments.size());
+            for (const auto& argument : arguments) {
+                if (!argument || !lamina::detail::node(argument)) {
+                    return expression_failure(CasErrc::InvalidArgument,
+                                              "function arguments cannot be null",
+                                              kParseOperation);
+                }
+                nodes.push_back(lamina::detail::node(argument));
+            }
+            auto node = lamina::detail::make_node<UninterpretedFunctionNode>(
+                name, std::move(nodes));
+            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        } catch (const std::bad_alloc&) {
+            return expression_failure(CasErrc::ResourceLimit,
+                                      "function expression allocation failed",
+                                      kParseOperation);
+        } catch (const std::exception& error) {
+            return expression_failure(CasErrc::InvalidArgument, error.what(),
+                                      kParseOperation);
+        }
+    }
+};
+
+int domain_rank(NumberDomain domain) noexcept {
+    switch (domain) {
+    case NumberDomain::Integers:
+        return 0;
+    case NumberDomain::Rationals:
+        return 1;
+    case NumberDomain::Reals:
+        return 2;
+    case NumberDomain::Complexes:
+        return 3;
+    case NumberDomain::Expressions:
+        return 4;
+    }
+    return -1;
+}
+
+std::optional<int> exact_small_integer_node(
+    const std::shared_ptr<const SymbolicNode>& node,
+    int min_value,
+    int max_value);
+
+Result<bool> domain_contains_node(
+    NumberDomain domain,
+    const std::shared_ptr<const SymbolicNode>& node) {
+    if (!node) {
+        return bool_failure(CasErrc::InvalidArgument,
+                            "domain membership element must not be null",
+                            kNumberDomainOperation);
+    }
+    if (domain == NumberDomain::Expressions) {
+        return Result<bool>::success(true);
+    }
+
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (is_imaginary_unit_name(variable->name())) {
+            return Result<bool>::success(domain == NumberDomain::Complexes);
+        }
+    }
+
+    if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
+        const auto& value = number->value();
+        if (std::holds_alternative<BigInt>(value)) {
+            return Result<bool>::success(true);
+        }
+        if (std::holds_alternative<Rational>(value)) {
+            const auto& rational = std::get<Rational>(value);
+            switch (domain) {
+            case NumberDomain::Integers:
+                return Result<bool>::success(rational.is_integer());
+            case NumberDomain::Rationals:
+            case NumberDomain::Reals:
+            case NumberDomain::Complexes:
+            case NumberDomain::Expressions:
+                return Result<bool>::success(true);
+            }
+        }
+        const lmmc_real_t real = std::get<lmmc_real_t>(value);
+        if (!std::isfinite(static_cast<double>(real))) {
+            return bool_failure(CasErrc::NumericFailure,
+                                "domain membership requires finite numeric literals",
+                                kNumberDomainOperation);
+        }
+        switch (domain) {
+        case NumberDomain::Integers:
+        case NumberDomain::Rationals:
+            return Result<bool>::success(false);
+        case NumberDomain::Reals:
+        case NumberDomain::Complexes:
+        case NumberDomain::Expressions:
+            return Result<bool>::success(true);
+        }
+    }
+
+    if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
+        if (domain == NumberDomain::Complexes) {
+            auto real_part =
+                domain_contains_node(NumberDomain::Reals, complex_node->real());
+            if (!real_part) return real_part;
+            auto imag_part =
+                domain_contains_node(NumberDomain::Reals, complex_node->imag());
+            if (!imag_part) return imag_part;
+            return Result<bool>::success(real_part.value() && imag_part.value());
+        }
+
+        if (!complex_node->imag()->is_zero()) {
+            return Result<bool>::success(false);
+        }
+        return domain_contains_node(domain, complex_node->real());
+    }
+
+    if (domain == NumberDomain::Complexes) {
+        if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+            for (const auto& operand : add->operands()) {
+                auto member = domain_contains_node(domain, operand);
+                if (!member || !member.value()) return member;
+            }
+            return Result<bool>::success(true);
+        }
+
+        if (auto multiply =
+                std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+            for (const auto& operand : multiply->operands()) {
+                auto member = domain_contains_node(domain, operand);
+                if (!member || !member.value()) return member;
+            }
+            return Result<bool>::success(true);
+        }
+
+        if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+            if (!exact_small_integer_node(power->exponent(), 1, 64)) {
+                return bool_failure(
+                    CasErrc::Inconclusive,
+                    "complex domain membership for powers requires a positive exact integer exponent",
+                    kNumberDomainOperation);
+            }
+            auto base_member = domain_contains_node(domain, power->base());
+            if (!base_member) return base_member;
+            return Result<bool>::success(base_member.value());
+        }
+    }
+
+    return bool_failure(CasErrc::Inconclusive,
+                        "domain membership is only decidable for numeric and explicit complex expressions",
+                        kNumberDomainOperation);
 }
 
 Result<void> validate_eqv_options(const EqvOptions& options) {
@@ -671,6 +1416,27 @@ Result<std::optional<ExprSet>> try_lsr_closed_form_rational_poly_roots(
 ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     const auto& node = lamina::detail::node(expression);
 
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (is_imaginary_unit_name(variable->name())) {
+            auto unit = imaginary_unit();
+            if (!unit) throw std::runtime_error(unit.error().message);
+            return unit.value();
+        }
+        return lamina::detail::make_expression_ptr(node);
+    }
+
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> operands;
+        operands.reserve(add->operands().size());
+        for (const auto& operand : add->operands()) {
+            auto canonical_operand = canonicalize_lsr_complex_product(
+                *lamina::detail::make_expression_ptr(operand));
+            operands.push_back(lamina::detail::node(canonical_operand));
+        }
+        return lamina::detail::make_expression_ptr(
+            SymbolicFactory::create_add(std::move(operands)))->simplify();
+    }
+
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto exponent = exact_small_integer_node(power->exponent(), 0, 16);
         if (exponent) {
@@ -687,6 +1453,16 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
             }
         }
         return lamina::detail::make_expression_ptr(node);
+    }
+
+    if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
+        auto real_part = canonicalize_lsr_complex_product(
+            *lamina::detail::make_expression_ptr(complex_node->real()));
+        auto imag_part = canonicalize_lsr_complex_product(
+            *lamina::detail::make_expression_ptr(complex_node->imag()));
+        auto value = complex(real_part, imag_part);
+        if (!value) throw std::runtime_error(value.error().message);
+        return value.value()->simplify();
     }
 
     auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node);
@@ -763,6 +1539,12 @@ Result<ApproxComplex> evaluate_complex_node(
         }
         return Result<ApproxComplex>::success(
             ApproxComplex{real.value(), imag.value()});
+    }
+
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (is_imaginary_unit_name(variable->name())) {
+            return Result<ApproxComplex>::success(approx_complex(0.0, 1.0));
+        }
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -865,30 +1647,29 @@ Result<void> set_eqv_budget(EqvOptions& options,
     return Result<void>::success();
 }
 
-ExprSet::ExprSet(std::vector<ExprPtr> elements)
-    : elements_(std::move(elements)) {}
+ExprSet::ExprSet(std::vector<ExprPtr> elements, ExprPtr expression)
+    : elements_(std::move(elements)), expression_(std::move(expression)) {}
 
 Result<ExprSet> ExprSet::make(std::vector<ExprPtr> elements) {
-    std::vector<ExprPtr> unique;
-    unique.reserve(elements.size());
-    for (auto& element : elements) {
+    for (const auto& element : elements) {
         if (!element) {
             return expr_set_failure(CasErrc::InvalidArgument,
                                     "set<Expr> elements cannot be null",
                                     kExprSetOperation);
         }
-        bool duplicate = false;
-        for (const auto& existing : unique) {
-            if (structurally_equal(*existing, *element)) {
-                duplicate = true;
-                break;
-            }
-        }
-        if (!duplicate) {
-            unique.push_back(std::move(element));
-        }
     }
-    return Result<ExprSet>::success(ExprSet(std::move(unique)));
+    ComputationContext context;
+    auto expression = make_finite_set(elements, context);
+    if (!expression) return Result<ExprSet>::failure(expression.error());
+    auto node = std::dynamic_pointer_cast<const FiniteSetNode>(
+        lamina::detail::node(expression.value()));
+    std::vector<ExprPtr> unique;
+    unique.reserve(node->elements().size());
+    for (const auto& element : node->elements()) {
+        unique.push_back(lamina::detail::make_expression_ptr(element));
+    }
+    return Result<ExprSet>::success(
+        ExprSet(std::move(unique), expression.value()));
 }
 
 bool ExprSet::contains(const SymbolicExpr& expression) const {
@@ -916,7 +1697,7 @@ ExprSet ExprSet::set_union(const ExprSet& other) const {
             result.push_back(element);
         }
     }
-    return ExprSet(std::move(result));
+    return ExprSet::make(std::move(result)).value();
 }
 
 ExprSet ExprSet::intersection(const ExprSet& other) const {
@@ -926,7 +1707,7 @@ ExprSet ExprSet::intersection(const ExprSet& other) const {
             result.push_back(element);
         }
     }
-    return ExprSet(std::move(result));
+    return ExprSet::make(std::move(result)).value();
 }
 
 ExprSet ExprSet::difference(const ExprSet& other) const {
@@ -936,7 +1717,7 @@ ExprSet ExprSet::difference(const ExprSet& other) const {
             result.push_back(element);
         }
     }
-    return ExprSet(std::move(result));
+    return ExprSet::make(std::move(result)).value();
 }
 
 ExprSet ExprSet::symmetric_difference(const ExprSet& other) const {
@@ -945,212 +1726,46 @@ ExprSet ExprSet::symmetric_difference(const ExprSet& other) const {
     return left_only.set_union(right_only);
 }
 
-ExprResult sym(const std::string& name) {
-    if (name.empty()) {
-        return expression_failure(CasErrc::InvalidArgument,
-                                  "symbol name cannot be empty", kSymOperation);
+const char* NumberDomainSet::name() const noexcept {
+    switch (domain_) {
+    case NumberDomain::Integers:
+        return "Z";
+    case NumberDomain::Rationals:
+        return "Q";
+    case NumberDomain::Reals:
+        return "R";
+    case NumberDomain::Complexes:
+        return "C";
+    case NumberDomain::Expressions:
+        return "Expr";
     }
-    if (is_reserved_symbol_name(name)) {
-        if (is_imaginary_unit_name(name)) {
-            return expression_failure(CasErrc::InvalidArgument,
-                                      "imaginary unit symbol is reserved",
-                                      kSymOperation);
-        }
-        return expression_failure(CasErrc::InvalidArgument,
-                                  "reserved mathematical constants cannot be shadowed",
-                                  kSymOperation);
+    return "?";
+}
+
+bool NumberDomainSet::subset_of(const NumberDomainSet& other) const noexcept {
+    return domain_rank(domain_) <= domain_rank(other.domain_);
+}
+
+Result<bool> NumberDomainSet::contains(const ExprPtr& element) const {
+    if (!element || !lamina::detail::node(element)) {
+        return bool_failure(CasErrc::InvalidArgument,
+                            "domain membership element must not be null",
+                            kNumberDomainOperation);
     }
+    return domain_contains_node(domain_, lamina::detail::node(element));
+}
+
+ExprResult parse_expr(const std::string& source) {
     try {
-        auto expression = SymbolicExpr::variable(name);
-        if (!expression) {
-            return expression_failure(CasErrc::InternalInvariant,
-                                      "symbol factory returned null", kSymOperation);
-        }
-        return ExprResult::success(std::move(expression));
+        return ExprParser(source).parse();
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
-                                  "symbol allocation failed", kSymOperation);
+                                  "expression parse allocation failed",
+                                  kParseOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kSymOperation);
+        return expression_failure(CasErrc::ParseError, error.what(),
+                                  kParseOperation);
     }
-}
-
-ExprResult integer(long long value) {
-    try {
-        return ExprResult::success(SymbolicExpr::number(value));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "integer allocation failed", kIntegerOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kIntegerOperation);
-    }
-}
-
-ExprResult integer(const BigInt& value) {
-    try {
-        return ExprResult::success(SymbolicExpr::number(value));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "integer allocation failed", kIntegerOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kIntegerOperation);
-    }
-}
-
-ExprResult rational(const Rational& value) {
-    try {
-        return ExprResult::success(SymbolicExpr::number(value));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "rational allocation failed", kRationalOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kRationalOperation);
-    }
-}
-
-ExprResult approx_real(double value) {
-    if (!std::isfinite(value)) {
-        return expression_failure(CasErrc::InvalidArgument,
-                                  "approximate real must be finite", kApproxOperation);
-    }
-    try {
-        return ExprResult::success(SymbolicExpr::number(value));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "approximate real allocation failed", kApproxOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kApproxOperation);
-    }
-}
-
-ExprResult constant_symbol(const char* name) {
-    try {
-        auto expression = SymbolicExpr::variable(name);
-        if (!expression || !lamina::detail::node(expression)) {
-            return expression_failure(CasErrc::InternalInvariant,
-                                      "constant factory returned null",
-                                      kConstantOperation);
-        }
-        return ExprResult::success(std::move(expression));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "constant allocation failed",
-                                  kConstantOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
-                                  kConstantOperation);
-    }
-}
-
-ExprResult pi() {
-    return constant_symbol("pi");
-}
-
-ExprResult e() {
-    return constant_symbol("e");
-}
-
-ExprResult phi() {
-    return constant_symbol("phi");
-}
-
-ExprResult i() {
-    return imaginary_unit();
-}
-
-ExprResult I() {
-    return imaginary_unit();
-}
-
-ExprResult imaginary_unit() {
-    auto zero = integer(0);
-    if (!zero) return ExprResult::failure(zero.error());
-    auto one = integer(1);
-    if (!one) return ExprResult::failure(one.error());
-    return complex(zero.value(), one.value());
-}
-
-ExprResult complex(ExprPtr real, ExprPtr imag) {
-    if (!real || !imag) {
-        return expression_failure(CasErrc::InvalidArgument,
-                                  "complex expression parts cannot be null",
-                                  kComplexOperation);
-    }
-    try {
-        auto node = SymbolicFactory::create_complex(lamina::detail::node(real),
-                                                    lamina::detail::node(imag));
-        return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "complex expression allocation failed",
-                                  kComplexOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
-                                  kComplexOperation);
-    }
-}
-
-ExprResult real(const ExprPtr& expression, ComputationContext& context) {
-    return expr_from_complex_result(real_part_checked(expression, context),
-                                    kRealOperation);
-}
-
-ExprResult real(const ExprPtr& expression) {
-    ComputationContext context;
-    return real(expression, context);
-}
-
-ExprResult imag(const ExprPtr& expression, ComputationContext& context) {
-    return expr_from_complex_result(imag_part_checked(expression, context),
-                                    kImagOperation);
-}
-
-ExprResult imag(const ExprPtr& expression) {
-    ComputationContext context;
-    return imag(expression, context);
-}
-
-ExprResult conj(const ExprPtr& expression, ComputationContext& context) {
-    return expr_from_complex_result(conjugate_checked(expression, context),
-                                    kConjOperation);
-}
-
-ExprResult conj(const ExprPtr& expression) {
-    ComputationContext context;
-    return conj(expression, context);
-}
-
-ExprResult abs(const ExprPtr& expression, ComputationContext& context) {
-    auto step = context.consume_steps(1, kAbsOperation);
-    if (!step) return ExprResult::failure(step.error());
-    auto re = real(expression, context);
-    if (!re) return re;
-    auto im = imag(expression, context);
-    if (!im) return im;
-    try {
-        auto re_squared = SymbolicExpr::power(re.value(), SymbolicExpr::number(2));
-        auto im_squared = SymbolicExpr::power(im.value(), SymbolicExpr::number(2));
-        auto sum = SymbolicExpr::add(re_squared, im_squared);
-        auto result = SymbolicExpr::sqrt(sum)->simplify();
-        if (!result || !lamina::detail::node(result)) {
-            return expression_failure(CasErrc::InternalInvariant,
-                                      "complex absolute value construction failed",
-                                      kAbsOperation);
-        }
-        return ExprResult::success(std::move(result));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "complex absolute value allocation failed",
-                                  kAbsOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
-                                  kAbsOperation);
-    }
-}
-
-ExprResult abs(const ExprPtr& expression) {
-    ComputationContext context;
-    return abs(expression, context);
 }
 
 Result<ApproxReal> evalf(const SymbolicExpr& expression,
@@ -1214,7 +1829,7 @@ SolveResult solve_set(const ExprPtr& equation,
                                     "solve variable cannot be empty",
                                     "lsr.solve_set");
     }
-    return solve_dispatch_checked(equation, variable, context, options);
+    return solve_equation(equation, variable, context, options);
 }
 
 SolveResult solve_set(const ExprPtr& equation,
@@ -1233,6 +1848,116 @@ ExprSetResult expr_set(std::vector<ExprPtr> elements) {
                                 kExprSetOperation);
     } catch (const std::exception& error) {
         return expr_set_failure(CasErrc::InvalidArgument, error.what(),
+                                kExprSetOperation);
+    }
+}
+
+NumberDomainSet integers() {
+    return NumberDomainSet(NumberDomain::Integers);
+}
+
+NumberDomainSet rationals() {
+    return NumberDomainSet(NumberDomain::Rationals);
+}
+
+NumberDomainSet reals() {
+    return NumberDomainSet(NumberDomain::Reals);
+}
+
+NumberDomainSet complexes() {
+    return NumberDomainSet(NumberDomain::Complexes);
+}
+
+NumberDomainSet expressions() {
+    return NumberDomainSet(NumberDomain::Expressions);
+}
+
+Result<bool> domain_contains(const NumberDomainSet& domain,
+                             const ExprPtr& element) {
+    return domain.contains(element);
+}
+
+Result<bool> domain_subset(const NumberDomainSet& lhs,
+                           const NumberDomainSet& rhs) {
+    return Result<bool>::success(lhs.subset_of(rhs));
+}
+
+Result<bool> expr_set_contains(const ExprSet& set,
+                               const ExprPtr& element) {
+    if (!element) {
+        return Result<bool>::failure(CasErrc::InvalidArgument,
+                                     "set<Expr> membership element cannot be null",
+                                     kExprSetOperation);
+    }
+    return Result<bool>::success(set.contains(*element));
+}
+
+Result<bool> expr_set_not_contains(const ExprSet& set,
+                                   const ExprPtr& element) {
+    auto result = expr_set_contains(set, element);
+    if (!result) return result;
+    return Result<bool>::success(!result.value());
+}
+
+Result<bool> expr_set_subset(const ExprSet& lhs,
+                             const ExprSet& rhs) {
+    return Result<bool>::success(lhs.subset_of(rhs));
+}
+
+Result<bool> expr_set_subset_domain(const ExprSet& set,
+                                    const NumberDomainSet& domain) {
+    for (const auto& element : set.elements()) {
+        auto contains = domain.contains(element);
+        if (!contains) {
+            return contains;
+        }
+        if (!contains.value()) {
+            return Result<bool>::success(false);
+        }
+    }
+    return Result<bool>::success(true);
+}
+
+ExprSetResult expr_set_union(const ExprSet& lhs,
+                             const ExprSet& rhs) {
+    try {
+        return ExprSetResult::success(lhs.set_union(rhs));
+    } catch (const std::bad_alloc&) {
+        return expr_set_failure(CasErrc::ResourceLimit,
+                                "set<Expr> union allocation failed",
+                                kExprSetOperation);
+    }
+}
+
+ExprSetResult expr_set_intersection(const ExprSet& lhs,
+                                    const ExprSet& rhs) {
+    try {
+        return ExprSetResult::success(lhs.intersection(rhs));
+    } catch (const std::bad_alloc&) {
+        return expr_set_failure(CasErrc::ResourceLimit,
+                                "set<Expr> intersection allocation failed",
+                                kExprSetOperation);
+    }
+}
+
+ExprSetResult expr_set_difference(const ExprSet& lhs,
+                                  const ExprSet& rhs) {
+    try {
+        return ExprSetResult::success(lhs.difference(rhs));
+    } catch (const std::bad_alloc&) {
+        return expr_set_failure(CasErrc::ResourceLimit,
+                                "set<Expr> difference allocation failed",
+                                kExprSetOperation);
+    }
+}
+
+ExprSetResult expr_set_symmetric_difference(const ExprSet& lhs,
+                                            const ExprSet& rhs) {
+    try {
+        return ExprSetResult::success(lhs.symmetric_difference(rhs));
+    } catch (const std::bad_alloc&) {
+        return expr_set_failure(CasErrc::ResourceLimit,
+                                "set<Expr> symmetric difference allocation failed",
                                 kExprSetOperation);
     }
 }
@@ -1338,6 +2063,18 @@ const char* error_name(CasErrc code) noexcept {
         return "NumericFailure";
     case CasErrc::InternalInvariant:
         return "InternalInvariant";
+    case CasErrc::DimensionMismatch:
+        return "DimensionMismatch";
+    case CasErrc::UnitInvalid:
+        return "UnitInvalid";
+    case CasErrc::UnitStripTypeMismatch:
+        return "UnitStripTypeMismatch";
+    case CasErrc::SetElementTypeMismatch:
+        return "SetElementTypeMismatch";
+    case CasErrc::SetOperandTypeMismatch:
+        return "SetOperandTypeMismatch";
+    case CasErrc::SetElementNotHashable:
+        return "SetElementNotHashable";
     }
     return "InternalInvariant";
 }
@@ -1392,8 +2129,27 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
     auto step = context.consume_steps(1, kEquivalentOperation);
     if (!step) return Result<bool>::failure(step.error());
     try {
-        auto canonical_lhs = canonicalize_lsr_complex_product(lhs);
-        auto canonical_rhs = canonicalize_lsr_complex_product(rhs);
+        auto lhs_dimension = dimension_of(lhs);
+        if (!lhs_dimension) return Result<bool>::failure(lhs_dimension.error());
+        auto rhs_dimension = dimension_of(rhs);
+        if (!rhs_dimension) return Result<bool>::failure(rhs_dimension.error());
+        if (lhs_dimension.value() != rhs_dimension.value()) {
+            return Result<bool>::success(false);
+        }
+        auto lhs_ptr = std::make_shared<SymbolicExpr>(lhs);
+        auto rhs_ptr = std::make_shared<SymbolicExpr>(rhs);
+        if (std::dynamic_pointer_cast<const QuantityNode>(lamina::detail::node(lhs))) {
+            auto stripped = strip_unit(lhs_ptr, UnitStripMode::BaseValue, context);
+            if (!stripped) return Result<bool>::failure(stripped.error());
+            lhs_ptr = stripped.value();
+        }
+        if (std::dynamic_pointer_cast<const QuantityNode>(lamina::detail::node(rhs))) {
+            auto stripped = strip_unit(rhs_ptr, UnitStripMode::BaseValue, context);
+            if (!stripped) return Result<bool>::failure(stripped.error());
+            rhs_ptr = stripped.value();
+        }
+        auto canonical_lhs = canonicalize_lsr_complex_product(*lhs_ptr);
+        auto canonical_rhs = canonicalize_lsr_complex_product(*rhs_ptr);
         if (structurally_equal(*canonical_lhs, *canonical_rhs)) {
             return Result<bool>::success(true);
         }
@@ -1467,6 +2223,32 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
                              const SymbolicExpr& rhs,
                              ComputationContext& context) {
     return equivalent_core(lhs, rhs, context, EqvOptions{});
+}
+
+Result<bool> equivalent(const SymbolicExpr& lhs,
+                        const SymbolicExpr& rhs,
+                        ComputationContext& context,
+                        const EqvOptions& options) {
+    auto checked = equivalent_core(lhs, rhs, context, options);
+    if (checked) return checked;
+
+    const auto code = checked.error().code;
+    if (code == CasErrc::ResourceLimit ||
+        code == CasErrc::Inconclusive ||
+        code == CasErrc::UnsupportedExpression) {
+        (void)context.add_diagnostic(
+            Diagnostic{DiagnosticSeverity::Warning,
+                       kEquivalentOperation,
+                       checked.error().message});
+        return Result<bool>::success(false);
+    }
+    return Result<bool>::failure(checked.error());
+}
+
+Result<bool> equivalent(const SymbolicExpr& lhs,
+                        const SymbolicExpr& rhs,
+                        ComputationContext& context) {
+    return equivalent(lhs, rhs, context, EqvOptions{});
 }
 
 } // namespace lamina::lsr

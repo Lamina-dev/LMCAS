@@ -47,20 +47,20 @@ Result<std::shared_ptr<const MatrixNode>> require_square_matrix(
     return mat;
 }
 
-MatrixExprResult require_matrix_result(std::shared_ptr<SymbolicExpr> result,
+ExpressionResult require_matrix_result(std::shared_ptr<SymbolicExpr> result,
                                        const std::string& operation)
 {
     if (!result || !lamina::detail::node(result)) {
-        return MatrixExprResult::failure(CasErrc::InternalInvariant,
+        return ExpressionResult::failure(CasErrc::InternalInvariant,
                                          "matrix operation returned an empty expression",
                                          operation);
     }
-    return MatrixExprResult::success(std::move(result));
+    return ExpressionResult::success(std::move(result));
 }
 
-MatrixExprResult unsupported_matrix_dimension(const std::string& operation)
+ExpressionResult unsupported_matrix_dimension(const std::string& operation)
 {
-    return MatrixExprResult::failure(
+    return ExpressionResult::failure(
         CasErrc::UnsupportedExpression,
         "only two-dimensional transformation matrices are supported", operation);
 }
@@ -76,22 +76,22 @@ bool matrix_is_provably_nonzero_number(const std::shared_ptr<SymbolicExpr>& expr
 
 } // namespace
 
-MatrixExprResult matrix_multiply_checked(const std::shared_ptr<SymbolicExpr>& A,
+ExpressionResult matrix_multiply_checked(const std::shared_ptr<SymbolicExpr>& A,
                                          const std::shared_ptr<SymbolicExpr>& B,
                                          ComputationContext& context) {
     const std::string operation = "matrix_multiply";
     auto left = require_matrix(A, context, operation);
-    if (!left) return MatrixExprResult::failure(left.error());
+    if (!left) return ExpressionResult::failure(left.error());
     auto right = require_matrix(B, context, operation);
-    if (!right) return MatrixExprResult::failure(right.error());
+    if (!right) return ExpressionResult::failure(right.error());
     if (left.value()->cols() != right.value()->rows()) {
-        return MatrixExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::InvalidArgument, "matrix dimensions are not compatible", operation);
     }
     return require_matrix_result(SymbolicExpr::multiply(A, B), operation);
 }
 
-MatrixExprResult matrix_multiply_checked(const std::shared_ptr<SymbolicExpr>& A,
+ExpressionResult matrix_multiply_checked(const std::shared_ptr<SymbolicExpr>& A,
                                          const std::shared_ptr<SymbolicExpr>& B) {
     ComputationContext context;
     return matrix_multiply_checked(A, B, context);
@@ -104,15 +104,15 @@ std::shared_ptr<SymbolicExpr> matrix_multiply(const std::shared_ptr<SymbolicExpr
     return checked.value();
 }
 
-MatrixExprResult matrix_determinant_checked(const std::shared_ptr<SymbolicExpr>& A,
+ExpressionResult matrix_determinant_checked(const std::shared_ptr<SymbolicExpr>& A,
                                             ComputationContext& context) {
     const std::string operation = "matrix_determinant";
     auto mat = require_square_matrix(A, context, operation);
-    if (!mat) return MatrixExprResult::failure(mat.error());
+    if (!mat) return ExpressionResult::failure(mat.error());
     return require_matrix_result(SymbolicExpr::determinant(A), operation);
 }
 
-MatrixExprResult matrix_determinant_checked(const std::shared_ptr<SymbolicExpr>& A) {
+ExpressionResult matrix_determinant_checked(const std::shared_ptr<SymbolicExpr>& A) {
     ComputationContext context;
     return matrix_determinant_checked(A, context);
 }
@@ -123,37 +123,37 @@ std::shared_ptr<SymbolicExpr> matrix_determinant(const std::shared_ptr<SymbolicE
     return checked.value();
 }
 
-MatrixExprResult matrix_inverse_checked(const std::shared_ptr<SymbolicExpr>& A,
+ExpressionResult matrix_inverse_checked(const std::shared_ptr<SymbolicExpr>& A,
                                         ComputationContext& context) {
     const std::string operation = "matrix_inverse";
     auto mat = require_square_matrix(A, context, operation);
-    if (!mat) return MatrixExprResult::failure(mat.error());
+    if (!mat) return ExpressionResult::failure(mat.error());
     auto determinant_budget =
         context.consume_steps(mat.value()->rows() * mat.value()->cols() + 1, operation);
-    if (!determinant_budget) return MatrixExprResult::failure(determinant_budget.error());
+    if (!determinant_budget) return ExpressionResult::failure(determinant_budget.error());
 
     auto det = SymbolicExpr::determinant(A);
     if (!det || !lamina::detail::node(det)) {
-        return MatrixExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::InternalInvariant,
             "matrix determinant could not be constructed",
             operation);
     }
     auto det_simplified = det->simplify();
     if (!det_simplified || !lamina::detail::node(det_simplified)) {
-        return MatrixExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::InternalInvariant,
             "matrix determinant simplification produced an empty expression",
             operation);
     }
     if (lamina::detail::node(det_simplified)->is_zero()) {
-        return MatrixExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::DomainError,
             "matrix is singular and has no inverse",
             operation);
     }
     if (!matrix_is_provably_nonzero_number(det_simplified)) {
-        return MatrixExprResult::failure(
+        return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "matrix determinant is not provably non-zero in the current support domain",
             operation);
@@ -161,11 +161,11 @@ MatrixExprResult matrix_inverse_checked(const std::shared_ptr<SymbolicExpr>& A,
 
     auto inverse_budget =
         context.consume_steps(mat.value()->rows() * mat.value()->cols() * 4 + 1, operation);
-    if (!inverse_budget) return MatrixExprResult::failure(inverse_budget.error());
+    if (!inverse_budget) return ExpressionResult::failure(inverse_budget.error());
     return require_matrix_result(SymbolicExpr::inverse(A), operation);
 }
 
-MatrixExprResult matrix_inverse_checked(const std::shared_ptr<SymbolicExpr>& A) {
+ExpressionResult matrix_inverse_checked(const std::shared_ptr<SymbolicExpr>& A) {
     ComputationContext context;
     return matrix_inverse_checked(A, context);
 }
@@ -176,11 +176,11 @@ std::shared_ptr<SymbolicExpr> matrix_inverse(const std::shared_ptr<SymbolicExpr>
     return checked.value();
 }
 
-MatrixExprResult matrix_rotation_checked(double theta, int dim,
+ExpressionResult matrix_rotation_checked(double theta, int dim,
                                          ComputationContext& context) {
     const std::string operation = "matrix_rotation";
     auto step = matrix_consume_step(context, operation);
-    if (!step) return MatrixExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
     if (dim == 2) {
         auto c = SymbolicExpr::number(std::cos(theta));
         auto s = SymbolicExpr::number(std::sin(theta));
@@ -192,7 +192,7 @@ MatrixExprResult matrix_rotation_checked(double theta, int dim,
     return unsupported_matrix_dimension(operation);
 }
 
-MatrixExprResult matrix_rotation_checked(double theta, int dim) {
+ExpressionResult matrix_rotation_checked(double theta, int dim) {
     ComputationContext context;
     return matrix_rotation_checked(theta, dim, context);
 }
@@ -203,11 +203,11 @@ std::shared_ptr<SymbolicExpr> matrix_rotation(double theta, int dim) {
     return checked.value();
 }
 
-MatrixExprResult matrix_reflection_checked(double angle, int dim,
+ExpressionResult matrix_reflection_checked(double angle, int dim,
                                            ComputationContext& context) {
     const std::string operation = "matrix_reflection";
     auto step = matrix_consume_step(context, operation);
-    if (!step) return MatrixExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
     if (dim == 2) {
         auto c = SymbolicExpr::number(std::cos(angle));
         auto s = SymbolicExpr::number(std::sin(angle));
@@ -218,7 +218,7 @@ MatrixExprResult matrix_reflection_checked(double angle, int dim,
     return unsupported_matrix_dimension(operation);
 }
 
-MatrixExprResult matrix_reflection_checked(double angle, int dim) {
+ExpressionResult matrix_reflection_checked(double angle, int dim) {
     ComputationContext context;
     return matrix_reflection_checked(angle, dim, context);
 }
@@ -229,11 +229,11 @@ std::shared_ptr<SymbolicExpr> matrix_reflection(double angle, int dim) {
     return checked.value();
 }
 
-MatrixExprResult matrix_scaling_checked(double sx, double sy, int dim,
+ExpressionResult matrix_scaling_checked(double sx, double sy, int dim,
                                         ComputationContext& context) {
     const std::string operation = "matrix_scaling";
     auto step = matrix_consume_step(context, operation);
-    if (!step) return MatrixExprResult::failure(step.error());
+    if (!step) return ExpressionResult::failure(step.error());
     if (dim == 2) {
         return require_matrix_result(
             SymbolicExpr::matrix({{SymbolicExpr::number(sx), SymbolicExpr::number(0)}, {SymbolicExpr::number(0), SymbolicExpr::number(sy)}}),
@@ -242,7 +242,7 @@ MatrixExprResult matrix_scaling_checked(double sx, double sy, int dim,
     return unsupported_matrix_dimension(operation);
 }
 
-MatrixExprResult matrix_scaling_checked(double sx, double sy, int dim) {
+ExpressionResult matrix_scaling_checked(double sx, double sy, int dim) {
     ComputationContext context;
     return matrix_scaling_checked(sx, sy, dim, context);
 }

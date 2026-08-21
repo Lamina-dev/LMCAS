@@ -42,11 +42,15 @@ public:
     void visit(const LogicalNode&) override {}
     void visit(const PiecewiseNode&) override {}
     void visit(const SummationNode&) override {}
-    void visit(const ProductNode_Op&) override {}
+    void visit(const ProductNode&) override {}
     void visit(const TransformNode&) override {}
     void visit(const QuantifierNode&) override {}
     void visit(const SetBuilderNode&) override {}
     void visit(const ComplexNode&) override {}
+    void visit(const FiniteSetNode&) override {}
+    void visit(const IntervalNode&) override {}
+    void visit(const MembershipNode&) override {}
+    void visit(const QuantityNode&) override {}
 };
 
 static_assert(!std::is_abstract<ExhaustiveProbeVisitor>::value,
@@ -118,10 +122,10 @@ static_assert(!HasPublicBodyField<SummationNode>::value &&
               !HasPublicLowerBoundField<SummationNode>::value &&
               !HasPublicUpperBoundField<SummationNode>::value,
               "SummationNode storage must remain private");
-static_assert(!HasPublicBodyField<ProductNode_Op>::value &&
-              !HasPublicIndexVarField<ProductNode_Op>::value &&
-              !HasPublicLowerBoundField<ProductNode_Op>::value &&
-              !HasPublicUpperBoundField<ProductNode_Op>::value,
+static_assert(!HasPublicBodyField<ProductNode>::value &&
+              !HasPublicIndexVarField<ProductNode>::value &&
+              !HasPublicLowerBoundField<ProductNode>::value &&
+              !HasPublicUpperBoundField<ProductNode>::value,
               "ProductNode storage must remain private");
 static_assert(!HasPublicTransformTypeField<TransformNode>::value &&
               !HasPublicBodyField<TransformNode>::value &&
@@ -220,7 +224,7 @@ static_assert(!std::is_constructible<SummationNode,
               std::shared_ptr<const SymbolicNode>,
               std::shared_ptr<const SymbolicNode>>::value,
               "SummationNode construction must be factory-only");
-static_assert(!std::is_constructible<ProductNode_Op,
+static_assert(!std::is_constructible<ProductNode,
               std::shared_ptr<const SymbolicNode>, std::string,
               std::shared_ptr<const SymbolicNode>,
               std::shared_ptr<const SymbolicNode>>::value,
@@ -304,7 +308,7 @@ int main() {
         (void)lamina::detail::make_node<SummationNode>(one, "", zero, one);
     }, "SummationNode rejects empty index variable");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<ProductNode_Op>(one, "k", zero, nullptr);
+        (void)lamina::detail::make_node<ProductNode>(one, "k", zero, nullptr);
     }, "ProductNode rejects null bound");
     expect_invalid([&]() {
         (void)lamina::detail::make_node<TransformNode>(
@@ -321,6 +325,20 @@ int main() {
     expect_invalid([&]() {
         (void)lamina::detail::make_node<SetBuilderNode>("", one, condition);
     }, "SetBuilderNode rejects empty element variable");
+    expect_invalid([&]() {
+        (void)lamina::detail::make_node<FiniteSetNode>(
+            std::vector<std::shared_ptr<const SymbolicNode>>{nullptr});
+    }, "FiniteSetNode rejects null elements");
+    expect_invalid([&]() {
+        (void)lamina::detail::make_node<IntervalNode>(nullptr, one, true, true);
+    }, "IntervalNode rejects null endpoints");
+    expect_invalid([&]() {
+        (void)lamina::detail::make_node<MembershipNode>(one, nullptr);
+    }, "MembershipNode rejects null sets");
+    expect_invalid([&]() {
+        (void)lamina::detail::make_node<QuantityNode>(
+            one, lamina::DimensionSignature::base("m"), Rational(0), "m");
+    }, "QuantityNode rejects zero scale");
 
     TEST_CASE("SymbolicFactory rejects null children");
     expect_invalid([&]() {

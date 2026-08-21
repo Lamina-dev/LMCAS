@@ -309,7 +309,7 @@ int main() {
             "Vieta product (1*2*3*4=24): got " + std::to_string(product));
     }
 
-    TEST_CASE("Property 2: Quartic root verification (random from known roots)");
+    TEST_CASE("Quartic root verification (random from known roots)");
 
     {
         const double RESIDUAL_TOL = 1e-10;
@@ -344,7 +344,7 @@ int main() {
 
             if (roots.size() != 4) {
                 std::ostringstream msg;
-                msg << "Property 2 General Trial " << trial
+                msg << "General Trial " << trial
                     << " (roots=" << r1 << "," << r2 << "," << r3 << "," << r4
                     << "): expected 4 roots, got " << roots.size();
                 EXPECT_TRUE(false, msg.str());
@@ -363,7 +363,7 @@ int main() {
                 if (std::abs(residual) >= RESIDUAL_TOL) {
                     trial_ok = false;
                     std::ostringstream msg;
-                    msg << "Property 2 General Trial " << trial << " root " << i
+                    msg << "General Trial " << trial << " root " << i
                         << " (roots=" << r1 << "," << r2 << "," << r3 << "," << r4
                         << "): |f(r)| = " << std::abs(residual) << " >= 1e-10"
                         << " (r = " << val << ")";
@@ -398,7 +398,7 @@ int main() {
 
             if (roots.size() != 4) {
                 std::ostringstream msg;
-                msg << "Property 2 Biquadratic Trial " << trial
+                msg << "Biquadratic Trial " << trial
                     << " (r1=" << r1 << ", r2=" << r2
                     << "): expected 4 roots, got " << roots.size();
                 EXPECT_TRUE(false, msg.str());
@@ -418,7 +418,7 @@ int main() {
                 if (std::abs(residual) >= RESIDUAL_TOL) {
                     trial_ok = false;
                     std::ostringstream msg;
-                    msg << "Property 2 Biquadratic Trial " << trial << " root " << i
+                    msg << "Biquadratic Trial " << trial << " root " << i
                         << " (r1=" << r1 << ", r2=" << r2
                         << "): |f(r)| = " << std::abs(residual) << " >= 1e-10"
                         << " (r = " << val << ")";
@@ -450,7 +450,7 @@ int main() {
 
             if (roots.size() != 4) {
                 std::ostringstream msg;
-                msg << "Property 2 q=0 Trial " << trial
+                msg << "q=0 Trial " << trial
                     << " (center=" << center << ", k=" << k
                     << "): expected 4 roots, got " << roots.size();
                 EXPECT_TRUE(false, msg.str());
@@ -469,7 +469,7 @@ int main() {
                 if (std::abs(residual) >= RESIDUAL_TOL) {
                     trial_ok = false;
                     std::ostringstream msg;
-                    msg << "Property 2 q=0 Trial " << trial << " root " << i
+                    msg << "q=0 Trial " << trial << " root " << i
                         << " (center=" << center << ", k=" << k
                         << "): |f(r)| = " << std::abs(residual) << " >= 1e-10"
                         << " (r = " << val << ")";
@@ -481,7 +481,7 @@ int main() {
 
         {
             std::ostringstream msg;
-            msg << "Property 2: Quartic root verification: " << quartic_verify_pass_count
+            msg << "Quartic root verification: " << quartic_verify_pass_count
                 << "/" << total_trials << " trials passed ("
                 << quartic_verify_total_roots << " real roots verified)";
             EXPECT_TRUE(quartic_verify_pass_count == total_trials, msg.str());

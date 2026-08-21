@@ -38,7 +38,7 @@ static SymbolicExpr make_power_expr(const std::string& var_name, int n) {
 
 
 void test_ln_monotonicity_both_positive() {
-    TEST_CASE("Property 28: x > y, both Positive → ln(x) > ln(y)");
+    TEST_CASE("x > y, both Positive → ln(x) > ln(y)");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -111,7 +111,7 @@ void test_checked_monotonicity_rules_noop() {
 
 
 void test_sqrt_monotonicity_both_positive() {
-    TEST_CASE("Property 29: x > y, both Positive → sqrt(x) > sqrt(y)");
+    TEST_CASE("x > y, both Positive → sqrt(x) > sqrt(y)");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -137,7 +137,7 @@ void test_sqrt_monotonicity_both_positive() {
 
 
 void test_exp_monotonicity_both_real() {
-    TEST_CASE("Property 30: x > y, both Real → exp(x) > exp(y)");
+    TEST_CASE("x > y, both Real → exp(x) > exp(y)");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -162,7 +162,7 @@ void test_exp_monotonicity_both_real() {
 }
 
 void test_exp_monotonicity_positive_implies_real() {
-    TEST_CASE("Property 30: x > y, both Positive (implies Real) → exp(x) > exp(y)");
+    TEST_CASE("x > y, both Positive (implies Real) → exp(x) > exp(y)");
 
     AssumptionContext ctx;
     // Positive implies NonNegative and NonZero, but we also need Real domain
@@ -191,7 +191,7 @@ void test_exp_monotonicity_positive_implies_real() {
 
 
 void test_ln_guard_missing_positive() {
-    TEST_CASE("Property 31: ln rule NOT applied when one variable lacks Positive");
+    TEST_CASE("ln rule NOT applied when one variable lacks Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -216,7 +216,7 @@ void test_ln_guard_missing_positive() {
 }
 
 void test_sqrt_guard_missing_positive() {
-    TEST_CASE("Property 31: sqrt rule NOT applied when one variable lacks Positive");
+    TEST_CASE("sqrt rule NOT applied when one variable lacks Positive");
 
     AssumptionContext ctx;
     // Neither x nor y has Positive assumption
@@ -242,7 +242,7 @@ void test_sqrt_guard_missing_positive() {
 }
 
 void test_exp_guard_missing_real() {
-    TEST_CASE("Property 31: exp rule NOT applied when one variable lacks Real domain");
+    TEST_CASE("exp rule NOT applied when one variable lacks Real domain");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -267,7 +267,7 @@ void test_exp_guard_missing_real() {
 }
 
 void test_no_rules_for_non_gt_relation() {
-    TEST_CASE("Property 31: No monotonicity rules applied for non-GT relations");
+    TEST_CASE("No monotonicity rules applied for non-GT relations");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -295,7 +295,7 @@ void test_no_rules_for_non_gt_relation() {
 }
 
 void test_no_rules_for_non_variable_operands() {
-    TEST_CASE("Property 31: No monotonicity rules applied for non-variable operands");
+    TEST_CASE("No monotonicity rules applied for non-variable operands");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -324,7 +324,7 @@ void test_no_rules_for_non_variable_operands() {
 
 
 void test_power_monotonicity_both_nonnegative() {
-    TEST_CASE("Req 15.4: x > y, both NonNegative → x^n > y^n for n in expressions");
+    TEST_CASE("x > y, both NonNegative → x^n > y^n for n in expressions");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
@@ -356,7 +356,7 @@ void test_power_monotonicity_both_nonnegative() {
 }
 
 void test_power_guard_missing_nonnegative() {
-    TEST_CASE("Req 15.5: Power rule NOT applied when variables lack NonNegative");
+    TEST_CASE("Power rule NOT applied when variables lack NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -388,7 +388,7 @@ void test_power_guard_missing_nonnegative() {
 
 
 void test_recursive_monotonicity_depth_limit() {
-    TEST_CASE("Req 15.6: Monotonicity rules applied recursively up to depth 8");
+    TEST_CASE("Monotonicity rules applied recursively up to depth 8");
 
     // With both Positive and Real, applying x > y should produce:
     // Level 0: ln(x) > ln(y), sqrt(x) > sqrt(y), exp(x) > exp(y)
@@ -491,8 +491,8 @@ static Interval make_open_interval(double lo, double hi) {
     return iv;
 }
 
-void test_property7_exp_increasing_on_reals() {
-    TEST_CASE("Property 7: exp is auto-inferred as Increasing on all of R");
+void test_exp_increasing_on_reals() {
+    TEST_CASE("exp is auto-inferred as Increasing on all of R");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -509,8 +509,8 @@ void test_property7_exp_increasing_on_reals() {
         "exp(x) is Increasing on entire real line");
 }
 
-void test_property7_exp_increasing_on_finite_interval() {
-    TEST_CASE("Property 7: exp is Increasing on finite interval [0, 10]");
+void test_exp_increasing_on_finite_interval() {
+    TEST_CASE("exp is Increasing on finite interval [0, 10]");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -526,8 +526,8 @@ void test_property7_exp_increasing_on_finite_interval() {
         "exp(x) is Increasing on [0, 10]");
 }
 
-void test_property7_ln_increasing_on_positive_reals() {
-    TEST_CASE("Property 7: ln is auto-inferred as Increasing on positive reals");
+void test_ln_increasing_on_positive_reals() {
+    TEST_CASE("ln is auto-inferred as Increasing on positive reals");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -545,8 +545,8 @@ void test_property7_ln_increasing_on_positive_reals() {
         "ln(x) is Increasing on (0, 1000)");
 }
 
-void test_property7_ln_increasing_on_closed_positive() {
-    TEST_CASE("Property 7: ln is Increasing on [1, 100]");
+void test_ln_increasing_on_closed_positive() {
+    TEST_CASE("ln is Increasing on [1, 100]");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -563,8 +563,8 @@ void test_property7_ln_increasing_on_closed_positive() {
         "ln(x) is Increasing on [1, 100]");
 }
 
-void test_property7_negation_reverses_monotonicity() {
-    TEST_CASE("Property 7: Negation reverses monotonicity (-exp(x) is Decreasing)");
+void test_negation_reverses_monotonicity() {
+    TEST_CASE("Negation reverses monotonicity (-exp(x) is Decreasing)");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -587,8 +587,8 @@ void test_property7_negation_reverses_monotonicity() {
         "-exp(x) is Decreasing (negation reverses Increasing)");
 }
 
-void test_property7_negation_reverses_ln() {
-    TEST_CASE("Property 7: -ln(x) is Decreasing on positive reals");
+void test_negation_reverses_ln() {
+    TEST_CASE("-ln(x) is Decreasing on positive reals");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -612,8 +612,8 @@ void test_property7_negation_reverses_ln() {
         "-ln(x) is Decreasing on [1, 100]");
 }
 
-void test_property7_declared_monotonicity_deduction() {
-    TEST_CASE("Property 7: Declared monotonically increasing f with x > y deduces f(x) > f(y)");
+void test_declared_monotonicity_deduction() {
+    TEST_CASE("Declared monotonically increasing f with x > y deduces f(x) > f(y)");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -641,8 +641,8 @@ void test_property7_declared_monotonicity_deduction() {
         "x > y with exp increasing => exp(x) > exp(y)");
 }
 
-void test_property7_ln_deduction_from_inequality() {
-    TEST_CASE("Property 7: x > y with both Positive deduces ln(x) > ln(y)");
+void test_ln_deduction_from_inequality() {
+    TEST_CASE("x > y with both Positive deduces ln(x) > ln(y)");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -665,8 +665,8 @@ void test_property7_ln_deduction_from_inequality() {
         "x > y with both Positive => ln(x) > ln(y)");
 }
 
-void test_property7_unknown_for_non_monotone_function() {
-    TEST_CASE("Property 7: Non-monotone function (sin) returns Unknown monotonicity");
+void test_unknown_for_non_monotone_function() {
+    TEST_CASE("Non-monotone function (sin) returns Unknown monotonicity");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -682,8 +682,8 @@ void test_property7_unknown_for_non_monotone_function() {
         "sin(x) on [0, 2*pi] has Unknown monotonicity (not monotone on full period)");
 }
 
-void test_property7_wrong_variable_returns_unknown() {
-    TEST_CASE("Property 7: Querying monotonicity w.r.t. wrong variable returns Unknown");
+void test_wrong_variable_returns_unknown() {
+    TEST_CASE("Querying monotonicity w.r.t. wrong variable returns Unknown");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -701,16 +701,16 @@ void test_property7_wrong_variable_returns_unknown() {
 }
 
 int main() {
-    test_property7_exp_increasing_on_reals();
-    test_property7_exp_increasing_on_finite_interval();
-    test_property7_ln_increasing_on_positive_reals();
-    test_property7_ln_increasing_on_closed_positive();
-    test_property7_negation_reverses_monotonicity();
-    test_property7_negation_reverses_ln();
-    test_property7_declared_monotonicity_deduction();
-    test_property7_ln_deduction_from_inequality();
-    test_property7_unknown_for_non_monotone_function();
-    test_property7_wrong_variable_returns_unknown();
+    test_exp_increasing_on_reals();
+    test_exp_increasing_on_finite_interval();
+    test_ln_increasing_on_positive_reals();
+    test_ln_increasing_on_closed_positive();
+    test_negation_reverses_monotonicity();
+    test_negation_reverses_ln();
+    test_declared_monotonicity_deduction();
+    test_ln_deduction_from_inequality();
+    test_unknown_for_non_monotone_function();
+    test_wrong_variable_returns_unknown();
 
     // Properties 28-31: Monotonicity deduction rules (existing tests)
     test_ln_monotonicity_both_positive();

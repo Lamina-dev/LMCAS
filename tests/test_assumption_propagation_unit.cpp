@@ -39,7 +39,7 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
 
 
 static void test_x_squared_nonnegative_when_real() {
-    TEST_CASE("Propagation: x² non-negative when x is Real (Req 18.1)");
+    TEST_CASE("Propagation: x² non-negative when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -53,7 +53,7 @@ static void test_x_squared_nonnegative_when_real() {
 }
 
 static void test_x_squared_integer_when_integer() {
-    TEST_CASE("Propagation: x² Integer when x is Integer (Req 18.3)");
+    TEST_CASE("Propagation: x² Integer when x is Integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
@@ -67,7 +67,7 @@ static void test_x_squared_integer_when_integer() {
 }
 
 static void test_abs_positive_when_x_positive() {
-    TEST_CASE("Propagation: |x| positive when x is Positive (Req 18.2)");
+    TEST_CASE("Propagation: |x| positive when x is Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -113,7 +113,7 @@ static void test_abs_positive_when_x_nonzero() {
 
 
 static void test_diagnostic_transcendental_then_integer() {
-    TEST_CASE("Diagnostics: Transcendental + Integer contradiction (Req 19.1)");
+    TEST_CASE("Diagnostics: Transcendental + Integer contradiction");
 
     AssumptionContext ctx;
     ctx.current_properties().declare_transcendental("x");
@@ -141,7 +141,7 @@ static void test_diagnostic_transcendental_then_integer() {
 }
 
 static void test_diagnostic_positive_then_negative() {
-    TEST_CASE("Diagnostics: Positive + Negative contradiction (Req 19.2)");
+    TEST_CASE("Diagnostics: Positive + Negative contradiction");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -169,7 +169,7 @@ static void test_diagnostic_positive_then_negative() {
 }
 
 static void test_diagnostic_natural_then_negative() {
-    TEST_CASE("Diagnostics: Natural + Negative contradiction (Req 19.3)");
+    TEST_CASE("Diagnostics: Natural + Negative contradiction");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Natural);
@@ -189,7 +189,7 @@ static void test_diagnostic_natural_then_negative() {
 }
 
 static void test_diagnostic_positiveint_then_zero() {
-    TEST_CASE("Diagnostics: PositiveInt + Zero contradiction (Req 19.3)");
+    TEST_CASE("Diagnostics: PositiveInt + Zero contradiction");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);

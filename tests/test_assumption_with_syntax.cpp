@@ -52,7 +52,7 @@ static std::vector<AssumptionDecl> random_decls() {
 
 
 static void test_with_assumptions_preserves_depth_normal() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 13: with_assumptions preserves depth on normal return");
+    TEST_CASE("with_assumptions preserves depth on normal return");
 
     rc::check("with_assumptions preserves context depth on normal callable return", []() {
         AssumptionContext ctx;
@@ -81,7 +81,7 @@ static void test_with_assumptions_preserves_depth_normal() {
 }
 
 static void test_with_assumptions_preserves_depth_exception() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 13: with_assumptions preserves depth on exception");
+    TEST_CASE("with_assumptions preserves depth on exception");
 
     rc::check("with_assumptions preserves context depth even when callable throws", []() {
         AssumptionContext ctx;
@@ -118,7 +118,7 @@ static void test_with_assumptions_preserves_depth_exception() {
 
 /// Test: with_assumptions preserves depth with void callable on normal return
 static void test_with_assumptions_void_preserves_depth_normal() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 13: void with_assumptions preserves depth on normal return");
+    TEST_CASE("void with_assumptions preserves depth on normal return");
 
     rc::check("void with_assumptions preserves context depth on normal return", []() {
         AssumptionContext ctx;
@@ -142,7 +142,7 @@ static void test_with_assumptions_void_preserves_depth_normal() {
 
 /// Test: with_assumptions preserves depth with void callable on exception
 static void test_with_assumptions_void_preserves_depth_exception() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 13: void with_assumptions preserves depth on exception");
+    TEST_CASE("void with_assumptions preserves depth on exception");
 
     rc::check("void with_assumptions preserves context depth when void callable throws", []() {
         AssumptionContext ctx;
@@ -173,7 +173,7 @@ static void test_with_assumptions_void_preserves_depth_exception() {
 
 /// Test: with_assumptions with vector overload preserves depth
 static void test_with_assumptions_vector_preserves_depth() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 13: vector overload preserves depth");
+    TEST_CASE("vector overload preserves depth");
 
     rc::check("with_assumptions (vector overload) preserves context depth on normal and exception paths", []() {
         AssumptionContext ctx;
@@ -212,7 +212,7 @@ static void test_with_assumptions_vector_preserves_depth() {
 
 /// Test: assumptions applied inside with_assumptions are visible during callable
 static void test_with_assumptions_applies_declarations() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 13: declarations are applied inside scope");
+    TEST_CASE("declarations are applied inside scope");
 
     rc::check("with_assumptions applies declarations that are visible inside the callable", []() {
         AssumptionContext ctx;

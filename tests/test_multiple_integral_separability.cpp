@@ -11,7 +11,7 @@
 #include <functional>
 
 using lamina::Integrator;
-using lamina::MultipleIntegralEngine;
+using lamina::IntegrationStep;
 
 namespace {
 
@@ -111,22 +111,22 @@ ComboReport verify_combo(const FunctionSpec& f,
     auto y_hi = SymbolicExpr::number(by.hi);
 
     Integrator integrator;
-    MultipleIntegralEngine engine;
+    lamina::ComputationContext context;
 
-    // Steps: index 0 is innermost. Inner over x, outer over y.
-    std::vector<MultipleIntegralEngine::IntegrationStep> steps = {
+    std::vector<IntegrationStep> steps = {
         {"x", x_lo, x_hi},
         {"y", y_lo, y_hi},
     };
 
     std::shared_ptr<SymbolicExpr> engine_result;
-    try {
-        engine_result = engine.evaluate(*integrand, steps, integrator);
-    } catch (const std::exception& e) {
+    auto integrated = lamina::integrate_multiple_checked(
+        *integrand, steps, integrator, context);
+    if (!integrated) {
         rep.failed = true;
-        rep.detail = std::string("exception in engine.evaluate: ") + e.what();
+        rep.detail = "multiple integration failed: " + integrated.error().message;
         return rep;
     }
+    engine_result = lamina::detail::make_expression_ptr(integrated.value());
 
     if (!engine_result) {
         rep.failed = true;
@@ -227,7 +227,7 @@ ComboReport verify_combo(const FunctionSpec& f,
 }// anonymous namespace
 
 int main() {
-    TEST_CASE("Property 9: Multiple integral separability");
+    TEST_CASE("Multiple integral separability");
 
     int total_combos      = 0;
     int verified_combos   = 0;

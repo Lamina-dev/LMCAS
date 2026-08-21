@@ -78,8 +78,8 @@ static Sign expected_division_sign(Sign num_sign, Sign den_sign) {
 }
 
 
-static void test_property1_division_sign_table() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 1: Division sign inference follows sign multiplication table");
+static void test_division_sign_table() {
+    TEST_CASE("Division sign inference follows sign multiplication table");
 
     rc::check("For any division with known non-zero numerator and denominator signs, "
               "the result sign follows the sign multiplication table", []() {
@@ -118,8 +118,8 @@ static void test_property1_division_sign_table() {
 }
 
 
-static void test_property1_unknown_denominator_returns_unknown() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 1: Unknown denominator sign returns Unknown");
+static void test_unknown_denominator_returns_unknown() {
+    TEST_CASE("Unknown denominator sign returns Unknown");
 
     rc::check("For any division where denominator sign is unknown, result is Unknown", []() {
         Sign num_sign = random_nonzero_sign();
@@ -139,8 +139,8 @@ static void test_property1_unknown_denominator_returns_unknown() {
 }
 
 
-static void test_property1_zero_denominator_returns_unknown() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 1: Zero denominator returns Unknown");
+static void test_zero_denominator_returns_unknown() {
+    TEST_CASE("Zero denominator returns Unknown");
 
     rc::check("For any division where denominator is zero, result is Unknown", []() {
         Sign num_sign = random_nonzero_sign();
@@ -162,8 +162,8 @@ static void test_property1_zero_denominator_returns_unknown() {
 }
 
 
-static void test_property1_all_sign_combinations() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 1: All four sign combinations");
+static void test_all_sign_combinations() {
+    TEST_CASE("All four sign combinations");
 
     // pos / pos → pos
     {
@@ -204,8 +204,8 @@ static void test_property1_all_sign_combinations() {
 }
 
 
-static void test_property4_add_all_positive_is_positive() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode all GT zero → positive");
+static void test_add_all_positive_is_positive() {
+    TEST_CASE("AddNode all GT zero → positive");
 
     rc::check("For any AddNode where all operands are GT zero, sum is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
@@ -226,8 +226,8 @@ static void test_property4_add_all_positive_is_positive() {
     });
 }
 
-static void test_property4_add_all_nonneg_is_nonneg() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode all GEQ zero → non-negative");
+static void test_add_all_nonneg_is_nonneg() {
+    TEST_CASE("AddNode all GEQ zero → non-negative");
 
     rc::check("For any AddNode where all operands are GEQ zero, sum is non-negative", []() {
         int num_operands = rc::gen::inRange(2, 5);
@@ -249,8 +249,8 @@ static void test_property4_add_all_nonneg_is_nonneg() {
 }
 
 
-static void test_property4_multiply_all_positive_is_positive() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 4: MultiplyNode all GT zero → positive");
+static void test_multiply_all_positive_is_positive() {
+    TEST_CASE("MultiplyNode all GT zero → positive");
 
     rc::check("For any MultiplyNode where all operands are GT zero, product is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
@@ -272,8 +272,8 @@ static void test_property4_multiply_all_positive_is_positive() {
 }
 
 
-static void test_property4_gt_nonneg_implies_positive() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 4: x GT y with y NonNegative → x positive");
+static void test_gt_nonneg_implies_positive() {
+    TEST_CASE("x GT y with y NonNegative → x positive");
 
     rc::check("For any variable x with relation x GT 0, x is positive", []() {
         std::string x_name = "x_" + std::to_string(rc::gen::inRange(0, 999));
@@ -297,8 +297,8 @@ static void test_property4_gt_nonneg_implies_positive() {
 }
 
 
-static void test_property4_unknown_operand_returns_unknown() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 4: Unknown operand sign → Unknown");
+static void test_unknown_operand_returns_unknown() {
+    TEST_CASE("Unknown operand sign → Unknown");
 
     rc::check("For any AddNode/MultiplyNode with an undetermined operand, result is Unknown", []() {
         bool use_add = rc::gen::boolean();
@@ -338,8 +338,8 @@ static void test_property4_unknown_operand_returns_unknown() {
 }
 
 
-static void test_property4_add_with_gt_zero_relations() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode operands with GT 0 relations → positive");
+static void test_add_with_gt_zero_relations() {
+    TEST_CASE("AddNode operands with GT 0 relations → positive");
 
     rc::check("For any AddNode where all operands have x GT 0 relations, sum is positive", []() {
         int num_operands = rc::gen::inRange(2, 4);
@@ -369,8 +369,8 @@ static void test_property4_add_with_gt_zero_relations() {
 }
 
 
-static void test_property4_add_mixed_pos_nonneg() {
-    TEST_CASE("Feature: assumption-system-enhancements, Property 4: AddNode mixed positive/non-negative");
+static void test_add_mixed_pos_nonneg() {
+    TEST_CASE("AddNode mixed positive/non-negative");
 
     rc::check("AddNode with at least one positive and rest non-negative is positive", []() {
         int num_operands = rc::gen::inRange(2, 5);
@@ -396,18 +396,18 @@ static void test_property4_add_mixed_pos_nonneg() {
 
 
 int main() {
-    test_property1_division_sign_table();
-    test_property1_unknown_denominator_returns_unknown();
-    test_property1_zero_denominator_returns_unknown();
-    test_property1_all_sign_combinations();
+    test_division_sign_table();
+    test_unknown_denominator_returns_unknown();
+    test_zero_denominator_returns_unknown();
+    test_all_sign_combinations();
 
-    test_property4_add_all_positive_is_positive();
-    test_property4_add_all_nonneg_is_nonneg();
-    test_property4_multiply_all_positive_is_positive();
-    test_property4_gt_nonneg_implies_positive();
-    test_property4_unknown_operand_returns_unknown();
-    test_property4_add_with_gt_zero_relations();
-    test_property4_add_mixed_pos_nonneg();
+    test_add_all_positive_is_positive();
+    test_add_all_nonneg_is_nonneg();
+    test_multiply_all_positive_is_positive();
+    test_gt_nonneg_implies_positive();
+    test_unknown_operand_returns_unknown();
+    test_add_with_gt_zero_relations();
+    test_add_mixed_pos_nonneg();
 
     return TEST_REPORT();
 }

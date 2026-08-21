@@ -36,8 +36,8 @@ static std::vector<std::shared_ptr<SymbolicExpr>> rand_coeffs(int len, int max_a
 }
 
 
-static void test_property13_power_series_addition_componentwise() {
-    TEST_CASE("Property 13: Power series addition is component-wise");
+static void test_power_series_addition_componentwise() {
+    TEST_CASE("Power series addition is component-wise");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -90,14 +90,14 @@ static void test_property13_power_series_addition_componentwise() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 13: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " power series addition trials are component-wise (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
-static void test_property14_power_series_multiplication_cauchy() {
-    TEST_CASE("Property 14: Power series multiplication satisfies Cauchy product");
+static void test_power_series_multiplication_cauchy() {
+    TEST_CASE("Power series multiplication satisfies Cauchy product");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -157,14 +157,14 @@ static void test_property14_power_series_multiplication_cauchy() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 14: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " power series multiplication trials satisfy Cauchy product (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
-static void test_property15_fourier_series_symmetry() {
-    TEST_CASE("Property 15: Fourier series symmetry (even/odd functions)");
+static void test_fourier_series_symmetry() {
+    TEST_CASE("Fourier series symmetry (even/odd functions)");
 
     auto x = SymbolicExpr::variable("x");
     int num_trials = 30;
@@ -278,14 +278,14 @@ static void test_property15_fourier_series_symmetry() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 15: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " Fourier series symmetry (parity) trials passed (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
-static void test_property16_symbolic_summation_closed_form() {
-    TEST_CASE("Property 16: Symbolic summation closed form verification");
+static void test_symbolic_summation_closed_form() {
+    TEST_CASE("Symbolic summation closed form verification");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -355,14 +355,14 @@ static void test_property16_symbolic_summation_closed_form() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 16: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " symbolic summation closed form trials verified (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
-static void test_property35_convergence_radius_geometric() {
-    TEST_CASE("Property 35: Convergence radius for geometric series");
+static void test_convergence_radius_geometric() {
+    TEST_CASE("Convergence radius for geometric series");
 
     int num_trials = 30;
     int pass_count = 0;
@@ -413,18 +413,18 @@ static void test_property35_convergence_radius_geometric() {
     }
 
     EXPECT_TRUE(pass_count == num_trials,
-        "Property 35: All " + std::to_string(num_trials) +
+        "All " + std::to_string(num_trials) +
         " geometric series convergence radius trials passed (" +
         std::to_string(pass_count) + "/" + std::to_string(num_trials) + ")");
 }
 
 
 int main() {
-    test_property13_power_series_addition_componentwise();
-    test_property14_power_series_multiplication_cauchy();
-    test_property15_fourier_series_symmetry();
-    test_property16_symbolic_summation_closed_form();
-    test_property35_convergence_radius_geometric();
+    test_power_series_addition_componentwise();
+    test_power_series_multiplication_cauchy();
+    test_fourier_series_symmetry();
+    test_symbolic_summation_closed_form();
+    test_convergence_radius_geometric();
 
     return TEST_REPORT();
 }

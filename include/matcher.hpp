@@ -3,6 +3,7 @@
  * @brief 模式匹配引擎 Matcher 与重写规则系统 RewriteEngine。
  */
 #pragma once
+#include "computation_context.hpp"
 #include "symbolic.hpp"
 #include <unordered_map>
 #include <unordered_set>
@@ -28,13 +29,11 @@ public:
      * @param target 目标表达式
      * @param wildcards 模式中的通配符名称集合
      * @param results 匹配成功时输出绑定结果
-     * @param ctx 可选的假设上下文，用于条件评估（默认 nullptr 表示无假设）
      * @return 匹配成功返回 true
      */
     static bool match(const SymbolicExpr& pattern, const SymbolicExpr& target,
                       const std::unordered_set<std::string>& wildcards,
-                      MatchMap& results,
-                      const AssumptionContext* ctx = nullptr);
+                      MatchMap& results);
 
     /**
      * @brief 将绑定结果代入模板表达式
@@ -70,7 +69,6 @@ struct LAMINA_API Rule {
 /** @brief 基于规则的表达式重写引擎 */
 class LAMINA_API RewriteEngine {
     std::vector<Rule> rules;
-    const AssumptionContext* assumption_ctx_ = nullptr;
 
 public:
     /**
@@ -80,35 +78,25 @@ public:
     void add_rule(const Rule& rule);
 
     /**
-     * @brief 设置假设上下文，用于规则条件评估
-     *
-     * When set, the context is passed to rule condition functions during
-     * apply and apply_step. When nullptr, behavior is identical to the
-     * original implementation (conditions receive only the MatchMap).
-     *
-     * @param ctx 假设上下文指针（nullptr 表示不使用假设）
-     */
-    void set_assumption_context(const AssumptionContext* ctx);
-
-    /**
-     * @brief 获取当前假设上下文
-     * @return 当前假设上下文指针（可能为 nullptr）
-     */
-    const AssumptionContext* get_assumption_context() const { return assumption_ctx_; }
-
-    /**
      * @brief 反复应用规则直到不动点或达到最大迭代次数
      * @param expr 输入表达式
      * @param max_iterations 最大迭代次数
      * @return 重写后的表达式
      */
-    SymbolicExpr apply(const SymbolicExpr& expr, int max_iterations = 100);
+    SymbolicExpr apply(const SymbolicExpr& expr, int max_iterations = 100) const;
+    Result<SymbolicExpr> apply_checked(
+        const SymbolicExpr& expr,
+        ComputationContext& context,
+        int max_iterations = 100) const;
     /**
      * @brief 对表达式应用一步重写
      * @param expr 输入表达式
      * @return 重写后的表达式，若无规则匹配则返回原表达式
      */
-    SymbolicExpr apply_step(const SymbolicExpr& expr);
+    SymbolicExpr apply_step(const SymbolicExpr& expr) const;
+    Result<SymbolicExpr> apply_step_checked(
+        const SymbolicExpr& expr,
+        ComputationContext& context) const;
     /**
      * @brief 获取当前所有规则
      * @return 规则列表的常引用

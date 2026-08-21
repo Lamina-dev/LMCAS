@@ -105,7 +105,7 @@ static std::shared_ptr<SymbolicExpr> make_x_squared_plus(const std::string& var,
 
 
 void test_x_squared_minus_4_real_domain() {
-    TEST_CASE("Property 25: x²-4=0 with Real domain → both x=2 and x=-2 returned");
+    TEST_CASE("x²-4=0 with Real domain → both x=2 and x=-2 returned");
 
     auto eq = make_x_squared_minus("x", 4);
 
@@ -124,7 +124,7 @@ void test_x_squared_minus_4_real_domain() {
 }
 
 void test_x_squared_minus_4_positive_int() {
-    TEST_CASE("Property 25: x²-4=0 with PositiveInt domain → only x=2");
+    TEST_CASE("x²-4=0 with PositiveInt domain → only x=2");
 
     auto eq = make_x_squared_minus("x", 4);
 
@@ -142,7 +142,7 @@ void test_x_squared_minus_4_positive_int() {
 }
 
 void test_x_squared_minus_4_nonnegative_sign() {
-    TEST_CASE("Property 25: x²-4=0 with NonNegative sign → only x=2");
+    TEST_CASE("x²-4=0 with NonNegative sign → only x=2");
 
     auto eq = make_x_squared_minus("x", 4);
 
@@ -162,7 +162,7 @@ void test_x_squared_minus_4_nonnegative_sign() {
 
 
 void test_x_squared_plus_1_real_domain() {
-    TEST_CASE("Property 25: x²+1=0 with Real domain → empty set (imaginary excluded)");
+    TEST_CASE("x²+1=0 with Real domain → empty set (imaginary excluded)");
 
     auto eq = make_x_squared_plus("x", 1);
 
@@ -177,7 +177,7 @@ void test_x_squared_plus_1_real_domain() {
 }
 
 void test_x_squared_plus_1_no_context() {
-    TEST_CASE("Property 25: x²+1=0 without context → all solutions returned");
+    TEST_CASE("x²+1=0 without context → all solutions returned");
 
     auto eq = make_x_squared_plus("x", 1);
 
@@ -191,7 +191,7 @@ void test_x_squared_plus_1_no_context() {
 
 
 void test_x_squared_minus_1_positive_sign() {
-    TEST_CASE("Property 25: x²-1=0 with Positive sign → only x=1");
+    TEST_CASE("x²-1=0 with Positive sign → only x=1");
 
     auto eq = make_x_squared_minus("x", 1);
 
@@ -209,7 +209,7 @@ void test_x_squared_minus_1_positive_sign() {
 }
 
 void test_x_squared_minus_1_negative_sign() {
-    TEST_CASE("Property 25: x²-1=0 with Negative sign → only x=-1");
+    TEST_CASE("x²-1=0 with Negative sign → only x=-1");
 
     auto eq = make_x_squared_minus("x", 1);
 
@@ -228,7 +228,7 @@ void test_x_squared_minus_1_negative_sign() {
 
 
 void test_no_context_all_solutions_returned() {
-    TEST_CASE("Property 25: No context (nullptr) → all solutions returned unfiltered");
+    TEST_CASE("No context (nullptr) → all solutions returned unfiltered");
 
     // x² - 4 = 0 → x=2, x=-2
     auto eq = make_x_squared_minus("x", 4);
@@ -244,7 +244,7 @@ void test_no_context_all_solutions_returned() {
 }
 
 void test_no_context_x_squared_minus_1() {
-    TEST_CASE("Property 25: x²-1=0 no context → both x=1 and x=-1 returned");
+    TEST_CASE("x²-1=0 no context → both x=1 and x=-1 returned");
 
     auto eq = make_x_squared_minus("x", 1);
 
@@ -259,7 +259,7 @@ void test_no_context_x_squared_minus_1() {
 
 
 void test_all_solutions_filtered_empty_result() {
-    TEST_CASE("Property 25: All solutions filtered → empty result set");
+    TEST_CASE("All solutions filtered → empty result set");
 
     // x² - 4 = 0 → x=2, x=-2
     // With Negative sign: x=2 excluded (positive), x=-2 excluded? No, -2 is negative.
@@ -277,7 +277,7 @@ void test_all_solutions_filtered_empty_result() {
 }
 
 void test_all_solutions_filtered_positive_int() {
-    TEST_CASE("Property 25: x²-4=0 with PositiveInt and x>2 constraint → may filter all");
+    TEST_CASE("x²-4=0 with PositiveInt and x>2 constraint → may filter all");
 
     // x² - 2 = 0 → x=sqrt(2), x=-sqrt(2)
     // With PositiveInt domain: sqrt(2) is not an integer → excluded
@@ -307,7 +307,7 @@ void test_all_solutions_filtered_positive_int() {
 
 
 void test_natural_domain_excludes_negative() {
-    TEST_CASE("Property 25: x²-4=0 with Natural domain → only x=2 (non-negative integer)");
+    TEST_CASE("x²-4=0 with Natural domain → only x=2 (non-negative integer)");
 
     auto eq = make_x_squared_minus("x", 4);
 
@@ -325,7 +325,7 @@ void test_natural_domain_excludes_negative() {
 }
 
 void test_integer_domain_both_returned() {
-    TEST_CASE("Property 25: x²-4=0 with Integer domain → both x=2 and x=-2 (both integers)");
+    TEST_CASE("x²-4=0 with Integer domain → both x=2 and x=-2 (both integers)");
 
     auto eq = make_x_squared_minus("x", 4);
 
@@ -343,7 +343,7 @@ void test_integer_domain_both_returned() {
 }
 
 void test_complex_domain_no_filtering() {
-    TEST_CASE("Property 25: Complex domain (default) → no filtering applied");
+    TEST_CASE("Complex domain (default) → no filtering applied");
 
     // x² + 1 = 0 with Complex domain → imaginary solutions should be kept
     auto eq = make_x_squared_plus("x", 1);
@@ -359,7 +359,7 @@ void test_complex_domain_no_filtering() {
 }
 
 void test_nonpositive_sign_filtering() {
-    TEST_CASE("Property 25: x²-4=0 with NonPositive sign → only x=-2");
+    TEST_CASE("x²-4=0 with NonPositive sign → only x=-2");
 
     auto eq = make_x_squared_minus("x", 4);
 

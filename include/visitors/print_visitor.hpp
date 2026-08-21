@@ -27,15 +27,20 @@ public:
     void visit(const MultiplyNode& node) override;
     void visit(const PowerNode& node) override;
     void visit(const FunctionNode& node) override;
+    void visit(const UninterpretedFunctionNode& node) override;
     void visit(const MatrixNode& node) override;
     void visit(const RelationalNode& node) override;
     void visit(const LogicalNode& node) override;
     void visit(const PiecewiseNode& node) override;
     void visit(const SummationNode& node) override;
-    void visit(const ProductNode_Op& node) override;
+    void visit(const ProductNode& node) override;
     void visit(const TransformNode& node) override;
     void visit(const QuantifierNode& node) override;
     void visit(const SetBuilderNode& node) override;
+    void visit(const FiniteSetNode& node) override;
+    void visit(const IntervalNode& node) override;
+    void visit(const MembershipNode& node) override;
+    void visit(const QuantityNode& node) override;
     void visit(const ComplexNode& node) override;
 
 private:

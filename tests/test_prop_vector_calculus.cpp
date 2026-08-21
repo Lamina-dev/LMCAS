@@ -131,8 +131,8 @@ std::optional<double> eval_at_point(const std::shared_ptr<SymbolicExpr>& expr,
 } // anonymous namespace
 
 
-static void test_property_6_directional_derivative() {
-    TEST_CASE("Property 6: Directional derivative equals gradient dot unit direction");
+static void test_directional_derivative() {
+    TEST_CASE("Directional derivative equals gradient dot unit direction");
 
     rc::check("D_u(f) == grad(f) . unit(u) for random polynomials", []() {
         auto f = gen_poly_3d(2);
@@ -178,8 +178,8 @@ static void test_property_6_directional_derivative() {
 }
 
 
-static void test_property_7_gradient_components() {
-    TEST_CASE("Property 7: Gradient components equal partial derivatives");
+static void test_gradient_components() {
+    TEST_CASE("Gradient components equal partial derivatives");
 
     rc::check("grad(f)[i] == df/dxi for random polynomials", []() {
         auto f = gen_poly_3d(3);
@@ -212,8 +212,8 @@ static void test_property_7_gradient_components() {
 }
 
 
-static void test_property_8_jacobian_entries() {
-    TEST_CASE("Property 8: Jacobian entry correctness");
+static void test_jacobian_entries() {
+    TEST_CASE("Jacobian entry correctness");
 
     rc::check("J[i][j] == d(fi)/d(xj) for random polynomial vector functions", []() {
         std::vector<std::string> vars = {"x", "y", "z"};
@@ -256,8 +256,8 @@ static void test_property_8_jacobian_entries() {
 }
 
 
-static void test_property_9_hessian_symmetry() {
-    TEST_CASE("Property 9: Hessian symmetry and correctness");
+static void test_hessian_symmetry() {
+    TEST_CASE("Hessian symmetry and correctness");
 
     rc::check("H[i][j] == H[j][i] and H[i][j] == d2f/(dxi dxj) for random polynomials", []() {
         auto f = gen_poly_3d(3);
@@ -309,8 +309,8 @@ static void test_property_9_hessian_symmetry() {
 }
 
 
-static void test_property_22_curl_grad_zero() {
-    TEST_CASE("Property 22: curl(grad(f)) = 0");
+static void test_curl_grad_zero() {
+    TEST_CASE("curl(grad(f)) = 0");
 
     rc::check("curl(grad(f)) == 0 for random polynomial scalar fields", []() {
         auto f = gen_poly_3d(3);
@@ -337,8 +337,8 @@ static void test_property_22_curl_grad_zero() {
 }
 
 
-static void test_property_23_div_curl_zero() {
-    TEST_CASE("Property 23: div(curl(F)) = 0");
+static void test_div_curl_zero() {
+    TEST_CASE("div(curl(F)) = 0");
 
     rc::check("div(curl(F)) == 0 for random polynomial vector fields", []() {
         auto F = gen_vector_field_3d(2);
@@ -363,8 +363,8 @@ static void test_property_23_div_curl_zero() {
 }
 
 
-static void test_property_24_laplacian_div_grad() {
-    TEST_CASE("Property 24: Laplacian equals divergence of gradient");
+static void test_laplacian_div_grad() {
+    TEST_CASE("Laplacian equals divergence of gradient");
 
     rc::check("laplacian(f) == div(grad(f)) for random polynomial scalar fields", []() {
         auto f = gen_poly_3d(3);
@@ -398,8 +398,8 @@ static void test_property_24_laplacian_div_grad() {
 }
 
 
-static void test_property_20_projection_perpendicular() {
-    TEST_CASE("Property 20: Vector projection perpendicularity");
+static void test_projection_perpendicular() {
+    TEST_CASE("Vector projection perpendicularity");
 
     rc::check("dot(a - proj(a, b), b) == 0 for random vectors", []() {
         auto a = gen_vector_field_3d(0);
@@ -424,8 +424,8 @@ static void test_property_20_projection_perpendicular() {
 }
 
 
-static void test_property_21_mixed_product_det() {
-    TEST_CASE("Property 21: Mixed product equals determinant");
+static void test_mixed_product_det() {
+    TEST_CASE("Mixed product equals determinant");
 
     rc::check("dot(a, cross(b, c)) == det([a, b, c]) for random vectors", []() {
         auto a = gen_direction_3d();
@@ -454,15 +454,15 @@ static void test_property_21_mixed_product_det() {
 
 
 int main() {
-    test_property_6_directional_derivative();
-    test_property_7_gradient_components();
-    test_property_8_jacobian_entries();
-    test_property_9_hessian_symmetry();
-    test_property_20_projection_perpendicular();
-    test_property_21_mixed_product_det();
-    test_property_22_curl_grad_zero();
-    test_property_23_div_curl_zero();
-    test_property_24_laplacian_div_grad();
+    test_directional_derivative();
+    test_gradient_components();
+    test_jacobian_entries();
+    test_hessian_symmetry();
+    test_projection_perpendicular();
+    test_mixed_product_det();
+    test_curl_grad_zero();
+    test_div_curl_zero();
+    test_laplacian_div_grad();
 
     return TEST_REPORT();
 }

@@ -31,7 +31,7 @@ static std::shared_ptr<const SymbolicNode> num_d(double v) {
 
 
 void test_exp_real_arg_positive() {
-    TEST_CASE("Property 18: exp(x) is Positive when x is Real");
+    TEST_CASE("exp(x) is Positive when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -45,7 +45,7 @@ void test_exp_real_arg_positive() {
 }
 
 void test_exp_real_arg_real_domain() {
-    TEST_CASE("Property 18: exp(x) is Real when x is Real");
+    TEST_CASE("exp(x) is Real when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -59,7 +59,7 @@ void test_exp_real_arg_real_domain() {
 }
 
 void test_exp_real_arg_nonnegative() {
-    TEST_CASE("Property 18: exp(x) is NonNegative when x is Real (implied by Positive)");
+    TEST_CASE("exp(x) is NonNegative when x is Real (implied by Positive)");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -73,7 +73,7 @@ void test_exp_real_arg_nonnegative() {
 }
 
 void test_exp_real_arg_not_negative() {
-    TEST_CASE("Property 18: exp(x) is not Negative when x is Real");
+    TEST_CASE("exp(x) is not Negative when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -87,7 +87,7 @@ void test_exp_real_arg_not_negative() {
 }
 
 void test_exp_real_arg_nonzero() {
-    TEST_CASE("Property 18: exp(x) is NonZero when x is Real");
+    TEST_CASE("exp(x) is NonZero when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -101,7 +101,7 @@ void test_exp_real_arg_nonzero() {
 }
 
 void test_exp_integer_arg() {
-    TEST_CASE("Property 18: exp(n) is Positive and Real when n is Integer (Integer implies Real)");
+    TEST_CASE("exp(n) is Positive and Real when n is Integer (Integer implies Real)");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -117,7 +117,7 @@ void test_exp_integer_arg() {
 }
 
 void test_exp_no_assumption() {
-    TEST_CASE("Property 18: exp(x) is Unknown when x has no assumptions");
+    TEST_CASE("exp(x) is Unknown when x has no assumptions");
 
     AssumptionContext ctx;
     // No assumptions about x
@@ -133,7 +133,7 @@ void test_exp_no_assumption() {
 }
 
 void test_exp_numeric_arg() {
-    TEST_CASE("Property 18: exp(2) is Positive and Real (numeric argument is Real)");
+    TEST_CASE("exp(2) is Positive and Real (numeric argument is Real)");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -149,7 +149,7 @@ void test_exp_numeric_arg() {
 
 
 void test_sin_real_arg_real_domain() {
-    TEST_CASE("Property 19: sin(x) is Real when x is Real");
+    TEST_CASE("sin(x) is Real when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -163,7 +163,7 @@ void test_sin_real_arg_real_domain() {
 }
 
 void test_sin_real_arg_sign_unknown() {
-    TEST_CASE("Property 19: sin(x) sign is Unknown when x is Real (can be +/-)");
+    TEST_CASE("sin(x) sign is Unknown when x is Real (can be +/-)");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -181,7 +181,7 @@ void test_sin_real_arg_sign_unknown() {
 }
 
 void test_sin_integer_arg() {
-    TEST_CASE("Property 19: sin(n) is Real when n is Integer (Integer implies Real)");
+    TEST_CASE("sin(n) is Real when n is Integer (Integer implies Real)");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -195,7 +195,7 @@ void test_sin_integer_arg() {
 }
 
 void test_sin_no_assumption() {
-    TEST_CASE("Property 19: sin(x) is Unknown when x has no assumptions");
+    TEST_CASE("sin(x) is Unknown when x has no assumptions");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -207,7 +207,7 @@ void test_sin_no_assumption() {
 }
 
 void test_cos_real_arg_real_domain() {
-    TEST_CASE("Property 19: cos(x) is Real when x is Real");
+    TEST_CASE("cos(x) is Real when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -221,7 +221,7 @@ void test_cos_real_arg_real_domain() {
 }
 
 void test_cos_real_arg_sign_unknown() {
-    TEST_CASE("Property 19: cos(x) sign is Unknown when x is Real (can be +/-)");
+    TEST_CASE("cos(x) sign is Unknown when x is Real (can be +/-)");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -239,7 +239,7 @@ void test_cos_real_arg_sign_unknown() {
 }
 
 void test_cos_integer_arg() {
-    TEST_CASE("Property 19: cos(n) is Real when n is Integer");
+    TEST_CASE("cos(n) is Real when n is Integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -253,7 +253,7 @@ void test_cos_integer_arg() {
 }
 
 void test_cos_no_assumption() {
-    TEST_CASE("Property 19: cos(x) is Unknown when x has no assumptions");
+    TEST_CASE("cos(x) is Unknown when x has no assumptions");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -265,7 +265,7 @@ void test_cos_no_assumption() {
 }
 
 void test_sin_numeric_arg() {
-    TEST_CASE("Property 19: sin(1) is Real (numeric argument is Real)");
+    TEST_CASE("sin(1) is Real (numeric argument is Real)");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -277,7 +277,7 @@ void test_sin_numeric_arg() {
 }
 
 void test_cos_numeric_arg() {
-    TEST_CASE("Property 19: cos(0) is Real (numeric argument is Real)");
+    TEST_CASE("cos(0) is Real (numeric argument is Real)");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -292,7 +292,7 @@ void test_cos_numeric_arg() {
 // --- abs() tests ---
 
 void test_abs_real_arg_nonnegative() {
-    TEST_CASE("Property 20a: abs(x) is NonNegative when x is Real");
+    TEST_CASE("abs(x) is NonNegative when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -306,7 +306,7 @@ void test_abs_real_arg_nonnegative() {
 }
 
 void test_abs_real_arg_real_domain() {
-    TEST_CASE("Property 20a: abs(x) is Real when x is Real");
+    TEST_CASE("abs(x) is Real when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -320,7 +320,7 @@ void test_abs_real_arg_real_domain() {
 }
 
 void test_abs_real_arg_not_negative() {
-    TEST_CASE("Property 20a: abs(x) is not Negative when x is Real");
+    TEST_CASE("abs(x) is not Negative when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -334,7 +334,7 @@ void test_abs_real_arg_not_negative() {
 }
 
 void test_abs_integer_arg() {
-    TEST_CASE("Property 20a: abs(n) is NonNegative and Real when n is Integer");
+    TEST_CASE("abs(n) is NonNegative and Real when n is Integer");
 
     AssumptionContext ctx;
     ctx.assume_domain("n", Domain::Integer);
@@ -350,7 +350,7 @@ void test_abs_integer_arg() {
 }
 
 void test_abs_no_assumption() {
-    TEST_CASE("Property 20a: abs(x) is Unknown when x has no assumptions");
+    TEST_CASE("abs(x) is Unknown when x has no assumptions");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -364,7 +364,7 @@ void test_abs_no_assumption() {
 }
 
 void test_abs_numeric_arg() {
-    TEST_CASE("Property 20a: abs(-3) is NonNegative and Real");
+    TEST_CASE("abs(-3) is NonNegative and Real");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -380,7 +380,7 @@ void test_abs_numeric_arg() {
 // --- ln() tests ---
 
 void test_ln_positive_arg_real() {
-    TEST_CASE("Property 20b: ln(x) is Real when x is Positive");
+    TEST_CASE("ln(x) is Real when x is Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -394,7 +394,7 @@ void test_ln_positive_arg_real() {
 }
 
 void test_ln_positive_arg_sign_unknown() {
-    TEST_CASE("Property 20b: ln(x) sign is Unknown when x is Positive (ln can be +/-)");
+    TEST_CASE("ln(x) sign is Unknown when x is Positive (ln can be +/-)");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -411,7 +411,7 @@ void test_ln_positive_arg_sign_unknown() {
 }
 
 void test_ln_nonnegative_arg_not_sufficient() {
-    TEST_CASE("Property 20b: ln(x) is Unknown when x is only NonNegative (not Positive)");
+    TEST_CASE("ln(x) is Unknown when x is only NonNegative (not Positive)");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
@@ -426,7 +426,7 @@ void test_ln_nonnegative_arg_not_sufficient() {
 }
 
 void test_ln_no_assumption() {
-    TEST_CASE("Property 20b: ln(x) is Unknown when x has no assumptions");
+    TEST_CASE("ln(x) is Unknown when x has no assumptions");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -438,7 +438,7 @@ void test_ln_no_assumption() {
 }
 
 void test_ln_numeric_positive_arg() {
-    TEST_CASE("Property 20b: ln(2) is Real (numeric positive argument)");
+    TEST_CASE("ln(2) is Real (numeric positive argument)");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -452,7 +452,7 @@ void test_ln_numeric_positive_arg() {
 // --- sqrt() tests ---
 
 void test_sqrt_nonneg_arg_nonnegative() {
-    TEST_CASE("Property 20c: sqrt(x) is NonNegative when x is NonNegative");
+    TEST_CASE("sqrt(x) is NonNegative when x is NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
@@ -466,7 +466,7 @@ void test_sqrt_nonneg_arg_nonnegative() {
 }
 
 void test_sqrt_nonneg_arg_real() {
-    TEST_CASE("Property 20c: sqrt(x) is Real when x is NonNegative");
+    TEST_CASE("sqrt(x) is Real when x is NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
@@ -480,7 +480,7 @@ void test_sqrt_nonneg_arg_real() {
 }
 
 void test_sqrt_nonneg_arg_not_negative() {
-    TEST_CASE("Property 20c: sqrt(x) is not Negative when x is NonNegative");
+    TEST_CASE("sqrt(x) is not Negative when x is NonNegative");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
@@ -494,7 +494,7 @@ void test_sqrt_nonneg_arg_not_negative() {
 }
 
 void test_sqrt_positive_arg() {
-    TEST_CASE("Property 20c: sqrt(x) is NonNegative and Real when x is Positive");
+    TEST_CASE("sqrt(x) is NonNegative and Real when x is Positive");
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -511,7 +511,7 @@ void test_sqrt_positive_arg() {
 }
 
 void test_sqrt_no_assumption() {
-    TEST_CASE("Property 20c: sqrt(x) is Unknown when x has no assumptions");
+    TEST_CASE("sqrt(x) is Unknown when x has no assumptions");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -525,7 +525,7 @@ void test_sqrt_no_assumption() {
 }
 
 void test_sqrt_numeric_arg() {
-    TEST_CASE("Property 20c: sqrt(4) is NonNegative and Real");
+    TEST_CASE("sqrt(4) is NonNegative and Real");
 
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
@@ -540,7 +540,7 @@ void test_sqrt_numeric_arg() {
 
 
 void test_tan_real_arg_real_domain() {
-    TEST_CASE("Req 8.9: tan(x) is Real when x is Real");
+    TEST_CASE("tan(x) is Real when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -554,7 +554,7 @@ void test_tan_real_arg_real_domain() {
 }
 
 void test_tan_real_arg_sign_unknown() {
-    TEST_CASE("Req 8.9: tan(x) sign is Unknown when x is Real");
+    TEST_CASE("tan(x) sign is Unknown when x is Real");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -571,7 +571,7 @@ void test_tan_real_arg_sign_unknown() {
 
 
 void test_unrecognized_function() {
-    TEST_CASE("Req 8.7: Unrecognized function returns Unknown for all properties");
+    TEST_CASE("Unrecognized function returns Unknown for all properties");
 
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
@@ -595,7 +595,7 @@ void test_unrecognized_function() {
 
 
 void test_insufficient_arg_properties() {
-    TEST_CASE("Req 8.8: Insufficient argument properties → Unknown");
+    TEST_CASE("Insufficient argument properties → Unknown");
 
     AssumptionContext ctx;
     // x has no assumptions — insufficient for any function rule
