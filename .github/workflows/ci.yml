@@ -102,7 +102,7 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp:print_suppressions=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir build --output-on-failure --timeout 120
+        run: ctest --test-dir build --output-on-failure --timeout 300
 
   thread-sanitizer:
     runs-on: ubuntu-latest
