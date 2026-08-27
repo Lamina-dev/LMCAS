@@ -1,3 +1,5 @@
+cmake_policy(SET CMP0057 NEW)
+
 if(NOT DEFINED LMCAS_SOURCE_DIR)
     message(FATAL_ERROR "LMCAS_SOURCE_DIR is required")
 endif()
@@ -19,7 +21,7 @@ foreach(entry IN ITEMS
     "src/lsr_expr_parsing.cpp|1000"
     "src/lsr_expr_sets.cpp|1000"
     "src/lsr_expr_solving.cpp|1000"
-    "src/lsr_expr_facade.cpp|950"
+    "src/lsr_expr_facade.cpp|1150"
     "src/multivariate_factor_patterns.cpp|400"
     "src/multivariate_factor.cpp|1500"
     "src/multivariate_hensel.cpp|650"

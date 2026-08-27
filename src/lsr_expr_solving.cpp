@@ -301,7 +301,7 @@ ExprSetResult solve_expr_set(const ExprPtr& equation,
                              const std::string& variable,
                              ComputationContext& context,
                              const SolveOptions& options) {
-    auto normalized = normalize_equation_to_zero(equation, true, context);
+    auto normalized = normalize_equation_to_zero(equation, false, context);
     if (!normalized) {
         return ExprSetResult::failure(normalized.error());
     }

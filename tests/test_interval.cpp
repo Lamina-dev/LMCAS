@@ -510,7 +510,7 @@ int main() {
         EXPECT_TRUE(expr != nullptr, "to_expr() for (2, 5) should not be nullptr");
         std::string str = expr->to_string();
 
-        EXPECT_TRUE(str.find("And") != std::string::npos, "to_expr (2,5) should contain 'And'");
+        EXPECT_TRUE(str.find("and") != std::string::npos, "to_expr (2,5) should contain 'and'");
         EXPECT_TRUE(str.find(">") != std::string::npos, "to_expr (2,5) should contain '>'");
         EXPECT_TRUE(str.find("<") != std::string::npos, "to_expr (2,5) should contain '<'");
     }
@@ -527,7 +527,7 @@ int main() {
         std::string str = expr->to_string();
         EXPECT_TRUE(str.find(">") != std::string::npos, "to_expr (3,+inf) should contain '>'");
 
-        EXPECT_TRUE(str.find("And") == std::string::npos, "to_expr (3,+inf) should NOT contain 'And'");
+        EXPECT_TRUE(str.find("and") == std::string::npos, "to_expr (3,+inf) should NOT contain 'and'");
     }
 
     TEST_CASE("to_expr: single interval (-inf, 4] -> x <= 4");
@@ -541,7 +541,7 @@ int main() {
         EXPECT_TRUE(expr != nullptr, "to_expr() for (-inf, 4] should not be nullptr");
         std::string str = expr->to_string();
         EXPECT_TRUE(str.find("<=") != std::string::npos, "to_expr (-inf,4] should contain '<='");
-        EXPECT_TRUE(str.find("And") == std::string::npos, "to_expr (-inf,4] should NOT contain 'And'");
+        EXPECT_TRUE(str.find("and") == std::string::npos, "to_expr (-inf,4] should NOT contain 'and'");
     }
 
     TEST_CASE("to_expr: single interval [1, 3] -> x >= 1 And x <= 3");
@@ -556,7 +556,7 @@ int main() {
         std::string str = expr->to_string();
         EXPECT_TRUE(str.find(">=") != std::string::npos, "to_expr [1,3] should contain '>='");
         EXPECT_TRUE(str.find("<=") != std::string::npos, "to_expr [1,3] should contain '<='");
-        EXPECT_TRUE(str.find("And") != std::string::npos, "to_expr [1,3] should contain 'And'");
+        EXPECT_TRUE(str.find("and") != std::string::npos, "to_expr [1,3] should contain 'and'");
     }
 
     TEST_CASE("to_expr: two intervals (-inf, -2) ∪ (3, +inf) -> Or");
@@ -569,7 +569,7 @@ int main() {
         auto expr = u.to_expr("x");
         EXPECT_TRUE(expr != nullptr, "to_expr() for (-inf,-2)∪(3,+inf) should not be nullptr");
         std::string str = expr->to_string();
-        EXPECT_TRUE(str.find("Or") != std::string::npos, "to_expr multi-interval should contain 'Or'");
+        EXPECT_TRUE(str.find("or") != std::string::npos, "to_expr multi-interval should contain 'or'");
         EXPECT_TRUE(str.find("<") != std::string::npos, "to_expr should contain '<'");
         EXPECT_TRUE(str.find(">") != std::string::npos, "to_expr should contain '>'");
     }
@@ -585,7 +585,7 @@ int main() {
         auto expr = u.to_expr("x");
         EXPECT_TRUE(expr != nullptr, "to_expr() for 3 intervals should not be nullptr");
         std::string str = expr->to_string();
-        EXPECT_TRUE(str.find("Or") != std::string::npos, "to_expr 3 intervals should contain 'Or'");
+        EXPECT_TRUE(str.find("or") != std::string::npos, "to_expr 3 intervals should contain 'or'");
     }
 
     return TEST_REPORT();
