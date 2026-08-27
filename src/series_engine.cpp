@@ -1,6 +1,5 @@
 /**
  * @file series_engine.cpp
- * @brief Series engine: convergence, power series, Fourier, Laurent, summation, lim sup/inf.
  */
 
 #include "series_engine.hpp"
@@ -10,7 +9,8 @@
 #include <cmath>
 #include <memory>
 #include <string>
-#include <vector>
+#include <cstdio>
+#include <typeinfo>
 #include <algorithm>
 #include <variant>
 #include <limits>
@@ -294,9 +294,13 @@ std::optional<int> supported_laurent_integer_power(
         return variable->name() == var ? std::optional<int>(1) : std::nullopt;
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto exponent = integer_value_from_node(power->exponent());
+        if (!exponent) return std::nullopt;
         auto base = std::dynamic_pointer_cast<const VariableNode>(power->base());
-        if (!base || base->name() != var) return std::nullopt;
-        return integer_value_from_node(power->exponent());
+        if (base && base->name() == var) return *exponent;
+        auto nested = supported_laurent_integer_power(power->base(), var);
+        if (!nested) return std::nullopt;
+        return *nested * *exponent;
     }
     if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int total_power = 0;
@@ -450,6 +454,18 @@ ConvergenceInfo convergence_test(
             }
             if (p < -1.0) return {ConvergenceResult::Convergent, "p-series"};
             if (p >= -1.0 && p < 0.0) return {ConvergenceResult::Divergent, "p-series"};
+        }
+    }
+    // Fast path: a Laurent monomial c*n^e resolves by the p-series rule
+    // without the ratio limit, whose Abs simplification can fail to
+    // terminate for reciprocal powers such as 1/(n^2).
+    if (const auto laurent_power = supported_laurent_integer_power(
+            lamina::detail::node(general_term), index_var)) {
+        if (*laurent_power < -1) {
+            return {ConvergenceResult::Convergent, "p-series"};
+        }
+        if (*laurent_power >= -1 && *laurent_power < 0) {
+            return {ConvergenceResult::Divergent, "p-series"};
         }
     }
     auto n = SymbolicExpr::variable(index_var);

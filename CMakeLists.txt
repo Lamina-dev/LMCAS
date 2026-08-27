@@ -169,7 +169,12 @@ set(LMCAS_LINEAR_ALGEBRA_SOURCES
 )
 
 set(LMCAS_FACADE_SOURCES
-    src/lsr_expr.cpp
+    src/lsr_expr_complex_evaluation.cpp
+    src/lsr_expr_equivalence.cpp
+    src/lsr_expr_errors.cpp
+    src/lsr_expr_parsing.cpp
+    src/lsr_expr_sets.cpp
+    src/lsr_expr_solving.cpp
     src/lsr_expr_facade.cpp
     src/lsr_value_facade.cpp
 )

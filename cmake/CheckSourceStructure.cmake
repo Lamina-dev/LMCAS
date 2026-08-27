@@ -13,7 +13,12 @@ foreach(entry IN ITEMS
     "src/integration_table.cpp|900"
     "src/integration_rational.cpp|900"
     "src/inference_engine_arithmetic.cpp|1200"
-    "src/lsr_expr.cpp|1900"
+    "src/lsr_expr_complex_evaluation.cpp|1000"
+    "src/lsr_expr_equivalence.cpp|1000"
+    "src/lsr_expr_errors.cpp|1000"
+    "src/lsr_expr_parsing.cpp|1000"
+    "src/lsr_expr_sets.cpp|1000"
+    "src/lsr_expr_solving.cpp|1000"
     "src/lsr_expr_facade.cpp|950"
     "src/multivariate_factor_patterns.cpp|400"
     "src/multivariate_factor.cpp|1500"
@@ -48,9 +53,6 @@ foreach(path IN LISTS implementation_files public_headers)
         set(maximum_lines 1650)
     else()
         set(maximum_lines 800)
-    endif()
-    if(path STREQUAL "${LMCAS_SOURCE_DIR}/src/lsr_expr.cpp")
-        set(maximum_lines 1900)
     endif()
     file(READ "${path}" contents)
     string(REGEX REPLACE "[^\n]" "" line_breaks "${contents}")

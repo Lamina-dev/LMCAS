@@ -21,6 +21,14 @@ static std::shared_ptr<SymbolicExpr> symbolic_poly_to_expr(
         if (coeff == SymbolicPolyCoeff(0)) continue;
 
         auto coeff_expr = coeff.val;
+        if (coeff_expr) {
+            if (auto simplified = coeff_expr->simplify()) {
+                coeff_expr = simplified;
+            }
+            if (lamina::detail::node(coeff_expr) && coeff_expr->is_zero()) {
+                continue;
+            }
+        }
         if (i == 0) {
             terms.push_back(coeff_expr);
         } else {
@@ -58,6 +66,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> make_rootof_solutions(
     if (n <= 0) return {};
 
     auto poly_expr = symbolic_poly_to_expr(poly);
+    if (auto canonical = poly_expr->simplify()) {
+        if (lamina::detail::node(canonical)) {
+            poly_expr = canonical;
+        }
+    }
 
     std::vector<std::shared_ptr<SymbolicExpr>> solutions;
     solutions.reserve(n);
