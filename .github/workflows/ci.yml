@@ -85,7 +85,7 @@ jobs:
       - name: Build consumer
         run: cmake --build build-consumer --parallel 2
       - name: Run consumer
-        run: ./build-consumer/lmcas_package_consumer
+        run: LD_LIBRARY_PATH="$PWD/dist/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ./build-consumer/lmcas_package_consumer
 
   sanitizers:
     runs-on: ubuntu-latest

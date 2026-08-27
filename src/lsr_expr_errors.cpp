@@ -8,22 +8,7 @@ namespace lamina::lsr {
 namespace {
 
 constexpr const char* kSymOperation = "lsr.sym";
-constexpr const char* kIntegerOperation = "lsr.integer";
-constexpr const char* kRationalOperation = "lsr.rational";
-constexpr const char* kApproxOperation = "lsr.approx_real";
-constexpr const char* kConstantOperation = "lsr.constant";
 constexpr const char* kComplexOperation = "lsr.complex";
-constexpr const char* kExprOperation = "lsr.expr_op";
-constexpr const char* kMathOperation = "lsr.math";
-constexpr const char* kRealOperation = "lsr.real";
-constexpr const char* kImagOperation = "lsr.imag";
-constexpr const char* kConjOperation = "lsr.conj";
-constexpr const char* kAbsOperation = "lsr.abs";
-constexpr const char* kSimplifyOperation = "lsr.simplify";
-constexpr const char* kExpandOperation = "lsr.expand";
-constexpr const char* kDifferentiateOperation = "lsr.differentiate";
-constexpr const char* kSubstituteOperation = "lsr.substitute";
-constexpr const char* kExprMatchOperation = "lsr.expr_match";
 
 } // namespace
 
