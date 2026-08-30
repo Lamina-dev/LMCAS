@@ -972,12 +972,13 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
                 return InferenceTriboolResult::success(Tribool::Unknown);
             }
 
+            case FunctionNode::FuncType::ArcTan:
+                // atan 在实数域严格递增且 atan(0)=0,六类符号性质均与参数一致.
+                return query_sign_of_checked(arg_expr, target);
+
             case FunctionNode::FuncType::ArcSin:
             case FunctionNode::FuncType::ArcCos:
-            case FunctionNode::FuncType::ArcTan: {
-                // Recognized, but no specific sign rules are implemented here.
                 return InferenceTriboolResult::success(Tribool::Unknown);
-            }
 
             default:
                 // Unrecognized function -> Unknown for all properties
@@ -1074,9 +1075,18 @@ InferenceTriboolResult InferenceEngine::infer_function_domain_checked(const void
                 return InferenceTriboolResult::success(Tribool::Unknown);
             }
 
+            case FunctionNode::FuncType::ArcTan:
+                if (target == Domain::Real) {
+                    Tribool arg_real = detail::propagate_result(
+                        query_real_checked(arg_expr));
+                    if (arg_real == Tribool::True) {
+                        return InferenceTriboolResult::success(Tribool::True);
+                    }
+                }
+                return InferenceTriboolResult::success(Tribool::Unknown);
+
             case FunctionNode::FuncType::ArcSin:
             case FunctionNode::FuncType::ArcCos:
-            case FunctionNode::FuncType::ArcTan:
                 return InferenceTriboolResult::success(Tribool::Unknown);
 
             default:

@@ -16,6 +16,16 @@
 
 using namespace lamina;
 
+static std::vector<std::shared_ptr<SymbolicExpr>> checked_mixed_candidates(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts)
+{
+    auto result = solve_mixed_transcendental_checked(expr, var, opts);
+    if (!result) return {};
+    return std::move(result.value().value);
+}
+
 void test_classification_sin_x_plus_x() {
     TEST_CASE("contains_transcendental_of_var: sin(x) + x → true");
 
@@ -2197,7 +2207,7 @@ void test_factored_sin_x_minus_half_times_x_minus_3() {
     opts.search_lo = 0.0;
     opts.search_hi = 4.0;
 
-    auto results = solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     std::cout << "  [INFO] (sin(x)-0.5)*(x-3) on [0,4]: " << results.size() << " root(s) found" << std::endl;
     for (size_t i = 0; i < results.size(); ++i) {
@@ -2260,7 +2270,7 @@ void test_factored_sin_x_times_cos_x() {
     opts.search_lo = -10.0;
     opts.search_hi = 10.0;
 
-    auto results = solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     std::cout << "  [INFO] sin(x)*cos(x) on [-10,10]: " << results.size() << " root(s) found" << std::endl;
     for (size_t i = 0; i < results.size(); ++i) {
@@ -2328,7 +2338,7 @@ void test_exception_safety_division_by_zero_expression() {
     bool threw = false;
     std::vector<std::shared_ptr<SymbolicExpr>> results;
     try {
-        results = lamina::solve_mixed_transcendental(expr, "x", opts);
+        results = checked_mixed_candidates(expr, "x", opts);
     } catch (...) {
         threw = true;
     }
@@ -2366,7 +2376,7 @@ void test_exception_safety_ln_negative_domain() {
     bool threw = false;
     std::vector<std::shared_ptr<SymbolicExpr>> results;
     try {
-        results = lamina::solve_mixed_transcendental(expr, "x", opts);
+        results = checked_mixed_candidates(expr, "x", opts);
     } catch (...) {
         threw = true;
     }
@@ -2403,7 +2413,7 @@ void test_exception_safety_tan_near_singularity() {
     bool threw = false;
     std::vector<std::shared_ptr<SymbolicExpr>> results;
     try {
-        results = lamina::solve_mixed_transcendental(expr, "x", opts);
+        results = checked_mixed_candidates(expr, "x", opts);
     } catch (...) {
         threw = true;
     }
@@ -2432,7 +2442,7 @@ void test_exception_safety_nullptr_expression() {
     bool threw = false;
     std::vector<std::shared_ptr<SymbolicExpr>> results;
     try {
-        results = lamina::solve_mixed_transcendental(expr, "x", opts);
+        results = checked_mixed_candidates(expr, "x", opts);
     } catch (...) {
         threw = true;
     }
@@ -2464,7 +2474,7 @@ void test_exception_safety_extreme_values() {
     bool threw = false;
     std::vector<std::shared_ptr<SymbolicExpr>> results;
     try {
-        results = lamina::solve_mixed_transcendental(expr, "x", opts);
+        results = checked_mixed_candidates(expr, "x", opts);
     } catch (...) {
         threw = true;
     }
@@ -2495,7 +2505,7 @@ void test_no_variable_dependence_returns_empty() {
     opts.allow_numeric = true;
     opts.tolerance = 1e-12;
 
-    auto results = lamina::solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     EXPECT_TRUE(results.empty(),
         "Expression sin(3)+5 has no dependence on x, should return empty vector");
@@ -2510,7 +2520,7 @@ void test_no_variable_dependence_constant_expression() {
     lamina::SolveOptions opts;
     opts.allow_numeric = true;
 
-    auto results = lamina::solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     EXPECT_TRUE(results.empty(),
         "Constant expression 42 has no dependence on x, should return empty vector");
@@ -2526,7 +2536,7 @@ void test_no_variable_dependence_other_variable() {
     lamina::SolveOptions opts;
     opts.allow_numeric = true;
 
-    auto results = lamina::solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     EXPECT_TRUE(results.empty(),
         "Expression sin(y)+y has no dependence on x, should return empty vector");
@@ -2554,7 +2564,7 @@ void test_e2e_sin_x_plus_x_root_at_zero() {
     opts.search_lo = -3.0;
     opts.search_hi = 3.0;
 
-    auto results = solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     std::cout << "  [INFO] sin(x)-x/2 on [-3,3]: " << results.size() << " root(s) found" << std::endl;
     for (size_t i = 0; i < results.size(); ++i) {
@@ -2600,7 +2610,7 @@ void test_e2e_exp_x_minus_x_minus_2() {
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    auto results = solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     std::cout << "  [INFO] exp(x)-x-2: " << results.size() << " root(s) found" << std::endl;
     for (size_t i = 0; i < results.size(); ++i) {
@@ -2655,7 +2665,7 @@ void test_e2e_x_cos_x_minus_1() {
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    auto results = solve_mixed_transcendental(expr, "x", opts);
+    auto results = checked_mixed_candidates(expr, "x", opts);
 
     std::cout << "  [INFO] x*cos(x)-1: " << results.size() << " root(s) found" << std::endl;
     for (size_t i = 0; i < results.size(); ++i) {
@@ -2689,6 +2699,60 @@ void test_e2e_x_cos_x_minus_1() {
                 " < " + std::to_string(*vj));
         }
     }
+}
+
+void test_checked_mixed_contract() {
+    TEST_CASE("solve_mixed_transcendental_checked: 参数、预算与未决候选");
+
+    auto x = SymbolicExpr::variable("x");
+    auto expression = SymbolicExpr::sin(x);
+    SolveOptions opts;
+    opts.allow_numeric = true;
+    opts.has_search_interval = true;
+    opts.search_lo = -1.0;
+    opts.search_hi = 1.0;
+    opts.tolerance = 1e-8;
+
+    auto candidates =
+        solve_mixed_transcendental_checked(expression, "x", opts);
+    EXPECT_TRUE(candidates.has_value(), "有界数值路径应返回受检候选");
+    if (candidates) {
+        EXPECT_TRUE(
+            candidates.value().completeness ==
+                Completeness::Inconclusive,
+            "符号变化隔离不得宣称排除偶重根");
+        for (const auto& root : candidates.value().value) {
+            auto value = test_numeric_eval(root);
+            EXPECT_TRUE(value.has_value() && std::isfinite(*value),
+                        "候选根必须有限");
+            if (value) {
+                EXPECT_TRUE(
+                    *value >= opts.search_lo &&
+                        *value <= opts.search_hi &&
+                        std::fabs(std::sin(*value)) <= opts.tolerance,
+                    "候选根必须位于区间内并满足残差界");
+            }
+        }
+    }
+
+    SolveOptions invalid = opts;
+    invalid.tolerance = 0.0;
+    auto invalid_result =
+        solve_mixed_transcendental_checked(expression, "x", invalid);
+    EXPECT_FALSE(invalid_result.has_value(), "零容差应被拒绝");
+    EXPECT_TRUE(
+        invalid_result.error().code == CasErrc::InvalidArgument,
+        "零容差应报告 InvalidArgument");
+
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext context(limits);
+    auto limited = solve_mixed_transcendental_checked(
+        expression, "x", opts, context);
+    EXPECT_FALSE(limited.has_value(), "耗尽预算应返回错误");
+    EXPECT_TRUE(
+        limited.error().code == CasErrc::ResourceLimit,
+        "预算错误应报告 ResourceLimit");
 }
 
 int main() {
@@ -2795,6 +2859,7 @@ int main() {
     test_e2e_sin_x_plus_x_root_at_zero();
     test_e2e_exp_x_minus_x_minus_2();
     test_e2e_x_cos_x_minus_1();
+    test_checked_mixed_contract();
 
     return TEST_REPORT();
 }

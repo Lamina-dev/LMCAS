@@ -395,6 +395,51 @@ void test_unbounded_variable() {
 }
 
 
+void test_arctan_bounds() {
+    TEST_CASE("atan 单调传播有限端点并给出开放全局值域");
+
+    AssumptionContext bounded_context;
+    EXPECT_TRUE(
+        bounded_context.assume_domain("x", Domain::Real).has_value(),
+        "有限区间实数域假设应成功");
+    declare_bounds(bounded_context, "x", -1.0, 1.0);
+    auto bounded_expression = wrap_expr(
+        lamina::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::ArcTan,
+            std::vector<std::shared_ptr<const SymbolicNode>>{
+                make_var("x")}));
+    InferenceEngine bounded_engine(bounded_context);
+    auto bounded = bounded_engine.propagate_bounds(bounded_expression);
+    EXPECT_TRUE(bounded.has_value(), "有限参数区间应传播到 atan");
+    if (bounded) {
+        EXPECT_NEAR(
+            get_lower(*bounded), -std::atan(1.0), 1e-10,
+            "atan 下端点应单调映射");
+        EXPECT_NEAR(
+            get_upper(*bounded), std::atan(1.0), 1e-10,
+            "atan 上端点应单调映射");
+    }
+
+    AssumptionContext real_context;
+    EXPECT_TRUE(
+        real_context.assume_domain("x", Domain::Real).has_value(),
+        "无界实数域假设应成功");
+    InferenceEngine real_engine(real_context);
+    auto global = real_engine.propagate_bounds(bounded_expression);
+    EXPECT_TRUE(global.has_value(), "实参数 atan 应具有全局值域");
+    if (global) {
+        EXPECT_TRUE(
+            global->lower.is_open && global->upper.is_open,
+            "atan 全局值域两端均为开端点");
+        EXPECT_NEAR(
+            get_lower(*global), -LMMC_CONST_PI / 2.0, 1e-10,
+            "atan 全局下界为 -pi/2");
+        EXPECT_NEAR(
+            get_upper(*global), LMMC_CONST_PI / 2.0, 1e-10,
+            "atan 全局上界为 pi/2");
+    }
+}
+
 int main() {
     // Addition
     test_addition_propagation();
@@ -421,6 +466,7 @@ int main() {
     // Trig functions
     test_sin_propagation();
     test_cos_propagation();
+    test_arctan_bounds();
 
     // Edge cases
     test_number_node_propagation();

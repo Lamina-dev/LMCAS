@@ -1,39 +1,45 @@
 option(LMCAS_FETCH_GTEST "Download GoogleTest when it is not installed" OFF)
 
-include(FetchContent)
-
-find_package(GTest CONFIG QUIET)
-if(NOT GTest_FOUND AND LMCAS_FETCH_GTEST)
-    FetchContent_Declare(
-        googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.15.2
-        GIT_SHALLOW TRUE
-        GIT_CONFIG http.version=HTTP/1.1
-    )
-    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(googletest)
-endif()
-
-if(GTest_FOUND OR TARGET GTest::gtest_main)
-    set(LMCAS_HAVE_GTEST ON)
+if(LMCAS_BUILD_GTEST_TESTS)
+    include(FetchContent)
+    find_package(GTest CONFIG QUIET)
+    if(NOT GTest_FOUND AND LMCAS_FETCH_GTEST)
+        FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.15.2
+            GIT_SHALLOW TRUE
+            GIT_CONFIG http.version=HTTP/1.1
+        )
+        if(NOT DEFINED INSTALL_GTEST)
+            set(INSTALL_GTEST OFF)
+        endif()
+        if(NOT DEFINED BUILD_GMOCK)
+            set(BUILD_GMOCK OFF)
+        endif()
+        FetchContent_MakeAvailable(googletest)
+    endif()
+    if(NOT GTest_FOUND AND NOT TARGET GTest::gtest_main)
+        message(FATAL_ERROR
+            "LMCAS_BUILD_GTEST_TESTS=ON requires GoogleTest; install it or enable LMCAS_FETCH_GTEST")
+    endif()
     include(GoogleTest)
-else()
-    set(LMCAS_HAVE_GTEST OFF)
-    message(STATUS "GoogleTest not found; skipping GTest-based tests (enable LMCAS_FETCH_GTEST to download it)")
 endif()
 
 function(lmcas_add_gtest TARGET_NAME SOURCE_FILE)
-    if(NOT LMCAS_HAVE_GTEST)
+    if(NOT LMCAS_BUILD_GTEST_TESTS)
         return()
     endif()
     add_executable(${TARGET_NAME} ${SOURCE_FILE})
     target_link_libraries(${TARGET_NAME} PRIVATE lmcas GTest::gtest_main)
+    lmcas_apply_instrumentation(${TARGET_NAME})
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
-    gtest_discover_tests(${TARGET_NAME} DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(${TARGET_NAME}
+        PROPERTIES LABELS "gtest"
+        DISCOVERY_TIMEOUT 30
+    )
 endfunction()
 
 function(lmcas_add_standalone_test TARGET_NAME SOURCE_FILE)
@@ -42,54 +48,22 @@ function(lmcas_add_standalone_test TARGET_NAME SOURCE_FILE)
     endif()
     add_executable(${TARGET_NAME} ${SOURCE_FILE})
     target_link_libraries(${TARGET_NAME} PRIVATE lmcas)
+    lmcas_apply_instrumentation(${TARGET_NAME})
     add_test(NAME ${TARGET_NAME} COMMAND ${TARGET_NAME})
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
 endfunction()
 
-function(lmcas_add_standalone_test_group TARGET_NAME)
+function(lmcas_add_standalone_test_group GROUP_NAME)
     if(NOT LMCAS_BUILD_STANDALONE_TESTS)
         return()
     endif()
-
-    set(TEST_SOURCES ${ARGN})
-    set(RUNNER_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}_runner.cpp")
-    set(RUNNER_CONTENT "#include \"test_common.hpp\"\n#include <iostream>\n")
-    set(RUNNER_CALLS "")
-
-    foreach(TEST_SOURCE IN LISTS TEST_SOURCES)
+    foreach(TEST_SOURCE IN LISTS ARGN)
         get_filename_component(TEST_STEM "${TEST_SOURCE}" NAME_WE)
-        string(MAKE_C_IDENTIFIER "${TARGET_NAME}_${TEST_STEM}_main" TEST_ENTRYPOINT)
-        set_property(
-            SOURCE "${TEST_SOURCE}"
-            APPEND PROPERTY COMPILE_DEFINITIONS "main=${TEST_ENTRYPOINT}"
-        )
-        string(APPEND RUNNER_CONTENT "int ${TEST_ENTRYPOINT}();\n")
-        string(APPEND RUNNER_CALLS
-            "    g_failures = 0;\n"
-            "    g_passes = 0;\n"
-            "    std::cout << \"\\n=== ${TEST_STEM} ===\\n\";\n"
-            "    if (${TEST_ENTRYPOINT}() != 0) ++failed_programs;\n"
-        )
+        lmcas_add_standalone_test("${TEST_STEM}" "${TEST_SOURCE}")
+        set_tests_properties("${TEST_STEM}" PROPERTIES LABELS "${GROUP_NAME}")
     endforeach()
-
-    string(APPEND RUNNER_CONTENT
-        "\nint main() {\n"
-        "    int failed_programs = 0;\n"
-        "${RUNNER_CALLS}"
-        "    return failed_programs == 0 ? 0 : 1;\n"
-        "}\n"
-    )
-    file(GENERATE OUTPUT "${RUNNER_SOURCE}" CONTENT "${RUNNER_CONTENT}")
-
-    add_executable(${TARGET_NAME} "${RUNNER_SOURCE}" ${TEST_SOURCES})
-    target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_link_libraries(${TARGET_NAME} PRIVATE lmcas)
-    add_test(NAME ${TARGET_NAME} COMMAND ${TARGET_NAME})
-    set_target_properties(${TARGET_NAME} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    )
 endfunction()
 
 function(lmcas_add_public_header_checks TARGET_NAME)

@@ -35,21 +35,33 @@ struct IsolatedInterval {
 };
 
 /**
- * @brief 混合超越方程求解主入口:符号预处理 + 数值根隔离 + 精化.
+ * @brief 受检混合超越方程求解结果.
  *
- * 对输入表达式先调用 factor_transcendental 尝试分解为多个因子:
- * - 可约为 <=4 次多项式的因子委托给多项式求解器;
- * - 可通过 Lambert W 或直接反演求解的因子委托给 solve_transcendental;
- * - 不可约因子进入数值路径(根隔离 + 精化).
- * 最终对所有因子的根集取并集,去重排序后返回.
- *
- * @param[in] expr 待求解表达式(视为 = 0)
- * @param[in] var  求解变量名
- * @param[in] opts 求解选项(容差,最大迭代次数,搜索区间等)
- * @return 数值根列表,以 NumberNode 表达式形式返回,按升序排列;
- *         无根时返回空向量
+ * `Complete` 表示给定有界区间内的全部求解路径均已穷尽;
+ * `Inconclusive` 可携带已经通过区间与残差验证的候选根.
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
+using MixedTranscendentalResult =
+    Result<MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>>;
+
+/**
+ * @brief 在调用方计算上下文中执行混合超越方程求解.
+ *
+ * @param[in] expr    待求解表达式(视为 = 0)
+ * @param[in] var     求解变量名
+ * @param[in] opts    求解选项
+ * @param[in] context 计算预算与取消状态
+ * @return 受检的完整或未决结果
+ */
+LAMINA_API MixedTranscendentalResult solve_mixed_transcendental_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts,
+    ComputationContext& context);
+
+/**
+ * @brief 使用默认计算上下文执行受检混合超越方程求解.
+ */
+LAMINA_API MixedTranscendentalResult solve_mixed_transcendental_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts);

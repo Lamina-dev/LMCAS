@@ -880,20 +880,179 @@ TransformEngineResult inverse_fourier_transform_checked(
 
 
 
+struct TeGaussian {
+    std::shared_ptr<SymbolicExpr> coefficient;
+    double rate = 0.0;
+};
+
+static bool te_numeric_expr(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    double& value)
+{
+    if (!expression || !lamina::detail::node(expression)) return false;
+    auto number = std::dynamic_pointer_cast<const NumberNode>(
+        lamina::detail::node(expression));
+    if (!number) return false;
+    value = te_numval(lamina::detail::node(expression));
+    return std::isfinite(value);
+}
+
+static bool te_var_square(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable)
+{
+    auto power = expression
+        ? std::dynamic_pointer_cast<const PowerNode>(
+              lamina::detail::node(expression))
+        : nullptr;
+    if (!power) return false;
+    auto base = std::dynamic_pointer_cast<const VariableNode>(power->base());
+    auto exponent =
+        std::dynamic_pointer_cast<const NumberNode>(power->exponent());
+    return base && exponent && base->name() == variable &&
+           std::fabs(te_numval(power->exponent()) - 2.0) < 1e-12;
+}
+
+static bool te_match_positive_gaussian(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable,
+    TeGaussian& gaussian)
+{
+    auto parts = te_split_coeff(expression, variable);
+    double coefficient = 0.0;
+    if (!te_numeric_expr(parts.first, coefficient)) return false;
+
+    auto function = std::dynamic_pointer_cast<const FunctionNode>(
+        lamina::detail::node(parts.second));
+    if (!function || function->type() != FunctionNode::FuncType::Exp ||
+        function->arguments().size() != 1) {
+        return false;
+    }
+    auto argument =
+        lamina::detail::make_expression_ptr(function->arguments()[0]);
+    auto exponent_parts = te_split_coeff(argument, variable);
+    double exponent_coefficient = 0.0;
+    if (!te_numeric_expr(exponent_parts.first, exponent_coefficient) ||
+        !te_var_square(exponent_parts.second, variable) ||
+        !(exponent_coefficient < 0.0)) {
+        return false;
+    }
+    gaussian = {parts.first, -exponent_coefficient};
+    return std::isfinite(gaussian.rate) && gaussian.rate > 0.0;
+}
+
+static TransformEngineResult te_convolve_core(
+    const std::shared_ptr<SymbolicExpr>& f,
+    const std::shared_ptr<SymbolicExpr>& g,
+    const std::string& variable,
+    ComputationContext& context)
+{
+    constexpr const char* operation = "convolve";
+    auto step = context.consume_steps(1, operation);
+    if (!step) return TransformEngineResult::failure(step.error());
+
+    if (te_is_zero(f) || te_is_zero(g)) {
+        return te_wrap_transform_result(SymbolicExpr::number(0), operation);
+    }
+
+    auto convolve_sum = [&](const std::shared_ptr<SymbolicExpr>& sum,
+                            const std::shared_ptr<SymbolicExpr>& other,
+                            bool sum_is_left) -> TransformEngineResult {
+        auto addition = std::dynamic_pointer_cast<const AddNode>(
+            lamina::detail::node(sum));
+        if (!addition) {
+            return TransformEngineResult::failure(
+                CasErrc::Inconclusive,
+                "当前双边卷积规则不支持该表达式对", operation);
+        }
+        std::shared_ptr<SymbolicExpr> accumulated;
+        for (const auto& operand : addition->operands()) {
+            auto term = lamina::detail::make_expression_ptr(operand);
+            auto transformed = sum_is_left
+                ? te_convolve_core(term, other, variable, context)
+                : te_convolve_core(other, term, variable, context);
+            if (!transformed) return transformed;
+            auto expression = transformed.value().value.expression;
+            accumulated = accumulated
+                ? SymbolicExpr::add(accumulated, expression)
+                : expression;
+        }
+        return te_wrap_transform_result(
+            accumulated ? accumulated->simplify() : SymbolicExpr::number(0),
+            operation);
+    };
+
+    if (std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(f))) {
+        return convolve_sum(f, g, true);
+    }
+    if (std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(g))) {
+        return convolve_sum(g, f, false);
+    }
+
+    auto left_parts = te_split_coeff(f, variable);
+    if (te_depends_on(left_parts.second, variable) &&
+        left_parts.second->to_string() != f->to_string()) {
+        auto inner =
+            te_convolve_core(left_parts.second, g, variable, context);
+        if (!inner) return inner;
+        auto scaled = SymbolicExpr::multiply(
+            left_parts.first, inner.value().value.expression)->simplify();
+        return te_wrap_transform_result(scaled, operation);
+    }
+    auto right_parts = te_split_coeff(g, variable);
+    if (te_depends_on(right_parts.second, variable) &&
+        right_parts.second->to_string() != g->to_string()) {
+        auto inner =
+            te_convolve_core(f, right_parts.second, variable, context);
+        if (!inner) return inner;
+        auto scaled = SymbolicExpr::multiply(
+            right_parts.first, inner.value().value.expression)->simplify();
+        return te_wrap_transform_result(scaled, operation);
+    }
+
+    TeGaussian left;
+    TeGaussian right;
+    if (!te_match_positive_gaussian(f, variable, left) ||
+        !te_match_positive_gaussian(g, variable, right)) {
+        return TransformEngineResult::failure(
+            CasErrc::Inconclusive,
+            "当前双边卷积规则不支持该表达式对", operation);
+    }
+
+    const double rate_sum = left.rate + right.rate;
+    const double output_rate = left.rate * right.rate / rate_sum;
+    auto scale = SymbolicExpr::multiply(
+        SymbolicExpr::multiply(left.coefficient, right.coefficient),
+        SymbolicExpr::sqrt(SymbolicExpr::divide(
+            SymbolicExpr::variable("pi"),
+            SymbolicExpr::number(rate_sum))));
+    auto square = SymbolicExpr::power(
+        SymbolicExpr::variable(variable), SymbolicExpr::number(2));
+    auto exponent = SymbolicExpr::multiply(
+        SymbolicExpr::number(-output_rate), square);
+    auto gaussian = SymbolicExpr::exp(exponent);
+    return te_wrap_transform_result(
+        SymbolicExpr::multiply(scale, gaussian)->simplify(), operation);
+}
+
 TransformEngineResult convolve_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::shared_ptr<SymbolicExpr>& g,
     const std::string& var,
     ComputationContext& context) {
     const std::string operation = "convolve";
-    auto valid = te_validate_convolution_inputs(f, g, var, context, operation);
+    auto valid =
+        te_validate_convolution_inputs(f, g, var, context, operation);
     if (!valid) return TransformEngineResult::failure(valid.error());
-    auto step = context.consume_steps(10, operation);
-    if (!step) return TransformEngineResult::failure(step.error());
-    return TransformEngineResult::failure(
-        CasErrc::Inconclusive,
-        "verified bilateral convolution is not implemented",
-        operation);
+    try {
+        return te_convolve_core(f, g, var, context);
+    } catch (const std::bad_alloc&) {
+        return TransformEngineResult::failure(
+            CasErrc::ResourceLimit, "双边卷积分配失败", operation);
+    } catch (const std::exception& error) {
+        return TransformEngineResult::failure(
+            CasErrc::InternalInvariant, error.what(), operation);
+    }
 }
 
 TransformEngineResult convolve_checked(

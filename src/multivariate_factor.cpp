@@ -8,9 +8,12 @@
 #include <climits>
 #include <cstdint>
 #include <cmath>
+#include <functional>
+#include <iterator>
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <new>
 #include "internal/multivariate_factor_support.hpp"
 namespace lamina {
 static std::map<int, MultiPoly>
@@ -125,896 +128,639 @@ static MultiPoly lagrange_interpolate(const std::vector<Rational>& points,
 
 /**
  * @internal
- * @brief 生成搜索序列中第 k 个整数值
- *
- * 按 0, 1, -1, 2, -2, 3, -3, ... 的顺序生成.
- *
- * @param[in] k 序号(从 0 开始)
- * @return 对应的整数值
+ * @brief 通过 Berlekamp、Hensel 提升和有界组合枚举执行受检一元分解。
  */
-static int search_value(int k)
+UnivariateFactorResult factor_univariate_bridge_checked(
+    const Polynomial<Rational>& poly,
+    ComputationContext& context)
 {
-    if (k == 0) return 0;
-    int half = (k + 1) / 2;
-    return (k % 2 == 1) ? half : -half;
-}
-
-/**
- * @internal
- * @brief 判断一元多项式是否无平方
- *
- * 通过计算 gcd(f, f') 判断:若 GCD 为常数(次数 <= 0),则 f 无平方.
- *
- * @param[in] poly 一元多项式
- * @return 若无平方返回 true
- */
-static bool is_square_free_univariate(const Polynomial<Rational>& poly)
-{
-    if (poly.degree() <= 0) return true;
-    Polynomial<Rational> deriv = poly.differentiate();
-    if (deriv.is_zero()) return true;
-    Polynomial<Rational> g = Polynomial<Rational>::gcd(poly, deriv);
-    return g.degree() <= 0;
-}
-
-/**
- * @internal
- * @brief 一元因式分解桥接:调用现有 Berlekamp/Hensel/Zassenhaus 基础设施
- *
- * 将有理系数一元多项式分解为不可约因子列表.流程:
- * 1. 无平方因子预处理
- * 2. 尝试多个素数执行 Berlekamp 模分解
- * 3. 转换为整系数多项式并执行 Hensel 提升
- * 4. 通过 Zassenhaus 因子组合恢复有理系数真因子
- *
- * @param[in] poly 有理系数一元多项式(应为无平方的)
- * @return 不可约因子列表;若分解失败则返回原多项式本身
- *
- * @see berlekamp_factor, hensel_lift, zassenhaus_combine
- */
-std::vector<Polynomial<Rational>> factor_univariate_bridge(
-    const Polynomial<Rational>& poly)
-{
-    /// 常数或线性多项式:不可约
-    if (poly.degree() <= 1) {
-        return {poly};
+    constexpr const char* operation = "factor_multivariate";
+    auto step = context.consume_steps(1, operation);
+    if (!step) return UnivariateFactorResult::failure(step.error());
+    if (poly.is_zero() || poly.degree() <= 0) {
+        return UnivariateFactorResult::success(
+            MathResult<std::vector<Polynomial<Rational>>>{
+                poly.is_zero() ? std::vector<Polynomial<Rational>>{}
+                               : std::vector<Polynomial<Rational>>{poly},
+                Completeness::Complete, {}});
+    }
+    if (poly.degree() == 1) {
+        return UnivariateFactorResult::success(
+            MathResult<std::vector<Polynomial<Rational>>>{
+                {poly.make_monic()}, Completeness::Complete, {}});
     }
 
-    /// 无平方因子预处理
-    TfSquareFreeResult sqf = tf_square_free(poly);
-    Polynomial<Rational> work_poly = sqf.square_free;
+    try {
+        TfSquareFreeResult sqf = tf_square_free(poly);
+        Polynomial<Rational> work_poly = sqf.square_free.make_monic();
+        static const int64_t trial_primes[] =
+            {3, 5, 7, 11, 13, 17, 19, 23, 29, 31};
+        BerlekampResult berlekamp;
+        bool found_valid_reduction = false;
 
-    if (work_poly.degree() <= 1) {
-        /// 无平方部分为线性或常数,原多项式为完全幂
-        std::vector<Polynomial<Rational>> result;
-        if (work_poly.degree() == 1) result.push_back(work_poly);
-        if (sqf.had_repeated_factors && sqf.repeated_factor.degree() >= 1) {
-            /// 递归分解重复因子
-            auto sub = factor_univariate_bridge(sqf.repeated_factor);
-            result.insert(result.end(), sub.begin(), sub.end());
-        }
-        return result.empty() ? std::vector<Polynomial<Rational>>{poly} : result;
-    }
-
-    /// Berlekamp 模分解:尝试多个素数
-    static const int64_t TRIAL_PRIMES[] = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31};
-    BerlekampResult berl_result;
-    bool berlekamp_success = false;
-
-    for (int64_t p : TRIAL_PRIMES) {
-        try {
-            berl_result = berlekamp_factor(work_poly, p);
-            if (berl_result.prime > 0 && !berl_result.factors.empty()) {
-                berlekamp_success = true;
-                break;
+        for (int64_t prime : trial_primes) {
+            auto prime_step = context.consume_steps(1, operation);
+            if (!prime_step) {
+                return UnivariateFactorResult::failure(prime_step.error());
             }
-        } catch (...) {
-            continue;
+            try {
+                berlekamp = berlekamp_factor(work_poly, prime);
+                if (berlekamp.prime > 0 && !berlekamp.factors.empty()) {
+                    found_valid_reduction = true;
+                    break;
+                }
+            } catch (const std::exception&) {
+                // 该素数可能使首项系数消失；继续尝试下一个确定性素数。
+            }
         }
-    }
 
-    if (!berlekamp_success || berl_result.factors.size() <= 1) {
-        /// 在所有尝试素数下不可约
-        return {poly};
-    }
+        if (!found_valid_reduction) {
+            return UnivariateFactorResult::success(
+                MathResult<std::vector<Polynomial<Rational>>>{
+                    {poly.make_monic()}, Completeness::Inconclusive,
+                    "未找到保持次数的有效模素数"});
+        }
 
-    /// 转换为整系数多项式(乘以分母 LCM)
-    BigInt lcm_denom(1);
-    for (const auto& c : work_poly.coeffs) {
-        BigInt d = c.get_denominator();
-        lcm_denom = BigInt::lcm(lcm_denom, d);
-    }
+        std::vector<Polynomial<Rational>> factors;
+        Completeness completeness = Completeness::Complete;
+        std::string reason;
+        if (berlekamp.factors.size() <= 1) {
+            factors.push_back(work_poly.make_monic());
+        } else {
+            BigInt denominator_lcm(1);
+            for (const Rational& coefficient : work_poly.coeffs) {
+                denominator_lcm = BigInt::lcm(
+                    denominator_lcm, coefficient.get_denominator());
+            }
+            std::vector<BigInt> integer_coefficients;
+            integer_coefficients.reserve(work_poly.coeffs.size());
+            for (const Rational& coefficient : work_poly.coeffs) {
+                integer_coefficients.push_back(
+                    coefficient.get_numerator() *
+                    (denominator_lcm / coefficient.get_denominator()));
+            }
+            Polynomial<BigInt> integer_poly(
+                integer_coefficients, work_poly.variable_name);
 
-    std::vector<BigInt> int_coeffs;
-    int_coeffs.reserve(work_poly.coeffs.size());
-    for (const auto& c : work_poly.coeffs) {
-        BigInt num = c.get_numerator() * (lcm_denom / c.get_denominator());
-        int_coeffs.push_back(num);
-    }
-    Polynomial<BigInt> int_poly(int_coeffs, work_poly.variable_name);
+            BigInt max_coefficient(0);
+            for (const BigInt& coefficient : integer_coefficients) {
+                if (coefficient.Abs() > max_coefficient) {
+                    max_coefficient = coefficient.Abs();
+                }
+            }
+            BigInt target = max_coefficient * BigInt(2);
+            for (int i = 0; i < work_poly.degree(); ++i) {
+                target = target * BigInt(2);
+            }
+            const int64_t prime = berlekamp.prime;
+            int lift_bound = 1;
+            BigInt modulus(static_cast<long long>(prime));
+            while (modulus <= target && lift_bound < 100) {
+                auto lift_step = context.consume_steps(1, operation);
+                if (!lift_step) {
+                    return UnivariateFactorResult::failure(lift_step.error());
+                }
+                modulus = modulus * BigInt(static_cast<long long>(prime));
+                ++lift_bound;
+            }
 
-    /// 计算 Mignotte 界确定提升精度
-    int n = work_poly.degree();
-    BigInt max_coeff(0);
-    for (const auto& c : int_coeffs) {
-        BigInt ac = c.Abs();
-        if (ac > max_coeff) max_coeff = ac;
-    }
-    BigInt mignotte = max_coeff;
-    for (int i = 0; i < n; ++i) {
-        mignotte = mignotte * BigInt(2);
-    }
+            auto lifted = hensel_lift_checked(
+                integer_poly, berlekamp.factors, prime, lift_bound);
+            if (!lifted) {
+                if (lifted.error().code == CasErrc::InvalidArgument ||
+                    lifted.error().code == CasErrc::Inconclusive) {
+                    return UnivariateFactorResult::success(
+                        MathResult<std::vector<Polynomial<Rational>>>{
+                            {poly.make_monic()}, Completeness::Inconclusive,
+                            "当前模素数的提升前置条件不成立"});
+                }
+                return UnivariateFactorResult::failure(lifted.error());
+            }
+            auto combined = zassenhaus_combine_checked(
+                work_poly, lifted.value(), modulus, context);
+            if (!combined) {
+                if (combined.error().code == CasErrc::InvalidArgument ||
+                    combined.error().code == CasErrc::Inconclusive) {
+                    return UnivariateFactorResult::success(
+                        MathResult<std::vector<Polynomial<Rational>>>{
+                            {poly.make_monic()}, Completeness::Inconclusive,
+                            "提升因子无法完成精确有理重构"});
+                }
+                return UnivariateFactorResult::failure(combined.error());
+            }
+            factors = std::move(combined.value().value);
+            completeness = combined.value().completeness;
+            reason = std::move(combined.value().reason);
+        }
 
-    /// 确定提升次数 k 使得 p^k > 2 * mignotte
-    BigInt target = mignotte * BigInt(2);
-    int64_t prime = berl_result.prime;
-    int lift_bound = 1;
-    BigInt pk(static_cast<long long>(prime));
-    while (pk <= target && lift_bound < 100) {
-        pk = pk * BigInt(static_cast<long long>(prime));
-        lift_bound++;
+        if (sqf.had_repeated_factors &&
+            sqf.repeated_factor.degree() >= 1) {
+            auto repeated = factor_univariate_bridge_checked(
+                sqf.repeated_factor, context);
+            if (!repeated) {
+                return UnivariateFactorResult::failure(repeated.error());
+            }
+            if (repeated.value().completeness == Completeness::Inconclusive) {
+                completeness = Completeness::Inconclusive;
+                if (reason.empty()) reason = repeated.value().reason;
+            }
+            auto repeated_factors = std::move(repeated.value().value);
+            factors.insert(factors.end(),
+                           std::make_move_iterator(repeated_factors.begin()),
+                           std::make_move_iterator(repeated_factors.end()));
+        }
+
+        Polynomial<Rational> product(
+            {Rational(1)}, poly.variable_name);
+        for (const auto& factor : factors) product = product * factor;
+        if (!(product == poly.make_monic())) {
+            return UnivariateFactorResult::failure(
+                CasErrc::InternalInvariant,
+                "一元因子未能精确重构输入多项式", operation);
+        }
+        return UnivariateFactorResult::success(
+            MathResult<std::vector<Polynomial<Rational>>>{
+                std::move(factors), completeness, std::move(reason)});
+    } catch (const std::bad_alloc&) {
+        return UnivariateFactorResult::failure(
+            CasErrc::ResourceLimit, "一元分解分配失败", operation);
+    } catch (const std::exception& error) {
+        return UnivariateFactorResult::success(
+            MathResult<std::vector<Polynomial<Rational>>>{
+                {poly.make_monic()}, Completeness::Inconclusive,
+                std::string("一元分解路径未覆盖：") + error.what()});
     }
+}
 
-    /// Hensel 提升
-    auto lifted = hensel_lift_checked(
-        int_poly, berl_result.factors, prime, lift_bound);
-    if (!lifted) return {poly};
-    std::vector<Polynomial<BigInt>> lifted_factors =
-        std::move(lifted.value());
 
-    if (lifted_factors.empty()) {
-        return {poly};
-    }
+static void precompute_leading_coefficients(
+    const MultiPoly& poly,
+    const std::string& main_var,
+    const std::map<std::string, Rational>& eval_points,
+    std::vector<Polynomial<Rational>>& univariate_factors);
 
-    /// 计算素数幂 p^k
-    int64_t prime_power = 1;
-    for (int i = 0; i < lift_bound; ++i) {
-        if (prime_power > INT64_MAX / prime) {
-            prime_power = INT64_MAX;
+namespace {
+
+struct FactorRecursionGuard {
+    ComputationContext& context;
+    ~FactorRecursionGuard() { context.leave_recursion(); }
+};
+
+static MultiPoly embed_univariate_factor(
+    const Polynomial<Rational>& factor,
+    const std::vector<std::string>& variables,
+    const std::string& main_variable)
+{
+    size_t main_index = variables.size();
+    for (size_t i = 0; i < variables.size(); ++i) {
+        if (variables[i] == main_variable) {
+            main_index = i;
             break;
         }
-        prime_power *= prime;
     }
-
-    /// Zassenhaus 因子组合
-    std::vector<Polynomial<Rational>> true_factors;
-    try {
-        true_factors = zassenhaus_combine(work_poly, lifted_factors, prime_power);
-    } catch (...) {
-        return {poly};
+    std::vector<MultiPoly::Term> terms;
+    for (size_t degree = 0; degree < factor.coeffs.size(); ++degree) {
+        if (factor.coeffs[degree].is_zero()) continue;
+        Monomial monomial(variables.size(), 0);
+        monomial[main_index] = static_cast<int>(degree);
+        terms.emplace_back(std::move(monomial), factor.coeffs[degree]);
     }
-
-    if (true_factors.empty()) {
-        return {poly};
-    }
-
-    /// 验证:因子数提供有效上界(一元因子数 >= 多元因子数)
-    /// 若重复因子存在,递归分解并合并
-    if (sqf.had_repeated_factors && sqf.repeated_factor.degree() >= 1) {
-        auto sub = factor_univariate_bridge(sqf.repeated_factor);
-        true_factors.insert(true_factors.end(), sub.begin(), sub.end());
-    }
-
-    return true_factors;
+    return MultiPoly(std::move(terms), variables);
 }
 
-/**
- * @internal
- * @brief 选择求值点:确定主变量和辅助变量的整数求值点
- *
- * 选择次数最高的变量作为主变量,对辅助变量搜索整数求值点,
- * 使得求值后的一元多项式满足:
- * 1. 次数等于原多项式关于主变量的次数(首项系数不消失)
- * 2. 求值后的多项式无平方
- *
- * 搜索顺序:对每个辅助变量从 0, +/-1, +/-2, ... 开始尝试.
- * 多个辅助变量时系统地枚举组合.
- *
- * @param[in]  poly        输入多元多项式
- * @param[out] main_var    选定的主变量名
- * @param[out] eval_points 辅助变量到求值点的映射
- * @return 若找到有效求值点返回 true,否则返回 false
- *
- * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
- *      Mathematics of Computation, 32(144), 1978.
- */
-[[maybe_unused]] static bool select_evaluation_points(
-    const MultiPoly& poly,
-    std::string& main_var,
-    std::map<std::string, Rational>& eval_points)
+static Result<MathResult<MultiFactorResult>> assemble_checked_factorization(
+    const MultiPoly& original,
+    const std::vector<MultiPoly>& raw_factors,
+    const std::vector<int>& raw_multiplicities,
+    Completeness completeness,
+    std::string reason)
 {
-    const auto& vars = poly.variables();
-    if (vars.empty() || poly.is_zero()) return false;
-
-    /// 步骤 1:选择主变量(次数最高的变量)
-    main_var = vars[0];
-    int max_deg = poly.degree(vars[0]);
-    for (size_t i = 1; i < vars.size(); ++i) {
-        int d = poly.degree(vars[i]);
-        if (d > max_deg) {
-            max_deg = d;
-            main_var = vars[i];
+    constexpr const char* operation = "factor_multivariate";
+    if (original.is_zero()) {
+        if (!raw_factors.empty()) {
+            return MultiFactorCheckedResult::failure(
+                CasErrc::InternalInvariant, "零多项式收到非空因子列表", operation);
         }
+        return MultiFactorCheckedResult::success(
+            MathResult<MultiFactorResult>{
+                MultiFactorResult{Rational(0), {}, {}},
+                completeness, std::move(reason)});
     }
 
-    /// 若多项式实质为一元(无辅助变量),无需求值点
-    std::vector<std::string> aux_vars;
-    for (const auto& v : vars) {
-        if (v != main_var) aux_vars.push_back(v);
-    }
-    if (aux_vars.empty()) {
-        eval_points.clear();
-        return true;
-    }
-
-    int target_degree = poly.degree(main_var);
-    int num_aux = static_cast<int>(aux_vars.size());
-
-    /// 步骤 2:搜索求值点组合
-    /// 对于单个辅助变量,直接线性搜索
-    /// 对于多个辅助变量,系统地枚举组合
-    int max_attempts = 1000;
-    int attempt = 0;
-
-    if (num_aux == 1) {
-        /// 单辅助变量:简单线性搜索
-        for (int k = 0; attempt < max_attempts; ++k, ++attempt) {
-            int val = search_value(k);
-            Rational r_val(val);
-
-            /// 求值:将辅助变量代入
-            MultiPoly evaluated = poly.eval(aux_vars[0], r_val);
-
-            /// 检查次数保持(首项系数不消失)
-            if (evaluated.degree(main_var) != target_degree) continue;
-
-            /// 转换为一元多项式并检查无平方性
-            try {
-                Polynomial<Rational> uni = evaluated.to_univariate();
-                if (!is_square_free_univariate(uni)) continue;
-            } catch (...) {
-                /// 若转换失败(仍含多变量),跳过
-                continue;
-            }
-
-            /// 找到有效点
-            eval_points.clear();
-            eval_points[aux_vars[0]] = r_val;
-            return true;
-        }
-    } else {
-        /// 多辅助变量:按层级搜索
-        /// 使用混合基数计数器枚举组合
-        /// 搜索范围逐步扩大:先尝试所有变量在 {0} 内,
-        /// 再尝试 {0, 1, -1},再 {0, 1, -1, 2, -2},...
-        int range = 0; // 当前搜索半径
-        while (attempt < max_attempts) {
-            ++range;
-            int values_per_var = 2 * range + 1; // 从 -range 到 +range
-
-            /// 枚举所有组合:values_per_var^num_aux 种
-            int total_combos = 1;
-            for (int i = 0; i < num_aux; ++i) {
-                total_combos *= values_per_var;
-                if (total_combos > max_attempts - attempt) {
-                    total_combos = max_attempts - attempt;
-                    break;
-                }
-            }
-
-            for (int combo = 0; combo < total_combos && attempt < max_attempts;
-                 ++combo, ++attempt) {
-                /// 将 combo 解码为各辅助变量的值
-                std::map<std::string, Rational> candidate;
-                int temp = combo;
-                for (int i = 0; i < num_aux; ++i) {
-                    int idx = temp % values_per_var;
-                    temp /= values_per_var;
-                    /// 将 idx 映射为搜索序列值:0->0, 1->1, 2->-1, 3->2, 4->-2, ...
-                    int val = search_value(idx);
-                    candidate[aux_vars[i]] = Rational(val);
-                }
-
-                /// 求值:将所有辅助变量代入
-                MultiPoly evaluated = poly.eval(candidate);
-
-                /// 检查次数保持
-                if (evaluated.degree(main_var) != target_degree) continue;
-
-                /// 转换为一元多项式并检查无平方性
-                try {
-                    Polynomial<Rational> uni = evaluated.to_univariate();
-                    if (!is_square_free_univariate(uni)) continue;
-                } catch (...) {
-                    continue;
-                }
-
-                /// 找到有效点
-                eval_points = std::move(candidate);
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-
-/**
- * @internal
- * @brief 试除验证:逐一检验提升后的因子候选是否为真因子
- *
- * 对每个提升后的因子候选 fᵢ,先本原化,然后尝试对剩余多项式执行精确除法.
- * 若整除成功,则 fᵢ 为真因子,更新剩余多项式为商;否则跳过该候选.
- *
- * @param[in,out] remaining      剩余多项式,成功除法后更新为商
- * @param[in,out] lifted_factors 提升后的因子候选列表,已验证的因子从中移除
- * @return 验证通过的真因子列表
- *
- * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
- *      Mathematics of Computation, 32(144), 1978.
- */
-[[maybe_unused]] static std::vector<MultiPoly> trial_division(
-    MultiPoly& remaining,
-    std::vector<MultiPoly>& lifted_factors)
-{
-    std::vector<MultiPoly> true_factors;
-    std::vector<bool> used(lifted_factors.size(), false);
-
-    for (size_t i = 0; i < lifted_factors.size(); ++i) {
-        if (remaining.is_constant()) break;
-
-        /// 本原化候选因子
-        MultiPoly candidate = lifted_factors[i].make_primitive();
-        if (candidate.is_zero() || candidate.is_constant()) {
-            used[i] = true;
-            continue;
-        }
-
-        /// 确保首项系数为正
-        if (!candidate.terms().empty() && candidate.terms()[0].second < Rational(0)) {
-            candidate = candidate * Rational(-1);
-        }
-
-        /// 尝试精确除法
-        try {
-            MultiPoly quotient = remaining.exact_div(candidate);
-            /// 除法成功:记录为真因子
-            true_factors.push_back(candidate);
-            remaining = quotient;
-            used[i] = true;
-        } catch (...) {
-            /// 精确除法失败时,当前候选进入下一组合.
-        }
-    }
-
-    /// 从 lifted_factors 中移除已使用的因子
-    std::vector<MultiPoly> remaining_factors;
-    for (size_t i = 0; i < lifted_factors.size(); ++i) {
-        if (!used[i]) {
-            remaining_factors.push_back(std::move(lifted_factors[i]));
-        }
-    }
-    lifted_factors = std::move(remaining_factors);
-
-    return true_factors;
-}
-
-/**
- * @internal
- * @brief 因子组合:对未通过单独试除的因子,尝试子集乘积验证
- *
- * 单个提升因子未通过整除检验时,依次枚举含 2,3,... 个因子的乘积.
- * 成功候选记录为真因子,并从池中移除其成员后继续处理剩余多项式.
- *
- * 早期终止条件:
- * - 剩余多项式变为常数
- * - 剩余多项式次数 <= 1(不可约)
- *
- * @param[in,out] remaining      剩余多项式,成功除法后更新为商
- * @param[in,out] lifted_factors 未通过试除的因子候选列表
- * @return 通过组合验证的真因子列表
- *
- * @see Geddes, Czapor, Labahn. "Algorithms for Computer Algebra." Section15.7.
- */
-[[maybe_unused]] static std::vector<MultiPoly> factor_combination(
-    MultiPoly& remaining,
-    std::vector<MultiPoly>& lifted_factors)
-{
-    std::vector<MultiPoly> true_factors;
-    int n = static_cast<int>(lifted_factors.size());
-
-    if (n == 0 || remaining.is_constant()) return true_factors;
-
-    /// 按子集大小递增枚举:2, 3, ..., n/2
-    int max_subset_size = n / 2;
-
-    for (int subset_size = 2; subset_size <= max_subset_size; ++subset_size) {
-        /// 早期终止:剩余多项式为常数或线性
-        if (remaining.is_constant() || remaining.total_degree() <= 1) break;
-
-        /// 枚举大小为 subset_size 的所有子集
-        /// 使用位掩码或组合索引枚举
-        n = static_cast<int>(lifted_factors.size());
-        if (subset_size > n / 2) break;
-
-        /// 生成组合索引
-        std::vector<int> indices(subset_size);
-        for (int i = 0; i < subset_size; ++i) indices[i] = i;
-
-        bool found_in_this_size = true;
-        while (found_in_this_size) {
-            found_in_this_size = false;
-
-            /// 重置组合索引
-            n = static_cast<int>(lifted_factors.size());
-            if (subset_size > n) break;
-            for (int i = 0; i < subset_size; ++i) indices[i] = i;
-
-            bool has_next = true;
-            while (has_next) {
-                /// 早期终止检查
-                if (remaining.is_constant() || remaining.total_degree() <= 1) {
-                    has_next = false;
-                    break;
-                }
-
-                /// 计算当前子集的乘积
-                MultiPoly product = lifted_factors[indices[0]];
-                for (int i = 1; i < subset_size; ++i) {
-                    product = product * lifted_factors[indices[i]];
-                }
-
-                /// 本原化乘积
-                product = product.make_primitive();
-                if (!product.is_zero() && !product.terms().empty() &&
-                    product.terms()[0].second < Rational(0)) {
-                    product = product * Rational(-1);
-                }
-
-                /// 尝试精确除法
-                bool division_success = false;
-                try {
-                    MultiPoly quotient = remaining.exact_div(product);
-                    /// 成功:记录乘积为真因子
-                    true_factors.push_back(product);
-                    remaining = quotient;
-                    division_success = true;
-                } catch (...) {
-                    /// 除法失败
-                }
-
-                if (division_success) {
-                    /// 从 lifted_factors 中移除已使用的因子(按降序索引移除)
-                    std::vector<int> to_remove(indices.begin(),
-                                              indices.begin() + subset_size);
-                    std::sort(to_remove.rbegin(), to_remove.rend());
-                    for (int idx : to_remove) {
-                        lifted_factors.erase(lifted_factors.begin() + idx);
-                    }
-                    found_in_this_size = true;
-                    break; // 重新开始当前大小的枚举
-                }
-
-                /// 推进到下一个组合
-                /// 标准组合生成:从最后一个索引开始尝试递增
-                int pos = subset_size - 1;
-                while (pos >= 0) {
-                    indices[pos]++;
-                    if (indices[pos] <= n - subset_size + pos) {
-                        /// 填充后续索引
-                        for (int j = pos + 1; j < subset_size; ++j) {
-                            indices[j] = indices[j - 1] + 1;
-                        }
-                        break;
-                    }
-                    pos--;
-                }
-                if (pos < 0) has_next = false;
-            }
-
-            /// 若本轮未找到匹配,退出当前大小
-            if (!found_in_this_size) break;
-        }
-    }
-
-    /// 早期终止:若剩余多项式为常数或线性,无需继续
-    /// 剩余未组合的因子假定为不可约,直接返回
-    if (!remaining.is_constant() && remaining.total_degree() > 0 && !lifted_factors.empty()) {
-        /// 将剩余因子视为不可约返回
-        /// 注意:这些因子可能需要进一步验证,但在当前阶段
-        /// 假设它们是不可约的(因为所有子集组合都已尝试)
-    }
-
-    return true_factors;
-}
-
-
-/**
- * @internal
- * @brief 组装最终因式分解结果
- *
- * 收集所有真因子,确保每个因子本原化且首项系数为正,
- * 计算整体数值常数,并验证 constant * prod(factors[i]^mult[i]) == original.
- *
- * 算法:
- * 1. 对每个因子执行 make_primitive(),若首项系数为负则取反
- * 2. 计算整体常数 = original.numeric_content() / prod(各因子的 numeric_content)
- * 3. 验证乘积等于原多项式;若验证失败则回退返回原多项式
- *
- * @param[in] factors        真因子列表(来自试除/组合验证)
- * @param[in] multiplicities 各因子的重数(来自无平方因子分解)
- * @param[in] original       原始多项式(用于计算常数和验证)
- * @return 满足不变量的 MultiFactorResult
- *
- * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
- *      Mathematics of Computation, 32(144), 1978.
- */
-[[maybe_unused]] static MultiFactorResult assemble_result(
-    const std::vector<MultiPoly>& factors,
-    const std::vector<int>& multiplicities,
-    const MultiPoly& original)
-{
     MultiFactorResult result;
-
-    /// 空因子列表:原多项式为常数或零
-    if (factors.empty()) {
-        if (original.is_zero()) {
-            result.constant = Rational(0);
+    for (size_t i = 0; i < raw_factors.size(); ++i) {
+        const MultiPoly& raw = raw_factors[i];
+        const int multiplicity =
+            i < raw_multiplicities.size() ? raw_multiplicities[i] : 1;
+        if (multiplicity <= 0) {
+            return MultiFactorCheckedResult::failure(
+                CasErrc::InternalInvariant, "因子重数必须为正", operation);
+        }
+        if (raw.is_zero() || raw.is_constant()) continue;
+        MultiPoly factor = raw.make_primitive();
+        if (!factor.terms().empty() &&
+            factor.terms()[0].second < Rational(0)) {
+            factor = factor * Rational(-1);
+        }
+        auto existing = std::find(result.factors.begin(),
+                                  result.factors.end(), factor);
+        if (existing == result.factors.end()) {
+            result.factors.push_back(std::move(factor));
+            result.multiplicities.push_back(multiplicity);
         } else {
-            result.constant = original.numeric_content();
-            if (!original.terms().empty() && original.terms()[0].second < Rational(0)) {
-                result.constant = -result.constant;
-            }
+            const size_t index =
+                static_cast<size_t>(existing - result.factors.begin());
+            result.multiplicities[index] += multiplicity;
         }
-        return result;
     }
 
-    /// 步骤 1:本原化每个因子,确保首项系数为正
-    std::vector<MultiPoly> prim_factors;
-    prim_factors.reserve(factors.size());
-    Rational content_product(1);
-
-    for (size_t i = 0; i < factors.size(); ++i) {
-        const MultiPoly& f = factors[i];
-
-        if (f.is_zero() || f.is_constant()) {
-            /// 常数/零因子:吸收到整体常数中
-            if (!f.is_zero()) {
-                Rational c = f.numeric_content();
-                if (!f.terms().empty() && f.terms()[0].second < Rational(0)) {
-                    c = -c;
-                }
-                int mult = (i < multiplicities.size()) ? multiplicities[i] : 1;
-                for (int m = 0; m < mult; ++m) {
-                    content_product = content_product * c;
-                }
-            }
-            continue;
-        }
-
-        Rational nc = f.numeric_content();
-        MultiPoly prim = f.make_primitive();
-
-        /// 确保首项系数为正
-        if (!prim.terms().empty() && prim.terms()[0].second < Rational(0)) {
-            prim = prim * Rational(-1);
-            nc = -nc;
-        }
-
-        /// 累积各因子内容到常数乘积中(考虑重数)
-        int mult = (i < multiplicities.size()) ? multiplicities[i] : 1;
-        for (int m = 0; m < mult; ++m) {
-            content_product = content_product * nc;
-        }
-
-        prim_factors.push_back(std::move(prim));
-        result.multiplicities.push_back(mult);
-    }
-
-    result.factors = std::move(prim_factors);
-
-    /// 步骤 2:计算整体常数
-    /// original == content_product * result.constant * prod(prim_factors[i]^mult[i])
-    /// 因此 result.constant = original 的数值内容 / content_product
-    /// 但更精确地:直接从原多项式和因子乘积的比值推导
-    Rational orig_nc = original.numeric_content();
-    if (!original.terms().empty() && original.terms()[0].second < Rational(0)) {
-        orig_nc = -orig_nc;
-    }
-
-    if (!content_product.is_zero()) {
-        result.constant = orig_nc / content_product;
-    } else {
-        result.constant = orig_nc;
-    }
-
-    /// 步骤 3:验证 constant * prod(factors[i]^mult[i]) == original
-    /// 计算因子乘积
     MultiPoly product(Rational(1), original.variables());
     for (size_t i = 0; i < result.factors.size(); ++i) {
-        MultiPoly power = result.factors[i];
-        for (int m = 1; m < result.multiplicities[i]; ++m) {
-            power = power * result.factors[i];
+        for (int power = 0; power < result.multiplicities[i]; ++power) {
+            product = product * result.factors[i];
         }
-        product = product * power;
     }
-    product = product * result.constant;
-
-    /// 验证乘积等于原多项式
-    if (product != original) {
-        /// 验证失败:尝试通过精确除法修正常数
-        /// 若 product 与 original 仅差一个标量倍数,修正常数即可
-        if (!product.is_zero()) {
-            /// 比较首项系数比值
-            const auto& orig_terms = original.terms();
-            const auto& prod_terms = product.terms();
-            if (!orig_terms.empty() && !prod_terms.empty() &&
-                orig_terms[0].first == prod_terms[0].first) {
-                Rational ratio = orig_terms[0].second / prod_terms[0].second;
-                MultiPoly corrected = product * ratio;
-                if (corrected == original) {
-                    result.constant = result.constant * ratio;
-                    return result;
-                }
-            }
-        }
-
-        /// 修正失败:回退返回原多项式作为不可约因子
-        MultiFactorResult fallback;
-        fallback.constant = orig_nc;
-        MultiPoly prim = original.make_primitive();
-        if (!prim.terms().empty() && prim.terms()[0].second < Rational(0)) {
-            prim = prim * Rational(-1);
-            fallback.constant = -fallback.constant;
-        }
-        fallback.factors = {prim};
-        fallback.multiplicities = {1};
-        return fallback;
+    MultiPoly quotient = original.exact_div(product);
+    if (!quotient.is_constant() || quotient.terms().empty()) {
+        return MultiFactorCheckedResult::failure(
+            CasErrc::InternalInvariant,
+            "因子乘积与输入只差常数的不变量失效", operation);
     }
-
-    return result;
+    result.constant = quotient.terms()[0].second;
+    if (product * result.constant != original) {
+        return MultiFactorCheckedResult::failure(
+            CasErrc::InternalInvariant, "最终因子未精确重构输入", operation);
+    }
+    return MultiFactorCheckedResult::success(
+        MathResult<MultiFactorResult>{
+            std::move(result), completeness, std::move(reason)});
 }
 
-MultiFactorResult factor_multivariate(const MultiPoly& poly)
+static MultiFactorCheckedResult factor_multivariate_impl(
+    const MultiPoly& poly,
+    ComputationContext& context)
 {
-    if (poly.is_zero()) return {Rational(0), {}, {}};
+    constexpr const char* operation = "factor_multivariate";
+    auto recursion = context.enter_recursion(operation);
+    if (!recursion) return MultiFactorCheckedResult::failure(recursion.error());
+    FactorRecursionGuard recursion_guard{context};
 
-    /// 常数多项式
+    if (poly.is_zero()) {
+        return assemble_checked_factorization(
+            poly, {}, {}, Completeness::Complete, {});
+    }
     if (poly.is_constant()) {
-        Rational c = poly.numeric_content();
-        if (!poly.terms().empty() && poly.terms()[0].second < Rational(0)) {
-            c = -c;
-        }
-        return {c, {}, {}};
+        return assemble_checked_factorization(
+            poly, {}, {}, Completeness::Complete, {});
+    }
+    const auto& variables = poly.variables();
+    if (variables.empty()) {
+        return MultiFactorCheckedResult::failure(
+            CasErrc::InternalInvariant,
+            "非常数多项式缺少变量表", operation);
     }
 
-    const auto& vars = poly.variables();
-
-    /// 选择主变量(次数最高的变量)
-    std::string main_var = vars[0];
-    int max_deg = poly.degree(vars[0]);
-    for (size_t i = 1; i < vars.size(); ++i) {
-        int d = poly.degree(vars[i]);
-        if (d > max_deg) {
-            max_deg = d;
-            main_var = vars[i];
+    std::string main_variable = variables.front();
+    for (const auto& variable : variables) {
+        if (poly.degree(variable) > poly.degree(main_variable)) {
+            main_variable = variable;
         }
     }
-
-    /// --- 快速路径 1:线性多项式 ---
-    if (detail::is_linear(poly, main_var)) {
-        Rational nc = poly.numeric_content();
-        MultiPoly prim = poly.make_primitive();
-        /// make_primitive() 确保首项系数为正.若原多项式首项系数为负,
-        /// 则 prim 已被取反,需要将符号吸收到常数中.
-        if (!poly.terms().empty() && poly.terms()[0].second < Rational(0)) {
-            nc = -nc;
-        }
-        return {nc, {prim}, {1}};
+    if (poly.total_degree() <= 1) {
+        return assemble_checked_factorization(
+            poly, {poly}, {1}, Completeness::Complete, {});
     }
 
-    /// --- 快速路径 2:差平方 a^2 - b^2 = (a+b)(a-b) ---
-    /// 先提取数值内容,使形如 2x^2-8y^2 的多项式归约为 2*(x^2-4y^2),
-    /// 其本原部分的系数 (1,4) 才是完全平方,可被差平方检测识别.
-    {
-        Rational dos_content = poly.numeric_content();
-        bool dos_was_negative = (!poly.terms().empty() && poly.terms()[0].second < Rational(0));
-        MultiPoly dos_prim = poly.make_primitive();
-        Rational dos_const = dos_was_negative ? -dos_content : dos_content;
-
-        if (auto dos = detail::detect_difference_of_squares(dos_prim)) {
-            auto& [a, b] = *dos;
-            MultiPoly sum = a + b;
-            MultiPoly diff = a - b;
-
-            MultiFactorResult result;
-            result.constant = dos_const;
-
-            auto process_factor = [&](MultiPoly& f) {
-                Rational nc = f.numeric_content();
-                bool was_negative = (!f.terms().empty() && f.terms()[0].second < Rational(0));
-                f = f.make_primitive();
-                if (was_negative) {
-                    nc = -nc;
-                }
-                result.constant = result.constant * nc;
-                result.factors.push_back(f);
-                result.multiplicities.push_back(1);
-            };
-
-            process_factor(sum);
-            process_factor(diff);
-            return result;
-        }
-    }
-
-    /// --- 旧快速路径 2(保留作兜底,处理本原检测未覆盖的情形)---
-    if (auto dos = detail::detect_difference_of_squares(poly)) {
-        auto& [a, b] = *dos;
-        MultiPoly sum = a + b;
-        MultiPoly diff = a - b;
-
-        /// 递归分解各因子
-        MultiFactorResult result;
-        result.constant = Rational(1);
-
-        auto process_factor = [&](MultiPoly& f) {
-            Rational nc = f.numeric_content();
-            /// make_primitive() 确保首项系数为正
-            bool was_negative = (!f.terms().empty() && f.terms()[0].second < Rational(0));
-            f = f.make_primitive();
-            if (was_negative) {
-                nc = -nc;
-            }
-            result.constant = result.constant * nc;
-            result.factors.push_back(f);
-            result.multiplicities.push_back(1);
-        };
-
-        process_factor(sum);
-        process_factor(diff);
-        return result;
-    }
-
-    /// --- 快速路径 3:二项式幂 xⁿ - yⁿ ---
-    if (auto bp = detail::detect_binomial_power(poly)) {
-        auto& [var1, var2, n] = *bp;
-
-        /// xⁿ - yⁿ 的分圆分解
-        /// 对于 n >= 2:xⁿ - yⁿ = (x - y) * (x^(n-1) + x^(n-2)*y + ... + y^(n-1))
-        /// 若 n 为偶数:还有 (x + y) 因子
-        MultiFactorResult result;
-        result.constant = Rational(1);
-
-        int v1_idx = -1, v2_idx = -1;
-        for (size_t i = 0; i < vars.size(); ++i) {
-            if (vars[i] == var1) v1_idx = static_cast<int>(i);
-            if (vars[i] == var2) v2_idx = static_cast<int>(i);
-        }
-
-        /// 因子 (x - y)
-        {
-            Monomial m1(vars.size(), 0);
-            m1[v1_idx] = 1;
-            Monomial m2(vars.size(), 0);
-            m2[v2_idx] = 1;
-            std::vector<MultiPoly::Term> f_terms = {{m1, Rational(1)}, {m2, Rational(-1)}};
-            MultiPoly factor(std::move(f_terms), vars);
-            result.factors.push_back(factor);
-            result.multiplicities.push_back(1);
-        }
-
-        if (n % 2 == 0) {
-            /// 因子 (x + y)
-            Monomial m1(vars.size(), 0);
-            m1[v1_idx] = 1;
-            Monomial m2(vars.size(), 0);
-            m2[v2_idx] = 1;
-            std::vector<MultiPoly::Term> f_terms = {{m1, Rational(1)}, {m2, Rational(1)}};
-            MultiPoly factor(std::move(f_terms), vars);
-            result.factors.push_back(factor);
-            result.multiplicities.push_back(1);
-
-            /// 剩余因子:(x^(n-1) + x^(n-2)*y + ... + y^(n-1)) / (x + y)
-            /// 即 xⁿ - yⁿ = (x-y)(x+y) * Q(x,y)
-            /// 计算 Q = poly / ((x-y)*(x+y))
-            MultiPoly product = result.factors[0] * result.factors[1];
-            try {
-                MultiPoly quotient = poly.exact_div(product);
-                if (!quotient.is_constant()) {
-                    Rational nc = quotient.numeric_content();
-                    bool was_negative = (!quotient.terms().empty() &&
-                                         quotient.terms()[0].second < Rational(0));
-                    MultiPoly prim = quotient.make_primitive();
-                    if (was_negative) {
-                        nc = -nc;
-                    }
-                    result.constant = result.constant * nc;
-                    result.factors.push_back(prim);
-                    result.multiplicities.push_back(1);
-                } else {
-                    result.constant = result.constant * quotient.numeric_content();
-                }
-            } catch (...) {
-                /// 除法失败,回退到返回原多项式
-                return {Rational(1), {poly}, {1}};
-            }
-        } else {
-            /// n 为奇数:xⁿ - yⁿ = (x - y) * (x^(n-1) + x^(n-2)*y + ... + y^(n-1))
-            /// 计算商
-            try {
-                MultiPoly quotient = poly.exact_div(result.factors[0]);
-                if (!quotient.is_constant()) {
-                    Rational nc = quotient.numeric_content();
-                    bool was_negative = (!quotient.terms().empty() &&
-                                         quotient.terms()[0].second < Rational(0));
-                    MultiPoly prim = quotient.make_primitive();
-                    if (was_negative) {
-                        nc = -nc;
-                    }
-                    result.constant = result.constant * nc;
-                    result.factors.push_back(prim);
-                    result.multiplicities.push_back(1);
-                } else {
-                    result.constant = result.constant * quotient.numeric_content();
-                }
-            } catch (...) {
-                return {Rational(1), {poly}, {1}};
-            }
-        }
-
-        return result;
-    }
-
-    /// --- 快速路径 4:公因子单项式 ---
-    auto [gcd_mono, quotient] = detail::extract_common_monomial(poly);
+    auto [common_monomial, quotient] =
+        detail::extract_common_monomial(poly);
     bool has_common_monomial = false;
-    for (size_t i = 0; i < gcd_mono.size(); ++i) {
-        if (gcd_mono[i] != 0) { has_common_monomial = true; break; }
+    for (int exponent : common_monomial) {
+        if (exponent > 0) {
+            has_common_monomial = true;
+            break;
+        }
     }
     if (has_common_monomial) {
-        /// 递归分解商多项式
-        MultiFactorResult sub_result = factor_multivariate(quotient);
+        auto sub = factor_multivariate_impl(quotient, context);
+        if (!sub) return sub;
+        std::vector<MultiPoly> factors;
+        std::vector<int> multiplicities;
+        for (size_t i = 0; i < common_monomial.size(); ++i) {
+            if (common_monomial[i] <= 0) continue;
+            Monomial monomial(variables.size(), 0);
+            monomial[i] = 1;
+            factors.emplace_back(
+                std::vector<MultiPoly::Term>{{monomial, Rational(1)}},
+                variables);
+            multiplicities.push_back(common_monomial[i]);
+        }
+        auto sub_value = std::move(sub.value());
+        factors.insert(factors.end(),
+                       sub_value.value.factors.begin(),
+                       sub_value.value.factors.end());
+        multiplicities.insert(multiplicities.end(),
+                              sub_value.value.multiplicities.begin(),
+                              sub_value.value.multiplicities.end());
+        return assemble_checked_factorization(
+            poly, factors, multiplicities, sub_value.completeness,
+            std::move(sub_value.reason));
+    }
 
-        /// 将公因子单项式拆分为各变量的幂次因子
-        MultiFactorResult result;
-        result.constant = sub_result.constant;
+    MultiPoly primitive = poly.make_primitive();
+    if (auto difference =
+            detail::detect_difference_of_squares(primitive)) {
+        std::vector<MultiPoly> factors;
+        std::vector<int> multiplicities;
+        Completeness completeness = Completeness::Complete;
+        std::string reason;
+        for (MultiPoly candidate :
+             {difference->first + difference->second,
+              difference->first - difference->second}) {
+            auto sub = factor_multivariate_impl(candidate, context);
+            if (!sub) return sub;
+            auto sub_value = std::move(sub.value());
+            if (sub_value.completeness == Completeness::Inconclusive) {
+                completeness = Completeness::Inconclusive;
+                if (reason.empty()) reason = sub_value.reason;
+            }
+            factors.insert(factors.end(),
+                           sub_value.value.factors.begin(),
+                           sub_value.value.factors.end());
+            multiplicities.insert(
+                multiplicities.end(),
+                sub_value.value.multiplicities.begin(),
+                sub_value.value.multiplicities.end());
+        }
+        return assemble_checked_factorization(
+            poly, factors, multiplicities, completeness, std::move(reason));
+    }
 
-        for (size_t i = 0; i < gcd_mono.size(); ++i) {
-            if (gcd_mono[i] > 0) {
-                /// 创建变量 vars[i] 的单项式因子
-                Monomial var_mono(vars.size(), 0);
-                var_mono[i] = 1;
-                std::vector<MultiPoly::Term> var_terms = {{var_mono, Rational(1)}};
-                MultiPoly var_factor(std::move(var_terms), vars);
-                result.factors.push_back(var_factor);
-                result.multiplicities.push_back(gcd_mono[i]);
+    if (auto binomial = detail::detect_binomial_power(primitive)) {
+        const auto& [left_variable, right_variable, exponent] = *binomial;
+        (void)exponent;
+        size_t left_index = 0;
+        size_t right_index = 0;
+        for (size_t i = 0; i < variables.size(); ++i) {
+            if (variables[i] == left_variable) left_index = i;
+            if (variables[i] == right_variable) right_index = i;
+        }
+        Monomial left_monomial(variables.size(), 0);
+        Monomial right_monomial(variables.size(), 0);
+        left_monomial[left_index] = 1;
+        right_monomial[right_index] = 1;
+        MultiPoly linear(
+            std::vector<MultiPoly::Term>{
+                {left_monomial, Rational(1)},
+                {right_monomial, Rational(-1)}},
+            variables);
+        MultiPoly remaining = primitive.exact_div(linear);
+        auto sub = factor_multivariate_impl(remaining, context);
+        if (!sub) return sub;
+        auto sub_value = std::move(sub.value());
+        std::vector<MultiPoly> factors = {linear};
+        std::vector<int> multiplicities = {1};
+        factors.insert(factors.end(),
+                       sub_value.value.factors.begin(),
+                       sub_value.value.factors.end());
+        multiplicities.insert(multiplicities.end(),
+                              sub_value.value.multiplicities.begin(),
+                              sub_value.value.multiplicities.end());
+        return assemble_checked_factorization(
+            poly, factors, multiplicities, sub_value.completeness,
+            std::move(sub_value.reason));
+    }
+
+    if (primitive.is_univariate()) {
+        Polynomial<Rational> univariate = primitive.to_univariate();
+        auto factored =
+            factor_univariate_bridge_checked(univariate, context);
+        if (!factored) {
+            return MultiFactorCheckedResult::failure(factored.error());
+        }
+        auto factor_value = std::move(factored.value());
+        std::vector<MultiPoly> factors;
+        factors.reserve(factor_value.value.size());
+        for (const auto& factor : factor_value.value) {
+            factors.push_back(embed_univariate_factor(
+                factor, variables, main_variable));
+        }
+        return assemble_checked_factorization(
+            poly, factors, std::vector<int>(factors.size(), 1),
+            factor_value.completeness, std::move(factor_value.reason));
+    }
+
+    std::vector<std::string> auxiliary_variables;
+    for (const auto& variable : variables) {
+        if (variable != main_variable) auxiliary_variables.push_back(variable);
+    }
+    std::map<std::string, Rational> zero_evaluation;
+    for (const auto& variable : auxiliary_variables) {
+        zero_evaluation[variable] = Rational(0);
+    }
+    MultiPoly evaluated = primitive.eval(zero_evaluation);
+    if (evaluated.degree(main_variable) == primitive.degree(main_variable)) {
+        Polynomial<Rational> base_poly = evaluated.to_univariate();
+        auto base_result =
+            factor_univariate_bridge_checked(base_poly, context);
+        if (!base_result) {
+            return MultiFactorCheckedResult::failure(base_result.error());
+        }
+        auto base_value = std::move(base_result.value());
+        bool all_linear = base_value.value.size() > 1;
+        for (const auto& factor : base_value.value) {
+            all_linear = all_linear && factor.degree() == 1;
+        }
+
+        if (all_linear && auxiliary_variables.size() == 1) {
+            auto hensel_step = context.consume_steps(
+                static_cast<size_t>(
+                    std::max(1, primitive.degree(auxiliary_variables[0]))),
+                operation);
+            if (!hensel_step) {
+                return MultiFactorCheckedResult::failure(hensel_step.error());
+            }
+            std::vector<Polynomial<Rational>> prepared = base_value.value;
+            precompute_leading_coefficients(
+                primitive, main_variable, zero_evaluation, prepared);
+            auto lifted = multivariate_hensel_lift(
+                primitive, prepared, auxiliary_variables[0], Rational(0),
+                primitive.degree(auxiliary_variables[0]));
+            MultiPoly lifted_product(Rational(1), variables);
+            for (const auto& factor : lifted) {
+                lifted_product = lifted_product * factor;
+            }
+            if (lifted.size() > 1 && lifted_product == primitive) {
+                return assemble_checked_factorization(
+                    poly, lifted, std::vector<int>(lifted.size(), 1),
+                    base_value.completeness, std::move(base_value.reason));
             }
         }
 
-        /// 添加商多项式的因子
-        for (size_t i = 0; i < sub_result.factors.size(); ++i) {
-            result.factors.push_back(sub_result.factors[i]);
-            result.multiplicities.push_back(sub_result.multiplicities[i]);
+        if (all_linear) {
+            const size_t factor_count = base_value.value.size();
+            std::vector<Rational> base_constants;
+            for (const auto& factor : base_value.value) {
+                base_constants.push_back(factor.make_monic().coeffs[0]);
+            }
+            std::vector<std::vector<Rational>> sample_constants;
+            bool samples_valid = true;
+            for (const auto& sampled_variable : auxiliary_variables) {
+                std::map<std::string, Rational> sample = zero_evaluation;
+                sample[sampled_variable] = Rational(1);
+                MultiPoly sample_poly = primitive.eval(sample);
+                if (sample_poly.degree(main_variable) !=
+                    primitive.degree(main_variable)) {
+                    samples_valid = false;
+                    break;
+                }
+                auto sample_result = factor_univariate_bridge_checked(
+                    sample_poly.to_univariate(), context);
+                if (!sample_result) {
+                    return MultiFactorCheckedResult::failure(
+                        sample_result.error());
+                }
+                if (sample_result.value().value.size() != factor_count) {
+                    samples_valid = false;
+                    break;
+                }
+                std::vector<Rational> constants;
+                for (const auto& factor : sample_result.value().value) {
+                    if (factor.degree() != 1) {
+                        samples_valid = false;
+                        break;
+                    }
+                    constants.push_back(factor.make_monic().coeffs[0]);
+                }
+                if (!samples_valid) break;
+                sample_constants.push_back(std::move(constants));
+            }
+
+            if (samples_valid) {
+                std::vector<std::vector<size_t>> assignments(
+                    auxiliary_variables.size(),
+                    std::vector<size_t>(factor_count));
+                for (auto& assignment : assignments) {
+                    for (size_t i = 0; i < factor_count; ++i) {
+                        assignment[i] = i;
+                    }
+                }
+                std::vector<MultiPoly> found_factors;
+                std::optional<CasError> enumeration_error;
+                std::function<bool(size_t)> enumerate =
+                    [&](size_t variable_index) -> bool {
+                    if (variable_index < assignments.size()) {
+                        auto& permutation = assignments[variable_index];
+                        std::sort(permutation.begin(), permutation.end());
+                        do {
+                            if (enumerate(variable_index + 1)) return true;
+                            if (enumeration_error) return false;
+                        } while (std::next_permutation(
+                            permutation.begin(), permutation.end()));
+                        return false;
+                    }
+
+                    auto candidate_step =
+                        context.consume_steps(1, operation);
+                    if (!candidate_step) {
+                        enumeration_error = candidate_step.error();
+                        return false;
+                    }
+                    std::vector<MultiPoly> candidates;
+                    for (size_t factor_index = 0;
+                         factor_index < factor_count; ++factor_index) {
+                        std::vector<MultiPoly::Term> terms;
+                        Monomial main_monomial(variables.size(), 0);
+                        size_t main_index = static_cast<size_t>(
+                            std::find(variables.begin(), variables.end(),
+                                      main_variable) - variables.begin());
+                        main_monomial[main_index] = 1;
+                        terms.emplace_back(main_monomial, Rational(1));
+                        Monomial constant_monomial(variables.size(), 0);
+                        if (!base_constants[factor_index].is_zero()) {
+                            terms.emplace_back(
+                                constant_monomial,
+                                base_constants[factor_index]);
+                        }
+                        for (size_t variable_index = 0;
+                             variable_index < auxiliary_variables.size();
+                             ++variable_index) {
+                            Rational coefficient =
+                                sample_constants[variable_index]
+                                    [assignments[variable_index][factor_index]]
+                                - base_constants[factor_index];
+                            if (coefficient.is_zero()) continue;
+                            Monomial monomial(variables.size(), 0);
+                            const size_t index = static_cast<size_t>(
+                                std::find(variables.begin(), variables.end(),
+                                          auxiliary_variables[variable_index])
+                                - variables.begin());
+                            monomial[index] = 1;
+                            terms.emplace_back(
+                                std::move(monomial), coefficient);
+                        }
+                        candidates.emplace_back(std::move(terms), variables);
+                    }
+                    MultiPoly product(Rational(1), variables);
+                    for (const auto& factor : candidates) {
+                        product = product * factor;
+                    }
+                    if (product == primitive) {
+                        found_factors = std::move(candidates);
+                        return true;
+                    }
+                    return false;
+                };
+
+                const bool found = enumerate(0);
+                if (enumeration_error) {
+                    return MultiFactorCheckedResult::failure(
+                        std::move(*enumeration_error));
+                }
+                if (found) {
+                    return assemble_checked_factorization(
+                        poly, found_factors,
+                        std::vector<int>(found_factors.size(), 1),
+                        Completeness::Complete, {});
+                }
+            }
         }
-
-        return result;
     }
 
-    /// --- 快速路径 5:齐次二元多项式 ---
-    if (auto hb = detail::factor_homogeneous_bivariate(poly)) {
-        return *hb;
+    if (auto homogeneous =
+            detail::factor_homogeneous_bivariate(primitive)) {
+        return assemble_checked_factorization(
+            poly, homogeneous->factors, homogeneous->multiplicities,
+            Completeness::Complete, {});
     }
 
-    Rational nc = poly.numeric_content();
-    MultiPoly prim = poly.make_primitive();
-    /// make_primitive() 确保首项系数为正.若原多项式首项系数为负,
-    /// 则 prim 已被取反,需要将符号吸收到常数中.
-    if (!poly.terms().empty() && poly.terms()[0].second < Rational(0)) {
-        nc = -nc;
+    return assemble_checked_factorization(
+        poly, {poly}, {1}, Completeness::Inconclusive,
+        "当前受检算法无法证明该多项式不可约");
+}
+
+} // namespace
+
+MultiFactorCheckedResult factor_multivariate_checked(
+    const MultiPoly& poly,
+    ComputationContext& context)
+{
+    try {
+        return factor_multivariate_impl(poly, context);
+    } catch (const std::bad_alloc&) {
+        return MultiFactorCheckedResult::failure(
+            CasErrc::ResourceLimit, "多元分解分配失败",
+            "factor_multivariate");
+    } catch (const std::exception& error) {
+        return assemble_checked_factorization(
+            poly, {poly}, {1}, Completeness::Inconclusive,
+            std::string("多元分解路径未覆盖：") + error.what());
     }
-    return {nc, {prim}, {1}};
+}
+
+MultiFactorCheckedResult factor_multivariate_checked(const MultiPoly& poly)
+{
+    ComputationContext context;
+    return factor_multivariate_checked(poly, context);
 }
 MultiPoly multivariate_content(const MultiPoly& poly, const std::string& main_var)
 {
@@ -1361,7 +1107,7 @@ SquareFreeDecomp square_free_decompose(const MultiPoly& poly, const std::string&
  * @see D. Y. Y. Yun, "On Square-Free Decomposition Algorithms,"
  *      Proceedings of SYMSAC 1976.
  */
-[[maybe_unused]] static void precompute_leading_coefficients(
+static void precompute_leading_coefficients(
     const MultiPoly& poly,
     const std::string& main_var,
     const std::map<std::string, Rational>& eval_points,

@@ -391,7 +391,14 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                     auto mpoly = symbolic_node_to_multipoly(lamina::detail::node(simp), var_list);
 
                     if (!mpoly.is_zero() && !mpoly.is_constant()) {
-                        auto result = lamina::factor_multivariate(mpoly);
+                        auto checked =
+                            lamina::factor_multivariate_checked(mpoly);
+                        if (!checked ||
+                            checked.value().completeness !=
+                                lamina::Completeness::Complete) {
+                            return simp;
+                        }
+                        const auto& result = checked.value().value;
 
                         /// 检查分解是否产生了多个因子
                         if (!result.factors.empty()) {

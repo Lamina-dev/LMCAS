@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.26)
 project(LMCAS VERSION 2.0.0 LANGUAGES C CXX)
 
 include(CTest)
@@ -6,13 +6,14 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 option(LMCAS_BUILD_BENCHMARKS "Build LMCAS benchmarks" OFF)
-option(LMCAS_BUILD_STANDALONE_TESTS "Build standalone executable tests" ON)
+option(LMCAS_BUILD_STANDALONE_TESTS "Build standalone executable tests" ${BUILD_TESTING})
+option(LMCAS_BUILD_LMMC_TESTS "Build nested LMMC tests" ${BUILD_TESTING})
+option(LMCAS_BUILD_GTEST_TESTS "Build GoogleTest-based tests" ${BUILD_TESTING})
 option(LMCAS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(LMCAS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMCAS_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
 option(LMCAS_WARNINGS_AS_ERRORS "Treat LMCAS compiler warnings as errors" OFF)
-set(LMCAS_USE_LAMMP_ASM "AUTO" CACHE STRING "LAMMP assembly backend: AUTO | ON | OFF")
-set_property(CACHE LMCAS_USE_LAMMP_ASM PROPERTY STRINGS AUTO ON OFF)
+option(LMCAS_USE_LAMMP_ASM "Enable the LAMMP assembly backend" OFF)
 
 if(LMCAS_ENABLE_SANITIZERS AND LMCAS_ENABLE_TSAN)
     message(FATAL_ERROR "LMCAS_ENABLE_SANITIZERS and LMCAS_ENABLE_TSAN are mutually exclusive")
@@ -37,40 +38,69 @@ if(WIN32)
     add_compile_definitions(LAMMP_WINDOWS)
 endif()
 
-if(LMCAS_USE_LAMMP_ASM STREQUAL "ON")
-    set(USE_ASM ON CACHE BOOL "Enable x64 assembly optimization (require NASM)" FORCE)
-elseif(LMCAS_USE_LAMMP_ASM STREQUAL "OFF")
-    set(USE_ASM OFF CACHE BOOL "Enable x64 assembly optimization (require NASM)" FORCE)
-elseif(LMCAS_USE_LAMMP_ASM STREQUAL "AUTO")
-    # Do not let a previous explicit ON/OFF selection in the build tree
-    # override AUTO on subsequent reconfiguration.
-    unset(USE_ASM CACHE)
-    unset(USE_ASM)
-elseif(NOT LMCAS_USE_LAMMP_ASM STREQUAL "AUTO")
-    message(FATAL_ERROR "LMCAS_USE_LAMMP_ASM must be AUTO, ON, or OFF")
+if(NOT DEFINED USE_ASM)
+    set(USE_ASM "${LMCAS_USE_LAMMP_ASM}")
 endif()
-set(LAMMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(LAMMP_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+if(NOT DEFINED LAMMP_BUILD_TESTS)
+    set(LAMMP_BUILD_TESTS OFF)
+endif()
+if(NOT DEFINED LAMMP_BUILD_BENCHMARKS)
+    set(LAMMP_BUILD_BENCHMARKS OFF)
+endif()
 add_subdirectory(LMMC/LAMMP EXCLUDE_FROM_ALL)
 
 if(UNIX)
     target_link_libraries(LammpCore PRIVATE m)
 endif()
 
-set(LMMC_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(LMMC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(LMMC_BUILD_SHARED ON CACHE BOOL "" FORCE)
-set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP" CACHE PATH "" FORCE)
-add_subdirectory(LMMC EXCLUDE_FROM_ALL)
+if(NOT DEFINED LMMC_BUILD_TESTS)
+    set(LMMC_BUILD_TESTS "${LMCAS_BUILD_LMMC_TESTS}")
+endif()
+if(NOT DEFINED LMMC_BUILD_EXAMPLES)
+    set(LMMC_BUILD_EXAMPLES OFF)
+endif()
+if(NOT DEFINED LMMC_BUILD_SHARED)
+    set(LMMC_BUILD_SHARED ON)
+endif()
+if(NOT DEFINED LAMMP_ROOT)
+    set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP")
+endif()
+if(NOT DEFINED LMMC_WARNINGS_AS_ERRORS)
+    set(LMMC_WARNINGS_AS_ERRORS "${LMCAS_WARNINGS_AS_ERRORS}")
+endif()
+if(NOT DEFINED LMMC_ENABLE_SANITIZERS)
+    set(LMMC_ENABLE_SANITIZERS "${LMCAS_ENABLE_SANITIZERS}")
+endif()
+if(NOT DEFINED LMMC_ENABLE_TSAN)
+    set(LMMC_ENABLE_TSAN "${LMCAS_ENABLE_TSAN}")
+endif()
+if(NOT DEFINED LMMC_ENABLE_COVERAGE)
+    set(LMMC_ENABLE_COVERAGE "${LMCAS_ENABLE_COVERAGE}")
+endif()
+if(NOT DEFINED LMMC_USE_LAMMP_ASM)
+    set(LMMC_USE_LAMMP_ASM "${LMCAS_USE_LAMMP_ASM}")
+endif()
+if(LMCAS_BUILD_LMMC_TESTS)
+    add_subdirectory(LMMC)
+else()
+    add_subdirectory(LMMC EXCLUDE_FROM_ALL)
+endif()
 
 set_target_properties(LammpCore PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"
-    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"
 )
+foreach(_lmcas_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(LammpCore PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${_lmcas_config}
+            "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        LIBRARY_OUTPUT_DIRECTORY_${_lmcas_config}
+            "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+        ARCHIVE_OUTPUT_DIRECTORY_${_lmcas_config}
+            "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"
+    )
+endforeach()
 
 set(LMCAS_CORE_SOURCES
     src/bigint.cpp
@@ -236,16 +266,24 @@ endforeach()
 
 target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
-        target_compile_options(${component} PRIVATE -Wall -Wextra -Wpedantic)
-    endforeach()
-    if(LMCAS_WARNINGS_AS_ERRORS)
-        foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
-            target_compile_options(${component} PRIVATE -Werror)
-        endforeach()
-    endif()
+set(_lmcas_warning_options
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wall>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wextra>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wpedantic>
+)
+if(LMCAS_WARNINGS_AS_ERRORS)
+    list(APPEND _lmcas_warning_options
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Werror>)
 endif()
+foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
+    target_compile_options(${component} PRIVATE ${_lmcas_warning_options})
+endforeach()
+target_compile_options(lmcas PRIVATE
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wall>
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wextra>
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wpedantic>
+    $<$<AND:$<BOOL:${LMCAS_WARNINGS_AS_ERRORS}>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:-Werror>
+)
 
 target_include_directories(lmcas PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -258,35 +296,49 @@ target_link_libraries(lmcas
     PUBLIC LammpCore lmmc
 )
 
-if(LMCAS_ENABLE_SANITIZERS OR LMCAS_ENABLE_TSAN)
-    if(WIN32 OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        message(FATAL_ERROR "The configured sanitizer mode requires GCC or Clang on a non-Windows platform")
+function(lmcas_apply_instrumentation target_name)
+    if(LMCAS_ENABLE_SANITIZERS OR LMCAS_ENABLE_TSAN)
+        if(WIN32 OR
+           NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" OR
+           NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            message(FATAL_ERROR "The configured sanitizer mode requires GCC or Clang for both C and C++ on a non-Windows platform")
+        endif()
+        if(LMCAS_ENABLE_SANITIZERS)
+            set(_lmcas_instrumentation_flags
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        else()
+            set(_lmcas_instrumentation_flags
+                -fsanitize=thread -fno-omit-frame-pointer)
+        endif()
+        target_compile_options(${target_name} PRIVATE
+            ${_lmcas_instrumentation_flags})
+        target_link_options(${target_name} PRIVATE
+            ${_lmcas_instrumentation_flags})
+    elseif(LMCAS_ENABLE_COVERAGE)
+        if(WIN32 OR
+           NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" OR
+           NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            message(FATAL_ERROR "Coverage requires GCC or Clang for both C and C++ on a non-Windows platform")
+        endif()
+        target_compile_options(${target_name} PRIVATE --coverage -O0 -g)
+        target_link_options(${target_name} PRIVATE --coverage)
     endif()
+endfunction()
 
-    if(LMCAS_ENABLE_SANITIZERS)
-        set(_lmcas_sanitizer_flags -fsanitize=address,undefined -fno-omit-frame-pointer)
-    else()
-        set(_lmcas_sanitizer_flags -fsanitize=thread -fno-omit-frame-pointer)
-    endif()
-
-    foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
-        target_compile_options(${component} PRIVATE ${_lmcas_sanitizer_flags})
-    endforeach()
-    target_compile_options(lmcas INTERFACE ${_lmcas_sanitizer_flags})
-    target_link_options(lmcas PUBLIC ${_lmcas_sanitizer_flags})
-endif()
-
-if(LMCAS_ENABLE_COVERAGE)
-    if(WIN32 OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        message(FATAL_ERROR "Coverage instrumentation requires GCC or Clang on a non-Windows platform")
-    endif()
-
-    foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
+foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
+    if(LMCAS_ENABLE_SANITIZERS OR LMCAS_ENABLE_TSAN)
+        if(LMCAS_ENABLE_SANITIZERS)
+            target_compile_options(${component} PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        else()
+            target_compile_options(${component} PRIVATE
+                -fsanitize=thread -fno-omit-frame-pointer)
+        endif()
+    elseif(LMCAS_ENABLE_COVERAGE)
         target_compile_options(${component} PRIVATE --coverage -O0 -g)
-    endforeach()
-    target_compile_options(lmcas INTERFACE --coverage -O0 -g)
-    target_link_options(lmcas PUBLIC --coverage)
-endif()
+    endif()
+endforeach()
+lmcas_apply_instrumentation(lmcas)
 
 # ============================================================
 # Benchmarks

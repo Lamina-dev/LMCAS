@@ -16,6 +16,28 @@ InferenceTriboolResult InferenceEngine::query_periodic_checked(const SymbolicExp
                     case FunctionNode::FuncType::Cos:
                     case FunctionNode::FuncType::Tan:
                         return Tribool::True;
+                    case FunctionNode::FuncType::ArcTan: {
+                        if (func->arguments().size() != 1) {
+                            return Tribool::Unknown;
+                        }
+                        auto argument = lamina::detail::expression_from_node(
+                            func->arguments()[0]);
+                        if (auto variable =
+                                std::dynamic_pointer_cast<const VariableNode>(
+                                    func->arguments()[0])) {
+                            const auto& properties =
+                                impl_->ctx.current_properties();
+                            return properties.is_periodic(variable->name())
+                                ? Tribool::True
+                                : Tribool::False;
+                        }
+                        auto periodic = query_periodic_checked(argument);
+                        if (periodic &&
+                            periodic.value() == Tribool::True) {
+                            return Tribool::True;
+                        }
+                        return Tribool::Unknown;
+                    }
                     default:
                         break;
                 }
@@ -116,6 +138,10 @@ Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
         switch (func->type()) {
             case FunctionNode::FuncType::Exp:
                 // exp is strictly increasing on all of ℝ
+                return Monotonicity::Increasing;
+
+            case FunctionNode::FuncType::ArcTan:
+                // atan 在整个实数域严格递增.
                 return Monotonicity::Increasing;
 
             case FunctionNode::FuncType::Ln: {

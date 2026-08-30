@@ -700,6 +700,41 @@ void test_wrong_variable_returns_unknown() {
         "exp(x) w.r.t. y returns Unknown (wrong variable)");
 }
 
+void test_arctan_monotonicity_and_periodicity() {
+    TEST_CASE("atan(x) 全域递增且非周期");
+
+    AssumptionContext context;
+    EXPECT_TRUE(
+        context.assume_domain("x", Domain::Real).has_value(),
+        "实数域假设应成功");
+    InferenceEngine engine(context);
+    SymbolicExpr atan_x =
+        make_func_expr(FunctionNode::FuncType::ArcTan, "x");
+
+    EXPECT_TRUE(
+        engine.infer_monotonicity(
+            atan_x, "x", Interval::entire_line()) ==
+            Monotonicity::Increasing,
+        "atan(x) 在实数域严格递增");
+    EXPECT_TRUE(
+        engine.query_periodic_checked(atan_x).value() ==
+            Tribool::False,
+        "未声明周期性的自变量经 atan 后非周期");
+
+    auto sin_x = lamina::detail::make_node<FunctionNode>(
+        FunctionNode::FuncType::Sin,
+        std::vector<std::shared_ptr<const SymbolicNode>>{
+            lamina::detail::make_node<VariableNode>("x")});
+    SymbolicExpr atan_sin = lamina::detail::expression_from_node(
+        lamina::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::ArcTan,
+            std::vector<std::shared_ptr<const SymbolicNode>>{sin_x}));
+    EXPECT_TRUE(
+        engine.query_periodic_checked(atan_sin).value() ==
+            Tribool::True,
+        "atan 应保留已证明参数的周期");
+}
+
 int main() {
     test_exp_increasing_on_reals();
     test_exp_increasing_on_finite_interval();
@@ -711,6 +746,7 @@ int main() {
     test_ln_deduction_from_inequality();
     test_unknown_for_non_monotone_function();
     test_wrong_variable_returns_unknown();
+    test_arctan_monotonicity_and_periodicity();
 
     // Properties 28-31: Monotonicity deduction rules (existing tests)
     test_ln_monotonicity_both_positive();

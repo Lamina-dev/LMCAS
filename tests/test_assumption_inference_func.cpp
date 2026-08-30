@@ -570,6 +570,38 @@ void test_tan_real_arg_sign_unknown() {
 }
 
 
+void test_arctan_sign_and_real_domain() {
+    TEST_CASE("atan(x) 传播符号性质与实数域");
+
+    AssumptionContext context;
+    EXPECT_TRUE(context.assume_domain("x", Domain::Real).has_value(),
+                "实数域假设应成功");
+    EXPECT_TRUE(context.assume_sign("x", Sign::Positive).has_value(),
+                "正号假设应成功");
+    InferenceEngine engine(context);
+    auto expression =
+        make_func_expr(FunctionNode::FuncType::ArcTan, var("x"));
+
+    EXPECT_TRUE(
+        engine.query_positive_checked(expression).value() == Tribool::True,
+        "正参数的 atan 为正");
+    EXPECT_TRUE(
+        engine.query_negative_checked(expression).value() == Tribool::False,
+        "正参数的 atan 不为负");
+    EXPECT_TRUE(
+        engine.query_nonnegative_checked(expression).value() == Tribool::True,
+        "正参数的 atan 非负");
+    EXPECT_TRUE(
+        engine.query_nonpositive_checked(expression).value() == Tribool::False,
+        "正参数的 atan 不为非正");
+    EXPECT_TRUE(
+        engine.query_nonzero_checked(expression).value() == Tribool::True,
+        "正参数的 atan 非零");
+    EXPECT_TRUE(
+        engine.query_real_checked(expression).value() == Tribool::True,
+        "实参数的 atan 为实数");
+}
+
 void test_unrecognized_function() {
     TEST_CASE("Unrecognized function returns Unknown for all properties");
 
@@ -664,6 +696,7 @@ int main() {
 
     test_tan_real_arg_real_domain();
     test_tan_real_arg_sign_unknown();
+    test_arctan_sign_and_real_domain();
 
     // Edge cases
     test_unrecognized_function();

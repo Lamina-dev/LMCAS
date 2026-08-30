@@ -333,13 +333,20 @@ static SolveVectorResult solve_finite_vector_core(
         auto substitution = detect_trans_substitutions(f_expr, var);
         if (substitution.mappings.empty() || !is_polynomial_after_substitution(substitution)) {
             if (opts.allow_numeric) {
-                auto mixed_results = solve_mixed_transcendental(f_expr, var, opts);
-                if (!mixed_results.empty()) {
-                    return SolveVectorResult::success(std::move(mixed_results));
+                auto mixed = solve_mixed_transcendental_checked(
+                    f_expr, var, opts, context);
+                if (!mixed) {
+                    return SolveVectorResult::failure(mixed.error());
+                }
+                if (mixed.value().completeness == Completeness::Complete) {
+                    return SolveVectorResult::success(
+                        std::move(mixed.value().value));
                 }
                 return SolveVectorResult::failure(
                     CasErrc::Inconclusive,
-                    "mixed transcendental numeric search produced no verified vector result",
+                    mixed.value().reason.empty()
+                        ? "mixed transcendental search is incomplete"
+                        : mixed.value().reason,
                     operation);
             }
             return SolveVectorResult::failure(

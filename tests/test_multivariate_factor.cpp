@@ -22,6 +22,15 @@ static MultiPoly::Term make_term(const std::vector<int>& exponents, const Ration
     return {Monomial(exponents.begin(), exponents.end()), coeff};
 }
 
+static MultiFactorResult checked_factor_multivariate(const MultiPoly& poly)
+{
+    auto result = factor_multivariate_checked(poly);
+    if (!result) {
+        throw std::runtime_error(result.error().message);
+    }
+    return std::move(result.value().value);
+}
+
 int main()
 {
 
@@ -231,7 +240,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // 验证因子乘积等于原多项式
         MultiPoly product(Rational(result.constant), vars);
@@ -254,7 +263,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // 验证因子乘积等于原多项式
         MultiPoly product(Rational(result.constant), vars);
@@ -281,7 +290,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // 不可约多项式应返回自身
         EXPECT_TRUE(result.factors.size() == 1,
@@ -303,7 +312,7 @@ int main()
         std::vector<std::string> vars = {"x", "y"};
         MultiPoly poly(Rational(42), vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
         EXPECT_TRUE(result.factors.empty(), "constant polynomial has no factors");
         EXPECT_TRUE(result.constant == Rational(42), "constant is 42");
     }
@@ -313,7 +322,7 @@ int main()
         std::vector<std::string> vars = {"x", "y"};
         MultiPoly poly(Rational(0), vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
         EXPECT_TRUE(result.factors.empty(), "zero polynomial has no factors");
         EXPECT_TRUE(result.constant == Rational(0), "constant is 0");
     }
@@ -342,7 +351,7 @@ int main()
 
         MultiPoly poly = f1 * f2;
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // 验证因子乘积等于原多项式
         MultiPoly product(Rational(result.constant), vars);
@@ -365,7 +374,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // 验证因子乘积等于原多项式
         MultiPoly product(Rational(result.constant), vars);
@@ -405,7 +414,7 @@ int main()
         }
 
         // Factor the product
-        MultiFactorResult result = factor_multivariate(product);
+        MultiFactorResult result = checked_factor_multivariate(product);
 
         // Reconstruct: constant * ∏(factors[i]^mult[i])
         MultiPoly reconstructed(Rational(result.constant), vars);
@@ -438,7 +447,7 @@ int main()
         if (f != 0) terms.push_back({Monomial({0, 0}), Rational(f)});
 
         MultiPoly poly(terms, vars);
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Each factor should be primitive (numeric_content == 1)
         for (size_t i = 0; i < result.factors.size(); ++i) {
@@ -486,7 +495,7 @@ int main()
         int scalar = rc::gen::inRange(1, 5);
         MultiPoly poly = monomial_factor * linear_factor * Rational(scalar);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Reconstruct
         MultiPoly reconstructed(Rational(result.constant), vars);
@@ -516,7 +525,7 @@ int main()
         if (terms.empty()) terms.push_back({Monomial({1, 0}), Rational(1)});
 
         MultiPoly poly(terms, vars);
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Should have exactly one factor (the polynomial itself, up to constant)
         RC_ASSERT(result.factors.size() == 1);
@@ -547,7 +556,7 @@ int main()
         if (terms.empty()) terms.push_back({Monomial({1, 0, 0}), Rational(1)});
 
         MultiPoly poly(terms, vars);
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Should have exactly one factor
         RC_ASSERT(result.factors.size() == 1);
@@ -597,7 +606,7 @@ int main()
         // Skip if diff is zero (a == ±b)
         if (diff.is_zero()) return;
 
-        MultiFactorResult result = factor_multivariate(diff);
+        MultiFactorResult result = checked_factor_multivariate(diff);
 
         // Verify product correctness: constant * ∏(factors[i]^mult[i]) == diff
         MultiPoly reconstructed(Rational(result.constant), vars);
@@ -639,7 +648,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Verify product correctness
         MultiPoly reconstructed(Rational(result.constant), vars);
@@ -666,7 +675,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Verify product
         MultiPoly product(Rational(result.constant), vars);
@@ -689,7 +698,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Verify product
         MultiPoly product(Rational(result.constant), vars);
@@ -714,7 +723,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Verify product correctness (fundamental invariant)
         MultiPoly product(Rational(result.constant), vars);
@@ -737,7 +746,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         // Verify product
         MultiPoly product(Rational(result.constant), vars);
@@ -757,7 +766,7 @@ int main()
         std::vector<std::string> vars = {"x", "y"};
         MultiPoly poly(Rational(42), vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
         EXPECT_TRUE(result.factors.empty(), "constant 42: no factors");
         EXPECT_TRUE(result.constant == Rational(42), "constant 42: constant is 42");
     }
@@ -767,12 +776,12 @@ int main()
         std::vector<std::string> vars = {"x", "y"};
         MultiPoly poly(Rational(0), vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
         EXPECT_TRUE(result.factors.empty(), "zero: no factors");
         EXPECT_TRUE(result.constant == Rational(0), "zero: constant is 0");
     }
 
-    TEST_CASE("Complete factorization: irreducible x^2+y^2+1 -> returns itself");
+    TEST_CASE("Checked factorization: x^2+y^2+1 精确返回未决单因子");
     {
         std::vector<std::string> vars = {"x", "y"};
         std::vector<MultiPoly::Term> terms = {
@@ -782,7 +791,7 @@ int main()
         };
         MultiPoly poly(terms, vars);
 
-        MultiFactorResult result = factor_multivariate(poly);
+        MultiFactorResult result = checked_factor_multivariate(poly);
 
         EXPECT_TRUE(result.factors.size() == 1, "x^2+y^2+1: single irreducible factor");
         EXPECT_TRUE(result.constant == Rational(1), "x^2+y^2+1: constant is 1");
@@ -796,6 +805,40 @@ int main()
             }
         }
         EXPECT_TRUE(product == poly, "x^2+y^2+1: product equals original");
+        auto checked = factor_multivariate_checked(poly);
+        EXPECT_TRUE(checked.has_value(), "未覆盖模式应返回精确候选");
+        if (checked) {
+            EXPECT_TRUE(
+                checked.value().completeness == Completeness::Inconclusive,
+                "未证明不可约时不得标记 Complete");
+        }
+    }
+
+    TEST_CASE("Checked factorization: 已知模式完整且预算错误可见");
+    {
+        std::vector<std::string> vars = {"x", "y"};
+        MultiPoly difference({
+            make_term({2, 0}, Rational(1)),
+            make_term({0, 2}, Rational(-1))
+        }, vars);
+        auto complete = factor_multivariate_checked(difference);
+        EXPECT_TRUE(complete.has_value(), "平方差分解应成功");
+        if (complete) {
+            EXPECT_TRUE(
+                complete.value().completeness == Completeness::Complete,
+                "平方差递归到线性因子后应为 Complete");
+        }
+
+        ResourceLimits limits;
+        limits.max_steps = 0;
+        ComputationContext context(limits);
+        auto limited =
+            factor_multivariate_checked(difference, context);
+        EXPECT_FALSE(limited.has_value(), "耗尽预算应返回错误");
+        EXPECT_TRUE(
+            limited.error().code == CasErrc::ResourceLimit,
+            "预算错误应报告 ResourceLimit");
+
     }
 
     return TEST_REPORT();

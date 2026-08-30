@@ -4,6 +4,19 @@
 
 using namespace lamina;
 
+static std::vector<Polynomial<Rational>> checked_zassenhaus(
+    const Polynomial<Rational>& poly,
+    const std::vector<Polynomial<BigInt>>& lifted,
+    int64_t modulus)
+{
+    auto result = zassenhaus_combine_checked(
+        poly, lifted, BigInt(static_cast<long long>(modulus)));
+    if (!result) {
+        throw std::runtime_error(result.error().message);
+    }
+    return std::move(result.value().value);
+}
+
 void test_single_sin() {
     TEST_CASE("detect_trans_substitutions: single sin(x)");
 
@@ -1033,7 +1046,7 @@ void test_zassenhaus_single_factor() {
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);  // p^k = 5^3
+    auto result = checked_zassenhaus(poly, lifted, 125);  // p^k = 5^3
 
     EXPECT_TRUE(result.size() == 1, "single factor should return 1 true factor");
     EXPECT_TRUE(result[0].degree() == 1, "factor should be degree 1");
@@ -1051,7 +1064,7 @@ void test_zassenhaus_two_linear_factors() {
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")    // x + 1
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
     EXPECT_TRUE(result.size() == 2, "x^2 - 1 should have 2 true factors");
 
@@ -1072,18 +1085,15 @@ void test_zassenhaus_irreducible_quadratic() {
     /// Hensel 提升给出的两个模因子在 Q 上组合后仍返回原多项式.
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
-    // 模 7 下 x^2 + x + 1 = (x - 2)(x - 4) mod 7
-    // 提升后的因子(mod 49 = 7^2)
-    /// 提升因子为 (x - 2) mod 49 与 (x - 4) mod 49,
-    /// 两者在 Q 上的组合保持原多项式.
+    // 模 7 下为 (x - 2)(x - 4),提升到模 49 后根为 18 和 30.
     std::vector<Polynomial<BigInt>> lifted = {
-        Polynomial<BigInt>({BigInt(-2), BigInt(1)}, "x"),  // x - 2 (mod 49)
-        Polynomial<BigInt>({BigInt(-4), BigInt(1)}, "x")   // x - 4 (mod 49)
+        Polynomial<BigInt>({BigInt(-18), BigInt(1)}, "x"),
+        Polynomial<BigInt>({BigInt(-30), BigInt(1)}, "x")
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 49);
+    auto result = checked_zassenhaus(poly, lifted, 49);
 
-    // x - 2 不整除 x^2 + x + 1 over Q,x - 4 也不整除
+    // 两个提升线性因子在有理数域上均不整除原多项式.
     // 所以应返回原多项式作为单一因子
     EXPECT_TRUE(result.size() == 1, "irreducible polynomial should return 1 factor");
     EXPECT_TRUE(result[0].degree() == 2, "factor should be degree 2");
@@ -1102,7 +1112,7 @@ void test_zassenhaus_three_factors() {
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")     // x + 1
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
     EXPECT_TRUE(result.size() == 3, "x^3 - x should have 3 true factors");
 
@@ -1120,22 +1130,25 @@ void test_zassenhaus_empty_factors() {
     Polynomial<Rational> poly({Rational(1), Rational(0), Rational(1)}, "x");
     std::vector<Polynomial<BigInt>> lifted;
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
     EXPECT_TRUE(result.size() == 1, "empty factors should return original poly");
 }
 
 void test_zassenhaus_zero_polynomial() {
-    TEST_CASE("zassenhaus_combine: zero polynomial");
+    TEST_CASE("zassenhaus_combine_checked: 零多项式拒绝非空提升因子");
 
     Polynomial<Rational> poly("x");
     std::vector<Polynomial<BigInt>> lifted = {
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
-
-    EXPECT_TRUE(result.empty(), "zero polynomial should return empty result");
+    auto result =
+        zassenhaus_combine_checked(poly, lifted, BigInt(125));
+    EXPECT_FALSE(result.has_value(), "零多项式与非空提升因子不一致");
+    EXPECT_TRUE(
+        result.error().code == CasErrc::InvalidArgument,
+        "不一致的提升因子应报告 InvalidArgument");
 }
 
 void test_zassenhaus_quadratic_times_linear() {
@@ -1146,21 +1159,17 @@ void test_zassenhaus_quadratic_times_linear() {
     Polynomial<Rational> x_minus_1({Rational(-1), Rational(1)}, "x");
     Polynomial<Rational> poly = x2_plus_1 * x_minus_1;
 
-    // 模 5 下 x^2 + 1 = (x - 2)(x - 3) mod 5
-    // 所以 f = (x-2)(x-3)(x-1) mod 5
-    // 提升后的因子 mod 125
+    // 模 125 下 x^2 + 1 的根提升为 57 和 68.
+    // 因此 f 与 (x-57)(x-68)(x-1) 模 125 同余.
     std::vector<Polynomial<BigInt>> lifted = {
-        Polynomial<BigInt>({BigInt(-2), BigInt(1)}, "x"),   // x - 2 (from x^2+1)
-        Polynomial<BigInt>({BigInt(-3), BigInt(1)}, "x"),   // x - 3 (from x^2+1)
-        Polynomial<BigInt>({BigInt(-1), BigInt(1)}, "x")    // x - 1
+        Polynomial<BigInt>({BigInt(-57), BigInt(1)}, "x"),
+        Polynomial<BigInt>({BigInt(-68), BigInt(1)}, "x"),
+        Polynomial<BigInt>({BigInt(-1), BigInt(1)}, "x")
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
-    // 应找到 (x-1) 作为真因子(子集大小 1),
-    // 然后 (x-2)(x-3) mod 125 = x^2 - 5x + 6 mod 125 不等于 x^2+1
-    // 实际上需要正确的提升因子.这里用简化测试:
-    // 至少应返回非空结果
+    // 真因子 x-1 可由单元素子集恢复，剩余两个提升因子组合为 x^2+1.
     EXPECT_TRUE(result.size() >= 1, "should find at least 1 factor");
 
     // 验证所有因子的乘积等于原多项式
@@ -1180,17 +1189,17 @@ void test_zassenhaus_quadratic_times_linear() {
 void test_zassenhaus_early_termination_irreducible() {
     TEST_CASE("zassenhaus early termination: irreducible polynomial (all subsets checked)");
 
-    /// f(x) = x^2 + x + 1 在 Q 上为整体元素.
-    /// 模 7 因子 (x-2)(x-4) 的所有真子集候选均未通过整除检验,
+    /// f(x) = x^2 + x + 1 在 Q 上不可约.
+    /// 模 49 因子 (x-18)(x-30) 的所有真子集候选均未通过整除检验,
     /// 因而剩余项等于原多项式.
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
-        Polynomial<BigInt>({BigInt(-2), BigInt(1)}, "x"),  // x - 2 (mod 49)
-        Polynomial<BigInt>({BigInt(-4), BigInt(1)}, "x")   // x - 4 (mod 49)
+        Polynomial<BigInt>({BigInt(-18), BigInt(1)}, "x"),
+        Polynomial<BigInt>({BigInt(-30), BigInt(1)}, "x")
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 49);
+    auto result = checked_zassenhaus(poly, lifted, 49);
 
     // 不可约多项式:所有子集检查完毕后,剩余多项式作为唯一因子返回
     EXPECT_TRUE(result.size() == 1, "irreducible polynomial should return 1 factor");
@@ -1203,18 +1212,17 @@ void test_zassenhaus_early_termination_remaining_irreducible() {
     TEST_CASE("zassenhaus early termination: after finding one factor, remaining is irreducible");
 
     // f(x) = (x - 1)(x^2 + x + 1) = x^3 - 1
-    // 模 7 下 x^2 + x + 1 = (x-2)(x-4),x - 1 = (x-1)
-    // 所以 f = (x-1)(x-2)(x-4) mod 7
+    // 模 49 下 f = (x-1)(x-18)(x-30).
     // 在 Q 上:找到 (x-1) 后,剩余 x^2 + x + 1 不可约
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(0), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
-        Polynomial<BigInt>({BigInt(-1), BigInt(1)}, "x"),   // x - 1
-        Polynomial<BigInt>({BigInt(-2), BigInt(1)}, "x"),   // x - 2 (from x^2+x+1 mod 7)
-        Polynomial<BigInt>({BigInt(-4), BigInt(1)}, "x")    // x - 4 (from x^2+x+1 mod 7)
+        Polynomial<BigInt>({BigInt(-1), BigInt(1)}, "x"),
+        Polynomial<BigInt>({BigInt(-18), BigInt(1)}, "x"),
+        Polynomial<BigInt>({BigInt(-30), BigInt(1)}, "x")
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 49);
+    auto result = checked_zassenhaus(poly, lifted, 49);
 
     // 应找到 (x-1) 作为第一个因子,然后剩余 x^2+x+1 不可约
     EXPECT_TRUE(result.size() == 2, "should find 2 true factors");
@@ -1246,7 +1254,7 @@ void test_zassenhaus_early_termination_linear_remaining() {
         Polynomial<BigInt>({BigInt(2), BigInt(1)}, "x")     // x + 2
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
     // 应找到 3 个线性因子(或 (x^2-1) + (x+2))
     // 关键验证:因子乘积等于原多项式
@@ -1274,7 +1282,7 @@ void test_zassenhaus_early_termination_single_active_factor() {
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")    // x + 1
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
     EXPECT_TRUE(result.size() == 2, "should find 2 factors");
 
@@ -1298,7 +1306,7 @@ void test_zassenhaus_early_termination_degree_one_input() {
         Polynomial<BigInt>({BigInt(5), BigInt(1)}, "x")
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
     EXPECT_TRUE(result.size() == 1, "linear polynomial should return 1 factor");
     EXPECT_TRUE(result[0].degree() == 1, "factor should be linear");
@@ -1317,7 +1325,7 @@ void test_zassenhaus_rational_reconstruction_integer_coeffs() {
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")    // x + 1
     };
 
-    auto result = zassenhaus_combine(poly, lifted, 125);
+    auto result = checked_zassenhaus(poly, lifted, 125);
 
     EXPECT_TRUE(result.size() == 2, "x^2 - 1 should still have 2 factors with rational reconstruction");
 
@@ -1394,7 +1402,7 @@ void test_zassenhaus_rational_reconstruction_with_rational_poly() {
     };
 
     // 使用大素数幂确保有理重构路径被使用
-    auto result = zassenhaus_combine(poly2, lifted2, 1000000007LL);
+    auto result = checked_zassenhaus(poly2, lifted2, 1000000007LL);
 
     EXPECT_TRUE(result.size() == 2, "should find 2 factors with large prime power");
 
@@ -1408,13 +1416,10 @@ void test_zassenhaus_rational_reconstruction_with_rational_poly() {
 }
 
 
-void test_zassenhaus_pruned_path_triggered() {
-    TEST_CASE("zassenhaus_combine: pruned path triggered for >15 factors");
+void test_zassenhaus_bounded_enumeration_many_factors() {
+    TEST_CASE("zassenhaus_combine_checked: 有界枚举处理 16 个线性因子");
 
-    // 构造一个多项式,其 Hensel 提升产生 16 个线性因子
-    // f(x) = (x-1)(x-2)...(x-16) 的简化版本
-    // 使用 16 个线性因子来触发剪枝路径
-    // 原多项式为这些因子的乘积
+    // 构造 f(x) = (x-1)(x-2)...(x-16),逐轮首个单因子候选即可整除.
 
     // 构造 f(x) = product of (x - i) for i = 1..16
     Polynomial<Rational> poly({Rational(1)}, "x");  // 从 1 开始
@@ -1429,13 +1434,13 @@ void test_zassenhaus_pruned_path_triggered() {
         lifted.push_back(Polynomial<BigInt>({BigInt(-i), BigInt(1)}, "x"));
     }
 
-    // 使用足够大的 prime_power
+    // 使用足够大的精确重构模数.
     int64_t prime_power = 1000000007LL;
 
-    auto result = zassenhaus_combine(poly, lifted, prime_power);
+    auto result = checked_zassenhaus(poly, lifted, prime_power);
 
     // 应该找到 16 个线性因子
-    EXPECT_TRUE(result.size() == 16, "should find 16 factors via pruned path");
+    EXPECT_TRUE(result.size() == 16, "bounded enumeration finds 16 factors");
 
     // 验证每个因子为线性
     int linear_count = 0;
@@ -1445,10 +1450,10 @@ void test_zassenhaus_pruned_path_triggered() {
     EXPECT_TRUE(linear_count == 16, "all 16 factors should be linear");
 }
 
-void test_zassenhaus_pruned_path_correctness() {
-    TEST_CASE("zassenhaus_combine: pruned path product equals original");
+void test_zassenhaus_bounded_enumeration_product() {
+    TEST_CASE("zassenhaus_combine_checked: 有界枚举结果精确重构输入");
 
-    // 构造 f(x) = (x-1)(x-2)...(x-16)
+    // 构造 f(x) = (x-1)(x-2)...(x-16).
     Polynomial<Rational> poly({Rational(1)}, "x");
     for (int i = 1; i <= 16; ++i) {
         Polynomial<Rational> factor({Rational(-i), Rational(1)}, "x");
@@ -1462,7 +1467,7 @@ void test_zassenhaus_pruned_path_correctness() {
 
     int64_t prime_power = 1000000007LL;
 
-    auto result = zassenhaus_combine(poly, lifted, prime_power);
+    auto result = checked_zassenhaus(poly, lifted, prime_power);
 
     // 验证因子乘积等于原多项式
     if (!result.empty()) {
@@ -1473,7 +1478,36 @@ void test_zassenhaus_pruned_path_correctness() {
         auto monic_poly = poly.make_monic();
         auto monic_product = product.make_monic();
         EXPECT_TRUE(monic_poly == monic_product,
-            "product of pruned factors should equal original polynomial");
+            "bounded-enumeration factors reconstruct original polynomial");
+    }
+}
+
+void test_zassenhaus_tiny_budget_is_inconclusive() {
+    TEST_CASE("zassenhaus_combine_checked: 微小预算返回精确未决结果");
+
+    Polynomial<Rational> poly({Rational(1)}, "x");
+    std::vector<Polynomial<BigInt>> lifted;
+    for (int i = 1; i <= 4; ++i) {
+        poly = poly *
+            Polynomial<Rational>({Rational(-i), Rational(1)}, "x");
+        lifted.emplace_back(
+            std::vector<BigInt>{BigInt(-i), BigInt(1)}, "x");
+    }
+    ResourceLimits limits;
+    limits.max_steps = lifted.size();
+    ComputationContext context(limits);
+    auto result = zassenhaus_combine_checked(
+        poly, lifted, BigInt(1000000007LL), context);
+
+    EXPECT_TRUE(result.has_value(), "预算耗尽应返回精确部分结果");
+    if (result) {
+        EXPECT_TRUE(
+            result.value().completeness == Completeness::Inconclusive,
+            "预算耗尽应标记为 Inconclusive");
+        EXPECT_TRUE(
+            result.value().value.size() == 1 &&
+                result.value().value[0] == poly.make_monic(),
+            "未决结果仍应精确重构输入");
     }
 }
 
@@ -2309,8 +2343,9 @@ int main() {
     test_zassenhaus_early_termination_single_active_factor();
     test_zassenhaus_early_termination_degree_one_input();
 
-    test_zassenhaus_pruned_path_triggered();
-    test_zassenhaus_pruned_path_correctness();
+    test_zassenhaus_bounded_enumeration_many_factors();
+    test_zassenhaus_bounded_enumeration_product();
+    test_zassenhaus_tiny_budget_is_inconclusive();
 
     test_back_substitute_u0_plus_x_to_sin_x_plus_x();
     test_back_substitute_u0_squared_minus_x_squared();

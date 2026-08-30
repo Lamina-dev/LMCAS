@@ -208,15 +208,40 @@ static void test_inverse_fourier_constant_returns_unevaluated() {
 
 
 static void test_convolve_returns_result() {
-    TEST_CASE("convolve: unsupported bilateral pair is Inconclusive");
+    TEST_CASE("convolve: 正高斯双边卷积返回受证闭式");
     auto x = var("x");
-    auto neg_x_sq = SymbolicExpr::multiply(
-        num(-1), SymbolicExpr::power(x, num(2)));
-    auto f = SymbolicExpr::exp(neg_x_sq);
-    auto result = lamina::convolve_checked(f, f, "x");
+    auto x_squared = SymbolicExpr::power(x, num(2));
+    auto first = SymbolicExpr::multiply(
+        num(2), SymbolicExpr::exp(
+            SymbolicExpr::multiply(num(-1), x_squared)));
+    auto second = SymbolicExpr::multiply(
+        num(3), SymbolicExpr::exp(
+            SymbolicExpr::multiply(num(-2), x_squared)));
+
+    auto result = lamina::convolve_checked(first, second, "x");
+    EXPECT_TRUE(result.has_value(), "正高斯卷积应返回闭式");
+    if (result) {
+        auto expression = result.value().value.expression;
+        EXPECT_TRUE(expression != nullptr, "卷积闭式不能为空");
+        EXPECT_TRUE(
+            std::holds_alternative<lamina::ByConstructionProof>(
+                result.value().certificate),
+            "高斯卷积应具有构造证明");
+        const auto text = expression->to_string();
+        EXPECT_TRUE(
+            text.find("exp") != std::string::npos &&
+                text.find("pi") != std::string::npos,
+            "闭式应包含高斯指数与 pi 归一化因子");
+    }
+
+    auto zero = lamina::convolve_checked(num(0), first, "x");
     EXPECT_TRUE(
-        !result && result.error().code == lamina::CasErrc::Inconclusive,
-        "unsupported verified bilateral convolution is Inconclusive");
+        zero && zero.value().value.expression->is_zero(),
+        "零函数卷积应为零");
+
+    auto sum = SymbolicExpr::add(first, second);
+    auto linear = lamina::convolve_checked(sum, first, "x");
+    EXPECT_TRUE(linear.has_value(), "卷积应对加法保持线性");
 }
 
 static void test_convolve_null_inputs() {

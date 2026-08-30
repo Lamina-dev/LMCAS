@@ -264,7 +264,14 @@ factor_homogeneous_bivariate(const MultiPoly& poly)
     }
 
     /// 一元因式分解
-    std::vector<Polynomial<Rational>> uni_factors = factor_univariate_bridge(uni_poly);
+    ComputationContext context;
+    auto checked_factors = factor_univariate_bridge_checked(uni_poly, context);
+    if (!checked_factors ||
+        checked_factors.value().completeness != Completeness::Complete) {
+        return std::nullopt;
+    }
+    std::vector<Polynomial<Rational>> uni_factors =
+        std::move(checked_factors.value().value);
     if (uni_factors.size() <= 1) return std::nullopt;
 
     /// 重新齐次化每个因子

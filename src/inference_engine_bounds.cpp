@@ -294,6 +294,50 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
                 // If the argument has finite bounds, sin/cos is bounded by [-1, 1]
                 return make_interval(-1.0, 1.0);
             }
+            case FunctionNode::FuncType::ArcTan: {
+                auto argument_bounds = propagate_bounds(arg_expr);
+                if (argument_bounds) {
+                    Interval result;
+                    if (argument_bounds->lower.is_neg_infinity) {
+                        result.lower = Endpoint::open(
+                            SymbolicExpr::number(-LMMC_CONST_PI / 2.0));
+                    } else if (auto lower =
+                                   endpoint_to_double(
+                                       argument_bounds->lower)) {
+                        auto value = SymbolicExpr::number(std::atan(*lower));
+                        result.lower = argument_bounds->lower.is_open
+                            ? Endpoint::open(value)
+                            : Endpoint::closed(value);
+                    } else {
+                        return std::nullopt;
+                    }
+
+                    if (argument_bounds->upper.is_pos_infinity) {
+                        result.upper = Endpoint::open(
+                            SymbolicExpr::number(LMMC_CONST_PI / 2.0));
+                    } else if (auto upper =
+                                   endpoint_to_double(
+                                       argument_bounds->upper)) {
+                        auto value = SymbolicExpr::number(std::atan(*upper));
+                        result.upper = argument_bounds->upper.is_open
+                            ? Endpoint::open(value)
+                            : Endpoint::closed(value);
+                    } else {
+                        return std::nullopt;
+                    }
+                    return result;
+                }
+
+                auto real = query_real_checked(arg_expr);
+                if (real && real.value() == Tribool::True) {
+                    return Interval{
+                        Endpoint::open(SymbolicExpr::number(
+                            -LMMC_CONST_PI / 2.0)),
+                        Endpoint::open(SymbolicExpr::number(
+                            LMMC_CONST_PI / 2.0))};
+                }
+                return std::nullopt;
+            }
             default:
                 return std::nullopt;
         }

@@ -847,23 +847,15 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         return {pyth_simplified};
     }
 
-    /// --- Phase 5: Zassenhaus 因子组合 ---
-    int64_t prime_power = 1;
-    for (int i = 0; i < lift_bound; ++i) {
-        /// 乘法达到 int64_t 上界前截断 prime_power.
-        if (prime_power > std::numeric_limits<int64_t>::max() / prime) {
-            prime_power = std::numeric_limits<int64_t>::max();
-            break;
-        }
-        prime_power *= prime;
-    }
-
-    std::vector<Polynomial<Rational>> true_factors;
-    try {
-        true_factors = zassenhaus_combine(work_poly, lifted_factors, prime_power);
-    } catch (...) {
+    /// --- 阶段 5：受检 Zassenhaus 有界组合枚举 ---
+    auto combined =
+        zassenhaus_combine_checked(work_poly, lifted_factors, pk);
+    if (!combined ||
+        combined.value().completeness != Completeness::Complete) {
         return {pyth_simplified};
     }
+    std::vector<Polynomial<Rational>> true_factors =
+        std::move(combined.value().value);
 
     /// 若组合后仅得到一个因子(或无因子),表达式不可约
     if (true_factors.size() <= 1) {

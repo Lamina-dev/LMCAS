@@ -14,6 +14,8 @@
 
 #include "lamina_export.hpp"
 #include "multivariate_poly.hpp"
+#include "computation_context.hpp"
+#include "result.hpp"
 
 #include <optional>
 #include <string>
@@ -34,19 +36,21 @@ struct MultiFactorResult {
     std::vector<int> multiplicities; ///< 各因子的重数
 };
 
+using MultiFactorCheckedResult = Result<MathResult<MultiFactorResult>>;
+
 /**
- * @brief 多元多项式因式分解主入口
+ * @brief 受检精确多元因式分解.
  *
- * 采用 Wang-EEZ 算法，将多元多项式分解为不可约因子的乘积。
- * 返回 constant * factors[0]^mult[0] * factors[1]^mult[1] * ... = poly。
- *
- * 对于零多项式返回 {0, [], []}；对于常数多项式返回 {constant, [], []}。
- * 内部错误时返回原多项式作为不可约因子，不抛异常。
- *
- * @param[in] poly 待分解的多元多项式
- * @return 分解结果
+ * 每个成功值都精确重构 @p poly.`Complete` 还证明所有终端因子在已实现
+ * 的精确路径下不可约;有界或尚不支持的精确部分结果标记为
+ * `Inconclusive`.资源、取消、分配与内部不变量失败均通过 CasError 返回.
  */
-LAMINA_API MultiFactorResult factor_multivariate(const MultiPoly& poly);
+LAMINA_API MultiFactorCheckedResult factor_multivariate_checked(
+    const MultiPoly& poly,
+    ComputationContext& context);
+
+LAMINA_API MultiFactorCheckedResult factor_multivariate_checked(
+    const MultiPoly& poly);
 
 /// 内部算法组件（供测试使用）
 

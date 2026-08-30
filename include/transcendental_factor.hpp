@@ -13,6 +13,7 @@
 #include "bigint.hpp"
 #include "rational.hpp"
 #include "result.hpp"
+#include "computation_context.hpp"
 
 #include <memory>
 #include <string>
@@ -102,23 +103,26 @@ LAMINA_API HenselLiftResult hensel_lift_checked(
     int64_t prime,
     int lift_bound);
 
+using ZassenhausResult =
+    Result<MathResult<std::vector<Polynomial<Rational>>>>;
+
 /**
- * @brief Zassenhaus 因子组合(内部接口).
+ * @brief 受检且有界的精确 Zassenhaus 因子组合.
  *
- * 从 Hensel 提升后的因子中枚举子集,通过有理重构和整除性检验
- * 筛选出原多项式的真因子.
- *
- * @param[in] poly           有理系数原多项式
- * @param[in] lifted_factors Hensel 提升后的整系数因子
- * @param[in] prime_power    素数幂 p^k
- * @return 有理系数真因子列表
- *
- * @internal
+ * 要求重构模数为正,且提升因子乘积与 @p poly 的整数归一化结果同余.
+ * 候选子集按字典序枚举,不受机器字宽限制.计算预算耗尽时,精确部分分解
+ * 以 `Inconclusive` 返回.
  */
-std::vector<Polynomial<Rational>> LAMINA_API zassenhaus_combine(
+LAMINA_API ZassenhausResult zassenhaus_combine_checked(
     const Polynomial<Rational>& poly,
     const std::vector<Polynomial<BigInt>>& lifted_factors,
-    int64_t prime_power);
+    const BigInt& reconstruction_modulus,
+    ComputationContext& context);
+
+LAMINA_API ZassenhausResult zassenhaus_combine_checked(
+    const Polynomial<Rational>& poly,
+    const std::vector<Polynomial<BigInt>>& lifted_factors,
+    const BigInt& reconstruction_modulus);
 
 /**
  * @brief 二因子二次 Hensel 提升的状态结构.

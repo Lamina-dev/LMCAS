@@ -1,12 +1,11 @@
 #include "test_common.hpp"
 #include "series_engine.hpp"
 #include <random>
-#include <chrono>
 #include <cmath>
 
 
-static std::mt19937 rng(static_cast<unsigned>(
-    std::chrono::steady_clock::now().time_since_epoch().count()));
+static constexpr unsigned kPropertySeed = 0x53455249u;
+static std::mt19937 rng(kPropertySeed);
 
 /// Generate a random integer in [lo, hi].
 static int rand_int(int lo, int hi) {

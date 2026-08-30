@@ -727,11 +727,16 @@ Result<std::vector<RootIsolation>> isolate_exact_roots(
         };
 
         auto factors = factor_biquadratic(polynomial);
-        if (factors.empty()) {
-            factors = polynomial.degree() >= 6
-                ? lamina::factor_univariate_bridge(polynomial)
-                : std::vector<Poly>{polynomial};
+        if (factors.empty() && polynomial.degree() >= 6) {
+            auto factor_result =
+                lamina::factor_univariate_bridge_checked(polynomial, context);
+            if (!factor_result) {
+                return Result<std::vector<RootIsolation>>::failure(
+                    factor_result.error());
+            }
+            factors = std::move(factor_result.value().value);
         }
+        if (factors.empty()) factors = {polynomial};
         std::size_t factored_degree = 0;
         bool strict_factorization = factors.size() > 1;
         for (auto& factor : factors) {

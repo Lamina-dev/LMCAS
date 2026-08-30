@@ -16,6 +16,7 @@
 #include <limits>
 #include <unordered_set>
 #include <vector>
+#include <new>
 
 namespace lamina {
 
@@ -672,12 +673,28 @@ static lmmc_real_t evaluate_with_retry(
     return std::numeric_limits<lmmc_real_t>::quiet_NaN();
 }
 
-std::vector<IsolatedInterval> isolate_roots(
+static bool consume_mixed_step(
+    ComputationContext* context,
+    std::optional<CasError>* failure)
+{
+    if (!context) return true;
+    auto step = context->consume_steps(
+        1, "solve_mixed_transcendental_checked");
+    if (step) return true;
+    if (failure) *failure = step.error();
+    return false;
+}
+
+
+static std::vector<IsolatedInterval> isolate_roots_with_context(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var,
     const SearchInterval& interval,
-    const SolveOptions& opts)
+    const SolveOptions& opts,
+    ComputationContext* context,
+    std::optional<CasError>* failure,
+    bool* complete)
 {
     std::vector<IsolatedInterval> result;
 
@@ -703,6 +720,10 @@ std::vector<IsolatedInterval> isolate_roots(
     /// 预计算初始采样点的函数值
     std::vector<lmmc_real_t> sample_vals(INITIAL_DIVISIONS + 1);
     for (int i = 0; i <= INITIAL_DIVISIONS; ++i) {
+        if (!consume_mixed_step(context, failure)) {
+            if (complete) *complete = false;
+            return result;
+        }
         lmmc_real_t x = interval.lo + i * step;
         sample_vals[i] = evaluate_with_retry(expr, var, x, step * 0.5);
     }
@@ -733,8 +754,14 @@ std::vector<IsolatedInterval> isolate_roots(
 
     /// 自适应细分处理工作栈
     while (!work_stack.empty()) {
+        if (!consume_mixed_step(context, failure)) {
+            if (complete) *complete = false;
+            break;
+        }
         /// 检查 max_roots 限制
-        if (max_roots_limit > 0 && static_cast<int>(result.size()) >= max_roots_limit) {
+        if (max_roots_limit > 0 &&
+            static_cast<int>(result.size()) >= max_roots_limit) {
+            if (complete) *complete = false;
             break;
         }
 
@@ -861,12 +888,24 @@ std::vector<IsolatedInterval> isolate_roots(
             return a.lo < b.lo;
         });
 
-    /// 应用 max_roots 限制
-    if (max_roots_limit > 0 && static_cast<int>(result.size()) > max_roots_limit) {
+    if (max_roots_limit > 0 &&
+        static_cast<int>(result.size()) > max_roots_limit) {
+        if (complete) *complete = false;
         result.resize(static_cast<size_t>(max_roots_limit));
     }
 
     return result;
+}
+
+std::vector<IsolatedInterval> isolate_roots(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::shared_ptr<SymbolicExpr>& derivative,
+    const std::string& var,
+    const SearchInterval& interval,
+    const SolveOptions& opts)
+{
+    return isolate_roots_with_context(
+        expr, derivative, var, interval, opts, nullptr, nullptr, nullptr);
 }
 
 
@@ -938,12 +977,15 @@ std::vector<lmmc_real_t> deduplicate_roots(
  * @param[in] opts       求解选项(tolerance, max_newton_iterations)
  * @return 精化后的数值根;未收敛或残差超限时返回 nullopt
  */
-std::optional<NumericRoot> refine_root(
+static std::optional<NumericRoot> refine_root_with_context(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var,
     const IsolatedInterval& interval,
-    const SolveOptions& opts)
+    const SolveOptions& opts,
+    ComputationContext* context,
+    std::optional<CasError>* failure,
+    bool* complete)
 {
     lmmc_real_t lo = interval.lo;
     lmmc_real_t hi = interval.hi;
@@ -980,6 +1022,10 @@ std::optional<NumericRoot> refine_root(
         }
 
         for (int i = 1; i <= max_iter; ++i) {
+            if (!consume_mixed_step(context, failure)) {
+                if (complete) *complete = false;
+                return std::nullopt;
+            }
             lmmc_real_t mid = (lo + hi) * 0.5;
             lmmc_real_t f_mid = evaluate_at(expr, var, mid);
 
@@ -1047,6 +1093,10 @@ std::optional<NumericRoot> refine_root(
     }
 
     for (int i = 1; i <= max_iter; ++i) {
+        if (!consume_mixed_step(context, failure)) {
+            if (complete) *complete = false;
+            return std::nullopt;
+        }
         lmmc_real_t fx = evaluate_at(expr, var, x);
 
         if (std::isnan(fx)) {
@@ -1156,6 +1206,17 @@ std::optional<NumericRoot> refine_root(
     return std::nullopt;
 }
 
+std::optional<NumericRoot> refine_root(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::shared_ptr<SymbolicExpr>& derivative,
+    const std::string& var,
+    const IsolatedInterval& interval,
+    const SolveOptions& opts)
+{
+    return refine_root_with_context(
+        expr, derivative, var, interval, opts, nullptr, nullptr, nullptr);
+}
+
 
 /**
  * @internal
@@ -1195,157 +1256,222 @@ static std::vector<std::shared_ptr<SymbolicExpr>> assemble_results(
  * @param[in] opts     求解选项
  * @return 精化后的数值根列表
  */
-static std::vector<NumericRoot> numerical_path(
+static Result<std::vector<NumericRoot>> numerical_path(
     const std::shared_ptr<SymbolicExpr>& factor,
     const std::string& var,
     const SearchInterval& interval,
-    const SolveOptions& opts)
+    const SolveOptions& opts,
+    ComputationContext& context,
+    bool& complete)
 {
     std::vector<NumericRoot> roots;
-
-    /// 计算导数
-    std::shared_ptr<SymbolicExpr> derivative = nullptr;
+    std::shared_ptr<SymbolicExpr> derivative;
     try {
         if (factor && lamina::detail::node(factor)) {
-            DifferentiationVisitor dv(var);
-            lamina::detail::node(factor)->accept(dv);
-            auto deriv_node = dv.get_result();
-            if (deriv_node) {
-                derivative = lamina::detail::make_expression_ptr(deriv_node);
+            DifferentiationVisitor visitor(var);
+            lamina::detail::node(factor)->accept(visitor);
+            auto derivative_node = visitor.get_result();
+            if (derivative_node) {
+                derivative =
+                    lamina::detail::make_expression_ptr(derivative_node);
             }
         }
-    } catch (...) {
-        /// 微分失败,derivative 保持 nullptr -> 回退到纯二分法
+    } catch (const std::exception&) {
+        // 缺少导数时仍可使用二分路径,但不能证明搜索完备.
+        complete = false;
     }
 
-    /// 根隔离
-    auto intervals = isolate_roots(factor, derivative, var, interval, opts);
+    // 当前符号变化隔离无法证明排除偶重根,因此数值路径始终未决.
+    complete = false;
+    std::optional<CasError> failure;
+    auto intervals = isolate_roots_with_context(
+        factor, derivative, var, interval, opts,
+        &context, &failure, &complete);
+    if (failure) {
+        return Result<std::vector<NumericRoot>>::failure(*failure);
+    }
 
-    /// 逐区间精化
-    for (const auto& iso : intervals) {
-        auto refined = refine_root(factor, derivative, var, iso, opts);
-        if (refined.has_value()) {
-            roots.push_back(refined.value());
+    for (const auto& isolated : intervals) {
+        auto refined = refine_root_with_context(
+            factor, derivative, var, isolated, opts,
+            &context, &failure, &complete);
+        if (failure) {
+            return Result<std::vector<NumericRoot>>::failure(*failure);
         }
+        if (refined) roots.push_back(*refined);
     }
-
-    return roots;
+    return Result<std::vector<NumericRoot>>::success(std::move(roots));
 }
 
-std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
+MixedTranscendentalResult solve_mixed_transcendental_checked(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    const std::string& var,
+    const SolveOptions& opts,
+    ComputationContext& context)
+{
+    constexpr const char* operation = "solve_mixed_transcendental_checked";
+    if (!expr || !lamina::detail::node(expr)) {
+        return MixedTranscendentalResult::failure(
+            CasErrc::InvalidArgument, "待求解表达式不能为空", operation);
+    }
+    if (var.empty()) {
+        return MixedTranscendentalResult::failure(
+            CasErrc::InvalidArgument, "求解变量不能为空", operation);
+    }
+    if (!std::isfinite(opts.tolerance) || opts.tolerance <= 0.0 ||
+        opts.max_newton_iterations <= 0 || opts.max_roots == 0 ||
+        opts.max_roots < -1) {
+        return MixedTranscendentalResult::failure(
+            CasErrc::InvalidArgument, "求解选项包含无效界限", operation);
+    }
+    if (opts.has_search_interval &&
+        (!std::isfinite(opts.search_lo) ||
+         !std::isfinite(opts.search_hi) ||
+         opts.search_lo >= opts.search_hi)) {
+        return MixedTranscendentalResult::failure(
+            CasErrc::InvalidArgument, "搜索区间必须为有限递增区间", operation);
+    }
+
+    try {
+        auto initial_step = context.consume_steps(1, operation);
+        if (!initial_step) {
+            return MixedTranscendentalResult::failure(initial_step.error());
+        }
+        if (!expression_depends_on_variable(
+                lamina::detail::node(expr), var)) {
+            return MixedTranscendentalResult::success(
+                MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>{
+                    {}, Completeness::Complete, {}});
+        }
+
+        auto interval_opt = determine_search_interval(expr, var, opts);
+        if (!interval_opt) {
+            return MixedTranscendentalResult::failure(
+                CasErrc::InvalidArgument, "无法确定有效搜索区间", operation);
+        }
+        const SearchInterval interval = *interval_opt;
+        if (!std::isfinite(interval.lo) || !std::isfinite(interval.hi) ||
+            interval.lo >= interval.hi) {
+            return MixedTranscendentalResult::failure(
+                CasErrc::InvalidArgument, "搜索区间必须为有限递增区间",
+                operation);
+        }
+
+        std::vector<NumericRoot> all_roots;
+        bool complete = true;
+        auto accept_value = [&](lmmc_real_t value, int iterations) {
+            if (!std::isfinite(value) ||
+                value < interval.lo || value > interval.hi) {
+                complete = false;
+                return;
+            }
+            const lmmc_real_t residual =
+                std::fabs(evaluate_at(expr, var, value));
+            if (!std::isfinite(residual) || residual > opts.tolerance) {
+                complete = false;
+                return;
+            }
+            all_roots.push_back({value, residual, iterations});
+        };
+        auto accept_symbolic = [&](const auto& roots) {
+            for (const auto& root : roots) {
+                if (!root) {
+                    complete = false;
+                    continue;
+                }
+                auto simplified = root->simplify();
+                if (!simplified || !lamina::detail::node(simplified)) {
+                    complete = false;
+                    continue;
+                }
+                accept_value(
+                    recursive_eval(lamina::detail::node(simplified)), 0);
+            }
+        };
+
+        auto factors = factor_transcendental(expr, var);
+        if (factors.empty()) {
+            factors.push_back(expr);
+            complete = false;
+        }
+        for (const auto& factor : factors) {
+            auto factor_step = context.consume_steps(1, operation);
+            if (!factor_step) {
+                return MixedTranscendentalResult::failure(
+                    factor_step.error());
+            }
+            if (!factor || !lamina::detail::node(factor)) {
+                complete = false;
+                continue;
+            }
+            if (!expression_depends_on_variable(
+                    lamina::detail::node(factor), var)) {
+                continue;
+            }
+
+            bool solved_as_polynomial = false;
+            if (!contains_transcendental_of_var(factor, var)) {
+                try {
+                    auto polynomial =
+                        symbolic_to_poly<SymbolicPolyCoeff>(factor, var);
+                    const int degree = polynomial.degree();
+                    if (degree >= 1 && degree <= 4) {
+                        accept_symbolic(solve_by_factoring(polynomial, var));
+                        solved_as_polynomial = true;
+                    }
+                } catch (const std::exception&) {
+                    complete = false;
+                }
+            }
+            if (solved_as_polynomial) continue;
+
+            try {
+                accept_symbolic(solve_transcendental(factor, var));
+            } catch (const std::exception&) {
+                complete = false;
+            }
+
+            auto numeric =
+                numerical_path(factor, var, interval, opts, context, complete);
+            if (!numeric) {
+                return MixedTranscendentalResult::failure(numeric.error());
+            }
+            for (const auto& root : numeric.value()) {
+                accept_value(root.value, root.iterations);
+            }
+        }
+
+        auto values =
+            deduplicate_roots(all_roots, opts.tolerance, -1);
+        if (opts.max_roots > 0 &&
+            static_cast<int>(values.size()) > opts.max_roots) {
+            values.resize(static_cast<std::size_t>(opts.max_roots));
+            complete = false;
+        }
+        auto results = assemble_results(values);
+        return MixedTranscendentalResult::success(
+            MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>{
+                std::move(results),
+                complete ? Completeness::Complete
+                         : Completeness::Inconclusive,
+                complete ? std::string{}
+                         : "有界数值隔离未能证明排除全部未检测根"});
+    } catch (const std::bad_alloc&) {
+        return MixedTranscendentalResult::failure(
+            CasErrc::ResourceLimit, "混合求解分配失败", operation);
+    } catch (const std::exception& error) {
+        return MixedTranscendentalResult::failure(
+            CasErrc::InternalInvariant, error.what(), operation);
+    }
+}
+
+MixedTranscendentalResult solve_mixed_transcendental_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts)
 {
-    try {
-        /// 1. 早期退出:表达式不依赖变量
-        if (!expr || !lamina::detail::node(expr) || !expression_depends_on_variable(lamina::detail::node(expr), var)) {
-            return {};
-        }
-
-        /// 2. 确定搜索区间
-        auto interval_opt = determine_search_interval(expr, var, opts);
-        if (!interval_opt.has_value()) {
-            return {};
-        }
-        SearchInterval interval = interval_opt.value();
-
-        /// 3. 符号预处理:因式分解
-        auto factors = factor_transcendental(expr, var);
-
-        /// 收集所有数值根
-        std::vector<NumericRoot> all_roots;
-
-        /// 4. 多因子处理
-        bool is_single_factor_same_as_input = false;
-        if (factors.size() == 1) {
-            /// 检查唯一因子是否结构等于原表达式
-            if (factors[0] && factors[0]->to_string() == expr->to_string()) {
-                is_single_factor_same_as_input = true;
-            }
-        }
-
-        if (!is_single_factor_same_as_input && factors.size() > 1) {
-            /// 多因子:对每个因子独立求解
-            for (const auto& factor : factors) {
-                if (!factor || !lamina::detail::node(factor)) continue;
-
-                /// 跳过不依赖变量的因子(常数因子)
-                if (!expression_depends_on_variable(lamina::detail::node(factor), var)) continue;
-
-                /// (a) 尝试转换为多项式
-                bool solved_as_poly = false;
-                try {
-                    auto poly = symbolic_to_poly<SymbolicPolyCoeff>(factor, var);
-                    int deg = poly.degree();
-                    if (deg >= 1 && deg <= 4) {
-                        /// 委托给多项式求解器
-                        auto poly_roots = solve_by_factoring(poly, var);
-                        for (const auto& root_expr : poly_roots) {
-                            if (!root_expr) continue;
-                            /// 提取数值
-                            auto simplified = root_expr->simplify();
-                            if (!simplified || !lamina::detail::node(simplified)) continue;
-                            lmmc_real_t val = recursive_eval(lamina::detail::node(simplified));
-                            if (std::isfinite(val)) {
-                                /// 验证根在搜索区间内
-                                if (val >= interval.lo && val <= interval.hi) {
-                                    lmmc_real_t residual = std::fabs(evaluate_at(expr, var, val));
-                                    if (!std::isnan(residual)) {
-                                        all_roots.push_back({val, residual, 0});
-                                    }
-                                }
-                            }
-                        }
-                        solved_as_poly = true;
-                    }
-                } catch (...) {
-                    /// 转换诊断表示当前表达式位于多项式支持域之外.
-                }
-
-                if (solved_as_poly) continue;
-
-                /// (b) 尝试 solve_transcendental(收集符号解的数值)
-                try {
-                    auto trans_roots = solve_transcendental(factor, var);
-                    if (!trans_roots.empty()) {
-                        for (const auto& root_expr : trans_roots) {
-                            if (!root_expr) continue;
-                            auto simplified = root_expr->simplify();
-                            if (!simplified || !lamina::detail::node(simplified)) continue;
-                            lmmc_real_t val = recursive_eval(lamina::detail::node(simplified));
-                            if (std::isfinite(val)) {
-                                if (val >= interval.lo && val <= interval.hi) {
-                                    lmmc_real_t residual = std::fabs(evaluate_at(expr, var, val));
-                                    if (!std::isnan(residual)) {
-                                        all_roots.push_back({val, residual, 0});
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (...) {
-                    /// solve_transcendental 失败
-                }
-
-                /// (c) 数值路径:对该因子执行根隔离 + 精化
-                /// 始终执行数值路径以捕获区间内所有周期根
-                auto factor_roots = numerical_path(factor, var, interval, opts);
-                all_roots.insert(all_roots.end(), factor_roots.begin(), factor_roots.end());
-            }
-        } else {
-            /// 5. 单因子等于输入 或 分解返回空/单因子:直接数值路径
-            auto numeric_roots = numerical_path(expr, var, interval, opts);
-            all_roots.insert(all_roots.end(), numeric_roots.begin(), numeric_roots.end());
-        }
-
-        /// 6. 结果组装:去重,排序,转换
-        auto deduplicated = deduplicate_roots(all_roots, opts.tolerance, opts.max_roots);
-        return assemble_results(deduplicated);
-
-    } catch (...) {
-        return {};
-    }
+    ComputationContext context;
+    return solve_mixed_transcendental_checked(expr, var, opts, context);
 }
 
 } // namespace lamina
