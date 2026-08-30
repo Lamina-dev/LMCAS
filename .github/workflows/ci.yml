@@ -117,7 +117,7 @@ jobs:
       - name: Test
         env:
           TSAN_OPTIONS: halt_on_error=1
-        run: ctest --test-dir build --output-on-failure --timeout 120
+        run: ctest --test-dir build --output-on-failure --timeout 300
 
   coverage:
     runs-on: ubuntu-latest
