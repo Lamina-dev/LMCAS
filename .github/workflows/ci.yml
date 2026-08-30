@@ -94,10 +94,6 @@ jobs:
             msystem: MINGW64
             build_type: Release
             shared: "OFF"
-          - name: win32-debug-shared
-            msystem: MINGW32
-            build_type: Debug
-            shared: "ON"
     name: mingw-${{ matrix.name }}
     runs-on: windows-latest
     defaults:
