@@ -13,7 +13,7 @@ int main() {
     {
         // Z{1} = z/(z-1)
         auto one = SymbolicExpr::number(1);
-        auto result = z_transform(one, "n", "z");
+        auto result = z_transform_checked(one, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{1} should not be null");
         auto z = SymbolicExpr::variable("z");
         auto expected = SymbolicExpr::divide(z,
@@ -28,7 +28,7 @@ int main() {
         auto half = SymbolicExpr::number(0.5);
         auto n = SymbolicExpr::variable("n");
         auto f_n = SymbolicExpr::power(half, n);
-        auto result = z_transform(f_n, "n", "z");
+        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{(1/2)^n} should not be null");
         auto z = SymbolicExpr::variable("z");
         auto expected = SymbolicExpr::divide(z,
@@ -41,7 +41,7 @@ int main() {
     {
         // Z{n} = z/(z-1)^2
         auto n = SymbolicExpr::variable("n");
-        auto result = z_transform(n, "n", "z");
+        auto result = z_transform_checked(n, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{n} should not be null");
         auto z = SymbolicExpr::variable("z");
         auto db = SymbolicExpr::add(z, SymbolicExpr::number(-1));
@@ -57,7 +57,7 @@ int main() {
         auto w = SymbolicExpr::variable("w");
         auto n = SymbolicExpr::variable("n");
         auto f_n = SymbolicExpr::sin(SymbolicExpr::multiply(w, n));
-        auto result = z_transform(f_n, "n", "z");
+        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{sin(w*n)} should not be null");
         // Verify it's not an unevaluated node
         EXPECT_FALSE(
@@ -74,7 +74,7 @@ int main() {
         auto w = SymbolicExpr::variable("w");
         auto n = SymbolicExpr::variable("n");
         auto f_n = SymbolicExpr::cos(SymbolicExpr::multiply(w, n));
-        auto result = z_transform(f_n, "n", "z");
+        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{cos(w*n)} should not be null");
         EXPECT_FALSE(
             std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
@@ -87,7 +87,7 @@ int main() {
     {
         // Z{5} = 5*z/(z-1)
         auto five = SymbolicExpr::number(5);
-        auto result = z_transform(five, "n", "z");
+        auto result = z_transform_checked(five, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{5} should not be null");
         auto z = SymbolicExpr::variable("z");
         auto expected = SymbolicExpr::multiply(five,
@@ -103,7 +103,7 @@ int main() {
         auto one = SymbolicExpr::number(1);
         auto n = SymbolicExpr::variable("n");
         auto f_n = SymbolicExpr::add(one, n);
-        auto result = z_transform(f_n, "n", "z");
+        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{1+n} should not be null");
         EXPECT_FALSE(
             std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
@@ -118,27 +118,21 @@ int main() {
         auto n = SymbolicExpr::variable("n");
         auto f_n = SymbolicExpr::multiply(three,
             SymbolicExpr::power(a, n));
-        auto result = z_transform(f_n, "n", "z");
+        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{3*a^n} should not be null");
         EXPECT_FALSE(
             std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,
             "Z{3*a^n} should be evaluated");
     }
 
-    TEST_CASE("Z transform: unevaluated for unknown form");
+    TEST_CASE("Z transform: unsupported form is Inconclusive");
     {
-        // Z{ln(n)} should return unevaluated TransformNode
         auto n = SymbolicExpr::variable("n");
         auto f_n = SymbolicExpr::ln(n);
-        auto result = z_transform(f_n, "n", "z");
-        EXPECT_TRUE(result != nullptr, "Z{ln(n)} should not be null");
-        auto tn = std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result));
-        EXPECT_TRUE(tn != nullptr, "Z{ln(n)} should be unevaluated TransformNode");
-        if (tn) {
-            EXPECT_TRUE(
-                tn->transform_type() == TransformNode::TransformType::ZTransform,
-                "Transform type should be ZTransform");
-        }
+        auto result = z_transform_checked(f_n, "n", "z");
+        EXPECT_TRUE(!result &&
+                        result.error().code == CasErrc::Inconclusive,
+                    "Z{ln(n)} is explicitly Inconclusive");
     }
 
     TEST_CASE("Z transform: n*a^n");
@@ -147,7 +141,7 @@ int main() {
         auto a = SymbolicExpr::variable("a");
         auto n = SymbolicExpr::variable("n");
         auto f_n = SymbolicExpr::multiply(n, SymbolicExpr::power(a, n));
-        auto result = z_transform(f_n, "n", "z");
+        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
         EXPECT_TRUE(result != nullptr, "Z{n*a^n} should not be null");
         EXPECT_FALSE(
             std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(result)) != nullptr,

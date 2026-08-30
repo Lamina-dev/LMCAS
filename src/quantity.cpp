@@ -284,13 +284,19 @@ QuantityResult quantity_power(const std::shared_ptr<SymbolicExpr>& base,
         return failure(CasErrc::DimensionMismatch,
                        "a quantity exponent must be dimensionless");
     }
-    auto power = exact_rational(exponent_view.value);
-    if (!power) return QuantityResult::failure(power.error());
     const auto base_view = view(base);
     auto base_value = scaled_value(base_view);
-    return make_quantity(SymbolicFactory::create_power(base_value, exponent_view.value),
-                         base_view.dimension.raised_to(power.value()),
-                         Rational(1), base_view.dimension.raised_to(power.value()).to_string());
+    if (base_view.dimension.is_dimensionless()) {
+        return make_quantity(
+            SymbolicFactory::create_power(base_value, exponent_view.value),
+            DimensionSignature{}, Rational(1), {});
+    }
+    auto power = exact_rational(exponent_view.value);
+    if (!power) return QuantityResult::failure(power.error());
+    auto dimension = base_view.dimension.raised_to(power.value());
+    return make_quantity(
+        SymbolicFactory::create_power(base_value, exponent_view.value),
+        dimension, Rational(1), dimension.to_string());
 }
 
 } // namespace lamina

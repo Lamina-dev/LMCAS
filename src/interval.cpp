@@ -1,5 +1,8 @@
 #include "../include/interval.hpp"
 #include "../include/symbolic_ast.hpp"
+#include "internal/exact_algebraic.hpp"
+#include "internal/exact_root.hpp"
+#include "../include/poly_utils.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
@@ -19,6 +22,16 @@ struct ComparableEndpoint {
     Rational rational{};
     Rational radical_coefficient{};
     Rational radicand{};
+    std::optional<lamina::detail::ExactRealAlgebraic> algebraic;
+
+    ComparableEndpoint(int infinity_value = 0,
+                       Rational rational_value = {},
+                       Rational coefficient_value = {},
+                       Rational radicand_value = {})
+        : infinity(infinity_value),
+          rational(std::move(rational_value)),
+          radical_coefficient(std::move(coefficient_value)),
+          radicand(std::move(radicand_value)) {}
 };
 
 struct CheckedInterval {
@@ -180,50 +193,78 @@ int rational_sign(const Rational& value) {
     return value.get_numerator().IsNegative() ? -1 : 1;
 }
 
-int quadratic_surd_sign(const Rational& rational,
-                        const Rational& coefficient,
-                        const Rational& radicand) {
-    const int rational_part_sign = rational_sign(rational);
-    const int radical_part_sign = rational_sign(coefficient);
-    if (radical_part_sign == 0) return rational_part_sign;
-    if (rational_part_sign == 0 || rational_part_sign == radical_part_sign) {
-        return radical_part_sign;
-    }
-
-    const Rational rational_square = rational * rational;
-    const Rational radical_square = coefficient * coefficient * radicand;
-    if (rational_square == radical_square) return 0;
-    if (rational_part_sign > 0) {
-        return rational_square > radical_square ? 1 : -1;
-    }
-    return radical_square > rational_square ? 1 : -1;
-}
 
 Result<int> compare_comparable(const ComparableEndpoint& left,
                                const ComparableEndpoint& right,
+                               ComputationContext& context,
                                const std::string& operation) {
+    (void)operation;
     if (left.infinity < right.infinity) return Result<int>::success(-1);
     if (left.infinity > right.infinity) return Result<int>::success(1);
     if (left.infinity != 0) return Result<int>::success(0);
 
-    const bool left_radical = left.radical_coefficient != Rational(0);
-    const bool right_radical = right.radical_coefficient != Rational(0);
+    const bool left_radical =
+        left.radical_coefficient != Rational(0) || left.algebraic.has_value();
+    const bool right_radical =
+        right.radical_coefficient != Rational(0) || right.algebraic.has_value();
     if (!left_radical && !right_radical) {
         if (left.rational < right.rational) return Result<int>::success(-1);
         if (left.rational > right.rational) return Result<int>::success(1);
         return Result<int>::success(0);
     }
-    if (left_radical && right_radical && left.radicand != right.radicand) {
-        return Result<int>::failure(
-            CasErrc::Inconclusive,
-            "exact comparison across distinct quadratic extensions is not proven",
-            operation);
+    auto compare_algebraic_to_rational =
+        [](const lamina::detail::ExactRealAlgebraic& algebraic,
+           const Rational& rational) -> int {
+            if (algebraic.upper < rational) return -1;
+            if (rational < algebraic.lower) return 1;
+            const Rational value = algebraic.polynomial.eval(rational);
+            if (value == Rational(0)) return 0;
+            const Rational lower_value =
+                algebraic.polynomial.eval(algebraic.lower);
+            const bool root_before_rational =
+                rational_sign(lower_value) != rational_sign(value);
+            return root_before_rational ? -1 : 1;
+        };
+    if (left.algebraic && right.radical_coefficient == Rational(0)) {
+        return Result<int>::success(
+            compare_algebraic_to_rational(*left.algebraic, right.rational));
     }
-    const Rational radicand = left_radical ? left.radicand : right.radicand;
-    return Result<int>::success(quadratic_surd_sign(
-        left.rational - right.rational,
-        left.radical_coefficient - right.radical_coefficient,
-        radicand));
+    if (right.algebraic && left.radical_coefficient == Rational(0)) {
+        return Result<int>::success(
+            -compare_algebraic_to_rational(*right.algebraic, left.rational));
+    }
+    auto to_algebraic = [&](const ComparableEndpoint& endpoint)
+        -> lamina::detail::ExactRealAlgebraicResult {
+        if (endpoint.algebraic) {
+            return lamina::detail::ExactRealAlgebraicResult::success(
+                *endpoint.algebraic);
+        }
+        if (endpoint.radical_coefficient == Rational(0)) {
+            return lamina::detail::make_exact_real_algebraic(
+                Polynomial<Rational>({
+                    Rational(0) - endpoint.rational,
+                    Rational(1)
+                }),
+                0, 1, context);
+        }
+        const Rational a = endpoint.rational;
+        const Rational b = endpoint.radical_coefficient;
+        const Rational d = endpoint.radicand;
+        auto value = lamina::detail::make_exact_real_algebraic(
+            Polynomial<Rational>({
+                a * a - b * b * d,
+                Rational(-2) * a,
+                Rational(1)
+            }),
+            b > Rational(0) ? 1 : 0, 1, context);
+        return value;
+    };
+    auto left_algebraic = to_algebraic(left);
+    if (!left_algebraic) return Result<int>::failure(left_algebraic.error());
+    auto right_algebraic = to_algebraic(right);
+    if (!right_algebraic) return Result<int>::failure(right_algebraic.error());
+    return lamina::detail::compare_exact_real_algebraic(
+        left_algebraic.value(), right_algebraic.value(), context);
 }
 
 Result<ComparableEndpoint> comparable_endpoint(
@@ -290,7 +331,43 @@ Result<ComparableEndpoint> comparable_endpoint(
     }
 
     if (auto surd = parse_quadratic_surd(lamina::detail::node(simplified))) {
+        if (surd->radical_coefficient != Rational(0)) {
+            const Rational a = surd->rational;
+            const Rational b = surd->radical_coefficient;
+            const Rational d = surd->radicand;
+            auto algebraic = lamina::detail::make_exact_real_algebraic(
+                Polynomial<Rational>({
+                    a * a - b * b * d,
+                    Rational(-2) * a,
+                    Rational(1)
+                }),
+                b > Rational(0) ? 1 : 0, 1, context);
+            if (!algebraic) {
+                return Result<ComparableEndpoint>::failure(algebraic.error());
+            }
+            surd->algebraic = std::move(algebraic.value());
+        }
         return Result<ComparableEndpoint>::success(std::move(*surd));
+    }
+
+    if (auto root = std::dynamic_pointer_cast<const RootOfNode>(
+            lamina::detail::node(simplified))) {
+        auto isolated = lamina::detail::isolate_exact_root(
+            root->exact_id(), context, operation);
+        if (!isolated) {
+            return Result<ComparableEndpoint>::failure(isolated.error());
+        }
+        auto* real = std::get_if<lamina::detail::RealIsolation>(
+            &isolated.value());
+        if (!real) {
+            return Result<ComparableEndpoint>::failure(
+                CasErrc::DomainError,
+                "interval endpoint RootOf is not real",
+                operation);
+        }
+        ComparableEndpoint endpoint_value;
+        endpoint_value.algebraic = std::move(real->value);
+        return Result<ComparableEndpoint>::success(std::move(endpoint_value));
     }
 
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(simplified))) {
@@ -490,9 +567,9 @@ Result<IntervalUnion> IntervalUnion::intersect_checked(
     while (i < a_intervals.size() && j < b_intervals.size()) {
         const auto& a = a_intervals[i];
         const auto& b = b_intervals[j];
-        auto lower_order = compare_comparable(a.lower, b.lower, operation);
+        auto lower_order = compare_comparable(a.lower, b.lower, context, operation);
         if (!lower_order) return Result<IntervalUnion>::failure(lower_order.error());
-        auto upper_order = compare_comparable(a.upper, b.upper, operation);
+        auto upper_order = compare_comparable(a.upper, b.upper, context, operation);
         if (!upper_order) return Result<IntervalUnion>::failure(upper_order.error());
         const bool use_a_lower = lower_order.value() >= 0;
         const bool use_a_upper = upper_order.value() <= 0;
@@ -620,13 +697,13 @@ Result<bool> interval_contains_checked(
     auto upper = comparable_endpoint(interval.upper, context, operation);
     if (!upper) return Result<bool>::failure(upper.error());
 
-    auto lower_cmp = compare_comparable(point_key, lower.value(), operation);
+    auto lower_cmp = compare_comparable(point_key, lower.value(), context, operation);
     if (!lower_cmp) return Result<bool>::failure(lower_cmp.error());
     if (lower_cmp.value() < 0 ||
         (lower_cmp.value() == 0 && interval.lower.is_open)) {
         return Result<bool>::success(false);
     }
-    auto upper_cmp = compare_comparable(point_key, upper.value(), operation);
+    auto upper_cmp = compare_comparable(point_key, upper.value(), context, operation);
     if (!upper_cmp) return Result<bool>::failure(upper_cmp.error());
     if (upper_cmp.value() > 0 ||
         (upper_cmp.value() == 0 && interval.upper.is_open)) {
@@ -650,8 +727,7 @@ Result<bool> interval_is_empty_checked(
     if (!lower) return Result<bool>::failure(lower.error());
     auto upper = comparable_endpoint(interval.upper, context, operation);
     if (!upper) return Result<bool>::failure(upper.error());
-    auto comparison = compare_comparable(
-        lower.value(), upper.value(), operation);
+    auto comparison = compare_comparable(lower.value(), upper.value(), context, operation);
     if (!comparison) return Result<bool>::failure(comparison.error());
     return Result<bool>::success(
         comparison.value() > 0 ||
@@ -682,8 +758,7 @@ Result<std::vector<Interval>> normalize_intervals_checked(
         auto upper = comparable_endpoint(
             interval.upper, context, kCheckedIntervalOperation);
         if (!upper) return Result<std::vector<Interval>>::failure(upper.error());
-        auto comparison = compare_comparable(
-            lower.value(), upper.value(), kCheckedIntervalOperation);
+        auto comparison = compare_comparable(lower.value(), upper.value(), context, kCheckedIntervalOperation);
         if (!comparison) {
             return Result<std::vector<Interval>>::failure(comparison.error());
         }
@@ -699,10 +774,7 @@ Result<std::vector<Interval>> normalize_intervals_checked(
     for (std::size_t i = 1; i < checked.size(); ++i) {
         std::size_t position = i;
         while (position > 0) {
-            auto comparison = compare_comparable(
-                checked[position - 1].lower,
-                checked[position].lower,
-                kCheckedIntervalOperation);
+            auto comparison = compare_comparable(checked[position - 1].lower, checked[position].lower, context, kCheckedIntervalOperation);
             if (!comparison) {
                 return Result<std::vector<Interval>>::failure(comparison.error());
             }
@@ -725,8 +797,7 @@ Result<std::vector<Interval>> normalize_intervals_checked(
         }
 
         CheckedInterval& current = merged.back();
-        auto boundary = compare_comparable(
-            current.upper, next.lower, kCheckedIntervalOperation);
+        auto boundary = compare_comparable(current.upper, next.lower, context, kCheckedIntervalOperation);
         if (!boundary) {
             return Result<std::vector<Interval>>::failure(boundary.error());
         }
@@ -738,8 +809,7 @@ Result<std::vector<Interval>> normalize_intervals_checked(
             continue;
         }
 
-        auto upper_comparison = compare_comparable(
-            current.upper, next.upper, kCheckedIntervalOperation);
+        auto upper_comparison = compare_comparable(current.upper, next.upper, context, kCheckedIntervalOperation);
         if (!upper_comparison) {
             return Result<std::vector<Interval>>::failure(upper_comparison.error());
         }

@@ -90,7 +90,7 @@ static SymbolicExpr apply_assumption_simplifications(
 
     // Check if the integration variable is known Positive
     SymbolicExpr var_expr = *SymbolicExpr::variable(var);
-    Tribool var_positive = ctx->is_positive(var_expr);
+    Tribool var_positive = detail::propagate_result(ctx->is_positive(var_expr));
 
     if (var_positive == Tribool::True) {
         auto new_root = simplify_abs_positive(lamina::detail::node(expr), var);
@@ -100,6 +100,40 @@ static SymbolicExpr apply_assumption_simplifications(
     }
 
     return expr;
+}
+
+IntegrationStrategyResult IntegrationStrategy::try_integrate(
+    const SymbolicExpr& expr,
+    const std::string& var,
+    Integrator& integrator,
+    ComputationContext& computation,
+    int depth) {
+    const std::string operation = "integrate.strategy." + name();
+    auto access = computation.consume_steps(0, operation);
+    if (!access) return IntegrationStrategyResult::failure(access.error());
+    try {
+        auto expression = try_integrate_raw(
+            expr, var, integrator, computation, depth);
+        auto final_access = computation.consume_steps(0, operation);
+        if (!final_access) {
+            return IntegrationStrategyResult::failure(final_access.error());
+        }
+        if (!expression) {
+            return IntegrationStrategyResult::success(
+                IntegrationNotApplicable{});
+        }
+        return IntegrationStrategyResult::success(IntegrationCandidate{
+            std::move(expression), name()});
+    } catch (const detail::ResultPropagation& propagation) {
+        return IntegrationStrategyResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return IntegrationStrategyResult::failure(
+            CasErrc::ResourceLimit,
+            "integration strategy allocation failed", operation);
+    } catch (const std::exception& error) {
+        return IntegrationStrategyResult::failure(
+            CasErrc::InternalInvariant, error.what(), operation);
+    }
 }
 
 Integrator::Integrator() {
@@ -117,15 +151,24 @@ Integrator::Integrator() {
     strategies_.push_back(std::make_unique<IBPStrategy>());
 }
 
-void Integrator::add_strategy(std::unique_ptr<IntegrationStrategy> strategy, int position) {
+Result<void> Integrator::add_strategy(
+    std::unique_ptr<IntegrationStrategy> strategy,
+    int position) {
     if (!strategy) {
-        throw std::invalid_argument("Integrator::add_strategy: strategy must not be null");
+        return Result<void>::failure(
+            CasErrc::InvalidArgument, "strategy must not be null", "integrator.add_strategy");
     }
-    if (position < 0 || position >= (int)strategies_.size()) {
-        strategies_.push_back(std::move(strategy));
-    } else {
-        strategies_.insert(strategies_.begin() + position, std::move(strategy));
+    try {
+        if (position < 0 || position >= static_cast<int>(strategies_.size())) {
+            strategies_.push_back(std::move(strategy));
+        } else {
+            strategies_.insert(strategies_.begin() + position, std::move(strategy));
+        }
+    } catch (const std::bad_alloc&) {
+        return Result<void>::failure(
+            CasErrc::ResourceLimit, "strategy allocation failed", "integrator.add_strategy");
     }
+    return Result<void>::success();
 }
 
 bool Integrator::depends_on(const SymbolicExpr& expr, const std::string& var) {
@@ -134,11 +177,9 @@ bool Integrator::depends_on(const SymbolicExpr& expr, const std::string& var) {
 
 std::shared_ptr<SymbolicExpr> Integrator::make_integral_node(
     const SymbolicExpr& expr, const std::string& var) {
-    std::vector<std::shared_ptr<const SymbolicNode>> args;
-    args.push_back(lamina::detail::node(expr));
-    args.push_back(lamina::detail::node(SymbolicExpr::variable(var)));
     return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args));
+        lamina::detail::make_node<IntegralNode>(
+            lamina::detail::node(expr), var));
 }
 
 std::shared_ptr<SymbolicExpr> Integrator::check_cycle(
@@ -164,7 +205,7 @@ void Integrator::resolve_cycle(std::shared_ptr<SymbolicExpr>& result, size_t cyc
     }
 }
 
-std::shared_ptr<SymbolicExpr> Integrator::apply_linearity(
+Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
     const SymbolicExpr& expr, const std::string& var,
     ComputationContext& context, int depth) {
 
@@ -192,89 +233,165 @@ std::shared_ptr<SymbolicExpr> Integrator::apply_linearity(
                      ? lamina::detail::expression_from_node(dependents[0])
                      : lamina::detail::expression_from_node(
                            lamina::detail::make_node<MultiplyNode>(dependents)));
+            if (dependents.size() > 1) {
+                std::vector<std::shared_ptr<const SymbolicNode>> exponents;
+                exponents.reserve(dependents.size());
+                bool all_exponential = true;
+                for (const auto& dependent : dependents) {
+                    auto function =
+                        std::dynamic_pointer_cast<const FunctionNode>(dependent);
+                    if (!function ||
+                        function->type() != FunctionNode::FuncType::Exp ||
+                        function->arguments().size() != 1) {
+                        all_exponential = false;
+                        break;
+                    }
+                    exponents.push_back(function->arguments()[0]);
+                }
+                if (all_exponential) {
+                    dep_part = lamina::detail::expression_from_node(
+                        lamina::detail::make_node<FunctionNode>(
+                            FunctionNode::FuncType::Exp,
+                            std::vector<std::shared_ptr<const SymbolicNode>>{
+                                SymbolicFactory::create_add(
+                                    std::move(exponents))}));
+                }
+            }
 
             auto int_part = integrate_recursive(dep_part, var, context, depth + 1);
-            if (!int_part) return nullptr;
-            return SymbolicExpr::multiply(
-                lamina::detail::make_expression_ptr(const_part),
-                int_part);
+            if (!int_part) {
+                return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                    int_part.error());
+            }
+            return Result<std::shared_ptr<SymbolicExpr>>::success(
+                SymbolicExpr::multiply(
+                    lamina::detail::make_expression_ptr(const_part),
+                    int_part.value()));
         }
     }
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(
+            lamina::detail::node(expr))) {
         std::vector<std::shared_ptr<const SymbolicNode>> results;
         for (auto& op : add->operands()) {
             auto term = lamina::detail::expression_from_node(op);
-            auto int_term = integrate_recursive(term, var, context, depth + 1);
-            if (!int_term) return nullptr;
-            results.push_back(lamina::detail::node(int_term));
+            auto int_term = integrate_recursive(
+                term, var, context, depth + 1);
+            if (!int_term) {
+                return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                    int_term.error());
+            }
+            results.push_back(lamina::detail::node(int_term.value()));
         }
-        return lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(results));
+        return Result<std::shared_ptr<SymbolicExpr>>::success(
+            lamina::detail::make_expression_ptr(
+                lamina::detail::make_node<AddNode>(results)));
     }
-
-    return nullptr;
+    return Result<std::shared_ptr<SymbolicExpr>>::success(nullptr);
 }
 
-std::shared_ptr<SymbolicExpr> Integrator::dispatch_strategies(
+Result<std::shared_ptr<SymbolicExpr>> Integrator::dispatch_strategies(
     const SymbolicExpr& expr, const std::string& var,
     ComputationContext& context, int depth) {
-
     for (auto& strategy : strategies_) {
         auto budget = context.consume_steps(1, "integrate.strategy");
-        if (!budget) return nullptr;
-        std::shared_ptr<SymbolicExpr> result;
-        try {
-            result = strategy->try_integrate(expr, var, *this, context, depth);
-        } catch (const std::exception& error) {
-            context.add_diagnostic({
-                DiagnosticSeverity::Error,
-                "integrate.strategy." + strategy->name(),
-                error.what(),
-            });
-            return nullptr;
+        if (!budget) {
+            return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                budget.error());
         }
-        if (result) {
-            return result;
+        auto attempt = strategy->try_integrate(
+            expr, var, *this, context, depth);
+        if (!attempt) {
+            return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                attempt.error());
+        }
+        if (auto* candidate =
+                std::get_if<IntegrationCandidate>(&attempt.value())) {
+            if (!strategy->requires_residual_verification()) {
+                return Result<std::shared_ptr<SymbolicExpr>>::success(
+                    candidate->expression);
+            }
+            auto derivative = candidate->expression
+                ? candidate->expression->differentiate(var) : nullptr;
+            if (!derivative) {
+                if (depth > 0) {
+                    return Result<std::shared_ptr<SymbolicExpr>>::success(
+                        nullptr);
+                }
+                continue;
+            }
+            auto normalized_derivative = derivative->simplify();
+            auto normalized_integrand = make_expr_ptr(expr)->simplify();
+            if (normalized_derivative && normalized_integrand &&
+                lamina::detail::node(normalized_derivative)->equals(
+                    *lamina::detail::node(normalized_integrand))) {
+                return Result<std::shared_ptr<SymbolicExpr>>::success(
+                    candidate->expression);
+            }
+            auto delta = SymbolicExpr::add(
+                derivative,
+                SymbolicExpr::multiply(
+                    SymbolicExpr::number(-1), make_expr_ptr(expr)));
+            delta = delta->cancel()->simplify();
+            if (delta && delta->is_zero()) {
+                return Result<std::shared_ptr<SymbolicExpr>>::success(
+                    candidate->expression);
+            }
+            if (depth > 0) {
+                return Result<std::shared_ptr<SymbolicExpr>>::success(nullptr);
+            }
         }
     }
-    return nullptr;
+    return Result<std::shared_ptr<SymbolicExpr>>::success(nullptr);
 }
 
-std::shared_ptr<SymbolicExpr> Integrator::integrate_recursive(
+Result<std::shared_ptr<SymbolicExpr>> Integrator::integrate_recursive(
     const SymbolicExpr& expr, const std::string& var,
     ComputationContext& context, int depth) {
-
     auto entered = context.enter_recursion("integrate.recursive");
-    if (!entered) return nullptr;
+    if (!entered) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            entered.error());
+    }
     struct RecursionExit {
         ComputationContext& context;
         ~RecursionExit() { context.leave_recursion(); }
     } recursion_exit{context};
 
     auto linear_result = apply_linearity(expr, var, context, depth);
-    if (linear_result) return linear_result;
+    if (!linear_result) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            linear_result.error());
+    }
+    if (linear_result.value()) return linear_result;
 
     auto cycle_result = check_cycle(expr, var);
-    if (cycle_result) return cycle_result;
+    if (cycle_result) {
+        return Result<std::shared_ptr<SymbolicExpr>>::success(
+            std::move(cycle_result));
+    }
 
     cycle_state_.history.push_back(expr);
-    size_t my_idx = cycle_state_.history.size() - 1;
+    const size_t my_idx = cycle_state_.history.size() - 1;
 
     if (expr.is_number() || !depends_on_integration_variable(expr, var)) {
         cycle_state_.history.pop_back();
-        return SymbolicExpr::multiply(make_expr_ptr(expr), SymbolicExpr::variable(var));
+        return Result<std::shared_ptr<SymbolicExpr>>::success(
+            SymbolicExpr::multiply(
+                make_expr_ptr(expr), SymbolicExpr::variable(var)));
     }
 
     auto result = dispatch_strategies(expr, var, context, depth);
-
     cycle_state_.history.pop_back();
-
     if (!result) {
-        return make_integral_node(expr, var);
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(result.error());
+    }
+    if (!result.value()) {
+        return Result<std::shared_ptr<SymbolicExpr>>::success(
+            make_integral_node(expr, var));
     }
 
-    resolve_cycle(result, my_idx);
-
+    resolve_cycle(result.value(), my_idx);
     return result;
 }
 
@@ -338,23 +455,12 @@ Result<SymbolicExpr> Integrator::integrate_checked(
             CasErrc::InternalInvariant, error.what(), "integrate.preprocess");
     }
 
-    std::shared_ptr<SymbolicExpr> result;
-    try {
-        result = integrate_recursive(working_expr, var_name, context, 0);
-    } catch (const std::exception& error) {
-        return Result<SymbolicExpr>::failure(
-            CasErrc::InternalInvariant, error.what(), "integrate.recursive");
+    auto recursive = integrate_recursive(
+        working_expr, var_name, context, 0);
+    if (!recursive) {
+        return Result<SymbolicExpr>::failure(recursive.error());
     }
-    if (!context.diagnostics().empty()) {
-        const auto& diagnostic = context.diagnostics().back();
-        if (diagnostic.severity == DiagnosticSeverity::Error &&
-            diagnostic.operation.find("integrate.strategy.") == 0) {
-            return Result<SymbolicExpr>::failure(
-                CasErrc::InternalInvariant,
-                diagnostic.message,
-                diagnostic.operation);
-        }
-    }
+    auto result = std::move(recursive.value());
     auto final_access = context.consume_steps(0, "integrate");
     if (!final_access) return Result<SymbolicExpr>::failure(final_access.error());
     if (!result) {
@@ -364,16 +470,11 @@ Result<SymbolicExpr> Integrator::integrate_checked(
     return Result<SymbolicExpr>::success(*result);
 }
 
-SymbolicExpr Integrator::integrate(
+Result<SymbolicExpr> Integrator::integrate(
     const SymbolicExpr& expr,
     const std::string& var_name) {
     ComputationContext context;
-    auto result = integrate_checked(expr, var_name, context);
-    if (!result) {
-        throw std::runtime_error(
-            result.error().operation + ": " + result.error().message);
-    }
-    return std::move(result.value());
+    return integrate_checked(expr, var_name, context);
 }
 
 Result<SymbolicExpr> Integrator::integrate_def_checked(
@@ -426,12 +527,26 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
                     expr, var_name, lower, *t, context);
                 if (!int_left_result) return int_left_result;
                 auto int_left = int_left_result.value();
-                auto lim_left = int_left.limit("t", zero, "-");
+                auto lim_left_result = limit_expression_checked(
+                    std::make_shared<SymbolicExpr>(int_left), "t", zero,
+                    LimitDirection::FromBelow, context);
+                if (!lim_left_result) {
+                    return Result<SymbolicExpr>::failure(
+                        lim_left_result.error());
+                }
+                auto lim_left = lim_left_result.value();
                 auto int_right_result = integrate_def_checked(
                     expr, var_name, *t, upper, context);
                 if (!int_right_result) return int_right_result;
                 auto int_right = int_right_result.value();
-                auto lim_right = int_right.limit("t", zero, "+");
+                auto lim_right_result = limit_expression_checked(
+                    std::make_shared<SymbolicExpr>(int_right), "t", zero,
+                    LimitDirection::FromAbove, context);
+                if (!lim_right_result) {
+                    return Result<SymbolicExpr>::failure(
+                        lim_right_result.error());
+                }
+                auto lim_right = lim_right_result.value();
                 if (lim_left && lim_right) {
                     return Result<SymbolicExpr>::success(
                         *SymbolicExpr::add(lim_left, lim_right));
@@ -444,17 +559,14 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
     if (!indefinite_result) return indefinite_result;
     SymbolicExpr indefinite = indefinite_result.value();
 
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(indefinite))) {
-        if (func->type() == FunctionNode::FuncType::Calculus_Integral) {
-            std::vector<std::shared_ptr<const SymbolicNode>> args;
-            args.push_back(lamina::detail::node(expr));
-            args.push_back(lamina::detail::node(SymbolicExpr::variable(var_name)));
-            args.push_back(lamina::detail::node(lower));
-            args.push_back(lamina::detail::node(upper));
-            return Result<SymbolicExpr>::success(
-                lamina::detail::expression_from_node(lamina::detail::make_node<FunctionNode>(
-                    FunctionNode::FuncType::Calculus_Integral, args)));
-        }
+    if (std::dynamic_pointer_cast<const IntegralNode>(
+            lamina::detail::node(indefinite))) {
+        return Result<SymbolicExpr>::success(
+            lamina::detail::expression_from_node(
+                lamina::detail::make_node<IntegralNode>(
+                    lamina::detail::node(expr), var_name,
+                    lamina::detail::node(lower),
+                    lamina::detail::node(upper))));
     }
 
     auto F_b = indefinite.substitute(var_name, make_expr_ptr(upper));
@@ -463,18 +575,13 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
     return Result<SymbolicExpr>::success(*result->simplify());
 }
 
-SymbolicExpr Integrator::integrate_def(
+Result<SymbolicExpr> Integrator::integrate_def(
     const SymbolicExpr& expr,
     const std::string& var_name,
     const SymbolicExpr& lower,
     const SymbolicExpr& upper) {
     ComputationContext context;
-    auto result = integrate_def_checked(expr, var_name, lower, upper, context);
-    if (!result) {
-        throw std::runtime_error(
-            result.error().operation + ": " + result.error().message);
-    }
-    return std::move(result.value());
+    return integrate_def_checked(expr, var_name, lower, upper, context);
 }
 
 } // namespace lamina

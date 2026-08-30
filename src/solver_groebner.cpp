@@ -1,4 +1,5 @@
 #include "solver.hpp"
+#include "solve_strategies.hpp"
 #include "symbolic_ast.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
@@ -437,6 +438,9 @@ namespace {
             m[idx] = 1;
             result.add_term(m, Rational(1));
         }
+        void visit(const UninterpretedFunctionNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
 
         void visit(const MatrixNode& node) override {
             represent_as_aux_or_fail(node.clone());
@@ -472,6 +476,15 @@ namespace {
         void visit(const IntervalNode& node) override { represent_as_aux_or_fail(node.clone()); }
         void visit(const MembershipNode& node) override { represent_as_aux_or_fail(node.clone()); }
         void visit(const QuantityNode& node) override { represent_as_aux_or_fail(node.clone()); }
+        void visit(const IntegralNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const LimitNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
+        void visit(const RootOfNode& node) override {
+            represent_as_aux_or_fail(node.clone());
+        }
     };
 
     struct PolyContext {
@@ -839,7 +852,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
     }
 
     if (cleared_equations.size() == 1 && variables.size() == 1) {
-        auto roots = SymbolicExpr::solve(lamina::detail::make_expression_ptr(cleared_equations[0]), variables[0]);
+        auto roots = lamina::solve_finite_checked(lamina::detail::make_expression_ptr(cleared_equations[0]), variables[0]).value();
         std::vector<std::map<std::string, SymbolicExpr>> single_solutions;
         for (const auto& r : roots) {
             single_solutions.push_back({{variables[0], *r}});
@@ -962,7 +975,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
 
         if (!target) return {};
 
-        auto roots = SymbolicExpr::solve(target, curr_var);
+        auto roots = lamina::solve_finite_checked(target, curr_var).value();
         if (roots.empty()) return {};
 
         std::vector<std::map<std::string, SymbolicExpr>> results;

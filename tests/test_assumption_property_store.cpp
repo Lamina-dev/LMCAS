@@ -179,77 +179,52 @@ void test_more_specific_upgrades() {
 
 
 void test_natural_negative_contradiction() {
-    TEST_CASE("Natural + Negative sign throws");
+    TEST_CASE("Natural + Negative sign returns failure");
     PropertyStore store;
     store.declare_sign("x", Sign::Negative);
 
-    bool threw = false;
-    try {
-        store.declare_domain("x", Domain::Natural);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Natural domain with Negative sign throws");
+    auto failure_184 = store.declare_domain("x", Domain::Natural);
+    EXPECT_TRUE(!failure_184.has_value(), "Natural domain with Negative sign returns failure");
     // State unchanged: domain should still be Complex (default)
     EXPECT_TRUE(store.get_domain("x") == Domain::Complex,
         "x domain unchanged after failed Natural declaration");
 }
 
 void test_positiveint_negative_contradiction() {
-    TEST_CASE("PositiveInt + Negative sign throws");
+    TEST_CASE("PositiveInt + Negative sign returns failure");
     PropertyStore store;
     store.declare_sign("x", Sign::Negative);
 
-    bool threw = false;
-    try {
-        store.declare_domain("x", Domain::PositiveInt);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "PositiveInt domain with Negative sign throws");
+    auto failure_201 = store.declare_domain("x", Domain::PositiveInt);
+    EXPECT_TRUE(!failure_201.has_value(), "PositiveInt domain with Negative sign returns failure");
 }
 
 void test_positiveint_zero_contradiction() {
-    TEST_CASE("PositiveInt + Zero sign throws");
+    TEST_CASE("PositiveInt + Zero sign returns failure");
     PropertyStore store;
     store.declare_sign("x", Sign::Zero);
 
-    bool threw = false;
-    try {
-        store.declare_domain("x", Domain::PositiveInt);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "PositiveInt domain with Zero sign throws");
+    auto failure_215 = store.declare_domain("x", Domain::PositiveInt);
+    EXPECT_TRUE(!failure_215.has_value(), "PositiveInt domain with Zero sign returns failure");
 }
 
 void test_positiveint_nonpositive_contradiction() {
-    TEST_CASE("PositiveInt + NonPositive sign throws");
+    TEST_CASE("PositiveInt + NonPositive sign returns failure");
     PropertyStore store;
     store.declare_sign("x", Sign::NonPositive);
 
-    bool threw = false;
-    try {
-        store.declare_domain("x", Domain::PositiveInt);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "PositiveInt domain with NonPositive sign throws");
+    auto failure_229 = store.declare_domain("x", Domain::PositiveInt);
+    EXPECT_TRUE(!failure_229.has_value(), "PositiveInt domain with NonPositive sign returns failure");
 }
 
 void test_natural_implied_negative_contradiction() {
-    TEST_CASE("Natural + implied Negative (from Negative declaration) throws");
+    TEST_CASE("Natural + implied Negative (from Negative declaration) returns failure");
     PropertyStore store;
     // Declaring Negative implies NonPositive and NonZero
     store.declare_sign("y", Sign::Negative);
 
-    bool threw = false;
-    try {
-        store.declare_domain("y", Domain::Natural);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Natural domain with implied Negative sign throws");
+    auto failure_244 = store.declare_domain("y", Domain::Natural);
+    EXPECT_TRUE(!failure_244.has_value(), "Natural domain with implied Negative sign returns failure");
 }
 
 void test_compatible_domain_sign_no_throw() {
@@ -391,14 +366,8 @@ void test_all_contradiction_pairs() {
         PropertyStore store;
         store.declare_sign("x", s1);
 
-        bool threw = false;
-        try {
-            store.declare_sign("x", s2);
-        } catch (const std::invalid_argument&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw,
-            sign_name(s1) + " + " + sign_name(s2) + " throws");
+        auto failure_392 = store.declare_sign("x", s2);
+        EXPECT_TRUE(!failure_392.has_value(), sign_name(s1) + " + " + sign_name(s2) + " returns failure");
         // State unchanged: s2 should not be present
         EXPECT_FALSE(store.has_sign("x", s2),
             "x does not have " + sign_name(s2) + " after failed declaration");
@@ -411,13 +380,8 @@ void test_implied_contradiction() {
     // because Negative contradicts NonNegative
     PropertyStore store;
     store.declare_sign("x", Sign::Positive);
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Negative contradicts implied NonNegative from Positive");
+    auto failure_413 = store.declare_sign("x", Sign::Negative);
+    EXPECT_TRUE(!failure_413.has_value(), "Negative contradicts implied NonNegative from Positive");
     EXPECT_TRUE(store.has_sign("x", Sign::Positive),
         "x still has Positive after failed Negative declaration");
 }
@@ -491,18 +455,13 @@ void test_parity_idempotent() {
 }
 
 void test_parity_contradiction() {
-    TEST_CASE("Contradictory parity throws");
+    TEST_CASE("Contradictory parity returns failure");
     // Even then Odd
     {
         PropertyStore store;
         store.declare_parity("x", Parity::Even);
-        bool threw = false;
-        try {
-            store.declare_parity("x", Parity::Odd);
-        } catch (const std::invalid_argument&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw, "Even then Odd throws");
+        auto failure_498 = store.declare_parity("x", Parity::Odd);
+        EXPECT_TRUE(!failure_498.has_value(), "Even then Odd returns failure");
         EXPECT_TRUE(store.get_parity("x") == Parity::Even,
             "x parity unchanged after failed Odd declaration");
     }
@@ -510,13 +469,8 @@ void test_parity_contradiction() {
     {
         PropertyStore store;
         store.declare_parity("y", Parity::Odd);
-        bool threw = false;
-        try {
-            store.declare_parity("y", Parity::Even);
-        } catch (const std::invalid_argument&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw, "Odd then Even throws");
+        auto failure_512 = store.declare_parity("y", Parity::Even);
+        EXPECT_TRUE(!failure_512.has_value(), "Odd then Even returns failure");
         EXPECT_TRUE(store.get_parity("y") == Parity::Odd,
             "y parity unchanged after failed Even declaration");
     }
@@ -587,33 +541,23 @@ void test_idempotent() {
 }
 
 void test_contradiction_bounded_unbounded() {
-    TEST_CASE("Bounded then Unbounded throws");
+    TEST_CASE("Bounded then Unbounded returns failure");
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Bounded);
 
-    bool threw = false;
-    try {
-        store.declare_bounded("x", Boundedness::Unbounded);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Bounded then Unbounded throws");
+    auto failure_592 = store.declare_bounded("x", Boundedness::Unbounded);
+    EXPECT_TRUE(!failure_592.has_value(), "Bounded then Unbounded returns failure");
     EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
         "x remains Bounded after failed Unbounded declaration");
 }
 
 void test_contradiction_unbounded_bounded() {
-    TEST_CASE("Unbounded then Bounded throws");
+    TEST_CASE("Unbounded then Bounded returns failure");
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Unbounded);
 
-    bool threw = false;
-    try {
-        store.declare_bounded("x", Boundedness::Bounded);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Unbounded then Bounded throws");
+    auto failure_608 = store.declare_bounded("x", Boundedness::Bounded);
+    EXPECT_TRUE(!failure_608.has_value(), "Unbounded then Bounded returns failure");
     EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Unbounded,
         "x remains Unbounded after failed Bounded declaration");
 }
@@ -633,41 +577,26 @@ void test_cross_domain_sign_interaction() {
     PropertyStore store;
     store.declare_domain("x", Domain::Natural);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Negative sign with Natural domain throws");
+    auto failure_634 = store.declare_sign("x", Sign::Negative);
+    EXPECT_TRUE(!failure_634.has_value(), "Negative sign with Natural domain returns failure");
 }
 
 void test_cross_positiveint_then_zero_throws() {
-    TEST_CASE("Cross: Domain PositiveInt then sign Zero throws");
+    TEST_CASE("Cross: Domain PositiveInt then sign Zero returns failure");
     PropertyStore store;
     store.declare_domain("x", Domain::PositiveInt);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Zero);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Zero sign with PositiveInt domain throws");
+    auto failure_648 = store.declare_sign("x", Sign::Zero);
+    EXPECT_TRUE(!failure_648.has_value(), "Zero sign with PositiveInt domain returns failure");
 }
 
 void test_cross_positiveint_then_nonpositive_throws() {
-    TEST_CASE("Cross: Domain PositiveInt then sign NonPositive throws");
+    TEST_CASE("Cross: Domain PositiveInt then sign NonPositive returns failure");
     PropertyStore store;
     store.declare_domain("x", Domain::PositiveInt);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::NonPositive);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "NonPositive sign with PositiveInt domain throws");
+    auto failure_662 = store.declare_sign("x", Sign::NonPositive);
+    EXPECT_TRUE(!failure_662.has_value(), "NonPositive sign with PositiveInt domain returns failure");
 }
 
 void test_default_domain_complex() {

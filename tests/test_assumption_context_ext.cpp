@@ -10,6 +10,12 @@
 
 using namespace lamina;
 
+static AssumptionContext deserialize_success(const std::string& data) {
+    auto result = AssumptionContext::deserialize(data);
+    EXPECT_TRUE(result.has_value(), "assumption context deserialization succeeds");
+    return result ? std::move(result.value()) : AssumptionContext();
+}
+
 
 static Interval make_closed_interval(double lo, double hi) {
     auto lower_val = lamina::detail::make_expression_ptr(
@@ -87,7 +93,7 @@ static void test_with_assumptions_callable_sees_assumptions() {
     AssumptionContext ctx;
     int initial_depth = ctx.depth();
 
-    bool saw_positive = with_assumptions(ctx,
+    auto saw_positive = with_assumptions(ctx,
         {
             AssumptionDecl::make_domain("x", Domain::Real),
             AssumptionDecl::make_sign("x", Sign::Positive)
@@ -97,7 +103,8 @@ static void test_with_assumptions_callable_sees_assumptions() {
                    ctx.has_domain("x", Domain::Real);
         });
 
-    EXPECT_TRUE(saw_positive, "Callable sees domain and sign assumptions");
+    EXPECT_TRUE(saw_positive.has_value() && saw_positive.value(),
+                "Callable sees domain and sign assumptions");
     EXPECT_TRUE(ctx.depth() == initial_depth,
                 "Depth restored after with_assumptions");
 }
@@ -108,40 +115,35 @@ static void test_with_assumptions_preserves_depth_on_success() {
     AssumptionContext ctx;
     int depth_before = ctx.depth();
 
-    with_assumptions(ctx,
-        { AssumptionDecl::make_sign("y", Sign::Negative) },
+    auto result = with_assumptions(ctx,
+        { AssumptionDecl::make_domain("x", Domain::Real) },
         [&]() {
-            // Just verify we're one level deeper inside
             EXPECT_TRUE(ctx.depth() == depth_before + 1,
                         "Inside with_assumptions, depth is +1");
         });
+    EXPECT_TRUE(result.has_value(), "with_assumptions succeeds");
 
     EXPECT_TRUE(ctx.depth() == depth_before,
                 "After with_assumptions, depth is restored");
 }
 
 static void test_with_assumptions_preserves_depth_on_exception() {
-    TEST_CASE("with_assumptions: depth restored on exception");
+    TEST_CASE("with_assumptions: callable exception becomes Result failure");
 
     AssumptionContext ctx;
     int depth_before = ctx.depth();
 
-    bool caught = false;
-    try {
-        with_assumptions(ctx,
-            { AssumptionDecl::make_sign("z", Sign::Positive) },
-            [&]() {
-                throw std::runtime_error("test exception");
-            });
-    } catch (const std::runtime_error& e) {
-        caught = true;
-        EXPECT_EQ_STR(std::string(e.what()), "test exception",
-                      "Exception propagated correctly");
-    }
+    auto result = with_assumptions(ctx,
+        { AssumptionDecl::make_sign("z", Sign::Positive) },
+        [&]() {
+            throw std::runtime_error("test exception");
+        });
 
-    EXPECT_TRUE(caught, "Exception was caught");
+    EXPECT_TRUE(!result.has_value(), "Callable exception is returned as an error");
+    EXPECT_TRUE(result.error().code == CasErrc::InternalInvariant,
+                "Callable exception maps to InternalInvariant");
     EXPECT_TRUE(ctx.depth() == depth_before,
-                "Depth restored after exception in with_assumptions");
+                "Depth restored after failed with_assumptions");
 }
 
 static void test_with_assumptions_checked_success_and_rollback() {
@@ -150,7 +152,7 @@ static void test_with_assumptions_checked_success_and_rollback() {
     AssumptionContext ctx;
     int depth_before = ctx.depth();
 
-    auto result = with_assumptions_checked(ctx,
+    auto result = with_assumptions(ctx,
         {
             AssumptionDecl::make_domain("x", Domain::Real),
             AssumptionDecl::make_sign("x", Sign::Positive)
@@ -177,7 +179,7 @@ static void test_with_assumptions_checked_decl_failure_rolls_back() {
     int depth_before = ctx.depth();
     bool called = false;
 
-    auto result = with_assumptions_checked(ctx,
+    auto result = with_assumptions(ctx,
         { AssumptionDecl::make_sign("", Sign::Positive) },
         [&]() -> int {
             called = true;
@@ -199,7 +201,7 @@ static void test_with_assumptions_checked_callable_exception() {
     AssumptionContext ctx;
     int depth_before = ctx.depth();
 
-    auto result = with_assumptions_checked(ctx,
+    auto result = with_assumptions(ctx,
         { AssumptionDecl::make_sign("z", Sign::Positive) },
         [&]() {
             throw std::runtime_error("checked body failure");
@@ -246,8 +248,9 @@ static void test_checked_interval_and_definiteness_queries() {
         EXPECT_TRUE(empty_symbol.error().code == CasErrc::InvalidArgument,
                     "checked continuity empty symbol reports InvalidArgument");
     }
-    EXPECT_TRUE(ctx.is_continuous("", unit) == Tribool::Unknown,
-                "legacy continuity query unwraps checked failure to Unknown");
+    auto canonical_empty_symbol = ctx.is_continuous("", unit);
+    EXPECT_TRUE(!canonical_empty_symbol.has_value(),
+                "canonical continuity query preserves checked failure");
 
     auto positive_def_decl =
         ctx.current_properties().declare_definiteness_checked(
@@ -277,8 +280,9 @@ static void test_checked_interval_and_definiteness_queries() {
         EXPECT_TRUE(empty_matrix_symbol.error().code == CasErrc::InvalidArgument,
                     "checked positive-definite empty symbol reports InvalidArgument");
     }
-    EXPECT_TRUE(ctx.is_positive_definite("") == Tribool::Unknown,
-                "legacy positive-definite query unwraps checked failure to Unknown");
+    auto canonical_empty_matrix = ctx.is_positive_definite("");
+    EXPECT_TRUE(!canonical_empty_matrix.has_value(),
+                "canonical positive-definite query preserves checked failure");
 }
 
 
@@ -289,7 +293,7 @@ static void test_serialize_empty_context() {
     std::string serialized = ctx.serialize();
 
     // Deserialize
-    AssumptionContext restored = AssumptionContext::deserialize(serialized);
+    AssumptionContext restored = deserialize_success(serialized);
 
     // Both should have depth 1 (root scope)
     EXPECT_TRUE(restored.depth() == 1, "Restored empty context has depth 1");
@@ -303,7 +307,7 @@ static void test_serialize_single_scope_with_domain_and_sign() {
     ctx.assume_sign("x", Sign::Positive);
 
     std::string serialized = ctx.serialize();
-    AssumptionContext restored = AssumptionContext::deserialize(serialized);
+    AssumptionContext restored = deserialize_success(serialized);
 
     // Verify same queries
     EXPECT_TRUE(restored.has_domain("x", Domain::Real),
@@ -324,7 +328,7 @@ static void test_serialize_multi_scope() {
     ctx.assume_sign("y", Sign::Negative);
 
     std::string serialized = ctx.serialize();
-    AssumptionContext restored = AssumptionContext::deserialize(serialized);
+    AssumptionContext restored = deserialize_success(serialized);
 
     // Verify depth
     EXPECT_TRUE(restored.depth() == 2, "Restored multi-scope has depth 2");
@@ -344,61 +348,39 @@ static void test_serialize_multi_scope() {
 
 
 static void test_deserialize_missing_end_throws() {
-    TEST_CASE("Malformed deserialization: missing END throws with line number");
+    TEST_CASE("Malformed deserialization: missing END returns ParseError");
 
-    std::string malformed = "SCOPE 0\nDOMAIN x Real\n";
-    // No END terminator
-
-    bool threw = false;
-    std::string msg;
-    try {
-        AssumptionContext::deserialize(malformed);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        msg = e.what();
-    }
-
-    EXPECT_TRUE(threw, "Missing END throws std::invalid_argument");
-    // Should contain line number info
-    EXPECT_TRUE(msg.find("Line") != std::string::npos || msg.find("line") != std::string::npos,
+    auto result = AssumptionContext::deserialize("SCOPE 0\nDOMAIN x Real\n");
+    EXPECT_TRUE(!result.has_value(), "Missing END returns failure");
+    EXPECT_TRUE(result.error().code == CasErrc::ParseError,
+                "Missing END reports ParseError");
+    EXPECT_TRUE(result.error().message.find("Line") != std::string::npos ||
+                result.error().message.find("line") != std::string::npos,
                 "Error message contains line number info");
 }
 
 static void test_deserialize_unknown_keyword_throws() {
-    TEST_CASE("Malformed deserialization: unknown keyword throws");
+    TEST_CASE("Malformed deserialization: unknown keyword returns ParseError");
 
-    std::string malformed = "SCOPE 0\nFOOBAR x Real\nEND\n";
-
-    bool threw = false;
-    std::string msg;
-    try {
-        AssumptionContext::deserialize(malformed);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        msg = e.what();
-    }
-
-    EXPECT_TRUE(threw, "Unknown keyword throws std::invalid_argument");
-    EXPECT_TRUE(msg.find("FOOBAR") != std::string::npos || msg.find("unknown") != std::string::npos,
+    auto result = AssumptionContext::deserialize(
+        "SCOPE 0\nFOOBAR x Real\nEND\n");
+    EXPECT_TRUE(!result.has_value(), "Unknown keyword returns failure");
+    EXPECT_TRUE(result.error().code == CasErrc::ParseError,
+                "Unknown keyword reports ParseError");
+    EXPECT_TRUE(result.error().message.find("FOOBAR") != std::string::npos ||
+                result.error().message.find("unknown") != std::string::npos,
                 "Error message mentions the unknown keyword");
 }
 
 static void test_deserialize_domain_before_scope_throws() {
-    TEST_CASE("Malformed deserialization: DOMAIN before SCOPE throws");
+    TEST_CASE("Malformed deserialization: DOMAIN before SCOPE returns ParseError");
 
-    std::string malformed = "DOMAIN x Real\nSCOPE 0\nEND\n";
-
-    bool threw = false;
-    std::string msg;
-    try {
-        AssumptionContext::deserialize(malformed);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        msg = e.what();
-    }
-
-    EXPECT_TRUE(threw, "DOMAIN before SCOPE throws std::invalid_argument");
-    EXPECT_TRUE(msg.find("before SCOPE") != std::string::npos,
+    auto result = AssumptionContext::deserialize(
+        "DOMAIN x Real\nSCOPE 0\nEND\n");
+    EXPECT_TRUE(!result.has_value(), "DOMAIN before SCOPE returns failure");
+    EXPECT_TRUE(result.error().code == CasErrc::ParseError,
+                "DOMAIN before SCOPE reports ParseError");
+    EXPECT_TRUE(result.error().message.find("before SCOPE") != std::string::npos,
                 "Error message mentions 'before SCOPE'");
 }
 

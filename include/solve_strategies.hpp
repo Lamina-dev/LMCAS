@@ -44,39 +44,8 @@ enum class SolveStrategy {
     RootOf            ///< 以 RootOf 表达式表示
 };
 
-/**
- * @brief 方程求解策略调度器，根据表达式类型选择合适的求解方法。
- * @param expr 待求解的表达式（视为等于零）
- * @param var 求解变量名
- * @param opts 求解选项
- * @return 所有根的符号表达式列表
- */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> solve_dispatch(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& var,
-    const SolveOptions& opts);
 
-using SolveVectorResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
-/**
- * @brief Projects verified finite solutions to expression values.
- *
- * Solution sets that cannot be represented as a finite vector return
- * `CasErrc::Inconclusive`.
- */
-LAMINA_API SolveVectorResult solve_dispatch_vector_checked(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& var,
-    ComputationContext& context,
-    const SolveOptions& opts = {});
-
-/** @brief Projects finite solutions using a default computation context. */
-LAMINA_API SolveVectorResult solve_dispatch_vector_checked(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& var,
-    const SolveOptions& opts = {});
-
-using SolveResult = Result<SolutionSet>;
 
 /**
  * @brief Solves an equation within the verified support domain.
@@ -100,4 +69,18 @@ LAMINA_API SolveResult solve_equation(
     const std::string& var,
     const SolveOptions& opts = {});
 
+
+using FiniteSolveResult =
+    Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
+
+LAMINA_API FiniteSolveResult solve_finite_checked(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable,
+    ComputationContext& context,
+    const SolveOptions& options = {});
+
+LAMINA_API FiniteSolveResult solve_finite_checked(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable,
+    const SolveOptions& options = {});
 }

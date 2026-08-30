@@ -83,7 +83,7 @@ static void test_trig_integer_or_real_gives_real() {
         auto func_node = make_function(func_type, make_var(var_name));
         auto expr = wrap_expr(func_node);
 
-        RC_ASSERT(engine.query_real(expr) == Tribool::True);
+        RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -102,7 +102,7 @@ static void test_exp_rational_or_real_gives_real() {
         auto func_node = make_function(FunctionNode::FuncType::Exp, make_var(var_name));
         auto expr = wrap_expr(func_node);
 
-        RC_ASSERT(engine.query_real(expr) == Tribool::True);
+        RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -120,7 +120,7 @@ static void test_ln_integer_gives_real() {
         auto func_node = make_function(FunctionNode::FuncType::Ln, make_var(var_name));
         auto expr = wrap_expr(func_node);
 
-        RC_ASSERT(engine.query_real(expr) == Tribool::True);
+        RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -139,7 +139,7 @@ static void test_sqrt_nonneg_real_gives_real() {
         auto func_node = make_function(FunctionNode::FuncType::Sqrt, make_var(var_name));
         auto expr = wrap_expr(func_node);
 
-        RC_ASSERT(engine.query_real(expr) == Tribool::True);
+        RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -158,7 +158,7 @@ static void test_integer_power_natural_gives_integer() {
         auto pow_node = make_power(make_var(base_name), make_number(exponent));
         auto expr = wrap_expr(pow_node);
 
-        RC_ASSERT(engine.query_integer(expr) == Tribool::True);
+        RC_ASSERT(engine.query_integer_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -176,7 +176,7 @@ static void test_integer_power_zero_gives_integer() {
         auto pow_node = make_power(make_var(base_name), make_number(0));
         auto expr = wrap_expr(pow_node);
 
-        RC_ASSERT(engine.query_integer(expr) == Tribool::True);
+        RC_ASSERT(engine.query_integer_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -196,7 +196,7 @@ static void test_rational_power_integer_gives_real() {
         auto expr = wrap_expr(pow_node);
 
         // Rational implies Real, and Real^Integer → Real
-        RC_ASSERT(engine.query_real(expr) == Tribool::True);
+        RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -222,7 +222,7 @@ static void test_unknown_domain_gives_unknown() {
         auto expr = wrap_expr(func_node);
 
         // Without Real/Integer domain on argument, can't infer Real result
-        RC_ASSERT(engine.query_real(expr) == Tribool::Unknown);
+        RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::Unknown);
     });
 }
 
@@ -236,7 +236,7 @@ static void test_all_trig_with_integer() {
         ctx.assume_domain("n", Domain::Integer);
         InferenceEngine engine(ctx);
         auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sin, make_var("n")));
-        EXPECT_TRUE(engine.query_real(expr) == Tribool::True, "sin(Integer) → Real");
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "sin(Integer) → Real");
     }
     // cos(Integer) → Real
     {
@@ -244,7 +244,7 @@ static void test_all_trig_with_integer() {
         ctx.assume_domain("n", Domain::Integer);
         InferenceEngine engine(ctx);
         auto expr = wrap_expr(make_function(FunctionNode::FuncType::Cos, make_var("n")));
-        EXPECT_TRUE(engine.query_real(expr) == Tribool::True, "cos(Integer) → Real");
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "cos(Integer) → Real");
     }
     // tan(Integer) → Real
     {
@@ -252,7 +252,7 @@ static void test_all_trig_with_integer() {
         ctx.assume_domain("n", Domain::Integer);
         InferenceEngine engine(ctx);
         auto expr = wrap_expr(make_function(FunctionNode::FuncType::Tan, make_var("n")));
-        EXPECT_TRUE(engine.query_real(expr) == Tribool::True, "tan(Integer) → Real");
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "tan(Integer) → Real");
     }
 }
 
@@ -263,7 +263,7 @@ static void test_exp_with_integer() {
     ctx.assume_domain("n", Domain::Integer);
     InferenceEngine engine(ctx);
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Exp, make_var("n")));
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True, "exp(Integer) → Real");
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "exp(Integer) → Real");
 }
 
 static void test_ln_positive_gives_real() {
@@ -274,7 +274,7 @@ static void test_ln_positive_gives_real() {
     ctx.assume_sign("x", Sign::Positive);
     InferenceEngine engine(ctx);
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Ln, make_var("x")));
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True, "ln(Positive Real) → Real");
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "ln(Positive Real) → Real");
 }
 
 static void test_sqrt_without_nonneg_unknown() {
@@ -286,7 +286,7 @@ static void test_sqrt_without_nonneg_unknown() {
     // No sign declared — could be negative
     InferenceEngine engine(ctx);
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sqrt, make_var("x")));
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
         "sqrt(Real without NonNeg) → Unknown");
 }
 
@@ -302,7 +302,7 @@ static void test_power_negative_exponent_not_integer() {
     auto expr = wrap_expr(pow_node);
 
     // Should NOT be able to infer Integer (e.g., 2^(-1) = 0.5)
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "Integer^(-1) → Integer is Unknown (not guaranteed)");
 }
 

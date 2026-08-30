@@ -3,7 +3,7 @@
 namespace lamina {
 
 static bool validate_integration_steps(const std::vector<IntegrationStep>& steps) {
-    if (steps.empty() || steps.size() > 3) return false;
+    if (steps.empty()) return false;
 
     for (size_t i = 0; i < steps.size(); ++i) {
         const auto& s = steps[i];
@@ -43,12 +43,6 @@ Result<SymbolicExpr> integrate_multiple_checked(
                 "integrate.multiple");
         }
 
-        if (contains_unevaluated_integral(lamina::detail::node(current))) {
-            return Result<SymbolicExpr>::failure(
-                CasErrc::Inconclusive,
-                "an inner integral is outside the supported domain",
-                "integrate.multiple");
-        }
 
         const bool definite = static_cast<bool>(step.lower) && static_cast<bool>(step.upper);
 

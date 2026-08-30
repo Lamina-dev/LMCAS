@@ -130,34 +130,9 @@ static bool calculus_utils_expr_equal(const std::shared_ptr<SymbolicExpr>& a,
     return lamina::detail::node(a)->equals(*lamina::detail::node(b));
 }
 
-static bool calculus_utils_contains_rootof(const std::shared_ptr<const SymbolicNode>& node)
-{
-    if (!node) return false;
-
-    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (function->type() == FunctionNode::FuncType::RootOf) return true;
-        for (const auto& argument : function->arguments()) {
-            if (calculus_utils_contains_rootof(argument)) return true;
-        }
-        return false;
-    }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& operand : add->operands()) {
-            if (calculus_utils_contains_rootof(operand)) return true;
-        }
-        return false;
-    }
-    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& operand : multiply->operands()) {
-            if (calculus_utils_contains_rootof(operand)) return true;
-        }
-        return false;
-    }
-    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return calculus_utils_contains_rootof(power->base()) ||
-               calculus_utils_contains_rootof(power->exponent());
-    }
-    return false;
+static bool calculus_utils_contains_rootof(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    return lamina::detail::contains_node_type<RootOfNode>(node);
 }
 
 static bool calculus_utils_contains_complex(const std::shared_ptr<const SymbolicNode>& node)
@@ -451,9 +426,9 @@ ContinuityType continuity_at(
     if (!f || !point) return ContinuityType::Essential;
 
     /// 计算左极限
-    auto left_lim = f->limit(var, point, "-");
+    auto left_lim = lamina::limit_expression_checked(f, var, point, LimitDirection::FromBelow).value();
     /// 计算右极限
-    auto right_lim = f->limit(var, point, "+");
+    auto right_lim = lamina::limit_expression_checked(f, var, point, LimitDirection::FromAbove).value();
     /// 计算函数值（直接代入）
     auto func_val = f->substitute(var, point);
 
@@ -511,8 +486,9 @@ AsymptoteAnalysisResult asymptotes_checked(
         if (!solved_zeros) return AsymptoteAnalysisResult::failure(solved_zeros.error());
 
         const auto& zero_set = solved_zeros.value();
-        if (zero_set.kind() != SolutionSet::Kind::Empty &&
-            zero_set.kind() != SolutionSet::Kind::Finite) {
+        const auto* finite_zeros = std::get_if<FiniteSolutions>(&zero_set);
+        if (!std::holds_alternative<EmptySolutions>(zero_set) &&
+            !finite_zeros) {
             return AsymptoteAnalysisResult::failure(
                 CasErrc::Inconclusive,
                 "asymptote denominator zeros are outside the finite exact support domain",
@@ -520,9 +496,9 @@ AsymptoteAnalysisResult asymptotes_checked(
         }
 
         std::vector<std::shared_ptr<SymbolicExpr>> zeros;
-        if (zero_set.kind() == SolutionSet::Kind::Finite) {
-            zeros.reserve(zero_set.finite_solutions().size());
-            for (const auto& solution : zero_set.finite_solutions()) {
+        if (finite_zeros) {
+            zeros.reserve(finite_zeros->values.size());
+            for (const auto& solution : finite_zeros->values) {
                 if (!solution.value || !lamina::detail::node(solution.value)) {
                     return AsymptoteAnalysisResult::failure(
                         CasErrc::InternalInvariant,
@@ -550,13 +526,13 @@ AsymptoteAnalysisResult asymptotes_checked(
             if (!z || calculus_utils_is_infinity(z)) continue;
 
             /// 验证该点处极限为 ±∞
-            auto lim_at_z = f->limit(var, z);
+            auto lim_at_z = lamina::limit_expression_checked(f, var, z).value();
             if (calculus_utils_is_infinity(lim_at_z)) {
                 result.vertical.push_back(z);
             } else {
                 /// 尝试单侧极限
-                auto lim_right = f->limit(var, z, "+");
-                auto lim_left = f->limit(var, z, "-");
+                auto lim_right = lamina::limit_expression_checked(f, var, z, LimitDirection::FromAbove).value();
+                auto lim_left = lamina::limit_expression_checked(f, var, z, LimitDirection::FromBelow).value();
                 if (calculus_utils_is_infinity(lim_right) || calculus_utils_is_infinity(lim_left)) {
                     result.vertical.push_back(z);
                 }
@@ -565,8 +541,8 @@ AsymptoteAnalysisResult asymptotes_checked(
     }
 
     /// 计算 x→+∞ 和 x→-∞ 的极限
-    auto lim_pos = f->limit(var, pos_inf);
-    auto lim_neg = f->limit(var, neg_inf);
+    auto lim_pos = lamina::limit_expression_checked(f, var, pos_inf).value();
+    auto lim_neg = lamina::limit_expression_checked(f, var, neg_inf).value();
 
     if (lim_pos) lim_pos = lim_pos->simplify();
     if (lim_neg) lim_neg = lim_neg->simplify();
@@ -600,14 +576,14 @@ AsymptoteAnalysisResult asymptotes_checked(
     if (!has_horiz_pos) {
         /// 计算 slope = lim(f/x) as x→+∞
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
-        auto slope_pos = f_over_x->limit(var, pos_inf);
+        auto slope_pos = lamina::limit_expression_checked(f_over_x, var, pos_inf).value();
         if (slope_pos) slope_pos = slope_pos->simplify();
 
         if (slope_pos && !calculus_utils_is_infinity(slope_pos) && !slope_pos->is_zero()) {
             /// 计算 intercept = lim(f - slope*x) as x→+∞
             auto slope_times_x = SymbolicExpr::multiply(slope_pos, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
-            auto intercept_pos = f_minus_mx->limit(var, pos_inf);
+            auto intercept_pos = lamina::limit_expression_checked(f_minus_mx, var, pos_inf).value();
             if (intercept_pos) intercept_pos = intercept_pos->simplify();
 
             if (intercept_pos && !calculus_utils_is_infinity(intercept_pos)) {
@@ -619,14 +595,14 @@ AsymptoteAnalysisResult asymptotes_checked(
     if (!has_horiz_neg) {
         /// 计算 slope = lim(f/x) as x→-∞
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
-        auto slope_neg = f_over_x->limit(var, neg_inf);
+        auto slope_neg = lamina::limit_expression_checked(f_over_x, var, neg_inf).value();
         if (slope_neg) slope_neg = slope_neg->simplify();
 
         if (slope_neg && !calculus_utils_is_infinity(slope_neg) && !slope_neg->is_zero()) {
             /// 计算 intercept = lim(f - slope*x) as x→-∞
             auto slope_times_x = SymbolicExpr::multiply(slope_neg, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
-            auto intercept_neg = f_minus_mx->limit(var, neg_inf);
+            auto intercept_neg = lamina::limit_expression_checked(f_minus_mx, var, neg_inf).value();
             if (intercept_neg) intercept_neg = intercept_neg->simplify();
 
             if (intercept_neg && !calculus_utils_is_infinity(intercept_neg)) {
@@ -656,13 +632,6 @@ AsymptoteAnalysisResult asymptotes_checked(
     return asymptotes_checked(f, var, context);
 }
 
-AsymptoteResult asymptotes(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
-{
-    auto checked = asymptotes_checked(f, var);
-    if (!checked) return {};
-    return std::move(checked.value());
-}
 
 
 std::shared_ptr<SymbolicExpr> log_differentiate(
@@ -858,13 +827,13 @@ SymbolicExprVectorResult inverse_function_checked(
         if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
         const auto& solutions = solved.value();
-        if (solutions.kind() == SolutionSet::Kind::Empty) {
+        if (std::holds_alternative<EmptySolutions>(solutions)) {
             return SymbolicExprVectorResult::success({});
         }
-        if (solutions.kind() == SolutionSet::Kind::Finite) {
+        if (const auto* finite = std::get_if<FiniteSolutions>(&solutions)) {
             std::vector<std::shared_ptr<SymbolicExpr>> values;
-            values.reserve(solutions.finite_solutions().size());
-            for (const auto& solution : solutions.finite_solutions()) {
+            values.reserve(finite->values.size());
+            for (const auto& solution : finite->values) {
                 if (!solution.value || !lamina::detail::node(solution.value)) {
                     return SymbolicExprVectorResult::failure(
                         CasErrc::InternalInvariant,
@@ -905,23 +874,7 @@ SymbolicExprVectorResult inverse_function_checked(
     return inverse_function_checked(f, var, y, context);
 }
 
-std::shared_ptr<SymbolicExpr> inverse_derivative(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& point)
-{
-    auto checked = inverse_derivative_checked(f, var, point);
-    if (checked) return checked.value();
-    return nullptr;
-}
 
-std::vector<std::shared_ptr<SymbolicExpr>> inverse_function(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& y)
-{
-    auto checked = inverse_function_checked(f, var, y);
-    if (!checked) return {};
-    return std::move(checked.value());
-}
 
 
 /// 构造绝对值表达式 |expr|
@@ -937,43 +890,8 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_make_abs(
 
 static bool calculus_utils_contains_unevaluated_integral(
     const std::shared_ptr<const SymbolicNode>& node,
-    std::size_t depth = 0)
-{
-    if (!node || depth > 200) return false;
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (func->type() == FunctionNode::FuncType::Calculus_Integral) return true;
-        for (const auto& arg : func->arguments()) {
-            if (calculus_utils_contains_unevaluated_integral(arg, depth + 1)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : add->operands()) {
-            if (calculus_utils_contains_unevaluated_integral(op, depth + 1)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mul->operands()) {
-            if (calculus_utils_contains_unevaluated_integral(op, depth + 1)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return calculus_utils_contains_unevaluated_integral(pow->base(), depth + 1) ||
-               calculus_utils_contains_unevaluated_integral(pow->exponent(), depth + 1);
-    }
-    if (auto complex = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        return calculus_utils_contains_unevaluated_integral(complex->real(), depth + 1) ||
-               calculus_utils_contains_unevaluated_integral(complex->imag(), depth + 1);
-    }
-    return false;
+    std::size_t = 0) {
+    return lamina::detail::contains_node_type<IntegralNode>(node);
 }
 
 /// 尝试符号定积分，若结果仍含未求值积分节点则返回 nullptr
@@ -984,7 +902,8 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_try_symbolic_definite(
     const std::shared_ptr<SymbolicExpr>& b)
 {
     Integrator integrator;
-    SymbolicExpr result = integrator.integrate_def(*integrand, var, *a, *b);
+    SymbolicExpr result = detail::propagate_result(
+        integrator.integrate_def(*integrand, var, *a, *b));
 
     if (calculus_utils_contains_unevaluated_integral(lamina::detail::node(result))) return nullptr;
     auto res = lamina::detail::make_expression_ptr(result);
@@ -996,72 +915,6 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_try_symbolic_definite(
     return simplified ? simplified : res;
 }
 
-/// 数值定积分回退（复合 Simpson 法）
-static std::shared_ptr<SymbolicExpr> calculus_utils_numerical_definite(
-    const std::shared_ptr<SymbolicExpr>& integrand,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b)
-{
-    ComputationContext context;
-    auto a_eval = evaluate_numeric(*a, NumericBindings{}, context);
-    auto b_eval = evaluate_numeric(*b, NumericBindings{}, context);
-    if (!a_eval || !b_eval ||
-        !a_eval.value().is_finite() || !b_eval.value().is_finite() ||
-        !std::isfinite(a_eval.value().value) ||
-        !std::isfinite(b_eval.value().value)) {
-        return nullptr;
-    }
-    double a_val = a_eval.value().value;
-    double b_val = b_eval.value().value;
-
-    int n = 1000;
-    double h = (b_val - a_val) / n;
-    if (!std::isfinite(h)) return nullptr;
-    double sum = 0.0;
-
-    for (int i = 0; i <= n; ++i) {
-        double xi = a_val + i * h;
-        auto xi_expr = SymbolicExpr::number(xi);
-        auto fi = integrand->substitute(var, xi_expr);
-        if (!fi || !lamina::detail::node(fi)) return nullptr;
-        auto fi_eval = evaluate_numeric(*fi, NumericBindings{}, context);
-        if (!fi_eval || !fi_eval.value().is_finite() ||
-            !std::isfinite(fi_eval.value().value)) {
-            return nullptr;
-        }
-        double fi_val = fi_eval.value().value;
-
-        double weight = 1.0;
-        if (i == 0 || i == n) {
-            weight = 1.0;
-        } else if (i % 2 == 1) {
-            weight = 4.0;
-        } else {
-            weight = 2.0;
-        }
-        sum += weight * fi_val;
-        if (!std::isfinite(sum)) return nullptr;
-    }
-    sum *= h / 3.0;
-    if (!std::isfinite(sum)) return nullptr;
-
-    return SymbolicExpr::number(sum);
-}
-
-/// 符号积分优先，失败时回退到数值积分
-static std::shared_ptr<SymbolicExpr> calculus_utils_integrate_with_fallback(
-    const std::shared_ptr<SymbolicExpr>& integrand,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b)
-{
-    auto symbolic_result = calculus_utils_try_symbolic_definite(integrand, var, a, b);
-    if (symbolic_result) {
-        return symbolic_result;
-    }
-    return calculus_utils_numerical_definite(integrand, var, a, b);
-}
 
 
 ExpressionResult curvature_checked(
@@ -1116,13 +969,6 @@ ExpressionResult curvature_checked(
     return curvature_checked(f, var, context);
 }
 
-std::shared_ptr<SymbolicExpr> curvature(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
-{
-    auto checked = curvature_checked(f, var);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
@@ -1205,14 +1051,6 @@ ExpressionResult curvature_parametric_checked(
     return curvature_parametric_checked(x_t, y_t, t, context);
 }
 
-std::shared_ptr<SymbolicExpr> curvature_parametric(
-    const std::shared_ptr<SymbolicExpr>& x_t,
-    const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t)
-{
-    auto checked = curvature_parametric_checked(x_t, y_t, t);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 
 SymbolicExprVectorResult inflection_points_checked(
@@ -1246,13 +1084,13 @@ SymbolicExprVectorResult inflection_points_checked(
     if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
     const auto& solutions = solved.value();
-    if (solutions.kind() == SolutionSet::Kind::Empty) {
+    if (std::holds_alternative<EmptySolutions>(solutions)) {
         return SymbolicExprVectorResult::success({});
     }
-    if (solutions.kind() == SolutionSet::Kind::Finite) {
+    if (const auto* finite = std::get_if<FiniteSolutions>(&solutions)) {
         std::vector<std::shared_ptr<SymbolicExpr>> points;
-        points.reserve(solutions.finite_solutions().size());
-        for (const auto& solution : solutions.finite_solutions()) {
+        points.reserve(finite->values.size());
+        for (const auto& solution : finite->values) {
             if (!solution.value || !lamina::detail::node(solution.value)) {
                 return SymbolicExprVectorResult::failure(
                     CasErrc::InternalInvariant,
@@ -1264,22 +1102,6 @@ SymbolicExprVectorResult inflection_points_checked(
         return SymbolicExprVectorResult::success(std::move(points));
     }
 
-    if (solutions.kind() == SolutionSet::Kind::Inconclusive) {
-        auto candidates = SymbolicExpr::solve(equation, var);
-        std::vector<std::shared_ptr<SymbolicExpr>> verified;
-        verified.reserve(candidates.size());
-        for (const auto& candidate : candidates) {
-            if (!candidate || !lamina::detail::node(candidate)) continue;
-            auto residual = equation->substitute(var, candidate);
-            auto simplified = residual ? residual->simplify() : nullptr;
-            if (simplified && lamina::detail::node(simplified) && simplified->is_zero()) {
-                verified.push_back(candidate);
-            }
-        }
-        if (!verified.empty()) {
-            return SymbolicExprVectorResult::success(std::move(verified));
-        }
-    }
 
     return SymbolicExprVectorResult::failure(
         CasErrc::Inconclusive,
@@ -1294,13 +1116,6 @@ SymbolicExprVectorResult inflection_points_checked(
     return inflection_points_checked(f, var, context);
 }
 
-std::vector<std::shared_ptr<SymbolicExpr>> inflection_points(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
-{
-    auto checked = inflection_points_checked(f, var);
-    if (!checked) return {};
-    return std::move(checked.value());
-}
 
 
 ExpressionResult surface_area_revolution_x_checked(
@@ -1366,35 +1181,6 @@ ExpressionResult surface_area_revolution_x_checked(
     return surface_area_revolution_x_checked(f, var, a, b, context);
 }
 
-std::shared_ptr<SymbolicExpr> surface_area_revolution_x(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b)
-{
-    /// f' = df/dvar
-    auto f_prime = f->differentiate(var);
-
-    /// √(1 + f'²)
-    auto f_prime_sq = SymbolicExpr::power(f_prime, SymbolicExpr::number(2));
-    auto one_plus_fp_sq = SymbolicExpr::add(SymbolicExpr::number(1), f_prime_sq);
-    auto arc_factor = SymbolicExpr::sqrt(one_plus_fp_sq);
-
-    /// |f(x)| · √(1 + f'²)
-    auto abs_f = calculus_utils_make_abs(f);
-    auto integrand = SymbolicExpr::multiply(abs_f, arc_factor);
-
-    /// 2π
-    auto two_pi = SymbolicExpr::multiply(
-        SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
-
-    /// S = 2π ∫ₐᵇ |f(x)| · √(1 + f'²) dx
-    auto integral = calculus_utils_integrate_with_fallback(integrand, var, a, b);
-    if (!integral) {
-        return nullptr;
-    }
-    auto result = SymbolicExpr::multiply(two_pi, integral);
-    auto simplified = result->simplify();
-    return simplified ? simplified : result;
-}
 
 ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
@@ -1460,35 +1246,5 @@ ExpressionResult surface_area_revolution_y_checked(
     return surface_area_revolution_y_checked(f, var, a, b, context);
 }
 
-std::shared_ptr<SymbolicExpr> surface_area_revolution_y(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b)
-{
-    /// f' = df/dvar
-    auto f_prime = f->differentiate(var);
-
-    /// √(1 + f'²)
-    auto f_prime_sq = SymbolicExpr::power(f_prime, SymbolicExpr::number(2));
-    auto one_plus_fp_sq = SymbolicExpr::add(SymbolicExpr::number(1), f_prime_sq);
-    auto arc_factor = SymbolicExpr::sqrt(one_plus_fp_sq);
-
-    /// |var| · √(1 + f'²)
-    auto var_expr = SymbolicExpr::variable(var);
-    auto abs_var = calculus_utils_make_abs(var_expr);
-    auto integrand = SymbolicExpr::multiply(abs_var, arc_factor);
-
-    /// 2π
-    auto two_pi = SymbolicExpr::multiply(
-        SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
-
-    /// S = 2π ∫ₐᵇ |x| · √(1 + f'²) dx
-    auto integral = calculus_utils_integrate_with_fallback(integrand, var, a, b);
-    if (!integral) {
-        return nullptr;
-    }
-    auto result = SymbolicExpr::multiply(two_pi, integral);
-    auto simplified = result->simplify();
-    return simplified ? simplified : result;
-}
 
 } // namespace lamina

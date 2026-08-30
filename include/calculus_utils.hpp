@@ -74,8 +74,6 @@ LAMINA_API AsymptoteAnalysisResult asymptotes_checked(
 LAMINA_API AsymptoteAnalysisResult asymptotes_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
-LAMINA_API AsymptoteResult asymptotes(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 
 /**
@@ -144,9 +142,6 @@ LAMINA_API ExpressionResult inverse_derivative_checked(
  * @param[in] point 求导点（y 值）
  * @return 反函数导数表达式，不存在时返回 nullptr
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> inverse_derivative(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& point);
 
 /**
  * @brief 求解反函数 f⁻¹(y)，即求解方程 f(x) = y 关于 x 的所有解。
@@ -175,9 +170,6 @@ LAMINA_API SymbolicExprVectorResult inverse_function_checked(
  * @param[in] y   目标值表达式
  * @return 所有解的列表
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inverse_function(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& y);
 
 
 /**
@@ -196,8 +188,6 @@ LAMINA_API ExpressionResult curvature_checked(
 LAMINA_API ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> curvature(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 /**
  * @brief 计算参数曲线 (x(t), y(t)) 的曲率 κ = |x'y'' - y'x''| / (x'² + y'²)^(3/2)
@@ -218,9 +208,6 @@ LAMINA_API ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> curvature_parametric(
-    const std::shared_ptr<SymbolicExpr>& x_t,
-    const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t);
 
 
 /**
@@ -240,8 +227,6 @@ LAMINA_API SymbolicExprVectorResult inflection_points_checked(
 LAMINA_API SymbolicExprVectorResult inflection_points_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> inflection_points(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 
 /**
@@ -274,9 +259,6 @@ LAMINA_API ExpressionResult surface_area_revolution_x_checked(
  * @param[in] b 积分上限
  * @return 旋转面面积的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> surface_area_revolution_x(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 
 /**
  * @brief 计算曲线 y = f(x) 绕 y 轴旋转所得旋转面的面积
@@ -308,8 +290,5 @@ LAMINA_API ExpressionResult surface_area_revolution_y_checked(
  * @param[in] b 积分上限
  * @return 旋转面面积的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> surface_area_revolution_y(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 
 } // namespace lamina

@@ -29,16 +29,10 @@ int main() {
         EXPECT_TRUE(ctx.get_active_conditionals().empty(),
                     "failed checked conditional stores no conditional");
 
-        bool threw = false;
-        try {
-            ctx.assume_conditional(x, conclusion);
-        } catch (const std::invalid_argument&) {
-            threw = true;
-        }
-        EXPECT_TRUE(threw,
-                    "legacy conditional maps checked validation failure to invalid_argument");
+        auto failure_30 = ctx.assume_conditional(x, conclusion);
+        EXPECT_TRUE(!failure_30.has_value(), "canonical conditional maps checked validation failure to invalid_argument");
         EXPECT_TRUE(ctx.get_active_conditionals().empty(),
-                    "legacy conditional failure remains transactional");
+                    "canonical conditional failure remains transactional");
     }
 
     TEST_CASE("assume_conditional: stores conditional in current scope");

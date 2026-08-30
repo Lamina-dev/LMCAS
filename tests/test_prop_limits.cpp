@@ -143,13 +143,17 @@ static void test_indeterminate_termination() {
         }
         }
 
-        // The key property: the limit computation must terminate (not crash/loop)
-        // and return either a valid result or nullptr.
-        auto result = expr->limit("x", limit_point, direction);
-
-        // If we reach here, the computation terminated (did not crash or loop).
-        // The result should be either nullptr or a valid expression.
-        bool terminated = true; // We reached this point, so it terminated.
+        // The key property: checked limit computation terminates.
+        auto parsed_direction = LimitDirection::Both;
+        if (direction == "+") {
+            parsed_direction = LimitDirection::FromAbove;
+        } else if (direction == "-") {
+            parsed_direction = LimitDirection::FromBelow;
+        }
+        auto result = lamina::limit_expression_checked(
+            expr, "x", limit_point, parsed_direction);
+        (void)result;
+        bool terminated = true;
         if (terminated) {
             pass_count++;
         }
@@ -186,7 +190,7 @@ static void test_rational_degree_rule() {
         auto Q_inv = SymbolicExpr::power(Q, neg_one);
         auto expr = SymbolicExpr::multiply(P, Q_inv);
 
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
 
         bool property_holds = false;
 
@@ -277,7 +281,7 @@ static void test_squeeze_bounded_oscillation() {
         auto expr = SymbolicExpr::multiply(zero_factor, bounded_factor);
 
         // Compute limit as x→0
-        auto result = expr->limit("x", zero);
+        auto result = lamina::limit_expression_checked(expr, "x", zero).value();
 
         bool property_holds = false;
         if (result) {

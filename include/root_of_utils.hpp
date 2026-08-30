@@ -7,6 +7,7 @@
 #include "symbolic.hpp"
 #include "polynomial.hpp"
 #include "poly_utils.hpp"
+#include "numeric_evaluation.hpp"
 #include "lmmc/config.h"
 #include <vector>
 #include <memory>
@@ -16,26 +17,40 @@
 namespace lamina {
 
 using RootOfEvaluationResult = Result<lmmc_real_t>;
+using RootOfComplexEvaluationResult = Result<ApproxComplex>;
+using RootOfConstructionResult = Result<std::shared_ptr<SymbolicExpr>>;
+
+LAMINA_API RootOfConstructionResult make_rootof_checked(
+    const std::shared_ptr<SymbolicExpr>& polynomial,
+    const std::string& variable,
+    std::size_t index,
+    ComputationContext& context);
+
+LAMINA_API RootOfConstructionResult make_rootof_checked(
+    const std::shared_ptr<SymbolicExpr>& polynomial,
+    const std::string& variable,
+    std::size_t index);
+
 
 /**
- * @brief 对 RootOf 表达式进行数值求值。
- * @param rootof_expr RootOf 符号表达式
- * @return 若求值成功则返回数值结果，否则返回 nullopt
- */
-LAMINA_API std::optional<lmmc_real_t> rootof_evaluate(
-    const std::shared_ptr<SymbolicExpr>& rootof_expr);
-
-/**
- * @brief Evaluate a RootOf in the supported exact-real-root domain.
- *
  * The polynomial must be structurally provable as an exact rational
- * polynomial and all of its roots must be real. Unsupported complex or
- * parametric cases return `Inconclusive`; malformed expressions and invalid
- * indices return `InvalidArgument`.
+ * polynomial. Real evaluation requires the selected root to be real;
+ * selecting a non-real root returns `DomainError`. Malformed expressions
+ * and invalid indices return `InvalidArgument`.
  */
 LAMINA_API RootOfEvaluationResult rootof_evaluate_checked(
     const std::shared_ptr<SymbolicExpr>& rootof_expr,
     ComputationContext& context);
+
+LAMINA_API RootOfEvaluationResult rootof_evaluate_checked(
+    const std::shared_ptr<SymbolicExpr>& rootof_expr);
+
+LAMINA_API RootOfComplexEvaluationResult rootof_evaluate_complex_checked(
+    const std::shared_ptr<SymbolicExpr>& rootof_expr,
+    ComputationContext& context);
+
+LAMINA_API RootOfComplexEvaluationResult rootof_evaluate_complex_checked(
+    const std::shared_ptr<SymbolicExpr>& rootof_expr);
 
 /**
  * @brief 化简 RootOf 表达式（如可用根式表示则转换为闭式）。

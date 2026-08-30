@@ -15,11 +15,8 @@ public:
         Ln, Log, Abs, Sqrt,                  ///< 对数、绝对值、平方根
         Exp,                                 ///< 指数函数
         LambertW,                            ///< Lambert W 函数
-        RootOf,                              ///< 多项式根表示
         Atan2,                               ///< 双参数反正切
-        Calculus_Integral,                   ///< 积分
         Infinity,                            ///< 无穷大
-        Limit,                               ///< 极限
         Erf,                                 ///< 误差函数 erf(x) = (2/√π)∫₀ˣ e^(-t²) dt
         Ei,                                  ///< 指数积分 Ei(x)
         Si,                                  ///< 正弦积分 Si(x) = ∫₀ˣ sin(t)/t dt
@@ -120,7 +117,7 @@ private:
 public:
     const std::string& name() const noexcept { return name_; }
     const auto& arguments() const noexcept { return arguments_; }
-    int type_priority() const override { return 107; }
+    int type_priority() const override { return 111; }
 
 protected:
     std::size_t compute_hash() const override {
@@ -366,7 +363,7 @@ public:
             const auto& sparse = std::get<SparseStorage>(storage_);
             auto it = sparse.find(idx);
             if (it != sparse.end()) return it->second;
-            return lamina::detail::make_node<NumberNode>(0.0);
+            return lamina::detail::make_node<NumberNode>(BigInt(0));
         }
     }
 

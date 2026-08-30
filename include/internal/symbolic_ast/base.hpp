@@ -47,6 +47,9 @@ class PiecewiseNode;
 class SummationNode;
 class ProductNode;
 class ComplexNode;
+class IntegralNode;
+class LimitNode;
+class RootOfNode;
 
 struct SymbolicExpr::Impl {
     explicit Impl(std::shared_ptr<const SymbolicNode> root_node)
@@ -249,9 +252,7 @@ public:
     virtual void visit(const MultiplyNode& node) = 0;
     virtual void visit(const PowerNode& node) = 0;
     virtual void visit(const FunctionNode& node) = 0;
-    virtual void visit(const UninterpretedFunctionNode&) {
-        throw std::runtime_error("UninterpretedFunctionNode is not supported by this visitor");
-    }
+    virtual void visit(const UninterpretedFunctionNode& node) = 0;
     virtual void visit(const MatrixNode& node) = 0;
     virtual void visit(const RelationalNode& node) = 0;
     virtual void visit(const LogicalNode& node) = 0;
@@ -266,6 +267,9 @@ public:
     virtual void visit(const MembershipNode& node) = 0;
     virtual void visit(const QuantityNode& node) = 0;
     virtual void visit(const ComplexNode& node) = 0;
+    virtual void visit(const IntegralNode& node) = 0;
+    virtual void visit(const LimitNode& node) = 0;
+    virtual void visit(const RootOfNode& node) = 0;
 };
 
 } // namespace lamina::detail

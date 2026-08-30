@@ -46,13 +46,13 @@ void test_positive_base_real_exponent() {
     // x^y where x is Positive, y is Real
     auto expr = make_power_expr(make_var("x"), make_var("y"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "x^y is Positive when x>0 and y is Real");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "x^y is NonNegative when x>0 and y is Real");
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
                 "x^y is NonZero when x>0 and y is Real");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
                 "x^y is not Negative when x>0 and y is Real");
 }
 
@@ -70,7 +70,7 @@ void test_positive_base_integer_exponent() {
         auto expr = make_power_expr(make_var("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is Positive when x>0";
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, msg);
     }
 }
 
@@ -88,7 +88,7 @@ void test_positive_base_real_number_exponent() {
         auto expr = make_power_expr(make_var("x"), make_num_d(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is Positive when x>0";
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, msg);
     }
 }
 
@@ -105,7 +105,7 @@ void test_numeric_positive_base() {
     for (int b : bases) {
         auto expr = make_power_expr(make_num(b), make_var("y"));
         std::string msg = std::to_string(b) + "^y is Positive when y is Real";
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, msg);
     }
 }
 
@@ -124,10 +124,10 @@ void test_real_base_even_exponent() {
         auto expr = make_power_expr(make_var("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is NonNegative when x is Real (even exponent)";
-        EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True, msg);
         std::string msg2 = "x^" + std::to_string(exp) +
                            " is not Negative when x is Real (even exponent)";
-        EXPECT_TRUE(engine.query_negative(expr) == Tribool::False, msg2);
+        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False, msg2);
     }
 }
 
@@ -146,7 +146,7 @@ void test_real_base_odd_exponent_not_nonneg() {
         auto expr = make_power_expr(make_var("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is Unknown for NonNegative when x is Real (odd exponent)";
-        EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown, msg);
+        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown, msg);
     }
 }
 
@@ -169,7 +169,7 @@ void test_randomized_even_exponents() {
         InferenceEngine engine(ctx);
         auto expr = make_power_expr(make_var(var_name), make_num(even_exp));
 
-        if (engine.query_nonnegative(expr) == Tribool::True) {
+        if (engine.query_nonnegative_checked(expr).value() == Tribool::True) {
             pass_count++;
         }
     }
@@ -195,10 +195,10 @@ void test_nonneg_base_positive_int_exponent() {
         auto expr = make_power_expr(make_var("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is NonNegative when x>=0 (positive int exponent)";
-        EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True, msg);
         std::string msg2 = "x^" + std::to_string(exp) +
                            " is not Negative when x>=0";
-        EXPECT_TRUE(engine.query_negative(expr) == Tribool::False, msg2);
+        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False, msg2);
     }
 }
 
@@ -220,7 +220,7 @@ void test_randomized_positive_exponents() {
         InferenceEngine engine(ctx);
         auto expr = make_power_expr(make_var(var_name), make_num(pos_exp));
 
-        if (engine.query_nonnegative(expr) == Tribool::True) {
+        if (engine.query_nonnegative_checked(expr).value() == Tribool::True) {
             pass_count++;
         }
     }
@@ -246,7 +246,7 @@ void test_nonzero_base_integer_exponent() {
         auto expr = make_power_expr(make_var("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is NonZero when x!=0 (integer exponent)";
-        EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True, msg);
     }
 }
 
@@ -268,7 +268,7 @@ void test_nonzero_randomized_integer_exponents() {
         InferenceEngine engine(ctx);
         auto expr = make_power_expr(make_var(var_name), make_num(exp));
 
-        if (engine.query_nonzero(expr) == Tribool::True) {
+        if (engine.query_nonzero_checked(expr).value() == Tribool::True) {
             pass_count++;
         }
     }
@@ -291,9 +291,9 @@ void test_positive_base_even_exponent_is_positive() {
 
     // x^2 where x is Positive and Real → Positive (rule 16a fires)
     auto expr = make_power_expr(make_var("x"), make_num(2));
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "x^2 is Positive when x>0 (rule 16a)");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "x^2 is NonNegative when x>0");
 }
 
@@ -305,14 +305,14 @@ void test_numeric_base_and_exponent() {
 
     // 2^3 — NumberNode base (positive), NumberNode exponent (integer)
     auto expr = make_power_expr(make_num(2), make_num(3));
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "2^3 is Positive");
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
                 "2^3 is NonZero");
 
     // 3^(-2) — positive base, integer exponent
     auto expr2 = make_power_expr(make_num(3), make_num(-2));
-    EXPECT_TRUE(engine.query_positive(expr2) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr2).value() == Tribool::True,
                 "3^(-2) is Positive");
 }
 
@@ -324,13 +324,13 @@ void test_no_rule_matches() {
     InferenceEngine engine(ctx);
 
     auto expr = make_power_expr(make_var("x"), make_var("y"));
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "x^y is Unknown when no assumptions");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
                 "x^y is Unknown for Negative when no assumptions");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
                 "x^y is Unknown for NonNegative when no assumptions");
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::Unknown,
                 "x^y is Unknown for NonZero when no assumptions");
 }
 
@@ -344,9 +344,9 @@ void test_negative_base_non_integer_exponent() {
 
     // x^(1.5) where x is Negative — could be complex, no rule matches
     auto expr = make_power_expr(make_var("x"), make_num_d(1.5));
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "(-x)^1.5 is Unknown for Positive");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "(-x)^1.5 is Unknown for Real");
 }
 
@@ -365,7 +365,7 @@ void test_real_base_integer_exponent_domain() {
         auto expr = make_power_expr(make_var("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is Real when x is Real (integer exponent)";
-        EXPECT_TRUE(engine.query_real(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, msg);
     }
 }
 
@@ -387,7 +387,7 @@ void test_domain_randomized_integer_exponents() {
         InferenceEngine engine(ctx);
         auto expr = make_power_expr(make_var(var_name), make_num(exp));
 
-        if (engine.query_real(expr) == Tribool::True) {
+        if (engine.query_real_checked(expr).value() == Tribool::True) {
             pass_count++;
         }
     }
@@ -412,7 +412,7 @@ void test_integer_base_integer_exponent() {
         auto expr = make_power_expr(make_var("n"), make_num(exp));
         std::string msg = "n^" + std::to_string(exp) +
                           " is Real when n is Integer (Integer implies Real)";
-        EXPECT_TRUE(engine.query_real(expr) == Tribool::True, msg);
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, msg);
     }
 }
 
@@ -424,15 +424,15 @@ void test_numeric_base_integer_exponent() {
 
     // Numeric bases are Real, integer exponents are integers
     auto expr1 = make_power_expr(make_num(2), make_num(3));
-    EXPECT_TRUE(engine.query_real(expr1) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr1).value() == Tribool::True,
                 "2^3 is Real");
 
     auto expr2 = make_power_expr(make_num(-3), make_num(2));
-    EXPECT_TRUE(engine.query_real(expr2) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr2).value() == Tribool::True,
                 "(-3)^2 is Real");
 
     auto expr3 = make_power_expr(make_num(5), make_num(-1));
-    EXPECT_TRUE(engine.query_real(expr3) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr3).value() == Tribool::True,
                 "5^(-1) is Real");
 }
 
@@ -449,7 +449,7 @@ void test_real_base_non_integer_exponent_unknown() {
     auto expr = make_power_expr(make_var("x"), make_num_d(1.5));
     // The domain inference rule requires integer exponent
     // Without Positive base, we can't guarantee Real
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "x^1.5 is Unknown for Real when x is only Real (non-integer exponent)");
 }
 
@@ -461,7 +461,7 @@ void test_no_domain_yields_unknown() {
     InferenceEngine engine(ctx);
 
     auto expr = make_power_expr(make_var("x"), make_num(2));
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "x^2 is Unknown for Real when x has no domain assumption");
 }
 

@@ -90,9 +90,33 @@ public:
         }
         result = lamina::detail::make_node<FunctionNode>(node.type(), new_args);
     }
+    void visit(const UninterpretedFunctionNode& node) override {
+        std::vector<std::shared_ptr<const SymbolicNode>> arguments;
+        arguments.reserve(node.arguments().size());
+        for (const auto& argument : node.arguments()) {
+            argument->accept(*this);
+            arguments.push_back(result);
+        }
+        result = lamina::detail::make_node<UninterpretedFunctionNode>(
+            node.name(), std::move(arguments));
+    }
 
     void visit(const MatrixNode& node) override {
         result = node.clone();
+    }
+    void visit(const IntegralNode& node) override {
+        node.body()->accept(*this);
+        auto body = result;
+        std::shared_ptr<const SymbolicNode> lower;
+        std::shared_ptr<const SymbolicNode> upper;
+        if (node.lower()) {
+            node.lower()->accept(*this);
+            lower = result;
+            node.upper()->accept(*this);
+            upper = result;
+        }
+        result = lamina::detail::make_node<IntegralNode>(
+            body, node.variable(), lower, upper);
     }
 
     void visit(const RelationalNode& node) override {
@@ -154,8 +178,10 @@ public:
 
     void visit(const TransformNode& node) override {
         node.body()->accept(*this);
+        auto body = result;
+        node.target()->accept(*this);
         result = lamina::detail::make_node<TransformNode>(
-            node.transform_type(), result, node.source_var(), node.target_var());
+            node.transform_type(), body, node.source_var(), result);
     }
 
     void visit(const QuantifierNode& node) override {
@@ -213,4 +239,13 @@ public:
         auto expanded_i = result;
         result = SymbolicFactory::create_complex(expanded_r, expanded_i);
     }
+    void visit(const LimitNode& node) override {
+        node.body()->accept(*this);
+        auto body = result;
+        node.point()->accept(*this);
+        result = lamina::detail::make_node<LimitNode>(
+            body, node.variable(), result, node.direction());
+    }
+
+    void visit(const RootOfNode& node) override { result = node.clone(); }
 };

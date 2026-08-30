@@ -256,12 +256,11 @@ std::vector<Polynomial<Rational>> factor_univariate_bridge(
     }
 
     /// Hensel 提升
-    std::vector<Polynomial<BigInt>> lifted_factors;
-    try {
-        lifted_factors = hensel_lift(int_poly, berl_result.factors, prime, lift_bound);
-    } catch (...) {
-        return {poly};
-    }
+    auto lifted = hensel_lift_checked(
+        int_poly, berl_result.factors, prime, lift_bound);
+    if (!lifted) return {poly};
+    std::vector<Polynomial<BigInt>> lifted_factors =
+        std::move(lifted.value());
 
     if (lifted_factors.empty()) {
         return {poly};

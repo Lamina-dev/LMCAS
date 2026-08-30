@@ -392,57 +392,6 @@ inline CrtResult multi_crt_checked(const std::vector<int64_t>& residues,
     return multi_crt_checked(residues, primes, context);
 }
 
-/**
- * @brief 有理数重构：从模像 x mod m 恢复有理数 a/b
- * @param x 模像值
- * @param m 模数
- * @return pair(分子 a, 分母 b)；失败时返回 (0, 0)
- */
-inline std::pair<int64_t, int64_t> rational_reconstruction(int64_t x, int64_t m) {
-    if (m <= 0) {
-        return {0, 0};
-    }
-
-    x = ((x % m) + m) % m;
-
-    int64_t bound = static_cast<int64_t>(std::floor(std::sqrt(static_cast<double>(m) / 2.0)));
-    if (bound == 0) bound = 1;
-
-    int64_t r0 = m, r1 = x;
-    int64_t s0 = 0, s1 = 1;
-
-    while (r1 > bound) {
-        int64_t q = r0 / r1;
-        int64_t r_new = r0 - q * r1;
-        int64_t s_new = s0 - q * s1;
-
-        r0 = r1;
-        r1 = r_new;
-        s0 = s1;
-        s1 = s_new;
-    }
-
-    int64_t a = r1;
-    int64_t b = s1;
-
-    if (b < 0) {
-        a = -a;
-        b = -b;
-    }
-
-    if (std::abs(a) >= bound || b == 0 || b >= bound) {
-
-        return {0, 0};
-    }
-
-    int64_t s_unused, t_unused;
-    int64_t g = extended_gcd(std::abs(a), b, s_unused, t_unused);
-    if (g != 1) {
-        return {0, 0};
-    }
-
-    return {a, b};
-}
 
 /**
  * @brief Checked rational reconstruction. Returns Inconclusive when no
@@ -457,17 +406,52 @@ inline RationalReconstructionResult rational_reconstruction_checked(
     if (!step) return RationalReconstructionResult::failure(step.error());
     if (m <= 0) {
         return RationalReconstructionResult::failure(
-            CasErrc::InvalidArgument, "rational reconstruction modulus must be positive", operation);
+            CasErrc::InvalidArgument,
+            "rational reconstruction modulus must be positive",
+            operation);
     }
 
-    auto reconstructed = rational_reconstruction(x, m);
-    if (reconstructed.second == 0) {
+    x = ((x % m) + m) % m;
+    int64_t bound = static_cast<int64_t>(
+        std::floor(std::sqrt(static_cast<double>(m) / 2.0)));
+    if (bound == 0) bound = 1;
+    int64_t r0 = m;
+    int64_t r1 = x;
+    int64_t s0 = 0;
+    int64_t s1 = 1;
+    while (r1 > bound) {
+        step = context.consume_steps(1, operation);
+        if (!step) return RationalReconstructionResult::failure(step.error());
+        const int64_t quotient = r0 / r1;
+        const int64_t next_r = r0 - quotient * r1;
+        const int64_t next_s = s0 - quotient * s1;
+        r0 = r1;
+        r1 = next_r;
+        s0 = s1;
+        s1 = next_s;
+    }
+    int64_t numerator = r1;
+    int64_t denominator = s1;
+    if (denominator < 0) {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+    int64_t unused_s = 0;
+    int64_t unused_t = 0;
+    const bool outside_bound =
+        std::abs(numerator) >= bound || denominator == 0 ||
+        denominator >= bound;
+    const bool not_coprime = !outside_bound &&
+        extended_gcd(std::abs(numerator), denominator,
+                     unused_s, unused_t) != 1;
+    if (outside_bound || not_coprime) {
         return RationalReconstructionResult::failure(
             CasErrc::Inconclusive,
             "no rational reconstruction exists in the supported bound",
             operation);
     }
-    return RationalReconstructionResult::success(reconstructed);
+    return RationalReconstructionResult::success(
+        {numerator, denominator});
 }
 
 inline RationalReconstructionResult rational_reconstruction_checked(int64_t x, int64_t m) {

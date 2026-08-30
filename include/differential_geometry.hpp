@@ -29,9 +29,6 @@ LAMINA_API DifferentialGeometryExprResult metric_inverse_checked(
     const std::shared_ptr<SymbolicExpr>& g_ij
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> metric_inverse(
-    const std::shared_ptr<SymbolicExpr>& g_ij
-);
 
 /**
  * @brief 计算第一类克里斯托弗符号 Γ_{kij}
@@ -55,11 +52,6 @@ LAMINA_API DifferentialGeometryExprResult christoffel_first_kind_checked(
     int k, int i, int j
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> christoffel_first_kind(
-    const std::shared_ptr<SymbolicExpr>& g_ij,
-    const std::vector<std::string>& coords,
-    int k, int i, int j
-);
 
 /**
  * @brief 计算第二类克里斯托弗符号 Γ^k_{ij}
@@ -86,12 +78,6 @@ LAMINA_API DifferentialGeometryExprResult christoffel_second_kind_checked(
     int k, int i, int j
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> christoffel_second_kind(
-    const std::shared_ptr<SymbolicExpr>& g_ij,
-    const std::shared_ptr<SymbolicExpr>& g_up_ij,
-    const std::vector<std::string>& coords,
-    int k, int i, int j
-);
 
 /**
  * @brief 计算黎曼曲率张量 R^rho_{sigma mu nu}
@@ -111,12 +97,6 @@ LAMINA_API DifferentialGeometryExprResult riemann_curvature_tensor_checked(
 );
 
 LAMINA_API DifferentialGeometryExprResult riemann_curvature_tensor_checked(
-    const std::shared_ptr<SymbolicExpr>& g_ij,
-    const std::vector<std::string>& coords,
-    int rho, int sigma, int mu, int nu
-);
-
-LAMINA_API std::shared_ptr<SymbolicExpr> riemann_curvature_tensor(
     const std::shared_ptr<SymbolicExpr>& g_ij,
     const std::vector<std::string>& coords,
     int rho, int sigma, int mu, int nu
@@ -148,12 +128,6 @@ LAMINA_API DifferentialGeometryExprResult lie_derivative_checked(
     int order = 1
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> lie_derivative(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& X,
-    const std::vector<std::string>& vars,
-    int order = 1
-);
 
 /**
  * @brief 计算微分形式的外微分 d(form)。
@@ -181,10 +155,5 @@ LAMINA_API DifferentialGeometryVectorResult exterior_derivative_checked(
     const std::vector<std::string>& vars
 );
 
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> exterior_derivative(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& form_coeffs,
-    int degree,
-    const std::vector<std::string>& vars
-);
 
 } // namespace lamina

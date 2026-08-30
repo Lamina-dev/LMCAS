@@ -1,4 +1,5 @@
 #include "newton_raphson.hpp"
+#include "internal/exact_sturm.hpp"
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
 #include <algorithm>
@@ -55,186 +56,18 @@ NumericRootResult invalid_root_options(const SolveOptions& opts,
 
 } // namespace
 
-static int count_sign_changes(const std::vector<Rational>& values) {
-    int changes = 0;
-    int last_sign = 0;
-
-    for (const auto& v : values) {
-        if (v.is_zero()) continue;
-
-        int current_sign = (v > Rational(0)) ? 1 : -1;
-        if (last_sign != 0 && current_sign != last_sign) {
-            ++changes;
-        }
-        last_sign = current_sign;
-    }
-    return changes;
+Result<std::vector<std::pair<Rational, Rational>>>
+isolate_real_roots_checked(
+    const Polynomial<Rational>& polynomial,
+    ComputationContext& context) {
+    return detail::isolate_real_roots_exact(
+        polynomial, context, "isolate_real_roots");
 }
 
-static int sturm_sign_changes_at(
-    const std::vector<Polynomial<Rational>>& sturm,
-    const Rational& x)
-{
-    std::vector<Rational> values;
-    values.reserve(sturm.size());
-    for (const auto& p : sturm) {
-        values.push_back(p.eval(x));
-    }
-    return count_sign_changes(values);
-}
-
-[[maybe_unused]] static int sturm_sign_changes_at_pos_inf(
-    const std::vector<Polynomial<Rational>>& sturm)
-{
-    std::vector<Rational> signs;
-    signs.reserve(sturm.size());
-    for (const auto& p : sturm) {
-        if (p.is_zero()) continue;
-        signs.push_back(p.lead_coeff());
-    }
-    return count_sign_changes(signs);
-}
-
-[[maybe_unused]] static int sturm_sign_changes_at_neg_inf(
-    const std::vector<Polynomial<Rational>>& sturm)
-{
-    std::vector<Rational> signs;
-    signs.reserve(sturm.size());
-    for (const auto& p : sturm) {
-        if (p.is_zero()) continue;
-        int deg = p.degree();
-        Rational lc = p.lead_coeff();
-
-        if (deg % 2 == 1) {
-            lc = -lc;
-        }
-        signs.push_back(lc);
-    }
-    return count_sign_changes(signs);
-}
-
-static Rational cauchy_bound(const Polynomial<Rational>& poly) {
-    if (poly.degree() <= 0) return Rational(1);
-
-    Rational lc = poly.lead_coeff();
-    Rational max_ratio(0);
-
-    for (int i = 0; i < poly.degree(); ++i) {
-        Rational coeff = poly.coeffs[i];
-        if (coeff.is_zero()) continue;
-        Rational ratio = coeff.abs() / lc.abs();
-        if (ratio > max_ratio) {
-            max_ratio = ratio;
-        }
-    }
-
-    return Rational(1) + max_ratio;
-}
-
-static int roots_in_interval(
-    const std::vector<Polynomial<Rational>>& sturm,
-    const Rational& a,
-    const Rational& b)
-{
-    int va = sturm_sign_changes_at(sturm, a);
-    int vb = sturm_sign_changes_at(sturm, b);
-    return va - vb;
-}
-
-std::vector<std::pair<Rational, Rational>> isolate_real_roots(
-    const Polynomial<Rational>& poly)
-{
-    std::vector<std::pair<Rational, Rational>> result;
-
-    if (poly.is_zero() || poly.degree() <= 0) {
-        return result;
-    }
-
-    Polynomial<Rational> sqfree = poly.square_free_part();
-    if (sqfree.is_zero() || sqfree.degree() <= 0) {
-        return result;
-    }
-
-    std::vector<Polynomial<Rational>> sturm;
-    sturm.push_back(sqfree);
-    sturm.push_back(sqfree.differentiate());
-
-    while (true) {
-        size_t n = sturm.size();
-        const auto& prev2 = sturm[n - 2];
-        const auto& prev1 = sturm[n - 1];
-
-        if (prev1.is_zero()) break;
-
-        auto [quotient, remainder] = prev2.div_mod(prev1);
-
-        if (remainder.is_zero()) break;
-
-        Polynomial<Rational> neg_rem(remainder.variable_name);
-        neg_rem.coeffs.resize(remainder.coeffs.size());
-        for (size_t i = 0; i < remainder.coeffs.size(); ++i) {
-            neg_rem.coeffs[i] = -remainder.coeffs[i];
-        }
-        neg_rem.trim();
-
-        sturm.push_back(neg_rem);
-    }
-
-    Rational bound = cauchy_bound(sqfree);
-    Rational lo = -bound;
-    Rational hi = bound;
-
-    int total_roots = roots_in_interval(sturm, lo, hi);
-    if (total_roots <= 0) {
-        return result;
-    }
-
-    struct Interval {
-        Rational lo, hi;
-        int root_count;
-    };
-
-    std::vector<Interval> work_queue;
-    work_queue.push_back({lo, hi, total_roots});
-
-    while (!work_queue.empty()) {
-        Interval current = work_queue.back();
-        work_queue.pop_back();
-
-        if (current.root_count == 0) {
-            continue;
-        }
-
-        if (current.root_count == 1) {
-            result.push_back({current.lo, current.hi});
-            continue;
-        }
-
-        Rational mid = (current.lo + current.hi) / Rational(2);
-
-        int left_count = roots_in_interval(sturm, current.lo, mid);
-        int right_count = roots_in_interval(sturm, mid, current.hi);
-
-        if (left_count + right_count < current.root_count) {
-
-            result.push_back({mid, mid});
-        }
-
-        if (right_count > 0) {
-            work_queue.push_back({mid, current.hi, right_count});
-        }
-        if (left_count > 0) {
-            work_queue.push_back({current.lo, mid, left_count});
-        }
-    }
-
-    std::sort(result.begin(), result.end(),
-        [](const std::pair<Rational, Rational>& a,
-           const std::pair<Rational, Rational>& b) {
-            return a.first < b.first;
-        });
-
-    return result;
+Result<std::vector<std::pair<Rational, Rational>>>
+isolate_real_roots_checked(const Polynomial<Rational>& polynomial) {
+    ComputationContext context;
+    return isolate_real_roots_checked(polynomial, context);
 }
 
 NumericRootResult bisection_checked(
@@ -313,17 +146,6 @@ NumericRootResult bisection_checked(
     return NumericRootResult::success(std::nullopt);
 }
 
-std::optional<NumericRoot> bisection(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    lmmc_real_t lo,
-    lmmc_real_t hi,
-    const SolveOptions& opts)
-{
-    ComputationContext context;
-    auto result = bisection_checked(f, var, lo, hi, context, opts);
-    return result ? result.value() : std::nullopt;
-}
 
 NumericRootResult bisection_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -401,20 +223,6 @@ NumericRootResult newton_raphson_checked(
     return NumericRootResult::success(std::nullopt);
 }
 
-std::optional<NumericRoot> newton_raphson(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& df,
-    const std::string& var,
-    lmmc_real_t x0,
-    lmmc_real_t bracket_lo,
-    lmmc_real_t bracket_hi,
-    const SolveOptions& opts)
-{
-    ComputationContext context;
-    auto result = newton_raphson_checked(
-        f, df, var, x0, bracket_lo, bracket_hi, context, opts);
-    return result ? result.value() : std::nullopt;
-}
 
 NumericRootResult newton_raphson_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -487,17 +295,6 @@ NumericRootResult newton_raphson_checked(
     return NumericRootResult::success(std::nullopt);
 }
 
-std::optional<NumericRoot> newton_raphson(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& df,
-    const std::string& var,
-    lmmc_real_t x0,
-    const SolveOptions& opts)
-{
-    ComputationContext context;
-    auto result = newton_raphson_checked(f, df, var, x0, context, opts);
-    return result ? result.value() : std::nullopt;
-}
 
 NumericRootResult newton_raphson_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -510,15 +307,6 @@ NumericRootResult newton_raphson_checked(
     return newton_raphson_checked(f, df, var, x0, context, opts);
 }
 
-std::vector<NumericRoot> solve_numeric(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& var,
-    const SolveOptions& opts)
-{
-    ComputationContext context;
-    auto result = solve_numeric_checked(expr, var, context, opts);
-    return result ? result.value() : std::vector<NumericRoot>{};
-}
 
 NumericRootsResult solve_numeric_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -568,8 +356,9 @@ NumericRootsResult solve_numeric_checked(
         recognized_poly.value()->degree() >= 1) {
         const Polynomial<Rational>& poly = *recognized_poly.value();
         auto df_expr = expr->differentiate(var);
-        auto intervals = isolate_real_roots(poly);
-        for (const auto& [lo_rat, hi_rat] : intervals) {
+        auto isolated = isolate_real_roots_checked(poly, context);
+        if (!isolated) return NumericRootsResult::failure(isolated.error());
+        for (const auto& [lo_rat, hi_rat] : isolated.value()) {
             if (opts.max_roots > 0 &&
                 static_cast<int>(results.size()) >= opts.max_roots) {
                 break;

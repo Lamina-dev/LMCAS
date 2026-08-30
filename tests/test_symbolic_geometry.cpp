@@ -8,7 +8,7 @@ void test_volume_revolution_x() {
         auto x = SymbolicExpr::variable("x");
         auto h = SymbolicExpr::variable("h");
         auto zero = SymbolicExpr::number(0);
-        auto result = lamina::volume_of_revolution_x(x, zero, h);
+        auto result = lamina::volume_of_revolution_x_checked(x, zero, h).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Cone volume result: " << s << std::endl;
         // The result should keep the exact pi/3 factor.
@@ -27,7 +27,7 @@ void test_volume_revolution_x() {
         auto x_sq = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto inner = SymbolicExpr::add(r_sq, SymbolicExpr::multiply(SymbolicExpr::number(-1), x_sq));
         auto fx = SymbolicExpr::sqrt(inner);
-        auto result = lamina::volume_of_revolution_x(fx, neg_r, r);
+        auto result = lamina::volume_of_revolution_x_checked(fx, neg_r, r).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Sphere volume result: " << s << std::endl;
         // The result should stay exact and must not leave the polynomial integral unevaluated.
@@ -50,7 +50,7 @@ void test_arc_length_x() {
         );
         auto zero = SymbolicExpr::number(0);
         auto three = SymbolicExpr::number(3);
-        auto result = lamina::arc_length_x(fx, zero, three);
+        auto result = lamina::arc_length_x_checked(fx, zero, three).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Linear arc length result: " << s << std::endl;
         // For linear function, the integrand sqrt(1+4)=sqrt(5) is constant
@@ -67,11 +67,6 @@ void test_arc_length_x() {
         auto fx = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto zero = SymbolicExpr::number(0);
         auto one = SymbolicExpr::number(1);
-        auto result = lamina::arc_length_x(fx, zero, one);
-        std::string s = result ? result->to_string() : "null";
-        std::cout << "  x^2 arc length result: " << s << std::endl;
-        EXPECT_TRUE(result == nullptr,
-                    "legacy x^2 arc length unwraps unsupported checked result to nullptr");
 
         auto checked = lamina::arc_length_x_checked(fx, zero, one);
         EXPECT_TRUE(!checked.has_value(),
@@ -88,7 +83,7 @@ void test_volume_revolution_y() {
         auto y = SymbolicExpr::variable("y");
         auto h = SymbolicExpr::variable("h");
         auto zero = SymbolicExpr::number(0);
-        auto result = lamina::volume_of_revolution_y(y, zero, h);
+        auto result = lamina::volume_of_revolution_y_checked(y, zero, h).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Y-axis cone volume result: " << s << std::endl;
         // The result should keep the exact pi/3 factor.
@@ -109,7 +104,7 @@ void test_arc_length_y() {
         );
         auto zero = SymbolicExpr::number(0);
         auto three = SymbolicExpr::number(3);
-        auto result = lamina::arc_length_y(fy, zero, three);
+        auto result = lamina::arc_length_y_checked(fy, zero, three).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Y-axis linear arc length result: " << s << std::endl;
         EXPECT_TRUE(result != nullptr, "y-axis linear arc length is not null");
@@ -135,8 +130,6 @@ void test_symbolic_geometry_checked_contracts() {
                     "checked volume_of_revolution_x rejects null profile");
         EXPECT_TRUE(null_profile.error().code == lamina::CasErrc::InvalidArgument,
                     "checked volume_of_revolution_x reports InvalidArgument");
-        EXPECT_TRUE(lamina::volume_of_revolution_x(nullptr, zero, one) == nullptr,
-                    "legacy volume_of_revolution_x unwraps invalid input to nullptr");
 
         std::shared_ptr<SymbolicExpr> null_root;
         auto null_bound = lamina::arc_length_x_checked(x, null_root, one);
@@ -152,8 +145,6 @@ void test_symbolic_geometry_checked_contracts() {
                     "checked arc_length_x rejects unsupported derivatives");
         EXPECT_TRUE(unsupported_arc.error().code == lamina::CasErrc::Inconclusive,
                     "checked arc_length_x reports Inconclusive for unsupported derivatives");
-        EXPECT_TRUE(lamina::arc_length_x(unsupported_profile, zero, one) == nullptr,
-                    "legacy arc_length_x unwraps unsupported checked result to nullptr");
 
         lamina::CancellationToken cancellation;
         lamina::ComputationContext cancelled_context({}, cancellation);

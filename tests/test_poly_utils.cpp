@@ -122,79 +122,12 @@ void test_depends_on_var() {
     }
 }
 
-void test_gaussian_eliminate() {
-    TEST_CASE("gaussian_eliminate: 2x3 augmented matrix");
-    {
-        // System: x + 2y = 5, 3x + 4y = 11
-        // Augmented matrix:
-        // [1 2 5]
-        // [3 4 11]
-        // After elimination, should get row-echelon form with pivots at columns 0 and 1
-        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> A = {
-            {SymbolicExpr::number(1), SymbolicExpr::number(2), SymbolicExpr::number(5)},
-            {SymbolicExpr::number(3), SymbolicExpr::number(4), SymbolicExpr::number(11)}
-        };
-
-        std::vector<size_t> pivot_col_for_row;
-        int sign;
-        lamina::gaussian_eliminate(A, 2, 3, pivot_col_for_row, sign);
-
-        // Verify pivot positions: row 0 has pivot at col 0, row 1 has pivot at col 1
-        EXPECT_TRUE(pivot_col_for_row[0] == 0, "gaussian_eliminate pivot row 0 at col 0");
-        EXPECT_TRUE(pivot_col_for_row[1] == 1, "gaussian_eliminate pivot row 1 at col 1");
-
-        // After full elimination (reduced row echelon), A[0][0] should be 1 and A[1][1] should be 1
-        std::string a00 = A[0][0] ? A[0][0]->simplify()->to_string() : "null";
-        std::string a11 = A[1][1] ? A[1][1]->simplify()->to_string() : "null";
-        EXPECT_CONTAINS(a00, {"1"}, "gaussian_eliminate A[0][0] is 1 (pivot)");
-        EXPECT_CONTAINS(a11, {"1"}, "gaussian_eliminate A[1][1] is 1 (pivot)");
-
-        // Solution: x=1, y=2 => A[0][2]=1, A[1][2]=2
-        std::string a02 = A[0][2] ? A[0][2]->simplify()->to_string() : "null";
-        std::string a12 = A[1][2] ? A[1][2]->simplify()->to_string() : "null";
-        EXPECT_EQ_STR(a02, "1", "gaussian_eliminate solution x=1");
-        EXPECT_EQ_STR(a12, "2", "gaussian_eliminate solution y=2");
-    }
-}
-
-void test_gaussian_eliminate_singular() {
-    TEST_CASE("gaussian_eliminate: singular matrix (rank deficient)");
-    {
-        // System: x + 2y = 3, 2x + 4y = 6 (second row is 2x first)
-        // Augmented matrix:
-        // [1 2 3]
-        // [2 4 6]
-        // After elimination, second row should become all zeros (rank 1)
-        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> A = {
-            {SymbolicExpr::number(1), SymbolicExpr::number(2), SymbolicExpr::number(3)},
-            {SymbolicExpr::number(2), SymbolicExpr::number(4), SymbolicExpr::number(6)}
-        };
-
-        std::vector<size_t> pivot_col_for_row;
-        int sign;
-        lamina::gaussian_eliminate(A, 2, 3, pivot_col_for_row, sign);
-
-        // Row 0 should have a pivot, row 1 should have no pivot (SIZE_MAX)
-        EXPECT_TRUE(pivot_col_for_row[0] == 0, "singular matrix pivot row 0 at col 0");
-        EXPECT_TRUE(pivot_col_for_row[1] == (size_t)-1, "singular matrix row 1 has no pivot (rank deficient)");
-
-        // Second row should be all zeros after elimination
-        std::string a10 = A[1][0] ? A[1][0]->simplify()->to_string() : "null";
-        std::string a11 = A[1][1] ? A[1][1]->simplify()->to_string() : "null";
-        std::string a12 = A[1][2] ? A[1][2]->simplify()->to_string() : "null";
-        EXPECT_EQ_STR(a10, "0", "singular matrix A[1][0] is 0");
-        EXPECT_EQ_STR(a11, "0", "singular matrix A[1][1] is 0");
-        EXPECT_EQ_STR(a12, "0", "singular matrix A[1][2] is 0");
-    }
-}
 
 int main() {
     try {
         test_symbolic_to_poly();
         test_poly_to_symbolic();
         test_depends_on_var();
-        test_gaussian_eliminate();
-        test_gaussian_eliminate_singular();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;
         g_failures++;

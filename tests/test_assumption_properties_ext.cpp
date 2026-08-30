@@ -85,12 +85,12 @@ static void test_periodicity_declared_symbol_roundtrip() {
     SymbolicExpr f_expr = make_var("f");
 
     // query_periodic should return True
-    Tribool is_periodic = engine.query_periodic(f_expr);
+    Tribool is_periodic = engine.query_periodic_checked(f_expr).value();
     EXPECT_TRUE(is_periodic == Tribool::True,
         "Declared periodic symbol: query_periodic returns True");
 
     // infer_period should return the declared period
-    auto inferred = engine.infer_period(f_expr);
+    auto inferred = engine.infer_period_checked(f_expr).value();
     EXPECT_TRUE(inferred.has_value(),
         "Declared periodic symbol: infer_period returns a value");
 
@@ -116,9 +116,9 @@ static void test_periodicity_declared_symbol_various_periods() {
     // g: period 2.0
     {
         SymbolicExpr g_expr = make_var("g");
-        EXPECT_TRUE(engine.query_periodic(g_expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_periodic_checked(g_expr).value() == Tribool::True,
             "g is periodic");
-        auto period = engine.infer_period(g_expr);
+        auto period = engine.infer_period_checked(g_expr).value();
         EXPECT_TRUE(period.has_value(), "g has inferred period");
         if (period.has_value()) {
             auto val = extract_numeric(*period);
@@ -130,9 +130,9 @@ static void test_periodicity_declared_symbol_various_periods() {
     // h: period pi
     {
         SymbolicExpr h_expr = make_var("h");
-        EXPECT_TRUE(engine.query_periodic(h_expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_periodic_checked(h_expr).value() == Tribool::True,
             "h is periodic");
-        auto period = engine.infer_period(h_expr);
+        auto period = engine.infer_period_checked(h_expr).value();
         EXPECT_TRUE(period.has_value(), "h has inferred period");
         if (period.has_value()) {
             auto val = extract_numeric(*period);
@@ -144,9 +144,9 @@ static void test_periodicity_declared_symbol_various_periods() {
     // k: period 100.0
     {
         SymbolicExpr k_expr = make_var("k");
-        EXPECT_TRUE(engine.query_periodic(k_expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_periodic_checked(k_expr).value() == Tribool::True,
             "k is periodic");
-        auto period = engine.infer_period(k_expr);
+        auto period = engine.infer_period_checked(k_expr).value();
         EXPECT_TRUE(period.has_value(), "k has inferred period");
         if (period.has_value()) {
             auto val = extract_numeric(*period);
@@ -165,12 +165,12 @@ static void test_periodicity_sin_auto_inferred() {
     SymbolicExpr sin_x = make_func(FunctionNode::FuncType::Sin, "x");
 
     // sin should be periodic
-    Tribool is_periodic = engine.query_periodic(sin_x);
+    Tribool is_periodic = engine.query_periodic_checked(sin_x).value();
     EXPECT_TRUE(is_periodic == Tribool::True,
         "sin(x) is periodic");
 
     // Period should be 2*pi
-    auto period = engine.infer_period(sin_x);
+    auto period = engine.infer_period_checked(sin_x).value();
     EXPECT_TRUE(period.has_value(), "sin(x) has inferred period");
 
     if (period.has_value()) {
@@ -188,11 +188,11 @@ static void test_periodicity_cos_auto_inferred() {
 
     SymbolicExpr cos_x = make_func(FunctionNode::FuncType::Cos, "x");
 
-    Tribool is_periodic = engine.query_periodic(cos_x);
+    Tribool is_periodic = engine.query_periodic_checked(cos_x).value();
     EXPECT_TRUE(is_periodic == Tribool::True,
         "cos(x) is periodic");
 
-    auto period = engine.infer_period(cos_x);
+    auto period = engine.infer_period_checked(cos_x).value();
     EXPECT_TRUE(period.has_value(), "cos(x) has inferred period");
 
     if (period.has_value()) {
@@ -210,11 +210,11 @@ static void test_periodicity_tan_auto_inferred() {
 
     SymbolicExpr tan_x = make_func(FunctionNode::FuncType::Tan, "x");
 
-    Tribool is_periodic = engine.query_periodic(tan_x);
+    Tribool is_periodic = engine.query_periodic_checked(tan_x).value();
     EXPECT_TRUE(is_periodic == Tribool::True,
         "tan(x) is periodic");
 
-    auto period = engine.infer_period(tan_x);
+    auto period = engine.infer_period_checked(tan_x).value();
     EXPECT_TRUE(period.has_value(), "tan(x) has inferred period");
 
     if (period.has_value()) {
@@ -232,11 +232,11 @@ static void test_periodicity_non_periodic_function() {
 
     SymbolicExpr exp_x = make_func(FunctionNode::FuncType::Exp, "x");
 
-    Tribool is_periodic = engine.query_periodic(exp_x);
+    Tribool is_periodic = engine.query_periodic_checked(exp_x).value();
     EXPECT_TRUE(is_periodic == Tribool::Unknown,
         "exp(x) is not known to be periodic (returns Unknown)");
 
-    auto period = engine.infer_period(exp_x);
+    auto period = engine.infer_period_checked(exp_x).value();
     EXPECT_FALSE(period.has_value(),
         "exp(x) has no inferred period");
 }
@@ -249,11 +249,11 @@ static void test_periodicity_non_periodic_variable() {
 
     SymbolicExpr x_expr = make_var("x");
 
-    Tribool is_periodic = engine.query_periodic(x_expr);
+    Tribool is_periodic = engine.query_periodic_checked(x_expr).value();
     EXPECT_TRUE(is_periodic == Tribool::Unknown,
         "Undeclared variable: query_periodic returns Unknown");
 
-    auto period = engine.infer_period(x_expr);
+    auto period = engine.infer_period_checked(x_expr).value();
     EXPECT_FALSE(period.has_value(),
         "Undeclared variable: infer_period returns nullopt");
 }
@@ -292,11 +292,11 @@ static void test_periodicity_ln_not_periodic() {
 
     SymbolicExpr ln_x = make_func(FunctionNode::FuncType::Ln, "x");
 
-    Tribool is_periodic = engine.query_periodic(ln_x);
+    Tribool is_periodic = engine.query_periodic_checked(ln_x).value();
     EXPECT_TRUE(is_periodic == Tribool::Unknown,
         "ln(x) is not known to be periodic");
 
-    auto period = engine.infer_period(ln_x);
+    auto period = engine.infer_period_checked(ln_x).value();
     EXPECT_FALSE(period.has_value(),
         "ln(x) has no inferred period");
 }

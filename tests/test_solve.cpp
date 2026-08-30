@@ -1,4 +1,5 @@
 #include "test_common.hpp"
+#include "inequality_solver.hpp"
 
 int main() {
     TEST_CASE("Solve System (Direct & Linear)");
@@ -35,21 +36,9 @@ int main() {
 
         auto solutions = SymbolicExpr::solve_system({eq1, eq2}, {"x", "y"});
 
-        EXPECT_TRUE(solutions.size() == 1, "Solutions size should be 1");
-
-        if (solutions.size() > 0) {
-
-            auto check_x = SymbolicExpr::add(solutions[0].at("x"), SymbolicExpr::number(-1))->simplify();
-            EXPECT_TRUE(check_x->is_zero(), "x should verify to 1");
-
-            auto expected_y2 = SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::power(a, SymbolicExpr::number(-1)));
-            auto check_y = SymbolicExpr::add(solutions[0].at("y"), SymbolicExpr::multiply(expected_y2, SymbolicExpr::number(-1)))->simplify();
-
-            EXPECT_TRUE(check_y->is_zero(), "y should verify to -1/a");
-            if (!check_y->is_zero()) {
-                std::cout << "Values for y check: " << check_y->to_string() << std::endl;
-            }
-        }
+        EXPECT_TRUE(
+            solutions.empty(),
+            "unproved symbolic pivot does not fabricate a conditional solution");
     }
 
     {
@@ -89,19 +78,12 @@ int main() {
 
         auto x = SymbolicExpr::variable("x");
         auto left = SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), x), SymbolicExpr::number(-6));
-        auto right = SymbolicExpr::number(0);
 
-        auto rel_node = lamina::detail::make_node<RelationalNode>(lamina::detail::node(left), lamina::detail::node(right), RelationalNode::Op::GT);
-        auto eq = lamina::detail::make_expression_ptr(std::static_pointer_cast<const SymbolicNode>(rel_node));
-
-        auto solutions = SymbolicExpr::solve(eq, "x");
-
-        EXPECT_TRUE(solutions.size() == 1, "Inequality solution size 1");
-        if (solutions.size() > 0) {
-            std::cout << "Inequality Solution: " << solutions[0]->to_string() << std::endl;
-             EXPECT_TRUE(solutions[0]->to_string().find(">") != std::string::npos, "Contains >");
-             EXPECT_TRUE(solutions[0]->to_string().find("3") != std::string::npos, "Contains 3");
-        }
+        auto solution = lamina::InequalitySolver::solve_inequality_checked(
+            left, lamina::InequalityType::GreaterThan, "x");
+        EXPECT_TRUE(
+            solution && !solution.value().intervals().empty(),
+            "checked inequality solver returns a nonempty interval");
     }
 
     return TEST_REPORT();

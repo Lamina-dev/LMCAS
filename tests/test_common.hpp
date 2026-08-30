@@ -7,9 +7,35 @@
 #include <cmath>
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
+#include "solve_strategies.hpp"
 
 inline int g_failures = 0;
 inline int g_passes = 0;
+
+inline std::vector<std::shared_ptr<SymbolicExpr>> solve_vector_for_test(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable,
+    const lamina::SolveOptions& options = {}) {
+    auto result = lamina::solve_equation(expression, variable, options);
+    if (!result) {
+        if (result.error().code == lamina::CasErrc::Inconclusive) return {};
+        throw std::runtime_error(
+            "checked solve failed: " + result.error().message);
+    }
+    if (std::holds_alternative<lamina::EmptySolutions>(result.value())) return {};
+    const auto* finite =
+        std::get_if<lamina::FiniteSolutions>(&result.value());
+    if (!finite) {
+        throw std::runtime_error("solve result is not finitely enumerable");
+    }
+    std::vector<std::shared_ptr<SymbolicExpr>> values;
+    for (const auto& solution : finite->values) {
+        for (std::size_t copy = 0; copy < solution.multiplicity; ++copy) {
+            values.push_back(solution.value);
+        }
+    }
+    return values;
+}
 
 inline void TEST_CASE(const std::string& name) {
     std::cout << "---------------------------------------------------" << std::endl;

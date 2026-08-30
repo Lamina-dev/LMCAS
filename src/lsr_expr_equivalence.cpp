@@ -255,7 +255,8 @@ ExprPtr rewrite_exp_log_basic_identity(
                     inner_ln->arguments()[0]);
                 const bool known_positive = inner_ln->arguments()[0]->is_positive() ||
                     (assumptions &&
-                     assumptions->is_positive(*ln_arg) == Tribool::True);
+                     detail::propagate_result(assumptions->is_positive(*ln_arg)) ==
+                         Tribool::True);
                 if (known_positive) {
                     return ln_arg->simplify();
                 }

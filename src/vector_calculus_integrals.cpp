@@ -3,6 +3,7 @@
 #include "numeric_evaluation.hpp"
 #include "solver.hpp"
 #include "symbolic_ast.hpp"
+#include "residual_verification.hpp"
 
 #include <cmath>
 #include <exception>
@@ -34,7 +35,8 @@ static std::shared_ptr<SymbolicExpr> vector_calculus_try_definite(
     const std::shared_ptr<SymbolicExpr>& b)
 {
     Integrator integrator;
-    SymbolicExpr result = integrator.integrate_def(*integrand, var, *a, *b);
+    SymbolicExpr result = detail::propagate_result(
+        integrator.integrate_def(*integrand, var, *a, *b));
 
     if (vector_calculus_contains_unevaluated_integral(lamina::detail::node(result))) {
         return nullptr;
@@ -481,6 +483,18 @@ static VectorCalculusExprResult greens_theorem_area_strict(
     auto integrand_checked = vector_calculus_simplify_strict(
         integrand, operation, "Green's area integrand is outside the supported domain");
     if (!integrand_checked) return integrand_checked;
+    lsr::EqvOptions trig_options;
+    trig_options.profile = lsr::EqvProfile::TrigBasic;
+    ComputationContext identity_context;
+    auto unit_identity = check_equivalent(
+        integrand_checked.value(), SymbolicExpr::number(1),
+        identity_context, trig_options);
+    if (unit_identity &&
+        std::holds_alternative<ProvedZeroResidual>(
+            unit_identity.value())) {
+        integrand_checked = VectorCalculusExprResult::success(
+            SymbolicExpr::number(1));
+    }
 
     auto integral = vector_calculus_definite_integral_strict(
         integrand_checked.value(), t, a, b, operation);
@@ -1321,9 +1335,6 @@ std::shared_ptr<SymbolicExpr> divergence_theorem(
 
     /// 计算散度 ∇·F = ∂F₁/∂x + ∂F₂/∂y + ∂F₃/∂z
     auto div_F = divergence(F, vars);
-    if (!div_F) {
-        return SymbolicExpr::number(0);
-    }
 
     Integrator integrator;
     ComputationContext context;

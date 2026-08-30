@@ -839,12 +839,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         lift_bound++;
     }
 
-    std::vector<Polynomial<BigInt>> lifted_factors;
-    try {
-        lifted_factors = hensel_lift(int_poly, berl_result.factors, prime, lift_bound);
-    } catch (...) {
-        return {pyth_simplified};
-    }
+    auto lifted = hensel_lift_checked(
+        int_poly, berl_result.factors, prime, lift_bound);
+    if (!lifted) return {pyth_simplified};
+    std::vector<Polynomial<BigInt>> lifted_factors =
+        std::move(lifted.value());
 
     if (lifted_factors.empty()) {
         return {pyth_simplified};

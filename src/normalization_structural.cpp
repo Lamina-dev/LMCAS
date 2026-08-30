@@ -211,8 +211,10 @@ void NormalizationVisitor::visit(const ProductNode& node) {
 void NormalizationVisitor::visit(const TransformNode& node) {
         node.body()->accept(*this);
         auto new_body = result;
-
-        result = lamina::detail::make_node<TransformNode>(node.transform_type(), new_body, node.source_var(), node.target_var());
+        node.target()->accept(*this);
+        auto new_target = result;
+        result = lamina::detail::make_node<TransformNode>(
+            node.transform_type(), new_body, node.source_var(), new_target);
     }
 void NormalizationVisitor::visit(const QuantifierNode& node) {
         node.domain()->accept(*this);
@@ -284,4 +286,31 @@ void NormalizationVisitor::visit(const QuantityNode& node) {
     node.value()->accept(*this);
     result = lamina::detail::make_node<QuantityNode>(
         result, node.dimension(), node.scale_to_base(), node.display_unit());
+}
+
+void NormalizationVisitor::visit(const IntegralNode& node) {
+    node.body()->accept(*this);
+    auto body = result;
+    std::shared_ptr<const SymbolicNode> lower;
+    std::shared_ptr<const SymbolicNode> upper;
+    if (node.lower()) {
+        node.lower()->accept(*this);
+        lower = result;
+        node.upper()->accept(*this);
+        upper = result;
+    }
+    result = lamina::detail::make_node<IntegralNode>(
+        std::move(body), node.variable(), std::move(lower), std::move(upper));
+}
+
+void NormalizationVisitor::visit(const LimitNode& node) {
+    node.body()->accept(*this);
+    auto body = result;
+    node.point()->accept(*this);
+    result = lamina::detail::make_node<LimitNode>(
+        body, node.variable(), result, node.direction());
+}
+
+void NormalizationVisitor::visit(const RootOfNode& node) {
+    result = node.clone();
 }

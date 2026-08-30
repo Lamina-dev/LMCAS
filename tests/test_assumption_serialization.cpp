@@ -11,6 +11,12 @@
 
 using namespace lamina;
 
+static AssumptionContext deserialize_success(const std::string& data) {
+    auto result = AssumptionContext::deserialize(data);
+    RC_ASSERT(result.has_value());
+    return result ? std::move(result.value()) : AssumptionContext();
+}
+
 
 /// Generate a random Domain (excluding Complex which is the default).
 static Domain random_domain() {
@@ -77,7 +83,7 @@ static void test_serialization_domain_roundtrip() {
 
         // Serialize and deserialize
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         // Query results must match
         RC_ASSERT(restored.get_domain(var) == dom);
@@ -97,7 +103,7 @@ static void test_serialization_sign_roundtrip() {
         ctx.assume_sign(var, sign);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         RC_ASSERT(restored.has_sign(var, sign));
     });
@@ -115,7 +121,7 @@ static void test_serialization_parity_roundtrip() {
         ctx.current_properties().declare_parity(var, par);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         RC_ASSERT(restored.get_parity(var) == par);
     });
@@ -133,7 +139,7 @@ static void test_serialization_boundedness_roundtrip() {
         ctx.current_properties().declare_bounded(var, bnd);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         RC_ASSERT(restored.get_boundedness(var) == bnd);
     });
@@ -150,7 +156,7 @@ static void test_serialization_transcendental_roundtrip() {
         ctx.current_properties().declare_transcendental(var);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         // Transcendental implies Real domain
         RC_ASSERT(restored.get_domain(var) == Domain::Real);
@@ -170,7 +176,7 @@ static void test_serialization_finiteness_roundtrip() {
         ctx.current_properties().declare_finiteness(var, fin);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         RC_ASSERT(restored.current_properties().get_finiteness(var) == fin);
 
@@ -193,7 +199,7 @@ static void test_serialization_definiteness_roundtrip() {
         ctx.current_properties().declare_definiteness(var, def);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         RC_ASSERT(restored.current_properties().get_definiteness(var) == def);
     });
@@ -220,7 +226,7 @@ static void test_serialization_multi_scope_roundtrip() {
         int depth_before = ctx.depth();
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         // Depth should match
         RC_ASSERT(restored.depth() == depth_before);
@@ -249,7 +255,7 @@ static void test_serialization_combined_properties_roundtrip() {
         ctx.current_properties().declare_bounded(var, Boundedness::Bounded);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         RC_ASSERT(restored.get_domain(var) == Domain::Integer);
         RC_ASSERT(restored.has_sign(var, Sign::Positive));
@@ -275,7 +281,7 @@ static void test_serialization_simple_relation_roundtrip() {
         ctx.assume(rel_expr);
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         // The sign property derived from the relation should be preserved
         RC_ASSERT(restored.has_sign(var, Sign::Positive));
@@ -290,7 +296,7 @@ static void test_serialization_empty_roundtrip() {
         AssumptionContext ctx;
 
         std::string serialized = ctx.serialize();
-        AssumptionContext restored = AssumptionContext::deserialize(serialized);
+        AssumptionContext restored = deserialize_success(serialized);
 
         RC_ASSERT(restored.depth() == ctx.depth());
         // No properties should be set
@@ -337,15 +343,12 @@ static void test_checked_deserialization_contracts() {
     EXPECT_TRUE(property_contradiction.error().code == CasErrc::ParseError,
                 "checked deserialize maps property contradiction to ParseError");
 
-    bool legacy_threw = false;
-    try {
-        (void)AssumptionContext::deserialize(
-            "SCOPE 0\nDOMAIN n Natural\nSIGN n Negative\nEND\n");
-    } catch (const std::invalid_argument&) {
-        legacy_threw = true;
-    }
-    EXPECT_TRUE(legacy_threw,
-                "legacy deserialize maps checked ParseError to invalid_argument");
+    auto canonical = AssumptionContext::deserialize(
+        "SCOPE 0\nDOMAIN n Natural\nSIGN n Negative\nEND\n");
+    EXPECT_TRUE(!canonical.has_value(),
+                "canonical deserialize returns the checked ParseError");
+    EXPECT_TRUE(canonical.error().code == CasErrc::ParseError,
+                "canonical deserialize preserves ParseError");
 }
 
 

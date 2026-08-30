@@ -10,12 +10,26 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include "internal/ode_support.hpp"
+#include "../include/integrator.hpp"
 #include <cmath>
 #include <memory>
 #include <string>
 
 namespace lamina {
 
+static FrobeniusSolution solve_frobenius_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&, int);
+
+
+static ODESolution solve_variation_of_parameters_core(
+    const std::shared_ptr<SymbolicExpr>& y1,
+    const std::shared_ptr<SymbolicExpr>& y2,
+    const std::shared_ptr<SymbolicExpr>& g,
+    const std::string& x,
+    ComputationContext& context);
 
 ODESolutionResult solve_variation_of_parameters_checked(
     const std::shared_ptr<SymbolicExpr>& y1,
@@ -33,9 +47,12 @@ ODESolutionResult solve_variation_of_parameters_checked(
 
     try {
         return wrap_ode_solution(
-            solve_variation_of_parameters(y1, y2, g, x),
+            solve_variation_of_parameters_core(
+                y1, y2, g, x, context),
             ODEType::HigherOrder_ConstCoeff,
             operation);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(
             CasErrc::ResourceLimit,
@@ -59,11 +76,12 @@ ODESolutionResult solve_variation_of_parameters_checked(
     return solve_variation_of_parameters_checked(y1, y2, g, x, context);
 }
 
-ODESolution solve_variation_of_parameters(
+static ODESolution solve_variation_of_parameters_core(
     const std::shared_ptr<SymbolicExpr>& y1,
     const std::shared_ptr<SymbolicExpr>& y2,
     const std::shared_ptr<SymbolicExpr>& g,
-    const std::string& x)
+    const std::string& x,
+    ComputationContext& context)
 {
     ODESolution result;
     result.method_used = ODEType::HigherOrder_ConstCoeff;
@@ -108,14 +126,13 @@ ODESolution solve_variation_of_parameters(
         W);
     u2_prime = u2_prime->simplify();
 
-    /// 积分得 u₁ 和 u₂
-    auto u1 = u1_prime->integrate(x);
-    auto u2 = u2_prime->integrate(x);
-
-    if (!u1 || !u2) {
-        result.general_solution = nullptr;
-        return result;
-    }
+    Integrator integrator;
+    auto u1_value = detail::propagate_result(
+        integrator.integrate_checked(*u1_prime, x, context));
+    auto u2_value = detail::propagate_result(
+        integrator.integrate_checked(*u2_prime, x, context));
+    auto u1 = std::make_shared<SymbolicExpr>(std::move(u1_value));
+    auto u2 = std::make_shared<SymbolicExpr>(std::move(u2_value));
 
     /// 特解: y_p = u₁·y₁ + u₂·y₂
     auto y_p = SymbolicExpr::add(
@@ -126,6 +143,7 @@ ODESolution solve_variation_of_parameters(
     result.general_solution = y_p;
     return result;
 }
+
 
 
 ODESingularityType classify_singular_point(
@@ -158,8 +176,8 @@ ODESingularityType classify_singular_point(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
     /// 尝试用极限计算 (x-x₀)·p(x) 和 (x-x₀)²·q(x) 在 x₀ 处的值
-    auto xp_limit = xp->limit(x, x0);
-    auto x2q_limit = x2q->limit(x, x0);
+    auto xp_limit = lamina::limit_expression_checked(xp, x, x0).value();
+    auto x2q_limit = lamina::limit_expression_checked(x2q, x, x0).value();
 
     double xp_val = xp_limit ? try_eval_double(xp_limit) : std::numeric_limits<double>::quiet_NaN();
     double x2q_val = x2q_limit ? try_eval_double(x2q_limit) : std::numeric_limits<double>::quiet_NaN();
@@ -187,8 +205,8 @@ static Result<void> validate_frobenius_regular_singular_domain(
     auto x2q_expr = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
-    auto P0_expr = xp_expr->limit(x, x0);
-    auto Q0_expr = x2q_expr->limit(x, x0);
+    auto P0_expr = lamina::limit_expression_checked(xp_expr, x, x0).value();
+    auto Q0_expr = lamina::limit_expression_checked(x2q_expr, x, x0).value();
     double P0 = P0_expr ? try_eval_double(P0_expr) : std::numeric_limits<double>::quiet_NaN();
     double Q0 = Q0_expr ? try_eval_double(Q0_expr) : std::numeric_limits<double>::quiet_NaN();
     if (!std::isfinite(P0) || !std::isfinite(Q0)) {
@@ -249,7 +267,7 @@ FrobeniusSolutionResult solve_frobenius_checked(
             }
         }
 
-        auto solution = solve_frobenius(p, q, x0, x, order);
+        auto solution = solve_frobenius_impl(p, q, x0, x, order);
         if (!solution.series_solution || !lamina::detail::node(solution.series_solution)) {
             return FrobeniusSolutionResult::failure(
                 CasErrc::Inconclusive,
@@ -287,7 +305,7 @@ FrobeniusSolutionResult solve_frobenius_checked(
     return solve_frobenius_checked(p, q, x0, x, order, context);
 }
 
-FrobeniusSolution solve_frobenius(
+static FrobeniusSolution solve_frobenius_impl(
     const std::shared_ptr<SymbolicExpr>& p,
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
@@ -367,8 +385,8 @@ FrobeniusSolution solve_frobenius(
     auto x2q_expr = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
-    auto P0_expr = xp_expr->limit(x, x0);
-    auto Q0_expr = x2q_expr->limit(x, x0);
+    auto P0_expr = lamina::limit_expression_checked(xp_expr, x, x0).value();
+    auto Q0_expr = lamina::limit_expression_checked(x2q_expr, x, x0).value();
 
     double P0 = P0_expr ? try_eval_double(P0_expr) : 0.0;
     double Q0 = Q0_expr ? try_eval_double(Q0_expr) : 0.0;
@@ -415,11 +433,11 @@ FrobeniusSolution solve_frobenius(
             pv = try_eval_double(pv_expr);
             qv = try_eval_double(qv_expr);
             if (std::isnan(pv)) {
-                auto lim = xp_current->limit(x, x0);
+                auto lim = lamina::limit_expression_checked(xp_current, x, x0).value();
                 pv = lim ? try_eval_double(lim) : 0.0;
             }
             if (std::isnan(qv)) {
-                auto lim = x2q_current->limit(x, x0);
+                auto lim = lamina::limit_expression_checked(x2q_current, x, x0).value();
                 qv = lim ? try_eval_double(lim) : 0.0;
             }
         }

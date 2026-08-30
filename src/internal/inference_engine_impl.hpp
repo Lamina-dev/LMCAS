@@ -75,13 +75,6 @@ Result<T> checked_inference_result(
     }
 }
 
-inline Tribool inference_query_or_unknown(InferenceTriboolResult result) {
-    return result ? result.value() : Tribool::Unknown;
-}
-
-inline std::optional<SymbolicExpr> inference_period_or_empty(InferencePeriodResult result) {
-    return result ? result.value() : std::nullopt;
-}
 
 struct InferenceEngine::Impl {
     explicit Impl(const AssumptionContext& context)

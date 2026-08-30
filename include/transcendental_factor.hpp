@@ -88,26 +88,6 @@ LAMINA_API BerlekampResult berlekamp_factor(
     const Polynomial<Rational>& poly,
     int64_t prime);
 
-/**
- * @brief Hensel 提升（内部接口）。
- *
- * 将模 p 下的因子通过二次 Hensel 提升升至 mod p^k，
- * 其中 k 由 Mignotte 界确定。
- *
- * @param[in] poly        整系数多项式
- * @param[in] mod_factors 模 p 下的不可约因子
- * @param[in] prime       素数 p
- * @param[in] lift_bound  提升次数上界 k
- * @return 提升后的整系数因子列表（系数在 mod p^k 意义下）
- *
- * @internal
- */
-LAMINA_API std::vector<Polynomial<BigInt>> hensel_lift(
-    const Polynomial<BigInt>& poly,
-    const std::vector<Polynomial<ModInt>>& mod_factors,
-    int64_t prime,
-    int lift_bound);
-
 using HenselLiftResult = Result<std::vector<Polynomial<BigInt>>>;
 
 /**

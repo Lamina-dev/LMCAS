@@ -1,5 +1,6 @@
 #include "test_common.hpp"
 #include "symbolic.hpp"
+#include "symbolic_matrix.hpp"
 #include <iostream>
 #include <cassert>
 #include <cmath>
@@ -80,7 +81,7 @@ void test_fraction_matrix() {
     };
 
     auto mat = SymbolicExpr::matrix(elements);
-    auto det = SymbolicExpr::determinant(mat)->simplify();
+    auto det = lamina::matrix_determinant_checked(mat).value()->simplify();
 
     EXPECT_EQ_EXPR_STR(det, "1/60", "det([[1/2, 1/3], [1/4, 1/5]]) = 1/60");
 
@@ -88,7 +89,7 @@ void test_fraction_matrix() {
     auto i3 = num(3); auto i4 = num(4);
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> inv_elems = {{i1, i2}, {i3, i4}};
     auto mat_inv = SymbolicExpr::matrix(inv_elems);
-    auto inv = SymbolicExpr::inverse(mat_inv)->simplify();
+    auto inv = lamina::matrix_inverse_checked(mat_inv).value()->simplify();
 
     EXPECT_EQ_EXPR_STR(inv, "[[-2, 1], [3/2, -1/2]]", "inverse of [[1, 2], [3, 4]] is exact");
 }

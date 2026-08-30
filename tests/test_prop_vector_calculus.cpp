@@ -2,6 +2,7 @@
 #include "test_common.hpp"
 #include "rapidcheck/rapidcheck.h"
 #include "vector_calculus.hpp"
+#include "symbolic_matrix.hpp"
 #include "symbolic_ast.hpp"
 
 #include <cmath>
@@ -406,7 +407,9 @@ static void test_projection_perpendicular() {
         auto b = gen_direction_3d();
         std::vector<std::string> vars = {"x", "y", "z"};
 
-        auto proj = vector_project(a, b);
+        auto proj_result = vector_project(a, b);
+        RC_ASSERT(proj_result.has_value());
+        const auto& proj = proj_result.value();
         RC_ASSERT(proj.size() == 3);
 
         VectorField diff = {
@@ -416,7 +419,8 @@ static void test_projection_perpendicular() {
         };
 
         auto d = dot_product(diff, b);
-        auto d_val = test_numeric_eval(d->simplify());
+        RC_ASSERT(d.has_value());
+        auto d_val = test_numeric_eval(d.value()->simplify());
         if (d_val) {
             RC_ASSERT(std::abs(*d_val) < 1e-6);
         }
@@ -433,7 +437,9 @@ static void test_mixed_product_det() {
         auto c = gen_direction_3d();
 
         auto cr = cross_product(b, c);
-        auto dp = dot_product(a, cr);
+        RC_ASSERT(cr.has_value());
+        auto dp = dot_product(a, cr.value());
+        RC_ASSERT(dp.has_value());
 
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> mat_elems = {
             {a[0], a[1], a[2]},
@@ -441,9 +447,9 @@ static void test_mixed_product_det() {
             {c[0], c[1], c[2]}
         };
         auto mat = SE::matrix(mat_elems);
-        auto d = SE::determinant(mat);
+        auto d = lamina::matrix_determinant_checked(mat).value();
 
-        auto dp_val = test_numeric_eval(dp->simplify());
+        auto dp_val = test_numeric_eval(dp.value()->simplify());
         auto d_val = test_numeric_eval(d->simplify());
 
         if (dp_val && d_val) {

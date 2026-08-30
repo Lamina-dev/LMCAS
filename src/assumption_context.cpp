@@ -19,15 +19,6 @@ namespace lamina {
 
 namespace {
 
-[[noreturn]] void throw_assumption_error(const CasError& error) {
-    if (error.code == CasErrc::InvalidArgument || error.code == CasErrc::ParseError) {
-        throw std::invalid_argument(error.message);
-    }
-    if (error.code == CasErrc::ResourceLimit) {
-        throw std::bad_alloc();
-    }
-    throw std::runtime_error(error.message);
-}
 
 void require_deserialization_update(const Result<void>& result,
                                     int line,
@@ -62,12 +53,14 @@ void AssumptionContext::push() {
     ++cache_generation_;
 }
 
-void AssumptionContext::pop() {
+AssumptionVoidResult AssumptionContext::pop() {
     if (scope_stack_.size() <= 1) {
-        throw std::runtime_error("Cannot pop root scope");
+        return AssumptionVoidResult::failure(
+            CasErrc::InvalidArgument, "cannot pop the root assumption scope", "assumption.pop");
     }
     scope_stack_.pop_back();
     ++cache_generation_;
+    return AssumptionVoidResult::success();
 }
 
 int AssumptionContext::depth() const {
@@ -171,11 +164,10 @@ std::optional<Interval> AssumptionContext::get_bounds(const std::string& symbol)
 
 // Conditional assumptions
 
-void AssumptionContext::assume_conditional(const SymbolicExpr& condition, const SymbolicExpr& conclusion) {
-    auto result = assume_conditional_checked(condition, conclusion);
-    if (!result) {
-        throw_assumption_error(result.error());
-    }
+AssumptionVoidResult AssumptionContext::assume_conditional(
+    const SymbolicExpr& condition,
+    const SymbolicExpr& conclusion) {
+    return assume_conditional_checked(condition, conclusion);
 }
 
 AssumptionVoidResult AssumptionContext::assume_conditional_checked(
@@ -325,11 +317,10 @@ Tribool AssumptionContext::evaluate_condition(const SymbolicExpr& condition) con
     return Tribool::Unknown;
 }
 
-void AssumptionContext::assume_domain(const std::string& variable, Domain domain) {
-    auto result = assume_domain_checked(variable, domain);
-    if (!result) {
-        throw_assumption_error(result.error());
-    }
+AssumptionVoidResult AssumptionContext::assume_domain(
+    const std::string& variable,
+    Domain domain) {
+    return assume_domain_checked(variable, domain);
 }
 
 AssumptionVoidResult AssumptionContext::assume_domain_checked(
@@ -349,11 +340,10 @@ AssumptionVoidResult AssumptionContext::assume_domain_checked(
     return AssumptionVoidResult::success();
 }
 
-void AssumptionContext::assume_sign(const std::string& variable, Sign sign) {
-    auto result = assume_sign_checked(variable, sign);
-    if (!result) {
-        throw_assumption_error(result.error());
-    }
+AssumptionVoidResult AssumptionContext::assume_sign(
+    const std::string& variable,
+    Sign sign) {
+    return assume_sign_checked(variable, sign);
 }
 
 AssumptionVoidResult AssumptionContext::assume_sign_checked(
@@ -373,13 +363,8 @@ AssumptionVoidResult AssumptionContext::assume_sign_checked(
     return AssumptionVoidResult::success();
 }
 
-void AssumptionContext::assume(const SymbolicExpr& relation) {
-    auto result = assume_checked(relation);
-    if (result) {
-        return;
-    }
-
-    throw_assumption_error(result.error());
+AssumptionVoidResult AssumptionContext::assume(const SymbolicExpr& relation) {
+    return assume_checked(relation);
 }
 
 AssumptionVoidResult AssumptionContext::assume_checked(const SymbolicExpr& relation) {
@@ -424,20 +409,11 @@ AssumptionTriboolResult assumption_query_result(InferenceTriboolResult result) {
     return AssumptionTriboolResult::success(result.value());
 }
 
-Tribool assumption_query_or_unknown(AssumptionTriboolResult result) {
-    if (!result) {
-        return Tribool::Unknown;
-    }
-    return result.value();
-}
 
 } // anonymous namespace
 
-Tribool AssumptionContext::is_positive(const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) {
-        throw std::invalid_argument("is_positive: expression must not be null/empty");
-    }
-    return assumption_query_or_unknown(is_positive_checked(expr));
+AssumptionTriboolResult AssumptionContext::is_positive(const SymbolicExpr& expr) const {
+    return is_positive_checked(expr);
 }
 
 AssumptionTriboolResult AssumptionContext::is_positive_checked(const SymbolicExpr& expr) const {
@@ -445,11 +421,8 @@ AssumptionTriboolResult AssumptionContext::is_positive_checked(const SymbolicExp
     return assumption_query_result(inference.query_positive_checked(expr));
 }
 
-Tribool AssumptionContext::is_negative(const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) {
-        throw std::invalid_argument("is_negative: expression must not be null/empty");
-    }
-    return assumption_query_or_unknown(is_negative_checked(expr));
+AssumptionTriboolResult AssumptionContext::is_negative(const SymbolicExpr& expr) const {
+    return is_negative_checked(expr);
 }
 
 AssumptionTriboolResult AssumptionContext::is_negative_checked(const SymbolicExpr& expr) const {
@@ -457,11 +430,8 @@ AssumptionTriboolResult AssumptionContext::is_negative_checked(const SymbolicExp
     return assumption_query_result(inference.query_negative_checked(expr));
 }
 
-Tribool AssumptionContext::is_nonnegative(const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) {
-        throw std::invalid_argument("is_nonnegative: expression must not be null/empty");
-    }
-    return assumption_query_or_unknown(is_nonnegative_checked(expr));
+AssumptionTriboolResult AssumptionContext::is_nonnegative(const SymbolicExpr& expr) const {
+    return is_nonnegative_checked(expr);
 }
 
 AssumptionTriboolResult AssumptionContext::is_nonnegative_checked(const SymbolicExpr& expr) const {
@@ -469,11 +439,8 @@ AssumptionTriboolResult AssumptionContext::is_nonnegative_checked(const Symbolic
     return assumption_query_result(inference.query_nonnegative_checked(expr));
 }
 
-Tribool AssumptionContext::is_real(const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) {
-        throw std::invalid_argument("is_real: expression must not be null/empty");
-    }
-    return assumption_query_or_unknown(is_real_checked(expr));
+AssumptionTriboolResult AssumptionContext::is_real(const SymbolicExpr& expr) const {
+    return is_real_checked(expr);
 }
 
 AssumptionTriboolResult AssumptionContext::is_real_checked(const SymbolicExpr& expr) const {
@@ -481,11 +448,8 @@ AssumptionTriboolResult AssumptionContext::is_real_checked(const SymbolicExpr& e
     return assumption_query_result(inference.query_real_checked(expr));
 }
 
-Tribool AssumptionContext::is_integer(const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) {
-        throw std::invalid_argument("is_integer: expression must not be null/empty");
-    }
-    return assumption_query_or_unknown(is_integer_checked(expr));
+AssumptionTriboolResult AssumptionContext::is_integer(const SymbolicExpr& expr) const {
+    return is_integer_checked(expr);
 }
 
 AssumptionTriboolResult AssumptionContext::is_integer_checked(const SymbolicExpr& expr) const {
@@ -493,11 +457,8 @@ AssumptionTriboolResult AssumptionContext::is_integer_checked(const SymbolicExpr
     return assumption_query_result(inference.query_integer_checked(expr));
 }
 
-Tribool AssumptionContext::is_nonzero(const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) {
-        throw std::invalid_argument("is_nonzero: expression must not be null/empty");
-    }
-    return assumption_query_or_unknown(is_nonzero_checked(expr));
+AssumptionTriboolResult AssumptionContext::is_nonzero(const SymbolicExpr& expr) const {
+    return is_nonzero_checked(expr);
 }
 
 AssumptionTriboolResult AssumptionContext::is_nonzero_checked(const SymbolicExpr& expr) const {
@@ -507,8 +468,10 @@ AssumptionTriboolResult AssumptionContext::is_nonzero_checked(const SymbolicExpr
 
 // Extended query methods (read-through all scopes)
 
-Tribool AssumptionContext::is_continuous(const std::string& symbol, const Interval& interval) const {
-    return assumption_query_or_unknown(is_continuous_checked(symbol, interval));
+AssumptionTriboolResult AssumptionContext::is_continuous(
+    const std::string& symbol,
+    const Interval& interval) const {
+    return is_continuous_checked(symbol, interval);
 }
 
 AssumptionTriboolResult AssumptionContext::is_continuous_checked(
@@ -531,8 +494,10 @@ AssumptionTriboolResult AssumptionContext::is_continuous_checked(
     return AssumptionTriboolResult::success(Tribool::Unknown);
 }
 
-Tribool AssumptionContext::is_differentiable(const std::string& symbol, const Interval& interval) const {
-    return assumption_query_or_unknown(is_differentiable_checked(symbol, interval));
+AssumptionTriboolResult AssumptionContext::is_differentiable(
+    const std::string& symbol,
+    const Interval& interval) const {
+    return is_differentiable_checked(symbol, interval);
 }
 
 AssumptionTriboolResult AssumptionContext::is_differentiable_checked(
@@ -555,8 +520,9 @@ AssumptionTriboolResult AssumptionContext::is_differentiable_checked(
     return AssumptionTriboolResult::success(Tribool::Unknown);
 }
 
-Tribool AssumptionContext::is_positive_definite(const std::string& symbol) const {
-    return assumption_query_or_unknown(is_positive_definite_checked(symbol));
+AssumptionTriboolResult AssumptionContext::is_positive_definite(
+    const std::string& symbol) const {
+    return is_positive_definite_checked(symbol);
 }
 
 AssumptionTriboolResult AssumptionContext::is_positive_definite_checked(
@@ -576,8 +542,9 @@ AssumptionTriboolResult AssumptionContext::is_positive_definite_checked(
     return AssumptionTriboolResult::success(Tribool::Unknown);
 }
 
-Tribool AssumptionContext::is_positive_semidefinite(const std::string& symbol) const {
-    return assumption_query_or_unknown(is_positive_semidefinite_checked(symbol));
+AssumptionTriboolResult AssumptionContext::is_positive_semidefinite(
+    const std::string& symbol) const {
+    return is_positive_semidefinite_checked(symbol);
 }
 
 AssumptionTriboolResult AssumptionContext::is_positive_semidefinite_checked(
@@ -1330,12 +1297,8 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
     return ctx;
 }
 
-AssumptionContext AssumptionContext::deserialize(const std::string& data) {
-    auto result = deserialize_checked(data);
-    if (!result) {
-        throw_assumption_error(result.error());
-    }
-    return std::move(result.value());
+Result<AssumptionContext> AssumptionContext::deserialize(const std::string& data) {
+    return deserialize_checked(data);
 }
 
 Result<AssumptionContext> AssumptionContext::deserialize_checked(const std::string& data) {

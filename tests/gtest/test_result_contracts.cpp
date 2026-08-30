@@ -6,18 +6,16 @@
 namespace lamina {
 namespace {
 
-TEST(ResultContractsTest, SolutionSetKindsAreExplicit) {
-    EXPECT_EQ(SolutionSet::empty().kind(), SolutionSet::Kind::Empty);
+TEST(ResultContractsTest, SolutionSetAlternativesAreExplicit) {
+    SolutionSet empty = EmptySolutions{};
+    EXPECT_TRUE(std::holds_alternative<EmptySolutions>(empty));
 
     auto x = SymbolicExpr::variable("x");
-    auto finite = SolutionSet::finite({FiniteSolution{x, 2, {}}});
-    ASSERT_EQ(finite.kind(), SolutionSet::Kind::Finite);
-    ASSERT_EQ(finite.finite_solutions().size(), 1U);
-    EXPECT_EQ(finite.finite_solutions().front().multiplicity, 2);
-
-    auto inconclusive = SolutionSet::inconclusive("unsupported equation class");
-    EXPECT_EQ(inconclusive.kind(), SolutionSet::Kind::Inconclusive);
-    EXPECT_EQ(inconclusive.reason(), "unsupported equation class");
+    SolutionSet finite = FiniteSolutions{{FiniteSolution{x, 2, {}}}};
+    const auto* values = std::get_if<FiniteSolutions>(&finite);
+    ASSERT_NE(values, nullptr);
+    ASSERT_EQ(values->values.size(), 1U);
+    EXPECT_EQ(values->values.front().multiplicity, 2U);
 }
 
 TEST(ResultContractsTest, SolveSeparatesMathematicalOutcomesFromErrors) {
@@ -27,13 +25,13 @@ TEST(ResultContractsTest, SolveSeparatesMathematicalOutcomesFromErrors) {
     auto empty = solve_equation(
         SymbolicExpr::number(1), "x", context, SolveOptions{});
     ASSERT_TRUE(empty);
-    EXPECT_EQ(empty.value().kind(), SolutionSet::Kind::Empty);
+    EXPECT_TRUE(std::holds_alternative<EmptySolutions>(empty.value()));
 
     ComputationContext universal_context;
     auto universal = solve_equation(
         SymbolicExpr::number(0), "x", universal_context, SolveOptions{});
     ASSERT_TRUE(universal);
-    EXPECT_EQ(universal.value().kind(), SolutionSet::Kind::Universal);
+    EXPECT_TRUE(std::holds_alternative<UniversalSolutions>(universal.value()));
 
     CancellationToken cancellation;
     cancellation.cancel();

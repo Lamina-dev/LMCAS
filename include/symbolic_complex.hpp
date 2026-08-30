@@ -40,7 +40,6 @@ inline ComplexSymbolic make_complex(
  * @param b 加数
  * @return 和
  */
-LAMINA_API ComplexSymbolic complex_add(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 LAMINA_API ComplexSymbolicResult complex_add_checked(
     const ComplexSymbolic& a,
@@ -57,7 +56,6 @@ LAMINA_API ComplexSymbolicResult complex_add_checked(
  * @param b 减数
  * @return 差
  */
-LAMINA_API ComplexSymbolic complex_sub(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 LAMINA_API ComplexSymbolicResult complex_sub_checked(
     const ComplexSymbolic& a,
@@ -74,7 +72,6 @@ LAMINA_API ComplexSymbolicResult complex_sub_checked(
  * @param b 乘数
  * @return 积
  */
-LAMINA_API ComplexSymbolic complex_mul(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 LAMINA_API ComplexSymbolicResult complex_mul_checked(
     const ComplexSymbolic& a,
@@ -91,7 +88,6 @@ LAMINA_API ComplexSymbolicResult complex_mul_checked(
  * @param b 除数
  * @return 商
  */
-LAMINA_API ComplexSymbolic complex_div(const ComplexSymbolic& a, const ComplexSymbolic& b);
 
 LAMINA_API ComplexSymbolicResult complex_div_checked(
     const ComplexSymbolic& a,
@@ -107,7 +103,6 @@ LAMINA_API ComplexSymbolicResult complex_div_checked(
  * @param z 输入复数
  * @return 共轭复数
  */
-LAMINA_API ComplexSymbolic complex_conj(const ComplexSymbolic& z);
 
 LAMINA_API ComplexSymbolicResult complex_conj_checked(
     const ComplexSymbolic& z,
@@ -120,7 +115,6 @@ LAMINA_API ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z);
  * @param z 输入复数
  * @return 模的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> complex_abs(const ComplexSymbolic& z);
 
 LAMINA_API ExpressionResult complex_abs_checked(
     const ComplexSymbolic& z,
@@ -133,7 +127,6 @@ LAMINA_API ExpressionResult complex_abs_checked(const ComplexSymbolic& z);
  * @param z 输入复数
  * @return 辐角的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z);
 
 LAMINA_API ExpressionResult complex_arg_checked(
     const ComplexSymbolic& z,
@@ -147,10 +140,6 @@ LAMINA_API ExpressionResult complex_arg_checked(const ComplexSymbolic& z);
  * @param theta 辐角
  * @return 对应的符号复数
  */
-LAMINA_API ComplexSymbolic complex_exp_form(
-    std::shared_ptr<SymbolicExpr> r,
-    std::shared_ptr<SymbolicExpr> theta
-);
 
 LAMINA_API ComplexSymbolicResult complex_exp_form_checked(
     std::shared_ptr<SymbolicExpr> r,
@@ -167,10 +156,6 @@ LAMINA_API ComplexSymbolicResult complex_exp_form_checked(
  * @param theta 辐角
  * @return 对应的符号复数
  */
-LAMINA_API ComplexSymbolic complex_trig_form(
-    std::shared_ptr<SymbolicExpr> r,
-    std::shared_ptr<SymbolicExpr> theta
-);
 
 LAMINA_API ComplexSymbolicResult complex_trig_form_checked(
     std::shared_ptr<SymbolicExpr> r,
@@ -187,10 +172,6 @@ LAMINA_API ComplexSymbolicResult complex_trig_form_checked(
  * @param n 根的次数
  * @return n 个复数根的列表
  */
-LAMINA_API std::vector<ComplexSymbolic> solve_complex_nth_root(
-    std::shared_ptr<SymbolicExpr> c,
-    int n
-);
 
 LAMINA_API ComplexRootsResult solve_complex_nth_root_checked(
     std::shared_ptr<SymbolicExpr> c,

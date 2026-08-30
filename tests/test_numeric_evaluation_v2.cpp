@@ -37,6 +37,19 @@ int main() {
                     "pi and unicode pi agree");
     }
 
+    TEST_CASE("Certified algebraic roots have real numeric values");
+    auto root_variable = SymbolicExpr::variable("z");
+    auto root_polynomial = SymbolicExpr::add(
+        SymbolicExpr::multiply(root_variable, root_variable),
+        SymbolicExpr::number(-2));
+    auto root = evaluate_numeric(
+        *SymbolicExpr::root_of(root_polynomial, "z", 0));
+    EXPECT_TRUE(root.has_value(), "real RootOf evaluates numerically");
+    if (root) {
+        EXPECT_NEAR(root.value().value, -std::sqrt(2.0), 1e-12,
+                    "first real root of z^2-2 is -sqrt(2)");
+    }
+
     TEST_CASE("Resource limits are enforced");
     ResourceLimits limits;
     limits.max_steps = 1;

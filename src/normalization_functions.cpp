@@ -706,6 +706,16 @@ void NormalizationVisitor::visit(const FunctionNode& node) {
         }
         result = func_node;
     }
+void NormalizationVisitor::visit(const UninterpretedFunctionNode& node) {
+    std::vector<std::shared_ptr<const SymbolicNode>> arguments;
+    arguments.reserve(node.arguments().size());
+    for (const auto& argument : node.arguments()) {
+        argument->accept(*this);
+        arguments.push_back(result);
+    }
+    result = lamina::detail::make_node<UninterpretedFunctionNode>(
+        node.name(), std::move(arguments));
+}
 bool NormalizationVisitor::try_get_integer_value(const std::shared_ptr<const NumberNode>& node, long long& value) {
         if (!node) return false;
         if (std::holds_alternative<BigInt>(node->value())) {
@@ -753,12 +763,9 @@ bool NormalizationVisitor::is_provably_nonzero(const std::shared_ptr<const Symbo
             return is_provably_nonzero(complex->real()) || is_provably_nonzero(complex->imag());
         }
         if (!assumptions_) return false;
-        try {
-            auto expr = lamina::detail::expression_from_node(node);
-            return assumptions_->is_nonzero(expr) == lamina::Tribool::True;
-        } catch (...) {
-            return false;
-        }
+        auto expr = lamina::detail::expression_from_node(node);
+        return lamina::detail::propagate_result(
+                   assumptions_->is_nonzero(expr)) == lamina::Tribool::True;
     }
 std::shared_ptr<const SymbolicNode> NormalizationVisitor::try_assumption_simplify(const std::shared_ptr<const SymbolicNode>& node) {
         if (!assumptions_) return nullptr;
@@ -790,13 +797,15 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::try_assumption_simplif
                     if (is_exp_two) {
                         // We have sqrt(base²) — query the base's properties
                         auto base_expr = lamina::detail::expression_from_node(pow->base());
-                        lamina::Tribool nonneg = assumptions_->is_nonnegative(base_expr);
+                        lamina::Tribool nonneg = lamina::detail::propagate_result(
+                            assumptions_->is_nonnegative(base_expr));
                         if (nonneg == lamina::Tribool::True) {
                             // sqrt(x²) → x when x is NonNegative
                             return pow->base();
                         }
 
-                        lamina::Tribool real = assumptions_->is_real(base_expr);
+                        lamina::Tribool real = lamina::detail::propagate_result(
+                            assumptions_->is_real(base_expr));
                         if (real == lamina::Tribool::True) {
                             // sqrt(x²) → abs(x) when x is Real (but not NonNegative)
                             std::vector<std::shared_ptr<const SymbolicNode>> abs_args = { pow->base() };
@@ -811,13 +820,15 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::try_assumption_simplif
         // Rule: abs(x) → -x when x is Negative
         if (func->type() == FunctionNode::FuncType::Abs) {
             auto arg_expr = lamina::detail::expression_from_node(arg);
-            lamina::Tribool pos = assumptions_->is_positive(arg_expr);
+            lamina::Tribool pos = lamina::detail::propagate_result(
+                assumptions_->is_positive(arg_expr));
             if (pos == lamina::Tribool::True) {
                 // abs(x) → x when x is Positive
                 return arg;
             }
 
-            lamina::Tribool neg = assumptions_->is_negative(arg_expr);
+            lamina::Tribool neg = lamina::detail::propagate_result(
+                assumptions_->is_negative(arg_expr));
             if (neg == lamina::Tribool::True) {
                 // abs(x) → -x when x is Negative
                 std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {

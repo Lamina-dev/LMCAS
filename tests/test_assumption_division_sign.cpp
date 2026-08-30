@@ -104,15 +104,15 @@ static void test_division_sign_table() {
         Sign expected = expected_division_sign(num_sign, den_sign);
 
         if (expected == Sign::Positive) {
-            RC_ASSERT(engine.query_positive(div_expr) == Tribool::True);
-            RC_ASSERT(engine.query_negative(div_expr) == Tribool::False);
-            RC_ASSERT(engine.query_nonnegative(div_expr) == Tribool::True);
-            RC_ASSERT(engine.query_nonzero(div_expr) == Tribool::True);
+            RC_ASSERT(engine.query_positive_checked(div_expr).value() == Tribool::True);
+            RC_ASSERT(engine.query_negative_checked(div_expr).value() == Tribool::False);
+            RC_ASSERT(engine.query_nonnegative_checked(div_expr).value() == Tribool::True);
+            RC_ASSERT(engine.query_nonzero_checked(div_expr).value() == Tribool::True);
         } else {
-            RC_ASSERT(engine.query_negative(div_expr) == Tribool::True);
-            RC_ASSERT(engine.query_positive(div_expr) == Tribool::False);
-            RC_ASSERT(engine.query_nonpositive(div_expr) == Tribool::True);
-            RC_ASSERT(engine.query_nonzero(div_expr) == Tribool::True);
+            RC_ASSERT(engine.query_negative_checked(div_expr).value() == Tribool::True);
+            RC_ASSERT(engine.query_positive_checked(div_expr).value() == Tribool::False);
+            RC_ASSERT(engine.query_nonpositive_checked(div_expr).value() == Tribool::True);
+            RC_ASSERT(engine.query_nonzero_checked(div_expr).value() == Tribool::True);
         }
     });
 }
@@ -133,8 +133,8 @@ static void test_unknown_denominator_returns_unknown() {
 
         auto div_expr = make_division(num_name, den_name);
 
-        RC_ASSERT(engine.query_positive(div_expr) == Tribool::Unknown);
-        RC_ASSERT(engine.query_negative(div_expr) == Tribool::Unknown);
+        RC_ASSERT(engine.query_positive_checked(div_expr).value() == Tribool::Unknown);
+        RC_ASSERT(engine.query_negative_checked(div_expr).value() == Tribool::Unknown);
     });
 }
 
@@ -154,10 +154,10 @@ static void test_zero_denominator_returns_unknown() {
 
         auto div_expr = make_division(num_name, den_name);
 
-        RC_ASSERT(engine.query_positive(div_expr) == Tribool::Unknown);
-        RC_ASSERT(engine.query_negative(div_expr) == Tribool::Unknown);
-        RC_ASSERT(engine.query_nonnegative(div_expr) == Tribool::Unknown);
-        RC_ASSERT(engine.query_nonpositive(div_expr) == Tribool::Unknown);
+        RC_ASSERT(engine.query_positive_checked(div_expr).value() == Tribool::Unknown);
+        RC_ASSERT(engine.query_negative_checked(div_expr).value() == Tribool::Unknown);
+        RC_ASSERT(engine.query_nonnegative_checked(div_expr).value() == Tribool::Unknown);
+        RC_ASSERT(engine.query_nonpositive_checked(div_expr).value() == Tribool::Unknown);
     });
 }
 
@@ -172,7 +172,7 @@ static void test_all_sign_combinations() {
         ctx.assume_sign("b", Sign::Positive);
         InferenceEngine engine(ctx);
         auto expr = make_division("a", "b");
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True, "pos/pos → positive");
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, "pos/pos → positive");
     }
     // neg / neg → pos
     {
@@ -181,7 +181,7 @@ static void test_all_sign_combinations() {
         ctx.assume_sign("b", Sign::Negative);
         InferenceEngine engine(ctx);
         auto expr = make_division("a", "b");
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True, "neg/neg → positive");
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, "neg/neg → positive");
     }
     // pos / neg → neg
     {
@@ -190,7 +190,7 @@ static void test_all_sign_combinations() {
         ctx.assume_sign("b", Sign::Negative);
         InferenceEngine engine(ctx);
         auto expr = make_division("a", "b");
-        EXPECT_TRUE(engine.query_negative(expr) == Tribool::True, "pos/neg → negative");
+        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True, "pos/neg → negative");
     }
     // neg / pos → neg
     {
@@ -199,7 +199,7 @@ static void test_all_sign_combinations() {
         ctx.assume_sign("b", Sign::Positive);
         InferenceEngine engine(ctx);
         auto expr = make_division("a", "b");
-        EXPECT_TRUE(engine.query_negative(expr) == Tribool::True, "neg/pos → negative");
+        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True, "neg/pos → negative");
     }
 }
 
@@ -222,7 +222,7 @@ static void test_add_all_positive_is_positive() {
         auto add_node = make_add(operands);
         auto expr = wrap_expr(add_node);
 
-        RC_ASSERT(engine.query_positive(expr) == Tribool::True);
+        RC_ASSERT(engine.query_positive_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -244,7 +244,7 @@ static void test_add_all_nonneg_is_nonneg() {
         auto add_node = make_add(operands);
         auto expr = wrap_expr(add_node);
 
-        RC_ASSERT(engine.query_nonnegative(expr) == Tribool::True);
+        RC_ASSERT(engine.query_nonnegative_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -267,7 +267,7 @@ static void test_multiply_all_positive_is_positive() {
         auto mul_node = make_multiply(operands);
         auto expr = wrap_expr(mul_node);
 
-        RC_ASSERT(engine.query_positive(expr) == Tribool::True);
+        RC_ASSERT(engine.query_positive_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -292,7 +292,7 @@ static void test_gt_nonneg_implies_positive() {
 
         auto x_expr = lamina::detail::expression_from_node(make_var(x_name));
         // x > 0 should derive Positive sign for x in the PropertyStore
-        RC_ASSERT(engine.query_positive(x_expr) == Tribool::True);
+        RC_ASSERT(engine.query_positive_checked(x_expr).value() == Tribool::True);
     });
 }
 
@@ -331,7 +331,7 @@ static void test_unknown_operand_returns_unknown() {
         // the sign definitively (for the general case)
         // For AddNode: can't determine positive if one operand is unknown
         // For MultiplyNode: can't determine positive if one operand is unknown
-        Tribool result = engine.query_positive(expr);
+        Tribool result = engine.query_positive_checked(expr).value();
         // The result should be Unknown since we can't determine the last operand's sign
         RC_ASSERT(result == Tribool::Unknown);
     });
@@ -364,7 +364,7 @@ static void test_add_with_gt_zero_relations() {
         auto add_node = make_add(operands);
         auto expr = wrap_expr(add_node);
 
-        RC_ASSERT(engine.query_positive(expr) == Tribool::True);
+        RC_ASSERT(engine.query_positive_checked(expr).value() == Tribool::True);
     });
 }
 
@@ -389,8 +389,8 @@ static void test_add_mixed_pos_nonneg() {
         auto expr = wrap_expr(add_node);
 
         // All positive → sum is positive
-        RC_ASSERT(engine.query_positive(expr) == Tribool::True);
-        RC_ASSERT(engine.query_nonnegative(expr) == Tribool::True);
+        RC_ASSERT(engine.query_positive_checked(expr).value() == Tribool::True);
+        RC_ASSERT(engine.query_nonnegative_checked(expr).value() == Tribool::True);
     });
 }
 

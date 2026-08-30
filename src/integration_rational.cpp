@@ -1,4 +1,5 @@
 #include "internal/integration_support.hpp"
+#include "internal/exact_matrix.hpp"
 
 namespace lamina {
 
@@ -352,7 +353,8 @@ bool RationalDecompositionStrategy::solve_coefficients(
     const Polynomial<Rational>& P,
     const Polynomial<Rational>& Q,
     const std::vector<std::pair<Polynomial<Rational>, int>>& factors,
-    std::vector<Polynomial<Rational>>& numerators_out) {
+    std::vector<Polynomial<Rational>>& numerators_out,
+    ComputationContext& context) {
 
     numerators_out.clear();
 
@@ -487,62 +489,22 @@ bool RationalDecompositionStrategy::solve_coefficients(
         }
     }
 
-    // Solve via Gaussian elimination on Rational matrix.
-    size_t m = rows;
-    size_t n = cols;
-    int sign = 1;
-    (void)sign;
-    size_t pivot_row = 0;
-    std::vector<size_t> pivot_col_for_row(m, static_cast<size_t>(-1));
-    for (size_t col = 0; col + 1 < n && pivot_row < m; ++col) {
-        size_t max_row = pivot_row;
-        bool found = false;
-        while (max_row < m) {
-            if (!(M[max_row][col] == Rational(0))) { found = true; break; }
-            ++max_row;
-        }
-        if (!found) continue;
-        if (max_row != pivot_row) std::swap(M[pivot_row], M[max_row]);
-        pivot_col_for_row[pivot_row] = col;
-        Rational pivot = M[pivot_row][col];
-        // Normalize pivot row.
-        for (size_t k = col; k < n; ++k) {
-            M[pivot_row][k] = M[pivot_row][k] / pivot;
-        }
-        // Eliminate in other rows.
-        for (size_t i = 0; i < m; ++i) {
-            if (i == pivot_row) continue;
-            Rational f = M[i][col];
-            if (f == Rational(0)) continue;
-            for (size_t k = col; k < n; ++k) {
-                M[i][k] = M[i][k] - f * M[pivot_row][k];
-            }
-        }
-        ++pivot_row;
+    std::vector<Rational> augmented;
+    augmented.reserve(rows * cols);
+    for (const auto& row : M) {
+        augmented.insert(augmented.end(), row.begin(), row.end());
     }
-
-    // Check for inconsistency: any row with all-zero LHS but nonzero RHS.
-    for (size_t r = 0; r < m; ++r) {
-        bool all_zero_lhs = true;
-        for (size_t c = 0; c + 1 < n; ++c) {
-            if (!(M[r][c] == Rational(0))) { all_zero_lhs = false; break; }
+    auto solved = detail::solve_rational_unique(
+        rows, num_unknowns, std::move(augmented), context,
+        "integrate.rational.coefficients");
+    if (!solved) {
+        if (solved.error().code == CasErrc::Inconclusive ||
+            solved.error().code == CasErrc::DomainError) {
+            return false;
         }
-        if (all_zero_lhs && !(M[r][n - 1] == Rational(0))) return false;
+        throw detail::ResultPropagation(solved.error());
     }
-
-    // Extract solution: requires that each unknown has a pivot column.
-    std::vector<Rational> sol(num_unknowns, Rational(0));
-    std::vector<bool> pivoted(num_unknowns, false);
-    for (size_t r = 0; r < m; ++r) {
-        size_t pc = pivot_col_for_row[r];
-        if (pc == static_cast<size_t>(-1)) continue;
-        if (pc >= num_unknowns) continue;
-        sol[pc] = M[r][n - 1];
-        pivoted[pc] = true;
-    }
-    for (size_t i = 0; i < num_unknowns; ++i) {
-        if (!pivoted[i]) return false; // underdetermined -> can't form unique partial fractions
-    }
+    auto sol = std::move(solved.value());
 
     // Re-package solution into per-(factor, power) numerator polynomials.
     numerators_out.reserve(num_unknowns);
@@ -617,11 +579,9 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::integrate_term(
             auto den_pw = SymbolicExpr::power(den_sym_base, rd_num_int(power));
             auto inv_den = SymbolicExpr::power(den_pw, rd_num_int(-1));
             auto integrand = SymbolicExpr::multiply(num_sym, inv_den);
-            std::vector<std::shared_ptr<const SymbolicNode>> args;
-            args.push_back(lamina::detail::node(integrand));
-            args.push_back(lamina::detail::node(SymbolicExpr::variable(var)));
             return lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Calculus_Integral, args));
+                lamina::detail::make_node<IntegralNode>(
+                    lamina::detail::node(integrand), var));
         }
 
         // power == 1: ∫ (B x + C) / (x^2 + p x + q) dx
@@ -671,9 +631,9 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::integrate_term(
     return SymbolicExpr::number(0);
 }
 
-std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext&, int depth) {
+    ComputationContext& computation, int depth) {
     (void)ctx;
     (void)depth;
 
@@ -685,6 +645,16 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
     } catch (...) {
         return nullptr;
     }
+    if (!P.is_zero() && P.degree() > 0 && P.degree() < Q.degree()) {
+        Polynomial<Rational> reduced_denominator;
+        Polynomial<Rational> remainder;
+        poly_divide(Q, P, reduced_denominator, remainder);
+        if (remainder.is_zero()) {
+            P = Polynomial<Rational>(
+                std::vector<Rational>{Rational(1)}, P.variable_name);
+            Q = std::move(reduced_denominator);
+        }
+    }
 
     // Defensive: if Q is zero or constant, this is not the right strategy.
     if (rd_is_zero_poly(Q) || Q.degree() < 1) return nullptr;
@@ -692,6 +662,15 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
     /// PartialFractionStrategy 处理 deg<=1 的简单情形；degree>=2 交给本策略，
     /// 因为它的 integrate_term 对不可约二次因子（→ arctan + ln）是完整的，
     /// 而 PartialFraction 对不可约二次式会失败（留下未求值积分）。
+    if (Q.degree() == 1 && P.degree() <= 0 &&
+        !P.coeffs.empty() && Q.coeffs.size() > 1 &&
+        Q.coeffs[1] != Rational(0)) {
+        auto coefficient = SymbolicExpr::number(
+            P.coeffs[0] / Q.coeffs[1]);
+        auto logarithm = SymbolicExpr::ln(rd_poly_to_sym(Q, var));
+        return SymbolicExpr::multiply(
+            coefficient, logarithm)->simplify();
+    }
     if (Q.degree() < 2) return nullptr;
     try {
         // Long division if needed.
@@ -709,11 +688,8 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
             // Cannot factor over Q -> return unevaluated integral node.
             return Integrator::depends_on(expr, var)
                 ? lamina::detail::make_expression_ptr(
-                      lamina::detail::make_node<FunctionNode>(
-                          FunctionNode::FuncType::Calculus_Integral,
-                          std::vector<std::shared_ptr<const SymbolicNode>>{
-                              lamina::detail::node(expr),
-                              lamina::detail::node(SymbolicExpr::variable(var))}))
+                      lamina::detail::make_node<IntegralNode>(
+                          lamina::detail::node(expr), var))
                 : nullptr;
         }
         if (factors.empty()) {
@@ -727,13 +703,11 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
         // Solve coefficients on the proper part rem / Q.
         std::vector<Polynomial<Rational>> numerators;
         if (!rd_is_zero_poly(rem)) {
-            if (!solve_coefficients(rem, Q, factors, numerators)) {
+            if (!solve_coefficients(
+                    rem, Q, factors, numerators, computation)) {
                 return lamina::detail::make_expression_ptr(
-                    lamina::detail::make_node<FunctionNode>(
-                        FunctionNode::FuncType::Calculus_Integral,
-                        std::vector<std::shared_ptr<const SymbolicNode>>{
-                            lamina::detail::node(expr),
-                            lamina::detail::node(SymbolicExpr::variable(var))}));
+                    lamina::detail::make_node<IntegralNode>(
+                        lamina::detail::node(expr), var));
             }
         }
 
@@ -769,11 +743,8 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
                     if (!term) {
                         // Fallback: unevaluated integral over the original.
                         return lamina::detail::make_expression_ptr(
-                            lamina::detail::make_node<FunctionNode>(
-                                FunctionNode::FuncType::Calculus_Integral,
-                                std::vector<std::shared_ptr<const SymbolicNode>>{
-                                    lamina::detail::node(expr),
-                                    lamina::detail::node(SymbolicExpr::variable(var))}));
+                            lamina::detail::make_node<IntegralNode>(
+                                lamina::detail::node(expr), var));
                     }
                     result = SymbolicExpr::add(result, term);
                 }
@@ -792,11 +763,8 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate(
     } catch (...) {
         // Any unexpected runtime failure -> return unevaluated integral.
         return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<FunctionNode>(
-                FunctionNode::FuncType::Calculus_Integral,
-                std::vector<std::shared_ptr<const SymbolicNode>>{
-                    lamina::detail::node(expr),
-                    lamina::detail::node(SymbolicExpr::variable(var))}));
+            lamina::detail::make_node<IntegralNode>(
+                lamina::detail::node(expr), var));
     }
 }
 

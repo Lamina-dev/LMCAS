@@ -12,7 +12,7 @@ int main() {
     std::cout << "int(x^2) = " << integrated->to_string() << "\n";
 
     auto point = SymbolicExpr::number(2);
-    auto lim = expr->limit("x", point);
+    auto lim = lamina::limit_expression_checked(expr, "x", point).value();
     EXPECT_TRUE(lim != nullptr && std::abs(lim->to_numeric() - 4.0) < 1e-12,
                 "limit x^2 at 2 equals 4");
     std::cout << "limit(x^2, x->2) = " << lim->to_string() << "\n";
@@ -46,12 +46,12 @@ int main() {
     auto ratio = SymbolicExpr::multiply(dN, dD_inv);
     std::cout << "Ratio dN/dD: " << ratio->to_string() << "\n";
 
-    auto lim_ratio = ratio->limit("x", two);
+    auto lim_ratio = lamina::limit_expression_checked(ratio, "x", two).value();
     std::cout << "Limit of Ratio: " << lim_ratio->to_string() << "\n";
 
     auto rational = SymbolicExpr::multiply(num, SymbolicExpr::power(den, minus_one));
     std::cout << "Rational: " << rational->to_string() << "\n";
-    auto lim_rational = rational->limit("x", two);
+    auto lim_rational = lamina::limit_expression_checked(rational, "x", two).value();
     EXPECT_TRUE(lim_rational != nullptr && std::abs(lim_rational->to_numeric() - 4.0) < 1e-12,
                 "removable singularity limit equals 4");
     std::cout << "Result: " << lim_rational->to_string() << "\n";

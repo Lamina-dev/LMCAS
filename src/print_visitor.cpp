@@ -103,9 +103,6 @@ void PrintVisitor::visit(const FunctionNode& node) {
         case FunctionNode::FuncType::Sqrt: buffer << "sqrt"; break;
         case FunctionNode::FuncType::Exp: buffer << "exp"; break;
         case FunctionNode::FuncType::LambertW: buffer << "lambertw"; break;
-        case FunctionNode::FuncType::RootOf: buffer << "rootof"; break;
-        case FunctionNode::FuncType::Calculus_Integral: buffer << "integral"; break;
-        case FunctionNode::FuncType::Limit: buffer << "limit"; break;
         case FunctionNode::FuncType::Infinity: buffer << "inf"; break;
         case FunctionNode::FuncType::Erf: buffer << "erf"; break;
         case FunctionNode::FuncType::Ei: buffer << "Ei"; break;
@@ -232,27 +229,37 @@ void PrintVisitor::visit(const TransformNode& node) {
         case TransformNode::TransformType::Laplace:
             buffer << "L{";
             node.body()->accept(*this);
-            buffer << "}(" << node.target_var() << ")";
+            buffer << "}(";
+            node.target()->accept(*this);
+            buffer << ")";
             break;
         case TransformNode::TransformType::InverseLaplace:
             buffer << "L\xe2\x81\xbb\xc2\xb9{";
             node.body()->accept(*this);
-            buffer << "}(" << node.target_var() << ")";
+            buffer << "}(";
+            node.target()->accept(*this);
+            buffer << ")";
             break;
         case TransformNode::TransformType::Fourier:
             buffer << "F{";
             node.body()->accept(*this);
-            buffer << "}(" << node.target_var() << ")";
+            buffer << "}(";
+            node.target()->accept(*this);
+            buffer << ")";
             break;
         case TransformNode::TransformType::InverseFourier:
             buffer << "F\xe2\x81\xbb\xc2\xb9{";
             node.body()->accept(*this);
-            buffer << "}(" << node.target_var() << ")";
+            buffer << "}(";
+            node.target()->accept(*this);
+            buffer << ")";
             break;
         case TransformNode::TransformType::ZTransform:
             buffer << "Z{";
             node.body()->accept(*this);
-            buffer << "}(" << node.target_var() << ")";
+            buffer << "}(";
+            node.target()->accept(*this);
+            buffer << ")";
             break;
     }
 }
@@ -315,4 +322,35 @@ void PrintVisitor::visit(const ComplexNode& node) {
     buffer << " + ";
     node.imag()->accept(*this);
     buffer << "*I)";
+}
+
+void PrintVisitor::visit(const IntegralNode& node) {
+    buffer << "Integral(";
+    node.body()->accept(*this);
+    buffer << ", " << node.variable();
+    if (node.is_definite()) {
+        buffer << ", ";
+        node.lower()->accept(*this);
+        buffer << ", ";
+        node.upper()->accept(*this);
+    }
+    buffer << ")";
+}
+
+void PrintVisitor::visit(const LimitNode& node) {
+    buffer << "limit(";
+    node.body()->accept(*this);
+    buffer << ", " << node.variable() << ", ";
+    node.point()->accept(*this);
+    switch (node.direction()) {
+        case LimitDirection::Both: buffer << ", both)"; break;
+        case LimitDirection::FromBelow: buffer << ", below)"; break;
+        case LimitDirection::FromAbove: buffer << ", above)"; break;
+    }
+}
+
+void PrintVisitor::visit(const RootOfNode& node) {
+    buffer << "rootof(";
+    node.polynomial()->accept(*this);
+    buffer << ", " << node.variable() << ", " << node.index() << ")";
 }

@@ -3,9 +3,6 @@
 
 namespace lamina {
 
-Tribool InferenceEngine::infer_add_sign(const void* opaque_node, Sign target) const {
-    return inference_query_or_unknown(infer_add_sign_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_add_sign_checked(const void* opaque_node, Sign target) const {
     if (!opaque_node) {
@@ -106,9 +103,6 @@ InferenceTriboolResult InferenceEngine::infer_add_sign_checked(const void* opaqu
 
 // Sign inference from relational constraints
 
-Tribool InferenceEngine::infer_sign_from_relations(const SymbolicExpr& expr, Sign target) const {
-    return inference_query_or_unknown(infer_sign_from_relations_checked(expr, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_sign_from_relations_checked(
     const SymbolicExpr& expr, Sign target) const {
@@ -234,9 +228,6 @@ InferenceTriboolResult InferenceEngine::infer_sign_from_relations_checked(
 
 // Addition domain inference
 
-Tribool InferenceEngine::infer_add_domain(const void* opaque_node, Domain target) const {
-    return inference_query_or_unknown(infer_add_domain_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_add_domain_checked(const void* opaque_node, Domain target) const {
     if (!opaque_node) {
@@ -292,9 +283,6 @@ InferenceTriboolResult InferenceEngine::infer_add_domain_checked(const void* opa
 
 // Division sign inference
 
-Tribool InferenceEngine::infer_division_sign(const void* opaque_node, Sign target) const {
-    return inference_query_or_unknown(infer_division_sign_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_division_sign_checked(const void* opaque_node, Sign target) const {
     if (!opaque_node) {
@@ -417,9 +405,6 @@ InferenceTriboolResult InferenceEngine::infer_division_sign_checked(const void* 
 
 // Multiplication sign inference
 
-Tribool InferenceEngine::infer_multiply_sign(const void* opaque_node, Sign target) const {
-    return inference_query_or_unknown(infer_multiply_sign_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_multiply_sign_checked(const void* opaque_node, Sign target) const {
     if (!opaque_node) {
@@ -599,9 +584,6 @@ InferenceTriboolResult InferenceEngine::infer_multiply_sign_checked(const void* 
 
 // Multiplication domain inference
 
-Tribool InferenceEngine::infer_multiply_domain(const void* opaque_node, Domain target) const {
-    return inference_query_or_unknown(infer_multiply_domain_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_multiply_domain_checked(const void* opaque_node, Domain target) const {
     if (!opaque_node) {
@@ -724,9 +706,6 @@ bool is_zero_number(const NumberNode& num) {
     return num.is_zero();
 }
 
-Tribool InferenceEngine::infer_power_property(const void* opaque_node, Sign target) const {
-    return inference_query_or_unknown(infer_power_property_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void* opaque_node, Sign target) const {
     if (!opaque_node) {
@@ -827,9 +806,6 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
     }
 }
 
-Tribool InferenceEngine::infer_power_domain(const void* opaque_node, Domain target) const {
-    return inference_query_or_unknown(infer_power_domain_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_power_domain_checked(const void* opaque_node, Domain target) const {
     if (!opaque_node) {
@@ -884,9 +860,6 @@ InferenceTriboolResult InferenceEngine::infer_power_domain_checked(const void* o
 
 // Function inference
 
-Tribool InferenceEngine::infer_function_property(const void* opaque_node, Sign target) const {
-    return inference_query_or_unknown(infer_function_property_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_function_property_checked(const void* opaque_node, Sign target) const {
     if (!opaque_node) {
@@ -1030,9 +1003,6 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
     }
 }
 
-Tribool InferenceEngine::infer_function_domain(const void* opaque_node, Domain target) const {
-    return inference_query_or_unknown(infer_function_domain_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_function_domain_checked(const void* opaque_node, Domain target) const {
     if (!opaque_node) {

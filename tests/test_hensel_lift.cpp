@@ -27,8 +27,6 @@ void test_mignotte_bound_simple() {
     EXPECT_TRUE(!checked && checked.error().code == CasErrc::InvalidArgument,
                 "checked hensel_lift rejects empty factor lists");
 
-    auto legacy = hensel_lift(poly, empty_factors, 3, 0);
-    EXPECT_TRUE(legacy.empty(), "legacy hensel_lift unwraps empty factor errors");
 }
 
 /**
@@ -41,11 +39,12 @@ void test_lift_height_increases_with_degree() {
     Polynomial<BigInt> f2(std::vector<BigInt>{BigInt(-1), BigInt(0), BigInt(0), BigInt(0), BigInt(1)}, "x");
 
     std::vector<Polynomial<ModInt>> empty_factors;
-    auto r1 = hensel_lift(f1, empty_factors, 5, 0);
-    auto r2 = hensel_lift(f2, empty_factors, 5, 0);
-
-    EXPECT_TRUE(r1.empty(), "legacy hensel_lift unwraps missing factors for x^2-1");
-    EXPECT_TRUE(r2.empty(), "legacy hensel_lift unwraps missing factors for x^4-1");
+    auto r1 = hensel_lift_checked(f1, empty_factors, 5, 0);
+    auto r2 = hensel_lift_checked(f2, empty_factors, 5, 0);
+    EXPECT_TRUE(!r1 && r1.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects missing factors for x^2-1");
+    EXPECT_TRUE(!r2 && r2.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects missing factors for x^4-1");
 }
 
 /**
@@ -57,8 +56,9 @@ void test_mignotte_bound_larger_coefficients() {
     Polynomial<BigInt> poly(std::vector<BigInt>{BigInt(3), BigInt(-4), BigInt(5), BigInt(6)}, "x");
 
     std::vector<Polynomial<ModInt>> empty_factors;
-    auto result = hensel_lift(poly, empty_factors, 7, 0);
-    EXPECT_TRUE(result.empty(), "legacy hensel_lift unwraps missing factors for larger coefficients");
+    auto result = hensel_lift_checked(poly, empty_factors, 7, 0);
+    EXPECT_TRUE(!result && result.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects missing factors for larger coefficients");
 }
 
 /**
@@ -72,19 +72,16 @@ void test_edge_cases() {
     auto checked_zero = hensel_lift_checked(zero_poly, empty_factors, 5, 0);
     EXPECT_TRUE(!checked_zero && checked_zero.error().code == CasErrc::InvalidArgument,
                 "checked hensel_lift rejects zero polynomials");
-    auto r1 = hensel_lift(zero_poly, empty_factors, 5, 0);
-    EXPECT_TRUE(r1.empty(), "legacy hensel_lift unwraps zero-polynomial errors");
 
     Polynomial<BigInt> const_poly(std::vector<BigInt>{BigInt(42)}, "x");
     auto checked_constant = hensel_lift_checked(const_poly, empty_factors, 5, 0);
     EXPECT_TRUE(!checked_constant && checked_constant.error().code == CasErrc::InvalidArgument,
                 "checked hensel_lift rejects constant polynomials");
-    auto r2 = hensel_lift(const_poly, empty_factors, 5, 0);
-    EXPECT_TRUE(r2.empty(), "legacy hensel_lift unwraps constant-polynomial errors");
 
     Polynomial<BigInt> poly(std::vector<BigInt>{BigInt(-1), BigInt(0), BigInt(1)}, "x");
-    auto r3 = hensel_lift(poly, empty_factors, 3, 5);
-    EXPECT_TRUE(r3.empty(), "legacy hensel_lift unwraps missing factors with explicit lift_bound");
+    auto r3 = hensel_lift_checked(poly, empty_factors, 3, 5);
+    EXPECT_TRUE(!r3 && r3.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects missing factors with explicit lift bound");
 
     auto invalid_prime = hensel_lift_checked(poly, empty_factors, 1, 0);
     EXPECT_TRUE(!invalid_prime && invalid_prime.error().code == CasErrc::InvalidArgument,
@@ -103,8 +100,9 @@ void test_large_coefficients() {
     }, "x");
 
     std::vector<Polynomial<ModInt>> empty_factors;
-    auto result = hensel_lift(poly, empty_factors, 7, 0);
-    EXPECT_TRUE(result.empty(), "legacy hensel_lift unwraps missing factors for large coefficients");
+    auto result = hensel_lift_checked(poly, empty_factors, 7, 0);
+    EXPECT_TRUE(!result && result.error().code == CasErrc::InvalidArgument,
+                "checked hensel_lift rejects missing factors for large coefficients");
 }
 
 
@@ -443,9 +441,6 @@ void test_hensel_lift_via_api_x2_minus_1() {
     auto checked = hensel_lift_checked(poly, mod_factors, p, 2);
     EXPECT_TRUE(checked && checked.value().size() == 2,
                 "checked hensel_lift lifts valid mod-p factors");
-    auto legacy = hensel_lift(poly, mod_factors, p, 2);
-    EXPECT_TRUE(legacy.size() == 2,
-                "legacy hensel_lift still unwraps successful checked results");
 
     Polynomial<ModInt> bad_factor("x");
     bad_factor.coeffs = {ModInt(0, p), ModInt(1, p)};
@@ -477,7 +472,7 @@ void test_multi_factor_lift_3_factors() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2, f3};
 
     int lift_bound = 2;  // lift to mod 5^2 = 25
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 3, "should produce 3 lifted factors");
 
@@ -529,7 +524,7 @@ void test_multi_factor_lift_2_factors_via_api() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2};
 
     int lift_bound = 2;  // lift to mod 3^2 = 9
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 2, "should produce 2 lifted factors");
 
@@ -576,7 +571,7 @@ void test_multi_factor_lift_symmetric_coeffs() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2, f3};
 
     int lift_bound = 2;  // lift to mod 25
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 3, "should produce 3 lifted factors");
 
@@ -640,7 +635,7 @@ void test_symmetric_repr_basic_range() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2};
 
     int lift_bound = 4;  // lift to mod 3^4 = 81
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 2, "should produce 2 lifted factors");
 
@@ -705,7 +700,7 @@ void test_symmetric_repr_large_coefficients() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2, f3};
 
     int lift_bound = 3;  // lift to mod 7^3 = 343
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 3, "should produce 3 lifted factors");
 
@@ -773,7 +768,7 @@ void test_symmetric_repr_roundtrip() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2};
 
     int lift_bound = 3;  // lift to mod 5^3 = 125
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 2, "should produce 2 lifted factors");
 
@@ -830,7 +825,7 @@ void test_symmetric_repr_boundary() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2};
 
     int lift_bound = 3;  // lift to mod 2^3 = 8
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 2, "should produce 2 lifted factors");
 
@@ -888,7 +883,7 @@ void test_symmetric_repr_high_lift() {
     std::vector<Polynomial<ModInt>> mod_factors = {f1, f2};
 
     int lift_bound = 5;  // lift to mod 5^5 = 3125
-    auto lifted = hensel_lift(poly, mod_factors, p, lift_bound);
+    auto lifted = hensel_lift_checked(poly, mod_factors, p, lift_bound).value();
 
     EXPECT_TRUE(lifted.size() == 2, "should produce 2 lifted factors");
 

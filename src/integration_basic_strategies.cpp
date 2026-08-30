@@ -2,7 +2,7 @@
 
 namespace lamina {
 
-std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext& computation, int) {
     (void)computation;
@@ -47,7 +47,7 @@ std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate(
     return nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext&, int) {
 
@@ -78,7 +78,7 @@ std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate(
     return nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext& computation, int) {
 
@@ -112,7 +112,8 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate(
             auto ratio = SymbolicExpr::divide(make_expr_ptr(expr), term_times_du)->simplify();
             bool ratio_independent = !depends_on_integration_variable(*ratio, var);
             if (!ratio_independent && computation.assumptions()) {
-                Tribool du_nonzero = computation.assumptions()->is_nonzero(*du);
+                Tribool du_nonzero = detail::propagate_result(
+                    computation.assumptions()->is_nonzero(*du));
                 if (du_nonzero == Tribool::True) {
                     ratio_independent = !depends_on_integration_variable(*ratio, var);
                 }
@@ -191,7 +192,7 @@ bool LinearSubstitutionStrategy::extract_linear_arg(
     return true;
 }
 
-std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext& computation, int depth) {
 
@@ -208,10 +209,7 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
     if ((fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr)))) {
         // Skip wrappers that are not "real" single-argument functions.
         switch (fn->type()) {
-            case FT::Calculus_Integral:
             case FT::Infinity:
-            case FT::Limit:
-            case FT::RootOf:
             case FT::Atan2:
             case FT::Log:
                 return nullptr;
@@ -229,10 +227,7 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
 
         if ((base_fn = std::dynamic_pointer_cast<const FunctionNode>(pn->base()))) {
             switch (base_fn->type()) {
-                case FT::Calculus_Integral:
                 case FT::Infinity:
-                case FT::Limit:
-                case FT::RootOf:
                 case FT::Atan2:
                 case FT::Log:
                     return nullptr;
@@ -281,11 +276,16 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
     if (!test_expr) return nullptr;
 
     TableLookupStrategy table_only;
-    auto F_dummy = table_only.try_integrate(
+    auto table_attempt = table_only.try_integrate(
         *test_expr, dummy_name, ctx, computation, depth);
-    if (!F_dummy) return nullptr;
-
-    auto F_substituted = F_dummy->substitute(dummy_name, make_expr_ptr(*arg_expr));
+    if (!table_attempt) {
+        throw detail::ResultPropagation(table_attempt.error());
+    }
+    auto* table_candidate =
+        std::get_if<IntegrationCandidate>(&table_attempt.value());
+    if (!table_candidate || !table_candidate->expression) return nullptr;
+    auto F_substituted = table_candidate->expression->substitute(
+        dummy_name, make_expr_ptr(*arg_expr));
     if (!F_substituted) return nullptr;
 
     auto inv_a = SymbolicExpr::power(a_coeff, SymbolicExpr::number(-1));
@@ -298,7 +298,7 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate(
     return result;
 }
 
-std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext&, int) {
 
@@ -385,7 +385,7 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate(
     return nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext& computation, int depth) {
 
@@ -442,7 +442,8 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
     }
     else dv = lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(dv_ops));
 
-    auto v = ctx.integrate_recursive(*dv, var, computation, depth + 1);
+    auto v = detail::propagate_result(
+        ctx.integrate_recursive(*dv, var, computation, depth + 1));
     if (!v || !lamina::detail::node(v)) return nullptr;
     if (contains_unevaluated_integral(lamina::detail::node(v))) return nullptr;
 
@@ -455,7 +456,9 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate(
     auto uv = SymbolicExpr::multiply(make_expr_ptr(u), v);
     auto vdu = SymbolicExpr::multiply(v, du);
     if (!uv || !vdu) return nullptr;
-    auto int_vdu = ctx.integrate_recursive(*vdu, var, computation, depth + 1);
+    vdu = vdu->cancel()->simplify();
+    auto int_vdu = detail::propagate_result(
+        ctx.integrate_recursive(*vdu, var, computation, depth + 1));
     if (!int_vdu || !lamina::detail::node(int_vdu) ||
         contains_unevaluated_integral(lamina::detail::node(int_vdu))) {
         return nullptr;

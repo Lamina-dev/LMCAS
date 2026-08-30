@@ -7,6 +7,7 @@
 #include "lamina_export.hpp"
 #include "bigint.hpp"
 #include "conditional_result.hpp"
+#include "limit_result.hpp"
 #include "rational.hpp"
 #include <memory>
 #include <string>
@@ -121,16 +122,6 @@ public:
     bool is_one() const;
 
     /**
-     * @brief 计算两个多项式表达式的最大公因式。
-     * @param a 第一个多项式
-     * @param b 第二个多项式
-     * @return 首一 GCD 表达式；非精确有理多项式返回 nullptr
-     * @deprecated Use lamina::symbolic_polynomial_gcd to preserve errors and
-     *             resource-limit information.
-     */
-    static std::shared_ptr<SymbolicExpr> poly_gcd(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
-
-    /**
      * @brief 计算两个多项式关于指定变量的结式。
      * @param a 第一个多项式
      * @param b 第二个多项式
@@ -140,32 +131,12 @@ public:
     static std::shared_ptr<SymbolicExpr> poly_resultant(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b, const std::string& var);
 
     /**
-     * @brief 计算矩阵行列式。
-     * @param mat 矩阵表达式
-     * @return 行列式值
-     */
-    static std::shared_ptr<SymbolicExpr> determinant(const std::shared_ptr<SymbolicExpr>& mat);
-
-    /**
      * @brief 计算矩阵转置。
      * @param mat 矩阵表达式
      * @return 转置矩阵
      */
     static std::shared_ptr<SymbolicExpr> transpose(const std::shared_ptr<SymbolicExpr>& mat);
 
-    /**
-     * @brief 计算矩阵的逆。
-     * @param mat 矩阵表达式
-     * @return 逆矩阵，不可逆时返回 nullptr
-     */
-    static std::shared_ptr<SymbolicExpr> inverse(const std::shared_ptr<SymbolicExpr>& mat);
-
-    /**
-     * @brief 计算矩阵的行最简阶梯形（RREF）。
-     * @param mat 矩阵表达式
-     * @return RREF 矩阵
-     */
-    static std::shared_ptr<SymbolicExpr> rref(const std::shared_ptr<SymbolicExpr>& mat);
 
     /**
      * @brief 计算矩阵的特征多项式。
@@ -210,15 +181,6 @@ public:
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
         const std::vector<std::string>& unknowns,
         const std::vector<std::string>& parameters);
-
-    /**
-     * @brief 计算表达式的极限。
-     * @param var 趋近的变量名
-     * @param point 趋近的目标值
-     * @param direction 方向："+"（右极限）、"-"（左极限）、""（双侧）
-     * @return 极限结果表达式
-     */
-    std::shared_ptr<SymbolicExpr> limit(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, const std::string& direction = "") const;
 
     /**
      * @brief 计算不定积分。
@@ -448,15 +410,6 @@ public:
     static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var);
 
     /**
-     * @brief 计算表达式的极限。
-     * @param op 表达式
-     * @param var 趋近变量名
-     * @param target 趋近目标值
-     * @return 极限结果
-     */
-    static std::shared_ptr<SymbolicExpr> limit_func(std::shared_ptr<SymbolicExpr> op, const std::string& var, std::shared_ptr<SymbolicExpr> target);
-
-    /**
      * @brief 从二维元素列表创建矩阵表达式。
      * @param elements 二维表达式数组，elements[i][j] 为第 i 行第 j 列元素
      * @return 矩阵表达式
@@ -488,14 +441,6 @@ public:
      * @return 导数表达式
      */
     std::shared_ptr<SymbolicExpr> differentiate(const std::string& var_name) const;
-
-    /**
-     * @brief 求解方程，返回指定变量的所有解。
-     * @param eq 方程表达式（等于零的形式，或 RelationalNode）
-     * @param var_name 求解的变量名
-     * @return 解的列表
-     */
-    static std::vector<std::shared_ptr<SymbolicExpr>> solve(std::shared_ptr<SymbolicExpr> eq, const std::string& var_name);
 
     /**
      * @brief 将表达式转换为可读字符串。

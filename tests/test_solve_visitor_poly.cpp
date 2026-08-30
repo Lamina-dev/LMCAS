@@ -14,7 +14,7 @@ void test_solve_numeric() {
         SymbolicExpr::number(-4)
     );
 
-    auto solutions = SymbolicExpr::solve(eq1, "x");
+    auto solutions = lamina::solve_finite_checked(eq1, "x").value();
     EXPECT_TRUE(solutions.size() == 1, "linear equation has one solution");
     std::cout << "2x - 4 = 0 => x = " << solutions[0]->to_string() << std::endl;
 
@@ -26,7 +26,7 @@ void test_solve_numeric() {
         )
     );
 
-    auto sol2 = SymbolicExpr::solve(eq2, "x");
+    auto sol2 = lamina::solve_finite_checked(eq2, "x").value();
     EXPECT_TRUE(sol2.size() == 2, "quadratic equation has two solutions");
     std::cout << "x^2 - 3x + 2 = 0 => x1=" << sol2[0]->to_string() << ", x2=" << sol2[1]->to_string() << std::endl;
 }
@@ -42,7 +42,7 @@ void test_solve_symbolic() {
         b
     );
 
-    auto sols = SymbolicExpr::solve(eq, "x");
+    auto sols = lamina::solve_finite_checked(eq, "x").value();
     EXPECT_TRUE(sols.size() == 1, "symbolic linear equation has one solution");
     std::cout << "ax + b = 0 => x = " << sols[0]->to_string() << std::endl;
 

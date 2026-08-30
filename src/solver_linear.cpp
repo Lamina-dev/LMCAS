@@ -2,6 +2,7 @@
 #include "symbolic_ast.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
+#include "internal/exact_matrix.hpp"
 #include "assumption_context.hpp"
 #include <iostream>
 #include <vector>
@@ -20,53 +21,6 @@
 namespace lamina {
 using namespace solver_detail;
 
-void gaussian_eliminate(std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& A, size_t m, size_t n, std::vector<size_t>& pivot_col_for_row, int& sign) {
-    size_t pivot_row = 0;
-    sign = 1;
-    pivot_col_for_row.assign(m, (size_t)-1);
-
-    for (size_t col = 0; col < n && pivot_row < m; ++col) {
-        size_t max_row = pivot_row;
-        bool found_pivot = false;
-        while (max_row < m) {
-            A[max_row][col] = A[max_row][col]->simplify();
-            if (!A[max_row][col]->is_zero()) {
-                found_pivot = true;
-                break;
-            }
-            max_row++;
-        }
-
-        if (!found_pivot) continue;
-
-        if (pivot_row != max_row) {
-            std::swap(A[pivot_row], A[max_row]);
-            sign = -sign;
-        }
-
-        pivot_col_for_row[pivot_row] = col;
-        auto pivot = A[pivot_row][col];
-        auto pivot_inv = SymbolicExpr::power(pivot, SymbolicExpr::number(-1));
-
-        for (size_t k = col; k < A[pivot_row].size(); ++k) {
-            A[pivot_row][k] = SymbolicExpr::multiply(A[pivot_row][k], pivot_inv)->simplify();
-        }
-
-        for (size_t i = 0; i < m; ++i) {
-            if (i != pivot_row) {
-                auto factor = A[i][col];
-                if (!factor->is_zero()) {
-                    auto neg_factor = SymbolicExpr::multiply(factor, SymbolicExpr::number(-1));
-                    for (size_t k = col; k < A[i].size(); ++k) {
-                        auto term = SymbolicExpr::multiply(neg_factor, A[pivot_row][k]);
-                        A[i][k] = SymbolicExpr::add(A[i][k], term)->simplify();
-                    }
-                }
-            }
-        }
-        pivot_row++;
-    }
-}
 
 std::shared_ptr<SymbolicExpr> solver_detail::to_ptr(const SymbolicExpr& expr) {
     return lamina::detail::make_expression_ptr(expr);
@@ -351,39 +305,50 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
         matrix[i][num_vars] = lamina::detail::make_expression_ptr(neg_const);
     }
 
-    std::vector<size_t> pivot_col_for_row;
-    int sign;
-    gaussian_eliminate(matrix, num_eqs, num_vars, pivot_col_for_row, sign);
+    detail::ExactMatrixData augmented{
+        num_eqs, num_vars + 1, {}};
+    augmented.entries.reserve(num_eqs * (num_vars + 1));
+    for (const auto& row : matrix) {
+        augmented.entries.insert(
+            augmented.entries.end(), row.begin(), row.end());
+    }
+    ComputationContext context;
+    auto solved = detail::solve_linear_exact(
+        std::move(augmented), num_vars, context,
+        "solve_linear_system");
+    if (!solved ||
+        std::holds_alternative<detail::InconsistentLinearSolution>(
+            solved.value())) {
+        return {};
+    }
 
-    std::map<std::string, SymbolicExpr> solution;
-    for (size_t i = 0; i < num_eqs; ++i) {
-        size_t pcol = pivot_col_for_row[i];
-        if (pcol != (size_t)-1) {
-            SymbolicExpr val = *matrix[i][num_vars];
-            for (size_t j = pcol + 1; j < num_vars; ++j) {
-                SymbolicExpr c = *matrix[i][j];
-                if (!lamina::detail::node(c)->is_zero()) {
-
-                    std::vector<std::shared_ptr<const SymbolicNode>> mops;
-                    mops.push_back(lamina::detail::node(c));
-                    mops.push_back(SymbolicFactory::create_variable(variables[j]));
-                    auto term = SymbolicFactory::create_multiply(mops);
-
-                    std::vector<std::shared_ptr<const SymbolicNode>> nops;
-                    nops.push_back(SymbolicFactory::create_number(BigInt(-1)));
-                    nops.push_back(term);
-
-                    std::vector<std::shared_ptr<const SymbolicNode>> aops;
-                    aops.push_back(lamina::detail::node(val));
-                    aops.push_back(SymbolicFactory::create_multiply(nops));
-                    val = lamina::detail::expression_from_node(
-                        SymbolicFactory::create_add(aops));
-                }
+    std::vector<std::shared_ptr<SymbolicExpr>> values;
+    if (auto* unique =
+            std::get_if<detail::UniqueLinearSolution>(&solved.value())) {
+        values = std::move(unique->values);
+    } else {
+        auto& parametric =
+            std::get<detail::ParametricLinearSolution>(solved.value());
+        values = parametric.particular;
+        for (std::size_t parameter = 0;
+             parameter < parametric.free_columns.size(); ++parameter) {
+            auto free_variable = SymbolicExpr::variable(
+                variables[parametric.free_columns[parameter]]);
+            for (std::size_t column = 0; column < num_vars; ++column) {
+                auto term = SymbolicExpr::multiply(
+                    parametric.nullspace_basis[parameter][column],
+                    free_variable);
+                values[column] = SymbolicExpr::add(
+                    values[column], term)->simplify();
             }
-            solution.insert_or_assign(variables[pcol], std::move(val));
         }
     }
 
+    std::map<std::string, SymbolicExpr> solution;
+    for (std::size_t column = 0; column < num_vars; ++column) {
+        solution.insert_or_assign(
+            variables[column], *values[column]);
+    }
     return solution;
 }
 

@@ -21,6 +21,15 @@ struct ApproxReal {
     bool is_finite() const noexcept { return status == NumericStatus::Finite; }
 };
 
+struct ApproxComplex {
+    ApproxReal real;
+    ApproxReal imag;
+
+    bool is_finite() const noexcept {
+        return real.is_finite() && imag.is_finite();
+    }
+};
+
 using NumericBindings = std::unordered_map<std::string, double>;
 
 LAMINA_API Result<ApproxReal> evaluate_numeric(const SymbolicExpr& expression,

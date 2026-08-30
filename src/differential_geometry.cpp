@@ -184,6 +184,18 @@ std::vector<std::vector<std::size_t>> index_combinations(std::size_t n,
 
 } // namespace
 
+static std::shared_ptr<SymbolicExpr> christoffel_first_kind_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::vector<std::string>&, int, int, int);
+static std::shared_ptr<SymbolicExpr> christoffel_second_kind_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::vector<std::string>&, int, int, int);
+static std::shared_ptr<SymbolicExpr> lie_derivative_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::vector<std::shared_ptr<SymbolicExpr>>&,
+    const std::vector<std::string>&, int);
+
 DifferentialGeometryExprResult metric_inverse_checked(
     const std::shared_ptr<SymbolicExpr>& g_ij,
     ComputationContext& context)
@@ -217,10 +229,6 @@ DifferentialGeometryExprResult metric_inverse_checked(
     return metric_inverse_checked(g_ij, context);
 }
 
-std::shared_ptr<SymbolicExpr> metric_inverse(
-    const std::shared_ptr<SymbolicExpr>& g_ij) {
-    return SymbolicExpr::inverse(g_ij);
-}
 
 DifferentialGeometryExprResult christoffel_first_kind_checked(
     const std::shared_ptr<SymbolicExpr>& g_ij,
@@ -241,7 +249,7 @@ DifferentialGeometryExprResult christoffel_first_kind_checked(
     auto budget = context.consume_steps(16, operation);
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
-        auto result = christoffel_first_kind(g_ij, coords, k, i, j);
+        auto result = christoffel_first_kind_impl(g_ij, coords, k, i, j);
         if (!result || !lamina::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
@@ -269,7 +277,7 @@ DifferentialGeometryExprResult christoffel_first_kind_checked(
     return christoffel_first_kind_checked(g_ij, coords, k, i, j, context);
 }
 
-std::shared_ptr<SymbolicExpr> christoffel_first_kind(
+static std::shared_ptr<SymbolicExpr> christoffel_first_kind_impl(
     const std::shared_ptr<SymbolicExpr>& g_ij,
     const std::vector<std::string>& coords,
     int k, int i, int j) {
@@ -288,7 +296,9 @@ std::shared_ptr<SymbolicExpr> christoffel_first_kind(
     auto sum12 = SymbolicExpr::add(term1, term2);
     auto diff = SymbolicExpr::add(sum12, SymbolicExpr::multiply(term3, SymbolicExpr::number(-1)));
     
-    return SymbolicExpr::multiply(SymbolicExpr::number(0.5), diff)->simplify();
+    return SymbolicExpr::multiply(
+        SymbolicExpr::number(Rational(BigInt(1), BigInt(2))),
+        diff)->simplify();
 }
 
 DifferentialGeometryExprResult christoffel_second_kind_checked(
@@ -313,7 +323,7 @@ DifferentialGeometryExprResult christoffel_second_kind_checked(
     auto budget = context.consume_steps(dim * 20 + 12, operation);
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
-        auto result = christoffel_second_kind(g_ij, g_up_ij, coords, k, i, j);
+        auto result = christoffel_second_kind_impl(g_ij, g_up_ij, coords, k, i, j);
         if (!result || !lamina::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
@@ -342,7 +352,7 @@ DifferentialGeometryExprResult christoffel_second_kind_checked(
     return christoffel_second_kind_checked(g_ij, g_up_ij, coords, k, i, j, context);
 }
 
-std::shared_ptr<SymbolicExpr> christoffel_second_kind(
+static std::shared_ptr<SymbolicExpr> christoffel_second_kind_impl(
     const std::shared_ptr<SymbolicExpr>& g_ij,
     const std::shared_ptr<SymbolicExpr>& g_up_ij,
     const std::vector<std::string>& coords,
@@ -356,11 +366,48 @@ std::shared_ptr<SymbolicExpr> christoffel_second_kind(
     
     for (size_t m = 0; m < dim; m++) {
         auto g_up_km = lamina::detail::make_expression_ptr(mat_up->get(k, m));
-        auto gamma_first = christoffel_first_kind(g_ij, coords, m, i, j);
+        auto gamma_first = christoffel_first_kind_impl(g_ij, coords, m, i, j);
         auto term = SymbolicExpr::multiply(g_up_km, gamma_first);
         result = SymbolicExpr::add(result, term);
     }
     
+    return result->simplify();
+}
+
+static std::shared_ptr<SymbolicExpr> riemann_curvature_tensor_with_inverse(
+    const std::shared_ptr<SymbolicExpr>& g_ij,
+    const std::shared_ptr<SymbolicExpr>& g_up_ij,
+    const std::vector<std::string>& coords,
+    int rho, int sigma, int mu, int nu) {
+    auto gamma_rho_nu_sigma =
+        christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, nu, sigma);
+    auto gamma_rho_mu_sigma =
+        christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, mu, sigma);
+
+    auto term1 = gamma_rho_nu_sigma->differentiate(coords[mu]);
+    auto term2 = gamma_rho_mu_sigma->differentiate(coords[nu]);
+    auto result = SymbolicExpr::add(
+        term1,
+        SymbolicExpr::multiply(term2, SymbolicExpr::number(-1)));
+
+    for (std::size_t lambda = 0; lambda < coords.size(); ++lambda) {
+        auto gamma_rho_mu_lambda =
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, mu, lambda);
+        auto gamma_lambda_nu_sigma =
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, lambda, nu, sigma);
+        auto gamma_rho_nu_lambda =
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, nu, lambda);
+        auto gamma_lambda_mu_sigma =
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, lambda, mu, sigma);
+        auto product_difference = SymbolicExpr::add(
+            SymbolicExpr::multiply(
+                gamma_rho_mu_lambda, gamma_lambda_nu_sigma),
+            SymbolicExpr::multiply(
+                SymbolicExpr::multiply(
+                    gamma_rho_nu_lambda, gamma_lambda_mu_sigma),
+                SymbolicExpr::number(-1)));
+        result = SymbolicExpr::add(result, product_difference);
+    }
     return result->simplify();
 }
 
@@ -389,7 +436,8 @@ DifferentialGeometryExprResult riemann_curvature_tensor_checked(
         if (!inverse_metric) {
             return DifferentialGeometryExprResult::failure(inverse_metric.error());
         }
-        auto result = riemann_curvature_tensor(g_ij, coords, rho, sigma, mu, nu);
+        auto result = riemann_curvature_tensor_with_inverse(
+            g_ij, inverse_metric.value(), coords, rho, sigma, mu, nu);
         if (!result || !lamina::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
@@ -417,41 +465,6 @@ DifferentialGeometryExprResult riemann_curvature_tensor_checked(
     return riemann_curvature_tensor_checked(g_ij, coords, rho, sigma, mu, nu, context);
 }
 
-std::shared_ptr<SymbolicExpr> riemann_curvature_tensor(
-    const std::shared_ptr<SymbolicExpr>& g_ij,
-    const std::vector<std::string>& coords,
-    int rho, int sigma, int mu, int nu) {
-    
-    auto g_up_ij = metric_inverse(g_ij);
-    if (!g_up_ij) return SymbolicExpr::number(0);
-    
-    auto gamma_rho_nu_sigma = christoffel_second_kind(g_ij, g_up_ij, coords, rho, nu, sigma);
-    auto gamma_rho_mu_sigma = christoffel_second_kind(g_ij, g_up_ij, coords, rho, mu, sigma);
-    
-    auto term1 = gamma_rho_nu_sigma->differentiate(coords[mu]);
-    auto term2 = gamma_rho_mu_sigma->differentiate(coords[nu]);
-    
-    auto diff = SymbolicExpr::add(term1, SymbolicExpr::multiply(term2, SymbolicExpr::number(-1)));
-    
-    size_t dim = coords.size();
-    auto sum_term = SymbolicExpr::number(0);
-    
-    for (size_t lambda = 0; lambda < dim; lambda++) {
-        auto gamma_rho_mu_lambda = christoffel_second_kind(g_ij, g_up_ij, coords, rho, mu, lambda);
-        auto gamma_lambda_nu_sigma = christoffel_second_kind(g_ij, g_up_ij, coords, lambda, nu, sigma);
-        
-        auto gamma_rho_nu_lambda = christoffel_second_kind(g_ij, g_up_ij, coords, rho, nu, lambda);
-        auto gamma_lambda_mu_sigma = christoffel_second_kind(g_ij, g_up_ij, coords, lambda, mu, sigma);
-        
-        auto prod1 = SymbolicExpr::multiply(gamma_rho_mu_lambda, gamma_lambda_nu_sigma);
-        auto prod2 = SymbolicExpr::multiply(gamma_rho_nu_lambda, gamma_lambda_mu_sigma);
-        
-        auto sub = SymbolicExpr::add(prod1, SymbolicExpr::multiply(prod2, SymbolicExpr::number(-1)));
-        sum_term = SymbolicExpr::add(sum_term, sub);
-    }
-    
-    return SymbolicExpr::add(diff, sum_term)->simplify();
-}
 
 DifferentialGeometryExprResult lie_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -479,7 +492,7 @@ DifferentialGeometryExprResult lie_derivative_checked(
                                         operation);
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
-        auto result = lie_derivative(f, X, vars, order);
+        auto result = lie_derivative_impl(f, X, vars, order);
         if (!result || !lamina::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
@@ -508,7 +521,7 @@ DifferentialGeometryExprResult lie_derivative_checked(
     return lie_derivative_checked(f, X, vars, order, context);
 }
 
-std::shared_ptr<SymbolicExpr> lie_derivative(
+static std::shared_ptr<SymbolicExpr> lie_derivative_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& X,
     const std::vector<std::string>& vars,
@@ -661,14 +674,5 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
     return exterior_derivative_checked(form_coeffs, degree, vars, context);
 }
 
-std::vector<std::shared_ptr<SymbolicExpr>> exterior_derivative(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& form_coeffs,
-    int degree,
-    const std::vector<std::string>& vars) {
-    ComputationContext context;
-    auto checked = exterior_derivative_checked(form_coeffs, degree, vars, context);
-    return checked ? std::move(checked).value()
-                   : std::vector<std::shared_ptr<SymbolicExpr>>{};
-}
 
 } // namespace lamina

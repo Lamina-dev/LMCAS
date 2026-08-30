@@ -131,7 +131,7 @@ void test_allow_numeric_false_returns_empty() {
     lamina::SolveOptions opts;
     opts.allow_numeric = false;
 
-    auto results = lamina::solve_dispatch(expr, "x", opts);
+    auto results = solve_vector_for_test(expr, "x", opts);
 
     EXPECT_TRUE(results.empty(),
         "solve_dispatch with allow_numeric=false on x*sin(x)-1 should return empty vector");
@@ -152,7 +152,7 @@ void test_allow_numeric_true_permits_solving() {
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
 
-    auto results = lamina::solve_dispatch(expr, "x", opts);
+    auto results = solve_vector_for_test(expr, "x", opts);
 
     // Note: If the numerical solver is fully implemented, this should return
     // at least one root. If it's still a stub, this test documents the expected
@@ -187,7 +187,7 @@ void test_allow_numeric_false_cos_equation_returns_empty() {
     lamina::SolveOptions opts;
     opts.allow_numeric = false;
 
-    auto results = lamina::solve_dispatch(expr, "x", opts);
+    auto results = solve_vector_for_test(expr, "x", opts);
 
     EXPECT_TRUE(results.empty(),
         "solve_dispatch with allow_numeric=false on x*cos(x)+x^2*sin(x)-1 should return empty vector");
@@ -207,7 +207,7 @@ void test_routing_pure_polynomial_not_hybrid() {
     // Even with allow_numeric=true, a pure polynomial should NOT go through hybrid solver
     opts.allow_numeric = true;
 
-    auto results = lamina::solve_dispatch(expr, "x", opts);
+    auto results = solve_vector_for_test(expr, "x", opts);
 
     // x^2 - 4 = 0 has roots x = -2 and x = 2
     EXPECT_TRUE(results.size() == 2,
@@ -247,7 +247,7 @@ void test_routing_transcendental_substitution_not_hybrid() {
     // With allow_numeric=false, the transcendental solver path should still find ln(2)
     opts.allow_numeric = false;
 
-    auto results = lamina::solve_dispatch(expr, "x", opts);
+    auto results = solve_vector_for_test(expr, "x", opts);
 
     // exp(x) - 2 = 0 has solution x = ln(2) ≈ 0.693147
     EXPECT_TRUE(!results.empty(),
@@ -291,7 +291,7 @@ void test_routing_polynomial_with_allow_numeric_false() {
     lamina::SolveOptions opts;
     opts.allow_numeric = false;
 
-    auto results = lamina::solve_dispatch(expr, "x", opts);
+    auto results = solve_vector_for_test(expr, "x", opts);
 
     // A pure polynomial should be solved by the polynomial solver regardless of allow_numeric
     EXPECT_TRUE(results.size() == 2,
@@ -335,7 +335,7 @@ void test_backward_compat_cubic_polynomial() {
     // Test with allow_numeric=true — polynomial path should still handle it
     lamina::SolveOptions opts_numeric;
     opts_numeric.allow_numeric = true;
-    auto results_numeric = lamina::solve_dispatch(expr, "x", opts_numeric);
+    auto results_numeric = solve_vector_for_test(expr, "x", opts_numeric);
 
     EXPECT_TRUE(results_numeric.size() == 3,
         "x^3-6x^2+11x-6=0 should produce 3 roots with allow_numeric=true");
@@ -358,7 +358,7 @@ void test_backward_compat_cubic_polynomial() {
     // Test with allow_numeric=false — polynomial path should still produce same results
     lamina::SolveOptions opts_symbolic;
     opts_symbolic.allow_numeric = false;
-    auto results_symbolic = lamina::solve_dispatch(expr, "x", opts_symbolic);
+    auto results_symbolic = solve_vector_for_test(expr, "x", opts_symbolic);
 
     EXPECT_TRUE(results_symbolic.size() == 3,
         "x^3-6x^2+11x-6=0 should produce 3 roots with allow_numeric=false (polynomial path)");
@@ -396,7 +396,7 @@ void test_backward_compat_transcendental_substitution() {
     lamina::SolveOptions opts;
     opts.allow_numeric = false;
 
-    auto results = lamina::solve_dispatch(expr, "x", opts);
+    auto results = solve_vector_for_test(expr, "x", opts);
 
     EXPECT_TRUE(!results.empty(),
         "exp(x)-2=0 should produce at least one root via transcendental path (not hybrid)");
@@ -421,7 +421,7 @@ void test_backward_compat_transcendental_substitution() {
     // With allow_numeric=true, should produce the same result (not go through hybrid)
     lamina::SolveOptions opts_numeric;
     opts_numeric.allow_numeric = true;
-    auto results_numeric = lamina::solve_dispatch(expr, "x", opts_numeric);
+    auto results_numeric = solve_vector_for_test(expr, "x", opts_numeric);
 
     EXPECT_TRUE(!results_numeric.empty(),
         "exp(x)-2=0 with allow_numeric=true should still produce roots");

@@ -39,12 +39,6 @@ LAMINA_API ExpressionResult calculate_residue_checked(
     int order = 1
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> calculate_residue(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& z,
-    const std::shared_ptr<SymbolicExpr>& z0,
-    int order = 1
-);
 
 /**
  * @brief 使用柯西积分公式计算闭合路径积分 ∮ f(z)/(z-z0)^n dz
@@ -72,12 +66,6 @@ LAMINA_API ExpressionResult cauchy_integral_checked(
     int n = 1
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> cauchy_integral(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& z,
-    const std::shared_ptr<SymbolicExpr>& z0,
-    int n = 1
-);
 
 /**
  * @brief 尝试对函数进行解析延拓
@@ -111,9 +99,6 @@ LAMINA_API ExpressionResult real_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> real_part(
-    const std::shared_ptr<SymbolicExpr>& expr
-);
 
 /**
  * @brief 提取表达式的虚部 Im(expr)。
@@ -132,9 +117,6 @@ LAMINA_API ExpressionResult imag_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> imag_part(
-    const std::shared_ptr<SymbolicExpr>& expr
-);
 
 /**
  * @brief 计算表达式的复共轭 conj(expr)，将 i 替换为 -i。
@@ -153,9 +135,6 @@ LAMINA_API ExpressionResult conjugate_checked(
     const std::shared_ptr<SymbolicExpr>& expr
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> conjugate(
-    const std::shared_ptr<SymbolicExpr>& expr
-);
 
 /**
  * @brief 检查函数 f(z) 在变量 z 上是否解析（满足 Cauchy-Riemann 方程）。
@@ -180,10 +159,6 @@ LAMINA_API ComplexBoolResult is_analytic_checked(
     const std::string& z
 );
 
-LAMINA_API bool is_analytic(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& z
-);
 
 /**
  * @brief calculate_residue 的别名，匹配规范命名 residue。
@@ -203,11 +178,5 @@ LAMINA_API ExpressionResult residue_checked(
     int order = 1
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> residue(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& z,
-    const std::shared_ptr<SymbolicExpr>& z0,
-    int order = 1
-);
 
 } // namespace lamina

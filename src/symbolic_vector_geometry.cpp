@@ -360,14 +360,6 @@ VectorExprListResult vector_cross_checked(
     return vector_cross_checked(a, b, context);
 }
 
-double vector_angle(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& b
-) {
-    auto checked = vector_angle_checked(a, b);
-    if (!checked) return std::numeric_limits<double>::quiet_NaN();
-    return checked.value();
-}
 
 VectorAngleResult vector_angle_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
@@ -412,14 +404,6 @@ VectorAngleResult vector_angle_checked(
     return vector_angle_checked(a, b, context);
 }
 
-std::vector<std::shared_ptr<SymbolicExpr>> line_plane_intersection(
-    const LineSymbolic& line,
-    const PlaneSymbolic& plane
-) {
-    auto checked = line_plane_intersection_checked(line, plane);
-    if (!checked) return {};
-    return checked.value();
-}
 
 VectorExprListResult line_plane_intersection_checked(
     const LineSymbolic& line,
@@ -484,14 +468,6 @@ VectorExprListResult line_plane_intersection_checked(
     return line_plane_intersection_checked(line, plane, context);
 }
 
-std::shared_ptr<SymbolicExpr> point_plane_distance(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& point,
-    const PlaneSymbolic& plane
-) {
-    auto checked = point_plane_distance_checked(point, plane);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 ExpressionResult point_plane_distance_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
@@ -553,14 +529,6 @@ ExpressionResult point_plane_distance_checked(
     return point_plane_distance_checked(point, plane, context);
 }
 
-std::shared_ptr<SymbolicExpr> skew_lines_distance(
-    const LineSymbolic& l1,
-    const LineSymbolic& l2
-) {
-    auto checked = skew_lines_distance_checked(l1, l2);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 ExpressionResult skew_lines_distance_checked(
     const LineSymbolic& l1,
@@ -622,13 +590,6 @@ ExpressionResult skew_lines_distance_checked(
     return skew_lines_distance_checked(l1, l2, context);
 }
 
-LineSymbolic line_from_two_points(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& p2) {
-    auto checked = line_from_two_points_checked(p1, p2);
-    if (!checked) return LineSymbolic{};
-    return checked.value();
-}
 
 LineSymbolicResult line_from_two_points_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
@@ -680,14 +641,6 @@ LineSymbolicResult line_from_two_points_checked(
     return line_from_two_points_checked(p1, p2, context);
 }
 
-PlaneSymbolic plane_from_three_points(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& p2,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& p3) {
-    auto checked = plane_from_three_points_checked(p1, p2, p3);
-    if (!checked) return PlaneSymbolic{};
-    return checked.value();
-}
 
 PlaneSymbolicResult plane_from_three_points_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& p1,
@@ -775,12 +728,6 @@ PlaneSymbolicResult plane_from_three_points_checked(
     return plane_from_three_points_checked(p1, p2, p3, context);
 }
 
-std::shared_ptr<SymbolicExpr> dihedral_angle(
-    const PlaneSymbolic& p1, const PlaneSymbolic& p2) {
-    auto checked = dihedral_angle_checked(p1, p2);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 ExpressionResult dihedral_angle_checked(
     const PlaneSymbolic& p1,
@@ -844,10 +791,6 @@ ExpressionResult dihedral_angle_checked(
     return dihedral_angle_checked(p1, p2, context);
 }
 
-std::string classify_quadric(const SurfaceSymbolic& surf) {
-    auto checked = classify_quadric_checked(surf);
-    return checked ? checked.value() : "unknown";
-}
 
 VectorStringResult classify_quadric_checked(
     const SurfaceSymbolic& surf,
@@ -982,7 +925,10 @@ VectorStringResult classify_quadric_checked(
             }
             return VectorStringResult::success("hyperboloid");
         }
-        return VectorStringResult::success("unknown");
+        return VectorStringResult::failure(
+            CasErrc::Inconclusive,
+            "quadric is outside the currently classified support domain",
+            operation);
     } catch (const std::bad_alloc&) {
         return VectorStringResult::failure(CasErrc::ResourceLimit,
                                            "vector geometry allocation failed",
@@ -998,13 +944,6 @@ VectorStringResult classify_quadric_checked(const SurfaceSymbolic& surf) {
     return classify_quadric_checked(surf, context);
 }
 
-std::vector<std::shared_ptr<SymbolicExpr>> surface_normal(
-    const SurfaceSymbolic& surf,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& point) {
-    auto checked = surface_normal_checked(surf, point);
-    if (!checked) return {};
-    return checked.value();
-}
 
 VectorExprListResult surface_normal_checked(
     const SurfaceSymbolic& surf,
@@ -1080,13 +1019,6 @@ VectorExprListResult surface_normal_checked(
     return surface_normal_checked(surf, point, context);
 }
 
-PlaneSymbolic tangent_plane(
-    const SurfaceSymbolic& surf,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& point) {
-    auto checked = tangent_plane_checked(surf, point);
-    if (!checked) return PlaneSymbolic{};
-    return checked.value();
-}
 
 PlaneSymbolicResult tangent_plane_checked(
     const SurfaceSymbolic& surf,

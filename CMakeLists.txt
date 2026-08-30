@@ -75,7 +75,9 @@ set_target_properties(LammpCore PROPERTIES
 set(LMCAS_CORE_SOURCES
     src/bigint.cpp
     src/expression_analysis.cpp
+    src/exact_matrix.cpp
     src/unit.cpp
+    src/residual_verification.cpp
     src/quantity.cpp
     src/symbolic_set.cpp
     src/symbolic_core.cpp
@@ -115,6 +117,10 @@ set(LMCAS_ALGEBRA_SOURCES
     src/solve_mixed_transcendental.cpp
     src/solve_visitor.cpp
     src/newton_raphson.cpp
+    src/exact_sturm.cpp
+    src/exact_algebraic.cpp
+    src/exact_root.cpp
+    src/complex_root_isolation.cpp
     src/poly_utils.cpp
     src/root_of_utils.cpp
     src/interval.cpp
@@ -130,6 +136,7 @@ set(LMCAS_ALGEBRA_SOURCES
 set(LMCAS_CALCULUS_SOURCES
     src/limit_visitor.cpp
     src/limit_visitor_core.cpp
+    src/limit_result.cpp
     src/symbolic_calculus_adapter.cpp
     src/integration_table.cpp
     src/integration_basic_strategies.cpp

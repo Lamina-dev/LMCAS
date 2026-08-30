@@ -1,4 +1,5 @@
 #include "numeric_evaluation.hpp"
+#include "root_of_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -129,6 +130,13 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
         return make_approx(std::pow(base.value().value, exponent.value().value));
     }
 
+    if (std::dynamic_pointer_cast<const RootOfNode>(node)) {
+        auto root_expression = lamina::detail::make_expression_ptr(node);
+        auto root = rootof_evaluate_checked(root_expression, context);
+        if (!root) return Result<ApproxReal>::failure(root.error());
+        return make_approx(root.value());
+    }
+
     if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
         if (function->type() == FunctionNode::FuncType::Infinity &&
             function->arguments().empty()) {
@@ -163,6 +171,7 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
             }
             return make_approx(value);
         }
+
 
         if (function->arguments().size() != 1) {
             return failure(CasErrc::UnsupportedExpression,
@@ -225,6 +234,17 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
                 result = static_cast<double>(value);
                 break;
             }
+            case FunctionNode::FuncType::RealPart:
+            case FunctionNode::FuncType::Conjugate:
+                result = x;
+                break;
+            case FunctionNode::FuncType::ImagPart:
+            case FunctionNode::FuncType::ComplexArg:
+                result = 0.0;
+                break;
+            case FunctionNode::FuncType::ComplexAbs:
+                result = std::abs(x);
+                break;
             default:
                 return failure(CasErrc::UnsupportedExpression,
                                "function is not supported by real numeric evaluation");

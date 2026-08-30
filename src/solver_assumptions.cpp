@@ -1,4 +1,5 @@
 #include "solver.hpp"
+#include "solve_strategies.hpp"
 #include "symbolic_ast.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
@@ -25,7 +26,7 @@ namespace {
  * The imaginary unit in LMCAS is represented as sqrt(-1), i.e., a FunctionNode
  * with type Sqrt and a single argument that is a NumberNode with value -1.
  */
-class ContainsImaginaryVisitor : public lamina::detail::SymbolicVisitor {
+class ContainsImaginaryVisitor : public lamina::detail::RecursiveSymbolicVisitor {
 public:
     bool found = false;
 
@@ -279,8 +280,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions(
     const AssumptionContext* ctx)
 {
     // Step 1: Compute all solutions using the existing solver
-    auto all_solutions = SymbolicExpr::solve(
-        std::const_pointer_cast<SymbolicExpr>(equation), variable);
+    auto all_solutions = lamina::solve_finite_checked(std::const_pointer_cast<SymbolicExpr>(equation), variable).value();
 
     // Step 2: If no context provided, return all solutions unfiltered
     if (!ctx) {

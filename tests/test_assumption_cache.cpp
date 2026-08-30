@@ -75,14 +75,14 @@ static void test_invalidate_cache_clears_cache() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // First query — populates cache
-        Tribool result1 = qi.query_positive(expr);
+        Tribool result1 = qi.query_positive(expr).value();
         RC_ASSERT(result1 == Tribool::True);
 
         // Invalidate cache
         qi.invalidate_cache();
 
         // Second query — should recompute and still return True
-        Tribool result2 = qi.query_positive(expr);
+        Tribool result2 = qi.query_positive(expr).value();
         RC_ASSERT(result2 == Tribool::True);
 
         // Results must be consistent
@@ -106,20 +106,20 @@ static void test_cache_stores_results() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // Query multiple times — all should return the same result
-        Tribool r1 = qi.query_positive(expr);
-        Tribool r2 = qi.query_positive(expr);
-        Tribool r3 = qi.query_positive(expr);
+        Tribool r1 = qi.query_positive(expr).value();
+        Tribool r2 = qi.query_positive(expr).value();
+        Tribool r3 = qi.query_positive(expr).value();
 
         RC_ASSERT(r1 == r2);
         RC_ASSERT(r2 == r3);
 
         // Also test other query types for consistency
-        Tribool n1 = qi.query_negative(expr);
-        Tribool n2 = qi.query_negative(expr);
+        Tribool n1 = qi.query_negative(expr).value();
+        Tribool n2 = qi.query_negative(expr).value();
         RC_ASSERT(n1 == n2);
 
-        Tribool nn1 = qi.query_nonnegative(expr);
-        Tribool nn2 = qi.query_nonnegative(expr);
+        Tribool nn1 = qi.query_nonnegative(expr).value();
+        Tribool nn2 = qi.query_nonnegative(expr).value();
         RC_ASSERT(nn1 == nn2);
     });
 }
@@ -138,7 +138,7 @@ static void test_invalidation_allows_new_results() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // First query — no sign declared, should be Unknown
-        Tribool result_before = qi.query_positive(expr);
+        Tribool result_before = qi.query_positive(expr).value();
         RC_ASSERT(result_before == Tribool::Unknown);
 
         // Now declare the variable as Positive in the context
@@ -148,7 +148,7 @@ static void test_invalidation_allows_new_results() {
         qi.invalidate_cache();
 
         // After invalidation, the query should recompute with new assumptions
-        Tribool result_after = qi.query_positive(expr);
+        Tribool result_after = qi.query_positive(expr).value();
         RC_ASSERT(result_after == Tribool::True);
     });
 }
@@ -168,7 +168,7 @@ static void test_invalidation_on_scope_push() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // Query in initial scope
-        Tribool result_initial = qi.query_positive(expr);
+        Tribool result_initial = qi.query_positive(expr).value();
         RC_ASSERT(result_initial == Tribool::True);
 
         // Push a new scope and declare the variable as Negative (shadows parent)
@@ -179,10 +179,10 @@ static void test_invalidation_on_scope_push() {
         qi.invalidate_cache();
 
         // Query should now reflect the new scope's declaration
-        Tribool result_pushed = qi.query_positive(expr);
+        Tribool result_pushed = qi.query_positive(expr).value();
         RC_ASSERT(result_pushed == Tribool::False);
 
-        Tribool result_neg = qi.query_negative(expr);
+        Tribool result_neg = qi.query_negative(expr).value();
         RC_ASSERT(result_neg == Tribool::True);
     });
 }
@@ -202,7 +202,7 @@ static void test_invalidation_on_scope_pop() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // Query in root scope
-        Tribool result_root = qi.query_positive(expr);
+        Tribool result_root = qi.query_positive(expr).value();
         RC_ASSERT(result_root == Tribool::True);
 
         // Push scope, declare Negative
@@ -210,14 +210,14 @@ static void test_invalidation_on_scope_pop() {
         ctx.assume_sign(var_name, Sign::Negative);
         qi.invalidate_cache();
 
-        Tribool result_child = qi.query_positive(expr);
+        Tribool result_child = qi.query_positive(expr).value();
         RC_ASSERT(result_child == Tribool::False);
 
         // Pop scope — should revert to parent's Positive
         ctx.pop();
         qi.invalidate_cache();
 
-        Tribool result_popped = qi.query_positive(expr);
+        Tribool result_popped = qi.query_positive(expr).value();
         RC_ASSERT(result_popped == Tribool::True);
     });
 }
@@ -235,7 +235,7 @@ static void test_invalidation_on_assume_domain() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // Initially no domain declared — query_integer should be Unknown
-        Tribool result_before = qi.query_integer(expr);
+        Tribool result_before = qi.query_integer(expr).value();
         RC_ASSERT(result_before == Tribool::Unknown);
 
         // Declare Integer domain
@@ -243,7 +243,7 @@ static void test_invalidation_on_assume_domain() {
         qi.invalidate_cache();
 
         // After invalidation, query should reflect new domain
-        Tribool result_after = qi.query_integer(expr);
+        Tribool result_after = qi.query_integer(expr).value();
         RC_ASSERT(result_after == Tribool::True);
     });
 }
@@ -261,7 +261,7 @@ static void test_invalidation_on_assume_relation() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // Initially no sign — query_positive should be Unknown
-        Tribool result_before = qi.query_positive(expr);
+        Tribool result_before = qi.query_positive(expr).value();
         RC_ASSERT(result_before == Tribool::Unknown);
 
         // Add relation: var > 0 (which derives Positive sign)
@@ -275,7 +275,7 @@ static void test_invalidation_on_assume_relation() {
         qi.invalidate_cache();
 
         // After invalidation, query should reflect the new relation
-        Tribool result_after = qi.query_positive(expr);
+        Tribool result_after = qi.query_positive(expr).value();
         RC_ASSERT(result_after == Tribool::True);
     });
 }
@@ -293,26 +293,26 @@ static void test_multiple_invalidations_correct() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // Round 1: Unknown
-        Tribool r1 = qi.query_positive(expr);
+        Tribool r1 = qi.query_positive(expr).value();
         RC_ASSERT(r1 == Tribool::Unknown);
 
         // Round 2: Declare Positive
         ctx.assume_sign(var_name, Sign::Positive);
         qi.invalidate_cache();
-        Tribool r2 = qi.query_positive(expr);
+        Tribool r2 = qi.query_positive(expr).value();
         RC_ASSERT(r2 == Tribool::True);
 
         // Round 3: Push scope, declare Negative
         ctx.push();
         ctx.assume_sign(var_name, Sign::Negative);
         qi.invalidate_cache();
-        Tribool r3 = qi.query_positive(expr);
+        Tribool r3 = qi.query_positive(expr).value();
         RC_ASSERT(r3 == Tribool::False);
 
         // Round 4: Pop scope, revert to Positive
         ctx.pop();
         qi.invalidate_cache();
-        Tribool r4 = qi.query_positive(expr);
+        Tribool r4 = qi.query_positive(expr).value();
         RC_ASSERT(r4 == Tribool::True);
     });
 }
@@ -333,11 +333,11 @@ static void test_cache_different_property_types() {
         SymbolicExpr expr = make_var_expr(var_name);
 
         // Query different properties
-        Tribool pos = qi.query_positive(expr);
-        Tribool neg = qi.query_negative(expr);
-        Tribool nonneg = qi.query_nonnegative(expr);
-        Tribool integer = qi.query_integer(expr);
-        Tribool real = qi.query_real(expr);
+        Tribool pos = qi.query_positive(expr).value();
+        Tribool neg = qi.query_negative(expr).value();
+        Tribool nonneg = qi.query_nonnegative(expr).value();
+        Tribool integer = qi.query_integer(expr).value();
+        Tribool real = qi.query_real(expr).value();
 
         // Verify correctness
         RC_ASSERT(pos == Tribool::True);
@@ -347,19 +347,19 @@ static void test_cache_different_property_types() {
         RC_ASSERT(real == Tribool::True);
 
         // Repeat — should return same cached results
-        RC_ASSERT(qi.query_positive(expr) == pos);
-        RC_ASSERT(qi.query_negative(expr) == neg);
-        RC_ASSERT(qi.query_nonnegative(expr) == nonneg);
-        RC_ASSERT(qi.query_integer(expr) == integer);
-        RC_ASSERT(qi.query_real(expr) == real);
+        RC_ASSERT(qi.query_positive(expr).value() == pos);
+        RC_ASSERT(qi.query_negative(expr).value() == neg);
+        RC_ASSERT(qi.query_nonnegative(expr).value() == nonneg);
+        RC_ASSERT(qi.query_integer(expr).value() == integer);
+        RC_ASSERT(qi.query_real(expr).value() == real);
 
         // Invalidate and verify all still correct
         qi.invalidate_cache();
-        RC_ASSERT(qi.query_positive(expr) == Tribool::True);
-        RC_ASSERT(qi.query_negative(expr) == Tribool::False);
-        RC_ASSERT(qi.query_nonnegative(expr) == Tribool::True);
-        RC_ASSERT(qi.query_integer(expr) == Tribool::True);
-        RC_ASSERT(qi.query_real(expr) == Tribool::True);
+        RC_ASSERT(qi.query_positive(expr).value() == Tribool::True);
+        RC_ASSERT(qi.query_negative(expr).value() == Tribool::False);
+        RC_ASSERT(qi.query_nonnegative(expr).value() == Tribool::True);
+        RC_ASSERT(qi.query_integer(expr).value() == Tribool::True);
+        RC_ASSERT(qi.query_real(expr).value() == Tribool::True);
     });
 }
 
@@ -379,9 +379,9 @@ static void test_invalidate_clears_all_entries() {
         SymbolicExpr expr_b = make_var_expr("b");
 
         // Populate cache with multiple entries
-        Tribool a_pos = qi.query_positive(expr_a);
-        Tribool b_neg = qi.query_negative(expr_b);
-        Tribool a_int = qi.query_integer(expr_a);
+        Tribool a_pos = qi.query_positive(expr_a).value();
+        Tribool b_neg = qi.query_negative(expr_b).value();
+        Tribool a_int = qi.query_integer(expr_a).value();
 
         RC_ASSERT(a_pos == Tribool::True);
         RC_ASSERT(b_neg == Tribool::True);
@@ -391,9 +391,9 @@ static void test_invalidate_clears_all_entries() {
         qi.invalidate_cache();
 
         // Queries still return correct results (recomputed)
-        RC_ASSERT(qi.query_positive(expr_a) == Tribool::True);
-        RC_ASSERT(qi.query_negative(expr_b) == Tribool::True);
-        RC_ASSERT(qi.query_integer(expr_a) == Tribool::True);
+        RC_ASSERT(qi.query_positive(expr_a).value() == Tribool::True);
+        RC_ASSERT(qi.query_negative(expr_b).value() == Tribool::True);
+        RC_ASSERT(qi.query_integer(expr_a).value() == Tribool::True);
     });
 }
 

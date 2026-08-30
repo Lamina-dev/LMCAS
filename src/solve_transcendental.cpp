@@ -1,6 +1,7 @@
 #include "solve_transcendental.hpp"
 #include "symbolic_ast.hpp"
 #include "solve_strategies.hpp"
+#include "solve_polynomial.hpp"
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
@@ -536,6 +537,12 @@ static std::vector<std::shared_ptr<SymbolicExpr>> invert_h_power(
     return results;
 }
 
+static std::vector<std::shared_ptr<SymbolicExpr>> solve_polynomial_values(
+    const Polynomial<SymbolicPolyCoeff>& polynomial,
+    const std::string& variable) {
+    return solve_by_factoring(polynomial, variable);
+}
+
 static std::vector<std::shared_ptr<SymbolicExpr>> invert_substitution_h(
     const std::shared_ptr<SymbolicExpr>& h_expr,
     const std::shared_ptr<SymbolicExpr>& u_root,
@@ -597,7 +604,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> invert_substitution_h(
 
     auto poly = symbolic_to_poly<SymbolicPolyCoeff>(eq, var);
     if (!poly.is_zero() && poly.degree() >= 1) {
-        return SymbolicExpr::solve(eq, var);
+        return solve_polynomial_values(poly, var);
     }
 
     return {};
@@ -627,7 +634,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_inner_equation(
 
     auto inner_poly = symbolic_to_poly<SymbolicPolyCoeff>(inner_eq, var);
     if (!inner_poly.is_zero() && inner_poly.degree() >= 1) {
-        auto inner_solutions = SymbolicExpr::solve(inner_eq, var);
+        auto inner_solutions = solve_polynomial_values(inner_poly, var);
         if (!inner_solutions.empty()) return inner_solutions;
     }
 
@@ -709,7 +716,10 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_transcendental_impl(
     auto subst = detect_substitution(expr, var);
     if (subst) {
 
-        auto u_solutions = SymbolicExpr::solve(subst->poly_in_u, subst->u_var);
+        auto polynomial = symbolic_to_poly<SymbolicPolyCoeff>(
+            subst->poly_in_u, subst->u_var);
+        auto u_solutions = solve_polynomial_values(
+            polynomial, subst->u_var);
         if (u_solutions.empty()) return {};
 
         std::vector<std::shared_ptr<SymbolicExpr>> results;

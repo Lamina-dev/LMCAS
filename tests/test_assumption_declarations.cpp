@@ -34,7 +34,7 @@ static Interval make_open_interval(double lo, double hi) {
 
 
 static void test_continuous_only_on_differentiable_overlap_throws() {
-    TEST_CASE("Continuity overlap: declaring continuous-only on interval overlapping differentiable throws");
+    TEST_CASE("Continuity overlap: declaring continuous-only on interval overlapping differentiable returns failure");
 
     PropertyStore store;
 
@@ -44,33 +44,23 @@ static void test_continuous_only_on_differentiable_overlap_throws() {
 
     // Declaring continuous-only on [5, 15] (overlaps [0,10]) should throw
     Interval cont_interval = make_closed_interval(5.0, 15.0);
-    bool threw = false;
-    try {
-        store.declare_continuous("f", cont_interval);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"Contradiction", "f", "differentiable"},
-            "Exception message mentions contradiction, symbol, and differentiable");
-    }
-    EXPECT_TRUE(threw, "Declaring continuous-only on differentiable overlap throws");
+    auto failure_46 = store.declare_continuous("f", cont_interval);
+    EXPECT_TRUE(!failure_46.has_value(), "Declaring continuous-only on differentiable overlap returns failure");
+    EXPECT_TRUE(failure_46.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_46.error().message, {"Contradiction", "f", "differentiable"},
+            "Result error message mentions contradiction, symbol, and differentiable");
 }
 
 static void test_continuous_only_on_exact_differentiable_interval_throws() {
-    TEST_CASE("Continuity overlap: declaring continuous-only on exact differentiable interval throws");
+    TEST_CASE("Continuity overlap: declaring continuous-only on exact differentiable interval returns failure");
 
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 5.0);
     store.declare_differentiable("g", iv);
 
-    bool threw = false;
-    try {
-        store.declare_continuous("g", iv);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring continuous-only on exact differentiable interval throws");
+    auto failure_65 = store.declare_continuous("g", iv);
+    EXPECT_TRUE(!failure_65.has_value(), "Declaring continuous-only on exact differentiable interval returns failure");
 }
 
 static void test_differentiable_on_continuous_overlap_ok() {
@@ -84,13 +74,8 @@ static void test_differentiable_on_continuous_overlap_ok() {
 
     // Declaring differentiable on [5, 15] (overlaps) should NOT throw (it's an upgrade)
     Interval diff_interval = make_closed_interval(5.0, 15.0);
-    bool threw = false;
-    try {
-        store.declare_differentiable("h", diff_interval);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_FALSE(threw, "Declaring differentiable on continuous-only overlap does not throw");
+    auto success_76 = store.declare_differentiable("h", diff_interval);
+    EXPECT_TRUE(success_76.has_value(), "Declaring differentiable on continuous-only overlap does not throw");
 }
 
 static void test_continuous_on_continuous_overlap_ok() {
@@ -102,13 +87,8 @@ static void test_continuous_on_continuous_overlap_ok() {
     Interval iv2 = make_closed_interval(5.0, 15.0);
     store.declare_continuous("k", iv1);
 
-    bool threw = false;
-    try {
-        store.declare_continuous("k", iv2);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_FALSE(threw, "Declaring continuous-only on continuous-only overlap does not throw");
+    auto success_93 = store.declare_continuous("k", iv2);
+    EXPECT_TRUE(success_93.has_value(), "Declaring continuous-only on continuous-only overlap does not throw");
 }
 
 static void test_differentiable_implies_continuous() {
@@ -119,9 +99,9 @@ static void test_differentiable_implies_continuous() {
     Interval iv = make_closed_interval(1.0, 5.0);
     store.declare_differentiable("f", iv);
 
-    EXPECT_TRUE(store.is_continuous("f", iv),
+    EXPECT_TRUE(store.is_continuous("f", iv).value(),
         "Differentiable symbol is also continuous on same interval");
-    EXPECT_TRUE(store.is_differentiable("f", iv),
+    EXPECT_TRUE(store.is_differentiable("f", iv).value(),
         "Differentiable symbol is differentiable on same interval");
 }
 
@@ -133,9 +113,9 @@ static void test_continuous_not_differentiable() {
     Interval iv = make_closed_interval(0.0, 3.0);
     store.declare_continuous("f", iv);
 
-    EXPECT_TRUE(store.is_continuous("f", iv),
+    EXPECT_TRUE(store.is_continuous("f", iv).value(),
         "Continuous symbol is continuous");
-    EXPECT_FALSE(store.is_differentiable("f", iv),
+    EXPECT_FALSE(store.is_differentiable("f", iv).value(),
         "Continuous-only symbol is NOT differentiable");
 }
 
@@ -149,13 +129,8 @@ static void test_non_overlapping_intervals_no_conflict() {
 
     store.declare_differentiable("f", diff_iv);
 
-    bool threw = false;
-    try {
-        store.declare_continuous("f", cont_iv);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_FALSE(threw, "Disjoint intervals do not conflict");
+    auto success_140 = store.declare_continuous("f", cont_iv);
+    EXPECT_TRUE(success_140.has_value(), "Disjoint intervals do not conflict");
 }
 
 
@@ -167,7 +142,7 @@ static void test_monotonicity_declare_and_retrieve_increasing() {
     Interval iv = make_closed_interval(0.0, 10.0);
     store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing);
 
-    Monotonicity result = store.get_monotonicity("f", "x", iv);
+    Monotonicity result = store.get_monotonicity("f", "x", iv).value();
     EXPECT_TRUE(result == Monotonicity::Increasing,
         "get_monotonicity returns Increasing for exact interval");
 }
@@ -180,7 +155,7 @@ static void test_monotonicity_declare_and_retrieve_decreasing() {
     Interval iv = make_closed_interval(-5.0, 5.0);
     store.declare_monotonicity("g", "t", iv, Monotonicity::Decreasing);
 
-    Monotonicity result = store.get_monotonicity("g", "t", iv);
+    Monotonicity result = store.get_monotonicity("g", "t", iv).value();
     EXPECT_TRUE(result == Monotonicity::Decreasing,
         "get_monotonicity returns Decreasing for exact interval");
 }
@@ -196,7 +171,7 @@ static void test_monotonicity_sub_interval_coverage() {
 
     // Query on [2, 8] (sub-interval) should return Increasing
     Interval sub_iv = make_closed_interval(2.0, 8.0);
-    Monotonicity result = store.get_monotonicity("f", "x", sub_iv);
+    Monotonicity result = store.get_monotonicity("f", "x", sub_iv).value();
     EXPECT_TRUE(result == Monotonicity::Increasing,
         "Sub-interval query returns Increasing (covered by larger declaration)");
 }
@@ -211,7 +186,7 @@ static void test_monotonicity_uncovered_interval_returns_unknown() {
 
     // Query on [6, 10] (not covered) should return Unknown
     Interval uncovered = make_closed_interval(6.0, 10.0);
-    Monotonicity result = store.get_monotonicity("f", "x", uncovered);
+    Monotonicity result = store.get_monotonicity("f", "x", uncovered).value();
     EXPECT_TRUE(result == Monotonicity::Unknown,
         "Uncovered interval returns Unknown");
 }
@@ -225,7 +200,7 @@ static void test_monotonicity_wrong_variable_returns_unknown() {
     store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing);
 
     // Query with different variable
-    Monotonicity result = store.get_monotonicity("f", "y", iv);
+    Monotonicity result = store.get_monotonicity("f", "y", iv).value();
     EXPECT_TRUE(result == Monotonicity::Unknown,
         "Query with wrong variable returns Unknown");
 }
@@ -236,7 +211,7 @@ static void test_monotonicity_undeclared_symbol_returns_unknown() {
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 10.0);
-    Monotonicity result = store.get_monotonicity("undeclared", "x", iv);
+    Monotonicity result = store.get_monotonicity("undeclared", "x", iv).value();
     EXPECT_TRUE(result == Monotonicity::Unknown,
         "Undeclared symbol returns Unknown");
 }
@@ -252,9 +227,9 @@ static void test_monotonicity_multiple_declarations() {
     store.declare_monotonicity("f", "x", iv1, Monotonicity::Increasing);
     store.declare_monotonicity("f", "x", iv2, Monotonicity::Decreasing);
 
-    EXPECT_TRUE(store.get_monotonicity("f", "x", iv1) == Monotonicity::Increasing,
+    EXPECT_TRUE(store.get_monotonicity("f", "x", iv1).value() == Monotonicity::Increasing,
         "First interval returns Increasing");
-    EXPECT_TRUE(store.get_monotonicity("f", "x", iv2) == Monotonicity::Decreasing,
+    EXPECT_TRUE(store.get_monotonicity("f", "x", iv2).value() == Monotonicity::Decreasing,
         "Second interval returns Decreasing");
 }
 
@@ -267,7 +242,7 @@ static void test_monotonicity_entire_line() {
     store.declare_monotonicity("exp", "x", entire, Monotonicity::Increasing);
 
     Interval sub = make_closed_interval(-100.0, 100.0);
-    EXPECT_TRUE(store.get_monotonicity("exp", "x", sub) == Monotonicity::Increasing,
+    EXPECT_TRUE(store.get_monotonicity("exp", "x", sub).value() == Monotonicity::Increasing,
         "Entire line declaration covers any finite sub-interval");
 }
 
@@ -354,189 +329,134 @@ static void test_periodicity_different_symbols() {
 
 
 static void test_contradiction_finite_divergent() {
-    TEST_CASE("Contradiction: Finite then Divergent throws");
+    TEST_CASE("Contradiction: Finite then Divergent returns failure");
 
     PropertyStore store;
     store.declare_finiteness("x", Finiteness::Finite);
 
-    bool threw = false;
-    try {
-        store.declare_finiteness("x", Finiteness::Divergent);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"x", "Finite", "Divergent"},
-            "Exception mentions symbol, Finite, and Divergent");
-    }
-    EXPECT_TRUE(threw, "Finite + Divergent throws");
+    auto failure_355 = store.declare_finiteness("x", Finiteness::Divergent);
+    EXPECT_TRUE(!failure_355.has_value(), "Finite + Divergent returns failure");
+    EXPECT_TRUE(failure_355.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_355.error().message, {"x", "Finite", "Divergent"},
+            "Result error mentions symbol, Finite, and Divergent");
 }
 
 static void test_contradiction_divergent_finite() {
-    TEST_CASE("Contradiction: Divergent then Finite throws");
+    TEST_CASE("Contradiction: Divergent then Finite returns failure");
 
     PropertyStore store;
     store.declare_finiteness("y", Finiteness::Divergent);
 
-    bool threw = false;
-    try {
-        store.declare_finiteness("y", Finiteness::Finite);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"y", "Finite", "Divergent"},
-            "Exception mentions symbol, Finite, and Divergent");
-    }
-    EXPECT_TRUE(threw, "Divergent + Finite throws");
+    auto failure_373 = store.declare_finiteness("y", Finiteness::Finite);
+    EXPECT_TRUE(!failure_373.has_value(), "Divergent + Finite returns failure");
+    EXPECT_TRUE(failure_373.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_373.error().message, {"y", "Finite", "Divergent"},
+            "Result error mentions symbol, Finite, and Divergent");
 }
 
 static void test_contradiction_positive_definite_negative_definite() {
-    TEST_CASE("Contradiction: PositiveDefinite then NegativeDefinite throws");
+    TEST_CASE("Contradiction: PositiveDefinite then NegativeDefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("M", Definiteness::PositiveDefinite);
 
-    bool threw = false;
-    try {
-        store.declare_definiteness("M", Definiteness::NegativeDefinite);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"M", "definiteness"},
-            "Exception mentions symbol and definiteness");
-    }
-    EXPECT_TRUE(threw, "PositiveDefinite + NegativeDefinite throws");
+    auto failure_391 = store.declare_definiteness("M", Definiteness::NegativeDefinite);
+    EXPECT_TRUE(!failure_391.has_value(), "PositiveDefinite + NegativeDefinite returns failure");
+    EXPECT_TRUE(failure_391.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_391.error().message, {"M", "definiteness"},
+            "Result error mentions symbol and definiteness");
 }
 
 static void test_contradiction_positive_definite_indefinite() {
-    TEST_CASE("Contradiction: PositiveDefinite then Indefinite throws");
+    TEST_CASE("Contradiction: PositiveDefinite then Indefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("A", Definiteness::PositiveDefinite);
 
-    bool threw = false;
-    try {
-        store.declare_definiteness("A", Definiteness::Indefinite);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "PositiveDefinite + Indefinite throws");
+    auto failure_414 = store.declare_definiteness("A", Definiteness::Indefinite);
+    EXPECT_TRUE(!failure_414.has_value(), "PositiveDefinite + Indefinite returns failure");
 }
 
 static void test_contradiction_negative_definite_indefinite() {
-    TEST_CASE("Contradiction: NegativeDefinite then Indefinite throws");
+    TEST_CASE("Contradiction: NegativeDefinite then Indefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("B", Definiteness::NegativeDefinite);
 
-    bool threw = false;
-    try {
-        store.declare_definiteness("B", Definiteness::Indefinite);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "NegativeDefinite + Indefinite throws");
+    auto failure_429 = store.declare_definiteness("B", Definiteness::Indefinite);
+    EXPECT_TRUE(!failure_429.has_value(), "NegativeDefinite + Indefinite returns failure");
 }
 
 static void test_contradiction_transcendental_algebraic() {
-    TEST_CASE("Contradiction: Transcendental then Algebraic domain throws");
+    TEST_CASE("Contradiction: Transcendental then Algebraic domain returns failure");
 
     PropertyStore store;
     store.declare_transcendental("pi");
 
-    bool threw = false;
-    try {
-        store.declare_domain("pi", Domain::Algebraic);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"pi", "Transcendental", "Algebraic"},
-            "Exception mentions symbol, Transcendental, and Algebraic");
-    }
-    EXPECT_TRUE(threw, "Transcendental + Algebraic throws");
+    auto failure_429 = store.declare_domain("pi", Domain::Algebraic);
+    EXPECT_TRUE(!failure_429.has_value(), "Transcendental + Algebraic returns failure");
+    EXPECT_TRUE(failure_429.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_429.error().message, {"pi", "Transcendental", "Algebraic"},
+            "Result error mentions symbol, Transcendental, and Algebraic");
 }
 
 static void test_contradiction_transcendental_rational() {
-    TEST_CASE("Contradiction: Transcendental then Rational domain throws");
+    TEST_CASE("Contradiction: Transcendental then Rational domain returns failure");
 
     PropertyStore store;
     store.declare_transcendental("e");
 
-    bool threw = false;
-    try {
-        store.declare_domain("e", Domain::Rational);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Transcendental + Rational throws");
+    auto failure_462 = store.declare_domain("e", Domain::Rational);
+    EXPECT_TRUE(!failure_462.has_value(), "Transcendental + Rational returns failure");
 }
 
 static void test_contradiction_transcendental_integer() {
-    TEST_CASE("Contradiction: Transcendental then Integer domain throws");
+    TEST_CASE("Contradiction: Transcendental then Integer domain returns failure");
 
     PropertyStore store;
     store.declare_transcendental("pi");
 
-    bool threw = false;
-    try {
-        store.declare_domain("pi", Domain::Integer);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Transcendental + Integer throws");
+    auto failure_477 = store.declare_domain("pi", Domain::Integer);
+    EXPECT_TRUE(!failure_477.has_value(), "Transcendental + Integer returns failure");
 }
 
 static void test_contradiction_algebraic_then_transcendental() {
-    TEST_CASE("Contradiction: Algebraic domain then Transcendental throws");
+    TEST_CASE("Contradiction: Algebraic domain then Transcendental returns failure");
 
     PropertyStore store;
     store.declare_domain("sqrt2", Domain::Algebraic);
 
-    bool threw = false;
-    try {
-        store.declare_transcendental("sqrt2");
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"sqrt2", "Transcendental", "Algebraic"},
-            "Exception mentions symbol, Transcendental, and Algebraic");
-    }
-    EXPECT_TRUE(threw, "Algebraic + Transcendental throws");
+    auto failure_467 = store.declare_transcendental("sqrt2");
+    EXPECT_TRUE(!failure_467.has_value(), "Algebraic + Transcendental returns failure");
+    EXPECT_TRUE(failure_467.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_467.error().message, {"sqrt2", "Transcendental", "Algebraic"},
+            "Result error mentions symbol, Transcendental, and Algebraic");
 }
 
 static void test_contradiction_bounded_unbounded() {
-    TEST_CASE("Contradiction: Bounded then Unbounded throws");
+    TEST_CASE("Contradiction: Bounded then Unbounded returns failure");
 
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Bounded);
 
-    bool threw = false;
-    try {
-        store.declare_bounded("x", Boundedness::Unbounded);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"x", "boundedness"},
-            "Exception mentions symbol and boundedness");
-    }
-    EXPECT_TRUE(threw, "Bounded + Unbounded throws");
+    auto failure_485 = store.declare_bounded("x", Boundedness::Unbounded);
+    EXPECT_TRUE(!failure_485.has_value(), "Bounded + Unbounded returns failure");
+    EXPECT_TRUE(failure_485.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_485.error().message, {"x", "boundedness"},
+            "Result error mentions symbol and boundedness");
 }
 
 static void test_contradiction_parity_even_odd() {
-    TEST_CASE("Contradiction: Even then Odd parity throws");
+    TEST_CASE("Contradiction: Even then Odd parity returns failure");
 
     PropertyStore store;
     store.declare_parity("n", Parity::Even);
 
-    bool threw = false;
-    try {
-        store.declare_parity("n", Parity::Odd);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        std::string msg = e.what();
-        EXPECT_CONTAINS(msg, {"n", "parity"},
-            "Exception mentions symbol and parity");
-    }
-    EXPECT_TRUE(threw, "Even + Odd throws");
+    auto failure_503 = store.declare_parity("n", Parity::Odd);
+    EXPECT_TRUE(!failure_503.has_value(), "Even + Odd returns failure");
+    EXPECT_TRUE(failure_503.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    EXPECT_CONTAINS(failure_503.error().message, {"n", "parity"},
+            "Result error mentions symbol and parity");
 }
 
 

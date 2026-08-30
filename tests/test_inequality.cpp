@@ -79,9 +79,11 @@ int main() {
         auto cubic = SymbolicExpr::power(x, SymbolicExpr::number(3));
         auto cubic_result = InequalitySolver::solve_inequality_checked(
             cubic, InequalityType::GreaterEqual, "x");
-        EXPECT_TRUE(!cubic_result &&
-                        cubic_result.error().code == CasErrc::Inconclusive,
-                    "checked inequality solving declares its current degree support domain");
+        EXPECT_TRUE(cubic_result &&
+                        cubic_result.value().contains(0.0) &&
+                        cubic_result.value().contains(2.0) &&
+                        !cubic_result.value().contains(-1.0),
+                    "checked inequality solves exact cubic sign charts");
 
         auto null_result = InequalitySolver::solve_inequality_checked(
             nullptr, InequalityType::GreaterThan, "x");
@@ -220,7 +222,16 @@ int main() {
                         mixed_surd_result.value().contains(1.0) &&
                         !mixed_surd_result.value().contains(-1.0) &&
                         !mixed_surd_result.value().contains(2.0),
-                    "checked conjunction compares a quadratic surd with rational bounds exactly");
+                    mixed_surd_result
+                        ? "mixed result=" + mixed_surd_result.value().to_string() +
+                              " contains(1)=" +
+                              std::to_string(mixed_surd_result.value().contains(1.0)) +
+                              " contains(-1)=" +
+                              std::to_string(mixed_surd_result.value().contains(-1.0)) +
+                              " contains(2)=" +
+                              std::to_string(mixed_surd_result.value().contains(2.0))
+                        : "checked conjunction failed: " +
+                              mixed_surd_result.error().message);
 
         std::vector<std::pair<std::shared_ptr<SymbolicExpr>, InequalityType>> invalid{
             {nullptr, InequalityType::GreaterThan}

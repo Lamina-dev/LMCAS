@@ -83,7 +83,8 @@ public:
      * @param max_iterations 最大迭代次数
      * @return 重写后的表达式
      */
-    SymbolicExpr apply(const SymbolicExpr& expr, int max_iterations = 100) const;
+    Result<SymbolicExpr> apply(
+        const SymbolicExpr& expr, int max_iterations = 100) const;
     Result<SymbolicExpr> apply_checked(
         const SymbolicExpr& expr,
         ComputationContext& context,
@@ -93,7 +94,7 @@ public:
      * @param expr 输入表达式
      * @return 重写后的表达式，若无规则匹配则返回原表达式
      */
-    SymbolicExpr apply_step(const SymbolicExpr& expr) const;
+    Result<SymbolicExpr> apply_step(const SymbolicExpr& expr) const;
     Result<SymbolicExpr> apply_step_checked(
         const SymbolicExpr& expr,
         ComputationContext& context) const;

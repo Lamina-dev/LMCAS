@@ -27,12 +27,6 @@ Tribool query_or_unknown(QueryTriboolResult result) {
     return result.value();
 }
 
-std::optional<SymbolicExpr> period_or_empty(QueryPeriodResult result) {
-    if (!result) {
-        return std::nullopt;
-    }
-    return result.value();
-}
 
 QueryTriboolResult checked_query_result(
     const SymbolicExpr& expr,
@@ -44,11 +38,14 @@ QueryTriboolResult checked_query_result(
     }
     try {
         return QueryTriboolResult::success(query());
+    } catch (const detail::ResultPropagation& ex) {
+        return QueryTriboolResult::failure(ex.error());
     } catch (const std::bad_alloc&) {
         return QueryTriboolResult::failure(
             CasErrc::ResourceLimit, "query allocation failed", operation);
     } catch (const std::exception& ex) {
-        return QueryTriboolResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
+        return QueryTriboolResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
     }
 }
 
@@ -210,8 +207,8 @@ int QueryInterface::get_infinity_sign(const SymbolicExpr& expression) const {
 
 // Public query methods
 
-Tribool QueryInterface::query_positive(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_positive_checked(expr));
+QueryTriboolResult QueryInterface::query_positive(const SymbolicExpr& expr) const {
+    return query_positive_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_positive_checked(const SymbolicExpr& expr) const {
@@ -233,17 +230,15 @@ QueryTriboolResult QueryInterface::query_positive_checked(const SymbolicExpr& ex
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_positive(expr);
+                    return detail::propagate_result(
+                        engine.query_positive_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_negative(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_negative_checked(expr));
+QueryTriboolResult QueryInterface::query_negative(const SymbolicExpr& expr) const {
+    return query_negative_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_negative_checked(const SymbolicExpr& expr) const {
@@ -265,17 +260,15 @@ QueryTriboolResult QueryInterface::query_negative_checked(const SymbolicExpr& ex
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_negative(expr);
+                    return detail::propagate_result(
+                        engine.query_negative_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_nonnegative(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_nonnegative_checked(expr));
+QueryTriboolResult QueryInterface::query_nonnegative(const SymbolicExpr& expr) const {
+    return query_nonnegative_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_nonnegative_checked(const SymbolicExpr& expr) const {
@@ -297,17 +290,15 @@ QueryTriboolResult QueryInterface::query_nonnegative_checked(const SymbolicExpr&
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_nonnegative(expr);
+                    return detail::propagate_result(
+                        engine.query_nonnegative_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_real(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_real_checked(expr));
+QueryTriboolResult QueryInterface::query_real(const SymbolicExpr& expr) const {
+    return query_real_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_real_checked(const SymbolicExpr& expr) const {
@@ -326,17 +317,15 @@ QueryTriboolResult QueryInterface::query_real_checked(const SymbolicExpr& expr) 
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_real(expr);
+                    return detail::propagate_result(
+                        engine.query_real_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_integer(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_integer_checked(expr));
+QueryTriboolResult QueryInterface::query_integer(const SymbolicExpr& expr) const {
+    return query_integer_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_integer_checked(const SymbolicExpr& expr) const {
@@ -355,17 +344,15 @@ QueryTriboolResult QueryInterface::query_integer_checked(const SymbolicExpr& exp
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_integer(expr);
+                    return detail::propagate_result(
+                        engine.query_integer_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_nonzero(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_nonzero_checked(expr));
+QueryTriboolResult QueryInterface::query_nonzero(const SymbolicExpr& expr) const {
+    return query_nonzero_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_nonzero_checked(const SymbolicExpr& expr) const {
@@ -384,19 +371,17 @@ QueryTriboolResult QueryInterface::query_nonzero_checked(const SymbolicExpr& exp
                         return Tribool::True;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_nonzero(expr);
+                    return detail::propagate_result(
+                        engine.query_nonzero_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
 // Extended property queries
 
-Tribool QueryInterface::query_algebraic(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_algebraic_checked(expr));
+QueryTriboolResult QueryInterface::query_algebraic(const SymbolicExpr& expr) const {
+    return query_algebraic_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_algebraic_checked(const SymbolicExpr& expr) const {
@@ -415,17 +400,15 @@ QueryTriboolResult QueryInterface::query_algebraic_checked(const SymbolicExpr& e
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_algebraic(expr);
+                    return detail::propagate_result(
+                        engine.query_algebraic_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_transcendental(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_transcendental_checked(expr));
+QueryTriboolResult QueryInterface::query_transcendental(const SymbolicExpr& expr) const {
+    return query_transcendental_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_transcendental_checked(const SymbolicExpr& expr) const {
@@ -444,17 +427,15 @@ QueryTriboolResult QueryInterface::query_transcendental_checked(const SymbolicEx
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_transcendental(expr);
+                    return detail::propagate_result(
+                        engine.query_transcendental_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_finite(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_finite_checked(expr));
+QueryTriboolResult QueryInterface::query_finite(const SymbolicExpr& expr) const {
+    return query_finite_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_finite_checked(const SymbolicExpr& expr) const {
@@ -473,17 +454,15 @@ QueryTriboolResult QueryInterface::query_finite_checked(const SymbolicExpr& expr
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_finite(expr);
+                    return detail::propagate_result(
+                        engine.query_finite_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_divergent(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_divergent_checked(expr));
+QueryTriboolResult QueryInterface::query_divergent(const SymbolicExpr& expr) const {
+    return query_divergent_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_divergent_checked(const SymbolicExpr& expr) const {
@@ -502,17 +481,15 @@ QueryTriboolResult QueryInterface::query_divergent_checked(const SymbolicExpr& e
                         return Tribool::True;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_divergent(expr);
+                    return detail::propagate_result(
+                        engine.query_divergent_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_periodic(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_periodic_checked(expr));
+QueryTriboolResult QueryInterface::query_periodic(const SymbolicExpr& expr) const {
+    return query_periodic_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_periodic_checked(const SymbolicExpr& expr) const {
@@ -531,36 +508,36 @@ QueryTriboolResult QueryInterface::query_periodic_checked(const SymbolicExpr& ex
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return engine.query_periodic(expr);
+                    return detail::propagate_result(
+                        engine.query_periodic_checked(expr));
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-std::optional<SymbolicExpr> QueryInterface::get_period(const SymbolicExpr& expr) const {
-    return period_or_empty(get_period_checked(expr));
+QueryPeriodResult QueryInterface::get_period(const SymbolicExpr& expr) const {
+    return get_period_checked(expr);
 }
 
-std::optional<SymbolicExpr> QueryInterface::get_period_impl(const SymbolicExpr& expr) const {
-    if (is_unhandled_type(expr)) return std::nullopt;
-    if (is_infinity_node(expr)) return std::nullopt;
 
+QueryPeriodResult QueryInterface::get_period_checked(
+    const SymbolicExpr& expr) const {
+    if (!lamina::detail::node(expr)) {
+        return QueryPeriodResult::failure(
+            CasErrc::InvalidArgument,
+            "query expression must not be null",
+            "get_period");
+    }
+    if (is_unhandled_type(expr) || is_infinity_node(expr)) {
+        return QueryPeriodResult::success(std::nullopt);
+    }
     InferenceEngine engine(ctx_);
-    return engine.infer_period(expr);
+    return engine.infer_period_checked(expr);
 }
 
-QueryPeriodResult QueryInterface::get_period_checked(const SymbolicExpr& expr) const {
-    return checked_expression_result<std::optional<SymbolicExpr>>(
-        expr, "get_period", [&]() {
-            return get_period_impl(expr);
-        });
-}
-
-Tribool QueryInterface::query_positive_definite(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_positive_definite_checked(expr));
+QueryTriboolResult QueryInterface::query_positive_definite(
+    const SymbolicExpr& expr) const {
+    return query_positive_definite_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_positive_definite_checked(const SymbolicExpr& expr) const {
@@ -583,15 +560,13 @@ QueryTriboolResult QueryInterface::query_positive_definite_checked(const Symboli
                     }
                     return Tribool::Unknown;
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
-Tribool QueryInterface::query_positive_semidefinite(const SymbolicExpr& expr) const {
-    return query_or_unknown(query_positive_semidefinite_checked(expr));
+QueryTriboolResult QueryInterface::query_positive_semidefinite(
+    const SymbolicExpr& expr) const {
+    return query_positive_semidefinite_checked(expr);
 }
 
 QueryTriboolResult QueryInterface::query_positive_semidefinite_checked(const SymbolicExpr& expr) const {
@@ -615,22 +590,15 @@ QueryTriboolResult QueryInterface::query_positive_semidefinite_checked(const Sym
                     }
                     return Tribool::Unknown;
                 });
-            if (!result) {
-                throw std::runtime_error(result.error().message);
-            }
-            return result.value();
+            return detail::propagate_result(std::move(result));
         });
 }
 
 // Query conditions (query mode)
 
-std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions(
+QueryInterface::QueryConditionSetsResult QueryInterface::query_conditions(
     const SymbolicExpr& expr, Sign target) const {
-    auto result = query_conditions_checked(expr, target);
-    if (!result) {
-        return {};
-    }
-    return result.value();
+    return query_conditions_checked(expr, target);
 }
 
 std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions_impl(

@@ -8,7 +8,7 @@ int main() {
     {
 
         Polynomial<Rational> p({Rational(-3), Rational(1)}, "x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
         EXPECT_TRUE(intervals.size() == 1, "x-3 should have 1 real root");
         if (!intervals.empty()) {
             EXPECT_TRUE(intervals[0].first <= Rational(3) && intervals[0].second >= Rational(3),
@@ -20,7 +20,7 @@ int main() {
     {
 
         Polynomial<Rational> p({Rational(-4), Rational(0), Rational(1)}, "x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
         EXPECT_TRUE(intervals.size() == 2, "x^2-4 should have 2 real roots");
         if (intervals.size() == 2) {
 
@@ -36,7 +36,7 @@ int main() {
     {
 
         Polynomial<Rational> p({Rational(-6), Rational(11), Rational(-6), Rational(1)}, "x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
         EXPECT_TRUE(intervals.size() == 3, "x^3-6x^2+11x-6 should have 3 real roots");
         if (intervals.size() == 3) {
             EXPECT_TRUE(intervals[0].first <= Rational(1) && intervals[0].second >= Rational(1),
@@ -52,7 +52,7 @@ int main() {
     {
 
         Polynomial<Rational> p({Rational(1), Rational(0), Rational(1)}, "x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
         EXPECT_TRUE(intervals.size() == 0, "x^2+1 should have 0 real roots");
     }
 
@@ -60,7 +60,7 @@ int main() {
     {
 
         Polynomial<Rational> p({Rational(1), Rational(-2), Rational(1)}, "x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
 
         EXPECT_TRUE(intervals.size() == 1, "(x-1)^2 should have 1 distinct real root");
         if (!intervals.empty()) {
@@ -73,21 +73,21 @@ int main() {
     {
 
         Polynomial<Rational> p({Rational(6), Rational(0), Rational(-5), Rational(0), Rational(1)}, "x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
         EXPECT_TRUE(intervals.size() == 4, "(x^2-2)(x^2-3) should have 4 real roots");
     }
 
     TEST_CASE("Sturm Isolation - Constant polynomial");
     {
         Polynomial<Rational> p({Rational(5)}, "x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
         EXPECT_TRUE(intervals.size() == 0, "Constant polynomial should have 0 roots");
     }
 
     TEST_CASE("Sturm Isolation - Zero polynomial");
     {
         Polynomial<Rational> p("x");
-        auto intervals = lamina::isolate_real_roots(p);
+        auto intervals = lamina::isolate_real_roots_checked(p).value();
         EXPECT_TRUE(intervals.size() == 0, "Zero polynomial should return empty");
     }
 

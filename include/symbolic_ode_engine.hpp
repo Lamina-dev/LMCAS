@@ -10,9 +10,11 @@
 #include "lamina_export.hpp"
 #include "result.hpp"
 #include "symbolic.hpp"
+#include "proof_outcome.hpp"
 #include <memory>
 #include <string>
 #include <vector>
+#include <optional>
 
 namespace lamina {
 
@@ -70,6 +72,8 @@ struct ODESolution {
     std::shared_ptr<SymbolicExpr> general_solution;  ///< 通解表达式
     std::vector<std::string> constants;              ///< 任意常数名称列表 (C1, C2, ...)
     ODEType method_used = ODEType::Unknown;          ///< 使用的求解方法
+    std::shared_ptr<SymbolicExpr> normalized_residual;
+    std::optional<ProofCertificate> certificate;
 };
 
 using ODESolutionResult = Result<ODESolution>;
@@ -241,11 +245,6 @@ LAMINA_API ODESolutionResult solve_homogeneous_ode_checked(
     const std::string& x,
     const std::string& y);
 
-LAMINA_API ODESolution solve_homogeneous_ode(
-    const std::shared_ptr<SymbolicExpr>& rhs,
-    const std::string& x,
-    const std::string& y);
-
 /**
  * @brief 求解 Bernoulli 方程 y' + P(x)y = Q(x)y^n。
  *
@@ -278,13 +277,6 @@ LAMINA_API ODESolutionResult solve_bernoulli_ode_checked(
     const std::string& x,
     const std::string& y);
 
-LAMINA_API ODESolution solve_bernoulli_ode(
-    const std::shared_ptr<SymbolicExpr>& P,
-    const std::shared_ptr<SymbolicExpr>& Q,
-    int n,
-    const std::string& x,
-    const std::string& y);
-
 /**
  * @brief 求解恰当方程 M(x,y)dx + N(x,y)dy = 0。
  *
@@ -311,12 +303,6 @@ LAMINA_API ODESolutionResult solve_exact_ode_checked(
  * @brief 使用默认计算上下文求解恰当方程，并显式报告无效输入和未覆盖域。
  */
 LAMINA_API ODESolutionResult solve_exact_ode_checked(
-    const std::shared_ptr<SymbolicExpr>& M,
-    const std::shared_ptr<SymbolicExpr>& N,
-    const std::string& x,
-    const std::string& y);
-
-LAMINA_API ODESolution solve_exact_ode(
     const std::shared_ptr<SymbolicExpr>& M,
     const std::shared_ptr<SymbolicExpr>& N,
     const std::string& x,
@@ -375,12 +361,6 @@ LAMINA_API ODESolutionResult solve_higher_order_ode_checked(
     const std::string& x,
     const std::string& y);
 
-LAMINA_API ODESolution solve_higher_order_ode(
-    const std::vector<double>& coeffs,
-    const std::shared_ptr<SymbolicExpr>& forcing,
-    const std::string& x,
-    const std::string& y);
-
 /**
  * @brief 求解 Euler (Cauchy-Euler) 方程。
  *
@@ -412,12 +392,6 @@ LAMINA_API ODESolutionResult solve_euler_ode_checked(
     const std::string& x,
     const std::string& y);
 
-LAMINA_API ODESolution solve_euler_ode(
-    const std::vector<double>& euler_coeffs,
-    const std::shared_ptr<SymbolicExpr>& forcing,
-    const std::string& x,
-    const std::string& y);
-
 
 /**
  * @brief 奇点类型枚举。
@@ -436,6 +410,8 @@ struct FrobeniusSolution {
     ODESingularityType point_type;                     ///< 展开点的奇点类型
     std::vector<double> indicial_roots;             ///< 指标方程的根（正则奇点时）
     int truncation_order;                           ///< 截断阶数
+    std::shared_ptr<SymbolicExpr> normalized_residual;
+    std::optional<ProofCertificate> certificate;
 };
 
 using FrobeniusSolutionResult = Result<FrobeniusSolution>;
@@ -467,12 +443,6 @@ LAMINA_API ODESolutionResult solve_variation_of_parameters_checked(
  * @brief 使用默认计算上下文执行参数变分法，并显式报告无效输入和未覆盖域。
  */
 LAMINA_API ODESolutionResult solve_variation_of_parameters_checked(
-    const std::shared_ptr<SymbolicExpr>& y1,
-    const std::shared_ptr<SymbolicExpr>& y2,
-    const std::shared_ptr<SymbolicExpr>& g,
-    const std::string& x);
-
-LAMINA_API ODESolution solve_variation_of_parameters(
     const std::shared_ptr<SymbolicExpr>& y1,
     const std::shared_ptr<SymbolicExpr>& y2,
     const std::shared_ptr<SymbolicExpr>& g,
@@ -527,13 +497,6 @@ LAMINA_API FrobeniusSolutionResult solve_frobenius_checked(
  * @brief 使用默认计算上下文求 Frobenius 级数解，并显式报告无效输入和未覆盖域。
  */
 LAMINA_API FrobeniusSolutionResult solve_frobenius_checked(
-    const std::shared_ptr<SymbolicExpr>& p,
-    const std::shared_ptr<SymbolicExpr>& q,
-    const std::shared_ptr<SymbolicExpr>& x0,
-    const std::string& x,
-    int order = 6);
-
-LAMINA_API FrobeniusSolution solve_frobenius(
     const std::shared_ptr<SymbolicExpr>& p,
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,

@@ -33,7 +33,7 @@ int main() {
         auto sin_inv_x = SymbolicExpr::sin(inv_x);
         auto expr = SymbolicExpr::multiply(x, sin_inv_x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*sin(1/x), x->0) = 0");
     }
 
@@ -45,7 +45,7 @@ int main() {
         auto cos_inv_x = SymbolicExpr::cos(inv_x);
         auto expr = SymbolicExpr::multiply(x_sq, cos_inv_x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(x^2*cos(1/x), x->0) = 0");
     }
 
@@ -55,7 +55,7 @@ int main() {
         auto cos_x = SymbolicExpr::cos(x);
         auto expr = SymbolicExpr::multiply(x, cos_x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*cos(x), x->0) = 0");
     }
 
@@ -65,7 +65,7 @@ int main() {
         auto sin_x = SymbolicExpr::sin(x);
         auto expr = SymbolicExpr::multiply(x, sin_x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*sin(x), x->0) = 0");
     }
 
@@ -73,7 +73,7 @@ int main() {
     TEST_CASE("Non-squeeze: sin(x) as x->0 = 0 (direct substitution)");
     {
         auto sin_x = SymbolicExpr::sin(x);
-        auto lim = sin_x->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(sin_x, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(sin(x), x->0) = 0");
     }
 
@@ -82,7 +82,7 @@ int main() {
     {
         auto sin_x = SymbolicExpr::sin(x);
         auto expr = SymbolicExpr::multiply(x, sin_x);
-        auto lim = expr->limit("x", two);
+        auto lim = lamina::limit_expression_checked(expr, "x", two).value();
         // Should be 2*sin(2), not 0
         EXPECT_TRUE(lim != nullptr, "limit(x*sin(x), x->2) is not null");
         auto lim_str = lim->to_string();
@@ -97,7 +97,7 @@ int main() {
         auto cos_inv_x = SymbolicExpr::cos(inv_x);
         auto expr = SymbolicExpr::multiply(SymbolicExpr::multiply(x, sin_inv_x), cos_inv_x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*sin(1/x)*cos(1/x), x->0) = 0");
     }
 
@@ -111,7 +111,7 @@ int main() {
                 std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(inv_x)}));
         auto expr = SymbolicExpr::multiply(x, atan_inv_x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*arctan(1/x), x->0) = 0");
     }
 
@@ -123,7 +123,7 @@ int main() {
         auto squeeze_term = SymbolicExpr::multiply(x, sin_inv_x);
         auto expr = SymbolicExpr::add(five, squeeze_term);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "5", "limit(5 + x*sin(1/x), x->0) = 5");
     }
 
@@ -136,7 +136,7 @@ int main() {
         auto squeeze_term = SymbolicExpr::multiply(x_sq, cos_inv_x);
         auto expr = SymbolicExpr::add(three, squeeze_term);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "3", "limit(3 + x^2*cos(1/x), x->0) = 3");
     }
 
@@ -148,7 +148,7 @@ int main() {
         auto sin_sq = SymbolicExpr::power(sin_inv_x, two);
         auto expr = SymbolicExpr::multiply(sin_sq, x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit(sin(1/x)^2 * x, x->0) = 0");
     }
 
@@ -160,7 +160,7 @@ int main() {
         auto bounded_expr = SymbolicExpr::add(two, sin_inv_x);
         auto expr = SymbolicExpr::multiply(bounded_expr, x);
 
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_EQ_EXPR_STR(lim, "0", "limit((2+sin(1/x))*x, x->0) = 0");
     }
 

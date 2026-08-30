@@ -307,7 +307,7 @@ void test_checked_add_relation_contracts() {
 }
 
 void test_legacy_add_relation_is_transactional() {
-    TEST_CASE("RelationStore legacy add_relation delegates transactionally");
+    TEST_CASE("RelationStore canonical add_relation delegates transactionally");
 
     RelationStore rs;
     PropertyStore ps;
@@ -317,22 +317,16 @@ void test_legacy_add_relation_is_transactional() {
     rs.add_relation(x, zero, RelationOp::GT, ps);
     const auto relation_count = rs.get_relations().size();
 
-    bool threw = false;
-    try {
-        rs.add_relation(x, zero, RelationOp::LT, ps);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-
-    EXPECT_TRUE(threw, "legacy add_relation maps checked contradiction to invalid_argument");
+    auto failure_318 = rs.add_relation(x, zero, RelationOp::LT, ps);
+    EXPECT_TRUE(!failure_318.has_value(), "canonical add_relation maps checked contradiction to invalid_argument");
     EXPECT_TRUE(rs.get_relations().size() == relation_count,
-                "legacy add_relation does not retain a failed relation");
+                "canonical add_relation does not retain a failed relation");
     EXPECT_FALSE(rs.has_relation(x, zero, RelationOp::LT),
-                 "legacy add_relation preserves transactional relation state");
+                 "canonical add_relation preserves transactional relation state");
     EXPECT_TRUE(ps.has_sign("x", Sign::Positive),
-                "legacy add_relation preserves the previously proven sign");
+                "canonical add_relation preserves the previously proven sign");
     EXPECT_FALSE(ps.has_sign("x", Sign::Negative),
-                 "legacy add_relation does not commit a contradictory sign");
+                 "canonical add_relation does not commit a contradictory sign");
 }
 
 int main() {

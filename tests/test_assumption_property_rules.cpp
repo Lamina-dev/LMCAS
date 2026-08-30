@@ -34,15 +34,11 @@ static Interval make_open_interval(double lo, double hi) {
     return iv;
 }
 
-/// Check that a callable throws std::invalid_argument.
+/// Check that a callable returns an InvalidArgument failure.
 template<typename F>
-static bool throws_invalid_argument(F&& f) {
-    try {
-        f();
-        return false;
-    } catch (const std::invalid_argument&) {
-        return true;
-    }
+static bool returns_invalid_argument(F&& f) {
+    auto result = f();
+    return !result.has_value() && result.error().code == CasErrc::InvalidArgument;
 }
 
 
@@ -54,9 +50,9 @@ static void test_differentiable_implies_continuous_closed_interval() {
 
     store.declare_differentiable("f", iv);
 
-    EXPECT_TRUE(store.is_continuous("f", iv),
+    EXPECT_TRUE(store.is_continuous("f", iv).value(),
         "Differentiable on [0,1] => continuous on [0,1]");
-    EXPECT_TRUE(store.is_differentiable("f", iv),
+    EXPECT_TRUE(store.is_differentiable("f", iv).value(),
         "Differentiable on [0,1] => differentiable on [0,1]");
 }
 
@@ -68,7 +64,7 @@ static void test_differentiable_implies_continuous_open_interval() {
 
     store.declare_differentiable("g", iv);
 
-    EXPECT_TRUE(store.is_continuous("g", iv),
+    EXPECT_TRUE(store.is_continuous("g", iv).value(),
         "Differentiable on (0,10) => continuous on (0,10)");
 }
 
@@ -81,9 +77,9 @@ static void test_differentiable_implies_continuous_subinterval() {
 
     store.declare_differentiable("h", outer);
 
-    EXPECT_TRUE(store.is_continuous("h", inner),
+    EXPECT_TRUE(store.is_continuous("h", inner).value(),
         "Differentiable on [0,10] => continuous on sub-interval [2,5]");
-    EXPECT_TRUE(store.is_differentiable("h", inner),
+    EXPECT_TRUE(store.is_differentiable("h", inner).value(),
         "Differentiable on [0,10] => differentiable on sub-interval [2,5]");
 }
 
@@ -95,12 +91,12 @@ static void test_differentiable_implies_continuous_entire_line() {
 
     store.declare_differentiable("p", entire);
 
-    EXPECT_TRUE(store.is_continuous("p", entire),
+    EXPECT_TRUE(store.is_continuous("p", entire).value(),
         "Differentiable on (-inf,+inf) => continuous on (-inf,+inf)");
 
     // Also continuous on any finite sub-interval
     Interval sub = make_closed_interval(-100.0, 100.0);
-    EXPECT_TRUE(store.is_continuous("p", sub),
+    EXPECT_TRUE(store.is_continuous("p", sub).value(),
         "Differentiable on (-inf,+inf) => continuous on [-100,100]");
 }
 
@@ -116,9 +112,9 @@ static void test_differentiable_multiple_symbols() {
     store.declare_differentiable("b", iv2);
     store.declare_differentiable("c", iv3);
 
-    EXPECT_TRUE(store.is_continuous("a", iv1), "a continuous on [0,1]");
-    EXPECT_TRUE(store.is_continuous("b", iv2), "b continuous on [-5,5]");
-    EXPECT_TRUE(store.is_continuous("c", iv3), "c continuous on [10,20]");
+    EXPECT_TRUE(store.is_continuous("a", iv1).value(), "a continuous on [0,1]");
+    EXPECT_TRUE(store.is_continuous("b", iv2).value(), "b continuous on [-5,5]");
+    EXPECT_TRUE(store.is_continuous("c", iv3).value(), "c continuous on [10,20]");
 }
 
 static void test_continuous_only_not_differentiable() {
@@ -129,9 +125,9 @@ static void test_continuous_only_not_differentiable() {
 
     store.declare_continuous("f", iv);
 
-    EXPECT_TRUE(store.is_continuous("f", iv),
+    EXPECT_TRUE(store.is_continuous("f", iv).value(),
         "Continuous on [0,1] => is_continuous true");
-    EXPECT_FALSE(store.is_differentiable("f", iv),
+    EXPECT_FALSE(store.is_differentiable("f", iv).value(),
         "Continuous-only on [0,1] => is_differentiable false");
 }
 
@@ -142,9 +138,9 @@ static void test_transcendental_rejects_algebraic() {
     PropertyStore store;
     store.declare_transcendental("pi");
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_domain("pi", Domain::Algebraic);
-    }), "Transcendental + Algebraic throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_domain("pi", Domain::Algebraic);
+    }), "Transcendental + Algebraic returns failure");
 }
 
 static void test_transcendental_rejects_rational() {
@@ -153,9 +149,9 @@ static void test_transcendental_rejects_rational() {
     PropertyStore store;
     store.declare_transcendental("e");
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_domain("e", Domain::Rational);
-    }), "Transcendental + Rational throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_domain("e", Domain::Rational);
+    }), "Transcendental + Rational returns failure");
 }
 
 static void test_transcendental_rejects_integer() {
@@ -164,9 +160,9 @@ static void test_transcendental_rejects_integer() {
     PropertyStore store;
     store.declare_transcendental("tau");
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_domain("tau", Domain::Integer);
-    }), "Transcendental + Integer throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_domain("tau", Domain::Integer);
+    }), "Transcendental + Integer returns failure");
 }
 
 static void test_transcendental_rejects_natural() {
@@ -175,9 +171,9 @@ static void test_transcendental_rejects_natural() {
     PropertyStore store;
     store.declare_transcendental("alpha");
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_domain("alpha", Domain::Natural);
-    }), "Transcendental + Natural throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_domain("alpha", Domain::Natural);
+    }), "Transcendental + Natural returns failure");
 }
 
 static void test_transcendental_rejects_positive_int() {
@@ -186,9 +182,9 @@ static void test_transcendental_rejects_positive_int() {
     PropertyStore store;
     store.declare_transcendental("gamma");
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_domain("gamma", Domain::PositiveInt);
-    }), "Transcendental + PositiveInt throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_domain("gamma", Domain::PositiveInt);
+    }), "Transcendental + PositiveInt returns failure");
 }
 
 static void test_algebraic_implies_real() {
@@ -222,9 +218,9 @@ static void test_algebraic_then_transcendental_throws() {
     store.declare_domain("x", Domain::Algebraic);
 
     // Transcendental requires domain <= Real, but Algebraic is more specific
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_transcendental("x");
-    }), "Algebraic then Transcendental throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_transcendental("x");
+    }), "Algebraic then Transcendental returns failure");
 }
 
 static void test_rational_then_transcendental_throws() {
@@ -233,9 +229,9 @@ static void test_rational_then_transcendental_throws() {
     PropertyStore store;
     store.declare_domain("x", Domain::Rational);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_transcendental("x");
-    }), "Rational then Transcendental throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_transcendental("x");
+    }), "Rational then Transcendental returns failure");
 }
 
 static void test_integer_then_transcendental_throws() {
@@ -244,9 +240,9 @@ static void test_integer_then_transcendental_throws() {
     PropertyStore store;
     store.declare_domain("n", Domain::Integer);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_transcendental("n");
-    }), "Integer then Transcendental throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_transcendental("n");
+    }), "Integer then Transcendental returns failure");
 }
 
 static void test_transcendental_allows_real_declaration() {
@@ -289,25 +285,25 @@ static void test_finite_implies_bounded() {
 }
 
 static void test_finite_then_divergent_throws() {
-    TEST_CASE("Finite + Divergent throws");
+    TEST_CASE("Finite + Divergent returns failure");
 
     PropertyStore store;
     store.declare_finiteness("x", Finiteness::Finite);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_finiteness("x", Finiteness::Divergent);
-    }), "Finite + Divergent throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_finiteness("x", Finiteness::Divergent);
+    }), "Finite + Divergent returns failure");
 }
 
 static void test_divergent_then_finite_throws() {
-    TEST_CASE("Divergent + Finite throws");
+    TEST_CASE("Divergent + Finite returns failure");
 
     PropertyStore store;
     store.declare_finiteness("y", Finiteness::Divergent);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_finiteness("y", Finiteness::Finite);
-    }), "Divergent + Finite throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_finiteness("y", Finiteness::Finite);
+    }), "Divergent + Finite returns failure");
 }
 
 static void test_divergent_does_not_imply_bounded() {
@@ -374,47 +370,47 @@ static void test_positive_definite_implies_positive_semidefinite() {
 }
 
 static void test_positive_definite_plus_negative_definite_throws() {
-    TEST_CASE("PositiveDefinite + NegativeDefinite throws");
+    TEST_CASE("PositiveDefinite + NegativeDefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("B", Definiteness::PositiveDefinite);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_definiteness("B", Definiteness::NegativeDefinite);
-    }), "PositiveDefinite + NegativeDefinite throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_definiteness("B", Definiteness::NegativeDefinite);
+    }), "PositiveDefinite + NegativeDefinite returns failure");
 }
 
 static void test_negative_definite_plus_positive_definite_throws() {
-    TEST_CASE("NegativeDefinite + PositiveDefinite throws");
+    TEST_CASE("NegativeDefinite + PositiveDefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("C", Definiteness::NegativeDefinite);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_definiteness("C", Definiteness::PositiveDefinite);
-    }), "NegativeDefinite + PositiveDefinite throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_definiteness("C", Definiteness::PositiveDefinite);
+    }), "NegativeDefinite + PositiveDefinite returns failure");
 }
 
 static void test_positive_definite_plus_indefinite_throws() {
-    TEST_CASE("PositiveDefinite + Indefinite throws");
+    TEST_CASE("PositiveDefinite + Indefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("D", Definiteness::PositiveDefinite);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_definiteness("D", Definiteness::Indefinite);
-    }), "PositiveDefinite + Indefinite throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_definiteness("D", Definiteness::Indefinite);
+    }), "PositiveDefinite + Indefinite returns failure");
 }
 
 static void test_negative_definite_plus_indefinite_throws() {
-    TEST_CASE("NegativeDefinite + Indefinite throws");
+    TEST_CASE("NegativeDefinite + Indefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("E", Definiteness::NegativeDefinite);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_definiteness("E", Definiteness::Indefinite);
-    }), "NegativeDefinite + Indefinite throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_definiteness("E", Definiteness::Indefinite);
+    }), "NegativeDefinite + Indefinite returns failure");
 }
 
 static void test_negative_definite_implies_negative_semidefinite() {
@@ -449,14 +445,14 @@ static void test_positive_semidefinite_upgradeable_to_positive_definite() {
 }
 
 static void test_positive_definite_plus_negative_semidefinite_throws() {
-    TEST_CASE("PositiveDefinite + NegativeSemiDefinite throws");
+    TEST_CASE("PositiveDefinite + NegativeSemiDefinite returns failure");
 
     PropertyStore store;
     store.declare_definiteness("H", Definiteness::PositiveDefinite);
 
-    EXPECT_TRUE(throws_invalid_argument([&]() {
-        store.declare_definiteness("H", Definiteness::NegativeSemiDefinite);
-    }), "PositiveDefinite + NegativeSemiDefinite throws");
+    EXPECT_TRUE(returns_invalid_argument([&]() {
+        return store.declare_definiteness("H", Definiteness::NegativeSemiDefinite);
+    }), "PositiveDefinite + NegativeSemiDefinite returns failure");
 }
 
 static void test_definiteness_idempotent() {

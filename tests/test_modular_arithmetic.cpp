@@ -121,10 +121,6 @@ static void test_legacy_compatibility() {
         threw = true;
     }
     EXPECT_TRUE(threw, "legacy CRT preserves domain_error for non-coprime moduli");
-
-    auto failed_reconstruction = rational_reconstruction(0, 1);
-    EXPECT_TRUE(failed_reconstruction.first == 0 && failed_reconstruction.second == 0,
-                "legacy rational reconstruction preserves (0,0) failure shape");
 }
 
 int main() {

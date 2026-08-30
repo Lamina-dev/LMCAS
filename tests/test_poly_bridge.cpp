@@ -53,7 +53,9 @@ void test_bridge() {
     auto sp2 = SymbolicExpr::variable("x");
     sp2 = SymbolicExpr::add(sp2, SymbolicExpr::number(1));
 
-    auto sgcd = SymbolicExpr::poly_gcd(expr, sp2);
+    ComputationContext gcd_context;
+    auto sgcd = symbolic_polynomial_gcd(
+        *expr, *sp2, gcd_context).value();
 
     std::cout << "SymbolicExpr::poly_gcd result: " << sgcd->to_string() << std::endl;
 

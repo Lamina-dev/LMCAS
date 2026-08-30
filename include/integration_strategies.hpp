@@ -5,16 +5,37 @@
 #include "rational.hpp"
 #include <memory>
 #include <string>
+#include <variant>
 
 namespace lamina {
 
 class Integrator;
+
+struct IntegrationNotApplicable {};
+
+struct IntegrationCandidate {
+    std::shared_ptr<SymbolicExpr> expression;
+    std::string strategy_name;
+};
+
+using IntegrationStrategyOutcome =
+    std::variant<IntegrationNotApplicable, IntegrationCandidate>;
+using IntegrationStrategyResult = Result<IntegrationStrategyOutcome>;
+
 
 /** @brief 积分策略基类，定义策略接口 */
 class LAMINA_API IntegrationStrategy {
 public:
     virtual ~IntegrationStrategy() = default;
 
+    IntegrationStrategyResult try_integrate(
+        const SymbolicExpr& expr,
+        const std::string& var,
+        Integrator& ctx,
+        ComputationContext& computation,
+        int depth = 0);
+
+protected:
     /**
      * @brief 尝试对表达式进行积分
      * @param expr 被积表达式
@@ -23,42 +44,53 @@ public:
      * @param depth 当前递归深度
      * @return 积分结果，失败返回 nullptr
      */
-    virtual std::shared_ptr<SymbolicExpr> try_integrate(
+    virtual std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr,
         const std::string& var,
         Integrator& ctx,
         ComputationContext& computation,
         int depth = 0) = 0;
 
+public:
     /**
      * @brief 获取策略名称
      * @return 策略名称字符串
      */
     virtual std::string name() const = 0;
+    virtual bool requires_residual_verification() const noexcept {
+        return true;
+    }
+};
+
+class BuiltInIntegrationStrategy : public IntegrationStrategy {
+public:
+    bool requires_residual_verification() const noexcept override {
+        return false;
+    }
 };
 
 /** @brief 查表积分策略 */
-class LAMINA_API TableLookupStrategy : public IntegrationStrategy {
+class LAMINA_API TableLookupStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "TableLookup"; }
 };
 
 /** @brief 幂律积分策略 */
-class LAMINA_API PowerRuleStrategy : public IntegrationStrategy {
+class LAMINA_API PowerRuleStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "PowerRule"; }
 };
 
 /** @brief 换元积分策略 */
-class LAMINA_API SubstitutionStrategy : public IntegrationStrategy {
+class LAMINA_API SubstitutionStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "Substitution"; }
@@ -72,9 +104,9 @@ public:
  * 再代回 a*var + b 并乘以 1/a 得到结果。该策略仅依赖积分表（TableLookupStrategy），
  * 不再次进入完整的策略链，避免与一般换元策略产生递归。
  */
-class LAMINA_API LinearSubstitutionStrategy : public IntegrationStrategy {
+class LAMINA_API LinearSubstitutionStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "LinearSubstitution"; }
@@ -109,9 +141,9 @@ public:
  * sin/cos/tan/sec 的内部参数必须恰为积分变量本身（如 sin(2x) 由 LinearSubstitutionStrategy 处理）。
  * 若指数为非整数、负数或超出 m+n > 8 的总度数限制，则返回 nullptr 让链上后续策略尝试。
  */
-class LAMINA_API TrigCombinationStrategy : public IntegrationStrategy {
+class LAMINA_API TrigCombinationStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "TrigCombination"; }
@@ -217,9 +249,9 @@ private:
  *   - 表达式不是有理函数时返回 nullptr，让链上后续策略尝试；
  *   - 因式分解或线性方程组无解时返回未求值积分节点保留原积分形式。
  */
-class LAMINA_API RationalDecompositionStrategy : public IntegrationStrategy {
+class LAMINA_API RationalDecompositionStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "RationalDecomposition"; }
@@ -272,10 +304,12 @@ public:
      *        每个分子要么是常数 (A)，要么是一次多项式 (B·x + C)
      * @return 系数解唯一存在时返回 true；系统无解或退化时返回 false
      */
-    bool solve_coefficients(const Polynomial<Rational>& P,
-                            const Polynomial<Rational>& Q,
-                            const std::vector<std::pair<Polynomial<Rational>, int>>& factors,
-                            std::vector<Polynomial<Rational>>& numerators_out);
+    bool solve_coefficients(
+        const Polynomial<Rational>& P,
+        const Polynomial<Rational>& Q,
+        const std::vector<std::pair<Polynomial<Rational>, int>>& factors,
+        std::vector<Polynomial<Rational>>& numerators_out,
+        ComputationContext& context);
 
     /**
      * @brief 对单个部分分式项 numerator(x)/factor(x)^power 求积分。
@@ -313,18 +347,18 @@ public:
  *
  * 任何无法匹配的输入返回 nullptr，让策略链上的后续策略尝试。
  */
-class LAMINA_API SpecialFunctionStrategy : public IntegrationStrategy {
+class LAMINA_API SpecialFunctionStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "SpecialFunction"; }
 };
 
 /** @brief 部分分式积分策略 */
-class LAMINA_API PartialFractionStrategy : public IntegrationStrategy {
+class LAMINA_API PartialFractionStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "PartialFraction"; }
@@ -333,7 +367,7 @@ public:
 /** @brief 分部积分策略 */
 class LAMINA_API IBPStrategy : public IntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "IntegrationByParts"; }
@@ -350,9 +384,9 @@ public:
  * 换元后积分，再用反函数与直角三角关系回代为原变量。
  * 在策略链中位于 SubstitutionStrategy 之后、IBPStrategy 之前。
  */
-class LAMINA_API TrigSubstitutionStrategy : public IntegrationStrategy {
+class LAMINA_API TrigSubstitutionStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "TrigSubstitution"; }
@@ -366,9 +400,9 @@ public:
  * 将被积函数转化为 t 的有理函数后递归积分，再回代 t = tan(x/2)。
  * 在策略链中位于 TrigCombinationStrategy 之后。
  */
-class LAMINA_API WeierstrassStrategy : public IntegrationStrategy {
+class LAMINA_API WeierstrassStrategy : public BuiltInIntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate(
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
     std::string name() const override { return "Weierstrass"; }

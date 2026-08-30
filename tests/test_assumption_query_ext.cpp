@@ -89,16 +89,16 @@ void test_cache_hit_returns_same_result() {
     auto x_expr = make_var("x");
 
     // First query — computes and caches
-    Tribool result1 = qi.query_positive(x_expr);
+    Tribool result1 = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(result1, Tribool::True, "First query: x is Positive");
 
     // Second query — should return cached result (same value)
-    Tribool result2 = qi.query_positive(x_expr);
+    Tribool result2 = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(result2, Tribool::True, "Second query (cached): x is Positive");
 
     // Verify consistency across different property queries on same expression
-    Tribool neg1 = qi.query_negative(x_expr);
-    Tribool neg2 = qi.query_negative(x_expr);
+    Tribool neg1 = qi.query_negative(x_expr).value();
+    Tribool neg2 = qi.query_negative(x_expr).value();
     EXPECT_TRIBOOL(neg1, Tribool::False, "First query: x is not Negative");
     EXPECT_TRIBOOL(neg2, Tribool::False, "Second query (cached): x is not Negative");
 }
@@ -114,14 +114,14 @@ void test_cache_invalidation_on_push() {
     auto x_expr = make_var("x");
 
     // Populate cache
-    Tribool before = qi.query_positive(x_expr);
+    Tribool before = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(before, Tribool::True, "Before push: x is Positive");
 
     // Manually invalidate cache (simulating push_scope hook)
     qi.invalidate_cache();
 
     // After invalidation, query should still return correct result (recomputed)
-    Tribool after = qi.query_positive(x_expr);
+    Tribool after = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(after, Tribool::True, "After invalidate (push): x still Positive");
 }
 
@@ -134,7 +134,7 @@ void test_cache_invalidation_on_pop() {
     auto x_expr = make_var("x");
 
     // x is undeclared → Unknown
-    Tribool before_push = qi.query_positive(x_expr);
+    Tribool before_push = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(before_push, Tribool::Unknown, "Before push: x is Unknown");
 
     // Push scope and declare x Positive
@@ -142,7 +142,7 @@ void test_cache_invalidation_on_pop() {
     ctx.assume_sign("x", Sign::Positive);
     qi.invalidate_cache();  // Simulate hook
 
-    Tribool in_scope = qi.query_positive(x_expr);
+    Tribool in_scope = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(in_scope, Tribool::True, "In pushed scope: x is Positive");
 
     // Pop scope
@@ -150,7 +150,7 @@ void test_cache_invalidation_on_pop() {
     qi.invalidate_cache();  // Simulate hook
 
     // After pop, x should be Unknown again
-    Tribool after_pop = qi.query_positive(x_expr);
+    Tribool after_pop = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(after_pop, Tribool::Unknown, "After pop: x is Unknown again");
 }
 
@@ -163,7 +163,7 @@ void test_cache_invalidation_on_assume() {
     auto x_expr = make_var("x");
 
     // Initially unknown
-    Tribool before = qi.query_positive(x_expr);
+    Tribool before = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(before, Tribool::Unknown, "Before assume: x is Unknown");
 
     // Declare x Positive
@@ -171,7 +171,7 @@ void test_cache_invalidation_on_assume() {
     qi.invalidate_cache();  // Simulate hook
 
     // Now should be True
-    Tribool after = qi.query_positive(x_expr);
+    Tribool after = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(after, Tribool::True, "After assume + invalidate: x is Positive");
 }
 
@@ -184,7 +184,10 @@ void test_query_conditions_simple_variable() {
     auto x_expr = make_var("x");
 
     // Query: under what conditions is x > 0?
-    auto conditions = qi.query_conditions(x_expr, Sign::Positive);
+    auto conditions_result = qi.query_conditions(x_expr, Sign::Positive);
+    EXPECT_TRUE(conditions_result.has_value(), "Condition query succeeds");
+    if (!conditions_result) return;
+    const auto& conditions = conditions_result.value();
 
     EXPECT_TRUE(conditions.size() == 1,
                 "Single variable should return exactly 1 condition set");
@@ -206,7 +209,10 @@ void test_query_conditions_simple_variable() {
     }
 
     // Also test with Negative target
-    auto neg_conditions = qi.query_conditions(x_expr, Sign::Negative);
+    auto neg_conditions_result = qi.query_conditions(x_expr, Sign::Negative);
+    EXPECT_TRUE(neg_conditions_result.has_value(), "Negative condition query succeeds");
+    if (!neg_conditions_result) return;
+    const auto& neg_conditions = neg_conditions_result.value();
     EXPECT_TRUE(neg_conditions.size() == 1,
                 "Negative target: single variable returns 1 condition set");
     if (!neg_conditions.empty()) {
@@ -226,7 +232,10 @@ void test_query_conditions_subtraction() {
     auto expr = make_subtraction("x", "y");
 
     // Query: under what conditions is (x - y) > 0?
-    auto conditions = qi.query_conditions(expr, Sign::Positive);
+    auto conditions_result = qi.query_conditions(expr, Sign::Positive);
+    EXPECT_TRUE(conditions_result.has_value(), "Composite condition query succeeds");
+    if (!conditions_result) return;
+    const auto& conditions = conditions_result.value();
 
     // Should return at least 2 condition sets:
     // 1. {x: Positive, y: Negative}
@@ -278,9 +287,9 @@ void test_query_positive_definite() {
     QueryInterface qi(ctx);
     auto m_expr = make_var("M");
 
-    EXPECT_TRIBOOL(qi.query_positive_definite(m_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_positive_definite(m_expr).value(), Tribool::True,
                    "M declared PositiveDefinite: query_positive_definite = True");
-    EXPECT_TRIBOOL(qi.query_positive_semidefinite(m_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(m_expr).value(), Tribool::True,
                    "M declared PositiveDefinite: query_positive_semidefinite = True (implied)");
 }
 
@@ -295,10 +304,10 @@ void test_query_positive_semidefinite() {
     QueryInterface qi(ctx);
     auto a_expr = make_var("A");
 
-    EXPECT_TRIBOOL(qi.query_positive_semidefinite(a_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(a_expr).value(), Tribool::True,
                    "A declared PSD: query_positive_semidefinite = True");
     // PositiveSemiDefinite does NOT imply PositiveDefinite
-    EXPECT_TRIBOOL(qi.query_positive_definite(a_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive_definite(a_expr).value(), Tribool::Unknown,
                    "A declared PSD: query_positive_definite = Unknown");
 }
 
@@ -312,9 +321,9 @@ void test_query_definiteness_negative() {
     QueryInterface qi(ctx);
     auto n_expr = make_var("N");
 
-    EXPECT_TRIBOOL(qi.query_positive_definite(n_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_positive_definite(n_expr).value(), Tribool::False,
                    "N declared NegDef: query_positive_definite = False");
-    EXPECT_TRIBOOL(qi.query_positive_semidefinite(n_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(n_expr).value(), Tribool::False,
                    "N declared NegDef: query_positive_semidefinite = False");
 }
 
@@ -326,9 +335,9 @@ void test_query_definiteness_undeclared() {
     QueryInterface qi(ctx);
     auto u_expr = make_var("U");
 
-    EXPECT_TRIBOOL(qi.query_positive_definite(u_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive_definite(u_expr).value(), Tribool::Unknown,
                    "Undeclared: query_positive_definite = Unknown");
-    EXPECT_TRIBOOL(qi.query_positive_semidefinite(u_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive_semidefinite(u_expr).value(), Tribool::Unknown,
                    "Undeclared: query_positive_semidefinite = Unknown");
 }
 
@@ -343,14 +352,14 @@ void test_query_algebraic() {
     QueryInterface qi(ctx);
     auto x_expr = make_var("x");
 
-    EXPECT_TRIBOOL(qi.query_algebraic(x_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_algebraic(x_expr).value(), Tribool::True,
                    "x declared Algebraic: query_algebraic = True");
-    EXPECT_TRIBOOL(qi.query_transcendental(x_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_transcendental(x_expr).value(), Tribool::False,
                    "x declared Algebraic: query_transcendental = False");
 
     // Undeclared variable
     auto y_expr = make_var("y");
-    EXPECT_TRIBOOL(qi.query_algebraic(y_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_algebraic(y_expr).value(), Tribool::Unknown,
                    "y undeclared: query_algebraic = Unknown");
 }
 
@@ -364,9 +373,9 @@ void test_query_transcendental() {
     QueryInterface qi(ctx);
     auto pi_expr = make_var("pi_sym");
 
-    EXPECT_TRIBOOL(qi.query_transcendental(pi_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_transcendental(pi_expr).value(), Tribool::True,
                    "pi_sym declared Transcendental: query_transcendental = True");
-    EXPECT_TRIBOOL(qi.query_algebraic(pi_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_algebraic(pi_expr).value(), Tribool::False,
                    "pi_sym declared Transcendental: query_algebraic = False");
 }
 
@@ -380,16 +389,16 @@ void test_query_finite() {
     QueryInterface qi(ctx);
     auto a_expr = make_var("a");
 
-    EXPECT_TRIBOOL(qi.query_finite(a_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_finite(a_expr).value(), Tribool::True,
                    "a declared Finite: query_finite = True");
-    EXPECT_TRIBOOL(qi.query_divergent(a_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_divergent(a_expr).value(), Tribool::False,
                    "a declared Finite: query_divergent = False");
 
     // Undeclared
     auto b_expr = make_var("b");
-    EXPECT_TRIBOOL(qi.query_finite(b_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_finite(b_expr).value(), Tribool::Unknown,
                    "b undeclared: query_finite = Unknown");
-    EXPECT_TRIBOOL(qi.query_divergent(b_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_divergent(b_expr).value(), Tribool::Unknown,
                    "b undeclared: query_divergent = Unknown");
 }
 
@@ -403,9 +412,9 @@ void test_query_divergent() {
     QueryInterface qi(ctx);
     auto d_expr = make_var("d");
 
-    EXPECT_TRIBOOL(qi.query_divergent(d_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_divergent(d_expr).value(), Tribool::True,
                    "d declared Divergent: query_divergent = True");
-    EXPECT_TRIBOOL(qi.query_finite(d_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_finite(d_expr).value(), Tribool::False,
                    "d declared Divergent: query_finite = False");
 }
 
@@ -422,7 +431,7 @@ void test_query_periodic_declared() {
     QueryInterface qi(ctx);
     auto f_expr = make_var("f");
 
-    EXPECT_TRIBOOL(qi.query_periodic(f_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_periodic(f_expr).value(), Tribool::True,
                    "f declared periodic: query_periodic = True");
 }
 
@@ -437,11 +446,11 @@ void test_query_periodic_trig() {
     auto cos_expr = make_cos("x");
     auto tan_expr = make_tan("x");
 
-    EXPECT_TRIBOOL(qi.query_periodic(sin_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_periodic(sin_expr).value(), Tribool::True,
                    "sin(x): query_periodic = True");
-    EXPECT_TRIBOOL(qi.query_periodic(cos_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_periodic(cos_expr).value(), Tribool::True,
                    "cos(x): query_periodic = True");
-    EXPECT_TRIBOOL(qi.query_periodic(tan_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_periodic(tan_expr).value(), Tribool::True,
                    "tan(x): query_periodic = True");
 }
 
@@ -460,14 +469,18 @@ void test_get_period_trig() {
     auto cos_period = qi.get_period(cos_expr);
     auto tan_period = qi.get_period(tan_expr);
 
-    EXPECT_TRUE(sin_period.has_value(), "sin(x) should have a period");
-    EXPECT_TRUE(cos_period.has_value(), "cos(x) should have a period");
-    EXPECT_TRUE(tan_period.has_value(), "tan(x) should have a period");
+    EXPECT_TRUE(sin_period.has_value() && sin_period.value().has_value(),
+                "sin(x) should have a period");
+    EXPECT_TRUE(cos_period.has_value() && cos_period.value().has_value(),
+                "cos(x) should have a period");
+    EXPECT_TRUE(tan_period.has_value() && tan_period.value().has_value(),
+                "tan(x) should have a period");
 
     // sin and cos should have the same period (2*pi)
-    if (sin_period.has_value() && cos_period.has_value()) {
-        std::string sin_p_str = sin_period->to_string();
-        std::string cos_p_str = cos_period->to_string();
+    if (sin_period && cos_period &&
+        sin_period.value().has_value() && cos_period.value().has_value()) {
+        std::string sin_p_str = sin_period.value()->to_string();
+        std::string cos_p_str = cos_period.value()->to_string();
         EXPECT_TRUE(sin_p_str == cos_p_str,
                     "sin and cos should have the same period (2*pi)");
     }
@@ -482,7 +495,8 @@ void test_get_period_non_periodic() {
 
     auto x_expr = make_var("x");
     auto period = qi.get_period(x_expr);
-    EXPECT_TRUE(!period.has_value(),
+    EXPECT_TRUE(period.has_value(), "Non-periodic query succeeds");
+    EXPECT_TRUE(period.has_value() && !period.value().has_value(),
                 "Variable x (undeclared periodic) should have no period");
 
 }
@@ -585,23 +599,23 @@ void test_cache_multiple_properties() {
     auto x_expr = make_var("x");
 
     // Query multiple properties — each should be cached independently
-    Tribool pos = qi.query_positive(x_expr);
-    Tribool intg = qi.query_integer(x_expr);
-    Tribool neg = qi.query_negative(x_expr);
+    Tribool pos = qi.query_positive(x_expr).value();
+    Tribool intg = qi.query_integer(x_expr).value();
+    Tribool neg = qi.query_negative(x_expr).value();
 
     EXPECT_TRIBOOL(pos, Tribool::True, "x Positive cached correctly");
     EXPECT_TRIBOOL(intg, Tribool::True, "x Integer cached correctly");
     EXPECT_TRIBOOL(neg, Tribool::False, "x not Negative cached correctly");
 
     // Query again — should hit cache
-    EXPECT_TRIBOOL(qi.query_positive(x_expr), Tribool::True, "x Positive (cache hit)");
-    EXPECT_TRIBOOL(qi.query_integer(x_expr), Tribool::True, "x Integer (cache hit)");
-    EXPECT_TRIBOOL(qi.query_negative(x_expr), Tribool::False, "x not Negative (cache hit)");
+    EXPECT_TRIBOOL(qi.query_positive(x_expr).value(), Tribool::True, "x Positive (cache hit)");
+    EXPECT_TRIBOOL(qi.query_integer(x_expr).value(), Tribool::True, "x Integer (cache hit)");
+    EXPECT_TRIBOOL(qi.query_negative(x_expr).value(), Tribool::False, "x not Negative (cache hit)");
 
     // Invalidate and re-query
     qi.invalidate_cache();
-    EXPECT_TRIBOOL(qi.query_positive(x_expr), Tribool::True, "x Positive after invalidate");
-    EXPECT_TRIBOOL(qi.query_integer(x_expr), Tribool::True, "x Integer after invalidate");
+    EXPECT_TRIBOOL(qi.query_positive(x_expr).value(), Tribool::True, "x Positive after invalidate");
+    EXPECT_TRIBOOL(qi.query_integer(x_expr).value(), Tribool::True, "x Integer after invalidate");
 }
 
 

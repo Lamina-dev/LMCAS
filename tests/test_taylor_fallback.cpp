@@ -28,7 +28,7 @@ int main() {
         auto num = SymbolicExpr::add(sin_x, neg_x);
         auto den = SymbolicExpr::power(x, three);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit((sin(x)-x)/x^3, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -52,7 +52,7 @@ int main() {
         auto num = SymbolicExpr::add(one, neg_cos);
         auto den = SymbolicExpr::power(x, two);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit((1-cos(x))/x^2, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -75,7 +75,7 @@ int main() {
         auto num = SymbolicExpr::add(SymbolicExpr::add(exp_x, neg_1), neg_x);
         auto den = SymbolicExpr::power(x, two);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit((e^x-1-x)/x^2, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -96,7 +96,7 @@ int main() {
     {
         auto sin_x = SymbolicExpr::sin(x);
         auto expr = SymbolicExpr::multiply(sin_x, SymbolicExpr::power(x, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit(sin(x)/x, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -114,7 +114,7 @@ int main() {
     {
         auto tan_x = SymbolicExpr::tan(x);
         auto expr = SymbolicExpr::multiply(tan_x, SymbolicExpr::power(x, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit(tan(x)/x, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -139,7 +139,7 @@ int main() {
         auto sin_inv_x = SymbolicExpr::sin(inv_x);
         // Express as sin(1/x) / (1/x) directly as a fraction
         auto expr = SymbolicExpr::multiply(sin_inv_x, SymbolicExpr::power(inv_x, neg_one));
-        auto lim = expr->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_TRUE(lim != nullptr, "limit(sin(1/x)/(1/x), x->inf) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -176,7 +176,7 @@ int main() {
             SymbolicExpr::multiply(two, x_sq),
             three);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = expr->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_TRUE(lim != nullptr, "limit((x^2+x)/(2x^2+3), x->inf) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);

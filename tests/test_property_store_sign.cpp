@@ -111,13 +111,8 @@ void test_contradiction_positive_negative() {
     PropertyStore store;
     store.declare_sign("x", Sign::Positive);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Negative after Positive throws");
+    auto failure_112 = store.declare_sign("x", Sign::Negative);
+    EXPECT_TRUE(!failure_112.has_value(), "Declaring Negative after Positive returns failure");
     // State should be unchanged
     EXPECT_TRUE(store.has_sign("x", Sign::Positive), "x still has Positive after failed declaration");
     EXPECT_FALSE(store.has_sign("x", Sign::Negative), "x does not have Negative after failed declaration");
@@ -128,13 +123,8 @@ void test_contradiction_positive_zero() {
     PropertyStore store;
     store.declare_sign("x", Sign::Positive);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Zero);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Zero after Positive throws");
+    auto failure_129 = store.declare_sign("x", Sign::Zero);
+    EXPECT_TRUE(!failure_129.has_value(), "Declaring Zero after Positive returns failure");
     EXPECT_FALSE(store.has_sign("x", Sign::Zero), "x does not have Zero after failed declaration");
 }
 
@@ -143,13 +133,8 @@ void test_contradiction_positive_nonpositive() {
     PropertyStore store;
     store.declare_sign("x", Sign::Positive);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::NonPositive);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring NonPositive after Positive throws");
+    auto failure_144 = store.declare_sign("x", Sign::NonPositive);
+    EXPECT_TRUE(!failure_144.has_value(), "Declaring NonPositive after Positive returns failure");
     EXPECT_FALSE(store.has_sign("x", Sign::NonPositive), "x does not have NonPositive after failed declaration");
 }
 
@@ -158,13 +143,8 @@ void test_contradiction_negative_zero() {
     PropertyStore store;
     store.declare_sign("x", Sign::Negative);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Zero);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Zero after Negative throws");
+    auto failure_159 = store.declare_sign("x", Sign::Zero);
+    EXPECT_TRUE(!failure_159.has_value(), "Declaring Zero after Negative returns failure");
     EXPECT_FALSE(store.has_sign("x", Sign::Zero), "x does not have Zero after failed declaration");
 }
 
@@ -173,13 +153,8 @@ void test_contradiction_negative_nonnegative() {
     PropertyStore store;
     store.declare_sign("x", Sign::Negative);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::NonNegative);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring NonNegative after Negative throws");
+    auto failure_174 = store.declare_sign("x", Sign::NonNegative);
+    EXPECT_TRUE(!failure_174.has_value(), "Declaring NonNegative after Negative returns failure");
     EXPECT_FALSE(store.has_sign("x", Sign::NonNegative), "x does not have NonNegative after failed declaration");
 }
 
@@ -188,13 +163,8 @@ void test_contradiction_nonnegative_negative() {
     PropertyStore store;
     store.declare_sign("x", Sign::NonNegative);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Negative after NonNegative throws");
+    auto failure_189 = store.declare_sign("x", Sign::Negative);
+    EXPECT_TRUE(!failure_189.has_value(), "Declaring Negative after NonNegative returns failure");
     EXPECT_FALSE(store.has_sign("x", Sign::Negative), "x does not have Negative after failed declaration");
 }
 
@@ -203,13 +173,8 @@ void test_contradiction_nonpositive_positive() {
     PropertyStore store;
     store.declare_sign("x", Sign::NonPositive);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Positive);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Positive after NonPositive throws");
+    auto failure_204 = store.declare_sign("x", Sign::Positive);
+    EXPECT_TRUE(!failure_204.has_value(), "Declaring Positive after NonPositive returns failure");
     EXPECT_FALSE(store.has_sign("x", Sign::Positive), "x does not have Positive after failed declaration");
 }
 
@@ -218,13 +183,8 @@ void test_contradiction_zero_nonzero() {
     PropertyStore store;
     store.declare_sign("x", Sign::Zero);
 
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::NonZero);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring NonZero after Zero throws");
+    auto failure_219 = store.declare_sign("x", Sign::NonZero);
+    EXPECT_TRUE(!failure_219.has_value(), "Declaring NonZero after Zero returns failure");
     EXPECT_FALSE(store.has_sign("x", Sign::NonZero), "x does not have NonZero after failed declaration");
 }
 
@@ -235,13 +195,8 @@ void test_contradiction_via_implied_signs() {
     // x now has: Positive, NonNegative, NonZero
 
     // Declaring Negative should fail because Negative contradicts NonNegative (implied)
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Negative contradicts implied NonNegative from Positive");
+    auto failure_237 = store.declare_sign("x", Sign::Negative);
+    EXPECT_TRUE(!failure_237.has_value(), "Declaring Negative contradicts implied NonNegative from Positive");
 }
 
 void test_contradiction_implied_against_existing() {
@@ -251,13 +206,8 @@ void test_contradiction_implied_against_existing() {
     // x now has: NonZero
 
     // Declaring Zero should fail because Zero contradicts NonZero
-    bool threw = false;
-    try {
-        store.declare_sign("x", Sign::Zero);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Zero contradicts existing NonZero");
+    auto failure_253 = store.declare_sign("x", Sign::Zero);
+    EXPECT_TRUE(!failure_253.has_value(), "Declaring Zero contradicts existing NonZero");
 }
 
 void test_compatible_signs_can_coexist() {
@@ -404,34 +354,29 @@ void test_checked_property_store_contracts() {
 }
 
 void test_legacy_declarations_delegate_transactionally() {
-    TEST_CASE("PropertyStore legacy declarations delegate transactionally");
+    TEST_CASE("PropertyStore canonical declarations delegate transactionally");
 
     PropertyStore store;
     store.declare_sign("x", Sign::Positive);
     const auto symbols_before = store.get_all_symbols();
 
-    bool contradiction_threw = false;
-    try {
-        store.declare_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument&) {
-        contradiction_threw = true;
-    }
-    EXPECT_TRUE(contradiction_threw,
-                "legacy sign declaration maps checked contradiction to invalid_argument");
+    auto contradiction = store.declare_sign("x", Sign::Negative);
+    EXPECT_TRUE(!contradiction.has_value(),
+                "canonical sign declaration returns contradiction");
+    EXPECT_TRUE(contradiction.error().code == CasErrc::InvalidArgument,
+                "sign contradiction reports InvalidArgument");
     EXPECT_TRUE(store.has_sign("x", Sign::Positive),
-                "legacy sign failure preserves the established sign");
+                "canonical sign failure preserves the established sign");
     EXPECT_FALSE(store.has_sign("x", Sign::Negative),
-                 "legacy sign failure does not commit a contradictory sign");
+                 "canonical sign failure does not commit a contradictory sign");
 
-    bool empty_threw = false;
-    try {
-        store.declare_domain("", Domain::Real);
-    } catch (const std::invalid_argument&) {
-        empty_threw = true;
-    }
-    EXPECT_TRUE(empty_threw, "legacy domain declaration rejects an empty symbol");
+    auto empty_symbol = store.declare_domain("", Domain::Real);
+    EXPECT_TRUE(!empty_symbol.has_value(),
+                "canonical domain declaration rejects an empty symbol");
+    EXPECT_TRUE(empty_symbol.error().code == CasErrc::InvalidArgument,
+                "empty domain symbol reports InvalidArgument");
     EXPECT_TRUE(store.get_all_symbols() == symbols_before,
-                "failed legacy declaration does not create an empty property record");
+                "failed canonical declaration does not create an empty property record");
 }
 
 int main() {

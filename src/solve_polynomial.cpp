@@ -13,7 +13,7 @@ namespace lamina {
 static bool is_purely_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
     if (!expr || !lamina::detail::node(expr)) return true;
 
-    struct VarDetector : public lamina::detail::SymbolicVisitor {
+    struct VarDetector : public lamina::detail::RecursiveSymbolicVisitor {
         bool has_var = false;
         void visit(const NumberNode&) override {}
         void visit(const VariableNode&) override { has_var = true; }
@@ -796,7 +796,7 @@ static bool convert_to_rational_poly(
         auto simplified = coeff_expr->simplify();
 
         if (lamina::detail::node(simplified)) {
-            struct VarCheck : public lamina::detail::SymbolicVisitor {
+            struct VarCheck : public lamina::detail::RecursiveSymbolicVisitor {
                 bool found = false;
                 void visit(const NumberNode&) override {}
                 void visit(const VariableNode&) override { found = true; }

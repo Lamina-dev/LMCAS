@@ -28,7 +28,7 @@ int main() {
         auto x3 = SymbolicExpr::power(x, SymbolicExpr::number(3));
         auto eq = SymbolicExpr::add(x3, SymbolicExpr::number(-2));
 
-        auto sols = SymbolicExpr::solve(eq, "x");
+        auto sols = lamina::solve_finite_checked(eq, "x").value();
         EXPECT_TRUE(sols.size() == 3, "cubic x^3-2 should return 3 roots");
     }
 
@@ -38,7 +38,7 @@ int main() {
         auto x = SymbolicExpr::variable("x");
         auto eq = SymbolicExpr::add(x, SymbolicExpr::exp(x));
 
-        auto sols = SymbolicExpr::solve(eq, "x");
+        auto sols = lamina::solve_finite_checked(eq, "x").value();
 
         EXPECT_TRUE(!sols.empty(), "x+exp(x)=0 should have a solution");
     }
@@ -72,7 +72,7 @@ int main() {
         opts.allow_numeric = false;
         opts.return_rootof = true;
 
-        auto sols = lamina::solve_dispatch(eq, "x", opts);
+        auto sols = solve_vector_for_test(eq, "x", opts);
         EXPECT_TRUE(sols.empty(), "all strategies fail -> empty result");
 
         std::cout << "[PASS] no exception thrown on total fallthrough" << std::endl;
@@ -88,7 +88,7 @@ int main() {
 
         lamina::SolveOptions opts_no_numeric;
         opts_no_numeric.allow_numeric = false;
-        auto sols_no_numeric = lamina::solve_dispatch(eq, "x", opts_no_numeric);
+        auto sols_no_numeric = solve_vector_for_test(eq, "x", opts_no_numeric);
         EXPECT_TRUE(sols_no_numeric.empty(), "allow_numeric=false -> no solutions for x^x-2");
 
         lamina::SolveOptions opts_numeric;
@@ -96,7 +96,7 @@ int main() {
         opts_numeric.has_initial_guess = true;
         opts_numeric.initial_guess = 1.5;
         opts_numeric.tolerance = 1e-10;
-        auto sols_numeric = lamina::solve_dispatch(eq, "x", opts_numeric);
+        auto sols_numeric = solve_vector_for_test(eq, "x", opts_numeric);
 
         EXPECT_TRUE(!sols_numeric.empty(), "allow_numeric=true -> finds numeric solution for x^x-2");
     }
@@ -114,7 +114,7 @@ int main() {
         lamina::SolveOptions opts_rootof;
         opts_rootof.return_rootof = true;
         opts_rootof.allow_numeric = false;
-        auto sols_rootof = lamina::solve_dispatch(eq, "x", opts_rootof);
+        auto sols_rootof = solve_vector_for_test(eq, "x", opts_rootof);
         EXPECT_TRUE(sols_rootof.size() == 5, "return_rootof=true -> 5 RootOf solutions for degree-5");
         if (!sols_rootof.empty()) {
 
@@ -124,7 +124,7 @@ int main() {
         lamina::SolveOptions opts_no_rootof;
         opts_no_rootof.return_rootof = false;
         opts_no_rootof.allow_numeric = false;
-        auto sols_no_rootof = lamina::solve_dispatch(eq, "x", opts_no_rootof);
+        auto sols_no_rootof = solve_vector_for_test(eq, "x", opts_no_rootof);
 
         bool has_rootof = false;
         for (const auto& sol : sols_no_rootof) {
@@ -144,7 +144,7 @@ int main() {
         auto eq = SymbolicExpr::eq(lhs, rhs);
 
         lamina::SolveOptions opts;
-        auto sols = lamina::solve_dispatch(eq, "x", opts);
+        auto sols = solve_vector_for_test(eq, "x", opts);
         EXPECT_TRUE(sols.size() == 1, "f(x)=g(x) form produces one solution");
         if (!sols.empty()) {
 
@@ -161,7 +161,7 @@ int main() {
         auto five = SymbolicExpr::number(5);
 
         lamina::SolveOptions opts;
-        auto sols = lamina::solve_dispatch(five, "x", opts);
+        auto sols = solve_vector_for_test(five, "x", opts);
         EXPECT_TRUE(sols.empty(), "degree-0 non-zero constant -> empty result");
     }
 
@@ -173,7 +173,7 @@ int main() {
         auto eq = SymbolicExpr::eq(three, zero);
 
         lamina::SolveOptions opts;
-        auto sols = lamina::solve_dispatch(eq, "x", opts);
+        auto sols = solve_vector_for_test(eq, "x", opts);
         EXPECT_TRUE(sols.empty(), "3=0 equation -> empty (no solution exists)");
     }
 
@@ -205,7 +205,7 @@ int main() {
 
             auto expanded = poly_expr->expand();
 
-            auto solutions = SymbolicExpr::solve(expanded, "x");
+            auto solutions = lamina::solve_finite_checked(expanded, "x").value();
 
             if ((int)solutions.size() == degree) {
                 pass_count++;
@@ -251,7 +251,7 @@ int main() {
                 SymbolicExpr::number(b_val)
             );
 
-            auto sols = SymbolicExpr::solve(expr, "x");
+            auto sols = lamina::solve_finite_checked(expr, "x").value();
 
             if (sols.size() != 1) {
                 std::ostringstream msg;
@@ -312,7 +312,7 @@ int main() {
                 )
             );
 
-            auto sols = SymbolicExpr::solve(expr, "x");
+            auto sols = lamina::solve_finite_checked(expr, "x").value();
 
             size_t expected_count = (disc == 0) ? 1 : 2;
 

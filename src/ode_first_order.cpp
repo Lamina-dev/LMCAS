@@ -16,6 +16,18 @@
 
 namespace lamina {
 
+static ODESolution solve_homogeneous_ode_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&, const std::string&);
+static ODESolution solve_bernoulli_ode_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::shared_ptr<SymbolicExpr>&,
+    int, const std::string&, const std::string&);
+static ODESolution solve_exact_ode_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&, const std::string&);
+
 
 ODESolutionResult solve_homogeneous_ode_checked(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -30,9 +42,11 @@ ODESolutionResult solve_homogeneous_ode_checked(
     if (!step) return ODESolutionResult::failure(step.error());
 
     try {
-        return wrap_ode_solution(solve_homogeneous_ode(rhs, x, y),
+        return wrap_ode_solution(solve_homogeneous_ode_impl(rhs, x, y),
                                  ODEType::Homogeneous,
                                  operation);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(CasErrc::ResourceLimit,
                                           "homogeneous ODE allocation failed",
@@ -53,7 +67,7 @@ ODESolutionResult solve_homogeneous_ode_checked(
     return solve_homogeneous_ode_checked(rhs, x, y, context);
 }
 
-ODESolution solve_homogeneous_ode(
+static ODESolution solve_homogeneous_ode_impl(
     const std::shared_ptr<SymbolicExpr>& rhs,
     const std::string& x,
     const std::string& y)
@@ -130,9 +144,11 @@ ODESolutionResult solve_bernoulli_ode_checked(
     if (!step) return ODESolutionResult::failure(step.error());
 
     try {
-        return wrap_ode_solution(solve_bernoulli_ode(P, Q, n, x, y),
+        return wrap_ode_solution(solve_bernoulli_ode_impl(P, Q, n, x, y),
                                  ODEType::Bernoulli,
                                  operation);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(CasErrc::ResourceLimit,
                                           "Bernoulli ODE allocation failed",
@@ -155,7 +171,7 @@ ODESolutionResult solve_bernoulli_ode_checked(
     return solve_bernoulli_ode_checked(P, Q, n, x, y, context);
 }
 
-ODESolution solve_bernoulli_ode(
+static ODESolution solve_bernoulli_ode_impl(
     const std::shared_ptr<SymbolicExpr>& P,
     const std::shared_ptr<SymbolicExpr>& Q,
     int n,
@@ -269,9 +285,11 @@ ODESolutionResult solve_exact_ode_checked(
     if (!step) return ODESolutionResult::failure(step.error());
 
     try {
-        return wrap_ode_solution(solve_exact_ode(M, N, x, y),
+        return wrap_ode_solution(solve_exact_ode_impl(M, N, x, y),
                                  ODEType::Exact,
                                  operation);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(CasErrc::ResourceLimit,
                                           "exact ODE allocation failed",
@@ -293,7 +311,7 @@ ODESolutionResult solve_exact_ode_checked(
     return solve_exact_ode_checked(M, N, x, y, context);
 }
 
-ODESolution solve_exact_ode(
+static ODESolution solve_exact_ode_impl(
     const std::shared_ptr<SymbolicExpr>& M,
     const std::shared_ptr<SymbolicExpr>& N,
     const std::string& x,

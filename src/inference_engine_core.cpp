@@ -59,9 +59,6 @@ InferenceEngine::DepthGuard::~DepthGuard() {
     }
 }
 
-Tribool InferenceEngine::query_sign_of(const SymbolicExpr& expr, Sign sign) const {
-    return inference_query_or_unknown(query_sign_of_checked(expr, sign));
-}
 
 InferenceTriboolResult InferenceEngine::query_sign_of_checked(const SymbolicExpr& expr, Sign sign) const {
     switch (sign) {
@@ -87,9 +84,6 @@ InferenceTriboolResult InferenceEngine::query_sign_of_checked(const SymbolicExpr
     return InferenceTriboolResult::success(Tribool::Unknown);
 }
 
-Tribool InferenceEngine::query_domain_of(const SymbolicExpr& expr, Domain domain) const {
-    return inference_query_or_unknown(query_domain_of_checked(expr, domain));
-}
 
 InferenceTriboolResult InferenceEngine::query_domain_of_checked(const SymbolicExpr& expr, Domain domain) const {
     switch (domain) {
@@ -174,9 +168,6 @@ InferenceTriboolResult InferenceEngine::query_domain_of_checked(const SymbolicEx
 // These public methods are called by the QueryInterface for composite nodes.
 // They inspect the root node type and dispatch to the appropriate inference method.
 
-Tribool InferenceEngine::query_positive(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_positive_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_positive_checked(const SymbolicExpr& expr) const {
     const int infinity = infinity_sign(expr);
@@ -243,9 +234,6 @@ InferenceTriboolResult InferenceEngine::query_positive_checked(const SymbolicExp
         });
 }
 
-Tribool InferenceEngine::query_negative(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_negative_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_negative_checked(const SymbolicExpr& expr) const {
     const int infinity = infinity_sign(expr);
@@ -305,9 +293,6 @@ InferenceTriboolResult InferenceEngine::query_negative_checked(const SymbolicExp
         });
 }
 
-Tribool InferenceEngine::query_nonnegative(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_nonnegative_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_nonnegative_checked(const SymbolicExpr& expr) const {
     const int infinity = infinity_sign(expr);
@@ -367,9 +352,6 @@ InferenceTriboolResult InferenceEngine::query_nonnegative_checked(const Symbolic
         });
 }
 
-Tribool InferenceEngine::query_nonpositive(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_nonpositive_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_nonpositive_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_nonpositive_checked",
@@ -420,9 +402,6 @@ InferenceTriboolResult InferenceEngine::query_nonpositive_checked(const Symbolic
         });
 }
 
-Tribool InferenceEngine::query_real(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_real_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_real_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_real_checked",
@@ -465,9 +444,6 @@ InferenceTriboolResult InferenceEngine::query_real_checked(const SymbolicExpr& e
         });
 }
 
-Tribool InferenceEngine::query_integer(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_integer_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_integer_checked(const SymbolicExpr& expr) const {
     if (infinity_sign(expr) != 0) {
@@ -518,9 +494,6 @@ InferenceTriboolResult InferenceEngine::query_integer_checked(const SymbolicExpr
         });
 }
 
-Tribool InferenceEngine::query_nonzero(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_nonzero_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_nonzero_checked(const SymbolicExpr& expr) const {
     if (infinity_sign(expr) != 0) {
@@ -584,9 +557,6 @@ InferenceTriboolResult InferenceEngine::query_nonzero_checked(const SymbolicExpr
 
 // Subtraction sign inference
 
-Tribool InferenceEngine::infer_subtraction_sign(const void* opaque_node, Sign target) const {
-    return inference_query_or_unknown(infer_subtraction_sign_checked(opaque_node, target));
-}
 
 InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const void* opaque_node, Sign target) const {
     if (!opaque_node) {
@@ -709,9 +679,6 @@ InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const voi
 
 // Algebraic / Transcendental / Finite / Divergent queries
 
-Tribool InferenceEngine::query_algebraic(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_algebraic_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_algebraic_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_algebraic_checked",
@@ -741,9 +708,6 @@ InferenceTriboolResult InferenceEngine::query_algebraic_checked(const SymbolicEx
         });
 }
 
-Tribool InferenceEngine::query_transcendental(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_transcendental_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_transcendental_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_transcendental_checked",
@@ -772,9 +736,6 @@ InferenceTriboolResult InferenceEngine::query_transcendental_checked(const Symbo
         });
 }
 
-Tribool InferenceEngine::query_finite(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_finite_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_finite_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_finite_checked",
@@ -807,9 +768,6 @@ InferenceTriboolResult InferenceEngine::query_finite_checked(const SymbolicExpr&
         });
 }
 
-Tribool InferenceEngine::query_divergent(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_divergent_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_divergent_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_divergent_checked",

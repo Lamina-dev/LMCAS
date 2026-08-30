@@ -92,7 +92,7 @@ static void test_real_var_x_squared_nonnegative() {
         auto x_squared = make_x_squared(var_name);
 
         // x² should be non-negative for any Real variable
-        RC_ASSERT(engine.query_nonnegative(x_squared) == Tribool::True);
+        RC_ASSERT(engine.query_nonnegative_checked(x_squared).value() == Tribool::True);
     });
 }
 
@@ -112,7 +112,7 @@ static void test_integer_var_x_squared_integer() {
         auto x_squared = make_x_squared(var_name);
 
         // x² should have Integer domain when x is Integer
-        RC_ASSERT(engine.query_integer(x_squared) == Tribool::True);
+        RC_ASSERT(engine.query_integer_checked(x_squared).value() == Tribool::True);
     });
 }
 
@@ -133,8 +133,8 @@ static void test_positive_var_abs_positive() {
         auto abs_x = make_abs_x(var_name);
 
         // |x| should be positive when x is positive and real
-        RC_ASSERT(engine.query_positive(abs_x) == Tribool::True);
-        RC_ASSERT(engine.query_nonnegative(abs_x) == Tribool::True);
+        RC_ASSERT(engine.query_positive_checked(abs_x).value() == Tribool::True);
+        RC_ASSERT(engine.query_nonnegative_checked(abs_x).value() == Tribool::True);
     });
 }
 
@@ -166,7 +166,7 @@ static void test_propagation_is_lazy() {
         // But querying through the InferenceEngine should still work
         InferenceEngine engine(ctx);
         auto x_squared = make_x_squared(var_name);
-        RC_ASSERT(engine.query_nonnegative(x_squared) == Tribool::True);
+        RC_ASSERT(engine.query_nonnegative_checked(x_squared).value() == Tribool::True);
     });
 }
 

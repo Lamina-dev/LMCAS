@@ -13,12 +13,15 @@ void run_test(const std::string& name, const SymbolicExpr& expr, const std::stri
     std::cout << "case: " << name << std::endl;
     std::cout << "Expr: " << expr.to_string() << std::endl;
 
-    try {
-        lamina::Integrator integrator;
-        auto result = integrator.integrate(expr, var);
-        std::cout << "Integral: " << result.to_string() << std::endl;
+    lamina::Integrator integrator;
+    auto result = integrator.integrate(expr, var);
+    if (!result) {
+        EXPECT_TRUE(false, name + ": integration failed: " + result.error().message);
+        return;
+    }
+    std::cout << "Integral: " << result.value().to_string() << std::endl;
 
-        auto diff = result.differentiate(var);
+    auto diff = result.value().differentiate(var);
 
         if (!diff) {
             EXPECT_TRUE(false, name + ": failed to differentiate result");
@@ -44,15 +47,38 @@ void run_test(const std::string& name, const SymbolicExpr& expr, const std::stri
             const std::string delta = diff_minus_original ? diff_minus_original->to_string() : "null";
             EXPECT_TRUE(false, name + ": derivative check not zero: " + delta);
         }
-    } catch (const std::exception& e) {
-        EXPECT_TRUE(false, name + ": unexpected exception: " + std::string(e.what()));
-    }
+
 }
+
+class WrongIntegrationStrategy final : public lamina::IntegrationStrategy {
+public:
+    std::shared_ptr<SymbolicExpr> try_integrate_raw(
+        const SymbolicExpr&,
+        const std::string& variable,
+        lamina::Integrator&,
+        lamina::ComputationContext&,
+        int) override {
+        return SymbolicExpr::variable(variable);
+    }
+
+    std::string name() const override { return "DeliberatelyWrong"; }
+};
 
 int main() {
     using namespace lamina;
 
     auto x_var = lamina::detail::make_expression_ptr(*SymbolicExpr::variable("x"));
+    TEST_CASE("Generated integration candidates require exact residual proof");
+    Integrator gated_integrator;
+    auto added = gated_integrator.add_strategy(
+        std::make_unique<WrongIntegrationStrategy>(), 0);
+    EXPECT_TRUE(added.has_value(), "wrong strategy is installed for the gate test");
+    ComputationContext gate_context;
+    auto gated = gated_integrator.integrate_checked(
+        *x_var, "x", gate_context);
+    EXPECT_TRUE(gated && gated.value().to_string() != "x",
+                "wrong integration candidate is rejected");
+
 
     auto x2_ptr = SymbolicExpr::power(x_var, lamina::detail::make_expression_ptr(*SymbolicExpr::number(2)));
     run_test("Power Rule x^2", *x2_ptr, "x");

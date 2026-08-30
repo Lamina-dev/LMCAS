@@ -272,21 +272,20 @@ ExprSetResult solve_normalized_expr_set(const ExprPtr& normalized,
     }
 
     const auto& solution_set = solved.value();
-    if (solution_set.kind() == SolutionSet::Kind::Empty) {
+    if (std::holds_alternative<EmptySolutions>(solution_set)) {
         return expr_set({});
     }
-    if (solution_set.kind() != SolutionSet::Kind::Finite) {
-        std::string reason = solution_set.reason();
-        if (reason.empty()) {
-            reason = "solution set is not a finite enumerable set<Expr>";
-        }
-        return expr_set_failure(CasErrc::Inconclusive, std::move(reason),
-                                kSolveExprSetOperation);
+    const auto* finite = std::get_if<FiniteSolutions>(&solution_set);
+    if (!finite) {
+        return expr_set_failure(
+            CasErrc::Inconclusive,
+            "solution set is not a finite enumerable set<Expr>",
+            kSolveExprSetOperation);
     }
 
     std::vector<ExprPtr> elements;
-    elements.reserve(solution_set.finite_solutions().size());
-    for (const auto& solution : solution_set.finite_solutions()) {
+    elements.reserve(finite->values.size());
+    for (const auto& solution : finite->values) {
         if (!solution.conditions.empty()) {
             return expr_set_failure(CasErrc::Inconclusive,
                                     "conditional finite solutions cannot be lowered to set<Expr>",

@@ -1410,8 +1410,9 @@ static void test_find_extrema_quadratic_min()
 
     EXPECT_TRUE(!extrema.empty(), "found at least one critical point");
     if (!extrema.empty()) {
-        EXPECT_TRUE(extrema[0].classification == "minimum",
-            "x^2+y^2 has minimum at origin, got: " + extrema[0].classification);
+        EXPECT_TRUE(
+            extrema[0].classification == CriticalPointClassification::LocalMinimum,
+            "x^2+y^2 has minimum at origin");
 
         // Check the point is (0, 0)
         auto x_val = extrema[0].point.at("x");
@@ -1439,8 +1440,9 @@ static void test_find_extrema_quadratic_max()
 
     EXPECT_TRUE(!extrema.empty(), "found at least one critical point");
     if (!extrema.empty()) {
-        EXPECT_TRUE(extrema[0].classification == "maximum",
-            "-x^2-y^2 has maximum at origin, got: " + extrema[0].classification);
+        EXPECT_TRUE(
+            extrema[0].classification == CriticalPointClassification::LocalMaximum,
+            "-x^2-y^2 has maximum at origin");
     }
 }
 
@@ -1461,8 +1463,9 @@ static void test_find_extrema_saddle()
 
     EXPECT_TRUE(!extrema.empty(), "found at least one critical point");
     if (!extrema.empty()) {
-        EXPECT_TRUE(extrema[0].classification == "saddle",
-            "x^2-y^2 has saddle at origin, got: " + extrema[0].classification);
+        EXPECT_TRUE(
+            extrema[0].classification == CriticalPointClassification::Saddle,
+            "x^2-y^2 has saddle at origin");
     }
 }
 
@@ -1480,8 +1483,9 @@ static void test_find_extrema_degenerate()
 
     // The system df/dx = 2x = 0, df/dy = 0 has solution x=0, y=free
     if (!extrema.empty()) {
-        EXPECT_TRUE(extrema[0].classification == "degenerate",
-            "x^2 in 2D has degenerate critical point, got: " + extrema[0].classification);
+        EXPECT_TRUE(
+            extrema[0].classification == CriticalPointClassification::Degenerate,
+            "x^2 in 2D has degenerate critical point");
     }
 }
 
@@ -1502,8 +1506,9 @@ static void test_find_extrema_single_var()
 
     EXPECT_TRUE(!extrema.empty(), "found critical point for (x-1)^2");
     if (!extrema.empty()) {
-        EXPECT_TRUE(extrema[0].classification == "minimum",
-            "(x-1)^2 has minimum, got: " + extrema[0].classification);
+        EXPECT_TRUE(
+            extrema[0].classification == CriticalPointClassification::LocalMinimum,
+            "(x-1)^2 has minimum");
 
         auto x_val = extrema[0].point.at("x");
         if (x_val) {
@@ -1602,8 +1607,10 @@ static void test_extrema_lagrange_checked_contracts()
     EXPECT_TRUE(extrema.has_value(), "checked extrema succeeds for single-variable quadratic");
     if (extrema) {
         EXPECT_TRUE(!extrema.value().empty(), "checked extrema returns a critical point");
-        EXPECT_TRUE(extrema.value()[0].classification == "minimum",
-                    "checked extrema classifies quadratic minimum");
+        EXPECT_TRUE(
+            extrema.value()[0].classification ==
+                CriticalPointClassification::LocalMinimum,
+            "checked extrema classifies quadratic minimum");
     }
 
     auto objective = SymbolicExpr::add(

@@ -40,7 +40,7 @@ void test_exp_real_arg_positive() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, var("x"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "exp(x) is Positive when x is Real");
 }
 
@@ -54,7 +54,7 @@ void test_exp_real_arg_real_domain() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "exp(x) is Real when x is Real");
 }
 
@@ -68,7 +68,7 @@ void test_exp_real_arg_nonnegative() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, var("x"));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "exp(x) is NonNegative when x is Real");
 }
 
@@ -82,7 +82,7 @@ void test_exp_real_arg_not_negative() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, var("x"));
 
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
                 "exp(x) is not Negative when x is Real");
 }
 
@@ -96,7 +96,7 @@ void test_exp_real_arg_nonzero() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, var("x"));
 
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
                 "exp(x) is NonZero when x is Real");
 }
 
@@ -110,9 +110,9 @@ void test_exp_integer_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, var("n"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "exp(n) is Positive when n is Integer");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "exp(n) is Real when n is Integer");
 }
 
@@ -126,9 +126,9 @@ void test_exp_no_assumption() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, var("x"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "exp(x) is Unknown for Positive when x has no assumptions");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "exp(x) is Unknown for Real when x has no assumptions");
 }
 
@@ -141,9 +141,9 @@ void test_exp_numeric_arg() {
     // NumberNode 2 is Real (BigInt → Integer → Real)
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, num(2));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "exp(2) is Positive");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "exp(2) is Real");
 }
 
@@ -158,7 +158,7 @@ void test_sin_real_arg_real_domain() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sin, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "sin(x) is Real when x is Real");
 }
 
@@ -172,11 +172,11 @@ void test_sin_real_arg_sign_unknown() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sin, var("x"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "sin(x) Positive is Unknown (sin can be negative)");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
                 "sin(x) Negative is Unknown (sin can be positive)");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
                 "sin(x) NonNegative is Unknown (sin can be negative)");
 }
 
@@ -190,7 +190,7 @@ void test_sin_integer_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sin, var("n"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "sin(n) is Real when n is Integer");
 }
 
@@ -202,7 +202,7 @@ void test_sin_no_assumption() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sin, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "sin(x) Real is Unknown when x has no assumptions");
 }
 
@@ -216,7 +216,7 @@ void test_cos_real_arg_real_domain() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Cos, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "cos(x) is Real when x is Real");
 }
 
@@ -230,11 +230,11 @@ void test_cos_real_arg_sign_unknown() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Cos, var("x"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "cos(x) Positive is Unknown (cos can be negative)");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
                 "cos(x) Negative is Unknown (cos can be positive)");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
                 "cos(x) NonNegative is Unknown (cos can be negative)");
 }
 
@@ -248,7 +248,7 @@ void test_cos_integer_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Cos, var("n"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "cos(n) is Real when n is Integer");
 }
 
@@ -260,7 +260,7 @@ void test_cos_no_assumption() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Cos, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "cos(x) Real is Unknown when x has no assumptions");
 }
 
@@ -272,7 +272,7 @@ void test_sin_numeric_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sin, num(1));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "sin(1) is Real");
 }
 
@@ -284,7 +284,7 @@ void test_cos_numeric_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Cos, num(0));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "cos(0) is Real");
 }
 
@@ -301,7 +301,7 @@ void test_abs_real_arg_nonnegative() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Abs, var("x"));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "abs(x) is NonNegative when x is Real");
 }
 
@@ -315,7 +315,7 @@ void test_abs_real_arg_real_domain() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Abs, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "abs(x) is Real when x is Real");
 }
 
@@ -329,7 +329,7 @@ void test_abs_real_arg_not_negative() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Abs, var("x"));
 
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
                 "abs(x) is not Negative when x is Real");
 }
 
@@ -343,9 +343,9 @@ void test_abs_integer_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Abs, var("n"));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "abs(n) is NonNegative when n is Integer");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "abs(n) is Real when n is Integer");
 }
 
@@ -357,9 +357,9 @@ void test_abs_no_assumption() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Abs, var("x"));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
                 "abs(x) NonNegative is Unknown when x has no assumptions");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "abs(x) Real is Unknown when x has no assumptions");
 }
 
@@ -371,9 +371,9 @@ void test_abs_numeric_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Abs, num(-3));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "abs(-3) is NonNegative");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "abs(-3) is Real");
 }
 
@@ -389,7 +389,7 @@ void test_ln_positive_arg_real() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Ln, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "ln(x) is Real when x is Positive");
 }
 
@@ -404,9 +404,9 @@ void test_ln_positive_arg_sign_unknown() {
     auto expr = make_func_expr(FunctionNode::FuncType::Ln, var("x"));
 
     // ln(x) can be positive (x>1), negative (0<x<1), or zero (x=1)
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "ln(x) Positive is Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
                 "ln(x) Negative is Unknown");
 }
 
@@ -421,7 +421,7 @@ void test_ln_nonnegative_arg_not_sufficient() {
     auto expr = make_func_expr(FunctionNode::FuncType::Ln, var("x"));
 
     // NonNegative includes 0, and ln(0) is undefined, so we can't infer Real
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "ln(x) Real is Unknown when x is only NonNegative");
 }
 
@@ -433,7 +433,7 @@ void test_ln_no_assumption() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Ln, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "ln(x) Real is Unknown when x has no assumptions");
 }
 
@@ -445,7 +445,7 @@ void test_ln_numeric_positive_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Ln, num(2));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "ln(2) is Real");
 }
 
@@ -461,7 +461,7 @@ void test_sqrt_nonneg_arg_nonnegative() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sqrt, var("x"));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "sqrt(x) is NonNegative when x is NonNegative");
 }
 
@@ -475,7 +475,7 @@ void test_sqrt_nonneg_arg_real() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sqrt, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "sqrt(x) is Real when x is NonNegative");
 }
 
@@ -489,7 +489,7 @@ void test_sqrt_nonneg_arg_not_negative() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sqrt, var("x"));
 
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
                 "sqrt(x) is not Negative when x is NonNegative");
 }
 
@@ -504,9 +504,9 @@ void test_sqrt_positive_arg() {
     auto expr = make_func_expr(FunctionNode::FuncType::Sqrt, var("x"));
 
     // Positive implies NonNegative, so sqrt rule fires
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "sqrt(x) is NonNegative when x is Positive");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "sqrt(x) is Real when x is Positive");
 }
 
@@ -518,9 +518,9 @@ void test_sqrt_no_assumption() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sqrt, var("x"));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
                 "sqrt(x) NonNegative is Unknown when x has no assumptions");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "sqrt(x) Real is Unknown when x has no assumptions");
 }
 
@@ -532,9 +532,9 @@ void test_sqrt_numeric_arg() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Sqrt, num(4));
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
                 "sqrt(4) is NonNegative");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "sqrt(4) is Real");
 }
 
@@ -549,7 +549,7 @@ void test_tan_real_arg_real_domain() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Tan, var("x"));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
                 "tan(x) is Real when x is Real");
 }
 
@@ -563,9 +563,9 @@ void test_tan_real_arg_sign_unknown() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Tan, var("x"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "tan(x) Positive is Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
                 "tan(x) Negative is Unknown");
 }
 
@@ -581,15 +581,15 @@ void test_unrecognized_function() {
     // LambertW is not in the recognized list for property inference
     auto expr = make_func_expr(FunctionNode::FuncType::LambertW, var("x"));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "LambertW(x) Positive is Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
                 "LambertW(x) Negative is Unknown");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
                 "LambertW(x) NonNegative is Unknown");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "LambertW(x) Real is Unknown");
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
                 "LambertW(x) Integer is Unknown");
 }
 
@@ -603,23 +603,23 @@ void test_insufficient_arg_properties() {
     InferenceEngine engine(ctx);
 
     auto exp_expr = make_func_expr(FunctionNode::FuncType::Exp, var("x"));
-    EXPECT_TRUE(engine.query_positive(exp_expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(exp_expr).value() == Tribool::Unknown,
                 "exp(x) Unknown when x has no domain");
 
     auto sin_expr = make_func_expr(FunctionNode::FuncType::Sin, var("x"));
-    EXPECT_TRUE(engine.query_real(sin_expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(sin_expr).value() == Tribool::Unknown,
                 "sin(x) Unknown when x has no domain");
 
     auto abs_expr = make_func_expr(FunctionNode::FuncType::Abs, var("x"));
-    EXPECT_TRUE(engine.query_nonnegative(abs_expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(abs_expr).value() == Tribool::Unknown,
                 "abs(x) Unknown when x has no domain");
 
     auto ln_expr = make_func_expr(FunctionNode::FuncType::Ln, var("x"));
-    EXPECT_TRUE(engine.query_real(ln_expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(ln_expr).value() == Tribool::Unknown,
                 "ln(x) Unknown when x has no sign");
 
     auto sqrt_expr = make_func_expr(FunctionNode::FuncType::Sqrt, var("x"));
-    EXPECT_TRUE(engine.query_nonnegative(sqrt_expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(sqrt_expr).value() == Tribool::Unknown,
                 "sqrt(x) Unknown when x has no sign");
 }
 

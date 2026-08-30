@@ -6,6 +6,7 @@
 
 #include "lsr_expr_internal.hpp"
 #include "symbolic_ast.hpp"
+#include "root_of_utils.hpp"
 
 namespace lamina::lsr {
 namespace {
@@ -590,6 +591,91 @@ private:
         if (name == "real" && arguments.size() == 1) return real(arguments[0]);
         if (name == "imag" && arguments.size() == 1) return imag(arguments[0]);
         if (name == "conj" && arguments.size() == 1) return conj(arguments[0]);
+        if ((name == "Integral" || name == "integral") &&
+            (arguments.size() == 2 || arguments.size() == 4)) {
+            auto variable = std::dynamic_pointer_cast<const VariableNode>(
+                lamina::detail::node(arguments[1]));
+            if (!variable) {
+                return fail("Integral variable must be a symbol");
+            }
+            try {
+                auto node = lamina::detail::make_node<IntegralNode>(
+                    lamina::detail::node(arguments[0]), variable->name(),
+                    arguments.size() == 4
+                        ? lamina::detail::node(arguments[2])
+                        : nullptr,
+                    arguments.size() == 4
+                        ? lamina::detail::node(arguments[3])
+                        : nullptr);
+                return ExprResult::success(
+                    lamina::detail::make_expression_ptr(std::move(node)));
+            } catch (const std::bad_alloc&) {
+                return expression_failure(
+                    CasErrc::ResourceLimit,
+                    "Integral expression allocation failed",
+                    kParseOperation);
+            } catch (const std::exception& error) {
+                return expression_failure(
+                    CasErrc::InvalidArgument, error.what(), kParseOperation);
+            }
+        }
+        if ((name == "limit" || name == "Limit") && arguments.size() == 4) {
+            auto variable = std::dynamic_pointer_cast<const VariableNode>(
+                lamina::detail::node(arguments[1]));
+            auto direction = std::dynamic_pointer_cast<const VariableNode>(
+                lamina::detail::node(arguments[3]));
+            if (!variable || !direction) {
+                return fail("limit variable and direction must be symbols");
+            }
+            LimitDirection parsed_direction;
+            if (direction->name() == "both") {
+                parsed_direction = LimitDirection::Both;
+            } else if (direction->name() == "below" ||
+                       direction->name() == "left" ||
+                       direction->name() == "from_below") {
+                parsed_direction = LimitDirection::FromBelow;
+            } else if (direction->name() == "above" ||
+                       direction->name() == "right" ||
+                       direction->name() == "from_above") {
+                parsed_direction = LimitDirection::FromAbove;
+            } else {
+                return fail("invalid limit direction");
+            }
+            return ExprResult::success(lamina::detail::make_expression_ptr(
+                lamina::detail::make_node<LimitNode>(
+                    lamina::detail::node(arguments[0]), variable->name(),
+                    lamina::detail::node(arguments[2]), parsed_direction)));
+        }
+        if ((name == "rootof" || name == "RootOf") &&
+            arguments.size() == 3) {
+            auto variable = std::dynamic_pointer_cast<const VariableNode>(
+                lamina::detail::node(arguments[1]));
+            auto index = std::dynamic_pointer_cast<const NumberNode>(
+                lamina::detail::node(arguments[2]));
+            if (!variable || !index ||
+                std::holds_alternative<lmmc_real_t>(index->value())) {
+                return fail("RootOf variable and index are invalid");
+            }
+            BigInt index_value;
+            if (std::holds_alternative<BigInt>(index->value())) {
+                index_value = std::get<BigInt>(index->value());
+            } else {
+                const auto& rational = std::get<Rational>(index->value());
+                if (!rational.is_integer()) {
+                    return fail("RootOf index must be an integer");
+                }
+                index_value = rational.to_BigInt();
+            }
+            const auto converted = index_value.try_to_int64();
+            if (!converted || *converted < 0) {
+                return fail("RootOf index is negative or too large");
+            }
+            auto root = make_rootof_checked(
+                arguments[0], variable->name(),
+                static_cast<std::size_t>(*converted));
+            if (!root) return ExprResult::failure(root.error());
+            return ExprResult::success(std::move(root.value()));
+        }
         if (name == "max" && !arguments.empty()) {
             return function_node(name, arguments, FunctionNode::FuncType::Max);
         }
@@ -605,7 +691,10 @@ private:
             name == "log" || name == "log10" || name == "floor" ||
             name == "ceil" || name == "round" || name == "abs" ||
             name == "real" || name == "imag" || name == "conj" ||
-            name == "atan2" || name == "clamp") {
+            name == "atan2" || name == "clamp" ||
+            name == "Integral" || name == "integral" ||
+            name == "Limit" || name == "limit" ||
+            name == "RootOf" || name == "rootof") {
             return fail("invalid argument count for function '" + name + "'");
         }
         try {

@@ -12,14 +12,14 @@ SymbolicExpr create_num(int n) {
     return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(n)));
 }
 
-SymbolicExpr operator+(const SymbolicExpr& a, const SymbolicExpr& b) {
+static SymbolicExpr operator+(const SymbolicExpr& a, const SymbolicExpr& b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     ops.push_back(lamina::detail::node(a));
     ops.push_back(lamina::detail::node(b));
     return lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
 }
 
-SymbolicExpr operator-(const SymbolicExpr& a, const SymbolicExpr& b) {
+static SymbolicExpr operator-(const SymbolicExpr& a, const SymbolicExpr& b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     ops.push_back(SymbolicFactory::create_number(BigInt(-1)));
     ops.push_back(lamina::detail::node(b));
@@ -31,7 +31,7 @@ SymbolicExpr operator-(const SymbolicExpr& a, const SymbolicExpr& b) {
     return lamina::detail::expression_from_node(SymbolicFactory::create_add(aops));
 }
 
-SymbolicExpr operator*(const SymbolicExpr& a, const SymbolicExpr& b) {
+static SymbolicExpr operator*(const SymbolicExpr& a, const SymbolicExpr& b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     ops.push_back(lamina::detail::node(a));
     ops.push_back(lamina::detail::node(b));

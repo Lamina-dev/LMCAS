@@ -22,7 +22,7 @@ void test_homogeneous_ode() {
         EXPECT_TRUE(is_homogeneous_ode(rhs, "x", "y"), "y/x is homogeneous");
 
         // 求解
-        auto sol = solve_homogeneous_ode(rhs, "x", "y");
+        auto sol = solve_homogeneous_ode_checked(rhs, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "homogeneous y/x has solution");
         EXPECT_TRUE(sol.method_used == ODEType::Homogeneous, "method is Homogeneous");
         EXPECT_TRUE(!sol.constants.empty(), "has constants");
@@ -38,7 +38,7 @@ void test_homogeneous_ode() {
 
         EXPECT_TRUE(is_homogeneous_ode(rhs, "x", "y"), "(x+y)/x is homogeneous");
 
-        auto sol = solve_homogeneous_ode(rhs, "x", "y");
+        auto sol = solve_homogeneous_ode_checked(rhs, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "homogeneous (x+y)/x has solution");
         std::string s = sol.general_solution->to_string();
         // 解应包含 x 和 y
@@ -58,7 +58,7 @@ void test_homogeneous_ode() {
 
         EXPECT_TRUE(is_homogeneous_ode(rhs, "x", "y"), "(x^2+y^2)/(xy) is homogeneous");
 
-        auto sol = solve_homogeneous_ode(rhs, "x", "y");
+        auto sol = solve_homogeneous_ode_checked(rhs, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "homogeneous (x^2+y^2)/(xy) has solution");
     }
 }
@@ -71,7 +71,7 @@ void test_bernoulli_ode() {
         auto P = SymbolicExpr::number(1);
         auto Q = SymbolicExpr::number(1);
 
-        auto sol = solve_bernoulli_ode(P, Q, 2, "x", "y");
+        auto sol = solve_bernoulli_ode_checked(P, Q, 2, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "Bernoulli P=1 Q=1 n=2 has solution");
         EXPECT_TRUE(sol.method_used == ODEType::Bernoulli, "method is Bernoulli");
 
@@ -87,7 +87,7 @@ void test_bernoulli_ode() {
         auto P = SymbolicExpr::divide(SymbolicExpr::number(1), x);
         auto Q = SymbolicExpr::variable("x");
 
-        auto sol = solve_bernoulli_ode(P, Q, 2, "x", "y");
+        auto sol = solve_bernoulli_ode_checked(P, Q, 2, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "Bernoulli P=1/x Q=x n=2 has solution");
 
         std::string s = sol.general_solution->to_string();
@@ -100,7 +100,7 @@ void test_bernoulli_ode() {
         auto P = SymbolicExpr::number(2);
         auto Q = SymbolicExpr::number(1);
 
-        auto sol = solve_bernoulli_ode(P, Q, 3, "x", "y");
+        auto sol = solve_bernoulli_ode_checked(P, Q, 3, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "Bernoulli P=2 Q=1 n=3 has solution");
         EXPECT_TRUE(sol.method_used == ODEType::Bernoulli, "method is Bernoulli");
 
@@ -125,7 +125,7 @@ void test_exact_ode() {
 
         EXPECT_TRUE(is_exact_ode(M, N, "x", "y"), "(2x+y, x+2y) is exact");
 
-        auto sol = solve_exact_ode(M, N, "x", "y");
+        auto sol = solve_exact_ode_checked(M, N, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "exact (2x+y, x+2y) has solution");
         EXPECT_TRUE(sol.method_used == ODEType::Exact, "method is Exact");
 
@@ -156,7 +156,7 @@ void test_exact_ode() {
 
         EXPECT_TRUE(is_exact_ode(M, N, "x", "y"), "trig+exp exact equation");
 
-        auto sol = solve_exact_ode(M, N, "x", "y");
+        auto sol = solve_exact_ode_checked(M, N, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "trig+exp exact has solution");
     }
 
@@ -169,7 +169,7 @@ void test_exact_ode() {
 
         EXPECT_TRUE(is_exact_ode(y, x, "x", "y"), "(y, x) is exact");
 
-        auto sol = solve_exact_ode(y, x, "x", "y");
+        auto sol = solve_exact_ode_checked(y, x, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "exact (y, x) has solution");
 
         std::string s = sol.general_solution->to_string();
@@ -336,12 +336,20 @@ void test_higher_order_euler_checked_contracts() {
         EXPECT_TRUE(same_vars.error().code == CasErrc::InvalidArgument,
             "checked Euler ODE reports InvalidArgument for duplicate variables");
 
-        auto unsupported_forcing = solve_higher_order_ode_checked(
+        auto constant_forcing = solve_higher_order_ode_checked(
             {1.0, 0.0, 1.0}, SymbolicExpr::number(1), "x", "y");
-        EXPECT_TRUE(!unsupported_forcing.has_value(),
-            "checked higher-order ODE rejects nonhomogeneous forcing outside support domain");
-        EXPECT_TRUE(unsupported_forcing.error().code == CasErrc::Inconclusive,
-            "checked higher-order ODE reports Inconclusive for unsupported forcing");
+        EXPECT_TRUE(constant_forcing.has_value(),
+            "checked higher-order ODE supports constant nonhomogeneous forcing");
+        if (constant_forcing) {
+            EXPECT_CONTAINS(
+                constant_forcing.value().general_solution->to_string(),
+                {"1"}, "constant-forcing solution contains its particular term");
+        }
+
+        auto euler_forcing = solve_euler_ode_checked(
+            {1.0, 1.0, -1.0}, SymbolicExpr::number(1), "x", "y");
+        EXPECT_TRUE(euler_forcing.has_value(),
+            "checked Euler ODE supports constant nonhomogeneous forcing");
     }
 
     {
@@ -411,7 +419,7 @@ void test_integrating_factor() {
         auto M = SymbolicExpr::multiply(SymbolicExpr::number(2), y);
         auto N = x;
 
-        auto sol = solve_exact_ode(M, N, "x", "y");
+        auto sol = solve_exact_ode_checked(M, N, "x", "y").value();
         EXPECT_TRUE(sol.general_solution != nullptr,
             "solve_exact_ode handles non-exact with integrating factor");
     }
@@ -465,7 +473,7 @@ void test_variation_of_parameters() {
         auto y2 = SymbolicExpr::sin(x);
         auto g = SymbolicExpr::divide(SymbolicExpr::number(1), SymbolicExpr::cos(x));
 
-        auto sol = solve_variation_of_parameters(y1, y2, g, "x");
+        auto sol = solve_variation_of_parameters_checked(y1, y2, g, "x").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "VoP y''+y=sec(x) has solution");
         EXPECT_TRUE(sol.constants.empty(), "VoP produces particular solution (no constants)");
 
@@ -488,11 +496,15 @@ void test_variation_of_parameters() {
             SymbolicExpr::multiply(SymbolicExpr::number(-1), x));
         auto g = SymbolicExpr::exp(x);
 
-        auto sol = solve_variation_of_parameters(y1, y2, g, "x");
-        EXPECT_TRUE(sol.general_solution != nullptr, "VoP y''-y=e^x has solution");
-
-        std::string s = sol.general_solution->to_string();
-        EXPECT_CONTAINS(s, {"x"}, "VoP y''-y=e^x solution contains x");
+        auto checked = solve_variation_of_parameters_checked(
+            y1, y2, g, "x");
+        EXPECT_TRUE(checked && checked.value().general_solution != nullptr,
+                    "VoP y''-y=e^x has solution");
+        if (checked && checked.value().general_solution) {
+            EXPECT_CONTAINS(
+                checked.value().general_solution->to_string(), {"x"},
+                "VoP y''-y=e^x solution contains x");
+        }
     }
 
     TEST_CASE("Variation of Parameters: y'' + y = sin(x)");
@@ -507,14 +519,16 @@ void test_variation_of_parameters() {
         auto y2 = SymbolicExpr::sin(x);
         auto g = SymbolicExpr::sin(x);
 
-        auto sol = solve_variation_of_parameters(y1, y2, g, "x");
+        auto sol = solve_variation_of_parameters_checked(y1, y2, g, "x").value();
         EXPECT_TRUE(sol.general_solution != nullptr, "VoP y''+y=sin(x) has solution");
     }
 
     TEST_CASE("Variation of Parameters: null inputs");
     {
-        auto sol = solve_variation_of_parameters(nullptr, nullptr, nullptr, "x");
-        EXPECT_TRUE(sol.general_solution == nullptr, "VoP with null inputs returns null");
+        auto sol = solve_variation_of_parameters_checked(
+            nullptr, nullptr, nullptr, "x");
+        EXPECT_TRUE(!sol && sol.error().code == CasErrc::InvalidArgument,
+                    "null VoP inputs are InvalidArgument");
     }
 }
 
@@ -555,7 +569,7 @@ void test_frobenius() {
         auto q = SymbolicExpr::number(1);
         auto x0 = SymbolicExpr::number(0);
 
-        auto sol = solve_frobenius(p, q, x0, "x", 6);
+        auto sol = solve_frobenius_checked(p, q, x0, "x", 6).value();
         EXPECT_TRUE(sol.series_solution != nullptr, "Frobenius y''+y=0 has series solution");
         EXPECT_TRUE(sol.point_type == ODESingularityType::Ordinary, "point type is ordinary");
         EXPECT_TRUE(sol.truncation_order == 6, "truncation order is 6");
@@ -579,7 +593,7 @@ void test_frobenius() {
             SymbolicExpr::power(x, SymbolicExpr::number(2)));
         auto x0 = SymbolicExpr::number(0);
 
-        auto sol = solve_frobenius(p, q, x0, "x", 4);
+        auto sol = solve_frobenius_checked(p, q, x0, "x", 4).value();
         EXPECT_TRUE(sol.series_solution != nullptr, "Frobenius Euler eq has series solution");
         EXPECT_TRUE(sol.point_type == ODESingularityType::RegularSingular,
             "Euler eq at x=0 is regular singular");
@@ -612,9 +626,11 @@ void test_frobenius() {
         EXPECT_TRUE(type == ODESingularityType::IrregularSingular,
             "1/x^3 coefficient gives irregular singular point");
 
-        auto sol = solve_frobenius(p, q, x0, "x", 4);
-        EXPECT_TRUE(sol.series_solution == nullptr,
-            "Frobenius returns null for irregular singular point");
+        auto sol = solve_frobenius_checked(p, q, x0, "x", 4);
+        EXPECT_TRUE(!sol &&
+                        (sol.error().code == CasErrc::DomainError ||
+                         sol.error().code == CasErrc::Inconclusive),
+                    "irregular singular Frobenius input is explicitly rejected");
     }
 }
 

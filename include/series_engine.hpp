@@ -45,6 +45,15 @@ using ConvergenceInfoResult = Result<ConvergenceInfo>;
  * @return 收敛半径表达式（可能为数值、∞ 或符号表达式）
  */
 LAMINA_API ExpressionResult convergence_radius_checked(
+    const std::shared_ptr<SymbolicExpr>& general_coefficient,
+    const std::string& index_var,
+    ComputationContext& context);
+
+LAMINA_API ExpressionResult convergence_radius_checked(
+    const std::shared_ptr<SymbolicExpr>& general_coefficient,
+    const std::string& index_var);
+
+LAMINA_API ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var,
     ComputationContext& context);
@@ -53,8 +62,6 @@ LAMINA_API ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> convergence_radius(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients, const std::string& var);
 
 /**
  * @brief 判定无穷级数的收敛性。
@@ -74,8 +81,6 @@ LAMINA_API ConvergenceInfoResult convergence_test_checked(
     const std::shared_ptr<SymbolicExpr>& general_term,
     const std::string& index_var);
 
-LAMINA_API ConvergenceInfo convergence_test(
-    const std::shared_ptr<SymbolicExpr>& general_term, const std::string& index_var);
 
 
 /**
@@ -106,9 +111,6 @@ LAMINA_API PowerSeriesResult power_series_multiply_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b, int order);
 
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_multiply(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& a,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& b, int order);
 
 /**
  * @brief 幂级数复合：计算 f(g(x)) 的系数，要求 g(0) = 0。
@@ -127,9 +129,6 @@ LAMINA_API PowerSeriesResult power_series_compose_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& g, int order);
 
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_compose(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& f,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& g, int order);
 
 
 /**
@@ -204,9 +203,6 @@ LAMINA_API ExpressionResult laurent_series_checked(
     int order_neg,
     int order_pos);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> laurent_series(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& center, int order_neg, int order_pos);
 
 /**
  * @brief 计算函数在指定点的洛朗级数展开（含详细信息）。
@@ -233,9 +229,6 @@ LAMINA_API LaurentSeriesResult laurent_series_full_checked(
     int order_neg,
     int order_pos);
 
-LAMINA_API LaurentResult laurent_series_full(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& center, int order_neg, int order_pos);
 
 
 /**

@@ -55,6 +55,8 @@ static void test_integrator_compatibility_entrypoint() {
         // Integrator without context (default)
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(integrand, "x");
+        EXPECT_TRUE(result_default.has_value(), "default polynomial integration succeeds");
+        if (!result_default) continue;
 
         // Integrator with explicit computation context and no assumptions
         Integrator integrator_nullptr;
@@ -65,8 +67,8 @@ static void test_integrator_compatibility_entrypoint() {
         auto result_nullptr = checked.value();
 
         // Results must be identical
-        EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
-                      "compatibility and checked polynomial integration agree");
+        EXPECT_EQ_STR(result_default.value().to_string(), result_nullptr.to_string(),
+                      "default and explicit-context polynomial integration agree");
         }
     }
 }
@@ -81,6 +83,8 @@ static void test_integrator_trig_nullptr() {
 
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(*sin_x, "x");
+        EXPECT_TRUE(result_default.has_value(), "default sin integration succeeds");
+        if (!result_default) return;
 
         Integrator integrator_nullptr;
         ComputationContext context;
@@ -89,8 +93,8 @@ static void test_integrator_trig_nullptr() {
         if (!checked) return;
         auto result_nullptr = checked.value();
 
-        EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
-                      "sin(x) integral: default == nullptr context");
+        EXPECT_EQ_STR(result_default.value().to_string(), result_nullptr.to_string(),
+                      "sin(x) integral: default == explicit context");
     }
     {
         auto x = SymbolicExpr::variable("x");
@@ -98,6 +102,8 @@ static void test_integrator_trig_nullptr() {
 
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(*cos_x, "x");
+        EXPECT_TRUE(result_default.has_value(), "default cos integration succeeds");
+        if (!result_default) return;
 
         Integrator integrator_nullptr;
         ComputationContext context;
@@ -106,8 +112,8 @@ static void test_integrator_trig_nullptr() {
         if (!checked) return;
         auto result_nullptr = checked.value();
 
-        EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
-                      "cos(x) integral: default == nullptr context");
+        EXPECT_EQ_STR(result_default.value().to_string(), result_nullptr.to_string(),
+                      "cos(x) integral: default == explicit context");
     }
     {
         auto x = SymbolicExpr::variable("x");
@@ -115,6 +121,8 @@ static void test_integrator_trig_nullptr() {
 
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(*exp_x, "x");
+        EXPECT_TRUE(result_default.has_value(), "default exp integration succeeds");
+        if (!result_default) return;
 
         Integrator integrator_nullptr;
         ComputationContext context;
@@ -123,8 +131,8 @@ static void test_integrator_trig_nullptr() {
         if (!checked) return;
         auto result_nullptr = checked.value();
 
-        EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
-                      "exp(x) integral: default == nullptr context");
+        EXPECT_EQ_STR(result_default.value().to_string(), result_nullptr.to_string(),
+                      "exp(x) integral: default == explicit context");
     }
 }
 
@@ -409,6 +417,8 @@ static void test_rewrite_engine_nullptr() {
         RewriteEngine engine_default;
         engine_default.add_rule(rule);
         auto result_default = engine_default.apply(target, 10);
+        EXPECT_TRUE(result_default.has_value(), "default additive rewrite succeeds");
+        if (!result_default) return;
 
         // RewriteEngine with an explicit context without assumptions
         RewriteEngine engine_nullptr;
@@ -419,8 +429,8 @@ static void test_rewrite_engine_nullptr() {
         if (!checked) return;
         auto result_nullptr = checked.value();
 
-        EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
-                      "RewriteEngine y+0: default == nullptr context");
+        EXPECT_EQ_STR(result_default.value().to_string(), result_nullptr.to_string(),
+                      "RewriteEngine y+0: default == explicit context");
     }
 
     // Rule: _a * 1 -> _a
@@ -441,6 +451,8 @@ static void test_rewrite_engine_nullptr() {
         RewriteEngine engine_default;
         engine_default.add_rule(rule);
         auto result_default = engine_default.apply(target, 10);
+        EXPECT_TRUE(result_default.has_value(), "default multiplicative rewrite succeeds");
+        if (!result_default) return;
 
         RewriteEngine engine_nullptr;
         engine_nullptr.add_rule(rule);
@@ -450,8 +462,8 @@ static void test_rewrite_engine_nullptr() {
         if (!checked) return;
         auto result_nullptr = checked.value();
 
-        EXPECT_EQ_STR(result_default.to_string(), result_nullptr.to_string(),
-                      "RewriteEngine z*1: default == nullptr context");
+        EXPECT_EQ_STR(result_default.value().to_string(), result_nullptr.to_string(),
+                      "RewriteEngine z*1: default == explicit context");
     }
 }
 

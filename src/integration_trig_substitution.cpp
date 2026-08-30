@@ -65,7 +65,7 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node, cons
 
 } // anonymous namespace
 
-std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext&, int) {
     if (!lamina::detail::node(expr)) return nullptr;

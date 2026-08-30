@@ -42,6 +42,9 @@ public:
     void visit(const MembershipNode& node) override;
     void visit(const QuantityNode& node) override;
     void visit(const ComplexNode& node) override;
+    void visit(const IntegralNode& node) override;
+    void visit(const LimitNode& node) override;
+    void visit(const RootOfNode& node) override;
 
 private:
     std::stringstream buffer;

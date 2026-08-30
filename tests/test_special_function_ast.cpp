@@ -130,14 +130,13 @@ void verify_case(const Case& c) {
     }
 
     Integrator integ;
-    std::shared_ptr<SymbolicExpr> result;
-    try {
-        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand, kVarName));
-    } catch (const std::exception& e) {
+    auto integrated = integ.integrate(*integrand, kVarName);
+    if (!integrated) {
         EXPECT_TRUE(false,
-                    c.name + ": exception during integration: " + e.what());
+                    c.name + ": integration failed: " + integrated.error().message);
         return;
     }
+    auto result = lamina::detail::make_expression_ptr(integrated.value());
 
     bool ok = ast_contains_functype(lamina::detail::node(result), c.expected);
     if (!ok) {

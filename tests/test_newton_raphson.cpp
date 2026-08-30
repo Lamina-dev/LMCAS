@@ -163,9 +163,6 @@ int main() {
                         default_bracket_domain.error().code == lamina::CasErrc::DomainError,
                     "default-context bracketed Newton preserves DomainError");
 
-        auto legacy_domain = lamina::newton_raphson(log_f, log_df, "x", -1.0, opts);
-        EXPECT_TRUE(!legacy_domain.has_value(),
-                    "legacy Newton still unwraps errors to nullopt");
 
         lamina::ComputationContext solve_unbound_context;
         auto solve_unbound = lamina::solve_numeric_checked(
@@ -179,9 +176,6 @@ int main() {
                         default_context_unbound.error().code == lamina::CasErrc::UnboundSymbol,
                     "default-context checked solve preserves coefficient binding failures");
 
-        auto legacy_unbound = lamina::solve_numeric(f, "x", opts);
-        EXPECT_TRUE(legacy_unbound.empty(),
-                    "legacy solve_numeric still unwraps errors to an empty vector");
 
         lamina::ComputationContext solve_cancelled_context({}, cancellation);
         auto solve_cancelled = lamina::solve_numeric_checked(
@@ -256,7 +250,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 100;
 
-        auto result = lamina::newton_raphson(f, df, "x", 1.5, opts);
+        auto result = lamina::newton_raphson_checked(f, df, "x", 1.5, opts).value();
         EXPECT_TRUE(result.has_value(), "Newton-Raphson should converge for x^2-2 near 1.5");
         if (result.has_value()) {
             EXPECT_TRUE(std::abs(result->value - std::sqrt(2.0)) < 1e-10,
@@ -280,7 +274,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 100;
 
-        auto result = lamina::newton_raphson(f, df, "x", 1.5, 1.0, 2.0, opts);
+        auto result = lamina::newton_raphson_checked(f, df, "x", 1.5, 1.0, 2.0, opts).value();
         EXPECT_TRUE(result.has_value(), "Newton-Raphson with bracket should converge for x^2-2");
         if (result.has_value()) {
             EXPECT_TRUE(std::abs(result->value - std::sqrt(2.0)) < 1e-10,
@@ -304,7 +298,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 100;
 
-        auto result = lamina::newton_raphson(f, df, "x", 1e-8, -1.0, 1.0, opts);
+        auto result = lamina::newton_raphson_checked(f, df, "x", 1e-8, -1.0, 1.0, opts).value();
         EXPECT_TRUE(result.has_value(), "Should converge via bisection fallback for x^3 near zero");
         if (result.has_value()) {
             EXPECT_TRUE(std::abs(result->value) < 1e-4,
@@ -326,7 +320,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 100;
 
-        auto result = lamina::newton_raphson(f, df, "x", 1e-8, opts);
+        auto result = lamina::newton_raphson_checked(f, df, "x", 1e-8, opts).value();
 
         EXPECT_TRUE(result.has_value(), "f(1e-8) = 1e-24 < tolerance, should converge immediately");
     }
@@ -356,7 +350,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 2;
 
-        auto result = lamina::newton_raphson(f, df, "x", 10.0, opts);
+        auto result = lamina::newton_raphson_checked(f, df, "x", 10.0, opts).value();
         EXPECT_TRUE(!result.has_value(), "Should not converge in 2 iterations from x=10");
     }
 
@@ -375,14 +369,14 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 100;
 
-        auto result = lamina::newton_raphson(f, df, "x", 0.01, opts);
+        auto result = lamina::newton_raphson_checked(f, df, "x", 0.01, opts).value();
         EXPECT_TRUE(result.has_value(), "Should converge for x^2-4 even from x0=0.01 (large first step)");
         if (result.has_value()) {
             EXPECT_TRUE(std::abs(result->value - 2.0) < 1e-10 || std::abs(result->value + 2.0) < 1e-10,
                 "Root should be ±2");
         }
 
-        auto result2 = lamina::newton_raphson(f, df, "x", 0.01, 0.0, 3.0, opts);
+        auto result2 = lamina::newton_raphson_checked(f, df, "x", 0.01, 0.0, 3.0, opts).value();
         EXPECT_TRUE(result2.has_value(), "Should converge with bracket for x^2-4 from x0=0.01");
         if (result2.has_value()) {
             EXPECT_TRUE(std::abs(result2->value - 2.0) < 1e-10,
@@ -402,7 +396,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 100;
 
-        auto result = lamina::bisection(f, "x", 1.0, 2.0, opts);
+        auto result = lamina::bisection_checked(f, "x", 1.0, 2.0, opts).value();
         EXPECT_TRUE(result.has_value(), "Bisection should converge for x^2-2 on [1,2]");
         if (result.has_value()) {
             EXPECT_TRUE(std::abs(result->value - std::sqrt(2.0)) < 1e-10,
@@ -423,7 +417,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 100;
 
-        auto result = lamina::bisection(f, "x", -1.0, 1.0, opts);
+        auto result = lamina::bisection_checked(f, "x", -1.0, 1.0, opts).value();
         EXPECT_TRUE(!result.has_value(), "Bisection should return nullopt when no sign change");
     }
 
@@ -433,7 +427,7 @@ int main() {
         lamina::Polynomial<Rational> poly("x");
         poly.coeffs = {Rational(-2), Rational(0), Rational(1)};
 
-        auto intervals = lamina::isolate_real_roots(poly);
+        auto intervals = lamina::isolate_real_roots_checked(poly).value();
         EXPECT_TRUE(intervals.size() == 2, "x^2-2 should have 2 isolated real roots");
     }
 
@@ -459,7 +453,7 @@ int main() {
 
             lamina::Polynomial<Rational> poly = poly_from_roots(all_roots);
 
-            auto intervals = lamina::isolate_real_roots(poly);
+            auto intervals = lamina::isolate_real_roots_checked(poly).value();
             int sturm_count = (int)intervals.size();
 
             bool count_matches = (sturm_count == expected_distinct_real_roots);
@@ -601,7 +595,7 @@ int main() {
             auto expr = lamina::poly_to_symbolic(poly);
             auto df_expr = lamina::poly_to_symbolic(dpoly);
 
-            auto intervals = lamina::isolate_real_roots(poly);
+            auto intervals = lamina::isolate_real_roots_checked(poly).value();
 
             bool trial_ok = true;
             for (const auto& [lo_rat, hi_rat] : intervals) {
@@ -613,7 +607,7 @@ int main() {
                 opts.tolerance = TOLERANCE;
                 opts.max_newton_iterations = 100;
 
-                auto result = lamina::newton_raphson(expr, df_expr, "x", x0, lo, hi, opts);
+                auto result = lamina::newton_raphson_checked(expr, df_expr, "x", x0, lo, hi, opts).value();
 
                 if (result.has_value()) {
                     total_roots_checked++;
@@ -657,7 +651,7 @@ int main() {
         lamina::Polynomial<Rational> poly("x");
         poly.coeffs = {Rational(2), Rational(-3), Rational(1)};
 
-        auto intervals = lamina::isolate_real_roots(poly);
+        auto intervals = lamina::isolate_real_roots_checked(poly).value();
         EXPECT_TRUE(intervals.size() == 2, "Sturm should isolate 2 roots for (x-1)(x-2)");
 
         auto expr = lamina::poly_to_symbolic(poly);
@@ -673,7 +667,7 @@ int main() {
             double hi = hi_rat.to_double();
             double x0 = (lo + hi) * 0.5;
 
-            auto result = lamina::newton_raphson(expr, df_expr, "x", x0, lo, hi, opts);
+            auto result = lamina::newton_raphson_checked(expr, df_expr, "x", x0, lo, hi, opts).value();
             EXPECT_TRUE(result.has_value(),
                 "Newton should find root in interval [" + std::to_string(lo) + ", " + std::to_string(hi) + "]");
             if (result.has_value()) {
@@ -694,7 +688,7 @@ int main() {
         lamina::Polynomial<Rational> poly("x");
         poly.coeffs = {Rational(-6), Rational(11), Rational(-6), Rational(1)};
 
-        auto intervals = lamina::isolate_real_roots(poly);
+        auto intervals = lamina::isolate_real_roots_checked(poly).value();
         EXPECT_TRUE(intervals.size() == 3, "Sturm should isolate 3 roots for (x-1)(x-2)(x-3)");
 
         auto expr = lamina::poly_to_symbolic(poly);
@@ -710,7 +704,7 @@ int main() {
             double hi = hi_rat.to_double();
             double x0 = (lo + hi) * 0.5;
 
-            auto result = lamina::newton_raphson(expr, df_expr, "x", x0, lo, hi, opts);
+            auto result = lamina::newton_raphson_checked(expr, df_expr, "x", x0, lo, hi, opts).value();
             EXPECT_TRUE(result.has_value(),
                 "Newton should find root in interval [" + std::to_string(lo) + ", " + std::to_string(hi) + "]");
             if (result.has_value()) {
@@ -744,7 +738,7 @@ int main() {
             opts.has_initial_guess = true;
             opts.initial_guess = 0.5;
 
-            auto roots = lamina::solve_numeric(f, "x", opts);
+            auto roots = lamina::solve_numeric_checked(f, "x", opts).value();
             EXPECT_TRUE(roots.size() <= 1,
                 "Non-polynomial solve_numeric should return at most 1 root");
         }
@@ -757,7 +751,7 @@ int main() {
             opts.has_initial_guess = true;
             opts.initial_guess = 2.5;
 
-            auto roots = lamina::solve_numeric(f, "x", opts);
+            auto roots = lamina::solve_numeric_checked(f, "x", opts).value();
             EXPECT_TRUE(roots.size() <= 1,
                 "Non-polynomial with different x0 should still return at most 1 root");
         }
@@ -769,7 +763,7 @@ int main() {
             opts.max_newton_iterations = 100;
             opts.has_initial_guess = false;
 
-            auto roots = lamina::solve_numeric(f, "x", opts);
+            auto roots = lamina::solve_numeric_checked(f, "x", opts).value();
             EXPECT_TRUE(roots.size() <= 1,
                 "Non-polynomial without explicit x0 should return at most 1 root");
         }
@@ -786,7 +780,7 @@ int main() {
             opts.tolerance = 1e-10;
             opts.max_newton_iterations = 100;
 
-            auto roots = lamina::solve_numeric(poly_f, "x", opts);
+            auto roots = lamina::solve_numeric_checked(poly_f, "x", opts).value();
 
             EXPECT_TRUE(roots.size() == 2,
                 "Polynomial x^2-4 should find 2 roots via Sturm path");
@@ -820,7 +814,7 @@ int main() {
         opts.tolerance = 1e-12;
         opts.max_newton_iterations = 1;
 
-        auto result = lamina::newton_raphson(f, df, "x", 5.0, opts);
+        auto result = lamina::newton_raphson_checked(f, df, "x", 5.0, opts).value();
         EXPECT_TRUE(!result.has_value(),
             "Should not converge in 1 iteration from x=5 for x^3-2x+2");
     }
@@ -831,7 +825,7 @@ int main() {
         lamina::Polynomial<Rational> poly("x");
         poly.coeffs = {Rational(-2), Rational(0), Rational(1)};
 
-        auto intervals = lamina::isolate_real_roots(poly);
+        auto intervals = lamina::isolate_real_roots_checked(poly).value();
         EXPECT_TRUE(intervals.size() == 2, "x^2-2 should have 2 isolated real roots");
     }
 

@@ -1,4 +1,5 @@
 #include "matrix_decomposition.hpp"
+#include "symbolic_matrix.hpp"
 #include "test_common.hpp"
 #include <string>
 #include <variant>
@@ -46,19 +47,25 @@ int main() {
     // ---- rank ----
     {
         auto I = mat2(1,0, 0,1);
-        EXPECT_TRUE(matrix_rank(I) == 2, "rank(I2) = 2");
-        auto singular = mat2(1,2, 2,4); // rows linearly dependent
-        EXPECT_TRUE(matrix_rank(singular) == 1, "rank([[1,2],[2,4]]) = 1");
+        auto identity_rank = matrix_rank_checked(I);
+        EXPECT_TRUE(identity_rank && identity_rank.value() == 2,
+                    "rank(I2) = 2");
+        auto singular = mat2(1,2, 2,4);
+        auto singular_rank = matrix_rank_checked(singular);
+        EXPECT_TRUE(singular_rank && singular_rank.value() == 1,
+                    "rank([[1,2],[2,4]]) = 1");
         auto zero = mat2(0,0, 0,0);
-        EXPECT_TRUE(matrix_rank(zero) == 0, "rank(0) = 0");
+        auto zero_rank = matrix_rank_checked(zero);
+        EXPECT_TRUE(zero_rank && zero_rank.value() == 0, "rank(0) = 0");
     }
 
     // ---- LU round-trip P*A = L*U (here no pivoting): A = L*U ----
     {
         auto A = mat2(4,3, 6,3);
-        std::shared_ptr<SymbolicExpr> L, U;
-        EXPECT_TRUE(lu_decomposition(A, L, U), "LU succeeds");
-        auto prod = SymbolicExpr::multiply(L, U)->simplify();
+        auto decomposition = lu_decomposition_checked(A);
+        EXPECT_TRUE(decomposition.has_value(), "checked LU succeeds");
+        auto prod = SymbolicExpr::multiply(
+            decomposition.value().L, decomposition.value().U)->simplify();
         EXPECT_EQ_EXPR(prod, A->simplify(), "L*U == A");
     }
 
@@ -171,17 +178,17 @@ int main() {
     // ---- Jordan form of diagonalizable matrix: A = P J P^-1 ----
     {
         auto A = mat2(2,0, 0,3);
-        std::shared_ptr<SymbolicExpr> J, P;
-        if (jordan_form(A, J, P) && P && J) {
-            auto Pinv = SymbolicExpr::inverse(P);
-            if (Pinv) {
-                auto recon = SymbolicExpr::multiply(P, SymbolicExpr::multiply(J, Pinv))->simplify();
-                EXPECT_EQ_EXPR(recon, A->simplify(), "P J P^-1 == A");
-            } else {
-                EXPECT_TRUE(false, "Jordan basis matrix P must be invertible");
-            }
-        } else {
-            EXPECT_TRUE(false, "Jordan form must exist for a diagonal matrix");
+        auto decomposition = jordan_form_checked(A);
+        EXPECT_TRUE(decomposition.has_value(),
+                    "checked Jordan form exists for a diagonal matrix");
+        if (decomposition) {
+            auto inverse =
+                matrix_inverse_checked(decomposition.value().P).value();
+            auto recon = SymbolicExpr::multiply(
+                decomposition.value().P,
+                SymbolicExpr::multiply(
+                    decomposition.value().J, inverse))->simplify();
+            EXPECT_EQ_EXPR(recon, A->simplify(), "P J P^-1 == A");
         }
     }
 
@@ -191,8 +198,10 @@ int main() {
         auto lu = lu_decomposition_checked(A);
         EXPECT_TRUE(lu.has_value(), "checked LU succeeds");
         if (lu) {
-            auto prod = SymbolicExpr::multiply(lu.value().L, lu.value().U)->simplify();
-            EXPECT_EQ_EXPR(prod, A->simplify(), "checked LU reconstructs A");
+            auto permuted = SymbolicExpr::multiply(lu.value().P, A)->simplify();
+            auto prod = SymbolicExpr::multiply(
+                lu.value().L, lu.value().U)->simplify();
+            EXPECT_EQ_EXPR(prod, permuted, "checked PLU reconstructs P*A");
         }
 
         auto qr = qr_decomposition_checked(mat2(1,0, 0,1));
@@ -213,7 +222,7 @@ int main() {
         if (jordan) {
             EXPECT_TRUE(jordan.value().J != nullptr && jordan.value().P != nullptr,
                         "checked Jordan returns J and P");
-            auto Pinv = SymbolicExpr::inverse(jordan.value().P);
+            auto Pinv = matrix_inverse_checked(jordan.value().P).value();
             EXPECT_TRUE(Pinv != nullptr, "checked Jordan returns invertible P");
             if (Pinv) {
                 auto reconstructed = SymbolicExpr::multiply(
@@ -222,6 +231,21 @@ int main() {
                 EXPECT_EQ_EXPR(reconstructed, mat2(2,0, 0,3)->simplify(),
                                "checked Jordan reconstructs exact diagonal input");
             }
+        }
+
+        auto jordan_block = mat2(2,1, 0,2);
+        auto block_form = jordan_form_checked(jordan_block);
+        EXPECT_TRUE(block_form.has_value(),
+                    "checked Jordan accepts a non-diagonal Jordan block");
+        if (block_form) {
+            auto Pinv = matrix_inverse_checked(block_form.value().P).value();
+            auto reconstructed = Pinv
+                ? SymbolicExpr::multiply(
+                      block_form.value().P,
+                      SymbolicExpr::multiply(block_form.value().J, Pinv))->simplify()
+                : nullptr;
+            EXPECT_EQ_EXPR(reconstructed, jordan_block->simplify(),
+                           "Jordan block satisfies A=P*J*P^-1");
         }
 
         auto svd = svd_decomposition_checked(mat2(2,0, 0,3));
@@ -242,14 +266,23 @@ int main() {
                     "checked LU rejects non-square matrix");
 
         auto needs_pivot_lu = lu_decomposition_checked(mat2(0,1, 1,0));
-        EXPECT_TRUE(!needs_pivot_lu && needs_pivot_lu.error().code == CasErrc::Inconclusive,
-                    "checked LU reports Inconclusive when no-pivot minors vanish");
+        EXPECT_TRUE(needs_pivot_lu.has_value(),
+                    "checked PLU succeeds when row pivoting is required");
+        if (needs_pivot_lu) {
+            auto pivoted = SymbolicExpr::multiply(
+                needs_pivot_lu.value().P, mat2(0,1, 1,0))->simplify();
+            auto reconstructed = SymbolicExpr::multiply(
+                needs_pivot_lu.value().L,
+                needs_pivot_lu.value().U)->simplify();
+            EXPECT_EQ_EXPR(reconstructed, pivoted,
+                           "pivoting PLU satisfies P*A=L*U");
+        }
 
         auto x = SymbolicExpr::variable("x");
         auto symbolic_lu_input = SymbolicExpr::matrix({{x, num(1)}, {num(1), num(1)}});
         auto symbolic_lu = lu_decomposition_checked(symbolic_lu_input);
         EXPECT_TRUE(!symbolic_lu && symbolic_lu.error().code == CasErrc::Inconclusive,
-                    "checked LU requires proven exact rational no-pivot support");
+                    "checked PLU requires exact rational entries or proved pivots");
 
         auto bad_qr = qr_decomposition_checked(num(1));
         EXPECT_TRUE(!bad_qr && bad_qr.error().code == CasErrc::InvalidArgument,
@@ -291,26 +324,25 @@ int main() {
                     "checked Jordan rejects non-square matrix");
 
         auto non_diagonal_jordan = jordan_form_checked(mat2(1,1, 0,1));
-        EXPECT_TRUE(!non_diagonal_jordan &&
-                    non_diagonal_jordan.error().code == CasErrc::Inconclusive,
-                    "checked Jordan reports Inconclusive for unverified non-diagonal input");
+        EXPECT_TRUE(non_diagonal_jordan.has_value(),
+                    "checked Jordan supports an exact rational Jordan block");
 
         auto symbolic_jordan = jordan_form_checked(symbolic_spd);
         EXPECT_TRUE(!symbolic_jordan && symbolic_jordan.error().code == CasErrc::Inconclusive,
-                    "checked Jordan requires proven exact rational diagonal support");
+                    "checked Jordan requires exact rational entries or proved chains");
 
         auto non_diagonal_svd = svd_decomposition_checked(mat2(1,1, 0,1));
-        EXPECT_TRUE(!non_diagonal_svd && non_diagonal_svd.error().code == CasErrc::Inconclusive,
-                    "checked SVD reports Inconclusive for unverified non-diagonal input");
+        EXPECT_TRUE(!non_diagonal_svd &&
+                        non_diagonal_svd.error().code == CasErrc::Inconclusive,
+                    "checked SVD remains explicit when a complete singular basis is unproved");
 
         auto negative_diagonal_svd = svd_decomposition_checked(mat2(-1,0, 0,1));
-        EXPECT_TRUE(!negative_diagonal_svd &&
-                    negative_diagonal_svd.error().code == CasErrc::Inconclusive,
-                    "checked SVD reports Inconclusive outside nonnegative diagonal support");
+        EXPECT_TRUE(negative_diagonal_svd.has_value(),
+                    "checked SVD absorbs diagonal signs into singular vectors");
 
         auto symbolic_svd = svd_decomposition_checked(symbolic_spd);
         EXPECT_TRUE(!symbolic_svd && symbolic_svd.error().code == CasErrc::Inconclusive,
-                    "checked SVD requires proven exact rational diagonal support");
+                    "checked SVD requires exact rational entries or proved eigenspaces");
     }
 
     {

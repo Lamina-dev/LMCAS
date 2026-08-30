@@ -36,27 +36,27 @@ struct SignHash {
  */
 class LAMINA_API PropertyStore {
 public:
-    /// Declare domain for a symbol. Throws std::invalid_argument on contradiction.
-    void declare_domain(const std::string& symbol, Domain domain);
+    /// Declare domain for a symbol and report contradictions.
+    PropertyStoreResult declare_domain(const std::string& symbol, Domain domain);
 
     /** @brief Declares a domain and reports contradictions. */
     PropertyStoreResult declare_domain_checked(const std::string& symbol, Domain domain);
 
-    /// Declare sign for a symbol. Throws std::invalid_argument on contradiction.
-    void declare_sign(const std::string& symbol, Sign sign);
+    /// Declare sign for a symbol and report contradictions.
+    PropertyStoreResult declare_sign(const std::string& symbol, Sign sign);
 
     /** @brief Declares a sign and reports contradictions. */
     PropertyStoreResult declare_sign_checked(const std::string& symbol, Sign sign);
 
-    /// Declare parity for a symbol. Throws std::invalid_argument on contradiction.
-    void declare_parity(const std::string& symbol, Parity parity);
+    /// Declare parity for a symbol and report contradictions.
+    PropertyStoreResult declare_parity(const std::string& symbol, Parity parity);
 
     /** @brief Declares parity and reports contradictions. */
     PropertyStoreResult declare_parity_checked(const std::string& symbol, Parity parity);
 
     /// Declare boundedness for a symbol, optionally with interval bounds.
-    void declare_bounded(const std::string& symbol, Boundedness bounded,
-                         std::optional<Interval> bounds = std::nullopt);
+    PropertyStoreResult declare_bounded(const std::string& symbol, Boundedness bounded,
+                                        std::optional<Interval> bounds = std::nullopt);
 
     /** @brief Declares boundedness and reports contradictions. */
     PropertyStoreResult declare_bounded_checked(
@@ -89,10 +89,10 @@ public:
      * @brief Declare a symbol as continuous on a specified interval.
      * @param symbol Symbol name.
      * @param interval Interval on which continuity holds.
-     * @throws std::invalid_argument if the declaration contradicts an existing
-     *         overlapping declaration (e.g., downgrading differentiable to continuous-only).
+     * Contradictory overlapping declarations are returned as `CasError`.
      */
-    void declare_continuous(const std::string& symbol, const Interval& interval);
+    PropertyStoreResult declare_continuous(
+        const std::string& symbol, const Interval& interval);
 
     PropertyStoreResult declare_continuous_checked(
         const std::string& symbol,
@@ -110,10 +110,10 @@ public:
      *
      * @param symbol Symbol name.
      * @param interval Interval on which differentiability holds.
-     * @throws std::invalid_argument if the declaration contradicts an existing
-     *         overlapping declaration.
+     * Contradictory overlapping declarations are returned as `CasError`.
      */
-    void declare_differentiable(const std::string& symbol, const Interval& interval);
+    PropertyStoreResult declare_differentiable(
+        const std::string& symbol, const Interval& interval);
 
     PropertyStoreResult declare_differentiable_checked(
         const std::string& symbol,
@@ -130,7 +130,7 @@ public:
      * @return true if the symbol has been declared continuous (or differentiable)
      *         on an interval that covers the queried interval.
      */
-    bool is_continuous(const std::string& symbol, const Interval& interval) const;
+    Result<bool> is_continuous(const std::string& symbol, const Interval& interval) const;
 
     Result<bool> is_continuous_checked(
         const std::string& symbol,
@@ -147,7 +147,7 @@ public:
      * @return true if the symbol has been declared differentiable on an interval
      *         that covers the queried interval.
      */
-    bool is_differentiable(const std::string& symbol, const Interval& interval) const;
+    Result<bool> is_differentiable(const std::string& symbol, const Interval& interval) const;
 
     Result<bool> is_differentiable_checked(
         const std::string& symbol,
@@ -162,14 +162,11 @@ public:
      * @brief Declare a symbol as transcendental.
      *
      * Sets the symbol's domain to Real and marks it transcendental.
-     * Throws std::invalid_argument if the symbol already has a domain more
-     * specific than Real (Algebraic, Rational, Integer, Natural, PositiveInt),
-     * since transcendental numbers cannot be algebraic.
+     * Returns an error if the symbol already has an algebraic sub-domain.
      *
      * @param symbol Symbol name
-     * @throws std::invalid_argument on contradiction with Algebraic or sub-domains
      */
-    void declare_transcendental(const std::string& symbol);
+    PropertyStoreResult declare_transcendental(const std::string& symbol);
 
     /** @brief Declares transcendence and reports domain contradictions. */
     PropertyStoreResult declare_transcendental_checked(const std::string& symbol);
@@ -185,15 +182,12 @@ public:
     /**
      * @brief Declare finiteness for a symbol.
      *
-     * Finite implies Bounded (auto-calls declare_bounded).
-     * Throws std::invalid_argument if contradicting an existing finiteness
-     * (e.g., declaring Finite when already Divergent, or vice versa).
+     * Finite implies Bounded. Contradictions are returned as `CasError`.
      *
      * @param symbol Symbol name
      * @param f Finiteness value (Finite, Divergent, or Unknown)
-     * @throws std::invalid_argument on Finite+Divergent contradiction
      */
-    void declare_finiteness(const std::string& symbol, Finiteness f);
+    PropertyStoreResult declare_finiteness(const std::string& symbol, Finiteness f);
 
     /** @brief Declares finiteness and reports contradictions. */
     PropertyStoreResult declare_finiteness_checked(const std::string& symbol, Finiteness f);
@@ -209,16 +203,13 @@ public:
     /**
      * @brief Declare matrix definiteness for a symbol.
      *
-     * PositiveDefinite implies PositiveSemiDefinite.
-     * NegativeDefinite implies NegativeSemiDefinite.
-     * Contradictions (e.g., PositiveDefinite + NegativeDefinite,
-     * PositiveDefinite + Indefinite, NegativeDefinite + Indefinite) throw.
+     * PositiveDefinite implies PositiveSemiDefinite. NegativeDefinite implies
+     * NegativeSemiDefinite. Contradictions are returned as `CasError`.
      *
      * @param symbol Symbol name
      * @param d Definiteness value
-     * @throws std::invalid_argument on contradiction
      */
-    void declare_definiteness(const std::string& symbol, Definiteness d);
+    PropertyStoreResult declare_definiteness(const std::string& symbol, Definiteness d);
 
     /** @brief Declares matrix definiteness and reports contradictions. */
     PropertyStoreResult declare_definiteness_checked(const std::string& symbol, Definiteness d);
@@ -236,8 +227,8 @@ public:
      * @param symbol Symbol name
      * @param period The period as a symbolic expression (must be non-null)
      */
-    void declare_periodic(const std::string& symbol,
-                          const std::shared_ptr<SymbolicExpr>& period);
+    PropertyStoreResult declare_periodic(
+        const std::string& symbol, const std::shared_ptr<SymbolicExpr>& period);
 
     /** @brief Declares periodicity and reports invalid periods. */
     PropertyStoreResult declare_periodic_checked(
@@ -303,8 +294,9 @@ public:
      * @param interval The interval on which the monotonicity property holds.
      * @param mono     The type of monotonicity (Increasing, Decreasing, etc.).
      */
-    void declare_monotonicity(const std::string& symbol, const std::string& variable,
-                              const Interval& interval, Monotonicity mono);
+    PropertyStoreResult declare_monotonicity(
+        const std::string& symbol, const std::string& variable,
+        const Interval& interval, Monotonicity mono);
 
     PropertyStoreResult declare_monotonicity_checked(
         const std::string& symbol,
@@ -331,8 +323,9 @@ public:
      * @param interval The interval to check coverage for.
      * @return The monotonicity type if covered, or Monotonicity::Unknown.
      */
-    Monotonicity get_monotonicity(const std::string& symbol, const std::string& variable,
-                                  const Interval& interval) const;
+    Result<Monotonicity> get_monotonicity(
+        const std::string& symbol, const std::string& variable,
+        const Interval& interval) const;
 
     Result<Monotonicity> get_monotonicity_checked(
         const std::string& symbol,

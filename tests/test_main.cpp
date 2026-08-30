@@ -21,7 +21,7 @@ Value cas_solve(const std::vector<Value>& args) {
     auto expr = args[0].as_symbolic();
     std::string var = args[1].to_string();
 
-    auto solutions = SymbolicExpr::solve(expr, var);
+    auto solutions = lamina::solve_finite_checked(expr, var).value();
 
     std::vector<Value> val_sols;
     for (const auto& s : solutions) {

@@ -38,14 +38,6 @@ struct ExprMatch {
 
 using ExprMatchResult = Result<ExprMatch>;
 
-struct ApproxComplex {
-    ApproxReal real;
-    ApproxReal imag;
-
-    bool is_finite() const noexcept {
-        return real.is_finite() && imag.is_finite();
-    }
-};
 
 enum class EqvProfile {
     Core,

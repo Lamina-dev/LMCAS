@@ -1,13 +1,5 @@
 #include "poly_utils.hpp"
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_gcd(
-    const std::shared_ptr<SymbolicExpr>& left,
-    const std::shared_ptr<SymbolicExpr>& right) {
-    if (!left || !right) return nullptr;
-    lamina::ComputationContext context;
-    auto result = lamina::symbolic_polynomial_gcd(*left, *right, context);
-    return result ? result.value() : nullptr;
-}
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(
     const std::shared_ptr<SymbolicExpr>& left,

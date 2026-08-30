@@ -68,15 +68,14 @@ static void test_with_assumptions_preserves_depth_normal() {
         auto decls = random_decls();
 
         // Call with_assumptions with a normal callable
-        int result = with_assumptions(ctx, decls, [&]() -> int {
-            // Inside the scope, depth should be one more
+        auto result = with_assumptions(ctx, decls, [&]() -> int {
             RC_ASSERT(ctx.depth() == depth_before + 1);
             return 42;
         });
 
-        // After with_assumptions, depth must be restored
         RC_ASSERT(ctx.depth() == depth_before);
-        RC_ASSERT(result == 42);
+        RC_ASSERT(result.has_value());
+        RC_ASSERT(result.value() == 42);
     });
 }
 
@@ -96,22 +95,15 @@ static void test_with_assumptions_preserves_depth_exception() {
         // Generate random declarations
         auto decls = random_decls();
 
-        // Call with_assumptions with a throwing callable
-        bool caught = false;
-        try {
-            with_assumptions(ctx, decls, [&]() -> int {
-                RC_ASSERT(ctx.depth() == depth_before + 1);
-                throw std::runtime_error("test exception");
-                return 0; // unreachable
-            });
-        } catch (const std::runtime_error& e) {
-            caught = true;
-            RC_ASSERT(std::string(e.what()) == "test exception");
-        }
+        auto result = with_assumptions(ctx, decls, [&]() -> int {
+            RC_ASSERT(ctx.depth() == depth_before + 1);
+            throw std::runtime_error("test exception");
+            return 0;
+        });
 
-        // Exception must have been caught
-        RC_ASSERT(caught);
-        // Depth must be restored despite the exception
+        RC_ASSERT(!result.has_value());
+        RC_ASSERT(result.error().code == CasErrc::InternalInvariant);
+        RC_ASSERT(result.error().message == "test exception");
         RC_ASSERT(ctx.depth() == depth_before);
     });
 }
@@ -131,11 +123,11 @@ static void test_with_assumptions_void_preserves_depth_normal() {
 
         auto decls = random_decls();
 
-        // Call with void callable
-        with_assumptions(ctx, decls, [&]() {
+        auto result = with_assumptions(ctx, decls, [&]() {
             RC_ASSERT(ctx.depth() == depth_before + 1);
         });
 
+        RC_ASSERT(result.has_value());
         RC_ASSERT(ctx.depth() == depth_before);
     });
 }
@@ -155,18 +147,14 @@ static void test_with_assumptions_void_preserves_depth_exception() {
 
         auto decls = random_decls();
 
-        bool caught = false;
-        try {
-            with_assumptions(ctx, decls, [&]() {
-                RC_ASSERT(ctx.depth() == depth_before + 1);
-                throw std::logic_error("void exception");
-            });
-        } catch (const std::logic_error& e) {
-            caught = true;
-            RC_ASSERT(std::string(e.what()) == "void exception");
-        }
+        auto result = with_assumptions(ctx, decls, [&]() {
+            RC_ASSERT(ctx.depth() == depth_before + 1);
+            throw std::logic_error("void exception");
+        });
 
-        RC_ASSERT(caught);
+        RC_ASSERT(!result.has_value());
+        RC_ASSERT(result.error().code == CasErrc::InternalInvariant);
+        RC_ASSERT(result.error().message == "void exception");
         RC_ASSERT(ctx.depth() == depth_before);
     });
 }
@@ -188,24 +176,20 @@ static void test_with_assumptions_vector_preserves_depth() {
         std::vector<AssumptionDecl> decls = random_decls();
 
         // Normal path
-        int result = with_assumptions(ctx, decls, [&]() -> int {
+        auto result = with_assumptions(ctx, decls, [&]() -> int {
             RC_ASSERT(ctx.depth() == depth_before + 1);
             return 99;
         });
         RC_ASSERT(ctx.depth() == depth_before);
-        RC_ASSERT(result == 99);
+        RC_ASSERT(result.has_value());
+        RC_ASSERT(result.value() == 99);
 
-        // Exception path
-        bool caught = false;
-        try {
-            with_assumptions(ctx, decls, [&]() -> int {
-                throw std::runtime_error("vec exception");
-                return 0;
-            });
-        } catch (const std::runtime_error&) {
-            caught = true;
-        }
-        RC_ASSERT(caught);
+        auto failed = with_assumptions(ctx, decls, [&]() -> int {
+            throw std::runtime_error("vec exception");
+            return 0;
+        });
+        RC_ASSERT(!failed.has_value());
+        RC_ASSERT(failed.error().code == CasErrc::InternalInvariant);
         RC_ASSERT(ctx.depth() == depth_before);
     });
 }
@@ -221,13 +205,12 @@ static void test_with_assumptions_applies_declarations() {
 
         int depth_before = ctx.depth();
 
-        with_assumptions(ctx, {AssumptionDecl::make_domain(var, dom)}, [&]() {
-            // The domain should be visible inside
-            RC_ASSERT(ctx.has_domain(var, dom));
-        });
+        auto result = with_assumptions(
+            ctx, {AssumptionDecl::make_domain(var, dom)}, [&]() {
+                RC_ASSERT(ctx.has_domain(var, dom));
+            });
 
-        // After with_assumptions, the declaration should NOT be visible
-        // (unless it was already declared in the parent scope)
+        RC_ASSERT(result.has_value());
         RC_ASSERT(ctx.depth() == depth_before);
     });
 }

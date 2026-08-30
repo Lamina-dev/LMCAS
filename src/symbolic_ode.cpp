@@ -22,13 +22,13 @@ constexpr const char* kSolveLinear2OdeOperation = "solve_linear2_ode";
 static bool dep_var_is_positive(const std::string& y, const AssumptionContext* ctx) {
     if (!ctx) return false;
     auto y_expr = SymbolicExpr::variable(y);
-    return ctx->is_positive(*y_expr) == Tribool::True;
+    return detail::propagate_result(ctx->is_positive(*y_expr)) == Tribool::True;
 }
 
 /// Check if a symbolic expression is known NonZero in the given context.
 static bool expr_is_nonzero(const std::shared_ptr<SymbolicExpr>& expr, const AssumptionContext* ctx) {
     if (!ctx || !expr) return false;
-    return ctx->is_nonzero(*expr) == Tribool::True;
+    return detail::propagate_result(ctx->is_nonzero(*expr)) == Tribool::True;
 }
 
 /// Wrap an expression in abs() to signal positive-branch preference.

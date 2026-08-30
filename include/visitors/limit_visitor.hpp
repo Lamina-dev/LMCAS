@@ -100,6 +100,7 @@ public:
     void visit(const MultiplyNode& node) override;
     void visit(const PowerNode& node) override;
     void visit(const FunctionNode& node) override;
+    void visit(const UninterpretedFunctionNode& node) override;
     void visit(const MatrixNode& node) override;
     void visit(const RelationalNode& node) override;
     void visit(const LogicalNode& node) override;
@@ -114,4 +115,7 @@ public:
     void visit(const MembershipNode& node) override;
     void visit(const QuantityNode& node) override;
     void visit(const ComplexNode& node) override;
+    void visit(const IntegralNode& node) override;
+    void visit(const LimitNode& node) override;
+    void visit(const RootOfNode& node) override;
 };

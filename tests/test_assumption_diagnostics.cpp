@@ -114,7 +114,7 @@ static void test_domain_contradiction_message() {
     TEST_CASE("Domain contradiction contains symbol and domains");
 
     rc::check("For any domain contradiction (Transcendental then sub-Real), "
-              "the exception message contains the symbol name and both domains", []() {
+              "the Result error message contains the symbol name and both domains", []() {
         std::string var_name = random_var_name();
         DomainContradiction contradiction = random_domain_contradiction();
 
@@ -124,16 +124,10 @@ static void test_domain_contradiction_message() {
         store.declare_transcendental(var_name);
 
         // Now try to declare a contradicting sub-Real domain
-        bool threw = false;
-        std::string message;
-        try {
-            store.declare_domain(var_name, contradiction.second);
-        } catch (const std::invalid_argument& e) {
-            threw = true;
-            message = e.what();
-        }
-
-        RC_ASSERT(threw);
+        auto failure_126 = store.declare_domain(var_name, contradiction.second);
+        RC_ASSERT(!failure_126.has_value());
+        RC_ASSERT(failure_126.error().code == CasErrc::InvalidArgument);
+        const std::string& message = failure_126.error().message;
         // Message must contain the symbol name
         RC_ASSERT(message.find(var_name) != std::string::npos);
         // Message must contain information about the conflicting domain
@@ -151,7 +145,7 @@ static void test_sign_contradiction_message() {
     TEST_CASE("Sign contradiction contains symbol and signs");
 
     rc::check("For any sign contradiction (e.g., Positive then Negative), "
-              "the exception message contains the symbol name and both signs", []() {
+              "the Result error message contains the symbol name and both signs", []() {
         std::string var_name = random_var_name();
         SignContradiction contradiction = random_sign_contradiction();
 
@@ -161,16 +155,10 @@ static void test_sign_contradiction_message() {
         store.declare_sign(var_name, contradiction.first);
 
         // Now try to declare the contradicting sign
-        bool threw = false;
-        std::string message;
-        try {
-            store.declare_sign(var_name, contradiction.second);
-        } catch (const std::invalid_argument& e) {
-            threw = true;
-            message = e.what();
-        }
-
-        RC_ASSERT(threw);
+        auto failure_163 = store.declare_sign(var_name, contradiction.second);
+        RC_ASSERT(!failure_163.has_value());
+        RC_ASSERT(failure_163.error().code == CasErrc::InvalidArgument);
+        const std::string& message = failure_163.error().message;
         // Message must contain the symbol name
         RC_ASSERT(message.find(var_name) != std::string::npos);
         // Message must contain information about both signs
@@ -187,7 +175,7 @@ static void test_cross_constraint_message() {
     TEST_CASE("Cross-constraint conflict contains symbol, domain, and sign");
 
     rc::check("For any cross-constraint conflict (e.g., Natural + Negative), "
-              "the exception message contains the symbol name and explains both", []() {
+              "the Result error message contains the symbol name and explains both", []() {
         std::string var_name = random_var_name();
         CrossConstraint conflict = random_cross_constraint();
 
@@ -197,16 +185,10 @@ static void test_cross_constraint_message() {
         store.declare_domain(var_name, conflict.domain);
 
         // Now try to declare the contradicting sign
-        bool threw = false;
-        std::string message;
-        try {
-            store.declare_sign(var_name, conflict.sign);
-        } catch (const std::invalid_argument& e) {
-            threw = true;
-            message = e.what();
-        }
-
-        RC_ASSERT(threw);
+        auto failure_199 = store.declare_sign(var_name, conflict.sign);
+        RC_ASSERT(!failure_199.has_value());
+        RC_ASSERT(failure_199.error().code == CasErrc::InvalidArgument);
+        const std::string& message = failure_199.error().message;
         // Message must contain the symbol name
         RC_ASSERT(message.find(var_name) != std::string::npos);
         // Message should contain information about the domain or sign conflict
@@ -223,7 +205,7 @@ static void test_finiteness_contradiction_message() {
     TEST_CASE("Finiteness contradiction contains symbol info");
 
     rc::check("For any Finite+Divergent contradiction, "
-              "the exception message contains the symbol name", []() {
+              "the Result error message contains the symbol name", []() {
         std::string var_name = random_var_name();
 
         PropertyStore store;
@@ -233,16 +215,10 @@ static void test_finiteness_contradiction_message() {
 
         store.declare_finiteness(var_name, finite_first ? Finiteness::Finite : Finiteness::Divergent);
 
-        bool threw = false;
-        std::string message;
-        try {
-            store.declare_finiteness(var_name, finite_first ? Finiteness::Divergent : Finiteness::Finite);
-        } catch (const std::invalid_argument& e) {
-            threw = true;
-            message = e.what();
-        }
-
-        RC_ASSERT(threw);
+        auto failure_234 = store.declare_finiteness(var_name, finite_first ? Finiteness::Divergent : Finiteness::Finite);
+        RC_ASSERT(!failure_234.has_value());
+        RC_ASSERT(failure_234.error().code == CasErrc::InvalidArgument);
+        const std::string& message = failure_234.error().message;
         // Message must contain the symbol name
         RC_ASSERT(message.find(var_name) != std::string::npos);
         // Message should mention both finiteness states
@@ -259,7 +235,7 @@ static void test_definiteness_contradiction_message() {
     TEST_CASE("Definiteness contradiction contains symbol info");
 
     rc::check("For any PositiveDefinite+NegativeDefinite contradiction, "
-              "the exception message contains the symbol name", []() {
+              "the Result error message contains the symbol name", []() {
         std::string var_name = random_var_name();
 
         PropertyStore store;
@@ -270,17 +246,11 @@ static void test_definiteness_contradiction_message() {
         store.declare_definiteness(var_name,
             pos_first ? Definiteness::PositiveDefinite : Definiteness::NegativeDefinite);
 
-        bool threw = false;
-        std::string message;
-        try {
-            store.declare_definiteness(var_name,
+        auto failure_271 = store.declare_definiteness(var_name,
                 pos_first ? Definiteness::NegativeDefinite : Definiteness::PositiveDefinite);
-        } catch (const std::invalid_argument& e) {
-            threw = true;
-            message = e.what();
-        }
-
-        RC_ASSERT(threw);
+        RC_ASSERT(!failure_271.has_value());
+        RC_ASSERT(failure_271.error().code == CasErrc::InvalidArgument);
+        const std::string& message = failure_271.error().message;
         // Message must contain the symbol name
         RC_ASSERT(message.find(var_name) != std::string::npos);
         // Message should reference definiteness

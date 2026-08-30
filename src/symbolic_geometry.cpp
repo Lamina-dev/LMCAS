@@ -29,36 +29,10 @@ Result<void> validate_geometry_inputs(const std::shared_ptr<SymbolicExpr>& funct
     return Result<void>::success();
 }
 
-bool contains_unevaluated_integral(const std::shared_ptr<const SymbolicNode>& node,
-                                   std::size_t depth = 0)
-{
-    if (!node || depth > 200) return false;
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (func->type() == FunctionNode::FuncType::Calculus_Integral) {
-            return true;
-        }
-        for (const auto& arg : func->arguments()) {
-            if (contains_unevaluated_integral(arg, depth + 1)) return true;
-        }
-        return false;
-    }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : add->operands()) {
-            if (contains_unevaluated_integral(op, depth + 1)) return true;
-        }
-        return false;
-    }
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mul->operands()) {
-            if (contains_unevaluated_integral(op, depth + 1)) return true;
-        }
-        return false;
-    }
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return contains_unevaluated_integral(pow->base(), depth + 1) ||
-               contains_unevaluated_integral(pow->exponent(), depth + 1);
-    }
-    return false;
+bool contains_unevaluated_integral(
+    const std::shared_ptr<const SymbolicNode>& node,
+    std::size_t = 0) {
+    return lamina::detail::contains_node_type<IntegralNode>(node);
 }
 
 ExpressionResult simplify_geometry_checked(std::shared_ptr<SymbolicExpr> expr,
@@ -236,14 +210,6 @@ ExpressionResult volume_of_revolution_x_checked(
                                           context);
 }
 
-std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
-    std::shared_ptr<SymbolicExpr> fx,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-) {
-    auto result = volume_of_revolution_x_checked(std::move(fx), std::move(a), std::move(b));
-    return result ? result.value() : nullptr;
-}
 
 ExpressionResult arc_length_x_checked(
     std::shared_ptr<SymbolicExpr> fx,
@@ -265,14 +231,6 @@ ExpressionResult arc_length_x_checked(
     return arc_length_x_checked(std::move(fx), std::move(a), std::move(b), context);
 }
 
-std::shared_ptr<SymbolicExpr> arc_length_x(
-    std::shared_ptr<SymbolicExpr> fx,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-) {
-    auto result = arc_length_x_checked(std::move(fx), std::move(a), std::move(b));
-    return result ? result.value() : nullptr;
-}
 
 ExpressionResult volume_of_revolution_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
@@ -295,14 +253,6 @@ ExpressionResult volume_of_revolution_y_checked(
                                           context);
 }
 
-std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
-    std::shared_ptr<SymbolicExpr> fy,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-) {
-    auto result = volume_of_revolution_y_checked(std::move(fy), std::move(a), std::move(b));
-    return result ? result.value() : nullptr;
-}
 
 ExpressionResult arc_length_y_checked(
     std::shared_ptr<SymbolicExpr> fy,
@@ -324,13 +274,5 @@ ExpressionResult arc_length_y_checked(
     return arc_length_y_checked(std::move(fy), std::move(a), std::move(b), context);
 }
 
-std::shared_ptr<SymbolicExpr> arc_length_y(
-    std::shared_ptr<SymbolicExpr> fy,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-) {
-    auto result = arc_length_y_checked(std::move(fy), std::move(a), std::move(b));
-    return result ? result.value() : nullptr;
-}
 
 }

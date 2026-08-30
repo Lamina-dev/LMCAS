@@ -17,7 +17,8 @@ public:
      * @param var_name 积分变量名
      * @return 积分结果表达式
      */
-    SymbolicExpr integrate(const SymbolicExpr& expr, const std::string& var_name);
+    Result<SymbolicExpr> integrate(
+        const SymbolicExpr& expr, const std::string& var_name);
     Result<SymbolicExpr> integrate_checked(
         const SymbolicExpr& expr,
         const std::string& var_name,
@@ -30,8 +31,9 @@ public:
      * @param upper 积分上限
      * @return 定积分结果表达式
      */
-    SymbolicExpr integrate_def(const SymbolicExpr& expr, const std::string& var_name,
-                               const SymbolicExpr& lower, const SymbolicExpr& upper);
+    Result<SymbolicExpr> integrate_def(
+        const SymbolicExpr& expr, const std::string& var_name,
+        const SymbolicExpr& lower, const SymbolicExpr& upper);
     Result<SymbolicExpr> integrate_def_checked(
         const SymbolicExpr& expr,
         const std::string& var_name,
@@ -44,7 +46,8 @@ public:
      * @param strategy 策略对象
      * @param position 插入位置，-1 表示追加到末尾
      */
-    void add_strategy(std::unique_ptr<IntegrationStrategy> strategy, int position = -1);
+    Result<void> add_strategy(
+        std::unique_ptr<IntegrationStrategy> strategy, int position = -1);
 
     /** @brief 获取积分表（可修改） */
     IntegrationTable& table() { return table_; }
@@ -58,7 +61,7 @@ public:
      * @param depth 当前递归深度
      * @return 积分结果，失败返回 nullptr
      */
-    std::shared_ptr<SymbolicExpr> integrate_recursive(
+    Result<std::shared_ptr<SymbolicExpr>> integrate_recursive(
         const SymbolicExpr& expr, const std::string& var,
         ComputationContext& context, int depth = 0);
 
@@ -80,11 +83,11 @@ private:
     CycleState cycle_state_;
     std::size_t query_depth_ = 0;
 
-    std::shared_ptr<SymbolicExpr> apply_linearity(
+    Result<std::shared_ptr<SymbolicExpr>> apply_linearity(
         const SymbolicExpr& expr, const std::string& var,
         ComputationContext& context, int depth);
 
-    std::shared_ptr<SymbolicExpr> dispatch_strategies(
+    Result<std::shared_ptr<SymbolicExpr>> dispatch_strategies(
         const SymbolicExpr& expr, const std::string& var,
         ComputationContext& context, int depth);
 

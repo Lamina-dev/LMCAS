@@ -23,8 +23,9 @@ int main() {
     lamina::ComputationContext context;
     auto solved = lamina::solve_equation(
         expr, "x", context, lamina::SolveOptions{});
-    if (!solved || solved.value().kind() != lamina::SolutionSet::Kind::Finite ||
-        solved.value().finite_solutions().size() != 1) {
+    const auto* finite = solved
+        ? std::get_if<lamina::FiniteSolutions>(&solved.value()) : nullptr;
+    if (!finite || finite->values.size() != 1) {
         std::cerr << "failed to solve expression\n";
         return 2;
     }
@@ -530,7 +531,12 @@ int main() {
         return 11;
     }
     auto positive_assumptions = std::make_shared<lamina::AssumptionContext>();
-    positive_assumptions->assume_sign("x", lamina::Sign::Positive);
+    auto positive_assumption =
+        positive_assumptions->assume_sign("x", lamina::Sign::Positive);
+    if (!positive_assumption) {
+        std::cerr << "failed to create positive LSR assumption\n";
+        return 11;
+    }
     lamina::ComputationContext exp_ln_positive_context;
     if (!exp_ln_positive_context.set_assumptions(positive_assumptions)) {
         std::cerr << "failed to attach LSR equivalence assumptions\n";

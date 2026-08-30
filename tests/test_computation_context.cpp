@@ -66,15 +66,20 @@ int main() {
 
     TEST_CASE("DiagnosticEngine is the only diagnostic dispatch point");
     std::size_t consumed = 0;
-    diagnostic_context.set_diagnostic_consumer(
-        [&](const Diagnostic& diagnostic) {
-            if (diagnostic.operation == "test_consumer") ++consumed;
-        });
+    auto installed_diagnostic_consumer =
+        diagnostic_context.set_diagnostic_consumer(
+            [&](const Diagnostic& diagnostic) {
+                if (diagnostic.operation == "test_consumer") ++consumed;
+            });
+    EXPECT_TRUE(installed_diagnostic_consumer.has_value(),
+                "diagnostic consumer installation succeeds");
     ResourceLimits consumer_limits;
     consumer_limits.max_diagnostics = 2;
     ComputationContext consumer_context(consumer_limits);
-    consumer_context.set_diagnostic_consumer(
+    auto installed_consumer = consumer_context.set_diagnostic_consumer(
         [&](const Diagnostic&) { ++consumed; });
+    EXPECT_TRUE(installed_consumer.has_value(),
+                "consumer context accepts a diagnostic consumer");
     auto emitted = consumer_context.add_diagnostic(
         {DiagnosticSeverity::Info, "test_consumer", "event"});
     EXPECT_TRUE(emitted.has_value() && consumed == 1,
@@ -82,8 +87,13 @@ int main() {
 
     TEST_CASE("Diagnostic consumer failures preserve engine state");
     ComputationContext failing_consumer_context;
-    failing_consumer_context.set_diagnostic_consumer(
-        [](const Diagnostic&) { throw std::runtime_error("consumer failure"); });
+    auto installed_failing_consumer =
+        failing_consumer_context.set_diagnostic_consumer(
+            [](const Diagnostic&) {
+                throw std::runtime_error("consumer failure");
+            });
+    EXPECT_TRUE(installed_failing_consumer.has_value(),
+                "throwing diagnostic consumer installation succeeds");
     auto consumer_failure = failing_consumer_context.add_diagnostic(
         {DiagnosticSeverity::Error, "test_consumer_failure", "event"});
     EXPECT_TRUE(!consumer_failure &&

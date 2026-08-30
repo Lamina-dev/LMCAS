@@ -115,8 +115,8 @@ static double eval_poly_at(const Polynomial<Rational>& poly, double x) {
 
 static bool is_rootof(const std::shared_ptr<SymbolicExpr>& expr) {
     if (!expr || !lamina::detail::node(expr)) return false;
-    auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr));
-    return func && func->type() == FunctionNode::FuncType::RootOf;
+    return std::dynamic_pointer_cast<const RootOfNode>(
+               lamina::detail::node(expr)) != nullptr;
 }
 
 void test_zero_constant_factor_out_x() {

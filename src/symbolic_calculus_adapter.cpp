@@ -9,25 +9,6 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::integral(
     return operand ? operand->integrate(variable_name) : nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::limit_func(
-    std::shared_ptr<SymbolicExpr> operand,
-    const std::string& variable_name,
-    std::shared_ptr<SymbolicExpr> target) {
-    return operand ? operand->limit(variable_name, std::move(target)) : nullptr;
-}
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::limit(
-    const std::string& variable,
-    const std::shared_ptr<SymbolicExpr>& point,
-    const std::string& direction) const {
-    if (!impl_->root || !point) return nullptr;
-
-    LimitVisitor visitor(variable, lamina::detail::node(point), direction);
-    impl_->root->accept(visitor);
-    return visitor.get_result()
-        ? lamina::detail::make_expression_ptr(visitor.get_result())
-        : nullptr;
-}
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(
     const std::string& variable) const {
@@ -35,7 +16,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(
 
     lamina::Integrator integrator;
     auto result = lamina::detail::make_expression_ptr(
-        integrator.integrate(*this, variable));
+        lamina::detail::propagate_result(integrator.integrate(*this, variable)));
     return result->simplify();
 }
 
@@ -89,13 +70,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::make_integral(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable) {
     if (!expression) return nullptr;
-    std::vector<std::shared_ptr<const SymbolicNode>> arguments = {
-        lamina::detail::node(expression),
-        lamina::detail::make_node<VariableNode>(variable),
-    };
     return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
-            FunctionNode::FuncType::Calculus_Integral, arguments));
+        lamina::detail::make_node<IntegralNode>(
+            lamina::detail::node(expression), variable));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(
@@ -103,12 +80,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& point) {
     if (!expression || !point) return nullptr;
-    std::vector<std::shared_ptr<const SymbolicNode>> arguments = {
-        lamina::detail::node(expression),
-        lamina::detail::make_node<VariableNode>(variable),
-        lamina::detail::node(point),
-    };
     return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
-            FunctionNode::FuncType::Limit, arguments));
+        lamina::detail::make_node<LimitNode>(
+            lamina::detail::node(expression), variable,
+            lamina::detail::node(point), LimitDirection::Both));
 }

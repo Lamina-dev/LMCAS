@@ -93,7 +93,7 @@ static void test_cycle_shared_node_returns_unknown() {
     // The shared node will be visited twice — the second visit detects the cycle
     // and returns Unknown. The overall result depends on whether the first visit
     // provides enough information.
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
 
     // Key property: no crash, no infinite loop. Result is either True or Unknown.
     // Since x is Positive, (x+x) is Positive, and (x+x)*(x+x) should be Positive.
@@ -116,7 +116,7 @@ static void test_cycle_detection_no_false_positive_distinct_nodes() {
 
     // Since the nodes are distinct pointers, cycle detection should NOT trigger.
     // With x Positive: (x+x) is Positive, and (x+x)*(x+x) should be Positive.
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
 
     EXPECT_TRUE(result == Tribool::True,
         "Distinct nodes with same structure: no false positive from cycle detection");
@@ -137,7 +137,7 @@ static void test_cycle_detection_multiply_shared_operand() {
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node, x_node});
     auto expr = lamina::detail::expression_from_node(mul);
     // Query should complete. x*x with x Positive should be Positive.
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
 
     // The same VariableNode pointer appears twice in the multiply.
     // Cycle detection uses pointer identity, so the second encounter of x_node
@@ -166,7 +166,7 @@ static void test_cycle_detection_nested_function_shared_arg() {
     auto expr = lamina::detail::expression_from_node(add);
     // exp(x) is always positive, so exp(x) + exp(x) should be positive.
     // But cycle detection may trigger on the shared exp_node.
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
 
     // Must complete without infinite recursion
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,
@@ -183,12 +183,12 @@ static void test_cycle_detection_preserves_state_after_query() {
 
     // First query with shared nodes
     SymbolicExpr shared_expr = make_shared_subexpr();
-    engine.query_positive(shared_expr);
+    engine.query_positive_checked(shared_expr).value();
 
     // Second query on a simple expression should work normally
     // (visited set should be cleared after first query)
     SymbolicExpr simple = make_var("x");
-    Tribool result = engine.query_positive(simple);
+    Tribool result = engine.query_positive_checked(simple).value();
 
     EXPECT_TRUE(result == Tribool::True,
         "After shared-node query, subsequent simple query works correctly");
@@ -206,11 +206,11 @@ static void test_cycle_detection_different_query_types() {
     SymbolicExpr shared_expr = make_shared_subexpr();
 
     // Multiple query types should all complete without hanging
-    Tribool r1 = engine.query_positive(shared_expr);
-    Tribool r2 = engine.query_negative(shared_expr);
-    Tribool r3 = engine.query_nonnegative(shared_expr);
-    Tribool r4 = engine.query_real(shared_expr);
-    Tribool r5 = engine.query_integer(shared_expr);
+    Tribool r1 = engine.query_positive_checked(shared_expr).value();
+    Tribool r2 = engine.query_negative_checked(shared_expr).value();
+    Tribool r3 = engine.query_nonnegative_checked(shared_expr).value();
+    Tribool r4 = engine.query_real_checked(shared_expr).value();
+    Tribool r5 = engine.query_integer_checked(shared_expr).value();
 
     // All should complete (no infinite loop)
     EXPECT_TRUE(r1 == Tribool::True || r1 == Tribool::Unknown,
@@ -238,7 +238,7 @@ static void test_depth_limit_returns_unknown() {
     // Create expression nested deeper than the limit
     SymbolicExpr deep_expr = make_deeply_nested("x", 10);
 
-    Tribool result = engine.query_positive(deep_expr);
+    Tribool result = engine.query_positive_checked(deep_expr).value();
 
     EXPECT_TRUE(result == Tribool::Unknown,
         "Expression exceeding depth limit returns Unknown");
@@ -257,12 +257,12 @@ static void test_depth_limit_no_exception() {
 
     bool threw = false;
     try {
-        engine.query_positive(deep_expr);
-        engine.query_negative(deep_expr);
-        engine.query_nonnegative(deep_expr);
-        engine.query_real(deep_expr);
-        engine.query_integer(deep_expr);
-        engine.query_nonzero(deep_expr);
+        engine.query_positive_checked(deep_expr).value();
+        engine.query_negative_checked(deep_expr).value();
+        engine.query_nonnegative_checked(deep_expr).value();
+        engine.query_real_checked(deep_expr).value();
+        engine.query_integer_checked(deep_expr).value();
+        engine.query_nonzero_checked(deep_expr).value();
     } catch (...) {
         threw = true;
     }
@@ -283,7 +283,7 @@ static void test_depth_limit_within_limit_works() {
     // exp(x) with x Positive should be Positive (depth 2: exp -> x)
     SymbolicExpr shallow = make_deeply_nested("x", 1); // exp(x)
 
-    Tribool result = engine.query_positive(shallow);
+    Tribool result = engine.query_positive_checked(shallow).value();
 
     EXPECT_TRUE(result == Tribool::True,
         "Expression within depth limit returns correct result (exp(x) with x Positive)");
@@ -301,11 +301,11 @@ static void test_depth_limit_boundary() {
 
     // Depth 3 nesting: exp(exp(exp(x))) — should be within limit (depth 4 allows 4 levels)
     SymbolicExpr at_limit = make_deeply_nested("x", 3);
-    Tribool result_at = engine.query_positive(at_limit);
+    Tribool result_at = engine.query_positive_checked(at_limit).value();
 
     // Depth 5 nesting: exceeds limit of 4
     SymbolicExpr over_limit = make_deeply_nested("x", 5);
-    Tribool result_over = engine.query_positive(over_limit);
+    Tribool result_over = engine.query_positive_checked(over_limit).value();
 
     // At limit should still work (exp of positive is positive)
     EXPECT_TRUE(result_at == Tribool::True || result_at == Tribool::Unknown,
@@ -333,9 +333,9 @@ static void test_depth_limit_no_side_effects_on_context() {
 
     // Trigger depth limit
     SymbolicExpr deep_expr = make_deeply_nested("x", 20);
-    engine.query_positive(deep_expr);
-    engine.query_negative(deep_expr);
-    engine.query_real(deep_expr);
+    engine.query_positive_checked(deep_expr).value();
+    engine.query_negative_checked(deep_expr).value();
+    engine.query_real_checked(deep_expr).value();
 
     // Verify state unchanged
     int depth_after = ctx.depth();
@@ -362,12 +362,12 @@ static void test_depth_limit_subsequent_queries_work() {
 
     // First: trigger depth limit
     SymbolicExpr deep_expr = make_deeply_nested("x", 20);
-    Tribool deep_result = engine.query_positive(deep_expr);
+    Tribool deep_result = engine.query_positive_checked(deep_expr).value();
     EXPECT_TRUE(deep_result == Tribool::Unknown, "Deep expression returns Unknown");
 
     // Then: shallow query should still work correctly
     SymbolicExpr simple = make_var("x");
-    Tribool simple_result = engine.query_positive(simple);
+    Tribool simple_result = engine.query_positive_checked(simple).value();
     EXPECT_TRUE(simple_result == Tribool::True,
         "Simple query after depth limit hit still returns correct result");
 }
@@ -405,7 +405,7 @@ static void test_depth_limit_add_node_deep() {
     // Create deeply nested add: ((((x + x) + x) + x) + x) ... 10 levels
     SymbolicExpr deep_add = make_nested_add("x", 10);
 
-    Tribool result = engine.query_positive(deep_add);
+    Tribool result = engine.query_positive_checked(deep_add).value();
 
     // Should return Unknown due to depth limit (or True if the engine
     // can short-circuit before hitting the limit)
@@ -438,7 +438,7 @@ static void test_depth_limit_multiple_variables() {
             std::vector<std::shared_ptr<const SymbolicNode>>{current});
     }
     auto expr = lamina::detail::expression_from_node(current);
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
 
     // Should return Unknown due to depth limit
     EXPECT_TRUE(result == Tribool::Unknown,

@@ -769,13 +769,5 @@ HenselLiftResult hensel_lift_checked(
     return HenselLiftResult::success(std::move(result));
 }
 
-std::vector<Polynomial<BigInt>> hensel_lift(
-    const Polynomial<BigInt>& poly,
-    const std::vector<Polynomial<ModInt>>& mod_factors,
-    int64_t prime,
-    int lift_bound) {
-    auto result = hensel_lift_checked(poly, mod_factors, prime, lift_bound);
-    return result ? result.value() : std::vector<Polynomial<BigInt>>{};
-}
 
 } // namespace lamina

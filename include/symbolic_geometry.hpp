@@ -34,12 +34,6 @@ LAMINA_API ExpressionResult volume_of_revolution_x_checked(
     std::shared_ptr<SymbolicExpr> b
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> volume_of_revolution_x(
-    std::shared_ptr<SymbolicExpr> fx,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-);
-
 /**
  * @brief 计算函数 f(x) 在 [a, b] 上的弧长
  * @param fx 曲线函数表达式 f(x)
@@ -58,12 +52,6 @@ LAMINA_API ExpressionResult arc_length_x_checked(
  * @brief 使用默认计算上下文计算 x 方向弧长，并显式报告无效输入。
  */
 LAMINA_API ExpressionResult arc_length_x_checked(
-    std::shared_ptr<SymbolicExpr> fx,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-);
-
-LAMINA_API std::shared_ptr<SymbolicExpr> arc_length_x(
     std::shared_ptr<SymbolicExpr> fx,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b
@@ -92,12 +80,6 @@ LAMINA_API ExpressionResult volume_of_revolution_y_checked(
     std::shared_ptr<SymbolicExpr> b
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> volume_of_revolution_y(
-    std::shared_ptr<SymbolicExpr> fy,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-);
-
 /**
  * @brief 计算函数 f(y) 在 [a, b] 上的弧长
  * @param fy 曲线函数表达式 f(y)
@@ -116,12 +98,6 @@ LAMINA_API ExpressionResult arc_length_y_checked(
  * @brief 使用默认计算上下文计算 y 方向弧长，并显式报告无效输入。
  */
 LAMINA_API ExpressionResult arc_length_y_checked(
-    std::shared_ptr<SymbolicExpr> fy,
-    std::shared_ptr<SymbolicExpr> a,
-    std::shared_ptr<SymbolicExpr> b
-);
-
-LAMINA_API std::shared_ptr<SymbolicExpr> arc_length_y(
     std::shared_ptr<SymbolicExpr> fy,
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b

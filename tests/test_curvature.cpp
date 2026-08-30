@@ -18,7 +18,7 @@ int main()
         // f(x) = x^2, f'=2x, f''=2
         // κ = |2| / (1 + (2*0)^2)^(3/2) = 2 / 1 = 2
         auto f = SymbolicExpr::power(x, SymbolicExpr::number(2));
-        auto kappa = curvature(f, "x");
+        auto kappa = curvature_checked(f, "x").value();
         EXPECT_TRUE(kappa != nullptr, "curvature(x^2) should not be null");
 
         if (kappa) {
@@ -37,7 +37,7 @@ int main()
         // f(x) = x, f'=1, f''=0
         // κ = |0| / (1 + 1)^(3/2) = 0
         auto f = x;
-        auto kappa = curvature(f, "x");
+        auto kappa = curvature_checked(f, "x").value();
         EXPECT_TRUE(kappa != nullptr, "curvature(x) should not be null");
 
         if (kappa) {
@@ -60,7 +60,7 @@ int main()
         // κ = 1
         auto x_t = SymbolicExpr::cos(t);
         auto y_t = SymbolicExpr::sin(t);
-        auto kappa = curvature_parametric(x_t, y_t, "t");
+        auto kappa = curvature_parametric_checked(x_t, y_t, "t").value();
         EXPECT_TRUE(kappa != nullptr, "curvature_parametric(cos,sin) should not be null");
 
         if (kappa) {
@@ -80,7 +80,7 @@ int main()
         // κ = 1/R = 1/2
         auto x_t = SymbolicExpr::multiply(SymbolicExpr::number(2), SymbolicExpr::cos(t));
         auto y_t = SymbolicExpr::multiply(SymbolicExpr::number(2), SymbolicExpr::sin(t));
-        auto kappa = curvature_parametric(x_t, y_t, "t");
+        auto kappa = curvature_parametric_checked(x_t, y_t, "t").value();
         EXPECT_TRUE(kappa != nullptr, "curvature_parametric(2cos,2sin) should not be null");
 
         if (kappa) {
@@ -111,12 +111,12 @@ int main()
         auto a = SymbolicExpr::number(-1);
         auto b = SymbolicExpr::number(1);
 
-        auto sa = surface_area_revolution_x(f, "x", a, b);
-        EXPECT_TRUE(sa != nullptr, "surface_area_revolution_x(sqrt(1-x^2)) should not be null");
-        std::cout << "  surface_area_revolution_x(sqrt(1-x^2), -1, 1) = " << sa->to_string() << std::endl;
-        double num_val = sa->to_numeric();
-        // Integrated via numerical fallback (Simpson), so use a looser tolerance.
-        EXPECT_NEAR(num_val, 4.0 * M_PI, 0.05, "surface area of unit sphere is 4*pi");
+        auto surface =
+            surface_area_revolution_x_checked(f, "x", a, b);
+        EXPECT_TRUE(
+            !surface &&
+                surface.error().code == lamina::CasErrc::Inconclusive,
+            "sphere surface requiring implicit numeric fallback is Inconclusive");
     }
 
     TEST_CASE("surface_area_revolution_x: cone from y=x, [0,1]");
@@ -129,7 +129,7 @@ int main()
         auto a = SymbolicExpr::number(0);
         auto b = SymbolicExpr::number(1);
 
-        auto sa = surface_area_revolution_x(f, "x", a, b);
+        auto sa = surface_area_revolution_x_checked(f, "x", a, b).value();
         EXPECT_TRUE(sa != nullptr, "surface_area_revolution_x(x, 0, 1) should not be null");
         std::cout << "  surface_area_revolution_x(x, 0, 1) = " << sa->to_string() << std::endl;
         double num_val = sa->to_numeric();
@@ -148,7 +148,7 @@ int main()
         auto a = SymbolicExpr::number(0);
         auto b = SymbolicExpr::number(1);
 
-        auto sa = surface_area_revolution_y(f, "x", a, b);
+        auto sa = surface_area_revolution_y_checked(f, "x", a, b).value();
         EXPECT_TRUE(sa != nullptr, "surface_area_revolution_y(x, 0, 1) should not be null");
         std::cout << "  surface_area_revolution_y(x, 0, 1) = " << sa->to_string() << std::endl;
         double num_val = sa->to_numeric();

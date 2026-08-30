@@ -13,6 +13,7 @@
 namespace lamina {
 
 struct LUDecomposition {
+    std::shared_ptr<SymbolicExpr> P;
     std::shared_ptr<SymbolicExpr> L;
     std::shared_ptr<SymbolicExpr> U;
 };
@@ -59,11 +60,6 @@ LAMINA_API LUDecompositionResult lu_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API bool lu_decomposition(
-    const std::shared_ptr<SymbolicExpr>& A,
-    std::shared_ptr<SymbolicExpr>& L,
-    std::shared_ptr<SymbolicExpr>& U
-);
 
 /**
  * @brief 计算符号矩阵的 QR 分解 (A = Q * R)
@@ -81,11 +77,6 @@ LAMINA_API QRDecompositionResult qr_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API bool qr_decomposition(
-    const std::shared_ptr<SymbolicExpr>& A,
-    std::shared_ptr<SymbolicExpr>& Q,
-    std::shared_ptr<SymbolicExpr>& R
-);
 
 /**
  * @brief 计算对称正定矩阵的 Cholesky 分解 (A = L * L^T)
@@ -102,10 +93,6 @@ LAMINA_API CholeskyDecompositionResult cholesky_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API bool cholesky_decomposition(
-    const std::shared_ptr<SymbolicExpr>& A,
-    std::shared_ptr<SymbolicExpr>& L
-);
 
 /**
  * @brief 计算符号矩阵的奇异值分解 (A = U * S * V^T)
@@ -124,12 +111,6 @@ LAMINA_API SVDDecompositionResult svd_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API bool svd_decomposition(
-    const std::shared_ptr<SymbolicExpr>& A,
-    std::shared_ptr<SymbolicExpr>& U,
-    std::shared_ptr<SymbolicExpr>& S,
-    std::shared_ptr<SymbolicExpr>& V
-);
 
 /**
  * @brief 计算矩阵指数 e^A
@@ -149,14 +130,6 @@ LAMINA_API std::shared_ptr<SymbolicExpr> matrix_trace(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-/**
- * @brief 计算矩阵的秩（通过 RREF 主元计数）。
- * @param A 输入矩阵
- * @return 秩（整数）；输入非矩阵返回 -1
- */
-LAMINA_API int matrix_rank(
-    const std::shared_ptr<SymbolicExpr>& A
-);
 
 /**
  * @brief 对一组向量执行 Gram-Schmidt 正交化。
@@ -237,10 +210,5 @@ LAMINA_API JordanDecompositionResult jordan_form_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API bool jordan_form(
-    const std::shared_ptr<SymbolicExpr>& A,
-    std::shared_ptr<SymbolicExpr>& J,
-    std::shared_ptr<SymbolicExpr>& P
-);
 
 } // namespace lamina

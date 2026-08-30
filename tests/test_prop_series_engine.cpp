@@ -110,7 +110,7 @@ static void test_power_series_multiplication_cauchy() {
         auto a = rand_coeffs(len_a, 3);
         auto b = rand_coeffs(len_b, 3);
 
-        auto result = lamina::power_series_multiply(a, b, order);
+        auto result = lamina::power_series_multiply_checked(a, b, order).value();
 
         bool property_holds = true;
 
@@ -382,7 +382,7 @@ static void test_convergence_radius_geometric() {
             r_pow *= r;
         }
 
-        auto radius = lamina::convergence_radius(coefficients, "x");
+        auto radius = lamina::convergence_radius_checked(coefficients, "x").value();
 
         bool property_holds = false;
 

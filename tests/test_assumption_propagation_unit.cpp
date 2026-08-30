@@ -48,7 +48,7 @@ static void test_x_squared_nonnegative_when_real() {
     // Build x² = PowerNode(x, 2)
     auto x_squared = wrap_expr(make_power(make_var("x"), make_number(2)));
 
-    EXPECT_TRUE(engine.query_nonnegative(x_squared) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(x_squared).value() == Tribool::True,
                 "x² is NonNegative when x is Real");
 }
 
@@ -62,7 +62,7 @@ static void test_x_squared_integer_when_integer() {
     // Build x² = PowerNode(x, 2)
     auto x_squared = wrap_expr(make_power(make_var("x"), make_number(2)));
 
-    EXPECT_TRUE(engine.query_integer(x_squared) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(x_squared).value() == Tribool::True,
                 "x² is Integer when x is Integer");
 }
 
@@ -77,7 +77,7 @@ static void test_abs_positive_when_x_positive() {
     // Build |x| = FunctionNode::Abs(x)
     auto abs_x = wrap_expr(make_function(FunctionNode::FuncType::Abs, make_var("x")));
 
-    EXPECT_TRUE(engine.query_positive(abs_x) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(abs_x).value() == Tribool::True,
                 "|x| is Positive when x is Positive");
 }
 
@@ -92,7 +92,7 @@ static void test_abs_positive_when_x_negative() {
     // Build |x| = FunctionNode::Abs(x)
     auto abs_x = wrap_expr(make_function(FunctionNode::FuncType::Abs, make_var("x")));
 
-    EXPECT_TRUE(engine.query_positive(abs_x) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(abs_x).value() == Tribool::True,
                 "|x| is Positive when x is Negative");
 }
 
@@ -107,7 +107,7 @@ static void test_abs_positive_when_x_nonzero() {
     // Build |x| = FunctionNode::Abs(x)
     auto abs_x = wrap_expr(make_function(FunctionNode::FuncType::Abs, make_var("x")));
 
-    EXPECT_TRUE(engine.query_positive(abs_x) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(abs_x).value() == Tribool::True,
                 "|x| is Positive when x is NonZero");
 }
 
@@ -118,26 +118,20 @@ static void test_diagnostic_transcendental_then_integer() {
     AssumptionContext ctx;
     ctx.current_properties().declare_transcendental("x");
 
-    bool threw = false;
-    std::string msg;
-    try {
-        ctx.assume_domain("x", Domain::Integer);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        msg = e.what();
-    }
-
-    EXPECT_TRUE(threw, "Transcendental + Integer throws std::invalid_argument");
+    auto failure_119 = ctx.assume_domain("x", Domain::Integer);
+    EXPECT_TRUE(!failure_119.has_value(), "Transcendental + Integer returns InvalidArgument");
+    EXPECT_TRUE(failure_119.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    const std::string& msg = failure_119.error().message;
     // Message should contain the symbol name and relevant domain info
     EXPECT_CONTAINS(msg, {"x", "Integer"},
-                    "Exception message contains 'x' and 'Integer'");
+                    "Result error message contains 'x' and 'Integer'");
     // Should also mention Transcendental or Real (the existing constraint)
     bool has_transcendental_or_real =
         (msg.find("Transcendental") != std::string::npos) ||
         (msg.find("Real") != std::string::npos) ||
         (msg.find("transcendental") != std::string::npos);
     EXPECT_TRUE(has_transcendental_or_real,
-                "Exception message mentions Transcendental or Real");
+                "Result error message mentions Transcendental or Real");
 }
 
 static void test_diagnostic_positive_then_negative() {
@@ -146,26 +140,20 @@ static void test_diagnostic_positive_then_negative() {
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
 
-    bool threw = false;
-    std::string msg;
-    try {
-        ctx.assume_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        msg = e.what();
-    }
-
-    EXPECT_TRUE(threw, "Positive + Negative throws std::invalid_argument");
+    auto failure_147 = ctx.assume_sign("x", Sign::Negative);
+    EXPECT_TRUE(!failure_147.has_value(), "Positive + Negative returns InvalidArgument");
+    EXPECT_TRUE(failure_147.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    const std::string& msg = failure_147.error().message;
     // The message should contain the symbol name and mention Positive.
     // The system may report the implied sign (NonPositive) rather than the
     // literal "Negative" since Negative implies NonPositive which contradicts Positive.
     EXPECT_CONTAINS(msg, {"x", "Positive"},
-                    "Exception message contains 'x' and 'Positive'");
+                    "Result error message contains 'x' and 'Positive'");
     bool has_negative_or_nonpositive =
         (msg.find("Negative") != std::string::npos) ||
         (msg.find("NonPositive") != std::string::npos);
     EXPECT_TRUE(has_negative_or_nonpositive,
-                "Exception message mentions Negative or NonPositive");
+                "Result error message mentions Negative or NonPositive");
 }
 
 static void test_diagnostic_natural_then_negative() {
@@ -174,18 +162,12 @@ static void test_diagnostic_natural_then_negative() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Natural);
 
-    bool threw = false;
-    std::string msg;
-    try {
-        ctx.assume_sign("x", Sign::Negative);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        msg = e.what();
-    }
-
-    EXPECT_TRUE(threw, "Natural + Negative throws std::invalid_argument");
+    auto failure_175 = ctx.assume_sign("x", Sign::Negative);
+    EXPECT_TRUE(!failure_175.has_value(), "Natural + Negative returns InvalidArgument");
+    EXPECT_TRUE(failure_175.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    const std::string& msg = failure_175.error().message;
     EXPECT_CONTAINS(msg, {"Natural", "Negative"},
-                    "Exception message contains 'Natural' and 'Negative'");
+                    "Result error message contains 'Natural' and 'Negative'");
 }
 
 static void test_diagnostic_positiveint_then_zero() {
@@ -194,26 +176,20 @@ static void test_diagnostic_positiveint_then_zero() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
 
-    bool threw = false;
-    std::string msg;
-    try {
-        ctx.assume_sign("x", Sign::Zero);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        msg = e.what();
-    }
-
-    EXPECT_TRUE(threw, "PositiveInt + Zero throws std::invalid_argument");
+    auto failure_195 = ctx.assume_sign("x", Sign::Zero);
+    EXPECT_TRUE(!failure_195.has_value(), "PositiveInt + Zero returns InvalidArgument");
+    EXPECT_TRUE(failure_195.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
+    const std::string& msg = failure_195.error().message;
     // The message should mention PositiveInt (the domain) and the conflicting sign.
     // The system may report the implied sign (NonPositive) rather than "Zero"
     // since Zero implies NonPositive which contradicts PositiveInt's implied Positive.
     EXPECT_CONTAINS(msg, {"PositiveInt"},
-                    "Exception message contains 'PositiveInt'");
+                    "Result error message contains 'PositiveInt'");
     bool has_zero_or_nonpositive =
         (msg.find("Zero") != std::string::npos) ||
         (msg.find("NonPositive") != std::string::npos);
     EXPECT_TRUE(has_zero_or_nonpositive,
-                "Exception message mentions Zero or NonPositive");
+                "Result error message mentions Zero or NonPositive");
 }
 
 

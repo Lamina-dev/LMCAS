@@ -16,7 +16,7 @@ int main() {
     {
         auto f = SymbolicExpr::multiply(x, x);
         std::vector<std::shared_ptr<SymbolicExpr>> X = {num(1), num(0), num(0)};
-        auto L = lie_derivative(f, X, vars, 1);
+        auto L = lie_derivative_checked(f, X, vars, 1).value();
         auto expected = SymbolicExpr::multiply(num(2), x);
         EXPECT_EQ_EXPR(L->simplify(), expected->simplify(), "L_(1,0,0)(x^2) = 2x");
     }
@@ -25,7 +25,7 @@ int main() {
     {
         auto f = SymbolicExpr::multiply(x, y);
         std::vector<std::shared_ptr<SymbolicExpr>> X = {y, x, num(0)};
-        auto L = lie_derivative(f, X, vars, 1);
+        auto L = lie_derivative_checked(f, X, vars, 1).value();
         // d/dx(xy)=y, d/dy(xy)=x => y*y + x*x
         auto expected = SymbolicExpr::add(SymbolicExpr::multiply(y, y), SymbolicExpr::multiply(x, x));
         EXPECT_EQ_EXPR(L->simplify(), expected->simplify(), "L_(y,x,0)(xy) = y^2 + x^2");
@@ -35,7 +35,7 @@ int main() {
     {
         auto f = SymbolicExpr::add(SymbolicExpr::multiply(x, x),
                  SymbolicExpr::add(SymbolicExpr::multiply(y, y), SymbolicExpr::multiply(z, z)));
-        auto d = exterior_derivative({f}, 0, vars);
+        auto d = exterior_derivative_checked({f}, 0, vars).value();
         EXPECT_TRUE(d.size() == 3, "d(0-form) has 3 components");
         EXPECT_EQ_EXPR(d[0]->simplify(), SymbolicExpr::multiply(num(2), x)->simplify(), "d f / dx = 2x");
         EXPECT_EQ_EXPR(d[1]->simplify(), SymbolicExpr::multiply(num(2), y)->simplify(), "d f / dy = 2y");
@@ -45,8 +45,8 @@ int main() {
     // ---- d^2 = 0: exterior derivative of (d of a 0-form) is the zero 2-form ----
     {
         auto f = SymbolicExpr::multiply(x, y); // smooth scalar
-        auto d1 = exterior_derivative({f}, 0, vars); // 1-form coeffs
-        auto d2 = exterior_derivative(d1, 1, vars);   // 2-form coeffs, should all be 0
+        auto d1 = exterior_derivative_checked({f}, 0, vars).value(); // 1-form coeffs
+        auto d2 = exterior_derivative_checked(d1, 1, vars).value();   // 2-form coeffs, should all be 0
         EXPECT_TRUE(d2.size() == 3, "2-form has 3 components in 3D");
         bool all_zero = true;
         for (auto& c : d2) {
@@ -110,7 +110,7 @@ int main() {
     {
         // metric_inverse expects a matrix; use a 2x2 identity metric.
         auto g = SymbolicExpr::matrix({{num(1), num(0)}, {num(0), num(1)}});
-        auto mi = metric_inverse(g);
+        auto mi = metric_inverse_checked(g).value();
         EXPECT_TRUE(mi != nullptr, "metric_inverse returns non-null");
     }
 

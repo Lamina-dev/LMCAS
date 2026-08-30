@@ -7,6 +7,7 @@
 
 #include "lsr_expr_internal.hpp"
 #include "symbolic_ast.hpp"
+#include "root_of_utils.hpp"
 
 namespace lamina::lsr {
 namespace {
@@ -16,6 +17,18 @@ constexpr const char* kNumberDomainOperation = "lsr.number_domain";
 Result<bool> bool_failure(CasErrc code, std::string message,
                           const char* operation) {
     return Result<bool>::failure(code, std::move(message), operation);
+}
+
+std::optional<Rational> exact_number_value(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number || std::holds_alternative<lmmc_real_t>(number->value())) {
+        return std::nullopt;
+    }
+    if (std::holds_alternative<BigInt>(number->value())) {
+        return Rational(std::get<BigInt>(number->value()));
+    }
+    return std::get<Rational>(number->value());
 }
 
 int domain_rank(NumberDomain domain) noexcept {
@@ -101,6 +114,129 @@ Result<bool> domain_contains_node(
             return Result<bool>::success(false);
         }
         return domain_contains_node(domain, complex_node->real());
+    }
+
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+        for (const auto& operand : add->operands()) {
+            auto member = domain_contains_node(domain, operand);
+            if (!member || !member.value()) return member;
+        }
+        return Result<bool>::success(true);
+    }
+
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        for (const auto& operand : multiply->operands()) {
+            auto member = domain_contains_node(domain, operand);
+            if (!member || !member.value()) return member;
+        }
+        return Result<bool>::success(true);
+    }
+
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        auto exponent = std::dynamic_pointer_cast<const NumberNode>(
+            power->exponent());
+        if (!exponent || std::holds_alternative<lmmc_real_t>(exponent->value())) {
+            return bool_failure(
+                CasErrc::Inconclusive,
+                "domain membership for powers requires an exact exponent",
+                kNumberDomainOperation);
+        }
+        Rational exponent_value = std::holds_alternative<BigInt>(exponent->value())
+            ? Rational(std::get<BigInt>(exponent->value()))
+            : std::get<Rational>(exponent->value());
+        if (!exponent_value.is_integer()) {
+            auto exact_base = exact_number_value(power->base());
+            if (exponent_value == Rational(1, 2) && exact_base) {
+                if (*exact_base < Rational(0)) {
+                    return Result<bool>::success(
+                        domain == NumberDomain::Complexes);
+                }
+                if (domain == NumberDomain::Reals ||
+                    domain == NumberDomain::Complexes) {
+                    return Result<bool>::success(true);
+                }
+                const bool rational_root =
+                    exact_base->get_numerator().is_perfect_square() &&
+                    exact_base->get_denominator().is_perfect_square();
+                return Result<bool>::success(
+                    domain == NumberDomain::Rationals
+                        ? rational_root
+                        : rational_root &&
+                              exact_base->get_denominator() == BigInt(1));
+            }
+            return bool_failure(
+                CasErrc::Inconclusive,
+                "non-integer power membership requires a branch/domain proof",
+                kNumberDomainOperation);
+        }
+        auto base_member = domain_contains_node(domain, power->base());
+        if (!base_member || !base_member.value()) return base_member;
+        if (domain == NumberDomain::Integers &&
+            exponent_value < Rational(0)) {
+            return Result<bool>::success(false);
+        }
+        return Result<bool>::success(true);
+    }
+
+    if (std::dynamic_pointer_cast<const RootOfNode>(node)) {
+        auto expression = lamina::detail::make_expression_ptr(node);
+        if (domain == NumberDomain::Complexes) {
+            auto value = rootof_evaluate_complex_checked(expression);
+            return value ? Result<bool>::success(true)
+                         : Result<bool>::failure(value.error());
+        }
+        ComputationContext root_context;
+        auto value = rootof_evaluate_checked(expression, root_context);
+        if (value) return Result<bool>::success(domain == NumberDomain::Reals);
+        if (value.error().code == CasErrc::DomainError) {
+            return Result<bool>::success(false);
+        }
+        return Result<bool>::failure(value.error());
+    }
+
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
+        if (function->type() == FunctionNode::FuncType::Sqrt &&
+            function->arguments().size() == 1) {
+            auto exact = exact_number_value(function->arguments()[0]);
+            if (exact) {
+                const bool negative = *exact < Rational(0);
+                if (domain == NumberDomain::Complexes) {
+                    return Result<bool>::success(true);
+                }
+                if (negative) return Result<bool>::success(false);
+                if (domain == NumberDomain::Reals) {
+                    return Result<bool>::success(true);
+                }
+                const bool rational_root =
+                    exact->get_numerator().is_perfect_square() &&
+                    exact->get_denominator().is_perfect_square();
+                if (domain == NumberDomain::Rationals) {
+                    return Result<bool>::success(rational_root);
+                }
+                if (domain == NumberDomain::Integers) {
+                    return Result<bool>::success(
+                        rational_root && exact->get_denominator() == BigInt(1));
+                }
+            }
+        }
+        if (function->arguments().size() == 1 &&
+            (function->type() == FunctionNode::FuncType::Sin ||
+             function->type() == FunctionNode::FuncType::Cos ||
+             function->type() == FunctionNode::FuncType::Exp ||
+             function->type() == FunctionNode::FuncType::Sinh ||
+             function->type() == FunctionNode::FuncType::Cosh ||
+             function->type() == FunctionNode::FuncType::Tanh ||
+             function->type() == FunctionNode::FuncType::Abs)) {
+            if (domain == NumberDomain::Integers ||
+                domain == NumberDomain::Rationals) {
+                return Result<bool>::success(false);
+            }
+            return domain_contains_node(
+                domain == NumberDomain::Complexes
+                    ? NumberDomain::Complexes
+                    : NumberDomain::Reals,
+                function->arguments()[0]);
+        }
     }
 
     if (domain == NumberDomain::Complexes) {

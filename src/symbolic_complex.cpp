@@ -74,11 +74,6 @@ Result<T> checked_construct(F&& f, const std::string& operation) {
 
 } // namespace
 
-ComplexSymbolic complex_add(const ComplexSymbolic& a, const ComplexSymbolic& b) {
-    auto checked = complex_add_checked(a, b);
-    if (!checked) return make_complex(nullptr, nullptr);
-    return checked.value();
-}
 ComplexSymbolicResult complex_add_checked(const ComplexSymbolic& a, const ComplexSymbolic& b,
                                           ComputationContext& context) {
     auto va = validate_complex_symbolic(a, "a", context, kComplexAddOperation);
@@ -96,11 +91,6 @@ ComplexSymbolicResult complex_add_checked(const ComplexSymbolic& a, const Comple
     return complex_add_checked(a, b, context);
 }
 
-ComplexSymbolic complex_sub(const ComplexSymbolic& a, const ComplexSymbolic& b) {
-    auto checked = complex_sub_checked(a, b);
-    if (!checked) return make_complex(nullptr, nullptr);
-    return checked.value();
-}
 ComplexSymbolicResult complex_sub_checked(const ComplexSymbolic& a, const ComplexSymbolic& b,
                                           ComputationContext& context) {
     auto va = validate_complex_symbolic(a, "a", context, kComplexSubOperation);
@@ -120,11 +110,6 @@ ComplexSymbolicResult complex_sub_checked(const ComplexSymbolic& a, const Comple
     return complex_sub_checked(a, b, context);
 }
 
-ComplexSymbolic complex_mul(const ComplexSymbolic& a, const ComplexSymbolic& b) {
-    auto checked = complex_mul_checked(a, b);
-    if (!checked) return make_complex(nullptr, nullptr);
-    return checked.value();
-}
 ComplexSymbolicResult complex_mul_checked(const ComplexSymbolic& a, const ComplexSymbolic& b,
                                           ComputationContext& context) {
     auto va = validate_complex_symbolic(a, "a", context, kComplexMulOperation);
@@ -147,11 +132,6 @@ ComplexSymbolicResult complex_mul_checked(const ComplexSymbolic& a, const Comple
     return complex_mul_checked(a, b, context);
 }
 
-ComplexSymbolic complex_div(const ComplexSymbolic& a, const ComplexSymbolic& b) {
-    auto checked = complex_div_checked(a, b);
-    if (!checked) return make_complex(nullptr, nullptr);
-    return checked.value();
-}
 ComplexSymbolicResult complex_div_checked(const ComplexSymbolic& a, const ComplexSymbolic& b,
                                           ComputationContext& context) {
     auto va = validate_complex_symbolic(a, "a", context, kComplexDivOperation);
@@ -183,11 +163,6 @@ ComplexSymbolicResult complex_div_checked(const ComplexSymbolic& a, const Comple
     return complex_div_checked(a, b, context);
 }
 
-ComplexSymbolic complex_conj(const ComplexSymbolic& z) {
-    auto checked = complex_conj_checked(z);
-    if (!checked) return make_complex(nullptr, nullptr);
-    return checked.value();
-}
 ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z, ComputationContext& context) {
     auto vz = validate_complex_symbolic(z, "z", context, kComplexConjOperation);
     if (!vz) return ComplexSymbolicResult::failure(vz.error());
@@ -202,10 +177,6 @@ ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z) {
     return complex_conj_checked(z, context);
 }
 
-std::shared_ptr<SymbolicExpr> complex_abs(const ComplexSymbolic& z) {
-    auto checked = complex_abs_checked(z);
-    return checked ? checked.value() : nullptr;
-}
 ExpressionResult complex_abs_checked(const ComplexSymbolic& z, ComputationContext& context) {
     auto vz = validate_complex_symbolic(z, "z", context, kComplexAbsOperation);
     if (!vz) return ExpressionResult::failure(vz.error());
@@ -222,10 +193,6 @@ ExpressionResult complex_abs_checked(const ComplexSymbolic& z) {
     return complex_abs_checked(z, context);
 }
 
-std::shared_ptr<SymbolicExpr> complex_arg(const ComplexSymbolic& z) {
-    auto checked = complex_arg_checked(z);
-    return checked ? checked.value() : nullptr;
-}
 ExpressionResult complex_arg_checked(const ComplexSymbolic& z, ComputationContext& context) {
     auto vz = validate_complex_symbolic(z, "z", context, kComplexArgOperation);
     if (!vz) return ExpressionResult::failure(vz.error());
@@ -240,11 +207,6 @@ ExpressionResult complex_arg_checked(const ComplexSymbolic& z) {
     return complex_arg_checked(z, context);
 }
 
-ComplexSymbolic complex_exp_form(std::shared_ptr<SymbolicExpr> r, std::shared_ptr<SymbolicExpr> theta) {
-    auto checked = complex_exp_form_checked(std::move(r), std::move(theta));
-    if (!checked) return make_complex(nullptr, nullptr);
-    return checked.value();
-}
 ComplexSymbolicResult complex_exp_form_checked(std::shared_ptr<SymbolicExpr> r,
                                                std::shared_ptr<SymbolicExpr> theta,
                                                ComputationContext& context) {
@@ -266,11 +228,6 @@ ComplexSymbolicResult complex_exp_form_checked(std::shared_ptr<SymbolicExpr> r,
     return complex_exp_form_checked(std::move(r), std::move(theta), context);
 }
 
-ComplexSymbolic complex_trig_form(std::shared_ptr<SymbolicExpr> r, std::shared_ptr<SymbolicExpr> theta) {
-    auto checked = complex_trig_form_checked(std::move(r), std::move(theta));
-    if (!checked) return make_complex(nullptr, nullptr);
-    return checked.value();
-}
 ComplexSymbolicResult complex_trig_form_checked(std::shared_ptr<SymbolicExpr> r,
                                                 std::shared_ptr<SymbolicExpr> theta,
                                                 ComputationContext& context) {
@@ -282,16 +239,6 @@ ComplexSymbolicResult complex_trig_form_checked(std::shared_ptr<SymbolicExpr> r,
     return complex_trig_form_checked(std::move(r), std::move(theta), context);
 }
 
-std::vector<ComplexSymbolic> solve_complex_nth_root(std::shared_ptr<SymbolicExpr> c, int n) {
-    auto checked = solve_complex_nth_root_checked(std::move(c), n);
-    if (!checked) {
-        if (checked.error().code == CasErrc::InvalidArgument) {
-            throw std::invalid_argument(checked.error().message);
-        }
-        return {};
-    }
-    return checked.value();
-}
 ComplexRootsResult solve_complex_nth_root_checked(std::shared_ptr<SymbolicExpr> c, int n,
                                                   ComputationContext& context) {
     auto vc = validate_expr(c, "c", context, kComplexNthRootOperation);
@@ -320,8 +267,9 @@ ComplexRootsResult solve_complex_nth_root_checked(std::shared_ptr<SymbolicExpr> 
         for (int k = 0; k < n; ++k) {
             double root_r = std::pow(r, 1.0 / n);
             double root_theta = (theta + 2 * LMMC_CONST_PI * k) / n;
-            roots.push_back(complex_exp_form(SymbolicExpr::number(root_r),
-                                             SymbolicExpr::number(root_theta)));
+            roots.push_back(complex_exp_form_checked(
+                SymbolicExpr::number(root_r),
+                SymbolicExpr::number(root_theta), context).value());
         }
         return roots;
     }, kComplexNthRootOperation);
@@ -337,23 +285,28 @@ std::vector<ComplexSymbolic> solve_complex_quadratic(std::shared_ptr<SymbolicExp
     auto delta = SymbolicExpr::add(SymbolicExpr::power(b, SymbolicExpr::number(2)), SymbolicExpr::multiply(SymbolicExpr::number(-1), four_ac));
     auto sqrt_delta = SymbolicExpr::sqrt(delta);
     auto denom = SymbolicExpr::multiply(SymbolicExpr::number(2), a);
-    auto z1 = complex_div(make_complex(SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(-1), b), sqrt_delta), SymbolicExpr::number(0)), make_complex(denom, SymbolicExpr::number(0)));
-    auto z2 = complex_div(make_complex(SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(-1), b), SymbolicExpr::multiply(SymbolicExpr::number(-1), sqrt_delta)), SymbolicExpr::number(0)), make_complex(denom, SymbolicExpr::number(0)));
+    auto z1 = complex_div_checked(make_complex(SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(-1), b), sqrt_delta), SymbolicExpr::number(0)), make_complex(denom, SymbolicExpr::number(0))).value();
+    auto z2 = complex_div_checked(make_complex(SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(-1), b), SymbolicExpr::multiply(SymbolicExpr::number(-1), sqrt_delta)), SymbolicExpr::number(0)), make_complex(denom, SymbolicExpr::number(0))).value();
     return {z1, z2};
 }
 
 std::shared_ptr<SymbolicExpr> complex_locus_circle(const ComplexSymbolic& a, std::shared_ptr<SymbolicExpr> r, const std::string& z_var) {
 
     auto z = SymbolicExpr::variable(z_var);
-    auto z_minus_a = complex_sub(make_complex(z, SymbolicExpr::number(0)), a);
-    return SymbolicExpr::eq(complex_abs(z_minus_a), r);
+    auto z_minus_a = complex_sub_checked(
+        make_complex(z, SymbolicExpr::number(0)), a).value();
+    return SymbolicExpr::eq(complex_abs_checked(z_minus_a).value(), r);
 }
 std::shared_ptr<SymbolicExpr> complex_locus_perpendicular_bisector(const ComplexSymbolic& a, const ComplexSymbolic& b, const std::string& z_var) {
 
     auto z = SymbolicExpr::variable(z_var);
-    auto z_minus_a = complex_sub(make_complex(z, SymbolicExpr::number(0)), a);
-    auto z_minus_b = complex_sub(make_complex(z, SymbolicExpr::number(0)), b);
-    return SymbolicExpr::eq(complex_abs(z_minus_a), complex_abs(z_minus_b));
+    auto z_minus_a = complex_sub_checked(
+        make_complex(z, SymbolicExpr::number(0)), a).value();
+    auto z_minus_b = complex_sub_checked(
+        make_complex(z, SymbolicExpr::number(0)), b).value();
+    return SymbolicExpr::eq(
+        complex_abs_checked(z_minus_a).value(),
+        complex_abs_checked(z_minus_b).value());
 }
 
 }

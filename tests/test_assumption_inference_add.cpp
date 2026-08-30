@@ -46,7 +46,7 @@ void test_all_positive_operands() {
     {
         auto add = make_add({make_var("a"), make_var("b")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
             "a + b is Positive when a, b are Positive");
     }
 
@@ -54,7 +54,7 @@ void test_all_positive_operands() {
     {
         auto add = make_add({make_var("a"), make_var("b"), make_var("c")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
             "a + b + c is Positive when a, b, c are Positive");
     }
 }
@@ -73,7 +73,7 @@ void test_all_negative_operands() {
     {
         auto add = make_add({make_var("x"), make_var("y")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
             "x + y is Negative when x, y are Negative");
     }
 
@@ -81,7 +81,7 @@ void test_all_negative_operands() {
     {
         auto add = make_add({make_var("x"), make_var("y"), make_var("z")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
             "x + y + z is Negative when x, y, z are Negative");
     }
 }
@@ -100,7 +100,7 @@ void test_all_nonnegative_operands() {
     {
         auto add = make_add({make_var("a"), make_var("b")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
             "a + b is NonNegative when a, b are NonNegative");
     }
 
@@ -108,7 +108,7 @@ void test_all_nonnegative_operands() {
     {
         auto add = make_add({make_var("a"), make_var("b"), make_var("c")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
             "a + b + c is NonNegative when a, b, c are NonNegative");
     }
 }
@@ -124,7 +124,7 @@ void test_all_nonpositive_operands() {
 
     auto add = make_add({make_var("a"), make_var("b")});
     auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::True,
         "a + b is NonPositive when a, b are NonPositive");
 }
 
@@ -141,7 +141,7 @@ void test_positive_implies_nonnegative_for_sum() {
     auto expr = wrap_expr(add);
 
     // Positive implies NonNegative, so the sum should also be NonNegative
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
         "a + b is NonNegative when a, b are Positive (Positive implies NonNegative)");
 }
 
@@ -157,13 +157,13 @@ void test_unknown_operand_yields_unknown() {
     auto add = make_add({make_var("a"), make_var("b")});
     auto expr = wrap_expr(add);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "a + b is Unknown for Positive when b has Unknown sign");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
         "a + b is Unknown for Negative when b has Unknown sign");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
         "a + b is Unknown for NonNegative when b has Unknown sign");
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::Unknown,
         "a + b is Unknown for NonPositive when b has Unknown sign");
 }
 
@@ -180,9 +180,9 @@ void test_mixed_signs_yield_unknown() {
     auto expr = wrap_expr(add);
 
     // Positive + Negative → can't determine sign of sum
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "pos + neg is Unknown for Positive (mixed signs)");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
         "pos + neg is Unknown for Negative (mixed signs)");
 }
 
@@ -199,7 +199,7 @@ void test_single_operand() {
 
     // Note: AddNode with single operand may be simplified by the factory,
     // but we construct it directly here
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "Single-operand add(x) is Positive when x is Positive");
 }
 
@@ -213,7 +213,7 @@ void test_sign_with_number_operands() {
     {
         auto add = make_add({make_num(3), make_num(5)});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
             "3 + 5 is Positive");
     }
 
@@ -221,7 +221,7 @@ void test_sign_with_number_operands() {
     {
         auto add = make_add({make_num(-3), make_num(-5)});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
             "(-3) + (-5) is Negative");
     }
 
@@ -229,7 +229,7 @@ void test_sign_with_number_operands() {
     {
         auto add = make_add({make_num(3), make_num(-5)});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
             "3 + (-5) is Unknown for Positive (mixed signs)");
     }
 }
@@ -246,7 +246,7 @@ void test_with_variables_and_numbers_mixed() {
     {
         auto add = make_add({make_var("x"), make_num(5)});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
             "x + 5 is Positive when x is Positive");
     }
 
@@ -254,7 +254,7 @@ void test_with_variables_and_numbers_mixed() {
     {
         auto add = make_add({make_var("x"), make_num(-3)});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
             "x + (-3) is Unknown for Positive (mixed signs)");
     }
 }
@@ -274,7 +274,7 @@ void test_many_operands_uniform_sign() {
 
     auto add = make_add(ops);
     auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "Sum of 10 Positive variables is Positive");
 }
 
@@ -306,7 +306,7 @@ void test_all_integer_operands() {
     {
         auto add = make_add({make_var("a"), make_var("b")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
             "a + b is Integer when a, b are Integer");
     }
 
@@ -314,7 +314,7 @@ void test_all_integer_operands() {
     {
         auto add = make_add({make_var("a"), make_var("b"), make_var("c")});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
             "a + b + c is Integer when a, b, c are Integer");
     }
 }
@@ -330,7 +330,7 @@ void test_all_real_operands() {
 
     auto add = make_add({make_var("x"), make_var("y")});
     auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "x + y is Real when x, y are Real");
 }
 
@@ -347,7 +347,7 @@ void test_integer_implies_real_for_sum() {
     auto expr = wrap_expr(add);
 
     // Integer implies Real, so sum of integers should also be Real
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "a + b is Real when a, b are Integer (Integer implies Real)");
 }
 
@@ -364,11 +364,11 @@ void test_mixed_integer_and_real() {
     auto expr = wrap_expr(add);
 
     // Integer + Real → Real (Integer is subset of Real)
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "a + b is Real when a is Integer and b is Real");
 
     // But not necessarily Integer (b might not be Integer)
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "a + b is Unknown for Integer when b is only Real");
 }
 
@@ -384,7 +384,7 @@ void test_unknown_domain_yields_unknown() {
     auto add = make_add({make_var("a"), make_var("b")});
     auto expr = wrap_expr(add);
 
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "a + b is Unknown for Integer when b has no Integer domain");
 }
 
@@ -398,9 +398,9 @@ void test_domain_with_number_operands() {
     {
         auto add = make_add({make_num(3), make_num(5)});
         auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
             "3 + 5 is Integer");
-        EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
             "3 + 5 is Real");
     }
 }
@@ -420,7 +420,7 @@ void test_many_integer_operands() {
 
     auto add = make_add(ops);
     auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
         "Sum of 8 Integer variables is Integer");
 }
 
@@ -435,7 +435,7 @@ void test_real_with_numbers() {
     // x + 3 where x is Real → sum is Real (3 is Integer which implies Real)
     auto add = make_add({make_var("x"), make_num(3)});
     auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "x + 3 is Real when x is Real");
 }
 
@@ -454,7 +454,7 @@ void test_nested_addition_domain() {
     auto outer_add = make_add({inner_add, make_var("c")});
     auto expr = wrap_expr(outer_add);
 
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
         "(a + b) + c is Integer when a, b, c are Integer");
 }
 

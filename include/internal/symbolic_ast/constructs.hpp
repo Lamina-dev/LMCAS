@@ -265,7 +265,7 @@ private:
     const TransformType transform_type_;
     const std::shared_ptr<const SymbolicNode> body_;
     const std::string source_var_;
-    const std::string target_var_;
+    const std::shared_ptr<const SymbolicNode> target_;
 
     /**
      * @brief 构造积分变换节点。
@@ -275,14 +275,14 @@ private:
      * @param tgt 目标变量名
      */
     TransformNode(TransformType tt, std::shared_ptr<const SymbolicNode> b,
-                  std::string src, std::string tgt)
+                  std::string src, std::shared_ptr<const SymbolicNode> target)
         : transform_type_(tt), body_(std::move(b)),
-          source_var_(std::move(src)), target_var_(std::move(tgt)) {
-        if (!body_) {
-            throw std::invalid_argument("TransformNode body cannot be null");
+          source_var_(std::move(src)), target_(std::move(target)) {
+        if (!body_ || !target_) {
+            throw std::invalid_argument("TransformNode children cannot be null");
         }
-        if (source_var_.empty() || target_var_.empty()) {
-            throw std::invalid_argument("TransformNode variables cannot be empty");
+        if (source_var_.empty()) {
+            throw std::invalid_argument("TransformNode source variable cannot be empty");
         }
     }
 
@@ -290,7 +290,7 @@ public:
     TransformType transform_type() const noexcept { return transform_type_; }
     const std::shared_ptr<const SymbolicNode>& body() const noexcept { return body_; }
     const std::string& source_var() const noexcept { return source_var_; }
-    const std::string& target_var() const noexcept { return target_var_; }
+    const std::shared_ptr<const SymbolicNode>& target() const noexcept { return target_; }
 
     int type_priority() const override { return 11; }
 
@@ -301,7 +301,7 @@ protected:
         hash_combine(seed, static_cast<std::size_t>(transform_type_));
         hash_combine(seed, body_->hash());
         hash_combine(seed, std::hash<std::string>{}(source_var_));
-        hash_combine(seed, std::hash<std::string>{}(target_var_));
+        hash_combine(seed, target_->hash());
         return seed;
     }
 
@@ -312,7 +312,7 @@ protected:
         }
         int cmp = source_var_.compare(o.source_var_);
         if (cmp != 0) return cmp;
-        cmp = target_var_.compare(o.target_var_);
+        cmp = target_->compare(*o.target_);
         if (cmp != 0) return cmp;
         return body_->compare(*o.body_);
     }
@@ -322,7 +322,7 @@ public:
 
     std::shared_ptr<const SymbolicNode> clone() const override {
         return lamina::detail::make_node<TransformNode>(
-            transform_type_, body_->clone(), source_var_, target_var_);
+            transform_type_, body_->clone(), source_var_, target_->clone());
     }
 };
 

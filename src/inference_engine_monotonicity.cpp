@@ -5,9 +5,6 @@ namespace lamina {
 
 // Periodicity inference
 
-Tribool InferenceEngine::query_periodic(const SymbolicExpr& expr) const {
-    return inference_query_or_unknown(query_periodic_checked(expr));
-}
 
 InferenceTriboolResult InferenceEngine::query_periodic_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_periodic_checked",
@@ -33,9 +30,6 @@ InferenceTriboolResult InferenceEngine::query_periodic_checked(const SymbolicExp
         });
 }
 
-std::optional<SymbolicExpr> InferenceEngine::infer_period(const SymbolicExpr& expr) const {
-    return inference_period_or_empty(infer_period_checked(expr));
-}
 
 InferencePeriodResult InferenceEngine::infer_period_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<std::optional<SymbolicExpr>>(
@@ -164,7 +158,8 @@ Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
     // VariableNode: check PropertyStore for declared monotonicity
     if (auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
         const auto& props = impl_->ctx.current_properties();
-        return props.get_monotonicity(var_node->name(), var, interval);
+        return detail::propagate_result(
+            props.get_monotonicity(var_node->name(), var, interval));
     }
 
     return Monotonicity::Unknown;

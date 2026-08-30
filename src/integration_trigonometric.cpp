@@ -134,7 +134,7 @@ bool TrigCombinationStrategy::extract_sec_power(
     return true;
 }
 
-std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext&, int depth) {
 

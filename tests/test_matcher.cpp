@@ -119,8 +119,12 @@ void test_rewrite_engine() {
     auto target = add(inner, zero);
 
     auto result = engine.apply(target);
+    EXPECT_TRUE(result.has_value(), "rewrite engine application succeeds");
+    if (!result) return;
 
-    EXPECT_TRUE(lamina::detail::node(result)->equals(*lamina::detail::node(inner)), "rewrite engine removes additive zero");
+    EXPECT_TRUE(lamina::detail::node(result.value())->equals(
+                    *lamina::detail::node(inner)),
+                "rewrite engine removes additive zero");
 
     std::cout << "Rewrite engine passed." << std::endl;
 }

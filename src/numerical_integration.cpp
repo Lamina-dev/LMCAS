@@ -13,27 +13,6 @@
 
 namespace lamina {
 
-std::shared_ptr<SymbolicExpr> quadrature_simpson(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b,
-    int n) {
-    auto result = quadrature_simpson_numeric(f, var, a, b, n);
-    if (!result) return nullptr;
-    return SymbolicExpr::number(result.value().value);
-}
-
-std::shared_ptr<SymbolicExpr> quadrature_gaussian(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b,
-    int n) {
-    auto result = quadrature_gaussian_numeric(f, var, a, b, n);
-    if (!result) return nullptr;
-    return SymbolicExpr::number(result.value().value);
-}
 
 namespace {
 
@@ -472,27 +451,6 @@ Result<ApproxReal> adaptive_simpson_numeric(
     return adaptive_simpson_numeric(f, var, a, b, context, tol, max_depth);
 }
 
-std::shared_ptr<SymbolicExpr> adaptive_simpson(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b,
-    double tol) {
-    auto result = adaptive_simpson_numeric(f, var, a, b, tol, 50);
-    if (!result) return nullptr;
-    return SymbolicExpr::number(result.value().value);
-}
-
-std::shared_ptr<SymbolicExpr> numerical_integrate(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b,
-    int n) {
-    auto result = numerical_integrate_numeric(f, var, a, b, n);
-    if (!result) return nullptr;
-    return SymbolicExpr::number(result.value().value);
-}
 
 Result<ApproxReal> numerical_integrate_numeric(
     const std::shared_ptr<SymbolicExpr>& f,

@@ -63,7 +63,8 @@ void test_rational_reconstruction() {
     ModInt seven(7, p);
     ModInt encoded = three / seven;
 
-    auto [num, den] = rational_reconstruction(encoded.value(), p);
+    auto [num, den] =
+        rational_reconstruction_checked(encoded.value(), p).value();
 
     std::cout << "  Reconstructed: " << num << "/" << den << std::endl;
     EXPECT_TRUE(num == 3 && den == 7, "rational reconstruction recovers 3/7");
@@ -71,7 +72,8 @@ void test_rational_reconstruction() {
     ModInt neg2(-2, p);
     ModInt five(5, p);
     ModInt encoded2 = neg2 / five;
-    auto [num2, den2] = rational_reconstruction(encoded2.value(), p);
+    auto [num2, den2] =
+        rational_reconstruction_checked(encoded2.value(), p).value();
     std::cout << "  Reconstructed: " << num2 << "/" << den2 << std::endl;
     EXPECT_TRUE(num2 == -2 && den2 == 5, "rational reconstruction recovers -2/5");
 

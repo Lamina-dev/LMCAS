@@ -1,5 +1,6 @@
 #include "parametric_solver.hpp"
 #include "solver.hpp"
+#include "solve_strategies.hpp"
 #include "poly_utils.hpp"
 #include "symbolic_ast.hpp"
 #include <algorithm>
@@ -339,7 +340,7 @@ ParametricSolver::solve_polynomial_parametric(
             return self(self, var_pos - 1, next_partial);
         }
 
-        auto roots = SymbolicExpr::solve(target, curr_var);
+        auto roots = lamina::solve_finite_checked(target, curr_var).value();
         if (roots.empty()) {
 
             auto next_partial = partial;

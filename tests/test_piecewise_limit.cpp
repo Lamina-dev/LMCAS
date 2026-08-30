@@ -129,7 +129,7 @@ int main() {
     TEST_CASE("sgn(x) right limit at 0 = 1");
     {
         // sgn(x) as x->0+
-        auto lim = x->limit("x", zero, "+");
+        auto lim = lamina::limit_expression_checked(x, "x", zero, LimitDirection::FromAbove).value();
         // We need to construct sgn(x) directly
         auto x_node = lamina::detail::make_node<VariableNode>("x");
         auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));

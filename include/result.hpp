@@ -47,7 +47,7 @@ private:
 } // namespace detail
 
 template <typename T>
-class Result {
+class [[nodiscard]] Result {
 public:
     static Result success(T value) {
         return Result(std::move(value));
@@ -106,7 +106,7 @@ T propagate_result(Result<T> result) {
 } // namespace detail
 
 template <>
-class Result<void> {
+class [[nodiscard]] Result<void> {
 public:
     static Result success() { return Result(); }
 

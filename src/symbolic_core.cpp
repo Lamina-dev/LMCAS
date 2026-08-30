@@ -5,12 +5,14 @@
 #include <set>
 #include "../include/symbolic.hpp"
 #include "../include/symbolic_ast.hpp"
+#include "../include/internal/expression_analysis.hpp"
 #include "../include/visitors/print_visitor.hpp"
 #include "../include/visitors/normalization_visitor.hpp"
 #include "../include/visitors/differentiation_visitor.hpp"
 #include "../include/visitors/expand_visitor.hpp"
 #include "../include/matcher.hpp"
 #include "../include/numeric_evaluation.hpp"
+#include "../include/root_of_utils.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
@@ -189,13 +191,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::root_of(
     if (!polynomial || !polynomial->impl_->root) {
         throw std::invalid_argument("root_of polynomial cannot be null");
     }
-    auto variable_expression = variable(variable_name);
-    auto index_expression = number(index);
-    std::vector<std::shared_ptr<const SymbolicNode>> arguments{
-        polynomial->impl_->root, variable_expression->impl_->root, index_expression->impl_->root};
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
-            FunctionNode::FuncType::RootOf, std::move(arguments)));
+    if (index < 0) throw std::invalid_argument("root_of index cannot be negative");
+    auto result = lamina::make_rootof_checked(
+        polynomial, variable_name, static_cast<std::size_t>(index));
+    if (!result) throw std::invalid_argument(result.error().message);
+    return std::move(result.value());
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::eq(
@@ -333,347 +333,6 @@ Rational SymbolicExpr::convert_rational() const {
     return Rational(0);
 }
 
-class VariablesVisitor : public lamina::detail::SymbolicVisitor {
-    std::set<std::string> bound_vars;
-
-    bool is_bound(const std::string& name) const {
-        return bound_vars.find(name) != bound_vars.end();
-    }
-
-public:
-    std::set<std::string> vars;
-
-    void visit(const NumberNode&) override {}
-    void visit(const VariableNode& node) override {
-        if (!is_bound(node.name())) {
-            vars.insert(node.name());
-        }
-    }
-    void visit(const AddNode& node) override {
-        for(auto& op : node.operands()) op->accept(*this);
-    }
-    void visit(const MultiplyNode& node) override {
-        for(auto& op : node.operands()) op->accept(*this);
-    }
-    void visit(const PowerNode& node) override {
-        node.base()->accept(*this);
-        node.exponent()->accept(*this);
-    }
-    void visit(const FunctionNode& node) override {
-        for(auto& arg : node.arguments()) arg->accept(*this);
-    }
-    void visit(const UninterpretedFunctionNode& node) override {
-        for (const auto& argument : node.arguments()) argument->accept(*this);
-    }
-    void visit(const MatrixNode&) override {
-
-    }
-    void visit(const RelationalNode& node) override {
-        node.left()->accept(*this);
-        node.right()->accept(*this);
-    }
-    void visit(const LogicalNode& node) override {
-        node.left()->accept(*this);
-        if (node.right()) node.right()->accept(*this);
-    }
-    void visit(const PiecewiseNode& node) override {
-        for (const auto& branch : node.branches()) {
-            branch.expression->accept(*this);
-            branch.condition->accept(*this);
-        }
-        if (node.default_expr()) node.default_expr()->accept(*this);
-    }
-    void visit(const SummationNode& node) override {
-        node.lower_bound()->accept(*this);
-        node.upper_bound()->accept(*this);
-        bool inserted = bound_vars.insert(node.index_var()).second;
-        node.body()->accept(*this);
-        if (inserted) bound_vars.erase(node.index_var());
-    }
-    void visit(const ProductNode& node) override {
-        node.lower_bound()->accept(*this);
-        node.upper_bound()->accept(*this);
-        bool inserted = bound_vars.insert(node.index_var()).second;
-        node.body()->accept(*this);
-        if (inserted) bound_vars.erase(node.index_var());
-    }
-    void visit(const TransformNode& node) override {
-        bool inserted = bound_vars.insert(node.source_var()).second;
-        node.body()->accept(*this);
-        if (inserted) bound_vars.erase(node.source_var());
-        if (!is_bound(node.target_var())) vars.insert(node.target_var());
-    }
-    void visit(const QuantifierNode& node) override {
-        node.domain()->accept(*this);
-        bool inserted = bound_vars.insert(node.bound_var()).second;
-        node.predicate()->accept(*this);
-        if (inserted) bound_vars.erase(node.bound_var());
-    }
-    void visit(const SetBuilderNode& node) override {
-        node.domain()->accept(*this);
-        bool inserted = bound_vars.insert(node.element_var()).second;
-        node.predicate()->accept(*this);
-        if (inserted) bound_vars.erase(node.element_var());
-    }
-    void visit(const ComplexNode& node) override {
-        node.real()->accept(*this);
-        node.imag()->accept(*this);
-    }
-    void visit(const FiniteSetNode& node) override {
-        for (const auto& element : node.elements()) element->accept(*this);
-    }
-    void visit(const IntervalNode& node) override {
-        node.lower()->accept(*this);
-        node.upper()->accept(*this);
-    }
-    void visit(const MembershipNode& node) override {
-        node.element()->accept(*this);
-        node.set()->accept(*this);
-    }
-    void visit(const QuantityNode& node) override { node.value()->accept(*this); }
-};
-
-class SubstituteVisitor : public lamina::detail::SymbolicVisitor {
-    std::string var_name;
-    std::shared_ptr<const SymbolicNode> new_val;
-public:
-    std::shared_ptr<const SymbolicNode> result;
-
-    SubstituteVisitor(std::string v, std::shared_ptr<const SymbolicNode> val)
-        : var_name(std::move(v)), new_val(std::move(val)) {}
-
-    std::shared_ptr<const SymbolicNode> get_result() const { return result; }
-
-    void visit(const NumberNode& node) override {
-        result = node.clone();
-    }
-
-    void visit(const VariableNode& node) override {
-        if (node.name() == var_name) {
-            result = new_val->clone();
-        } else {
-            result = node.clone();
-        }
-    }
-
-    void visit(const AddNode& node) override {
-        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
-        for (const auto& op : node.operands()) {
-            op->accept(*this);
-            new_ops.push_back(result);
-        }
-        result = lamina::detail::make_node<AddNode>(new_ops);
-    }
-
-    void visit(const MultiplyNode& node) override {
-        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
-        for (const auto& op : node.operands()) {
-            op->accept(*this);
-            new_ops.push_back(result);
-        }
-        result = lamina::detail::make_node<MultiplyNode>(new_ops);
-    }
-
-    void visit(const PowerNode& node) override {
-        node.base()->accept(*this);
-        auto new_base = result;
-        node.exponent()->accept(*this);
-        auto new_exp = result;
-        result = lamina::detail::make_node<PowerNode>(new_base, new_exp);
-    }
-
-    void visit(const FunctionNode& node) override {
-        std::vector<std::shared_ptr<const SymbolicNode>> new_args;
-        for (const auto& arg : node.arguments()) {
-            arg->accept(*this);
-            new_args.push_back(result);
-        }
-        result = lamina::detail::make_node<FunctionNode>(node.type(), new_args);
-    }
-
-    void visit(const UninterpretedFunctionNode& node) override {
-        std::vector<std::shared_ptr<const SymbolicNode>> arguments;
-        arguments.reserve(node.arguments().size());
-        for (const auto& argument : node.arguments()) {
-            argument->accept(*this);
-            arguments.push_back(result);
-        }
-        result = lamina::detail::make_node<UninterpretedFunctionNode>(
-            node.name(), std::move(arguments));
-    }
-
-    void visit(const MatrixNode& node) override {
-
-        if (std::holds_alternative<MatrixNode::DenseStorage>(node.storage())) {
-            const auto& dense = std::get<MatrixNode::DenseStorage>(node.storage());
-            MatrixNode::DenseStorage new_dense;
-            for(const auto& e : dense) {
-                e->accept(*this);
-                new_dense.push_back(result);
-            }
-            result = lamina::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_dense);
-        } else {
-            const auto& sparse = std::get<MatrixNode::SparseStorage>(node.storage());
-            MatrixNode::SparseStorage new_sparse;
-            for(const auto& [idx, val] : sparse) {
-                val->accept(*this);
-                new_sparse[idx] = result;
-            }
-            result = lamina::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_sparse);
-        }
-    }
-
-    void visit(const RelationalNode& node) override {
-        node.left()->accept(*this);
-        auto new_left = result;
-        node.right()->accept(*this);
-        auto new_right = result;
-        result = lamina::detail::make_node<RelationalNode>(new_left, new_right, node.op());
-    }
-
-    void visit(const LogicalNode& node) override {
-        node.left()->accept(*this);
-        auto new_left = result;
-        std::shared_ptr<const SymbolicNode> new_right = nullptr;
-        if (node.right()) {
-            node.right()->accept(*this);
-            new_right = result;
-        }
-        result = lamina::detail::make_node<LogicalNode>(new_left, new_right, node.op());
-    }
-
-    void visit(const SummationNode& node) override {
-        /// 指标变量是绑定变量：仅当替换变量不是指标时才替换通项。
-        std::shared_ptr<const SymbolicNode> new_body;
-        if (node.index_var() == var_name) {
-            new_body = node.body()->clone();
-        } else {
-            node.body()->accept(*this);
-            new_body = result;
-        }
-        node.lower_bound()->accept(*this);
-        auto new_lo = result;
-        node.upper_bound()->accept(*this);
-        auto new_hi = result;
-        result = lamina::detail::make_node<SummationNode>(new_body, node.index_var(), new_lo, new_hi);
-    }
-
-    void visit(const ProductNode& node) override {
-        std::shared_ptr<const SymbolicNode> new_body;
-        if (node.index_var() == var_name) {
-            new_body = node.body()->clone();
-        } else {
-            node.body()->accept(*this);
-            new_body = result;
-        }
-        node.lower_bound()->accept(*this);
-        auto new_lo = result;
-        node.upper_bound()->accept(*this);
-        auto new_hi = result;
-        result = lamina::detail::make_node<ProductNode>(new_body, node.index_var(), new_lo, new_hi);
-    }
-
-    void visit(const PiecewiseNode& node) override {
-        std::vector<PiecewiseNode::Branch> new_branches;
-        for (const auto& b : node.branches()) {
-            PiecewiseNode::Branch nb;
-            b.expression->accept(*this);
-            nb.expression = result;
-            b.condition->accept(*this);
-            nb.condition = result;
-            new_branches.push_back(nb);
-        }
-        std::shared_ptr<const SymbolicNode> new_def = nullptr;
-        if (node.default_expr()) {
-            node.default_expr()->accept(*this);
-            new_def = result;
-        }
-        result = lamina::detail::make_node<PiecewiseNode>(std::move(new_branches), new_def);
-    }
-
-    void visit(const ComplexNode& node) override {
-        node.real()->accept(*this);
-        auto new_real = result;
-        node.imag()->accept(*this);
-        auto new_imag = result;
-        result = lamina::detail::make_node<ComplexNode>(new_real, new_imag);
-    }
-
-    void visit(const TransformNode& node) override {
-        std::shared_ptr<const SymbolicNode> new_body;
-        if (node.source_var() == var_name) {
-            new_body = node.body()->clone();
-        } else {
-            node.body()->accept(*this);
-            new_body = result;
-        }
-        result = lamina::detail::make_node<TransformNode>(
-            node.transform_type(), new_body, node.source_var(), node.target_var());
-    }
-
-    void visit(const QuantifierNode& node) override {
-        node.domain()->accept(*this);
-        auto new_domain = result;
-
-        std::shared_ptr<const SymbolicNode> new_predicate;
-        if (node.bound_var() == var_name) {
-            new_predicate = node.predicate()->clone();
-        } else {
-            node.predicate()->accept(*this);
-            new_predicate = result;
-        }
-
-        result = lamina::detail::make_node<QuantifierNode>(
-            node.quantifier_type(), node.bound_var(), new_domain, new_predicate);
-    }
-
-    void visit(const SetBuilderNode& node) override {
-        node.domain()->accept(*this);
-        auto new_domain = result;
-
-        std::shared_ptr<const SymbolicNode> new_predicate;
-        if (node.element_var() == var_name) {
-            new_predicate = node.predicate()->clone();
-        } else {
-            node.predicate()->accept(*this);
-            new_predicate = result;
-        }
-
-        result = lamina::detail::make_node<SetBuilderNode>(
-            node.element_var(), new_domain, new_predicate);
-    }
-
-    void visit(const FiniteSetNode& node) override {
-        std::vector<std::shared_ptr<const SymbolicNode>> elements;
-        elements.reserve(node.elements().size());
-        for (const auto& element : node.elements()) {
-            element->accept(*this);
-            elements.push_back(result);
-        }
-        result = lamina::detail::make_node<FiniteSetNode>(std::move(elements));
-    }
-
-    void visit(const IntervalNode& node) override {
-        node.lower()->accept(*this);
-        auto lower = result;
-        node.upper()->accept(*this);
-        result = lamina::detail::make_node<IntervalNode>(
-            lower, result, node.lower_closed(), node.upper_closed());
-    }
-
-    void visit(const MembershipNode& node) override {
-        node.element()->accept(*this);
-        auto element = result;
-        node.set()->accept(*this);
-        result = lamina::detail::make_node<MembershipNode>(element, result);
-    }
-
-    void visit(const QuantityNode& node) override {
-        node.value()->accept(*this);
-        result = lamina::detail::make_node<QuantityNode>(
-            result, node.dimension(), node.scale_to_base(), node.display_unit());
-    }
-};
 
 int SymbolicExpr::compare(const std::shared_ptr<SymbolicExpr>& other) const {
     if (!impl_->root || !lamina::detail::node(other)) return 0;
@@ -681,15 +340,15 @@ int SymbolicExpr::compare(const std::shared_ptr<SymbolicExpr>& other) const {
     return impl_->root->compare(*lamina::detail::node(other));
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const {
-    if (!impl_->root) return nullptr;
-    SubstituteVisitor v(var_name, lamina::detail::node(value));
-    impl_->root->accept(v);
-
-    NormalizationVisitor norm;
-    v.get_result()->accept(norm);
-
-    return lamina::detail::make_expression_ptr(norm.get_result());
+std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(
+    const std::string& var_name,
+    const std::shared_ptr<SymbolicExpr>& value) const {
+    if (!value) return nullptr;
+    auto substituted = lamina::substitute_free(
+        impl_->root, var_name, lamina::detail::node(value));
+    NormalizationVisitor normalization;
+    substituted->accept(normalization);
+    return lamina::detail::make_expression_ptr(normalization.get_result());
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {

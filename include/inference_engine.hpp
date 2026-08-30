@@ -65,13 +65,6 @@ public:
     /// to the appropriate inference method based on the expression's root node type.
     /// @{
 
-    Tribool query_positive(const SymbolicExpr& expr) const;
-    Tribool query_negative(const SymbolicExpr& expr) const;
-    Tribool query_nonnegative(const SymbolicExpr& expr) const;
-    Tribool query_nonpositive(const SymbolicExpr& expr) const;
-    Tribool query_real(const SymbolicExpr& expr) const;
-    Tribool query_integer(const SymbolicExpr& expr) const;
-    Tribool query_nonzero(const SymbolicExpr& expr) const;
 
     InferenceTriboolResult query_positive_checked(const SymbolicExpr& expr) const;
     InferenceTriboolResult query_negative_checked(const SymbolicExpr& expr) const;
@@ -92,7 +85,6 @@ public:
      * @param expr The expression to query
      * @return True if algebraic, False if transcendental, Unknown otherwise
      */
-    Tribool query_algebraic(const SymbolicExpr& expr) const;
 
     InferenceTriboolResult query_algebraic_checked(const SymbolicExpr& expr) const;
 
@@ -105,7 +97,6 @@ public:
      * @param expr The expression to query
      * @return True if transcendental, False if algebraic, Unknown otherwise
      */
-    Tribool query_transcendental(const SymbolicExpr& expr) const;
 
     InferenceTriboolResult query_transcendental_checked(const SymbolicExpr& expr) const;
 
@@ -118,7 +109,6 @@ public:
      * @param expr The expression to query
      * @return True if finite, False if divergent, Unknown otherwise
      */
-    Tribool query_finite(const SymbolicExpr& expr) const;
 
     InferenceTriboolResult query_finite_checked(const SymbolicExpr& expr) const;
 
@@ -131,7 +121,6 @@ public:
      * @param expr The expression to query
      * @return True if divergent, False if finite, Unknown otherwise
      */
-    Tribool query_divergent(const SymbolicExpr& expr) const;
 
     InferenceTriboolResult query_divergent_checked(const SymbolicExpr& expr) const;
 
@@ -163,7 +152,6 @@ public:
      * @param expr The expression to query
      * @return Tribool::True if periodic, False if known non-periodic, Unknown otherwise
      */
-    Tribool query_periodic(const SymbolicExpr& expr) const;
 
     InferenceTriboolResult query_periodic_checked(const SymbolicExpr& expr) const;
 
@@ -176,7 +164,6 @@ public:
      * @param expr The expression to query
      * @return The period as a SymbolicExpr, or std::nullopt if not periodic or unknown
      */
-    std::optional<SymbolicExpr> infer_period(const SymbolicExpr& expr) const;
 
     InferencePeriodResult infer_period_checked(const SymbolicExpr& expr) const;
 
@@ -240,13 +227,9 @@ private:
 
     /// @name Sign inference for specific node types
     /// @{
-    Tribool infer_add_sign(const void* node, Sign target) const;
     InferenceTriboolResult infer_add_sign_checked(const void* node, Sign target) const;
-    Tribool infer_multiply_sign(const void* node, Sign target) const;
     InferenceTriboolResult infer_multiply_sign_checked(const void* node, Sign target) const;
-    Tribool infer_power_property(const void* node, Sign target) const;
     InferenceTriboolResult infer_power_property_checked(const void* node, Sign target) const;
-    Tribool infer_function_property(const void* node, Sign target) const;
     InferenceTriboolResult infer_function_property_checked(const void* node, Sign target) const;
     /// @}
 
@@ -263,7 +246,6 @@ private:
      * @param target The sign property being queried
      * @return True if the target sign can be inferred from relations, Unknown otherwise
      */
-    Tribool infer_sign_from_relations(const SymbolicExpr& expr, Sign target) const;
     InferenceTriboolResult infer_sign_from_relations_checked(const SymbolicExpr& expr, Sign target) const;
 
     /// @name Division and subtraction sign inference
@@ -277,7 +259,6 @@ private:
      *   positive ÷ negative → negative, negative ÷ positive → negative.
      * Returns Unknown when denominator sign is unknown or zero.
     */
-    Tribool infer_division_sign(const void* node, Sign target) const;
     InferenceTriboolResult infer_division_sign_checked(const void* node, Sign target) const;
 
     /**
@@ -286,27 +267,20 @@ private:
      * Detects a negated subtrahend and applies subtraction sign rules, such as
      * positive minus negative producing a positive result.
      */
-    Tribool infer_subtraction_sign(const void* node, Sign target) const;
     InferenceTriboolResult infer_subtraction_sign_checked(const void* node, Sign target) const;
 
     /// @}
 
     /// @name Domain inference for specific node types
     /// @{
-    Tribool infer_add_domain(const void* node, Domain target) const;
     InferenceTriboolResult infer_add_domain_checked(const void* node, Domain target) const;
-    Tribool infer_multiply_domain(const void* node, Domain target) const;
     InferenceTriboolResult infer_multiply_domain_checked(const void* node, Domain target) const;
-    Tribool infer_power_domain(const void* node, Domain target) const;
     InferenceTriboolResult infer_power_domain_checked(const void* node, Domain target) const;
-    Tribool infer_function_domain(const void* node, Domain target) const;
     InferenceTriboolResult infer_function_domain_checked(const void* node, Domain target) const;
     /// @}
 
     /// @name Helper methods for querying sub-expression properties
     /// @{
-    Tribool query_sign_of(const SymbolicExpr& expr, Sign sign) const;
-    Tribool query_domain_of(const SymbolicExpr& expr, Domain domain) const;
     InferenceTriboolResult query_sign_of_checked(const SymbolicExpr& expr, Sign sign) const;
     InferenceTriboolResult query_domain_of_checked(const SymbolicExpr& expr, Domain domain) const;
     /// @}

@@ -9,6 +9,8 @@
 #include "transform_engine.hpp"
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
+#include "internal/expression_analysis.hpp"
+#include "residual_verification.hpp"
 #include <cmath>
 #include <algorithm>
 #include <exception>
@@ -19,36 +21,12 @@
 namespace lamina {
 
 
-static bool te_contains_var(const std::shared_ptr<const SymbolicNode>& node,
-                            const std::string& var) {
-    if (!node) return false;
-    if (auto vn = std::dynamic_pointer_cast<const VariableNode>(node))
-        return vn->name() == var;
-    if (auto an = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : an->operands())
-            if (te_contains_var(op, var)) return true;
-        return false;
-    }
-    if (auto mn = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mn->operands())
-            if (te_contains_var(op, var)) return true;
-        return false;
-    }
-    if (auto pn = std::dynamic_pointer_cast<const PowerNode>(node))
-        return te_contains_var(pn->base(), var) ||
-               te_contains_var(pn->exponent(), var);
-    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        for (const auto& arg : fn->arguments())
-            if (te_contains_var(arg, var)) return true;
-        return false;
-    }
-    if (auto tn = std::dynamic_pointer_cast<const TransformNode>(node))
-        return te_contains_var(tn->body(), var);
-    return false;
-}
 
-static bool te_depends_on(const std::shared_ptr<SymbolicExpr>& e, const std::string& v) {
-    return e && lamina::detail::node(e) && te_contains_var(lamina::detail::node(e), v);
+static bool te_depends_on(const std::shared_ptr<SymbolicExpr>& expression,
+                          const std::string& variable) {
+    return expression &&
+           expression_depends_on_variable(
+               lamina::detail::node(expression), variable);
 }
 
 static Result<void> te_validate_expr_vars(const std::shared_ptr<SymbolicExpr>& expr,
@@ -97,6 +75,11 @@ static Result<void> te_validate_convolution_inputs(
     return Result<void>::success();
 }
 
+static bool te_contains_transform(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    return lamina::detail::contains_node_type<TransformNode>(node);
+}
+
 static TransformEngineResult te_wrap_transform_result(
     std::shared_ptr<SymbolicExpr> expr,
     const std::string& operation) {
@@ -107,18 +90,17 @@ static TransformEngineResult te_wrap_transform_result(
             operation);
     }
 
-    if (std::dynamic_pointer_cast<const TransformNode>(lamina::detail::node(expr))) {
+    if (te_contains_transform(lamina::detail::node(expr))) {
         return TransformEngineResult::failure(
             CasErrc::Inconclusive,
             "transform is outside the current evaluated support domain",
             operation);
     }
 
-    TransformResult result;
-    result.expression.value = std::move(expr);
-    result.expression.verification = VerificationStatus::NotChecked;
-    result.verification = VerificationStatus::NotChecked;
-    return TransformEngineResult::success(std::move(result));
+    return TransformEngineResult::success(
+        Verified<EvaluatedTransform>{
+            EvaluatedTransform{std::move(expr), {}, {}},
+            ByConstructionProof{}});
 }
 
 static std::shared_ptr<SymbolicExpr> te_gt_condition(
@@ -145,12 +127,14 @@ static long long te_factorial(int n) {
 static std::shared_ptr<SymbolicExpr> te_unevaluated_laplace(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
     return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::Laplace, lamina::detail::node(f)->clone(), t, s));
+        TransformNode::TransformType::Laplace, lamina::detail::node(f)->clone(), t,
+        SymbolicFactory::create_variable(s)));
 }
 static std::shared_ptr<SymbolicExpr> te_unevaluated_inv_laplace(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
     return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::InverseLaplace, lamina::detail::node(F)->clone(), s, t));
+        TransformNode::TransformType::InverseLaplace, lamina::detail::node(F)->clone(), s,
+        SymbolicFactory::create_variable(t)));
 }
 static std::pair<std::shared_ptr<SymbolicExpr>,std::shared_ptr<SymbolicExpr>>
 te_split_coeff(const std::shared_ptr<SymbolicExpr>& e, const std::string& v) {
@@ -159,7 +143,7 @@ te_split_coeff(const std::shared_ptr<SymbolicExpr>& e, const std::string& v) {
     if (!mul) return {SymbolicExpr::number(1), e};
     std::vector<std::shared_ptr<const SymbolicNode>> cp, vp;
     for (auto& op : mul->operands()) {
-        if (te_contains_var(op, v)) vp.push_back(op); else cp.push_back(op);
+        if (expression_depends_on_variable(op, v)) vp.push_back(op); else cp.push_back(op);
     }
     if (cp.empty()) return {SymbolicExpr::number(1), e};
     if (vp.empty()) return {e, SymbolicExpr::number(1)};
@@ -197,7 +181,7 @@ static bool te_is_trig(const std::shared_ptr<SymbolicExpr>& e, const std::string
     if (ml && ml->operands().size() == 2) {
         for (size_t i = 0; i < 2; ++i) {
             auto vn = std::dynamic_pointer_cast<const VariableNode>(ml->operands()[i]);
-            if (vn && vn->name() == v && !te_contains_var(ml->operands()[1-i], v)) {
+            if (vn && vn->name() == v && !expression_depends_on_variable(ml->operands()[1-i], v)) {
                 freq = lamina::detail::make_expression_ptr(ml->operands()[1-i]); return true;
             }
         }
@@ -218,7 +202,7 @@ static bool te_is_hyp(const std::shared_ptr<SymbolicExpr>& e, const std::string&
     if (ml && ml->operands().size() == 2) {
         for (size_t i = 0; i < 2; ++i) {
             auto vn = std::dynamic_pointer_cast<const VariableNode>(ml->operands()[i]);
-            if (vn && vn->name() == v && !te_contains_var(ml->operands()[1-i], v)) {
+            if (vn && vn->name() == v && !expression_depends_on_variable(ml->operands()[1-i], v)) {
                 freq = lamina::detail::make_expression_ptr(ml->operands()[1-i]); return true;
             }
         }
@@ -238,7 +222,7 @@ static bool te_extract_exp(const std::shared_ptr<SymbolicExpr>& e, const std::st
         if (ml && ml->operands().size() == 2) {
             for (size_t i = 0; i < 2; ++i) {
                 auto vn = std::dynamic_pointer_cast<const VariableNode>(ml->operands()[i]);
-                if (vn && vn->name() == t && !te_contains_var(ml->operands()[1-i], t)) {
+                if (vn && vn->name() == t && !expression_depends_on_variable(ml->operands()[1-i], t)) {
                     a_out = lamina::detail::make_expression_ptr(ml->operands()[1-i]);
                     rem_out = SymbolicExpr::number(1); return true;
                 }
@@ -330,8 +314,11 @@ static std::vector<std::shared_ptr<SymbolicExpr>> te_laplace_roc(
     return {};
 }
 
-std::shared_ptr<SymbolicExpr> laplace_transform(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
+static std::shared_ptr<SymbolicExpr> laplace_transform_core(
+    const std::shared_ptr<SymbolicExpr>& f, const std::string& t,
+    const std::string& s, ComputationContext& context) {
+    auto step = context.consume_steps(1, "laplace_transform.recursive");
+    if (!step) return nullptr;
     if (!f || !lamina::detail::node(f)) return nullptr;
     if (te_is_zero(f)) return SymbolicExpr::number(0);
     if (!te_depends_on(f, t)) return SymbolicExpr::divide(f, SymbolicExpr::variable(s));
@@ -339,7 +326,8 @@ std::shared_ptr<SymbolicExpr> laplace_transform(
     if (add) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add->operands()) {
-            auto lt = laplace_transform(lamina::detail::make_expression_ptr(op), t, s);
+            auto lt = laplace_transform_core(
+                lamina::detail::make_expression_ptr(op), t, s, context);
             if (!lt) return te_unevaluated_laplace(f, t, s);
             result = result ? SymbolicExpr::add(result, lt) : lt;
         }
@@ -347,13 +335,13 @@ std::shared_ptr<SymbolicExpr> laplace_transform(
     }
     auto [coeff, body] = te_split_coeff(f, t);
     if (!coeff->is_one()) {
-        auto lt_body = laplace_transform(body, t, s);
+        auto lt_body = laplace_transform_core(body, t, s, context);
         if (lt_body) return SymbolicExpr::multiply(coeff, lt_body);
     }
     std::shared_ptr<SymbolicExpr> a_shift, remainder;
     if (te_extract_exp(f, t, a_shift, remainder)) {
         if (te_depends_on(remainder, t)) {
-            auto lt_rem = laplace_transform(remainder, t, s);
+            auto lt_rem = laplace_transform_core(remainder, t, s, context);
             if (lt_rem) return lt_rem->substitute(s, SymbolicExpr::add(SymbolicExpr::variable(s), SymbolicExpr::multiply(SymbolicExpr::number(-1), a_shift)));
         } else {
             return SymbolicExpr::divide(remainder, SymbolicExpr::add(SymbolicExpr::variable(s), SymbolicExpr::multiply(SymbolicExpr::number(-1), a_shift)));
@@ -375,9 +363,14 @@ TransformEngineResult laplace_transform_checked(
     auto step = context.consume_steps(8, operation);
     if (!step) return TransformEngineResult::failure(step.error());
     try {
-        auto result = te_wrap_transform_result(laplace_transform(f, t, s), operation);
-        if (result && result.value().verification != VerificationStatus::Inconclusive) {
-            result.value().roc = te_laplace_roc(f, t, s);
+        auto expression = laplace_transform_core(f, t, s, context);
+        auto final_access = context.consume_steps(0, operation);
+        if (!final_access) {
+            return TransformEngineResult::failure(final_access.error());
+        }
+        auto result = te_wrap_transform_result(std::move(expression), operation);
+        if (result) {
+            result.value().value.roc = te_laplace_roc(f, t, s);
         }
         return result;
     } catch (const std::bad_alloc&) {
@@ -397,6 +390,7 @@ TransformEngineResult laplace_transform_checked(
     ComputationContext context;
     return laplace_transform_checked(f, t, s, context);
 }
+
 
 static std::shared_ptr<SymbolicExpr> te_inv_power(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
@@ -457,7 +451,7 @@ static std::shared_ptr<SymbolicExpr> te_inv_product(
         auto pw = std::dynamic_pointer_cast<const PowerNode>(op);
         if (pw && !den_part) {
             double ev = te_numval(pw->exponent());
-            if (ev < 0 && te_contains_var(pw->base(), s)) { den_part = op; continue; }
+            if (ev < 0 && expression_depends_on_variable(pw->base(), s)) { den_part = op; continue; }
         }
         num_parts.push_back(op);
     }
@@ -473,15 +467,19 @@ static std::shared_ptr<SymbolicExpr> te_inv_product(
     return nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> inverse_laplace(
-    const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
+static std::shared_ptr<SymbolicExpr> inverse_laplace_core(
+    const std::shared_ptr<SymbolicExpr>& F, const std::string& s,
+    const std::string& t, ComputationContext& context) {
+    auto step = context.consume_steps(1, "inverse_laplace.recursive");
+    if (!step) return nullptr;
     if (!F || !lamina::detail::node(F)) return nullptr;
     if (te_is_zero(F)) return SymbolicExpr::number(0);
     auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(F));
     if (add) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add->operands()) {
-            auto ilt = inverse_laplace(lamina::detail::make_expression_ptr(op), s, t);
+            auto ilt = inverse_laplace_core(
+                lamina::detail::make_expression_ptr(op), s, t, context);
             if (!ilt) return te_unevaluated_inv_laplace(F, s, t);
             result = result ? SymbolicExpr::add(result, ilt) : ilt;
         }
@@ -489,7 +487,7 @@ std::shared_ptr<SymbolicExpr> inverse_laplace(
     }
     auto [coeff, body] = te_split_coeff(F, s);
     if (!coeff->is_one()) {
-        auto ilt_body = inverse_laplace(body, s, t);
+        auto ilt_body = inverse_laplace_core(body, s, t, context);
         if (ilt_body) return SymbolicExpr::multiply(coeff, ilt_body);
     }
     auto pw_res = te_inv_power(F, s, t);
@@ -510,7 +508,31 @@ TransformEngineResult inverse_laplace_checked(
     auto step = context.consume_steps(8, operation);
     if (!step) return TransformEngineResult::failure(step.error());
     try {
-        return te_wrap_transform_result(inverse_laplace(F, s, t), operation);
+        auto expression = inverse_laplace_core(F, s, t, context);
+        auto final_access = context.consume_steps(0, operation);
+        if (!final_access) {
+            return TransformEngineResult::failure(final_access.error());
+        }
+        auto result = te_wrap_transform_result(expression, operation);
+        if (!result) return result;
+        auto round_trip = laplace_transform_core(
+            expression, t, s, context);
+        if (!round_trip ||
+            te_contains_transform(lamina::detail::node(round_trip))) {
+            return TransformEngineResult::failure(
+                CasErrc::Inconclusive,
+                "inverse Laplace round trip is not proved", operation);
+        }
+        auto verified = check_equivalent(round_trip, F, context);
+        if (!verified) return TransformEngineResult::failure(verified.error());
+        if (!std::holds_alternative<ProvedZeroResidual>(verified.value())) {
+            return TransformEngineResult::failure(
+                CasErrc::Inconclusive,
+                "inverse Laplace round trip is not proved", operation);
+        }
+        result.value().certificate =
+            ExactRoundTripProof{SymbolicExpr::number(0)};
+        return result;
     } catch (const std::bad_alloc&) {
         return TransformEngineResult::failure(CasErrc::ResourceLimit,
                                               "transform allocation failed",
@@ -528,6 +550,7 @@ TransformEngineResult inverse_laplace_checked(
     ComputationContext context;
     return inverse_laplace_checked(F, s, t, context);
 }
+
 
 
 /**
@@ -612,15 +635,19 @@ static bool te_is_abs_exp(const std::shared_ptr<SymbolicExpr>& f, const std::str
     return false;
 }
 
-std::shared_ptr<SymbolicExpr> fourier_transform(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& omega) {
+static std::shared_ptr<SymbolicExpr> fourier_transform_core(
+    const std::shared_ptr<SymbolicExpr>& f, const std::string& t,
+    const std::string& omega, ComputationContext& context) {
+    auto step = context.consume_steps(1, "fourier_transform.recursive");
+    if (!step) return nullptr;
     if (!f || !lamina::detail::node(f)) return nullptr;
     auto wv = SymbolicExpr::variable(omega);
 
     /// 不依赖 t：无有限 Fourier 变换（δ函数），返回未求值
     if (!te_depends_on(f, t)) {
         return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-            TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t, omega));
+            TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t,
+            SymbolicFactory::create_variable(omega)));
     }
 
     /// 线性性：处理加法 F{af+bg} = aF{f} + bF{g}
@@ -628,10 +655,12 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add_node->operands()) {
-            auto ft = fourier_transform(lamina::detail::make_expression_ptr(op), t, omega);
+            auto ft = fourier_transform_core(
+                lamina::detail::make_expression_ptr(op), t, omega, context);
             if (!ft) {
                 return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-                    TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t, omega));
+                    TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t,
+                    SymbolicFactory::create_variable(omega)));
             }
             result = result ? SymbolicExpr::add(result, ft) : ft;
         }
@@ -641,7 +670,7 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
     /// 分离常数系数: c * body
     auto [coeff, body] = te_split_coeff(f, t);
     if (!coeff->is_one()) {
-        auto ft_body = fourier_transform(body, t, omega);
+        auto ft_body = fourier_transform_core(body, t, omega, context);
         if (ft_body) return SymbolicExpr::multiply(coeff, ft_body);
     }
 
@@ -701,7 +730,8 @@ std::shared_ptr<SymbolicExpr> fourier_transform(
 
     /// 未知形式：返回未求值 TransformNode
     return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t, omega));
+        TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t,
+        SymbolicFactory::create_variable(omega)));
 }
 
 TransformEngineResult fourier_transform_checked(
@@ -715,7 +745,12 @@ TransformEngineResult fourier_transform_checked(
     auto step = context.consume_steps(8, operation);
     if (!step) return TransformEngineResult::failure(step.error());
     try {
-        return te_wrap_transform_result(fourier_transform(f, t, omega), operation);
+        auto expression = fourier_transform_core(f, t, omega, context);
+        auto final_access = context.consume_steps(0, operation);
+        if (!final_access) {
+            return TransformEngineResult::failure(final_access.error());
+        }
+        return te_wrap_transform_result(std::move(expression), operation);
     } catch (const std::bad_alloc&) {
         return TransformEngineResult::failure(CasErrc::ResourceLimit,
                                               "transform allocation failed",
@@ -734,15 +769,21 @@ TransformEngineResult fourier_transform_checked(
     return fourier_transform_checked(f, t, omega, context);
 }
 
-std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
-    const std::shared_ptr<SymbolicExpr>& F, const std::string& omega, const std::string& t) {
+
+
+static std::shared_ptr<SymbolicExpr> inverse_fourier_transform_core(
+    const std::shared_ptr<SymbolicExpr>& F, const std::string& omega,
+    const std::string& t, ComputationContext& context) {
+    auto step = context.consume_steps(1, "inverse_fourier_transform.recursive");
+    if (!step) return nullptr;
     if (!F || !lamina::detail::node(F)) return nullptr;
     auto tv = SymbolicExpr::variable(t);
 
     /// 不依赖 ω：返回未求值
     if (!te_depends_on(F, omega)) {
         return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-            TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega, t));
+            TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega,
+            SymbolicFactory::create_variable(t)));
     }
 
     /// 线性性
@@ -750,10 +791,12 @@ std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add_node->operands()) {
-            auto ift = inverse_fourier_transform(lamina::detail::make_expression_ptr(op), omega, t);
+            auto ift = inverse_fourier_transform_core(
+                lamina::detail::make_expression_ptr(op), omega, t, context);
             if (!ift) {
                 return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-                    TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega, t));
+                    TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega,
+                    SymbolicFactory::create_variable(t)));
             }
             result = result ? SymbolicExpr::add(result, ift) : ift;
         }
@@ -776,7 +819,8 @@ std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
 
     /// 未知形式：返回未求值
     return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega, t));
+        TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega,
+        SymbolicFactory::create_variable(t)));
 }
 
 TransformEngineResult inverse_fourier_transform_checked(
@@ -790,8 +834,32 @@ TransformEngineResult inverse_fourier_transform_checked(
     auto step = context.consume_steps(8, operation);
     if (!step) return TransformEngineResult::failure(step.error());
     try {
-        return te_wrap_transform_result(
-            inverse_fourier_transform(F, omega, t), operation);
+        auto expression = inverse_fourier_transform_core(
+            F, omega, t, context);
+        auto final_access = context.consume_steps(0, operation);
+        if (!final_access) {
+            return TransformEngineResult::failure(final_access.error());
+        }
+        auto result = te_wrap_transform_result(expression, operation);
+        if (!result) return result;
+        auto round_trip = fourier_transform_core(
+            expression, t, omega, context);
+        if (!round_trip ||
+            te_contains_transform(lamina::detail::node(round_trip))) {
+            return TransformEngineResult::failure(
+                CasErrc::Inconclusive,
+                "inverse Fourier round trip is not proved", operation);
+        }
+        auto verified = check_equivalent(round_trip, F, context);
+        if (!verified) return TransformEngineResult::failure(verified.error());
+        if (!std::holds_alternative<ProvedZeroResidual>(verified.value())) {
+            return TransformEngineResult::failure(
+                CasErrc::Inconclusive,
+                "inverse Fourier round trip is not proved", operation);
+        }
+        result.value().certificate =
+            ExactRoundTripProof{SymbolicExpr::number(0)};
+        return result;
     } catch (const std::bad_alloc&) {
         return TransformEngineResult::failure(CasErrc::ResourceLimit,
                                               "transform allocation failed",
@@ -810,37 +878,7 @@ TransformEngineResult inverse_fourier_transform_checked(
     return inverse_fourier_transform_checked(F, omega, t, context);
 }
 
-std::shared_ptr<SymbolicExpr> convolve(
-    const std::shared_ptr<SymbolicExpr>& f, const std::shared_ptr<SymbolicExpr>& g,
-    const std::string& var) {
-    if (!f || !lamina::detail::node(f)) return nullptr;
-    if (!g || !lamina::detail::node(g)) return nullptr;
-    /// (f * g)(t) = ∫_{-∞}^{∞} f(τ)g(t-τ)dτ
-    /// 使用辅助变量 tau 避免命名冲突
-    std::string tau = "__conv_tau__";
-    auto tau_var = SymbolicExpr::variable(tau);
-    auto t_var = SymbolicExpr::variable(var);
 
-    auto f_tau = f->substitute(var, tau_var);
-    if (!f_tau) return nullptr;
-
-    auto t_minus_tau = SymbolicExpr::add(t_var,
-        SymbolicExpr::multiply(SymbolicExpr::number(-1), tau_var));
-    auto g_shifted = g->substitute(var, t_minus_tau);
-    if (!g_shifted) return nullptr;
-
-    auto integrand = SymbolicExpr::multiply(f_tau, g_shifted)->simplify();
-    std::vector<std::shared_ptr<const SymbolicNode>> arguments{
-        lamina::detail::node(integrand),
-        lamina::detail::node(tau_var),
-        lamina::detail::node(SymbolicExpr::infinity(-1)),
-        lamina::detail::node(SymbolicExpr::infinity(1)),
-    };
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
-            FunctionNode::FuncType::Calculus_Integral,
-            std::move(arguments)));
-}
 
 TransformEngineResult convolve_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -994,8 +1032,11 @@ static std::vector<std::shared_ptr<SymbolicExpr>> zt_roc(
     return {};
 }
 
-std::shared_ptr<SymbolicExpr> z_transform(
-    const std::shared_ptr<SymbolicExpr>& f_n, const std::string& n, const std::string& z) {
+static std::shared_ptr<SymbolicExpr> z_transform_core(
+    const std::shared_ptr<SymbolicExpr>& f_n, const std::string& n,
+    const std::string& z, ComputationContext& context) {
+    auto step = context.consume_steps(1, "z_transform.recursive");
+    if (!step) return nullptr;
     if (!f_n || !lamina::detail::node(f_n)) return nullptr;
     auto zv = SymbolicExpr::variable(z);
 
@@ -1004,10 +1045,12 @@ std::shared_ptr<SymbolicExpr> z_transform(
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add_node->operands()) {
-            auto zt = z_transform(lamina::detail::make_expression_ptr(op), n, z);
+            auto zt = z_transform_core(
+                lamina::detail::make_expression_ptr(op), n, z, context);
             if (!zt) {
                 return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-                    TransformNode::TransformType::ZTransform, lamina::detail::node(f_n)->clone(), n, z));
+                    TransformNode::TransformType::ZTransform, lamina::detail::node(f_n)->clone(), n,
+                    SymbolicFactory::create_variable(z)));
             }
             result = result ? SymbolicExpr::add(result, zt) : zt;
         }
@@ -1017,7 +1060,7 @@ std::shared_ptr<SymbolicExpr> z_transform(
     /// 分离常数系数: c * body → c * Z{body}
     auto [coeff, body] = te_split_coeff(f_n, n);
     if (!coeff->is_one()) {
-        auto zt_body = z_transform(body, n, z);
+        auto zt_body = z_transform_core(body, n, z, context);
         if (zt_body) return SymbolicExpr::multiply(coeff, zt_body)->simplify();
     }
 
@@ -1115,7 +1158,8 @@ std::shared_ptr<SymbolicExpr> z_transform(
 
     /// 未知形式：返回未求值节点
     return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::ZTransform, lamina::detail::node(f_n)->clone(), n, z));
+        TransformNode::TransformType::ZTransform, lamina::detail::node(f_n)->clone(), n,
+        SymbolicFactory::create_variable(z)));
 }
 
 TransformEngineResult z_transform_checked(
@@ -1129,9 +1173,14 @@ TransformEngineResult z_transform_checked(
     auto step = context.consume_steps(8, operation);
     if (!step) return TransformEngineResult::failure(step.error());
     try {
-        auto result = te_wrap_transform_result(z_transform(f_n, n, z), operation);
-        if (result && result.value().verification != VerificationStatus::Inconclusive) {
-            result.value().roc = zt_roc(f_n, n, z);
+        auto expression = z_transform_core(f_n, n, z, context);
+        auto final_access = context.consume_steps(0, operation);
+        if (!final_access) {
+            return TransformEngineResult::failure(final_access.error());
+        }
+        auto result = te_wrap_transform_result(std::move(expression), operation);
+        if (result) {
+            result.value().value.roc = zt_roc(f_n, n, z);
         }
         return result;
     } catch (const std::bad_alloc&) {
@@ -1151,5 +1200,6 @@ TransformEngineResult z_transform_checked(
     ComputationContext context;
     return z_transform_checked(f_n, n, z, context);
 }
+
 
 } // namespace lamina

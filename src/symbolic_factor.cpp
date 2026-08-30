@@ -9,106 +9,11 @@
 #include "internal/expression_analysis.hpp"
 #include "../include/transcendental_factor.hpp"
 #include "../include/solve_polynomial.hpp"
+#include "../include/solve_strategies.hpp"
 #include "../include/multivariate_factor.hpp"
 
 namespace {
 
-class FactorVariablesVisitor : public lamina::detail::SymbolicVisitor {
-    std::set<std::string> bound_vars;
-
-    bool is_bound(const std::string& name) const {
-        return bound_vars.find(name) != bound_vars.end();
-    }
-
-public:
-    std::set<std::string> vars;
-
-    void visit(const NumberNode&) override {}
-    void visit(const VariableNode& node) override {
-        if (!is_bound(node.name())) {
-            vars.insert(node.name());
-        }
-    }
-    void visit(const AddNode& node) override {
-        for(auto& op : node.operands()) op->accept(*this);
-    }
-    void visit(const MultiplyNode& node) override {
-        for(auto& op : node.operands()) op->accept(*this);
-    }
-    void visit(const PowerNode& node) override {
-        node.base()->accept(*this);
-        node.exponent()->accept(*this);
-    }
-    void visit(const FunctionNode& node) override {
-        for(auto& arg : node.arguments()) arg->accept(*this);
-    }
-    void visit(const MatrixNode&) override {
-
-    }
-    void visit(const RelationalNode& node) override {
-        node.left()->accept(*this);
-        node.right()->accept(*this);
-    }
-    void visit(const LogicalNode& node) override {
-        node.left()->accept(*this);
-        if (node.right()) node.right()->accept(*this);
-    }
-    void visit(const PiecewiseNode& node) override {
-        for (const auto& branch : node.branches()) {
-            branch.expression->accept(*this);
-            branch.condition->accept(*this);
-        }
-        if (node.default_expr()) node.default_expr()->accept(*this);
-    }
-    void visit(const SummationNode& node) override {
-        node.lower_bound()->accept(*this);
-        node.upper_bound()->accept(*this);
-        bool inserted = bound_vars.insert(node.index_var()).second;
-        node.body()->accept(*this);
-        if (inserted) bound_vars.erase(node.index_var());
-    }
-    void visit(const ProductNode& node) override {
-        node.lower_bound()->accept(*this);
-        node.upper_bound()->accept(*this);
-        bool inserted = bound_vars.insert(node.index_var()).second;
-        node.body()->accept(*this);
-        if (inserted) bound_vars.erase(node.index_var());
-    }
-    void visit(const TransformNode& node) override {
-        bool inserted = bound_vars.insert(node.source_var()).second;
-        node.body()->accept(*this);
-        if (inserted) bound_vars.erase(node.source_var());
-        if (!is_bound(node.target_var())) vars.insert(node.target_var());
-    }
-    void visit(const QuantifierNode& node) override {
-        node.domain()->accept(*this);
-        bool inserted = bound_vars.insert(node.bound_var()).second;
-        node.predicate()->accept(*this);
-        if (inserted) bound_vars.erase(node.bound_var());
-    }
-    void visit(const SetBuilderNode& node) override {
-        node.domain()->accept(*this);
-        bool inserted = bound_vars.insert(node.element_var()).second;
-        node.predicate()->accept(*this);
-        if (inserted) bound_vars.erase(node.element_var());
-    }
-    void visit(const ComplexNode& node) override {
-        node.real()->accept(*this);
-        node.imag()->accept(*this);
-    }
-    void visit(const FiniteSetNode& node) override {
-        for (const auto& element : node.elements()) element->accept(*this);
-    }
-    void visit(const IntervalNode& node) override {
-        node.lower()->accept(*this);
-        node.upper()->accept(*this);
-    }
-    void visit(const MembershipNode& node) override {
-        node.element()->accept(*this);
-        node.set()->accept(*this);
-    }
-    void visit(const QuantityNode& node) override { node.value()->accept(*this); }
-};
 
 /// 多元因式分解辅助函数
 
@@ -346,7 +251,12 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
         for (const auto& op : add_node->operands()) {
              auto expr_op = lamina::detail::make_expression_ptr(op);
              if (!common) common = expr_op;
-             else common = poly_gcd(common, expr_op);
+             else {
+                 lamina::ComputationContext gcd_context;
+                 auto gcd = lamina::symbolic_polynomial_gcd(
+                     *common, *expr_op, gcd_context);
+                 common = gcd ? gcd.value() : number(1);
+             }
         }
 
         if (common && !common->is_one() && !common->is_zero()) {
@@ -369,10 +279,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
         }
 
         /// 步骤 2：一元多项式分解（支持任意次数）
-        FactorVariablesVisitor vv;
-        lamina::detail::node(simp)->accept(vv);
-        if (vv.vars.size() == 1) {
-             std::string var = *vv.vars.begin();
+        auto factor_variables = lamina::free_variables(lamina::detail::node(simp));
+        if (factor_variables.size() == 1) {
+             std::string var = *factor_variables.begin();
              try {
                  auto poly = lamina::symbolic_to_poly<Rational>(simp, var);
                  int deg = poly.degree();
@@ -445,10 +354,12 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
              try_solve_quadratic:
              /// 后备：二次多项式通过求解方程分解
              try {
-                 auto poly = lamina::symbolic_to_poly<lamina::SymbolicPolyCoeff>(simp, *vv.vars.begin());
+                 auto poly = lamina::symbolic_to_poly<lamina::SymbolicPolyCoeff>(
+                     simp, *factor_variables.begin());
                  if (poly.degree() == 2) {
-                      std::string var = *vv.vars.begin();
-                      auto solutions = solve(simp, var);
+                      std::string var = *factor_variables.begin();
+                      auto solutions =
+                          lamina::solve_finite_checked(simp, var).value();
                       if (solutions.size() == 2) {
                            auto leading = poly.coeffs[2].val;
                            if (!leading) leading = number(1);
@@ -471,11 +382,12 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
         }
 
         /// 步骤 3：多元多项式 — 先尝试 factor_multivariate，再回退逐变量分解
-        if (vv.vars.size() > 1) {
+        if (factor_variables.size() > 1) {
             /// 3a: 检测是否为多项式表达式，若是则使用 MultiPoly 路径
             if (is_poly_expr_node(lamina::detail::node(simp))) {
                 try {
-                    std::vector<std::string> var_list(vv.vars.begin(), vv.vars.end());
+                    std::vector<std::string> var_list(
+                        factor_variables.begin(), factor_variables.end());
                     auto mpoly = symbolic_node_to_multipoly(lamina::detail::node(simp), var_list);
 
                     if (!mpoly.is_zero() && !mpoly.is_constant()) {
@@ -522,7 +434,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
             }
 
             /// 3b: 回退 — 逐变量尝试有理根分解
-            for (const auto& var : vv.vars) {
+            for (const auto& var : factor_variables) {
                 try {
                     auto poly = lamina::symbolic_to_poly<lamina::SymbolicPolyCoeff>(simp, var);
                     if (poly.degree() >= 2) {
@@ -582,11 +494,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
     /// 超越因式分解后备路径：当标准多项式分解无法处理时，
     /// 检测表达式是否含超越函数，若是则尝试超越因式分解。
     {
-        FactorVariablesVisitor tv;
-        lamina::detail::node(simp)->accept(tv);
+        const auto transform_variables =
+            lamina::free_variables(lamina::detail::node(simp));
         std::string target_var;
-        if (!tv.vars.empty()) {
-            target_var = *tv.vars.begin();
+        if (!transform_variables.empty()) {
+            target_var = *transform_variables.begin();
         }
 
         if (!target_var.empty()) {
@@ -768,14 +680,17 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
             /// 对 combined_num / combined_den 做多项式 GCD 约分
             combined_den = combined_den->expand()->simplify();
 
-            FactorVariablesVisitor vv;
-            if (lamina::detail::node(combined_num)) lamina::detail::node(combined_num)->accept(vv);
-            if (lamina::detail::node(combined_den)) lamina::detail::node(combined_den)->accept(vv);
+            auto rational_variables =
+                lamina::free_variables(lamina::detail::node(combined_num));
+            const auto denominator_variables =
+                lamina::free_variables(lamina::detail::node(combined_den));
+            rational_variables.insert(denominator_variables.begin(),
+                                      denominator_variables.end());
 
             auto cur_num = combined_num;
             auto cur_den = combined_den;
 
-            for (const auto& var : vv.vars) {
+            for (const auto& var : rational_variables) {
                 try {
                     auto num_expanded = cur_num->expand()->simplify();
                     auto den_expanded = cur_den->expand()->simplify();
@@ -850,18 +765,20 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
 
     if (denominator->is_one()) return numerator;
 
-    FactorVariablesVisitor vv;
-    if (lamina::detail::node(numerator)) lamina::detail::node(numerator)->accept(vv);
-    if (lamina::detail::node(denominator)) lamina::detail::node(denominator)->accept(vv);
+    auto rational_variables = lamina::free_variables(lamina::detail::node(numerator));
+    const auto denominator_variables =
+        lamina::free_variables(lamina::detail::node(denominator));
+    rational_variables.insert(denominator_variables.begin(),
+                              denominator_variables.end());
 
-    if (vv.vars.empty()) {
+    if (rational_variables.empty()) {
         return divide(numerator, denominator)->simplify();
     }
 
     auto cur_num = numerator;
     auto cur_den = denominator;
 
-    for (const auto& var : vv.vars) {
+    for (const auto& var : rational_variables) {
         try {
             auto num_expanded = cur_num->expand()->simplify();
             auto den_expanded = cur_den->expand()->simplify();

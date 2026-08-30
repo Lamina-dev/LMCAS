@@ -20,7 +20,7 @@ int main() {
         auto ln_base = SymbolicExpr::ln(base);
         auto product = SymbolicExpr::multiply(x, ln_base);
         std::cout << "  expr = " << product->to_string() << std::endl;
-        auto lim = product->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(product, "x", inf).value();
         if (lim) {
             std::cout << "  result = " << lim->to_string() << std::endl;
             auto val = test_numeric_eval(lim);
@@ -66,7 +66,7 @@ int main() {
         auto base = SymbolicExpr::add(one, inv_x);
         auto expr = SymbolicExpr::power(base, x);
         std::cout << "  expr = " << expr->to_string() << std::endl;
-        auto lim = expr->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(expr, "x", inf).value();
         if (lim) {
             std::cout << "  result = " << lim->to_string() << std::endl;
             auto val = test_numeric_eval(lim);

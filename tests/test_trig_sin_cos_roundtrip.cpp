@@ -46,8 +46,8 @@ std::shared_ptr<SymbolicExpr> build_integrand(int m, int n) {
 
 bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
+    if (std::dynamic_pointer_cast<const IntegralNode>(node)) return true;
     if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
         for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
     } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -86,14 +86,13 @@ PairReport verify_pair(int m, int n) {
     }
 
     Integrator integ;
-    std::shared_ptr<SymbolicExpr> result;
-    try {
-        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand, kVarName));
-    } catch (const std::exception& e) {
+    auto integrated = integ.integrate(*integrand, kVarName);
+    if (!integrated) {
         rep.failed = true;
-        rep.detail = std::string("exception during integration: ") + e.what();
+        rep.detail = std::string("integration failed: ") + integrated.error().message;
         return rep;
     }
+    auto result = lamina::detail::make_expression_ptr(integrated.value());
 
     if (has_integral_node(lamina::detail::node(result))) {
         rep.failed = true;

@@ -16,6 +16,15 @@
 
 namespace lamina {
 
+static ODESolution solve_higher_order_ode_impl(
+    const std::vector<double>&,
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&, const std::string&);
+static ODESolution solve_euler_ode_impl(
+    const std::vector<double>&,
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&, const std::string&);
+
 /**
  * @internal
  * @brief 表示特征多项式的一个根及其重数。
@@ -418,16 +427,26 @@ ODESolutionResult solve_higher_order_ode_checked(
     auto budget = context.consume_steps(coeffs.size() * 20 + 20, operation);
     if (!budget) return ODESolutionResult::failure(budget.error());
 
-    if (has_nonzero_forcing(forcing)) {
+    const bool nonzero_forcing = has_nonzero_forcing(forcing);
+    if (nonzero_forcing &&
+        (!forcing->is_number() || coeffs.back() == 0.0)) {
         return ODESolutionResult::failure(
             CasErrc::Inconclusive,
-            "checked higher-order ODE currently supports homogeneous constant-coefficient equations only",
+            "non-homogeneous constant-coefficient ODE currently requires a constant forcing and nonzero y coefficient",
             operation);
     }
 
     try {
+        auto solution = solve_higher_order_ode_impl(
+            coeffs, nullptr, x, y);
+        if (nonzero_forcing && solution.general_solution) {
+            auto particular = SymbolicExpr::divide(
+                forcing, SymbolicExpr::number(coeffs.back()))->simplify();
+            solution.general_solution = SymbolicExpr::add(
+                solution.general_solution, particular)->simplify();
+        }
         return wrap_ode_solution(
-            solve_higher_order_ode(coeffs, forcing, x, y),
+            std::move(solution),
             ODEType::HigherOrder_ConstCoeff,
             operation);
     } catch (const std::bad_alloc&) {
@@ -453,7 +472,7 @@ ODESolutionResult solve_higher_order_ode_checked(
     return solve_higher_order_ode_checked(coeffs, forcing, x, y, context);
 }
 
-ODESolution solve_higher_order_ode(
+static ODESolution solve_higher_order_ode_impl(
     const std::vector<double>& coeffs,
     const std::shared_ptr<SymbolicExpr>& forcing,
     const std::string& x,
@@ -497,16 +516,27 @@ ODESolutionResult solve_euler_ode_checked(
     auto budget = context.consume_steps(euler_coeffs.size() * 20 + 20, operation);
     if (!budget) return ODESolutionResult::failure(budget.error());
 
-    if (has_nonzero_forcing(forcing)) {
+    const bool nonzero_forcing = has_nonzero_forcing(forcing);
+    if (nonzero_forcing &&
+        (!forcing->is_number() || euler_coeffs.back() == 0.0)) {
         return ODESolutionResult::failure(
             CasErrc::Inconclusive,
-            "checked Euler ODE currently supports homogeneous equations only",
+            "non-homogeneous Euler ODE currently requires a constant forcing and nonzero y coefficient",
             operation);
     }
 
     try {
+        auto solution = solve_euler_ode_impl(
+            euler_coeffs, nullptr, x, y);
+        if (nonzero_forcing && solution.general_solution) {
+            auto particular = SymbolicExpr::divide(
+                forcing,
+                SymbolicExpr::number(euler_coeffs.back()))->simplify();
+            solution.general_solution = SymbolicExpr::add(
+                solution.general_solution, particular)->simplify();
+        }
         return wrap_ode_solution(
-            solve_euler_ode(euler_coeffs, forcing, x, y),
+            std::move(solution),
             ODEType::Euler,
             operation);
     } catch (const std::bad_alloc&) {
@@ -532,7 +562,7 @@ ODESolutionResult solve_euler_ode_checked(
     return solve_euler_ode_checked(euler_coeffs, forcing, x, y, context);
 }
 
-ODESolution solve_euler_ode(
+static ODESolution solve_euler_ode_impl(
     const std::vector<double>& euler_coeffs,
     const std::shared_ptr<SymbolicExpr>& forcing,
     const std::string& x,

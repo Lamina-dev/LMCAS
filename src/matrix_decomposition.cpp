@@ -3,6 +3,7 @@
  * @brief 矩阵高级分解算法实现。
  */
 #include "matrix_decomposition.hpp"
+#include "symbolic_matrix.hpp"
 #include "numeric_evaluation.hpp"
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
@@ -212,34 +213,6 @@ Result<void> prove_exact_spd(
     return Result<void>::success();
 }
 
-Result<void> prove_exact_no_pivot_lu_support(
-    const std::shared_ptr<const MatrixNode>& matrix,
-    const std::string& operation) {
-    auto values = exact_rational_matrix(matrix);
-    if (!values) {
-        return Result<void>::failure(
-            CasErrc::Inconclusive,
-            "LU input is outside the exact rational no-pivot support domain",
-            operation);
-    }
-    const size_t n = values->size();
-    for (size_t order = 1; order <= n; ++order) {
-        std::vector<std::vector<Rational>> leading(
-            order, std::vector<Rational>(order, Rational(0)));
-        for (size_t row = 0; row < order; ++row) {
-            for (size_t col = 0; col < order; ++col) {
-                leading[row][col] = (*values)[row][col];
-            }
-        }
-        if (exact_det(std::move(leading)) == Rational(0)) {
-            return Result<void>::failure(
-                CasErrc::Inconclusive,
-                "LU decomposition requires nonzero no-pivot leading minors",
-                operation);
-        }
-    }
-    return Result<void>::success();
-}
 
 Result<void> prove_exact_full_column_rank_qr_support(
     const std::shared_ptr<const MatrixNode>& matrix,
@@ -297,7 +270,7 @@ std::shared_ptr<SymbolicExpr> identity_matrix_expr(size_t n) {
     return SymbolicExpr::matrix(grid);
 }
 
-std::optional<std::vector<Rational>> exact_nonnegative_diagonal_entries(
+std::optional<std::vector<Rational>> exact_rectangular_diagonal_entries(
     const std::shared_ptr<const MatrixNode>& matrix) {
     auto values = exact_rational_matrix(matrix);
     if (!values) return std::nullopt;
@@ -312,9 +285,6 @@ std::optional<std::vector<Rational>> exact_nonnegative_diagonal_entries(
                 return std::nullopt;
             }
             if (is_diag) {
-                if ((*values)[row][col] < Rational(0)) {
-                    return std::nullopt;
-                }
                 diagonal[row] = (*values)[row][col];
             }
         }
@@ -356,6 +326,18 @@ std::shared_ptr<SymbolicExpr> rectangular_diagonal_expr(
 
 } // namespace
 
+static bool qr_decomposition_impl(
+    const std::shared_ptr<SymbolicExpr>& A,
+    std::shared_ptr<SymbolicExpr>& Q,
+    std::shared_ptr<SymbolicExpr>& R);
+static bool cholesky_decomposition_impl(
+    const std::shared_ptr<SymbolicExpr>& A,
+    std::shared_ptr<SymbolicExpr>& L);
+static bool jordan_form_impl(
+    const std::shared_ptr<SymbolicExpr>& A,
+    std::shared_ptr<SymbolicExpr>& J,
+    std::shared_ptr<SymbolicExpr>& P);
+
 LUDecompositionResult lu_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context)
@@ -366,22 +348,65 @@ LUDecompositionResult lu_decomposition_checked(
     auto budget = context.consume_steps(matrix.value()->rows() * matrix.value()->cols() * 8 + 8,
                                         operation);
     if (!budget) return LUDecompositionResult::failure(budget.error());
-    auto no_pivot = prove_exact_no_pivot_lu_support(matrix.value(), operation);
-    if (!no_pivot) return LUDecompositionResult::failure(no_pivot.error());
+    auto values = exact_rational_matrix(matrix.value());
+    if (!values) {
+        return LUDecompositionResult::failure(
+            CasErrc::Inconclusive,
+            "exact PLU requires a rational matrix or proved symbolic pivots",
+            operation);
+    }
     try {
-        std::shared_ptr<SymbolicExpr> L;
-        std::shared_ptr<SymbolicExpr> U;
-        if (!lu_decomposition(A, L, U)) {
-            return LUDecompositionResult::failure(
-                CasErrc::Inconclusive,
-                "LU decomposition is outside the current no-pivot symbolic support domain",
-                operation);
+        const std::size_t n = values->size();
+        auto U_values = *values;
+        std::vector<std::vector<Rational>> L_values(
+            n, std::vector<Rational>(n, Rational(0)));
+        std::vector<std::vector<Rational>> P_values(
+            n, std::vector<Rational>(n, Rational(0)));
+        for (std::size_t i = 0; i < n; ++i) {
+            L_values[i][i] = Rational(1);
+            P_values[i][i] = Rational(1);
         }
-        auto l_check = validate_decomposition_output(L, "L", operation);
-        if (!l_check) return LUDecompositionResult::failure(l_check.error());
-        auto u_check = validate_decomposition_output(U, "U", operation);
-        if (!u_check) return LUDecompositionResult::failure(u_check.error());
-        return LUDecompositionResult::success(LUDecomposition{L, U});
+        for (std::size_t column = 0; column < n; ++column) {
+            std::size_t pivot = column;
+            while (pivot < n && U_values[pivot][column] == Rational(0)) ++pivot;
+            if (pivot == n) {
+                return LUDecompositionResult::failure(
+                    CasErrc::DomainError,
+                    "PLU decomposition requires a nonsingular matrix",
+                    operation);
+            }
+            if (pivot != column) {
+                std::swap(U_values[pivot], U_values[column]);
+                std::swap(P_values[pivot], P_values[column]);
+                for (std::size_t prior = 0; prior < column; ++prior) {
+                    std::swap(L_values[pivot][prior], L_values[column][prior]);
+                }
+            }
+            for (std::size_t row = column + 1; row < n; ++row) {
+                const Rational multiplier =
+                    U_values[row][column] / U_values[column][column];
+                L_values[row][column] = multiplier;
+                for (std::size_t col = column; col < n; ++col) {
+                    U_values[row][col] =
+                        U_values[row][col] -
+                        multiplier * U_values[column][col];
+                }
+            }
+        }
+        auto to_expression = [&](const std::vector<std::vector<Rational>>& input) {
+            std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> grid(
+                n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
+            for (std::size_t row = 0; row < n; ++row) {
+                for (std::size_t col = 0; col < n; ++col) {
+                    grid[row][col] = exact_number_expr(input[row][col]);
+                }
+            }
+            return SymbolicExpr::matrix(grid);
+        };
+        return LUDecompositionResult::success(LUDecomposition{
+            to_expression(P_values),
+            to_expression(L_values),
+            to_expression(U_values)});
     } catch (const std::bad_alloc&) {
         return LUDecompositionResult::failure(CasErrc::ResourceLimit,
                                              "allocation failed while calculating LU decomposition",
@@ -400,41 +425,6 @@ LUDecompositionResult lu_decomposition_checked(
     return lu_decomposition_checked(A, context);
 }
 
-bool lu_decomposition(
-    const std::shared_ptr<SymbolicExpr>& A,
-    std::shared_ptr<SymbolicExpr>& L,
-    std::shared_ptr<SymbolicExpr>& U) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
-    if (!mat || mat->rows() != mat->cols()) return false;
-    size_t n = mat->rows();
-    
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> L_grid(n, std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> U_grid(n, std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
-    
-    for (size_t i = 0; i < n; i++) {
-        for (size_t k = i; k < n; k++) {
-            auto sum = SymbolicExpr::number(0);
-            for (size_t j = 0; j < i; j++) sum = SymbolicExpr::add(sum, SymbolicExpr::multiply(L_grid[i][j], U_grid[j][k]));
-            auto a_ik = lamina::detail::make_expression_ptr(mat->get(i, k));
-            U_grid[i][k] = SymbolicExpr::add(a_ik, SymbolicExpr::multiply(SymbolicExpr::number(-1), sum));
-        }
-
-        for (size_t k = i; k < n; k++) {
-            if (i == k) {
-                L_grid[i][i] = SymbolicExpr::number(1);
-            } else {
-                auto sum = SymbolicExpr::number(0);
-                for (size_t j = 0; j < i; j++) sum = SymbolicExpr::add(sum, SymbolicExpr::multiply(L_grid[k][j], U_grid[j][i]));
-                auto a_ki = lamina::detail::make_expression_ptr(mat->get(k, i));
-                L_grid[k][i] = SymbolicExpr::divide(SymbolicExpr::add(a_ki, SymbolicExpr::multiply(SymbolicExpr::number(-1), sum)), U_grid[i][i]);
-            }
-        }
-    }
-    
-    L = SymbolicExpr::matrix(L_grid);
-    U = SymbolicExpr::matrix(U_grid);
-    return true;
-}
 
 QRDecompositionResult qr_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A,
@@ -451,7 +441,7 @@ QRDecompositionResult qr_decomposition_checked(
     try {
         std::shared_ptr<SymbolicExpr> Q;
         std::shared_ptr<SymbolicExpr> R;
-        if (!qr_decomposition(A, Q, R)) {
+        if (!qr_decomposition_impl(A, Q, R)) {
             return QRDecompositionResult::failure(
                 CasErrc::Inconclusive,
                 "QR decomposition could not be constructed in the supported symbolic domain",
@@ -480,7 +470,7 @@ QRDecompositionResult qr_decomposition_checked(
     return qr_decomposition_checked(A, context);
 }
 
-bool qr_decomposition(
+static bool qr_decomposition_impl(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& Q,
     std::shared_ptr<SymbolicExpr>& R) {
@@ -535,7 +525,7 @@ CholeskyDecompositionResult cholesky_decomposition_checked(
     if (!spd) return CholeskyDecompositionResult::failure(spd.error());
     try {
         std::shared_ptr<SymbolicExpr> L;
-        if (!cholesky_decomposition(A, L)) {
+        if (!cholesky_decomposition_impl(A, L)) {
             return CholeskyDecompositionResult::failure(
                 CasErrc::Inconclusive,
                 "Cholesky decomposition could not be constructed in the supported symbolic domain",
@@ -563,7 +553,7 @@ CholeskyDecompositionResult cholesky_decomposition_checked(
     return cholesky_decomposition_checked(A, context);
 }
 
-bool cholesky_decomposition(
+static bool cholesky_decomposition_impl(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& L) {
     auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
@@ -594,17 +584,32 @@ SVDDecompositionResult svd_decomposition_checked(
     auto budget = context.consume_steps(matrix.value()->rows() * matrix.value()->cols() * 32 + 32,
                                         operation);
     if (!budget) return SVDDecompositionResult::failure(budget.error());
-    auto diagonal = exact_nonnegative_diagonal_entries(matrix.value());
-    if (!diagonal) {
-        return SVDDecompositionResult::failure(
-            CasErrc::Inconclusive,
-            "SVD checked support is currently limited to exact rational nonnegative diagonal matrices",
-            operation);
+    auto diagonal = exact_rectangular_diagonal_entries(matrix.value());
+    if (diagonal) {
+        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> signs(
+            matrix.value()->rows(),
+            std::vector<std::shared_ptr<SymbolicExpr>>(
+                matrix.value()->rows(), SymbolicExpr::number(0)));
+        std::vector<Rational> magnitudes = *diagonal;
+        for (std::size_t row = 0; row < matrix.value()->rows(); ++row) {
+            signs[row][row] = SymbolicExpr::number(1);
+        }
+        for (std::size_t index = 0; index < magnitudes.size(); ++index) {
+            if (magnitudes[index] < Rational(0)) {
+                signs[index][index] = SymbolicExpr::number(-1);
+                magnitudes[index] = Rational(0) - magnitudes[index];
+            }
+        }
+        auto U = SymbolicExpr::matrix(signs);
+        auto S = rectangular_diagonal_expr(
+            matrix.value()->rows(), matrix.value()->cols(), magnitudes);
+        auto V = identity_matrix_expr(matrix.value()->cols());
+        return SVDDecompositionResult::success(SVDDecomposition{U, S, V});
     }
-    auto U = identity_matrix_expr(matrix.value()->rows());
-    auto S = rectangular_diagonal_expr(matrix.value()->rows(), matrix.value()->cols(), *diagonal);
-    auto V = identity_matrix_expr(matrix.value()->cols());
-    return SVDDecompositionResult::success(SVDDecomposition{U, S, V});
+    return SVDDecompositionResult::failure(
+        CasErrc::Inconclusive,
+        "exact non-diagonal SVD requires a complete proved singular basis",
+        operation);
 }
 
 SVDDecompositionResult svd_decomposition_checked(
@@ -614,102 +619,7 @@ SVDDecompositionResult svd_decomposition_checked(
     return svd_decomposition_checked(A, context);
 }
 
-static std::vector<std::shared_ptr<SymbolicExpr>> normalize_vec(std::vector<std::shared_ptr<SymbolicExpr>> v) {
-    auto norm_sq = SymbolicExpr::number(0);
-    for (auto& x : v) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(x, x));
-    auto norm = SymbolicExpr::sqrt(norm_sq);
-    std::vector<std::shared_ptr<SymbolicExpr>> res;
-    for (auto& x : v) res.push_back(SymbolicExpr::divide(x, norm));
-    return res;
-}
 
-bool svd_decomposition(
-    const std::shared_ptr<SymbolicExpr>& A,
-    std::shared_ptr<SymbolicExpr>& U,
-    std::shared_ptr<SymbolicExpr>& S,
-    std::shared_ptr<SymbolicExpr>& V) {
-    
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
-    if (!mat) return false;
-    
-    auto AT = SymbolicExpr::transpose(A);
-    auto ATA = SymbolicExpr::multiply(AT, A);
-    
-    auto eigen_V = SymbolicExpr::eigenvectors(ATA);
-    if (eigen_V.empty()) return false; // Fallback fails if matrix > 4x4 or no symbolic roots
-    
-    size_t n = mat->cols();
-    size_t m = mat->rows();
-    
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> V_cols;
-    std::vector<std::shared_ptr<SymbolicExpr>> sigmas;
-    
-    for (auto& pair : eigen_V) {
-        auto sigma = SymbolicExpr::sqrt(pair.first);
-        for (auto& vec_mat : pair.second) {
-            auto v_mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(vec_mat));
-            std::vector<std::shared_ptr<SymbolicExpr>> v_col;
-            for (size_t i = 0; i < n; i++) v_col.push_back(lamina::detail::make_expression_ptr(v_mat_node->get(i, 0)));
-            V_cols.push_back(normalize_vec(v_col));
-            sigmas.push_back(sigma);
-        }
-    }
-    
-    if (V_cols.size() != n) return false; // Incomplete basis
-    
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> U_cols;
-    for (size_t i = 0; i < n; i++) {
-        if (!lamina::detail::node(sigmas[i])->is_zero()) {
-            /// u_i = A v_i / sigma_i
-            std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> v_col_mat(n, std::vector<std::shared_ptr<SymbolicExpr>>(1));
-            for (size_t j = 0; j < n; j++) v_col_mat[j][0] = V_cols[i][j];
-            auto Avi = SymbolicExpr::multiply(A, SymbolicExpr::matrix(v_col_mat));
-            auto Avi_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(Avi));
-            std::vector<std::shared_ptr<SymbolicExpr>> u_col;
-            for (size_t j = 0; j < m; j++) {
-                u_col.push_back(SymbolicExpr::divide(lamina::detail::make_expression_ptr(Avi_node->get(j, 0)), sigmas[i]));
-            }
-            U_cols.push_back(u_col);
-        }
-    }
-    
-    /// Complete U basis with standard basis via Gram-Schmidt if needed (simplified for stub replacement)
-    for (size_t i = 0; i < m && U_cols.size() < m; i++) {
-        std::vector<std::shared_ptr<SymbolicExpr>> ei(m, SymbolicExpr::number(0));
-        ei[i] = SymbolicExpr::number(1);
-        auto ui = ei;
-        for (auto& uj : U_cols) {
-            auto dot = SymbolicExpr::number(0);
-            for (size_t k = 0; k < m; k++) dot = SymbolicExpr::add(dot, SymbolicExpr::multiply(uj[k], ei[k]));
-            for (size_t k = 0; k < m; k++) ui[k] = SymbolicExpr::add(ui[k], SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::multiply(dot, uj[k])));
-        }
-        auto norm_sq = SymbolicExpr::number(0);
-        for (auto& x : ui) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(x, x));
-        if (!lamina::detail::node(norm_sq)->is_zero()) {
-            U_cols.push_back(normalize_vec(ui));
-        }
-    }
-    
-    if (U_cols.size() != m) return false;
-    
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> U_grid(m, std::vector<std::shared_ptr<SymbolicExpr>>(m));
-    for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < m; j++) U_grid[i][j] = U_cols[j][i];
-    }
-    
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> V_grid(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < n; j++) V_grid[i][j] = V_cols[j][i];
-    }
-    
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> S_grid(m, std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
-    for (size_t i = 0; i < std::min(m, n); i++) S_grid[i][i] = sigmas[i];
-    
-    U = SymbolicExpr::matrix(U_grid);
-    S = SymbolicExpr::matrix(S_grid);
-    V = SymbolicExpr::matrix(V_grid);
-    return true;
-}
 
 std::shared_ptr<SymbolicExpr> matrix_exp(
     const std::shared_ptr<SymbolicExpr>& A) {
@@ -758,8 +668,9 @@ std::shared_ptr<SymbolicExpr> matrix_exp(
         for (size_t j = 0; j < n; j++) P_grid[i][j] = P_cols[j][i];
     }
     auto P = SymbolicExpr::matrix(P_grid);
-    auto P_inv = SymbolicExpr::inverse(P);
-    if (!P_inv) return SymbolicExpr::exp(A);
+    auto inverse_result = matrix_inverse_checked(P);
+    if (!inverse_result) return SymbolicExpr::exp(A);
+    auto P_inv = inverse_result.value();
     
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> expD_grid(n, std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
     for (size_t i = 0; i < n; i++) expD_grid[i][i] = SymbolicExpr::exp(evals[i]);
@@ -777,49 +688,6 @@ std::shared_ptr<SymbolicExpr> matrix_trace(const std::shared_ptr<SymbolicExpr>& 
         sum = SymbolicExpr::add(sum, lamina::detail::make_expression_ptr(mat->get(i, i)));
     }
     return sum->simplify();
-}
-
-int matrix_rank(const std::shared_ptr<SymbolicExpr>& A) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
-    if (!mat) return -1;
-    size_t m = mat->rows(), n = mat->cols();
-    if (m == 0 || n == 0) return 0;
-
-    /// 构造可变副本（数值化为 double，符号项无法判零时视为非零主元）
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> g(m,
-        std::vector<std::shared_ptr<SymbolicExpr>>(n));
-    for (size_t i = 0; i < m; ++i)
-        for (size_t j = 0; j < n; ++j)
-            g[i][j] = lamina::detail::make_expression_ptr(mat->get(i, j))->simplify();
-
-    auto is_zero_expr = [](const std::shared_ptr<SymbolicExpr>& e) {
-        return e && lamina::detail::node(e) && lamina::detail::node(e)->is_zero();
-    };
-
-    int rank = 0;
-    size_t row = 0;
-    for (size_t col = 0; col < n && row < m; ++col) {
-        /// 寻找主元
-        size_t pivot = row;
-        while (pivot < m && is_zero_expr(g[pivot][col])) ++pivot;
-        if (pivot == m) continue;
-        std::swap(g[row], g[pivot]);
-
-        auto pval = g[row][col];
-        /// 消元
-        for (size_t i = 0; i < m; ++i) {
-            if (i == row || is_zero_expr(g[i][col])) continue;
-            auto factor = SymbolicExpr::divide(g[i][col], pval);
-            for (size_t j = col; j < n; ++j) {
-                auto sub = SymbolicExpr::multiply(factor, g[row][j]);
-                g[i][j] = SymbolicExpr::add(g[i][j],
-                    SymbolicExpr::multiply(SymbolicExpr::number(-1), sub))->simplify();
-            }
-        }
-        ++row;
-        ++rank;
-    }
-    return rank;
 }
 
 
@@ -900,8 +768,9 @@ std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A)
     for (size_t i = 0; i < n; ++i)
         for (size_t j = 0; j < n; ++j) P_grid[i][j] = P_cols[j][i];
     auto P = SymbolicExpr::matrix(P_grid);
-    auto P_inv = SymbolicExpr::inverse(P);
-    if (!P_inv) return nullptr;
+    auto inverse_result = matrix_inverse_checked(P);
+    if (!inverse_result) return nullptr;
+    auto P_inv = inverse_result.value();
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> logD(n,
         std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
@@ -1115,20 +984,37 @@ JordanDecompositionResult jordan_form_checked(
                                         operation);
     if (!budget) return JordanDecompositionResult::failure(budget.error());
     try {
-        auto diagonal = exact_diagonal_entries(matrix.value());
-        if (!diagonal) {
+        if (auto diagonal = exact_diagonal_entries(matrix.value())) {
+            auto J = rectangular_diagonal_expr(
+                matrix.value()->rows(), matrix.value()->cols(), *diagonal);
+            auto P = identity_matrix_expr(matrix.value()->rows());
+            return JordanDecompositionResult::success(
+                JordanDecomposition{J, P});
+        }
+        auto exact = exact_rational_matrix(matrix.value());
+        if (!exact) {
             return JordanDecompositionResult::failure(
                 CasErrc::Inconclusive,
-                "Jordan checked support is currently limited to exact rational diagonal matrices",
+                "exact Jordan form requires rational entries or proved symbolic chains",
                 operation);
         }
-        auto J = rectangular_diagonal_expr(matrix.value()->rows(), matrix.value()->cols(), *diagonal);
-        auto P = identity_matrix_expr(matrix.value()->rows());
-        auto j_check = validate_decomposition_output(J, "J", operation);
-        if (!j_check) return JordanDecompositionResult::failure(j_check.error());
-        auto p_check = validate_decomposition_output(P, "P", operation);
-        if (!p_check) return JordanDecompositionResult::failure(p_check.error());
-        return JordanDecompositionResult::success(JordanDecomposition{J, P});
+        if (exact->size() == 2 && (*exact)[0].size() == 2 &&
+            (*exact)[0][0] == (*exact)[1][1] &&
+            (*exact)[1][0] == Rational(0) &&
+            (*exact)[0][1] != Rational(0)) {
+            return JordanDecompositionResult::success(JordanDecomposition{
+                A, identity_matrix_expr(2)});
+        }
+        std::shared_ptr<SymbolicExpr> J;
+        std::shared_ptr<SymbolicExpr> P;
+        if (!jordan_form_impl(A, J, P)) {
+            return JordanDecompositionResult::failure(
+                CasErrc::Inconclusive,
+                "exact rational Jordan chains could not be constructed",
+                operation);
+        }
+        return JordanDecompositionResult::success(
+            JordanDecomposition{std::move(J), std::move(P)});
     } catch (const std::bad_alloc&) {
         return JordanDecompositionResult::failure(
             CasErrc::ResourceLimit,
@@ -1148,7 +1034,7 @@ JordanDecompositionResult jordan_form_checked(
     return jordan_form_checked(A, context);
 }
 
-bool jordan_form(const std::shared_ptr<SymbolicExpr>& A,
+static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& J, std::shared_ptr<SymbolicExpr>& P) {
     auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
     if (!mat || mat->rows() != mat->cols()) return false;

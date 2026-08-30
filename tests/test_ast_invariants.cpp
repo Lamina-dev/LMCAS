@@ -1,6 +1,8 @@
 #include "test_common.hpp"
 #include "symbolic.hpp"
 #include "poly_utils.hpp"
+#include "internal/expression_analysis.hpp"
+#include "lsr_expr.hpp"
 
 #include <limits>
 #include <stdexcept>
@@ -37,6 +39,7 @@ public:
     void visit(const MultiplyNode&) override {}
     void visit(const PowerNode&) override {}
     void visit(const FunctionNode&) override {}
+    void visit(const UninterpretedFunctionNode&) override {}
     void visit(const MatrixNode&) override {}
     void visit(const RelationalNode&) override {}
     void visit(const LogicalNode&) override {}
@@ -51,6 +54,9 @@ public:
     void visit(const IntervalNode&) override {}
     void visit(const MembershipNode&) override {}
     void visit(const QuantityNode&) override {}
+    void visit(const IntegralNode&) override {}
+    void visit(const LimitNode&) override {}
+    void visit(const RootOfNode&) override {}
 };
 
 static_assert(!std::is_abstract<ExhaustiveProbeVisitor>::value,
@@ -312,11 +318,13 @@ int main() {
     }, "ProductNode rejects null bound");
     expect_invalid([&]() {
         (void)lamina::detail::make_node<TransformNode>(
-            TransformNode::TransformType::Laplace, nullptr, "t", "s");
+            TransformNode::TransformType::Laplace, nullptr, "t",
+            SymbolicFactory::create_variable("s"));
     }, "TransformNode rejects null body");
     expect_invalid([&]() {
         (void)lamina::detail::make_node<TransformNode>(
-            TransformNode::TransformType::Laplace, one, "", "s");
+            TransformNode::TransformType::Laplace, one, "",
+            SymbolicFactory::create_variable("s"));
     }, "TransformNode rejects empty source variable");
     expect_invalid([&]() {
         (void)lamina::detail::make_node<QuantifierNode>(
@@ -449,6 +457,155 @@ int main() {
     EXPECT_TRUE(q_free != nullptr, "Free substitution preserves QuantifierNode");
     EXPECT_TRUE(!node_depends_on(q_free->predicate(), "y"),
                 "Substitution replaces free variable in quantifier predicate");
+
+    TEST_CASE("Capture-avoiding substitution covers every binder scope");
+    auto replacement_k = SymbolicFactory::create_variable("k");
+    auto capture_source = lamina::detail::make_node<SummationNode>(
+        SymbolicFactory::create_add({k_node, x_node}), "k", x_node, n_node);
+    auto capture_result = std::dynamic_pointer_cast<const SummationNode>(
+        lamina::substitute_free(capture_source, "x", replacement_k));
+    EXPECT_TRUE(capture_result && capture_result->index_var() != "k",
+                "Summation binder alpha-renames to avoid capture");
+    EXPECT_TRUE(capture_result && node_depends_on(capture_result->body(), "k"),
+                "Replacement variable remains free after alpha-renaming");
+    EXPECT_TRUE(capture_result && node_depends_on(capture_result->lower_bound(), "k"),
+                "Summation bounds remain outside binder scope");
+    auto product_source = lamina::detail::make_node<ProductNode>(
+        SymbolicFactory::create_add({k_node, x_node}), "k", x_node, n_node);
+    auto product_result = std::dynamic_pointer_cast<const ProductNode>(
+        lamina::substitute_free(product_source, "x", replacement_k));
+    EXPECT_TRUE(product_result && product_result->index_var() != "k" &&
+                    node_depends_on(product_result->lower_bound(), "k"),
+                "Product alpha-renames its body binder but rewrites bounds");
+
+
+    auto integral = lamina::detail::make_node<IntegralNode>(
+        SymbolicFactory::create_add({x_node, k_node}), "k", x_node, n_node);
+    auto substituted_integral = std::dynamic_pointer_cast<const IntegralNode>(
+        lamina::substitute_free(integral, "x", replacement_k));
+    EXPECT_TRUE(substituted_integral && substituted_integral->variable() != "k",
+                "Integral binder alpha-renames to avoid capture");
+    EXPECT_TRUE(substituted_integral &&
+                    node_depends_on(substituted_integral->lower(), "k"),
+                "Integral bounds remain outside binder scope");
+
+    auto transform = lamina::detail::make_node<TransformNode>(
+        TransformNode::TransformType::Laplace,
+        SymbolicFactory::create_add({x_node, k_node}), "k", x_node);
+    auto substituted_transform = std::dynamic_pointer_cast<const TransformNode>(
+        lamina::substitute_free(transform, "x", replacement_k));
+    EXPECT_TRUE(substituted_transform &&
+                    substituted_transform->source_var() != "k",
+                "Transform source binder alpha-renames to avoid capture");
+    EXPECT_TRUE(substituted_transform &&
+                    node_depends_on(substituted_transform->target(), "k"),
+                "Transform target is a free structural child");
+
+    auto set_builder = lamina::detail::make_node<SetBuilderNode>(
+        "k", x_node,
+        lamina::detail::make_node<RelationalNode>(
+            x_node, k_node, RelationalNode::Op::GT));
+    auto substituted_set = std::dynamic_pointer_cast<const SetBuilderNode>(
+        lamina::substitute_free(set_builder, "x", replacement_k));
+    EXPECT_TRUE(substituted_set && substituted_set->element_var() != "k",
+                "Set-builder binder alpha-renames to avoid capture");
+    EXPECT_TRUE(substituted_set && node_depends_on(substituted_set->domain(), "k"),
+                "Set-builder domain remains outside binder scope");
+    auto quantified_domain = lamina::detail::make_node<QuantifierNode>(
+        QuantifierNode::Type::ForAll, "x", x_node,
+        lamina::detail::make_node<RelationalNode>(
+            x_node, zero, RelationalNode::Op::GT));
+    auto substituted_quantified_domain =
+        std::dynamic_pointer_cast<const QuantifierNode>(
+            lamina::substitute_free(
+                quantified_domain, "x",
+                SymbolicFactory::create_number(BigInt(9))));
+    EXPECT_TRUE(substituted_quantified_domain &&
+                    substituted_quantified_domain->domain()->is_number() &&
+                    node_depends_on(
+                        substituted_quantified_domain->predicate(), "x"),
+                "Quantifier domain is outside its predicate binder");
+
+    auto nested_shadow = lamina::detail::make_node<SummationNode>(
+        lamina::detail::make_node<ProductNode>(
+            SymbolicFactory::create_add({k_node, x_node}), "k", zero, n_node),
+        "k", zero, n_node);
+    auto shadow_result = std::dynamic_pointer_cast<const SummationNode>(
+        lamina::substitute_free(
+            nested_shadow, "k", SymbolicFactory::create_number(BigInt(4))));
+    auto shadow_product = shadow_result
+        ? std::dynamic_pointer_cast<const ProductNode>(shadow_result->body())
+        : nullptr;
+    EXPECT_TRUE(shadow_product &&
+                    node_depends_on(shadow_product->body(), "k"),
+                "Nested shadowing prevents substitution in both scoped bodies");
+
+
+    TEST_CASE("Traversal reaches matrices and uninterpreted functions");
+    auto nested_sum = lamina::detail::make_node<SummationNode>(
+        SymbolicFactory::create_add({k_node, x_node}), "k", zero, n_node);
+    auto uninterpreted = lamina::detail::make_node<UninterpretedFunctionNode>(
+        "f", std::vector<std::shared_ptr<const SymbolicNode>>{nested_sum});
+    auto matrix = lamina::detail::make_node<MatrixNode>(
+        1, 1, MatrixNode::DenseStorage{uninterpreted});
+    const auto matrix_free = lamina::free_variables(matrix);
+    EXPECT_TRUE(matrix_free.count("x") == 1 && matrix_free.count("n") == 1 &&
+                    matrix_free.count("k") == 0,
+                "Free-variable traversal reaches matrix and function arguments");
+    auto matrix_substituted = lamina::substitute_free(
+        matrix, "x", SymbolicFactory::create_number(BigInt(7)));
+    EXPECT_TRUE(!lamina::expression_depends_on_variable(matrix_substituted, "x"),
+                "Substitution reaches matrix and function arguments");
+
+    TEST_CASE("Recursive traversal enforces depth limit");
+    std::shared_ptr<const SymbolicNode> deep = x_node;
+    for (int depth = 0; depth < 205; ++depth) {
+        deep = lamina::detail::make_node<PowerNode>(deep, one);
+    }
+    bool depth_rejected = false;
+    try {
+        lamina::detail::RecursiveSymbolicVisitor traversal;
+        deep->accept(traversal);
+    } catch (const std::runtime_error&) {
+        depth_rejected = true;
+    }
+    EXPECT_TRUE(depth_rejected, "Recursive traversal rejects excessive depth");
+    TEST_CASE("Limit and RootOf expose precise binder scopes");
+    auto scoped_limit = lamina::detail::make_node<LimitNode>(
+        SymbolicFactory::create_add({x_node, y_node_for_predicate}),
+        "x", x_node, LimitDirection::Both);
+    const auto limit_free = lamina::free_variables(scoped_limit);
+    EXPECT_TRUE(limit_free.count("x") == 1 && limit_free.count("y") == 1,
+                "Limit binds its body variable but not its point");
+    auto root_polynomial_expression = SymbolicExpr::add(
+        SymbolicExpr::power(
+            SymbolicExpr::variable("x"), SymbolicExpr::number(2)),
+        SymbolicExpr::number(1));
+    auto root_expression = SymbolicExpr::root_of(
+        root_polynomial_expression, "x", 1);
+    auto root_node = std::dynamic_pointer_cast<const RootOfNode>(
+        lamina::detail::node(root_expression));
+    const auto root_free = lamina::free_variables(root_node);
+    EXPECT_TRUE(root_free.empty(),
+                "canonical RootOf identity has no dummy free variable");
+
+    TEST_CASE("Limit and RootOf print parse round trips preserve structure");
+    auto limit_node = lamina::detail::make_node<LimitNode>(
+        SymbolicFactory::create_add({x_node, one}), "x", zero,
+        LimitDirection::FromAbove);
+    auto limit_expression = lamina::detail::make_expression_ptr(limit_node);
+    auto parsed_limit = lamina::lsr::parse_expr(limit_expression->to_string());
+    EXPECT_TRUE(parsed_limit &&
+                    lamina::detail::node(parsed_limit.value())->equals(*limit_node),
+                "LimitNode survives print/parse round trip");
+
+    EXPECT_TRUE(root_node != nullptr,
+                "checked RootOf construction returns a RootOfNode");
+    auto parsed_root = lamina::lsr::parse_expr(root_expression->to_string());
+    EXPECT_TRUE(parsed_root &&
+                    lamina::detail::node(parsed_root.value())->equals(*root_node),
+                "RootOfNode survives print/parse round trip");
+
 
     TEST_CASE("Immutable expressions can be shared for concurrent reads");
     auto shared_expr = SymbolicExpr::add(

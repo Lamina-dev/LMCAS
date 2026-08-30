@@ -286,8 +286,6 @@ public:
                     d_outer = SymbolicFactory::create_multiply({W, denom_inv});
                 }
                 break;
-            case FunctionNode::FuncType::RootOf:
-                throw std::runtime_error("RootOf differentiation is not mathematically supported yet.");
             case FunctionNode::FuncType::Erf:
                 {
                     // d/dx erf(x) = (2/sqrt(pi)) * exp(-x^2)
@@ -408,6 +406,10 @@ public:
         result = lamina::detail::make_node<PiecewiseNode>(std::move(new_branches), new_def);
     }
 
+    void visit(const UninterpretedFunctionNode&) override {
+        unsupported("UninterpretedFunctionNode");
+    }
+
     void visit(const SummationNode&) override {
         unsupported("SummationNode");
     }
@@ -435,4 +437,56 @@ public:
         result = lamina::detail::make_node<QuantityNode>(
             result, node.dimension(), node.scale_to_base(), node.display_unit());
     }
+
+    void visit(const IntegralNode& node) override {
+        if (!node.is_definite()) {
+            if (node.variable() == var) {
+                result = node.body()->clone();
+                return;
+            }
+            node.body()->accept(*this);
+            result = lamina::detail::make_node<IntegralNode>(
+                result, node.variable());
+            return;
+        }
+
+        std::vector<std::shared_ptr<const SymbolicNode>> terms;
+        if (node.variable() != var) {
+            node.body()->accept(*this);
+            if (!result->is_zero()) {
+                terms.push_back(lamina::detail::make_node<IntegralNode>(
+                    result, node.variable(), node.lower(), node.upper()));
+            }
+        }
+
+        auto body_expression = lamina::detail::make_expression_ptr(
+            lamina::detail::expression_from_node(node.body()));
+        auto upper_expression = lamina::detail::make_expression_ptr(
+            lamina::detail::expression_from_node(node.upper()));
+        auto lower_expression = lamina::detail::make_expression_ptr(
+            lamina::detail::expression_from_node(node.lower()));
+
+        node.upper()->accept(*this);
+        auto upper_derivative = result;
+        if (!upper_derivative->is_zero()) {
+            auto at_upper = body_expression->substitute(
+                node.variable(), upper_expression);
+            terms.push_back(SymbolicFactory::create_multiply(
+                {lamina::detail::node(at_upper), upper_derivative}));
+        }
+
+        node.lower()->accept(*this);
+        auto lower_derivative = result;
+        if (!lower_derivative->is_zero()) {
+            auto at_lower = body_expression->substitute(
+                node.variable(), lower_expression);
+            terms.push_back(SymbolicFactory::create_multiply({
+                SymbolicFactory::create_number(BigInt(-1)),
+                lamina::detail::node(at_lower),
+                lower_derivative}));
+        }
+        result = SymbolicFactory::create_add(std::move(terms));
+    }
+    void visit(const LimitNode&) override { unsupported("LimitNode"); }
+    void visit(const RootOfNode&) override { unsupported("RootOfNode"); }
 };

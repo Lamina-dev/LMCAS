@@ -343,7 +343,8 @@ int main() {
         });
 
         auto transform = lamina::detail::make_node<TransformNode>(
-            TransformNode::TransformType::Laplace, body, "t", "s");
+            TransformNode::TransformType::Laplace, body, "t",
+            SymbolicFactory::create_variable("s"));
         auto result = normalize(transform);
 
         auto tr_result = std::dynamic_pointer_cast<const TransformNode>(result);

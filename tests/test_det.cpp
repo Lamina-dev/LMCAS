@@ -1,4 +1,5 @@
 #include "test_common.hpp"
+#include "symbolic_matrix.hpp"
 
 int main() {
     TEST_CASE("Matrix Determinant");
@@ -9,7 +10,7 @@ int main() {
             {SymbolicExpr::number(0), SymbolicExpr::number(1)}
         };
         auto m1 = SymbolicExpr::matrix(m1_data);
-        auto det1 = SymbolicExpr::determinant(m1);
+        auto det1 = lamina::matrix_determinant_checked(m1).value();
         EXPECT_EQ_EXPR(det1, SymbolicExpr::number(1), "Det(I_2)");
     }
 
@@ -24,7 +25,7 @@ int main() {
             {c, d}
         };
         auto m2 = SymbolicExpr::matrix(m2_data);
-        auto det2 = SymbolicExpr::determinant(m2);
+        auto det2 = lamina::matrix_determinant_checked(m2).value();
 
         auto ad = SymbolicExpr::multiply(a, d);
         auto bc = SymbolicExpr::multiply(b, c);

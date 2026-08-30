@@ -198,7 +198,7 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
 
 } // anonymous namespace
 
-std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext& computation, int depth) {
     if (!lamina::detail::node(expr)) return nullptr;
@@ -251,31 +251,27 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate(
     /// 积分器的循环检测状态导致结果被错误改写）。
     Integrator inner;
     RationalDecompositionStrategy rds;
-    auto integrated = rds.try_integrate(
+    auto rational_attempt = rds.try_integrate(
         *integrand_t, tvar, inner, computation, depth + 1);
+    if (!rational_attempt) {
+        throw detail::ResultPropagation(rational_attempt.error());
+    }
+    std::shared_ptr<SymbolicExpr> integrated;
+    if (auto* candidate =
+            std::get_if<IntegrationCandidate>(&rational_attempt.value())) {
+        integrated = candidate->expression;
+    }
     if (!integrated) {
-        /// 退化为多项式（如常数 1）时，RationalDecomposition 可能不接受；
-        /// 直接用幂律积分兜底。
-        integrated = inner.integrate_recursive(*integrand_t, tvar, computation, 0);
+        integrated = detail::propagate_result(
+            inner.integrate_recursive(*integrand_t, tvar, computation, 0));
     }
     if (!integrated) return nullptr;
 
     /// 若结果仍含未求值积分节点，视为失败
-    if (expression_depends_on_variable(lamina::detail::node(integrated), tvar)) {
-        /// 检查是否残留 Calculus_Integral
-        bool has_uneval = false;
-        std::function<void(const std::shared_ptr<const SymbolicNode>&)> scan =
-            [&](const std::shared_ptr<const SymbolicNode>& n) {
-                if (!n) return;
-                if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(n))
-                    if (fn->type() == FunctionNode::FuncType::Calculus_Integral) has_uneval = true;
-                if (auto a = std::dynamic_pointer_cast<const AddNode>(n)) for (auto& o : a->operands()) scan(o);
-                if (auto m = std::dynamic_pointer_cast<const MultiplyNode>(n)) for (auto& o : m->operands()) scan(o);
-                if (auto p = std::dynamic_pointer_cast<const PowerNode>(n)) { scan(p->base()); scan(p->exponent()); }
-                if (auto f = std::dynamic_pointer_cast<const FunctionNode>(n)) for (auto& o : f->arguments()) scan(o);
-            };
-        scan(lamina::detail::node(integrated));
-        if (has_uneval) return nullptr;
+    if (expression_depends_on_variable(lamina::detail::node(integrated), tvar) &&
+        lamina::detail::contains_node_type<IntegralNode>(
+            lamina::detail::node(integrated))) {
+        return nullptr;
     }
 
     /// 回代 t = tan(x/2)

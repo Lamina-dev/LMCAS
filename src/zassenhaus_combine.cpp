@@ -158,9 +158,10 @@ static bool zc_rational_reconstruction(
         const int64_t a_val = *a_small;
         const int64_t m_val = *m_small;
 
-        auto [p, q] = lamina::rational_reconstruction(a_val, m_val);
-        if (q == 0) return false;
-
+        auto reconstructed =
+            lamina::rational_reconstruction_checked(a_val, m_val);
+        if (!reconstructed) return false;
+        const auto [p, q] = reconstructed.value();
         num = BigInt(static_cast<long long>(p));
         den = BigInt(static_cast<long long>(q));
         return true;

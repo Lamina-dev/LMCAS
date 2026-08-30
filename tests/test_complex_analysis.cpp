@@ -18,7 +18,7 @@ int main() {
         auto a = num(2);
         auto denom = SymbolicExpr::add(z, SymbolicExpr::multiply(num(-1), a));
         auto f = SymbolicExpr::divide(num(1), denom);
-        auto res = residue(f, "z", a, 1);
+        auto res = residue_checked(f, "z", a, 1).value();
         EXPECT_TRUE(res != nullptr, "residue not null");
         EXPECT_EQ_EXPR(res->simplify(), num(1), "Res(1/(z-2), z=2) = 1");
     }
@@ -26,8 +26,8 @@ int main() {
     // ---- real_part / imag_part of (3 + 4i) ----
     {
         auto z = cmplx(3, 4);
-        EXPECT_EQ_EXPR(real_part(z), num(3), "Re(3+4i) = 3");
-        EXPECT_EQ_EXPR(imag_part(z), num(4), "Im(3+4i) = 4");
+        EXPECT_EQ_EXPR(real_part_checked(z).value(), num(3), "Re(3+4i) = 3");
+        EXPECT_EQ_EXPR(imag_part_checked(z).value(), num(4), "Im(3+4i) = 4");
 
         auto re_checked = real_part_checked(z);
         auto im_checked = imag_part_checked(z);
@@ -42,23 +42,23 @@ int main() {
     // ---- real/imag of (2+i)*(1+i) = 2 + 2i + i + i^2 = 1 + 3i ----
     {
         auto prod = SymbolicExpr::multiply(cmplx(2,1), cmplx(1,1));
-        EXPECT_EQ_EXPR(real_part(prod), num(1), "Re((2+i)(1+i)) = 1");
-        EXPECT_EQ_EXPR(imag_part(prod), num(3), "Im((2+i)(1+i)) = 3");
+        EXPECT_EQ_EXPR(real_part_checked(prod).value(), num(1), "Re((2+i)(1+i)) = 1");
+        EXPECT_EQ_EXPR(imag_part_checked(prod).value(), num(3), "Im((2+i)(1+i)) = 3");
     }
 
     // ---- conjugate of (3+4i) = 3-4i ----
     {
         auto z = cmplx(3, 4);
-        auto c = conjugate(z);
-        EXPECT_EQ_EXPR(real_part(c), num(3), "Re(conj(3+4i)) = 3");
-        EXPECT_EQ_EXPR(imag_part(c)->simplify(), num(-4), "Im(conj(3+4i)) = -4");
+        auto c = conjugate_checked(z).value();
+        EXPECT_EQ_EXPR(real_part_checked(c).value(), num(3), "Re(conj(3+4i)) = 3");
+        EXPECT_EQ_EXPR(imag_part_checked(c).value()->simplify(), num(-4), "Im(conj(3+4i)) = -4");
 
         auto checked = conjugate_checked(z);
         EXPECT_TRUE(checked.has_value(), "checked conjugate(3+4i) succeeds");
         if (checked) {
-            EXPECT_EQ_EXPR(real_part(checked.value()), num(3),
+            EXPECT_EQ_EXPR(real_part_checked(checked.value()).value(), num(3),
                            "checked Re(conj(3+4i)) = 3");
-            EXPECT_EQ_EXPR(imag_part(checked.value())->simplify(), num(-4),
+            EXPECT_EQ_EXPR(imag_part_checked(checked.value()).value()->simplify(), num(-4),
                            "checked Im(conj(3+4i)) = -4");
         }
     }
@@ -80,12 +80,6 @@ int main() {
         EXPECT_TRUE(!empty_re && empty_re.error().code == CasErrc::InvalidArgument,
                     "checked real_part rejects null expression");
 
-        EXPECT_TRUE(real_part(nullptr) == nullptr,
-                    "legacy real_part unwraps invalid input to nullptr");
-        EXPECT_TRUE(imag_part(nullptr) == nullptr,
-                    "legacy imag_part unwraps invalid input to nullptr");
-        EXPECT_TRUE(conjugate(nullptr) == nullptr,
-                    "legacy conjugate unwraps invalid input to nullptr");
     }
 
     // ---- checked complex part APIs observe computation context cancellation ----
@@ -117,15 +111,15 @@ int main() {
     {
         auto i = cmplx(0, 1);
         auto i2 = SymbolicExpr::multiply(i, i)->simplify();
-        EXPECT_EQ_EXPR(real_part(i2), num(-1), "Re(i^2) = -1");
-        EXPECT_EQ_EXPR(imag_part(i2)->simplify(), num(0), "Im(i^2) = 0");
+        EXPECT_EQ_EXPR(real_part_checked(i2).value(), num(-1), "Re(i^2) = -1");
+        EXPECT_EQ_EXPR(imag_part_checked(i2).value()->simplify(), num(0), "Im(i^2) = 0");
     }
 
     // ---- is_analytic: f(z) = z^2 is analytic ----
     {
         auto z = SymbolicExpr::variable("z");
         auto f = SymbolicExpr::multiply(z, z);
-        EXPECT_TRUE(is_analytic(f, "z"), "z^2 is analytic");
+        EXPECT_TRUE(is_analytic_checked(f, "z").value(), "z^2 is analytic");
 
         auto checked = is_analytic_checked(f, "z");
         EXPECT_TRUE(checked.has_value(), "checked is_analytic succeeds for z^2");

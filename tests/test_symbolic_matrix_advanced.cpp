@@ -23,7 +23,7 @@ void test_matrix_multiply() {
         };
         auto I = SymbolicExpr::matrix(I_data);
 
-        auto result = lamina::matrix_multiply(A, I);
+        auto result = lamina::matrix_multiply_checked(A, I).value();
         EXPECT_TRUE(result != nullptr, "matrix_multiply(A, I) returns non-null");
 
         auto simplified = result->simplify();
@@ -46,7 +46,7 @@ void test_matrix_multiply() {
         };
         auto B = SymbolicExpr::matrix(B_data);
 
-        auto result = lamina::matrix_multiply(A, B);
+        auto result = lamina::matrix_multiply_checked(A, B).value();
         EXPECT_TRUE(result != nullptr, "matrix_multiply(A, B) returns non-null for numeric 2x2");
 
         auto simplified = result->simplify();
@@ -66,7 +66,7 @@ void test_matrix_determinant() {
             {SymbolicExpr::number(4), SymbolicExpr::number(6)}
         };
         auto m = SymbolicExpr::matrix(m_data);
-        auto det = lamina::matrix_determinant(m);
+        auto det = lamina::matrix_determinant_checked(m).value();
         // det = 3*6 - 8*4 = 18 - 32 = -14
         auto simplified = det ? det->simplify() : nullptr;
         EXPECT_EQ_EXPR(simplified, SymbolicExpr::number(-14), "Det 2x2: 3*6 - 8*4 = -14");
@@ -80,7 +80,7 @@ void test_matrix_determinant() {
             {SymbolicExpr::number(2), SymbolicExpr::number(8), SymbolicExpr::number(7)}
         };
         auto m = SymbolicExpr::matrix(m_data);
-        auto det = lamina::matrix_determinant(m);
+        auto det = lamina::matrix_determinant_checked(m).value();
         // det = 6*(-2*7 - 5*8) - 1*(4*7 - 5*2) + 1*(4*8 - (-2)*2)
         //     = 6*(-14-40) - 1*(28-10) + 1*(32+4)
         //     = 6*(-54) - 18 + 36
@@ -100,11 +100,11 @@ void test_matrix_inverse() {
             {SymbolicExpr::number(2), SymbolicExpr::number(6)}
         };
         auto A = SymbolicExpr::matrix(m_data);
-        auto A_inv = lamina::matrix_inverse(A);
+        auto A_inv = lamina::matrix_inverse_checked(A).value();
         EXPECT_TRUE(A_inv != nullptr, "matrix_inverse returns non-null for invertible 2x2");
 
         // Verify A * A_inv = I
-        auto product = lamina::matrix_multiply(A, A_inv);
+        auto product = lamina::matrix_multiply_checked(A, A_inv).value();
         auto simplified = product ? product->simplify() : nullptr;
 
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> id_data = {
@@ -121,7 +121,7 @@ void test_matrix_rotation() {
 
     // theta = 0 → identity matrix
     {
-        auto rot0 = lamina::matrix_rotation(0.0);
+        auto rot0 = lamina::matrix_rotation_checked(0.0).value();
         EXPECT_TRUE(rot0 != nullptr, "matrix_rotation(0) returns non-null");
 
         std::string rot0_str = rot0 ? rot0->to_string() : "null";
@@ -141,7 +141,7 @@ void test_matrix_rotation() {
     // theta = pi/2 → 90-degree rotation: [[0, -1], [1, 0]]
     {
         double pi_half = std::acos(0.0); // pi/2
-        auto rot90 = lamina::matrix_rotation(pi_half);
+        auto rot90 = lamina::matrix_rotation_checked(pi_half).value();
         EXPECT_TRUE(rot90 != nullptr, "matrix_rotation(pi/2) returns non-null");
 
         std::string rot90_str = rot90 ? rot90->to_string() : "null";
@@ -156,7 +156,7 @@ void test_matrix_reflection() {
 
     // Reflection with angle = 0 (reflection across x-axis)
     {
-        auto ref0 = lamina::matrix_reflection(0.0);
+        auto ref0 = lamina::matrix_reflection_checked(0.0).value();
         EXPECT_TRUE(ref0 != nullptr, "matrix_reflection(0) returns non-null");
 
         std::string ref0_str = ref0 ? ref0->to_string() : "null";
@@ -173,7 +173,7 @@ void test_matrix_scaling() {
 
     // Known scale factors: sx=2, sy=3
     {
-        auto scale = lamina::matrix_scaling(2.0, 3.0);
+        auto scale = lamina::matrix_scaling_checked(2.0, 3.0).value();
         EXPECT_TRUE(scale != nullptr, "matrix_scaling(2, 3) returns non-null");
 
         std::string scale_str = scale ? scale->to_string() : "null";
@@ -191,7 +191,7 @@ void test_matrix_scaling() {
 
     // Scale factors sx=1, sy=1 → identity
     {
-        auto scale_id = lamina::matrix_scaling(1.0, 1.0);
+        auto scale_id = lamina::matrix_scaling_checked(1.0, 1.0).value();
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> id_data = {
             {SymbolicExpr::number(1), SymbolicExpr::number(0)},
             {SymbolicExpr::number(0), SymbolicExpr::number(1)}
@@ -211,7 +211,7 @@ void test_matrix_eigenvalues() {
             {SymbolicExpr::number(0), SymbolicExpr::number(3)}
         };
         auto m = SymbolicExpr::matrix(m_data);
-        auto eigenvals = lamina::matrix_eigenvalues(m);
+        auto eigenvals = lamina::matrix_eigenvalues_checked(m).value();
 
         EXPECT_TRUE(eigenvals.size() == 2, "Upper triangular 2x2 has 2 eigenvalues");
         if (eigenvals.size() == 2) {
@@ -237,7 +237,7 @@ void test_matrix_eigenvectors() {
             {SymbolicExpr::number(0), SymbolicExpr::number(3)}
         };
         auto m = SymbolicExpr::matrix(m_data);
-        auto eigenvecs = lamina::matrix_eigenvectors(m);
+        auto eigenvecs = lamina::matrix_eigenvectors_checked(m).value();
 
         EXPECT_TRUE(eigenvecs.size() == 2, "2x2 matrix has two independent eigenvectors");
         if (eigenvecs.size() == 2) {
@@ -278,15 +278,11 @@ void test_matrix_checked_contracts() {
     EXPECT_TRUE(!bad_mul &&
                     bad_mul.error().code == lamina::CasErrc::InvalidArgument,
                 "checked matrix multiply rejects incompatible dimensions");
-    EXPECT_TRUE(lamina::matrix_multiply(A, B) == nullptr,
-                "legacy matrix multiply unwraps incompatible dimensions to nullptr");
 
     auto non_square_det = lamina::matrix_determinant_checked(A);
     EXPECT_TRUE(!non_square_det &&
                     non_square_det.error().code == lamina::CasErrc::InvalidArgument,
                 "checked determinant rejects non-square matrix");
-    EXPECT_TRUE(lamina::matrix_determinant(A) == nullptr,
-                "legacy determinant unwraps non-square matrix to nullptr");
 
     auto singular = SymbolicExpr::matrix({
         {SymbolicExpr::number(1), SymbolicExpr::number(2)},
@@ -296,8 +292,6 @@ void test_matrix_checked_contracts() {
     EXPECT_TRUE(!singular_inverse &&
                     singular_inverse.error().code == lamina::CasErrc::DomainError,
                 "checked inverse rejects provably singular matrices");
-    EXPECT_TRUE(lamina::matrix_inverse(singular) == nullptr,
-                "legacy inverse unwraps singular matrix domain failure to nullptr");
 
     auto symbolic_det = SymbolicExpr::matrix({
         {SymbolicExpr::variable("x"), SymbolicExpr::number(0)},
@@ -312,15 +306,11 @@ void test_matrix_checked_contracts() {
     EXPECT_TRUE(!unsupported_rot &&
                     unsupported_rot.error().code == lamina::CasErrc::UnsupportedExpression,
                 "checked rotation reports unsupported dimensions");
-    EXPECT_TRUE(lamina::matrix_rotation(0.0, 3) == nullptr,
-                "legacy rotation unwraps unsupported dimensions to nullptr");
 
     auto bad_eigenvalues = lamina::matrix_eigenvalues_checked(A);
     EXPECT_TRUE(!bad_eigenvalues &&
                     bad_eigenvalues.error().code == lamina::CasErrc::InvalidArgument,
                 "checked eigenvalues reject non-square matrix");
-    EXPECT_TRUE(lamina::matrix_eigenvalues(A).empty(),
-                "legacy eigenvalues unwrap non-square matrix to empty list");
 
     lamina::CancellationToken token;
     token.cancel();

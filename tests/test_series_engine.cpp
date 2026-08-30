@@ -80,7 +80,7 @@ static void test_power_series_multiply_basic() {
     // b(x) = 1 + x
     Coeffs b = {num(1), num(1)};
 
-    auto result = lamina::power_series_multiply(a, b, 3);
+    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     EXPECT_EQ_EXPR(result[0], num(1), "c[0] = 1*1 = 1");
@@ -98,7 +98,7 @@ static void test_power_series_multiply_truncation() {
 
     // Full product: 1 + 2x + 3x² + 2x³ + x⁴
     // Truncate to order 3: 1 + 2x + 3x²
-    auto result = lamina::power_series_multiply(a, b, 3);
+    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients (truncated)");
     EXPECT_EQ_EXPR(result[0], num(1), "c[0] = 1");
@@ -112,7 +112,7 @@ static void test_power_series_multiply_zero() {
     Coeffs a = {num(1), num(2), num(3)};
     Coeffs b = {num(0)};
 
-    auto result = lamina::power_series_multiply(a, b, 3);
+    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     EXPECT_EQ_EXPR(result[0], num(0), "c[0] = 0");
@@ -128,7 +128,7 @@ static void test_power_series_multiply_constants() {
     // b(x) = 1 + 2x + 4x²
     Coeffs b = {num(1), num(2), num(4)};
 
-    auto result = lamina::power_series_multiply(a, b, 3);
+    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     EXPECT_EQ_EXPR(result[0], num(3), "c[0] = 3*1 = 3");
@@ -144,7 +144,7 @@ static void test_power_series_compose_basic() {
     // g(x) = x (i.e., g(0)=0, g[1]=1)
     Coeffs g = {num(0), num(1)};
 
-    auto result = lamina::power_series_compose(f, g, 3);
+    auto result = lamina::power_series_compose_checked(f, g, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     // f(g(x)) = f(x) = 1 + x
@@ -161,7 +161,7 @@ static void test_power_series_compose_quadratic() {
     // g(x) = 2x (g(0)=0)
     Coeffs g = {num(0), num(2)};
 
-    auto result = lamina::power_series_compose(f, g, 3);
+    auto result = lamina::power_series_compose_checked(f, g, 3).value();
 
     // f(2x) = 1 + 2x + 4x²
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
@@ -177,9 +177,9 @@ static void test_power_series_compose_g0_nonzero() {
     // g(x) = 1 + x (g(0) = 1 ≠ 0)
     Coeffs g = {num(1), num(1)};
 
-    auto result = lamina::power_series_compose(f, g, 3);
-
-    EXPECT_TRUE(result.empty(), "Result is empty when g(0) != 0");
+    auto result = lamina::power_series_compose_checked(f, g, 3);
+    EXPECT_TRUE(!result && result.error().code == lamina::CasErrc::DomainError,
+                "g(0) != 0 is a checked domain error");
 }
 
 static void test_power_series_compose_exp_like() {
@@ -193,7 +193,7 @@ static void test_power_series_compose_exp_like() {
     // g(x) = 2x
     Coeffs g = {num(0), num(2)};
 
-    auto result = lamina::power_series_compose(f, g, 4);
+    auto result = lamina::power_series_compose_checked(f, g, 4).value();
 
     // exp(2x) = 1 + 2x + 2x² + (4/3)x³
     EXPECT_TRUE(result.size() == 4, "Result has 4 coefficients");
@@ -209,8 +209,9 @@ static void test_power_series_multiply_order_zero() {
     Coeffs a = {num(1), num(2)};
     Coeffs b = {num(3), num(4)};
 
-    auto result = lamina::power_series_multiply(a, b, 0);
-    EXPECT_TRUE(result.empty(), "Order 0 returns empty vector");
+    auto result = lamina::power_series_multiply_checked(a, b, 0);
+    EXPECT_TRUE(!result && result.error().code == lamina::CasErrc::InvalidArgument,
+                "order zero is a checked invalid argument");
 }
 
 static void test_power_series_checked_contracts() {
@@ -231,8 +232,6 @@ static void test_power_series_checked_contracts() {
     EXPECT_TRUE(!bad_order &&
                     bad_order.error().code == lamina::CasErrc::InvalidArgument,
                 "checked multiply rejects non-positive order");
-    EXPECT_TRUE(lamina::power_series_multiply(a, b, 0).empty(),
-                "legacy multiply unwraps non-positive order to empty vector");
 
     Coeffs with_null = {num(1), nullptr};
     auto null_coeff = lamina::power_series_multiply_checked(with_null, b, 2);
@@ -256,8 +255,6 @@ static void test_power_series_checked_contracts() {
     EXPECT_TRUE(!nonzero_g0 &&
                     nonzero_g0.error().code == lamina::CasErrc::DomainError,
                 "checked compose reports g(0) != 0 as domain error");
-    EXPECT_TRUE(lamina::power_series_compose(f, bad_g, 3).empty(),
-                "legacy compose unwraps g(0) != 0 to empty vector");
 
     lamina::CancellationToken token;
     token.cancel();
@@ -279,7 +276,24 @@ static void test_series_analysis_checked_contracts() {
                     "checked convergence_radius returns non-null expression");
     }
 
-    auto empty_coeffs = lamina::convergence_radius_checked({}, "x");
+    auto sequence_index = var("n");
+    auto exponential_term = SymbolicExpr::power(num(2), sequence_index);
+    auto exponential_radius = lamina::convergence_radius_checked(
+        exponential_term, "n");
+    EXPECT_TRUE(exponential_radius &&
+                    std::abs(exponential_radius.value()->to_numeric() - 0.5) <
+                        1e-12,
+                "coefficient term 2^n has radius 1/2");
+
+    auto polynomial_term = SymbolicExpr::power(sequence_index, num(3));
+    auto polynomial_radius = lamina::convergence_radius_checked(
+        polynomial_term, "n");
+    EXPECT_TRUE(polynomial_radius &&
+                    std::abs(polynomial_radius.value()->to_numeric() - 1.0) <
+                        1e-12,
+                "coefficient term n^3 has radius 1");
+
+    auto empty_coeffs = lamina::convergence_radius_checked(Coeffs{}, "x");
     EXPECT_TRUE(!empty_coeffs &&
                     empty_coeffs.error().code == lamina::CasErrc::InvalidArgument,
                 "checked convergence_radius rejects empty coefficients");
@@ -300,8 +314,6 @@ static void test_series_analysis_checked_contracts() {
     EXPECT_TRUE(!symbolic_radius &&
                     symbolic_radius.error().code == lamina::CasErrc::Inconclusive,
                 "checked convergence_radius rejects unsupported symbolic coefficients");
-    EXPECT_TRUE(lamina::convergence_radius(symbolic_coeffs, "x") != nullptr,
-                "legacy convergence_radius keeps compatibility result for symbolic coefficients");
 
     auto n = var("n");
     auto p_term = SymbolicExpr::power(n, num(-2));
@@ -322,9 +334,6 @@ static void test_series_analysis_checked_contracts() {
     EXPECT_TRUE(!unsupported_convergence &&
                     unsupported_convergence.error().code == lamina::CasErrc::Inconclusive,
                 "checked convergence_test reports Inconclusive for unsupported terms");
-    auto legacy_unsupported = lamina::convergence_test(unsupported_term, "n");
-    EXPECT_TRUE(legacy_unsupported.result == lamina::ConvergenceResult::Inconclusive,
-                "legacy convergence_test preserves inconclusive enum result");
 
     auto z = var("z");
     auto f = SymbolicExpr::divide(num(1), z);
@@ -350,16 +359,17 @@ static void test_series_analysis_checked_contracts() {
                     null_center.error().code == lamina::CasErrc::InvalidArgument,
                 "checked Laurent rejects null center");
 
-    auto unsupported_laurent = lamina::laurent_series_full_checked(SymbolicExpr::sin(z),
-                                                                   "z", num(0), 2, 2);
-    EXPECT_TRUE(!unsupported_laurent &&
-                    unsupported_laurent.error().code == lamina::CasErrc::Inconclusive,
-                "checked Laurent reports Inconclusive for unsupported analytic functions");
+    auto analytic_laurent = lamina::laurent_series_full_checked(
+        SymbolicExpr::sin(z), "z", num(0), 2, 2);
+    EXPECT_TRUE(analytic_laurent &&
+                    analytic_laurent.value().pole_order == 0,
+                "checked Laurent expands supported analytic functions");
 
-    auto shifted_laurent = lamina::laurent_series_full_checked(f, "z", num(1), 2, 2);
-    EXPECT_TRUE(!shifted_laurent &&
-                    shifted_laurent.error().code == lamina::CasErrc::Inconclusive,
-                "checked Laurent reports Inconclusive outside zero-center support");
+    auto shifted_laurent = lamina::laurent_series_full_checked(
+        f, "z", num(1), 2, 2);
+    EXPECT_TRUE(shifted_laurent &&
+                    shifted_laurent.value().pole_order == 0,
+                "checked Laurent supports a nonzero regular center");
 
     lamina::CancellationToken token;
     token.cancel();
@@ -670,7 +680,7 @@ static void test_convergence_radius_geometric() {
 
     // Coefficients of ∑x^n: all 1's → a_n = 1, ratio |a_n/a_{n+1}| = 1
     Coeffs coeffs = {num(1), num(1), num(1), num(1), num(1)};
-    auto result = lamina::convergence_radius(coeffs, "x");
+    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
     EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(1), "R = 1 for geometric series");
@@ -683,7 +693,7 @@ static void test_convergence_radius_exponential() {
     // Coefficients: 1, 1, 1/2, 1/6, 1/24 (= 1/n!)
     // Ratio |a_n/a_{n+1}| = (n+1) → ∞, so R = ∞
     Coeffs coeffs = {num(1), num(1), rat(1, 2), rat(1, 6), rat(1, 24)};
-    auto result = lamina::convergence_radius(coeffs, "x");
+    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
     EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
     // The ratio of consecutive coefficients grows, so R should be large or infinity
     if (result) {
@@ -699,7 +709,7 @@ static void test_convergence_radius_half() {
     // Coefficients: 1, 2, 4, 8, 16 → a_n = 2^n
     // Ratio |a_n/a_{n+1}| = 2^n / 2^(n+1) = 1/2
     Coeffs coeffs = {num(1), num(2), num(4), num(8), num(16)};
-    auto result = lamina::convergence_radius(coeffs, "x");
+    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
     EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
     if (result) {
         auto val = test_numeric_eval(result);
@@ -714,7 +724,7 @@ static void test_convergence_radius_single_coeff() {
     TEST_CASE("convergence_radius: single coefficient returns ∞");
 
     Coeffs coeffs = {num(5)};
-    auto result = lamina::convergence_radius(coeffs, "x");
+    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
     EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
     // A polynomial (finite terms) has infinite radius of convergence
 }
@@ -728,10 +738,12 @@ static void test_convergence_test_geometric_convergent() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(rat(1, 2), n);
 
-    auto info = lamina::convergence_test(a_n, "n");
-    EXPECT_TRUE(info.result == lamina::ConvergenceResult::Convergent ||
-                info.result == lamina::ConvergenceResult::Inconclusive,
-                "∑(1/2)^n: convergent or inconclusive (simplifier limitation)");
+    auto info = lamina::convergence_test_checked(a_n, "n");
+    EXPECT_TRUE(
+        (!info && info.error().code == lamina::CasErrc::Inconclusive) ||
+            (info && info.value().result ==
+                         lamina::ConvergenceResult::Convergent),
+        "geometric convergence is proved or explicitly Inconclusive");
 }
 
 static void test_convergence_test_geometric_divergent() {
@@ -741,10 +753,12 @@ static void test_convergence_test_geometric_divergent() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(num(2), n);
 
-    auto info = lamina::convergence_test(a_n, "n");
-    EXPECT_TRUE(info.result == lamina::ConvergenceResult::Divergent ||
-                info.result == lamina::ConvergenceResult::Inconclusive,
-                "∑2^n: divergent or inconclusive (simplifier limitation)");
+    auto info = lamina::convergence_test_checked(a_n, "n");
+    EXPECT_TRUE(
+        (!info && info.error().code == lamina::CasErrc::Inconclusive) ||
+            (info && info.value().result ==
+                         lamina::ConvergenceResult::Divergent),
+        "geometric divergence is proved or explicitly Inconclusive");
 }
 
 static void test_convergence_test_p_series() {
@@ -754,11 +768,12 @@ static void test_convergence_test_p_series() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-2));
 
-    auto info = lamina::convergence_test(a_n, "n");
-    // The ratio test gives limit 1, so it should be inconclusive
-    EXPECT_TRUE(info.result == lamina::ConvergenceResult::Inconclusive ||
-                info.result == lamina::ConvergenceResult::Convergent,
-                "∑1/n^2: inconclusive by ratio test or convergent by comparison");
+    auto info = lamina::convergence_test_checked(a_n, "n");
+    EXPECT_TRUE(
+        (!info && info.error().code == lamina::CasErrc::Inconclusive) ||
+            (info && info.value().result ==
+                         lamina::ConvergenceResult::Convergent),
+        "p-series is proved convergent or explicitly Inconclusive");
 }
 
 
@@ -805,7 +820,7 @@ static void test_laurent_series_1_over_z() {
     auto z = var("z");
     auto f = SymbolicExpr::power(z, num(-1));
 
-    auto result = lamina::laurent_series(f, "z", num(0), 2, 2);
+    auto result = lamina::laurent_series_checked(f, "z", num(0), 2, 2).value();
     EXPECT_TRUE(result != nullptr, "laurent_series(1/z) returns a result");
     if (result) {
         // result should equal 1/z
@@ -820,7 +835,7 @@ static void test_laurent_series_full_1_over_z() {
     auto z = var("z");
     auto f = SymbolicExpr::power(z, num(-1));
 
-    auto result = lamina::laurent_series_full(f, "z", num(0), 2, 2);
+    auto result = lamina::laurent_series_full_checked(f, "z", num(0), 2, 2).value();
     EXPECT_TRUE(result.series != nullptr, "laurent_series_full: series not null");
     EXPECT_TRUE(result.pole_order == 1, "laurent_series_full: pole_order = 1 for 1/z");
     if (result.residue) {
@@ -838,7 +853,7 @@ static void test_laurent_series_1_over_sin_z() {
     auto denom = SymbolicExpr::multiply(z, SymbolicExpr::add(z, num(1)));
     auto f = SymbolicExpr::divide(num(1), denom);
 
-    auto result = lamina::laurent_series_full(f, "z", num(0), 3, 3);
+    auto result = lamina::laurent_series_full_checked(f, "z", num(0), 3, 3).value();
     EXPECT_TRUE(result.pole_order == 1, "1/(z(z+1)): pole_order = 1");
     if (result.residue) {
         EXPECT_EQ_EXPR(result.residue->simplify(), num(1), "residue of 1/(z(z+1)) at 0 is 1");

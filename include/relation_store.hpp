@@ -58,8 +58,9 @@ public:
      * @param op  Relational operator
      * @param prop_store PropertyStore to notify for simple variable > 0 patterns
      */
-    void add_relation(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-                      RelationOp op, PropertyStore& prop_store);
+    RelationStoreResult add_relation(
+        const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+        RelationOp op, PropertyStore& prop_store);
 
     /**
      * @brief Checked relation insertion with explicit failure reporting.
@@ -99,10 +100,11 @@ public:
 private:
     std::vector<Relation> relations_;
 
-    void add_relation_unchecked(const SymbolicExpr& lhs,
-                                const SymbolicExpr& rhs,
-                                RelationOp op,
-                                PropertyStore& prop_store);
+    RelationStoreResult add_relation_unchecked(
+        const SymbolicExpr& lhs,
+        const SymbolicExpr& rhs,
+        RelationOp op,
+        PropertyStore& prop_store);
 
     /// Maximum number of new relations deduced per add_relation call via transitive closure.
     static constexpr int MAX_TRANSITIVE_DEDUCTIONS = 64;
@@ -123,8 +125,9 @@ private:
      * @param op  Relational operator
      * @param prop_store PropertyStore to update with derived sign
      */
-    void detect_reversed_pattern(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-                                 RelationOp op, PropertyStore& prop_store);
+    RelationStoreResult detect_reversed_pattern(
+        const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+        RelationOp op, PropertyStore& prop_store);
 
     /**
      * @brief Compute transitive closure after adding a new relation.
@@ -137,7 +140,8 @@ private:
      * @param new_rel The newly added relation that triggers closure computation
      * @param prop_store PropertyStore for sign derivation of deduced relations
      */
-    void compute_transitive_closure(const Relation& new_rel, PropertyStore& prop_store);
+    RelationStoreResult compute_transitive_closure(
+        const Relation& new_rel, PropertyStore& prop_store);
 };
 
 } // namespace lamina

@@ -41,9 +41,9 @@ LAMINA_API VectorCalculusFieldResult gradient_checked(
 LAMINA_API VectorCalculusFieldResult gradient_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
-
 LAMINA_API VectorField gradient(const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
+
 
 /**
  * @brief 计算向量场的散度 ∇·F = ∑∂Fᵢ/∂xᵢ。
@@ -63,9 +63,9 @@ LAMINA_API VectorCalculusExprResult divergence_checked(
 LAMINA_API VectorCalculusExprResult divergence_checked(
     const VectorField& F,
     const std::vector<std::string>& vars);
-
 LAMINA_API std::shared_ptr<SymbolicExpr> divergence(const VectorField& F,
     const std::vector<std::string>& vars);
+
 
 /**
  * @brief 计算向量场的旋度 ∇×F。
@@ -87,9 +87,9 @@ LAMINA_API VectorCalculusFieldResult curl_checked(
 LAMINA_API VectorCalculusFieldResult curl_checked(
     const VectorField& F,
     const std::vector<std::string>& vars);
-
 LAMINA_API VectorField curl(const VectorField& F,
     const std::vector<std::string>& vars);
+
 
 /**
  * @brief 计算标量函数的拉普拉斯算子 ∇²f = ∑∂²f/∂xᵢ²。
@@ -109,9 +109,9 @@ LAMINA_API VectorCalculusExprResult laplacian_checked(
 LAMINA_API VectorCalculusExprResult laplacian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
-
 LAMINA_API std::shared_ptr<SymbolicExpr> laplacian(const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
+
 
 /**
  * @brief 计算方向导数 D_u f = ∇f · û。
@@ -140,10 +140,10 @@ LAMINA_API VectorCalculusExprResult directional_derivative_checked(
     const std::vector<std::string>& vars,
     const VectorField& direction,
     int order = 1);
-
 LAMINA_API std::shared_ptr<SymbolicExpr> directional_derivative(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars,
     const VectorField& direction, int order = 1);
+
 
 
 /**
@@ -167,10 +167,10 @@ LAMINA_API VectorCalculusExprResult jacobian_checked(
 LAMINA_API VectorCalculusExprResult jacobian_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& functions,
     const std::vector<std::string>& vars);
-
 LAMINA_API std::shared_ptr<SymbolicExpr> jacobian(
     const std::vector<std::shared_ptr<SymbolicExpr>>& functions,
     const std::vector<std::string>& vars);
+
 
 /**
  * @brief 计算标量函数的海森矩阵。
@@ -192,9 +192,9 @@ LAMINA_API VectorCalculusExprResult hessian_checked(
 LAMINA_API VectorCalculusExprResult hessian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
-
 LAMINA_API std::shared_ptr<SymbolicExpr> hessian(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars);
+
 
 
 /**
@@ -485,12 +485,22 @@ LAMINA_API std::shared_ptr<SymbolicExpr> stokes_theorem(
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& v_bounds);
 
 
+enum class CriticalPointClassification {
+    LocalMinimum,
+    LocalMaximum,
+    Saddle,
+    Degenerate,
+    Inconclusive
+};
+
 /**
- * @brief 临界点信息，包含坐标和分类。
+ * @brief 临界点信息，包含坐标、分类和分类成立所需条件。
  */
 struct CriticalPoint {
-    std::map<std::string, std::shared_ptr<SymbolicExpr>> point; ///< 临界点坐标
-    std::string classification; ///< 分类: "minimum", "maximum", "saddle", "degenerate"
+    std::map<std::string, std::shared_ptr<SymbolicExpr>> point;
+    CriticalPointClassification classification =
+        CriticalPointClassification::Inconclusive;
+    std::vector<std::shared_ptr<SymbolicExpr>> conditions;
 };
 
 using ExtremaResult = Result<std::vector<CriticalPoint>>;
@@ -562,7 +572,7 @@ LAMINA_API std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lag
  * @param[in] b 向量 b（维度需与 a 相同）
  * @return 点积标量表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> dot_product(
+LAMINA_API VectorCalculusExprResult dot_product(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -571,7 +581,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> dot_product(
  * @param[in] b 三维向量 b
  * @return 叉积向量（三分量）
  */
-LAMINA_API VectorField cross_product(
+LAMINA_API VectorCalculusFieldResult cross_product(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -580,7 +590,7 @@ LAMINA_API VectorField cross_product(
  * @param[in] b 投影方向向量
  * @return 投影向量；b 为零向量时返回零向量
  */
-LAMINA_API VectorField vector_project(
+LAMINA_API VectorCalculusFieldResult vector_project(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -589,7 +599,7 @@ LAMINA_API VectorField vector_project(
  * @param[in] b 投影方向向量
  * @return 标量投影表达式；b 为零向量时返回 nullptr
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> scalar_project(
+LAMINA_API VectorCalculusExprResult scalar_project(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -598,7 +608,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> scalar_project(
  * @param[in] b 向量 b
  * @return 夹角表达式（弧度）；任一向量为零时返回 nullptr
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> vector_angle_symbolic(
+LAMINA_API VectorCalculusExprResult vector_angle_symbolic(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -608,7 +618,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> vector_angle_symbolic(
  * @param[in] c 向量 c
  * @return 混合积标量表达式（等于以 a,b,c 为行的行列式）
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> mixed_product(
+LAMINA_API VectorCalculusExprResult mixed_product(
     const VectorField& a, const VectorField& b, const VectorField& c);
 
 } // namespace lamina

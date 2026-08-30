@@ -2,6 +2,7 @@
 #include "integration.hpp"
 #include "numeric_evaluation.hpp"
 #include "solver.hpp"
+#include "solve_strategies.hpp"
 #include "symbolic_ast.hpp"
 
 #include <cmath>
@@ -66,7 +67,7 @@ static bool vector_calculus_evaluate_hessian_at_point(
  * @param[in] n         矩阵维度
  * @return 分类字符串: "minimum", "maximum", "saddle", "degenerate"
  */
-static std::string vector_calculus_classify_critical_point(
+static CriticalPointClassification vector_calculus_classify_critical_point(
     const std::vector<double>& numeric_H, size_t n)
 {
     const double tol = 1e-10;
@@ -74,9 +75,9 @@ static std::string vector_calculus_classify_critical_point(
     /// 1×1 情况：直接判断
     if (n == 1) {
         double val = numeric_H[0];
-        if (std::abs(val) < tol) return "degenerate";
-        if (val > 0) return "minimum";
-        return "maximum";
+        if (std::abs(val) < tol) return CriticalPointClassification::Degenerate;
+        if (val > 0) return CriticalPointClassification::LocalMinimum;
+        return CriticalPointClassification::LocalMaximum;
     }
 
     /// 2×2 情况：使用行列式和迹直接判断
@@ -86,10 +87,10 @@ static std::string vector_calculus_classify_critical_point(
         double det = a * d - b * c;
         double trace = a + d;
 
-        if (std::abs(det) < tol) return "degenerate";
-        if (det > 0 && trace > 0) return "minimum";
-        if (det > 0 && trace < 0) return "maximum";
-        return "saddle";
+        if (std::abs(det) < tol) return CriticalPointClassification::Degenerate;
+        if (det > 0 && trace > 0) return CriticalPointClassification::LocalMinimum;
+        if (det > 0 && trace < 0) return CriticalPointClassification::LocalMaximum;
+        return CriticalPointClassification::Saddle;
     }
 
     /// 一般情况：构建符号矩阵并求特征值
@@ -111,10 +112,10 @@ static std::string vector_calculus_classify_critical_point(
 
     /// 计算特征多项式并求解特征值
     auto cp = SymbolicExpr::charpoly(H_mat, "lambda");
-    if (!cp) return "degenerate";
+    if (!cp) return CriticalPointClassification::Inconclusive;
 
-    auto eigenvals = SymbolicExpr::solve(cp, "lambda");
-    if (eigenvals.empty()) return "degenerate";
+    auto eigenvals = lamina::solve_finite_checked(cp, "lambda").value();
+    if (eigenvals.empty()) return CriticalPointClassification::Inconclusive;
 
     bool all_positive = true;
     bool all_negative = true;
@@ -122,12 +123,12 @@ static std::string vector_calculus_classify_critical_point(
 
     for (const auto& ev : eigenvals) {
         if (!ev) {
-            return "degenerate";
+            return CriticalPointClassification::Inconclusive;
         }
         auto ev_simplified = ev->simplify();
         double val = 0.0;
         if (!vector_calculus_checked_finite_numeric(ev_simplified, val)) {
-            return "degenerate";
+            return CriticalPointClassification::Inconclusive;
         }
 
         if (std::abs(val) < tol) {
@@ -141,10 +142,10 @@ static std::string vector_calculus_classify_critical_point(
         }
     }
 
-    if (has_zero) return "degenerate";
-    if (all_positive) return "minimum";
-    if (all_negative) return "maximum";
-    return "saddle";
+    if (has_zero) return CriticalPointClassification::Degenerate;
+    if (all_positive) return CriticalPointClassification::LocalMinimum;
+    if (all_negative) return CriticalPointClassification::LocalMaximum;
+    return CriticalPointClassification::Saddle;
 }
 
 ExtremaResult find_extrema_checked(
@@ -193,7 +194,7 @@ ExtremaResult find_extrema_checked(
                         operation);
                 }
             }
-            if (cp.classification.empty()) {
+            if (cp.classification == CriticalPointClassification::Inconclusive) {
                 return ExtremaResult::failure(
                     CasErrc::Inconclusive,
                     "extrema candidate has no verified classification",
@@ -269,7 +270,6 @@ std::vector<CriticalPoint> find_extrema(
 
     /// 计算海森矩阵
     auto H = hessian(f, vars);
-    if (!H) return {};
 
     /// 对每个临界点进行分类
     std::vector<CriticalPoint> result;
@@ -284,7 +284,7 @@ std::vector<CriticalPoint> find_extrema(
         if (vector_calculus_evaluate_hessian_at_point(H, vars, sol, n, numeric_H)) {
             cp.classification = vector_calculus_classify_critical_point(numeric_H, n);
         } else {
-            cp.classification = "degenerate";
+            cp.classification = CriticalPointClassification::Inconclusive;
         }
 
         result.push_back(std::move(cp));

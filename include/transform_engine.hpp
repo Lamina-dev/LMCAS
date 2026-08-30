@@ -19,7 +19,6 @@
 
 namespace lamina {
 
-using TransformEngineResult = Result<TransformResult>;
 
 
 /**
@@ -93,11 +92,6 @@ LAMINA_API TransformEngineResult laplace_transform_checked(
     const std::string& t,
     const std::string& s);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> laplace_transform(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& t,
-    const std::string& s);
-
 /**
  * @brief 计算逆 Laplace 变换 ℒ⁻¹{F(s)} = f(t)。
  *
@@ -128,11 +122,6 @@ LAMINA_API TransformEngineResult inverse_laplace_checked(
     const std::string& s,
     const std::string& t);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> inverse_laplace(
-    const std::shared_ptr<SymbolicExpr>& F,
-    const std::string& s,
-    const std::string& t);
-
 
 /**
  * @brief 计算函数的 Fourier 变换 F{f(t)} = F(ω)。
@@ -151,11 +140,6 @@ LAMINA_API TransformEngineResult fourier_transform_checked(
  * @brief 使用默认计算上下文计算 Fourier 变换，并返回条件/ROC 容器。
  */
 LAMINA_API TransformEngineResult fourier_transform_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& t,
-    const std::string& omega);
-
-LAMINA_API std::shared_ptr<SymbolicExpr> fourier_transform(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& t,
     const std::string& omega);
@@ -181,11 +165,6 @@ LAMINA_API TransformEngineResult inverse_fourier_transform_checked(
     const std::string& omega,
     const std::string& t);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> inverse_fourier_transform(
-    const std::shared_ptr<SymbolicExpr>& F,
-    const std::string& omega,
-    const std::string& t);
-
 /**
  * @brief 计算两个函数的卷积 (f * g)(t) = ∫f(τ)g(t-τ)dτ。
  * @param[in] f 第一个函数
@@ -203,11 +182,6 @@ LAMINA_API TransformEngineResult convolve_checked(
  * @brief 使用默认计算上下文计算卷积，并显式报告无效输入。
  */
 LAMINA_API TransformEngineResult convolve_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& g,
-    const std::string& var);
-
-LAMINA_API std::shared_ptr<SymbolicExpr> convolve(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::shared_ptr<SymbolicExpr>& g,
     const std::string& var);
@@ -230,11 +204,6 @@ LAMINA_API TransformEngineResult z_transform_checked(
  * @brief 使用默认计算上下文计算 Z 变换，并返回条件/ROC 容器。
  */
 LAMINA_API TransformEngineResult z_transform_checked(
-    const std::shared_ptr<SymbolicExpr>& f_n,
-    const std::string& n,
-    const std::string& z);
-
-LAMINA_API std::shared_ptr<SymbolicExpr> z_transform(
     const std::shared_ptr<SymbolicExpr>& f_n,
     const std::string& n,
     const std::string& z);

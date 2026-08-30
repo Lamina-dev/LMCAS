@@ -20,8 +20,8 @@ constexpr double kTolerance = 1e-10;
 
 bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
+    if (std::dynamic_pointer_cast<const IntegralNode>(node)) return true;
     if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
         for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
     } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -140,22 +140,22 @@ ComboReport verify_combo(const FunctionSpec& f,
     }
 
     // Compute Ix = integrate_def(f, x, x_lo, x_hi)
-    std::shared_ptr<SymbolicExpr> Ix;
-    std::shared_ptr<SymbolicExpr> Iy;
-    try {
-        // Build f(x) and g(y) afresh (they were consumed when wrapped as
-        // children of the multiply node above; rebuild for safety).
-        auto fx2 = f.build(SymbolicExpr::variable("x"));
-        auto gy2 = g.build(SymbolicExpr::variable("y"));
-        Ix = lamina::detail::make_expression_ptr(
-            integrator.integrate_def(*fx2, "x", *x_lo, *x_hi));
-        Iy = lamina::detail::make_expression_ptr(
-            integrator.integrate_def(*gy2, "y", *y_lo, *y_hi));
-    } catch (const std::exception& e) {
+    auto fx2 = f.build(SymbolicExpr::variable("x"));
+    auto gy2 = g.build(SymbolicExpr::variable("y"));
+    auto ix_result = integrator.integrate_def(*fx2, "x", *x_lo, *x_hi);
+    if (!ix_result) {
         rep.failed = true;
-        rep.detail = std::string("exception in integrate_def: ") + e.what();
+        rep.detail = std::string("x integration failed: ") + ix_result.error().message;
         return rep;
     }
+    auto iy_result = integrator.integrate_def(*gy2, "y", *y_lo, *y_hi);
+    if (!iy_result) {
+        rep.failed = true;
+        rep.detail = std::string("y integration failed: ") + iy_result.error().message;
+        return rep;
+    }
+    auto Ix = lamina::detail::make_expression_ptr(ix_result.value());
+    auto Iy = lamina::detail::make_expression_ptr(iy_result.value());
 
     if (has_integral_node(lamina::detail::node(Ix)) || has_integral_node(lamina::detail::node(Iy))) {
         rep.unevaluated = true;
@@ -227,6 +227,29 @@ ComboReport verify_combo(const FunctionSpec& f,
 }// anonymous namespace
 
 int main() {
+    TEST_CASE("Checked multiple integration supports more than three binders");
+    {
+        Integrator integrator;
+        lamina::ComputationContext context;
+        auto zero = SymbolicExpr::number(0);
+        auto one = SymbolicExpr::number(1);
+        std::vector<IntegrationStep> steps{
+            {"w", zero, one},
+            {"z", zero, one},
+            {"y", zero, one},
+            {"x", zero, one}
+        };
+        auto fourfold = integrate_multiple_checked(
+            *SymbolicExpr::number(1), steps, integrator, context);
+        EXPECT_TRUE(fourfold.has_value(),
+                    "fourfold exact integral succeeds");
+        if (fourfold) {
+            auto value = test_numeric_eval(
+                lamina::detail::make_expression_ptr(fourfold.value()));
+            EXPECT_TRUE(value && std::abs(*value - 1.0) < 1e-12,
+                        "unit four-cube integrates to one");
+        }
+    }
     TEST_CASE("Multiple integral separability");
 
     int total_combos      = 0;

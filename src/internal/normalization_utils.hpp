@@ -3,6 +3,7 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include "symbolic_ast.hpp"
+#include "internal/expression_analysis.hpp"
 #include "assumption_context.hpp"
 #include <vector>
 #include <map>
@@ -50,34 +51,7 @@ inline std::shared_ptr<const SymbolicNode> norm_subst_index(
     const std::shared_ptr<const SymbolicNode>& node,
     const std::string& index_var,
     const std::shared_ptr<const SymbolicNode>& value) {
-    if (!node) return node;
-    if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (v->name() == index_var) return value->clone();
-        return node->clone();
-    }
-    if (std::dynamic_pointer_cast<const NumberNode>(node)) return node->clone();
-    if (auto a = std::dynamic_pointer_cast<const AddNode>(node)) {
-        std::vector<std::shared_ptr<const SymbolicNode>> ops;
-        for (auto& op : a->operands()) ops.push_back(norm_subst_index(op, index_var, value));
-        return lamina::detail::make_node<AddNode>(ops);
-    }
-    if (auto m = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        std::vector<std::shared_ptr<const SymbolicNode>> ops;
-        for (auto& op : m->operands()) ops.push_back(norm_subst_index(op, index_var, value));
-        return make_normalized_multiply_node(ops);
-    }
-    if (auto p = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return lamina::detail::make_node<PowerNode>(
-            norm_subst_index(p->base(), index_var, value),
-            norm_subst_index(p->exponent(), index_var, value));
-    }
-    if (auto f = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        std::vector<std::shared_ptr<const SymbolicNode>> args;
-        for (auto& arg : f->arguments()) args.push_back(norm_subst_index(arg, index_var, value));
-        return lamina::detail::make_node<FunctionNode>(f->type(), args);
-    }
-    /// 其它节点类型：保守地原样克隆
-    return node->clone();
+    return lamina::substitute_free(node, index_var, value);
 }
 
 /** @brief 节点比较器，按多项式次数降序排列，用于同类项合并 */

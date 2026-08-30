@@ -126,15 +126,17 @@ static void test_integrator_no_context_preserves_abs() {
     Integrator integrator;
     // No set_assumption_context call — defaults to nullptr
     auto result = integrator.integrate(integrand, "x");
+    EXPECT_TRUE(result.has_value(), "Integration without assumptions succeeds");
+    if (!result) return;
 
-    std::string result_str = result.to_string();
+    std::string result_str = result.value().to_string();
     std::cout << "  Integration of |x| without context: " << result_str << std::endl;
 
     // Without context, the integrator should either keep abs or produce
     // a result that still references abs (or an unevaluated integral).
     // The key point is it should NOT simplify |x| to x without assumptions.
     // We verify the result is produced (non-empty) — backward compatibility.
-    EXPECT_TRUE(lamina::detail::node(result) != nullptr,
+    EXPECT_TRUE(lamina::detail::node(result.value()) != nullptr,
                 "Integration without context produces a result");
 }
 
@@ -267,7 +269,8 @@ static void test_matcher_assumption_condition_matches() {
         if (!ctx) return false;
         auto it = bindings.find("A");
         if (it == bindings.end()) return false;
-        return ctx->is_positive(it->second) == Tribool::True;
+        auto positive = ctx->is_positive(it->second);
+        return positive && positive.value() == Tribool::True;
     };
 
     Rule rule(pattern, replacement, wildcards, assumption_cond);
@@ -308,7 +311,8 @@ static void test_matcher_assumption_condition_no_match_without_context() {
         if (!ctx) return false;
         auto it = bindings.find("A");
         if (it == bindings.end()) return false;
-        return ctx->is_positive(it->second) == Tribool::True;
+        auto positive = ctx->is_positive(it->second);
+        return positive && positive.value() == Tribool::True;
     };
 
     Rule rule(pattern, replacement, wildcards, assumption_cond);
@@ -339,7 +343,8 @@ static void test_matcher_rewrite_engine_with_context() {
         if (!ctx) return false;
         auto it = bindings.find("A");
         if (it == bindings.end()) return false;
-        return ctx->is_positive(it->second) == Tribool::True;
+        auto positive = ctx->is_positive(it->second);
+        return positive && positive.value() == Tribool::True;
     };
 
     Rule rule(abs_A, just_A, wildcards, assumption_cond);
@@ -379,6 +384,8 @@ static void test_integrator_nullptr_identical() {
     Integrator integrator1;
     // No context set (default nullptr)
     auto result1 = integrator1.integrate(integrand, "x");
+    EXPECT_TRUE(result1.has_value(), "default integration succeeds");
+    if (!result1) return;
 
     Integrator integrator2;
     ComputationContext integration_context2;
@@ -387,7 +394,7 @@ static void test_integrator_nullptr_identical() {
     EXPECT_TRUE(result2_checked.has_value(), "integration without assumptions succeeds");
     auto result2 = result2_checked.value();
 
-    std::string s1 = result1.to_string();
+    std::string s1 = result1.value().to_string();
     std::string s2 = result2.to_string();
 
     EXPECT_EQ_STR(s1, s2, "Integrator with default and explicit nullptr produce same result");

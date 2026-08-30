@@ -16,7 +16,7 @@ int main() {
         auto num = x;
         auto den = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) x/x^2 = 0");
     }
 
@@ -30,7 +30,7 @@ int main() {
         auto num = SymbolicExpr::add(SymbolicExpr::multiply(three, x2), x);
         auto den = SymbolicExpr::add(SymbolicExpr::multiply(two, x2), one);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_EQ_EXPR_STR(result, "3/2", "lim(x->inf) (3x^2+x)/(2x^2+1) = 3/2");
     }
 
@@ -39,7 +39,7 @@ int main() {
         // lim(x→∞) x^3 / x = lim(x→∞) x^2 = ∞
         auto x3 = SymbolicExpr::power(x, SymbolicExpr::number(3));
         auto expr = SymbolicExpr::multiply(x3, SymbolicExpr::power(x, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         // Should be infinity
         EXPECT_TRUE(result != nullptr, "lim(x->inf) x^3/x is not null");
         if (result) {
@@ -56,7 +56,7 @@ int main() {
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto num = SymbolicExpr::multiply(neg_two, x2);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(x2, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_EQ_EXPR_STR(result, "-2", "lim(x->inf) -2x^2/x^2 = -2");
     }
 
@@ -66,7 +66,7 @@ int main() {
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto exp_x = SymbolicExpr::exp(x);
         auto expr = SymbolicExpr::multiply(x2, SymbolicExpr::power(exp_x, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) x^2/exp(x) = 0");
     }
 
@@ -75,7 +75,7 @@ int main() {
         // lim(x→∞) ln(x) / x = 0
         auto ln_x = SymbolicExpr::ln(x);
         auto expr = SymbolicExpr::multiply(ln_x, SymbolicExpr::power(x, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) ln(x)/x = 0");
     }
 
@@ -85,7 +85,7 @@ int main() {
         auto x10 = SymbolicExpr::power(x, SymbolicExpr::number(10));
         auto exp_x = SymbolicExpr::exp(x);
         auto expr = SymbolicExpr::multiply(x10, SymbolicExpr::power(exp_x, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) x^10/exp(x) = 0");
     }
 
@@ -94,7 +94,7 @@ int main() {
         // lim(x→∞) exp(-x) = 0
         auto neg_x = SymbolicExpr::multiply(SymbolicExpr::number(-1), x);
         auto expr = SymbolicExpr::exp(neg_x);
-        auto result = expr->limit("x", inf);
+        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) exp(-x) = 0");
     }
 
@@ -103,21 +103,21 @@ int main() {
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto den = SymbolicExpr::add(x2, SymbolicExpr::number(1));
         auto expr = SymbolicExpr::multiply(x2, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
-        auto result = expr->limit("x", neg_inf);
+        auto result = lamina::limit_expression_checked(expr, "x", neg_inf).value();
         EXPECT_EQ_EXPR_STR(result, "1", "lim(x->-inf) x^2/(x^2+1) = 1");
     }
 
     TEST_CASE("Negative infinity: lim(x->-inf) exp(x) = 0");
     {
         auto expr = SymbolicExpr::exp(x);
-        auto result = expr->limit("x", neg_inf);
+        auto result = lamina::limit_expression_checked(expr, "x", neg_inf).value();
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->-inf) exp(x) = 0");
     }
 
     TEST_CASE("Negative infinity: lim(x->-inf) 1/x = 0");
     {
         auto expr = SymbolicExpr::power(x, SymbolicExpr::number(-1));
-        auto result = expr->limit("x", neg_inf);
+        auto result = lamina::limit_expression_checked(expr, "x", neg_inf).value();
         EXPECT_EQ_EXPR_STR(result, "0", "lim(x->-inf) 1/x = 0");
     }
 

@@ -6,7 +6,7 @@
 
 using namespace lamina;
 
-std::shared_ptr<SymbolicExpr> MakeSymbolicExprPtr(const SymbolicExpr& e) {
+static std::shared_ptr<SymbolicExpr> MakeSymbolicExprPtr(const SymbolicExpr& e) {
     return lamina::detail::make_expression_ptr(e);
 }
 
@@ -18,10 +18,10 @@ void test_one_sided_limit() {
     auto expr = SymbolicExpr::power(MakeSymbolicExprPtr(*x), SymbolicExpr::number(-1));
     auto zero = SymbolicExpr::number(0);
 
-    auto limit_right = expr->limit("x", MakeSymbolicExprPtr(*zero), "+");
+    auto limit_right = lamina::limit_expression_checked(expr, "x", MakeSymbolicExprPtr(*zero), LimitDirection::FromAbove).value();
     std::cout << "Limit x->0+ 1/x = " << limit_right->to_string() << std::endl;
 
-    auto limit_left = expr->limit("x", MakeSymbolicExprPtr(*zero), "-");
+    auto limit_left = lamina::limit_expression_checked(expr, "x", MakeSymbolicExprPtr(*zero), LimitDirection::FromBelow).value();
     std::cout << "Limit x->0- 1/x = " << limit_left->to_string() << std::endl;
 
     bool has_inf = false;
@@ -42,9 +42,12 @@ void test_improper_integral_singularity() {
     auto upper = SymbolicExpr::number(1);
 
     auto res = integrator.integrate_def(*expr, "x", *lower, *upper);
-    std::cout << "Result: " << res.to_string() << std::endl;
+    EXPECT_TRUE(res.has_value(), "improper integration returns a Result");
+    if (!res) return;
+    std::cout << "Result: " << res.value().to_string() << std::endl;
 
-    EXPECT_TRUE(lamina::detail::node(res) != nullptr, "improper integral returns a non-null expression");
+    EXPECT_TRUE(lamina::detail::node(res.value()) != nullptr,
+                "improper integral returns a non-null expression");
 }
 
 int main() {

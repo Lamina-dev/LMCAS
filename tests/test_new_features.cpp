@@ -1,4 +1,6 @@
 #include "test_common.hpp"
+#include "poly_utils.hpp"
+#include "solve_strategies.hpp"
 
 int main() {
     TEST_CASE("New Features (Expand, GCD, Solve, Resultant)");
@@ -20,7 +22,9 @@ int main() {
 
         auto Q = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(-1));
 
-        auto gcd = SymbolicExpr::poly_gcd(P, Q);
+        lamina::ComputationContext gcd_context;
+        auto gcd = lamina::symbolic_polynomial_gcd(
+            *P, *Q, gcd_context).value();
 
         EXPECT_CONTAINS(gcd->to_string(), {"x", "1"}, "GCD(x^2+2x+1, x^2-1)");
     }
@@ -28,7 +32,7 @@ int main() {
     {
 
         auto eq = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(-4));
-        auto sol = SymbolicExpr::solve(eq, "x");
+        auto sol = lamina::solve_finite_checked(eq, "x").value();
 
         EXPECT_TRUE(!sol.empty(), "Solve x^2-4=0 returned empty");
 
@@ -117,7 +121,8 @@ int main() {
         auto sinx_x = SymbolicExpr::divide(sinx, x);
 
         auto zero = SymbolicExpr::number(0);
-        auto lim_res = SymbolicExpr::limit_func(sinx_x, "x", zero);
+        auto lim_res =
+            lamina::limit_expression_checked(sinx_x, "x", zero).value();
         if (lim_res) {
              EXPECT_EQ_EXPR_STR(lim_res, "1", "Limit(sin(x)/x, x->0) = 1");
         }

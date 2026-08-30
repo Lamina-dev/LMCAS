@@ -210,8 +210,8 @@ void test_is_positive_equivalence() {
     QueryInterface qi(ctx);
 
     for (const auto& [expr, label] : exprs) {
-        Tribool via_convenience = ctx.is_positive(expr);
-        Tribool via_direct = qi.query_positive(expr);
+        Tribool via_convenience = ctx.is_positive(expr).value();
+        Tribool via_direct = qi.query_positive(expr).value();
 
         EXPECT_TRIBOOL(via_convenience, via_direct,
                        "is_positive(" + label + ") matches QueryInterface");
@@ -240,8 +240,8 @@ void test_is_negative_equivalence() {
     QueryInterface qi(ctx);
 
     for (const auto& [expr, label] : exprs) {
-        Tribool via_convenience = ctx.is_negative(expr);
-        Tribool via_direct = qi.query_negative(expr);
+        Tribool via_convenience = ctx.is_negative(expr).value();
+        Tribool via_direct = qi.query_negative(expr).value();
 
         EXPECT_TRIBOOL(via_convenience, via_direct,
                        "is_negative(" + label + ") matches QueryInterface");
@@ -266,8 +266,8 @@ void test_is_real_equivalence() {
     QueryInterface qi(ctx);
 
     for (const auto& [expr, label] : exprs) {
-        Tribool via_convenience = ctx.is_real(expr);
-        Tribool via_direct = qi.query_real(expr);
+        Tribool via_convenience = ctx.is_real(expr).value();
+        Tribool via_direct = qi.query_real(expr).value();
 
         EXPECT_TRIBOOL(via_convenience, via_direct,
                        "is_real(" + label + ") matches QueryInterface");
@@ -291,8 +291,8 @@ void test_is_integer_equivalence() {
     QueryInterface qi(ctx);
 
     for (const auto& [expr, label] : exprs) {
-        Tribool via_convenience = ctx.is_integer(expr);
-        Tribool via_direct = qi.query_integer(expr);
+        Tribool via_convenience = ctx.is_integer(expr).value();
+        Tribool via_direct = qi.query_integer(expr).value();
 
         EXPECT_TRIBOOL(via_convenience, via_direct,
                        "is_integer(" + label + ") matches QueryInterface");
@@ -319,8 +319,8 @@ void test_is_nonnegative_equivalence() {
     QueryInterface qi(ctx);
 
     for (const auto& [expr, label] : exprs) {
-        Tribool via_convenience = ctx.is_nonnegative(expr);
-        Tribool via_direct = qi.query_nonnegative(expr);
+        Tribool via_convenience = ctx.is_nonnegative(expr).value();
+        Tribool via_direct = qi.query_nonnegative(expr).value();
 
         EXPECT_TRIBOOL(via_convenience, via_direct,
                        "is_nonnegative(" + label + ") matches QueryInterface");
@@ -347,8 +347,8 @@ void test_is_nonzero_equivalence() {
     QueryInterface qi(ctx);
 
     for (const auto& [expr, label] : exprs) {
-        Tribool via_convenience = ctx.is_nonzero(expr);
-        Tribool via_direct = qi.query_nonzero(expr);
+        Tribool via_convenience = ctx.is_nonzero(expr).value();
+        Tribool via_direct = qi.query_nonzero(expr).value();
 
         EXPECT_TRIBOOL(via_convenience, via_direct,
                        "is_nonzero(" + label + ") matches QueryInterface");
@@ -396,13 +396,14 @@ void test_combined_assumptions_equivalence() {
     auto x_expr = make_var_expr("x");
     auto n_expr = make_var_expr("n");
 
-    EXPECT_TRIBOOL(qi_a.query_positive(x_expr), qi_b.query_positive(x_expr),
+    EXPECT_TRIBOOL(qi_a.query_positive(x_expr).value(), qi_b.query_positive(x_expr).value(),
                    "Combined: query_positive(x) matches");
-    EXPECT_TRIBOOL(qi_a.query_real(x_expr), qi_b.query_real(x_expr),
+    EXPECT_TRIBOOL(qi_a.query_real(x_expr).value(), qi_b.query_real(x_expr).value(),
                    "Combined: query_real(x) matches");
-    EXPECT_TRIBOOL(qi_a.query_integer(n_expr), qi_b.query_integer(n_expr),
+    EXPECT_TRIBOOL(qi_a.query_integer(n_expr).value(), qi_b.query_integer(n_expr).value(),
                    "Combined: query_integer(n) matches");
-    EXPECT_TRIBOOL(qi_a.query_nonnegative(n_expr), qi_b.query_nonnegative(n_expr),
+    EXPECT_TRIBOOL(qi_a.query_nonnegative(n_expr).value(),
+                   qi_b.query_nonnegative(n_expr).value(),
                    "Combined: query_nonnegative(n) matches");
 }
 
@@ -440,34 +441,24 @@ void test_scoped_convenience_equivalence() {
 
 
 void test_assume_domain_empty_name_throws() {
-    TEST_CASE("assume_domain with empty name throws std::invalid_argument");
+    TEST_CASE("assume_domain with empty name returns InvalidArgument");
 
     AssumptionContext ctx;
-    bool threw = false;
-    try {
-        ctx.assume_domain("", Domain::Real);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "assume_domain(\"\", Domain::Real) should throw std::invalid_argument");
+    auto failure_446 = ctx.assume_domain("", Domain::Real);
+    EXPECT_TRUE(!failure_446.has_value(), "assume_domain(\"\", Domain::Real) should throw std::invalid_argument");
 }
 
 void test_assume_sign_empty_name_throws() {
-    TEST_CASE("assume_sign with empty name throws std::invalid_argument");
+    TEST_CASE("assume_sign with empty name returns InvalidArgument");
 
     AssumptionContext ctx;
-    bool threw = false;
-    try {
-        ctx.assume_sign("", Sign::Positive);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "assume_sign(\"\", Sign::Positive) should throw std::invalid_argument");
+    auto failure_459 = ctx.assume_sign("", Sign::Positive);
+    EXPECT_TRUE(!failure_459.has_value(), "assume_sign(\"\", Sign::Positive) should throw std::invalid_argument");
 }
 
 
 void test_assume_non_relational_expr_throws() {
-    TEST_CASE("assume with AddNode root throws std::invalid_argument");
+    TEST_CASE("assume with AddNode root returns InvalidArgument");
 
     AssumptionContext ctx;
     // Create an expression with AddNode root (x + y)
@@ -476,13 +467,8 @@ void test_assume_non_relational_expr_throws() {
     auto add = lamina::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x, y});
     auto add_expr = lamina::detail::expression_from_node(add);
-    bool threw = false;
-    try {
-        ctx.assume(add_expr);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "assume(expr_with_AddNode_root) should throw std::invalid_argument");
+    auto failure_479 = ctx.assume(add_expr);
+    EXPECT_TRUE(!failure_479.has_value(), "assume(expr_with_AddNode_root) should throw std::invalid_argument");
 }
 
 
@@ -491,7 +477,7 @@ void test_is_positive_undeclared_returns_unknown() {
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_var");
-    Tribool result = ctx.is_positive(var_expr);
+    Tribool result = ctx.is_positive(var_expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
                 "is_positive(undeclared_var) should return Tribool::Unknown");
 }
@@ -501,7 +487,7 @@ void test_is_negative_undeclared_returns_unknown() {
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_var");
-    Tribool result = ctx.is_negative(var_expr);
+    Tribool result = ctx.is_negative(var_expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
                 "is_negative(undeclared_var) should return Tribool::Unknown");
 }
@@ -511,7 +497,7 @@ void test_is_nonnegative_undeclared_returns_unknown() {
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_z");
-    Tribool result = ctx.is_nonnegative(var_expr);
+    Tribool result = ctx.is_nonnegative(var_expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
                 "is_nonnegative(undeclared_z) should return Tribool::Unknown");
 }
@@ -521,7 +507,7 @@ void test_is_real_undeclared_returns_unknown() {
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_w");
-    Tribool result = ctx.is_real(var_expr);
+    Tribool result = ctx.is_real(var_expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
                 "is_real(undeclared_w) should return Tribool::Unknown");
 }
@@ -531,7 +517,7 @@ void test_is_integer_undeclared_returns_unknown() {
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_alpha");
-    Tribool result = ctx.is_integer(var_expr);
+    Tribool result = ctx.is_integer(var_expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
                 "is_integer(undeclared_alpha) should return Tribool::Unknown");
 }
@@ -541,7 +527,7 @@ void test_is_nonzero_undeclared_returns_unknown() {
 
     AssumptionContext ctx;
     SymbolicExpr var_expr = make_var_expr("undeclared_beta");
-    Tribool result = ctx.is_nonzero(var_expr);
+    Tribool result = ctx.is_nonzero(var_expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
                 "is_nonzero(undeclared_beta) should return Tribool::Unknown");
 }

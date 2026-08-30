@@ -53,8 +53,8 @@ int main() {
     ComputationContext distinct_context;
     auto distinct_empty = interval_is_empty_checked(
         distinct_extensions, distinct_context);
-    EXPECT_TRUE(!distinct_empty && distinct_empty.error().code == CasErrc::Inconclusive,
-                "comparison across distinct quadratic extensions remains explicit");
+    EXPECT_TRUE(distinct_empty && !distinct_empty.value(),
+                "sqrt(2) is certified smaller than sqrt(3)");
 
     Interval exact_numeric_expression{
         Endpoint::closed(SymbolicExpr::add(

@@ -248,7 +248,7 @@ void test_abs_nonnegative_not_positive() {
                 "abs(x) with NonNegative → x or abs(x)");
 }
 
-void test_abs_no_assumption() {
+static void test_abs_no_assumption() {
     TEST_CASE("abs(x) unchanged when x has no sign assumption");
 
     AssumptionContext ctx;

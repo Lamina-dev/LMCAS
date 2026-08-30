@@ -144,8 +144,6 @@ void test_symbolic_polynomial_gcd() {
     EXPECT_TRUE(!unsupported &&
                     unsupported.error().code == CasErrc::UnsupportedExpression,
                 "symbolic GCD rejects non-polynomial expressions");
-    EXPECT_TRUE(SymbolicExpr::poly_gcd(sine, lhs) == nullptr,
-                "legacy symbolic GCD does not report unsupported input as one");
 
     auto approximate = SymbolicExpr::add(
         x, SymbolicExpr::number(static_cast<lmmc_real_t>(0.5)));

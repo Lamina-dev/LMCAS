@@ -18,19 +18,27 @@ static bool close(const std::shared_ptr<SymbolicExpr>& e, double expected, doubl
     return false;
 }
 
+static bool close(const ApproxReal& value, double expected,
+                  double tolerance = 1e-6) {
+    return value.status == NumericStatus::Finite &&
+           std::abs(value.value - expected) < tolerance;
+}
+
 int main() {
     auto x = SymbolicExpr::variable("x");
 
     // ∫₀¹ x dx = 1/2 (Simpson exact for linear)
     {
-        auto r = quadrature_simpson(x, "x", num(0), num(1), 10);
+        auto r = quadrature_simpson_numeric(
+            x, "x", num(0), num(1), 10).value();
         EXPECT_TRUE(close(r, 0.5), "Simpson ∫₀¹ x dx = 0.5");
     }
 
     // ∫₀¹ x^2 dx = 1/3 (Simpson exact for quadratic)
     {
         auto f = SymbolicExpr::multiply(x, x);
-        auto r = quadrature_simpson(f, "x", num(0), num(1), 10);
+        auto r = quadrature_simpson_numeric(
+            f, "x", num(0), num(1), 10).value();
         EXPECT_TRUE(close(r, 1.0/3.0), "Simpson ∫₀¹ x² dx = 1/3");
     }
 
@@ -48,7 +56,8 @@ int main() {
     // ∫₀¹ x^3 dx = 1/4 via Gauss-Legendre (n=2 exact up to degree 3)
     {
         auto f = SymbolicExpr::power(x, num(3));
-        auto r = quadrature_gaussian(f, "x", num(0), num(1), 2);
+        auto r = quadrature_gaussian_numeric(
+            f, "x", num(0), num(1), 2).value();
         EXPECT_TRUE(close(r, 0.25, 1e-6), "Gauss ∫₀¹ x³ dx = 1/4");
     }
 
@@ -63,7 +72,8 @@ int main() {
     // adaptive_simpson on ∫₀¹ x^2 dx = 1/3
     {
         auto f = SymbolicExpr::multiply(x, x);
-        auto r = adaptive_simpson(f, "x", num(0), num(1), 1e-10);
+        auto r = adaptive_simpson_numeric(
+            f, "x", num(0), num(1), 1e-10).value();
         EXPECT_TRUE(close(r, 1.0/3.0, 1e-8), "adaptive Simpson ∫₀¹ x² dx = 1/3");
     }
 
@@ -193,29 +203,6 @@ int main() {
                     "checked Gaussian observes cancellation");
     }
 
-    // legacy wrappers now unwrap checked failures instead of fabricating values.
-    {
-        auto invalid_simpson = quadrature_simpson(x, "x", num(0), num(1), 0);
-        EXPECT_TRUE(!invalid_simpson,
-                    "legacy Simpson wrapper returns nullptr for invalid sample counts");
-
-        auto invalid_gauss = quadrature_gaussian(x, "x", num(0), num(1), 0);
-        EXPECT_TRUE(!invalid_gauss,
-                    "legacy Gaussian wrapper returns nullptr for invalid sample counts");
-
-        auto invalid_default = numerical_integrate(x, "x", num(0), num(1), 0);
-        EXPECT_TRUE(!invalid_default,
-                    "legacy default integration wrapper returns nullptr for invalid sample counts");
-
-        auto odd_simpson = quadrature_simpson(x, "x", num(0), num(1), 9);
-        EXPECT_TRUE(!odd_simpson,
-                    "legacy Simpson wrapper returns nullptr for odd subinterval counts");
-
-        auto y = SymbolicExpr::variable("y");
-        auto unbound = quadrature_simpson(SymbolicExpr::add(x, y), "x", num(0), num(1), 10);
-        EXPECT_TRUE(!unbound,
-                    "legacy Simpson wrapper returns nullptr for unbound variables");
-    }
 
     // checked fixed quadrature consumes the shared step budget.
     {
@@ -231,14 +218,16 @@ int main() {
     {
         auto f = SymbolicExpr::sin(x);
         auto pi = SymbolicExpr::number(LMMC_CONST_PI);
-        auto r = adaptive_simpson(f, "x", num(0), pi, 1e-10);
+        auto r = adaptive_simpson_numeric(
+            f, "x", num(0), pi, 1e-10).value();
         EXPECT_TRUE(close(r, 2.0, 1e-6), "adaptive Simpson ∫₀^π sin x dx = 2");
     }
 
     // numerical_integrate wrapper
     {
         auto f = SymbolicExpr::multiply(x, x);
-        auto r = numerical_integrate(f, "x", num(0), num(1), 100);
+        auto r = numerical_integrate_numeric(
+            f, "x", num(0), num(1), 100).value();
         EXPECT_TRUE(close(r, 1.0/3.0, 1e-6), "numerical_integrate ∫₀¹ x² dx = 1/3");
     }
 

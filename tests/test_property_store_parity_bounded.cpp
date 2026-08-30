@@ -105,33 +105,23 @@ void test_parity_idempotent_odd() {
 }
 
 void test_parity_contradiction_even_then_odd() {
-    TEST_CASE("Contradiction: Even then Odd throws");
+    TEST_CASE("Contradiction: Even then Odd returns failure");
     PropertyStore store;
     store.declare_parity("x", Parity::Even);
 
-    bool threw = false;
-    try {
-        store.declare_parity("x", Parity::Odd);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Odd after Even throws std::invalid_argument");
+    auto failure_110 = store.declare_parity("x", Parity::Odd);
+    EXPECT_TRUE(!failure_110.has_value(), "Declaring Odd after Even returns InvalidArgument");
     EXPECT_TRUE(store.get_parity("x") == Parity::Even,
                 "x parity remains Even after failed Odd declaration");
 }
 
 void test_parity_contradiction_odd_then_even() {
-    TEST_CASE("Contradiction: Odd then Even throws");
+    TEST_CASE("Contradiction: Odd then Even returns failure");
     PropertyStore store;
     store.declare_parity("x", Parity::Odd);
 
-    bool threw = false;
-    try {
-        store.declare_parity("x", Parity::Even);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Even after Odd throws std::invalid_argument");
+    auto failure_126 = store.declare_parity("x", Parity::Even);
+    EXPECT_TRUE(!failure_126.has_value(), "Declaring Even after Odd returns InvalidArgument");
     EXPECT_TRUE(store.get_parity("x") == Parity::Odd,
                 "x parity remains Odd after failed Even declaration");
 }
@@ -226,33 +216,23 @@ void test_boundedness_idempotent_unbounded() {
 }
 
 void test_boundedness_contradiction_bounded_then_unbounded() {
-    TEST_CASE("Contradiction: Bounded then Unbounded throws");
+    TEST_CASE("Contradiction: Bounded then Unbounded returns failure");
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Bounded);
 
-    bool threw = false;
-    try {
-        store.declare_bounded("x", Boundedness::Unbounded);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Unbounded after Bounded throws std::invalid_argument");
+    auto failure_231 = store.declare_bounded("x", Boundedness::Unbounded);
+    EXPECT_TRUE(!failure_231.has_value(), "Declaring Unbounded after Bounded returns InvalidArgument");
     EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
                 "x boundedness remains Bounded after failed Unbounded declaration");
 }
 
 void test_boundedness_contradiction_unbounded_then_bounded() {
-    TEST_CASE("Contradiction: Unbounded then Bounded throws");
+    TEST_CASE("Contradiction: Unbounded then Bounded returns failure");
     PropertyStore store;
     store.declare_bounded("x", Boundedness::Unbounded);
 
-    bool threw = false;
-    try {
-        store.declare_bounded("x", Boundedness::Bounded);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(threw, "Declaring Bounded after Unbounded throws std::invalid_argument");
+    auto failure_247 = store.declare_bounded("x", Boundedness::Bounded);
+    EXPECT_TRUE(!failure_247.has_value(), "Declaring Bounded after Unbounded returns InvalidArgument");
     EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Unbounded,
                 "x boundedness remains Unbounded after failed Bounded declaration");
 }
@@ -296,21 +276,15 @@ void test_interval_queries_preserve_exact_large_endpoints() {
     Interval first_point = Interval::point(SymbolicExpr::number(two_to_53));
     Interval second_point = Interval::point(SymbolicExpr::number(next_integer));
     store.declare_differentiable("f", first_point);
-    bool threw = false;
-    try {
-        store.declare_continuous("f", second_point);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    EXPECT_TRUE(!threw,
-                "adjacent large integer points do not falsely overlap after exact comparison");
+    auto success_278 = store.declare_continuous("f", second_point);
+    EXPECT_TRUE(success_278.has_value(), "adjacent large integer points do not falsely overlap after exact comparison");
 
     Interval closed_span{
         Endpoint::closed(SymbolicExpr::number(two_to_53)),
         Endpoint::closed(SymbolicExpr::number(next_integer))
     };
     store.declare_continuous("g", closed_span);
-    EXPECT_TRUE(store.is_continuous("g", second_point),
+    EXPECT_TRUE(store.is_continuous("g", second_point).value(),
                 "closed span covers its exact large upper endpoint");
 
     Interval open_upper_span{
@@ -318,7 +292,7 @@ void test_interval_queries_preserve_exact_large_endpoints() {
         Endpoint::open(SymbolicExpr::number(next_integer))
     };
     store.declare_continuous("h", open_upper_span);
-    EXPECT_TRUE(!store.is_continuous("h", second_point),
+    EXPECT_TRUE(!store.is_continuous("h", second_point).value(),
                 "open upper endpoint does not cover the exact large boundary point");
 }
 

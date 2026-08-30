@@ -5,6 +5,9 @@
 #include "internal/expression_analysis.hpp"
 #include "../include/solve_polynomial.hpp"
 #include "../include/solve_strategies.hpp"
+#include "../include/newton_raphson.hpp"
+#include "../include/root_of_utils.hpp"
+#include "internal/exact_algebraic.hpp"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -223,6 +226,107 @@ Result<IntervalUnion> solve_exact_affine_inequality(
     return Result<IntervalUnion>::success(IntervalUnion::from_single(interval));
 }
 
+
+struct ExactInequalityRoot {
+    std::shared_ptr<SymbolicExpr> expression;
+    lamina::detail::ExactRealAlgebraic algebraic;
+    int multiplicity = 1;
+};
+
+std::shared_ptr<SymbolicExpr> rational_polynomial_expression(
+    const Polynomial<Rational>& polynomial) {
+    auto variable = SymbolicExpr::variable(polynomial.variable_name);
+    std::shared_ptr<SymbolicExpr> sum = SymbolicExpr::number(0);
+    for (int degree = 0; degree <= polynomial.degree(); ++degree) {
+        if (polynomial.coeffs[degree] == Rational(0)) continue;
+        auto term = SymbolicExpr::number(polynomial.coeffs[degree]);
+        if (degree > 0) {
+            auto power = degree == 1
+                ? variable
+                : SymbolicExpr::power(variable, SymbolicExpr::number(degree));
+            term = SymbolicExpr::multiply(term, power);
+        }
+        sum = SymbolicExpr::add(sum, term);
+    }
+    return sum->simplify();
+}
+
+Result<IntervalUnion> solve_exact_polynomial_inequality(
+    const Polynomial<Rational>& polynomial,
+    InequalityType type,
+    ComputationContext& context) {
+    auto factors = square_free_factorization(polynomial);
+    std::vector<ExactInequalityRoot> roots;
+    try {
+        for (const auto& [factor, multiplicity] : factors) {
+            if (factor.degree() < 1) continue;
+            auto isolated = isolate_real_roots_checked(factor, context);
+            if (!isolated) {
+                return Result<IntervalUnion>::failure(isolated.error());
+            }
+            const auto& intervals = isolated.value();
+            auto factor_expression = rational_polynomial_expression(factor);
+            for (std::size_t index = 0; index < intervals.size(); ++index) {
+                auto algebraic = lamina::detail::make_exact_real_algebraic(
+                    factor, index, static_cast<std::size_t>(multiplicity), context);
+                if (!algebraic) {
+                    return Result<IntervalUnion>::failure(algebraic.error());
+                }
+                roots.push_back(ExactInequalityRoot{
+                    SymbolicExpr::root_of(
+                        factor_expression, polynomial.variable_name,
+                        static_cast<int>(index)),
+                    std::move(algebraic.value()),
+                    multiplicity});
+            }
+        }
+        std::sort(roots.begin(), roots.end(),
+            [](const ExactInequalityRoot& lhs, const ExactInequalityRoot& rhs) {
+                return lhs.algebraic.lower < rhs.algebraic.lower;
+            });
+    } catch (const std::bad_alloc&) {
+        return Result<IntervalUnion>::failure(
+            CasErrc::ResourceLimit,
+            "polynomial inequality root allocation failed",
+            kCheckedInequalityOperation);
+    } catch (const std::exception& error) {
+        return Result<IntervalUnion>::failure(
+            CasErrc::InternalInvariant, error.what(),
+            kCheckedInequalityOperation);
+    }
+
+    const bool wants_positive =
+        type == InequalityType::GreaterThan ||
+        type == InequalityType::GreaterEqual;
+    const bool strict =
+        type == InequalityType::GreaterThan ||
+        type == InequalityType::LessThan;
+    auto sign_satisfies = [&](int sign_value) {
+        return wants_positive ? sign_value > 0 : sign_value < 0;
+    };
+
+    int sign_value = rational_is_negative(polynomial.lead_coeff()) ? -1 : 1;
+    if ((polynomial.degree() & 1) != 0) sign_value = -sign_value;
+
+    std::vector<Interval> intervals;
+    Endpoint lower = Endpoint::neg_inf();
+    for (const auto& root : roots) {
+        if (sign_satisfies(sign_value)) {
+            intervals.push_back(Interval{
+                lower, Endpoint::open(root.expression)});
+        }
+        if (!strict) {
+            intervals.push_back(Interval::point(root.expression));
+        }
+        lower = Endpoint::open(root.expression);
+        if ((root.multiplicity & 1) != 0) sign_value = -sign_value;
+    }
+    if (sign_satisfies(sign_value)) {
+        intervals.push_back(Interval{lower, Endpoint::pos_inf()});
+    }
+    return IntervalUnion::from_intervals_checked(
+        std::move(intervals), context);
+}
 } // namespace
 
 Result<IntervalUnion> InequalitySolver::solve_inequality_checked(
@@ -255,7 +359,12 @@ Result<IntervalUnion> InequalitySolver::solve_inequality_checked(
             return solve_exact_quadratic_inequality(
                 *recognized.value(), type, context);
         }
-        return solve_exact_affine_inequality(*recognized.value(), type, context);
+        if (recognized.value()->degree() <= 1) {
+            return solve_exact_affine_inequality(
+                *recognized.value(), type, context);
+        }
+        return solve_exact_polynomial_inequality(
+            *recognized.value(), type, context);
     } catch (const std::bad_alloc&) {
         return Result<IntervalUnion>::failure(
             CasErrc::ResourceLimit, "inequality allocation failed",

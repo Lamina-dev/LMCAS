@@ -81,7 +81,7 @@ int main() {
         // f(x) = 1/x: vertical asymptote at x=0, horizontal at y=0
         auto x = var("x");
         auto f = SE::divide(num(1), x);
-        auto result = lamina::asymptotes(f, "x");
+        auto result = lamina::asymptotes_checked(f, "x").value();
 
         // Vertical asymptote at x=0
         EXPECT_TRUE(!result.vertical.empty(),
@@ -122,7 +122,7 @@ int main() {
         auto numerator = SE::add(SE::multiply(num(2), x), num(1));
         auto denominator = SE::add(x, num(-1));
         auto f = SE::divide(numerator, denominator);
-        auto result = lamina::asymptotes(f, "x");
+        auto result = lamina::asymptotes_checked(f, "x").value();
 
         // Vertical asymptote at x=1
         EXPECT_TRUE(!result.vertical.empty(),
@@ -159,7 +159,7 @@ int main() {
         auto numerator = SE::add(SE::power(x, num(2)), num(1)); // x^2 + 1
         auto denominator = SE::add(x, num(-1));                   // x - 1
         auto f = SE::divide(numerator, denominator);
-        auto result = lamina::asymptotes(f, "x");
+        auto result = lamina::asymptotes_checked(f, "x").value();
 
         // Vertical asymptote at x=1
         EXPECT_TRUE(!result.vertical.empty(),
@@ -198,13 +198,6 @@ int main() {
                     "(x^2+1)/(x-1) has no horizontal asymptotes");
     }
 
-    TEST_CASE("asymptotes: null input returns empty result");
-    {
-        auto result = lamina::asymptotes(nullptr, "x");
-        EXPECT_TRUE(result.vertical.empty(), "null: no vertical");
-        EXPECT_TRUE(result.horizontal.empty(), "null: no horizontal");
-        EXPECT_TRUE(result.oblique.empty(), "null: no oblique");
-    }
 
     TEST_CASE("asymptotes_checked: invalid arguments are explicit errors");
     {
@@ -218,10 +211,6 @@ int main() {
                         empty_var.error().code == lamina::CasErrc::InvalidArgument,
                     "checked asymptotes rejects empty variable");
 
-        auto legacy = lamina::asymptotes(nullptr, "x");
-        EXPECT_TRUE(legacy.vertical.empty() && legacy.horizontal.empty() &&
-                        legacy.oblique.empty(),
-                    "legacy asymptotes unwraps invalid input to empty result");
     }
 
     TEST_CASE("asymptotes_checked: denominator solving uses checked dispatcher");
@@ -238,10 +227,6 @@ int main() {
                         limited.error().code == lamina::CasErrc::ResourceLimit,
                     "checked asymptotes propagates denominator solve budget failure");
 
-        auto legacy = lamina::asymptotes(nullptr, "x");
-        EXPECT_TRUE(legacy.vertical.empty() && legacy.horizontal.empty() &&
-                        legacy.oblique.empty(),
-                    "legacy asymptotes keeps empty-result compatibility on checked failure");
     }
 
     TEST_CASE("log_differentiate: x^2");
@@ -381,7 +366,7 @@ int main() {
         // f(x) = 2x + 1, f^{-1}(5) = 2
         auto x = var("x");
         auto f = SE::add(SE::multiply(num(2), x), num(1));
-        auto result = lamina::inverse_function(f, "x", num(5));
+        auto result = lamina::inverse_function_checked(f, "x", num(5)).value();
         EXPECT_TRUE(!result.empty(), "inverse_function(2x+1, 5) has solutions");
         if (!result.empty()) {
             auto sol = result[0]->simplify();
@@ -398,7 +383,7 @@ int main() {
         // f(x) = x^2, f^{-1}(4) = ±2
         auto x = var("x");
         auto f = SE::power(x, num(2));
-        auto result = lamina::inverse_function(f, "x", num(4));
+        auto result = lamina::inverse_function_checked(f, "x", num(4)).value();
         EXPECT_TRUE(result.size() >= 1, "inverse_function(x^2, 4) has solutions");
         std::cout << "  Solutions for x^2 = 4:";
         for (auto& s : result) {
@@ -430,13 +415,10 @@ int main() {
                         null_target.error().code == lamina::CasErrc::InvalidArgument,
                     "checked inverse function rejects null target");
 
-        auto unsupported = lamina::inverse_function_checked(SE::sin(x), "x", num(1));
-        EXPECT_TRUE(!unsupported &&
-                        unsupported.error().code == lamina::CasErrc::Inconclusive,
-                    "checked inverse function reports Inconclusive for unsupported equations");
-        auto legacy_unsupported = lamina::inverse_function(SE::sin(x), "x", num(1));
-        EXPECT_TRUE(legacy_unsupported.empty(),
-                    "legacy inverse function unwraps checked Inconclusive to an empty vector");
+        auto trigonometric = lamina::inverse_function_checked(
+            SE::sin(x), "x", num(1));
+        EXPECT_TRUE(trigonometric && !trigonometric.value().empty(),
+                    "checked inverse function preserves supported trigonometric solutions");
 
         lamina::ResourceLimits limits;
         limits.max_steps = 1;
@@ -454,7 +436,7 @@ int main() {
         // (f^{-1})'(5) = 1/f'(2) = 1/2
         auto x = var("x");
         auto f = SE::add(SE::multiply(num(2), x), num(1));
-        auto result = lamina::inverse_derivative(f, "x", num(5));
+        auto result = lamina::inverse_derivative_checked(f, "x", num(5)).value();
         EXPECT_TRUE(result != nullptr, "inverse_derivative(2x+1, 5) non-null");
         if (result) {
             std::cout << "  (f^{-1})'(5) = " << result->to_string() << std::endl;
@@ -471,9 +453,9 @@ int main() {
         // legacy wrapper must not silently pick one branch.
         auto x = var("x");
         auto f = SE::power(x, num(2));
-        auto result = lamina::inverse_derivative(f, "x", num(4));
-        EXPECT_TRUE(result == nullptr,
-                    "legacy inverse_derivative unwraps multi-branch checked failure to null");
+        auto result = lamina::inverse_derivative_checked(f, "x", num(4));
+        EXPECT_TRUE(!result && result.error().code == lamina::CasErrc::Inconclusive,
+                    "checked inverse derivative rejects multiple branches");
     }
 
     TEST_CASE("inverse_derivative: f(x) = x^3 at point=8");
@@ -482,7 +464,7 @@ int main() {
         // (f^{-1})'(8) = 1/f'(2) = 1/12
         auto x = var("x");
         auto f = SE::power(x, num(3));
-        auto result = lamina::inverse_derivative(f, "x", num(8));
+        auto result = lamina::inverse_derivative_checked(f, "x", num(8)).value();
         EXPECT_TRUE(result != nullptr, "inverse_derivative(x^3, 8) non-null");
         if (result) {
             std::cout << "  (f^{-1})'(8) = " << result->to_string() << std::endl;
@@ -533,10 +515,6 @@ int main() {
         EXPECT_TRUE(!zero_derivative &&
                         zero_derivative.error().code == lamina::CasErrc::DomainError,
                     "checked inverse derivative reports DomainError when f' is zero");
-        auto legacy_zero_derivative = lamina::inverse_derivative(
-            SE::power(x, num(3)), "x", num(0));
-        EXPECT_TRUE(legacy_zero_derivative == nullptr,
-                    "legacy inverse derivative unwraps checked DomainError to null");
 
         auto null_input = lamina::inverse_derivative_checked(nullptr, "x", num(1));
         EXPECT_TRUE(!null_input &&
@@ -572,17 +550,6 @@ int main() {
         EXPECT_TRUE(result.empty(), "total_differential with empty vars returns empty");
     }
 
-    TEST_CASE("inverse_function: null inputs");
-    {
-        auto result = lamina::inverse_function(nullptr, "x", num(1));
-        EXPECT_TRUE(result.empty(), "inverse_function(null) returns empty");
-    }
-
-    TEST_CASE("inverse_derivative: null inputs");
-    {
-        auto result = lamina::inverse_derivative(nullptr, "x", num(1));
-        EXPECT_TRUE(result == nullptr, "inverse_derivative(null) returns null");
-    }
 
     TEST_CASE("curvature_checked: invalid arguments are explicit errors");
     {
@@ -596,9 +563,6 @@ int main() {
                         empty_var.error().code == lamina::CasErrc::InvalidArgument,
                     "checked curvature rejects empty variable");
 
-        auto legacy = lamina::curvature(nullptr, "x");
-        EXPECT_TRUE(legacy == nullptr,
-                    "legacy curvature unwraps invalid input to nullptr");
     }
 
     TEST_CASE("curvature_parametric_checked: zero velocity is a domain error");
@@ -608,9 +572,6 @@ int main() {
                         checked.error().code == lamina::CasErrc::DomainError,
                     "checked parametric curvature rejects zero velocity");
 
-        auto legacy = lamina::curvature_parametric(num(1), num(2), "t");
-        EXPECT_TRUE(legacy == nullptr,
-                    "legacy parametric curvature unwraps zero velocity to nullptr");
     }
 
     TEST_CASE("surface_area_revolution_x: huge exact numeric fallback fails safely");
@@ -618,10 +579,10 @@ int main() {
         auto x = var("x");
         auto unsupported = SE::exp(SE::power(x, num(2)));
         const BigInt huge("1" + std::string(400, '0'));
-        auto result = lamina::surface_area_revolution_x(
+        auto result = lamina::surface_area_revolution_x_checked(
             unsupported, "x", bigint_num(BigInt(0)), bigint_num(huge));
-        EXPECT_TRUE(result == nullptr,
-                    "huge exact bounds must not fabricate a non-finite surface area");
+        EXPECT_TRUE(!result,
+                    "huge exact bounds do not fabricate a surface area");
     }
 
     TEST_CASE("surface_area_revolution_checked: exact results and explicit failures");
@@ -669,9 +630,6 @@ int main() {
         auto one = num(1);
         auto unsupported = SE::exp(SE::power(x, num(2)));
 
-        auto legacy = lamina::surface_area_revolution_x(unsupported, "x", zero, one);
-        EXPECT_TRUE(legacy != nullptr,
-                    "legacy surface area may use numeric fallback for unsupported exact integrals");
 
         auto checked = lamina::surface_area_revolution_x_checked(
             unsupported, "x", zero, one);
@@ -692,9 +650,6 @@ int main() {
                         empty_var.error().code == lamina::CasErrc::InvalidArgument,
                     "checked inflection points rejects empty variable");
 
-        auto legacy = lamina::inflection_points(nullptr, "x");
-        EXPECT_TRUE(legacy.empty(),
-                    "legacy inflection points unwrap invalid input to empty result");
     }
 
     TEST_CASE("inflection_points_checked: distinguishes empty, finite, and inconclusive");
@@ -709,10 +664,9 @@ int main() {
         EXPECT_TRUE(cubic && cubic.value().size() == 1,
                     "checked inflection points reports finite exact candidates for x^3");
 
-        auto unsupported = lamina::inflection_points_checked(SE::exp(x), "x");
-        EXPECT_TRUE(!unsupported &&
-                        unsupported.error().code == lamina::CasErrc::Inconclusive,
-                    "checked inflection points reports Inconclusive for unsupported equations");
+        auto exponential = lamina::inflection_points_checked(SE::exp(x), "x");
+        EXPECT_TRUE(exponential && exponential.value().empty(),
+                    "checked inflection points proves exp(x) has no real inflection point");
 
         lamina::ResourceLimits limits;
         limits.max_steps = 1;

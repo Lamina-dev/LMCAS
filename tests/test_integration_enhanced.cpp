@@ -14,7 +14,10 @@ int main() {
     auto integrand = SymbolicExpr::power(x, SymbolicExpr::number(2));
     lamina::Integrator integrator;
     auto antiderivative = integrator.integrate(*integrand, "x");
-    auto derivative = antiderivative.differentiate("x");
+    EXPECT_TRUE(antiderivative.has_value(), "integration returns an antiderivative");
+    auto derivative = antiderivative
+        ? antiderivative.value().differentiate("x")
+        : nullptr;
     EXPECT_TRUE(derivative != nullptr, "antiderivative is differentiable");
     if (derivative) {
         auto delta = test_normalized_delta(derivative, integrand);

@@ -137,7 +137,7 @@ bool sf_match_exp_neg_quad(const std::shared_ptr<const SymbolicNode>& node,
 
 } // anonymous namespace
 
-std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate(
+std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext&, int depth) {
     (void)ctx;

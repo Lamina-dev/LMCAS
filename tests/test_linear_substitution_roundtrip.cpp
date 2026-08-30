@@ -29,8 +29,8 @@ std::shared_ptr<SymbolicExpr> num_int(long long n) {
 
 bool has_integral_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
+    if (std::dynamic_pointer_cast<const IntegralNode>(node)) return true;
     if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (fn->type() == FunctionNode::FuncType::Calculus_Integral) return true;
         for (auto& a : fn->arguments())
             if (has_integral_node(a)) return true;
     } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -150,14 +150,13 @@ ComboReport verify_combo(const Pattern& pat, const ABPair& ab) {
 
     // Integrate.
     Integrator integ;
-    std::shared_ptr<SymbolicExpr> result;
-    try {
-        result = lamina::detail::make_expression_ptr(integ.integrate(*integrand_ptr, kVarName));
-    } catch (const std::exception& e) {
+    auto integrated = integ.integrate(*integrand_ptr, kVarName);
+    if (!integrated) {
         rep.failed = true;
-        rep.detail = std::string("exception during integration: ") + e.what();
+        rep.detail = std::string("integration failed: ") + integrated.error().message;
         return rep;
     }
+    auto result = lamina::detail::make_expression_ptr(integrated.value());
 
     // Combinations that left an unevaluated integral are not evidence for
     // the round-trip property; they fall outside its conditional scope.

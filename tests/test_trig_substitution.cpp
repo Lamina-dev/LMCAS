@@ -15,8 +15,12 @@ static void check_roundtrip(const std::string& name, const std::shared_ptr<Symbo
     std::cout << "---- " << name << " ----\n";
     lamina::Integrator integ;
     auto F = integ.integrate(*f, var);
-    std::cout << "  F = " << F.to_string() << "\n";
-    auto dF = F.differentiate(var);
+    if (!F) {
+        EXPECT_TRUE(false, name + ": integration failed: " + F.error().message);
+        return;
+    }
+    std::cout << "  F = " << F.value().to_string() << "\n";
+    auto dF = F.value().differentiate(var);
     if (!dF) {
         EXPECT_TRUE(false, name + ": cannot differentiate result");
         return;
@@ -50,7 +54,11 @@ static void check_evaluated(const std::string& name, const std::shared_ptr<Symbo
                             const std::string& var) {
     lamina::Integrator integ;
     auto F = integ.integrate(*f, var);
-    std::string s = F.to_string();
+    if (!F) {
+        EXPECT_TRUE(false, name + ": integration failed: " + F.error().message);
+        return;
+    }
+    std::string s = F.value().to_string();
     bool uneval = s.find("Integral") != std::string::npos ||
                   s.find("integral") != std::string::npos ||
                   s.find("∫") != std::string::npos;

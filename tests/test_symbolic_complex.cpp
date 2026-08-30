@@ -16,7 +16,7 @@ void test_complex_arithmetic() {
 
     // Add pair 1: (1+2i) + (3+4i) = (4+6i)
     {
-        auto result = lamina::complex_add(a1, b1);
+        auto result = lamina::complex_add_checked(a1, b1).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         // Symbolic add produces "1 + 3" (unsimplified) or "4" (simplified)
@@ -26,7 +26,7 @@ void test_complex_arithmetic() {
 
     // Add pair 2: (2+0i) + (0+3i) = (2+3i)
     {
-        auto result = lamina::complex_add(a2, b2);
+        auto result = lamina::complex_add_checked(a2, b2).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         EXPECT_CONTAINS(real_s, {"2"}, "add pair2 real contains 2");
@@ -35,7 +35,7 @@ void test_complex_arithmetic() {
 
     // Sub pair 1: (1+2i) - (3+4i) = (-2-2i)
     {
-        auto result = lamina::complex_sub(a1, b1);
+        auto result = lamina::complex_sub_checked(a1, b1).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         EXPECT_CONTAINS(real_s, {"1"}, "sub pair1 real contains operands");
@@ -44,7 +44,7 @@ void test_complex_arithmetic() {
 
     // Sub pair 2: (2+0i) - (0+3i) = (2-3i)
     {
-        auto result = lamina::complex_sub(a2, b2);
+        auto result = lamina::complex_sub_checked(a2, b2).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         EXPECT_CONTAINS(real_s, {"2"}, "sub pair2 real contains 2");
@@ -53,7 +53,7 @@ void test_complex_arithmetic() {
 
     // Mul pair 1: (1+2i)*(3+4i) = (1*3 - 2*4) + (1*4 + 2*3)i = (-5+10i)
     {
-        auto result = lamina::complex_mul(a1, b1);
+        auto result = lamina::complex_mul_checked(a1, b1).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         EXPECT_TRUE(real_s != "null", "mul pair1 real is not null");
@@ -62,7 +62,7 @@ void test_complex_arithmetic() {
 
     // Mul pair 2: (2+0i)*(0+3i) = (0) + (6)i
     {
-        auto result = lamina::complex_mul(a2, b2);
+        auto result = lamina::complex_mul_checked(a2, b2).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         EXPECT_TRUE(real_s != "null", "mul pair2 real is not null");
@@ -72,7 +72,7 @@ void test_complex_arithmetic() {
 
     // Div pair 1: (1+2i)/(3+4i)
     {
-        auto result = lamina::complex_div(a1, b1);
+        auto result = lamina::complex_div_checked(a1, b1).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         EXPECT_TRUE(real_s != "null", "div pair1 real is not null");
@@ -81,7 +81,7 @@ void test_complex_arithmetic() {
 
     // Div pair 2: (2+0i)/(0+3i)
     {
-        auto result = lamina::complex_div(a2, b2);
+        auto result = lamina::complex_div_checked(a2, b2).value();
         std::string real_s = result.real ? result.real->to_string() : "null";
         std::string imag_s = result.imag ? result.imag->to_string() : "null";
         EXPECT_TRUE(real_s != "null", "div pair2 real is not null");
@@ -94,7 +94,7 @@ void test_complex_conj() {
 
     // conj(3+4i) should give (3-4i)
     auto z = lamina::make_complex(SymbolicExpr::number(3), SymbolicExpr::number(4));
-    auto conj = lamina::complex_conj(z);
+    auto conj = lamina::complex_conj_checked(z).value();
 
     std::string real_s = conj.real ? conj.real->to_string() : "null";
     std::string imag_s = conj.imag ? conj.imag->to_string() : "null";
@@ -112,7 +112,7 @@ void test_complex_abs() {
     // |3+4i| = sqrt(9+16) = sqrt(25) = 5
     {
         auto z = lamina::make_complex(SymbolicExpr::number(3), SymbolicExpr::number(4));
-        auto mod = lamina::complex_abs(z);
+        auto mod = lamina::complex_abs_checked(z).value();
         std::string s = mod ? mod->to_string() : "null";
         // The result is sqrt(3^2 + 4^2) = sqrt(25) which should simplify to 5
         // or contain structural elements like sqrt, 9, 16, or 25
@@ -131,7 +131,7 @@ void test_complex_abs() {
     TEST_CASE("Complex Modulus: |5+12i| = 13");
     {
         auto z = lamina::make_complex(SymbolicExpr::number(5), SymbolicExpr::number(12));
-        auto mod = lamina::complex_abs(z);
+        auto mod = lamina::complex_abs_checked(z).value();
         std::string s = mod ? mod->to_string() : "null";
         EXPECT_TRUE(s != "null", "abs(5+12i) is not null");
         auto val = test_numeric_eval(mod);
@@ -149,7 +149,7 @@ void test_complex_arg() {
     // arg(1+0i) = atan2(0, 1) = 0
     {
         auto z = lamina::make_complex(SymbolicExpr::number(1), SymbolicExpr::number(0));
-        auto arg = lamina::complex_arg(z);
+        auto arg = lamina::complex_arg_checked(z).value();
         std::string s = arg ? arg->to_string() : "null";
         EXPECT_TRUE(s != "null", "arg(1+0i) is not null");
         // Should be atan2(0, 1) which is 0
@@ -166,7 +166,7 @@ void test_complex_arg() {
     // arg(0+1i) = atan2(1, 0) = pi/2
     {
         auto z = lamina::make_complex(SymbolicExpr::number(0), SymbolicExpr::number(1));
-        auto arg = lamina::complex_arg(z);
+        auto arg = lamina::complex_arg_checked(z).value();
         std::string s = arg ? arg->to_string() : "null";
         EXPECT_TRUE(s != "null", "arg(0+1i) is not null");
         auto val = test_numeric_eval(arg);
@@ -185,8 +185,8 @@ void test_complex_polar_forms() {
     auto r = SymbolicExpr::number(2);
     auto theta = SymbolicExpr::number(1); // 1 radian
 
-    auto exp_form = lamina::complex_exp_form(r, theta);
-    auto trig_form = lamina::complex_trig_form(r, theta);
+    auto exp_form = lamina::complex_exp_form_checked(r, theta).value();
+    auto trig_form = lamina::complex_trig_form_checked(r, theta).value();
 
     // Both should produce r*cos(theta) for real and r*sin(theta) for imag
     std::string exp_real = exp_form.real ? exp_form.real->to_string() : "null";
@@ -210,28 +210,28 @@ void test_complex_nth_root() {
     // Test n=2: square roots of 4
     {
         auto c = SymbolicExpr::number(4.0);
-        auto roots = lamina::solve_complex_nth_root(c, 2);
+        auto roots = lamina::solve_complex_nth_root_checked(c, 2).value();
         EXPECT_TRUE(roots.size() == 2, "sqrt(4) returns exactly 2 roots");
     }
 
     // Test n=3: cube roots of 8
     {
         auto c = SymbolicExpr::number(8.0);
-        auto roots = lamina::solve_complex_nth_root(c, 3);
+        auto roots = lamina::solve_complex_nth_root_checked(c, 3).value();
         EXPECT_TRUE(roots.size() == 3, "cbrt(8) returns exactly 3 roots");
     }
 
     // Test n=4: fourth roots of 16
     {
         auto c = SymbolicExpr::number(16.0);
-        auto roots = lamina::solve_complex_nth_root(c, 4);
+        auto roots = lamina::solve_complex_nth_root_checked(c, 4).value();
         EXPECT_TRUE(roots.size() == 4, "4th root of 16 returns exactly 4 roots");
     }
 
     // Test n=5: fifth roots of 32
     {
         auto c = SymbolicExpr::number(32.0);
-        auto roots = lamina::solve_complex_nth_root(c, 5);
+        auto roots = lamina::solve_complex_nth_root_checked(c, 5).value();
         EXPECT_TRUE(roots.size() == 5, "5th root of 32 returns exactly 5 roots");
     }
 }

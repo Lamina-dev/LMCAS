@@ -19,9 +19,13 @@ bool test_cyclic_ibp() {
     std::cout << "Integration of: " << expr.to_string() << std::endl;
     Integrator integrator;
     auto result = integrator.integrate(expr, "x");
-    std::cout << "Result: " << result.to_string() << std::endl;
+    if (!result) {
+        std::cout << "[FAIL] Integration failed: " << result.error().message << std::endl;
+        return false;
+    }
+    std::cout << "Result: " << result.value().to_string() << std::endl;
 
-    auto diff = result.differentiate("x")->simplify();
+    auto diff = result.value().differentiate("x")->simplify();
     std::cout << "Derivative of result: " << diff->to_string() << std::endl;
 
     auto diff_check = test_normalized_delta(diff, lamina::detail::make_expression_ptr(expr));

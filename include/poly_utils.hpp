@@ -153,14 +153,5 @@ LAMINA_API bool contains(
     const SymbolicExpr& expression,
     const std::string& variable);
 
-/**
- * @brief Perform Gaussian elimination on an augmented symbolic matrix.
- */
-LAMINA_API void gaussian_eliminate(
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& matrix,
-    std::size_t rows,
-    std::size_t columns,
-    std::vector<std::size_t>& pivot_column_for_row,
-    int& sign);
 
 } // namespace lamina

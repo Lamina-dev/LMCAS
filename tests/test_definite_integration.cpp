@@ -7,7 +7,7 @@
 
 using namespace lamina;
 
-std::shared_ptr<SymbolicExpr> MakeSymbolicExprPtr(const SymbolicExpr& e) {
+static std::shared_ptr<SymbolicExpr> MakeSymbolicExprPtr(const SymbolicExpr& e) {
     return lamina::detail::make_expression_ptr(e);
 }
 
@@ -52,9 +52,11 @@ void test_polynomial() {
     auto upper = SymbolicExpr::number(1);
 
     auto res = integrator.integrate_def(*expr, "x", *lower, *upper);
-    std::cout << "Definite Integral result: " << res.to_string() << std::endl;
+    EXPECT_TRUE(res.has_value(), "polynomial definite integration succeeds");
+    if (!res) return;
+    std::cout << "Definite Integral result: " << res.value().to_string() << std::endl;
 
-    EXPECT_NEAR(evaluate_symbolic(res), 1.0/3.0, 1e-9,
+    EXPECT_NEAR(evaluate_symbolic(res.value()), 1.0/3.0, 1e-9,
                 "integral of x^2 from 0 to 1 is 1/3");
 
     std::cout << "[PASS]" << std::endl;
@@ -70,9 +72,11 @@ void test_trig() {
     auto upper = SymbolicExpr::number(3.14159265358979323846);
 
     auto res = integrator.integrate_def(*expr, "x", *lower, *upper);
-    std::cout << "Definite Integral result: " << res.to_string() << std::endl;
+    EXPECT_TRUE(res.has_value(), "trigonometric definite integration succeeds");
+    if (!res) return;
+    std::cout << "Definite Integral result: " << res.value().to_string() << std::endl;
 
-    EXPECT_NEAR(evaluate_symbolic(res), 2.0, 1e-5,
+    EXPECT_NEAR(evaluate_symbolic(res.value()), 2.0, 1e-5,
                 "integral of sin(x) from 0 to pi is 2");
 
     std::cout << "[PASS]" << std::endl;
@@ -87,9 +91,13 @@ void test_symbolic_limits() {
     auto b = SymbolicExpr::variable("b");
 
     auto res = integrator.integrate_def(*x, "x", *a, *b);
-    std::cout << "Definite Integral result: " << res.to_string() << std::endl;
+    EXPECT_TRUE(res.has_value(), "symbolic definite integration succeeds");
+    if (!res) return;
+    std::cout << "Definite Integral result: " << res.value().to_string() << std::endl;
 
-    auto check = res.substitute("a", SymbolicExpr::number(2))->substitute("b", SymbolicExpr::number(4))->simplify();
+    auto check = res.value().substitute(
+        "a", SymbolicExpr::number(2))->substitute(
+        "b", SymbolicExpr::number(4))->simplify();
 
     EXPECT_NEAR(evaluate_symbolic(*check), 6.0, 1e-9,
                 "symbolic integral of x from a to b evaluates correctly at a=2,b=4");
@@ -98,7 +106,7 @@ void test_symbolic_limits() {
 }
 
 void test_improper_split_ignores_nonrepresentable_exact_bounds() {
-    std::cout << "Test Case 4: 1/x with nonrepresentable exact bounds does not throw" << std::endl;
+    std::cout << "Test Case 4: 1/x with nonrepresentable exact bounds returns a result" << std::endl;
     Integrator integrator;
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::power(MakeSymbolicExprPtr(*x), SymbolicExpr::number(-1));
@@ -107,21 +115,13 @@ void test_improper_split_ignores_nonrepresentable_exact_bounds() {
     auto lower = SymbolicExpr::number(BigInt("-" + huge_digits));
     auto upper = SymbolicExpr::number(BigInt(huge_digits));
 
-    bool threw = false;
-    std::shared_ptr<SymbolicExpr> res;
-    try {
-        res = lamina::detail::make_expression_ptr(
-            integrator.integrate_def(*expr, "x", *lower, *upper));
-    } catch (...) {
-        threw = true;
-    }
-
-    EXPECT_TRUE(!threw && res,
+    auto result = integrator.integrate_def(*expr, "x", *lower, *upper);
+    EXPECT_TRUE(result.has_value(),
                 "integrate_def preserves symbolic result for nonrepresentable exact bounds");
+    if (!result) return;
 
-    if (res) {
-        std::cout << "Definite Integral result: " << res->to_string() << std::endl;
-    }
+    auto res = lamina::detail::make_expression_ptr(result.value());
+    std::cout << "Definite Integral result: " << res->to_string() << std::endl;
     std::cout << "[PASS]" << std::endl;
 }
 

@@ -1072,15 +1072,15 @@ int main() {
         SymbolicExpr::number(-1));
     lamina::ComputationContext context;
     auto solved = lamina::lsr::solve_set(equation, "x", context);
-    EXPECT_TRUE(solved &&
-                    solved.value().kind() == lamina::SolutionSet::Kind::Finite,
-                "solve_set returns a finite solution set for x^2 - 1");
-    EXPECT_TRUE(solved && solved.value().finite_solutions().size() == 2,
-                "solve_set preserves both roots");
+    const auto* finite_solutions = solved
+        ? std::get_if<lamina::FiniteSolutions>(&solved.value()) : nullptr;
+    EXPECT_TRUE(finite_solutions && finite_solutions->values.size() == 2,
+                "solve_set preserves both finite roots");
 
     auto empty = lamina::lsr::solve_set(SymbolicExpr::number(1), "x");
     EXPECT_TRUE(empty &&
-                    empty.value().kind() == lamina::SolutionSet::Kind::Empty,
+                    std::holds_alternative<lamina::EmptySolutions>(
+                        empty.value()),
                 "solve_set represents mathematical no-solution as Empty");
 
     TEST_CASE("LSR ExprSet implements set<Expr> finite collection semantics");
@@ -1401,21 +1401,19 @@ int main() {
                     repeated_roots.value().contains(*SymbolicExpr::number(0)),
                 "roots lowers repeated roots to one set<Expr> member");
 
-    auto cubic_equation = SymbolicExpr::add(
-        SymbolicExpr::power(x.value(), SymbolicExpr::number(3)),
+    auto quintic_equation = SymbolicExpr::add(
+        SymbolicExpr::power(x.value(), SymbolicExpr::number(5)),
         SymbolicExpr::number(-2));
-    auto cubic_roots = lamina::lsr::roots(cubic_equation, "x");
-    EXPECT_TRUE(cubic_roots && cubic_roots.value().size() == 3,
-                "roots lowers exact higher-degree polynomial roots to finite set<Expr>");
-    if (cubic_roots) {
+    auto quintic_roots = lamina::lsr::roots(quintic_equation, "x");
+    EXPECT_TRUE(quintic_roots && quintic_roots.value().size() == 5,
+                "roots lowers exact degree-five roots to finite set<Expr>");
+    if (quintic_roots) {
         bool all_root_of = true;
-        for (const auto& root : cubic_roots.value().elements()) {
-            auto function =
-                root ? std::dynamic_pointer_cast<const FunctionNode>(
-                           lamina::detail::node(root))
-                     : nullptr;
-            all_root_of = all_root_of && function &&
-                          function->type() == FunctionNode::FuncType::RootOf;
+        for (const auto& root : quintic_roots.value().elements()) {
+            const bool is_root_of =
+                root && std::dynamic_pointer_cast<const RootOfNode>(
+                            lamina::detail::node(root));
+            all_root_of = all_root_of && is_root_of;
         }
         EXPECT_TRUE(all_root_of,
                     "higher-degree finite polynomial roots remain explicit RootOf Expr values");
@@ -1742,7 +1740,10 @@ int main() {
                 "ExpLog-Basic does not prove exp(ln(y)) without domain evidence");
 
     auto positive_assumptions = std::make_shared<lamina::AssumptionContext>();
-    positive_assumptions->assume_sign("y", lamina::Sign::Positive);
+    auto positive_assumption =
+        positive_assumptions->assume_sign("y", lamina::Sign::Positive);
+    EXPECT_TRUE(positive_assumption.has_value(),
+                "positive equivalence assumption is accepted");
     lamina::ComputationContext exp_ln_positive_context;
     auto set_positive_assumptions =
         exp_ln_positive_context.set_assumptions(positive_assumptions);

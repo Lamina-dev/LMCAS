@@ -204,6 +204,20 @@ bool has_function_of_explicit_complex(const std::shared_ptr<const SymbolicNode>&
 
 } // namespace
 
+static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&,
+    const std::shared_ptr<SymbolicExpr>&,
+    int);
+static std::shared_ptr<SymbolicExpr> cauchy_integral_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&,
+    const std::shared_ptr<SymbolicExpr>&,
+    int);
+static bool is_analytic_impl(
+    const std::shared_ptr<SymbolicExpr>&,
+    const std::string&);
+
 ExpressionResult calculate_residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
@@ -219,7 +233,7 @@ ExpressionResult calculate_residue_checked(
     if (!budget) return ExpressionResult::failure(budget.error());
 
     try {
-        auto result = calculate_residue(f, z, z0, order);
+        auto result = calculate_residue_impl(f, z, z0, order);
         if (!result || !lamina::detail::node(result)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -248,7 +262,7 @@ ExpressionResult calculate_residue_checked(
     return calculate_residue_checked(f, z, z0, order, context);
 }
 
-std::shared_ptr<SymbolicExpr> calculate_residue(
+static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -270,7 +284,7 @@ std::shared_ptr<SymbolicExpr> calculate_residue(
     
     F = SymbolicExpr::divide(F, SymbolicExpr::number(fact));
     
-    return F->limit(z, z0);
+    return lamina::limit_expression_checked(F, z, z0).value();
 }
 
 ExpressionResult cauchy_integral_checked(
@@ -288,7 +302,7 @@ ExpressionResult cauchy_integral_checked(
     if (!budget) return ExpressionResult::failure(budget.error());
 
     try {
-        auto result = cauchy_integral(f, z, z0, n);
+        auto result = cauchy_integral_impl(f, z, z0, n);
         if (!result || !lamina::detail::node(result)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -317,7 +331,7 @@ ExpressionResult cauchy_integral_checked(
     return cauchy_integral_checked(f, z, z0, n, context);
 }
 
-std::shared_ptr<SymbolicExpr> cauchy_integral(
+static std::shared_ptr<SymbolicExpr> cauchy_integral_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -484,11 +498,6 @@ ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
     return real_part_checked(expr, context);
 }
 
-std::shared_ptr<SymbolicExpr> real_part(const std::shared_ptr<SymbolicExpr>& expr) {
-    auto checked = real_part_checked(expr);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
                                     ComputationContext& context) {
@@ -518,11 +527,6 @@ ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
     return imag_part_checked(expr, context);
 }
 
-std::shared_ptr<SymbolicExpr> imag_part(const std::shared_ptr<SymbolicExpr>& expr) {
-    auto checked = imag_part_checked(expr);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
                                     ComputationContext& context) {
@@ -569,11 +573,6 @@ ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr) {
     return conjugate_checked(expr, context);
 }
 
-std::shared_ptr<SymbolicExpr> conjugate(const std::shared_ptr<SymbolicExpr>& expr) {
-    auto checked = conjugate_checked(expr);
-    if (!checked) return nullptr;
-    return checked.value();
-}
 
 ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
                                       const std::string& z,
@@ -596,7 +595,7 @@ ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
     if (!budget) return ComplexBoolResult::failure(budget.error());
 
     try {
-        return ComplexBoolResult::success(is_analytic(f, z));
+        return ComplexBoolResult::success(is_analytic_impl(f, z));
     } catch (const std::bad_alloc&) {
         return ComplexBoolResult::failure(CasErrc::ResourceLimit,
                                           "allocation failed while checking analyticity",
@@ -614,7 +613,7 @@ ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
     return is_analytic_checked(f, z, context);
 }
 
-bool is_analytic(const std::shared_ptr<SymbolicExpr>& f, const std::string& z) {
+static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::string& z) {
     if (!f) return false;
     /// 将 z 替换为 (z_re + i·z_im)，分离 u、v，检验 Cauchy-Riemann。
     std::string xr = z + "_re";
@@ -663,12 +662,5 @@ ExpressionResult residue_checked(
     return calculate_residue_checked(f, z, z0, order);
 }
 
-std::shared_ptr<SymbolicExpr> residue(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& z,
-    const std::shared_ptr<SymbolicExpr>& z0,
-    int order) {
-    return calculate_residue(f, z, z0, order);
-}
 
 } // namespace lamina

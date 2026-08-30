@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <variant>
 
 namespace lamina {
 
@@ -33,10 +34,6 @@ LAMINA_API ExpressionResult matrix_multiply_checked(
     const std::shared_ptr<SymbolicExpr>& B
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_multiply(
-    const std::shared_ptr<SymbolicExpr>& A,
-    const std::shared_ptr<SymbolicExpr>& B
-);
 
 /**
  * @brief 计算符号矩阵的行列式
@@ -52,9 +49,6 @@ LAMINA_API ExpressionResult matrix_determinant_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_determinant(
-    const std::shared_ptr<SymbolicExpr>& A
-);
 
 /**
  * @brief 计算符号矩阵的逆矩阵
@@ -70,9 +64,54 @@ LAMINA_API ExpressionResult matrix_inverse_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_inverse(
-    const std::shared_ptr<SymbolicExpr>& A
-);
+
+using MatrixRankResult = Result<std::size_t>;
+using MatrixNullspaceResult =
+    Result<std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>>;
+
+struct MatrixUniqueLinearSolution {
+    std::vector<std::shared_ptr<SymbolicExpr>> values;
+};
+
+struct MatrixParametricLinearSolution {
+    std::vector<std::shared_ptr<SymbolicExpr>> particular;
+    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> nullspace_basis;
+    std::vector<std::size_t> free_columns;
+};
+
+struct MatrixInconsistentLinearSolution {};
+
+using MatrixLinearSolution = std::variant<
+    MatrixUniqueLinearSolution,
+    MatrixParametricLinearSolution,
+    MatrixInconsistentLinearSolution>;
+using MatrixLinearSolveResult = Result<MatrixLinearSolution>;
+
+LAMINA_API MatrixRankResult matrix_rank_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context);
+LAMINA_API MatrixRankResult matrix_rank_checked(
+    const std::shared_ptr<SymbolicExpr>& A);
+
+LAMINA_API ExpressionResult matrix_rref_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context);
+LAMINA_API ExpressionResult matrix_rref_checked(
+    const std::shared_ptr<SymbolicExpr>& A);
+
+LAMINA_API MatrixNullspaceResult matrix_nullspace_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    ComputationContext& context);
+LAMINA_API MatrixNullspaceResult matrix_nullspace_checked(
+    const std::shared_ptr<SymbolicExpr>& A);
+
+LAMINA_API MatrixLinearSolveResult matrix_solve_linear_checked(
+    const std::shared_ptr<SymbolicExpr>& coefficients,
+    const std::shared_ptr<SymbolicExpr>& right_hand_side,
+    ComputationContext& context);
+LAMINA_API MatrixLinearSolveResult matrix_solve_linear_checked(
+    const std::shared_ptr<SymbolicExpr>& coefficients,
+    const std::shared_ptr<SymbolicExpr>& right_hand_side);
 
 /**
  * @brief 生成旋转矩阵
@@ -91,10 +130,6 @@ LAMINA_API ExpressionResult matrix_rotation_checked(
     int dim = 2
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_rotation(
-    double theta,
-    int dim = 2
-);
 
 /**
  * @brief 生成反射矩阵
@@ -113,10 +148,6 @@ LAMINA_API ExpressionResult matrix_reflection_checked(
     int dim = 2
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_reflection(
-    double angle,
-    int dim = 2
-);
 
 /**
  * @brief 生成缩放矩阵
@@ -138,11 +169,6 @@ LAMINA_API ExpressionResult matrix_scaling_checked(
     int dim = 2
 );
 
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_scaling(
-    double sx,
-    double sy,
-    int dim = 2
-);
 
 /**
  * @brief 计算符号矩阵的特征值
@@ -158,9 +184,6 @@ LAMINA_API MatrixEigenvalueResult matrix_eigenvalues_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> matrix_eigenvalues(
-    const std::shared_ptr<SymbolicExpr>& A
-);
 
 /**
  * @brief 计算符号矩阵的特征向量
@@ -176,8 +199,5 @@ LAMINA_API MatrixEigenvectorResult matrix_eigenvectors_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
-LAMINA_API std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> matrix_eigenvectors(
-    const std::shared_ptr<SymbolicExpr>& A
-);
 
 }

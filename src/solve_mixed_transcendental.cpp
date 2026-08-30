@@ -43,7 +43,7 @@ bool contains_transcendental_of_var(
 {
     if (!expr || !lamina::detail::node(expr)) return false;
 
-    struct TranscendentalDetector : public lamina::detail::SymbolicVisitor {
+    struct TranscendentalDetector : public lamina::detail::RecursiveSymbolicVisitor {
         const std::string& target_var;
         bool found = false;
 
@@ -360,7 +360,7 @@ static bool is_periodic_func(FunctionNode::FuncType t) {
  * 对每个 sin/cos/tan 节点，若其参数为 k*x + c 形式，
  * 计算周期（sin/cos: 2π/|k|, tan: π/|k|）。
  */
-struct PeriodicCollector : public lamina::detail::SymbolicVisitor {
+struct PeriodicCollector : public lamina::detail::RecursiveSymbolicVisitor {
     const std::string& target_var;
     lmmc_real_t max_period = 0.0;
     bool found_periodic = false;

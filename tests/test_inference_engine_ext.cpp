@@ -75,9 +75,9 @@ void test_division_positive_over_positive() {
 
     auto expr = wrap_expr(make_division(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "pos / pos is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "pos / pos is not Negative");
 }
 
@@ -90,9 +90,9 @@ void test_division_negative_over_negative() {
 
     auto expr = wrap_expr(make_division(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "neg / neg is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "neg / neg is not Negative");
 }
 
@@ -105,9 +105,9 @@ void test_division_positive_over_negative() {
 
     auto expr = wrap_expr(make_division(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "pos / neg is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "pos / neg is Negative");
 }
 
@@ -120,9 +120,9 @@ void test_division_negative_over_positive() {
 
     auto expr = wrap_expr(make_division(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "neg / pos is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "neg / pos is Negative");
 }
 
@@ -135,9 +135,9 @@ void test_division_unknown_denominator() {
 
     auto expr = wrap_expr(make_division(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "pos / unknown: Positive is Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
         "pos / unknown: Negative is Unknown");
 }
 
@@ -150,9 +150,9 @@ void test_division_zero_denominator() {
 
     auto expr = wrap_expr(make_division(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "pos / zero: Positive is Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
         "pos / zero: Negative is Unknown");
 }
 
@@ -166,9 +166,9 @@ void test_subtraction_positive_minus_negative() {
 
     auto expr = wrap_expr(make_subtraction(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "pos - neg is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "pos - neg is not Negative");
 }
 
@@ -181,9 +181,9 @@ void test_subtraction_negative_minus_positive() {
 
     auto expr = wrap_expr(make_subtraction(make_var("a"), make_var("b")));
 
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "neg - pos is Negative");
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "neg - pos is not Positive");
 }
 
@@ -196,7 +196,7 @@ void test_domain_sin_integer() {
 
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sin, make_var("x")));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "sin(integer) is Real");
 }
 
@@ -208,7 +208,7 @@ void test_domain_exp_rational() {
 
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Exp, make_var("x")));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "exp(rational) is Real");
 }
 
@@ -221,7 +221,7 @@ void test_domain_ln_integer() {
 
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Ln, make_var("x")));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "ln(integer) is Real");
 }
 
@@ -234,7 +234,7 @@ void test_domain_sqrt_nonneg_real() {
 
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sqrt, make_var("x")));
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "sqrt(nonneg real) is Real");
 }
 
@@ -247,7 +247,7 @@ void test_domain_integer_pow_natural() {
     // x^3 where x is Integer and 3 is a positive integer
     auto expr = wrap_expr(make_power(make_var("x"), make_number(3)));
 
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
         "integer^3 is Integer");
 }
 
@@ -261,7 +261,7 @@ void test_domain_rational_pow_integer() {
     auto expr = wrap_expr(make_power(make_var("x"), make_number(2)));
 
     // Rational ⊂ Real, so Rational base + integer exponent → Real
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "rational^2 is Real");
 }
 
@@ -284,7 +284,7 @@ void test_depth_limit_triggers_unknown() {
 
     // With max depth 3, the deeply nested expression should return Unknown
     // because the engine can't recurse deep enough to resolve the innermost variable
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
     // sin doesn't have a definite sign anyway, but the key test is that
     // it doesn't crash or hang — it returns Unknown gracefully
     EXPECT_TRUE(result == Tribool::Unknown,
@@ -332,7 +332,7 @@ void test_depth_limit_nested_addition() {
 
     // exp requires Real argument to infer Positive. With depth limit 1,
     // the inner exp's domain can't be determined, so outer exp returns Unknown.
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
         "Nested exp with depth limit 1 returns Unknown");
 }
@@ -358,7 +358,7 @@ void test_cycle_detection_self_referential() {
 
     // With max depth 2, the engine can't recurse deep enough to determine
     // the innermost variable's domain, so it returns Unknown
-    Tribool result = engine.query_real(expr);
+    Tribool result = engine.query_real_checked(expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
         "Deeply nested trig with depth limit 2 returns Unknown for domain");
 }
@@ -376,7 +376,7 @@ void test_cycle_detection_no_crash_deep_shared() {
     auto expr = wrap_expr(outer);
 
     // Should not crash or hang — returns some result (likely Unknown due to cycles)
-    Tribool result = engine.query_positive(expr);
+    Tribool result = engine.query_positive_checked(expr).value();
     // The important thing is no infinite recursion
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,
         "Deeply shared nodes: no crash, returns True or Unknown");
@@ -407,7 +407,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(positive.value() == Tribool::True,
             "checked query_positive returns True for positive symbol");
     }
-    EXPECT_TRUE(engine.query_positive(x) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(x).value() == Tribool::True,
         "legacy query_positive unwraps checked result");
 
     auto nonpositive = engine.query_nonpositive_checked(x);
@@ -416,7 +416,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(nonpositive.value() == Tribool::False,
             "checked query_nonpositive returns False for positive symbol");
     }
-    EXPECT_TRUE(engine.query_nonpositive(x) == Tribool::False,
+    EXPECT_TRUE(engine.query_nonpositive_checked(x).value() == Tribool::False,
         "legacy query_nonpositive unwraps checked result");
 
     auto integer = engine.query_integer_checked(x);
@@ -425,7 +425,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(integer.value() == Tribool::True,
             "checked query_integer returns True for integer symbol");
     }
-    EXPECT_TRUE(engine.query_integer(x) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(x).value() == Tribool::True,
         "legacy query_integer unwraps checked result");
 
     auto nonzero = engine.query_nonzero_checked(x);
@@ -434,7 +434,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(nonzero.value() == Tribool::True,
             "checked query_nonzero returns True for positive symbol");
     }
-    EXPECT_TRUE(engine.query_nonzero(x) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonzero_checked(x).value() == Tribool::True,
         "legacy query_nonzero unwraps checked result");
 
     auto three = wrap_expr(make_number(3));
@@ -444,7 +444,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(numeric_negative.value() == Tribool::False,
             "checked query_negative returns False for positive number");
     }
-    EXPECT_TRUE(engine.query_negative(three) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(three).value() == Tribool::False,
         "legacy query_negative unwraps checked result");
 
     auto numeric_nonnegative = engine.query_nonnegative_checked(three);
@@ -453,7 +453,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(numeric_nonnegative.value() == Tribool::True,
             "checked query_nonnegative returns True for positive number");
     }
-    EXPECT_TRUE(engine.query_nonnegative(three) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(three).value() == Tribool::True,
         "legacy query_nonnegative unwraps checked result");
 
     auto numeric_real = engine.query_real_checked(three);
@@ -462,7 +462,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(numeric_real.value() == Tribool::True,
             "checked query_real returns True for exact number");
     }
-    EXPECT_TRUE(engine.query_real(three) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(three).value() == Tribool::True,
         "legacy query_real unwraps checked result");
 
     auto exp_rational = wrap_expr(make_function(FunctionNode::FuncType::Exp, make_var("q")));
@@ -473,7 +473,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(exp_rational_real.value() == Tribool::True,
             "checked query_real uses checked internal rational-domain dispatch");
     }
-    EXPECT_TRUE(engine.query_real(exp_rational) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(exp_rational).value() == Tribool::True,
         "legacy query_real unwraps checked rational-domain dispatch");
 
     auto integer_sum = wrap_expr(make_add({make_var("x"), make_var("x")}));
@@ -520,7 +520,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(positive_sum_checked.value() == Tribool::True,
             "checked query_positive uses checked addition-sign inference");
     }
-    EXPECT_TRUE(engine.query_positive(positive_sum) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(positive_sum).value() == Tribool::True,
         "legacy query_positive unwraps checked addition-sign inference");
 
     ctx.assume_sign("neg_symbol", Sign::Negative);
@@ -532,7 +532,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(positive_difference_checked.value() == Tribool::True,
             "checked query_positive uses checked subtraction-sign inference");
     }
-    EXPECT_TRUE(engine.query_positive(positive_difference) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(positive_difference).value() == Tribool::True,
         "legacy query_positive unwraps checked subtraction-sign inference");
 
     auto relation_positive_sum = wrap_expr(make_add({make_var("rel_a"), make_var("rel_b")}));
@@ -548,7 +548,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(relation_positive_sum_checked.value() == Tribool::True,
             "checked query_positive uses checked relation sign inference");
     }
-    EXPECT_TRUE(engine.query_positive(relation_positive_sum) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(relation_positive_sum).value() == Tribool::True,
         "legacy query_positive unwraps checked relation sign inference");
 
     auto positive_product = wrap_expr(make_multiply({make_var("x"), make_var("x")}));
@@ -559,7 +559,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(positive_product_checked.value() == Tribool::True,
             "checked query_positive uses checked multiplication-sign inference");
     }
-    EXPECT_TRUE(engine.query_positive(positive_product) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(positive_product).value() == Tribool::True,
         "legacy query_positive unwraps checked multiplication-sign inference");
 
     auto negative_product = wrap_expr(make_multiply({make_var("x"), make_var("neg_symbol")}));
@@ -570,7 +570,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(negative_product_checked.value() == Tribool::True,
             "checked query_negative uses checked multiplication-sign inference");
     }
-    EXPECT_TRUE(engine.query_negative(negative_product) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(negative_product).value() == Tribool::True,
         "legacy query_negative unwraps checked multiplication-sign inference");
 
     auto division_expr = wrap_expr(make_division(make_var("x"), make_var("x")));
@@ -581,7 +581,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(division_positive.value() == Tribool::True,
             "checked query_positive uses checked division-sign inference");
     }
-    EXPECT_TRUE(engine.query_positive(division_expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(division_expr).value() == Tribool::True,
         "legacy query_positive unwraps checked division-sign inference");
 
     auto positive_power = wrap_expr(make_power(make_var("x"), make_number(2)));
@@ -592,7 +592,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(positive_power_checked.value() == Tribool::True,
             "checked query_positive uses checked positive-base power inference");
     }
-    EXPECT_TRUE(engine.query_positive(positive_power) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(positive_power).value() == Tribool::True,
         "legacy query_positive unwraps checked power-sign inference");
 
     auto even_power = wrap_expr(make_power(make_var("unknown_symbol"), make_number(2)));
@@ -629,7 +629,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(exp_real_positive.value() == Tribool::True,
             "checked query_positive uses checked exp function-sign inference");
     }
-    EXPECT_TRUE(engine.query_positive(exp_real) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(exp_real).value() == Tribool::True,
         "legacy query_positive unwraps checked exp function-sign inference");
 
     auto abs_real_pos = wrap_expr(make_function(FunctionNode::FuncType::Abs, make_var("real_pos")));
@@ -686,7 +686,7 @@ void test_checked_inference_query_contracts() {
         EXPECT_TRUE(transcendental.value() == Tribool::True,
             "checked query_transcendental returns True for transcendental symbol");
     }
-    EXPECT_TRUE(engine.query_transcendental(tau_expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_transcendental_checked(tau_expr).value() == Tribool::True,
         "legacy query_transcendental unwraps checked result");
 
     auto divergent_expr = wrap_expr(make_var("divergent_symbol"));

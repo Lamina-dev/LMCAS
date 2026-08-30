@@ -23,7 +23,7 @@ int main() {
     {
         auto ln_x = SymbolicExpr::ln(x);
         auto expr = SymbolicExpr::multiply(x, ln_x);
-        auto lim = expr->limit("x", zero, "+");
+        auto lim = lamina::limit_expression_checked(expr, "x", zero, LimitDirection::FromAbove).value();
         EXPECT_TRUE(lim != nullptr, "limit(x*ln(x), x->0+) is not null");
         if (lim) EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*ln(x), x->0+) = 0");
     }
@@ -35,7 +35,7 @@ int main() {
         auto neg_x = SymbolicExpr::multiply(neg_one, x);
         auto exp_neg_x = SymbolicExpr::exp(neg_x);
         auto expr = SymbolicExpr::multiply(x, exp_neg_x);
-        auto lim = expr->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_TRUE(lim != nullptr, "limit(x*e^(-x), x->inf) is not null");
         if (lim) EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*e^(-x), x->inf) = 0");
     }
@@ -50,7 +50,7 @@ int main() {
         auto inv_sin_x = SymbolicExpr::power(sin_x, neg_one);
         auto neg_inv_sin_x = SymbolicExpr::multiply(inv_sin_x, neg_one);
         auto expr = SymbolicExpr::add(inv_x, neg_inv_sin_x);
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit(1/x - 1/sin(x), x->0) is not null");
         if (lim) EXPECT_EQ_EXPR_STR(lim, "0", "limit(1/x - 1/sin(x), x->0) = 0");
     }
@@ -65,7 +65,7 @@ int main() {
         auto sqrt_expr = SymbolicExpr::power(x_sq_plus_x, half);
         auto neg_sqrt = SymbolicExpr::multiply(sqrt_expr, neg_one);
         auto expr = SymbolicExpr::add(x, neg_sqrt);
-        auto lim = expr->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_TRUE(lim != nullptr, "limit(x - sqrt(x^2+x), x->inf) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -90,7 +90,7 @@ int main() {
         auto inv_x = SymbolicExpr::power(x, neg_one);
         auto base = SymbolicExpr::add(one, inv_x);
         auto expr = SymbolicExpr::power(base, x);
-        auto lim = expr->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_TRUE(lim != nullptr, "limit((1+1/x)^x, x->inf) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -112,7 +112,7 @@ int main() {
     TEST_CASE("0^0: lim(x->0+) x^x = 1");
     {
         auto expr = SymbolicExpr::power(x, x);
-        auto lim = expr->limit("x", zero, "+");
+        auto lim = lamina::limit_expression_checked(expr, "x", zero, LimitDirection::FromAbove).value();
         EXPECT_TRUE(lim != nullptr, "limit(x^x, x->0+) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -131,7 +131,7 @@ int main() {
     {
         auto inv_x = SymbolicExpr::power(x, neg_one);
         auto expr = SymbolicExpr::power(x, inv_x);
-        auto lim = expr->limit("x", inf);
+        auto lim = lamina::limit_expression_checked(expr, "x", inf).value();
         EXPECT_TRUE(lim != nullptr, "limit(x^(1/x), x->inf) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -153,7 +153,7 @@ int main() {
         auto num = SymbolicExpr::add(sin_x, neg_x);
         auto den = SymbolicExpr::power(x, three);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit((sin(x)-x)/x^3, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -173,7 +173,7 @@ int main() {
     {
         auto sin_x = SymbolicExpr::sin(x);
         auto expr = SymbolicExpr::multiply(sin_x, SymbolicExpr::power(x, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit(sin(x)/x, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);
@@ -192,7 +192,7 @@ int main() {
         auto neg_1 = SymbolicExpr::multiply(one, neg_one);
         auto num = SymbolicExpr::add(exp_x, neg_1);
         auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(x, neg_one));
-        auto lim = expr->limit("x", zero);
+        auto lim = lamina::limit_expression_checked(expr, "x", zero).value();
         EXPECT_TRUE(lim != nullptr, "limit((e^x-1)/x, x->0) is not null");
         if (lim) {
             auto val = test_numeric_eval(lim);

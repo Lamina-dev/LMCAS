@@ -49,8 +49,8 @@ public:
     /// Push a new scope onto the stack.
     void push();
 
-    /// Pop the current scope. Throws std::runtime_error if at root scope.
-    void pop();
+    /// Pop the current scope.
+    AssumptionVoidResult pop();
 
     /// Return the current nesting depth (number of scopes on the stack).
     int depth() const;
@@ -96,22 +96,22 @@ public:
     std::optional<Interval> get_bounds(const std::string& symbol) const;
 
     /// Declare domain for a variable in the current scope.
-    /// Throws std::invalid_argument if variable name is empty.
-    void assume_domain(const std::string& variable, Domain domain);
+    /// Returns an explicit error if the variable name is empty or contradictory.
+    AssumptionVoidResult assume_domain(const std::string& variable, Domain domain);
 
     /** @brief Declares a domain and reports invalid or contradictory input. */
     AssumptionVoidResult assume_domain_checked(const std::string& variable, Domain domain);
 
     /// Declare sign for a variable in the current scope.
-    /// Throws std::invalid_argument if variable name is empty.
-    void assume_sign(const std::string& variable, Sign sign);
+    /// Returns an explicit error if the variable name is empty or contradictory.
+    AssumptionVoidResult assume_sign(const std::string& variable, Sign sign);
 
     /** @brief Declares a sign and reports invalid or contradictory input. */
     AssumptionVoidResult assume_sign_checked(const std::string& variable, Sign sign);
 
     /// Store a relational constraint. The expression's root must be a RelationalNode.
-    /// Throws std::invalid_argument if expression is null/empty or root is not RelationalNode.
-    void assume(const SymbolicExpr& relation);
+    /// Invalid or contradictory relations are returned as an explicit error.
+    AssumptionVoidResult assume(const SymbolicExpr& relation);
 
     /** @brief Stores a relation and reports invalid or contradictory input. */
     AssumptionVoidResult assume_checked(const SymbolicExpr& relation);
@@ -126,9 +126,9 @@ public:
      *
      * @param condition  A relational expression (e.g., x > 1) serving as the guard
      * @param conclusion A relational expression (e.g., ln(x) > 0) to use when condition holds
-     * @throws std::invalid_argument if condition or conclusion is not relational
+     * Invalid or contradictory relations are returned as an explicit error.
      */
-    void assume_conditional(const SymbolicExpr& condition, const SymbolicExpr& conclusion);
+    AssumptionVoidResult assume_conditional(const SymbolicExpr& condition, const SymbolicExpr& conclusion);
 
     /** @brief Stores a guarded conclusion and reports invalid input. */
     AssumptionVoidResult assume_conditional_checked(
@@ -168,37 +168,37 @@ public:
     // --- Expression property queries ---
 
     /// Query whether the expression is positive (> 0).
-    Tribool is_positive(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_positive(const SymbolicExpr& expr) const;
 
     /** @brief Queries positivity and propagates computation failures. */
     AssumptionTriboolResult is_positive_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is negative (< 0).
-    Tribool is_negative(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_negative(const SymbolicExpr& expr) const;
 
     /** @brief Queries negativity and propagates computation failures. */
     AssumptionTriboolResult is_negative_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is non-negative (>= 0).
-    Tribool is_nonnegative(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_nonnegative(const SymbolicExpr& expr) const;
 
     /** @brief Queries non-negativity and propagates computation failures. */
     AssumptionTriboolResult is_nonnegative_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is real.
-    Tribool is_real(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_real(const SymbolicExpr& expr) const;
 
     /** @brief Queries real-domain membership and propagates computation failures. */
     AssumptionTriboolResult is_real_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is an integer.
-    Tribool is_integer(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_integer(const SymbolicExpr& expr) const;
 
     /** @brief Queries integer-domain membership and propagates computation failures. */
     AssumptionTriboolResult is_integer_checked(const SymbolicExpr& expr) const;
 
     /// Query whether the expression is non-zero (!= 0).
-    Tribool is_nonzero(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_nonzero(const SymbolicExpr& expr) const;
 
     /** @brief Queries nonzero status and propagates computation failures. */
     AssumptionTriboolResult is_nonzero_checked(const SymbolicExpr& expr) const;
@@ -217,14 +217,12 @@ public:
     /**
      * @brief Deserialize a string into a fully reconstructed AssumptionContext.
      *
-     * Parses the line-oriented format produced by serialize(). Throws
-     * std::invalid_argument with line number on malformed input.
+     * Parses the line-oriented format produced by serialize().
      *
      * @param data Serialized string (as produced by serialize()).
-     * @return Reconstructed AssumptionContext.
-     * @throws std::invalid_argument on malformed input with line number info.
+     * @return Reconstructed context or a parse/contradiction error.
      */
-    static AssumptionContext deserialize(const std::string& data);
+    static Result<AssumptionContext> deserialize(const std::string& data);
 
     /// Checked deserialization for untrusted input. Malformed or contradictory
     /// data returns CasError instead of throwing.
@@ -236,7 +234,7 @@ public:
      * @param interval Interval on which to check continuity.
      * @return True if continuous, False if not, Unknown if undetermined.
      */
-    Tribool is_continuous(const std::string& symbol, const Interval& interval) const;
+    AssumptionTriboolResult is_continuous(const std::string& symbol, const Interval& interval) const;
 
     /** @brief Queries interval continuity and propagates computation failures. */
     AssumptionTriboolResult is_continuous_checked(
@@ -249,7 +247,7 @@ public:
      * @param interval Interval on which to check differentiability.
      * @return True if differentiable, False if not, Unknown if undetermined.
      */
-    Tribool is_differentiable(const std::string& symbol, const Interval& interval) const;
+    AssumptionTriboolResult is_differentiable(const std::string& symbol, const Interval& interval) const;
 
     /** @brief Queries interval differentiability and propagates computation failures. */
     AssumptionTriboolResult is_differentiable_checked(
@@ -261,7 +259,7 @@ public:
      * @param symbol Symbol name to query.
      * @return True if positive definite, False if known not, Unknown if undetermined.
      */
-    Tribool is_positive_definite(const std::string& symbol) const;
+    AssumptionTriboolResult is_positive_definite(const std::string& symbol) const;
 
     /** @brief Queries positive definiteness and propagates computation failures. */
     AssumptionTriboolResult is_positive_definite_checked(const std::string& symbol) const;
@@ -271,7 +269,7 @@ public:
      * @param symbol Symbol name to query.
      * @return True if positive semidefinite, False if known not, Unknown if undetermined.
      */
-    Tribool is_positive_semidefinite(const std::string& symbol) const;
+    AssumptionTriboolResult is_positive_semidefinite(const std::string& symbol) const;
 
     /** @brief Queries positive semidefiniteness and propagates computation failures. */
     AssumptionTriboolResult is_positive_semidefinite_checked(const std::string& symbol) const;
@@ -409,57 +407,13 @@ inline AssumptionVoidResult apply_assumption_decl_checked(
 /**
  * @brief Execute a callable within a temporary assumption scope.
  *
- * Pushes a new scope on the context, applies all declarations from the
- * provided set, invokes the callable, pops the scope, and returns the result.
- * Exception-safe: the scope is popped even if the callable throws.
- *
- * @tparam F Callable type (must be invocable with no arguments)
- * @param ctx AssumptionContext to operate on
- * @param decls Set of assumption declarations to apply in the new scope
- * @param callable Function to invoke under the temporary assumptions
- * @return The result of invoking callable()
- *
+ * Declaration and callable failures are returned as `CasError`. The temporary
+ * scope is removed before every return.
  */
 template<typename F>
 auto with_assumptions(AssumptionContext& ctx,
-                      std::initializer_list<AssumptionDecl> decls,
+                      const std::vector<AssumptionDecl>& decls,
                       F&& callable)
-    -> std::enable_if_t<!std::is_void_v<decltype(callable())>, decltype(callable())>
-{
-    ctx.push();
-    try {
-        for (const auto& decl : decls) {
-            switch (decl.type()) {
-                case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol(), decl.domain());
-                    break;
-                case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol(), decl.sign());
-                    break;
-                case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation());
-                    break;
-            }
-        }
-        auto result = callable();
-        ctx.pop();
-        return result;
-    } catch (...) {
-        ctx.pop();
-        throw;
-    }
-}
-
-/**
- * @brief Applies assumptions for the duration of a non-void callable.
- *
- * Returns `CasError` on declaration or callable failure. The scope is always
- * removed before returning.
- */
-template<typename F>
-auto with_assumptions_checked(AssumptionContext& ctx,
-                              const std::vector<AssumptionDecl>& decls,
-                              F&& callable)
     -> std::enable_if_t<!std::is_void_v<decltype(callable())>, Result<decltype(callable())>>
 {
     using ReturnT = decltype(callable());
@@ -467,187 +421,79 @@ auto with_assumptions_checked(AssumptionContext& ctx,
     try {
         for (const auto& decl : decls) {
             auto applied = apply_assumption_decl_checked(ctx, decl);
-            if (!applied.has_value()) {
-                ctx.pop();
+            if (!applied) {
+                auto popped = ctx.pop();
+                if (!popped) return Result<ReturnT>::failure(popped.error());
                 return Result<ReturnT>::failure(applied.error());
             }
         }
         auto result = callable();
-        ctx.pop();
+        auto popped = ctx.pop();
+        if (!popped) return Result<ReturnT>::failure(popped.error());
         return Result<ReturnT>::success(std::move(result));
+    } catch (const detail::ResultPropagation& ex) {
+        auto popped = ctx.pop();
+        if (!popped) return Result<ReturnT>::failure(popped.error());
+        return Result<ReturnT>::failure(ex.error());
     } catch (const std::bad_alloc&) {
-        ctx.pop();
+        auto popped = ctx.pop();
+        if (!popped) return Result<ReturnT>::failure(popped.error());
         return Result<ReturnT>::failure(
             CasErrc::ResourceLimit, "with_assumptions allocation failed", "with_assumptions");
     } catch (const std::exception& ex) {
-        ctx.pop();
+        auto popped = ctx.pop();
+        if (!popped) return Result<ReturnT>::failure(popped.error());
         return Result<ReturnT>::failure(
             CasErrc::InternalInvariant, ex.what(), "with_assumptions");
     }
 }
 
-/**
- * @brief Applies assumptions for the duration of a void callable.
- */
 template<typename F>
-auto with_assumptions_checked(AssumptionContext& ctx,
-                              const std::vector<AssumptionDecl>& decls,
-                              F&& callable)
+auto with_assumptions(AssumptionContext& ctx,
+                      const std::vector<AssumptionDecl>& decls,
+                      F&& callable)
     -> std::enable_if_t<std::is_void_v<decltype(callable())>, AssumptionVoidResult>
 {
     ctx.push();
     try {
         for (const auto& decl : decls) {
             auto applied = apply_assumption_decl_checked(ctx, decl);
-            if (!applied.has_value()) {
-                ctx.pop();
+            if (!applied) {
+                auto popped = ctx.pop();
+                if (!popped) return AssumptionVoidResult::failure(popped.error());
                 return AssumptionVoidResult::failure(applied.error());
             }
         }
         callable();
-        ctx.pop();
+        auto popped = ctx.pop();
+        if (!popped) return AssumptionVoidResult::failure(popped.error());
         return AssumptionVoidResult::success();
+    } catch (const detail::ResultPropagation& ex) {
+        auto popped = ctx.pop();
+        if (!popped) return AssumptionVoidResult::failure(popped.error());
+        return AssumptionVoidResult::failure(ex.error());
     } catch (const std::bad_alloc&) {
-        ctx.pop();
+        auto popped = ctx.pop();
+        if (!popped) return AssumptionVoidResult::failure(popped.error());
         return AssumptionVoidResult::failure(
             CasErrc::ResourceLimit, "with_assumptions allocation failed", "with_assumptions");
     } catch (const std::exception& ex) {
-        ctx.pop();
+        auto popped = ctx.pop();
+        if (!popped) return AssumptionVoidResult::failure(popped.error());
         return AssumptionVoidResult::failure(
             CasErrc::InternalInvariant, ex.what(), "with_assumptions");
     }
 }
 
 template<typename F>
-auto with_assumptions_checked(AssumptionContext& ctx,
-                              std::initializer_list<AssumptionDecl> decls,
-                              F&& callable)
-    -> decltype(with_assumptions_checked(
-        ctx, std::vector<AssumptionDecl>(decls), std::forward<F>(callable)))
-{
-    return with_assumptions_checked(
-        ctx, std::vector<AssumptionDecl>(decls), std::forward<F>(callable));
-}
-
-/**
- * @brief Execute a void-returning callable within a temporary assumption scope.
- *
- * Overload for callables that return void. Pushes a new scope, applies
- * declarations, invokes the callable, and pops the scope.
- * Exception-safe: the scope is popped even if the callable throws.
- *
- * @tparam F Callable type (must be invocable with no arguments, returning void)
- * @param ctx AssumptionContext to operate on
- * @param decls Set of assumption declarations to apply in the new scope
- * @param callable Function to invoke under the temporary assumptions
- */
-template<typename F>
 auto with_assumptions(AssumptionContext& ctx,
                       std::initializer_list<AssumptionDecl> decls,
                       F&& callable)
-    -> std::enable_if_t<std::is_void_v<decltype(callable())>, void>
+    -> decltype(with_assumptions(
+        ctx, std::vector<AssumptionDecl>(decls), std::forward<F>(callable)))
 {
-    ctx.push();
-    try {
-        for (const auto& decl : decls) {
-            switch (decl.type()) {
-                case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol(), decl.domain());
-                    break;
-                case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol(), decl.sign());
-                    break;
-                case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation());
-                    break;
-            }
-        }
-        callable();
-        ctx.pop();
-    } catch (...) {
-        ctx.pop();
-        throw;
-    }
-}
-
-/**
- * @brief Execute a callable within a temporary assumption scope (vector overload).
- *
- * Same as the initializer_list overload but accepts a std::vector of declarations.
- *
- * @tparam F Callable type (must be invocable with no arguments)
- * @param ctx AssumptionContext to operate on
- * @param decls Vector of assumption declarations to apply in the new scope
- * @param callable Function to invoke under the temporary assumptions
- * @return The result of invoking callable()
- */
-template<typename F>
-auto with_assumptions(AssumptionContext& ctx,
-                      const std::vector<AssumptionDecl>& decls,
-                      F&& callable)
-    -> std::enable_if_t<!std::is_void_v<decltype(callable())>, decltype(callable())>
-{
-    ctx.push();
-    try {
-        for (const auto& decl : decls) {
-            switch (decl.type()) {
-                case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol(), decl.domain());
-                    break;
-                case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol(), decl.sign());
-                    break;
-                case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation());
-                    break;
-            }
-        }
-        auto result = callable();
-        ctx.pop();
-        return result;
-    } catch (...) {
-        ctx.pop();
-        throw;
-    }
-}
-
-/**
- * @brief Execute a void-returning callable within a temporary assumption scope (vector overload).
- *
- * Same as the initializer_list overload but accepts a std::vector of declarations.
- *
- * @tparam F Callable type (must be invocable with no arguments, returning void)
- * @param ctx AssumptionContext to operate on
- * @param decls Vector of assumption declarations to apply in the new scope
- * @param callable Function to invoke under the temporary assumptions
- */
-template<typename F>
-auto with_assumptions(AssumptionContext& ctx,
-                      const std::vector<AssumptionDecl>& decls,
-                      F&& callable)
-    -> std::enable_if_t<std::is_void_v<decltype(callable())>, void>
-{
-    ctx.push();
-    try {
-        for (const auto& decl : decls) {
-            switch (decl.type()) {
-                case AssumptionDecl::Type::Domain:
-                    ctx.assume_domain(decl.symbol(), decl.domain());
-                    break;
-                case AssumptionDecl::Type::Sign:
-                    ctx.assume_sign(decl.symbol(), decl.sign());
-                    break;
-                case AssumptionDecl::Type::Relation:
-                    ctx.assume(decl.relation());
-                    break;
-            }
-        }
-        callable();
-        ctx.pop();
-    } catch (...) {
-        ctx.pop();
-        throw;
-    }
+    return with_assumptions(
+        ctx, std::vector<AssumptionDecl>(decls), std::forward<F>(callable));
 }
 
 } // namespace lamina

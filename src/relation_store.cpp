@@ -40,33 +40,25 @@ bool expr_equals(const SymbolicExpr& a, const SymbolicExpr& b) {
     return lamina::detail::node(a)->equals(*lamina::detail::node(b));
 }
 
-void require_sign_declaration(PropertyStore& store,
-                              const std::string& symbol,
-                              Sign sign) {
-    auto result = store.declare_sign_checked(symbol, sign);
-    if (result) {
-        return;
-    }
-    if (result.error().code == CasErrc::InvalidArgument) {
-        throw std::invalid_argument(result.error().message);
-    }
-    if (result.error().code == CasErrc::ResourceLimit) {
-        throw std::bad_alloc();
-    }
-    throw std::runtime_error(result.error().message);
+RelationStoreResult require_sign_declaration(
+    PropertyStore& store,
+    const std::string& symbol,
+    Sign sign) {
+    return store.declare_sign(symbol, sign);
 }
 
 } // anonymous namespace
 
-void RelationStore::add_relation_unchecked(const SymbolicExpr& lhs,
-                                           const SymbolicExpr& rhs,
-                                           RelationOp op,
-                                           PropertyStore& prop_store) {
+RelationStoreResult RelationStore::add_relation_unchecked(
+    const SymbolicExpr& lhs,
+    const SymbolicExpr& rhs,
+    RelationOp op,
+    PropertyStore& prop_store) {
     // Store the relation regardless of pattern
     relations_.push_back(Relation{lhs, rhs, op});
 
     if (!lamina::detail::node(lhs) || !lamina::detail::node(rhs)) {
-        return;
+        return RelationStoreResult::success();
     }
 
     // Detect simple "variable op 0" pattern for sign property derivation.
@@ -78,51 +70,48 @@ void RelationStore::add_relation_unchecked(const SymbolicExpr& lhs,
         // Map operator to sign property
         switch (op) {
             case RelationOp::GT:
-                require_sign_declaration(prop_store, var_node->name(), Sign::Positive);
+                if (auto result = require_sign_declaration(
+                        prop_store, var_node->name(), Sign::Positive); !result) return result;
                 break;
             case RelationOp::GEQ:
-                require_sign_declaration(prop_store, var_node->name(), Sign::NonNegative);
+                if (auto result = require_sign_declaration(
+                        prop_store, var_node->name(), Sign::NonNegative); !result) return result;
                 break;
             case RelationOp::LT:
-                require_sign_declaration(prop_store, var_node->name(), Sign::Negative);
+                if (auto result = require_sign_declaration(
+                        prop_store, var_node->name(), Sign::Negative); !result) return result;
                 break;
             case RelationOp::LEQ:
-                require_sign_declaration(prop_store, var_node->name(), Sign::NonPositive);
+                if (auto result = require_sign_declaration(
+                        prop_store, var_node->name(), Sign::NonPositive); !result) return result;
                 break;
             case RelationOp::NEQ:
-                require_sign_declaration(prop_store, var_node->name(), Sign::NonZero);
+                if (auto result = require_sign_declaration(
+                        prop_store, var_node->name(), Sign::NonZero); !result) return result;
                 break;
             case RelationOp::EQ:
                 break;
         }
     } else {
         // Detect reversed "0 op variable" pattern
-        detect_reversed_pattern(lhs, rhs, op, prop_store);
+        auto reversed = detect_reversed_pattern(lhs, rhs, op, prop_store);
+        if (!reversed) return reversed;
     }
 
     // Compute transitive closure for GT/GEQ relations
     if (is_transitive_op(op)) {
-        compute_transitive_closure(relations_.back(), prop_store);
+        auto closure = compute_transitive_closure(relations_.back(), prop_store);
+        if (!closure) return closure;
     }
+    return RelationStoreResult::success();
 }
 
-void RelationStore::add_relation(const SymbolicExpr& lhs,
-                                 const SymbolicExpr& rhs,
-                                 RelationOp op,
-                                 PropertyStore& prop_store) {
-    auto result = add_relation_checked(lhs, rhs, op, prop_store);
-    if (result) {
-        return;
-    }
-
-    const auto& error = result.error();
-    if (error.code == CasErrc::InvalidArgument) {
-        throw std::invalid_argument(error.message);
-    }
-    if (error.code == CasErrc::ResourceLimit) {
-        throw std::bad_alloc();
-    }
-    throw std::runtime_error(error.message);
+RelationStoreResult RelationStore::add_relation(
+    const SymbolicExpr& lhs,
+    const SymbolicExpr& rhs,
+    RelationOp op,
+    PropertyStore& prop_store) {
+    return add_relation_checked(lhs, rhs, op, prop_store);
 }
 
 RelationStoreResult RelationStore::add_relation_checked(
@@ -142,7 +131,9 @@ RelationStoreResult RelationStore::add_relation_checked(
     try {
         RelationStore relation_candidate = *this;
         PropertyStore property_candidate = prop_store;
-        relation_candidate.add_relation_unchecked(lhs, rhs, op, property_candidate);
+        auto inserted = relation_candidate.add_relation_unchecked(
+            lhs, rhs, op, property_candidate);
+        if (!inserted) return inserted;
         *this = std::move(relation_candidate);
         prop_store = std::move(property_candidate);
     } catch (const std::bad_alloc&) {
@@ -158,7 +149,8 @@ RelationStoreResult RelationStore::add_relation_checked(
     return RelationStoreResult::success();
 }
 
-void RelationStore::compute_transitive_closure(const Relation& new_rel, PropertyStore& prop_store) {
+RelationStoreResult RelationStore::compute_transitive_closure(
+    const Relation& new_rel, PropertyStore& prop_store) {
     // BFS queue: each entry is a deduced relation to explore further
     struct QueueEntry {
         SymbolicExpr lhs;
@@ -197,18 +189,26 @@ void RelationStore::compute_transitive_closure(const Relation& new_rel, Property
 
                     // Derive sign properties for the new deduced relation
                     if (lamina::detail::node(deduced_lhs) && lamina::detail::node(deduced_rhs)) {
-                        detect_reversed_pattern(deduced_lhs, deduced_rhs, combined, prop_store);
+                        auto reversed = detect_reversed_pattern(
+                            deduced_lhs, deduced_rhs, combined, prop_store);
+                        if (!reversed) return reversed;
                         // Also check "variable op 0" pattern
                         auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(deduced_lhs));
                         auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(deduced_rhs));
                         if (var_node && num_node && num_node->is_zero()) {
                             switch (combined) {
-                                case RelationOp::GT:
-                                    require_sign_declaration(prop_store, var_node->name(), Sign::Positive);
+                                case RelationOp::GT: {
+                                    auto result = require_sign_declaration(
+                                        prop_store, var_node->name(), Sign::Positive);
+                                    if (!result) return result;
                                     break;
-                                case RelationOp::GEQ:
-                                    require_sign_declaration(prop_store, var_node->name(), Sign::NonNegative);
+                                }
+                                case RelationOp::GEQ: {
+                                    auto result = require_sign_declaration(
+                                        prop_store, var_node->name(), Sign::NonNegative);
+                                    if (!result) return result;
                                     break;
+                                }
                                 default:
                                     break;
                             }
@@ -238,18 +238,26 @@ void RelationStore::compute_transitive_closure(const Relation& new_rel, Property
 
                     // Derive sign properties for the new deduced relation
                     if (lamina::detail::node(deduced_lhs) && lamina::detail::node(deduced_rhs)) {
-                        detect_reversed_pattern(deduced_lhs, deduced_rhs, combined, prop_store);
+                        auto reversed = detect_reversed_pattern(
+                            deduced_lhs, deduced_rhs, combined, prop_store);
+                        if (!reversed) return reversed;
                         // Also check "variable op 0" pattern
                         auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(deduced_lhs));
                         auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(deduced_rhs));
                         if (var_node && num_node && num_node->is_zero()) {
                             switch (combined) {
-                                case RelationOp::GT:
-                                    require_sign_declaration(prop_store, var_node->name(), Sign::Positive);
+                                case RelationOp::GT: {
+                                    auto result = require_sign_declaration(
+                                        prop_store, var_node->name(), Sign::Positive);
+                                    if (!result) return result;
                                     break;
-                                case RelationOp::GEQ:
-                                    require_sign_declaration(prop_store, var_node->name(), Sign::NonNegative);
+                                }
+                                case RelationOp::GEQ: {
+                                    auto result = require_sign_declaration(
+                                        prop_store, var_node->name(), Sign::NonNegative);
+                                    if (!result) return result;
                                     break;
+                                }
                                 default:
                                     break;
                             }
@@ -262,20 +270,22 @@ void RelationStore::compute_transitive_closure(const Relation& new_rel, Property
             }
         }
     }
+    return RelationStoreResult::success();
 }
 
-void RelationStore::detect_reversed_pattern(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-                                            RelationOp op, PropertyStore& prop_store) {
+RelationStoreResult RelationStore::detect_reversed_pattern(
+    const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+    RelationOp op, PropertyStore& prop_store) {
     // LHS must be a NumberNode with value 0
     auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(lhs));
     if (!num_node || !num_node->is_zero()) {
-        return;
+        return RelationStoreResult::success();
     }
 
     // RHS must be a single VariableNode
     auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(rhs));
     if (!var_node) {
-        return;
+        return RelationStoreResult::success();
     }
 
     // Reversed semantics:
@@ -284,25 +294,27 @@ void RelationStore::detect_reversed_pattern(const SymbolicExpr& lhs, const Symbo
     //   0 GEQ var → 0 >= var → var <= 0 → NonPositive
     //   0 LEQ var → 0 <= var → var >= 0 → NonNegative
     //   0 NEQ var → 0 != var → NonZero
+    RelationStoreResult result = RelationStoreResult::success();
     switch (op) {
         case RelationOp::LT:
-            require_sign_declaration(prop_store, var_node->name(), Sign::Positive);
+            result = require_sign_declaration(prop_store, var_node->name(), Sign::Positive);
             break;
         case RelationOp::GT:
-            require_sign_declaration(prop_store, var_node->name(), Sign::Negative);
+            result = require_sign_declaration(prop_store, var_node->name(), Sign::Negative);
             break;
         case RelationOp::GEQ:
-            require_sign_declaration(prop_store, var_node->name(), Sign::NonPositive);
+            result = require_sign_declaration(prop_store, var_node->name(), Sign::NonPositive);
             break;
         case RelationOp::LEQ:
-            require_sign_declaration(prop_store, var_node->name(), Sign::NonNegative);
+            result = require_sign_declaration(prop_store, var_node->name(), Sign::NonNegative);
             break;
         case RelationOp::NEQ:
-            require_sign_declaration(prop_store, var_node->name(), Sign::NonZero);
+            result = require_sign_declaration(prop_store, var_node->name(), Sign::NonZero);
             break;
         case RelationOp::EQ:
             break;
     }
+    return result;
 }
 
 const std::vector<Relation>& RelationStore::get_relations() const {

@@ -4,7 +4,7 @@
 #include "integration.hpp"
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
-#include "expression_analysis.hpp"
+#include "internal/expression_analysis.hpp"
 #include "polynomial.hpp"
 #include "solve_polynomial.hpp"
 #include "symbolic_ast.hpp"
@@ -62,35 +62,7 @@ inline std::shared_ptr<SymbolicExpr> make_arctan(
 
 inline bool contains_unevaluated_integral(
     const std::shared_ptr<const SymbolicNode>& node) {
-    if (!node) {
-        return false;
-    }
-    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (function->type() == FunctionNode::FuncType::Calculus_Integral) {
-            return true;
-        }
-        for (const auto& argument : function->arguments()) {
-            if (contains_unevaluated_integral(argument)) {
-                return true;
-            }
-        }
-    } else if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& operand : add->operands()) {
-            if (contains_unevaluated_integral(operand)) {
-                return true;
-            }
-        }
-    } else if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& operand : multiply->operands()) {
-            if (contains_unevaluated_integral(operand)) {
-                return true;
-            }
-        }
-    } else if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return contains_unevaluated_integral(power->base()) ||
-               contains_unevaluated_integral(power->exponent());
-    }
-    return false;
+    return detail::contains_node_type<IntegralNode>(node);
 }
 
 } // namespace lamina

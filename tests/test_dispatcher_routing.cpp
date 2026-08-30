@@ -80,7 +80,7 @@ int main() {
 
             auto expr = build_poly_expr({b_val, a_val}, "x");
             SolveOptions opts;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (results.size() == 1) {
                 pass_count++;
@@ -110,7 +110,7 @@ int main() {
 
             auto expr = build_poly_expr({c_val, b_val, a_val}, "x");
             SolveOptions opts;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (results.size() == 2) {
                 pass_count++;
@@ -141,7 +141,7 @@ int main() {
 
             auto expr = build_poly_expr({d_val, c_val, b_val, a_val}, "x");
             SolveOptions opts;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (results.size() == 3) {
                 pass_count++;
@@ -174,7 +174,7 @@ int main() {
 
             auto expr = build_poly_expr({e_val, d_val, c_val, b_val, a_val}, "x");
             SolveOptions opts;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (results.size() == 4) {
                 pass_count++;
@@ -209,7 +209,7 @@ int main() {
             auto expr = build_poly_expr(test_polys[trial], "x");
             SolveOptions opts;
             opts.return_rootof = true;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             int degree = (int)test_polys[trial].size() - 1;
 
@@ -254,7 +254,7 @@ int main() {
                 auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), num_d(-c));
 
                 SolveOptions opts;
-                auto results = solve_dispatch(expr, "x", opts);
+                auto results = solve_vector_for_test(expr, "x", opts);
 
                 if (!results.empty()) {
                     pass_count++;
@@ -274,7 +274,7 @@ int main() {
                 auto expr = SymbolicExpr::add(SymbolicExpr::cos(x), num_d(-c));
 
                 SolveOptions opts;
-                auto results = solve_dispatch(expr, "x", opts);
+                auto results = solve_vector_for_test(expr, "x", opts);
 
                 if (!results.empty()) {
                     pass_count++;
@@ -294,7 +294,7 @@ int main() {
                 auto expr = SymbolicExpr::add(SymbolicExpr::exp(x), num_d(-c));
 
                 SolveOptions opts;
-                auto results = solve_dispatch(expr, "x", opts);
+                auto results = solve_vector_for_test(expr, "x", opts);
 
                 if (!results.empty()) {
                     pass_count++;
@@ -323,7 +323,7 @@ int main() {
 
             SolveOptions opts;
             opts.allow_numeric = true;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (results.size() == 2) {
                 pass_count++;
@@ -344,7 +344,7 @@ int main() {
             opts.allow_numeric = true;
             opts.has_initial_guess = true;
             opts.initial_guess = 0.5;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (!results.empty()) {
                 pass_count++;
@@ -361,7 +361,7 @@ int main() {
 
             SolveOptions opts;
             opts.allow_numeric = false;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (results.size() == 3) {
                 pass_count++;
@@ -391,7 +391,7 @@ int main() {
 
             auto expr = build_poly_expr({c_val, b_val, a_val}, "x");
             SolveOptions opts;
-            auto results = solve_dispatch(expr, "x", opts);
+            auto results = solve_vector_for_test(expr, "x", opts);
 
             if (results.size() == 2) {
                 bool has_transcendental_token = false;

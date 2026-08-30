@@ -43,15 +43,15 @@ void test_single_zero_operand() {
     auto mul_node = make_multiply({make_number(0), make_var("x")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
         "0 * x is NonNegative");
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::True,
         "0 * x is NonPositive");
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "0 * x is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "0 * x is not Negative");
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::False,
         "0 * x is not NonZero");
 }
 
@@ -64,13 +64,13 @@ void test_zero_among_multiple_operands() {
         {make_var("x"), make_number(0), make_var("y"), make_var("z")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
         "x * 0 * y * z is NonNegative");
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::True,
         "x * 0 * y * z is NonPositive");
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "x * 0 * y * z is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "x * 0 * y * z is not Negative");
 }
 
@@ -84,9 +84,9 @@ void test_zero_with_positive_numbers() {
         {make_number(5), make_number(0), make_number(3)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "5 * 0 * 3: not Positive");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
         "5 * 0 * 3: NonNegative");
 }
 
@@ -100,9 +100,9 @@ void test_zero_rational_and_float() {
         auto zero_rat = lamina::detail::make_node<NumberNode>(Rational(0));
         auto mul_node = make_multiply({zero_rat, make_var("x")});
         auto expr = wrap_expr(mul_node);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
             "Rational(0) * x: not Positive");
-        EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
             "Rational(0) * x: NonNegative");
     }
     // 0.0 * x
@@ -111,9 +111,9 @@ void test_zero_rational_and_float() {
             static_cast<lmmc_real_t>(0.0));
         auto mul_node = make_multiply({zero_float, make_var("x")});
         auto expr = wrap_expr(mul_node);
-        EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
             "0.0 * x: not Positive");
-        EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
             "0.0 * x: NonNegative");
     }
 }
@@ -128,13 +128,13 @@ void test_two_positives_product_positive() {
     auto mul_node = make_multiply({make_number(3), make_number(5)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "3 * 5 is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "3 * 5 is not Negative");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
         "3 * 5 is NonNegative");
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::False,
         "3 * 5 is not NonPositive");
 }
 
@@ -147,13 +147,13 @@ void test_one_negative_product_negative() {
     auto mul_node = make_multiply({make_number(3), make_number(-5)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "3 * (-5) is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "3 * (-5) is Negative");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::False,
         "3 * (-5) is not NonNegative");
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::True,
         "3 * (-5) is NonPositive");
 }
 
@@ -166,9 +166,9 @@ void test_two_negatives_product_positive() {
     auto mul_node = make_multiply({make_number(-3), make_number(-5)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "(-3) * (-5) is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "(-3) * (-5) is not Negative");
 }
 
@@ -182,9 +182,9 @@ void test_three_negatives_product_negative() {
         {make_number(-2), make_number(-3), make_number(-4)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "(-2)*(-3)*(-4) is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "(-2)*(-3)*(-4) is Negative");
 }
 
@@ -198,9 +198,9 @@ void test_four_negatives_product_positive() {
         {make_number(-1), make_number(-2), make_number(-3), make_number(-4)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "(-1)*(-2)*(-3)*(-4) is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "(-1)*(-2)*(-3)*(-4) is not Negative");
 }
 
@@ -214,9 +214,9 @@ void test_mixed_positive_negative_even() {
         {make_number(2), make_number(-3), make_number(4), make_number(-5)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "2*(-3)*4*(-5) is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "2*(-3)*4*(-5) is not Negative");
 }
 
@@ -230,9 +230,9 @@ void test_mixed_positive_negative_odd() {
         {make_number(2), make_number(-3), make_number(4)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "2*(-3)*4 is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "2*(-3)*4 is Negative");
 }
 
@@ -248,9 +248,9 @@ void test_positive_variables_product() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "pos_x * pos_y is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "pos_x * pos_y is not Negative");
 }
 
@@ -264,9 +264,9 @@ void test_negative_variables_product() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "neg_x * neg_y is Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "neg_x * neg_y is not Negative");
 }
 
@@ -280,9 +280,9 @@ void test_pos_neg_variable_product() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "pos_x * neg_y is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "pos_x * neg_y is Negative");
 }
 
@@ -298,9 +298,9 @@ void test_three_negative_variables() {
         {make_var("a"), make_var("b"), make_var("c")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "neg_a * neg_b * neg_c is not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "neg_a * neg_b * neg_c is Negative");
 }
 
@@ -315,7 +315,7 @@ void test_nonzero_variables_product() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
         "pos_x * neg_y is NonZero");
 }
 
@@ -327,7 +327,7 @@ void test_nonzero_numbers_product() {
     auto mul_node = make_multiply({make_number(3), make_number(-7)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
         "3 * (-7) is NonZero");
 }
 
@@ -345,7 +345,7 @@ void test_nonneg_even_negatives() {
         {make_var("x"), make_var("y"), make_var("z")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
         "nonneg * neg * neg: NonNegative (even negatives)");
 }
 
@@ -360,9 +360,9 @@ void test_nonpos_odd_negatives() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::True,
         "nonneg * neg: NonPositive (odd negatives)");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::False,
         "nonneg * neg: not NonNegative");
 }
 
@@ -376,13 +376,13 @@ void test_unknown_sign_no_zero() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "x * y: Positive Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
         "x * y: Negative Unknown");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
         "x * y: NonNegative Unknown");
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::Unknown,
         "x * y: NonPositive Unknown");
 }
 
@@ -396,9 +396,9 @@ void test_one_unknown_among_known() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "pos_x * unknown_y: Positive Unknown");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
         "pos_x * unknown_y: Negative Unknown");
 }
 
@@ -411,13 +411,13 @@ void test_zero_overrides_unknown() {
     auto mul_node = make_multiply({make_var("x"), make_number(0)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "x * 0: not Positive (zero overrides)");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "x * 0: not Negative (zero overrides)");
-    EXPECT_TRUE(engine.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
         "x * 0: NonNegative (zero)");
-    EXPECT_TRUE(engine.query_nonpositive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::True,
         "x * 0: NonPositive (zero)");
 }
 
@@ -443,9 +443,9 @@ void test_single_positive_number() {
     auto mul_node = make_multiply({make_number(7)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "multiply(7): Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
         "multiply(7): not Negative");
 }
 
@@ -458,9 +458,9 @@ void test_single_negative_number() {
     auto mul_node = make_multiply({make_number(-7)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "multiply(-7): not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "multiply(-7): Negative");
 }
 
@@ -474,9 +474,9 @@ void test_real_numbers_sign() {
         {make_number_real(2.5), make_number_real(-1.5)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
         "2.5 * (-1.5): not Positive");
-    EXPECT_TRUE(engine.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
         "2.5 * (-1.5): Negative");
 }
 
@@ -490,9 +490,9 @@ void test_many_operands_sign_parity() {
          make_number(4), make_number(5)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
         "1*2*3*4*5: Positive");
-    EXPECT_TRUE(engine.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
         "1*2*3*4*5: NonZero");
 }
 
@@ -507,7 +507,7 @@ void test_all_integer_numbers() {
         {make_number(3), make_number(-5), make_number(7)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
         "3 * (-5) * 7: Integer");
 }
 
@@ -523,7 +523,7 @@ void test_all_integer_variables() {
         {make_var("x"), make_var("y"), make_var("z")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
         "int_x * int_y * int_z: Integer");
 }
 
@@ -537,7 +537,7 @@ void test_mixed_integer_and_number() {
     auto mul_node = make_multiply({make_var("x"), make_number(5)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
         "int_x * 5: Integer");
 }
 
@@ -552,7 +552,7 @@ void test_all_real_numbers() {
          make_number_real(3.0)});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "2.5 * (-1.5) * 3.0: Real");
 }
 
@@ -566,7 +566,7 @@ void test_all_real_variables() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "real_x * real_y: Real");
 }
 
@@ -581,7 +581,7 @@ void test_integer_implies_real() {
     auto expr = wrap_expr(mul_node);
 
     // Integer implies Real, so product of Integers is also Real
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "int_x * int_y: also Real (Integer subset of Real)");
 }
 
@@ -595,10 +595,10 @@ void test_mixed_integer_real_is_real() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "int_x * real_y: Real");
     // But not necessarily Integer
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "int_x * real_y: Integer is Unknown");
 }
 
@@ -612,9 +612,9 @@ void test_unknown_domain_propagation() {
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "int_x * unknown_y: Integer Unknown");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
         "int_x * unknown_y: Real Unknown");
 }
 
@@ -628,7 +628,7 @@ void test_number_and_real_variable() {
     auto mul_node = make_multiply({make_number(5), make_var("x")});
     auto expr = wrap_expr(mul_node);
 
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "5 * real_x: Real");
 }
 
@@ -643,9 +643,9 @@ void test_natural_domain_implies_integer() {
     auto expr = wrap_expr(mul_node);
 
     // Natural implies Integer, so product should be Integer
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
         "nat_x * nat_y: Integer (Natural implies Integer)");
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "nat_x * nat_y: Real (Natural implies Real)");
 }
 
@@ -672,10 +672,10 @@ void test_rational_not_integer() {
     auto expr = wrap_expr(mul_node);
 
     // Rational(1/2) is not Integer, so product can't be proven Integer
-    EXPECT_TRUE(engine.query_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "Rational(1/2) * 3: Integer Unknown (non-integer operand)");
     // But both are Real
-    EXPECT_TRUE(engine.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "Rational(1/2) * 3: Real");
 }
 

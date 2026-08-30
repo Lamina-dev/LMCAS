@@ -40,17 +40,17 @@ void test_positive_bigint() {
         auto expr = make_bigint_expr(v);
         std::string label = "BigInt(" + std::to_string(v) + ")";
 
-        EXPECT_TRUE(qi.query_positive(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::True,
                     label + " query_positive=True");
-        EXPECT_TRUE(qi.query_negative(expr) == Tribool::False,
+        EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::False,
                     label + " query_negative=False");
-        EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::True,
                     label + " query_nonnegative=True");
-        EXPECT_TRUE(qi.query_integer(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::True,
                     label + " query_integer=True");
-        EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                     label + " query_real=True");
-        EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::True,
                     label + " query_nonzero=True");
     }
 }
@@ -67,17 +67,17 @@ void test_negative_bigint() {
         auto expr = make_bigint_expr(v);
         std::string label = "BigInt(" + std::to_string(v) + ")";
 
-        EXPECT_TRUE(qi.query_positive(expr) == Tribool::False,
+        EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::False,
                     label + " query_positive=False");
-        EXPECT_TRUE(qi.query_negative(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::True,
                     label + " query_negative=True");
-        EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::False,
+        EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::False,
                     label + " query_nonnegative=False");
-        EXPECT_TRUE(qi.query_integer(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::True,
                     label + " query_integer=True");
-        EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                     label + " query_real=True");
-        EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::True,
                     label + " query_nonzero=True");
     }
 }
@@ -91,17 +91,17 @@ void test_zero_bigint() {
 
     auto expr = make_bigint_expr(0);
 
-    EXPECT_TRUE(qi.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::False,
                 "BigInt(0) query_positive=False");
-    EXPECT_TRUE(qi.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::False,
                 "BigInt(0) query_negative=False");
-    EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::True,
                 "BigInt(0) query_nonnegative=True");
-    EXPECT_TRUE(qi.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::True,
                 "BigInt(0) query_integer=True");
-    EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                 "BigInt(0) query_real=True");
-    EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::False,
                 "BigInt(0) query_nonzero=False");
 }
 
@@ -114,17 +114,17 @@ void test_positive_rational() {
 
     auto expr = make_rational_expr(3, 2);
 
-    EXPECT_TRUE(qi.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::True,
                 "Rational(3/2) query_positive=True");
-    EXPECT_TRUE(qi.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::False,
                 "Rational(3/2) query_negative=False");
-    EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::True,
                 "Rational(3/2) query_nonnegative=True");
-    EXPECT_TRUE(qi.query_integer(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::False,
                 "Rational(3/2) query_integer=False");
-    EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                 "Rational(3/2) query_real=True");
-    EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::True,
                 "Rational(3/2) query_nonzero=True");
 }
 
@@ -137,17 +137,17 @@ void test_negative_rational() {
 
     auto expr = make_rational_expr(-5, 3);
 
-    EXPECT_TRUE(qi.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::False,
                 "Rational(-5/3) query_positive=False");
-    EXPECT_TRUE(qi.query_negative(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::True,
                 "Rational(-5/3) query_negative=True");
-    EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::False,
                 "Rational(-5/3) query_nonnegative=False");
-    EXPECT_TRUE(qi.query_integer(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::False,
                 "Rational(-5/3) query_integer=False");
-    EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                 "Rational(-5/3) query_real=True");
-    EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::True,
                 "Rational(-5/3) query_nonzero=True");
 }
 
@@ -160,17 +160,17 @@ void test_integer_rational() {
 
     auto expr = make_rational_expr(4, 1);
 
-    EXPECT_TRUE(qi.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::True,
                 "Rational(4/1) query_positive=True");
-    EXPECT_TRUE(qi.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::False,
                 "Rational(4/1) query_negative=False");
-    EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::True,
                 "Rational(4/1) query_nonnegative=True");
-    EXPECT_TRUE(qi.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::True,
                 "Rational(4/1) query_integer=True");
-    EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                 "Rational(4/1) query_real=True");
-    EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::True,
                 "Rational(4/1) query_nonzero=True");
 }
 
@@ -186,15 +186,15 @@ void test_positive_double() {
         auto expr = make_double_expr(v);
         std::string label = "double(" + std::to_string(v) + ")";
 
-        EXPECT_TRUE(qi.query_positive(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::True,
                     label + " query_positive=True");
-        EXPECT_TRUE(qi.query_negative(expr) == Tribool::False,
+        EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::False,
                     label + " query_negative=False");
-        EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::True,
                     label + " query_nonnegative=True");
-        EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                     label + " query_real=True");
-        EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::True,
                     label + " query_nonzero=True");
     }
 }
@@ -211,15 +211,15 @@ void test_negative_double() {
         auto expr = make_double_expr(v);
         std::string label = "double(" + std::to_string(v) + ")";
 
-        EXPECT_TRUE(qi.query_positive(expr) == Tribool::False,
+        EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::False,
                     label + " query_positive=False");
-        EXPECT_TRUE(qi.query_negative(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::True,
                     label + " query_negative=True");
-        EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::False,
+        EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::False,
                     label + " query_nonnegative=False");
-        EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                     label + " query_real=True");
-        EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::True,
+        EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::True,
                     label + " query_nonzero=True");
     }
 }
@@ -233,15 +233,15 @@ void test_zero_double() {
 
     auto expr = make_double_expr(0.0);
 
-    EXPECT_TRUE(qi.query_positive(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::False,
                 "double(0.0) query_positive=False");
-    EXPECT_TRUE(qi.query_negative(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_negative(expr).value() == Tribool::False,
                 "double(0.0) query_negative=False");
-    EXPECT_TRUE(qi.query_nonnegative(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_nonnegative(expr).value() == Tribool::True,
                 "double(0.0) query_nonnegative=True");
-    EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                 "double(0.0) query_real=True");
-    EXPECT_TRUE(qi.query_nonzero(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_nonzero(expr).value() == Tribool::False,
                 "double(0.0) query_nonzero=False");
 }
 
@@ -254,21 +254,21 @@ void test_non_integer_double() {
 
     auto expr = make_double_expr(2.5);
 
-    EXPECT_TRUE(qi.query_integer(expr) == Tribool::False,
+    EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::False,
                 "double(2.5) query_integer=False");
-    EXPECT_TRUE(qi.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::True,
                 "double(2.5) query_positive=True");
-    EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                 "double(2.5) query_real=True");
 
     // Also test a negative non-integer double
     auto expr2 = make_double_expr(-1.7);
 
-    EXPECT_TRUE(qi.query_integer(expr2) == Tribool::False,
+    EXPECT_TRUE(qi.query_integer(expr2).value() == Tribool::False,
                 "double(-1.7) query_integer=False");
-    EXPECT_TRUE(qi.query_negative(expr2) == Tribool::True,
+    EXPECT_TRUE(qi.query_negative(expr2).value() == Tribool::True,
                 "double(-1.7) query_negative=True");
-    EXPECT_TRUE(qi.query_real(expr2) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr2).value() == Tribool::True,
                 "double(-1.7) query_real=True");
 }
 
@@ -281,11 +281,11 @@ void test_integer_double() {
 
     auto expr = make_double_expr(3.0);
 
-    EXPECT_TRUE(qi.query_integer(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_integer(expr).value() == Tribool::True,
                 "double(3.0) query_integer=True");
-    EXPECT_TRUE(qi.query_positive(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_positive(expr).value() == Tribool::True,
                 "double(3.0) query_positive=True");
-    EXPECT_TRUE(qi.query_real(expr) == Tribool::True,
+    EXPECT_TRUE(qi.query_real(expr).value() == Tribool::True,
                 "double(3.0) query_real=True");
 }
 
@@ -332,15 +332,15 @@ void test_nan_handling() {
     auto nan_node = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(std::nan("")));
     SymbolicExpr nan_expr = make_expr(nan_node);
 
-    EXPECT_TRIBOOL(qi.query_integer(nan_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_integer(nan_expr).value(), Tribool::False,
                    "NaN: query_integer should return False");
-    EXPECT_TRIBOOL(qi.query_positive(nan_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive(nan_expr).value(), Tribool::Unknown,
                    "NaN: query_positive should return Unknown");
-    EXPECT_TRIBOOL(qi.query_negative(nan_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_negative(nan_expr).value(), Tribool::Unknown,
                    "NaN: query_negative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonnegative(nan_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonnegative(nan_expr).value(), Tribool::Unknown,
                    "NaN: query_nonnegative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonzero(nan_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonzero(nan_expr).value(), Tribool::Unknown,
                    "NaN: query_nonzero should return Unknown");
 }
 
@@ -357,13 +357,13 @@ void test_infinity_handling() {
         std::vector<std::shared_ptr<const SymbolicNode>>{});
     SymbolicExpr pos_inf_expr = make_expr(inf_node);
 
-    EXPECT_TRIBOOL(qi.query_positive(pos_inf_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_positive(pos_inf_expr).value(), Tribool::True,
                    "+Infinity: query_positive should return True");
-    EXPECT_TRIBOOL(qi.query_negative(pos_inf_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_negative(pos_inf_expr).value(), Tribool::False,
                    "+Infinity: query_negative should return False");
-    EXPECT_TRIBOOL(qi.query_integer(pos_inf_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_integer(pos_inf_expr).value(), Tribool::False,
                    "+Infinity: query_integer should return False");
-    EXPECT_TRIBOOL(qi.query_nonzero(pos_inf_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_nonzero(pos_inf_expr).value(), Tribool::True,
                    "+Infinity: query_nonzero should return True");
 
     // Negative infinity: MultiplyNode(-1, Infinity)
@@ -375,9 +375,9 @@ void test_infinity_handling() {
         std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, inf_node2});
     SymbolicExpr neg_inf_expr = make_expr(neg_inf_node);
 
-    EXPECT_TRIBOOL(qi.query_negative(neg_inf_expr), Tribool::True,
+    EXPECT_TRIBOOL(qi.query_negative(neg_inf_expr).value(), Tribool::True,
                    "-Infinity: query_negative should return True");
-    EXPECT_TRIBOOL(qi.query_positive(neg_inf_expr), Tribool::False,
+    EXPECT_TRIBOOL(qi.query_positive(neg_inf_expr).value(), Tribool::False,
                    "-Infinity: query_positive should return False");
 }
 
@@ -390,17 +390,17 @@ void test_undeclared_variable() {
 
     SymbolicExpr var_expr = make_expr(var("undeclared"));
 
-    EXPECT_TRIBOOL(qi.query_positive(var_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive(var_expr).value(), Tribool::Unknown,
                    "Undeclared var: query_positive should return Unknown");
-    EXPECT_TRIBOOL(qi.query_negative(var_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_negative(var_expr).value(), Tribool::Unknown,
                    "Undeclared var: query_negative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonnegative(var_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonnegative(var_expr).value(), Tribool::Unknown,
                    "Undeclared var: query_nonnegative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_real(var_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_real(var_expr).value(), Tribool::Unknown,
                    "Undeclared var: query_real should return Unknown");
-    EXPECT_TRIBOOL(qi.query_integer(var_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_integer(var_expr).value(), Tribool::Unknown,
                    "Undeclared var: query_integer should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonzero(var_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonzero(var_expr).value(), Tribool::Unknown,
                    "Undeclared var: query_nonzero should return Unknown");
 }
 
@@ -417,17 +417,17 @@ void test_matrix_node() {
     auto mat_node = lamina::detail::make_node<MatrixNode>(grid);
     SymbolicExpr mat_expr = make_expr(mat_node);
 
-    EXPECT_TRIBOOL(qi.query_positive(mat_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive(mat_expr).value(), Tribool::Unknown,
                    "MatrixNode: query_positive should return Unknown");
-    EXPECT_TRIBOOL(qi.query_negative(mat_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_negative(mat_expr).value(), Tribool::Unknown,
                    "MatrixNode: query_negative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonnegative(mat_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonnegative(mat_expr).value(), Tribool::Unknown,
                    "MatrixNode: query_nonnegative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_real(mat_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_real(mat_expr).value(), Tribool::Unknown,
                    "MatrixNode: query_real should return Unknown");
-    EXPECT_TRIBOOL(qi.query_integer(mat_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_integer(mat_expr).value(), Tribool::Unknown,
                    "MatrixNode: query_integer should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonzero(mat_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonzero(mat_expr).value(), Tribool::Unknown,
                    "MatrixNode: query_nonzero should return Unknown");
 }
 
@@ -442,17 +442,17 @@ void test_relational_node() {
         var("x"), num(0), RelationalNode::Op::GT);
     SymbolicExpr rel_expr = make_expr(rel_node);
 
-    EXPECT_TRIBOOL(qi.query_positive(rel_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive(rel_expr).value(), Tribool::Unknown,
                    "RelationalNode: query_positive should return Unknown");
-    EXPECT_TRIBOOL(qi.query_negative(rel_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_negative(rel_expr).value(), Tribool::Unknown,
                    "RelationalNode: query_negative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonnegative(rel_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonnegative(rel_expr).value(), Tribool::Unknown,
                    "RelationalNode: query_nonnegative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_real(rel_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_real(rel_expr).value(), Tribool::Unknown,
                    "RelationalNode: query_real should return Unknown");
-    EXPECT_TRIBOOL(qi.query_integer(rel_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_integer(rel_expr).value(), Tribool::Unknown,
                    "RelationalNode: query_integer should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonzero(rel_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonzero(rel_expr).value(), Tribool::Unknown,
                    "RelationalNode: query_nonzero should return Unknown");
 }
 
@@ -471,17 +471,17 @@ void test_logical_node() {
         left_rel, right_rel, LogicalNode::Op::And);
     SymbolicExpr logical_expr = make_expr(logical_node);
 
-    EXPECT_TRIBOOL(qi.query_positive(logical_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_positive(logical_expr).value(), Tribool::Unknown,
                    "LogicalNode: query_positive should return Unknown");
-    EXPECT_TRIBOOL(qi.query_negative(logical_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_negative(logical_expr).value(), Tribool::Unknown,
                    "LogicalNode: query_negative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonnegative(logical_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonnegative(logical_expr).value(), Tribool::Unknown,
                    "LogicalNode: query_nonnegative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_real(logical_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_real(logical_expr).value(), Tribool::Unknown,
                    "LogicalNode: query_real should return Unknown");
-    EXPECT_TRIBOOL(qi.query_integer(logical_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_integer(logical_expr).value(), Tribool::Unknown,
                    "LogicalNode: query_integer should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonzero(logical_expr), Tribool::Unknown,
+    EXPECT_TRIBOOL(qi.query_nonzero(logical_expr).value(), Tribool::Unknown,
                    "LogicalNode: query_nonzero should return Unknown");
 }
 

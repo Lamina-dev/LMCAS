@@ -189,13 +189,13 @@ void test_end_to_end_query_after_assumption() {
     ctx.assume_sign("x", Sign::Positive);
 
     auto x_expr = lamina::detail::expression_from_node(var("x"));
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "End-to-end: x is Positive after assume_sign(Positive)");
-    EXPECT_TRUE(ctx.is_nonnegative(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_nonnegative(x_expr).value() == Tribool::True,
                 "End-to-end: x is NonNegative (implied by Positive)");
-    EXPECT_TRUE(ctx.is_nonzero(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_nonzero(x_expr).value() == Tribool::True,
                 "End-to-end: x is NonZero (implied by Positive)");
-    EXPECT_TRUE(ctx.is_negative(x_expr) == Tribool::False,
+    EXPECT_TRUE(ctx.is_negative(x_expr).value() == Tribool::False,
                 "End-to-end: x is NOT Negative when Positive");
 }
 
@@ -246,14 +246,14 @@ void test_nested_scopes_query_roundtrip() {
     AssumptionContext ctx;
     auto x_expr = lamina::detail::expression_from_node(var("x"));
     // Root scope: x has no assumptions
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::Unknown,
                 "Nested scopes: x is Unknown in root scope");
 
     // Push scope 1: assume x > 0
     ctx.push();
     ctx.assume_sign("x", Sign::Positive);
 
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "Nested scopes: x is Positive in scope 1");
 
     // Push scope 2: assume y is Integer (x should still be accessible via has_sign)
@@ -261,7 +261,7 @@ void test_nested_scopes_query_roundtrip() {
     ctx.assume_domain("y", Domain::Integer);
 
     auto y_expr = lamina::detail::expression_from_node(var("y"));
-    EXPECT_TRUE(ctx.is_integer(y_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_integer(y_expr).value() == Tribool::True,
                 "Nested scopes: y is Integer in scope 2");
     // x Positive is visible via read-through (has_sign reads all scopes)
     EXPECT_TRUE(ctx.has_sign("x", Sign::Positive),
@@ -269,14 +269,14 @@ void test_nested_scopes_query_roundtrip() {
 
     // Pop scope 2
     ctx.pop();
-    EXPECT_TRUE(ctx.is_integer(y_expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_integer(y_expr).value() == Tribool::Unknown,
                 "Nested scopes: y is Unknown after popping scope 2");
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "Nested scopes: x still Positive in scope 1");
 
     // Pop scope 1
     ctx.pop();
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::Unknown,
                 "Nested scopes: x is Unknown after popping scope 1");
 }
 
@@ -331,17 +331,17 @@ void test_unrecognized_function_returns_unknown() {
         FunctionNode::FuncType::LambertW,
         std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
     auto expr = lamina::detail::expression_from_node(lambert_w);
-    EXPECT_TRUE(ctx.is_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_positive(expr).value() == Tribool::Unknown,
                 "LambertW(x) is_positive -> Unknown");
-    EXPECT_TRUE(ctx.is_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_negative(expr).value() == Tribool::Unknown,
                 "LambertW(x) is_negative -> Unknown");
-    EXPECT_TRUE(ctx.is_nonnegative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_nonnegative(expr).value() == Tribool::Unknown,
                 "LambertW(x) is_nonnegative -> Unknown");
-    EXPECT_TRUE(ctx.is_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_real(expr).value() == Tribool::Unknown,
                 "LambertW(x) is_real -> Unknown");
-    EXPECT_TRUE(ctx.is_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_integer(expr).value() == Tribool::Unknown,
                 "LambertW(x) is_integer -> Unknown");
-    EXPECT_TRUE(ctx.is_nonzero(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_nonzero(expr).value() == Tribool::Unknown,
                 "LambertW(x) is_nonzero -> Unknown");
 }
 
@@ -355,13 +355,13 @@ void test_unrecognized_function_erf() {
         FunctionNode::FuncType::Erf,
         std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
     auto expr = lamina::detail::expression_from_node(erf_x);
-    EXPECT_TRUE(ctx.is_positive(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_positive(expr).value() == Tribool::Unknown,
                 "Erf(x) is_positive -> Unknown");
-    EXPECT_TRUE(ctx.is_negative(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_negative(expr).value() == Tribool::Unknown,
                 "Erf(x) is_negative -> Unknown");
-    EXPECT_TRUE(ctx.is_real(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_real(expr).value() == Tribool::Unknown,
                 "Erf(x) is_real -> Unknown");
-    EXPECT_TRUE(ctx.is_integer(expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_integer(expr).value() == Tribool::Unknown,
                 "Erf(x) is_integer -> Unknown");
 }
 
@@ -410,19 +410,13 @@ void test_domain_filtering_positive_int_excludes_all() {
 
 
 void test_pop_on_root_scope_throws() {
-    TEST_CASE("pop() on root scope throws std::runtime_error");
+    TEST_CASE("pop() on root scope returns InvalidArgument");
 
     AssumptionContext ctx;
     EXPECT_TRUE(ctx.depth() == 1, "Initial depth is 1 (root scope)");
 
-    bool threw = false;
-    try {
-        ctx.pop();
-    } catch (const std::runtime_error&) {
-        threw = true;
-    }
-
-    EXPECT_TRUE(threw, "pop() on root scope throws std::runtime_error");
+    auto failure_416 = ctx.pop();
+    EXPECT_TRUE(!failure_416.has_value(), "pop() on root scope returns InvalidArgument");
     EXPECT_TRUE(ctx.depth() == 1, "depth unchanged after failed pop");
 }
 
@@ -442,7 +436,7 @@ void test_nesting_depth_128() {
     // Declare something in the deepest scope
     ctx.assume_sign("x", Sign::Positive);
     auto x_expr = lamina::detail::expression_from_node(var("x"));
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "Can declare and query at depth 129");
 
     // Pop all 128 scopes
@@ -451,12 +445,12 @@ void test_nesting_depth_128() {
     }
 
     EXPECT_TRUE(ctx.depth() == 1, "Depth is 1 after popping all 128 scopes");
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::Unknown,
                 "x is Unknown after popping all scopes");
 }
 
 
-void test_nan_handling() {
+static void test_nan_handling() {
     TEST_CASE("NaN NumberNode -> False for integer, Unknown for sign");
 
     AssumptionContext ctx;
@@ -464,15 +458,15 @@ void test_nan_handling() {
     double nan_val = std::numeric_limits<double>::quiet_NaN();
     auto nan_node = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(nan_val));
     auto nan_expr = lamina::detail::expression_from_node(nan_node);
-    EXPECT_TRUE(ctx.is_integer(nan_expr) == Tribool::False,
+    EXPECT_TRUE(ctx.is_integer(nan_expr).value() == Tribool::False,
                 "NaN is_integer -> False");
-    EXPECT_TRUE(ctx.is_positive(nan_expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_positive(nan_expr).value() == Tribool::Unknown,
                 "NaN is_positive -> Unknown");
-    EXPECT_TRUE(ctx.is_negative(nan_expr) == Tribool::Unknown,
+    EXPECT_TRUE(ctx.is_negative(nan_expr).value() == Tribool::Unknown,
                 "NaN is_negative -> Unknown");
 }
 
-void test_infinity_handling() {
+static void test_infinity_handling() {
     TEST_CASE("Infinity -> derive sign, False for integer");
 
     AssumptionContext ctx;
@@ -482,18 +476,18 @@ void test_infinity_handling() {
         FunctionNode::FuncType::Infinity,
         std::vector<std::shared_ptr<const SymbolicNode>>{});
     auto pos_inf_expr = lamina::detail::expression_from_node(pos_inf);
-    EXPECT_TRUE(ctx.is_integer(pos_inf_expr) == Tribool::False,
+    EXPECT_TRUE(ctx.is_integer(pos_inf_expr).value() == Tribool::False,
                 "+Infinity is_integer -> False");
-    EXPECT_TRUE(ctx.is_positive(pos_inf_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_positive(pos_inf_expr).value() == Tribool::True,
                 "+Infinity is_positive -> True");
 
     // Negative infinity: MultiplyNode(-1, Infinity)
     auto neg_inf = lamina::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{num(-1), pos_inf});
     auto neg_inf_expr = lamina::detail::expression_from_node(neg_inf);
-    EXPECT_TRUE(ctx.is_integer(neg_inf_expr) == Tribool::False,
+    EXPECT_TRUE(ctx.is_integer(neg_inf_expr).value() == Tribool::False,
                 "-Infinity is_integer -> False");
-    EXPECT_TRUE(ctx.is_negative(neg_inf_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_negative(neg_inf_expr).value() == Tribool::True,
                 "-Infinity is_negative -> True");
 }
 
@@ -509,9 +503,9 @@ void test_combined_pipeline() {
 
     // Step 2: Query properties
     auto x_expr = lamina::detail::expression_from_node(var("x"));
-    EXPECT_TRUE(ctx.is_positive(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "Pipeline: x is Positive");
-    EXPECT_TRUE(ctx.is_real(x_expr) == Tribool::True,
+    EXPECT_TRUE(ctx.is_real(x_expr).value() == Tribool::True,
                 "Pipeline: x is Real");
 
     // Step 3: Simplify abs(x) -> x (since x > 0)
