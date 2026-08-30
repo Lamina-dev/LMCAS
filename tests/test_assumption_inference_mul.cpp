@@ -39,7 +39,7 @@ void test_single_zero_operand() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(0, x) — zero operand detected via is_zero()
+    // multiply(0, x) - zero operand detected via is_zero()
     auto mul_node = make_multiply({make_number(0), make_var("x")});
     auto expr = wrap_expr(mul_node);
 
@@ -79,7 +79,7 @@ void test_zero_with_positive_numbers() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(5, 0, 3) — zero among positive numbers
+    // multiply(5, 0, 3) - zero among positive numbers
     auto mul_node = make_multiply(
         {make_number(5), make_number(0), make_number(3)});
     auto expr = wrap_expr(mul_node);
@@ -124,7 +124,7 @@ void test_two_positives_product_positive() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(3, 5) — both positive, 0 negatives (even)
+    // multiply(3, 5) - both positive, 0 negatives (even)
     auto mul_node = make_multiply({make_number(3), make_number(5)});
     auto expr = wrap_expr(mul_node);
 
@@ -143,7 +143,7 @@ void test_one_negative_product_negative() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(3, -5) — 1 negative (odd)
+    // multiply(3, -5) - 1 negative (odd)
     auto mul_node = make_multiply({make_number(3), make_number(-5)});
     auto expr = wrap_expr(mul_node);
 
@@ -162,7 +162,7 @@ void test_two_negatives_product_positive() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(-3, -5) — 2 negatives (even)
+    // multiply(-3, -5) - 2 negatives (even)
     auto mul_node = make_multiply({make_number(-3), make_number(-5)});
     auto expr = wrap_expr(mul_node);
 
@@ -177,7 +177,7 @@ void test_three_negatives_product_negative() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(-2, -3, -4) — 3 negatives (odd)
+    // multiply(-2, -3, -4) - 3 negatives (odd)
     auto mul_node = make_multiply(
         {make_number(-2), make_number(-3), make_number(-4)});
     auto expr = wrap_expr(mul_node);
@@ -193,7 +193,7 @@ void test_four_negatives_product_positive() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(-1, -2, -3, -4) — 4 negatives (even)
+    // multiply(-1, -2, -3, -4) - 4 negatives (even)
     auto mul_node = make_multiply(
         {make_number(-1), make_number(-2), make_number(-3), make_number(-4)});
     auto expr = wrap_expr(mul_node);
@@ -209,7 +209,7 @@ void test_mixed_positive_negative_even() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(2, -3, 4, -5) — 2 negatives (even)
+    // multiply(2, -3, 4, -5) - 2 negatives (even)
     auto mul_node = make_multiply(
         {make_number(2), make_number(-3), make_number(4), make_number(-5)});
     auto expr = wrap_expr(mul_node);
@@ -225,7 +225,7 @@ void test_mixed_positive_negative_odd() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(2, -3, 4) — 1 negative (odd)
+    // multiply(2, -3, 4) - 1 negative (odd)
     auto mul_node = make_multiply(
         {make_number(2), make_number(-3), make_number(4)});
     auto expr = wrap_expr(mul_node);
@@ -340,7 +340,7 @@ void test_nonneg_even_negatives() {
     ctx.assume_sign("z", Sign::Negative);
     InferenceEngine engine(ctx);
 
-    // x(nonneg) * y(neg) * z(neg) — 2 negatives (even)
+    // x(nonneg) * y(neg) * z(neg) - 2 negatives (even)
     auto mul_node = make_multiply(
         {make_var("x"), make_var("y"), make_var("z")});
     auto expr = wrap_expr(mul_node);
@@ -356,7 +356,7 @@ void test_nonpos_odd_negatives() {
     ctx.assume_sign("y", Sign::Negative);
     InferenceEngine engine(ctx);
 
-    // x(nonneg) * y(neg) — 1 negative (odd)
+    // x(nonneg) * y(neg) - 1 negative (odd)
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
@@ -372,7 +372,7 @@ void test_unknown_sign_no_zero() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(x, y) — no properties declared
+    // multiply(x, y) - no properties declared
     auto mul_node = make_multiply({make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
@@ -407,7 +407,7 @@ void test_zero_overrides_unknown() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(x, 0) — x unknown but zero present
+    // multiply(x, 0) - x unknown but zero present
     auto mul_node = make_multiply({make_var("x"), make_number(0)});
     auto expr = wrap_expr(mul_node);
 
@@ -439,7 +439,7 @@ void test_single_positive_number() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(7) — single positive number
+    // multiply(7) - single positive number
     auto mul_node = make_multiply({make_number(7)});
     auto expr = wrap_expr(mul_node);
 
@@ -469,7 +469,7 @@ void test_real_numbers_sign() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(2.5, -1.5) — 1 negative (odd)
+    // multiply(2.5, -1.5) - 1 negative (odd)
     auto mul_node = make_multiply(
         {make_number_real(2.5), make_number_real(-1.5)});
     auto expr = wrap_expr(mul_node);
@@ -502,7 +502,7 @@ void test_all_integer_numbers() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(3, -5, 7) — all BigInt (Integer)
+    // multiply(3, -5, 7) - all BigInt (Integer)
     auto mul_node = make_multiply(
         {make_number(3), make_number(-5), make_number(7)});
     auto expr = wrap_expr(mul_node);
@@ -533,7 +533,7 @@ void test_mixed_integer_and_number() {
     ctx.assume_domain("x", Domain::Integer);
     InferenceEngine engine(ctx);
 
-    // multiply(x, 5) — x is Integer, 5 is BigInt (Integer)
+    // multiply(x, 5) - x is Integer, 5 is BigInt (Integer)
     auto mul_node = make_multiply({make_var("x"), make_number(5)});
     auto expr = wrap_expr(mul_node);
 
@@ -546,7 +546,7 @@ void test_all_real_numbers() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // multiply(2.5, -1.5, 3.0) — all finite reals
+    // multiply(2.5, -1.5, 3.0) - all finite reals
     auto mul_node = make_multiply(
         {make_number_real(2.5), make_number_real(-1.5),
          make_number_real(3.0)});
@@ -624,7 +624,7 @@ void test_number_and_real_variable() {
     ctx.assume_domain("x", Domain::Real);
     InferenceEngine engine(ctx);
 
-    // multiply(5, x) — 5 is BigInt (Integer->Real), x is Real
+    // multiply(5, x) - 5 is BigInt (Integer->Real), x is Real
     auto mul_node = make_multiply({make_number(5), make_var("x")});
     auto expr = wrap_expr(mul_node);
 
@@ -671,7 +671,7 @@ void test_rational_not_integer() {
     auto mul_node = make_multiply({rat_node, make_number(3)});
     auto expr = wrap_expr(mul_node);
 
-    /// Rational(1/2) 与整数 3 的积缺少整数性证明，两项仍具有 Real 域。
+    /// Rational(1/2) 与整数 3 的积缺少整数性证明,两项仍具有 Real 域.
     EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "Rational(1/2) * 3: Integer Unknown (non-integer operand)");
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,

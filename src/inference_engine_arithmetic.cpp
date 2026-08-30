@@ -667,11 +667,11 @@ bool is_even_integer_number(const NumberNode& num) {
         return std::get<BigInt>(num.value()).is_even();
     }
     if (std::holds_alternative<Rational>(num.value())) {
-        // Rational with denominator 1 — check numerator
+        // Rational with denominator 1 - check numerator
         BigInt n = std::get<Rational>(num.value()).get_numerator();
         return n.is_even();
     }
-    // double case — guard against overflow for very large values
+    // double case - guard against overflow for very large values
     double v = std::get<lmmc_real_t>(num.value());
     if (std::fabs(v) >= static_cast<double>(LLONG_MAX)) {
         return std::fmod(v, 2.0) == 0.0;
@@ -761,7 +761,7 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
                 switch (target) {
                     case Sign::NonNegative: return InferenceTriboolResult::success(Tribool::True);
                     case Sign::Negative:    return InferenceTriboolResult::success(Tribool::False);
-                    /// base 可能为零，因此 Positive 与 NonPositive 均保持 Unknown。
+                    /// base 可能为零,因此 Positive 与 NonPositive 均保持 Unknown.
                     default: break;
                 }
             }
@@ -893,7 +893,7 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
             }
 
             case FunctionNode::FuncType::Sin: {
-                /// sin(Real) 属于 Real 且值域为 [-1,1]；其符号由具体参数值决定。
+                /// sin(Real) 属于 Real 且值域为 [-1,1];其符号由具体参数值决定.
                 Tribool arg_real = detail::propagate_result(query_domain_of_checked(arg_expr, Domain::Real));
                 if (arg_real != Tribool::True) return InferenceTriboolResult::success(Tribool::Unknown);
 
@@ -901,7 +901,7 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
             }
 
             case FunctionNode::FuncType::Cos: {
-                /// cos(Real) 属于 Real 且值域为 [-1,1]；其符号由具体参数值决定。
+                /// cos(Real) 属于 Real 且值域为 [-1,1];其符号由具体参数值决定.
                 Tribool arg_real = detail::propagate_result(query_domain_of_checked(arg_expr, Domain::Real));
                 if (arg_real != Tribool::True) return InferenceTriboolResult::success(Tribool::Unknown);
 
@@ -939,7 +939,7 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
 
             case FunctionNode::FuncType::Ln: {
                 // ln(Positive) -> Real
-                /// ln 在 x>1、0<x<1 与 x=1 时分别为正、负与零，通用符号保持 Unknown。
+                /// ln 在 x>1,0<x<1 与 x=1 时分别为正,负与零,通用符号保持 Unknown.
                 Tribool arg_positive = detail::propagate_result(query_sign_of_checked(arg_expr, Sign::Positive));
                 if (arg_positive != Tribool::True) return InferenceTriboolResult::success(Tribool::Unknown);
 

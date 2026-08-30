@@ -36,8 +36,8 @@ using AssumptionTriboolResult = Result<Tribool>;
  *
  * Maintains a stack of scopes, each containing a PropertyStore and RelationStore.
  * Queries use read-through semantics: searching from the top scope down to root,
- * 查询按子作用域到父作用域的顺序定位首个符号声明。
- * 子作用域声明覆盖查询结果，同时保留父作用域状态；弹出作用域后恢复先前结果。
+ * 查询按子作用域到父作用域的顺序定位首个符号声明.
+ * 子作用域声明覆盖查询结果,同时保留父作用域状态;弹出作用域后恢复先前结果.
  */
 class LAMINA_API AssumptionContext {
 public:
@@ -223,7 +223,7 @@ public:
      */
     static Result<AssumptionContext> deserialize(const std::string& data);
 
-    /// 面向不可信输入的受检反序列化接口，通过 CasError 传递格式与约束诊断。
+    /// 面向不可信输入的受检反序列化接口,通过 CasError 传递格式与约束诊断.
     static Result<AssumptionContext> deserialize_checked(const std::string& data);
 
     /**

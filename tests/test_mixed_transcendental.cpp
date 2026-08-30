@@ -121,7 +121,7 @@ void test_allow_numeric_false_returns_empty() {
     TEST_CASE("allow_numeric=false on mixed transcendental → empty vector");
 
     auto x = SymbolicExpr::variable("x");
-    /// x*sin(x) - 1 = 0 属于混合超越方程，数值根路径处理其闭式未决结果。
+    /// x*sin(x) - 1 = 0 属于混合超越方程,数值根路径处理其闭式未决结果.
     auto expr = SymbolicExpr::add(
         SymbolicExpr::multiply(x, SymbolicExpr::sin(x)),
         SymbolicExpr::number(-1)
@@ -155,7 +155,7 @@ void test_allow_numeric_true_permits_solving() {
 
     // Note: If the numerical solver is fully implemented, this should return
     // at least one root. If it's still a stub, this test documents the expected
-    /// allow_numeric=true 启用数值候选路径。
+    /// allow_numeric=true 启用数值候选路径.
     std::cout << "  [INFO] allow_numeric=true returned " << results.size() << " root(s)" << std::endl;
 
     // If results are non-empty, verify they are valid NumberNode expressions
@@ -169,7 +169,7 @@ void test_allow_numeric_false_cos_equation_returns_empty() {
     TEST_CASE("allow_numeric=false on x*cos(x)+x^2*sin(x)-1 → empty vector");
 
     auto x = SymbolicExpr::variable("x");
-    /// x*cos(x) + x²*sin(x) - 1 = 0 由混合超越数值路径处理。
+    /// x*cos(x) + x^2*sin(x) - 1 = 0 由混合超越数值路径处理.
     auto expr = SymbolicExpr::add(
         SymbolicExpr::multiply(x, SymbolicExpr::cos(x)),
         SymbolicExpr::add(
@@ -234,7 +234,7 @@ void test_routing_transcendental_substitution_not_hybrid() {
     TEST_CASE("exp(x) - 2 = 0 routes to transcendental solver, not hybrid");
 
     auto x = SymbolicExpr::variable("x");
-    // exp(x) - 2 = 0: reducible via substitution u = exp(x), giving u - 2 = 0 → u = 2 → x = ln(2)
+    // exp(x) - 2 = 0: reducible via substitution u = exp(x), giving u - 2 = 0 -> u = 2 -> x = ln(2)
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::number(-2)
@@ -246,7 +246,7 @@ void test_routing_transcendental_substitution_not_hybrid() {
 
     auto results = solve_vector_for_test(expr, "x", opts);
 
-    // exp(x) - 2 = 0 has solution x = ln(2) ≈ 0.693147
+    // exp(x) - 2 = 0 has solution x = ln(2) ~= 0.693147
     EXPECT_TRUE(!results.empty(),
         "exp(x) - 2 = 0 should produce at least one root via transcendental path");
 
@@ -265,7 +265,7 @@ void test_routing_transcendental_substitution_not_hybrid() {
                 EXPECT_NEAR(*eval, 0.0, 1e-10,
                     "Substituting root back into exp(x)-2 should give 0");
             } else {
-                /// 找到符号结果即证明超越路径在空数值回退设置下完成求解。
+                /// 找到符号结果即证明超越路径在空数值回退设置下完成求解.
                 std::cout << "  [INFO] Root is symbolic: " << results[0]->to_string() << std::endl;
                 EXPECT_TRUE(results[0] != nullptr && !results[0]->to_string().empty(),
                             "Transcendental path produced a symbolic result (not hybrid)");
@@ -328,7 +328,7 @@ void test_backward_compat_cubic_polynomial() {
         )
     );
 
-    // Test with allow_numeric=true — polynomial path should still handle it
+    // Test with allow_numeric=true - polynomial path should still handle it
     lamina::SolveOptions opts_numeric;
     opts_numeric.allow_numeric = true;
     auto results_numeric = solve_vector_for_test(expr, "x", opts_numeric);
@@ -351,7 +351,7 @@ void test_backward_compat_cubic_polynomial() {
         }
     }
 
-    // Test with allow_numeric=false — polynomial path should still produce same results
+    // Test with allow_numeric=false - polynomial path should still produce same results
     lamina::SolveOptions opts_symbolic;
     opts_symbolic.allow_numeric = false;
     auto results_symbolic = solve_vector_for_test(expr, "x", opts_symbolic);
@@ -381,14 +381,14 @@ void test_backward_compat_transcendental_substitution() {
     TEST_CASE("exp(x) - 2 = 0 still solved via transcendental path with hybrid integrated");
 
     auto x = SymbolicExpr::variable("x");
-    // exp(x) - 2 = 0: reducible via substitution u=exp(x), u-2=0 → x=ln(2)
+    // exp(x) - 2 = 0: reducible via substitution u=exp(x), u-2=0 -> x=ln(2)
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::number(-2)
     );
 
-    /// allow_numeric=false 时超越求解器仍返回 ln(2)，
-    /// 证明可约超越方程由符号路径处理。
+    /// allow_numeric=false 时超越求解器仍返回 ln(2),
+    /// 证明可约超越方程由符号路径处理.
     lamina::SolveOptions opts;
     opts.allow_numeric = false;
 
@@ -398,13 +398,13 @@ void test_backward_compat_transcendental_substitution() {
         "exp(x)-2=0 should produce at least one root via transcendental path (not hybrid)");
 
     if (!results.empty()) {
-        // Verify the root is approximately ln(2) ≈ 0.693147
+        // Verify the root is approximately ln(2) ~= 0.693147
         auto val = test_numeric_eval(results[0]);
         if (val.has_value()) {
             EXPECT_NEAR(*val, std::log(2.0), 1e-10,
                 "Root of exp(x)-2=0 should be ln(2) (backward compatible)");
         } else {
-            // Symbolic result — verify by substitution
+            // Symbolic result - verify by substitution
             auto substituted = expr->substitute("x", results[0]);
             auto eval = test_numeric_eval(substituted->simplify());
             if (eval.has_value()) {
@@ -514,7 +514,7 @@ void test_search_interval_sin_x_periodic_extension() {
     TEST_CASE("determine_search_interval: sin(x) + x → period 2π, interval [-2π, 2π]");
 
     auto x = SymbolicExpr::variable("x");
-    // sin(x) + x: k=1, period = 2π ≈ 6.28
+    // sin(x) + x: k=1, period = 2pi ~= 6.28
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
     lamina::SolveOptions opts;
@@ -523,8 +523,8 @@ void test_search_interval_sin_x_periodic_extension() {
     auto result = lamina::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
-        // Default [-10, 10] already covers 2π ≈ 6.28, so no extension needed
-        // Actually: 2*pi ≈ 6.28 < 10, so default [-10, 10] is already larger
+        // Default [-10, 10] already covers 2pi ~= 6.28, so no extension needed
+        // Actually: 2*pi ~= 6.28 < 10, so default [-10, 10] is already larger
         EXPECT_NEAR(result->lo, -10.0, 1e-10, "sin(x): period 2π < 10, so default [-10,10] used");
         EXPECT_NEAR(result->hi, 10.0, 1e-10, "sin(x): period 2π < 10, so default [-10,10] used");
     }
@@ -534,8 +534,8 @@ void test_search_interval_sin_small_k_periodic_extension() {
     TEST_CASE("determine_search_interval: sin(x/5) → period 10π ≈ 31.4, interval [-10π, 10π]");
 
     auto x = SymbolicExpr::variable("x");
-    // sin(x/5) = sin((1/5)*x): k=0.2, period = 2π/0.2 = 10π ≈ 31.4
-    // 2 full periods = 2 * 10π ≈ 62.8 → interval [-31.4, 31.4]
+    // sin(x/5) = sin((1/5)*x): k=0.2, period = 2pi/0.2 = 10pi ~= 31.4
+    // 2 full periods = 2 * 10pi ~= 62.8 -> interval [-31.4, 31.4]
     auto sin_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.2), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
@@ -545,7 +545,7 @@ void test_search_interval_sin_small_k_periodic_extension() {
     auto result = lamina::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
-        double expected_period = 2.0 * M_PI / 0.2;  // 10π ≈ 31.4
+        double expected_period = 2.0 * M_PI / 0.2;  // 10pi ~= 31.4
         // half_span = period = 31.4 (covers 2 full periods symmetric around 0)
         EXPECT_NEAR(result->lo, -expected_period, 1e-10,
             "sin(0.2*x): interval should extend to -10π");
@@ -558,8 +558,8 @@ void test_search_interval_tan_periodic_extension() {
     TEST_CASE("determine_search_interval: tan(x/3) → period π/|k|=3π ≈ 9.42, interval [-3π, 3π]");
 
     auto x = SymbolicExpr::variable("x");
-    // tan(x/3): k=1/3, period for tan = π/|k| = 3π ≈ 9.42
-    // 2 full periods = 2 * 3π ≈ 18.85 → half_span = 3π ≈ 9.42
+    // tan(x/3): k=1/3, period for tan = pi/|k| = 3pi ~= 9.42
+    // 2 full periods = 2 * 3pi ~= 18.85 -> half_span = 3pi ~= 9.42
     // But default [-10, 10] already covers 9.42, so no extension
     // Actually: half_span = period = 9.42 < 10, so default is used
     auto tan_arg = SymbolicExpr::multiply(SymbolicExpr::number(1.0/3.0), x);
@@ -571,7 +571,7 @@ void test_search_interval_tan_periodic_extension() {
     auto result = lamina::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
-        // period = π/(1/3) = 3π ≈ 9.42 < 10, so default [-10, 10] is used
+        // period = pi/(1/3) = 3pi ~= 9.42 < 10, so default [-10, 10] is used
         EXPECT_NEAR(result->lo, -10.0, 1e-10, "tan(x/3): period 3π < 10, default used");
         EXPECT_NEAR(result->hi, 10.0, 1e-10, "tan(x/3): period 3π < 10, default used");
     }
@@ -581,7 +581,7 @@ void test_search_interval_tan_small_k_extension() {
     TEST_CASE("determine_search_interval: tan(0.1*x) → period π/0.1=10π ≈ 31.4, extends");
 
     auto x = SymbolicExpr::variable("x");
-    // tan(0.1*x): k=0.1, period for tan = π/|k| = 10π ≈ 31.4
+    // tan(0.1*x): k=0.1, period for tan = pi/|k| = 10pi ~= 31.4
     // half_span = period = 31.4 > 10, so extends
     auto tan_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.1), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::tan(tan_arg), x);
@@ -592,7 +592,7 @@ void test_search_interval_tan_small_k_extension() {
     auto result = lamina::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
-        double expected_period = M_PI / 0.1;  // 10π ≈ 31.4
+        double expected_period = M_PI / 0.1;  // 10pi ~= 31.4
         EXPECT_NEAR(result->lo, -expected_period, 1e-10,
             "tan(0.1*x): interval should extend to -10π");
         EXPECT_NEAR(result->hi, expected_period, 1e-10,
@@ -604,7 +604,7 @@ void test_search_interval_clamp_to_100() {
     TEST_CASE("determine_search_interval: very small k → clamped to [-100, 100]");
 
     auto x = SymbolicExpr::variable("x");
-    // sin(0.01*x): k=0.01, period = 2π/0.01 = 200π ≈ 628
+    // sin(0.01*x): k=0.01, period = 2pi/0.01 = 200pi ~= 628
     // half_span = 628 > 100, so clamped to [-100, 100]
     auto sin_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.01), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
@@ -643,8 +643,8 @@ void test_search_interval_cos_2x_plus_1() {
     TEST_CASE("determine_search_interval: cos(2*x + 1) → k=2, period=π ≈ 3.14, default used");
 
     auto x = SymbolicExpr::variable("x");
-    // cos(2*x + 1): k=2, period = 2π/2 = π ≈ 3.14
-    // half_span = π < 10, so default [-10, 10] is used
+    // cos(2*x + 1): k=2, period = 2pi/2 = pi ~= 3.14
+    // half_span = pi < 10, so default [-10, 10] is used
     auto cos_arg = SymbolicExpr::add(
         SymbolicExpr::multiply(SymbolicExpr::number(2), x),
         SymbolicExpr::number(1)
@@ -687,14 +687,14 @@ void test_sin_x_plus_x_two_periods() {
     TEST_CASE("sin(x) + x → k=1, period=2π, interval spans at least 4π ≈ 12.57");
 
     auto x = SymbolicExpr::variable("x");
-    // sin(x) + x: k=1, period = 2π, two full periods = 4π ≈ 12.57
-    // The interval must span at least 4π total width.
-    // Since 4π ≈ 12.57 > default width of 20 ([-10,10]), the solver should extend.
-    // The intended span is at least 2*(2π/|k|) = 4π ≈ 12.57.
+    // sin(x) + x: k=1, period = 2pi, two full periods = 4pi ~= 12.57
+    // The interval must span at least 4pi total width.
+    // Since 4pi ~= 12.57 > default width of 20 ([-10,10]), the solver should extend.
+    // The intended span is at least 2*(2pi/|k|) = 4pi ~= 12.57.
     // The default [-10,10] has width 20 which already covers 12.57.
-    // But the design says half_span = period = 2π ≈ 6.28, so interval is [-6.28, 6.28]
+    // But the design says half_span = period = 2pi ~= 6.28, so interval is [-6.28, 6.28]
     // which has width 12.57. Since default [-10,10] width=20 > 12.57, default is used.
-    // Key check: the returned interval width >= 4π ≈ 12.57
+    // Key check: the returned interval width >= 4pi ~= 12.57
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
     lamina::SolveOptions opts;
@@ -704,7 +704,7 @@ void test_sin_x_plus_x_two_periods() {
     EXPECT_TRUE(result.has_value(), "sin(x)+x should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
-        double min_required = 2.0 * (2.0 * M_PI / 1.0);  // 4π ≈ 12.57
+        double min_required = 2.0 * (2.0 * M_PI / 1.0);  // 4pi ~= 12.57
         EXPECT_TRUE(width >= min_required - 1e-10,
             "sin(x)+x: interval width " + std::to_string(width) +
             " should be >= 4π ≈ " + std::to_string(min_required));
@@ -715,8 +715,8 @@ void test_cos_half_x_minus_x_two_periods() {
     TEST_CASE("cos(0.5*x) - x → k=0.5, period=4π, interval spans at least 8π ≈ 25.13");
 
     auto x = SymbolicExpr::variable("x");
-    // cos(0.5*x) - x: k=0.5, period = 2π/0.5 = 4π ≈ 12.57
-    // Two full periods = 2 * 4π = 8π ≈ 25.13
+    // cos(0.5*x) - x: k=0.5, period = 2pi/0.5 = 4pi ~= 12.57
+    // Two full periods = 2 * 4pi = 8pi ~= 25.13
     // Default [-10,10] width=20 < 25.13, so extension is needed.
     auto cos_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.5), x);
     auto expr = SymbolicExpr::add(
@@ -731,7 +731,7 @@ void test_cos_half_x_minus_x_two_periods() {
     EXPECT_TRUE(result.has_value(), "cos(0.5*x)-x should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
-        double min_required = 2.0 * (2.0 * M_PI / 0.5);  // 8π ≈ 25.13
+        double min_required = 2.0 * (2.0 * M_PI / 0.5);  // 8pi ~= 25.13
         EXPECT_TRUE(width >= min_required - 1e-10,
             "cos(0.5*x)-x: interval width " + std::to_string(width) +
             " should be >= 8π ≈ " + std::to_string(min_required));
@@ -742,10 +742,10 @@ void test_tan_x_plus_x_two_periods() {
     TEST_CASE("tan(x) + x → k=1, period=π (tan), interval spans at least 2π ≈ 6.28");
 
     auto x = SymbolicExpr::variable("x");
-    // tan(x) + x: k=1, period for tan = π/|k| = π ≈ 3.14
-    // Two full periods = 2 * π = 2π ≈ 6.28
+    // tan(x) + x: k=1, period for tan = pi/|k| = pi ~= 3.14
+    // Two full periods = 2 * pi = 2pi ~= 6.28
     // Default [-10,10] width=20 > 6.28, so default is used.
-    // Key check: interval width >= 2π ≈ 6.28
+    // Key check: interval width >= 2pi ~= 6.28
     auto expr = SymbolicExpr::add(SymbolicExpr::tan(x), x);
 
     lamina::SolveOptions opts;
@@ -755,7 +755,7 @@ void test_tan_x_plus_x_two_periods() {
     EXPECT_TRUE(result.has_value(), "tan(x)+x should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
-        double min_required = 2.0 * (M_PI / 1.0);  // 2π ≈ 6.28
+        double min_required = 2.0 * (M_PI / 1.0);  // 2pi ~= 6.28
         EXPECT_TRUE(width >= min_required - 1e-10,
             "tan(x)+x: interval width " + std::to_string(width) +
             " should be >= 2π ≈ " + std::to_string(min_required));
@@ -766,10 +766,10 @@ void test_sin_small_k_clamped() {
     TEST_CASE("sin(0.1*x) + x/100 → k=0.1, period=20π, 2 periods span=125.66, half_span=62.83");
 
     auto x = SymbolicExpr::variable("x");
-    // sin(0.1*x) + x/100: k=0.1, period = 2π/0.1 = 20π ≈ 62.83
-    // Two full periods = 2 * 20π = 40π ≈ 125.66 total width
+    // sin(0.1*x) + x/100: k=0.1, period = 2pi/0.1 = 20pi ~= 62.83
+    // Two full periods = 2 * 20pi = 40pi ~= 125.66 total width
     // Implementation: half_span = period = 62.83, interval = [-62.83, 62.83]
-    // Since 62.83 < 100, no clamping needed. Width = 125.66 >= 2*(2π/|k|).
+    // Since 62.83 < 100, no clamping needed. Width = 125.66 >= 2*(2pi/|k|).
     auto sin_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.1), x);
     auto expr = SymbolicExpr::add(
         SymbolicExpr::sin(sin_arg),
@@ -783,7 +783,7 @@ void test_sin_small_k_clamped() {
     EXPECT_TRUE(result.has_value(), "sin(0.1*x)+x/100 should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
-        double min_required = 2.0 * (2.0 * M_PI / 0.1);  // 2 * 20π ≈ 125.66
+        double min_required = 2.0 * (2.0 * M_PI / 0.1);  // 2 * 20pi ~= 125.66
         EXPECT_TRUE(width >= min_required - 1e-10,
             "sin(0.1*x)+x/100: interval width " + std::to_string(width) +
             " should be >= 2*(2π/0.1) ≈ " + std::to_string(min_required));
@@ -799,7 +799,7 @@ void test_sin_x_squared_nonlinear_default() {
     TEST_CASE("sin(x^2) + x → non-linear argument, default [-10, 10]");
 
     auto x = SymbolicExpr::variable("x");
-    /// sin(x²) 的参数关于 x 为二次式，因此使用默认区间 [-10, 10]。
+    /// sin(x^2) 的参数关于 x 为二次式,因此使用默认区间 [-10, 10].
     auto sin_arg = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
@@ -878,7 +878,7 @@ void test_max_roots_unlimited_sin_x() {
 
     auto result = lamina::isolate_roots(expr, derivative, "x", interval, opts);
 
-    // sin(x) has roots at -3π, -2π, -π, 0, π, 2π, 3π in [-10,10]
+    // sin(x) has roots at -3pi, -2pi, -pi, 0, pi, 2pi, 3pi in [-10,10]
     // That's approximately 7 roots. We expect at least 3 to confirm unlimited works.
     EXPECT_TRUE(result.size() >= 3,
         "sin(x) on [-10,10] with max_roots=-1: got " + std::to_string(result.size()) +
@@ -946,7 +946,7 @@ void test_min_width_tan_x_minus_x() {
     TEST_CASE("tan(x) - x on [-5, 5] → all intervals have width >= 1e-6");
 
     auto x = SymbolicExpr::variable("x");
-    // tan(x) - x: many roots close together near multiples of π
+    // tan(x) - x: many roots close together near multiples of pi
     auto expr = SymbolicExpr::add(
         SymbolicExpr::tan(x),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), x)
@@ -1029,7 +1029,7 @@ void test_sign_change_sin_x_plus_x_div_10() {
     TEST_CASE("sign-change invariant for sin(x) on [-10, 10]");
 
     auto x = SymbolicExpr::variable("x");
-    // f(x) = sin(x): has roots at 0, ±π, ±2π, ±3π within [-10, 10]
+    // f(x) = sin(x): has roots at 0, +/-pi, +/-2pi, +/-3pi within [-10, 10]
     auto expr = SymbolicExpr::sin(x);
 
     auto derivative = compute_derivative(expr, "x");
@@ -1043,7 +1043,7 @@ void test_sign_change_sin_x_plus_x_div_10() {
 
     std::cout << "  [INFO] sin(x) on [-10,10]: " << intervals.size() << " intervals found" << std::endl;
 
-    // sin(x) has 7 roots in [-10, 10]: -3π, -2π, -π, 0, π, 2π, 3π
+    // sin(x) has 7 roots in [-10, 10]: -3pi, -2pi, -pi, 0, pi, 2pi, 3pi
     // We expect at least some intervals to be found
     EXPECT_TRUE(intervals.size() > 0,
         "sin(x) on [-10,10] should produce at least one isolated interval");
@@ -1070,7 +1070,7 @@ void test_sign_change_exp_x_minus_x_minus_2() {
 
     auto x = SymbolicExpr::variable("x");
     // f(x) = exp(x) - x - 2
-    // Roots near x ≈ -1.84 and x ≈ 1.15
+    // Roots near x ~= -1.84 and x ~= 1.15
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::add(
@@ -1131,7 +1131,7 @@ void test_sign_change_x_cos_x_minus_1() {
 
     std::cout << "  [INFO] x*cos(x)-1 on [-10,10]: " << intervals.size() << " intervals found" << std::endl;
 
-    // x*cos(x) - 1 has roots (e.g., near x ≈ 1.28, x ≈ -1.28, and others)
+    // x*cos(x) - 1 has roots (e.g., near x ~= 1.28, x ~= -1.28, and others)
     EXPECT_TRUE(intervals.size() > 0,
         "x*cos(x)-1 on [-10,10] should produce at least one isolated interval");
 
@@ -1278,7 +1278,7 @@ void test_refine_root_sin_x_bisection_fallback() {
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
 
-    // No derivative → pure bisection
+    // No derivative -> pure bisection
     auto result = lamina::refine_root(expr, nullptr, "x", interval, opts);
 
     EXPECT_TRUE(result.has_value(), "refine_root (bisection) should converge for sin(x) on [3.0, 3.5]");
@@ -1326,9 +1326,9 @@ void test_refine_root_x_cos_x_minus_1() {
     TEST_CASE("refine_root: x*cos(x) - 1 on [4.5, 5.0] → converges");
 
     auto x = SymbolicExpr::variable("x");
-    // x*cos(x) - 1: has a root near x ≈ 4.917
-    // f(4.5) = 4.5*cos(4.5) - 1 ≈ 4.5*(-0.2108) - 1 ≈ -1.949 < 0
-    // f(5.0) = 5.0*cos(5.0) - 1 ≈ 5.0*(0.2837) - 1 ≈ 0.418 > 0
+    // x*cos(x) - 1: has a root near x ~= 4.917
+    // f(4.5) = 4.5*cos(4.5) - 1 ~= 4.5*(-0.2108) - 1 ~= -1.949 < 0
+    // f(5.0) = 5.0*cos(5.0) - 1 ~= 5.0*(0.2837) - 1 ~= 0.418 > 0
     auto expr = SymbolicExpr::add(
         SymbolicExpr::multiply(x, SymbolicExpr::cos(x)),
         SymbolicExpr::number(-1)
@@ -1493,7 +1493,7 @@ void test_pipeline_sin_x_ascending() {
 
     std::cout << "  [INFO] sin(x) pipeline: " << sorted.size() << " roots found" << std::endl;
 
-    // sin(x) has roots at -3π, -2π, -π, 0, π, 2π, 3π in [-10, 10] → 7 roots
+    // sin(x) has roots at -3pi, -2pi, -pi, 0, pi, 2pi, 3pi in [-10, 10] -> 7 roots
     EXPECT_TRUE(sorted.size() >= 2,
         "sin(x) on [-10,10] should produce at least 2 roots");
 
@@ -1537,7 +1537,7 @@ void test_pipeline_cos_x_ascending() {
 
     std::cout << "  [INFO] cos(x) pipeline: " << sorted.size() << " roots found" << std::endl;
 
-    // cos(x) has roots at ±π/2, ±3π/2, ±5π/2 in [-10, 10] → 6 roots
+    // cos(x) has roots at +/-pi/2, +/-3pi/2, +/-5pi/2 in [-10, 10] -> 6 roots
     EXPECT_TRUE(sorted.size() >= 2,
         "cos(x) on [-10,10] should produce at least 2 roots");
 
@@ -1603,7 +1603,7 @@ void test_roots_within_interval_sin_x() {
 
     std::cout << "  [INFO] sin(x) on [-3,3]: " << isolated.size() << " isolated interval(s)" << std::endl;
 
-    // sin(x) has a root at x=0 within [-3, 3]. ±π ≈ ±3.14 are outside.
+    // sin(x) has a root at x=0 within [-3, 3]. +/-pi ~= +/-3.14 are outside.
     // Regardless of how many roots are found, ALL must be within [-3, 3].
     for (size_t i = 0; i < isolated.size(); ++i) {
         auto refined = lamina::refine_root(expr, derivative, "x", isolated[i], opts);
@@ -1624,7 +1624,7 @@ void test_roots_within_interval_sin_x() {
 
     std::cout << "  [INFO] sin(x) on [-4,4]: " << isolated2.size() << " isolated interval(s)" << std::endl;
 
-    // sin(x) has roots at -π, 0, π within [-4, 4]
+    // sin(x) has roots at -pi, 0, pi within [-4, 4]
     for (size_t i = 0; i < isolated2.size(); ++i) {
         auto refined = lamina::refine_root(expr, derivative, "x", isolated2[i], opts);
         if (refined.has_value()) {
@@ -1668,10 +1668,10 @@ void test_roots_within_interval_cos_x_minus_half() {
 
     std::cout << "  [INFO] cos(x)-0.5 on [0,5]: " << isolated.size() << " isolated interval(s)" << std::endl;
 
-    // cos(x) = 0.5 has roots at x = π/3 ≈ 1.047 and x = 5π/3 ≈ 5.236 (outside [0,5])
-    // Actually within [0,5]: x = π/3 ≈ 1.047 and x = 5π/3 ≈ 5.236 is outside,
-    // but x = 2π - π/3 ≈ 5.236 is outside. So only π/3 ≈ 1.047 is in [0,5]?
-    // Wait: cos(x)=0.5 → x = ±π/3 + 2kπ. In [0,5]: π/3 ≈ 1.047, 5π/3 ≈ 5.236 (outside).
+    // cos(x) = 0.5 has roots at x = pi/3 ~= 1.047 and x = 5pi/3 ~= 5.236 (outside [0,5])
+    // Actually within [0,5]: x = pi/3 ~= 1.047 and x = 5pi/3 ~= 5.236 is outside,
+    // but x = 2pi - pi/3 ~= 5.236 is outside. So only pi/3 ~= 1.047 is in [0,5]?
+    // Wait: cos(x)=0.5 -> x = +/-pi/3 + 2kpi. In [0,5]: pi/3 ~= 1.047, 5pi/3 ~= 5.236 (outside).
     // So we expect 1 root in [0,5].
 
     for (size_t i = 0; i < isolated.size(); ++i) {
@@ -1740,7 +1740,7 @@ void test_output_validity_exp_x_minus_x_minus_2() {
     TEST_CASE("isolate_roots + refine_root on exp(x)-x-2 [-5,5] → output validity");
 
     auto x = SymbolicExpr::variable("x");
-    // exp(x) - x - 2: roots near x ≈ -1.84 and x ≈ 1.146
+    // exp(x) - x - 2: roots near x ~= -1.84 and x ~= 1.146
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::add(
@@ -1771,7 +1771,7 @@ void test_output_validity_exp_x_minus_x_minus_2() {
             EXPECT_TRUE(std::isfinite(root_result->value),
                 "Root " + std::to_string(i) + " value should be finite");
 
-            // (b) |f(root)| < tolerance — verify by substitution
+            // (b) |f(root)| < tolerance - verify by substitution
             auto substituted = expr->substitute("x", SymbolicExpr::number(root_result->value));
             double f_val = substituted->to_numeric();
             EXPECT_TRUE(std::abs(f_val) < opts.tolerance,
@@ -2147,7 +2147,7 @@ void test_deduplicate_pipeline_sin_x() {
     std::cout << "  [INFO] sin(x) pipeline: " << intervals.size() << " intervals -> "
               << refined_roots.size() << " refined -> " << deduped.size() << " deduplicated" << std::endl;
 
-    // sin(x) has 7 roots in [-10, 10]: -3π, -2π, -π, 0, π, 2π, 3π
+    // sin(x) has 7 roots in [-10, 10]: -3pi, -2pi, -pi, 0, pi, 2pi, 3pi
     EXPECT_TRUE(deduped.size() >= 3,
         "sin(x) on [-10,10] should have at least 3 deduplicated roots, got " +
         std::to_string(deduped.size()));
@@ -2178,7 +2178,7 @@ void test_factored_sin_x_minus_half_times_x_minus_3() {
 
     auto x = SymbolicExpr::variable("x");
     // (sin(x) - 0.5) * (x - 3)
-    // Factor 1: sin(x) - 0.5 has roots at x = π/6 ≈ 0.524 and x = 5π/6 ≈ 2.618 in [0, 4]
+    // Factor 1: sin(x) - 0.5 has roots at x = pi/6 ~= 0.524 and x = 5pi/6 ~= 2.618 in [0, 4]
     // Factor 2: x - 3 has root at x = 3
     // Combined result should contain roots from BOTH factors
     auto factor1 = SymbolicExpr::add(
@@ -2207,15 +2207,15 @@ void test_factored_sin_x_minus_half_times_x_minus_3() {
         }
     }
 
-    // Expected roots: π/6 ≈ 0.5236, 5π/6 ≈ 2.6180, and 3.0
+    // Expected roots: pi/6 ~= 0.5236, 5pi/6 ~= 2.6180, and 3.0
     // We need at least 3 roots (from both factors)
     EXPECT_TRUE(results.size() >= 3,
         "(sin(x)-0.5)*(x-3) on [0,4] should have at least 3 roots, got " +
         std::to_string(results.size()));
 
-    // Verify roots from factor 1 (sin(x) - 0.5): π/6 and 5π/6
-    double expected_pi_6 = M_PI / 6.0;       // ≈ 0.5236
-    double expected_5pi_6 = 5.0 * M_PI / 6.0; // ≈ 2.6180
+    // Verify roots from factor 1 (sin(x) - 0.5): pi/6 and 5pi/6
+    double expected_pi_6 = M_PI / 6.0;       // ~= 0.5236
+    double expected_5pi_6 = 5.0 * M_PI / 6.0; // ~= 2.6180
 
     bool found_pi_6 = false;
     bool found_5pi_6 = false;
@@ -2243,8 +2243,8 @@ void test_factored_sin_x_times_cos_x() {
 
     auto x = SymbolicExpr::variable("x");
     // sin(x) * cos(x)
-    // Factor 1: sin(x) has roots at 0, ±π, ±2π, ±3π in [-10, 10]
-    // Factor 2: cos(x) has roots at ±π/2, ±3π/2, ±5π/2 in [-10, 10]
+    // Factor 1: sin(x) has roots at 0, +/-pi, +/-2pi, +/-3pi in [-10, 10]
+    // Factor 2: cos(x) has roots at +/-pi/2, +/-3pi/2, +/-5pi/2 in [-10, 10]
     // Combined result should contain roots from BOTH factors
     auto expr = SymbolicExpr::multiply(
         SymbolicExpr::sin(x),
@@ -2270,8 +2270,8 @@ void test_factored_sin_x_times_cos_x() {
         }
     }
 
-    // sin(x) roots in [-10, 10]: -3π, -2π, -π, 0, π, 2π, 3π → 7 roots
-    // cos(x) roots in [-10, 10]: -5π/2, -3π/2, -π/2, π/2, 3π/2, 5π/2 → 6 roots
+    // sin(x) roots in [-10, 10]: -3pi, -2pi, -pi, 0, pi, 2pi, 3pi -> 7 roots
+    // cos(x) roots in [-10, 10]: -5pi/2, -3pi/2, -pi/2, pi/2, 3pi/2, 5pi/2 -> 6 roots
     // Total distinct roots: 13 (no overlap between sin and cos zeros)
     // We expect at least roots from both factors to be present
 
@@ -2280,11 +2280,11 @@ void test_factored_sin_x_times_cos_x() {
         "sin(x)*cos(x) on [-10,10] should have at least 6 roots (from both factors), got " +
         std::to_string(results.size()));
 
-    // Verify presence of roots from sin(x): check for root near 0 and near π
+    // Verify presence of roots from sin(x): check for root near 0 and near pi
     bool found_sin_zero = false;
     bool found_sin_pi = false;
 
-    // Verify presence of roots from cos(x): check for root near π/2 and near 3π/2
+    // Verify presence of roots from cos(x): check for root near pi/2 and near 3pi/2
     bool found_cos_pi_2 = false;
     bool found_cos_3pi_2 = false;
 
@@ -2324,7 +2324,7 @@ void test_exception_safety_division_by_zero_expression() {
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
 
-    // This must not throw — the try-catch wrapper should catch any internal errors
+    // This must not throw - the try-catch wrapper should catch any internal errors
     bool threw = false;
     std::vector<std::shared_ptr<SymbolicExpr>> results;
     try {
@@ -2388,7 +2388,7 @@ void test_exception_safety_tan_near_singularity() {
     TEST_CASE("Exception safety: tan(x) - x near singularities returns gracefully");
 
     auto x = SymbolicExpr::variable("x");
-    // tan(x) - x = 0: tan(x) has singularities at x = π/2 + nπ.
+    // tan(x) - x = 0: tan(x) has singularities at x = pi/2 + npi.
     // The solver must handle NaN/infinity at these points gracefully.
     auto expr = SymbolicExpr::add(
         SymbolicExpr::tan(x),
@@ -2447,7 +2447,7 @@ void test_exception_safety_extreme_values() {
     TEST_CASE("Exception safety: exp(x) - 1e300 on wide interval handles overflow gracefully");
 
     auto x = SymbolicExpr::variable("x");
-    /// exp(x) - 1e300 在大 x 处产生无穷值；求解器通过数值状态处理该结果。
+    /// exp(x) - 1e300 在大 x 处产生无穷值;求解器通过数值状态处理该结果.
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::number(-1e300)
@@ -2537,7 +2537,7 @@ void test_e2e_sin_x_plus_x_root_at_zero() {
     TEST_CASE("E2E: sin(x) - x/2 = 0 → roots near ±1.895");
 
     auto x = SymbolicExpr::variable("x");
-    // sin(x) - x/2 = 0: has roots at x=0 and near x ≈ ±1.8955
+    // sin(x) - x/2 = 0: has roots at x=0 and near x ~= +/-1.8955
     // (sin(x) = x/2 intersects at these points)
     // We test with a search interval that avoids x=0 landing on a grid point.
     auto expr = SymbolicExpr::add(
@@ -2564,7 +2564,7 @@ void test_e2e_sin_x_plus_x_root_at_zero() {
         }
     }
 
-    // sin(x) - x/2 = 0 has roots near ±1.8955 (and x=0, but that may be missed
+    // sin(x) - x/2 = 0 has roots near +/-1.8955 (and x=0, but that may be missed
     // due to the grid-point limitation of sign-change detection)
     EXPECT_TRUE(results.size() >= 1,
         "sin(x)-x/2=0 on [-3,3] should find at least 1 root");
@@ -2585,7 +2585,7 @@ void test_e2e_exp_x_minus_x_minus_2() {
 
     auto x = SymbolicExpr::variable("x");
     // exp(x) - x - 2 = 0 has two real roots:
-    //   x ≈ -1.8414 and x ≈ 1.1462
+    //   x ~= -1.8414 and x ~= 1.1462
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::add(
@@ -2643,7 +2643,7 @@ void test_e2e_x_cos_x_minus_1() {
 
     auto x = SymbolicExpr::variable("x");
     // x*cos(x) - 1 = 0 has multiple roots in [-10, 10]
-    // Known approximate roots: ±1.283, ±4.917, ±7.975, ...
+    // Known approximate roots: +/-1.283, +/-4.917, +/-7.975, ...
     auto expr = SymbolicExpr::add(
         SymbolicExpr::multiply(x, SymbolicExpr::cos(x)),
         SymbolicExpr::number(-1)
@@ -2665,7 +2665,7 @@ void test_e2e_x_cos_x_minus_1() {
         }
     }
 
-    // Should find at least 2 roots (the pair near ±1.283)
+    // Should find at least 2 roots (the pair near +/-1.283)
     EXPECT_TRUE(results.size() >= 2,
         "x*cos(x)-1=0 should find at least 2 roots in [-10,10]");
 

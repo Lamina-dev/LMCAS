@@ -157,7 +157,7 @@ static void test_log_differentiation_equivalence() {
                     RC_ASSERT(diff / scale < 1e-6);
                 }
             }
-            /// 任一表达式位于数值求值支持域之外时跳过当前采样点。
+            /// 任一表达式位于数值求值支持域之外时跳过当前采样点.
         }
     });
 }

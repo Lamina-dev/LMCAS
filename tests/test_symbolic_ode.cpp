@@ -103,7 +103,7 @@ void test_linear2_ode() {
     TEST_CASE("Linear 2nd Order ODE: y'' + y = 0 (complex roots r=±i)");
     {
         // a=1, b=0, c=1, f(x)=0
-        // Characteristic: r^2 + 1 = 0 => r=±i
+        // Characteristic: r^2 + 1 = 0 => r=+/-i
         auto fx = SymbolicExpr::number(0);
         auto sol = lamina::solve_linear2_ode(1, 0, 1, fx, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
@@ -116,7 +116,7 @@ void test_linear2_nonhomogeneous() {
     TEST_CASE("Linear 2nd Order ODE Non-homogeneous: y'' - 3y' + 2y = e^(3x)");
     {
         // a=1, b=-3, c=2, f(x) = e^(3x)
-        /// 旧版接口对支持域之外的非齐次输入抛出 std::logic_error。
+        /// 旧版接口对支持域之外的非齐次输入抛出 std::logic_error.
         auto x = SymbolicExpr::variable("x");
         auto three_x = SymbolicExpr::multiply(SymbolicExpr::number(3), x);
         auto fx = SymbolicExpr::exp(three_x);
@@ -127,7 +127,7 @@ void test_linear2_nonhomogeneous() {
             std::string s = sol ? sol->to_string() : "null";
             EXPECT_CONTAINS(s, {"C"}, "linear2 nonhomogeneous contains constant C");
         } catch (const std::logic_error&) {
-            // Non-homogeneous case is not yet implemented — this is expected
+            // Non-homogeneous case is not yet implemented - this is expected
             threw = true;
         }
         EXPECT_TRUE(threw, "legacy linear2 nonhomogeneous throws instead of returning a false solution");

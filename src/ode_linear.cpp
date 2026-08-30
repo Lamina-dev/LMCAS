@@ -1,6 +1,6 @@
 /**
  * @file symbolic_ode_engine.cpp
- * @brief 统一 ODE 求解引擎实现：类型检测与分类。
+ * @brief 统一 ODE 求解引擎实现:类型检测与分类.
  */
 #include "../include/symbolic_ode_engine.hpp"
 #include "symbolic_ast.hpp"
@@ -27,21 +27,21 @@ static ODESolution solve_euler_ode_impl(
 
 /**
  * @internal
- * @brief 表示特征多项式的一个根及其重数。
+ * @brief 表示特征多项式的一个根及其重数.
  */
 struct CharRoot {
     double real_part;   ///< 实部
-    double imag_part;   ///< 虚部（为零表示实根）
+    double imag_part;   ///< 虚部(为零表示实根)
     int multiplicity;   ///< 重数
     bool is_complex;    ///< 是否为复根
 };
 
 /**
  * @internal
- * @brief 使用数值方法求解特征多项式的所有根。
+ * @brief 使用数值方法求解特征多项式的所有根.
  *
- * 对于度数 ≤ 4 的多项式使用解析公式，
- * 对于度数 5-6 使用 Durand-Kerner 迭代法。
+ * 对于度数 <= 4 的多项式使用解析公式,
+ * 对于度数 5-6 使用 Durand-Kerner 迭代法.
  */
 [[maybe_unused]] static std::vector<CharRoot> find_characteristic_roots(
     const std::vector<double>& coeffs)
@@ -51,7 +51,7 @@ struct CharRoot {
 
     std::vector<CharRoot> roots;
 
-    /// 归一化系数（使最高次项系数为 1）
+    /// 归一化系数(使最高次项系数为 1)
     double leading = coeffs[0];
     if (std::abs(leading) < 1e-15) return {};
 
@@ -60,7 +60,7 @@ struct CharRoot {
         norm_coeffs[i] = coeffs[i] / leading;
     }
 
-    /// 对于低阶多项式，使用解析公式
+    /// 对于低阶多项式,使用解析公式
     if (n == 1) {
         /// r + norm_coeffs[1] = 0
         double r = -norm_coeffs[1];
@@ -89,8 +89,8 @@ struct CharRoot {
         return roots;
     }
 
-    /// 对于 n >= 3，使用 Durand-Kerner 方法求所有根
-    /// 初始化：在单位圆上均匀分布初始猜测
+    /// 对于 n >= 3,使用 Durand-Kerner 方法求所有根
+    /// 初始化:在单位圆上均匀分布初始猜测
     struct Complex {
         double re, im;
         Complex(double r = 0, double i = 0) : re(r), im(i) {}
@@ -113,7 +113,7 @@ struct CharRoot {
     };
 
     std::vector<Complex> z(n);
-    /// 初始猜测采用不同半径，提供非对称起点以区分各根。
+    /// 初始猜测采用不同半径,提供非对称起点以区分各根.
     for (int i = 0; i < n; ++i) {
         double angle = 2.0 * 3.14159265358979323846 * i / n + 0.1;
         double radius = 1.0 + 0.3 * i;
@@ -148,12 +148,12 @@ struct CharRoot {
         if (max_change < 1e-12) break;
     }
 
-    /// 将数值根分类为实根和复共轭对，并检测重根
+    /// 将数值根分类为实根和复共轭对,并检测重根
     std::vector<bool> used(n, false);
     for (int i = 0; i < n; ++i) {
         if (used[i]) continue;
 
-        /// 检查是否为实根（虚部接近零）
+        /// 检查是否为实根(虚部接近零)
         int is_real;
         lmmc_double_nearly_equal_tol(z[i].im, 0.0, 1e-8, 1e-8, &is_real);
 
@@ -176,7 +176,7 @@ struct CharRoot {
             }
             roots.push_back({r, 0.0, mult, false});
         } else {
-            /// 复根：找共轭对
+            /// 复根:找共轭对
             double re = z[i].re;
             double im = std::abs(z[i].im);
             used[i] = true;
@@ -224,9 +224,9 @@ struct CharRoot {
 
 /**
  * @internal
- * @brief 将 double 值转为"干净"的数值表达式。
+ * @brief 将 double 值转为"干净"的数值表达式.
  *
- * 若值接近整数或简单分数，使用精确表示。
+ * 若值接近整数或简单分数,使用精确表示.
  */
 static std::shared_ptr<SymbolicExpr> clean_number(double val) {
     /// 检查是否接近整数
@@ -258,10 +258,10 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
 
 /**
  * @internal
- * @brief 根据特征根构造齐次通解。
+ * @brief 根据特征根构造齐次通解.
  *
- * - 实根 r（重数 m）：C_k * x^k * e^(rx)，k = 0, ..., m-1
- * - 复根 α±βi（重数 m）：x^k * e^(αx) * (C_a*cos(βx) + C_b*sin(βx))
+ * - 实根 r(重数 m):C_k * x^k * e^(rx),k = 0, ..., m-1
+ * - 复根 alpha+/-betai(重数 m):x^k * e^(alphax) * (C_a*cos(betax) + C_b*sin(betax))
  */
 [[maybe_unused]] static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
     const std::vector<CharRoot>& roots,
@@ -300,9 +300,9 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
 
                 solution = solution ? SymbolicExpr::add(solution, term) : term;
             } else {
-                /// 复根 α±βi: 产生两个基本解
-                /// C_a * x^k * e^(αx) * cos(βx)
-                /// C_b * x^k * e^(αx) * sin(βx)
+                /// 复根 alpha+/-betai: 产生两个基本解
+                /// C_a * x^k * e^(alphax) * cos(betax)
+                /// C_b * x^k * e^(alphax) * sin(betax)
                 std::string ca_name = "C" + std::to_string(const_idx++);
                 std::string cb_name = "C" + std::to_string(const_idx++);
                 constants.push_back(ca_name);
@@ -315,7 +315,7 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
                 auto cos_term = SymbolicExpr::cos(beta_x);
                 auto sin_term = SymbolicExpr::sin(beta_x);
 
-                /// e^(αx) 因子
+                /// e^(alphax) 因子
                 std::shared_ptr<SymbolicExpr> exp_factor = nullptr;
                 int alpha_zero;
                 lmmc_double_nearly_equal_tol(root.real_part, 0.0, 1e-10, 1e-10, &alpha_zero);
@@ -331,13 +331,13 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
                     x_pow_factor = SymbolicExpr::power(x_var, SymbolicExpr::number(k));
                 }
 
-                /// 构造 cos 项: Ca * x^k * e^(αx) * cos(βx)
+                /// 构造 cos 项: Ca * x^k * e^(alphax) * cos(betax)
                 auto term_cos = Ca;
                 if (x_pow_factor) term_cos = SymbolicExpr::multiply(term_cos, x_pow_factor);
                 if (exp_factor) term_cos = SymbolicExpr::multiply(term_cos, exp_factor);
                 term_cos = SymbolicExpr::multiply(term_cos, cos_term);
 
-                /// 构造 sin 项: Cb * x^k * e^(αx) * sin(βx)
+                /// 构造 sin 项: Cb * x^k * e^(alphax) * sin(betax)
                 auto term_sin = Cb;
                 if (x_pow_factor) term_sin = SymbolicExpr::multiply(term_sin, x_pow_factor);
                 if (exp_factor) term_sin = SymbolicExpr::multiply(term_sin, exp_factor);
@@ -606,9 +606,9 @@ static ODESolution solve_euler_ode_impl(
 
 /**
  * @internal
- * @brief 检测非齐次项的类型，用于待定系数法。
+ * @brief 检测非齐次项的类型,用于待定系数法.
  *
- * 支持的类型：
+ * 支持的类型:
  * - 多项式: x^n
  * - 指数: e^(ax)
  * - 三角: cos(bx), sin(bx)

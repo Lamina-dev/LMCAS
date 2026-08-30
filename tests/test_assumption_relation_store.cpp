@@ -194,7 +194,7 @@ void test_composite_relation_no_sign_derivation() {
     RelationStore rs;
     PropertyStore ps;
 
-    /// 创建复合表达式，覆盖多变量关系存储路径。
+    /// 创建复合表达式,覆盖多变量关系存储路径.
     auto composite_expr = *SymbolicExpr::add(
         SymbolicExpr::variable("x"), SymbolicExpr::variable("y"));
     SymbolicExpr zero_expr = make_zero_expr();

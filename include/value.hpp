@@ -1,6 +1,6 @@
 /**
  * @file value.hpp
- * @brief 运行时值类型 Value，支持数值、符号、容器类型。
+ * @brief 运行时值类型 Value,支持数值,符号,容器类型.
  */
 #pragma once
 #include "lamina_export.hpp"
@@ -18,7 +18,7 @@
 #include <vector>
 #include <sstream>
 
-/** @brief 运行时统一值类型，支持数值、符号、容器等类型的动态表示 */
+/** @brief 运行时统一值类型,支持数值,符号,容器等类型的动态表示 */
 class Value final {
 public:
     /** @brief 值的类型枚举 */
@@ -43,7 +43,7 @@ public:
 
     ~Value() = default;
 
-    /** @brief 默认构造，初始化为 Null */
+    /** @brief 默认构造,初始化为 Null */
     Value() : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
 
     Value(std::nullptr_t) : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
@@ -83,7 +83,7 @@ public:
     }
     Value(const std::vector<std::vector<Value>>& mat) : type(Type::Matrix), data(mat) {}
 
-    /// 字符串使用独立的 Type::String 标记，与 Null 保持类型区分。
+    /// 字符串使用独立的 Type::String 标记,与 Null 保持类型区分.
     Value(const std::string& s) : type(Type::String), data(nullptr), _str_cache(s) {}
     Value(const char* s) : type(Type::String), data(nullptr), _str_cache(s ? s : "") {}
 
@@ -104,8 +104,8 @@ public:
             type == Type::Irrational) {
             return true;
         }
-        /// 可化简为数值节点的 Symbolic 表达式进入 numeric 路径；
-        /// 其余符号表达式保持 Symbolic 类型。
+        /// 可化简为数值节点的 Symbolic 表达式进入 numeric 路径;
+        /// 其余符号表达式保持 Symbolic 类型.
         if (type == Type::Symbolic) {
             const auto& sp = std::get<std::shared_ptr<SymbolicExpr>>(data);
             if (!sp) return false;
@@ -121,7 +121,7 @@ public:
 
     /**
      * @brief 将值转换为浮点数
-     * @return 浮点数近似值，非数值类型返回 0.0
+     * @return 浮点数近似值,非数值类型返回 0.0
      */
     lmmc_real_t as_number() const {
         if (type == Type::Infinity) {
@@ -133,7 +133,7 @@ public:
         if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
         if (type == Type::Float) return std::get<lmmc_real_t>(data);
         if (type == Type::BigInt) {
-            /// BigInt::to_double() 直接保留大整数的双精度近似。
+            /// BigInt::to_double() 直接保留大整数的双精度近似.
             return std::get<::BigInt>(data).to_double();
         }
         if (type == Type::Rational) {
@@ -163,14 +163,14 @@ public:
 
     /**
      * @brief 将值转换为有理数
-     * @return 有理数表示，非数值类型返回 0
+     * @return 有理数表示,非数值类型返回 0
      */
     ::Rational as_rational() const {
         if (type == Type::Rational) return std::get<::Rational>(data);
         if (type == Type::Int) return ::Rational(std::get<int>(data));
         if (type == Type::Float) return ::Rational::from_double(std::get<lmmc_real_t>(data));
         if (type == Type::BigInt) {
-            /// 直接从 BigInt 构造 Rational，保留全部整数位。
+            /// 直接从 BigInt 构造 Rational,保留全部整数位.
             return ::Rational(std::get<::BigInt>(data));
         }
         if (type == Type::Irrational) {
@@ -189,7 +189,7 @@ public:
         if (type == Type::Float) return ::Irrational::constant(std::get<lmmc_real_t>(data));
         if (type == Type::Rational) return ::Irrational::constant(std::get<::Rational>(data).to_double());
         if (type == Type::BigInt) {
-            /// to_double() 直接生成大整数的浮点近似，保留超出 int 范围的数量级。
+            /// to_double() 直接生成大整数的浮点近似,保留超出 int 范围的数量级.
             return ::Irrational::constant(std::get<::BigInt>(data).to_double());
         }
         return ::Irrational::constant(0);
@@ -197,7 +197,7 @@ public:
 
     /**
      * @brief 将值转换为符号表达式
-     * @return 符号表达式智能指针，不可转换时返回数值 0
+     * @return 符号表达式智能指针,不可转换时返回数值 0
      */
     std::shared_ptr<SymbolicExpr> as_symbolic() const {
         if (type == Type::Infinity) {
@@ -410,5 +410,5 @@ public:
     }
 
 private:
-    std::string _str_cache;  ///< 字符串构造时的缓存（兼容旧测试）
+    std::string _str_cache;  ///< 字符串构造时的缓存(兼容旧测试)
 };

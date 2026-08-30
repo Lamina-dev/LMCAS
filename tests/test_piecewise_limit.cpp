@@ -1,11 +1,11 @@
 /**
  * @file test_piecewise_limit.cpp
- * @brief 测试 LimitVisitor 对 PiecewiseNode 的极限处理和方向感知符号求值。
+ * @brief 测试 LimitVisitor 对 PiecewiseNode 的极限处理和方向感知符号求值.
  *
  * 覆盖:
  * - 单侧极限选择正确分支
  * - 双侧极限相等时返回该值
- * - 双侧极限差异映射为 nullptr，表示极限未定义
+ * - 双侧极限差异映射为 nullptr,表示极限未定义
  * - 方向感知的 sgn(x) 极限
  * - 方向感知的 |x| 极限
  */
@@ -96,7 +96,7 @@ int main() {
         branches.push_back({expr_minus, cond_lt});
         auto pw = lamina::detail::make_node<PiecewiseNode>(branches);
 
-        // Two-sided limit at x=0: left=−1, right=1, so DNE (nullptr)
+        // Two-sided limit at x=0: left=-1, right=1, so DNE (nullptr)
         LimitVisitor tv("x", zero_node, "");
         pw->accept(tv);
         auto r = tv.get_result();
@@ -189,7 +189,7 @@ int main() {
 
     TEST_CASE("1/x right limit at 0 = +inf");
     {
-        // x^(-1) as x→0+
+        // x^(-1) as x->0+
         auto x_node = lamina::detail::make_node<VariableNode>("x");
         auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
         auto inv_x = lamina::detail::make_node<PowerNode>(x_node, lamina::detail::make_node<NumberNode>(BigInt(-1)));
@@ -207,7 +207,7 @@ int main() {
 
     TEST_CASE("1/x left limit at 0 = -inf");
     {
-        // x^(-1) as x→0-
+        // x^(-1) as x->0-
         auto x_node = lamina::detail::make_node<VariableNode>("x");
         auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
         auto inv_x = lamina::detail::make_node<PowerNode>(x_node, lamina::detail::make_node<NumberNode>(BigInt(-1)));
@@ -233,7 +233,7 @@ int main() {
 
     TEST_CASE("1/x^2 right limit at 0 = +inf (even exponent)");
     {
-        // x^(-2) as x→0+
+        // x^(-2) as x->0+
         auto x_node = lamina::detail::make_node<VariableNode>("x");
         auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
         auto inv_x2 = lamina::detail::make_node<PowerNode>(x_node, lamina::detail::make_node<NumberNode>(BigInt(-2)));
@@ -251,7 +251,7 @@ int main() {
 
     TEST_CASE("1/x^2 left limit at 0 = +inf (even exponent, always positive)");
     {
-        // x^(-2) as x→0-
+        // x^(-2) as x->0-
         auto x_node = lamina::detail::make_node<VariableNode>("x");
         auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
         auto inv_x2 = lamina::detail::make_node<PowerNode>(x_node, lamina::detail::make_node<NumberNode>(BigInt(-2)));
@@ -271,7 +271,7 @@ int main() {
     TEST_CASE("Piecewise with GEQ/LEQ: right limit at boundary");
     {
         // piecewise(x^2 if x>=1, 2*x-1 if x<1)
-        // At x=1: right limit uses x>=1 branch → 1^2 = 1
+        // At x=1: right limit uses x>=1 branch -> 1^2 = 1
         auto x_node = lamina::detail::make_node<VariableNode>("x");
         auto one_node = lamina::detail::make_node<NumberNode>(BigInt(1));
 
@@ -290,7 +290,7 @@ int main() {
         branches.push_back({lin_expr, cond_lt});
         auto pw = lamina::detail::make_node<PiecewiseNode>(branches);
 
-        // Right limit at x=1: x>=1 branch → 1
+        // Right limit at x=1: x>=1 branch -> 1
         LimitVisitor rv("x", one_node, "+");
         pw->accept(rv);
         auto r = rv.get_result();
@@ -301,7 +301,7 @@ int main() {
                           "Right limit at x=1 (x>=1 branch) = 1");
         }
 
-        // Left limit at x=1: x<1 branch → 2(1)-1 = 1
+        // Left limit at x=1: x<1 branch -> 2(1)-1 = 1
         LimitVisitor lv("x", one_node, "-");
         pw->accept(lv);
         r = lv.get_result();

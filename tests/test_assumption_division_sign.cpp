@@ -68,10 +68,10 @@ static Sign random_nonzero_sign() {
 
 /// Determine expected sign of division given numerator and denominator signs
 static Sign expected_division_sign(Sign num_sign, Sign den_sign) {
-    // positive / positive → positive
-    // negative / negative → positive
-    // positive / negative → negative
-    // negative / positive → negative
+    // positive / positive -> positive
+    // negative / negative -> positive
+    // positive / negative -> negative
+    // negative / positive -> negative
     bool same_sign = (num_sign == Sign::Positive && den_sign == Sign::Positive) ||
                      (num_sign == Sign::Negative && den_sign == Sign::Negative);
     return same_sign ? Sign::Positive : Sign::Negative;
@@ -128,7 +128,7 @@ static void test_unknown_denominator_returns_unknown() {
 
         AssumptionContext ctx;
         ctx.assume_sign(num_name, num_sign);
-        // den_name has no sign declared → Unknown
+        // den_name has no sign declared -> Unknown
         InferenceEngine engine(ctx);
 
         auto div_expr = make_division(num_name, den_name);
@@ -165,7 +165,7 @@ static void test_zero_denominator_returns_unknown() {
 static void test_all_sign_combinations() {
     TEST_CASE("All four sign combinations");
 
-    // pos / pos → pos
+    // pos / pos -> pos
     {
         AssumptionContext ctx;
         ctx.assume_sign("a", Sign::Positive);
@@ -174,7 +174,7 @@ static void test_all_sign_combinations() {
         auto expr = make_division("a", "b");
         EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, "pos/pos → positive");
     }
-    // neg / neg → pos
+    // neg / neg -> pos
     {
         AssumptionContext ctx;
         ctx.assume_sign("a", Sign::Negative);
@@ -183,7 +183,7 @@ static void test_all_sign_combinations() {
         auto expr = make_division("a", "b");
         EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, "neg/neg → positive");
     }
-    // pos / neg → neg
+    // pos / neg -> neg
     {
         AssumptionContext ctx;
         ctx.assume_sign("a", Sign::Positive);
@@ -192,7 +192,7 @@ static void test_all_sign_combinations() {
         auto expr = make_division("a", "b");
         EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True, "pos/neg → negative");
     }
-    // neg / pos → neg
+    // neg / pos -> neg
     {
         AssumptionContext ctx;
         ctx.assume_sign("a", Sign::Negative);
@@ -280,7 +280,7 @@ static void test_gt_nonneg_implies_positive() {
 
         AssumptionContext ctx;
 
-        // Add relation x > 0 — this triggers sign derivation in RelationStore
+        // Add relation x > 0 - this triggers sign derivation in RelationStore
         auto x_var = lamina::detail::make_node<VariableNode>(x_name);
         auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
         auto rel_node = lamina::detail::make_node<RelationalNode>(
@@ -328,9 +328,9 @@ static void test_unknown_operand_returns_unknown() {
         auto expr = wrap_expr(node);
 
         // With one unknown operand, the engine should not be able to determine
-        /// AddNode 或 MultiplyNode 包含符号未知的操作数时，和或积的符号保持 Unknown。
+        /// AddNode 或 MultiplyNode 包含符号未知的操作数时,和或积的符号保持 Unknown.
         Tribool result = engine.query_positive_checked(expr).value();
-        /// 最后一个操作数的符号未知，因此结果为 Unknown。
+        /// 最后一个操作数的符号未知,因此结果为 Unknown.
         RC_ASSERT(result == Tribool::Unknown);
     });
 }
@@ -386,7 +386,7 @@ static void test_add_mixed_pos_nonneg() {
         auto add_node = make_add(operands);
         auto expr = wrap_expr(add_node);
 
-        // All positive → sum is positive
+        // All positive -> sum is positive
         RC_ASSERT(engine.query_positive_checked(expr).value() == Tribool::True);
         RC_ASSERT(engine.query_nonnegative_checked(expr).value() == Tribool::True);
     });

@@ -92,7 +92,7 @@ QueryTriboolResult QueryInterface::cached_query_checked(
     PropType prop,
     const std::string& operation,
     const std::function<Tribool()>& compute) const {
-    /// 空根节点直接返回参数诊断，其余节点进入哈希缓存。
+    /// 空根节点直接返回参数诊断,其余节点进入哈希缓存.
     if (!lamina::detail::node(expr)) {
         return QueryTriboolResult::failure(
             CasErrc::InvalidArgument, "query expression must not be null", operation);
@@ -165,7 +165,7 @@ bool QueryInterface::is_infinity_node(const SymbolicExpr& expression) const {
 
 int QueryInterface::get_infinity_sign(const SymbolicExpr& expression) const {
     const auto& node = lamina::detail::node(expression);
-    // Direct infinity node → positive infinity
+    // Direct infinity node -> positive infinity
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
         if (func->type() == FunctionNode::FuncType::Infinity) {
             return +1;

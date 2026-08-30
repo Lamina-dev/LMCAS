@@ -161,7 +161,7 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     }
 
     if (!fx->is_zero()) {
-        /// 非齐次特解当前位于支持域之外；显式诊断保留齐次解与通解的语义边界。
+        /// 非齐次特解当前位于支持域之外;显式诊断保留齐次解与通解的语义边界.
         throw std::logic_error(
             "solve_linear2_ode: non-homogeneous case is outside the current support domain");
     }

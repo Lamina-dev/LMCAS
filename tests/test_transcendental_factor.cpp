@@ -168,7 +168,7 @@ void test_sin_cos_pythagorean_constraint() {
     TEST_CASE("constraint detection: sin(x) and cos(x) → u0² + u1² - 1 = 0");
 
     auto x = SymbolicExpr::variable("x");
-    // sin²(x) + cos²(x) - 1
+    // sin^2(x) + cos^2(x) - 1
     auto sin_x = SymbolicExpr::sin(x);
     auto cos_x = SymbolicExpr::cos(x);
     auto expr = SymbolicExpr::add(
@@ -220,7 +220,7 @@ void test_no_constraint_different_args() {
 
     auto x = SymbolicExpr::variable("x");
     auto two_x = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
-    // sin(x) + cos(2*x) — different arguments, no Pythagorean constraint
+    // sin(x) + cos(2*x) - different arguments, no Pythagorean constraint
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), SymbolicExpr::cos(two_x));
 
     auto result = detect_trans_substitutions(expr, "x");
@@ -234,7 +234,7 @@ void test_no_constraint_same_type() {
 
     auto x = SymbolicExpr::variable("x");
     auto two_x = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
-    // exp(x) + exp(2*x) — not inverse pair
+    // exp(x) + exp(2*x) - not inverse pair
     auto expr = SymbolicExpr::add(SymbolicExpr::exp(x), SymbolicExpr::exp(two_x));
 
     auto result = detect_trans_substitutions(expr, "x");
@@ -289,7 +289,7 @@ void test_substitution_sin_squared_minus_x_squared() {
 
     auto x = SymbolicExpr::variable("x");
     auto sin_x = SymbolicExpr::sin(x);
-    // sin²(x) - x² = sin(x)^2 + (-1)*x^2
+    // sin^2(x) - x^2 = sin(x)^2 + (-1)*x^2
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(sin_x, SymbolicExpr::number(2)),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::power(x, SymbolicExpr::number(2)))
@@ -329,7 +329,7 @@ void test_substitution_no_transcendental() {
 void test_build_poly_single_indeterminate() {
     TEST_CASE("tf_build_polynomial: single indeterminate u0^2 + u0 + 1");
 
-    // 构造表达式 u0^2 + u0 + 1（纯 u0 多项式，无 x 依赖）
+    // 构造表达式 u0^2 + u0 + 1(纯 u0 多项式,无 x 依赖)
     auto u0 = SymbolicExpr::variable("u0");
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(u0, SymbolicExpr::number(2)),
@@ -344,7 +344,7 @@ void test_build_poly_single_indeterminate() {
     EXPECT_TRUE(result.poly.degree() == 2, "polynomial degree should be 2");
     EXPECT_TRUE(result.param_variables.empty(), "no parameter variables");
 
-    // 验证系数：1 + u0 + u0^2 → coeffs = {1, 1, 1}
+    // 验证系数:1 + u0 + u0^2 -> coeffs = {1, 1, 1}
     EXPECT_TRUE(result.poly.coeffs.size() == 3, "should have 3 coefficients");
     EXPECT_TRUE(result.poly.coeffs[0] == Rational(1), "constant term is 1");
     EXPECT_TRUE(result.poly.coeffs[1] == Rational(1), "linear term is 1");
@@ -425,7 +425,7 @@ void test_build_poly_only_x() {
 void test_build_poly_main_variable_selection() {
     TEST_CASE("tf_build_polynomial: selects highest-degree variable as main");
 
-    // u0^3 + u1^2 → u0 has degree 3, u1 has degree 2 → main = u0
+    // u0^3 + u1^2 -> u0 has degree 3, u1 has degree 2 -> main = u0
     auto u0 = SymbolicExpr::variable("u0");
     auto u1 = SymbolicExpr::variable("u1");
     auto expr = SymbolicExpr::add(
@@ -436,7 +436,7 @@ void test_build_poly_main_variable_selection() {
     std::vector<std::string> indeterminates = {"u0", "u1"};
     auto result = tf_build_polynomial(expr, indeterminates, "x");
 
-    // 主变量应为 u0（次数 3 > 2）
+    // 主变量应为 u0(次数 3 > 2)
     EXPECT_EQ_STR(result.main_variable, "u0", "main variable should be u0 (highest degree)");
 }
 
@@ -445,7 +445,7 @@ void test_build_poly_from_substitution_result() {
 
     auto x = SymbolicExpr::variable("x");
     auto sin_x = SymbolicExpr::sin(x);
-    // sin²(x) + sin(x) + 1 → u0² + u0 + 1
+    // sin^2(x) + sin(x) + 1 -> u0^2 + u0 + 1
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(sin_x, SymbolicExpr::number(2)),
         SymbolicExpr::add(sin_x, SymbolicExpr::number(1))
@@ -473,7 +473,7 @@ void test_build_poly_non_polynomial_fails() {
     TEST_CASE("tf_build_polynomial: non-polynomial expression fails");
 
     auto u0 = SymbolicExpr::variable("u0");
-    // sin(u0) — still transcendental in u0, not polynomial
+    // sin(u0) - still transcendental in u0, not polynomial
     auto expr = SymbolicExpr::sin(u0);
 
     std::vector<std::string> indeterminates = {"u0"};
@@ -507,7 +507,7 @@ void test_validate_remaining_sin_fails() {
     TEST_CASE("validation: expression with remaining sin(u0) fails");
 
     auto u0 = SymbolicExpr::variable("u0");
-    // sin(u0) + u0 — sin still depends on indeterminate u0
+    // sin(u0) + u0 - sin still depends on indeterminate u0
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(u0), u0);
 
     std::vector<std::string> indeterminates = {"u0"};
@@ -520,7 +520,7 @@ void test_validate_remaining_cos_fails() {
     TEST_CASE("validation: expression with remaining cos(u0) fails");
 
     auto u0 = SymbolicExpr::variable("u0");
-    // u0^2 + cos(u0) — cos still depends on indeterminate u0
+    // u0^2 + cos(u0) - cos still depends on indeterminate u0
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(u0, SymbolicExpr::number(2)),
         SymbolicExpr::cos(u0)
@@ -536,7 +536,7 @@ void test_validate_remaining_exp_fails() {
     TEST_CASE("validation: expression with remaining exp(u0) fails");
 
     auto u0 = SymbolicExpr::variable("u0");
-    // exp(u0) + u0^2 — exp still depends on indeterminate u0
+    // exp(u0) + u0^2 - exp still depends on indeterminate u0
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(u0),
         SymbolicExpr::power(u0, SymbolicExpr::number(2))
@@ -552,7 +552,7 @@ void test_validate_fractional_exponent_fails() {
     TEST_CASE("validation: fractional exponent u0^(1/2) fails");
 
     auto u0 = SymbolicExpr::variable("u0");
-    // u0^(1/2) — fractional exponent is not polynomial
+    // u0^(1/2) - fractional exponent is not polynomial
     auto half = SymbolicExpr::number(Rational(BigInt(1), BigInt(2)));
     auto expr = SymbolicExpr::power(u0, half);
 
@@ -566,7 +566,7 @@ void test_validate_negative_exponent_fails() {
     TEST_CASE("validation: negative exponent u0^(-1) fails");
 
     auto u0 = SymbolicExpr::variable("u0");
-    // u0^(-1) — negative exponent means division by variable
+    // u0^(-1) - negative exponent means division by variable
     auto expr = SymbolicExpr::power(u0, SymbolicExpr::number(-1));
 
     std::vector<std::string> indeterminates = {"u0"};
@@ -579,7 +579,7 @@ void test_validate_negative_fractional_exponent_fails() {
     TEST_CASE("validation: negative fractional exponent u0^(-3/2) fails");
 
     auto u0 = SymbolicExpr::variable("u0");
-    // u0^(-3/2) — negative fractional exponent
+    // u0^(-3/2) - negative fractional exponent
     auto neg_three_half = SymbolicExpr::number(Rational(BigInt(-3), BigInt(2)));
     auto expr = SymbolicExpr::power(u0, neg_three_half);
 
@@ -594,7 +594,7 @@ void test_validate_transcendental_in_original_var_fails() {
 
     auto x = SymbolicExpr::variable("x");
     auto u0 = SymbolicExpr::variable("u0");
-    // u0 + sin(x) — sin still depends on original variable x
+    // u0 + sin(x) - sin still depends on original variable x
     auto expr = SymbolicExpr::add(u0, SymbolicExpr::sin(x));
 
     std::vector<std::string> indeterminates = {"u0"};
@@ -608,7 +608,7 @@ void test_validate_valid_multivariate_polynomial() {
 
     auto u0 = SymbolicExpr::variable("u0");
     auto x = SymbolicExpr::variable("x");
-    // u0^2 + x — valid polynomial in both u0 and x
+    // u0^2 + x - valid polynomial in both u0 and x
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(u0, SymbolicExpr::number(2)),
         x
@@ -624,7 +624,7 @@ void test_validate_valid_multivariate_polynomial() {
 void test_square_free_already_square_free() {
     TEST_CASE("tf_square_free: already square-free polynomial x^2 - 1");
 
-    // x^2 - 1 = (x-1)(x+1)，无重因子
+    // x^2 - 1 = (x-1)(x+1),无重因子
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(1)}, "x");
 
     auto result = tf_square_free(poly);
@@ -705,7 +705,7 @@ void test_square_free_zero_polynomial() {
 void test_berlekamp_linear_poly() {
     TEST_CASE("berlekamp_factor: linear polynomial x + 1 → single factor");
 
-    // x + 1 → 线性多项式本身不可约
+    // x + 1 -> 线性多项式本身不可约
     Polynomial<Rational> poly({Rational(1), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 0);
@@ -719,13 +719,13 @@ void test_berlekamp_linear_poly() {
 void test_berlekamp_quadratic_irreducible() {
     TEST_CASE("berlekamp_factor: x^2 + x + 1 mod 2 is irreducible");
 
-    // x^2 + x + 1 在 F_2 上不可约（无根：f(0)=1, f(1)=1）
+    // x^2 + x + 1 在 F_2 上不可约(无根:f(0)=1, f(1)=1)
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 2);
 
     EXPECT_TRUE(result.prime == 2, "should use prime 2");
-    /// Q 矩阵构造成功；当前分裂阶段返回单一整体因子。
+    /// Q 矩阵构造成功;当前分裂阶段返回单一整体因子.
     EXPECT_TRUE(result.factors.size() >= 1, "should return at least 1 factor");
     // 验证因子次数之和等于原多项式次数
     int total_deg = 0;
@@ -738,7 +738,7 @@ void test_berlekamp_quadratic_irreducible() {
 void test_berlekamp_x2_minus_1_mod3() {
     TEST_CASE("berlekamp_factor: x^2 - 1 mod 3 (factorable as (x+1)(x-1))");
 
-    // x^2 - 1 = (x-1)(x+1)，在 F_3 上可分解
+    // x^2 - 1 = (x-1)(x+1),在 F_3 上可分解
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 3);
@@ -761,7 +761,7 @@ void test_berlekamp_x2_minus_1_mod3() {
 void test_berlekamp_cubic_poly() {
     TEST_CASE("berlekamp_factor: x^3 - x mod 5 (splits as x(x-1)(x+1))");
 
-    // x^3 - x = x(x-1)(x+1)，在 F_5 上完全分裂
+    // x^3 - x = x(x-1)(x+1),在 F_5 上完全分裂
     Polynomial<Rational> poly({Rational(0), Rational(-1), Rational(0), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 5);
@@ -794,7 +794,7 @@ void test_berlekamp_constant_poly() {
 void test_berlekamp_specified_prime() {
     TEST_CASE("berlekamp_factor: specified prime is used");
 
-    // x^2 + 1，指定 prime = 7
+    // x^2 + 1,指定 prime = 7
     Polynomial<Rational> poly({Rational(1), Rational(0), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 7);
@@ -825,7 +825,7 @@ void test_null_space_x2_minus_1_mod3() {
 void test_null_space_x2_plus_x_plus_1_mod2() {
     TEST_CASE("null space: x^2 + x + 1 mod 2 → dim = 1 (irreducible)");
 
-    // x^2 + x + 1 在 F_2 上不可约（无根：f(0)=1, f(1)=1）
+    // x^2 + x + 1 在 F_2 上不可约(无根:f(0)=1, f(1)=1)
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 2);
@@ -834,7 +834,7 @@ void test_null_space_x2_plus_x_plus_1_mod2() {
     EXPECT_TRUE(result.null_space_dim == 1, "null space dimension should be 1 (irreducible)");
     EXPECT_TRUE(result.null_space_basis.size() == 1, "should have 1 basis vector");
 
-    // 唯一的基向量应为 [1, 0]（对应平凡因子）
+    // 唯一的基向量应为 [1, 0](对应平凡因子)
     if (!result.null_space_basis.empty()) {
         EXPECT_TRUE(result.null_space_basis[0][0] == 1, "first basis vector starts with 1");
         EXPECT_TRUE(result.null_space_basis[0][1] == 0, "first basis vector second component is 0");
@@ -862,21 +862,21 @@ void test_null_space_x3_minus_x_mod5() {
 void test_null_space_linear_poly() {
     TEST_CASE("null space: linear polynomial → dim not computed (direct return)");
 
-    // 线性多项式直接返回，不经过零空间计算
+    // 线性多项式直接返回,不经过零空间计算
     Polynomial<Rational> poly({Rational(1), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 3);
 
     EXPECT_TRUE(result.prime == 3, "should use prime 3");
     EXPECT_TRUE(result.factors.size() == 1, "linear polynomial has 1 factor");
-    // 线性多项式不经过零空间计算，dim 保持默认值 0
+    // 线性多项式不经过零空间计算,dim 保持默认值 0
     EXPECT_TRUE(result.null_space_dim == 0, "null space dim is 0 for linear (not computed)");
 }
 
 void test_null_space_basis_vectors_in_kernel() {
     TEST_CASE("null space: basis vectors are in kernel of (Q-I)^T");
 
-    // x^2 - 1 mod 3：验证基向量确实满足 (Q-I)^T * v = 0
+    // x^2 - 1 mod 3:验证基向量确实满足 (Q-I)^T * v = 0
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(1)}, "x");
 
     auto result = berlekamp_factor(poly, 3);
@@ -884,8 +884,8 @@ void test_null_space_basis_vectors_in_kernel() {
 
     // 重新构造 Q 矩阵以验证
     // f_coeffs for x^2 - 1 mod 3: [2, 0, 1] (since -1 mod 3 = 2)
-    // 验证每个基向量 v 满足 (Q-I) * v = 0（等价于 Q*v = v）
-    /// 通过零空间维度间接验证 Q*v = v。
+    // 验证每个基向量 v 满足 (Q-I) * v = 0(等价于 Q*v = v)
+    /// 通过零空间维度间接验证 Q*v = v.
     EXPECT_TRUE(result.null_space_dim == 2, "x^2 - 1 mod 3 has null space dim 2");
 
     // 验证基向量非零
@@ -911,7 +911,7 @@ void test_split_x2_minus_1_mod3() {
     EXPECT_TRUE(result.factors.size() == 2, "should produce 2 irreducible factors");
 
     // 验证因子乘积等于原多项式 mod 3
-    // 因子应为首一线性多项式，乘积应为 x^2 + 2 (即 x^2 - 1 mod 3)
+    // 因子应为首一线性多项式,乘积应为 x^2 + 2 (即 x^2 - 1 mod 3)
     int total_deg = 0;
     for (const auto& f : result.factors) {
         total_deg += f.degree();
@@ -964,7 +964,7 @@ void test_split_product_verification_mod3() {
     // 验证因子乘积等于原多项式 mod p
     // 手动计算两个线性因子 (x + a)(x + b) = x^2 + (a+b)x + ab
     // 原多项式 mod 3: x^2 + 2 (coeffs: [2, 0, 1])
-    // 所以 a + b ≡ 0 (mod 3) 且 a*b ≡ 2 (mod 3)
+    // 所以 a + b == 0 (mod 3) 且 a*b == 2 (mod 3)
     if (result.factors.size() == 2) {
         // 提取两个线性因子的常数项
         int64_t a = result.factors[0].coeffs[0].value();
@@ -988,10 +988,10 @@ void test_split_product_verification_mod5() {
     EXPECT_TRUE(result.factors.size() == 3, "should have 3 factors");
 
     // x^3 - x = x(x-1)(x+1) = x(x+4)(x+1) in F_5
-    // 三个线性因子 (x + a)(x + b)(x + c) 展开：
+    // 三个线性因子 (x + a)(x + b)(x + c) 展开:
     //   x^3 + (a+b+c)x^2 + (ab+ac+bc)x + abc
     // 原多项式 mod 5: x^3 + 4x (coeffs: [0, 4, 0, 1])
-    // 所以 a+b+c ≡ 0, ab+ac+bc ≡ 4, abc ≡ 0 (mod 5)
+    // 所以 a+b+c == 0, ab+ac+bc == 4, abc == 0 (mod 5)
     if (result.factors.size() == 3) {
         int64_t a = result.factors[0].coeffs[0].value();
         int64_t b = result.factors[1].coeffs[0].value();
@@ -1007,7 +1007,7 @@ void test_split_x4_minus_1_mod5() {
     TEST_CASE("factor splitting: x^4 - 1 mod 5 → splits into factors");
 
     // x^4 - 1 = (x-1)(x+1)(x^2+1) in F_5
-    // x^2 + 1 在 F_5 上有根 x=2 (4+1=5≡0) 和 x=3 (9+1=10≡0)
+    // x^2 + 1 在 F_5 上有根 x=2 (4+1=5==0) 和 x=3 (9+1=10==0)
     // 所以 x^4 - 1 = (x-1)(x+1)(x-2)(x-3) = (x+4)(x+1)(x+3)(x+2) in F_5
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(0), Rational(0), Rational(1)}, "x");
 
@@ -1027,7 +1027,7 @@ void test_split_x4_minus_1_mod5() {
 void test_zassenhaus_single_factor() {
     TEST_CASE("zassenhaus_combine: single lifted factor → returns original poly");
 
-    // f(x) = x + 1，单因子情形
+    // f(x) = x + 1,单因子情形
     Polynomial<Rational> poly({Rational(1), Rational(1)}, "x");
     std::vector<Polynomial<BigInt>> lifted = {
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")
@@ -1045,7 +1045,7 @@ void test_zassenhaus_two_linear_factors() {
     // f(x) = x^2 - 1
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(1)}, "x");
 
-    // 提升后的因子（mod 125 = 5^3）：(x - 1) 和 (x + 1)
+    // 提升后的因子(mod 125 = 5^3):(x - 1) 和 (x + 1)
     std::vector<Polynomial<BigInt>> lifted = {
         Polynomial<BigInt>({BigInt(-1), BigInt(1)}, "x"),  // x - 1
         Polynomial<BigInt>({BigInt(1), BigInt(1)}, "x")    // x + 1
@@ -1055,7 +1055,7 @@ void test_zassenhaus_two_linear_factors() {
 
     EXPECT_TRUE(result.size() == 2, "x^2 - 1 should have 2 true factors");
 
-    // 验证因子乘积等于原多项式（首一化后）
+    // 验证因子乘积等于原多项式(首一化后)
     if (result.size() == 2) {
         auto product = result[0] * result[1];
         auto monic_poly = poly.make_monic();
@@ -1068,14 +1068,14 @@ void test_zassenhaus_two_linear_factors() {
 void test_zassenhaus_irreducible_quadratic() {
     TEST_CASE("zassenhaus_combine: x^2 + x + 1 (irreducible over Q)");
 
-    /// f(x) = x^2 + x + 1 在 Q 上为整体元素。
-    /// Hensel 提升给出的两个模因子在 Q 上组合后仍返回原多项式。
+    /// f(x) = x^2 + x + 1 在 Q 上为整体元素.
+    /// Hensel 提升给出的两个模因子在 Q 上组合后仍返回原多项式.
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
     // 模 7 下 x^2 + x + 1 = (x - 2)(x - 4) mod 7
-    // 提升后的因子（mod 49 = 7^2）
-    /// 提升因子为 (x - 2) mod 49 与 (x - 4) mod 49，
-    /// 两者在 Q 上的组合保持原多项式。
+    // 提升后的因子(mod 49 = 7^2)
+    /// 提升因子为 (x - 2) mod 49 与 (x - 4) mod 49,
+    /// 两者在 Q 上的组合保持原多项式.
     std::vector<Polynomial<BigInt>> lifted = {
         Polynomial<BigInt>({BigInt(-2), BigInt(1)}, "x"),  // x - 2 (mod 49)
         Polynomial<BigInt>({BigInt(-4), BigInt(1)}, "x")   // x - 4 (mod 49)
@@ -1083,7 +1083,7 @@ void test_zassenhaus_irreducible_quadratic() {
 
     auto result = zassenhaus_combine(poly, lifted, 49);
 
-    // x - 2 不整除 x^2 + x + 1 over Q，x - 4 也不整除
+    // x - 2 不整除 x^2 + x + 1 over Q,x - 4 也不整除
     // 所以应返回原多项式作为单一因子
     EXPECT_TRUE(result.size() == 1, "irreducible polynomial should return 1 factor");
     EXPECT_TRUE(result[0].degree() == 2, "factor should be degree 2");
@@ -1157,9 +1157,9 @@ void test_zassenhaus_quadratic_times_linear() {
 
     auto result = zassenhaus_combine(poly, lifted, 125);
 
-    // 应找到 (x-1) 作为真因子（子集大小 1），
+    // 应找到 (x-1) 作为真因子(子集大小 1),
     // 然后 (x-2)(x-3) mod 125 = x^2 - 5x + 6 mod 125 不等于 x^2+1
-    // 实际上需要正确的提升因子。这里用简化测试：
+    // 实际上需要正确的提升因子.这里用简化测试:
     // 至少应返回非空结果
     EXPECT_TRUE(result.size() >= 1, "should find at least 1 factor");
 
@@ -1180,9 +1180,9 @@ void test_zassenhaus_quadratic_times_linear() {
 void test_zassenhaus_early_termination_irreducible() {
     TEST_CASE("zassenhaus early termination: irreducible polynomial (all subsets checked)");
 
-    /// f(x) = x^2 + x + 1 在 Q 上为整体元素。
-    /// 模 7 因子 (x-2)(x-4) 的所有真子集候选均未通过整除检验，
-    /// 因而剩余项等于原多项式。
+    /// f(x) = x^2 + x + 1 在 Q 上为整体元素.
+    /// 模 7 因子 (x-2)(x-4) 的所有真子集候选均未通过整除检验,
+    /// 因而剩余项等于原多项式.
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
@@ -1192,7 +1192,7 @@ void test_zassenhaus_early_termination_irreducible() {
 
     auto result = zassenhaus_combine(poly, lifted, 49);
 
-    // 不可约多项式：所有子集检查完毕后，剩余多项式作为唯一因子返回
+    // 不可约多项式:所有子集检查完毕后,剩余多项式作为唯一因子返回
     EXPECT_TRUE(result.size() == 1, "irreducible polynomial should return 1 factor");
     EXPECT_TRUE(result[0].degree() == 2, "factor should be the original degree-2 polynomial");
     // 验证返回的因子是首一的
@@ -1203,9 +1203,9 @@ void test_zassenhaus_early_termination_remaining_irreducible() {
     TEST_CASE("zassenhaus early termination: after finding one factor, remaining is irreducible");
 
     // f(x) = (x - 1)(x^2 + x + 1) = x^3 - 1
-    // 模 7 下 x^2 + x + 1 = (x-2)(x-4)，x - 1 = (x-1)
+    // 模 7 下 x^2 + x + 1 = (x-2)(x-4),x - 1 = (x-1)
     // 所以 f = (x-1)(x-2)(x-4) mod 7
-    // 在 Q 上：找到 (x-1) 后，剩余 x^2 + x + 1 不可约
+    // 在 Q 上:找到 (x-1) 后,剩余 x^2 + x + 1 不可约
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(0), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
@@ -1216,7 +1216,7 @@ void test_zassenhaus_early_termination_remaining_irreducible() {
 
     auto result = zassenhaus_combine(poly, lifted, 49);
 
-    // 应找到 (x-1) 作为第一个因子，然后剩余 x^2+x+1 不可约
+    // 应找到 (x-1) 作为第一个因子,然后剩余 x^2+x+1 不可约
     EXPECT_TRUE(result.size() == 2, "should find 2 true factors");
 
     // 验证因子乘积等于原多项式
@@ -1233,8 +1233,8 @@ void test_zassenhaus_early_termination_linear_remaining() {
     TEST_CASE("zassenhaus early termination: remaining polynomial is linear");
 
     // f(x) = (x^2 - 1)(x + 2) = x^3 + 2x^2 - x - 2
-    // 模 5 下 x^2 - 1 = (x-1)(x+1)，x + 2 = (x+2)
-    // 找到 (x^2-1) 后，剩余 (x+2) 为线性 → 立即终止
+    // 模 5 下 x^2 - 1 = (x-1)(x+1),x + 2 = (x+2)
+    // 找到 (x^2-1) 后,剩余 (x+2) 为线性 -> 立即终止
     Polynomial<Rational> x2_minus_1({Rational(-1), Rational(0), Rational(1)}, "x");
     Polynomial<Rational> x_plus_2({Rational(2), Rational(1)}, "x");
     Polynomial<Rational> poly = x2_minus_1 * x_plus_2;
@@ -1248,8 +1248,8 @@ void test_zassenhaus_early_termination_linear_remaining() {
 
     auto result = zassenhaus_combine(poly, lifted, 125);
 
-    // 应找到 3 个线性因子（或 (x^2-1) + (x+2)）
-    // 关键验证：因子乘积等于原多项式
+    // 应找到 3 个线性因子(或 (x^2-1) + (x+2))
+    // 关键验证:因子乘积等于原多项式
     EXPECT_TRUE(result.size() >= 2, "should find at least 2 factors");
 
     Polynomial<Rational> product = result[0];
@@ -1266,7 +1266,7 @@ void test_zassenhaus_early_termination_single_active_factor() {
     TEST_CASE("zassenhaus early termination: single active factor remaining");
 
     // f(x) = (x - 1)(x + 1) = x^2 - 1
-    // 找到 (x-1) 后，仅剩 1 个活跃因子 → 立即终止
+    // 找到 (x-1) 后,仅剩 1 个活跃因子 -> 立即终止
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
@@ -1291,7 +1291,7 @@ void test_zassenhaus_early_termination_single_active_factor() {
 void test_zassenhaus_early_termination_degree_one_input() {
     TEST_CASE("zassenhaus early termination: linear polynomial input (immediate)");
 
-    // f(x) = x + 5，线性多项式直接返回（由 lifted_factors.size() == 1 处理）
+    // f(x) = x + 5,线性多项式直接返回(由 lifted_factors.size() == 1 处理)
     Polynomial<Rational> poly({Rational(5), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
@@ -1309,7 +1309,7 @@ void test_zassenhaus_rational_reconstruction_integer_coeffs() {
     TEST_CASE("zassenhaus_combine with rational_reconstruction: integer coefficients still work");
 
     // f(x) = x^2 - 1 = (x-1)(x+1)
-    // 整数系数情形：有理重构应恢复整数（分母为 1）
+    // 整数系数情形:有理重构应恢复整数(分母为 1)
     Polynomial<Rational> poly({Rational(-1), Rational(0), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
@@ -1334,59 +1334,59 @@ void test_zassenhaus_rational_reconstruction_with_rational_poly() {
     TEST_CASE("zassenhaus_combine with rational_reconstruction: rational coefficient polynomial");
 
     // f(x) = x^2 - 1/4 = (x - 1/2)(x + 1/2)
-    // 这是一个有理系数多项式，提升因子的系数在模 p^k 下编码了有理数
+    // 这是一个有理系数多项式,提升因子的系数在模 p^k 下编码了有理数
     // 使用 p^k = 1000000007 (大素数)
     // 对于 1/2 mod 1000000007: 需要 2 的逆元 mod 1000000007
     // 2^(-1) mod 1000000007 = 500000004
     // 所以 x - 1/2 在 mod 1000000007 下为 x - 500000004 (对称表示: x + 500000003)
     // 但有理重构应该能从 500000004 恢复出 1/2
 
-    // 更简单的测试：使用较小的模数
+    // 更简单的测试:使用较小的模数
     // p^k = 49 (7^2)
-    // 1/2 mod 49: 需要 2^(-1) mod 49 = 25 (因为 2*25 = 50 ≡ 1 mod 49)
+    // 1/2 mod 49: 需要 2^(-1) mod 49 = 25 (因为 2*25 = 50 == 1 mod 49)
     // 对称表示: 25 (在 [-24, 24] 范围内)
     // 有理重构 25 mod 49: bound = floor(sqrt(49/2)) = floor(4.95) = 4
     // 25 > 4, 所以需要运行扩展欧几里得:
     //   r0=49, r1=25, s0=0, s1=1
     //   q=1: r0=25, r1=24, s0=1, s1=-1
     //   q=1: r0=24, r1=1, s0=-1, s1=2
-    //   r1=1 ≤ 4, 停止. p=1, q=2 → 1/2 ✓
+    //   r1=1 <= 4, 停止. p=1, q=2 -> 1/2 [ok]
 
     // f(x) = x^2 - 1/4
     Polynomial<Rational> poly({Rational(-1, 4), Rational(0), Rational(1)}, "x");
 
     // 提升因子 mod 49: (x - 25) 和 (x + 25)
-    // 因为 1/2 ≡ 25 mod 49, 所以 x - 1/2 ≡ x - 25 mod 49
-    // 对称表示: -25 在 [-24,24] 之外，所以 -25 + 49 = 24 → x + 24? 不对
-    // 让我重新计算：对称表示 [-m/2, m/2) = [-24, 24]
+    // 因为 1/2 == 25 mod 49, 所以 x - 1/2 == x - 25 mod 49
+    // 对称表示: -25 在 [-24,24] 之外,所以 -25 + 49 = 24 -> x + 24? 不对
+    // 让我重新计算:对称表示 [-m/2, m/2) = [-24, 24]
     // -25 mod 49 = 24 (在对称表示中)
-    // 25 mod 49 = 25 → 超出 24，所以 25 - 49 = -24 (在对称表示中)
-    // 所以 x - 1/2 的系数: 常数项 = -1/2 ≡ -25 mod 49 → 对称表示 24
-    //       x + 1/2 的系数: 常数项 = 1/2 ≡ 25 mod 49 → 对称表示 -24
+    // 25 mod 49 = 25 -> 超出 24,所以 25 - 49 = -24 (在对称表示中)
+    // 所以 x - 1/2 的系数: 常数项 = -1/2 == -25 mod 49 -> 对称表示 24
+    //       x + 1/2 的系数: 常数项 = 1/2 == 25 mod 49 -> 对称表示 -24
 
     // 使用更大的模数使有理重构更可靠
     // p^k = 10007 (素数)
-    // 1/2 mod 10007: 2^(-1) mod 10007 = 5004 (因为 2*5004 = 10008 ≡ 1 mod 10007)
+    // 1/2 mod 10007: 2^(-1) mod 10007 = 5004 (因为 2*5004 = 10008 == 1 mod 10007)
     // bound = floor(sqrt(10007/2)) = floor(70.7) = 70
     // 有理重构 5004 mod 10007:
     //   r0=10007, r1=5004, s0=0, s1=1
-    //   q=2: r0=5004, r1=-1 → r1=10007-2*5004=-1 → 实际 r1=10007-2*5004=-1
-    //   不对，让我用正确的算法:
+    //   q=2: r0=5004, r1=-1 -> r1=10007-2*5004=-1 -> 实际 r1=10007-2*5004=-1
+    //   不对,让我用正确的算法:
     //   r0=10007, r1=5004
     //   q=10007/5004=1, r_new=10007-1*5004=5003, s_new=0-1*1=-1
     //   r0=5004, r1=5003, s0=1, s1=-1
     //   q=5004/5003=1, r_new=5004-1*5003=1, s_new=1-1*(-1)=2
-    //   r1=1 ≤ 70, 停止. p=1, q=2 → 1/2 ✓
+    //   r1=1 <= 70, 停止. p=1, q=2 -> 1/2 [ok]
 
     // 使用 p^k = 10007
-    // x - 1/2: 常数项 -1/2 ≡ -(5004) mod 10007 = 5003 → 对称: 5003 > 5003? 5003 < 5003.5 → 5003
-    // x + 1/2: 常数项 1/2 ≡ 5004 mod 10007 → 对称: 5004 > 5003.5 → 5004 - 10007 = -5003
+    // x - 1/2: 常数项 -1/2 == -(5004) mod 10007 = 5003 -> 对称: 5003 > 5003? 5003 < 5003.5 -> 5003
+    // x + 1/2: 常数项 1/2 == 5004 mod 10007 -> 对称: 5004 > 5003.5 -> 5004 - 10007 = -5003
 
     // 实际上让我用一个简单的整数系数例子来验证有理重构路径被调用
     // 使用 x^3 - x = x(x-1)(x+1) 这个已知能工作的例子
     // 但用更大的 prime_power 来确保有理重构路径被触发
 
-    // 简单验证：x^2 - 1 with large prime power
+    // 简单验证:x^2 - 1 with large prime power
     Polynomial<Rational> poly2({Rational(-1), Rational(0), Rational(1)}, "x");
     std::vector<Polynomial<BigInt>> lifted2 = {
         Polynomial<BigInt>({BigInt(-1), BigInt(1)}, "x"),
@@ -1411,7 +1411,7 @@ void test_zassenhaus_rational_reconstruction_with_rational_poly() {
 void test_zassenhaus_pruned_path_triggered() {
     TEST_CASE("zassenhaus_combine: pruned path triggered for >15 factors");
 
-    // 构造一个多项式，其 Hensel 提升产生 16 个线性因子
+    // 构造一个多项式,其 Hensel 提升产生 16 个线性因子
     // f(x) = (x-1)(x-2)...(x-16) 的简化版本
     // 使用 16 个线性因子来触发剪枝路径
     // 原多项式为这些因子的乘积
@@ -1486,10 +1486,10 @@ void test_back_substitute_u0_plus_x_to_sin_x_plus_x() {
     auto u0 = SymbolicExpr::variable("u0");
     auto factor_expr = SymbolicExpr::add(u0, x);
 
-    // 构造映射 u0 → sin(x)
+    // 构造映射 u0 -> sin(x)
     auto sin_x = SymbolicExpr::sin(x);
 
-    // 执行完整的换元→逆换元流程验证
+    // 执行完整的换元->逆换元流程验证
     // 先用 detect_trans_substitutions 获取映射
     auto original = SymbolicExpr::add(sin_x, x);
     auto sub_result = detect_trans_substitutions(original, "x");
@@ -1518,7 +1518,7 @@ void test_back_substitute_u0_squared_minus_x_squared() {
     auto x = SymbolicExpr::variable("x");
     auto sin_x = SymbolicExpr::sin(x);
 
-    // 原始表达式 sin²(x) - x²
+    // 原始表达式 sin^2(x) - x^2
     auto original = SymbolicExpr::add(
         SymbolicExpr::power(sin_x, SymbolicExpr::number(2)),
         SymbolicExpr::multiply(SymbolicExpr::number(-1),
@@ -1578,7 +1578,7 @@ void test_back_substitute_polynomial_factor() {
     auto x = SymbolicExpr::variable("x");
     auto sin_x = SymbolicExpr::sin(x);
 
-    // sin²(x) + sin(x) + 1 → u0² + u0 + 1
+    // sin^2(x) + sin(x) + 1 -> u0^2 + u0 + 1
     auto original = SymbolicExpr::add(
         SymbolicExpr::power(sin_x, SymbolicExpr::number(2)),
         SymbolicExpr::add(sin_x, SymbolicExpr::number(1))
@@ -1587,7 +1587,7 @@ void test_back_substitute_polynomial_factor() {
     auto sub_result = detect_trans_substitutions(original, "x");
     EXPECT_TRUE(sub_result.mappings.size() == 1, "should have 1 mapping");
 
-    // 构造多项式 u0 + 1（模拟一个因子）
+    // 构造多项式 u0 + 1(模拟一个因子)
     std::vector<std::string> indeterminates = {sub_result.mappings[0].indeterminate};
     Polynomial<Rational> factor_poly({Rational(1), Rational(1)}, "u0");
     auto factor_expr = poly_to_symbolic(factor_poly);
@@ -1618,7 +1618,7 @@ void test_back_substitute_no_mappings() {
     auto sub_result = detect_trans_substitutions(expr, "x");
     EXPECT_TRUE(sub_result.mappings.empty(), "should have no mappings");
 
-    // 逆换元（无映射时应返回原表达式）
+    // 逆换元(无映射时应返回原表达式)
     auto back = sub_result.poly_expr;
     for (const auto& m : sub_result.mappings) {
         back = back->substitute(m.indeterminate, m.trans_expr);
@@ -1652,7 +1652,7 @@ void test_back_substitute_roundtrip() {
 
     EXPECT_TRUE(back != nullptr, "roundtrip result should not be null");
     std::string back_str = back->to_string();
-    /// 逆换元结果应仅包含原始变量与函数。
+    /// 逆换元结果应仅包含原始变量与函数.
     EXPECT_TRUE(back_str.find("u0") == std::string::npos,
         "roundtrip should not contain u0");
     EXPECT_TRUE(back_str.find("u1") == std::string::npos,
@@ -1678,7 +1678,7 @@ void test_simplify_factors_extract_constant_from_product() {
     std::vector<std::shared_ptr<SymbolicExpr>> factors = {factor1, factor2};
     auto result = tf_simplify_factors(factors);
 
-    // 应提取常数 2，结果为 [2, sin(x), x+1]
+    // 应提取常数 2,结果为 [2, sin(x), x+1]
     EXPECT_TRUE(result.size() == 3, "should have 3 factors (constant + 2 non-constant)");
 
     // 第一个因子应为常数 2
@@ -1686,7 +1686,7 @@ void test_simplify_factors_extract_constant_from_product() {
     std::string first_str = result[0]->to_string();
     EXPECT_TRUE(first_str == "2", "first factor should be 2");
 
-    /// 数值前导系数集中在首个常数因子中。
+    /// 数值前导系数集中在首个常数因子中.
     bool has_sin = false;
     bool has_x_plus_1 = false;
     for (size_t i = 1; i < result.size(); ++i) {
@@ -1710,7 +1710,7 @@ void test_simplify_factors_no_constants() {
     std::vector<std::shared_ptr<SymbolicExpr>> factors = {factor1, factor2};
     auto result = tf_simplify_factors(factors);
 
-    // 无常数可提取，结果应为 2 个因子
+    // 无常数可提取,结果应为 2 个因子
     EXPECT_TRUE(result.size() == 2, "should have 2 factors (no constants to extract)");
 
     // 验证无纯数值因子
@@ -1746,7 +1746,7 @@ void test_simplify_factors_multiple_constants_combined() {
     auto cos_x = SymbolicExpr::cos(x);
 
     // 构造因子列表 [2*sin(x), 5*cos(x)]
-    /// simplify() 保持 c*trig(x) 的乘积结构。
+    /// simplify() 保持 c*trig(x) 的乘积结构.
     auto factor1 = SymbolicExpr::multiply(SymbolicExpr::number(2), sin_x);
     auto factor2 = SymbolicExpr::multiply(SymbolicExpr::number(5), cos_x);
 
@@ -1765,14 +1765,14 @@ void test_simplify_factors_constant_one_not_added() {
 
     auto x = SymbolicExpr::variable("x");
 
-    // 构造因子列表 [sin(x), x+1] — 无常数乘子
+    // 构造因子列表 [sin(x), x+1] - 无常数乘子
     auto factor1 = SymbolicExpr::sin(x);
     auto factor2 = SymbolicExpr::add(x, SymbolicExpr::number(1));
 
     std::vector<std::shared_ptr<SymbolicExpr>> factors = {factor1, factor2};
     auto result = tf_simplify_factors(factors);
 
-    /// 常数积为 1 时结果仅包含两个函数因子。
+    /// 常数积为 1 时结果仅包含两个函数因子.
     EXPECT_TRUE(result.size() == 2, "should have 2 factors (no constant added)");
     for (const auto& f : result) {
         if (f->is_number()) {
@@ -1787,13 +1787,13 @@ void test_simplify_factors_simplify_called() {
 
     auto x = SymbolicExpr::variable("x");
 
-    // 构造一个可化简的表达式：x + 0 应化简为 x
+    // 构造一个可化简的表达式:x + 0 应化简为 x
     auto factor1 = SymbolicExpr::add(x, SymbolicExpr::number(0));
 
     std::vector<std::shared_ptr<SymbolicExpr>> factors = {factor1};
     auto result = tf_simplify_factors(factors);
 
-    // 化简后 x + 0 → x
+    // 化简后 x + 0 -> x
     EXPECT_TRUE(result.size() >= 1, "should have at least 1 factor");
     // 结果应为简化形式
     bool found_x = false;
@@ -1866,7 +1866,7 @@ void test_mult_structure_sum_not_product() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    /// sin(x) + x 由完整流程判定为单一整体因子。
+    /// sin(x) + x 由完整流程判定为单一整体因子.
     EXPECT_TRUE(factors.size() == 1, "sum expression should not be split by multiplicative detection");
 }
 
@@ -1921,7 +1921,7 @@ void test_linear_irreducible_sin_squared_not_linear() {
 
     auto x = SymbolicExpr::variable("x");
     auto sin_x = SymbolicExpr::sin(x);
-    // sin²(x) + x
+    // sin^2(x) + x
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(sin_x, SymbolicExpr::number(2)),
         x
@@ -1929,9 +1929,9 @@ void test_linear_irreducible_sin_squared_not_linear() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    /// sin²(x) + x 对 u0 为二次式，因此进入完整因式分解流程。
-    /// 结果仍可为整体元素，其判定来源于完整流程。
-    // 实际上 sin²(x) + x 在超越多项式环中也是不可约的，但通过完整流程判定
+    /// sin^2(x) + x 对 u0 为二次式,因此进入完整因式分解流程.
+    /// 结果仍可为整体元素,其判定来源于完整流程.
+    // 实际上 sin^2(x) + x 在超越多项式环中也是不可约的,但通过完整流程判定
     EXPECT_TRUE(factors.size() >= 1, "sin^2(x) + x should return at least 1 factor");
 }
 
@@ -1943,7 +1943,7 @@ void test_linear_irreducible_sin_times_x_not_sum() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    /// sin(x) * x 由乘法结构直接拆分为两个因子。
+    /// sin(x) * x 由乘法结构直接拆分为两个因子.
     EXPECT_TRUE(factors.size() == 2, "sin(x) * x should be split into 2 factors by multiplicative detection");
 }
 
@@ -1983,12 +1983,12 @@ void test_exp_separation_no_common_exp() {
     TEST_CASE("exponential separation: exp(x) + sin(x) → no common exp factor");
 
     auto x = SymbolicExpr::variable("x");
-    /// exp(x) + sin(x) 的两项具有不同函数基。
+    /// exp(x) + sin(x) 的两项具有不同函数基.
     auto expr = SymbolicExpr::add(SymbolicExpr::exp(x), SymbolicExpr::sin(x));
 
     auto factors = factor_transcendental(expr, "x");
 
-    /// 公共指数因子提取保持未匹配状态；表达式随后由线性整体性规则处理。
+    /// 公共指数因子提取保持未匹配状态;表达式随后由线性整体性规则处理.
     EXPECT_TRUE(factors.size() == 1, "exp(x) + sin(x) should not be split by exponential separation");
 }
 
@@ -2049,8 +2049,8 @@ void test_pythagorean_sin2_cos2_to_1() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // sin²(x) + cos²(x) = 1，化简后无超越函数，应返回 {1} 或等价
-    // 由于化简为 1 后不含超越函数，factor_transcendental 应返回 {1}
+    // sin^2(x) + cos^2(x) = 1,化简后无超越函数,应返回 {1} 或等价
+    // 由于化简为 1 后不含超越函数,factor_transcendental 应返回 {1}
     EXPECT_TRUE(factors.size() == 1, "should produce 1 factor");
     if (!factors.empty()) {
         std::string s = factors[0]->to_string();
@@ -2068,12 +2068,12 @@ void test_pythagorean_sin2_cos2_plus_x() {
     auto cos_x = SymbolicExpr::cos(x);
     auto sin2 = SymbolicExpr::power(sin_x, two);
     auto cos2 = SymbolicExpr::power(cos_x, two);
-    // sin²(x) + cos²(x) + x
+    // sin^2(x) + cos^2(x) + x
     auto expr = SymbolicExpr::add(sin2, SymbolicExpr::add(cos2, x));
 
     auto factors = factor_transcendental(expr, "x");
 
-    // 化简后为 1 + x，无超越函数，应返回 {1+x} 或等价
+    // 化简后为 1 + x,无超越函数,应返回 {1+x} 或等价
     EXPECT_TRUE(factors.size() >= 1, "should produce at least 1 factor");
     // 验证结果不含 sin 或 cos
     for (const auto& f : factors) {
@@ -2101,7 +2101,7 @@ void test_pythagorean_common_coefficient() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // 2*sin²(x) + 2*cos²(x) = 2，化简后为常数
+    // 2*sin^2(x) + 2*cos^2(x) = 2,化简后为常数
     EXPECT_TRUE(factors.size() == 1, "should produce 1 factor");
     if (!factors.empty()) {
         EXPECT_TRUE(factors[0]->is_number(),
@@ -2121,7 +2121,7 @@ void test_pythagorean_different_args_unchanged() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    /// 参数不同的三角项保持各自结构，结果继续包含 sin 或 cos。
+    /// 参数不同的三角项保持各自结构,结果继续包含 sin 或 cos.
     bool has_trig = false;
     for (const auto& f : factors) {
         std::string s = f->to_string();
@@ -2142,7 +2142,7 @@ void test_pythagorean_no_matching_cos() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    /// 单独的 sin²(x) 保持平方结构。
+    /// 单独的 sin^2(x) 保持平方结构.
     bool has_sin = false;
     for (const auto& f : factors) {
         std::string s = f->to_string();
@@ -2159,7 +2159,7 @@ void test_full_pipeline_sin2_minus_x2() {
 
     auto x = SymbolicExpr::variable("x");
     auto sin_x = SymbolicExpr::sin(x);
-    // sin²(x) - x²
+    // sin^2(x) - x^2
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(sin_x, SymbolicExpr::number(2)),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::power(x, SymbolicExpr::number(2)))
@@ -2167,21 +2167,21 @@ void test_full_pipeline_sin2_minus_x2() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // sin²(x) - x² = (sin(x)+x)(sin(x)-x) 是差平方形式。
-    // 当前实现中，换元后 u0² - x² 为双变量多项式，
-    // 若多项式构造成功则应分解为 2 个因子，否则返回原表达式。
-    // 验证：至少返回 1 个因子，且因子包含 sin
+    // sin^2(x) - x^2 = (sin(x)+x)(sin(x)-x) 是差平方形式.
+    // 当前实现中,换元后 u0^2 - x^2 为双变量多项式,
+    // 若多项式构造成功则应分解为 2 个因子,否则返回原表达式.
+    // 验证:至少返回 1 个因子,且因子包含 sin
     EXPECT_TRUE(factors.size() >= 1, "should produce at least 1 factor");
 
     if (factors.size() == 2) {
-        // 若成功分解，验证因子结构
+        // 若成功分解,验证因子结构
         std::string f0 = factors[0]->to_string();
         std::string f1 = factors[1]->to_string();
         bool both_have_sin = (f0.find("sin") != std::string::npos) &&
                              (f1.find("sin") != std::string::npos);
         EXPECT_TRUE(both_have_sin, "both factors should contain sin(x)");
     } else {
-        // 若返回为不可约（多变量多项式构造限制），验证原表达式被保留
+        // 若返回为不可约(多变量多项式构造限制),验证原表达式被保留
         bool has_sin = false;
         for (const auto& f : factors) {
             if (f->to_string().find("sin") != std::string::npos) has_sin = true;

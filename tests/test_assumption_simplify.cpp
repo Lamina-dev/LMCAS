@@ -22,7 +22,7 @@ static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
     return v.get_result();
 }
 
-/// 使用空 AssumptionContext 执行兼容模式规范化。
+/// 使用空 AssumptionContext 执行兼容模式规范化.
 static std::shared_ptr<const SymbolicNode> normalize_no_ctx(
     const std::shared_ptr<const SymbolicNode>& node) {
     NormalizationVisitor v;
@@ -66,7 +66,7 @@ static bool is_variable(const std::shared_ptr<const SymbolicNode>& node, const s
     return v && v->name() == name;
 }
 
-/// Check if a node is abs(x) — FunctionNode(Abs, {VariableNode(name)}).
+/// Check if a node is abs(x) - FunctionNode(Abs, {VariableNode(name)}).
 static bool is_abs_of_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& name) {
     auto func = std::dynamic_pointer_cast<const FunctionNode>(node);
     if (!func || func->type() != FunctionNode::FuncType::Abs) return false;
@@ -107,7 +107,7 @@ void test_sqrt_x_squared_nonnegative() {
         AssumptionContext ctx;
         ctx.assume_sign(name, Sign::NonNegative);
 
-        // Build sqrt(x²)
+        // Build sqrt(x^2)
         auto x_squared = make_power(var(name), 2);
         auto sqrt_x_sq = make_sqrt(x_squared);
 
@@ -169,7 +169,7 @@ void test_sqrt_x_squared_integer_not_nonneg() {
 
     auto result = normalize_with_ctx(sqrt_n_sq, ctx);
 
-    // Integer implies Real, so sqrt(n²) → abs(n)
+    // Integer implies Real, so sqrt(n^2) -> abs(n)
     EXPECT_TRUE(is_abs_of_var(result, "n"),
                 "sqrt(n²) with Integer (not NonNeg) → abs(n)");
 }
@@ -188,7 +188,7 @@ void test_sqrt_x_squared_natural() {
 
     auto result = normalize_with_ctx(sqrt_k_sq, ctx);
 
-    // With NonNegative sign, sqrt(k²) → k
+    // With NonNegative sign, sqrt(k^2) -> k
     EXPECT_TRUE(is_variable(result, "k"),
                 "sqrt(k²) with Natural + NonNegative → k");
 }
@@ -239,7 +239,7 @@ void test_abs_nonnegative_not_positive() {
     auto abs_x = make_abs(var("x"));
     auto result = normalize_with_ctx(abs_x, ctx);
 
-    // The implementation only simplifies abs(x) → x for Positive,
+    // The implementation only simplifies abs(x) -> x for Positive,
     // not for NonNegative. Check that it either stays as abs(x) or
     // simplifies to x (both are mathematically valid for NonNegative).
     bool is_var_x = is_variable(result, "x");
@@ -267,7 +267,7 @@ static void test_abs_no_assumption() {
 void test_backward_compat_sqrt_x_squared() {
     TEST_CASE("sqrt(x²) without context produces same result as default NormalizationVisitor");
 
-    /// 空 AssumptionContext 保留 sqrt(x²) 的定义域条件。
+    /// 空 AssumptionContext 保留 sqrt(x^2) 的定义域条件.
     auto x_squared = make_power(var("x"), 2);
     auto sqrt_x_sq = make_sqrt(x_squared);
 
@@ -348,11 +348,11 @@ void test_backward_compat_no_assumption_rules_fire() {
     TEST_CASE("With context but no relevant assumptions, no rules fire");
 
     // Create a context with assumptions for variable "a", but simplify
-    // expressions involving variable "x" — no rules should fire for "x"
+    // expressions involving variable "x" - no rules should fire for "x"
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::Positive);
 
-    // sqrt(x²) should NOT simplify since x has no assumptions
+    // sqrt(x^2) should NOT simplify since x has no assumptions
     auto sqrt_x_sq = make_sqrt(make_power(var("x"), 2));
     auto result = normalize_with_ctx(sqrt_x_sq, ctx);
 
@@ -410,7 +410,7 @@ void test_sqrt_x_squared_in_larger_expression() {
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::NonNegative);
 
-    // Build: sqrt(x²) + 1
+    // Build: sqrt(x^2) + 1
     auto sqrt_x_sq = make_sqrt(make_power(var("x"), 2));
     auto expr = lamina::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{sqrt_x_sq, num(1)});
@@ -433,7 +433,7 @@ void test_sqrt_x_squared_in_larger_expression() {
         EXPECT_TRUE(has_x && has_one,
                     "sqrt(x²) + 1 with NonNegative x → x + 1");
     } else {
-        // Might be simplified differently, just check it's not still sqrt(x²) + 1
+        // Might be simplified differently, just check it's not still sqrt(x^2) + 1
         PrintVisitor pv;
         if (result) result->accept(pv);
         const auto result_str = pv.get_result();
@@ -502,7 +502,7 @@ void test_scoped_assumption_simplification() {
     EXPECT_TRUE(is_variable(result_child, "x"),
                 "sqrt(x²) in child scope with NonNegative → x");
 
-    // Pop scope — x should no longer be NonNegative
+    // Pop scope - x should no longer be NonNegative
     ctx.pop();
 
     auto result_after_pop = normalize_with_ctx(sqrt_x_sq, ctx);

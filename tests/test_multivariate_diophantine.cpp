@@ -6,7 +6,7 @@
 using namespace lamina;
 
 /**
- * @brief 辅助函数：构造 MultiPoly 项
+ * @brief 辅助函数:构造 MultiPoly 项
  */
 static MultiPoly::Term make_term(const std::vector<int>& exponents, const Rational& coeff)
 {
@@ -14,9 +14,9 @@ static MultiPoly::Term make_term(const std::vector<int>& exponents, const Ration
 }
 
 /**
- * @brief 辅助函数：验证丢番图方程解的正确性
+ * @brief 辅助函数:验证丢番图方程解的正确性
  *
- * 检查 s₁*f₁ + ... + sᵣ*fᵣ == target（截断到 degree < degree_bound in var）
+ * 检查 s_1*f_1 + ... + sᵣ*fᵣ == target(截断到 degree < degree_bound in var)
  */
 static bool verify_diophantine_solution(
     const std::vector<MultiPoly>& factors,
@@ -27,15 +27,15 @@ static bool verify_diophantine_solution(
 {
     if (solution.size() != factors.size()) return false;
 
-    // 计算 sum = s₁*f₁ + s₂*f₂ + ... + sᵣ*fᵣ
+    // 计算 sum = s_1*f_1 + s_2*f_2 + ... + sᵣ*fᵣ
     const auto& vars = factors[0].variables();
     MultiPoly sum(Rational(0), vars);
     for (size_t i = 0; i < factors.size(); ++i) {
         sum = sum + solution[i] * factors[i];
     }
 
-    /// 按 var 将 sum 截断到 degree < degree_bound。
-    /// 当前用例的 degree_bound 覆盖全部项，因此直接比较 sum 与 target。
+    /// 按 var 将 sum 截断到 degree < degree_bound.
+    /// 当前用例的 degree_bound 覆盖全部项,因此直接比较 sum 与 target.
     return sum == target;
 }
 
@@ -44,9 +44,9 @@ int main()
 
     TEST_CASE("Two coprime linear factors, target = 1");
     {
-        // f₁ = x+1, f₂ = x-1, target = 1
-        // 求解 s₁*(x+1) + s₂*(x-1) = 1
-        // 已知解：s₁ = 1/2, s₂ = -1/2（因为 (1/2)(x+1) + (-1/2)(x-1) = 1）
+        // f_1 = x+1, f_2 = x-1, target = 1
+        // 求解 s_1*(x+1) + s_2*(x-1) = 1
+        // 已知解:s_1 = 1/2, s_2 = -1/2(因为 (1/2)(x+1) + (-1/2)(x-1) = 1)
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -74,8 +74,8 @@ int main()
 
     TEST_CASE("Two coprime linear factors, target = x");
     {
-        // f₁ = x+1, f₂ = x-1, target = x
-        // 求解 s₁*(x+1) + s₂*(x-1) = x
+        // f_1 = x+1, f_2 = x-1, target = x
+        // 求解 s_1*(x+1) + s_2*(x-1) = x
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -106,8 +106,8 @@ int main()
 
     TEST_CASE("Three coprime factors, target = 1");
     {
-        // f₁ = x, f₂ = x+1, f₃ = x-1, target = 1
-        // 求解 s₁*x + s₂*(x+1) + s₃*(x-1) = 1
+        // f_1 = x, f_2 = x+1, f₃ = x-1, target = 1
+        // 求解 s_1*x + s_2*(x+1) + s₃*(x-1) = 1
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -140,12 +140,12 @@ int main()
 
     TEST_CASE("Factors with higher degree, target = 1");
     {
-        // f₁ = x²+1, f₂ = x+1, target = 1
-        // 求解 s₁*(x²+1) + s₂*(x+1) = 1
+        // f_1 = x^2+1, f_2 = x+1, target = 1
+        // 求解 s_1*(x^2+1) + s_2*(x+1) = 1
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
-            make_term({2}, Rational(1)),  // x²
+            make_term({2}, Rational(1)),  // x^2
             make_term({0}, Rational(1))   // +1
         };
         MultiPoly f1(f1_terms, vars);
@@ -169,8 +169,8 @@ int main()
 
     TEST_CASE("Non-trivial target, two coprime factors");
     {
-        // f₁ = x+1, f₂ = x+2, target = x+3
-        // 求解 s₁*(x+1) + s₂*(x+2) = x+3
+        // f_1 = x+1, f_2 = x+2, target = x+3
+        // 求解 s_1*(x+1) + s_2*(x+2) = x+3
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -202,9 +202,9 @@ int main()
 
     TEST_CASE("Target = 0 gives all-zero solution");
     {
-        // f₁ = x+1, f₂ = x-1, target = 0
-        // 求解 s₁*(x+1) + s₂*(x-1) = 0
-        // 平凡解：s₁ = 0, s₂ = 0
+        // f_1 = x+1, f_2 = x-1, target = 0
+        // 求解 s_1*(x+1) + s_2*(x-1) = 0
+        // 平凡解:s_1 = 0, s_2 = 0
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -244,19 +244,19 @@ int main()
 
     TEST_CASE("Two quadratic coprime factors, target = 1");
     {
-        // f₁ = x²+1, f₂ = x²+x+1, target = 1
-        // These are coprime since gcd(x²+1, x²+x+1) = 1
-        // 求解 s₁*(x²+1) + s₂*(x²+x+1) = 1
+        // f_1 = x^2+1, f_2 = x^2+x+1, target = 1
+        // These are coprime since gcd(x^2+1, x^2+x+1) = 1
+        // 求解 s_1*(x^2+1) + s_2*(x^2+x+1) = 1
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
-            make_term({2}, Rational(1)),  // x²
+            make_term({2}, Rational(1)),  // x^2
             make_term({0}, Rational(1))   // +1
         };
         MultiPoly f1(f1_terms, vars);
 
         std::vector<MultiPoly::Term> f2_terms = {
-            make_term({2}, Rational(1)),  // x²
+            make_term({2}, Rational(1)),  // x^2
             make_term({1}, Rational(1)),  // +x
             make_term({0}, Rational(1))   // +1
         };
@@ -276,9 +276,9 @@ int main()
 
     TEST_CASE("Diophantine degree constraints: deg(s_i) < deg(product/f_i)");
     {
-        // f₁ = x+1, f₂ = x-1, product = (x+1)(x-1) = x²-1
-        // deg(s₁) < deg(product/f₁) = deg(x-1) = 1 → s₁ is constant
-        // deg(s₂) < deg(product/f₂) = deg(x+1) = 1 → s₂ is constant
+        // f_1 = x+1, f_2 = x-1, product = (x+1)(x-1) = x^2-1
+        // deg(s_1) < deg(product/f_1) = deg(x-1) = 1 -> s_1 is constant
+        // deg(s_2) < deg(product/f_2) = deg(x+1) = 1 -> s_2 is constant
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -301,11 +301,11 @@ int main()
 
         EXPECT_TRUE(solution.size() == 2, "degree constraint: 2 solutions");
 
-        // product/f₁ = f₂, deg(f₂) = 1 → deg(s₁) < 1
+        // product/f_1 = f_2, deg(f_2) = 1 -> deg(s_1) < 1
         int deg_s1 = solution[0].degree("x");
         EXPECT_TRUE(deg_s1 < 1, "deg(s1) < deg(product/f1) = 1");
 
-        // product/f₂ = f₁, deg(f₁) = 1 → deg(s₂) < 1
+        // product/f_2 = f_1, deg(f_1) = 1 -> deg(s_2) < 1
         int deg_s2 = solution[1].degree("x");
         EXPECT_TRUE(deg_s2 < 1, "deg(s2) < deg(product/f2) = 1");
 
@@ -316,9 +316,9 @@ int main()
 
     TEST_CASE("Diophantine degree constraints: higher degree factors");
     {
-        // f₁ = x²+1, f₂ = x+1, product = (x²+1)(x+1)
-        // deg(s₁) < deg(product/f₁) = deg(x+1) = 1 → s₁ is constant
-        // deg(s₂) < deg(product/f₂) = deg(x²+1) = 2 → deg(s₂) ≤ 1
+        // f_1 = x^2+1, f_2 = x+1, product = (x^2+1)(x+1)
+        // deg(s_1) < deg(product/f_1) = deg(x+1) = 1 -> s_1 is constant
+        // deg(s_2) < deg(product/f_2) = deg(x^2+1) = 2 -> deg(s_2) <= 1
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -341,11 +341,11 @@ int main()
 
         EXPECT_TRUE(solution.size() == 2, "higher deg constraint: 2 solutions");
 
-        // deg(s₁) < deg(product/f₁) = deg(x+1) = 1
+        // deg(s_1) < deg(product/f_1) = deg(x+1) = 1
         int deg_s1 = solution[0].degree("x");
         EXPECT_TRUE(deg_s1 < 1, "deg(s1) < deg(x+1) = 1");
 
-        // deg(s₂) < deg(product/f₂) = deg(x²+1) = 2
+        // deg(s_2) < deg(product/f_2) = deg(x^2+1) = 2
         int deg_s2 = solution[1].degree("x");
         EXPECT_TRUE(deg_s2 < 2, "deg(s2) < deg(x^2+1) = 2");
 
@@ -357,8 +357,8 @@ int main()
 
     TEST_CASE("Unit: Two-factor f1=x, f2=x+1, target=1, known solution s1=-1, s2=1");
     {
-        // f₁ = x, f₂ = x+1, target = 1
-        // Known: s₁ = -1, s₂ = 1 (since (-1)(x) + (1)(x+1) = -x + x + 1 = 1)
+        // f_1 = x, f_2 = x+1, target = 1
+        // Known: s_1 = -1, s_2 = 1 (since (-1)(x) + (1)(x+1) = -x + x + 1 = 1)
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -385,8 +385,8 @@ int main()
 
     TEST_CASE("Unit: Two-factor f1=x+1, f2=x-1, target=x (non-trivial target)");
     {
-        // f₁ = x+1, f₂ = x-1, target = x
-        // Verify s₁*(x+1) + s₂*(x-1) = x
+        // f_1 = x+1, f_2 = x-1, target = x
+        // Verify s_1*(x+1) + s_2*(x-1) = x
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -417,8 +417,8 @@ int main()
 
     TEST_CASE("Unit: Single factor f1=x+1, target=x+1, solution s1=1");
     {
-        // f₁ = x+1, target = x+1
-        // Trivially: s₁ = 1 (since 1*(x+1) = x+1)
+        // f_1 = x+1, target = x+1
+        // Trivially: s_1 = 1 (since 1*(x+1) = x+1)
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -441,15 +441,15 @@ int main()
         EXPECT_TRUE(verify_diophantine_solution(factors, solution, target, "x", 10),
                     "s1*(x+1) == x+1, so s1 = 1");
 
-        // Additionally verify s₁ is exactly the constant 1
+        // Additionally verify s_1 is exactly the constant 1
         MultiPoly expected_s1(Rational(1), vars);
         EXPECT_TRUE(solution[0] == expected_s1, "single factor: s1 == 1");
     }
 
     TEST_CASE("Unit: Three-factor f1=x, f2=x+1, f3=x-1, target=1, verify sum");
     {
-        // f₁ = x, f₂ = x+1, f₃ = x-1, target = 1
-        // Verify s₁*x + s₂*(x+1) + s₃*(x-1) = 1
+        // f_1 = x, f_2 = x+1, f₃ = x-1, target = 1
+        // Verify s_1*x + s_2*(x+1) + s₃*(x-1) = 1
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -480,7 +480,7 @@ int main()
                     "s1*x + s2*(x+1) + s3*(x-1) == 1 (unit test)");
 
         // Verify degree constraints: each s_i should be constant (degree 0)
-        // since product = x*(x+1)*(x-1) = x³-x, deg(product/f_i) ≤ 2
+        // since product = x*(x+1)*(x-1) = x^3-x, deg(product/f_i) <= 2
         // and deg(s_i) < deg(product/f_i)
         for (size_t i = 0; i < solution.size(); ++i) {
             int deg_si = solution[i].degree("x");
@@ -491,8 +491,8 @@ int main()
 
     TEST_CASE("Unit: Two-factor f1=x+1, f2=x-1, target=1 — known solution s1=1/2, s2=-1/2");
     {
-        // f₁ = x+1, f₂ = x-1, target = 1
-        // Expected: s₁ = 1/2, s₂ = -1/2 (since (1/2)(x+1) + (-1/2)(x-1) = 1)
+        // f_1 = x+1, f_2 = x-1, target = 1
+        // Expected: s_1 = 1/2, s_2 = -1/2 (since (1/2)(x+1) + (-1/2)(x-1) = 1)
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -517,12 +517,12 @@ int main()
         EXPECT_TRUE(verify_diophantine_solution(factors, solution, target, "x", 10),
                     "unit two-factor (x+1,x-1): s1*(x+1) + s2*(x-1) == 1");
 
-        // Verify specific expected values: s₁ = 1/2, s₂ = -1/2
+        // Verify specific expected values: s_1 = 1/2, s_2 = -1/2
         // Both should be constants
         EXPECT_TRUE(solution[0].is_constant(), "s1 is constant for (x+1,x-1) target=1");
         EXPECT_TRUE(solution[1].is_constant(), "s2 is constant for (x+1,x-1) target=1");
 
-        // Check s₁ = 1/2 by evaluating at x=0 (since it's constant, eval doesn't matter)
+        // Check s_1 = 1/2 by evaluating at x=0 (since it's constant, eval doesn't matter)
         MultiPoly expected_s1(Rational(1, 2), vars);
         MultiPoly expected_s2(Rational(-1, 2), vars);
         EXPECT_TRUE(solution[0] == expected_s1, "s1 == 1/2");
@@ -531,8 +531,8 @@ int main()
 
     TEST_CASE("Unit: Two-factor f1=x, f2=x+1, target=1 — known solution s1=-1, s2=1");
     {
-        // f₁ = x, f₂ = x+1, target = 1
-        // Expected: s₁ = -1, s₂ = 1 (since -1*x + 1*(x+1) = -x + x + 1 = 1)
+        // f_1 = x, f_2 = x+1, target = 1
+        // Expected: s_1 = -1, s_2 = 1 (since -1*x + 1*(x+1) = -x + x + 1 = 1)
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -556,7 +556,7 @@ int main()
         EXPECT_TRUE(verify_diophantine_solution(factors, solution, target, "x", 10),
                     "unit two-factor (x,x+1): s1*x + s2*(x+1) == 1");
 
-        // Verify specific expected values: s₁ = -1, s₂ = 1
+        // Verify specific expected values: s_1 = -1, s_2 = 1
         EXPECT_TRUE(solution[0].is_constant(), "s1 is constant for (x,x+1) target=1");
         EXPECT_TRUE(solution[1].is_constant(), "s2 is constant for (x,x+1) target=1");
 
@@ -568,8 +568,8 @@ int main()
 
     TEST_CASE("Unit: Three-factor f1=x, f2=x+1, f3=x-1, target=1");
     {
-        // f₁ = x, f₂ = x+1, f₃ = x-1, target = 1
-        // Verify s₁*x + s₂*(x+1) + s₃*(x-1) == 1
+        // f_1 = x, f_2 = x+1, f₃ = x-1, target = 1
+        // Verify s_1*x + s_2*(x+1) + s₃*(x-1) == 1
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -599,9 +599,9 @@ int main()
         EXPECT_TRUE(verify_diophantine_solution(factors, solution, target, "x", 10),
                     "unit three-factor: s1*x + s2*(x+1) + s3*(x-1) == 1");
 
-        // Degree constraints: product = x(x+1)(x-1) = x³-x, degree 3
-        // deg(s₁) < deg(product/f₁) = deg((x+1)(x-1)) = 2
-        // deg(s₂) < deg(product/f₂) = deg(x(x-1)) = 2
+        // Degree constraints: product = x(x+1)(x-1) = x^3-x, degree 3
+        // deg(s_1) < deg(product/f_1) = deg((x+1)(x-1)) = 2
+        // deg(s_2) < deg(product/f_2) = deg(x(x-1)) = 2
         // deg(s₃) < deg(product/f₃) = deg(x(x+1)) = 2
         EXPECT_TRUE(solution[0].degree("x") < 2, "three-factor: deg(s1) < 2");
         EXPECT_TRUE(solution[1].degree("x") < 2, "three-factor: deg(s2) < 2");
@@ -610,8 +610,8 @@ int main()
 
     TEST_CASE("Unit: Two-factor f1=x+1, f2=x-1, target=x — non-trivial target");
     {
-        // f₁ = x+1, f₂ = x-1, target = x
-        // Verify s₁*(x+1) + s₂*(x-1) == x
+        // f_1 = x+1, f_2 = x-1, target = x
+        // Verify s_1*(x+1) + s_2*(x-1) == x
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
@@ -643,7 +643,7 @@ int main()
         EXPECT_TRUE(solution[0].degree("x") < 1, "non-trivial target: deg(s1) < 1");
         EXPECT_TRUE(solution[1].degree("x") < 1, "non-trivial target: deg(s2) < 1");
 
-        // Verify: s₁ = 1/2, s₂ = 1/2 (since (1/2)(x+1) + (1/2)(x-1) = x)
+        // Verify: s_1 = 1/2, s_2 = 1/2 (since (1/2)(x+1) + (1/2)(x-1) = x)
         MultiPoly expected_s1(Rational(1, 2), vars);
         MultiPoly expected_s2(Rational(1, 2), vars);
         EXPECT_TRUE(solution[0] == expected_s1, "non-trivial target: s1 == 1/2");
@@ -652,15 +652,15 @@ int main()
 
     TEST_CASE("Unit: Degree bound truncation — solutions respect degree_bound");
     {
-        // f₁ = x²+1, f₂ = x+1, target = x² (higher degree target)
+        // f_1 = x^2+1, f_2 = x+1, target = x^2 (higher degree target)
         // With degree_bound = 3, solutions should be truncated to degree < 3
-        // product = (x²+1)(x+1) = x³+x²+x+1, degree 3
-        // deg(s₁) < deg(product/f₁) = deg(x+1) = 1
-        // deg(s₂) < deg(product/f₂) = deg(x²+1) = 2
+        // product = (x^2+1)(x+1) = x^3+x^2+x+1, degree 3
+        // deg(s_1) < deg(product/f_1) = deg(x+1) = 1
+        // deg(s_2) < deg(product/f_2) = deg(x^2+1) = 2
         std::vector<std::string> vars = {"x"};
 
         std::vector<MultiPoly::Term> f1_terms = {
-            make_term({2}, Rational(1)),  // x²
+            make_term({2}, Rational(1)),  // x^2
             make_term({0}, Rational(1))   // +1
         };
         MultiPoly f1(f1_terms, vars);
@@ -672,7 +672,7 @@ int main()
         MultiPoly f2(f2_terms, vars);
 
         std::vector<MultiPoly::Term> target_terms = {
-            make_term({2}, Rational(1))   // x²
+            make_term({2}, Rational(1))   // x^2
         };
         MultiPoly target(target_terms, vars);
 
@@ -886,9 +886,9 @@ int main()
 
         RC_ASSERT(solution.size() == 2);
 
-        // deg(s1) < deg(product/f1) = deg(f2) = 1 → s1 is constant
+        // deg(s1) < deg(product/f1) = deg(f2) = 1 -> s1 is constant
         RC_ASSERT(solution[0].degree("x") < 1);
-        // deg(s2) < deg(product/f2) = deg(f1) = 1 → s2 is constant
+        // deg(s2) < deg(product/f2) = deg(f1) = 1 -> s2 is constant
         RC_ASSERT(solution[1].degree("x") < 1);
 
         // Also verify correctness

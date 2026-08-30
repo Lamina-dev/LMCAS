@@ -243,7 +243,7 @@ void PropertyStore::declare_domain_unchecked(const std::string& symbol, Domain d
         return;
     }
 
-    /// 超越域约束将符号域限制为 Real 或 Complex。
+    /// 超越域约束将符号域限制为 Real 或 Complex.
     if (props.transcendental && domain_specificity(domain) > domain_specificity(Domain::Real)) {
         throw std::invalid_argument(
             "Contradiction for symbol '" + symbol +
@@ -525,8 +525,8 @@ static bool intervals_equivalent(const Interval& left, const Interval& right) {
 }
 
 /**
- * 辅助函数：判断两个区间是否具有已证明的交集。
- * 端点排序委托给受检区间运算；当前支持域之外的端点保持“交集未证明”状态。
+ * 辅助函数:判断两个区间是否具有已证明的交集.
+ * 端点排序委托给受检区间运算;当前支持域之外的端点保持"交集未证明"状态.
  */
 static Result<bool> intervals_overlap_checked_impl(
     const Interval& a,
@@ -867,7 +867,7 @@ Result<Monotonicity> PropertyStore::get_monotonicity_checked(
 void PropertyStore::declare_transcendental_unchecked(const std::string& symbol) {
     auto& props = properties_[symbol];
 
-    // Idempotent: already transcendental → no-op
+    // Idempotent: already transcendental -> no-op
     if (props.transcendental) {
         return;
     }
@@ -916,7 +916,7 @@ bool PropertyStore::is_transcendental(const std::string& symbol) const {
 void PropertyStore::declare_finiteness_unchecked(const std::string& symbol, Finiteness f) {
     auto& props = properties_[symbol];
 
-    // Idempotent: same value → no-op
+    // Idempotent: same value -> no-op
     if (props.finiteness == f) {
         return;
     }
@@ -936,7 +936,7 @@ void PropertyStore::declare_finiteness_unchecked(const std::string& symbol, Fini
 
     props.finiteness = f;
 
-    // Implication: Finite → Bounded
+    // Implication: Finite -> Bounded
     if (f == Finiteness::Finite) {
         declare_bounded_unchecked(symbol, Boundedness::Bounded, std::nullopt);
     }
@@ -969,7 +969,7 @@ Finiteness PropertyStore::get_finiteness(const std::string& symbol) const {
 void PropertyStore::declare_definiteness_unchecked(const std::string& symbol, Definiteness d) {
     auto& props = properties_[symbol];
 
-    // Idempotent: same value → no-op
+    // Idempotent: same value -> no-op
     if (props.definiteness == d) {
         return;
     }

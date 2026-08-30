@@ -1,9 +1,9 @@
 /**
  * @file transcendental_factor.cpp
- * @brief 混合超越方程不可约因式分解：换元检测与主入口实现。
+ * @brief 混合超越方程不可约因式分解:换元检测与主入口实现.
  *
- * 本文件实现 Phase 1（换元检测）的核心逻辑：遍历表达式 AST，
- * 收集依赖目标变量的超越子表达式，去重后分配代数不定元。
+ * 本文件实现 Phase 1(换元检测)的核心逻辑:遍历表达式 AST,
+ * 收集依赖目标变量的超越子表达式,去重后分配代数不定元.
  */
 
 #include "transcendental_factor.hpp"
@@ -22,7 +22,7 @@ namespace lamina {
 
 
 /**
- * @brief 判断 FunctionNode 的函数类型是否为需要换元的超越函数。
+ * @brief 判断 FunctionNode 的函数类型是否为需要换元的超越函数.
  * @param[in] ft 函数类型枚举
  * @return 属于 Sin/Cos/Exp/Ln/Tan 之一返回 true
  * @internal
@@ -36,12 +36,12 @@ bool tf_is_transcendental_type(FunctionNode::FuncType ft) {
 }
 
 /**
- * @brief 递归遍历 AST，收集所有依赖目标变量的超越函数子表达式。
+ * @brief 递归遍历 AST,收集所有依赖目标变量的超越函数子表达式.
  *
- * 对于每个 FunctionNode，若其类型为超越函数且参数依赖 var，
- * 则将该节点作为候选加入结果集。遍历采用先序策略：
- * 先检查当前节点是否为超越函数，若是则收集后继续递归其参数
- * （以支持嵌套超越函数如 sin(exp(x)) 的外层优先收集）。
+ * 对于每个 FunctionNode,若其类型为超越函数且参数依赖 var,
+ * 则将该节点作为候选加入结果集.遍历采用先序策略:
+ * 先检查当前节点是否为超越函数,若是则收集后继续递归其参数
+ * (以支持嵌套超越函数如 sin(exp(x)) 的外层优先收集).
  *
  * @param[in]  node       当前 AST 节点
  * @param[in]  var        目标变量名
@@ -61,7 +61,7 @@ static void tf_collect_transcendental(
             expression_depends_on_variable(func->arguments()[0], var)) {
             candidates.push_back(node);
         }
-        /// 继续递归参数，以收集嵌套的超越子表达式
+        /// 继续递归参数,以收集嵌套的超越子表达式
         for (auto& arg : func->arguments()) {
             tf_collect_transcendental(arg, var, candidates);
         }
@@ -88,16 +88,16 @@ static void tf_collect_transcendental(
         return;
     }
 
-    /// NumberNode、VariableNode 等叶节点无需递归
+    /// NumberNode,VariableNode 等叶节点无需递归
 }
 
 /**
- * @brief 对候选超越子表达式去重，保留结构唯一的节点。
+ * @brief 对候选超越子表达式去重,保留结构唯一的节点.
  *
- * 使用 NodeSet（基于结构哈希和 equals 比较）进行去重，
- * 保持首次出现的顺序。
+ * 使用 NodeSet(基于结构哈希和 equals 比较)进行去重,
+ * 保持首次出现的顺序.
  *
- * @param[in,out] candidates 候选列表，去重后仅保留唯一项
+ * @param[in,out] candidates 候选列表,去重后仅保留唯一项
  * @internal
  */
 static void tf_deduplicate(std::vector<std::shared_ptr<const SymbolicNode>>& candidates) {
@@ -115,7 +115,7 @@ static void tf_deduplicate(std::vector<std::shared_ptr<const SymbolicNode>>& can
 }
 
 /**
- * @brief 判断两个 AST 节点是否结构相等。
+ * @brief 判断两个 AST 节点是否结构相等.
  * @param[in] a 第一个节点
  * @param[in] b 第二个节点
  * @return 结构相等返回 true
@@ -128,10 +128,10 @@ static bool tf_nodes_equal(const std::shared_ptr<const SymbolicNode>& a,
 }
 
 /**
- * @brief 判断节点是否为给定参数的取负形式。
+ * @brief 判断节点是否为给定参数的取负形式.
  *
- * 检测 node 是否等价于 -arg，即结构为 MultiplyNode({NumberNode(-1), arg})
- * 或 MultiplyNode({arg, NumberNode(-1)})。
+ * 检测 node 是否等价于 -arg,即结构为 MultiplyNode({NumberNode(-1), arg})
+ * 或 MultiplyNode({arg, NumberNode(-1)}).
  *
  * @param[in] node 待检测节点
  * @param[in] arg  参考参数节点
@@ -145,7 +145,7 @@ static bool tf_is_negation_of(const std::shared_ptr<const SymbolicNode>& node,
     auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node);
     if (!mul || mul->operands().size() != 2) return false;
 
-    /// 检查两种排列：(-1)*arg 或 arg*(-1)
+    /// 检查两种排列:(-1)*arg 或 arg*(-1)
     for (int i = 0; i < 2; ++i) {
         auto num_node = std::dynamic_pointer_cast<const NumberNode>(mul->operands()[i]);
         if (!num_node) continue;
@@ -173,15 +173,15 @@ static bool tf_is_negation_of(const std::shared_ptr<const SymbolicNode>& node,
 }
 
 /**
- * @brief 递归替换 AST 中的超越子表达式为对应不定元变量节点。
+ * @brief 递归替换 AST 中的超越子表达式为对应不定元变量节点.
  *
- * 对每个节点，按映射顺序（u0 优先于 u1）检查是否与某个超越子表达式结构相等。
- * 若匹配则替换为 VariableNode；否则递归处理子节点并重建当前节点。
- * 映射按外层优先顺序排列，因此 sin(exp(x)) 整体先映射为 u0，
- * 内部 exp(x) 保留在该映射的定义中。
+ * 对每个节点,按映射顺序(u0 优先于 u1)检查是否与某个超越子表达式结构相等.
+ * 若匹配则替换为 VariableNode;否则递归处理子节点并重建当前节点.
+ * 映射按外层优先顺序排列,因此 sin(exp(x)) 整体先映射为 u0,
+ * 内部 exp(x) 保留在该映射的定义中.
  *
  * @param[in] node     当前 AST 节点
- * @param[in] mappings 换元映射列表（按分配顺序）
+ * @param[in] mappings 换元映射列表(按分配顺序)
  * @return 替换后的新节点
  * @internal
  */
@@ -233,20 +233,20 @@ static std::shared_ptr<const SymbolicNode> tf_substitute_expr(
         return lamina::detail::make_node<PowerNode>(std::move(new_base), std::move(new_exp));
     }
 
-    /// 叶节点（NumberNode、VariableNode）直接返回
+    /// 叶节点(NumberNode,VariableNode)直接返回
     return node;
 }
 
 /**
- * @brief 检测换元映射之间的代数约束关系。
+ * @brief 检测换元映射之间的代数约束关系.
  *
- * 遍历所有映射对，识别以下约束模式：
- * - sin(f) 与 cos(f) 同时出现（相同参数 f）→ u_sin² + u_cos² - 1 = 0
- * - exp(f) 与 exp(-f) 同时出现（互为取负参数）→ u_pos * u_neg - 1 = 0
+ * 遍历所有映射对,识别以下约束模式:
+ * - sin(f) 与 cos(f) 同时出现(相同参数 f)-> u_sin^2 + u_cos^2 - 1 = 0
+ * - exp(f) 与 exp(-f) 同时出现(互为取负参数)-> u_pos * u_neg - 1 = 0
  *
- * 约束以 SymbolicExpr 形式存储，表示等于零的多项式。
+ * 约束以 SymbolicExpr 形式存储,表示等于零的多项式.
  *
- * @param[in,out] result 换元结果，constraints 字段将被填充
+ * @param[in,out] result 换元结果,constraints 字段将被填充
  * @internal
  */
 static void tf_detect_constraints(TransSubstitutionResult& result) {
@@ -271,7 +271,7 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
 
             if (is_sin_cos &&
                 tf_nodes_equal(func_i->arguments()[0], func_j->arguments()[0])) {
-                /// 构造约束：u_i² + u_j² - 1 = 0
+                /// 构造约束:u_i^2 + u_j^2 - 1 = 0
                 auto ui = SymbolicExpr::variable(mappings[i].indeterminate);
                 auto uj = SymbolicExpr::variable(mappings[j].indeterminate);
                 auto two = SymbolicExpr::number(2);
@@ -299,7 +299,7 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
                 }
 
                 if (is_inverse_pair) {
-                    /// 构造约束：u_i * u_j - 1 = 0
+                    /// 构造约束:u_i * u_j - 1 = 0
                     auto ui = SymbolicExpr::variable(mappings[i].indeterminate);
                     auto uj = SymbolicExpr::variable(mappings[j].indeterminate);
 
@@ -316,14 +316,14 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
 
 
 /**
- * @brief 检测表达式中的超越函数换元模式。
+ * @brief 检测表达式中的超越函数换元模式.
  *
- * 遍历表达式 AST，识别所有依赖目标变量的超越子表达式（Sin、Cos、Exp、Ln、Tan），
- * 对结构相同的子表达式去重后，为每个分配唯一的代数不定元名（u0, u1, u2, ...）。
+ * 遍历表达式 AST,识别所有依赖目标变量的超越子表达式(Sin,Cos,Exp,Ln,Tan),
+ * 对结构相同的子表达式去重后,为每个分配唯一的代数不定元名(u0, u1, u2, ...).
  *
  * @param[in] expr 待检测的符号表达式
  * @param[in] var  目标变量名
- * @return 换元结果，包含映射表；poly_expr 和 constraints 留空待后续任务填充
+ * @return 换元结果,包含映射表;poly_expr 和 constraints 留空待后续任务填充
  */
 TransSubstitutionResult detect_trans_substitutions(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -354,12 +354,12 @@ TransSubstitutionResult detect_trans_substitutions(
     /// 检测映射之间的代数约束
     tf_detect_constraints(result);
 
-    /// 执行替换：将超越子表达式替换为对应不定元变量
+    /// 执行替换:将超越子表达式替换为对应不定元变量
     if (!result.mappings.empty()) {
         auto substituted = tf_substitute_expr(lamina::detail::node(expr), result.mappings);
         result.poly_expr = lamina::detail::make_expression_ptr(substituted);
     } else {
-        /// 无超越子表达式时，poly_expr 即为原表达式
+        /// 无超越子表达式时,poly_expr 即为原表达式
         result.poly_expr = expr;
     }
 
@@ -368,14 +368,14 @@ TransSubstitutionResult detect_trans_substitutions(
 
 
 /**
- * @brief 计算符号表达式关于指定变量的次数。
+ * @brief 计算符号表达式关于指定变量的次数.
  *
- * 递归遍历 AST，计算表达式展开后关于 var 的最高次幂。
- * 与 var 无关的子表达式次数为 0；-1 表示当前结构位于多项式次数支持域之外。
+ * 递归遍历 AST,计算表达式展开后关于 var 的最高次幂.
+ * 与 var 无关的子表达式次数为 0;-1 表示当前结构位于多项式次数支持域之外.
  *
  * @param[in] node 符号节点
  * @param[in] var  变量名
- * @return 关于 var 的次数；-1 表示次数保持未知
+ * @return 关于 var 的次数;-1 表示次数保持未知
  * @internal
  */
 int tf_degree_in(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
@@ -445,13 +445,13 @@ int tf_degree_in(const std::shared_ptr<const SymbolicNode>& node, const std::str
 }
 
 /**
- * @brief 验证换元后的表达式确实是不定元的多项式。
+ * @brief 验证换元后的表达式确实是不定元的多项式.
  *
- * 检查表达式中是否仍残留超越函数依赖于任何不定元或原始变量。
- * 若表达式对所有候选变量的次数均可确定（非负整数），则视为有效多项式。
+ * 检查表达式中是否仍残留超越函数依赖于任何不定元或原始变量.
+ * 若表达式对所有候选变量的次数均可确定(非负整数),则视为有效多项式.
  *
  * @param[in] poly_expr      换元后的表达式
- * @param[in] all_variables  所有候选变量名（不定元 + 原始变量）
+ * @param[in] all_variables  所有候选变量名(不定元 + 原始变量)
  * @return 表达式是有效多项式返回 true
  * @internal
  */
@@ -472,16 +472,16 @@ static bool tf_validate_polynomial(
 }
 
 /**
- * @brief 将换元后的表达式构造为有理系数多项式。
+ * @brief 将换元后的表达式构造为有理系数多项式.
  *
- * 对换元后的多项式表达式，先展开再选择次数最高的不定元作为主变量，
- * 通过 symbolic_to_poly 转换为 Polynomial<Rational>。
- * 单变量情形（仅一个不定元且不含原始变量）直接转换；
- * 多变量情形选择次数最高的变量作为主变量。
+ * 对换元后的多项式表达式,先展开再选择次数最高的不定元作为主变量,
+ * 通过 symbolic_to_poly 转换为 Polynomial<Rational>.
+ * 单变量情形(仅一个不定元且不含原始变量)直接转换;
+ * 多变量情形选择次数最高的变量作为主变量.
  *
  * @param[in] poly_expr       换元后的符号表达式
- * @param[in] indeterminates  不定元名称列表（如 {"u0", "u1"}）
- * @param[in] original_var    原始目标变量名（如 "x"）
+ * @param[in] indeterminates  不定元名称列表(如 {"u0", "u1"})
+ * @param[in] original_var    原始目标变量名(如 "x")
  * @return 多项式构造结果
  */
 TfPolyBuildResult tf_build_polynomial(
@@ -496,7 +496,7 @@ TfPolyBuildResult tf_build_polynomial(
         return result;
     }
 
-    /// 展开前验证原始表达式的多项式结构，使分数指数等定义域信息参与判定。
+    /// 展开前验证原始表达式的多项式结构,使分数指数等定义域信息参与判定.
     {
         std::vector<std::string> pre_vars;
         for (const auto& ind : indeterminates) {
@@ -518,7 +518,7 @@ TfPolyBuildResult tf_build_polynomial(
         expanded = poly_expr;
     }
 
-    /// 收集所有候选变量：不定元 + 原始变量（若表达式仍依赖它）
+    /// 收集所有候选变量:不定元 + 原始变量(若表达式仍依赖它)
     std::vector<std::string> all_variables;
     for (const auto& ind : indeterminates) {
         if (expression_depends_on_variable(lamina::detail::node(expanded), ind)) {
@@ -529,7 +529,7 @@ TfPolyBuildResult tf_build_polynomial(
         all_variables.push_back(original_var);
     }
 
-    /// 无变量依赖：常数表达式
+    /// 无变量依赖:常数表达式
     if (all_variables.empty()) {
         Rational c = extract_coeff_value<Rational>(expanded);
         result.poly = Polynomial<Rational>({c}, "x");
@@ -543,7 +543,7 @@ TfPolyBuildResult tf_build_polynomial(
         return result;
     }
 
-    /// 计算每个变量的次数，选择最高次的作为主变量
+    /// 计算每个变量的次数,选择最高次的作为主变量
     std::string main_var;
     int max_degree = -1;
 
@@ -561,20 +561,20 @@ TfPolyBuildResult tf_build_polynomial(
 
     result.main_variable = main_var;
 
-    /// 收集参数变量（非主变量）
+    /// 收集参数变量(非主变量)
     for (const auto& var : all_variables) {
         if (var != main_var) {
             result.param_variables.push_back(var);
         }
     }
 
-    /// 单变量情形：仅主变量，无参数变量
+    /// 单变量情形:仅主变量,无参数变量
     /// 此时 symbolic_to_poly<Rational> 可直接提取有理系数
     if (result.param_variables.empty()) {
         result.poly = symbolic_to_poly<Rational>(expanded, main_var);
-        /// 验证转换结果非零（除非原表达式确实为零）
+        /// 验证转换结果非零(除非原表达式确实为零)
         if (result.poly.is_zero() && !expanded->is_zero()) {
-            /// 转换失败：可能系数提取出错
+            /// 转换失败:可能系数提取出错
             result.success = false;
             return result;
         }
@@ -582,25 +582,25 @@ TfPolyBuildResult tf_build_polynomial(
         return result;
     }
 
-    /// 多变量情形：主变量策略
-    /// 使用 symbolic_to_poly<Rational> 以主变量转换。
-    /// 注意：非主变量若出现在系数位置，extract_coeff_value<Rational> 会返回 0，
-    /// 导致信息丢失。因此仅当参数变量不实际出现在系数中时才能成功。
+    /// 多变量情形:主变量策略
+    /// 使用 symbolic_to_poly<Rational> 以主变量转换.
+    /// 注意:非主变量若出现在系数位置,extract_coeff_value<Rational> 会返回 0,
+    /// 导致信息丢失.因此仅当参数变量不实际出现在系数中时才能成功.
     //
-    /// u0² - x² 以 u0 为主变量时具有符号常数项 -x²。
-    /// 参数变量仅以有理倍数出现时可提升到有理系数表示；
-    /// 其他形式转入符号系数处理路径。
+    /// u0^2 - x^2 以 u0 为主变量时具有符号常数项 -x^2.
+    /// 参数变量仅以有理倍数出现时可提升到有理系数表示;
+    /// 其他形式转入符号系数处理路径.
     result.poly = symbolic_to_poly<Rational>(expanded, main_var);
 
-    /// 验证：重建多项式并与原表达式比较
-    /// 简单验证：检查多项式次数是否与预期一致
+    /// 验证:重建多项式并与原表达式比较
+    /// 简单验证:检查多项式次数是否与预期一致
     if (result.poly.degree() == max_degree) {
         result.success = true;
         return result;
     }
 
-    /// 次数不匹配，说明系数提取有损失
-    /// 尝试反转主变量选择：如果有其他变量能产生正确结果
+    /// 次数不匹配,说明系数提取有损失
+    /// 尝试反转主变量选择:如果有其他变量能产生正确结果
     for (const auto& var : all_variables) {
         if (var == main_var) continue;
 
@@ -618,22 +618,22 @@ TfPolyBuildResult tf_build_polynomial(
         }
     }
 
-    /// 所有有理系数表示路径均未匹配时，将结果标记为符号系数处理需求。
+    /// 所有有理系数表示路径均未匹配时,将结果标记为符号系数处理需求.
     result.success = false;
     return result;
 }
 
 
 /**
- * @brief 计算多项式的无平方因子部分。
+ * @brief 计算多项式的无平方因子部分.
  *
- * 算法：
+ * 算法:
  *   1. 计算 f' = derivative(f)
  *   2. g = gcd(f, f')
- *   3. 若 deg(g) == 0，f 已为 square-free，直接返回
+ *   3. 若 deg(g) == 0,f 已为 square-free,直接返回
  *   4. 否则 square_free_part = f / g
  *
- * 用于 Berlekamp 模分解前的预处理，确保输入多项式无重因子。
+ * 用于 Berlekamp 模分解前的预处理,确保输入多项式无重因子.
  *
  * @param[in] poly 输入的有理系数多项式
  * @return 无平方因子预处理结果
@@ -641,7 +641,7 @@ TfPolyBuildResult tf_build_polynomial(
 TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
     TfSquareFreeResult result;
 
-    /// 常数或零多项式：本身即为 square-free
+    /// 常数或零多项式:本身即为 square-free
     if (poly.degree() <= 0) {
         result.square_free = poly;
         result.repeated_factor = Polynomial<Rational>(Rational(1), poly.variable_name);
@@ -649,7 +649,7 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
         return result;
     }
 
-    /// 线性多项式：始终 square-free
+    /// 线性多项式:始终 square-free
     if (poly.degree() == 1) {
         result.square_free = poly;
         result.repeated_factor = Polynomial<Rational>(Rational(1), poly.variable_name);
@@ -663,7 +663,7 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
     /// 计算 gcd(f, f')
     Polynomial<Rational> g = Polynomial<Rational>::gcd(poly, deriv);
 
-    /// 若 gcd 为常数（degree 0），f 已为 square-free
+    /// 若 gcd 为常数(degree 0),f 已为 square-free
     if (g.degree() <= 0) {
         result.square_free = poly.make_monic();
         result.repeated_factor = Polynomial<Rational>(Rational(1), poly.variable_name);
@@ -671,7 +671,7 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
         return result;
     }
 
-    /// 存在重复因子：square_free_part = f / gcd(f, f')
+    /// 存在重复因子:square_free_part = f / gcd(f, f')
     auto [quotient, remainder] = poly.div_mod(g);
     result.square_free = quotient.make_monic();
     result.repeated_factor = g.make_monic();
@@ -681,25 +681,25 @@ TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly) {
 
 
 /**
- * @brief 计算整数的 popcount（二进制中 1 的个数）。
+ * @brief 计算整数的 popcount(二进制中 1 的个数).
  *
  * @param[in] mask 待计算的无符号整数
  * @return 二进制表示中 1 的个数
  * @internal
  */
 /**
- * @brief 混合超越表达式不可约因式分解主入口。
+ * @brief 混合超越表达式不可约因式分解主入口.
  *
- * 对含超越函数（sin、cos、exp、ln、tan）的表达式执行因式分解。
- * 完整流程：毕达哥拉斯化简 → 换元检测 → 多项式构造 → 无平方因子预处理
- * → Berlekamp 模分解 → Hensel 提升 → Zassenhaus 因子组合 → 逆换元 → 化简。
+ * 对含超越函数(sin,cos,exp,ln,tan)的表达式执行因式分解.
+ * 完整流程:毕达哥拉斯化简 -> 换元检测 -> 多项式构造 -> 无平方因子预处理
+ * -> Berlekamp 模分解 -> Hensel 提升 -> Zassenhaus 因子组合 -> 逆换元 -> 化简.
  *
- * 若任一阶段失败（如表达式不可多项式化、无合适素数等），
- * 返回原表达式作为单一不可约因子。
+ * 若任一阶段失败(如表达式不可多项式化,无合适素数等),
+ * 返回原表达式作为单一不可约因子.
  *
  * @param[in] expr 待分解的符号表达式
  * @param[in] var  目标变量名
- * @return 不可约因子列表（乘积等于原表达式，可能含常数因子）
+ * @return 不可约因子列表(乘积等于原表达式,可能含常数因子)
  */
 std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -707,25 +707,25 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
 
     if (!expr || !lamina::detail::node(expr)) return {};
 
-    /// --- 预处理：毕达哥拉斯恒等式化简 ---
-    /// 将 sin²(f) + cos²(f) 子模式替换为 1，简化后续分解
+    /// --- 预处理:毕达哥拉斯恒等式化简 ---
+    /// 将 sin^2(f) + cos^2(f) 子模式替换为 1,简化后续分解
     auto pyth_simplified = tf_simplify_pythagorean(expr, var);
 
-    /// --- 快速路径：乘积结构检测 ---
-    /// 若表达式已为独立子表达式的乘积，直接返回各因子
+    /// --- 快速路径:乘积结构检测 ---
+    /// 若表达式已为独立子表达式的乘积,直接返回各因子
     auto mult_factors = tf_detect_multiplicative_structure(pyth_simplified);
     if (!mult_factors.empty()) {
         return mult_factors;
     }
 
-    /// --- 快速路径：指数分离 ---
-    /// 若表达式为加法且所有项共享公共 exp(f(x)) 因子，提取之
+    /// --- 快速路径:指数分离 ---
+    /// 若表达式为加法且所有项共享公共 exp(f(x)) 因子,提取之
     auto exp_factors = tf_detect_exponential_separation(pyth_simplified, var);
     if (!exp_factors.empty()) {
         return exp_factors;
     }
 
-    /// 若表达式不含超越函数，直接返回原表达式
+    /// 若表达式不含超越函数,直接返回原表达式
     if (!tf_contains_transcendental(lamina::detail::node(pyth_simplified), var)) {
         return {pyth_simplified};
     }
@@ -733,13 +733,13 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     /// --- Phase 1: 换元检测 ---
     TransSubstitutionResult sub_result = detect_trans_substitutions(pyth_simplified, var);
 
-    /// 无换元映射：表达式不含可处理的超越子表达式
+    /// 无换元映射:表达式不含可处理的超越子表达式
     if (sub_result.mappings.empty()) {
         return {pyth_simplified};
     }
 
-    /// --- 快速路径：线性不可约检测 ---
-    /// 若换元后表达式对所有不定元和原始变量均为线性，则不可约
+    /// --- 快速路径:线性不可约检测 ---
+    /// 若换元后表达式对所有不定元和原始变量均为线性,则不可约
     if (tf_is_linear_irreducible(sub_result, var)) {
         return {pyth_simplified};
     }
@@ -755,11 +755,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         sub_result.poly_expr, indeterminates, var);
 
     if (!poly_result.success) {
-        /// 多项式构造失败：表达式不可多项式化
+        /// 多项式构造失败:表达式不可多项式化
         return {pyth_simplified};
     }
 
-    /// 常数或线性多项式：不可约
+    /// 常数或线性多项式:不可约
     if (poly_result.poly.degree() <= 1) {
         return {pyth_simplified};
     }
@@ -770,7 +770,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     /// 使用 square-free 部分进行后续分解
     Polynomial<Rational> work_poly = sqf_result.square_free;
 
-    /// 若 square-free 部分为常数或线性，不可约
+    /// 若 square-free 部分为常数或线性,不可约
     if (work_poly.degree() <= 1) {
         return {pyth_simplified};
     }
@@ -799,7 +799,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     }
 
     /// --- Phase 4: Hensel 提升 ---
-    /// 将有理系数多项式转为整系数（乘以分母 LCM）
+    /// 将有理系数多项式转为整系数(乘以分母 LCM)
     BigInt lcm_denom(1);
     for (const auto& c : work_poly.coeffs) {
         BigInt d = c.get_denominator();
@@ -814,14 +814,14 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     }
     Polynomial<BigInt> int_poly(int_coeffs, work_poly.variable_name);
 
-    /// 计算提升界：使用 Mignotte bound 确定需要的精度
+    /// 计算提升界:使用 Mignotte bound 确定需要的精度
     int n = work_poly.degree();
     BigInt max_coeff(0);
     for (const auto& c : int_coeffs) {
         BigInt ac = c.Abs();
         if (ac > max_coeff) max_coeff = ac;
     }
-    /// 保守 Mignotte 界：2^n * max_coeff
+    /// 保守 Mignotte 界:2^n * max_coeff
     BigInt mignotte = max_coeff;
     for (int i = 0; i < n; ++i) {
         mignotte = mignotte * BigInt(2);
@@ -850,7 +850,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     /// --- Phase 5: Zassenhaus 因子组合 ---
     int64_t prime_power = 1;
     for (int i = 0; i < lift_bound; ++i) {
-        /// 乘法达到 int64_t 上界前截断 prime_power。
+        /// 乘法达到 int64_t 上界前截断 prime_power.
         if (prime_power > std::numeric_limits<int64_t>::max() / prime) {
             prime_power = std::numeric_limits<int64_t>::max();
             break;
@@ -865,7 +865,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         return {pyth_simplified};
     }
 
-    /// 若组合后仅得到一个因子（或无因子），表达式不可约
+    /// 若组合后仅得到一个因子(或无因子),表达式不可约
     if (true_factors.size() <= 1) {
         return {pyth_simplified};
     }
@@ -879,14 +879,14 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         auto sym_factor = poly_to_symbolic(poly_factor);
         if (!sym_factor) continue;
 
-        /// 逆换元：将不定元替换回原始超越表达式
+        /// 逆换元:将不定元替换回原始超越表达式
         auto back_sub = tf_back_substitute(sym_factor, sub_result.mappings);
         if (back_sub) {
             symbolic_factors.push_back(back_sub);
         }
     }
 
-    /// 若逆换元后因子数 ≤ 1，分解无效
+    /// 若逆换元后因子数 <= 1,分解无效
     if (symbolic_factors.size() <= 1) {
         return {pyth_simplified};
     }
@@ -894,7 +894,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     /// --- Phase 6.2: 化简与常数提取 ---
     auto final_factors = tf_simplify_factors(symbolic_factors);
 
-    /// 若化简后仅剩一个非常数因子，分解无效
+    /// 若化简后仅剩一个非常数因子,分解无效
     size_t non_const_count = 0;
     for (const auto& f : final_factors) {
         if (f && !f->is_number()) non_const_count++;
@@ -903,7 +903,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
         return {pyth_simplified};
     }
 
-    /// 若存在重复因子（来自 square-free 预处理），需要恢复重数
+    /// 若存在重复因子(来自 square-free 预处理),需要恢复重数
     if (sqf_result.had_repeated_factors) {
         /// 将重复因子也进行逆换元并加入结果
         auto rep_sym = poly_to_symbolic(sqf_result.repeated_factor);

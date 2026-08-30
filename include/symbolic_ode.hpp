@@ -1,6 +1,6 @@
 /**
  * @file symbolic_ode.hpp
- * @brief 常微分方程求解：可分离变量、一阶线性、二阶常系数。
+ * @brief 常微分方程求解:可分离变量,一阶线性,二阶常系数.
  */
 #pragma once
 #include "computation_context.hpp"
@@ -14,7 +14,7 @@ namespace lamina {
 class AssumptionContext;
 
 /**
- * @brief 求解可分离变量型 ODE：dy/dx = rhs(x, y)
+ * @brief 求解可分离变量型 ODE:dy/dx = rhs(x, y)
  * @param rhs 方程右端表达式
  * @param x 自变量名
  * @param y 因变量名
@@ -31,7 +31,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
 );
 
 /**
- * @brief 求解一阶线性 ODE：dy/dx + P(x)*y = Q(x)
+ * @brief 求解一阶线性 ODE:dy/dx + P(x)*y = Q(x)
  * @param Px 系数函数 P(x)
  * @param Qx 非齐次项 Q(x)
  * @param x 自变量名
@@ -52,7 +52,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
 );
 
 /**
- * @brief 求解二阶常系数线性 ODE：a*y'' + b*y' + c*y = f(x)
+ * @brief 求解二阶常系数线性 ODE:a*y'' + b*y' + c*y = f(x)
  * @param a 二阶导数系数
  * @param b 一阶导数系数
  * @param c 零阶项系数
@@ -75,10 +75,10 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
 );
 
 /**
- * @brief 求解二阶常系数常微分方程。
+ * @brief 求解二阶常系数常微分方程.
  *
- * 当前支持齐次方程，以及 a == 0 且 b != 0 的一阶退化情形。
- * 二阶非齐次方程通过 `CasErrc::Inconclusive` 表示支持域边界。
+ * 当前支持齐次方程,以及 a == 0 且 b != 0 的一阶退化情形.
+ * 二阶非齐次方程通过 `CasErrc::Inconclusive` 表示支持域边界.
  */
 LAMINA_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     double a, double b, double c,

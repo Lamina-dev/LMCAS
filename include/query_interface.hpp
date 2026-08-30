@@ -1,6 +1,6 @@
 /**
  * @file query_interface.hpp
- * @brief QueryInterface class — unified tri-state query API for property questions on arbitrary expressions.
+ * @brief QueryInterface class - unified tri-state query API for property questions on arbitrary expressions.
  *
  * The QueryInterface is the single public entry point for property queries on SymbolicExpr trees.
  * It handles special cases (NaN, Infinity, Matrix, Relational, Logical nodes) and
@@ -50,7 +50,7 @@ enum class PropType {
 /**
  * @brief Cache key combining an expression's structural hash with the property type.
  *
- * Uses the expression structural hash — two structurally identical
+ * Uses the expression structural hash - two structurally identical
  * expressions will produce the same hash regardless of pointer identity.
  */
 struct CacheKey {
@@ -80,15 +80,15 @@ struct CacheKeyHash {
  * Provides query_positive, query_negative, query_nonnegative, query_real,
  * query_integer, and query_nonzero methods that return Tribool results.
  *
- * 结果先按（表达式哈希，属性类型）分桶，再以结构相等性确认表达式身份。
- * AssumptionContext 发生 push、pop 或 assume 变更时，缓存世代触发整体失效。
+ * 结果先按(表达式哈希,属性类型)分桶,再以结构相等性确认表达式身份.
+ * AssumptionContext 发生 push,pop 或 assume 变更时,缓存世代触发整体失效.
  *
  * Dispatch logic:
- *   - Null root node → Unknown
- *   - MatrixNode, RelationalNode, LogicalNode → Unknown
- *   - NumberNode with NaN → False for integer, Unknown for sign queries
- *   - FunctionNode::Infinity → derive sign from infinity's sign, False for integer
- *   - All other nodes → delegate to InferenceEngine
+ *   - Null root node -> Unknown
+ *   - MatrixNode, RelationalNode, LogicalNode -> Unknown
+ *   - NumberNode with NaN -> False for integer, Unknown for sign queries
+ *   - FunctionNode::Infinity -> derive sign from infinity's sign, False for integer
+ *   - All other nodes -> delegate to InferenceEngine
  */
 class LAMINA_API QueryInterface {
 public:
@@ -185,8 +185,8 @@ public:
     /**
      * @brief Invalidate the entire query result cache.
      *
-     * AssumptionContext 执行 push_scope、pop_scope、assume_domain、
-     * assume_sign 或关系插入后调用本函数。
+     * AssumptionContext 执行 push_scope,pop_scope,assume_domain,
+     * assume_sign 或关系插入后调用本函数.
      */
     void invalidate_cache() const;
 
@@ -239,7 +239,7 @@ private:
     /// If ctx_.cache_generation() differs, the cache is stale and must be cleared.
     mutable uint64_t observed_generation_;
 
-    /// Query result cache: (expression_hash, property_type) → collision bucket.
+    /// Query result cache: (expression_hash, property_type) -> collision bucket.
     /// Mutable because queries are logically const but populate the cache.
     mutable std::unordered_map<CacheKey, std::vector<CacheEntry>, CacheKeyHash> cache_;
 

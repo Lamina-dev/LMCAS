@@ -1,6 +1,6 @@
 /**
  * @file polynomial.hpp
- * @brief 一元多项式模板类 Polynomial<T>，支持四则运算、GCD、求导、求值。
+ * @brief 一元多项式模板类 Polynomial<T>,支持四则运算,GCD,求导,求值.
  */
 #pragma once
 
@@ -16,7 +16,7 @@
 namespace lamina {
 
 /**
- * @brief 计算两个系数的最大公约数（泛型实现）
+ * @brief 计算两个系数的最大公约数(泛型实现)
  * @tparam T 系数类型
  * @param a 第一个系数
  * @param b 第二个系数
@@ -40,26 +40,26 @@ T gcd_coeff_impl(const T& a, const T& b) {
 
 /**
  * @brief 一元多项式模板类
- * @tparam CoeffType 系数类型（支持 BigInt、Rational、int 等）
+ * @tparam CoeffType 系数类型(支持 BigInt,Rational,int 等)
  *
- * 系数按升幂存储：coeffs[i] 对应 x^i 的系数。
+ * 系数按升幂存储:coeffs[i] 对应 x^i 的系数.
  */
 template <typename CoeffType>
 class Polynomial {
 public:
 
-    std::vector<CoeffType> coeffs;   ///< 系数数组，coeffs[i] 为 x^i 的系数
+    std::vector<CoeffType> coeffs;   ///< 系数数组,coeffs[i] 为 x^i 的系数
     std::string variable_name;       ///< 变量名
 
     /**
      * @brief 构造零多项式
-     * @param var 变量名，默认 "x"
+     * @param var 变量名,默认 "x"
      */
     Polynomial(const std::string& var = "x") : variable_name(var) {}
 
     /**
      * @brief 从系数向量构造多项式
-     * @param c 系数向量（升幂排列）
+     * @param c 系数向量(升幂排列)
      * @param var 变量名
      */
     Polynomial(const std::vector<CoeffType>& c, const std::string& var = "x")
@@ -91,7 +91,7 @@ public:
 
     /**
      * @brief 获取多项式的次数
-     * @return 次数；零多项式返回 -1
+     * @return 次数;零多项式返回 -1
      */
     int degree() const {
         if (coeffs.empty()) return -1;
@@ -100,7 +100,7 @@ public:
 
     /**
      * @brief 获取首项系数
-     * @return 最高次项的系数；零多项式返回 0
+     * @return 最高次项的系数;零多项式返回 0
      */
     CoeffType lead_coeff() const {
         if (coeffs.empty()) return CoeffType(0);
@@ -115,13 +115,13 @@ public:
     Polynomial operator+(const Polynomial& other) const {
         std::string result_var = variable_name;
         if (variable_name != other.variable_name) {
-            /// 两个有效多项式共享变量名；零多项式沿用另一侧变量域。
+            /// 两个有效多项式共享变量名;零多项式沿用另一侧变量域.
             if (!is_zero() && !other.is_zero()) {
                 throw std::invalid_argument(
                     "Polynomial::operator+: variable name mismatch ('" +
                     variable_name + "' vs '" + other.variable_name + "')");
             }
-            /// 单侧为零时沿用非零侧变量名，保持结果变量域稳定。
+            /// 单侧为零时沿用非零侧变量名,保持结果变量域稳定.
             if (is_zero() && !other.is_zero()) {
                 result_var = other.variable_name;
             }
@@ -248,7 +248,7 @@ public:
     }
 
     /**
-     * @brief 计算两个系数的 GCD（静态方法）
+     * @brief 计算两个系数的 GCD(静态方法)
      * @param a 第一个系数
      * @param b 第二个系数
      * @return gcd(a, b)
@@ -269,7 +269,7 @@ public:
     }
 
     /**
-     * @brief 计算多项式的容度（所有系数的 GCD）
+     * @brief 计算多项式的容度(所有系数的 GCD)
      * @return 容度值
      */
     CoeffType content() const {
@@ -289,7 +289,7 @@ public:
     }
 
     /**
-     * @brief 计算多项式的本原部分（除以容度）
+     * @brief 计算多项式的本原部分(除以容度)
      * @return 本原多项式
      */
     Polynomial primitive_part() const {
@@ -315,7 +315,7 @@ public:
     }
 
     /**
-     * @brief 通过系数缩放执行伪除法，运算保持在原系数环
+     * @brief 通过系数缩放执行伪除法,运算保持在原系数环
      * @param other 除数多项式
      * @return pair(伪商, 伪余数)
      * @throw std::runtime_error 除数为零多项式时抛出
@@ -368,7 +368,7 @@ public:
     }
 
     /**
-     * @brief 对多项式求值（Horner 法）
+     * @brief 对多项式求值(Horner 法)
      * @param val 自变量的值
      * @return 多项式在 val 处的值
      */
@@ -399,7 +399,7 @@ public:
     }
 
     /**
-     * @brief 首一化（使首项系数为 1）
+     * @brief 首一化(使首项系数为 1)
      * @return 首一多项式
      */
     Polynomial make_monic() const {

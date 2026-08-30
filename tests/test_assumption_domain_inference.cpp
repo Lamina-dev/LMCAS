@@ -195,7 +195,7 @@ static void test_rational_power_integer_gives_real() {
         auto pow_node = make_power(make_var(base_name), make_number(exponent));
         auto expr = wrap_expr(pow_node);
 
-        // Rational implies Real, and Real^Integer → Real
+        // Rational implies Real, and Real^Integer -> Real
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
     });
 }
@@ -221,7 +221,7 @@ static void test_unknown_domain_gives_unknown() {
         auto func_node = make_function(func_type, make_var(var_name));
         auto expr = wrap_expr(func_node);
 
-        /// 参数域缺少 Real/Integer 证明时，函数值实数性保持 Unknown。
+        /// 参数域缺少 Real/Integer 证明时,函数值实数性保持 Unknown.
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::Unknown);
     });
 }
@@ -230,7 +230,7 @@ static void test_unknown_domain_gives_unknown() {
 static void test_all_trig_with_integer() {
     TEST_CASE("All trig(Integer) → Real");
 
-    // sin(Integer) → Real
+    // sin(Integer) -> Real
     {
         AssumptionContext ctx;
         ctx.assume_domain("n", Domain::Integer);
@@ -238,7 +238,7 @@ static void test_all_trig_with_integer() {
         auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sin, make_var("n")));
         EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "sin(Integer) → Real");
     }
-    // cos(Integer) → Real
+    // cos(Integer) -> Real
     {
         AssumptionContext ctx;
         ctx.assume_domain("n", Domain::Integer);
@@ -246,7 +246,7 @@ static void test_all_trig_with_integer() {
         auto expr = wrap_expr(make_function(FunctionNode::FuncType::Cos, make_var("n")));
         EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "cos(Integer) → Real");
     }
-    // tan(Integer) → Real
+    // tan(Integer) -> Real
     {
         AssumptionContext ctx;
         ctx.assume_domain("n", Domain::Integer);
@@ -280,10 +280,10 @@ static void test_ln_positive_gives_real() {
 static void test_sqrt_without_nonneg_unknown() {
     TEST_CASE("sqrt without NonNeg → Unknown");
 
-    /// sqrt 的实数性需要 Real 与 NonNegative 共同证明；当前仅声明 Real。
+    /// sqrt 的实数性需要 Real 与 NonNegative 共同证明;当前仅声明 Real.
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
-    /// 符号属性保持未声明状态。
+    /// 符号属性保持未声明状态.
     InferenceEngine engine(ctx);
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sqrt, make_var("x")));
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
@@ -297,7 +297,7 @@ static void test_power_negative_exponent_not_integer() {
     ctx.assume_domain("n", Domain::Integer);
     InferenceEngine engine(ctx);
 
-    // n^(-1) = 1/n — not necessarily integer
+    // n^(-1) = 1/n - not necessarily integer
     auto pow_node = make_power(make_var("n"), make_number(-1));
     auto expr = wrap_expr(pow_node);
 

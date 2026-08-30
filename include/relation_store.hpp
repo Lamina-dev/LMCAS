@@ -17,7 +17,7 @@
 
 namespace lamina {
 
-// Forward declaration — PropertyStore may not yet be compiled
+// Forward declaration - PropertyStore may not yet be compiled
 class PropertyStore;
 
 using RelationStoreResult = Result<void>;
@@ -36,13 +36,13 @@ struct Relation {
  *
  * When a relation of the form `variable op 0` is added, the RelationStore notifies
  * the PropertyStore to mark the variable with the corresponding sign:
- *   - GT  → Positive
- *   - GEQ → NonNegative
- *   - LT  → Negative
- *   - LEQ → NonPositive
- *   - NEQ → NonZero
+ *   - GT  -> Positive
+ *   - GEQ -> NonNegative
+ *   - LT  -> Negative
+ *   - LEQ -> NonPositive
+ *   - NEQ -> NonZero
  *
- * 复合关系（多变量左端或任意右端）按原结构存储，供 InferenceEngine 后续推导。
+ * 复合关系(多变量左端或任意右端)按原结构存储,供 InferenceEngine 后续推导.
  */
 class LAMINA_API RelationStore {
 public:
@@ -113,11 +113,11 @@ private:
      *
      * When exact zero appears on the left and a variable on the right, the
      * operator semantics are reversed to derive the variable's sign:
-     *   - 0 LT  var → var is Positive   (0 < var means var > 0)
-     *   - 0 GT  var → var is Negative   (0 > var means var < 0)
-     *   - 0 GEQ var → var is NonPositive (0 >= var means var <= 0)
-     *   - 0 LEQ var → var is NonNegative (0 <= var means var >= 0)
-     *   - 0 NEQ var → var is NonZero
+     *   - 0 LT  var -> var is Positive   (0 < var means var > 0)
+     *   - 0 GT  var -> var is Negative   (0 > var means var < 0)
+     *   - 0 GEQ var -> var is NonPositive (0 >= var means var <= 0)
+     *   - 0 LEQ var -> var is NonNegative (0 <= var means var >= 0)
+     *   - 0 NEQ var -> var is NonZero
      *
      * @param lhs Left-hand side expression (expected to be zero)
      * @param rhs Right-hand side expression (expected to be a variable)
@@ -132,7 +132,7 @@ private:
      * @brief Compute transitive closure after adding a new relation.
      *
      * BFS from the new relation, combining GT/GEQ operators transitively:
-     *   GT+GT→GT, GT+GEQ→GT, GEQ+GT→GT, GEQ+GEQ→GEQ.
+     *   GT+GT->GT, GT+GEQ->GT, GEQ+GT->GT, GEQ+GEQ->GEQ.
      * Only GT and GEQ participate in transitive closure.
      * Stops after MAX_TRANSITIVE_DEDUCTIONS new relations are deduced.
      *

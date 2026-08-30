@@ -1,6 +1,6 @@
 /**
  * @file calculus_utils.cpp
- * @brief 微积分工具函数实现：连续性判定、渐近线分析、对数微分、微分、全微分、反函数导数、反函数求解。
+ * @brief 微积分工具函数实现:连续性判定,渐近线分析,对数微分,微分,全微分,反函数导数,反函数求解.
  */
 
 #include "calculus_utils.hpp"
@@ -98,7 +98,7 @@ Result<void> calculus_utils_validate_expr_bounds(
 
 /**
  * @internal
- * @brief 判断表达式是否包含无穷大节点。
+ * @brief 判断表达式是否包含无穷大节点.
  */
 static bool calculus_utils_is_infinity(const std::shared_ptr<SymbolicExpr>& expr)
 {
@@ -119,7 +119,7 @@ static bool calculus_utils_is_infinity(const std::shared_ptr<SymbolicExpr>& expr
 
 /**
  * @internal
- * @brief 判断两个表达式是否结构相等。
+ * @brief 判断两个表达式是否结构相等.
  */
 static bool calculus_utils_expr_equal(const std::shared_ptr<SymbolicExpr>& a,
                                       const std::shared_ptr<SymbolicExpr>& b)
@@ -267,17 +267,17 @@ static CalculusRealCandidateStatus calculus_utils_extract_real_candidate(
 
 /**
  * @internal
- * @brief 从表达式中提取分母部分。
+ * @brief 从表达式中提取分母部分.
  *
- * 对于 PowerNode 且指数为负，base 即为分母。
- * 对于 MultiplyNode，查找指数为负的因子作为分母。
+ * 对于 PowerNode 且指数为负,base 即为分母.
+ * 对于 MultiplyNode,查找指数为负的因子作为分母.
  */
 static std::shared_ptr<SymbolicExpr> calculus_utils_extract_denominator(
     const std::shared_ptr<SymbolicExpr>& expr)
 {
     if (!expr || !lamina::detail::node(expr)) return nullptr;
 
-    /// 检查是否为 PowerNode 且指数为负（如 x^(-1) 表示 1/x）
+    /// 检查是否为 PowerNode 且指数为负(如 x^(-1) 表示 1/x)
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
         if (auto num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
             double e = 0;
@@ -429,7 +429,7 @@ ContinuityType continuity_at(
     auto left_lim = lamina::limit_expression_checked(f, var, point, LimitDirection::FromBelow).value();
     /// 计算右极限
     auto right_lim = lamina::limit_expression_checked(f, var, point, LimitDirection::FromAbove).value();
-    /// 计算函数值（直接代入）
+    /// 计算函数值(直接代入)
     auto func_val = f->substitute(var, point);
 
     /// 简化结果
@@ -437,11 +437,11 @@ ContinuityType continuity_at(
     if (right_lim) right_lim = right_lim->simplify();
     if (func_val) func_val = func_val->simplify();
 
-    /// 检查极限是否存在（不为无穷）
+    /// 检查极限是否存在(不为无穷)
     bool left_exists = left_lim && !calculus_utils_is_infinity(left_lim);
     bool right_exists = right_lim && !calculus_utils_is_infinity(right_lim);
 
-    /// 任一侧极限缺失或为无穷时，分类为本性间断点。
+    /// 任一侧极限缺失或为无穷时,分类为本性间断点.
     if (!left_exists || !right_exists) {
         return ContinuityType::Essential;
     }
@@ -450,19 +450,19 @@ ContinuityType continuity_at(
     bool limits_equal = calculus_utils_expr_equal(left_lim, right_lim);
 
     if (!limits_equal) {
-        /// 左极限 ≠ 右极限 → 跳跃间断点
+        /// 左极限 != 右极限 -> 跳跃间断点
         return ContinuityType::Jump;
     }
 
-    /// 左极限 = 右极限，检查是否等于函数值
+    /// 左极限 = 右极限,检查是否等于函数值
     bool val_exists = func_val && !calculus_utils_is_infinity(func_val);
 
     if (!val_exists || !calculus_utils_expr_equal(left_lim, func_val)) {
-        /// 极限存在但不等于函数值（或函数无定义） → 可去间断点
+        /// 极限存在但不等于函数值(或函数无定义) -> 可去间断点
         return ContinuityType::Removable;
     }
 
-    /// 左极限 = 右极限 = 函数值 → 连续
+    /// 左极限 = 右极限 = 函数值 -> 连续
     return ContinuityType::Continuous;
 }
 
@@ -479,7 +479,7 @@ AsymptoteAnalysisResult asymptotes_checked(
     auto pos_inf = SymbolicExpr::infinity(1);
     auto neg_inf = SymbolicExpr::infinity(-1);
 
-    /// 提取分母，求解分母 = 0 的点
+    /// 提取分母,求解分母 = 0 的点
     auto denominator = calculus_utils_extract_denominator(f);
     if (denominator) {
         auto solved_zeros = solve_equation(denominator, var, context, SolveOptions{});
@@ -525,7 +525,7 @@ AsymptoteAnalysisResult asymptotes_checked(
         for (auto& z : zeros) {
             if (!z || calculus_utils_is_infinity(z)) continue;
 
-            /// 验证该点处极限为 ±∞
+            /// 验证该点处极限为 +/-infinity
             auto lim_at_z = lamina::limit_expression_checked(f, var, z).value();
             if (calculus_utils_is_infinity(lim_at_z)) {
                 result.vertical.push_back(z);
@@ -540,7 +540,7 @@ AsymptoteAnalysisResult asymptotes_checked(
         }
     }
 
-    /// 计算 x→+∞ 和 x→-∞ 的极限
+    /// 计算 x->+infinity 和 x->-infinity 的极限
     auto lim_pos = lamina::limit_expression_checked(f, var, pos_inf).value();
     auto lim_neg = lamina::limit_expression_checked(f, var, neg_inf).value();
 
@@ -554,7 +554,7 @@ AsymptoteAnalysisResult asymptotes_checked(
         result.horizontal.push_back(lim_pos);
     }
     if (has_horiz_neg) {
-        /// 与正无穷方向相同的水平渐近线共享一个结果项。
+        /// 与正无穷方向相同的水平渐近线共享一个结果项.
         bool duplicate = has_horiz_pos && calculus_utils_expr_equal(lim_pos, lim_neg);
         if (!duplicate) {
             result.horizontal.push_back(lim_neg);
@@ -574,13 +574,13 @@ AsymptoteAnalysisResult asymptotes_checked(
     }
 
     if (!has_horiz_pos) {
-        /// 计算 slope = lim(f/x) as x→+∞
+        /// 计算 slope = lim(f/x) as x->+infinity
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
         auto slope_pos = lamina::limit_expression_checked(f_over_x, var, pos_inf).value();
         if (slope_pos) slope_pos = slope_pos->simplify();
 
         if (slope_pos && !calculus_utils_is_infinity(slope_pos) && !slope_pos->is_zero()) {
-            /// 计算 intercept = lim(f - slope*x) as x→+∞
+            /// 计算 intercept = lim(f - slope*x) as x->+infinity
             auto slope_times_x = SymbolicExpr::multiply(slope_pos, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
             auto intercept_pos = lamina::limit_expression_checked(f_minus_mx, var, pos_inf).value();
@@ -593,20 +593,20 @@ AsymptoteAnalysisResult asymptotes_checked(
     }
 
     if (!has_horiz_neg) {
-        /// 计算 slope = lim(f/x) as x→-∞
+        /// 计算 slope = lim(f/x) as x->-infinity
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
         auto slope_neg = lamina::limit_expression_checked(f_over_x, var, neg_inf).value();
         if (slope_neg) slope_neg = slope_neg->simplify();
 
         if (slope_neg && !calculus_utils_is_infinity(slope_neg) && !slope_neg->is_zero()) {
-            /// 计算 intercept = lim(f - slope*x) as x→-∞
+            /// 计算 intercept = lim(f - slope*x) as x->-infinity
             auto slope_times_x = SymbolicExpr::multiply(slope_neg, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
             auto intercept_neg = lamina::limit_expression_checked(f_minus_mx, var, neg_inf).value();
             if (intercept_neg) intercept_neg = intercept_neg->simplify();
 
             if (intercept_neg && !calculus_utils_is_infinity(intercept_neg)) {
-                /// 与正无穷方向相同的斜渐近线共享一个结果项。
+                /// 与正无穷方向相同的斜渐近线共享一个结果项.
                 bool duplicate = false;
                 for (auto& [s, i] : result.oblique) {
                     if (calculus_utils_expr_equal(s, slope_neg) &&
@@ -642,8 +642,8 @@ std::shared_ptr<SymbolicExpr> log_differentiate(
     /// 计算 ln(f)
     auto ln_f = SymbolicExpr::ln(f);
 
-    /// 对 ln(f) 求导 — 化简器会自动应用对数规则
-    /// （ln(a*b) = ln(a)+ln(b), ln(a^n) = n*ln(a)）
+    /// 对 ln(f) 求导 - 化简器会自动应用对数规则
+    /// (ln(a*b) = ln(a)+ln(b), ln(a^n) = n*ln(a))
     auto ln_f_simplified = ln_f->simplify();
     auto d_ln_f = ln_f_simplified->differentiate(var);
 
@@ -657,7 +657,7 @@ std::shared_ptr<SymbolicExpr> differential(
 {
     if (!f || !lamina::detail::node(f)) return nullptr;
 
-    /// 微分 df = f'(var) * dx，返回系数 f'(var)
+    /// 微分 df = f'(var) * dx,返回系数 f'(var)
     return f->differentiate(var);
 }
 
@@ -894,7 +894,7 @@ static bool calculus_utils_contains_unevaluated_integral(
     return lamina::detail::contains_node_type<IntegralNode>(node);
 }
 
-/// 尝试符号定积分，若结果仍含未求值积分节点则返回 nullptr
+/// 尝试符号定积分,若结果仍含未求值积分节点则返回 nullptr
 static std::shared_ptr<SymbolicExpr> calculus_utils_try_symbolic_definite(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& var,
@@ -932,7 +932,7 @@ ExpressionResult curvature_checked(
                                            "first derivative could not be constructed",
                                            operation);
     }
-    /// f'' = d²f/dvar²
+    /// f'' = d^2f/dvar^2
     auto f_double_prime = f_prime->differentiate(var);
     if (!f_double_prime || !lamina::detail::node(f_double_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
@@ -948,15 +948,15 @@ ExpressionResult curvature_checked(
                                            operation);
     }
 
-    /// 1 + f'²
+    /// 1 + f'^2
     auto f_prime_sq = SymbolicExpr::power(f_prime, SymbolicExpr::number(2));
     auto one_plus_fp_sq = SymbolicExpr::add(SymbolicExpr::number(1), f_prime_sq);
 
-    /// (1 + f'²)^(3/2)
+    /// (1 + f'^2)^(3/2)
     auto three_half = SymbolicExpr::number(Rational(3, 2));
     auto denom = SymbolicExpr::power(one_plus_fp_sq, three_half);
 
-    /// κ = |f''| / (1 + f'²)^(3/2)
+    /// κ = |f''| / (1 + f'^2)^(3/2)
     auto result = SymbolicExpr::divide(abs_f_pp, denom);
     auto simplified = result->simplify();
     return ExpressionResult::success(simplified ? simplified : result);
@@ -979,7 +979,7 @@ ExpressionResult curvature_parametric_checked(
     auto input = calculus_utils_validate_two_exprs(x_t, y_t, t, context, operation);
     if (!input) return ExpressionResult::failure(input.error());
 
-    /// x' = dx/dt, x'' = d²x/dt²
+    /// x' = dx/dt, x'' = d^2x/dt^2
     auto x_prime = x_t->differentiate(t);
     if (!x_prime || !lamina::detail::node(x_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
@@ -993,7 +993,7 @@ ExpressionResult curvature_parametric_checked(
                                            operation);
     }
 
-    /// y' = dy/dt, y'' = d²y/dt²
+    /// y' = dy/dt, y'' = d^2y/dt^2
     auto y_prime = y_t->differentiate(t);
     if (!y_prime || !lamina::detail::node(y_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
@@ -1028,16 +1028,16 @@ ExpressionResult curvature_parametric_checked(
                                            operation);
     }
 
-    /// x'² + y'²
+    /// x'^2 + y'^2
     auto x_prime_sq = SymbolicExpr::power(x_prime, SymbolicExpr::number(2));
     auto y_prime_sq = SymbolicExpr::power(y_prime, SymbolicExpr::number(2));
     auto sum_sq = SymbolicExpr::add(x_prime_sq, y_prime_sq);
 
-    /// (x'² + y'²)^(3/2)
+    /// (x'^2 + y'^2)^(3/2)
     auto three_half = SymbolicExpr::number(Rational(3, 2));
     auto denom = SymbolicExpr::power(sum_sq, three_half);
 
-    /// κ = |x'y'' - y'x''| / (x'² + y'²)^(3/2)
+    /// κ = |x'y'' - y'x''| / (x'^2 + y'^2)^(3/2)
     auto result = SymbolicExpr::divide(abs_cross, denom);
     auto simplified = result->simplify();
     return ExpressionResult::success(simplified ? simplified : result);
@@ -1069,7 +1069,7 @@ SymbolicExprVectorResult inflection_points_checked(
             "first derivative could not be constructed", operation);
     }
     
-    /// f'' = d²f/dvar²
+    /// f'' = d^2f/dvar^2
     auto f_double_prime = f_prime->differentiate(var);
     if (!f_double_prime || !lamina::detail::node(f_double_prime)) {
         return SymbolicExprVectorResult::failure(

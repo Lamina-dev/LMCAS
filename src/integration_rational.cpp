@@ -90,7 +90,7 @@ bool rd_collect_rational(const std::shared_ptr<const SymbolicNode>& node,
             num.push_back(Polynomial<Rational>({Rational(0), Rational(1)}, var));
             return true;
         }
-        /// 当前符号常量保持在符号域中，不提升为有理系数。
+        /// 当前符号常量保持在符号域中,不提升为有理系数.
         return false;
     }
 
@@ -277,8 +277,8 @@ bool RationalDecompositionStrategy::factor_denominator(
     auto sqfree = square_free_factorization(Q);
     if (sqfree.empty()) return false;
 
-    /// 步骤 2：对每个无平方因子逐次提取有理根，剩余整体因子次数至多为 2；
-    /// 高次剩余因子使该策略返回未匹配。
+    /// 步骤 2:对每个无平方因子逐次提取有理根,剩余整体因子次数至多为 2;
+    /// 高次剩余因子使该策略返回未匹配.
     for (auto& [piece, mult] : sqfree) {
         Polynomial<Rational> current = piece.make_monic();
 
@@ -341,7 +341,7 @@ bool RationalDecompositionStrategy::factor_denominator(
             factors_out.push_back({current.make_monic(), mult});
             continue;
         }
-        /// Q 上的高次整体因子由调用方映射为未求值积分节点。
+        /// Q 上的高次整体因子由调用方映射为未求值积分节点.
         return false;
     }
     return true;
@@ -402,7 +402,7 @@ bool RationalDecompositionStrategy::solve_coefficients(
     std::vector<std::vector<Rational>> M(rows, std::vector<Rational>(cols, Rational(0)));
 
     // RHS column: coefficients of P (degree < N expected; if deg(P) >= N
-    // then we have a problem — caller must run poly_divide first).
+    // then we have a problem - caller must run poly_divide first).
     if (P.degree() >= N) return false;
     for (size_t k = 0; k < rows; ++k) {
         Rational c = (k < P.coeffs.size()) ? P.coeffs[k] : Rational(0);
@@ -420,7 +420,7 @@ bool RationalDecompositionStrategy::solve_coefficients(
         for (int t = 0; t < mult; ++t) {
             auto qr = remaining.div_mod(fpoly);
             if (!rd_is_zero_poly(qr.second)) {
-                /// Q 与当前因子幂的余式应为零；残余项表示内部不变量失效。
+                /// Q 与当前因子幂的余式应为零;残余项表示内部不变量失效.
                 return false;
             }
             remaining = qr.first;
@@ -582,10 +582,10 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::integrate_term(
                     lamina::detail::node(integrand), var));
         }
 
-        // power == 1: ∫ (B x + C) / (x^2 + p x + q) dx
+        // power == 1: integral (B x + C) / (x^2 + p x + q) dx
         //   Split numerator: (B x + C) = (B/2) * (2x + p) + (C - B p / 2)
-        //   ∫ (B/2)(2x+p)/(x^2+px+q) dx = (B/2) * ln(x^2+px+q)
-        //   ∫ (C - B p / 2) / (x^2 + p x + q) dx
+        //   integral (B/2)(2x+p)/(x^2+px+q) dx = (B/2) * ln(x^2+px+q)
+        //   integral (C - B p / 2) / (x^2 + p x + q) dx
         //     = (C - B p / 2) * (2 / sqrt(4q - p^2)) * arctan( (2x + p) / sqrt(4q - p^2) )
         std::shared_ptr<SymbolicExpr> result = SymbolicExpr::number(0);
 
@@ -657,9 +657,9 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
     // Defensive: if Q is zero or constant, this is not the right strategy.
     if (rd_is_zero_poly(Q) || Q.degree() < 1) return nullptr;
 
-    /// PartialFractionStrategy 处理 deg<=1 的简单情形；degree>=2 交给本策略，
-    /// 因为它的 integrate_term 对不可约二次因子（→ arctan + ln）是完整的，
-    /// 而 PartialFraction 对不可约二次式会失败（留下未求值积分）。
+    /// PartialFractionStrategy 处理 deg<=1 的简单情形;degree>=2 交给本策略,
+    /// 因为它的 integrate_term 对不可约二次因子(-> arctan + ln)是完整的,
+    /// 而 PartialFraction 对不可约二次式会失败(留下未求值积分).
     if (Q.degree() == 1 && P.degree() <= 0 &&
         !P.coeffs.empty() && Q.coeffs.size() > 1 &&
         Q.coeffs[1] != Rational(0)) {
@@ -683,7 +683,7 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
         // Factor denominator.
         std::vector<std::pair<Polynomial<Rational>, int>> factors;
         if (!factor_denominator(Q, factors)) {
-            /// Q 上因式分解未决时保留未求值积分节点。
+            /// Q 上因式分解未决时保留未求值积分节点.
             return Integrator::depends_on(expr, var)
                 ? lamina::detail::make_expression_ptr(
                       lamina::detail::make_node<IntegralNode>(
@@ -694,7 +694,7 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
             // Means Q is constant after factoring, so really there's nothing left;
             // integrate quot only.
             if (rd_is_zero_poly(quot)) return SymbolicExpr::number(0);
-            // ∫ quot(x) dx = poly_integral(quot)
+            // integral quot(x) dx = poly_integral(quot)
             // fall through; handled below
         }
 

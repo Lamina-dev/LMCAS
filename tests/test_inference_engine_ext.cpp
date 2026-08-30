@@ -260,7 +260,7 @@ void test_domain_rational_pow_integer() {
     // x^2 where x is Rational and 2 is an integer exponent
     auto expr = wrap_expr(make_power(make_var("x"), make_number(2)));
 
-    // Rational ⊂ Real, so Rational base + integer exponent → Real
+    // Rational  subset  Real, so Rational base + integer exponent -> Real
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "rational^2 is Real");
 }
@@ -282,8 +282,8 @@ void test_depth_limit_triggers_unknown() {
     }
     auto expr = wrap_expr(node);
 
-    /// 最大深度为 3 时，深层表达式在内层变量推导前达到边界并返回 Unknown；
-    /// 测试同时验证查询在深度界内完成。
+    /// 最大深度为 3 时,深层表达式在内层变量推导前达到边界并返回 Unknown;
+    /// 测试同时验证查询在深度界内完成.
     Tribool result = engine.query_positive_checked(expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
         "Deeply nested expression with small depth limit returns Unknown");
@@ -319,16 +319,16 @@ void test_depth_limit_nested_addition() {
     engine.set_max_depth(1);
 
     // Create a nested function expression: exp(exp(x))
-    // Depth 1: query_positive on outer exp → DepthGuard depth=1 (ok, ≤ 1)
+    // Depth 1: query_positive on outer exp -> DepthGuard depth=1 (ok, <= 1)
     //   infer_function_property checks query_real on inner exp
-    //     query_real on inner exp → DepthGuard depth=2 (> 1, abort → Unknown)
+    //     query_real on inner exp -> DepthGuard depth=2 (> 1, abort -> Unknown)
     // So exp(exp(x)) with max_depth=1 should return Unknown for query_real
     auto x = make_var("x");
     auto inner_exp = make_function(FunctionNode::FuncType::Exp, x);
     auto outer_exp = make_function(FunctionNode::FuncType::Exp, inner_exp);
     auto expr = wrap_expr(outer_exp);
 
-    /// exp 的 Positive 推导需要 Real 参数；深度 1 使内层 exp 域保持 Unknown。
+    /// exp 的 Positive 推导需要 Real 参数;深度 1 使内层 exp 域保持 Unknown.
     Tribool result = engine.query_positive_checked(expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
         "Nested exp with depth limit 1 returns Unknown");
@@ -353,7 +353,7 @@ void test_cycle_detection_self_referential() {
     }
     auto expr = wrap_expr(node);
 
-    /// 最大深度为 2 时，内层变量域保持 Unknown，外层查询同步返回 Unknown。
+    /// 最大深度为 2 时,内层变量域保持 Unknown,外层查询同步返回 Unknown.
     Tribool result = engine.query_real_checked(expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
         "Deeply nested trig with depth limit 2 returns Unknown for domain");
@@ -371,7 +371,7 @@ void test_cycle_detection_no_crash_deep_shared() {
     auto outer = make_add({inner, inner}); // same inner pointer twice
     auto expr = wrap_expr(outer);
 
-    // Should not crash or hang — returns some result (likely Unknown due to cycles)
+    // Should not crash or hang - returns some result (likely Unknown due to cycles)
     Tribool result = engine.query_positive_checked(expr).value();
     // The important thing is no infinite recursion
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,

@@ -1,6 +1,6 @@
 /**
  * @file irrational.hpp
- * @brief 无理数表示类 Irrational，支持 sqrt、pi、e 及其线性组合。
+ * @brief 无理数表示类 Irrational,支持 sqrt,pi,e 及其线性组合.
  */
 #pragma once
 #define _USE_MATH_DEFINES
@@ -20,7 +20,7 @@
 #endif
 
 /**
- * @brief 计算浮点数的平方根（封装 LMMC 接口）
+ * @brief 计算浮点数的平方根(封装 LMMC 接口)
  * @param x 被开方数
  * @return 平方根值
  */
@@ -30,7 +30,7 @@ inline lmmc_real_t _irrational_sqrt(lmmc_real_t x) {
     return res;
 }
 
-/** @brief 无理数表示类，支持 √n、π、e、log 及其线性组合的精确表示与运算 */
+/** @brief 无理数表示类,支持 sqrtn,pi,e,log 及其线性组合的精确表示与运算 */
 class Irrational {
 public:
 
@@ -86,7 +86,7 @@ public:
                     return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
                 }
             case Type::COMPLEX: {
-                /// 重建完整线性组合，使 constant_term 与全部基向量共同参与结果。
+                /// 重建完整线性组合,使 constant_term 与全部基向量共同参与结果.
                 std::shared_ptr<SymbolicExpr> result;
                 auto add_term = [&](const std::shared_ptr<SymbolicExpr>& term) {
                     if (!result) {
@@ -111,7 +111,7 @@ public:
                         long long n = std::stoll(key.substr(4));
                         basis = SymbolicExpr::sqrt(SymbolicExpr::number(static_cast<int>(n)));
                     } else {
-                        /// 将未知基向量保留为变量，维持原始符号信息。
+                        /// 将未知基向量保留为变量,维持原始符号信息.
                         basis = SymbolicExpr::variable(key);
                     }
                     std::shared_ptr<SymbolicExpr> term = is_one_tol(coeff)
@@ -128,8 +128,8 @@ public:
     }
     /** @brief 无理数的内部类型 */
     enum class Type {
-        SQRT,     ///< 平方根形式 coeff * √radicand
-        PI,       ///< π 的倍数
+        SQRT,     ///< 平方根形式 coeff * sqrtradicand
+        PI,       ///< pi 的倍数
         E,        ///< e 的倍数
         LOG,      ///< 对数形式
         COMPLEX   ///< 多项线性组合
@@ -159,13 +159,13 @@ private:
 
 public:
 
-    /** @brief 默认构造，初始化为零值的 COMPLEX 类型 */
+    /** @brief 默认构造,初始化为零值的 COMPLEX 类型 */
     Irrational() : type(Type::COMPLEX), coefficient(0), radicand(1), constant_term(0) {}
 
     /**
-     * @brief 构造平方根形式无理数 coeff * √n
+     * @brief 构造平方根形式无理数 coeff * sqrtn
      * @param n 被开方数
-     * @param coeff 系数，默认为 1.0
+     * @param coeff 系数,默认为 1.0
      * @return 化简后的无理数对象
      */
     static Irrational sqrt(long long n, lmmc_real_t coeff = 1.0) {
@@ -181,9 +181,9 @@ public:
     }
 
     /**
-     * @brief 构造 π 的倍数
-     * @param coeff 系数，默认为 1.0
-     * @return coeff * π
+     * @brief 构造 pi 的倍数
+     * @param coeff 系数,默认为 1.0
+     * @return coeff * pi
      */
     static Irrational pi(lmmc_real_t coeff = 1.0) {
         Irrational result;
@@ -196,7 +196,7 @@ public:
 
     /**
      * @brief 构造 e 的倍数
-     * @param coeff 系数，默认为 1.0
+     * @param coeff 系数,默认为 1.0
      * @return coeff * e
      */
     static Irrational e(lmmc_real_t coeff = 1.0) {
@@ -209,7 +209,7 @@ public:
     }
 
     /**
-     * @brief 构造有理常数（退化为有理数的无理数表示）
+     * @brief 构造有理常数(退化为有理数的无理数表示)
      * @param value 常数值
      * @return 常数无理数对象
      */
@@ -400,7 +400,7 @@ public:
     }
 
     /**
-     * @brief 转换为可读字符串（如 "2√3"、"π/2"）
+     * @brief 转换为可读字符串(如 "2sqrt3","pi/2")
      * @return 格式化字符串
      */
     std::string to_string() const {
@@ -571,7 +571,7 @@ public:
                             term = std::to_string(abs_coeff) + "√" + std::to_string(n);
                         }
                     } else {
-                        /// 将未知基向量按原始 key 输出，与 to_symbolic 的 COMPLEX 分支保持一致。
+                        /// 将未知基向量按原始 key 输出,与 to_symbolic 的 COMPLEX 分支保持一致.
                         if (is_equal_tol(abs_coeff, 1.0)) {
                             term = key;
                         } else if (is_equal_tol(abs_coeff, round_val(abs_coeff))) {
@@ -605,7 +605,7 @@ public:
 
     /**
      * @brief 判断是否可精确表示为有理数
-     * @return 若为纯常数项（无无理部分）则返回 true
+     * @return 若为纯常数项(无无理部分)则返回 true
      */
     bool is_rational() const {
         if (type == Type::COMPLEX) {
@@ -614,7 +614,7 @@ public:
         return false;
     }
 
-    /** @brief 化简，移除系数为零的项 */
+    /** @brief 化简,移除系数为零的项 */
     void simplify() {
         if (type == Type::COMPLEX) {
             auto it = coefficients.begin();

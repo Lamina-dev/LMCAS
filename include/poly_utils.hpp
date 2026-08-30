@@ -64,8 +64,8 @@ LAMINA_API Result<Rational> symbolic_polynomial_content(
 /**
  * @brief Prove that an expression is an exact univariate rational polynomial.
  *
- * 成功且 optional 为空表示表达式位于当前结构支持域之外。
- * 精确系数仅来源于精确数值节点；遍历与展开计入所提供的上下文预算。
+ * 成功且 optional 为空表示表达式位于当前结构支持域之外.
+ * 精确系数仅来源于精确数值节点;遍历与展开计入所提供的上下文预算.
  */
 LAMINA_API Result<OptionalRationalPolynomial> recognize_rational_polynomial(
     const SymbolicExpr& expression,

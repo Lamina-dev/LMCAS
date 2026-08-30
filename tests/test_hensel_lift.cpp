@@ -1,6 +1,6 @@
 /**
  * @file test_hensel_lift.cpp
- * @brief Hensel 提升模块单元测试：Mignotte 界、提升高度计算与二因子二次提升。
+ * @brief Hensel 提升模块单元测试:Mignotte 界,提升高度计算与二因子二次提升.
  */
 
 #include "test_common.hpp"
@@ -15,7 +15,7 @@
 using namespace lamina;
 
 /**
- * @brief 测试简单多项式 (x^2 - 1) 的 Mignotte 界合理性。
+ * @brief 测试简单多项式 (x^2 - 1) 的 Mignotte 界合理性.
  */
 void test_mignotte_bound_simple() {
     TEST_CASE("Mignotte bound: x^2 - 1");
@@ -30,7 +30,7 @@ void test_mignotte_bound_simple() {
 }
 
 /**
- * @brief 测试高次多项式的提升高度随次数增长。
+ * @brief 测试高次多项式的提升高度随次数增长.
  */
 void test_lift_height_increases_with_degree() {
     TEST_CASE("Lift height increases with degree");
@@ -48,7 +48,7 @@ void test_lift_height_increases_with_degree() {
 }
 
 /**
- * @brief 测试较大系数多项式的 Mignotte 界。
+ * @brief 测试较大系数多项式的 Mignotte 界.
  */
 void test_mignotte_bound_larger_coefficients() {
     TEST_CASE("Mignotte bound: larger coefficients");
@@ -62,7 +62,7 @@ void test_mignotte_bound_larger_coefficients() {
 }
 
 /**
- * @brief 测试零多项式和常数多项式的边界情形。
+ * @brief 测试零多项式和常数多项式的边界情形.
  */
 void test_edge_cases() {
     TEST_CASE("Edge cases: zero and constant polynomials");
@@ -89,7 +89,7 @@ void test_edge_cases() {
 }
 
 /**
- * @brief 验证大系数多项式的中间结果由 BigInt 完整承载。
+ * @brief 验证大系数多项式的中间结果由 BigInt 完整承载.
  */
 void test_large_coefficients() {
     TEST_CASE("Large coefficients: no overflow");
@@ -109,7 +109,7 @@ void test_large_coefficients() {
 namespace {
 
 /**
- * @brief 辅助：多项式乘法（BigInt 系数，不取模）
+ * @brief 辅助:多项式乘法(BigInt 系数,不取模)
  */
 std::vector<BigInt> test_poly_mul(const std::vector<BigInt>& a,
                                   const std::vector<BigInt>& b) {
@@ -125,7 +125,7 @@ std::vector<BigInt> test_poly_mul(const std::vector<BigInt>& a,
 }
 
 /**
- * @brief 辅助：对称模归约
+ * @brief 辅助:对称模归约
  */
 BigInt test_sym_mod(const BigInt& c, const BigInt& m) {
     if (m.is_zero()) return c;
@@ -137,7 +137,7 @@ BigInt test_sym_mod(const BigInt& c, const BigInt& m) {
 }
 
 /**
- * @brief 辅助：对多项式系数取模归约
+ * @brief 辅助:对多项式系数取模归约
  */
 std::vector<BigInt> test_reduce(const std::vector<BigInt>& poly, const BigInt& m) {
     std::vector<BigInt> result = poly;
@@ -151,7 +151,7 @@ std::vector<BigInt> test_reduce(const std::vector<BigInt>& poly, const BigInt& m
 }
 
 /**
- * @brief 辅助：验证 g*h = f (mod m)
+ * @brief 辅助:验证 g*h = f (mod m)
  */
 bool test_verify_factorization(const std::vector<BigInt>& f,
                                const std::vector<BigInt>& g,
@@ -172,7 +172,7 @@ bool test_verify_factorization(const std::vector<BigInt>& f,
 }
 
 /**
- * @brief 辅助：验证 Bezout 关系 s*g + t*h = 1 (mod m)
+ * @brief 辅助:验证 Bezout 关系 s*g + t*h = 1 (mod m)
  */
 bool test_verify_bezout(const std::vector<BigInt>& s,
                         const std::vector<BigInt>& g,
@@ -203,7 +203,7 @@ bool test_verify_bezout(const std::vector<BigInt>& s,
 } // anonymous namespace
 
 /**
- * @brief 测试 x^2 - 1 = (x+1)(x-1) mod 3 的 Hensel 提升到 mod 9。
+ * @brief 测试 x^2 - 1 = (x+1)(x-1) mod 3 的 Hensel 提升到 mod 9.
  *
  * Bezout: s=2, t=1 满足 2*(x+1) + 1*(x-1) = 3x+1 = 1 (mod 3)
  * 提升后应满足 f = g'*h' (mod 9) 且 s'*g' + t'*h' = 1 (mod 9)
@@ -243,7 +243,7 @@ void test_hensel_lift_x2_minus_1_mod3() {
 }
 
 /**
- * @brief 测试 x^2+3x+2 = (x+1)(x+2) mod 5 的 Hensel 提升到 mod 25。
+ * @brief 测试 x^2+3x+2 = (x+1)(x+2) mod 5 的 Hensel 提升到 mod 25.
  *
  * Bezout: s=4, t=1 满足 4*(x+1) + 1*(x+2) = 5x+6 = 1 (mod 5)
  */
@@ -278,9 +278,9 @@ void test_hensel_lift_x2_plus_3x_plus_2_mod5() {
 }
 
 /**
- * @brief 测试非精确分解情形：x^2+6x+5 = (x+1)(x+5)，mod 3 下为 (x+1)(x+2)。
+ * @brief 测试非精确分解情形:x^2+6x+5 = (x+1)(x+5),mod 3 下为 (x+1)(x+2).
  *
- * 这是一个非平凡提升：mod 3 下的因子 (x+2) 需要被修正为 (x+5) mod 9。
+ * 这是一个非平凡提升:mod 3 下的因子 (x+2) 需要被修正为 (x+5) mod 9.
  */
 void test_hensel_lift_non_exact_mod3() {
     TEST_CASE("hl_two_factor_lift: x^2+6x+5 = (x+1)(x+5), lift from mod 3 to mod 9");
@@ -321,9 +321,9 @@ void test_hensel_lift_non_exact_mod3() {
 }
 
 /**
- * @brief 测试二次提升的迭代：mod 3 -> mod 9 -> mod 81。
+ * @brief 测试二次提升的迭代:mod 3 -> mod 9 -> mod 81.
  *
- * 验证可以连续调用 hl_two_factor_lift 进行多步提升。
+ * 验证可以连续调用 hl_two_factor_lift 进行多步提升.
  */
 void test_hensel_lift_iterated() {
     TEST_CASE("hl_two_factor_lift: iterated lift mod 3 -> 9 -> 81");
@@ -376,9 +376,9 @@ void test_hensel_lift_iterated() {
 }
 
 /**
- * @brief 测试三次多项式的 Hensel 提升。
+ * @brief 测试三次多项式的 Hensel 提升.
  *
- * f = x^3 - x = x(x+1)(x-1)，取两因子 g=x, h=x^2-1 mod 5。
+ * f = x^3 - x = x(x+1)(x-1),取两因子 g=x, h=x^2-1 mod 5.
  */
 void test_hensel_lift_cubic() {
     TEST_CASE("hl_two_factor_lift: x^3 - x with g=x, h=x^2-1 mod 5");
@@ -420,7 +420,7 @@ void test_hensel_lift_cubic() {
 }
 
 /**
- * @brief 测试通过公共 hensel_lift API 间接验证。
+ * @brief 测试通过公共 hensel_lift API 间接验证.
  */
 void test_hensel_lift_via_api_x2_minus_1() {
     TEST_CASE("hensel_lift API: x^2 - 1 rejects empty factors and lifts valid factors");
@@ -451,9 +451,9 @@ void test_hensel_lift_via_api_x2_minus_1() {
 
 
 /**
- * @brief 测试 3 因子提升：x³ - x = x(x-1)(x+1) mod 5，提升到 mod 25。
+ * @brief 测试 3 因子提升:x^3 - x = x(x-1)(x+1) mod 5,提升到 mod 25.
  *
- * 验证多因子提升后所有因子乘积等于 f (mod p^k)。
+ * 验证多因子提升后所有因子乘积等于 f (mod p^k).
  */
 void test_multi_factor_lift_3_factors() {
     TEST_CASE("multi-factor lift: x^3 - x = x*(x-1)*(x+1) mod 5, lift to mod 25");
@@ -505,9 +505,9 @@ void test_multi_factor_lift_3_factors() {
 }
 
 /**
- * @brief 测试 2 因子通过多因子路径：x² - 1 = (x+1)(x-1) mod 3，提升到 mod 9。
+ * @brief 测试 2 因子通过多因子路径:x^2 - 1 = (x+1)(x-1) mod 3,提升到 mod 9.
  *
- * 验证多因子提升对 2 因子情形也正确工作。
+ * 验证多因子提升对 2 因子情形也正确工作.
  */
 void test_multi_factor_lift_2_factors_via_api() {
     TEST_CASE("multi-factor lift via API: x^2 - 1 = (x+1)(x-1) mod 3, lift to mod 9");
@@ -552,7 +552,7 @@ void test_multi_factor_lift_2_factors_via_api() {
 }
 
 /**
- * @brief 测试多因子提升的系数在对称表示范围内。
+ * @brief 测试多因子提升的系数在对称表示范围内.
  */
 void test_multi_factor_lift_symmetric_coeffs() {
     TEST_CASE("multi-factor lift: coefficients in symmetric representation");
@@ -616,10 +616,10 @@ void test_multi_factor_lift_symmetric_coeffs() {
 
 
 /**
- * @brief 验证对称模归约的基本正确性。
+ * @brief 验证对称模归约的基本正确性.
  *
- * 测试 hl_symmetric_mod 的行为通过公共 API 间接验证：
- * 提升后的系数 c 应满足 -p^k/2 ≤ c ≤ p^k/2。
+ * 测试 hl_symmetric_mod 的行为通过公共 API 间接验证:
+ * 提升后的系数 c 应满足 -p^k/2 <= c <= p^k/2.
  */
 void test_symmetric_repr_basic_range() {
     TEST_CASE("symmetric repr: all coefficients in [-p^k/2, p^k/2] for x^2-1 mod 3, k=4");
@@ -673,10 +673,10 @@ void test_symmetric_repr_basic_range() {
 }
 
 /**
- * @brief 测试大系数多项式提升后系数仍在对称范围内。
+ * @brief 测试大系数多项式提升后系数仍在对称范围内.
  *
  * f = x^3 + 15x^2 + 71x + 105 = (x+3)(x+5)(x+7)
- * 系数较大，验证提升后归约到对称表示。
+ * 系数较大,验证提升后归约到对称表示.
  */
 void test_symmetric_repr_large_coefficients() {
     TEST_CASE("symmetric repr: large coefficient polynomial (x+3)(x+5)(x+7) mod 7, k=3");
@@ -688,7 +688,7 @@ void test_symmetric_repr_large_coefficients() {
     // 105 mod 7 = 0, 71 mod 7 = 1, 15 mod 7 = 1
     // f mod 7 = x^3 + x^2 + x = x(x^2 + x + 1)
     // x^2 + x + 1 mod 7: discriminant = 1-4 = -3 = 4 mod 7, sqrt(4)=2
-    // roots: (-1±2)/2 = 1/2=4, -3/2=2 mod 7
+    // roots: (-1+/-2)/2 = 1/2=4, -3/2=2 mod 7
     // So x^2+x+1 = (x-4)(x-2) = (x+3)(x+5) mod 7
     int64_t p = 7;
     Polynomial<ModInt> f1("x");
@@ -748,9 +748,9 @@ void test_symmetric_repr_large_coefficients() {
 }
 
 /**
- * @brief 测试对称归约的往返一致性：归约后的值 mod p^k 等于原值 mod p^k。
+ * @brief 测试对称归约的往返一致性:归约后的值 mod p^k 等于原值 mod p^k.
  *
- * 对各种系数值验证 symmetric_mod(c, m) ≡ c (mod m)。
+ * 对各种系数值验证 symmetric_mod(c, m) == c (mod m).
  */
 void test_symmetric_repr_roundtrip() {
     TEST_CASE("symmetric repr: roundtrip consistency c ≡ symmetric_mod(c, m) (mod m)");
@@ -759,7 +759,7 @@ void test_symmetric_repr_roundtrip() {
     // f = x^2 + 10x + 21 = (x+3)(x+7)
     Polynomial<BigInt> poly(std::vector<BigInt>{BigInt(21), BigInt(10), BigInt(1)}, "x");
 
-    // mod 5: 21 mod 5 = 1, 10 mod 5 = 0 → f = x^2 + 1 = (x+3)(x+2) mod 5
+    // mod 5: 21 mod 5 = 1, 10 mod 5 = 0 -> f = x^2 + 1 = (x+3)(x+2) mod 5
     int64_t p = 5;
     Polynomial<ModInt> f1("x");
     f1.coeffs = {ModInt(3, p), ModInt(1, p)};  // x+3
@@ -805,14 +805,14 @@ void test_symmetric_repr_roundtrip() {
 }
 
 /**
- * @brief 测试边界情形：系数恰好在 p^k/2 处。
+ * @brief 测试边界情形:系数恰好在 p^k/2 处.
  *
- * 使用 p=2, k=3 (mod 8)，half=4。验证系数 4 被保留，系数 5 被归约为 -3。
+ * 使用 p=2, k=3 (mod 8),half=4.验证系数 4 被保留,系数 5 被归约为 -3.
  */
 void test_symmetric_repr_boundary() {
     TEST_CASE("symmetric repr: boundary case at p^k/2");
 
-    // 使用 p=2, k=3 → mod 8, half = 4
+    // 使用 p=2, k=3 -> mod 8, half = 4
     // f = x^2 + 5x + 6 = (x+2)(x+3)
     // mod 2: f = x^2 + x = x(x+1)
     Polynomial<BigInt> poly(std::vector<BigInt>{BigInt(6), BigInt(5), BigInt(1)}, "x");
@@ -864,9 +864,9 @@ void test_symmetric_repr_boundary() {
 }
 
 /**
- * @brief 测试高提升次数下系数仍在对称范围内。
+ * @brief 测试高提升次数下系数仍在对称范围内.
  *
- * f = x^2 + 3x + 2 = (x+1)(x+2)，提升到 mod 5^5 = 3125。
+ * f = x^2 + 3x + 2 = (x+1)(x+2),提升到 mod 5^5 = 3125.
  */
 void test_symmetric_repr_high_lift() {
     TEST_CASE("symmetric repr: high lift bound p=5, k=5 (mod 3125)");

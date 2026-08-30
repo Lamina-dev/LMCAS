@@ -28,7 +28,7 @@ void test_reversed_0_lt_var_positive() {
     SymbolicExpr zero = make_zero();
     SymbolicExpr var = make_var("x");
 
-    // 0 < x means x > 0 → Positive
+    // 0 < x means x > 0 -> Positive
     rs.add_relation(zero, var, RelationalNode::Op::LT, ps);
 
     EXPECT_TRUE(ps.has_sign("x", Sign::Positive),
@@ -48,7 +48,7 @@ void test_reversed_0_gt_var_negative() {
     SymbolicExpr zero = make_zero();
     SymbolicExpr var = make_var("y");
 
-    // 0 > y means y < 0 → Negative
+    // 0 > y means y < 0 -> Negative
     rs.add_relation(zero, var, RelationalNode::Op::GT, ps);
 
     EXPECT_TRUE(ps.has_sign("y", Sign::Negative),
@@ -68,7 +68,7 @@ void test_reversed_0_geq_var_nonpositive() {
     SymbolicExpr zero = make_zero();
     SymbolicExpr var = make_var("z");
 
-    // 0 >= z means z <= 0 → NonPositive
+    // 0 >= z means z <= 0 -> NonPositive
     rs.add_relation(zero, var, RelationalNode::Op::GEQ, ps);
 
     EXPECT_TRUE(ps.has_sign("z", Sign::NonPositive),
@@ -84,7 +84,7 @@ void test_reversed_0_leq_var_nonnegative() {
     SymbolicExpr zero = make_zero();
     SymbolicExpr var = make_var("w");
 
-    // 0 <= w means w >= 0 → NonNegative
+    // 0 <= w means w >= 0 -> NonNegative
     rs.add_relation(zero, var, RelationalNode::Op::LEQ, ps);
 
     EXPECT_TRUE(ps.has_sign("w", Sign::NonNegative),
@@ -100,7 +100,7 @@ void test_reversed_0_neq_var_nonzero() {
     SymbolicExpr zero = make_zero();
     SymbolicExpr var = make_var("a");
 
-    // 0 != a means a != 0 → NonZero
+    // 0 != a means a != 0 -> NonZero
     rs.add_relation(zero, var, RelationalNode::Op::NEQ, ps);
 
     EXPECT_TRUE(ps.has_sign("a", Sign::NonZero),
@@ -169,7 +169,7 @@ void test_transitive_chain_geq_gt() {
     rs.add_relation(x, y, RelationalNode::Op::GEQ, ps);
     rs.add_relation(y, z, RelationalNode::Op::GT, ps);
 
-    // GEQ + GT → GT
+    // GEQ + GT -> GT
     EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GT),
                 "x GEQ y, y GT z → x GT z should be deduced");
 }
@@ -187,7 +187,7 @@ void test_transitive_chain_gt_geq() {
     rs.add_relation(x, y, RelationalNode::Op::GT, ps);
     rs.add_relation(y, z, RelationalNode::Op::GEQ, ps);
 
-    // GT + GEQ → GT
+    // GT + GEQ -> GT
     EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GT),
                 "x GT y, y GEQ z → x GT z should be deduced");
 }
@@ -205,7 +205,7 @@ void test_transitive_chain_geq_geq() {
     rs.add_relation(x, y, RelationalNode::Op::GEQ, ps);
     rs.add_relation(y, z, RelationalNode::Op::GEQ, ps);
 
-    // GEQ + GEQ → GEQ
+    // GEQ + GEQ -> GEQ
     EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GEQ),
                 "x GEQ y, y GEQ z → x GEQ z should be deduced");
 }
@@ -276,7 +276,7 @@ void test_transitive_cap_64() {
     // First, add many independent chains that share an endpoint.
 
     // Build a star pattern: many variables all GT than a central variable "center"
-    // Then add "center GT bottom" — this should trigger deductions for all
+    // Then add "center GT bottom" - this should trigger deductions for all
     // star variables GT bottom.
     
     // With 70 star variables + center GT bottom, the single add_relation(center, bottom, GT)
@@ -327,7 +327,7 @@ void test_transitive_cap_64() {
     EXPECT_TRUE(found_count == 64,
                 "Exactly 64 star variables should have deduced GT bottom relation");
 
-    /// 闭包上限触发后，部分星形节点保持关系未知。
+    /// 闭包上限触发后,部分星形节点保持关系未知.
     EXPECT_TRUE(found_count < num_star,
                 "Not all 70 star variables should have the deduced relation (cap hit)");
 }

@@ -608,16 +608,16 @@ static bool root_less_than(const std::shared_ptr<SymbolicExpr>& a,
         return *va < *vb;
     }
 
-    /// 参数根的顺序通过 (a - b) 的符号推导；
-    /// 二次公式的根差可化简为 ±sqrt(disc)/a。
+    /// 参数根的顺序通过 (a - b) 的符号推导;
+    /// 二次公式的根差可化简为 +/-sqrt(disc)/a.
     auto diff = SymbolicExpr::add(a, SymbolicExpr::multiply(b, SymbolicExpr::number(-1)))->simplify();
     if (auto vd = try_checked_numeric_constant(*diff)) {
         return *vd < 0;
     }
 
-    /// 尝试判断差值表达式的符号结构：
-    /// 如果差值形如 k * sqrt(...) / denom，判断各因子的符号。
-    /// 这覆盖了二次公式根差 = sqrt(delta)/a 的情形。
+    /// 尝试判断差值表达式的符号结构:
+    /// 如果差值形如 k * sqrt(...) / denom,判断各因子的符号.
+    /// 这覆盖了二次公式根差 = sqrt(delta)/a 的情形.
     auto try_sign_of_node = [](const std::shared_ptr<const SymbolicNode>& node) -> int {
         if (!node) return 0;
 
@@ -639,22 +639,22 @@ static bool root_less_than(const std::shared_ptr<SymbolicExpr>& a,
             }
         }
 
-        /// sqrt(...) 非负（假设参数使判别式非负）
+        /// sqrt(...) 非负(假设参数使判别式非负)
         if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
             if (fn->type() == FunctionNode::FuncType::Sqrt) return 1;
         }
 
-        /// x^(1/2) 或 x^0.5 也是平方根，非负
+        /// x^(1/2) 或 x^0.5 也是平方根,非负
         if (auto pw = std::dynamic_pointer_cast<const PowerNode>(node)) {
             auto exp_expr = lamina::detail::make_expression_ptr(pw->exponent());
             if (auto ev = try_checked_numeric_constant(*exp_expr)) {
                 if (*ev > 0 && *ev < 1.0) {
-                    /// base^(正分数) >= 0（假设 base 为判别式等非负量）
+                    /// base^(正分数) >= 0(假设 base 为判别式等非负量)
                     return 1;
                 }
             }
 
-            /// 对于整数指数，判断底数符号
+            /// 对于整数指数,判断底数符号
             auto base_expr = lamina::detail::make_expression_ptr(pw->base());
             auto bv_checked = try_checked_numeric_constant(*base_expr);
             auto ev_checked = try_checked_numeric_constant(*exp_expr);
@@ -672,7 +672,7 @@ static bool root_less_than(const std::shared_ptr<SymbolicExpr>& a,
         return 0;
     };
 
-    /// 对乘积节点，各因子符号之积
+    /// 对乘积节点,各因子符号之积
     auto try_sign_of_expr = [&try_sign_of_node](const std::shared_ptr<SymbolicExpr>& expr) -> int {
         if (!expr || !lamina::detail::node(expr)) return 0;
 
@@ -680,7 +680,7 @@ static bool root_less_than(const std::shared_ptr<SymbolicExpr>& a,
         int s = try_sign_of_node(lamina::detail::node(expr));
         if (s != 0) return s;
 
-        /// 乘积：各因子符号之积
+        /// 乘积:各因子符号之积
         if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
             int sign = 1;
             for (const auto& op : mul->operands()) {
@@ -1287,11 +1287,11 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
         auto symbolic_roots = solve_symbolic_poly(poly, variable);
 
         // Sort roots in ascending order
-        /// 当根含参数时，root_less_than 通过差值符号判断排序。
-        /// 对于二次公式根 r1=(-b+sqrt(d))/(2a), r2=(-b-sqrt(d))/(2a)，
-        /// 当 a>0 时 r1>r2，需要交换为 [r2, r1]。
+        /// 当根含参数时,root_less_than 通过差值符号判断排序.
+        /// 对于二次公式根 r1=(-b+sqrt(d))/(2a), r2=(-b-sqrt(d))/(2a),
+        /// 当 a>0 时 r1>r2,需要交换为 [r2, r1].
         if (symbolic_roots.size() == 2) {
-            /// 尝试判断 root[0] > root[1]，若是则交换
+            /// 尝试判断 root[0] > root[1],若是则交换
             bool swapped = false;
             auto d = SymbolicExpr::add(symbolic_roots[0],
                 SymbolicExpr::multiply(symbolic_roots[1], SymbolicExpr::number(-1)))->simplify();
@@ -1299,12 +1299,12 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                 std::sort(symbolic_roots.begin(), symbolic_roots.end(), root_less_than);
                 swapped = true;
             } else {
-            /// 如果差值可以求值为正数，说明 root[0] > root[1]，需要交换
+            /// 如果差值可以求值为正数,说明 root[0] > root[1],需要交换
             if (auto dv = try_checked_numeric_constant(*d)) {
                 if (*dv > 0) { std::swap(symbolic_roots[0], symbolic_roots[1]); swapped = true; }
             } else {
                 /// 尝试结构化符号判断
-                /// diff 为 (disc)^0.5 形式（PowerNode with exp=0.5）或含 sqrt 的乘积
+                /// diff 为 (disc)^0.5 形式(PowerNode with exp=0.5)或含 sqrt 的乘积
                 auto check_positive = [](const std::shared_ptr<SymbolicExpr>& e) -> bool {
                     if (!e || !lamina::detail::node(e)) return false;
                     /// PowerNode with exponent in (0,1) -> non-negative
@@ -1391,9 +1391,9 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
             }
             }
             if (!swapped) {
-                /// Fallback: 对于 a>0 的二次多项式，solve_quadratic_internal 返回
-                /// [大根, 小根]，需要交换。对于 a<0 则已经是 [小根, 大根]。
-                /// 这里利用 leading_sign 直接判断。
+                /// Fallback: 对于 a>0 的二次多项式,solve_quadratic_internal 返回
+                /// [大根, 小根],需要交换.对于 a<0 则已经是 [小根, 大根].
+                /// 这里利用 leading_sign 直接判断.
                 if (leading_sign > 0 && deg == 2) {
                     std::swap(symbolic_roots[0], symbolic_roots[1]);
                 }
@@ -1476,8 +1476,8 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     lamina::detail::node(SymbolicExpr::number(0)),
                     RelationalNode::Op::EQ));
 
-            /// 降阶多项式仍按参数分段时，expanded_into_subcases 标记各子分支
-            /// 已直接加入 result.cases。
+            /// 降阶多项式仍按参数分段时,expanded_into_subcases 标记各子分支
+            /// 已直接加入 result.cases.
             bool expanded_into_subcases = false;
 
             if (deg >= 1) {
@@ -1520,8 +1520,8 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                         reduced_expr = reduced_expr->simplify();
                         auto sub_result = solve_parametric_inequality(reduced_expr, type, variable, parameters);
 
-                        /// 将每个子分支的参数条件与父级 leading coeff == 0 条件合取，
-                        /// 再作为独立分支加入结果，完整保留降阶后的参数分段。
+                        /// 将每个子分支的参数条件与父级 leading coeff == 0 条件合取,
+                        /// 再作为独立分支加入结果,完整保留降阶后的参数分段.
                         if (sub_result.cases.empty()) {
                             degen_case.solution = IntervalUnion::empty();
                         } else {

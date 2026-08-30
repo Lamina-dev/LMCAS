@@ -1,6 +1,6 @@
 /**
  * @file test_ode_engine.cpp
- * @brief 测试 ODE 引擎的一阶求解方法：齐次、Bernoulli、恰当方程。
+ * @brief 测试 ODE 引擎的一阶求解方法:齐次,Bernoulli,恰当方程.
  */
 #include "test_common.hpp"
 #include "symbolic_ode_engine.hpp"
@@ -12,7 +12,7 @@ using namespace lamina;
 void test_homogeneous_ode() {
     TEST_CASE("Homogeneous ODE: y' = y/x");
     {
-        // y' = y/x 是齐次方程，f(y/x) = y/x
+        // y' = y/x 是齐次方程,f(y/x) = y/x
         // 解: y = Cx
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
@@ -30,7 +30,7 @@ void test_homogeneous_ode() {
 
     TEST_CASE("Homogeneous ODE: y' = (x + y)/x");
     {
-        // y' = (x + y)/x = 1 + y/x，齐次方程
+        // y' = (x + y)/x = 1 + y/x,齐次方程
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
         auto rhs = SymbolicExpr::divide(
@@ -47,7 +47,7 @@ void test_homogeneous_ode() {
 
     TEST_CASE("Homogeneous ODE: y' = (x^2 + y^2)/(x*y)");
     {
-        // y' = (x² + y²)/(xy) 是齐次方程
+        // y' = (x^2 + y^2)/(xy) 是齐次方程
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
         auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
@@ -67,7 +67,7 @@ void test_homogeneous_ode() {
 void test_bernoulli_ode() {
     TEST_CASE("Bernoulli ODE: y' + y = y^2 (P=1, Q=1, n=2)");
     {
-        // y' + y = y^2 → P(x)=1, Q(x)=1, n=2
+        // y' + y = y^2 -> P(x)=1, Q(x)=1, n=2
         auto P = SymbolicExpr::number(1);
         auto Q = SymbolicExpr::number(1);
 
@@ -96,7 +96,7 @@ void test_bernoulli_ode() {
 
     TEST_CASE("Bernoulli ODE: y' + 2*y = y^3 (P=2, Q=1, n=3)");
     {
-        // y' + 2y = y^3 → P=2, Q=1, n=3
+        // y' + 2y = y^3 -> P=2, Q=1, n=3
         auto P = SymbolicExpr::number(2);
         auto Q = SymbolicExpr::number(1);
 
@@ -114,8 +114,8 @@ void test_exact_ode() {
     TEST_CASE("Exact ODE: (2x + y)dx + (x + 2y)dy = 0");
     {
         // M = 2x + y, N = x + 2y
-        // ∂M/∂y = 1, ∂N/∂x = 1 → 恰当
-        // F(x,y) = x² + xy + y² = C
+        // partialM/partialy = 1, partialN/partialx = 1 -> 恰当
+        // F(x,y) = x^2 + xy + y^2 = C
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
         auto M = SymbolicExpr::add(
@@ -138,9 +138,9 @@ void test_exact_ode() {
     TEST_CASE("Exact ODE: (y*cos(x) + 2x*e^y)dx + (sin(x) + x^2*e^y)dy = 0");
     {
         // M = y*cos(x) + 2x*e^y
-        // N = sin(x) + x²*e^y
-        // ∂M/∂y = cos(x) + 2x*e^y
-        // ∂N/∂x = cos(x) + 2x*e^y → 恰当
+        // N = sin(x) + x^2*e^y
+        // partialM/partialy = cos(x) + 2x*e^y
+        // partialN/partialx = cos(x) + 2x*e^y -> 恰当
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
         auto M = SymbolicExpr::add(
@@ -162,7 +162,7 @@ void test_exact_ode() {
 
     TEST_CASE("Exact ODE: simple (y)dx + (x)dy = 0");
     {
-        // M = y, N = x → ∂M/∂y = 1, ∂N/∂x = 1 → 恰当
+        // M = y, N = x -> partialM/partialy = 1, partialN/partialx = 1 -> 恰当
         // F(x,y) = xy = C
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
@@ -380,9 +380,9 @@ void test_integrating_factor() {
     TEST_CASE("Integrating factor: (2y)dx + (x)dy = 0 (not exact, μ(x) exists)");
     {
         // M = 2y, N = x
-        // ∂M/∂y = 2, ∂N/∂x = 1 → 不恰当
-        // (∂M/∂y - ∂N/∂x)/N = (2-1)/x = 1/x → 仅依赖 x
-        // μ(x) = exp(∫1/x dx) = exp(ln(x)) = x
+        // partialM/partialy = 2, partialN/partialx = 1 -> 不恰当
+        // (partialM/partialy - partialN/partialx)/N = (2-1)/x = 1/x -> 仅依赖 x
+        // mu(x) = exp(integral1/x dx) = exp(ln(x)) = x
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
         auto M = SymbolicExpr::multiply(SymbolicExpr::number(2), y);
@@ -412,7 +412,7 @@ void test_integrating_factor() {
 
     TEST_CASE("Integrating factor: solve non-exact via solve_exact_ode");
     {
-        // (2y)dx + (x)dy = 0 → 不恰当但有积分因子
+        // (2y)dx + (x)dy = 0 -> 不恰当但有积分因子
         // solve_exact_ode 应自动找到积分因子并求解
         auto x = SymbolicExpr::variable("x");
         auto y = SymbolicExpr::variable("y");
@@ -434,7 +434,7 @@ void test_classification() {
         auto rhs = SymbolicExpr::divide(y, x);
 
         auto cls = classify_first_order_ode(rhs, "x", "y");
-        // y/x 可能被分类为可分离或齐次（取决于检测顺序）
+        // y/x 可能被分类为可分离或齐次(取决于检测顺序)
         // 实际上 y/x = (1/x)*y 也是线性的
         EXPECT_TRUE(cls.type == ODEType::Separable ||
                     cls.type == ODEType::Linear1 ||
@@ -451,7 +451,7 @@ void test_classification() {
             SymbolicExpr::power(y, SymbolicExpr::number(2)));
 
         auto cls = classify_first_order_ode(rhs, "x", "y");
-        /// x² + y² 进入一阶分类路径，可归类为恰当方程或 Unknown。
+        /// x^2 + y^2 进入一阶分类路径,可归类为恰当方程或 Unknown.
         EXPECT_TRUE(cls.order == 1, "classified as first order");
     }
 }
@@ -460,12 +460,12 @@ void test_classification() {
 void test_variation_of_parameters() {
     TEST_CASE("Variation of Parameters: y'' + y = sec(x)");
     {
-        // 齐次解: y₁ = cos(x), y₂ = sin(x)
+        // 齐次解: y_1 = cos(x), y_2 = sin(x)
         // 非齐次项: g(x) = sec(x) = 1/cos(x)
-        // Wronskian: W = cos(x)*cos(x) - sin(x)*(-sin(x)) = cos²(x) + sin²(x) = 1
-        // u₁' = -sin(x)*sec(x)/1 = -sin(x)/cos(x) = -tan(x)
-        // u₂' = cos(x)*sec(x)/1 = 1
-        // u₁ = ln|cos(x)|, u₂ = x
+        // Wronskian: W = cos(x)*cos(x) - sin(x)*(-sin(x)) = cos^2(x) + sin^2(x) = 1
+        // u_1' = -sin(x)*sec(x)/1 = -sin(x)/cos(x) = -tan(x)
+        // u_2' = cos(x)*sec(x)/1 = 1
+        // u_1 = ln|cos(x)|, u_2 = x
         // y_p = cos(x)*ln|cos(x)| + x*sin(x)
         auto x = SymbolicExpr::variable("x");
         auto y1 = SymbolicExpr::cos(x);
@@ -482,12 +482,12 @@ void test_variation_of_parameters() {
 
     TEST_CASE("Variation of Parameters: y'' - y = e^x");
     {
-        // 齐次解: y₁ = e^x, y₂ = e^(-x)
+        // 齐次解: y_1 = e^x, y_2 = e^(-x)
         // g(x) = e^x
         // W = e^x*(-e^(-x)) - e^(-x)*e^x = -1 - 1 = -2
-        // u₁' = -e^(-x)*e^x/(-2) = 1/2
-        // u₂' = e^x*e^x/(-2) = -e^(2x)/2
-        // u₁ = x/2, u₂ = -e^(2x)/4
+        // u_1' = -e^(-x)*e^x/(-2) = 1/2
+        // u_2' = e^x*e^x/(-2) = -e^(2x)/2
+        // u_1 = x/2, u_2 = -e^(2x)/4
         // y_p = (x/2)*e^x + (-e^(2x)/4)*e^(-x) = (x/2)*e^x - e^x/4
         auto x = SymbolicExpr::variable("x");
         auto y1 = SymbolicExpr::exp(x);
@@ -508,11 +508,11 @@ void test_variation_of_parameters() {
 
     TEST_CASE("Variation of Parameters: y'' + y = sin(x)");
     {
-        // 齐次解: y₁ = cos(x), y₂ = sin(x)
+        // 齐次解: y_1 = cos(x), y_2 = sin(x)
         // g(x) = sin(x)
         // W = 1
-        // u₁' = -sin(x)*sin(x) = -sin²(x)
-        // u₂' = cos(x)*sin(x) = sin(x)cos(x)
+        // u_1' = -sin(x)*sin(x) = -sin^2(x)
+        // u_2' = cos(x)*sin(x) = sin(x)cos(x)
         auto x = SymbolicExpr::variable("x");
         auto y1 = SymbolicExpr::cos(x);
         auto y2 = SymbolicExpr::sin(x);
@@ -535,7 +535,7 @@ void test_variation_of_parameters() {
 void test_frobenius() {
     TEST_CASE("Frobenius: classify ordinary point (y'' + y = 0 at x=0)");
     {
-        // p(x) = 0, q(x) = 1 → 常点
+        // p(x) = 0, q(x) = 1 -> 常点
         auto p = SymbolicExpr::number(0);
         auto q = SymbolicExpr::number(1);
         auto x0 = SymbolicExpr::number(0);
@@ -546,10 +546,10 @@ void test_frobenius() {
 
     TEST_CASE("Frobenius: classify regular singular point (Bessel at x=0)");
     {
-        // Bessel 方程: x²y'' + xy' + (x²-n²)y = 0
-        // 归一化: y'' + (1/x)y' + (1 - n²/x²)y = 0
-        // p(x) = 1/x, q(x) = 1 - n²/x² (取 n=0: q = 1)
-        // x·p(x) = 1 → 有限, x²·q(x) = x² → 有限 → 正则奇点
+        // Bessel 方程: x^2y'' + xy' + (x^2-n^2)y = 0
+        // 归一化: y'' + (1/x)y' + (1 - n^2/x^2)y = 0
+        // p(x) = 1/x, q(x) = 1 - n^2/x^2 (取 n=0: q = 1)
+        // x*p(x) = 1 -> 有限, x^2*q(x) = x^2 -> 有限 -> 正则奇点
         auto x = SymbolicExpr::variable("x");
         auto p = SymbolicExpr::divide(SymbolicExpr::number(1), x);
         auto q = SymbolicExpr::number(1);  // n=0 的 Bessel
@@ -562,8 +562,8 @@ void test_frobenius() {
 
     TEST_CASE("Frobenius: ordinary point series solution (y'' + y = 0)");
     {
-        // y'' + y = 0, p=0, q=1, 展开点 x₀=0
-        // 解: y = cos(x) = 1 - x²/2 + x⁴/24 - ...
+        // y'' + y = 0, p=0, q=1, 展开点 x_0=0
+        // 解: y = cos(x) = 1 - x^2/2 + x^4/24 - ...
         auto p = SymbolicExpr::number(0);
         auto q = SymbolicExpr::number(1);
         auto x0 = SymbolicExpr::number(0);
@@ -573,7 +573,7 @@ void test_frobenius() {
         EXPECT_TRUE(sol.point_type == ODESingularityType::Ordinary, "point type is ordinary");
         EXPECT_TRUE(sol.truncation_order == 6, "truncation order is 6");
 
-        // 验证系数: a₀=1, a₁=0, a₂=-1/2, a₃=0, a₄=1/24, a₅=0, a₆=-1/720
+        // 验证系数: a_0=1, a_1=0, a_2=-1/2, a₃=0, a₄=1/24, a₅=0, a₆=-1/720
         // 这对应 cos(x) 的 Taylor 展开
         std::string s = sol.series_solution->to_string();
         EXPECT_CONTAINS(s, {"x"}, "series solution contains x");
@@ -581,11 +581,11 @@ void test_frobenius() {
 
     TEST_CASE("Frobenius: regular singular point (Euler equation x²y'' + xy' - y = 0)");
     {
-        // 归一化: y'' + (1/x)y' + (-1/x²)y = 0
-        // p(x) = 1/x, q(x) = -1/x²
-        // P₀ = lim x·(1/x) = 1
-        // Q₀ = lim x²·(-1/x²) = -1
-        // 指标方程: r(r-1) + r - 1 = r² - 1 = 0 → r = ±1
+        // 归一化: y'' + (1/x)y' + (-1/x^2)y = 0
+        // p(x) = 1/x, q(x) = -1/x^2
+        // P_0 = lim x*(1/x) = 1
+        // Q_0 = lim x^2*(-1/x^2) = -1
+        // 指标方程: r(r-1) + r - 1 = r^2 - 1 = 0 -> r = +/-1
         auto x = SymbolicExpr::variable("x");
         auto p = SymbolicExpr::divide(SymbolicExpr::number(1), x);
         auto q = SymbolicExpr::divide(SymbolicExpr::number(-1),
@@ -613,8 +613,8 @@ void test_frobenius() {
 
     TEST_CASE("Frobenius: irregular singular point");
     {
-        // y'' + (1/x³)y = 0 → p=0, q=1/x³
-        // x²·q = x²/x³ = 1/x → 在 x=0 处无限 → 非正则奇点
+        // y'' + (1/x^3)y = 0 -> p=0, q=1/x^3
+        // x^2*q = x^2/x^3 = 1/x -> 在 x=0 处无限 -> 非正则奇点
         auto x = SymbolicExpr::variable("x");
         auto p = SymbolicExpr::number(0);
         auto q = SymbolicExpr::divide(SymbolicExpr::number(1),

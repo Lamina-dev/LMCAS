@@ -1,6 +1,6 @@
 /**
  * @file test_multipoly.cpp
- * @brief MultiPoly 类基本操作的单元测试和属性测试。
+ * @brief MultiPoly 类基本操作的单元测试和属性测试.
  */
 
 #include "test_common.hpp"
@@ -238,7 +238,7 @@ int main()
 
     TEST_CASE("MultiPoly: to_univariate with multi-var list but univariate");
     {
-        // p = 5y^3 + y in vars {x, y} — only y has non-zero exponents
+        // p = 5y^3 + y in vars {x, y} - only y has non-zero exponents
         std::vector<std::string> vars = {"x", "y"};
         std::vector<MultiPoly::Term> terms = {
             {{0, 3}, Rational(5)},  // 5y^3
@@ -275,7 +275,7 @@ int main()
 
     TEST_CASE("MultiPoly: to_univariate throws for multivariate");
     {
-        // p = x + y — not univariate
+        // p = x + y - not univariate
         std::vector<std::string> vars = {"x", "y"};
         std::vector<MultiPoly::Term> terms = {
             {{1, 0}, Rational(1)},  // x
@@ -467,7 +467,7 @@ int main()
     TEST_CASE("MultiPoly: exact_div throws on non-exact division");
     {
         std::vector<std::string> vars = {"x", "y"};
-        /// f = x² + 1，g = x + y，覆盖精确整除失败路径。
+        /// f = x^2 + 1,g = x + y,覆盖精确整除失败路径.
         std::vector<MultiPoly::Term> f_terms = {
             {{2, 0}, Rational(1)},  // x^2
             {{0, 0}, Rational(1)},  // 1
@@ -718,7 +718,7 @@ int main()
 
     TEST_CASE("MultiPoly: numeric_content of integer polynomial");
     {
-        // 6x^2 + 4x + 2 → content = 2
+        // 6x^2 + 4x + 2 -> content = 2
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{2}, Rational(6)},
@@ -732,7 +732,7 @@ int main()
 
     TEST_CASE("MultiPoly: numeric_content of rational polynomial");
     {
-        // (1/2)x + (1/3) → content = gcd(1/2, 1/3) = 1/6
+        // (1/2)x + (1/3) -> content = gcd(1/2, 1/3) = 1/6
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{1}, Rational(1, 2)},
@@ -745,7 +745,7 @@ int main()
 
     TEST_CASE("MultiPoly: numeric_content already primitive");
     {
-        // x^2 + x + 1 → content = 1
+        // x^2 + x + 1 -> content = 1
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{2}, Rational(1)},
@@ -759,7 +759,7 @@ int main()
 
     TEST_CASE("MultiPoly: numeric_content with negative coefficients");
     {
-        // -6x + 9 → content = 3 (always positive)
+        // -6x + 9 -> content = 3 (always positive)
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{1}, Rational(-6)},
@@ -780,7 +780,7 @@ int main()
 
     TEST_CASE("MultiPoly: make_primitive basic integer");
     {
-        // 6x^2 + 4x + 2 → primitive = 3x^2 + 2x + 1
+        // 6x^2 + 4x + 2 -> primitive = 3x^2 + 2x + 1
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{2}, Rational(6)},
@@ -798,7 +798,7 @@ int main()
 
     TEST_CASE("MultiPoly: make_primitive ensures positive leading coefficient");
     {
-        // -6x + 9 → content=3, divide: -2x + 3, leading is negative → negate: 2x - 3
+        // -6x + 9 -> content=3, divide: -2x + 3, leading is negative -> negate: 2x - 3
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{1}, Rational(-6)},
@@ -814,7 +814,7 @@ int main()
 
     TEST_CASE("MultiPoly: make_primitive of already primitive polynomial");
     {
-        // x^2 + x + 1 → already primitive, positive leading coeff
+        // x^2 + x + 1 -> already primitive, positive leading coeff
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{2}, Rational(1)},
@@ -828,7 +828,7 @@ int main()
 
     TEST_CASE("MultiPoly: make_primitive with rational coefficients");
     {
-        // (1/2)x + (1/3) → content=1/6, primitive = 3x + 2
+        // (1/2)x + (1/3) -> content=1/6, primitive = 3x + 2
         std::vector<std::string> vars = {"x"};
         std::vector<MultiPoly::Term> terms = {
             {{1}, Rational(1, 2)},
@@ -1271,7 +1271,7 @@ int main()
     TEST_CASE("exact_div round-trip — simple monomials (x, y)");
     {
         std::vector<std::string> vars = {"x", "y"};
-        // g = x, h = y → f = xy
+        // g = x, h = y -> f = xy
         std::vector<MultiPoly::Term> g_terms = {{{1, 0}, Rational(1)}};
         std::vector<MultiPoly::Term> h_terms = {{{0, 1}, Rational(1)}};
         MultiPoly g(g_terms, vars);
@@ -1285,7 +1285,7 @@ int main()
     TEST_CASE("exact_div round-trip — binomials (x+1, x-1)");
     {
         std::vector<std::string> vars = {"x"};
-        // g = x+1, h = x-1 → f = x²-1
+        // g = x+1, h = x-1 -> f = x^2-1
         std::vector<MultiPoly::Term> g_terms = {{{1}, Rational(1)}, {{0}, Rational(1)}};
         std::vector<MultiPoly::Term> h_terms = {{{1}, Rational(1)}, {{0}, Rational(-1)}};
         MultiPoly g(g_terms, vars);
@@ -1299,7 +1299,7 @@ int main()
     TEST_CASE("exact_div round-trip — bivariate (x+y, x-y)");
     {
         std::vector<std::string> vars = {"x", "y"};
-        // g = x+y, h = x-y → f = x²-y²
+        // g = x+y, h = x-y -> f = x^2-y^2
         std::vector<MultiPoly::Term> g_terms = {{{1, 0}, Rational(1)}, {{0, 1}, Rational(1)}};
         std::vector<MultiPoly::Term> h_terms = {{{1, 0}, Rational(1)}, {{0, 1}, Rational(-1)}};
         MultiPoly g(g_terms, vars);
@@ -1313,7 +1313,7 @@ int main()
     TEST_CASE("exact_div round-trip — with coefficients (2x+1, 3x+2)");
     {
         std::vector<std::string> vars = {"x"};
-        // g = 2x+1, h = 3x+2 → f = 6x²+7x+2
+        // g = 2x+1, h = 3x+2 -> f = 6x^2+7x+2
         std::vector<MultiPoly::Term> g_terms = {{{1}, Rational(2)}, {{0}, Rational(1)}};
         std::vector<MultiPoly::Term> h_terms = {{{1}, Rational(3)}, {{0}, Rational(2)}};
         MultiPoly g(g_terms, vars);
@@ -1327,7 +1327,7 @@ int main()
     TEST_CASE("exact_div round-trip — higher degree (x^2+x+1, x-1)");
     {
         std::vector<std::string> vars = {"x"};
-        // g = x^2+x+1, h = x-1 → f = x³-1
+        // g = x^2+x+1, h = x-1 -> f = x^3-1
         std::vector<MultiPoly::Term> g_terms = {
             {{2}, Rational(1)}, {{1}, Rational(1)}, {{0}, Rational(1)}};
         std::vector<MultiPoly::Term> h_terms = {{{1}, Rational(1)}, {{0}, Rational(-1)}};
@@ -1358,7 +1358,7 @@ int main()
     TEST_CASE("exact_div round-trip — monomial times polynomial (xy, x^2+y)");
     {
         std::vector<std::string> vars = {"x", "y"};
-        // g = xy, h = x^2+y → f = x^3*y + x*y^2
+        // g = xy, h = x^2+y -> f = x^3*y + x*y^2
         std::vector<MultiPoly::Term> g_terms = {{{1, 1}, Rational(1)}};
         std::vector<MultiPoly::Term> h_terms = {{{2, 0}, Rational(1)}, {{0, 1}, Rational(1)}};
         MultiPoly g(g_terms, vars);

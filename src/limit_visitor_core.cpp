@@ -280,7 +280,7 @@ double LimitVisitor::get_point_value() const {
 bool LimitVisitor::is_bounded(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return false;
     /// sin(expr) and cos(expr) are bounded in [-1, 1]
-    /// arctan(expr) is bounded in (-π/2, π/2)
+    /// arctan(expr) is bounded in (-pi/2, pi/2)
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
         return func->type() == FunctionNode::FuncType::Sin
             || func->type() == FunctionNode::FuncType::Cos
@@ -313,14 +313,14 @@ bool LimitVisitor::is_bounded(const std::shared_ptr<const SymbolicNode>& node) c
 }
 
 /**
- * @brief 判断表达式是否有界（扩展检测）。
+ * @brief 判断表达式是否有界(扩展检测).
  *
- * 检测形如 constant + bounded 或 constant * bounded 的表达式，
- * 这些表达式虽然不一定在 [-1,1] 内，但仍然有界。
- * 用于夹逼定理的一般情形：若 f 有界且 g→0，则 f·g→0。
+ * 检测形如 constant + bounded 或 constant * bounded 的表达式,
+ * 这些表达式虽然不一定在 [-1,1] 内,但仍然有界.
+ * 用于夹逼定理的一般情形:若 f 有界且 g->0,则 f*g->0.
  *
- * 也检测 bounded × zero_tending 形式的表达式，这类表达式趋向 0，
- * 因此在极限点附近有界。
+ * 也检测 bounded x zero_tending 形式的表达式,这类表达式趋向 0,
+ * 因此在极限点附近有界.
  */
 bool LimitVisitor::is_bounded_expression(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return false;
@@ -386,7 +386,7 @@ LimitVisitor::IndeterminateForm LimitVisitor::classify_add_form(const std::vecto
 }
 
 std::shared_ptr<const SymbolicNode> LimitVisitor::try_squeeze(const std::shared_ptr<const SymbolicNode>& expr) {
-    /// Case 1: MultiplyNode — product of bounded × zero-tending → 0
+    /// Case 1: MultiplyNode - product of bounded x zero-tending -> 0
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(expr)) {
         std::vector<std::shared_ptr<const SymbolicNode>> bounded_factors, other_factors;
         for (const auto& op : mul->operands()) {
@@ -410,17 +410,17 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::try_squeeze(const std::shared_
         return nullptr;
     }
 
-    /// Case 2: AddNode — general squeeze theorem.
-    /// If f(x) = g(x) + h(x) where h(x) is a product of bounded × zero-tending,
+    /// Case 2: AddNode - general squeeze theorem.
+    /// If f(x) = g(x) + h(x) where h(x) is a product of bounded x zero-tending,
     /// then lim f = lim g (since h squeezes to 0).
-    /// This handles the case: f bounded between g and (g + bounded×zero) where
+    /// This handles the case: f bounded between g and (g + boundedxzero) where
     /// lim(lower) = lim(upper) = lim g = L.
     if (auto add = std::dynamic_pointer_cast<const AddNode>(expr)) {
         std::vector<std::shared_ptr<const SymbolicNode>> squeeze_to_zero_terms;
         std::vector<std::shared_ptr<const SymbolicNode>> other_terms;
 
         for (const auto& op : add->operands()) {
-            /// Check if this term is a product of bounded × zero-tending
+            /// Check if this term is a product of bounded x zero-tending
             if (auto term_mul = std::dynamic_pointer_cast<const MultiplyNode>(op)) {
                 auto term_squeeze = try_squeeze(op);
                 if (term_squeeze && term_squeeze->is_zero()) {
@@ -491,27 +491,27 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_zero_times_inf(const s
     auto f = make_product_or_one(zero_f);
     auto g = make_product_or_one(inf_f);
 
-    /// Choose between 0/0 form (f/(1/g)) and ∞/∞ form (g/(1/f)).
+    /// Choose between 0/0 form (f/(1/g)) and infinity/infinity form (g/(1/f)).
     /// Heuristic: if the zero factor has exponential growth class (e.g., e^(-x)),
-    /// prefer ∞/∞ form because L'Hôpital on 0/0 won't converge (polynomial grows).
+    /// prefer infinity/infinity form because L'Hôpital on 0/0 won't converge (polynomial grows).
     /// Otherwise, try 0/0 first as it's simpler for most cases.
     bool prefer_inf_over_inf = false;
     if (is_limit_at_infinity() || is_limit_at_neg_infinity()) {
         GrowthClass f_growth = classify_growth(f);
         GrowthClass g_growth = classify_growth(g);
-        /// If zero factor is exponential (e.g., e^(-x)→0) and inf factor is polynomial,
-        /// the ∞/∞ form (polynomial/exponential) converges in one step.
+        /// If zero factor is exponential (e.g., e^(-x)->0) and inf factor is polynomial,
+        /// the infinity/infinity form (polynomial/exponential) converges in one step.
         if (f_growth == GrowthClass::Exponential && g_growth == GrowthClass::Polynomial) {
             prefer_inf_over_inf = true;
         }
-        /// If zero factor is polynomial (e.g., 1/x→0) and inf factor is logarithmic,
+        /// If zero factor is polynomial (e.g., 1/x->0) and inf factor is logarithmic,
         /// the 0/0 form works well.
     }
 
     std::shared_ptr<const SymbolicNode> res = nullptr;
 
     if (prefer_inf_over_inf) {
-        /// Try ∞/∞ form first: g / (1/f)
+        /// Try infinity/infinity form first: g / (1/f)
         auto f_inv = lamina::detail::make_node<PowerNode>(f, lamina::detail::make_node<NumberNode>(BigInt(-1)));
         res = apply_lhopital(g, f_inv);
         if (!res) {
@@ -616,8 +616,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
         if (simp_result) return simp_result;
     }
 
-    /// 构造 dN/dD 的真分式：分别计算 dN 与 dD 的极限，
-    /// 再判定 0/0 或 ∞/∞ 形式，使乘法节点语义保持明确。
+    /// 构造 dN/dD 的真分式:分别计算 dN 与 dD 的极限,
+    /// 再判定 0/0 或 infinity/infinity 形式,使乘法节点语义保持明确.
     LimitVisitor sub_n(var, point, direction, assumption_ctx_);
     sub_n.lhopital_depth_ = this->lhopital_depth_ + 1;
     dN->accept(sub_n);
@@ -637,7 +637,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
     bool n_inf = is_inf(val_n);
     bool d_inf = is_inf(val_d);
 
-    /// If still indeterminate (0/0 or ∞/∞), recurse with increased depth
+    /// If still indeterminate (0/0 or infinity/infinity), recurse with increased depth
     if ((n_zero && d_zero) || (n_inf && d_inf)) {
         LimitVisitor sub(var, point, direction, assumption_ctx_);
         sub.lhopital_depth_ = this->lhopital_depth_ + 1;
@@ -648,7 +648,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
         return sub.get_result();
     }
 
-    /// Denominator is zero but numerator isn't → ±∞
+    /// Denominator is zero but numerator isn't -> +/-infinity
     if (d_zero && !n_zero) {
         int sign_n = 1;
         if (auto nn = std::dynamic_pointer_cast<const NumberNode>(val_n)) {
@@ -672,7 +672,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
         return norm.get_result();
     }
 
-    /// Numerator is finite, denominator is ∞ → 0
+    /// Numerator is finite, denominator is infinity -> 0
     if (!n_inf && !n_zero && d_inf) {
         return lamina::detail::make_node<NumberNode>(BigInt(0));
     }
@@ -710,13 +710,13 @@ int LimitVisitor::determine_sign_near_point(const std::shared_ptr<const Symbolic
 }
 
 void LimitVisitor::visit(const AddNode& node) {
-    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity()) {
         auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<AddNode>(node.operands()));
         if (neg_inf_result) { result = neg_inf_result; return; }
     }
     /// General squeeze theorem for AddNode: detect terms that are products of
-    /// bounded × zero-tending (squeeze to 0) and compute limit of remaining terms.
+    /// bounded x zero-tending (squeeze to 0) and compute limit of remaining terms.
     auto squeeze_result = try_squeeze(lamina::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
     if (squeeze_result) { result = squeeze_result; return; }
     std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
@@ -727,7 +727,7 @@ void LimitVisitor::visit(const AddNode& node) {
 }
 
 void LimitVisitor::visit(const MultiplyNode& node) {
-    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity()) {
         auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
         if (neg_inf_result) { result = neg_inf_result; return; }
@@ -998,7 +998,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
 }
 
 void LimitVisitor::visit(const PowerNode& node) {
-    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity()) {
         auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<PowerNode>(node.base(), node.exponent()));
         if (neg_inf_result) { result = neg_inf_result; return; }
@@ -1095,7 +1095,7 @@ void LimitVisitor::visit(const PowerNode& node) {
     node.exponent()->accept(*this); auto e = result;
     auto form = classify_power_form(b, e);
     if (form != IndeterminateForm::None) { auto resolved = resolve_exponential_form(node.base(), node.exponent()); if (resolved) { result = resolved; return; } }
-    /// Handle ∞^(negative) → 0 and ∞^(positive) → ∞
+    /// Handle infinity^(negative) -> 0 and infinity^(positive) -> infinity
     if (is_inf(b)) {
         if (auto e_num = std::dynamic_pointer_cast<const NumberNode>(e)) {
             double ev = 0;
@@ -1110,7 +1110,7 @@ void LimitVisitor::visit(const PowerNode& node) {
             }
         }
     }
-    /// Handle 0^(negative) → ±∞ with direction-aware sign determination
+    /// Handle 0^(negative) -> +/-infinity with direction-aware sign determination
     if (b && b->is_zero()) {
         if (auto e_num = std::dynamic_pointer_cast<const NumberNode>(e)) {
             double ev = 0;
@@ -1118,7 +1118,7 @@ void LimitVisitor::visit(const PowerNode& node) {
             else if (std::holds_alternative<BigInt>(e_num->value())) ev = std::get<BigInt>(e_num->value()).to_double();
             else if (std::holds_alternative<Rational>(e_num->value())) ev = std::get<Rational>(e_num->value()).to_double();
             if (ev < 0 && !direction.empty()) {
-                /// base→0, exponent is negative, direction specified → ±∞
+                /// base->0, exponent is negative, direction specified -> +/-infinity
                 /// Determine sign based on approach direction and exponent parity
                 std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
                 auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
@@ -1126,7 +1126,7 @@ void LimitVisitor::visit(const PowerNode& node) {
                 bool odd_exponent = (exp_int % 2 != 0);
                 if (odd_exponent) {
                     /// For odd negative exponents (e.g., x^(-1), x^(-3)):
-                    /// x→0+ gives +∞, x→0- gives -∞
+                    /// x->0+ gives +infinity, x->0- gives -infinity
                     int base_sign = determine_sign_near_point(node.base(), direction);
                     if (base_sign < 0) {
                         std::vector<std::shared_ptr<const SymbolicNode>> m = {lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
@@ -1134,7 +1134,7 @@ void LimitVisitor::visit(const PowerNode& node) {
                         return;
                     }
                 }
-                /// Even negative exponents always give +∞
+                /// Even negative exponents always give +infinity
                 result = inf_node;
                 return;
             }
@@ -1144,7 +1144,7 @@ void LimitVisitor::visit(const PowerNode& node) {
 }
 
 void LimitVisitor::visit(const FunctionNode& node) {
-    /// Handle negative infinity: substitute x = -t and evaluate lim(t→+∞)
+    /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity() && node.type() != FunctionNode::FuncType::Infinity) {
         auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<FunctionNode>(node.type(), node.arguments()));
         if (neg_inf_result) { result = neg_inf_result; return; }

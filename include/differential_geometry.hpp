@@ -1,6 +1,6 @@
 /**
  * @file differential_geometry.hpp
- * @brief 微分几何：度量张量、克里斯托弗符号、黎曼曲率张量。
+ * @brief 微分几何:度量张量,克里斯托弗符号,黎曼曲率张量.
  */
 #pragma once
 #include "computation_context.hpp"
@@ -17,7 +17,7 @@ using DifferentialGeometryVectorResult = Result<std::vector<std::shared_ptr<Symb
 
 /**
  * @brief 计算度量张量的逆
- * @param g_ij 协变度量张量（矩阵表示）
+ * @param g_ij 协变度量张量(矩阵表示)
  * @return 逆变度量张量 g^ij
  */
 LAMINA_API DifferentialGeometryExprResult metric_inverse_checked(
@@ -103,14 +103,14 @@ LAMINA_API DifferentialGeometryExprResult riemann_curvature_tensor_checked(
 );
 
 /**
- * @brief 计算标量函数沿向量场 X 的李导数 L_X f = ∑ Xⁱ·∂f/∂xⁱ。
+ * @brief 计算标量函数沿向量场 X 的李导数 L_X f = sum Xⁱ*partialf/partialxⁱ.
  *
- * 支持迭代李导数（order 次重复应用）。
+ * 支持迭代李导数(order 次重复应用).
  *
  * @param f      标量函数
- * @param X      向量场分量（与 vars 一一对应）
+ * @param X      向量场分量(与 vars 一一对应)
  * @param vars   坐标变量名列表
- * @param order  迭代阶数（默认 1）
+ * @param order  迭代阶数(默认 1)
  * @return 李导数表达式
  */
 LAMINA_API DifferentialGeometryExprResult lie_derivative_checked(
@@ -130,15 +130,15 @@ LAMINA_API DifferentialGeometryExprResult lie_derivative_checked(
 
 
 /**
- * @brief 计算微分形式的外微分 d(form)。
+ * @brief 计算微分形式的外微分 d(form).
  *
- * k-形式的系数按递增坐标指标组合的字典序排列。对于指标组合
- * J=(j0,...,jk)，输出系数为
- * sum_r (-1)^r * partial(omega[J 去除 jr]) / partial(x[jr])。
- * 0-形式传单个系数；n 维空间中的 n-形式映射为空的 (n+1)-形式系数表。
+ * k-形式的系数按递增坐标指标组合的字典序排列.对于指标组合
+ * J=(j0,...,jk),输出系数为
+ * sum_r (-1)^r * partial(omega[J 去除 jr]) / partial(x[jr]).
+ * 0-形式传单个系数;n 维空间中的 n-形式映射为空的 (n+1)-形式系数表.
  *
- * @param form_coeffs 按上述顺序排列的形式系数（0-形式传单元素 [f]）
- * @param degree      形式次数，范围为 [0, vars.size()]
+ * @param form_coeffs 按上述顺序排列的形式系数(0-形式传单元素 [f])
+ * @param degree      形式次数,范围为 [0, vars.size()]
  * @param vars        坐标变量名列表
  * @return 外微分后的系数列表
  */

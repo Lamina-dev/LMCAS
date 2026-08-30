@@ -150,7 +150,7 @@ void test_unknown_operand_yields_unknown() {
 
     AssumptionContext ctx;
     ctx.assume_sign("a", Sign::Positive);
-    // "b" has no sign declared → Unknown
+    // "b" has no sign declared -> Unknown
 
     InferenceEngine engine(ctx);
 
@@ -179,7 +179,7 @@ void test_mixed_signs_yield_unknown() {
     auto add = make_add({make_var("pos"), make_var("neg")});
     auto expr = wrap_expr(add);
 
-    /// 正数与负数之和的符号由幅值决定，因此保持 Unknown。
+    /// 正数与负数之和的符号由幅值决定,因此保持 Unknown.
     EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "pos + neg is Unknown for Positive (mixed signs)");
     EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
@@ -225,7 +225,7 @@ void test_sign_with_number_operands() {
             "(-3) + (-5) is Negative");
     }
 
-    // Mixed: 3 + (-5) → Unknown
+    // Mixed: 3 + (-5) -> Unknown
     {
         auto add = make_add({make_num(3), make_num(-5)});
         auto expr = wrap_expr(add);
@@ -242,7 +242,7 @@ void test_with_variables_and_numbers_mixed() {
 
     InferenceEngine engine(ctx);
 
-    // x + 5 where x is Positive → sum is Positive
+    // x + 5 where x is Positive -> sum is Positive
     {
         auto add = make_add({make_var("x"), make_num(5)});
         auto expr = wrap_expr(add);
@@ -250,7 +250,7 @@ void test_with_variables_and_numbers_mixed() {
             "x + 5 is Positive when x is Positive");
     }
 
-    // x + (-3) where x is Positive → Unknown (mixed)
+    // x + (-3) where x is Positive -> Unknown (mixed)
     {
         auto add = make_add({make_var("x"), make_num(-3)});
         auto expr = wrap_expr(add);
@@ -363,7 +363,7 @@ void test_mixed_integer_and_real() {
     auto add = make_add({make_var("a"), make_var("b")});
     auto expr = wrap_expr(add);
 
-    // Integer + Real → Real (Integer is subset of Real)
+    // Integer + Real -> Real (Integer is subset of Real)
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "a + b is Real when a is Integer and b is Real");
 
@@ -394,7 +394,7 @@ void test_domain_with_number_operands() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // 3 + 5 (both BigInt → Integer)
+    // 3 + 5 (both BigInt -> Integer)
     {
         auto add = make_add({make_num(3), make_num(5)});
         auto expr = wrap_expr(add);
@@ -432,7 +432,7 @@ void test_real_with_numbers() {
 
     InferenceEngine engine(ctx);
 
-    // x + 3 where x is Real → sum is Real (3 is Integer which implies Real)
+    // x + 3 where x is Real -> sum is Real (3 is Integer which implies Real)
     auto add = make_add({make_var("x"), make_num(3)});
     auto expr = wrap_expr(add);
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
@@ -449,7 +449,7 @@ void test_nested_addition_domain() {
 
     InferenceEngine engine(ctx);
 
-    // (a + b) + c — the inner add should be Integer, so the outer should too
+    // (a + b) + c - the inner add should be Integer, so the outer should too
     auto inner_add = make_add({make_var("a"), make_var("b")});
     auto outer_add = make_add({inner_add, make_var("c")});
     auto expr = wrap_expr(outer_add);

@@ -1,6 +1,6 @@
 /**
  * @file series_engine.hpp
- * @brief 级数引擎模块：收敛性判定、幂级数运算、傅里叶级数、洛朗级数、渐近展开、符号求和与乘积。
+ * @brief 级数引擎模块:收敛性判定,幂级数运算,傅里叶级数,洛朗级数,渐近展开,符号求和与乘积.
  */
 #pragma once
 
@@ -17,7 +17,7 @@ using PowerSeriesResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
 
 /**
- * @brief 收敛性结果枚举。
+ * @brief 收敛性结果枚举.
  */
 enum class ConvergenceResult {
     Convergent,   ///< 收敛
@@ -26,23 +26,23 @@ enum class ConvergenceResult {
 };
 
 /**
- * @brief 收敛性判定信息。
+ * @brief 收敛性判定信息.
  */
 struct ConvergenceInfo {
     ConvergenceResult result;  ///< 判定结果
-    std::string test_used;     ///< 使用的判定方法（"ratio", "root", "comparison"）
+    std::string test_used;     ///< 使用的判定方法("ratio", "root", "comparison")
 };
 
 using ConvergenceInfoResult = Result<ConvergenceInfo>;
 
 /**
- * @brief 计算幂级数的收敛半径。
+ * @brief 计算幂级数的收敛半径.
  *
- * 先尝试比值判别法 R = lim|aₙ/aₙ₊₁|，若不确定则使用根值判别法 R = 1/lim sup |aₙ|^(1/n)。
+ * 先尝试比值判别法 R = lim|a_n/a_n_+_1|,若不确定则使用根值判别法 R = 1/lim sup |a_n|^(1/n).
  *
- * @param[in] coefficients 幂级数系数列表 {a₀, a₁, a₂, ...}
+ * @param[in] coefficients 幂级数系数列表 {a_0, a_1, a_2, ...}
  * @param[in] var 级数变量名
- * @return 收敛半径表达式（可能为数值、∞ 或符号表达式）
+ * @return 收敛半径表达式(可能为数值,infinity 或符号表达式)
  */
 LAMINA_API ExpressionResult convergence_radius_checked(
     const std::shared_ptr<SymbolicExpr>& general_coefficient,
@@ -64,11 +64,11 @@ LAMINA_API ExpressionResult convergence_radius_checked(
 
 
 /**
- * @brief 判定无穷级数的收敛性。
+ * @brief 判定无穷级数的收敛性.
  *
- * 依次尝试比值判别法、根值判别法和比较判别法。
+ * 依次尝试比值判别法,根值判别法和比较判别法.
  *
- * @param[in] general_term 通项表达式 aₙ
+ * @param[in] general_term 通项表达式 a_n
  * @param[in] index_var 求和指标变量名
  * @return 收敛性判定信息
  */
@@ -84,7 +84,7 @@ LAMINA_API ConvergenceInfoResult convergence_test_checked(
 
 
 /**
- * @brief 幂级数加法：逐项相加。
+ * @brief 幂级数加法:逐项相加.
  *
  * @param[in] a 第一个幂级数系数列表
  * @param[in] b 第二个幂级数系数列表
@@ -95,12 +95,12 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_add(
     const std::vector<std::shared_ptr<SymbolicExpr>>& b);
 
 /**
- * @brief 幂级数乘法：柯西乘积（卷积）。
+ * @brief 幂级数乘法:柯西乘积(卷积).
  *
  * @param[in] a 第一个幂级数系数列表
  * @param[in] b 第二个幂级数系数列表
  * @param[in] order 截断阶数
- * @return 乘积级数的系数列表（截断到 order 项）
+ * @return 乘积级数的系数列表(截断到 order 项)
  */
 LAMINA_API PowerSeriesResult power_series_multiply_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
@@ -113,10 +113,10 @@ LAMINA_API PowerSeriesResult power_series_multiply_checked(
 
 
 /**
- * @brief 幂级数复合：计算 f(g(x)) 的系数，要求 g(0) = 0。
+ * @brief 幂级数复合:计算 f(g(x)) 的系数,要求 g(0) = 0.
  *
  * @param[in] f 外层幂级数系数列表
- * @param[in] g 内层幂级数系数列表（g[0] 必须为 0）
+ * @param[in] g 内层幂级数系数列表(g[0] 必须为 0)
  * @param[in] order 截断阶数
  * @return 复合级数的系数列表
  */
@@ -132,12 +132,12 @@ LAMINA_API PowerSeriesResult power_series_compose_checked(
 
 
 /**
- * @brief 计算函数的傅里叶级数展开。
+ * @brief 计算函数的傅里叶级数展开.
  *
- * 计算截断傅里叶级数：a₀/2 + ∑(aₖcos(2πkx/T) + bₖsin(2πkx/T))，k=1..n_terms。
- * 系数公式：aₖ = (2/T)∫f(x)cos(2πkx/T)dx，bₖ = (2/T)∫f(x)sin(2πkx/T)dx。
- * 当函数为偶函数时，所有 bₖ = 0（余弦级数）；
- * 当函数为奇函数时，所有 aₖ = 0（正弦级数）。
+ * 计算截断傅里叶级数:a_0/2 + sum(aₖcos(2pikx/T) + bₖsin(2pikx/T)),k=1..n_terms.
+ * 系数公式:aₖ = (2/T)integralf(x)cos(2pikx/T)dx,bₖ = (2/T)integralf(x)sin(2pikx/T)dx.
+ * 当函数为偶函数时,所有 bₖ = 0(余弦级数);
+ * 当函数为奇函数时,所有 aₖ = 0(正弦级数).
  *
  * @param[in] f 待展开的函数表达式
  * @param[in] var 自变量名
@@ -151,7 +151,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> fourier_series(
 
 
 /**
- * @brief 奇点类型枚举。
+ * @brief 奇点类型枚举.
  */
 enum class SingularityType {
     Removable,  ///< 可去奇点
@@ -160,30 +160,30 @@ enum class SingularityType {
 };
 
 /**
- * @brief 洛朗级数展开结果。
+ * @brief 洛朗级数展开结果.
  */
 struct LaurentResult {
     std::shared_ptr<SymbolicExpr> series;  ///< 洛朗级数表达式
     SingularityType singularity;           ///< 奇点类型
-    int pole_order;                        ///< 极点阶数（非极点时为 0）
-    std::shared_ptr<SymbolicExpr> residue; ///< 留数（(z-z₀)⁻¹ 的系数）
+    int pole_order;                        ///< 极点阶数(非极点时为 0)
+    std::shared_ptr<SymbolicExpr> residue; ///< 留数((z-z_0)-¹ 的系数)
 };
 
 using LaurentSeriesResult = Result<LaurentResult>;
 
 /**
- * @brief 计算函数在指定点的洛朗级数展开。
+ * @brief 计算函数在指定点的洛朗级数展开.
  *
- * 展开包含从 (z-z₀)^(-order_neg) 到 (z-z₀)^(order_pos) 的项。
- * 通过计算 (z-z₀)^k · f(z) 在 z₀ 处的极限和导数来确定负幂次系数。
- * 根据洛朗系数判定奇点类型：
- *   - 所有负幂次系数为零 → 可去奇点
- *   - 有限个非零负幂次系数 → m 阶极点
- *   - 无穷多非零负幂次系数 → 本性奇点
+ * 展开包含从 (z-z_0)^(-order_neg) 到 (z-z_0)^(order_pos) 的项.
+ * 通过计算 (z-z_0)^k * f(z) 在 z_0 处的极限和导数来确定负幂次系数.
+ * 根据洛朗系数判定奇点类型:
+ *   - 所有负幂次系数为零 -> 可去奇点
+ *   - 有限个非零负幂次系数 -> m 阶极点
+ *   - 无穷多非零负幂次系数 -> 本性奇点
  *
  * @param[in] f 待展开的函数表达式
  * @param[in] var 变量名
- * @param[in] center 展开中心 z₀
+ * @param[in] center 展开中心 z_0
  * @param[in] order_neg 负幂次最大阶数
  * @param[in] order_pos 正幂次最大阶数
  * @return 洛朗级数表达式
@@ -205,14 +205,14 @@ LAMINA_API ExpressionResult laurent_series_checked(
 
 
 /**
- * @brief 计算函数在指定点的洛朗级数展开（含详细信息）。
+ * @brief 计算函数在指定点的洛朗级数展开(含详细信息).
  *
  * @param[in] f 待展开的函数表达式
  * @param[in] var 变量名
- * @param[in] center 展开中心 z₀
+ * @param[in] center 展开中心 z_0
  * @param[in] order_neg 负幂次最大阶数
  * @param[in] order_pos 正幂次最大阶数
- * @return 洛朗级数展开结果（含奇点分类和留数）
+ * @return 洛朗级数展开结果(含奇点分类和留数)
  */
 LAMINA_API LaurentSeriesResult laurent_series_full_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -232,10 +232,10 @@ LAMINA_API LaurentSeriesResult laurent_series_full_checked(
 
 
 /**
- * @brief 计算函数在 x→∞ 时的渐近展开。
+ * @brief 计算函数在 x->infinity 时的渐近展开.
  *
- * 将函数展开为递减幂次的和：∑ cₖ · x^αₖ，其中 α₁ > α₂ > ... > αₙ。
- * 对有理函数使用多项式长除法；对含 exp、ln、幂函数的复合表达式使用已知渐近恒等式。
+ * 将函数展开为递减幂次的和:sum cₖ * x^alphaₖ,其中 alpha_1 > alpha_2 > ... > alpha_n.
+ * 对有理函数使用多项式长除法;对含 exp,ln,幂函数的复合表达式使用已知渐近恒等式.
  *
  * @param[in] f 待展开的函数表达式
  * @param[in] var 变量名
@@ -247,10 +247,10 @@ LAMINA_API std::shared_ptr<SymbolicExpr> asymptotic_expand(
 
 
 /**
- * @brief 计算符号求和 ∑_{k=lower}^{upper} body(k) 的闭合形式。
+ * @brief 计算符号求和 sum_{k=lower}^{upper} body(k) 的闭合形式.
  *
- * 对多项式通项使用 Faulhaber 公式；对有理函数通项尝试部分分式分解和望远镜求和；
- * 对几何/指数通项使用等比级数公式；其余通项映射为未求值 SummationNode。
+ * 对多项式通项使用 Faulhaber 公式;对有理函数通项尝试部分分式分解和望远镜求和;
+ * 对几何/指数通项使用等比级数公式;其余通项映射为未求值 SummationNode.
  *
  * @param[in] body 通项表达式
  * @param[in] index 求和指标变量名
@@ -264,10 +264,10 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_sum(
 
 
 /**
- * @brief 计算符号乘积 ∏_{k=lower}^{upper} body(k) 的闭合形式。
+ * @brief 计算符号乘积 prod_{k=lower}^{upper} body(k) 的闭合形式.
  *
- * 对望远镜乘积和阶乘/Pochhammer 符号使用已知公式；
- * 其余通项映射为未求值 ProductNode。
+ * 对望远镜乘积和阶乘/Pochhammer 符号使用已知公式;
+ * 其余通项映射为未求值 ProductNode.
  *
  * @param[in] body 通项表达式
  * @param[in] index 乘积指标变量名
@@ -281,7 +281,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_product(
 
 
 /**
- * @brief 计算数列的上极限 lim sup aₙ。
+ * @brief 计算数列的上极限 lim sup a_n.
  * @param[in] a_n 通项表达式
  * @param[in] n 指标变量名
  * @return 上极限表达式
@@ -290,7 +290,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> lim_sup(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n);
 
 /**
- * @brief 计算数列的下极限 lim inf aₙ。
+ * @brief 计算数列的下极限 lim inf a_n.
  * @param[in] a_n 通项表达式
  * @param[in] n 指标变量名
  * @return 下极限表达式

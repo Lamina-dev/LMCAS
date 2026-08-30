@@ -1,6 +1,6 @@
 /**
  * @file symbolic_ode_engine.cpp
- * @brief 统一 ODE 求解引擎实现：类型检测与分类。
+ * @brief 统一 ODE 求解引擎实现:类型检测与分类.
  */
 #include "../include/symbolic_ode_engine.hpp"
 #include "symbolic_ast.hpp"
@@ -77,30 +77,30 @@ static ODESolution solve_homogeneous_ode_impl(
     result.constants = {"C"};
 
     /// 齐次方程 y' = f(y/x)
-    /// 令 v = y/x，则 y = v*x，y' = v + x*v'
+    /// 令 v = y/x,则 y = v*x,y' = v + x*v'
     /// 代入: v + x*v' = f(v)
     /// 即: x*v' = f(v) - v
     /// 分离变量: dv/(f(v) - v) = dx/x
 
-    /// 将 rhs 中的 y 替换为 v*x，得到 f 关于 v 和 x 的表达式
-    /// 由于齐次性，f(x, vx) = f(1, v)（令 t=1/x 缩放）
+    /// 将 rhs 中的 y 替换为 v*x,得到 f 关于 v 和 x 的表达式
+    /// 由于齐次性,f(x, vx) = f(1, v)(令 t=1/x 缩放)
     /// 所以直接用 x=1, y=v 代入得到 f(v)
     std::string v_name = "v";
     auto v_var = SymbolicExpr::variable(v_name);
     auto x_var = SymbolicExpr::variable(x);
 
-    /// f(v) = rhs(1, v)：将 x=1, y=v 代入
+    /// f(v) = rhs(1, v):将 x=1, y=v 代入
     auto f_v = rhs->substitute(x, SymbolicExpr::number(1));
     f_v = f_v->substitute(y, v_var);
     f_v = f_v->simplify();
 
     /// 分离变量方程: dv/(f(v) - v) = dx/x
-    /// 积分: ∫ dv/(f(v) - v) = ∫ dx/x = ln|x| + C
+    /// 积分: integral dv/(f(v) - v) = integral dx/x = ln|x| + C
     auto f_minus_v = SymbolicExpr::add(f_v,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), v_var));
     f_minus_v = f_minus_v->simplify();
 
-    /// 计算 ∫ 1/(f(v) - v) dv
+    /// 计算 integral 1/(f(v) - v) dv
     auto integrand = SymbolicExpr::divide(SymbolicExpr::number(1), f_minus_v);
     auto lhs_integral = integrand->integrate(v_name);
 
@@ -182,8 +182,8 @@ static ODESolution solve_bernoulli_ode_impl(
     result.method_used = ODEType::Bernoulli;
     result.constants = {"C"};
 
-    /// Bernoulli 方程: y' + P(x)*y = Q(x)*y^n  (n ≠ 0, 1)
-    /// 令 v = y^(1-n)，则 v' = (1-n)*y^(-n)*y'
+    /// Bernoulli 方程: y' + P(x)*y = Q(x)*y^n  (n != 0, 1)
+    /// 令 v = y^(1-n),则 v' = (1-n)*y^(-n)*y'
     /// 从原方程: y' = -P(x)*y + Q(x)*y^n
     /// 两边乘以 (1-n)*y^(-n):
     ///   (1-n)*y^(-n)*y' = (1-n)*(-P(x)*y^(1-n) + Q(x))
@@ -199,11 +199,11 @@ static ODESolution solve_bernoulli_ode_impl(
     auto Q_linear = SymbolicExpr::multiply(coeff, Q)->simplify();
 
     /// 用积分因子法求解线性 ODE: v' + P_linear*v = Q_linear
-    /// 积分因子 μ = exp(∫P_linear dx)
+    /// 积分因子 mu = exp(integralP_linear dx)
     auto intP = P_linear->integrate(x);
     auto mu = SymbolicExpr::exp(intP);
 
-    /// v = (1/μ) * (∫ Q_linear * μ dx + C)
+    /// v = (1/mu) * (integral Q_linear * mu dx + C)
     auto Q_mu = SymbolicExpr::multiply(Q_linear, mu)->simplify();
     auto int_Q_mu = Q_mu->integrate(x);
 
@@ -211,7 +211,7 @@ static ODESolution solve_bernoulli_ode_impl(
     auto numerator = SymbolicExpr::add(int_Q_mu, C_const);
     auto v_solution = SymbolicExpr::divide(numerator, mu)->simplify();
 
-    /// 回代: v = y^(1-n)，所以 y = v^(1/(1-n))
+    /// 回代: v = y^(1-n),所以 y = v^(1/(1-n))
     /// y^(1-n) = v_solution
     /// y = v_solution^(1/(1-n))
     auto exponent = SymbolicExpr::divide(
@@ -232,7 +232,7 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
 {
     if (!M || !N) return nullptr;
 
-    /// 计算 ∂M/∂y - ∂N/∂x
+    /// 计算 partialM/partialy - partialN/partialx
     auto dM_dy = M->differentiate(y);
     auto dN_dx = N->differentiate(x);
     if (!dM_dy || !dN_dx) return nullptr;
@@ -242,26 +242,26 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     diff = diff->simplify();
 
     if (diff->is_zero()) {
-        /// 已经恰当，积分因子为 1
+        /// 已经恰当,积分因子为 1
         return SymbolicExpr::number(1);
     }
 
-    /// 尝试 μ = μ(x): (∂M/∂y - ∂N/∂x) / N 仅依赖 x
+    /// 尝试 mu = mu(x): (partialM/partialy - partialN/partialx) / N 仅依赖 x
     if (N && !N->is_zero()) {
         auto ratio_x = SymbolicExpr::divide(diff, N)->simplify();
         if (!expression_depends_on_variable(lamina::detail::node(ratio_x), y)) {
-            /// μ(x) = exp(∫ ratio_x dx)
+            /// mu(x) = exp(integral ratio_x dx)
             auto int_ratio = ratio_x->integrate(x);
             return SymbolicExpr::exp(int_ratio);
         }
     }
 
-    /// 尝试 μ = μ(y): (∂N/∂x - ∂M/∂y) / M 仅依赖 y
+    /// 尝试 mu = mu(y): (partialN/partialx - partialM/partialy) / M 仅依赖 y
     if (M && !M->is_zero()) {
         auto neg_diff = SymbolicExpr::multiply(SymbolicExpr::number(-1), diff)->simplify();
         auto ratio_y = SymbolicExpr::divide(neg_diff, M)->simplify();
         if (!expression_depends_on_variable(lamina::detail::node(ratio_y), x)) {
-            /// μ(y) = exp(∫ ratio_y dy)
+            /// mu(y) = exp(integral ratio_y dy)
             auto int_ratio = ratio_y->integrate(y);
             return SymbolicExpr::exp(int_ratio);
         }
@@ -324,11 +324,11 @@ static ODESolution solve_exact_ode_impl(
     auto M_eff = M;
     auto N_eff = N;
 
-    /// 检查是否恰当，若不恰当则尝试寻找积分因子
+    /// 检查是否恰当,若不恰当则尝试寻找积分因子
     if (!is_exact_ode(M, N, x, y)) {
         auto mu = find_integrating_factor(M, N, x, y);
         if (!mu) {
-            /// 积分因子搜索未决时以空 general_solution 表示。
+            /// 积分因子搜索未决时以空 general_solution 表示.
             result.general_solution = nullptr;
             return result;
         }
@@ -337,12 +337,12 @@ static ODESolution solve_exact_ode_impl(
         N_eff = SymbolicExpr::multiply(mu, N)->simplify();
     }
 
-    /// 恰当方程: ∂F/∂x = M, ∂F/∂y = N
-    /// F(x,y) = ∫ M dx + g(y)
-    /// 对 F 关于 y 求导: ∂F/∂y = ∂/∂y(∫ M dx) + g'(y) = N
-    /// 所以 g'(y) = N - ∂/∂y(∫ M dx)
+    /// 恰当方程: partialF/partialx = M, partialF/partialy = N
+    /// F(x,y) = integral M dx + g(y)
+    /// 对 F 关于 y 求导: partialF/partialy = partial/partialy(integral M dx) + g'(y) = N
+    /// 所以 g'(y) = N - partial/partialy(integral M dx)
 
-    /// 步骤 1: 计算 ∫ M dx（将 y 视为常数）
+    /// 步骤 1: 计算 integral M dx(将 y 视为常数)
     auto F_partial = M_eff->integrate(x);
 
     /// 步骤 2: 对 F_partial 关于 y 求导
@@ -354,7 +354,7 @@ static ODESolution solve_exact_ode_impl(
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dF_dy));
     g_prime = g_prime->simplify();
 
-    /// 步骤 4: g(y) = ∫ g'(y) dy
+    /// 步骤 4: g(y) = integral g'(y) dy
     auto g_y = g_prime->integrate(y);
 
     /// 步骤 5: F(x,y) = F_partial + g(y)

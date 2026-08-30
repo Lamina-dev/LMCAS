@@ -1,6 +1,6 @@
 /**
  * @file newton_raphson.hpp
- * @brief 数值求根：Newton-Raphson 迭代、二分法、Sturm 实根隔离。
+ * @brief 数值求根:Newton-Raphson 迭代,二分法,Sturm 实根隔离.
  */
 #pragma once
 
@@ -21,14 +21,14 @@ using NumericRootResult = Result<std::optional<NumericRoot>>;
 using NumericRootsResult = Result<std::vector<NumericRoot>>;
 
 /**
- * @brief 在受支持的一元表达式域内执行数值求根。
+ * @brief 在受支持的一元表达式域内执行数值求根.
  *
- * 多项式输入先由 Sturm 序列隔离实根，再执行受检精化。
- * 其他输入使用 Newton 初值，缺省初值为零；求值、取消与资源诊断
- * 均通过 Result 通道返回调用方。
+ * 多项式输入先由 Sturm 序列隔离实根,再执行受检精化.
+ * 其他输入使用 Newton 初值,缺省初值为零;求值,取消与资源诊断
+ * 均通过 Result 通道返回调用方.
  *
  * @see Jacques Charles François Sturm,
- *      “Mémoire sur la résolution des équations numériques,” 1829.
+ *      "Mémoire sur la résolution des équations numériques," 1829.
  */
 LAMINA_API NumericRootsResult solve_numeric_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -56,7 +56,7 @@ LAMINA_API Result<std::vector<std::pair<Rational, Rational>>>
 isolate_real_roots_checked(const Polynomial<Rational>& poly);
 
 /**
- * @brief 带错误传播和资源预算的 Newton-Raphson 迭代。
+ * @brief 带错误传播和资源预算的 Newton-Raphson 迭代.
  */
 LAMINA_API NumericRootResult newton_raphson_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -74,7 +74,7 @@ LAMINA_API NumericRootResult newton_raphson_checked(
     const SolveOptions& opts);
 
 /**
- * @brief 带区间、错误传播和资源预算的 Newton-Raphson 迭代。
+ * @brief 带区间,错误传播和资源预算的 Newton-Raphson 迭代.
  */
 LAMINA_API NumericRootResult newton_raphson_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -96,7 +96,7 @@ LAMINA_API NumericRootResult newton_raphson_checked(
     const SolveOptions& opts);
 
 /**
- * @brief 带错误传播和资源预算的二分法求根。
+ * @brief 带错误传播和资源预算的二分法求根.
  */
 LAMINA_API NumericRootResult bisection_checked(
     const std::shared_ptr<SymbolicExpr>& f,

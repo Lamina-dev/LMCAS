@@ -88,11 +88,11 @@ void test_cache_hit_returns_same_result() {
     QueryInterface qi(ctx);
     auto x_expr = make_var("x");
 
-    // First query — computes and caches
+    // First query - computes and caches
     Tribool result1 = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(result1, Tribool::True, "First query: x is Positive");
 
-    // Second query — should return cached result (same value)
+    // Second query - should return cached result (same value)
     Tribool result2 = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(result2, Tribool::True, "Second query (cached): x is Positive");
 
@@ -133,7 +133,7 @@ void test_cache_invalidation_on_pop() {
     QueryInterface qi(ctx);
     auto x_expr = make_var("x");
 
-    // x is undeclared → Unknown
+    // x is undeclared -> Unknown
     Tribool before_push = qi.query_positive(x_expr).value();
     EXPECT_TRIBOOL(before_push, Tribool::Unknown, "Before push: x is Unknown");
 
@@ -306,7 +306,7 @@ void test_query_positive_semidefinite() {
 
     EXPECT_TRIBOOL(qi.query_positive_semidefinite(a_expr).value(), Tribool::True,
                    "A declared PSD: query_positive_semidefinite = True");
-    /// PositiveSemiDefinite 对 PositiveDefinite 查询保持 Unknown。
+    /// PositiveSemiDefinite 对 PositiveDefinite 查询保持 Unknown.
     EXPECT_TRIBOOL(qi.query_positive_definite(a_expr).value(), Tribool::Unknown,
                    "A declared PSD: query_positive_definite = Unknown");
 }
@@ -598,7 +598,7 @@ void test_cache_multiple_properties() {
     QueryInterface qi(ctx);
     auto x_expr = make_var("x");
 
-    // Query multiple properties — each should be cached independently
+    // Query multiple properties - each should be cached independently
     Tribool pos = qi.query_positive(x_expr).value();
     Tribool intg = qi.query_integer(x_expr).value();
     Tribool neg = qi.query_negative(x_expr).value();
@@ -607,7 +607,7 @@ void test_cache_multiple_properties() {
     EXPECT_TRIBOOL(intg, Tribool::True, "x Integer cached correctly");
     EXPECT_TRIBOOL(neg, Tribool::False, "x not Negative cached correctly");
 
-    // Query again — should hit cache
+    // Query again - should hit cache
     EXPECT_TRIBOOL(qi.query_positive(x_expr).value(), Tribool::True, "x Positive (cache hit)");
     EXPECT_TRIBOOL(qi.query_integer(x_expr).value(), Tribool::True, "x Integer (cache hit)");
     EXPECT_TRIBOOL(qi.query_negative(x_expr).value(), Tribool::False, "x not Negative (cache hit)");

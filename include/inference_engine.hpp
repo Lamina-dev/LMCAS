@@ -21,7 +21,7 @@ struct Interval;
 
 namespace lamina {
 
-// Forward declaration — AssumptionContext is implemented in a later task
+// Forward declaration - AssumptionContext is implemented in a later task
 class AssumptionContext;
 
 using InferenceTriboolResult = Result<Tribool>;
@@ -35,16 +35,16 @@ using InferencePeriodResult = Result<std::optional<SymbolicExpr>>;
  * based on the properties of operands/arguments.
  *
  * Sign inference rules:
- *   - Addition: uniform sign → same sign on sum; mixed/unknown → Unknown
- *   - Multiplication: zero → Zero; parity of negatives determines sign; unknown → Unknown
- *   - Power: positive base + real exponent → Positive; even exponent → NonNegative; etc.
- *   - Functions: exp → Positive; abs → NonNegative; sin/cos → Bounded[-1,1]; etc.
+ *   - Addition: uniform sign -> same sign on sum; mixed/unknown -> Unknown
+ *   - Multiplication: zero -> Zero; parity of negatives determines sign; unknown -> Unknown
+ *   - Power: positive base + real exponent -> Positive; even exponent -> NonNegative; etc.
+ *   - Functions: exp -> Positive; abs -> NonNegative; sin/cos -> Bounded[-1,1]; etc.
  *
  * Domain inference rules:
- *   - Addition: all Integer → Integer; all Real → Real
- *   - Multiplication: all Integer → Integer; all Real/Integer → Real
- *   - Power: Real base + integer exponent → Real
- *   - Functions: exp/sin/cos/abs/sqrt/ln/tan with Real argument → Real
+ *   - Addition: all Integer -> Integer; all Real -> Real
+ *   - Multiplication: all Integer -> Integer; all Real/Integer -> Real
+ *   - Power: Real base + integer exponent -> Real
+ *   - Functions: exp/sin/cos/abs/sqrt/ln/tan with Real argument -> Real
  */
 class LAMINA_API InferenceEngine {
 public:
@@ -158,7 +158,7 @@ public:
     /**
      * @brief Infer the period of an expression.
      *
-     * For known periodic functions: sin/cos → 2π, tan → π.
+     * For known periodic functions: sin/cos -> 2pi, tan -> pi.
      * For symbols declared periodic, returns the stored period.
      *
      * @param expr The expression to query
@@ -171,8 +171,8 @@ public:
      * @brief Infer the monotonicity of an expression with respect to a variable on an interval.
      *
      * Auto-infers monotonicity for known functions:
-     * - exp: Increasing on all of ℝ
-     * - ln: Increasing on ℝ⁺ (positive reals)
+     * - exp: Increasing on all of R
+     * - ln: Increasing on R+ (positive reals)
      * - negation (multiply by -1): reverses monotonicity
      *
      * Also checks PropertyStore for user-declared monotonicity.
@@ -188,7 +188,7 @@ public:
     /**
      * @brief Propagate interval bounds through an expression tree.
      * @param expr 用于传播边界的表达式
-     * @return 推导出的区间；std::nullopt 表示当前事实保持边界未知
+     * @return 推导出的区间;std::nullopt 表示当前事实保持边界未知
      */
     std::optional<Interval> propagate_bounds(const SymbolicExpr& expr) const;
 
@@ -210,8 +210,8 @@ public:
      * @brief Applies monotonicity deductions transactionally.
      *
      * Deduced relations are inserted through RelationStore::add_relation_checked.
-     * 派生关系与既有属性冲突时，插入操作以 CasError 原子地返回诊断，
-     * 关系存储保持提交前状态。
+     * 派生关系与既有属性冲突时,插入操作以 CasError 原子地返回诊断,
+     * 关系存储保持提交前状态.
      */
     Result<void> apply_monotonicity_rules_checked(const Relation& rel,
                                                   RelationStore& store,
@@ -240,7 +240,7 @@ private:
      * and products:
      *   - sum: all operands GT 0 -> Positive; all GEQ 0 -> NonNegative
      *   - product: all operands GT 0 -> Positive
-     *   - Also checks: x GT y with y non-negative → x is Positive
+     *   - Also checks: x GT y with y non-negative -> x is Positive
      *
      * @param expr The expression to check
      * @param target The sign property being queried
@@ -255,8 +255,8 @@ private:
      * @brief Infer the sign of an internally represented division expression.
      *
      * Applies the sign multiplication table for division:
-     *   positive ÷ positive → positive, negative ÷ negative → positive,
-     *   positive ÷ negative → negative, negative ÷ positive → negative.
+     *   positive / positive -> positive, negative / negative -> positive,
+     *   positive / negative -> negative, negative / positive -> negative.
      * Returns Unknown when denominator sign is unknown or zero.
     */
     InferenceTriboolResult infer_division_sign_checked(const void* node, Sign target) const;

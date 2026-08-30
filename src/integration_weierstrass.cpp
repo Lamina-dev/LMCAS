@@ -4,12 +4,12 @@ namespace lamina {
 
 namespace {
 
-/// 判断表达式是否仅由 var 通过 sin(var)/cos(var)/tan(var) 以及常数、四则、整数幂构成，
-/// 即关于 sin/cos 的有理函数。含有其它依赖 var 的函数（exp/ln/sqrt 等）时返回 false。
+/// 判断表达式是否仅由 var 通过 sin(var)/cos(var)/tan(var) 以及常数,四则,整数幂构成,
+/// 即关于 sin/cos 的有理函数.含有其它依赖 var 的函数(exp/ln/sqrt 等)时返回 false.
 bool weier_is_rational_trig(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     if (!node) return true;
     if (auto vn = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        /// 裸 var 表示输入超出 sin/cos 有理函数域。
+        /// 裸 var 表示输入超出 sin/cos 有理函数域.
         return vn->name() != var;
     }
     if (std::dynamic_pointer_cast<const NumberNode>(node)) return true;
@@ -38,14 +38,14 @@ bool weier_is_rational_trig(const std::shared_ptr<const SymbolicNode>& node, con
             /// 参数不依赖 var 时也算常数
             return !expression_depends_on_variable(fn->arguments()[0], var);
         }
-        /// 其它函数：仅当不依赖 var 才允许
+        /// 其它函数:仅当不依赖 var 才允许
         for (auto& a : fn->arguments()) if (expression_depends_on_variable(a, var)) return false;
         return true;
     }
     return false;
 }
 
-/// 是否至少包含一个 sin(var)/cos(var)/tan(var)... 形式（确保确实是三角有理函数）
+/// 是否至少包含一个 sin(var)/cos(var)/tan(var)... 形式(确保确实是三角有理函数)
 bool weier_has_trig_of_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     if (!node) return false;
     if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
@@ -73,8 +73,8 @@ bool weier_has_trig_of_var(const std::shared_ptr<const SymbolicNode>& node, cons
     return false;
 }
 
-/// 递归替换：将 sin(var)/cos(var)/tan(var)... 替换为关于 t 的有理表达式。
-///   sin = 2t/(1+t²), cos = (1-t²)/(1+t²), tan = 2t/(1-t²)
+/// 递归替换:将 sin(var)/cos(var)/tan(var)... 替换为关于 t 的有理表达式.
+///   sin = 2t/(1+t^2), cos = (1-t^2)/(1+t^2), tan = 2t/(1-t^2)
 std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const SymbolicNode>& node,
                                             const std::string& var, const std::string& tvar) {
     if (!node) return node;
@@ -87,8 +87,8 @@ std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const Sy
                 auto t = SymbolicExpr::variable(tvar);
                 auto one = SymbolicExpr::number(1);
                 auto t2 = SymbolicExpr::power(t, SymbolicExpr::number(2));
-                auto onep = SymbolicExpr::add(one, t2);                          // 1+t²
-                auto onem = SymbolicExpr::add(one, SymbolicExpr::multiply(SymbolicExpr::number(-1), t2)); // 1-t²
+                auto onep = SymbolicExpr::add(one, t2);                          // 1+t^2
+                auto onem = SymbolicExpr::add(one, SymbolicExpr::multiply(SymbolicExpr::number(-1), t2)); // 1-t^2
                 auto two_t = SymbolicExpr::multiply(SymbolicExpr::number(2), t);
                 switch (fn->type()) {
                     case FT::Sin: return lamina::detail::node(SymbolicExpr::divide(two_t, onep));
@@ -101,7 +101,7 @@ std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const Sy
                 }
             }
         }
-        /// 其它函数：递归替换参数
+        /// 其它函数:递归替换参数
         std::vector<std::shared_ptr<const SymbolicNode>> new_args;
         for (auto& a : fn->arguments()) new_args.push_back(weier_replace(a, var, tvar));
         return lamina::detail::make_node<FunctionNode>(fn->type(), new_args);
@@ -123,8 +123,8 @@ std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const Sy
     return node->clone();
 }
 
-/// 递归求值已执行 sin/cos→t 代换的表达式，生成关于 t 的多项式分子与分母；
-/// nullopt 表示当前节点位于有理函数支持域之外。
+/// 递归求值已执行 sin/cos->t 代换的表达式,生成关于 t 的多项式分子与分母;
+/// nullopt 表示当前节点位于有理函数支持域之外.
 typedef std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>> RatPair;
 
 std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNode>& node,
@@ -137,7 +137,7 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
         return RatPair{lamina::detail::make_expression_ptr(node->clone()), one};
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        /// 累加：a/b + c/d = (a*d + c*b)/(b*d)
+        /// 累加:a/b + c/d = (a*d + c*b)/(b*d)
         std::shared_ptr<SymbolicExpr> num = SymbolicExpr::number(0);
         std::shared_ptr<SymbolicExpr> den = one;
         for (auto& op : add->operands()) {
@@ -192,7 +192,7 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
         if (neg) std::swap(num, den);
         return RatPair{num, den};
     }
-    /// 其他节点结构由 nullopt 标记为 t 有理函数域之外。
+    /// 其他节点结构由 nullopt 标记为 t 有理函数域之外.
     return std::nullopt;
 }
 
@@ -209,22 +209,22 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
 
     const std::string tvar = "__weier_t";
 
-    /// 替换 sin/cos -> t 的有理式，并乘以 dx = 2/(1+t²) dt
+    /// 替换 sin/cos -> t 的有理式,并乘以 dx = 2/(1+t^2) dt
     auto replaced = lamina::detail::make_expression_ptr(weier_replace(lamina::detail::node(expr), var, tvar));
     auto t = SymbolicExpr::variable(tvar);
     auto t2 = SymbolicExpr::power(t, SymbolicExpr::number(2));
     auto onep = SymbolicExpr::add(SymbolicExpr::number(1), t2);
-    auto dx = SymbolicExpr::divide(SymbolicExpr::number(2), onep); // 2/(1+t²)
+    auto dx = SymbolicExpr::divide(SymbolicExpr::number(2), onep); // 2/(1+t^2)
     auto integrand_raw = SymbolicExpr::multiply(replaced, dx);
 
-    /// sin/cos 有理函数经代换后仍为 t 的有理函数。
-    /// 通过多项式对递归求值整棵表达式树，直接得到 N(t)/D(t)。
+    /// sin/cos 有理函数经代换后仍为 t 的有理函数.
+    /// 通过多项式对递归求值整棵表达式树,直接得到 N(t)/D(t).
     auto rat = weier_to_rational(lamina::detail::node(integrand_raw), tvar);
-    if (!rat) return nullptr;  /// 节点位于多项式支持域之外。
+    if (!rat) return nullptr;  /// 节点位于多项式支持域之外.
     auto [num_poly, den_poly] = *rat;
     if (!den_poly || lamina::detail::node(den_poly)->is_zero()) return nullptr;
 
-    /// 使用多项式 GCD 将 num/den 化为最简有理函数，并保持单一分式结构。
+    /// 使用多项式 GCD 将 num/den 化为最简有理函数,并保持单一分式结构.
     std::shared_ptr<SymbolicExpr> integrand_t;
     try {
         Polynomial<Rational> Np = symbolic_to_poly<Rational>(num_poly->expand(), tvar);
@@ -245,7 +245,7 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
         integrand_t = SymbolicExpr::divide(num_poly, den_poly)->simplify();
     }
 
-    /// 独立 Integrator 承载有理分解策略，使其循环检测状态与外层积分器隔离。
+    /// 独立 Integrator 承载有理分解策略,使其循环检测状态与外层积分器隔离.
     Integrator inner;
     RationalDecompositionStrategy rds;
     auto rational_attempt = rds.try_integrate(
@@ -264,7 +264,7 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
     }
     if (!integrated) return nullptr;
 
-    /// 若结果仍含未求值积分节点，视为失败
+    /// 若结果仍含未求值积分节点,视为失败
     if (expression_depends_on_variable(lamina::detail::node(integrated), tvar) &&
         lamina::detail::contains_node_type<IntegralNode>(
             lamina::detail::node(integrated))) {

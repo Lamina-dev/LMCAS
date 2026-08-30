@@ -58,9 +58,9 @@ static SymbolicExpr make_shared_subexpr() {
     return lamina::detail::expression_from_node(mul);
 }
 
-/// 创建结构相同但地址不同的两个节点，验证循环检测基于遍历路径。
+/// 创建结构相同但地址不同的两个节点,验证循环检测基于遍历路径.
 static std::pair<SymbolicExpr, SymbolicExpr> make_structurally_identical_distinct() {
-    /// 分别构造两个结构相同的 AddNode。
+    /// 分别构造两个结构相同的 AddNode.
     auto x1 = lamina::detail::make_node<VariableNode>("x");
     auto x2 = lamina::detail::make_node<VariableNode>("x");
 
@@ -88,11 +88,11 @@ static void test_cycle_shared_node_returns_unknown() {
     // Create expression with shared sub-expression (DAG structure)
     SymbolicExpr expr = make_shared_subexpr();
 
-    /// 查询应在深度界内完成。共享节点的第二次访问返回 Unknown，
-    /// 首次访问提供的信息决定最终结果。
+    /// 查询应在深度界内完成.共享节点的第二次访问返回 Unknown,
+    /// 首次访问提供的信息决定最终结果.
     Tribool result = engine.query_real_checked(expr).value();
 
-    /// 到达此处即证明查询完成；允许已证明与未知两种语义结果。
+    /// 到达此处即证明查询完成;允许已证明与未知两种语义结果.
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,
         "Shared node query completes without infinite recursion");
 }
@@ -135,7 +135,7 @@ static void test_cycle_detection_multiply_shared_operand() {
 
     // The same VariableNode pointer appears twice in the multiply.
     // Cycle detection uses pointer identity, so the second encounter of x_node
-    // will detect a "cycle". This is acceptable — result may be Unknown or True.
+    // will detect a "cycle". This is acceptable - result may be Unknown or True.
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,
         "Same variable pointer in multiply completes without crash");
 }
@@ -162,7 +162,7 @@ static void test_cycle_detection_nested_function_shared_arg() {
     // But cycle detection may trigger on the shared exp_node.
     Tribool result = engine.query_positive_checked(expr).value();
 
-    /// 共享函数节点查询应在深度界内完成。
+    /// 共享函数节点查询应在深度界内完成.
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,
         "Shared function node in add completes without infinite recursion");
 }
@@ -199,7 +199,7 @@ static void test_cycle_detection_different_query_types() {
 
     SymbolicExpr shared_expr = make_shared_subexpr();
 
-    /// 多种查询类型均应在深度界内完成。
+    /// 多种查询类型均应在深度界内完成.
     Tribool r1 = engine.query_positive_checked(shared_expr).value();
     Tribool r2 = engine.query_negative_checked(shared_expr).value();
     Tribool r3 = engine.query_nonnegative_checked(shared_expr).value();
@@ -293,7 +293,7 @@ static void test_depth_limit_boundary() {
     InferenceEngine engine(ctx);
     engine.set_max_depth(4);
 
-    // Depth 3 nesting: exp(exp(exp(x))) — should be within limit (depth 4 allows 4 levels)
+    // Depth 3 nesting: exp(exp(exp(x))) - should be within limit (depth 4 allows 4 levels)
     SymbolicExpr at_limit = make_deeply_nested("x", 3);
     Tribool result_at = engine.query_positive_checked(at_limit).value();
 

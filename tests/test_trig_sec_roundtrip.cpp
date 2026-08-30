@@ -170,8 +170,8 @@ int main() {
         } else {
             // No sample point produced an evaluable comparison. For sec^n
             // with n in {2,4,6,8} on the chosen sample points, sec is well
-            /// 该输入在实数域处处有定义；数值求值未决即记录为失败，
-            /// 使求值覆盖缺口在测试结果中可见。
+            /// 该输入在实数域处处有定义;数值求值未决即记录为失败,
+            /// 使求值覆盖缺口在测试结果中可见.
             ++failed_n;
             std::cerr << "[FAIL] " << prefix
                       << " : no sample point produced an evaluable comparison" << std::endl;

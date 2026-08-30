@@ -1,6 +1,6 @@
 /**
  * @file complex_analysis.hpp
- * @brief 复变函数分析：留数计算、柯西积分公式、解析延拓。
+ * @brief 复变函数分析:留数计算,柯西积分公式,解析延拓.
  */
 #pragma once
 #include "computation_context.hpp"
@@ -18,7 +18,7 @@ using ComplexBoolResult = Result<bool>;
  * @param f 被积函数
  * @param z 复变量名
  * @param z0 极点
- * @param order 极点的阶数（默认为1，简单极点）
+ * @param order 极点的阶数(默认为1,简单极点)
  * @return 留数的符号表达式
  */
 LAMINA_API ExpressionResult calculate_residue_checked(
@@ -30,7 +30,7 @@ LAMINA_API ExpressionResult calculate_residue_checked(
 );
 
 /**
- * @brief 使用默认计算上下文计算留数，并显式报告无效输入和未覆盖域。
+ * @brief 使用默认计算上下文计算留数,并显式报告无效输入和未覆盖域.
  */
 LAMINA_API ExpressionResult calculate_residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -41,7 +41,7 @@ LAMINA_API ExpressionResult calculate_residue_checked(
 
 
 /**
- * @brief 使用柯西积分公式计算闭合路径积分 ∮ f(z)/(z-z0)^n dz
+ * @brief 使用柯西积分公式计算闭合路径积分 contour_integral f(z)/(z-z0)^n dz
  * @param f 解析函数部分
  * @param z 复变量名
  * @param z0 奇点
@@ -57,7 +57,7 @@ LAMINA_API ExpressionResult cauchy_integral_checked(
 );
 
 /**
- * @brief 使用默认计算上下文应用柯西积分公式，并显式报告无效输入和未覆盖域。
+ * @brief 使用默认计算上下文应用柯西积分公式,并显式报告无效输入和未覆盖域.
  */
 LAMINA_API ExpressionResult cauchy_integral_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -71,7 +71,7 @@ LAMINA_API ExpressionResult cauchy_integral_checked(
  * @brief 尝试对函数进行解析延拓
  * @param f 输入函数
  * @param z 复变量名
- * @return 显式延拓结果；当前规则保持输入表达式时返回其自身
+ * @return 显式延拓结果;当前规则保持输入表达式时返回其自身
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> analytic_continuation(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -79,10 +79,10 @@ LAMINA_API std::shared_ptr<SymbolicExpr> analytic_continuation(
 );
 
 /**
- * @brief 提取表达式的实部 Re(expr)。
+ * @brief 提取表达式的实部 Re(expr).
  *
- * 将复变量 z = x + iy（或显式 i 单位）展开，分离实部。
- * 对实值表达式直接返回自身。
+ * 将复变量 z = x + iy(或显式 i 单位)展开,分离实部.
+ * 对实值表达式直接返回自身.
  *
  * @param expr 输入表达式
  * @return 实部表达式
@@ -93,7 +93,7 @@ LAMINA_API ExpressionResult real_part_checked(
 );
 
 /**
- * @brief 使用默认计算上下文提取表达式实部，并显式报告无效输入。
+ * @brief 使用默认计算上下文提取表达式实部,并显式报告无效输入.
  */
 LAMINA_API ExpressionResult real_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr
@@ -101,7 +101,7 @@ LAMINA_API ExpressionResult real_part_checked(
 
 
 /**
- * @brief 提取表达式的虚部 Im(expr)。
+ * @brief 提取表达式的虚部 Im(expr).
  * @param expr 输入表达式
  * @return 虚部表达式
  */
@@ -111,7 +111,7 @@ LAMINA_API ExpressionResult imag_part_checked(
 );
 
 /**
- * @brief 使用默认计算上下文提取表达式虚部，并显式报告无效输入。
+ * @brief 使用默认计算上下文提取表达式虚部,并显式报告无效输入.
  */
 LAMINA_API ExpressionResult imag_part_checked(
     const std::shared_ptr<SymbolicExpr>& expr
@@ -119,7 +119,7 @@ LAMINA_API ExpressionResult imag_part_checked(
 
 
 /**
- * @brief 计算表达式的复共轭 conj(expr)，将 i 替换为 -i。
+ * @brief 计算表达式的复共轭 conj(expr),将 i 替换为 -i.
  * @param expr 输入表达式
  * @return 共轭表达式
  */
@@ -129,7 +129,7 @@ LAMINA_API ExpressionResult conjugate_checked(
 );
 
 /**
- * @brief 使用默认计算上下文计算共轭，并显式报告无效输入。
+ * @brief 使用默认计算上下文计算共轭,并显式报告无效输入.
  */
 LAMINA_API ExpressionResult conjugate_checked(
     const std::shared_ptr<SymbolicExpr>& expr
@@ -137,12 +137,12 @@ LAMINA_API ExpressionResult conjugate_checked(
 
 
 /**
- * @brief 检查函数 f(z) 在变量 z 上是否解析（满足 Cauchy-Riemann 方程）。
+ * @brief 检查函数 f(z) 在变量 z 上是否解析(满足 Cauchy-Riemann 方程).
  *
- * 设 f = u(x,y) + i·v(x,y)，检查 ∂u/∂x = ∂v/∂y 且 ∂u/∂y = -∂v/∂x。
+ * 设 f = u(x,y) + i*v(x,y),检查 partialu/partialx = partialv/partialy 且 partialu/partialy = -partialv/partialx.
  *
  * @param f 复变函数表达式
- * @param z 复变量名（实部记为 z_re，虚部记为 z_im 进行分解）
+ * @param z 复变量名(实部记为 z_re,虚部记为 z_im 进行分解)
  * @return 解析返回 true
  */
 LAMINA_API ComplexBoolResult is_analytic_checked(
@@ -152,7 +152,7 @@ LAMINA_API ComplexBoolResult is_analytic_checked(
 );
 
 /**
- * @brief 使用默认计算上下文检查解析性，并显式报告无效输入。
+ * @brief 使用默认计算上下文检查解析性,并显式报告无效输入.
  */
 LAMINA_API ComplexBoolResult is_analytic_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -161,7 +161,7 @@ LAMINA_API ComplexBoolResult is_analytic_checked(
 
 
 /**
- * @brief calculate_residue 的别名，匹配规范命名 residue。
+ * @brief calculate_residue 的别名,匹配规范命名 residue.
  */
 LAMINA_API ExpressionResult residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,

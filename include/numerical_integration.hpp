@@ -1,6 +1,6 @@
 /**
  * @file numerical_integration.hpp
- * @brief 数值积分算法：辛普森法则和高斯求积（符号-数值混合桥接）。
+ * @brief 数值积分算法:辛普森法则和高斯求积(符号-数值混合桥接).
  */
 #pragma once
 #include "numeric_evaluation.hpp"

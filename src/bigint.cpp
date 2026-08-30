@@ -228,10 +228,10 @@ int BigInt::to_int() const {
                        : std::numeric_limits<int>::min();
         }
 
-        /// 单 limb 数值在目标整数范围内直接转换，超出范围时饱和到边界。
+        /// 单 limb 数值在目标整数范围内直接转换,超出范围时饱和到边界.
         unsigned long long mag = _data[0];
         if (_sign == NEGATIVE) {
-            /// 负数目标区间为 [INT_MIN, 0]。
+            /// 负数目标区间为 [INT_MIN, 0].
             // |INT_MIN| = static_cast<unsigned long long>(INT_MAX) + 1.
             unsigned long long min_mag =
                 static_cast<unsigned long long>(INT_MAX_LL) + 1ULL;
@@ -542,9 +542,9 @@ BigInt BigInt::power(BigInt exp) const {
         if (exp._size == 0) return BigInt(1);
 
         if (exp._size <= 1) {
-            // 单 limb 时尽量走窄重载，但 mp_limb_t 的位宽未必等于 unsigned long
-            /// LLP64 等平台的 unsigned long 可窄于 limb；
-            /// 窄路径仅处理可完整表示的值，其余值进入通用循环。
+            // 单 limb 时尽量走窄重载,但 mp_limb_t 的位宽未必等于 unsigned long
+            /// LLP64 等平台的 unsigned long 可窄于 limb;
+            /// 窄路径仅处理可完整表示的值,其余值进入通用循环.
             mp_limb_t lo = (exp._size == 0) ? 0 : exp._data[0];
             if (lo <= static_cast<mp_limb_t>(std::numeric_limits<unsigned long>::max())) {
                 return power(static_cast<unsigned long>(lo));
@@ -564,7 +564,7 @@ BigInt BigInt::power(BigInt exp) const {
              for (mp_size_t i = exp._size; i > 0; --i) {
                  mp_limb_t cur = exp._data[i-1];
                  mp_limb_t next_carry = cur & 1;
-                 // 不要写死 limb=64：用 LIMB_BITS 计算插入位置，且在 mp_limb_t 类型下移位。
+                 // 不要写死 limb=64:用 LIMB_BITS 计算插入位置,且在 mp_limb_t 类型下移位.
                  exp._data[i-1] = (cur >> 1) | (carry << (LIMB_BITS - 1));
                  carry = next_carry;
              }

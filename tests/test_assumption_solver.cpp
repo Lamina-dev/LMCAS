@@ -87,7 +87,7 @@ static bool any_solution_contains_imaginary(
     return false;
 }
 
-/// Build equation x² - c = 0 as a SymbolicExpr (x^2 + (-c))
+/// Build equation x^2 - c = 0 as a SymbolicExpr (x^2 + (-c))
 static std::shared_ptr<SymbolicExpr> make_x_squared_minus(const std::string& var, int c) {
     auto x = SymbolicExpr::variable(var);
     auto x_sq = SymbolicExpr::power(x, SymbolicExpr::number(2));
@@ -95,7 +95,7 @@ static std::shared_ptr<SymbolicExpr> make_x_squared_minus(const std::string& var
     return eq;
 }
 
-/// Build equation x² + c = 0 as a SymbolicExpr (x^2 + c)
+/// Build equation x^2 + c = 0 as a SymbolicExpr (x^2 + c)
 static std::shared_ptr<SymbolicExpr> make_x_squared_plus(const std::string& var, int c) {
     auto x = SymbolicExpr::variable(var);
     auto x_sq = SymbolicExpr::power(x, SymbolicExpr::number(2));
@@ -181,10 +181,10 @@ void test_x_squared_plus_1_no_context() {
 
     auto eq = make_x_squared_plus("x", 1);
 
-    // No context (nullptr) — all solutions returned unfiltered
+    // No context (nullptr) - all solutions returned unfiltered
     auto solutions = solve_with_assumptions(eq, "x", nullptr);
 
-    /// 默认求解路径返回复数域中的虚数解。
+    /// 默认求解路径返回复数域中的虚数解.
     EXPECT_TRUE(solutions.size() >= 1,
                 "x²+1=0 no context: at least 1 solution returned (imaginary)");
 }
@@ -230,7 +230,7 @@ void test_x_squared_minus_1_negative_sign() {
 void test_no_context_all_solutions_returned() {
     TEST_CASE("No context (nullptr) → all solutions returned unfiltered");
 
-    // x² - 4 = 0 → x=2, x=-2
+    // x^2 - 4 = 0 -> x=2, x=-2
     auto eq = make_x_squared_minus("x", 4);
 
     auto solutions = solve_with_assumptions(eq, "x", nullptr);
@@ -261,10 +261,10 @@ void test_no_context_x_squared_minus_1() {
 void test_all_solutions_filtered_empty_result() {
     TEST_CASE("All solutions filtered → empty result set");
 
-    // x² - 4 = 0 → x=2, x=-2
+    // x^2 - 4 = 0 -> x=2, x=-2
     // With Negative sign: x=2 excluded (positive), x=-2 excluded? No, -2 is negative.
     // Let's use a case where all solutions are excluded:
-    // x² + 1 = 0 with Real domain → both imaginary → empty set
+    // x^2 + 1 = 0 with Real domain -> both imaginary -> empty set
     auto eq = make_x_squared_plus("x", 1);
 
     AssumptionContext ctx;
@@ -279,9 +279,9 @@ void test_all_solutions_filtered_empty_result() {
 void test_all_solutions_filtered_positive_int() {
     TEST_CASE("x²-4=0 with PositiveInt and x>2 constraint → may filter all");
 
-    // x² - 2 = 0 → x=sqrt(2), x=-sqrt(2)
-    // With PositiveInt domain: sqrt(2) is not an integer → excluded
-    //                          -sqrt(2) is negative → excluded
+    // x^2 - 2 = 0 -> x=sqrt(2), x=-sqrt(2)
+    // With PositiveInt domain: sqrt(2) is not an integer -> excluded
+    //                          -sqrt(2) is negative -> excluded
     // Result: empty set
     auto eq = make_x_squared_minus("x", 2);
 
@@ -345,7 +345,7 @@ void test_integer_domain_both_returned() {
 void test_complex_domain_no_filtering() {
     TEST_CASE("Complex domain (default) → no filtering applied");
 
-    // x² + 1 = 0 with Complex domain → imaginary solutions should be kept
+    // x^2 + 1 = 0 with Complex domain -> imaginary solutions should be kept
     auto eq = make_x_squared_plus("x", 1);
 
     AssumptionContext ctx;
@@ -353,7 +353,7 @@ void test_complex_domain_no_filtering() {
 
     auto solutions = solve_with_assumptions(eq, "x", &ctx);
 
-    // Complex is the default/least restrictive — no filtering
+    // Complex is the default/least restrictive - no filtering
     EXPECT_TRUE(solutions.size() >= 1,
                 "x²+1=0 Complex domain: solutions returned (no filtering)");
 }
@@ -378,16 +378,16 @@ void test_nonpositive_sign_filtering() {
 
 
 int main() {
-    // Test Case 1: x²-4=0 with various domain/sign constraints
+    // Test Case 1: x^2-4=0 with various domain/sign constraints
     test_x_squared_minus_4_real_domain();
     test_x_squared_minus_4_positive_int();
     test_x_squared_minus_4_nonnegative_sign();
 
-    // Test Case 2: x²+1=0 (imaginary solutions)
+    // Test Case 2: x^2+1=0 (imaginary solutions)
     test_x_squared_plus_1_real_domain();
     test_x_squared_plus_1_no_context();
 
-    // Test Case 3: x²-1=0 with sign constraints
+    // Test Case 3: x^2-1=0 with sign constraints
     test_x_squared_minus_1_positive_sign();
     test_x_squared_minus_1_negative_sign();
 
@@ -395,7 +395,7 @@ int main() {
     test_no_context_all_solutions_returned();
     test_no_context_x_squared_minus_1();
 
-    // Test Case 5: All solutions filtered → empty result
+    // Test Case 5: All solutions filtered -> empty result
     test_all_solutions_filtered_empty_result();
     test_all_solutions_filtered_positive_int();
 

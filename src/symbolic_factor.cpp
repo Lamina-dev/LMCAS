@@ -19,7 +19,7 @@ namespace {
 
 /**
  * @internal
- * @brief 判断符号节点是否为多项式表达式（不含超越函数、负指数等）
+ * @brief 判断符号节点是否为多项式表达式(不含超越函数,负指数等)
  */
 static bool is_poly_expr_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return false;
@@ -75,9 +75,9 @@ static bool is_poly_expr_node(const std::shared_ptr<const SymbolicNode>& node) {
  * @internal
  * @brief 递归将符号节点转换为 MultiPoly
  *
- * 假设节点已通过 is_poly_expr_node 验证为多项式。
+ * 假设节点已通过 is_poly_expr_node 验证为多项式.
  * @param[in] node 符号节点
- * @param[in] vars 变量名列表（确定单项式各分量的含义）
+ * @param[in] vars 变量名列表(确定单项式各分量的含义)
  * @return 对应的 MultiPoly
  */
 static lamina::MultiPoly symbolic_node_to_multipoly(
@@ -246,7 +246,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
             return multiply(content, factored_primitive)->simplify();
         }
 
-        /// 步骤 1：提取各项的公因式（GCD）
+        /// 步骤 1:提取各项的公因式(GCD)
         std::shared_ptr<SymbolicExpr> common = nullptr;
         for (const auto& op : add_node->operands()) {
              auto expr_op = lamina::detail::make_expression_ptr(op);
@@ -278,7 +278,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
              return lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(final_ops));
         }
 
-        /// 步骤 2：一元多项式分解（支持任意次数）
+        /// 步骤 2:一元多项式分解(支持任意次数)
         auto factor_variables = lamina::free_variables(lamina::detail::node(simp));
         if (factor_variables.size() == 1) {
              std::string var = *factor_variables.begin();
@@ -313,7 +313,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                                factors.push_back(lamina::detail::node(linear_factor));
                            }
 
-                           /// 计算余下的不可约因子：原多项式 / 已分解因子的乘积
+                           /// 计算余下的不可约因子:原多项式 / 已分解因子的乘积
                            lamina::Polynomial<Rational> factored_product({leading}, var);
                            for (const auto& r : roots) {
                                lamina::Polynomial<Rational> lin({Rational(0) - r, Rational(1)}, var);
@@ -338,7 +338,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                                    factors.push_back(lamina::detail::node(q_expr));
                                }
                            } else if (!remainder.is_zero()) {
-                               /// 除法有余数 → 回退到原始方法
+                               /// 除法有余数 -> 回退到原始方法
                                goto try_solve_quadratic;
                            }
 
@@ -352,7 +352,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
              } catch (...) {}
 
              try_solve_quadratic:
-             /// 后备：二次多项式通过求解方程分解
+             /// 后备:二次多项式通过求解方程分解
              try {
                  auto poly = lamina::symbolic_to_poly<lamina::SymbolicPolyCoeff>(
                      simp, *factor_variables.begin());
@@ -381,9 +381,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
              } catch (...) {}
         }
 
-        /// 步骤 3：多元多项式 — 先尝试 factor_multivariate，再回退逐变量分解
+        /// 步骤 3:多元多项式 - 先尝试 factor_multivariate,再回退逐变量分解
         if (factor_variables.size() > 1) {
-            /// 3a: 检测是否为多项式表达式，若是则使用 MultiPoly 路径
+            /// 3a: 检测是否为多项式表达式,若是则使用 MultiPoly 路径
             if (is_poly_expr_node(lamina::detail::node(simp))) {
                 try {
                     std::vector<std::string> var_list(
@@ -429,11 +429,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                         }
                     }
                 } catch (...) {
-                    /// MultiPoly 路径失败，回退到逐变量分解
+                    /// MultiPoly 路径失败,回退到逐变量分解
                 }
             }
 
-            /// 3b: 回退 — 逐变量尝试有理根分解
+            /// 3b: 回退 - 逐变量尝试有理根分解
             for (const auto& var : factor_variables) {
                 try {
                     auto poly = lamina::symbolic_to_poly<lamina::SymbolicPolyCoeff>(simp, var);
@@ -472,7 +472,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                                 auto q_expr = lamina::poly_to_symbolic(quotient)->simplify();
                                 factors.push_back(lamina::detail::node(q_expr));
                             } else if (remainder.is_zero() && !quotient.is_zero() && quotient.degree() == 0) {
-                                /// 常数商 → 已完全分解
+                                /// 常数商 -> 已完全分解
                                 if (!(quotient.coeffs[0] == Rational(1))) {
                                     factors.push_back(
                                         lamina::detail::node(number(quotient.coeffs[0])));
@@ -491,7 +491,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
         }
     }
 
-    /// 标准多项式分解未匹配时，后备路径检测超越函数并尝试超越因式分解。
+    /// 标准多项式分解未匹配时,后备路径检测超越函数并尝试超越因式分解.
     {
         const auto transform_variables =
             lamina::free_variables(lamina::detail::node(simp));
@@ -504,7 +504,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
             try {
                 auto trans_factors = lamina::factor_transcendental(simp, target_var);
                 if (trans_factors.size() > 1) {
-                    /// 超越分解成功：组装乘积表达式
+                    /// 超越分解成功:组装乘积表达式
                     std::vector<std::shared_ptr<const SymbolicNode>> factor_nodes;
                     factor_nodes.reserve(trans_factors.size());
                     for (const auto& f : trans_factors) {
@@ -518,7 +518,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                     }
                 }
             } catch (...) {
-                /// 超越分解失败，返回原表达式
+                /// 超越分解失败,返回原表达式
             }
         }
     }
@@ -530,8 +530,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
     auto simp = simplify();
     if (!simp || !lamina::detail::node(simp)) return simp;
 
-    /// 辅助 lambda：从乘积节点中分离分子因子和分母因子。
-    /// 分母因子 = 含负指数的 PowerNode。
+    /// 辅助 lambda:从乘积节点中分离分子因子和分母因子.
+    /// 分母因子 = 含负指数的 PowerNode.
     auto separate_num_den = [](const std::shared_ptr<const SymbolicNode>& node,
                                std::vector<std::shared_ptr<const SymbolicNode>>& num_out,
                                std::vector<std::shared_ptr<const SymbolicNode>>& den_out) {
@@ -579,16 +579,16 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
         }
     };
 
-    /// 辅助 lambda：从因子列表构建乘积表达式
+    /// 辅助 lambda:从因子列表构建乘积表达式
     auto build_product = [](const std::vector<std::shared_ptr<const SymbolicNode>>& factors) -> std::shared_ptr<SymbolicExpr> {
         if (factors.empty()) return SymbolicExpr::number(1);
         if (factors.size() == 1) return lamina::detail::make_expression_ptr(factors[0]);
         return lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(factors));
     };
 
-    /// 策略 1：表达式是 AddNode，各项可能含公共分母因子。
-    /// 例如 simplify 后 (x²-1)/(x-1) 变为 -1*(x-1)^-1 + x²*(x-1)^-1
-    /// 需要提取公共分母，重组为 (分子之和)/分母 再做 GCD 约分。
+    /// 策略 1:表达式是 AddNode,各项可能含公共分母因子.
+    /// 例如 simplify 后 (x^2-1)/(x-1) 变为 -1*(x-1)^-1 + x^2*(x-1)^-1
+    /// 需要提取公共分母,重组为 (分子之和)/分母 再做 GCD 约分.
     if (auto add_node = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(simp))) {
         /// 对每个加法项分离分子/分母
         struct TermInfo {
@@ -608,8 +608,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
         }
 
         if (has_denominator) {
-            /// 计算公共分母（所有项分母的 LCM，简化处理：乘积）
-            /// 对于常见情况（所有项分母相同），直接提取。
+            /// 计算公共分母(所有项分母的 LCM,简化处理:乘积)
+            /// 对于常见情况(所有项分母相同),直接提取.
             /// 检查是否所有分母相同
             bool all_same_den = true;
             auto first_den_str = terms[0].denominator->to_string();
@@ -624,7 +624,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
             std::shared_ptr<SymbolicExpr> combined_den;
 
             if (all_same_den) {
-                /// 所有项分母相同：分子直接相加
+                /// 所有项分母相同:分子直接相加
                 combined_den = terms[0].denominator;
                 std::vector<std::shared_ptr<const SymbolicNode>> num_ops;
                 for (const auto& t : terms) {
@@ -637,7 +637,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
                 else combined_num = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(num_ops));
                 combined_num = combined_num->simplify();
             } else {
-                /// 分母不同：通分（乘以其他项的分母）
+                /// 分母不同:通分(乘以其他项的分母)
                 /// 计算总分母 = 所有不同分母的乘积
                 std::shared_ptr<SymbolicExpr> total_den = SymbolicExpr::number(1);
                 /// 收集不同的分母
@@ -701,11 +701,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
                     if (poly_num.is_zero()) return SymbolicExpr::number(0);
                     if (poly_den.is_zero()) return simp;
 
-                    /// 尝试用 Rational 系数做 GCD（纯数值系数时更可靠）
+                    /// 尝试用 Rational 系数做 GCD(纯数值系数时更可靠)
                     auto poly_num_r = lamina::symbolic_to_poly<Rational>(num_expanded, var);
                     auto poly_den_r = lamina::symbolic_to_poly<Rational>(den_expanded, var);
 
-                    /// 检查 Rational 转换是否丢失了信息（多元情况）
+                    /// 检查 Rational 转换是否丢失了信息(多元情况)
                     bool rational_ok = true;
                     auto reconstructed_num = lamina::poly_to_symbolic(poly_num_r)->expand()->simplify();
                     auto reconstructed_den = lamina::poly_to_symbolic(poly_den_r)->expand()->simplify();
@@ -724,7 +724,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
                             cur_den = lamina::poly_to_symbolic(q_den)->simplify();
                         }
                     } else {
-                        /// 多元情况：使用 SymbolicPolyCoeff 做 GCD
+                        /// 多元情况:使用 SymbolicPolyCoeff 做 GCD
                         auto g = lamina::Polynomial<lamina::SymbolicPolyCoeff>::gcd(poly_num, poly_den);
                         if (g.degree() >= 1) {
                             auto [q_num, r_num] = poly_num.div_mod(g);
@@ -752,7 +752,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
         }
     }
 
-    /// 策略 2：表达式是 MultiplyNode，直接分离分子/分母。
+    /// 策略 2:表达式是 MultiplyNode,直接分离分子/分母.
     std::vector<std::shared_ptr<const SymbolicNode>> num_factors;
     std::vector<std::shared_ptr<const SymbolicNode>> den_factors;
     separate_num_den(lamina::detail::node(simp), num_factors, den_factors);

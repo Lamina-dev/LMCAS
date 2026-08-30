@@ -1,6 +1,6 @@
 /**
  * @file solve_mixed_transcendental.cpp
- * @brief 混合超越方程求解模块实现。
+ * @brief 混合超越方程求解模块实现.
  */
 #include "solve_mixed_transcendental.hpp"
 #include "poly_utils.hpp"
@@ -22,7 +22,7 @@ namespace lamina {
 
 /**
  * @internal
- * @brief 判断 FunctionNode::FuncType 是否为超越函数（sin/cos/tan/exp/ln）。
+ * @brief 判断 FunctionNode::FuncType 是否为超越函数(sin/cos/tan/exp/ln).
  */
 static bool is_transcendental_func(FunctionNode::FuncType t) {
     switch (t) {
@@ -133,7 +133,7 @@ bool contains_transcendental_of_var(
                 }
             }
 
-            /// 递归检查参数子树（可能嵌套超越函数）
+            /// 递归检查参数子树(可能嵌套超越函数)
             for (auto& arg : n.arguments()) {
                 if (found) return;
                 arg->accept(*this);
@@ -148,13 +148,13 @@ bool contains_transcendental_of_var(
 
 /**
  * @internal
- * @brief 计算节点关于指定变量的多项式次数。
+ * @brief 计算节点关于指定变量的多项式次数.
  *
- * 与 var 无关的子表达式次数为 0；-1 表示当前结构位于多项式次数支持域之外。
+ * 与 var 无关的子表达式次数为 0;-1 表示当前结构位于多项式次数支持域之外.
  *
  * @param[in] node 符号节点
  * @param[in] var  变量名
- * @return 关于 var 的次数；-1 表示非多项式结构
+ * @return 关于 var 的次数;-1 表示非多项式结构
  */
 static int degree_in_var(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     if (!node) return 0;
@@ -243,9 +243,9 @@ bool is_polynomial_after_substitution(
 
 /**
  * @internal
- * @brief 从 NumberNode 中提取浮点数值。
+ * @brief 从 NumberNode 中提取浮点数值.
  * @param[in] node 数值节点
- * @return 浮点值；非数值节点返回 NaN
+ * @return 浮点值;非数值节点返回 NaN
  */
 static lmmc_real_t extract_real_value(const std::shared_ptr<const SymbolicNode>& node) {
     auto num = std::dynamic_pointer_cast<const NumberNode>(node);
@@ -265,17 +265,17 @@ static lmmc_real_t extract_real_value(const std::shared_ptr<const SymbolicNode>&
 
 /**
  * @internal
- * @brief 尝试从表达式中提取关于变量的线性系数 k（即 k*x + c 形式中的 k）。
+ * @brief 尝试从表达式中提取关于变量的线性系数 k(即 k*x + c 形式中的 k).
  *
- * 支持的模式：
- * - 变量本身 x → k = 1
- * - 乘法 k*x（数值 * 变量）→ 提取数值
- * - 加法 k*x + c → 在加法项中查找含变量的项并提取系数
- * - 非线性参数（x^2, sin(x) 等）→ 返回 NaN
+ * 支持的模式:
+ * - 变量本身 x -> k = 1
+ * - 乘法 k*x(数值 * 变量)-> 提取数值
+ * - 加法 k*x + c -> 在加法项中查找含变量的项并提取系数
+ * - 非线性参数(x^2, sin(x) 等)-> 返回 NaN
  *
  * @param[in] node 参数表达式节点
  * @param[in] var  变量名
- * @return 线性系数 k；非线性时返回 NaN
+ * @return 线性系数 k;非线性时返回 NaN
  */
 static lmmc_real_t extract_linear_coefficient(
     const std::shared_ptr<const SymbolicNode>& node,
@@ -283,7 +283,7 @@ static lmmc_real_t extract_linear_coefficient(
 {
     if (!node || !expression_depends_on_variable(node, var)) return 0.0;
 
-    /// 模式 1: 变量本身 → k = 1
+    /// 模式 1: 变量本身 -> k = 1
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
         if (v->name() == var) return 1.0;
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
@@ -308,7 +308,7 @@ static lmmc_real_t extract_linear_coefficient(
                 return extract_real_value(num_part);
             }
         }
-        /// 非简单 k*x 形式 → 非线性
+        /// 非简单 k*x 形式 -> 非线性
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
@@ -319,12 +319,12 @@ static lmmc_real_t extract_linear_coefficient(
 
         for (const auto& op : add->operands()) {
             if (!expression_depends_on_variable(op, var)) {
-                /// 常数项，跳过
+                /// 常数项,跳过
                 continue;
             }
-            /// 含变量的项 — 只允许一个
+            /// 含变量的项 - 只允许一个
             if (found_var_term) {
-                /// 多个含变量的项 → 非线性
+                /// 多个含变量的项 -> 非线性
                 return std::numeric_limits<lmmc_real_t>::quiet_NaN();
             }
             found_var_term = true;
@@ -334,13 +334,13 @@ static lmmc_real_t extract_linear_coefficient(
         return found_var_term ? coeff : std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
-    /// 其他节点类型（PowerNode, FunctionNode 等）→ 非线性
+    /// 其他节点类型(PowerNode, FunctionNode 等)-> 非线性
     return std::numeric_limits<lmmc_real_t>::quiet_NaN();
 }
 
 /**
  * @internal
- * @brief 判断 FunctionNode::FuncType 是否为周期函数（sin/cos/tan）。
+ * @brief 判断 FunctionNode::FuncType 是否为周期函数(sin/cos/tan).
  */
 static bool is_periodic_func(FunctionNode::FuncType t) {
     switch (t) {
@@ -355,10 +355,10 @@ static bool is_periodic_func(FunctionNode::FuncType t) {
 
 /**
  * @internal
- * @brief 遍历 AST 收集所有周期函数的周期信息。
+ * @brief 遍历 AST 收集所有周期函数的周期信息.
  *
- * 对每个 sin/cos/tan 节点，若其参数为 k*x + c 形式，
- * 计算周期（sin/cos: 2π/|k|, tan: π/|k|）。
+ * 对每个 sin/cos/tan 节点,若其参数为 k*x + c 形式,
+ * 计算周期(sin/cos: 2pi/|k|, tan: pi/|k|).
  */
 struct PeriodicCollector : public lamina::detail::RecursiveSymbolicVisitor {
     const std::string& target_var;
@@ -482,7 +482,7 @@ std::optional<SearchInterval> determine_search_interval(
         lamina::detail::node(expr)->accept(collector);
 
         if (collector.found_periodic && !collector.has_nonlinear_periodic && collector.max_period > 0.0) {
-            /// 扩展区间覆盖 2 个完整周期（对称于 0）
+            /// 扩展区间覆盖 2 个完整周期(对称于 0)
             lmmc_real_t half_span = collector.max_period;  // 2 periods / 2 = period (symmetric)
             if (half_span > lo * -1.0 || half_span > hi) {
                 lo = -half_span;
@@ -504,22 +504,22 @@ std::optional<SearchInterval> determine_search_interval(
 
 /**
  * @internal
- * @brief 在指定点对表达式进行数值求值。
+ * @brief 在指定点对表达式进行数值求值.
  *
- * 将变量替换为数值后调用 to_numeric() 获取浮点结果。
- * 若求值产生 NaN 或无穷大，返回 NaN。
+ * 将变量替换为数值后调用 to_numeric() 获取浮点结果.
+ * 若求值产生 NaN 或无穷大,返回 NaN.
  *
  * @param[in] expr 待求值表达式
  * @param[in] var  变量名
  * @param[in] x    求值点
- * @return 数值结果；异常时返回 NaN
+ * @return 数值结果;异常时返回 NaN
  */
 /**
  * @internal
- * @brief 递归数值求值：遍历 AST 计算表达式的浮点值。
+ * @brief 递归数值求值:遍历 AST 计算表达式的浮点值.
  *
- * 处理 NumberNode、FunctionNode、AddNode、MultiplyNode、PowerNode；
- * NaN 表示节点位于当前数值求值支持域之外。
+ * 处理 NumberNode,FunctionNode,AddNode,MultiplyNode,PowerNode;
+ * NaN 表示节点位于当前数值求值支持域之外.
  */
 static lmmc_real_t recursive_eval(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return 0.0;
@@ -638,16 +638,16 @@ static lmmc_real_t evaluate_at(
 
 /**
  * @internal
- * @brief 在指定点求值，若结果为 NaN 则尝试在附近重新采样。
+ * @brief 在指定点求值,若结果为 NaN 则尝试在附近重新采样.
  *
- * 最多重试 max_retries 次，每次将偏移量减半并向两侧尝试。
+ * 最多重试 max_retries 次,每次将偏移量减半并向两侧尝试.
  *
  * @param[in] expr        表达式
  * @param[in] var         变量名
  * @param[in] x           原始采样点
- * @param[in] half_width  初始偏移量（子区间宽度的一半）
+ * @param[in] half_width  初始偏移量(子区间宽度的一半)
  * @param[in] max_retries 最大重试次数
- * @return 有效数值结果；所有重试失败时返回 NaN
+ * @return 有效数值结果;所有重试失败时返回 NaN
  */
 static lmmc_real_t evaluate_with_retry(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -687,7 +687,7 @@ std::vector<IsolatedInterval> isolate_roots(
     int max_roots_limit = opts.max_roots;
     constexpr lmmc_real_t MIN_WIDTH = 1e-6;
 
-    /// 使用显式栈执行自适应细分，使递归深度保持恒定。
+    /// 使用显式栈执行自适应细分,使递归深度保持恒定.
     struct SubInterval {
         lmmc_real_t lo;
         lmmc_real_t hi;
@@ -707,7 +707,7 @@ std::vector<IsolatedInterval> isolate_roots(
         sample_vals[i] = evaluate_with_retry(expr, var, x, step * 0.5);
     }
 
-    /// 收集需要进一步处理的子区间（含符号变化或需要细分的）
+    /// 收集需要进一步处理的子区间(含符号变化或需要细分的)
     std::vector<SubInterval> work_stack;
     for (int i = 0; i < INITIAL_DIVISIONS; ++i) {
         lmmc_real_t a = interval.lo + i * step;
@@ -718,7 +718,7 @@ std::vector<IsolatedInterval> isolate_roots(
         /// 跳过两端都是 NaN 的子区间
         if (std::isnan(fa) && std::isnan(fb)) continue;
 
-        /// 若一端为 NaN，尝试缩小区间
+        /// 若一端为 NaN,尝试缩小区间
         if (std::isnan(fa) || std::isnan(fb)) {
             /// 将此子区间加入工作栈进行进一步细分
             work_stack.push_back({a, b, fa, fb});
@@ -745,11 +745,11 @@ std::vector<IsolatedInterval> isolate_roots(
         lmmc_real_t fa = current.f_lo;
         lmmc_real_t fb = current.f_hi;
 
-        /// 处理 NaN 端点：尝试重新采样
+        /// 处理 NaN 端点:尝试重新采样
         if (std::isnan(fa)) {
             fa = evaluate_with_retry(expr, var, current.lo, width * 0.25);
             if (std::isnan(fa)) {
-                /// 若宽度足够，细分后重试
+                /// 若宽度足够,细分后重试
                 if (width > MIN_WIDTH * 2.0) {
                     lmmc_real_t mid = (current.lo + current.hi) * 0.5;
                     lmmc_real_t fm = evaluate_with_retry(expr, var, mid, width * 0.125);
@@ -770,11 +770,11 @@ std::vector<IsolatedInterval> isolate_roots(
             }
         }
 
-        /// 无符号变化 → 跳过
+        /// 无符号变化 -> 跳过
         if (fa * fb >= 0.0) continue;
 
-        /// 符号变化确认 — 检查是否需要进一步细分
-        /// 若宽度已达最小限制，直接接受
+        /// 符号变化确认 - 检查是否需要进一步细分
+        /// 若宽度已达最小限制,直接接受
         if (width <= MIN_WIDTH) {
             bool confirmed = false;
             if (derivative) {
@@ -788,18 +788,18 @@ std::vector<IsolatedInterval> isolate_roots(
             continue;
         }
 
-        /// 单调性确认：若导数在区间内不变号，则恰含一个根
+        /// 单调性确认:若导数在区间内不变号,则恰含一个根
         if (derivative) {
             lmmc_real_t da = evaluate_at(derivative, var, current.lo);
             lmmc_real_t db = evaluate_at(derivative, var, current.hi);
 
             if (!std::isnan(da) && !std::isnan(db) && da * db > 0.0) {
-                /// 导数不变号 → 单调 → 恰含一个根
+                /// 导数不变号 -> 单调 -> 恰含一个根
                 result.push_back({current.lo, current.hi, true});
                 continue;
             }
 
-            /// 导数变号 → 可能含多个根，需要细分
+            /// 导数变号 -> 可能含多个根,需要细分
             if (!std::isnan(da) && !std::isnan(db) && da * db < 0.0) {
                 /// 仅在宽度允许时细分
                 if (width > MIN_WIDTH * 2.0) {
@@ -807,7 +807,7 @@ std::vector<IsolatedInterval> isolate_roots(
                     lmmc_real_t fm = evaluate_with_retry(expr, var, mid, width * 0.125);
 
                     if (std::isnan(fm)) {
-                        /// 中点求值失败，接受当前区间
+                        /// 中点求值失败,接受当前区间
                         result.push_back({current.lo, current.hi, false});
                     } else {
                         /// 将两半加入工作栈
@@ -817,7 +817,7 @@ std::vector<IsolatedInterval> isolate_roots(
                         if (fm * fb < 0.0) {
                             work_stack.push_back({mid, current.hi, fm, fb});
                         }
-                        /// 若两半都无符号变化但原区间有，说明根恰在中点附近
+                        /// 若两半都无符号变化但原区间有,说明根恰在中点附近
                         if (fa * fm >= 0.0 && fm * fb >= 0.0) {
                             result.push_back({current.lo, current.hi, false});
                         }
@@ -826,16 +826,16 @@ std::vector<IsolatedInterval> isolate_roots(
                 }
             }
 
-            /// 导数包含 NaN 时保留区间，并将单调性标记为未确认。
+            /// 导数包含 NaN 时保留区间,并将单调性标记为未确认.
             result.push_back({current.lo, current.hi, false});
         } else {
-            /// 导数信息未决时继续细分，以缩小候选区间。
+            /// 导数信息未决时继续细分,以缩小候选区间.
             if (width > MIN_WIDTH * 4.0) {
                 lmmc_real_t mid = (current.lo + current.hi) * 0.5;
                 lmmc_real_t fm = evaluate_with_retry(expr, var, mid, width * 0.125);
 
                 if (std::isnan(fm)) {
-                    /// 中点求值失败，接受当前区间
+                    /// 中点求值失败,接受当前区间
                     result.push_back({current.lo, current.hi, false});
                 } else {
                     if (fa * fm < 0.0) {
@@ -849,7 +849,7 @@ std::vector<IsolatedInterval> isolate_roots(
                     }
                 }
             } else {
-                /// 宽度已足够小，接受
+                /// 宽度已足够小,接受
                 result.push_back({current.lo, current.hi, false});
             }
         }
@@ -883,7 +883,7 @@ std::vector<lmmc_real_t> deduplicate_roots(
             return a.value < b.value;
         });
 
-    /// 去重：相邻比较，差值 < 10 * tolerance 视为重复，保留残差较小者
+    /// 去重:相邻比较,差值 < 10 * tolerance 视为重复,保留残差较小者
     lmmc_real_t threshold = 10.0 * tolerance;
     std::vector<NumericRoot> survivors;
     survivors.reserve(roots.size());
@@ -892,7 +892,7 @@ std::vector<lmmc_real_t> deduplicate_roots(
     for (size_t i = 1; i < roots.size(); ++i) {
         NumericRoot& last = survivors.back();
         if (std::fabs(roots[i].value - last.value) < threshold) {
-            /// 重复：保留残差更小者（相等时保留先出现的，即 last）
+            /// 重复:保留残差更小者(相等时保留先出现的,即 last)
             if (roots[i].residual < last.residual) {
                 last = roots[i];
             }
@@ -901,7 +901,7 @@ std::vector<lmmc_real_t> deduplicate_roots(
         }
     }
 
-    /// 收集存活根的值（已按升序排列）
+    /// 收集存活根的值(已按升序排列)
     std::vector<lmmc_real_t> result;
     result.reserve(survivors.size());
     for (const auto& r : survivors) {
@@ -919,24 +919,24 @@ std::vector<lmmc_real_t> deduplicate_roots(
 
 /**
  * @internal
- * @brief 对隔离区间执行根精化，返回高精度数值根。
+ * @brief 对隔离区间执行根精化,返回高精度数值根.
  *
- * 算法流程：
- * 1. 以区间中点为初始猜测；
- * 2. 若导数可用，执行带区间约束的 Newton-Raphson 迭代：
- *    - 每步计算 x_new = x - f(x)/f'(x)；
- *    - 若 x_new 超出 [lo, hi] 或残差增大，丢弃该迭代并执行一步二分法；
- *    - 若 f'(x) == 0，执行一步二分法；
- * 3. 若导数不可用（为 nullptr），执行纯二分法；
- * 4. 收敛条件：|f(x)| < tolerance；
- * 5. 达到最大迭代次数后，返回残差最小的迭代结果（仅当残差 < tolerance）。
+ * 算法流程:
+ * 1. 以区间中点为初始猜测;
+ * 2. 若导数可用,执行带区间约束的 Newton-Raphson 迭代:
+ *    - 每步计算 x_new = x - f(x)/f'(x);
+ *    - 若 x_new 超出 [lo, hi] 或残差增大,丢弃该迭代并执行一步二分法;
+ *    - 若 f'(x) == 0,执行一步二分法;
+ * 3. 若导数不可用(为 nullptr),执行纯二分法;
+ * 4. 收敛条件:|f(x)| < tolerance;
+ * 5. 达到最大迭代次数后,返回残差最小的迭代结果(仅当残差 < tolerance).
  *
  * @param[in] expr       待求解表达式
- * @param[in] derivative 表达式的导数（可为 nullptr，此时使用纯二分法）
+ * @param[in] derivative 表达式的导数(可为 nullptr,此时使用纯二分法)
  * @param[in] var        求解变量名
  * @param[in] interval   隔离子区间
- * @param[in] opts       求解选项（tolerance, max_newton_iterations）
- * @return 精化后的数值根；未收敛或残差超限时返回 nullopt
+ * @param[in] opts       求解选项(tolerance, max_newton_iterations)
+ * @return 精化后的数值根;未收敛或残差超限时返回 nullopt
  */
 std::optional<NumericRoot> refine_root(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -960,14 +960,14 @@ std::optional<NumericRoot> refine_root(
         return NumericRoot{hi, std::fabs(f_hi), 0};
     }
 
-    /// 跟踪最佳迭代结果（残差最小）
+    /// 跟踪最佳迭代结果(残差最小)
     lmmc_real_t best_x = x;
     lmmc_real_t best_residual = std::numeric_limits<lmmc_real_t>::max();
     int best_iter = 0;
 
     int max_iter = opts.max_newton_iterations;
 
-    /// 纯二分法路径：导数不可用
+    /// 纯二分法路径:导数不可用
     if (!derivative) {
         /// 确保端点有效且异号
         if (std::isnan(f_lo) || std::isnan(f_hi) || f_lo * f_hi > 0.0) {
@@ -1022,7 +1022,7 @@ std::optional<NumericRoot> refine_root(
             }
         }
 
-        /// 返回最佳结果（仅当残差 < tolerance）
+        /// 返回最佳结果(仅当残差 < tolerance)
         if (best_residual < opts.tolerance) {
             return NumericRoot{best_x, best_residual, best_iter};
         }
@@ -1072,9 +1072,9 @@ std::optional<NumericRoot> refine_root(
         /// 计算导数值
         lmmc_real_t dfx = evaluate_at(derivative, var, x);
 
-        /// 导数为零或 NaN → 执行二分步
+        /// 导数为零或 NaN -> 执行二分步
         if (std::isnan(dfx) || std::fabs(dfx) < 1e-15) {
-            /// 二分步：保持符号变化
+            /// 二分步:保持符号变化
             lmmc_real_t mid = (lo + hi) * 0.5;
             lmmc_real_t f_mid = evaluate_at(expr, var, mid);
 
@@ -1094,7 +1094,7 @@ std::optional<NumericRoot> refine_root(
         /// Newton 更新
         lmmc_real_t x_new = x - fx / dfx;
 
-        /// 检查 Newton 迭代是否有效：
+        /// 检查 Newton 迭代是否有效:
         /// 1. x_new 位于 [lo, hi] 内
         /// 2. 新残差小于等于当前残差
         bool do_bisection = false;
@@ -1107,8 +1107,8 @@ std::optional<NumericRoot> refine_root(
             if (std::isnan(f_new) || std::fabs(f_new) > residual) {
                 do_bisection = true;
             } else {
-                /// Newton 步有效，更新状态
-                /// 缩小区间：根据 fx 的符号更新端点
+                /// Newton 步有效,更新状态
+                /// 缩小区间:根据 fx 的符号更新端点
                 if (!std::isnan(f_lo) && fx * f_lo < 0.0) {
                     hi = x;
                     f_hi = fx;
@@ -1122,7 +1122,7 @@ std::optional<NumericRoot> refine_root(
         }
 
         if (do_bisection) {
-            /// 丢弃 Newton 迭代，执行一步二分法
+            /// 丢弃 Newton 迭代,执行一步二分法
             lmmc_real_t mid = (lo + hi) * 0.5;
             lmmc_real_t f_mid = evaluate_at(expr, var, mid);
 
@@ -1149,7 +1149,7 @@ std::optional<NumericRoot> refine_root(
         }
     }
 
-    /// 达到最大迭代次数：返回最佳结果（仅当残差 < tolerance）
+    /// 达到最大迭代次数:返回最佳结果(仅当残差 < tolerance)
     if (best_residual < opts.tolerance) {
         return NumericRoot{best_x, best_residual, best_iter};
     }
@@ -1159,13 +1159,13 @@ std::optional<NumericRoot> refine_root(
 
 /**
  * @internal
- * @brief 将去重排序后的数值根转换为 NumberNode 符号表达式向量。
+ * @brief 将去重排序后的数值根转换为 NumberNode 符号表达式向量.
  *
  * 对每个根值调用 SymbolicExpr::number(static_cast<double>(value)) 构造
- * NumberNode 表达式。输入为空时返回空向量。
+ * NumberNode 表达式.输入为空时返回空向量.
  *
- * @param[in] root_values 去重、升序排列的根值列表
- * @return 对应的 NumberNode 表达式向量；输入为空时返回空向量
+ * @param[in] root_values 去重,升序排列的根值列表
+ * @return 对应的 NumberNode 表达式向量;输入为空时返回空向量
  */
 static std::vector<std::shared_ptr<SymbolicExpr>> assemble_results(
     const std::vector<lmmc_real_t>& root_values)
@@ -1185,9 +1185,9 @@ static std::vector<std::shared_ptr<SymbolicExpr>> assemble_results(
 
 /**
  * @internal
- * @brief 对单个因子执行数值路径：根隔离 + 精化。
+ * @brief 对单个因子执行数值路径:根隔离 + 精化.
  *
- * 计算因子的导数，调用 isolate_roots 隔离根，再逐一调用 refine_root 精化。
+ * 计算因子的导数,调用 isolate_roots 隔离根,再逐一调用 refine_root 精化.
  *
  * @param[in] factor   待求解因子表达式
  * @param[in] var      变量名
@@ -1215,7 +1215,7 @@ static std::vector<NumericRoot> numerical_path(
             }
         }
     } catch (...) {
-        /// 微分失败，derivative 保持 nullptr → 回退到纯二分法
+        /// 微分失败,derivative 保持 nullptr -> 回退到纯二分法
     }
 
     /// 根隔离
@@ -1238,7 +1238,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
     const SolveOptions& opts)
 {
     try {
-        /// 1. 早期退出：表达式不依赖变量
+        /// 1. 早期退出:表达式不依赖变量
         if (!expr || !lamina::detail::node(expr) || !expression_depends_on_variable(lamina::detail::node(expr), var)) {
             return {};
         }
@@ -1250,7 +1250,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
         }
         SearchInterval interval = interval_opt.value();
 
-        /// 3. 符号预处理：因式分解
+        /// 3. 符号预处理:因式分解
         auto factors = factor_transcendental(expr, var);
 
         /// 收集所有数值根
@@ -1266,11 +1266,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
         }
 
         if (!is_single_factor_same_as_input && factors.size() > 1) {
-            /// 多因子：对每个因子独立求解
+            /// 多因子:对每个因子独立求解
             for (const auto& factor : factors) {
                 if (!factor || !lamina::detail::node(factor)) continue;
 
-                /// 跳过不依赖变量的因子（常数因子）
+                /// 跳过不依赖变量的因子(常数因子)
                 if (!expression_depends_on_variable(lamina::detail::node(factor), var)) continue;
 
                 /// (a) 尝试转换为多项式
@@ -1300,12 +1300,12 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                         solved_as_poly = true;
                     }
                 } catch (...) {
-                    /// 转换诊断表示当前表达式位于多项式支持域之外。
+                    /// 转换诊断表示当前表达式位于多项式支持域之外.
                 }
 
                 if (solved_as_poly) continue;
 
-                /// (b) 尝试 solve_transcendental（收集符号解的数值）
+                /// (b) 尝试 solve_transcendental(收集符号解的数值)
                 try {
                     auto trans_roots = solve_transcendental(factor, var);
                     if (!trans_roots.empty()) {
@@ -1328,18 +1328,18 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                     /// solve_transcendental 失败
                 }
 
-                /// (c) 数值路径：对该因子执行根隔离 + 精化
+                /// (c) 数值路径:对该因子执行根隔离 + 精化
                 /// 始终执行数值路径以捕获区间内所有周期根
                 auto factor_roots = numerical_path(factor, var, interval, opts);
                 all_roots.insert(all_roots.end(), factor_roots.begin(), factor_roots.end());
             }
         } else {
-            /// 5. 单因子等于输入 或 分解返回空/单因子：直接数值路径
+            /// 5. 单因子等于输入 或 分解返回空/单因子:直接数值路径
             auto numeric_roots = numerical_path(expr, var, interval, opts);
             all_roots.insert(all_roots.end(), numeric_roots.begin(), numeric_roots.end());
         }
 
-        /// 6. 结果组装：去重、排序、转换
+        /// 6. 结果组装:去重,排序,转换
         auto deduplicated = deduplicate_roots(all_roots, opts.tolerance, opts.max_roots);
         return assemble_results(deduplicated);
 

@@ -1,9 +1,9 @@
 /**
  * @file test_taylor_fallback.cpp
- * @brief Taylor 展开回退策略测试。
+ * @brief Taylor 展开回退策略测试.
  *
- * 验证 L'Hôpital 规则达到有限迭代边界后，
- * Taylor 级数展开继续完成极限计算。
+ * 验证 L'Hôpital 规则达到有限迭代边界后,
+ * Taylor 级数展开继续完成极限计算.
  *
  * 覆盖需求: 3.1, 3.2, 3.3, 3.4
  */
@@ -19,7 +19,7 @@ int main() {
     auto inf = SymbolicExpr::infinity(1);
 
 
-    // --- Test 1: lim(x→0) (sin(x) - x) / x^3 = -1/6 ---
+    // --- Test 1: lim(x->0) (sin(x) - x) / x^3 = -1/6 ---
     // Requires 3 L'Hôpital applications (0/0 each time) or Taylor fallback
     TEST_CASE("Taylor fallback: lim(x->0) (sin(x)-x)/x^3 = -1/6");
     {
@@ -42,9 +42,9 @@ int main() {
     }
 
 
-    // --- Test 2: lim(x→0) (1 - cos(x)) / x^2 = 1/2 ---
-    // Classic Taylor expansion: cos(x) = 1 - x²/2 + x⁴/24 - ...
-    // (1 - cos(x)) / x² = (x²/2 - x⁴/24 + ...) / x² = 1/2 - x²/24 + ...
+    // --- Test 2: lim(x->0) (1 - cos(x)) / x^2 = 1/2 ---
+    // Classic Taylor expansion: cos(x) = 1 - x^2/2 + x^4/24 - ...
+    // (1 - cos(x)) / x^2 = (x^2/2 - x^4/24 + ...) / x^2 = 1/2 - x^2/24 + ...
     TEST_CASE("Taylor fallback: lim(x->0) (1-cos(x))/x^2 = 1/2");
     {
         auto cos_x = SymbolicExpr::cos(x);
@@ -65,8 +65,8 @@ int main() {
         }
     }
 
-    // --- Test 3: lim(x→0) (e^x - 1 - x) / x^2 = 1/2 ---
-    // e^x = 1 + x + x²/2 + ..., so (e^x - 1 - x) / x² = 1/2 + x/6 + ...
+    // --- Test 3: lim(x->0) (e^x - 1 - x) / x^2 = 1/2 ---
+    // e^x = 1 + x + x^2/2 + ..., so (e^x - 1 - x) / x^2 = 1/2 + x/6 + ...
     TEST_CASE("Taylor fallback: lim(x->0) (e^x-1-x)/x^2 = 1/2");
     {
         auto exp_x = SymbolicExpr::exp(x);
@@ -89,8 +89,8 @@ int main() {
     }
 
 
-    // --- Test 4: lim(x→0) sin(x)/x = 1 ---
-    // sin(x) = x - x³/6 + ..., leading term is x; denominator leading term is x
+    // --- Test 4: lim(x->0) sin(x)/x = 1 ---
+    // sin(x) = x - x^3/6 + ..., leading term is x; denominator leading term is x
     // Ratio = 1
     TEST_CASE("Taylor/L'Hopital: lim(x->0) sin(x)/x = 1");
     {
@@ -108,8 +108,8 @@ int main() {
         }
     }
 
-    // --- Test 5: lim(x→0) tan(x)/x = 1 ---
-    // tan(x) = x + x³/3 + ..., leading term is x
+    // --- Test 5: lim(x->0) tan(x)/x = 1 ---
+    // tan(x) = x + x^3/3 + ..., leading term is x
     TEST_CASE("Taylor/L'Hopital: lim(x->0) tan(x)/x = 1");
     {
         auto tan_x = SymbolicExpr::tan(x);
@@ -127,9 +127,9 @@ int main() {
     }
 
 
-    // --- Test 6: lim(x→∞) sin(1/x) / (1/x) = 1 ---
+    // --- Test 6: lim(x->infinity) sin(1/x) / (1/x) = 1 ---
     // Expressed as a direct quotient so L'Hôpital/Taylor path is triggered.
-    // Substitute x = 1/t: sin(t)/t as t→0 = 1
+    // Substitute x = 1/t: sin(t)/t as t->0 = 1
     // NOTE: This test exercises the infinity substitution path. The current
     // indeterminate form resolution (task 3.1) may handle this before reaching
     // the Taylor fallback. We accept the computed result.
@@ -165,8 +165,8 @@ int main() {
     }
 
     // --- Test 7: Direct Taylor fallback at infinity via quotient form ---
-    // lim(x→∞) (x^2 + x) / (2*x^2 + 3) = 1/2
-    // This is ∞/∞ form, resolved by degree comparison (not Taylor), but verifies
+    // lim(x->infinity) (x^2 + x) / (2*x^2 + 3) = 1/2
+    // This is infinity/infinity form, resolved by degree comparison (not Taylor), but verifies
     // the infinity path doesn't break.
     TEST_CASE("Limit at infinity: lim(x->inf) (x^2+x)/(2x^2+3) = 1/2");
     {

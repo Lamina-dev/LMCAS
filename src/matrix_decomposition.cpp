@@ -1,6 +1,6 @@
 /**
  * @file matrix_decomposition.cpp
- * @brief 矩阵高级分解算法实现。
+ * @brief 矩阵高级分解算法实现.
  */
 #include "matrix_decomposition.hpp"
 #include "symbolic_matrix.hpp"
@@ -713,7 +713,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
                         SymbolicExpr::multiply(coeff, b[k])))->simplify();
             }
         }
-        /// 检查 u 是否为零向量（线性相关）
+        /// 检查 u 是否为零向量(线性相关)
         auto norm_sq = SymbolicExpr::number(0);
         for (auto& x : u) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(x, x));
         norm_sq = norm_sq->simplify();
@@ -754,7 +754,7 @@ std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A)
     }
     if (P_cols.size() != n) return nullptr;
 
-    /// 检查特征值为正（实数对数存在性）
+    /// 检查特征值为正(实数对数存在性)
     for (auto& ev : evals) {
         auto se = ev->simplify();
         if (se->is_number()) {
@@ -925,14 +925,14 @@ std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
     auto e = expr->expand();
     if (!e) e = expr;
 
-    /// A[i][j] = (1/2) ∂²(expr)/∂xᵢ∂xⱼ （对称矩阵，对角为 ∂²/2 即系数本身的一半*2）
+    /// A[i][j] = (1/2) partial^2(expr)/partialxᵢpartialxⱼ (对称矩阵,对角为 partial^2/2 即系数本身的一半*2)
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> grid(n,
         std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
     for (size_t i = 0; i < n; ++i) {
         auto di = e->differentiate(vars[i]);
         for (size_t j = 0; j < n; ++j) {
             auto dij = di->differentiate(vars[j]);
-            /// 对二次型，二阶偏导为常数；A_ij = (1/2)·∂²/∂xi∂xj
+            /// 对二次型,二阶偏导为常数;A_ij = (1/2)*partial^2/partialxipartialxj
             grid[i][j] = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), dij)->simplify();
         }
     }
@@ -940,7 +940,7 @@ std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
 }
 
 std::string classify_quadratic_form(const std::shared_ptr<SymbolicExpr>& A) {
-    /// 使用特征多项式的根列表分类二次型，直接依据特征值符号。
+    /// 使用特征多项式的根列表分类二次型,直接依据特征值符号.
     auto evals_expr = SymbolicExpr::eigenvalues(A);
     if (!evals_expr) return "unknown";
     auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(evals_expr));
@@ -1080,8 +1080,8 @@ static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
             diag.push_back(pr.first);
         }
     }
-    /// 特征向量数等于 n 时矩阵可对角化，Jordan 型即对角阵；
-    /// 向量数小于 n 时返回 false，表示广义特征向量链位于当前支持域之外。
+    /// 特征向量数等于 n 时矩阵可对角化,Jordan 型即对角阵;
+    /// 向量数小于 n 时返回 false,表示广义特征向量链位于当前支持域之外.
     if (P_cols.size() != n) return false;
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> P_grid(n,

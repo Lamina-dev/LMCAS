@@ -58,12 +58,12 @@ static bool vector_calculus_evaluate_hessian_at_point(
 
 /**
  * @internal
- * @brief 使用特征值分析对临界点进行分类。
+ * @brief 使用特征值分析对临界点进行分类.
  *
- * 对 n×n 实对称矩阵，直接通过数值分析特征值符号判断正定性。
- * 对于小矩阵（n ≤ 3），使用解析公式；对于大矩阵，使用特征多项式求解。
+ * 对 nxn 实对称矩阵,直接通过数值分析特征值符号判断正定性.
+ * 对于小矩阵(n <= 3),使用解析公式;对于大矩阵,使用特征多项式求解.
  *
- * @param[in] numeric_H 数值化的海森矩阵（行优先，n×n）
+ * @param[in] numeric_H 数值化的海森矩阵(行优先,nxn)
  * @param[in] n         矩阵维度
  * @return 分类字符串: "minimum", "maximum", "saddle", "degenerate"
  */
@@ -72,7 +72,7 @@ static CriticalPointClassification vector_calculus_classify_critical_point(
 {
     const double tol = 1e-10;
 
-    /// 1×1 情况：直接判断
+    /// 1x1 情况:直接判断
     if (n == 1) {
         double val = numeric_H[0];
         if (std::abs(val) < tol) return CriticalPointClassification::Degenerate;
@@ -80,7 +80,7 @@ static CriticalPointClassification vector_calculus_classify_critical_point(
         return CriticalPointClassification::LocalMaximum;
     }
 
-    /// 2×2 情况：使用行列式和迹直接判断
+    /// 2x2 情况:使用行列式和迹直接判断
     if (n == 2) {
         double a = numeric_H[0], b = numeric_H[1];
         double c = numeric_H[2], d = numeric_H[3];
@@ -93,12 +93,12 @@ static CriticalPointClassification vector_calculus_classify_critical_point(
         return CriticalPointClassification::Saddle;
     }
 
-    /// 一般情况：构建符号矩阵并求特征值
+    /// 一般情况:构建符号矩阵并求特征值
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> grid(n,
         std::vector<std::shared_ptr<SymbolicExpr>>(n));
     for (size_t i = 0; i < n; ++i) {
         for (size_t j = 0; j < n; ++j) {
-            /// 使用 Rational 保持 Hessian 系数的精确表示。
+            /// 使用 Rational 保持 Hessian 系数的精确表示.
             double val = numeric_H[i * n + j];
             int int_val = static_cast<int>(std::round(val));
             if (std::abs(val - int_val) < tol) {
@@ -229,7 +229,7 @@ std::vector<CriticalPoint> find_extrema(
 
     size_t n = vars.size();
 
-    /// 计算梯度 ∇f
+    /// 计算梯度 gradf
     std::vector<std::shared_ptr<SymbolicExpr>> grad_eqs;
     grad_eqs.reserve(n);
     for (const auto& var : vars) {
@@ -240,7 +240,7 @@ std::vector<CriticalPoint> find_extrema(
         grad_eqs.push_back(partial);
     }
 
-    /// 求解 ∇f = 0 系统（使用多项式系统求解器）
+    /// 求解 gradf = 0 系统(使用多项式系统求解器)
     std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> solutions;
 
     std::vector<SymbolicExpr> poly_eqs;
@@ -259,7 +259,7 @@ std::vector<CriticalPoint> find_extrema(
         }
     }
 
-    /// 如果多项式求解器失败，尝试线性求解器
+    /// 如果多项式求解器失败,尝试线性求解器
     if (solutions.empty()) {
         solutions = SymbolicExpr::solve_system(grad_eqs, vars);
     }
@@ -520,13 +520,13 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         lambda_names.push_back("lambda_" + std::to_string(k + 1));
     }
 
-    /// 构造方程组: ∂f/∂xᵢ - ∑ λₖ · ∂gₖ/∂xᵢ = 0 (对每个 i)
+    /// 构造方程组: partialf/partialxᵢ - sum lambdaₖ * partialgₖ/partialxᵢ = 0 (对每个 i)
     /// 加上约束方程: gₖ = 0 (对每个 k)
     std::vector<std::shared_ptr<SymbolicExpr>> equations;
     equations.reserve(n + m);
 
     for (size_t i = 0; i < n; ++i) {
-        /// ∂f/∂xᵢ - λ₁·∂g₁/∂xᵢ - λ₂·∂g₂/∂xᵢ - ...
+        /// partialf/partialxᵢ - lambda_1*partialg_1/partialxᵢ - lambda_2*partialg_2/partialxᵢ - ...
         auto eq = grad_f[i];
         for (size_t k = 0; k < m; ++k) {
             auto lambda_var = SymbolicExpr::variable(lambda_names[k]);
@@ -572,12 +572,12 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         }
     }
 
-    /// 如果多项式求解器失败，尝试线性求解器
+    /// 如果多项式求解器失败,尝试线性求解器
     if (solutions.empty()) {
         solutions = SymbolicExpr::solve_system(equations, all_vars);
     }
 
-    /// 从解中提取仅原始变量（去除乘数）
+    /// 从解中提取仅原始变量(去除乘数)
     std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> result;
     std::set<std::string> var_set(vars.begin(), vars.end());
 

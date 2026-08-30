@@ -122,7 +122,7 @@ static void test_integrator_no_context_preserves_abs() {
 
     // Create integrand: |x|
     auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
-    /// Integrator 保持默认空假设上下文。
+    /// Integrator 保持默认空假设上下文.
     Integrator integrator;
     auto result = integrator.integrate(integrand, "x");
     EXPECT_TRUE(result.has_value(), "Integration without assumptions succeeds");
@@ -131,8 +131,8 @@ static void test_integrator_no_context_preserves_abs() {
     std::string result_str = result.value().to_string();
     std::cout << "  Integration of |x| without context: " << result_str << std::endl;
 
-    /// 空上下文时积分结果保留 abs 或未求值积分结构，
-    /// |x| = x 化简仅在符号假设充分时启用。
+    /// 空上下文时积分结果保留 abs 或未求值积分结构,
+    /// |x| = x 化简仅在符号假设充分时启用.
     EXPECT_TRUE(lamina::detail::node(result.value()) != nullptr,
                 "Integration without context produces a result");
 }
@@ -141,7 +141,7 @@ static void test_integrator_no_context_preserves_abs() {
 static void test_limit_visitor_positive_resolves_sign() {
     TEST_CASE("LimitVisitor: positive variable resolves sign ambiguity");
 
-    // Compute limit of 1/x as x → 0+ with x known Positive.
+    // Compute limit of 1/x as x -> 0+ with x known Positive.
     // The LimitVisitor should use the assumption to determine the sign.
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
@@ -183,11 +183,11 @@ static void test_limit_visitor_positive_resolves_sign() {
 static void test_limit_visitor_nullptr_same_behavior() {
     TEST_CASE("LimitVisitor: nullptr context same as current behavior");
 
-    /// 在空上下文中计算 x² 于 x→2 的极限。
+    /// 在空上下文中计算 x^2 于 x->2 的极限.
     auto x_squared = lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2));
     auto point = make_number(2);
 
-    /// LimitVisitor 使用默认空上下文。
+    /// LimitVisitor 使用默认空上下文.
     LimitVisitor visitor_no_ctx("x", point, "");
     x_squared->accept(visitor_no_ctx);
     auto result_no_ctx = visitor_no_ctx.get_result();
@@ -235,7 +235,7 @@ static void test_ode_solver_positive_branch() {
 static void test_ode_solver_nullptr_no_abs() {
     TEST_CASE("ODE solver: nullptr context identical to current");
 
-    /// 在空上下文中求解 dy/dx = x*y。
+    /// 在空上下文中求解 dy/dx = x*y.
     auto x = SymbolicExpr::variable("x");
     auto y = SymbolicExpr::variable("y");
     auto rhs = SymbolicExpr::multiply(x, y);
@@ -322,7 +322,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
 
     EXPECT_TRUE(matched, "Matcher still matches structurally without context");
 
-    /// 空上下文使 assumption_condition 返回 false。
+    /// 空上下文使 assumption_condition 返回 false.
     bool cond_result = assumption_cond(bindings, nullptr);
     EXPECT_FALSE(cond_result,
                  "assumption_condition returns false without context (nullptr)");
@@ -331,7 +331,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
 static void test_matcher_rewrite_engine_with_context() {
     TEST_CASE("Matcher: RewriteEngine uses assumption context during apply");
 
-    // Create a rule: abs(A) → A when A is Positive
+    // Create a rule: abs(A) -> A when A is Positive
     auto abs_A = lamina::detail::expression_from_node(make_abs(make_var("A")));
     auto just_A = lamina::detail::expression_from_node(make_var("A"));
     std::unordered_set<std::string> wildcards = {"A"};

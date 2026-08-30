@@ -1,6 +1,6 @@
 /**
  * @file inequality_solver.hpp
- * @brief 不等式求解器 InequalitySolver，支持多项式、有理式、参数化不等式。
+ * @brief 不等式求解器 InequalitySolver,支持多项式,有理式,参数化不等式.
  */
 #pragma once
 #include "computation_context.hpp"
@@ -15,15 +15,15 @@
 
 namespace lamina {
 
-/** @brief 符号图条目，记录区间及其上的符号 */
+/** @brief 符号图条目,记录区间及其上的符号 */
 struct SignChartEntry {
     Interval interval; ///< 区间
-    int sign;          ///< 该区间上表达式的符号（+1, 0, -1）
+    int sign;          ///< 该区间上表达式的符号(+1, 0, -1)
 };
 
 /** @brief 参数化不等式的分段解集 */
 struct LAMINA_API PiecewiseIntervalResult {
-    /** @brief 单个分段：条件 + 对应解集 */
+    /** @brief 单个分段:条件 + 对应解集 */
     struct Case {
         std::shared_ptr<SymbolicExpr> condition; ///< 参数满足的条件
         IntervalUnion solution;                  ///< 该条件下的解集
@@ -45,9 +45,9 @@ struct LAMINA_API PiecewiseIntervalResult {
     /**
      * @brief 获取唯一分段的解集
      *
-     * is_single() 为真时返回该分段；多分段解依赖参数取值，
-     * 因而映射为空集以完整保留分段语义。
-     * @return 单一分段的解集；多分段结果映射为空集
+     * is_single() 为真时返回该分段;多分段解依赖参数取值,
+     * 因而映射为空集以完整保留分段语义.
+     * @return 单一分段的解集;多分段结果映射为空集
      */
     IntervalUnion single_solution() const {
         if (!is_single()) return IntervalUnion::empty();
@@ -55,7 +55,7 @@ struct LAMINA_API PiecewiseIntervalResult {
     }
 };
 
-/** @brief 不等式求解器，提供多项式、有理式及参数化不等式的求解 */
+/** @brief 不等式求解器,提供多项式,有理式及参数化不等式的求解 */
 class LAMINA_API InequalitySolver {
 public:
 
@@ -97,7 +97,7 @@ public:
 
     /**
      * @brief 求解单个不等式
-     * @param expr 不等式左端表达式（右端为 0）
+     * @param expr 不等式左端表达式(右端为 0)
      * @param type 不等式类型
      * @param variable 求解变量名
      * @return 解集
@@ -108,8 +108,8 @@ public:
         const std::string& variable);
 
     /**
-     * @brief 求解不等式组（取交集）
-     * @param inequalities 不等式列表，每项为 (表达式, 不等式类型)
+     * @brief 求解不等式组(取交集)
+     * @param inequalities 不等式列表,每项为 (表达式, 不等式类型)
      * @param variable 求解变量名
      * @return 解集
      */
@@ -119,7 +119,7 @@ public:
         const std::string& variable);
 
     /**
-     * @brief 求解有理不等式 numerator/denominator ≷ 0
+     * @brief 求解有理不等式 numerator/denominator >/< 0
      * @param numerator 分子表达式
      * @param denominator 分母表达式
      * @param type 不等式类型
@@ -133,7 +133,7 @@ public:
         const std::string& variable);
 
     /**
-     * @brief 求解含参数的不等式，返回分段结果
+     * @brief 求解含参数的不等式,返回分段结果
      * @param expr 不等式左端表达式
      * @param type 不等式类型
      * @param variable 求解变量名

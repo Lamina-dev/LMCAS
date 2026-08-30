@@ -1,11 +1,11 @@
 /**
  * @file limit_visitor.cpp
- * @brief LimitVisitor 的 Taylor 展开回退实现。
+ * @brief LimitVisitor 的 Taylor 展开回退实现.
  *
- * L'Hôpital 规则达到最大迭代深度后，
- * Taylor 级数展开分子和分母，并以首项系数比继续求极限。
+ * L'Hôpital 规则达到最大迭代深度后,
+ * Taylor 级数展开分子和分母,并以首项系数比继续求极限.
  *
- * 算法来源：标准 CAS Taylor 级数极限技术
+ * 算法来源:标准 CAS Taylor 级数极限技术
  */
 
 #include "../include/symbolic.hpp"
@@ -13,14 +13,14 @@
 #include "../include/visitors/normalization_visitor.hpp"
 
 /**
- * @brief 对 L'Hôpital 法则产生的导数比进行代数化简后求极限。
+ * @brief 对 L'Hôpital 法则产生的导数比进行代数化简后求极限.
  *
- * 当 dN/dD 含有公因子（如 x^-2）时，直接分别求极限会导致
- * 无限 0/0 循环。此方法先通过 simplify() 约去公因子，
- * 再对化简后的表达式求极限。
+ * 当 dN/dD 含有公因子(如 x^-2)时,直接分别求极限会导致
+ * 无限 0/0 循环.此方法先通过 simplify() 约去公因子,
+ * 再对化简后的表达式求极限.
  *
  * @param[in] ratio_node 导数比 dN * dD^(-1) 的 AST 节点
- * @return 极限结果，化简无效时返回 nullptr
+ * @return 极限结果,化简无效时返回 nullptr
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
     const std::shared_ptr<const SymbolicNode>& ratio_node) {
@@ -38,8 +38,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
 
     /// Reject simplified forms that are AddNodes (sums). When simplify() expands
     /// a fraction like (1-cos(x))/(sin(x)+x*cos(x)) into a sum of terms with
-    /// negative powers, evaluating the limit of that sum can trigger ∞−∞ detection,
-    /// which calls resolve_inf_minus_inf → apply_lhopital → simplify_and_eval_ratio
+    /// negative powers, evaluating the limit of that sum can trigger infinity-infinity detection,
+    /// which calls resolve_inf_minus_inf -> apply_lhopital -> simplify_and_eval_ratio
     /// again, creating an infinite loop.
     if (std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(simplified))) return nullptr;
 
@@ -63,16 +63,16 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
 }
 
 /**
- * @brief Taylor 展开回退策略实现。
+ * @brief Taylor 展开回退策略实现.
  *
- * 当极限点为有限值时，直接在该点展开 Taylor 级数。
- * 当极限点为无穷时，先做 x = 1/t 代换，再在 t = 0 处展开。
- * 从 order=4 开始逐步增加到 max_order，直到找到非零首项。
+ * 当极限点为有限值时,直接在该点展开 Taylor 级数.
+ * 当极限点为无穷时,先做 x = 1/t 代换,再在 t = 0 处展开.
+ * 从 order=4 开始逐步增加到 max_order,直到找到非零首项.
  *
  * @param[in] num 分子 AST 节点
  * @param[in] den 分母 AST 节点
  * @param[in] max_order 最大展开阶数
- * @return 极限结果节点；nullptr 表示当前规则保持结果未知
+ * @return 极限结果节点;nullptr 表示当前规则保持结果未知
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
     const std::shared_ptr<const SymbolicNode>& num,
@@ -91,7 +91,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
     std::shared_ptr<SymbolicExpr> expand_point;
 
     if (at_infinity) {
-        /// x → ∞: 代换 x = 1/t，在 t → 0 处展开
+        /// x -> infinity: 代换 x = 1/t,在 t -> 0 处展开
         std::string t_var = "__lim_t__";
         auto t_expr = SymbolicExpr::variable(t_var);
         auto one_over_t = SymbolicExpr::power(t_expr, SymbolicExpr::number(-1));
@@ -110,7 +110,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
 
     if (!num_expr || !den_expr || !expand_point) return nullptr;
 
-    /// 从 order=4 开始，逐步增加到 max_order
+    /// 从 order=4 开始,逐步增加到 max_order
     for (int order = 4; order <= max_order; order += 2) {
         auto num_series = num_expr->series(expand_var, expand_point, order);
         auto den_series = den_expr->series(expand_var, expand_point, order);
@@ -120,22 +120,22 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
         num_series = num_series->simplify();
         den_series = den_series->simplify();
 
-        /// 提取首项：在展开点处求值得到常数项，
+        /// 提取首项:在展开点处求值得到常数项,
         /// 若为零则对 (x - a) 的各阶系数逐一检查
         auto num_leading = find_leading_term(num_series, expand_var, expand_point, order);
         auto den_leading = find_leading_term(den_series, expand_var, expand_point, order);
 
         if (!num_leading.first || !den_leading.first) continue;
 
-        /// 两个首项都非零 → 可以确定极限
+        /// 两个首项都非零 -> 可以确定极限
         if (!num_leading.first->is_zero() && !den_leading.first->is_zero()) {
             int power_diff = num_leading.second - den_leading.second;
 
             if (power_diff > 0) {
-                /// 分子阶数更高 → 极限为 0
+                /// 分子阶数更高 -> 极限为 0
                 return lamina::detail::make_node<NumberNode>(BigInt(0));
             } else if (power_diff < 0) {
-                /// 分母阶数更高 → 极限为 ±∞
+                /// 分母阶数更高 -> 极限为 +/-infinity
                 /// 确定符号
                 auto ratio = SymbolicExpr::multiply(
                     lamina::detail::make_expression_ptr(num_leading.first),
@@ -157,7 +157,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
                 }
                 return inf_node;
             } else {
-                /// 同阶 → 极限为系数之比
+                /// 同阶 -> 极限为系数之比
                 auto ratio = SymbolicExpr::multiply(
                     lamina::detail::make_expression_ptr(num_leading.first),
                     SymbolicExpr::power(
@@ -168,12 +168,12 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
             }
         }
 
-        /// 如果分子首项为零但分母不为零，极限为 0
+        /// 如果分子首项为零但分母不为零,极限为 0
         if (num_leading.first->is_zero() && !den_leading.first->is_zero()) {
             return lamina::detail::make_node<NumberNode>(BigInt(0));
         }
 
-        /// 两者都为零 → 需要更高阶展开
+        /// 两者都为零 -> 需要更高阶展开
     }
 
     return nullptr;
@@ -181,9 +181,9 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
 
 /**
  * @internal
- * @brief 从 Taylor 级数中提取关于 (x - a) 的首个非零项。
+ * @brief 从 Taylor 级数中提取关于 (x - a) 的首个非零项.
  *
- * 通过逐阶求导并在展开点求值来确定首个非零系数及其阶数。
+ * 通过逐阶求导并在展开点求值来确定首个非零系数及其阶数.
  *
  * @param[in] series_expr 级数表达式
  * @param[in] expand_var 展开变量名
@@ -202,13 +202,13 @@ std::pair<std::shared_ptr<const SymbolicNode>, int> LimitVisitor::find_leading_t
     auto current = series_expr;
 
     for (int n = 0; n <= max_order; ++n) {
-        /// 在展开点求值得到第 n 阶系数（乘以 n!）
+        /// 在展开点求值得到第 n 阶系数(乘以 n!)
         auto val = current->substitute(expand_var, expand_point);
         if (!val) return {nullptr, 0};
         val = val->simplify();
 
         if (val && lamina::detail::node(val) && !lamina::detail::node(val)->is_zero()) {
-            /// 系数为 val / n!（但对于比较比值，n! 会约掉，所以直接返回 val）
+            /// 系数为 val / n!(但对于比较比值,n! 会约掉,所以直接返回 val)
             return {lamina::detail::node(val), n};
         }
 
@@ -223,9 +223,9 @@ std::pair<std::shared_ptr<const SymbolicNode>, int> LimitVisitor::find_leading_t
 
 /**
  * @internal
- * @brief 判断数值节点的符号。
+ * @brief 判断数值节点的符号.
  * @param[in] node AST 节点
- * @return 正数返回 1，负数返回 -1，零或未知符号返回 0
+ * @return 正数返回 1,负数返回 -1,零或未知符号返回 0
  */
 int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return 0;
@@ -249,7 +249,7 @@ int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
             return 0;
         }
     }
-    /// 对于乘法节点，符号为各因子符号之积
+    /// 对于乘法节点,符号为各因子符号之积
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int sign = 1;
         for (auto& op : mul->operands()) {
@@ -264,10 +264,10 @@ int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
 
 
 /**
- * @brief 处理分段函数节点的极限。
+ * @brief 处理分段函数节点的极限.
  *
- * 根据趋近方向选择满足条件的分支并计算极限；
- * 双侧结果相等时返回该值，差异时以 nullptr 表示极限未定义。
+ * 根据趋近方向选择满足条件的分支并计算极限;
+ * 双侧结果相等时返回该值,差异时以 nullptr 表示极限未定义.
  */
 void LimitVisitor::visit(const PiecewiseNode& node) {
     if (direction == "+" || direction == "-") {
@@ -284,7 +284,7 @@ void LimitVisitor::visit(const PiecewiseNode& node) {
             result = nullptr;
         }
     } else {
-        /// 双侧极限：分别计算左右极限
+        /// 双侧极限:分别计算左右极限
         auto lb = select_branch_by_direction(node, "-");
         auto rb = select_branch_by_direction(node, "+");
         std::shared_ptr<const SymbolicNode> lr = nullptr, rr = nullptr;
@@ -312,7 +312,7 @@ void LimitVisitor::visit(const PiecewiseNode& node) {
 }
 
 /**
- * @brief 根据趋近方向选择分段函数中满足条件的分支表达式。
+ * @brief 根据趋近方向选择分段函数中满足条件的分支表达式.
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::select_branch_by_direction(
     const PiecewiseNode& node, const std::string& dir) {
@@ -324,9 +324,9 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::select_branch_by_direction(
 }
 
 /**
- * @brief 判断条件在给定趋近方向下是否满足。
+ * @brief 判断条件在给定趋近方向下是否满足.
  *
- * 右极限（"+"）意味着 var > point，左极限（"-"）意味着 var < point。
+ * 右极限("+")意味着 var > point,左极限("-")意味着 var < point.
  */
 bool LimitVisitor::condition_satisfied_by_direction(
     const std::shared_ptr<const SymbolicNode>& condition, const std::string& dir) {
@@ -360,11 +360,11 @@ bool LimitVisitor::condition_satisfied_by_direction(
 }
 
 /**
- * @brief 评估关系表达式 left - right 在趋近方向下的符号。
+ * @brief 评估关系表达式 left - right 在趋近方向下的符号.
  */
 std::optional<int> LimitVisitor::evaluate_relational_sign(
     const std::shared_ptr<const RelationalNode>& rel, const std::string& dir) {
-    /// 模式：var op number
+    /// 模式:var op number
     auto left_var = std::dynamic_pointer_cast<const VariableNode>(rel->left());
     auto right_num = std::dynamic_pointer_cast<const NumberNode>(rel->right());
     if (left_var && left_var->name() == var && right_num) {
@@ -377,7 +377,7 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         if (diff < -1e-15) return -1;
         return 0;
     }
-    /// 模式：number op var
+    /// 模式:number op var
     auto left_num = std::dynamic_pointer_cast<const NumberNode>(rel->left());
     auto right_var = std::dynamic_pointer_cast<const VariableNode>(rel->right());
     if (left_num && right_var && right_var->name() == var) {
@@ -390,7 +390,7 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         if (diff < -1e-15) return -1;
         return 0;
     }
-    /// 通用：计算 (left - right) 的极限符号
+    /// 通用:计算 (left - right) 的极限符号
     auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
     std::vector<std::shared_ptr<const SymbolicNode>> neg_ops = {neg_one, rel->right()->clone()};
     std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {rel->left()->clone(), lamina::detail::make_node<MultiplyNode>(neg_ops)};
@@ -406,9 +406,9 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
 }
 
 /**
- * @brief 方向感知的 sgn 函数极限计算。
+ * @brief 方向感知的 sgn 函数极限计算.
  *
- * 当 sgn 的参数在趋近点为零时，根据趋近方向确定符号。
+ * 当 sgn 的参数在趋近点为零时,根据趋近方向确定符号.
  */
 std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_sgn_limit(
     const std::shared_ptr<const SymbolicNode>& arg) {
@@ -424,14 +424,14 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_sgn_li
         if (s) return lamina::detail::make_node<NumberNode>(BigInt(*s));
         return std::nullopt;
     }
-    /// 参数极限为零，根据方向确定符号
+    /// 参数极限为零,根据方向确定符号
     int sign = determine_sign_near_point(arg, direction);
     if (sign != 0) return lamina::detail::make_node<NumberNode>(BigInt(sign));
     return lamina::detail::make_node<NumberNode>(BigInt(0));
 }
 
 /**
- * @brief 方向感知的绝对值函数极限计算。
+ * @brief 方向感知的绝对值函数极限计算.
  */
 std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_abs_limit(
     const std::shared_ptr<const SymbolicNode>& arg) {
@@ -460,8 +460,8 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_abs_li
 
 
 /**
- * @brief 判断当前极限点是否为正无穷。
- * @return 极限点为 +∞ 时返回 true
+ * @brief 判断当前极限点是否为正无穷.
+ * @return 极限点为 +infinity 时返回 true
  */
 bool LimitVisitor::is_limit_at_infinity() const {
     if (auto f = std::dynamic_pointer_cast<const FunctionNode>(point)) {
@@ -471,27 +471,27 @@ bool LimitVisitor::is_limit_at_infinity() const {
 }
 
 /**
- * @brief 判断当前极限点是否为负无穷。
+ * @brief 判断当前极限点是否为负无穷.
  *
- * 负无穷表示为 -1 * Infinity 的 MultiplyNode。
- * @return 极限点为 -∞ 时返回 true
+ * 负无穷表示为 -1 * Infinity 的 MultiplyNode.
+ * @return 极限点为 -infinity 时返回 true
  */
 bool LimitVisitor::is_limit_at_neg_infinity() const {
     return is_neg_inf(point);
 }
 
 /**
- * @brief 获取多项式表达式关于 var 的次数。
+ * @brief 获取多项式表达式关于 var 的次数.
  *
- * 仅处理简单的多项式结构：
- * - VariableNode → 1
- * - NumberNode → 0
- * - PowerNode(var, n) → n
- * - MultiplyNode → 各因子次数之和
- * - AddNode → 各项次数的最大值
+ * 仅处理简单的多项式结构:
+ * - VariableNode -> 1
+ * - NumberNode -> 0
+ * - PowerNode(var, n) -> n
+ * - MultiplyNode -> 各因子次数之和
+ * - AddNode -> 各项次数的最大值
  *
  * @param[in] node AST 节点
- * @return 多项式次数，非多项式返回 -1
+ * @return 多项式次数,非多项式返回 -1
  */
 int LimitVisitor::get_polynomial_degree(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return -1;
@@ -515,7 +515,7 @@ int LimitVisitor::get_polynomial_degree(const std::shared_ptr<const SymbolicNode
                 if (e == static_cast<int>(e) && e >= 0) return static_cast<int>(e);
             }
         }
-        /// c^x or similar — not a polynomial
+        /// c^x or similar - not a polynomial
         int base_deg = get_polynomial_degree(pow->base());
         if (base_deg < 0) return -1;
         if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
@@ -548,17 +548,17 @@ int LimitVisitor::get_polynomial_degree(const std::shared_ptr<const SymbolicNode
         return max_deg;
     }
 
-    /// FunctionNode (sin, cos, exp, ln, etc.) — not a polynomial
+    /// FunctionNode (sin, cos, exp, ln, etc.) - not a polynomial
     return -1;
 }
 
 /**
- * @brief 获取多项式的首项系数。
+ * @brief 获取多项式的首项系数.
  *
- * 对于多项式 P(x) = a_n * x^n + ... + a_0，返回 a_n。
+ * 对于多项式 P(x) = a_n * x^n + ... + a_0,返回 a_n.
  *
  * @param[in] node AST 节点
- * @return 首项系数节点；nullptr 表示当前结构保持未知
+ * @return 首项系数节点;nullptr 表示当前结构保持未知
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::get_leading_coefficient(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return nullptr;
@@ -625,16 +625,16 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::get_leading_coefficient(const 
 }
 
 /**
- * @brief 通过多项式次数比较计算有理函数在无穷处的极限。
+ * @brief 通过多项式次数比较计算有理函数在无穷处的极限.
  *
- * 对于 P(x)/Q(x)：
- * - deg(P) < deg(Q) → 0
- * - deg(P) = deg(Q) → 首项系数之比
- * - deg(P) > deg(Q) → ±∞（符号由首项系数决定）
+ * 对于 P(x)/Q(x):
+ * - deg(P) < deg(Q) -> 0
+ * - deg(P) = deg(Q) -> 首项系数之比
+ * - deg(P) > deg(Q) -> +/-infinity(符号由首项系数决定)
  *
  * @param[in] num 分子 AST 节点
  * @param[in] den 分母 AST 节点
- * @return 极限结果，非有理函数时返回 nullptr
+ * @return 极限结果,非有理函数时返回 nullptr
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::limit_rational_at_infinity(
     const std::shared_ptr<const SymbolicNode>& num,
@@ -662,7 +662,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_rational_at_infinity(
         return norm.get_result();
     }
 
-    /// deg_num > deg_den → ±∞
+    /// deg_num > deg_den -> +/-infinity
     auto lc_num = get_leading_coefficient(num);
     auto lc_den = get_leading_coefficient(den);
     int sign_num = lc_num ? get_sign(lc_num) : 1;
@@ -679,9 +679,9 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_rational_at_infinity(
 }
 
 /**
- * @brief 分类表达式的增长速率。
+ * @brief 分类表达式的增长速率.
  *
- * 增长速率层次：Exponential > Polynomial > Logarithmic > Constant
+ * 增长速率层次:Exponential > Polynomial > Logarithmic > Constant
  *
  * @param[in] node AST 节点
  * @return 增长速率分类
@@ -761,9 +761,9 @@ LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<co
 }
 
 /**
- * @brief 获取多项式增长的有效次数（用于增长速率比较）。
+ * @brief 获取多项式增长的有效次数(用于增长速率比较).
  *
- * 对于 x^n 返回 n，对于 x^n * ln(x)^m 返回 n（多项式部分主导）。
+ * 对于 x^n 返回 n,对于 x^n * ln(x)^m 返回 n(多项式部分主导).
  *
  * @param[in] node AST 节点
  * @return 有效多项式次数
@@ -790,15 +790,15 @@ int LimitVisitor::get_growth_polynomial_degree(const std::shared_ptr<const Symbo
 }
 
 /**
- * @brief 通过增长速率比较计算极限。
+ * @brief 通过增长速率比较计算极限.
  *
- * 当分子和分母都趋向无穷时，比较增长速率：
+ * 当分子和分母都趋向无穷时,比较增长速率:
  * - 指数 > 多项式 > 对数
  * - 同类增长时比较具体次数
  *
  * @param[in] num 分子 AST 节点
  * @param[in] den 分母 AST 节点
- * @return 极限结果；nullptr 表示增长率比较保持未知
+ * @return 极限结果;nullptr 表示增长率比较保持未知
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::limit_by_growth_comparison(
     const std::shared_ptr<const SymbolicNode>& num,
@@ -813,17 +813,17 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_by_growth_comparison(
 
     /// Different growth classes
     if (static_cast<int>(num_growth) > static_cast<int>(den_growth)) {
-        /// Numerator grows faster → ±∞
+        /// Numerator grows faster -> +/-infinity
         std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
         return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     }
 
     if (static_cast<int>(num_growth) < static_cast<int>(den_growth)) {
-        /// Denominator grows faster → 0
+        /// Denominator grows faster -> 0
         return lamina::detail::make_node<NumberNode>(BigInt(0));
     }
 
-    /// Same growth class — compare within class
+    /// Same growth class - compare within class
     if (num_growth == GrowthClass::Polynomial) {
         int num_deg = get_growth_polynomial_degree(num);
         int den_deg = get_growth_polynomial_degree(den);
@@ -832,17 +832,17 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_by_growth_comparison(
             std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
             return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
         }
-        /// Same degree — fall through to L'Hôpital or other methods
+        /// Same degree - fall through to L'Hôpital or other methods
     }
 
     return nullptr;
 }
 
 /**
- * @brief 处理 x→-∞ 的极限，通过代换 x = -t 转化为 t→+∞。
+ * @brief 处理 x->-infinity 的极限,通过代换 x = -t 转化为 t->+infinity.
  *
  * @param[in] expr 原始表达式
- * @return 极限结果；nullptr 表示当前规则集之外
+ * @return 极限结果;nullptr 表示当前规则集之外
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
     const std::shared_ptr<const SymbolicNode>& expr) {
@@ -861,7 +861,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
     substituted = norm.get_result();
     if (!substituted) return nullptr;
 
-    /// Evaluate lim(t→+∞) of the substituted expression
+    /// Evaluate lim(t->+infinity) of the substituted expression
     std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
     auto pos_inf = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
 
@@ -872,7 +872,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
 }
 
 /**
- * @brief 在表达式中将 var 替换为 -t_var。
+ * @brief 在表达式中将 var 替换为 -t_var.
  *
  * @param[in] node AST 节点
  * @param[in] t_var 替换变量名
@@ -889,7 +889,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
         if (v->name() == var) {
-            /// x = -t → multiply(-1, t)
+            /// x = -t -> multiply(-1, t)
             std::vector<std::shared_ptr<const SymbolicNode>> ops = {
                 lamina::detail::make_node<NumberNode>(BigInt(-1)),
                 lamina::detail::make_node<VariableNode>(t_var)

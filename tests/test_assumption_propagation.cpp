@@ -37,7 +37,7 @@ static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
     return expr;
 }
 
-/// Build x² expression: PowerNode(VariableNode(name), NumberNode(2))
+/// Build x^2 expression: PowerNode(VariableNode(name), NumberNode(2))
 static SymbolicExpr make_x_squared(const std::string& var_name) {
     auto var = make_var(var_name);
     auto two = make_number(2);
@@ -91,7 +91,7 @@ static void test_real_var_x_squared_nonnegative() {
 
         auto x_squared = make_x_squared(var_name);
 
-        // x² should be non-negative for any Real variable
+        // x^2 should be non-negative for any Real variable
         RC_ASSERT(engine.query_nonnegative_checked(x_squared).value() == Tribool::True);
     });
 }
@@ -111,7 +111,7 @@ static void test_integer_var_x_squared_integer() {
 
         auto x_squared = make_x_squared(var_name);
 
-        // x² should have Integer domain when x is Integer
+        // x^2 should have Integer domain when x is Integer
         RC_ASSERT(engine.query_integer_checked(x_squared).value() == Tribool::True);
     });
 }
@@ -150,7 +150,7 @@ static void test_propagation_is_lazy() {
         AssumptionContext ctx;
         ctx.assume_domain(var_name, domain);
 
-        /// PropertyStore 仅保存声明变量；x² 等复合表达式按需推导。
+        /// PropertyStore 仅保存声明变量;x^2 等复合表达式按需推导.
         const PropertyStore& store = ctx.current_properties();
 
         // The store should have the variable we declared

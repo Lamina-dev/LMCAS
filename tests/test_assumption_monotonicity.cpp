@@ -195,7 +195,7 @@ void test_ln_guard_missing_positive() {
 
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
-    // y has no sign assumption — guard should prevent ln rule
+    // y has no sign assumption - guard should prevent ln rule
 
     InferenceEngine engine(ctx);
 
@@ -280,7 +280,7 @@ void test_no_rules_for_non_gt_relation() {
     SymbolicExpr x_expr = make_var_expr("x");
     SymbolicExpr y_expr = make_var_expr("y");
 
-    /// 使用 LT 关系验证反向单调推导。
+    /// 使用 LT 关系验证反向单调推导.
     Relation rel{x_expr, y_expr, RelationalNode::Op::LT};
     ctx.current_relations().add_relation(x_expr, y_expr, RelationalNode::Op::LT, ctx.current_properties());
 
@@ -448,9 +448,9 @@ void test_all_rules_applied_together() {
 
     engine.apply_monotonicity_rules(rel, ctx.current_relations(), ctx.current_properties());
 
-    // Positive → ln and sqrt rules apply
-    // Real → exp rule applies
-    // Positive implies NonNegative → power rule applies (if exponents exist)
+    // Positive -> ln and sqrt rules apply
+    // Real -> exp rule applies
+    // Positive implies NonNegative -> power rule applies (if exponents exist)
     SymbolicExpr ln_a = make_func_expr(FunctionNode::FuncType::Ln, "a");
     SymbolicExpr ln_b = make_func_expr(FunctionNode::FuncType::Ln, "b");
     SymbolicExpr sqrt_a = make_func_expr(FunctionNode::FuncType::Sqrt, "a");
@@ -630,7 +630,7 @@ void test_declared_monotonicity_deduction() {
     Relation rel{x_expr, y_expr, RelationalNode::Op::GT};
     ctx.current_relations().add_relation(x_expr, y_expr, RelationalNode::Op::GT, ctx.current_properties());
 
-    // Apply monotonicity rules — exp is auto-inferred increasing
+    // Apply monotonicity rules - exp is auto-inferred increasing
     engine.apply_monotonicity_rules(rel, ctx.current_relations(), ctx.current_properties());
 
     // exp(x) > exp(y) should be deduced (exp is increasing on R)

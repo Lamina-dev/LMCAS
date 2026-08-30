@@ -523,8 +523,8 @@ static ConvergenceInfo convergence_test_impl(
             if (p >= -1.0 && p < 0.0) return {ConvergenceResult::Divergent, "p-series"};
         }
     }
-    /// Laurent 单项式 c*n^e 直接应用 p 级数判据。
-    /// 该路径使倒数幂保持在线性规则内，并跳过 Abs 比值极限的递归化简。
+    /// Laurent 单项式 c*n^e 直接应用 p 级数判据.
+    /// 该路径使倒数幂保持在线性规则内,并跳过 Abs 比值极限的递归化简.
     if (const auto laurent_power = supported_laurent_integer_power(
             lamina::detail::node(general_term), index_var)) {
         if (*laurent_power < -1) {
@@ -668,21 +668,21 @@ std::shared_ptr<SymbolicExpr> fourier_series(
     const std::shared_ptr<SymbolicExpr>& period, int n_terms) {
     if (!f || !period || n_terms < 0) return nullptr;
 
-    /// 周期 T，半周期 L = T/2，基频 w = 2π/T
+    /// 周期 T,半周期 L = T/2,基频 w = 2pi/T
     auto T = period;
     auto pi = lamina::detail::make_expression_ptr(lamina::detail::make_node<VariableNode>("pi"));
     auto two = SymbolicExpr::number(2);
     auto L = SymbolicExpr::divide(T, two);          // 半周期
     auto half_lo = SymbolicExpr::multiply(SymbolicExpr::number(-1), L);
     auto half_hi = L;
-    auto w = SymbolicExpr::divide(SymbolicExpr::multiply(two, pi), T); // 2π/T
+    auto w = SymbolicExpr::divide(SymbolicExpr::multiply(two, pi), T); // 2pi/T
 
     int parity = detect_parity(f, var); // 1=even, -1=odd, 0=unknown
 
     Integrator integrator;
     auto x = SymbolicExpr::variable(var);
 
-    /// a0 = (1/L) ∫_{-L}^{L} f dx ; 常数项 a0/2
+    /// a0 = (1/L) integral_{-L}^{L} f dx ; 常数项 a0/2
     std::shared_ptr<SymbolicExpr> a0 = SymbolicExpr::number(0);
     {
         auto integ = detail::propagate_result(
@@ -693,10 +693,10 @@ std::shared_ptr<SymbolicExpr> fourier_series(
     auto result = SymbolicExpr::divide(a0, two); // a0/2
 
     for (int k = 1; k <= n_terms; ++k) {
-        auto kw = SymbolicExpr::multiply(SymbolicExpr::number(k), w); // k·2π/T
+        auto kw = SymbolicExpr::multiply(SymbolicExpr::number(k), w); // k*2pi/T
         auto arg = SymbolicExpr::multiply(kw, x);
 
-        /// a_k：奇函数时为 0
+        /// a_k:奇函数时为 0
         if (parity != -1) {
             auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::cos(arg));
             auto integ = detail::propagate_result(
@@ -707,7 +707,7 @@ std::shared_ptr<SymbolicExpr> fourier_series(
                 result = SymbolicExpr::add(result, SymbolicExpr::multiply(ak, SymbolicExpr::cos(arg)));
             }
         }
-        /// b_k：偶函数时为 0
+        /// b_k:偶函数时为 0
         if (parity != 1) {
             auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::sin(arg));
             auto integ = detail::propagate_result(
@@ -838,7 +838,7 @@ static LaurentResult laurent_series_full_impl(
     /// (x - center)
     auto shift = SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), center));
 
-    /// 寻找极点阶数 m：使 (x-c)^m · f 在 c 处解析（有限）。
+    /// 寻找极点阶数 m:使 (x-c)^m * f 在 c 处解析(有限).
     int pole_order = 0;
     std::shared_ptr<SymbolicExpr> regular = f;
     {
@@ -856,14 +856,14 @@ static LaurentResult laurent_series_full_impl(
                 if (g_at) g_at = g_at->simplify();
                 if (g_at && g_at->is_number()) {
                     pole_order = m;
-                    regular = g;       // (x-c)^m f(x)，在 c 处解析
+                    regular = g;       // (x-c)^m f(x),在 c 处解析
                     break;
                 }
             }
         }
     }
 
-    /// 对 regular（解析部分）做 Taylor 展开
+    /// 对 regular(解析部分)做 Taylor 展开
     int taylor_order = order_pos + pole_order + 1;
     if (taylor_order < 1) taylor_order = 1;
     auto taylor = regular->series(var, center, taylor_order);
@@ -886,7 +886,7 @@ static LaurentResult laurent_series_full_impl(
         /// a_{m-1} = (1/(m-1)!) lim_{x->c} d^{m-1}/dx^{m-1} [regular]
         auto deriv = regular;
         for (int i = 0; i < pole_order - 1; ++i) deriv = deriv->differentiate(var);
-        /// 用极限求值，稳健处理 0/0 形式（如 z/(z(z+1)) 在 z=0）。
+        /// 用极限求值,稳健处理 0/0 形式(如 z/(z(z+1)) 在 z=0).
         auto val = lamina::limit_expression_checked(deriv, var, center).value();
         if (!val) val = deriv->substitute(var, center);
         long long fact = 1;
@@ -900,8 +900,8 @@ static LaurentResult laurent_series_full_impl(
 std::shared_ptr<SymbolicExpr> asymptotic_expand(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var, int order) {
     if (!f || order < 0) return nullptr;
-    /// 通过 x = 1/t 替换，在 t=0 处做 Taylor 展开，再回代 t = 1/x，
-    /// 得到按 x 递减幂次的渐近展开。
+    /// 通过 x = 1/t 替换,在 t=0 处做 Taylor 展开,再回代 t = 1/x,
+    /// 得到按 x 递减幂次的渐近展开.
     auto x = SymbolicExpr::variable(var);
     std::string tname = var + "__asym_t";
     auto t = SymbolicExpr::variable(tname);

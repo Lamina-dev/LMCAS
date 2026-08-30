@@ -52,8 +52,8 @@ static std::shared_ptr<SymbolicExpr> build_parametric_linear_2x2(
     return SymbolicExpr::add(SymbolicExpr::add(term1, term2), eff_c0);
 }
 
-/// 递归数值求值器用于验证符号化简后仍保留结构的残差。
-/// std::nullopt 表示表达式仍包含待替换符号或数值求值产生定义域诊断。
+/// 递归数值求值器用于验证符号化简后仍保留结构的残差.
+/// std::nullopt 表示表达式仍包含待替换符号或数值求值产生定义域诊断.
 static std::optional<double> numeric_eval(const std::shared_ptr<SymbolicExpr>& e) {
     if (!e || !lamina::detail::node(e)) return 0.0;
     auto root = lamina::detail::node(e);
@@ -65,7 +65,7 @@ static std::optional<double> numeric_eval(const std::shared_ptr<SymbolicExpr>& e
         return 0.0;
     }
     if (std::dynamic_pointer_cast<const VariableNode>(root)) {
-        /// 替换后仍存在自由变量时返回 std::nullopt。
+        /// 替换后仍存在自由变量时返回 std::nullopt.
         return std::nullopt;
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(root)) {

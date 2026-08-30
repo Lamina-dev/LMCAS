@@ -139,7 +139,7 @@ void test_real_base_odd_exponent_not_nonneg() {
 
     InferenceEngine engine(ctx);
 
-    // Odd exponents: x^3, x^5 — Real base with odd exponent can be negative
+    // Odd exponents: x^3, x^5 - Real base with odd exponent can be negative
     // so NonNegative should be Unknown (not True)
     std::vector<int> odd_exponents = {1, 3, 5, 7};
     for (int exp : odd_exponents) {
@@ -289,7 +289,7 @@ void test_positive_base_even_exponent_is_positive() {
 
     InferenceEngine engine(ctx);
 
-    // x^2 where x is Positive and Real → Positive (rule 16a fires)
+    // x^2 where x is Positive and Real -> Positive (rule 16a fires)
     auto expr = make_power_expr(make_var("x"), make_num(2));
     EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "x^2 is Positive when x>0 (rule 16a)");
@@ -303,14 +303,14 @@ void test_numeric_base_and_exponent() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // 2^3 — NumberNode base (positive), NumberNode exponent (integer)
+    // 2^3 - NumberNode base (positive), NumberNode exponent (integer)
     auto expr = make_power_expr(make_num(2), make_num(3));
     EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
                 "2^3 is Positive");
     EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
                 "2^3 is NonZero");
 
-    // 3^(-2) — positive base, integer exponent
+    // 3^(-2) - positive base, integer exponent
     auto expr2 = make_power_expr(make_num(3), make_num(-2));
     EXPECT_TRUE(engine.query_positive_checked(expr2).value() == Tribool::True,
                 "3^(-2) is Positive");
@@ -342,7 +342,7 @@ void test_negative_base_non_integer_exponent() {
 
     InferenceEngine engine(ctx);
 
-    // x^(1.5) where x is Negative — could be complex, no rule matches
+    // x^(1.5) where x is Negative - could be complex, no rule matches
     auto expr = make_power_expr(make_var("x"), make_num_d(1.5));
     EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
                 "(-x)^1.5 is Unknown for Positive");
@@ -444,10 +444,10 @@ void test_real_base_non_integer_exponent_unknown() {
 
     InferenceEngine engine(ctx);
 
-    // x^(1.5) where x is Real — non-integer exponent, rule doesn't apply
+    // x^(1.5) where x is Real - non-integer exponent, rule doesn't apply
     // (could be complex if x < 0)
     auto expr = make_power_expr(make_var("x"), make_num_d(1.5));
-    /// 该域推导规则要求整数指数；仅有 Real 基底时结果域保持 Unknown。
+    /// 该域推导规则要求整数指数;仅有 Real 基底时结果域保持 Unknown.
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "x^1.5 is Unknown for Real when x is only Real (non-integer exponent)");
 }

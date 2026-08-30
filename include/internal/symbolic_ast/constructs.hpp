@@ -3,17 +3,17 @@
 #include "relations.hpp"
 
 /**
- * @brief 分段函数节点，表示条件分支表达式。
+ * @brief 分段函数节点,表示条件分支表达式.
  *
- * 存储有序的 (表达式, 条件) 对列表和可选的默认表达式。
- * 条件应为 RelationalNode 或 LogicalNode 表达式。
+ * 存储有序的 (表达式, 条件) 对列表和可选的默认表达式.
+ * 条件应为 RelationalNode 或 LogicalNode 表达式.
  */
 class PiecewiseNode : public SymbolicNode {
 public:
-    /** @brief 分支结构，包含表达式和对应条件。 */
+    /** @brief 分支结构,包含表达式和对应条件. */
     struct Branch {
         std::shared_ptr<const SymbolicNode> expression; ///< 分支值
-        std::shared_ptr<const SymbolicNode> condition;  ///< 条件（RelationalNode 或 LogicalNode）
+        std::shared_ptr<const SymbolicNode> condition;  ///< 条件(RelationalNode 或 LogicalNode)
     };
 
 private:
@@ -23,9 +23,9 @@ private:
     const std::shared_ptr<const SymbolicNode> default_expr_;
 
     /**
-     * @brief 构造分段函数节点。
+     * @brief 构造分段函数节点.
      * @param br 分支列表
-     * @param def 默认表达式（可为 nullptr）
+     * @param def 默认表达式(可为 nullptr)
      */
     PiecewiseNode(std::vector<Branch> br, std::shared_ptr<const SymbolicNode> def = nullptr)
         : branches_(std::move(br)), default_expr_(std::move(def)) {
@@ -96,7 +96,7 @@ public:
 };
 
 /**
- * @brief 求和节点，表示符号有限/无限求和 ∑_{k=a}^{b} f(k)。
+ * @brief 求和节点,表示符号有限/无限求和 sum_{k=a}^{b} f(k).
  */
 class SummationNode : public SymbolicNode {
 private:
@@ -108,7 +108,7 @@ private:
     const std::shared_ptr<const SymbolicNode> upper_bound_;
 
     /**
-     * @brief 构造求和节点。
+     * @brief 构造求和节点.
      * @param b 通项表达式
      * @param idx 指标变量名
      * @param lo 下界
@@ -170,7 +170,7 @@ public:
 };
 
 /**
- * @brief 连乘节点，表示符号有限/无限连乘 ∏_{k=a}^{b} f(k)。
+ * @brief 连乘节点,表示符号有限/无限连乘 prod_{k=a}^{b} f(k).
  */
 class ProductNode : public SymbolicNode {
 private:
@@ -182,7 +182,7 @@ private:
     const std::shared_ptr<const SymbolicNode> upper_bound_;
 
     /**
-     * @brief 构造连乘节点。
+     * @brief 构造连乘节点.
      * @param b 通项表达式
      * @param idx 指标变量名
      * @param lo 下界
@@ -244,18 +244,18 @@ public:
 };
 
 /**
- * @brief 积分变换节点，表示 Laplace、Fourier、Z 变换及其逆变换。
+ * @brief 积分变换节点,表示 Laplace,Fourier,Z 变换及其逆变换.
  *
- * 统一表示各类积分变换：L{f(t)}(s)、F{f(t)}(ω)、Z{f[n]}(z) 等。
+ * 统一表示各类积分变换:L{f(t)}(s),F{f(t)}(omega),Z{f[n]}(z) 等.
  */
 class TransformNode : public SymbolicNode {
 public:
     /** @brief 变换类型枚举 */
     enum class TransformType {
         Laplace,         ///< Laplace 变换 L{f(t)}(s)
-        InverseLaplace,  ///< 逆 Laplace 变换 L⁻¹{F(s)}(t)
-        Fourier,         ///< Fourier 变换 F{f(t)}(ω)
-        InverseFourier,  ///< 逆 Fourier 变换 F⁻¹{F(ω)}(t)
+        InverseLaplace,  ///< 逆 Laplace 变换 L-¹{F(s)}(t)
+        Fourier,         ///< Fourier 变换 F{f(t)}(omega)
+        InverseFourier,  ///< 逆 Fourier 变换 F-¹{F(omega)}(t)
         ZTransform       ///< Z 变换 Z{f[n]}(z)
     };
 
@@ -268,7 +268,7 @@ private:
     const std::shared_ptr<const SymbolicNode> target_;
 
     /**
-     * @brief 构造积分变换节点。
+     * @brief 构造积分变换节点.
      * @param tt 变换类型
      * @param b 被变换的表达式
      * @param src 源变量名
@@ -327,16 +327,16 @@ public:
 };
 
 /**
- * @brief 量词节点，表示全称量词 (∀) 或存在量词 (∃)。
+ * @brief 量词节点,表示全称量词 (forall) 或存在量词 (exists).
  *
- * 用于表示逻辑公式中的量化表达式，如 ∀x∈D: P(x) 或 ∃x∈D: P(x)。
+ * 用于表示逻辑公式中的量化表达式,如 forallx in D: P(x) 或 existsx in D: P(x).
  */
 class QuantifierNode : public SymbolicNode {
 public:
     /** @brief 量词类型枚举 */
     enum class Type {
-        ForAll, ///< 全称量词 ∀
-        Exists  ///< 存在量词 ∃
+        ForAll, ///< 全称量词 forall
+        Exists  ///< 存在量词 exists
     };
 
 private:
@@ -348,7 +348,7 @@ private:
     const std::shared_ptr<const SymbolicNode> predicate_;
 
     /**
-     * @brief 构造量词节点。
+     * @brief 构造量词节点.
      * @param qt 量词类型
      * @param var 约束变量名
      * @param dom 定义域表达式
@@ -409,9 +409,9 @@ public:
 };
 
 /**
- * @brief 集合构造器节点，表示集合构造式 {x ∈ D | P(x)}。
+ * @brief 集合构造器节点,表示集合构造式 {x  in  D | P(x)}.
  *
- * 用于表示满足特定条件的元素集合。
+ * 用于表示满足特定条件的元素集合.
  */
 class SetBuilderNode : public SymbolicNode {
 private:
@@ -422,7 +422,7 @@ private:
     const std::shared_ptr<const SymbolicNode> predicate_;
 
     /**
-     * @brief 构造集合构造器节点。
+     * @brief 构造集合构造器节点.
      * @param var 元素变量名
      * @param dom 定义域表达式
      * @param pred 成员条件表达式
@@ -756,7 +756,7 @@ inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_power(std::sh
         throw std::invalid_argument("create_power operands cannot be null");
     }
     if (exponent->is_zero()) {
-        /// x^0 的化简需要 base 的定义域证明；base=0 时保留 PowerNode。
+        /// x^0 的化简需要 base 的定义域证明;base=0 时保留 PowerNode.
         if (base->is_zero()) {
             return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
         }
@@ -774,7 +774,7 @@ inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_power(std::sh
     }
     if (exponent->is_one()) return base;
     if (base->is_zero()) {
-        /// 指数严格为正时 0^x 化简为 0，其余指数保留 PowerNode 及其定义域条件。
+        /// 指数严格为正时 0^x 化简为 0,其余指数保留 PowerNode 及其定义域条件.
         if (exponent->is_positive()) return create_number(::BigInt(0));
         return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
     }

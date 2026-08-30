@@ -92,7 +92,7 @@ static void test_domain_algebraic_property_store() {
     EXPECT_TRUE(store.has_domain("x", Domain::Complex),
         "Algebraic symbol has Complex domain");
 
-    /// Algebraic 与 Rational/Integer 的细化方向相反，因此两项查询均为 false。
+    /// Algebraic 与 Rational/Integer 的细化方向相反,因此两项查询均为 false.
     EXPECT_FALSE(store.has_domain("x", Domain::Rational),
         "Algebraic symbol does NOT have Rational domain");
 
@@ -147,7 +147,7 @@ static void test_default_symbol_properties() {
 
     PropertyStore store;
 
-    /// 查询首次出现的符号，PropertyStore 为各属性返回默认值。
+    /// 查询首次出现的符号,PropertyStore 为各属性返回默认值.
 
     // Default domain is Complex
     EXPECT_TRUE(store.get_domain("fresh") == Domain::Complex,

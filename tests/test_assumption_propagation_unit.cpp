@@ -45,7 +45,7 @@ static void test_x_squared_nonnegative_when_real() {
     ctx.assume_domain("x", Domain::Real);
     InferenceEngine engine(ctx);
 
-    // Build x² = PowerNode(x, 2)
+    // Build x^2 = PowerNode(x, 2)
     auto x_squared = wrap_expr(make_power(make_var("x"), make_number(2)));
 
     EXPECT_TRUE(engine.query_nonnegative_checked(x_squared).value() == Tribool::True,
@@ -59,7 +59,7 @@ static void test_x_squared_integer_when_integer() {
     ctx.assume_domain("x", Domain::Integer);
     InferenceEngine engine(ctx);
 
-    // Build x² = PowerNode(x, 2)
+    // Build x^2 = PowerNode(x, 2)
     auto x_squared = wrap_expr(make_power(make_var("x"), make_number(2)));
 
     EXPECT_TRUE(engine.query_integer_checked(x_squared).value() == Tribool::True,
@@ -144,8 +144,8 @@ static void test_diagnostic_positive_then_negative() {
     EXPECT_TRUE(!failure_147.has_value(), "Positive + Negative returns InvalidArgument");
     EXPECT_TRUE(failure_147.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
     const std::string& msg = failure_147.error().message;
-    /// 诊断包含符号名与 Positive；实现可报告由 Negative 推导出的
-    /// NonPositive 冲突。
+    /// 诊断包含符号名与 Positive;实现可报告由 Negative 推导出的
+    /// NonPositive 冲突.
     EXPECT_CONTAINS(msg, {"x", "Positive"},
                     "Result error message contains 'x' and 'Positive'");
     bool has_negative_or_nonpositive =
@@ -179,8 +179,8 @@ static void test_diagnostic_positiveint_then_zero() {
     EXPECT_TRUE(!failure_195.has_value(), "PositiveInt + Zero returns InvalidArgument");
     EXPECT_TRUE(failure_195.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
     const std::string& msg = failure_195.error().message;
-    /// 诊断包含 PositiveInt，并可使用 Zero 推导出的 NonPositive
-    /// 描述与隐含 Positive 的冲突。
+    /// 诊断包含 PositiveInt,并可使用 Zero 推导出的 NonPositive
+    /// 描述与隐含 Positive 的冲突.
     EXPECT_CONTAINS(msg, {"PositiveInt"},
                     "Result error message contains 'PositiveInt'");
     bool has_zero_or_nonpositive =

@@ -138,7 +138,7 @@ void test_exp_numeric_arg() {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
-    // NumberNode 2 is Real (BigInt → Integer → Real)
+    // NumberNode 2 is Real (BigInt -> Integer -> Real)
     auto expr = make_func_expr(FunctionNode::FuncType::Exp, num(2));
 
     EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
@@ -420,7 +420,7 @@ void test_ln_nonnegative_arg_not_sufficient() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Ln, var("x"));
 
-    /// NonNegative 包含零；ln 的实数性还需要 StrictlyPositive 证明。
+    /// NonNegative 包含零;ln 的实数性还需要 StrictlyPositive 证明.
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "ln(x) Real is Unknown when x is only NonNegative");
 }
@@ -598,7 +598,7 @@ void test_insufficient_arg_properties() {
     TEST_CASE("Insufficient argument properties → Unknown");
 
     AssumptionContext ctx;
-    // x has no assumptions — insufficient for any function rule
+    // x has no assumptions - insufficient for any function rule
 
     InferenceEngine engine(ctx);
 
