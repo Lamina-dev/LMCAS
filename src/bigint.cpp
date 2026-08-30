@@ -228,10 +228,10 @@ int BigInt::to_int() const {
                        : std::numeric_limits<int>::min();
         }
 
-        // _size == 1: a single limb. Saturate when the magnitude does not fit.
+        /// 单 limb 数值在目标整数范围内直接转换，超出范围时饱和到边界。
         unsigned long long mag = _data[0];
         if (_sign == NEGATIVE) {
-            // Negative: representable range is [INT_MIN, 0].
+            /// 负数目标区间为 [INT_MIN, 0]。
             // |INT_MIN| = static_cast<unsigned long long>(INT_MAX) + 1.
             unsigned long long min_mag =
                 static_cast<unsigned long long>(INT_MAX_LL) + 1ULL;
@@ -543,8 +543,8 @@ BigInt BigInt::power(BigInt exp) const {
 
         if (exp._size <= 1) {
             // 单 limb 时尽量走窄重载，但 mp_limb_t 的位宽未必等于 unsigned long
-            // （例如 LLP64 的 Windows 上 unsigned long 是 32-bit），所以仅在 limb 值
-            // 能完整放进 unsigned long 时才走窄路径，否则继续走通用循环避免截断。
+            /// LLP64 等平台的 unsigned long 可窄于 limb；
+            /// 窄路径仅处理可完整表示的值，其余值进入通用循环。
             mp_limb_t lo = (exp._size == 0) ? 0 : exp._data[0];
             if (lo <= static_cast<mp_limb_t>(std::numeric_limits<unsigned long>::max())) {
                 return power(static_cast<unsigned long>(lo));

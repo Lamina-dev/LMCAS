@@ -86,7 +86,7 @@ public:
                     return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
                 }
             case Type::COMPLEX: {
-                // 重建完整线性组合，而不是只返回 constant_term。
+                /// 重建完整线性组合，使 constant_term 与全部基向量共同参与结果。
                 std::shared_ptr<SymbolicExpr> result;
                 auto add_term = [&](const std::shared_ptr<SymbolicExpr>& term) {
                     if (!result) {
@@ -111,7 +111,7 @@ public:
                         long long n = std::stoll(key.substr(4));
                         basis = SymbolicExpr::sqrt(SymbolicExpr::number(static_cast<int>(n)));
                     } else {
-                        // 未识别的基向量：保留为变量，避免静默丢失。
+                        /// 将未知基向量保留为变量，维持原始符号信息。
                         basis = SymbolicExpr::variable(key);
                     }
                     std::shared_ptr<SymbolicExpr> term = is_one_tol(coeff)
@@ -571,8 +571,7 @@ public:
                             term = std::to_string(abs_coeff) + "√" + std::to_string(n);
                         }
                     } else {
-                        // 未识别的基向量：保留原始 key 作为变量名输出，避免静默漏项。
-                        // 与 to_symbolic 的 COMPLEX 分支保持一致。
+                        /// 将未知基向量按原始 key 输出，与 to_symbolic 的 COMPLEX 分支保持一致。
                         if (is_equal_tol(abs_coeff, 1.0)) {
                             term = key;
                         } else if (is_equal_tol(abs_coeff, round_val(abs_coeff))) {

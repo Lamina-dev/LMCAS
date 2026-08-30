@@ -282,11 +282,9 @@ void test_depth_limit_triggers_unknown() {
     }
     auto expr = wrap_expr(node);
 
-    // With max depth 3, the deeply nested expression should return Unknown
-    // because the engine can't recurse deep enough to resolve the innermost variable
+    /// 最大深度为 3 时，深层表达式在内层变量推导前达到边界并返回 Unknown；
+    /// 测试同时验证查询在深度界内完成。
     Tribool result = engine.query_positive_checked(expr).value();
-    // sin doesn't have a definite sign anyway, but the key test is that
-    // it doesn't crash or hang — it returns Unknown gracefully
     EXPECT_TRUE(result == Tribool::Unknown,
         "Deeply nested expression with small depth limit returns Unknown");
 }
@@ -330,8 +328,7 @@ void test_depth_limit_nested_addition() {
     auto outer_exp = make_function(FunctionNode::FuncType::Exp, inner_exp);
     auto expr = wrap_expr(outer_exp);
 
-    // exp requires Real argument to infer Positive. With depth limit 1,
-    // the inner exp's domain can't be determined, so outer exp returns Unknown.
+    /// exp 的 Positive 推导需要 Real 参数；深度 1 使内层 exp 域保持 Unknown。
     Tribool result = engine.query_positive_checked(expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
         "Nested exp with depth limit 1 returns Unknown");
@@ -356,8 +353,7 @@ void test_cycle_detection_self_referential() {
     }
     auto expr = wrap_expr(node);
 
-    // With max depth 2, the engine can't recurse deep enough to determine
-    // the innermost variable's domain, so it returns Unknown
+    /// 最大深度为 2 时，内层变量域保持 Unknown，外层查询同步返回 Unknown。
     Tribool result = engine.query_real_checked(expr).value();
     EXPECT_TRUE(result == Tribool::Unknown,
         "Deeply nested trig with depth limit 2 returns Unknown for domain");

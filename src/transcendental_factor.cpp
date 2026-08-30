@@ -177,8 +177,8 @@ static bool tf_is_negation_of(const std::shared_ptr<const SymbolicNode>& node,
  *
  * 对每个节点，按映射顺序（u0 优先于 u1）检查是否与某个超越子表达式结构相等。
  * 若匹配则替换为 VariableNode；否则递归处理子节点并重建当前节点。
- * 由于映射按外层优先顺序排列，先匹配外层可确保 sin(exp(x)) 整体被替换为 u0，
- * 而非先将内部 exp(x) 替换为 u1。
+ * 映射按外层优先顺序排列，因此 sin(exp(x)) 整体先映射为 u0，
+ * 内部 exp(x) 保留在该映射的定义中。
  *
  * @param[in] node     当前 AST 节点
  * @param[in] mappings 换元映射列表（按分配顺序）
@@ -371,11 +371,11 @@ TransSubstitutionResult detect_trans_substitutions(
  * @brief 计算符号表达式关于指定变量的次数。
  *
  * 递归遍历 AST，计算表达式展开后关于 var 的最高次幂。
- * 对于不依赖 var 的子表达式返回 0；对于无法确定次数的情形返回 -1。
+ * 与 var 无关的子表达式次数为 0；-1 表示当前结构位于多项式次数支持域之外。
  *
  * @param[in] node 符号节点
  * @param[in] var  变量名
- * @return 关于 var 的次数；-1 表示无法确定（非多项式结构）
+ * @return 关于 var 的次数；-1 表示次数保持未知
  * @internal
  */
 int tf_degree_in(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
@@ -496,8 +496,7 @@ TfPolyBuildResult tf_build_polynomial(
         return result;
     }
 
-    /// 先对原始表达式进行多项式验证（在展开之前）
-    /// 这可以捕获分数指数等情形，避免 expand() 错误简化后遗漏
+    /// 展开前验证原始表达式的多项式结构，使分数指数等定义域信息参与判定。
     {
         std::vector<std::string> pre_vars;
         for (const auto& ind : indeterminates) {
@@ -588,10 +587,9 @@ TfPolyBuildResult tf_build_polynomial(
     /// 注意：非主变量若出现在系数位置，extract_coeff_value<Rational> 会返回 0，
     /// 导致信息丢失。因此仅当参数变量不实际出现在系数中时才能成功。
     //
-    /// 对于如 u0² - x² 这种情形，以 u0 为主变量时，
-    /// 常数项为 -x²，无法表示为 Rational。
-    /// 此时尝试：若所有参数变量的系数均为有理数（即参数变量仅以有理数倍出现），
-    /// 则可以成功；否则标记为需要符号系数处理。
+    /// u0² - x² 以 u0 为主变量时具有符号常数项 -x²。
+    /// 参数变量仅以有理倍数出现时可提升到有理系数表示；
+    /// 其他形式转入符号系数处理路径。
     result.poly = symbolic_to_poly<Rational>(expanded, main_var);
 
     /// 验证：重建多项式并与原表达式比较
@@ -620,7 +618,7 @@ TfPolyBuildResult tf_build_polynomial(
         }
     }
 
-    /// 所有尝试均失败：多变量情形无法用 Polynomial<Rational> 精确表示
+    /// 所有有理系数表示路径均未匹配时，将结果标记为符号系数处理需求。
     result.success = false;
     return result;
 }
@@ -852,7 +850,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     /// --- Phase 5: Zassenhaus 因子组合 ---
     int64_t prime_power = 1;
     for (int i = 0; i < lift_bound; ++i) {
-        /// 防止溢出：若超出 int64_t 范围则截断
+        /// 乘法达到 int64_t 上界前截断 prime_power。
         if (prime_power > std::numeric_limits<int64_t>::max() / prime) {
             prime_power = std::numeric_limits<int64_t>::max();
             break;

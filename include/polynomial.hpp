@@ -115,13 +115,13 @@ public:
     Polynomial operator+(const Polynomial& other) const {
         std::string result_var = variable_name;
         if (variable_name != other.variable_name) {
-            // 仅当双方都不是零多项式时才属于真错误：零多项式可以无视变量名参与运算。
+            /// 两个有效多项式共享变量名；零多项式沿用另一侧变量域。
             if (!is_zero() && !other.is_zero()) {
                 throw std::invalid_argument(
                     "Polynomial::operator+: variable name mismatch ('" +
                     variable_name + "' vs '" + other.variable_name + "')");
             }
-            // 仅当一侧为零时，沿用非零侧的变量名，避免静默把结果改写成 this 的变量。
+            /// 单侧为零时沿用非零侧变量名，保持结果变量域稳定。
             if (is_zero() && !other.is_zero()) {
                 result_var = other.variable_name;
             }
@@ -315,7 +315,7 @@ public:
     }
 
     /**
-     * @brief 伪除法（避免分数运算）
+     * @brief 通过系数缩放执行伪除法，运算保持在原系数环
      * @param other 除数多项式
      * @return pair(伪商, 伪余数)
      * @throw std::runtime_error 除数为零多项式时抛出

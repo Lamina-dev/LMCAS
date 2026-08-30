@@ -328,7 +328,7 @@ static ODESolution solve_exact_ode_impl(
     if (!is_exact_ode(M, N, x, y)) {
         auto mu = find_integrating_factor(M, N, x, y);
         if (!mu) {
-            /// 无法找到积分因子
+            /// 积分因子搜索未决时以空 general_solution 表示。
             result.general_solution = nullptr;
             return result;
         }

@@ -45,9 +45,9 @@ struct LAMINA_API PiecewiseIntervalResult {
     /**
      * @brief 获取唯一分段的解集
      *
-     * 仅当 is_single() 为真时才返回该分段；多分段意味着解依赖参数取值，
-     * 此时返回空集而非默默丢弃其它分段。
-     * @return 单一分段时返回该分段解集，否则返回空集
+     * is_single() 为真时返回该分段；多分段解依赖参数取值，
+     * 因而映射为空集以完整保留分段语义。
+     * @return 单一分段的解集；多分段结果映射为空集
      */
     IntervalUnion single_solution() const {
         if (!is_single()) return IntervalUnion::empty();

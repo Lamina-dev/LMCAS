@@ -2,8 +2,8 @@
  * @file test_taylor_fallback.cpp
  * @brief Taylor 展开回退策略测试。
  *
- * 验证当 L'Hôpital 法则无法在有限步内解决不定式时，
- * Taylor 级数展开能正确计算极限。
+ * 验证 L'Hôpital 规则达到有限迭代边界后，
+ * Taylor 级数展开继续完成极限计算。
  *
  * 覆盖需求: 3.1, 3.2, 3.3, 3.4
  */

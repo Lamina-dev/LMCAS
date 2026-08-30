@@ -21,12 +21,14 @@ using NumericRootResult = Result<std::optional<NumericRoot>>;
 using NumericRootsResult = Result<std::vector<NumericRoot>>;
 
 /**
- * @brief Numerically solve in the supported univariate domain.
+ * @brief 在受支持的一元表达式域内执行数值求根。
  *
- * Polynomial inputs use Sturm isolation followed by checked refinement.
- * Other inputs require a Newton initial value; zero is used when none is
- * supplied. Evaluation, cancellation, and resource failures are
- * returned to the caller.
+ * 多项式输入先由 Sturm 序列隔离实根，再执行受检精化。
+ * 其他输入使用 Newton 初值，缺省初值为零；求值、取消与资源诊断
+ * 均通过 Result 通道返回调用方。
+ *
+ * @see Jacques Charles François Sturm,
+ *      “Mémoire sur la résolution des équations numériques,” 1829.
  */
 LAMINA_API NumericRootsResult solve_numeric_checked(
     const std::shared_ptr<SymbolicExpr>& expr,

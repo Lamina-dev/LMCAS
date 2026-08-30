@@ -451,8 +451,7 @@ void test_classification() {
             SymbolicExpr::power(y, SymbolicExpr::number(2)));
 
         auto cls = classify_first_order_ode(rhs, "x", "y");
-        // x² + y² 不是可分离、线性、齐次或 Bernoulli
-        // 可能被检测为恰当（以 M=-rhs, N=1 形式）或 Unknown
+        /// x² + y² 进入一阶分类路径，可归类为恰当方程或 Unknown。
         EXPECT_TRUE(cls.order == 1, "classified as first order");
     }
 }

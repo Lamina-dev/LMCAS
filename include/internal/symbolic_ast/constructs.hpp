@@ -756,7 +756,7 @@ inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_power(std::sh
         throw std::invalid_argument("create_power operands cannot be null");
     }
     if (exponent->is_zero()) {
-        // 不能盲目把 x^0 折叠成 1：base 可能为 0 时原表达式有定义域条件。
+        /// x^0 的化简需要 base 的定义域证明；base=0 时保留 PowerNode。
         if (base->is_zero()) {
             return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
         }
@@ -774,7 +774,7 @@ inline std::shared_ptr<const SymbolicNode> SymbolicFactory::create_power(std::sh
     }
     if (exponent->is_one()) return base;
     if (base->is_zero()) {
-        // 0^x = 0 仅当指数严格为正时才安全；x<=0 或符号未知时保留 PowerNode。
+        /// 指数严格为正时 0^x 化简为 0，其余指数保留 PowerNode 及其定义域条件。
         if (exponent->is_positive()) return create_number(::BigInt(0));
         return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent));
     }

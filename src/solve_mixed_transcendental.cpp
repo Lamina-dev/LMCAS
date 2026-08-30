@@ -150,7 +150,7 @@ bool contains_transcendental_of_var(
  * @internal
  * @brief 计算节点关于指定变量的多项式次数。
  *
- * 对不依赖 var 的子表达式返回 0；对无法确定次数的情形（非多项式结构）返回 -1。
+ * 与 var 无关的子表达式次数为 0；-1 表示当前结构位于多项式次数支持域之外。
  *
  * @param[in] node 符号节点
  * @param[in] var  变量名
@@ -518,8 +518,8 @@ std::optional<SearchInterval> determine_search_interval(
  * @internal
  * @brief 递归数值求值：遍历 AST 计算表达式的浮点值。
  *
- * 处理 NumberNode、FunctionNode、AddNode、MultiplyNode、PowerNode。
- * 若遇到无法求值的节点（如 VariableNode），返回 NaN。
+ * 处理 NumberNode、FunctionNode、AddNode、MultiplyNode、PowerNode；
+ * NaN 表示节点位于当前数值求值支持域之外。
  */
 static lmmc_real_t recursive_eval(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return 0.0;
@@ -687,7 +687,7 @@ std::vector<IsolatedInterval> isolate_roots(
     int max_roots_limit = opts.max_roots;
     constexpr lmmc_real_t MIN_WIDTH = 1e-6;
 
-    /// 使用栈进行自适应细分（避免深递归）
+    /// 使用显式栈执行自适应细分，使递归深度保持恒定。
     struct SubInterval {
         lmmc_real_t lo;
         lmmc_real_t hi;
@@ -826,10 +826,10 @@ std::vector<IsolatedInterval> isolate_roots(
                 }
             }
 
-            /// 导数有 NaN → 无法确认单调性，接受区间但标记未确认
+            /// 导数包含 NaN 时保留区间，并将单调性标记为未确认。
             result.push_back({current.lo, current.hi, false});
         } else {
-            /// 无导数可用 — 尝试细分以缩小区间
+            /// 导数信息未决时继续细分，以缩小候选区间。
             if (width > MIN_WIDTH * 4.0) {
                 lmmc_real_t mid = (current.lo + current.hi) * 0.5;
                 lmmc_real_t fm = evaluate_with_retry(expr, var, mid, width * 0.125);
@@ -1095,8 +1095,8 @@ std::optional<NumericRoot> refine_root(
         lmmc_real_t x_new = x - fx / dfx;
 
         /// 检查 Newton 迭代是否有效：
-        /// 1. x_new 必须在 [lo, hi] 内
-        /// 2. 残差不应增大
+        /// 1. x_new 位于 [lo, hi] 内
+        /// 2. 新残差小于等于当前残差
         bool do_bisection = false;
 
         if (x_new < lo || x_new > hi) {
@@ -1300,7 +1300,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_mixed_transcendental(
                         solved_as_poly = true;
                     }
                 } catch (...) {
-                    /// 转换失败，不是多项式
+                    /// 转换诊断表示当前表达式位于多项式支持域之外。
                 }
 
                 if (solved_as_poly) continue;

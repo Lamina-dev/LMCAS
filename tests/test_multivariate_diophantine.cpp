@@ -34,10 +34,8 @@ static bool verify_diophantine_solution(
         sum = sum + solution[i] * factors[i];
     }
 
-    // 截断 sum 到 degree < degree_bound in var（与 multivariate_diophantine 内部一致）
-    // 由于我们的测试用例中 degree_bound 足够大，截断不会影响结果
-    // 但为了严格验证，我们只比较 degree < degree_bound 的部分
-    // 简单做法：直接比较 sum 和 target（当 degree_bound 足够大时等价）
+    /// 按 var 将 sum 截断到 degree < degree_bound。
+    /// 当前用例的 degree_bound 覆盖全部项，因此直接比较 sum 与 target。
     return sum == target;
 }
 

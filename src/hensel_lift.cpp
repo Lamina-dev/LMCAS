@@ -27,8 +27,8 @@ namespace lamina {
 /**
  * @brief 计算二项式系数 C(n, k)。
  *
- * 使用乘法公式 C(n, k) = n! / (k! * (n-k)!) 逐步计算，
- * 利用 BigInt 避免中间结果溢出。取 k = min(k, n-k) 以减少迭代次数。
+ * 使用乘法公式 C(n, k) = n! / (k! * (n-k)!) 逐步计算；
+ * BigInt 承载全部中间结果，k = min(k, n-k) 缩短迭代路径。
  *
  * @param[in] n 上标（非负整数）
  * @param[in] k 下标（0 ≤ k ≤ n）
@@ -77,8 +77,8 @@ static BigInt hl_l2_norm_squared(const Polynomial<BigInt>& poly) {
  *
  * 其中 C(n, k) 为二项式系数，||f||_2 为系数向量的 L2 范数。
  *
- * 实现中使用 B^2 = C(n, floor(n/2))^2 * ||f||_2^2 避免开方，
- * 最终通过 BigInt::sqrt() 取整数平方根（向上取整）。
+ * 实现使用 B^2 = C(n, floor(n/2))^2 * ||f||_2^2 在整数域内计算，
+ * 最后由 BigInt::sqrt() 求向上取整的整数平方根。
  *
  * @param[in] poly 整系数多项式（非零，次数 ≥ 1）
  * @return Mignotte 界 B
@@ -118,7 +118,7 @@ static BigInt hl_mignotte_bound(const Polynomial<BigInt>& poly) {
  * - lc(f) 为多项式首项系数
  * - p 为选定的素数
  *
- * 通过反复乘以 p 直到超过阈值来确定 k，避免浮点对数的精度问题。
+ * 通过连续乘以 p 直至超过阈值确定 k，使界计算保持在整数域内。
  *
  * @param[in] poly  整系数多项式（非零，次数 ≥ 1）
  * @param[in] prime 选定的素数 p

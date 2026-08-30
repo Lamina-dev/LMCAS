@@ -144,9 +144,8 @@ static void test_diagnostic_positive_then_negative() {
     EXPECT_TRUE(!failure_147.has_value(), "Positive + Negative returns InvalidArgument");
     EXPECT_TRUE(failure_147.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
     const std::string& msg = failure_147.error().message;
-    // The message should contain the symbol name and mention Positive.
-    // The system may report the implied sign (NonPositive) rather than the
-    // literal "Negative" since Negative implies NonPositive which contradicts Positive.
+    /// 诊断包含符号名与 Positive；实现可报告由 Negative 推导出的
+    /// NonPositive 冲突。
     EXPECT_CONTAINS(msg, {"x", "Positive"},
                     "Result error message contains 'x' and 'Positive'");
     bool has_negative_or_nonpositive =
@@ -180,9 +179,8 @@ static void test_diagnostic_positiveint_then_zero() {
     EXPECT_TRUE(!failure_195.has_value(), "PositiveInt + Zero returns InvalidArgument");
     EXPECT_TRUE(failure_195.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
     const std::string& msg = failure_195.error().message;
-    // The message should mention PositiveInt (the domain) and the conflicting sign.
-    // The system may report the implied sign (NonPositive) rather than "Zero"
-    // since Zero implies NonPositive which contradicts PositiveInt's implied Positive.
+    /// 诊断包含 PositiveInt，并可使用 Zero 推导出的 NonPositive
+    /// 描述与隐含 Positive 的冲突。
     EXPECT_CONTAINS(msg, {"PositiveInt"},
                     "Result error message contains 'PositiveInt'");
     bool has_zero_or_nonpositive =

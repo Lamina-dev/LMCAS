@@ -42,8 +42,7 @@ struct Relation {
  *   - LEQ → NonPositive
  *   - NEQ → NonZero
  *
- * Composite relations (multi-variable LHS or non-zero RHS) are stored without
- * decomposition for later use by the InferenceEngine.
+ * 复合关系（多变量左端或任意右端）按原结构存储，供 InferenceEngine 后续推导。
  */
 class LAMINA_API RelationStore {
 public:

@@ -140,7 +140,7 @@ static Polynomial<Rational> zc_bigint_to_rational_poly(
  * @param[in] m 模数（正整数，通常为 p^k）
  * @param[out] num 输出分子
  * @param[out] den 输出分母
- * @return 重构成功返回 true；失败（无法满足界约束或 gcd≠1）返回 false
+ * @return 满足界约束且 gcd=1 时返回 true；false 表示重构未决
  * @internal
  */
 static bool zc_rational_reconstruction(
@@ -337,13 +337,12 @@ static BigInt zc_mignotte_bound(const Polynomial<Rational>& poly) {
 /**
  * @brief 基于度数和范数剪枝的因子组合（用于因子数 > 15 的情形）。
  *
- * 当模因子数超过 15 时，穷举所有 2^r 个子集不再实际可行。
- * 本函数使用以下启发式剪枝策略加速搜索：
+ * 当模因子数超过 15 时，本函数使用启发式剪枝控制子集搜索规模：
  *
  * 1. 度数剪枝：预计算每个提升因子的次数，仅枚举总度数为原多项式
- *    次数的合理因子度数（≤ deg(f)/2）的子集。
- * 2. 范数剪枝：对候选子集乘积计算 L1 范数，若超过 2 倍 Mignotte 界
- *    则立即拒绝，避免昂贵的有理重构和整除性检验。
+ *    次数的真因数的子集；
+ * 2. 范数剪枝：候选子集乘积的 L1 范数超过 2 倍 Mignotte 界时，
+ *    直接进入下一个候选。
  *
  * @note 完整的 LLL 格基约化算法可进一步优化此步骤，将搜索复杂度
  *       从指数级降至多项式级。对于典型用例（15 < r ≤ 30），
@@ -622,7 +621,7 @@ std::vector<Polynomial<Rational>> zassenhaus_combine(
                 uint64_t rr = subset + c;
                 subset = (((rr ^ subset) >> 2) / c) | rr;
 
-                /// 防止溢出
+                /// active_mask 为子集枚举设置数值上界。
                 if (subset > active_mask || subset == 0) break;
             }
         }

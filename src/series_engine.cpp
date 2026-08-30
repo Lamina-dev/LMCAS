@@ -523,9 +523,8 @@ static ConvergenceInfo convergence_test_impl(
             if (p >= -1.0 && p < 0.0) return {ConvergenceResult::Divergent, "p-series"};
         }
     }
-    // Fast path: a Laurent monomial c*n^e resolves by the p-series rule
-    // without the ratio limit, whose Abs simplification can fail to
-    // terminate for reciprocal powers such as 1/(n^2).
+    /// Laurent 单项式 c*n^e 直接应用 p 级数判据。
+    /// 该路径使倒数幂保持在线性规则内，并跳过 Abs 比值极限的递归化简。
     if (const auto laurent_power = supported_laurent_integer_power(
             lamina::detail::node(general_term), index_var)) {
         if (*laurent_power < -1) {

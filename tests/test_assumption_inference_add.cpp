@@ -179,7 +179,7 @@ void test_mixed_signs_yield_unknown() {
     auto add = make_add({make_var("pos"), make_var("neg")});
     auto expr = wrap_expr(add);
 
-    // Positive + Negative → can't determine sign of sum
+    /// 正数与负数之和的符号由幅值决定，因此保持 Unknown。
     EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
         "pos + neg is Unknown for Positive (mixed signs)");
     EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,

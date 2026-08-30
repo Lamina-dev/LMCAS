@@ -52,7 +52,7 @@ static void test_integrator_compatibility_entrypoint() {
         std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {coeff_node, power_node};
         auto mul_node = lamina::detail::make_node<MultiplyNode>(mul_ops);
         auto integrand = lamina::detail::expression_from_node(mul_node);
-        // Integrator without context (default)
+        /// 使用默认空上下文的 Integrator。
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(integrand, "x");
         EXPECT_TRUE(result_default.has_value(), "default polynomial integration succeeds");
@@ -155,7 +155,7 @@ static void test_limit_nullptr_backward_compat() {
         // Limit point: x → 1
         auto point = lamina::detail::make_node<NumberNode>(BigInt(1));
 
-        // LimitVisitor without context (default)
+        /// 使用默认空上下文的 LimitVisitor。
         LimitVisitor visitor_default("x", point, "");
         expr_node->accept(visitor_default);
         auto result_default = visitor_default.get_result();
@@ -231,7 +231,7 @@ static void test_series_nullptr_backward_compat() {
         auto exp_x = SymbolicExpr::exp(x);
         auto zero = SymbolicExpr::number(0);
 
-        // Series without context (default)
+        /// 使用默认空上下文计算级数。
         auto result_default = exp_x->series("x", zero, order);
 
         // Series with explicit nullptr context
@@ -369,7 +369,7 @@ static void test_matcher_nullptr_backward_compat() {
         auto target = lamina::detail::expression_from_node(tgt_node);
         std::unordered_set<std::string> wildcards = {"_a"};
 
-        // Match without context (default)
+        /// 使用默认空上下文执行匹配。
         MatchMap results_default;
         bool matched_default = Matcher::match(pattern, target, wildcards, results_default);
 
@@ -413,14 +413,14 @@ static void test_rewrite_engine_nullptr() {
         auto y_node = make_var("y");
         std::vector<std::shared_ptr<const SymbolicNode>> tgt_ops = {y_node, make_number(0)};
         auto target = lamina::detail::expression_from_node(lamina::detail::make_node<AddNode>(tgt_ops));
-        // RewriteEngine without context (default)
+        /// 使用默认空上下文的 RewriteEngine。
         RewriteEngine engine_default;
         engine_default.add_rule(rule);
         auto result_default = engine_default.apply(target, 10);
         EXPECT_TRUE(result_default.has_value(), "default additive rewrite succeeds");
         if (!result_default) return;
 
-        // RewriteEngine with an explicit context without assumptions
+        /// 使用显式上下文，并保持 assumptions 为空。
         RewriteEngine engine_nullptr;
         engine_nullptr.add_rule(rule);
         ComputationContext context;

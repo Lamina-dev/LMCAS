@@ -61,8 +61,8 @@ LAMINA_API Result<ApproxReal> quadrature_gaussian_numeric(
  * @brief Checked adaptive Simpson integration.
  *
  * All endpoint and integrand evaluation goes through evaluate_numeric(); missing
- * variables, domain errors, cancellation, and budget exhaustion are reported as
- * CasError instead of being collapsed to nullptr or zero.
+ * variables, domain errors, cancellation, and budget exhaustion are represented
+ * by CasError in the Result channel.
  */
 LAMINA_API Result<ApproxReal> adaptive_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,

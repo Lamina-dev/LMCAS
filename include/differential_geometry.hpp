@@ -134,8 +134,8 @@ LAMINA_API DifferentialGeometryExprResult lie_derivative_checked(
  *
  * k-形式的系数按递增坐标指标组合的字典序排列。对于指标组合
  * J=(j0,...,jk)，输出系数为
- * sum_r (-1)^r * partial(omega[J without jr]) / partial(x[jr])。
- * 0-形式传单个系数；n 维空间中的 n-形式返回空的 (n+1)-形式系数表。
+ * sum_r (-1)^r * partial(omega[J 去除 jr]) / partial(x[jr])。
+ * 0-形式传单个系数；n 维空间中的 n-形式映射为空的 (n+1)-形式系数表。
  *
  * @param form_coeffs 按上述顺序排列的形式系数（0-形式传单元素 [f]）
  * @param degree      形式次数，范围为 [0, vars.size()]

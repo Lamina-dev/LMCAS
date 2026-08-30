@@ -419,7 +419,7 @@ using FrobeniusSolutionResult = Result<FrobeniusSolution>;
 /**
  * @brief 用参数变分法求特解。
  *
- * 算法来源: Boyce & DiPrima, Elementary Differential Equations, Section 3.6
+ * @see Boyce and DiPrima, Elementary Differential Equations, §3.6.
  *
  * 给定二阶线性 ODE y'' + p(x)y' + q(x)y = g(x) 的两个齐次解 y₁, y₂，
  * 计算 Wronskian W = y₁y₂' - y₂y₁'，然后：
@@ -471,7 +471,7 @@ LAMINA_API ODESingularityType classify_singular_point(
 /**
  * @brief 用 Frobenius 方法求 ODE 的级数解。
  *
- * 算法来源: Bender & Orszag, Advanced Mathematical Methods, Chapter 3
+ * @see Bender and Orszag, Advanced Mathematical Methods for Scientists and Engineers, Chapter 3.
  *
  * 给定 y'' + p(x)y' + q(x)y = 0：
  * - 常点：假设 y = ∑aₙ(x-x₀)ⁿ，代入匹配系数

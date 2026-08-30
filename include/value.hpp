@@ -83,7 +83,7 @@ public:
     }
     Value(const std::vector<std::vector<Value>>& mat) : type(Type::Matrix), data(mat) {}
 
-    // 字符串值：用 Type::String 区分，避免和 Null 混在一起。
+    /// 字符串使用独立的 Type::String 标记，与 Null 保持类型区分。
     Value(const std::string& s) : type(Type::String), data(nullptr), _str_cache(s) {}
     Value(const char* s) : type(Type::String), data(nullptr), _str_cache(s ? s : "") {}
 
@@ -104,8 +104,8 @@ public:
             type == Type::Irrational) {
             return true;
         }
-        // Symbolic 表达式只要能化简为数值节点，就视为可走 numeric 路径；否则不视为
-        // numeric，避免上层算子把无法求值的符号悄悄塞进数值路径。
+        /// 可化简为数值节点的 Symbolic 表达式进入 numeric 路径；
+        /// 其余符号表达式保持 Symbolic 类型。
         if (type == Type::Symbolic) {
             const auto& sp = std::get<std::shared_ptr<SymbolicExpr>>(data);
             if (!sp) return false;
@@ -133,7 +133,7 @@ public:
         if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
         if (type == Type::Float) return std::get<lmmc_real_t>(data);
         if (type == Type::BigInt) {
-            // 直接用 BigInt::to_double() 即可，避免先 to_int() 后再转 double 在大数上失真。
+            /// BigInt::to_double() 直接保留大整数的双精度近似。
             return std::get<::BigInt>(data).to_double();
         }
         if (type == Type::Rational) {
@@ -170,7 +170,7 @@ public:
         if (type == Type::Int) return ::Rational(std::get<int>(data));
         if (type == Type::Float) return ::Rational::from_double(std::get<lmmc_real_t>(data));
         if (type == Type::BigInt) {
-            // 直接用 BigInt 构造 Rational，避免先转 int 截断高位。
+            /// 直接从 BigInt 构造 Rational，保留全部整数位。
             return ::Rational(std::get<::BigInt>(data));
         }
         if (type == Type::Irrational) {
@@ -189,7 +189,7 @@ public:
         if (type == Type::Float) return ::Irrational::constant(std::get<lmmc_real_t>(data));
         if (type == Type::Rational) return ::Irrational::constant(std::get<::Rational>(data).to_double());
         if (type == Type::BigInt) {
-            // 用 to_double() 而不是 to_int()，避免大整数被饱和到 INT_MAX/INT_MIN 后再当成数值。
+            /// to_double() 直接生成大整数的浮点近似，保留超出 int 范围的数量级。
             return ::Irrational::constant(std::get<::BigInt>(data).to_double());
         }
         return ::Irrational::constant(0);

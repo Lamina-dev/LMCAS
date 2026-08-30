@@ -243,7 +243,7 @@ void PropertyStore::declare_domain_unchecked(const std::string& symbol, Domain d
         return;
     }
 
-    // Transcendental guard: transcendental symbols cannot be Algebraic or more specific
+    /// 超越域约束将符号域限制为 Real 或 Complex。
     if (props.transcendental && domain_specificity(domain) > domain_specificity(Domain::Real)) {
         throw std::invalid_argument(
             "Contradiction for symbol '" + symbol +
@@ -525,9 +525,8 @@ static bool intervals_equivalent(const Interval& left, const Interval& right) {
 }
 
 /**
- * Helper: returns true if two intervals have a non-empty intersection.
- * Endpoint ordering is delegated to checked interval operations; unsupported
- * endpoints are treated conservatively as not proven to overlap.
+ * 辅助函数：判断两个区间是否具有已证明的交集。
+ * 端点排序委托给受检区间运算；当前支持域之外的端点保持“交集未证明”状态。
  */
 static Result<bool> intervals_overlap_checked_impl(
     const Interval& a,

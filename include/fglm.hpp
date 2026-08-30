@@ -1,6 +1,10 @@
 /**
  * @file fglm.hpp
  * @brief FGLM 算法：零维理想 Gröbner 基在不同单项式序之间的转换。
+ *
+ * @see J.-C. Faugère, P. Gianni, D. Lazard, and T. Mora,
+ *      “Efficient Computation of Zero-dimensional Gröbner Bases by Change of Ordering,”
+ *      Journal of Symbolic Computation 16(4), 1993.
  */
 #pragma once
 
@@ -220,7 +224,7 @@ inline bool is_zero_dimensional(const std::vector<FGLMPoly>& basis, size_t num_v
  * @param basis Gröbner 基
  * @param num_vars 变量个数
  * @param max_degree 搜索的最大次数上限
- * @return 商空间维数；无法确定时返回 -1
+ * @return 商空间维数；-1 表示当前搜索界内维数保持未知
  */
 inline int quotient_dimension(const std::vector<FGLMPoly>& basis,
                               size_t num_vars,
@@ -487,6 +491,9 @@ inline std::vector<Rational> poly_to_vector(
  * @param num_vars 变量个数
  * @return 目标序下的 Gröbner 基
  * @throw std::runtime_error 理想非零维或维数过大时抛出
+ * @see J.-C. Faugère, P. Gianni, D. Lazard, and T. Mora,
+ *      “Efficient Computation of Zero-dimensional Gröbner Bases by Change of Ordering,”
+ *      Journal of Symbolic Computation 16(4), 1993.
  */
 inline std::vector<FGLMPoly> fglm_convert(
     const std::vector<FGLMPoly>& source_basis,

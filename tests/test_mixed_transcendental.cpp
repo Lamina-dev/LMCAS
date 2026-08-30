@@ -121,8 +121,7 @@ void test_allow_numeric_false_returns_empty() {
     TEST_CASE("allow_numeric=false on mixed transcendental → empty vector");
 
     auto x = SymbolicExpr::variable("x");
-    // x*sin(x) - 1 = 0: a mixed transcendental equation with no closed-form solution.
-    // This equation cannot be reduced by polynomial or transcendental solvers.
+    /// x*sin(x) - 1 = 0 属于混合超越方程，数值根路径处理其闭式未决结果。
     auto expr = SymbolicExpr::add(
         SymbolicExpr::multiply(x, SymbolicExpr::sin(x)),
         SymbolicExpr::number(-1)
@@ -156,8 +155,7 @@ void test_allow_numeric_true_permits_solving() {
 
     // Note: If the numerical solver is fully implemented, this should return
     // at least one root. If it's still a stub, this test documents the expected
-    // behavior once implemented. The key property is that allow_numeric=true
-    // does NOT block the solver from attempting numerical methods.
+    /// allow_numeric=true 启用数值候选路径。
     std::cout << "  [INFO] allow_numeric=true returned " << results.size() << " root(s)" << std::endl;
 
     // If results are non-empty, verify they are valid NumberNode expressions
@@ -171,8 +169,7 @@ void test_allow_numeric_false_cos_equation_returns_empty() {
     TEST_CASE("allow_numeric=false on x*cos(x)+x^2*sin(x)-1 → empty vector");
 
     auto x = SymbolicExpr::variable("x");
-    // x*cos(x) + x^2*sin(x) - 1 = 0: another mixed transcendental equation
-    // that cannot be solved symbolically.
+    /// x*cos(x) + x²*sin(x) - 1 = 0 由混合超越数值路径处理。
     auto expr = SymbolicExpr::add(
         SymbolicExpr::multiply(x, SymbolicExpr::cos(x)),
         SymbolicExpr::add(
@@ -268,8 +265,7 @@ void test_routing_transcendental_substitution_not_hybrid() {
                 EXPECT_NEAR(*eval, 0.0, 1e-10,
                     "Substituting root back into exp(x)-2 should give 0");
             } else {
-                // Accept symbolic result — the key property is that it was found
-                // without allow_numeric, confirming the transcendental path handled it
+                /// 找到符号结果即证明超越路径在空数值回退设置下完成求解。
                 std::cout << "  [INFO] Root is symbolic: " << results[0]->to_string() << std::endl;
                 EXPECT_TRUE(results[0] != nullptr && !results[0]->to_string().empty(),
                             "Transcendental path produced a symbolic result (not hybrid)");
@@ -391,8 +387,8 @@ void test_backward_compat_transcendental_substitution() {
         SymbolicExpr::number(-2)
     );
 
-    // With allow_numeric=false, the transcendental solver should still find ln(2)
-    // This confirms the hybrid solver does NOT intercept reducible transcendental equations
+    /// allow_numeric=false 时超越求解器仍返回 ln(2)，
+    /// 证明可约超越方程由符号路径处理。
     lamina::SolveOptions opts;
     opts.allow_numeric = false;
 
@@ -803,8 +799,7 @@ void test_sin_x_squared_nonlinear_default() {
     TEST_CASE("sin(x^2) + x → non-linear argument, default [-10, 10]");
 
     auto x = SymbolicExpr::variable("x");
-    // sin(x^2) + x: argument x^2 is non-linear in x
-    // Should use default [-10, 10] without periodic extension
+    /// sin(x²) 的参数关于 x 为二次式，因此使用默认区间 [-10, 10]。
     auto sin_arg = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
@@ -2452,8 +2447,7 @@ void test_exception_safety_extreme_values() {
     TEST_CASE("Exception safety: exp(x) - 1e300 on wide interval handles overflow gracefully");
 
     auto x = SymbolicExpr::variable("x");
-    // exp(x) - 1e300: exp(x) overflows for large x, producing infinity.
-    // The solver must handle this without throwing.
+    /// exp(x) - 1e300 在大 x 处产生无穷值；求解器通过数值状态处理该结果。
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::number(-1e300)

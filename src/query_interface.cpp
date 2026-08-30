@@ -92,7 +92,7 @@ QueryTriboolResult QueryInterface::cached_query_checked(
     PropType prop,
     const std::string& operation,
     const std::function<Tribool()>& compute) const {
-    // Null root cannot be hashed — skip cache
+    /// 空根节点直接返回参数诊断，其余节点进入哈希缓存。
     if (!lamina::detail::node(expr)) {
         return QueryTriboolResult::failure(
             CasErrc::InvalidArgument, "query expression must not be null", operation);

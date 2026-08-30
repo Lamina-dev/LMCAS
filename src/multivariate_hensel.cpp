@@ -111,7 +111,7 @@ std::vector<MultiPoly> multivariate_hensel_lift(
         factors.push_back(std::move(mp));
     }
 
-    /// 若 lift_var 不在变量集中，无法提升，直接返回嵌入后的因子
+    /// lift_var 位于变量域之外时，返回嵌入后的原因子。
     if (lift_var_idx < 0) {
         return factors;
     }
@@ -185,7 +185,7 @@ std::vector<MultiPoly> multivariate_hensel_lift(
                 /// 然后执行多项式除法
                 MultiPoly eval_check = remainder.eval(lift_var, eval_point);
                 if (!eval_check.is_zero()) {
-                    /// 低阶误差未完全消除——不应发生，但防御性跳过
+                    /// 低阶误差残留时终止本轮提升，并将余式重置为零。
                     remainder = MultiPoly(Rational(0), vars);
                     break;
                 }
@@ -413,7 +413,7 @@ std::vector<MultiPoly> multivariate_diophantine(
             f2_uni = factors[1].to_univariate();
             converted = true;
         } catch (...) {
-            /// 若不是一元的，在 var 处求值后再转换
+            /// 多元输入先在 var 处求值，再转换为一元多项式。
             try {
                 MultiPoly f1_eval = factors[0].eval(var, eval_point);
                 MultiPoly f2_eval = factors[1].eval(var, eval_point);
@@ -426,7 +426,7 @@ std::vector<MultiPoly> multivariate_diophantine(
         }
 
         if (!converted) {
-            /// 无法转换为一元多项式，返回零解作为退化处理
+            /// 一元转换未决时返回零解，表示退化提升结果。
             return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
         }
 
@@ -463,8 +463,7 @@ std::vector<MultiPoly> multivariate_diophantine(
 
         auto [quotient, remainder] = target_uni.div_mod(g);
         if (!remainder.is_zero()) {
-            /// target 不能被 gcd 整除——不应发生于互素因子
-            /// 退化处理：返回零
+            /// 互素前提失效时返回零解，表示 Bézout 提升退化。
             return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
         }
 

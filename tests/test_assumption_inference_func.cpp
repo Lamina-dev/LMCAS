@@ -420,7 +420,7 @@ void test_ln_nonnegative_arg_not_sufficient() {
 
     auto expr = make_func_expr(FunctionNode::FuncType::Ln, var("x"));
 
-    // NonNegative includes 0, and ln(0) is undefined, so we can't infer Real
+    /// NonNegative 包含零；ln 的实数性还需要 StrictlyPositive 证明。
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "ln(x) Real is Unknown when x is only NonNegative");
 }

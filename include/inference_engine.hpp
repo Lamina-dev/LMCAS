@@ -187,8 +187,8 @@ public:
 
     /**
      * @brief Propagate interval bounds through an expression tree.
-     * @param expr The expression to propagate bounds for
-     * @return The propagated interval, or std::nullopt if bounds cannot be determined
+     * @param expr 用于传播边界的表达式
+     * @return 推导出的区间；std::nullopt 表示当前事实保持边界未知
      */
     std::optional<Interval> propagate_bounds(const SymbolicExpr& expr) const;
 
@@ -210,8 +210,8 @@ public:
      * @brief Applies monotonicity deductions transactionally.
      *
      * Deduced relations are inserted through RelationStore::add_relation_checked.
-     * If any derived relation contradicts stored properties, the failing insert
-     * returns CasError instead of partially applying that relation.
+     * 派生关系与既有属性冲突时，插入操作以 CasError 原子地返回诊断，
+     * 关系存储保持提交前状态。
      */
     Result<void> apply_monotonicity_rules_checked(const Relation& rel,
                                                   RelationStore& store,

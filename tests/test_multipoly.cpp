@@ -467,7 +467,7 @@ int main()
     TEST_CASE("MultiPoly: exact_div throws on non-exact division");
     {
         std::vector<std::string> vars = {"x", "y"};
-        // f = x^2 + 1, g = x + y (does not divide exactly)
+        /// f = x² + 1，g = x + y，覆盖精确整除失败路径。
         std::vector<MultiPoly::Term> f_terms = {
             {{2, 0}, Rational(1)},  // x^2
             {{0, 0}, Rational(1)},  // 1

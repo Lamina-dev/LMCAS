@@ -306,7 +306,7 @@ void test_query_positive_semidefinite() {
 
     EXPECT_TRIBOOL(qi.query_positive_semidefinite(a_expr).value(), Tribool::True,
                    "A declared PSD: query_positive_semidefinite = True");
-    // PositiveSemiDefinite does NOT imply PositiveDefinite
+    /// PositiveSemiDefinite 对 PositiveDefinite 查询保持 Unknown。
     EXPECT_TRIBOOL(qi.query_positive_definite(a_expr).value(), Tribool::Unknown,
                    "A declared PSD: query_positive_definite = Unknown");
 }

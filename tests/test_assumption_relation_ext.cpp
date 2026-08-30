@@ -327,7 +327,7 @@ void test_transitive_cap_64() {
     EXPECT_TRUE(found_count == 64,
                 "Exactly 64 star variables should have deduced GT bottom relation");
 
-    // Verify that some star variables do NOT have the deduced relation (cap hit)
+    /// 闭包上限触发后，部分星形节点保持关系未知。
     EXPECT_TRUE(found_count < num_star,
                 "Not all 70 star variables should have the deduced relation (cap hit)");
 }

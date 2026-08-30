@@ -140,7 +140,7 @@ LAMINA_API ExpressionResult inverse_derivative_checked(
  * @param[in] f     函数表达式
  * @param[in] var   变量名
  * @param[in] point 求导点（y 值）
- * @return 反函数导数表达式，不存在时返回 nullptr
+ * @return 反函数导数表达式；nullptr 表示输入位于当前支持域之外
  */
 
 /**

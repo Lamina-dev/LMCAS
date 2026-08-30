@@ -80,9 +80,8 @@ struct CacheKeyHash {
  * Provides query_positive, query_negative, query_nonnegative, query_real,
  * query_integer, and query_nonzero methods that return Tribool results.
  *
- * Results are bucketed by (expression_hash, property_type) and then verified by
- * structural equality, so a hash collision cannot return another expression's fact.
- * The cache must be invalidated on any mutation to the AssumptionContext (push/pop/assume).
+ * 结果先按（表达式哈希，属性类型）分桶，再以结构相等性确认表达式身份。
+ * AssumptionContext 发生 push、pop 或 assume 变更时，缓存世代触发整体失效。
  *
  * Dispatch logic:
  *   - Null root node → Unknown
@@ -186,8 +185,8 @@ public:
     /**
      * @brief Invalidate the entire query result cache.
      *
-     * Must be called whenever the AssumptionContext is mutated (push_scope,
-     * pop_scope, assume_domain, assume_sign, assume/add_relation).
+     * AssumptionContext 执行 push_scope、pop_scope、assume_domain、
+     * assume_sign 或关系插入后调用本函数。
      */
     void invalidate_cache() const;
 

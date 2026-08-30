@@ -71,7 +71,7 @@ LAMINA_API ExpressionResult cauchy_integral_checked(
  * @brief 尝试对函数进行解析延拓
  * @param f 输入函数
  * @param z 复变量名
- * @return 延拓后的函数（或返回自身若无法显式延拓）
+ * @return 显式延拓结果；当前规则保持输入表达式时返回其自身
  */
 LAMINA_API std::shared_ptr<SymbolicExpr> analytic_continuation(
     const std::shared_ptr<SymbolicExpr>& f,

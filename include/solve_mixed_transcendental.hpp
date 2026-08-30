@@ -2,11 +2,11 @@
  * @file solve_mixed_transcendental.hpp
  * @brief 混合超越方程求解：符号预处理 + 自适应根隔离 + Newton-Raphson 精化。
  *
- * 本模块处理同时包含超越函数（sin、cos、tan、exp、ln）和代数项的方程，
- * 这类方程无法通过换元化为纯多项式或纯超越形式。求解流程：
- * 1. 通过 factor_transcendental 尝试符号分解；
- * 2. 对不可约因子执行自适应根隔离（符号变化检测 + 单调性确认）；
- * 3. 使用 Newton-Raphson（带区间约束）精化每个隔离根，失败时回退到二分法。
+ * 本模块处理同时包含超越函数（sin、cos、tan、exp、ln）和代数项的方程。
+ * 求解流程：
+ * 1. 通过 factor_transcendental 执行符号分解；
+ * 2. 对整体因子执行自适应根隔离（符号变化检测与单调性确认）；
+ * 3. 使用带区间约束的 Newton-Raphson 精化隔离根，并以二分法完成稳定收敛路径。
  */
 #pragma once
 

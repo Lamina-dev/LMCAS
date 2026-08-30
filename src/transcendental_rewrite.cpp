@@ -131,7 +131,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
                     return result;
                 }
             } else {
-                /// 无法提取为有理数的数值（如非整数浮点），保留原样
+                /// 当前有理数提取规则之外的数值节点保持原结构。
                 result.push_back(simplified);
             }
             continue;
@@ -158,7 +158,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
                     if (tf_extract_rational(num, val)) {
                         constant_product = constant_product * val;
                     } else {
-                        /// 无法提取的数值操作数保留在非常数部分
+                        /// 当前提取规则之外的数值操作数保留在符号部分。
                         non_numeric_ops.push_back(nop);
                     }
                 }
@@ -205,9 +205,9 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
 /**
  * @brief 判断换元后的表达式是否对所有不定元和原始变量均为线性。
  *
- * 若换元后的表达式对每个不定元（u0, u1, ...）以及原始变量（如 x）的次数
- * 均不超过 1，则该表达式在超越多项式环中不可约——无法进一步因式分解。
- * 典型例子：a*sin(x) + b*x + c 换元后为 a*u0 + b*x + c，对 u0 和 x 均为线性。
+ * 换元表达式对每个不定元（u0, u1, ...）及原始变量的次数均小于等于 1 时，
+ * 该表达式在超越多项式环中为整体元素。
+ * 例如 a*sin(x) + b*x + c 映射为 a*u0 + b*x + c，对 u0 与 x 均为线性。
  *
  * @param[in] sub_result 换元结果（含 poly_expr 和 mappings）
  * @param[in] var        原始目标变量名
@@ -241,9 +241,8 @@ bool tf_is_linear_irreducible(
 /**
  * @brief 检测表达式是否已为独立子表达式的乘积形式。
  *
- * 若表达式根节点为 MultiplyNode，则将各操作数视为独立因子直接返回，
- * 避免进入完整的 Berlekamp/Zassenhaus 分解流程。
- * 数值常数被单独累积，仅当非 1 时作为独立因子返回。
+ * MultiplyNode 的各操作数直接形成独立因子，沿乘法结构完成分解；
+ * 数值常数单独累积，并在值异于 1 时形成常数因子。
  *
  * @param[in] expr 待检测的符号表达式
  * @return 因子列表；若表达式非乘积形式则返回空向量（表示无快速路径）
@@ -766,7 +765,7 @@ std::shared_ptr<SymbolicExpr> tf_simplify_pythagorean(
 
     if (!simplified_root) return expr;
 
-    /// 若化简后与原表达式结构相同，返回原表达式避免不必要的重建
+    /// 化简结果与原表达式结构相同时复用原对象。
     if (simplified_root->equals(*lamina::detail::node(expr))) {
         return expr;
     }

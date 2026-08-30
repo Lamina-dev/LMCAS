@@ -940,7 +940,7 @@ std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
 }
 
 std::string classify_quadratic_form(const std::shared_ptr<SymbolicExpr>& A) {
-    /// 使用特征值列表（来自特征多项式求根），避免脆弱的特征向量求解。
+    /// 使用特征多项式的根列表分类二次型，直接依据特征值符号。
     auto evals_expr = SymbolicExpr::eigenvalues(A);
     if (!evals_expr) return "unknown";
     auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(evals_expr));
@@ -1080,8 +1080,8 @@ static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
             diag.push_back(pr.first);
         }
     }
-    /// 当特征向量数等于 n 时，矩阵可对角化，Jordan 型即对角阵。
-    /// 缺陷情形（重根但特征向量不足）当前不支持广义特征向量链，返回 false。
+    /// 特征向量数等于 n 时矩阵可对角化，Jordan 型即对角阵；
+    /// 向量数小于 n 时返回 false，表示广义特征向量链位于当前支持域之外。
     if (P_cols.size() != n) return false;
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> P_grid(n,

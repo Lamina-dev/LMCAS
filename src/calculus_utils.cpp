@@ -441,7 +441,7 @@ ContinuityType continuity_at(
     bool left_exists = left_lim && !calculus_utils_is_infinity(left_lim);
     bool right_exists = right_lim && !calculus_utils_is_infinity(right_lim);
 
-    /// 如果任一侧极限不存在或为无穷 → 本性间断点
+    /// 任一侧极限缺失或为无穷时，分类为本性间断点。
     if (!left_exists || !right_exists) {
         return ContinuityType::Essential;
     }
@@ -554,7 +554,7 @@ AsymptoteAnalysisResult asymptotes_checked(
         result.horizontal.push_back(lim_pos);
     }
     if (has_horiz_neg) {
-        /// 避免重复添加相同的水平渐近线
+        /// 与正无穷方向相同的水平渐近线共享一个结果项。
         bool duplicate = has_horiz_pos && calculus_utils_expr_equal(lim_pos, lim_neg);
         if (!duplicate) {
             result.horizontal.push_back(lim_neg);
@@ -606,7 +606,7 @@ AsymptoteAnalysisResult asymptotes_checked(
             if (intercept_neg) intercept_neg = intercept_neg->simplify();
 
             if (intercept_neg && !calculus_utils_is_infinity(intercept_neg)) {
-                /// 避免重复：如果 +∞ 方向已有相同斜渐近线则跳过
+                /// 与正无穷方向相同的斜渐近线共享一个结果项。
                 bool duplicate = false;
                 for (auto& [s, i] : result.oblique) {
                     if (calculus_utils_expr_equal(s, slope_neg) &&

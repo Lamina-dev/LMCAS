@@ -101,8 +101,8 @@ public:
  *
  * 当被积函数形如 FunctionNode(arg) 或 PowerNode(base, exp)，且其内部参数可拆解为
  * a*var + b（其中 a、b 关于 var 为常数且 a ≠ 0）时，将参数替换为 var 进行查表，
- * 再代回 a*var + b 并乘以 1/a 得到结果。该策略仅依赖积分表（TableLookupStrategy），
- * 不再次进入完整的策略链，避免与一般换元策略产生递归。
+ * 再代回 a*var + b 并乘以 1/a 得到结果。该策略直接调用积分表
+ * （TableLookupStrategy），使递归边界保持在线性换元层。
  */
 class LAMINA_API LinearSubstitutionStrategy : public BuiltInIntegrationStrategy {
 public:
@@ -235,19 +235,18 @@ private:
  *   2. poly_divide：当 deg(P) ≥ deg(Q) 时进行多项式长除法，得到商和余式；商部分用幂律
  *      逐项积分，剩余的真分式进入部分分式分解。
  *   3. factor_denominator：用 square_free_factorization 加上有理根定理，把 Q 分解为
- *      线性因子和不可约二次因子（在有理数域上）。无法在有理数上完成分解时返回 false。
+ *      线性因子和有理域上的二次整体因子；高次整体因子使分解阶段返回 false。
  *   4. solve_coefficients：对每个因子按重数引入待定系数（线性因子贡献 A_l/(x-r)^l，
  *      二次因子贡献 (B_l·x + C_l)/q(x)^l），通过比较多项式系数列出线性方程组，使用
  *      gaussian_eliminate 求解。
  *   5. integrate_term：逐项积分：
- *        - A/(x-r)：A·ln|x-r|；A/(x-r)^l (l≥2)：-A/((l-1)(x-r)^(l-1))；
- *        - (Bx+C)/q(x)：分裂为 ln 和 arctan 两部分（完全平方）；
- *        - 不可约二次因子的高次幂 q^l (l≥2) 暂以未求值积分节点保留。
+ *      - A/(x-r)^l：l=1 生成 ln|x-r|，l>1 生成幂函数；
+ *      - (Bx+C)/q(x)：分裂为 ln 和 arctan 两部分（完全平方）；
+ *      - q^l（l>=2）映射为保留原语义的未求值积分节点。
  *
- * 失败保护：
- *   - 分母 Q 为零多项式时直接返回未求值积分节点；
- *   - 表达式不是有理函数时返回 nullptr，让链上后续策略尝试；
- *   - 因式分解或线性方程组无解时返回未求值积分节点保留原积分形式。
+ * 支持域映射：
+ *   - 零分母、因式分解未决与线性系统未决映射为未求值积分节点；
+ *   - 其他表达式返回 nullptr，由策略链继续匹配。
  */
 class LAMINA_API RationalDecompositionStrategy : public BuiltInIntegrationStrategy {
 public:
@@ -272,7 +271,7 @@ public:
     /**
      * @brief 多项式长除法：P = Q·quotient + remainder。
      * @param P 被除多项式
-     * @param Q 除多项式（不能为零）
+     * @param Q 除多项式（前置条件：Q 为非零多项式）
      * @param quotient_out 输出：商多项式
      * @param remainder_out 输出：余式多项式（deg(remainder) < deg(Q)）
      */
@@ -284,8 +283,7 @@ public:
      * @brief 把 Q 分解为线性 (x-r) 与不可约二次 (x²+px+q) 因子的集合。
      * @param Q 分母多项式
      * @param factors_out 输出：(因子, 重数) 列表；每个因子是首一线性或首一不可约二次
-     * @return 全部分解为线性/不可约二次因子返回 true；含有更高次不可约因子或
-     *         有理根定理无法穷尽线性因子时返回 false
+     * @return 线性/二次因子完整覆盖时返回 true；高次整体因子或剩余因子使结果为 false
      */
     bool factor_denominator(const Polynomial<Rational>& Q,
                             std::vector<std::pair<Polynomial<Rational>, int>>& factors_out);
@@ -345,7 +343,7 @@ public:
  * 内部参数严格要求为积分变量本身（exp(-x²) 中的 x 必须就是 var；含尺度的二次幂
  * 通过提取 var 的多项式系数识别），其他形式由换元/线性代换等策略处理。
  *
- * 任何无法匹配的输入返回 nullptr，让策略链上的后续策略尝试。
+ * 当前规则集之外的输入返回 nullptr，由策略链继续匹配。
  */
 class LAMINA_API SpecialFunctionStrategy : public BuiltInIntegrationStrategy {
 public:

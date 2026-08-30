@@ -184,7 +184,7 @@ void test_x_squared_plus_1_no_context() {
     // No context (nullptr) — all solutions returned unfiltered
     auto solutions = solve_with_assumptions(eq, "x", nullptr);
 
-    // Without filtering, the solver should return the imaginary solutions
+    /// 默认求解路径返回复数域中的虚数解。
     EXPECT_TRUE(solutions.size() >= 1,
                 "x²+1=0 no context: at least 1 solution returned (imaginary)");
 }

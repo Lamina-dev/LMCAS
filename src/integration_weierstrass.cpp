@@ -9,7 +9,7 @@ namespace {
 bool weier_is_rational_trig(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
     if (!node) return true;
     if (auto vn = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        /// 裸 var 不允许（如 x*sin(x) 不是 sin/cos 的有理函数）
+        /// 裸 var 表示输入超出 sin/cos 有理函数域。
         return vn->name() != var;
     }
     if (std::dynamic_pointer_cast<const NumberNode>(node)) return true;
@@ -123,8 +123,8 @@ std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const Sy
     return node->clone();
 }
 
-/// 将（已做 sin/cos→t 代换的）表达式树递归求值为有理数对 (分子, 分母)，
-/// 分子分母均为关于 t 的多项式表达式。返回 nullopt 表示遇到无法处理的结构。
+/// 递归求值已执行 sin/cos→t 代换的表达式，生成关于 t 的多项式分子与分母；
+/// nullopt 表示当前节点位于有理函数支持域之外。
 typedef std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>> RatPair;
 
 std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNode>& node,
@@ -192,7 +192,7 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
         if (neg) std::swap(num, den);
         return RatPair{num, den};
     }
-    /// 其它结构（含未代换的函数）无法表示为 t 的有理函数
+    /// 其他节点结构由 nullopt 标记为 t 有理函数域之外。
     return std::nullopt;
 }
 
@@ -217,16 +217,14 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
     auto dx = SymbolicExpr::divide(SymbolicExpr::number(2), onep); // 2/(1+t²)
     auto integrand_raw = SymbolicExpr::multiply(replaced, dx);
 
-    /// 关键：被积函数是 sin/cos 的有理函数，代换后仍是 t 的有理函数，但
-    /// 嵌套分式 simplify() 无法约化。用「有理数对 (分子多项式, 分母多项式)」
-    /// 递归求值整棵表达式树，得到干净的 N(t)/D(t)，再交给有理函数积分。
+    /// sin/cos 有理函数经代换后仍为 t 的有理函数。
+    /// 通过多项式对递归求值整棵表达式树，直接得到 N(t)/D(t)。
     auto rat = weier_to_rational(lamina::detail::node(integrand_raw), tvar);
-    if (!rat) return nullptr;  // 出现非多项式结构，放弃
+    if (!rat) return nullptr;  /// 节点位于多项式支持域之外。
     auto [num_poly, den_poly] = *rat;
     if (!den_poly || lamina::detail::node(den_poly)->is_zero()) return nullptr;
 
-    /// 用多项式 GCD 约简 num/den，得到最简有理函数，避免 simplify() 把
-    /// 单一分式重新展开成分式之和（那样 RationalDecomposition 无法识别）。
+    /// 使用多项式 GCD 将 num/den 化为最简有理函数，并保持单一分式结构。
     std::shared_ptr<SymbolicExpr> integrand_t;
     try {
         Polynomial<Rational> Np = symbolic_to_poly<Rational>(num_poly->expand(), tvar);
@@ -247,8 +245,7 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
         integrand_t = SymbolicExpr::divide(num_poly, den_poly)->simplify();
     }
 
-    /// 用有理分解策略直接积分（用独立的 Integrator 实例，避免污染外层
-    /// 积分器的循环检测状态导致结果被错误改写）。
+    /// 独立 Integrator 承载有理分解策略，使其循环检测状态与外层积分器隔离。
     Integrator inner;
     RationalDecompositionStrategy rds;
     auto rational_attempt = rds.try_integrate(

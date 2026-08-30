@@ -608,8 +608,8 @@ static bool root_less_than(const std::shared_ptr<SymbolicExpr>& a,
         return *va < *vb;
     }
 
-    /// 当根含参数无法直接求值时，尝试通过 (a - b) 的符号判断大小。
-    /// 对于二次公式的两个根，差值可化简为 ±sqrt(disc)/a 的形式。
+    /// 参数根的顺序通过 (a - b) 的符号推导；
+    /// 二次公式的根差可化简为 ±sqrt(disc)/a。
     auto diff = SymbolicExpr::add(a, SymbolicExpr::multiply(b, SymbolicExpr::number(-1)))->simplify();
     if (auto vd = try_checked_numeric_constant(*diff)) {
         return *vd < 0;
@@ -1476,8 +1476,8 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     lamina::detail::node(SymbolicExpr::number(0)),
                     RelationalNode::Op::EQ));
 
-            // 当降阶后的多项式仍然按参数分情形时，degen_case 不再是单分支：
-            // 此时 expanded_into_subcases 为 true，对应分支已直接 push 进 result.cases。
+            /// 降阶多项式仍按参数分段时，expanded_into_subcases 标记各子分支
+            /// 已直接加入 result.cases。
             bool expanded_into_subcases = false;
 
             if (deg >= 1) {
@@ -1520,9 +1520,8 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                         reduced_expr = reduced_expr->simplify();
                         auto sub_result = solve_parametric_inequality(reduced_expr, type, variable, parameters);
 
-                        // 不能只保留 sub_result.cases[0]，否则降阶后仍按参数分情形的解会被静默丢弃。
-                        // 把每个子分支的参数条件与父级 degen_case 的条件（leading coeff == 0）合取，
-                        // 作为独立分支加入结果。
+                        /// 将每个子分支的参数条件与父级 leading coeff == 0 条件合取，
+                        /// 再作为独立分支加入结果，完整保留降阶后的参数分段。
                         if (sub_result.cases.empty()) {
                             degen_case.solution = IntervalUnion::empty();
                         } else {

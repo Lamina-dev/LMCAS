@@ -91,11 +91,10 @@ LAMINA_API BerlekampResult berlekamp_factor(
 using HenselLiftResult = Result<std::vector<Polynomial<BigInt>>>;
 
 /**
- * @brief Checked Hensel lifting with explicit precondition failures.
+ * @brief 执行带显式前置条件诊断的 Hensel 提升。
  *
- * Empty factor lists, invalid primes, zero/constant input polynomials, zero
- * factors, and mod-p factor products that do not match the original polynomial
- * are reported as CasError instead of being silently accepted as empty output.
+ * 空因子列表、非法素数、零或常数输入、多项式零因子，以及模 p 因子乘积
+ * 与原多项式不一致等输入均通过 CasError 返回具体诊断。
  */
 LAMINA_API HenselLiftResult hensel_lift_checked(
     const Polynomial<BigInt>& poly,

@@ -92,7 +92,7 @@ int main() {
                     "checked real_part observes cancelled context");
     }
 
-    // ---- checked complex part APIs do not fabricate splits for complex function arguments ----
+    /// 受检实部/虚部接口对复合函数参数返回明确诊断。
     {
         auto i = cmplx(0, 1);
         auto exp_i = SymbolicExpr::exp(i);
@@ -128,7 +128,7 @@ int main() {
         }
     }
 
-    // ---- checked analyticity reports unsupported dependent functions explicitly ----
+    /// 受检解析性接口显式报告当前支持域之外的依赖函数。
     {
         auto z = SymbolicExpr::variable("z");
         auto sin_z = SymbolicExpr::sin(z);

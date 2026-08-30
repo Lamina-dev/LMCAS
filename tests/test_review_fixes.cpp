@@ -194,7 +194,7 @@ void test_irrational_to_symbolic_complex() {
     auto sym = mix.to_symbolic();
     EXPECT_TRUE(sym != nullptr, "to_symbolic returns non-null");
     std::string s = sym->to_string();
-    // Existence checks rather than exact form; printer ordering may vary.
+    /// 打印顺序允许变化，因此分别验证各项存在性。
     bool has_pi   = s.find("π") != std::string::npos;
     bool has_sqrt = s.find("2") != std::string::npos; // numeric or sqrt(2)
     EXPECT_TRUE(has_pi, "result contains pi term");

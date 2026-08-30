@@ -671,10 +671,9 @@ void test_rational_not_integer() {
     auto mul_node = make_multiply({rat_node, make_number(3)});
     auto expr = wrap_expr(mul_node);
 
-    // Rational(1/2) is not Integer, so product can't be proven Integer
+    /// Rational(1/2) 与整数 3 的积缺少整数性证明，两项仍具有 Real 域。
     EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
         "Rational(1/2) * 3: Integer Unknown (non-integer operand)");
-    // But both are Real
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
         "Rational(1/2) * 3: Real");
 }

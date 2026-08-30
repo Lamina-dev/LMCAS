@@ -51,9 +51,8 @@ enum class SolveStrategy {
  * @brief Solves an equation within the verified support domain.
  *
  * Exact rational polynomials produce exact RootOf solutions. Approximate
- * candidates are produced only when `allow_numeric` is set and are verified by
- * checked numeric evaluation. Unsupported symbolic domains return an
- * inconclusive SolutionSet rather than an empty set.
+ * `allow_numeric` 启用时生成数值候选，并通过受检数值求值验证。
+ * 符号支持域之外的输入返回 Inconclusive SolutionSet，保留解集完备性信息。
  */
 LAMINA_API SolveResult solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,

@@ -2,8 +2,8 @@
  * @file transform_engine.hpp
  * @brief 积分变换引擎：Laplace 变换、逆 Laplace 变换、Fourier 变换、Z 变换。
  *
- * 提供基于变换表查找、线性性质和位移定理的符号积分变换计算。
- * 无法求得闭合形式时返回未求值的 TransformNode。
+ * 提供基于变换表查找、线性性质和位移定理的符号积分变换计算；
+ * 当前规则集之外的表达式映射为未求值 TransformNode。
  */
 #pragma once
 
@@ -71,7 +71,7 @@ private:
  * 1. 线性性：ℒ{af + bg} = aℒ{f} + bℒ{g}
  * 2. 变换表查找：匹配已知变换对（t^n, e^at, sin, cos, sinh, cosh）
  * 3. 位移定理：ℒ{e^(at)·f(t)} = F(s-a)
- * 4. 无法求得闭合形式时返回未求值的 LaplaceNode
+ * 4. 当前规则集之外的表达式映射为未求值 LaplaceNode
  *
  * @param[in] f 时域函数表达式
  * @param[in] t 时域变量名
@@ -101,7 +101,7 @@ LAMINA_API TransformEngineResult laplace_transform_checked(
  * 3. 对每个部分分式项查表求逆变换
  * 4. 重极点处理：ℒ⁻¹{1/(s-a)^n} = t^(n-1)·e^(at)/(n-1)!
  * 5. 逆位移定理：ℒ⁻¹{F(s-a)} = e^(at)·f(t)
- * 6. 无法求得闭合形式时返回未求值的逆 Laplace 节点
+ * 6. 当前规则集之外的表达式映射为未求值逆 Laplace 节点
  *
  * @param[in] F 频域函数表达式
  * @param[in] s 频域变量名

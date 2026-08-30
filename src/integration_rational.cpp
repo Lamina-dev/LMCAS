@@ -90,7 +90,7 @@ bool rd_collect_rational(const std::shared_ptr<const SymbolicNode>& node,
             num.push_back(Polynomial<Rational>({Rational(0), Rational(1)}, var));
             return true;
         }
-        // Unknown symbolic constant: cannot lift safely into rational poly.
+        /// 当前符号常量保持在符号域中，不提升为有理系数。
         return false;
     }
 
@@ -277,9 +277,8 @@ bool RationalDecompositionStrategy::factor_denominator(
     auto sqfree = square_free_factorization(Q);
     if (sqfree.empty()) return false;
 
-    // Step 2: for each square-free factor, peel rational roots, leaving an
-    //         irreducible-quadratic cofactor at most. Anything that cannot be
-    //         reduced to factors of degree <= 2 forces this step to fail.
+    /// 步骤 2：对每个无平方因子逐次提取有理根，剩余整体因子次数至多为 2；
+    /// 高次剩余因子使该策略返回未匹配。
     for (auto& [piece, mult] : sqfree) {
         Polynomial<Rational> current = piece.make_monic();
 
@@ -342,8 +341,7 @@ bool RationalDecompositionStrategy::factor_denominator(
             factors_out.push_back({current.make_monic(), mult});
             continue;
         }
-        // Higher-degree irreducible factor over Q: cannot handle in this
-        // strategy. Caller will return an unevaluated integral.
+        /// Q 上的高次整体因子由调用方映射为未求值积分节点。
         return false;
     }
     return true;
@@ -422,7 +420,7 @@ bool RationalDecompositionStrategy::solve_coefficients(
         for (int t = 0; t < mult; ++t) {
             auto qr = remaining.div_mod(fpoly);
             if (!rd_is_zero_poly(qr.second)) {
-                // Q does not divide cleanly by this power of factor -> bug.
+                /// Q 与当前因子幂的余式应为零；残余项表示内部不变量失效。
                 return false;
             }
             remaining = qr.first;
@@ -685,7 +683,7 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
         // Factor denominator.
         std::vector<std::pair<Polynomial<Rational>, int>> factors;
         if (!factor_denominator(Q, factors)) {
-            // Cannot factor over Q -> return unevaluated integral node.
+            /// Q 上因式分解未决时保留未求值积分节点。
             return Integrator::depends_on(expr, var)
                 ? lamina::detail::make_expression_ptr(
                       lamina::detail::make_node<IntegralNode>(

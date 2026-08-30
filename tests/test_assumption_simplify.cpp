@@ -22,7 +22,7 @@ static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
     return v.get_result();
 }
 
-/// Normalize a node without any AssumptionContext (backward-compatible).
+/// 使用空 AssumptionContext 执行兼容模式规范化。
 static std::shared_ptr<const SymbolicNode> normalize_no_ctx(
     const std::shared_ptr<const SymbolicNode>& node) {
     NormalizationVisitor v;
@@ -267,8 +267,7 @@ static void test_abs_no_assumption() {
 void test_backward_compat_sqrt_x_squared() {
     TEST_CASE("sqrt(x²) without context produces same result as default NormalizationVisitor");
 
-    // Without an AssumptionContext, sqrt(x²) should NOT be simplified
-    // by assumption-based rules
+    /// 空 AssumptionContext 保留 sqrt(x²) 的定义域条件。
     auto x_squared = make_power(var("x"), 2);
     auto sqrt_x_sq = make_sqrt(x_squared);
 

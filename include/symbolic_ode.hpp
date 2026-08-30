@@ -75,12 +75,10 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
 );
 
 /**
- * @brief Solves a second-order constant-coefficient ODE.
+ * @brief 求解二阶常系数常微分方程。
  *
- * Supported domain currently covers homogeneous equations and first-order
- * degeneracy when a == 0 and b != 0. Non-homogeneous second-order equations
- * are outside the current support domain and return `CasErrc::Inconclusive`
- * instead of throwing or returning the homogeneous solution as a false success.
+ * 当前支持齐次方程，以及 a == 0 且 b != 0 的一阶退化情形。
+ * 二阶非齐次方程通过 `CasErrc::Inconclusive` 表示支持域边界。
  */
 LAMINA_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     double a, double b, double c,

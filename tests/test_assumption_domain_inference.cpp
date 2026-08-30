@@ -221,7 +221,7 @@ static void test_unknown_domain_gives_unknown() {
         auto func_node = make_function(func_type, make_var(var_name));
         auto expr = wrap_expr(func_node);
 
-        // Without Real/Integer domain on argument, can't infer Real result
+        /// 参数域缺少 Real/Integer 证明时，函数值实数性保持 Unknown。
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::Unknown);
     });
 }
@@ -280,10 +280,10 @@ static void test_ln_positive_gives_real() {
 static void test_sqrt_without_nonneg_unknown() {
     TEST_CASE("sqrt without NonNeg → Unknown");
 
-    // sqrt of a Real variable without NonNegative sign → Unknown
+    /// sqrt 的实数性需要 Real 与 NonNegative 共同证明；当前仅声明 Real。
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
-    // No sign declared — could be negative
+    /// 符号属性保持未声明状态。
     InferenceEngine engine(ctx);
     auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sqrt, make_var("x")));
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,

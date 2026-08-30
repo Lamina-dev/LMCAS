@@ -2,10 +2,10 @@
  * @file limit_visitor.cpp
  * @brief LimitVisitor 的 Taylor 展开回退实现。
  *
- * 当 L'Hôpital 法则超过最大迭代深度仍无法解决不定式时，
- * 通过 Taylor 级数展开分子和分母，提取首项系数比作为极限值。
+ * L'Hôpital 规则达到最大迭代深度后，
+ * Taylor 级数展开分子和分母，并以首项系数比继续求极限。
  *
- * 算法来源: 标准 CAS 技术——Taylor 级数展开求极限
+ * 算法来源：标准 CAS Taylor 级数极限技术
  */
 
 #include "../include/symbolic.hpp"
@@ -72,7 +72,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
  * @param[in] num 分子 AST 节点
  * @param[in] den 分母 AST 节点
  * @param[in] max_order 最大展开阶数
- * @return 极限结果节点，无法确定时返回 nullptr
+ * @return 极限结果节点；nullptr 表示当前规则保持结果未知
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
     const std::shared_ptr<const SymbolicNode>& num,
@@ -225,7 +225,7 @@ std::pair<std::shared_ptr<const SymbolicNode>, int> LimitVisitor::find_leading_t
  * @internal
  * @brief 判断数值节点的符号。
  * @param[in] node AST 节点
- * @return 正数返回 1，负数返回 -1，零或无法判断返回 0
+ * @return 正数返回 1，负数返回 -1，零或未知符号返回 0
  */
 int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) return 0;
@@ -266,8 +266,8 @@ int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
 /**
  * @brief 处理分段函数节点的极限。
  *
- * 根据趋近方向选择满足条件的分支，计算该分支表达式的极限。
- * 对于双侧极限，分别计算左右极限，若不同则返回 nullptr 表示极限不存在。
+ * 根据趋近方向选择满足条件的分支并计算极限；
+ * 双侧结果相等时返回该值，差异时以 nullptr 表示极限未定义。
  */
 void LimitVisitor::visit(const PiecewiseNode& node) {
     if (direction == "+" || direction == "-") {
@@ -558,7 +558,7 @@ int LimitVisitor::get_polynomial_degree(const std::shared_ptr<const SymbolicNode
  * 对于多项式 P(x) = a_n * x^n + ... + a_0，返回 a_n。
  *
  * @param[in] node AST 节点
- * @return 首项系数节点，无法确定时返回 nullptr
+ * @return 首项系数节点；nullptr 表示当前结构保持未知
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::get_leading_coefficient(const std::shared_ptr<const SymbolicNode>& node) const {
     if (!node) return nullptr;
@@ -798,7 +798,7 @@ int LimitVisitor::get_growth_polynomial_degree(const std::shared_ptr<const Symbo
  *
  * @param[in] num 分子 AST 节点
  * @param[in] den 分母 AST 节点
- * @return 极限结果，无法确定时返回 nullptr
+ * @return 极限结果；nullptr 表示增长率比较保持未知
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::limit_by_growth_comparison(
     const std::shared_ptr<const SymbolicNode>& num,
@@ -842,7 +842,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_by_growth_comparison(
  * @brief 处理 x→-∞ 的极限，通过代换 x = -t 转化为 t→+∞。
  *
  * @param[in] expr 原始表达式
- * @return 极限结果，无法处理时返回 nullptr
+ * @return 极限结果；nullptr 表示当前规则集之外
  */
 std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
     const std::shared_ptr<const SymbolicNode>& expr) {

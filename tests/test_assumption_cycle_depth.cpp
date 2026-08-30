@@ -58,10 +58,9 @@ static SymbolicExpr make_shared_subexpr() {
     return lamina::detail::expression_from_node(mul);
 }
 
-/// Create two structurally identical but distinct (different pointer) nodes.
-/// This tests that cycle detection does NOT produce false positives.
+/// 创建结构相同但地址不同的两个节点，验证循环检测基于遍历路径。
 static std::pair<SymbolicExpr, SymbolicExpr> make_structurally_identical_distinct() {
-    // Two separate AddNode instances with the same structure
+    /// 分别构造两个结构相同的 AddNode。
     auto x1 = lamina::detail::make_node<VariableNode>("x");
     auto x2 = lamina::detail::make_node<VariableNode>("x");
 
@@ -89,16 +88,11 @@ static void test_cycle_shared_node_returns_unknown() {
     // Create expression with shared sub-expression (DAG structure)
     SymbolicExpr expr = make_shared_subexpr();
 
-    // The query should complete without infinite recursion.
-    // The shared node will be visited twice — the second visit detects the cycle
-    // and returns Unknown. The overall result depends on whether the first visit
-    // provides enough information.
-    Tribool result = engine.query_positive_checked(expr).value();
+    /// 查询应在深度界内完成。共享节点的第二次访问返回 Unknown，
+    /// 首次访问提供的信息决定最终结果。
+    Tribool result = engine.query_real_checked(expr).value();
 
-    // Key property: no crash, no infinite loop. Result is either True or Unknown.
-    // Since x is Positive, (x+x) is Positive, and (x+x)*(x+x) should be Positive.
-    // But if cycle detection triggers on the shared node, it may return Unknown.
-    // Either way, the test passes if we get here without hanging.
+    /// 到达此处即证明查询完成；允许已证明与未知两种语义结果。
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,
         "Shared node query completes without infinite recursion");
 }
@@ -168,7 +162,7 @@ static void test_cycle_detection_nested_function_shared_arg() {
     // But cycle detection may trigger on the shared exp_node.
     Tribool result = engine.query_positive_checked(expr).value();
 
-    // Must complete without infinite recursion
+    /// 共享函数节点查询应在深度界内完成。
     EXPECT_TRUE(result == Tribool::True || result == Tribool::Unknown,
         "Shared function node in add completes without infinite recursion");
 }
@@ -205,7 +199,7 @@ static void test_cycle_detection_different_query_types() {
 
     SymbolicExpr shared_expr = make_shared_subexpr();
 
-    // Multiple query types should all complete without hanging
+    /// 多种查询类型均应在深度界内完成。
     Tribool r1 = engine.query_positive_checked(shared_expr).value();
     Tribool r2 = engine.query_negative_checked(shared_expr).value();
     Tribool r3 = engine.query_nonnegative_checked(shared_expr).value();

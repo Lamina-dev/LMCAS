@@ -447,8 +447,7 @@ void test_real_base_non_integer_exponent_unknown() {
     // x^(1.5) where x is Real — non-integer exponent, rule doesn't apply
     // (could be complex if x < 0)
     auto expr = make_power_expr(make_var("x"), make_num_d(1.5));
-    // The domain inference rule requires integer exponent
-    // Without Positive base, we can't guarantee Real
+    /// 该域推导规则要求整数指数；仅有 Real 基底时结果域保持 Unknown。
     EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
                 "x^1.5 is Unknown for Real when x is only Real (non-integer exponent)");
 }

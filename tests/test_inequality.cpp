@@ -1048,7 +1048,7 @@ int main() {
                                 lo = *lo_opt;
                                 lo_open = iv.lower.is_open;
                             } else {
-                                // Cannot evaluate lower bound; skip this interval.
+                                /// 下界求值未决时跳过当前区间。
                                 lo_valid = false;
                             }
                         }
@@ -1067,8 +1067,7 @@ int main() {
                         }
 
                         // If we couldn't evaluate an endpoint, try the
-                        // non-simplified version as well (simplify may have
-                        // introduced a form that numeric_eval can't handle).
+                        /// 同时尝试化简前形式，以覆盖 numeric_eval 支持的原始结构。
                         if (!lo_valid && !iv.lower.is_neg_infinity && iv.lower.value) {
                             auto lo_expr = iv.lower.value->substitute("p", SymbolicExpr::number(p_val));
                             lo_expr = lo_expr->substitute("q", SymbolicExpr::number(q_val));
@@ -1115,9 +1114,7 @@ int main() {
 
                 if (in_parametric != expected_result) {
 
-                    // If we couldn't evaluate any interval endpoint (all were
-                    // skipped due to lo_valid/hi_valid failures), we cannot
-                    // reliably compare. Skip this sample point.
+                    /// 所有端点均求值未决时跳过当前采样点。
                     if (!in_parametric && !parametric_solution.is_empty() &&
                         !parametric_solution.is_entire_line()) {
                         // Check if we actually evaluated at least one interval.

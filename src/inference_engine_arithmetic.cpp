@@ -761,8 +761,7 @@ InferenceTriboolResult InferenceEngine::infer_power_property_checked(const void*
                 switch (target) {
                     case Sign::NonNegative: return InferenceTriboolResult::success(Tribool::True);
                     case Sign::Negative:    return InferenceTriboolResult::success(Tribool::False);
-                    // Cannot determine Positive (base could be 0)
-                    // Cannot determine NonPositive (result is >= 0, not necessarily <= 0)
+                    /// base 可能为零，因此 Positive 与 NonPositive 均保持 Unknown。
                     default: break;
                 }
             }
@@ -894,18 +893,15 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
             }
 
             case FunctionNode::FuncType::Sin: {
-                // sin(Real) -> Real, Bounded[-1,1]
-                // sin can be positive, negative, or zero; cannot determine sign in general.
+                /// sin(Real) 属于 Real 且值域为 [-1,1]；其符号由具体参数值决定。
                 Tribool arg_real = detail::propagate_result(query_domain_of_checked(arg_expr, Domain::Real));
                 if (arg_real != Tribool::True) return InferenceTriboolResult::success(Tribool::Unknown);
 
-                // We can't determine sign without knowing the specific argument value.
                 return InferenceTriboolResult::success(Tribool::Unknown);
             }
 
             case FunctionNode::FuncType::Cos: {
-                // cos(Real) -> Real, Bounded[-1,1]
-                // cos can be positive, negative, or zero; cannot determine sign in general.
+                /// cos(Real) 属于 Real 且值域为 [-1,1]；其符号由具体参数值决定。
                 Tribool arg_real = detail::propagate_result(query_domain_of_checked(arg_expr, Domain::Real));
                 if (arg_real != Tribool::True) return InferenceTriboolResult::success(Tribool::Unknown);
 
@@ -943,8 +939,7 @@ InferenceTriboolResult InferenceEngine::infer_function_property_checked(const vo
 
             case FunctionNode::FuncType::Ln: {
                 // ln(Positive) -> Real
-                // ln can be positive (x>1), negative (0<x<1), or zero (x=1)
-                // Cannot determine sign in general
+                /// ln 在 x>1、0<x<1 与 x=1 时分别为正、负与零，通用符号保持 Unknown。
                 Tribool arg_positive = detail::propagate_result(query_sign_of_checked(arg_expr, Sign::Positive));
                 if (arg_positive != Tribool::True) return InferenceTriboolResult::success(Tribool::Unknown);
 

@@ -144,7 +144,7 @@ static void test_power_series_multiplication_cauchy() {
                         break;
                     }
                 } else {
-                    // If we can't evaluate numerically, check if both are zero
+                    /// 数值求值未决时，使用两侧零值条件完成本采样点判定。
                     if (std::abs(expected_val) > 1e-9) {
                         property_holds = false;
                         break;

@@ -466,7 +466,7 @@ public:
     /**
      * @brief 获取数值表达式的值。
      * @return 数值（int、BigInt 或 Rational）
-     * @throws std::runtime_error 表达式不是数值时抛出
+     * @throws std::runtime_error 节点类型与数值访问器不匹配时抛出
      */
     std::variant<int, ::BigInt, ::Rational> get_number() const;
 
@@ -474,13 +474,13 @@ public:
     /**
      * @brief 获取大整数值。
      * @return BigInt 值
-     * @throws std::runtime_error 表达式不是 BigInt 时抛出
+     * @throws std::runtime_error 节点类型与 BigInt 访问器不匹配时抛出
      */
     ::BigInt get_big_int() const;
     /**
      * @brief 获取有理数值。
      * @return Rational 值
-     * @throws std::runtime_error 表达式不是 Rational 时抛出
+     * @throws std::runtime_error 节点类型与 Rational 访问器不匹配时抛出
      */
     ::Rational get_rational() const;
     /**

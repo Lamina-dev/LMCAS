@@ -116,8 +116,7 @@ void test_linear2_nonhomogeneous() {
     TEST_CASE("Linear 2nd Order ODE Non-homogeneous: y'' - 3y' + 2y = e^(3x)");
     {
         // a=1, b=-3, c=2, f(x) = e^(3x)
-        // Note: The legacy implementation throws std::logic_error for the
-        // unsupported non-homogeneous case.
+        /// 旧版接口对支持域之外的非齐次输入抛出 std::logic_error。
         auto x = SymbolicExpr::variable("x");
         auto three_x = SymbolicExpr::multiply(SymbolicExpr::number(3), x);
         auto fx = SymbolicExpr::exp(three_x);

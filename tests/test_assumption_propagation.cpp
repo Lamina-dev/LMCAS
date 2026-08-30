@@ -150,9 +150,7 @@ static void test_propagation_is_lazy() {
         AssumptionContext ctx;
         ctx.assume_domain(var_name, domain);
 
-        // The PropertyStore should only have the declared variable, not x²
-        // Check that the property store does not have a symbol named "x²" or
-        // any composite expression stored eagerly
+        /// PropertyStore 仅保存声明变量；x² 等复合表达式按需推导。
         const PropertyStore& store = ctx.current_properties();
 
         // The store should have the variable we declared

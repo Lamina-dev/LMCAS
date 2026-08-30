@@ -60,7 +60,7 @@ void IntegrationTable::load_defaults() {
         };
     };
 
-    // Condition: `_u` is the integration variable AND `_a` does not depend on it.
+    /// 条件：`_u` 是积分变量，且 `_a` 关于该变量为常量。
     auto u_is_var_a_indep = [](const std::string& u_wc, const std::string& a_wc) {
         return [u_wc, a_wc](const MatchMap& m, const std::string& var) -> bool {
             auto it_u = m.find(u_wc);

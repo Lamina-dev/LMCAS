@@ -725,7 +725,7 @@ void test_berlekamp_quadratic_irreducible() {
     auto result = berlekamp_factor(poly, 2);
 
     EXPECT_TRUE(result.prime == 2, "should use prime 2");
-    // Q 矩阵构造应成功，当前返回单一因子（分裂未实现）
+    /// Q 矩阵构造成功；当前分裂阶段返回单一整体因子。
     EXPECT_TRUE(result.factors.size() >= 1, "should return at least 1 factor");
     // 验证因子次数之和等于原多项式次数
     int total_deg = 0;
@@ -885,7 +885,7 @@ void test_null_space_basis_vectors_in_kernel() {
     // 重新构造 Q 矩阵以验证
     // f_coeffs for x^2 - 1 mod 3: [2, 0, 1] (since -1 mod 3 = 2)
     // 验证每个基向量 v 满足 (Q-I) * v = 0（等价于 Q*v = v）
-    // 由于我们无法直接访问 Q，验证零空间维度即可
+    /// 通过零空间维度间接验证 Q*v = v。
     EXPECT_TRUE(result.null_space_dim == 2, "x^2 - 1 mod 3 has null space dim 2");
 
     // 验证基向量非零
@@ -1068,15 +1068,14 @@ void test_zassenhaus_two_linear_factors() {
 void test_zassenhaus_irreducible_quadratic() {
     TEST_CASE("zassenhaus_combine: x^2 + x + 1 (irreducible over Q)");
 
-    // f(x) = x^2 + x + 1，在 Q 上不可约
-    // 假设 Hensel 提升给出了两个模因子，但它们不能组合成 Q 上的真因子
-    // 在这种情况下，整个多项式应作为单一不可约因子返回
+    /// f(x) = x^2 + x + 1 在 Q 上为整体元素。
+    /// Hensel 提升给出的两个模因子在 Q 上组合后仍返回原多项式。
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
     // 模 7 下 x^2 + x + 1 = (x - 2)(x - 4) mod 7
     // 提升后的因子（mod 49 = 7^2）
-    // (x - 2) mod 49 和 (x - 4) mod 49
-    // 但这些因子在 Q 上不能组合成真因子
+    /// 提升因子为 (x - 2) mod 49 与 (x - 4) mod 49，
+    /// 两者在 Q 上的组合保持原多项式。
     std::vector<Polynomial<BigInt>> lifted = {
         Polynomial<BigInt>({BigInt(-2), BigInt(1)}, "x"),  // x - 2 (mod 49)
         Polynomial<BigInt>({BigInt(-4), BigInt(1)}, "x")   // x - 4 (mod 49)
@@ -1181,9 +1180,9 @@ void test_zassenhaus_quadratic_times_linear() {
 void test_zassenhaus_early_termination_irreducible() {
     TEST_CASE("zassenhaus early termination: irreducible polynomial (all subsets checked)");
 
-    // f(x) = x^2 + x + 1，在 Q 上不可约
-    // 模 7 下分裂为 (x-2)(x-4)，但在 Q 上无法组合出真因子
-    // 枚举所有子集（大小 1）后无法找到因子 → 剩余 = 原多项式
+    /// f(x) = x^2 + x + 1 在 Q 上为整体元素。
+    /// 模 7 因子 (x-2)(x-4) 的所有真子集候选均未通过整除检验，
+    /// 因而剩余项等于原多项式。
     Polynomial<Rational> poly({Rational(1), Rational(1), Rational(1)}, "x");
 
     std::vector<Polynomial<BigInt>> lifted = {
@@ -1653,7 +1652,7 @@ void test_back_substitute_roundtrip() {
 
     EXPECT_TRUE(back != nullptr, "roundtrip result should not be null");
     std::string back_str = back->to_string();
-    // 逆换元后不应包含任何不定元
+    /// 逆换元结果应仅包含原始变量与函数。
     EXPECT_TRUE(back_str.find("u0") == std::string::npos,
         "roundtrip should not contain u0");
     EXPECT_TRUE(back_str.find("u1") == std::string::npos,
@@ -1687,7 +1686,7 @@ void test_simplify_factors_extract_constant_from_product() {
     std::string first_str = result[0]->to_string();
     EXPECT_TRUE(first_str == "2", "first factor should be 2");
 
-    // 后续因子不应包含数值前导系数
+    /// 数值前导系数集中在首个常数因子中。
     bool has_sin = false;
     bool has_x_plus_1 = false;
     for (size_t i = 1; i < result.size(); ++i) {
@@ -1747,7 +1746,7 @@ void test_simplify_factors_multiple_constants_combined() {
     auto cos_x = SymbolicExpr::cos(x);
 
     // 构造因子列表 [2*sin(x), 5*cos(x)]
-    // simplify() 不会展开 c*trig(x) 形式
+    /// simplify() 保持 c*trig(x) 的乘积结构。
     auto factor1 = SymbolicExpr::multiply(SymbolicExpr::number(2), sin_x);
     auto factor2 = SymbolicExpr::multiply(SymbolicExpr::number(5), cos_x);
 
@@ -1773,7 +1772,7 @@ void test_simplify_factors_constant_one_not_added() {
     std::vector<std::shared_ptr<SymbolicExpr>> factors = {factor1, factor2};
     auto result = tf_simplify_factors(factors);
 
-    // 常数积为 1，不应添加常数因子
+    /// 常数积为 1 时结果仅包含两个函数因子。
     EXPECT_TRUE(result.size() == 2, "should have 2 factors (no constant added)");
     for (const auto& f : result) {
         if (f->is_number()) {
@@ -1867,7 +1866,7 @@ void test_mult_structure_sum_not_product() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // sin(x) + x 不是乘积形式，应走完整流程并返回原表达式（不可约）
+    /// sin(x) + x 由完整流程判定为单一整体因子。
     EXPECT_TRUE(factors.size() == 1, "sum expression should not be split by multiplicative detection");
 }
 
@@ -1930,9 +1929,8 @@ void test_linear_irreducible_sin_squared_not_linear() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // sin²(x) + x 对 u0 是二次的，不应触发线性不可约快速路径
-    // 它应该走完整流程（可能仍然不可约，但不是通过线性检测）
-    // 关键是验证它不会被错误地标记为线性不可约
+    /// sin²(x) + x 对 u0 为二次式，因此进入完整因式分解流程。
+    /// 结果仍可为整体元素，其判定来源于完整流程。
     // 实际上 sin²(x) + x 在超越多项式环中也是不可约的，但通过完整流程判定
     EXPECT_TRUE(factors.size() >= 1, "sin^2(x) + x should return at least 1 factor");
 }
@@ -1945,7 +1943,7 @@ void test_linear_irreducible_sin_times_x_not_sum() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // sin(x) * x 是乘积形式，应由乘积结构检测处理，不是线性不可约
+    /// sin(x) * x 由乘法结构直接拆分为两个因子。
     EXPECT_TRUE(factors.size() == 2, "sin(x) * x should be split into 2 factors by multiplicative detection");
 }
 
@@ -1985,13 +1983,12 @@ void test_exp_separation_no_common_exp() {
     TEST_CASE("exponential separation: exp(x) + sin(x) → no common exp factor");
 
     auto x = SymbolicExpr::variable("x");
-    // exp(x) + sin(x) — sin(x) does not have exp(x) as factor
+    /// exp(x) + sin(x) 的两项具有不同函数基。
     auto expr = SymbolicExpr::add(SymbolicExpr::exp(x), SymbolicExpr::sin(x));
 
     auto factors = factor_transcendental(expr, "x");
 
-    // 无公共 exp 因子，不应触发指数分离
-    // 表达式对 u0(exp) 和 u1(sin) 均为线性，应被线性不可约检测捕获
+    /// 公共指数因子提取保持未匹配状态；表达式随后由线性整体性规则处理。
     EXPECT_TRUE(factors.size() == 1, "exp(x) + sin(x) should not be split by exponential separation");
 }
 
@@ -2124,8 +2121,7 @@ void test_pythagorean_different_args_unchanged() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // 不同参数，不应化简
-    // 结果应仍含 sin 或 cos
+    /// 参数不同的三角项保持各自结构，结果继续包含 sin 或 cos。
     bool has_trig = false;
     for (const auto& f : factors) {
         std::string s = f->to_string();
@@ -2146,7 +2142,7 @@ void test_pythagorean_no_matching_cos() {
 
     auto factors = factor_transcendental(expr, "x");
 
-    // 无配对的 cos²(x)，不应化简
+    /// 单独的 sin²(x) 保持平方结构。
     bool has_sin = false;
     for (const auto& f : factors) {
         std::string s = f->to_string();

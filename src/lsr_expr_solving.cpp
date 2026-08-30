@@ -40,8 +40,7 @@ ExprPtr sqrt_rational_expression(const Rational& value) {
     if (exact_rational_sqrt(value, root)) {
         return rational_expression(root);
     }
-    // Factor the largest perfect square out of num*den so sqrt(28)
-    // canonicalizes to 2*sqrt(7) instead of surviving as sqrt(28).
+    /// 从 num*den 提取最大完全平方因子，使 sqrt(28) 规范化为 2*sqrt(7)。
     BigInt numerator = value.get_numerator();
     BigInt denominator = value.get_denominator();
     BigInt outside_numerator(1);

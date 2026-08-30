@@ -328,11 +328,9 @@ static void test_unknown_operand_returns_unknown() {
         auto expr = wrap_expr(node);
 
         // With one unknown operand, the engine should not be able to determine
-        // the sign definitively (for the general case)
-        // For AddNode: can't determine positive if one operand is unknown
-        // For MultiplyNode: can't determine positive if one operand is unknown
+        /// AddNode 或 MultiplyNode 包含符号未知的操作数时，和或积的符号保持 Unknown。
         Tribool result = engine.query_positive_checked(expr).value();
-        // The result should be Unknown since we can't determine the last operand's sign
+        /// 最后一个操作数的符号未知，因此结果为 Unknown。
         RC_ASSERT(result == Tribool::Unknown);
     });
 }

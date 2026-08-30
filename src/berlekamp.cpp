@@ -250,7 +250,7 @@ static bool bk_is_square_free_mod(
 
     std::vector<int64_t> f_prime = bk_derivative_mod(f, p);
 
-    /// 若导数为零多项式，则 f 不是 square-free（特征 p 下的情形）
+    /// 特征 p 下导数为零时，多项式具有重复结构。
     if (f_prime.empty()) return false;
 
     std::vector<int64_t> g = bk_gcd_mod(f, f_prime, p);
@@ -565,7 +565,7 @@ static std::vector<std::vector<int64_t>> bk_null_space(
 
     for (int col = 0; col < n; ++col) {
         if (pivot_row[col] != -1) {
-            /// 该列有主元，不是自由变量
+            /// 具有主元的列属于约束变量列。
             continue;
         }
 

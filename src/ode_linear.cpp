@@ -113,7 +113,7 @@ struct CharRoot {
     };
 
     std::vector<Complex> z(n);
-    /// 初始猜测：使用不同半径的点避免对称性问题
+    /// 初始猜测采用不同半径，提供非对称起点以区分各根。
     for (int i = 0; i < n; ++i) {
         double angle = 2.0 * 3.14159265358979323846 * i / n + 0.1;
         double radius = 1.0 + 0.3 * i;

@@ -89,7 +89,7 @@ void test_edge_cases() {
 }
 
 /**
- * @brief 测试大系数多项式不会溢出。
+ * @brief 验证大系数多项式的中间结果由 BigInt 完整承载。
  */
 void test_large_coefficients() {
     TEST_CASE("Large coefficients: no overflow");

@@ -280,7 +280,7 @@ void test_no_rules_for_non_gt_relation() {
     SymbolicExpr x_expr = make_var_expr("x");
     SymbolicExpr y_expr = make_var_expr("y");
 
-    // Use LT instead of GT
+    /// 使用 LT 关系验证反向单调推导。
     Relation rel{x_expr, y_expr, RelationalNode::Op::LT};
     ctx.current_relations().add_relation(x_expr, y_expr, RelationalNode::Op::LT, ctx.current_properties());
 

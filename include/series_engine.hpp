@@ -250,7 +250,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> asymptotic_expand(
  * @brief 计算符号求和 ∑_{k=lower}^{upper} body(k) 的闭合形式。
  *
  * 对多项式通项使用 Faulhaber 公式；对有理函数通项尝试部分分式分解和望远镜求和；
- * 对几何/指数通项使用等比级数公式。无法求得闭合形式时返回未求值的 SummationNode。
+ * 对几何/指数通项使用等比级数公式；其余通项映射为未求值 SummationNode。
  *
  * @param[in] body 通项表达式
  * @param[in] index 求和指标变量名
@@ -266,8 +266,8 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_sum(
 /**
  * @brief 计算符号乘积 ∏_{k=lower}^{upper} body(k) 的闭合形式。
  *
- * 对望远镜乘积和阶乘/Pochhammer 符号使用已知公式。
- * 无法求得闭合形式时返回未求值的 ProductNode。
+ * 对望远镜乘积和阶乘/Pochhammer 符号使用已知公式；
+ * 其余通项映射为未求值 ProductNode。
  *
  * @param[in] body 通项表达式
  * @param[in] index 乘积指标变量名

@@ -616,9 +616,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
         if (simp_result) return simp_result;
     }
 
-    /// Construct the ratio dN/dD. Instead of creating a MultiplyNode that might
-    /// be misinterpreted as 0×∞, evaluate as a proper fraction: compute limits
-    /// of dN and dD separately and check for 0/0 or ∞/∞ forms.
+    /// 构造 dN/dD 的真分式：分别计算 dN 与 dD 的极限，
+    /// 再判定 0/0 或 ∞/∞ 形式，使乘法节点语义保持明确。
     LimitVisitor sub_n(var, point, direction, assumption_ctx_);
     sub_n.lhopital_depth_ = this->lhopital_depth_ + 1;
     dN->accept(sub_n);

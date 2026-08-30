@@ -491,8 +491,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
         }
     }
 
-    /// 超越因式分解后备路径：当标准多项式分解无法处理时，
-    /// 检测表达式是否含超越函数，若是则尝试超越因式分解。
+    /// 标准多项式分解未匹配时，后备路径检测超越函数并尝试超越因式分解。
     {
         const auto transform_variables =
             lamina::free_variables(lamina::detail::node(simp));

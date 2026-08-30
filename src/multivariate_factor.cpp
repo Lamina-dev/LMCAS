@@ -484,7 +484,7 @@ std::vector<Polynomial<Rational>> factor_univariate_bridge(
             remaining = quotient;
             used[i] = true;
         } catch (...) {
-            /// 除法失败：该候选不是真因子，跳过
+            /// 精确除法失败时，当前候选进入下一组合。
         }
     }
 
@@ -504,9 +504,8 @@ std::vector<Polynomial<Rational>> factor_univariate_bridge(
  * @internal
  * @brief 因子组合：对未通过单独试除的因子，尝试子集乘积验证
  *
- * 当单个提升因子不能整除剩余多项式时，尝试 2 个、3 个、... 因子的乘积。
- * 按子集大小递增枚举，对每个子集计算乘积并本原化后尝试精确除法。
- * 成功时记录乘积为真因子，从池中移除已用因子，更新剩余多项式。
+ * 单个提升因子未通过整除检验时，依次枚举含 2、3、... 个因子的乘积。
+ * 成功候选记录为真因子，并从池中移除其成员后继续处理剩余多项式。
  *
  * 早期终止条件：
  * - 剩余多项式变为常数
@@ -1299,8 +1298,7 @@ SquareFreeDecomp square_free_decompose(const MultiPoly& poly, const std::string&
     /// 步骤 1：计算 f' = ∂f/∂main_var
     MultiPoly f_prime = formal_derivative(poly, main_var);
 
-    /// 步骤 2：计算 g = gcd(f, f')
-    /// 若 f' 为零（特征 0 下不应发生，但防御性处理），f 本身无平方
+    /// 步骤 2：计算 g = gcd(f, f')；特征 0 下 f' 为零时，f 直接作为单个无平方因子。
     if (f_prime.is_zero()) {
         return SquareFreeDecomp{{poly}};
     }
@@ -1342,10 +1340,10 @@ SquareFreeDecomp square_free_decompose(const MultiPoly& poly, const std::string&
  * @brief 首项系数预计算（Wang's leading coefficient trick）
  *
  * 在 Hensel 提升前，将原多项式关于主变量的首项系数 lc(f, x_main) 分解为
- * 辅助变量的因子，并按求值后的首项系数值分配给各一元因子。
- * 这确保提升过程产生正确的首项系数，避免引入虚假内容。
+ * 辅助变量的因子，并按求值后的首项系数值分配给各一元因子，
+ * 使提升过程保持正确的首项系数与本原内容。
  *
- * 算法（参考 Wang, P.S. 1978）：
+ * 算法步骤：
  * 1. 计算 lc = lc(f, x_main)，为辅助变量的多项式
  * 2. 若 lc 为常数，无需预计算
  * 3. 将 lc 在求值点处求值得到 lc_eval（有理数）
@@ -1360,6 +1358,8 @@ SquareFreeDecomp square_free_decompose(const MultiPoly& poly, const std::string&
  *
  * @see Wang, P.S. "An Improved Multivariate Polynomial Factoring Algorithm."
  *      Mathematics of Computation, 32(144), 1978.
+ * @see D. Y. Y. Yun, “On Square-Free Decomposition Algorithms,”
+ *      Proceedings of SYMSAC 1976.
  */
 [[maybe_unused]] static void precompute_leading_coefficients(
     const MultiPoly& poly,

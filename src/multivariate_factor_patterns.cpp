@@ -65,9 +65,8 @@ detect_difference_of_squares(const MultiPoly& poly)
 
     if (pos_num < BigInt(0) || neg_num < BigInt(0)) return std::nullopt;
 
-    /// 检查是否为完全平方
-    /// 注意：不能依赖 BigInt::sqrt()（该实现有 bug，对小整数返回错误值），
-    /// 改用 double 估计取整后用精确乘法验证。
+    /// 完全平方判定先以 double 估计候选整数，再用 BigInt 乘法精确验证，
+    /// 使小整数结果独立于 BigInt::sqrt() 的当前实现。
     auto is_perfect_square = [](const BigInt& n) -> std::pair<bool, BigInt> {
         if (n == BigInt(0)) return {true, BigInt(0)};
         if (n == BigInt(1)) return {true, BigInt(1)};

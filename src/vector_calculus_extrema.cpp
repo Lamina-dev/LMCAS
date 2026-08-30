@@ -98,7 +98,7 @@ static CriticalPointClassification vector_calculus_classify_critical_point(
         std::vector<std::shared_ptr<SymbolicExpr>>(n));
     for (size_t i = 0; i < n; ++i) {
         for (size_t j = 0; j < n; ++j) {
-            /// 使用 Rational 避免浮点精度问题
+            /// 使用 Rational 保持 Hessian 系数的精确表示。
             double val = numeric_H[i * n + j];
             int int_val = static_cast<int>(std::round(val));
             if (std::abs(val - int_val) < tol) {
