@@ -3,6 +3,7 @@
 #include "numeric_evaluation.hpp"
 #include "solver.hpp"
 #include "solve_strategies.hpp"
+#include "symbolic_matrix.hpp"
 #include "symbolic_ast.hpp"
 
 #include <cmath>
@@ -110,12 +111,11 @@ static CriticalPointClassification vector_calculus_classify_critical_point(
     }
     auto H_mat = SymbolicExpr::matrix(grid);
 
-    /// 计算特征多项式并求解特征值
-    auto cp = SymbolicExpr::charpoly(H_mat, "lambda");
-    if (!cp) return CriticalPointClassification::Inconclusive;
-
-    auto eigenvals = lamina::solve_finite_checked(cp, "lambda").value();
-    if (eigenvals.empty()) return CriticalPointClassification::Inconclusive;
+    auto eigenvalue_result = matrix_eigenvalues_checked(H_mat);
+    if (!eigenvalue_result) {
+        return CriticalPointClassification::Inconclusive;
+    }
+    auto eigenvals = std::move(eigenvalue_result.value());
 
     bool all_positive = true;
     bool all_negative = true;
@@ -168,7 +168,7 @@ ExtremaResult find_extrema_checked(
         for (const auto& var : vars) {
             auto partial = vector_calculus_differentiate_strict(f, var, operation);
             if (!partial) return ExtremaResult::failure(partial.error());
-            gradient.push_back(std::move(partial.value()));
+            gradient.push_back(std::move(lamina::detail::propagate_result(partial)));
         }
 
         auto extrema = find_extrema(f, vars);
@@ -249,7 +249,11 @@ std::vector<CriticalPoint> find_extrema(
         if (eq) poly_eqs.push_back(*eq);
     }
     if (poly_eqs.size() == n) {
-        auto poly_solutions = Solver::solve_polynomial_system(poly_eqs, vars);
+        auto checked_solutions =
+            Solver::solve_polynomial_system_checked(poly_eqs, vars);
+        const auto poly_solutions = checked_solutions
+            ? std::move(checked_solutions.value())
+            : std::vector<std::map<std::string, SymbolicExpr>>{};
         for (const auto& sol : poly_solutions) {
             std::map<std::string, std::shared_ptr<SymbolicExpr>> pt;
             for (const auto& [name, val] : sol) {
@@ -308,7 +312,7 @@ static LagrangeResult lagrange_multipliers_strict(
     for (const auto& var : vars) {
         auto partial = vector_calculus_differentiate_strict(f, var, operation);
         if (!partial) return LagrangeResult::failure(partial.error());
-        grad_f.push_back(std::move(partial.value()));
+        grad_f.push_back(std::move(lamina::detail::propagate_result(partial)));
     }
 
     std::vector<VectorField> grad_constraints;
@@ -320,7 +324,7 @@ static LagrangeResult lagrange_multipliers_strict(
             auto partial = vector_calculus_differentiate_strict(
                 constraint, var, operation);
             if (!partial) return LagrangeResult::failure(partial.error());
-            grad_g.push_back(std::move(partial.value()));
+            grad_g.push_back(std::move(lamina::detail::propagate_result(partial)));
         }
         grad_constraints.push_back(std::move(grad_g));
     }
@@ -344,7 +348,7 @@ static LagrangeResult lagrange_multipliers_strict(
         auto eq_checked = vector_calculus_simplify_strict(
             eq, operation, "Lagrange stationarity equation is outside the supported domain");
         if (!eq_checked) return LagrangeResult::failure(eq_checked.error());
-        equations.push_back(std::move(eq_checked.value()));
+        equations.push_back(std::move(lamina::detail::propagate_result(eq_checked)));
     }
     for (const auto& constraint : constraints) {
         equations.push_back(constraint);
@@ -368,7 +372,11 @@ static LagrangeResult lagrange_multipliers_strict(
         poly_eqs.push_back(*eq);
     }
 
-    auto poly_solutions = Solver::solve_polynomial_system(poly_eqs, all_vars);
+    auto checked_solutions =
+        Solver::solve_polynomial_system_checked(poly_eqs, all_vars);
+    const auto poly_solutions = checked_solutions
+        ? std::move(checked_solutions.value())
+        : std::vector<std::map<std::string, SymbolicExpr>>{};
     for (const auto& sol : poly_solutions) {
         std::map<std::string, std::shared_ptr<SymbolicExpr>> pt;
         for (const auto& [name, val] : sol) {
@@ -562,7 +570,11 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
     }
 
     if (poly_eqs.size() == equations.size()) {
-        auto poly_solutions = Solver::solve_polynomial_system(poly_eqs, all_vars);
+        auto checked_solutions =
+            Solver::solve_polynomial_system_checked(poly_eqs, all_vars);
+        const auto poly_solutions = checked_solutions
+            ? std::move(checked_solutions.value())
+            : std::vector<std::map<std::string, SymbolicExpr>>{};
         for (const auto& sol : poly_solutions) {
             std::map<std::string, std::shared_ptr<SymbolicExpr>> pt;
             for (const auto& [name, val] : sol) {

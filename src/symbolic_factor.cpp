@@ -215,21 +215,20 @@ static std::shared_ptr<SymbolicExpr> multipoly_to_symbolic(const lamina::MultiPo
     return result->simplify();
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
+std::shared_ptr<SymbolicExpr> SymbolicExpr::factor_impl(
+    lamina::ComputationContext& context) const {
     auto simp = simplify();
     if (!simp || !lamina::detail::node(simp)) return simp;
 
     if (auto add_node = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(simp))) {
 
-        lamina::ComputationContext content_context;
-        auto content_result = lamina::symbolic_polynomial_content(
-            *simp, content_context);
-        if (content_result && content_result.value() != Rational(0) &&
-            content_result.value() != Rational(1)) {
-            auto content = content_result.value().is_integer()
-                ? number(content_result.value().to_BigInt())
-                : number(content_result.value());
-            const Rational inverse_value = Rational(1) / content_result.value();
+        const Rational content_value = lamina::detail::propagate_result(
+            lamina::symbolic_polynomial_content(*simp, context));
+        if (content_value != Rational(0) && content_value != Rational(1)) {
+            auto content = content_value.is_integer()
+                ? number(content_value.to_BigInt())
+                : number(content_value);
+            const Rational inverse_value = Rational(1) / content_value;
             auto inverse_content = inverse_value.is_integer()
                 ? number(inverse_value.to_BigInt())
                 : number(inverse_value);
@@ -242,7 +241,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
             }
             auto primitive_sum = lamina::detail::make_expression_ptr(
                 lamina::detail::make_node<AddNode>(primitive_terms));
-            auto factored_primitive = primitive_sum->factor();
+            auto factored_primitive = lamina::detail::propagate_result(
+                primitive_sum->factor_checked(context));
             return multiply(content, factored_primitive)->simplify();
         }
 
@@ -252,10 +252,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
              auto expr_op = lamina::detail::make_expression_ptr(op);
              if (!common) common = expr_op;
              else {
-                 lamina::ComputationContext gcd_context;
-                 auto gcd = lamina::symbolic_polynomial_gcd(
-                     *common, *expr_op, gcd_context);
-                 common = gcd ? gcd.value() : number(1);
+                 common = lamina::detail::propagate_result(
+                     lamina::symbolic_polynomial_gcd(
+                         *common, *expr_op, context));
              }
         }
 
@@ -272,7 +271,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
              auto new_sum = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(new_ops));
 
              /// 递归分解余下的和式
-             auto factored_sum = new_sum->factor();
+             auto factored_sum = lamina::detail::propagate_result(
+                 new_sum->factor_checked(context));
 
              std::vector<std::shared_ptr<const SymbolicNode>> final_ops = {lamina::detail::node(common), lamina::detail::node(factored_sum)};
              return lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(final_ops));
@@ -331,7 +331,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                                } else if (quotient.degree() >= 2) {
                                    /// 尝试递归分解余下部分
                                    auto q_expr = lamina::poly_to_symbolic(quotient)->simplify();
-                                   auto q_factored = q_expr->factor();
+                                   auto q_factored = lamina::detail::propagate_result(
+                                       q_expr->factor_checked(context));
                                    factors.push_back(lamina::detail::node(q_factored));
                                } else {
                                    auto q_expr = lamina::poly_to_symbolic(quotient)->simplify();
@@ -349,7 +350,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                            }
                       }
                  }
-             } catch (...) {}
+             } catch (const std::invalid_argument&) {
+             } catch (const std::out_of_range&) {
+             }
 
              try_solve_quadratic:
              /// 后备:二次多项式通过求解方程分解
@@ -359,7 +362,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                  if (poly.degree() == 2) {
                       std::string var = *factor_variables.begin();
                       auto solutions =
-                          lamina::solve_finite_checked(simp, var).value();
+                          lamina::detail::propagate_result(
+                              lamina::solve_finite_checked(simp, var, context));
                       if (solutions.size() == 2) {
                            auto leading = poly.coeffs[2].val;
                            if (!leading) leading = number(1);
@@ -378,7 +382,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                            return lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(factors));
                       }
                  }
-             } catch (...) {}
+             } catch (const std::invalid_argument&) {
+             } catch (const std::out_of_range&) {
+             }
         }
 
         /// 步骤 3:多元多项式 - 先尝试 factor_multivariate,再回退逐变量分解
@@ -391,14 +397,15 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                     auto mpoly = symbolic_node_to_multipoly(lamina::detail::node(simp), var_list);
 
                     if (!mpoly.is_zero() && !mpoly.is_constant()) {
-                        auto checked =
-                            lamina::factor_multivariate_checked(mpoly);
-                        if (!checked ||
-                            checked.value().completeness !=
-                                lamina::Completeness::Complete) {
+                        const auto& checked =
+                            lamina::detail::propagate_result(
+                                lamina::factor_multivariate_checked(
+                                    mpoly, context));
+                        if (checked.completeness !=
+                            lamina::Completeness::Complete) {
                             return simp;
                         }
-                        const auto& result = checked.value().value;
+                        const auto& result = checked.value;
 
                         /// 检查分解是否产生了多个因子
                         if (!result.factors.empty()) {
@@ -435,8 +442,10 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                             }
                         }
                     }
-                } catch (...) {
-                    /// MultiPoly 路径失败,回退到逐变量分解
+                } catch (const std::invalid_argument&) {
+                    /// MultiPoly conversion failed; use the variable fallback.
+                } catch (const std::out_of_range&) {
+                    /// MultiPoly conversion failed; use the variable fallback.
                 }
             }
 
@@ -491,7 +500,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                             }
                         }
                     }
-                } catch (...) {
+                } catch (const std::invalid_argument&) {
+                    continue;
+                } catch (const std::out_of_range&) {
                     continue;
                 }
             }
@@ -524,13 +535,41 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::factor() const {
                             lamina::detail::make_node<MultiplyNode>(std::move(factor_nodes)));
                     }
                 }
-            } catch (...) {
-                /// 超越分解失败,返回原表达式
+            } catch (const std::invalid_argument&) {
+                /// Transcendental conversion did not apply.
+            } catch (const std::out_of_range&) {
+                /// Transcendental conversion did not apply.
             }
         }
     }
 
     return simp;
+}
+
+lamina::ExpressionResult SymbolicExpr::factor_checked(
+    lamina::ComputationContext& context) const
+{
+    constexpr const char* operation = "factor";
+    auto budget = context.consume_steps(1, operation);
+    if (!budget) return lamina::ExpressionResult::failure(budget.error());
+    try {
+        return lamina::ExpressionResult::success(factor_impl(context));
+    } catch (const lamina::detail::ResultPropagation& propagation) {
+        return lamina::ExpressionResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return lamina::ExpressionResult::failure(
+            lamina::CasErrc::ResourceLimit,
+            "allocation failed while factoring expression", operation);
+    } catch (const std::exception& ex) {
+        return lamina::ExpressionResult::failure(
+            lamina::CasErrc::InternalInvariant, ex.what(), operation);
+    }
+}
+
+lamina::ExpressionResult SymbolicExpr::factor_checked() const
+{
+    lamina::ComputationContext context;
+    return factor_checked(context);
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
@@ -740,7 +779,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
                             cur_den = lamina::poly_to_symbolic(q_den)->simplify();
                         }
                     }
-                } catch (...) {
+                } catch (const std::invalid_argument&) {
+                    continue;
+                } catch (const std::out_of_range&) {
+                    continue;
+                } catch (const std::runtime_error&) {
                     continue;
                 }
             }
@@ -828,7 +871,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
                     cur_den = lamina::poly_to_symbolic(q_den)->simplify();
                 }
             }
-        } catch (...) {
+        } catch (const std::invalid_argument&) {
+            continue;
+        } catch (const std::out_of_range&) {
+            continue;
+        } catch (const std::runtime_error&) {
             continue;
         }
     }

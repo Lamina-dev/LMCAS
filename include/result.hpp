@@ -98,7 +98,19 @@ private:
 namespace detail {
 
 template <typename T>
-T propagate_result(Result<T> result) {
+T& propagate_result(Result<T>& result) {
+    if (!result) throw ResultPropagation(result.error());
+    return result.value();
+}
+
+template <typename T>
+const T& propagate_result(const Result<T>& result) {
+    if (!result) throw ResultPropagation(result.error());
+    return result.value();
+}
+
+template <typename T>
+T propagate_result(Result<T>&& result) {
     if (!result) throw ResultPropagation(result.error());
     return std::move(result.value());
 }

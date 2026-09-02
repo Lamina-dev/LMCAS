@@ -18,14 +18,14 @@ LMCAS/
 │   └── ...
 ├── tests/              # 单元测试
 ├── benchmarks/         # 性能测试
-├── LMMC/               # 子模块：Lamina 数值库，内部携带 LAMMP
+├── LMMC/               # 子模块：Lamina 数值库，内部携带 LMMP
 └── CMakeLists.txt      # CMake 构建配置
 ```
 
 ## 构建
 
 ### 要求
-*   **CMake**: 3.16+
+*   **CMake**: 3.26+
 *   **编译器**: GCC 9+, Clang 10+ 或 MinGW (需支持 C++17；MSVC 暂不支持)
 
 ### MinGW / Windows
@@ -42,7 +42,7 @@ cmake --build . --config Debug
 .\bin\Debug\test_proof.exe
 ```
 
-注意：如果在运行可执行文件时遇到 DLL 缺失错误，请确保 `lmcas` 和 `LammpCore` 运行库位于可执行文件同级目录，或将 `build/bin` 添加到系统 PATH。
+注意：如果在运行可执行文件时遇到 DLL 缺失错误，请确保 `lmcas` 和 `lmmp` 运行库位于可执行文件同级目录，或将 `build/bin` 添加到系统 PATH。
 
 ### Linux / macOS
 
@@ -70,24 +70,24 @@ SymbolicExpr 是 LMCAS 的核心类，表示一个不可变的符号表达式树
 *   **代入**: expr->substitute("y", val) - 将变量 y 替换为表达式 val。
 
 ### 矩阵运算
-支持符号矩阵操作（通常通过 SymbolicExpr 静态方法调用）：
-*   SymbolicExpr::determinant(mat): 计算行列式。
-*   SymbolicExpr::inverse(mat): 计算逆矩阵。
-*   SymbolicExpr::eigenvalues(mat): 计算特征值。
+符号矩阵操作通过 `include/symbolic_matrix.hpp` 的 checked 自由函数提供：
+*   `matrix_determinant_checked`: 计算行列式。
+*   `matrix_inverse_checked`: 计算逆矩阵。
+*   `matrix_eigenvalues_checked`: 计算特征值。
 
 ### 数值系统
-*   **BigInt**: 任意精度整数（基于 LAMMP）。
+*   **BigInt**: 任意精度整数（基于 LMMP）。
 *   **Rational**: 任意精度有理数。
 *   **Irrational**: 简单的无理数包装（如 sqrt(2), pi, e）。
 
 ## 文档
-- [说明文档](docs/README.md)
-- [核心架构](docs/modules/symbolic.md)
+- [符号表达式 API](include/symbolic.hpp)
+- [符号矩阵 API](include/symbolic_matrix.hpp)
 
 ## 许可证
 GNU Lesser General Public License v3.0 (LGPL-3.0)
 
 ## 贡献
-- Lamina MP LAMMP - Jecricho Knox - Lamina-dev
+- Lamina MP (LMMP) - Jecricho Knox - Lamina-dev
 - Lamina CAS - Ziyang Bai - Lamina-dev
 - All contributors are contributed to the Lamina project.

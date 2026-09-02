@@ -7,6 +7,7 @@
 #include "symbolic_ast.hpp"
 #include "integration.hpp"
 #include "internal/expression_analysis.hpp"
+#include "internal/series_support.hpp"
 #include <cmath>
 #include <memory>
 #include <string>
@@ -17,127 +18,6 @@
 #include <limits>
 #include <optional>
 
-static bool series_is_number(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    return expr->is_number();
-}
-
-static double series_get_double(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return 0.0;
-    auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
-    if (!num) return 0.0;
-    if (std::holds_alternative<BigInt>(num->value()))
-        return std::get<BigInt>(num->value()).to_double();
-    if (std::holds_alternative<Rational>(num->value()))
-        return std::get<Rational>(num->value()).to_double();
-    return static_cast<double>(std::get<lmmc_real_t>(num->value()));
-}
-
-static bool series_is_infinity(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr));
-    if (func && func->type() == FunctionNode::FuncType::Infinity) return true;
-    if (series_is_number(expr)) return std::isinf(series_get_double(expr));
-    return false;
-}
-
-[[maybe_unused]] static bool series_depends_on(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    return expr->to_string().find(var) != std::string::npos;
-}
-
-static bool series_extract_alternating(const std::shared_ptr<const SymbolicNode>& node,
-                                       const std::string& n,
-                                       std::shared_ptr<SymbolicExpr>& remainder) {
-    auto pow = std::dynamic_pointer_cast<const PowerNode>(node);
-    if (pow) {
-        auto base_num = std::dynamic_pointer_cast<const NumberNode>(pow->base());
-        auto exp_var = std::dynamic_pointer_cast<const VariableNode>(pow->exponent());
-        if (base_num && exp_var && exp_var->name() == n) {
-            double base_val = 0.0;
-            if (std::holds_alternative<BigInt>(base_num->value()))
-                base_val = std::get<BigInt>(base_num->value()).to_double();
-            else if (std::holds_alternative<Rational>(base_num->value()))
-                base_val = std::get<Rational>(base_num->value()).to_double();
-            else
-                base_val = static_cast<double>(std::get<lmmc_real_t>(base_num->value()));
-            if (std::abs(base_val + 1.0) < 1e-12) {
-                remainder = SymbolicExpr::number(1);
-                return true;
-            }
-        }
-    }
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node);
-    if (mul) {
-        for (size_t i = 0; i < mul->operands().size(); ++i) {
-            auto pw = std::dynamic_pointer_cast<const PowerNode>(mul->operands()[i]);
-            if (!pw) continue;
-            auto base_num = std::dynamic_pointer_cast<const NumberNode>(pw->base());
-            auto exp_var = std::dynamic_pointer_cast<const VariableNode>(pw->exponent());
-            if (!base_num || !exp_var || exp_var->name() != n) continue;
-            double base_val = 0.0;
-            if (std::holds_alternative<BigInt>(base_num->value()))
-                base_val = std::get<BigInt>(base_num->value()).to_double();
-            else if (std::holds_alternative<Rational>(base_num->value()))
-                base_val = std::get<Rational>(base_num->value()).to_double();
-            else
-                base_val = static_cast<double>(std::get<lmmc_real_t>(base_num->value()));
-            if (std::abs(base_val + 1.0) < 1e-12) {
-                std::vector<std::shared_ptr<const SymbolicNode>> rest;
-                for (size_t j = 0; j < mul->operands().size(); ++j)
-                    if (j != i) rest.push_back(mul->operands()[j]);
-                if (rest.empty()) remainder = SymbolicExpr::number(1);
-                else if (rest.size() == 1) remainder = lamina::detail::make_expression_ptr(rest[0]);
-                else remainder = lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(rest));
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-static bool series_detect_trig_oscillation(const std::shared_ptr<const SymbolicNode>& node,
-                                           const std::string& n,
-                                           std::shared_ptr<SymbolicExpr>& amplitude) {
-    auto func = std::dynamic_pointer_cast<const FunctionNode>(node);
-    if (func && (func->type() == FunctionNode::FuncType::Sin || func->type() == FunctionNode::FuncType::Cos)) {
-        if (!func->arguments().empty()) {
-            auto arg_expr = lamina::detail::make_expression_ptr(func->arguments()[0]);
-            auto arg_limit = lamina::limit_expression_checked(arg_expr, n, SymbolicExpr::infinity()).value();
-            if (series_is_infinity(arg_limit)) { amplitude = SymbolicExpr::number(1); return true; }
-        }
-    }
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node);
-    if (!mul) return false;
-    for (size_t i = 0; i < mul->operands().size(); ++i) {
-        auto f = std::dynamic_pointer_cast<const FunctionNode>(mul->operands()[i]);
-        if (!f || (f->type() != FunctionNode::FuncType::Sin && f->type() != FunctionNode::FuncType::Cos)) continue;
-        if (f->arguments().empty()) continue;
-        auto arg_expr = lamina::detail::make_expression_ptr(f->arguments()[0]);
-        auto arg_limit = lamina::limit_expression_checked(arg_expr, n, SymbolicExpr::infinity()).value();
-        if (!series_is_infinity(arg_limit)) continue;
-        std::vector<std::shared_ptr<const SymbolicNode>> rest;
-        for (size_t j = 0; j < mul->operands().size(); ++j)
-            if (j != i) rest.push_back(mul->operands()[j]);
-        if (rest.empty()) amplitude = SymbolicExpr::number(1);
-        else if (rest.size() == 1) amplitude = lamina::detail::make_expression_ptr(rest[0]);
-        else amplitude = lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(rest));
-        return true;
-    }
-    return false;
-}
-
-static std::shared_ptr<SymbolicExpr> series_abs(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr) return nullptr;
-    if (series_is_number(expr)) return SymbolicExpr::number(std::abs(series_get_double(expr)));
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Abs,
-        std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(expr)}));
-}
-
-static std::shared_ptr<SymbolicExpr> series_negate(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr) return nullptr;
-    return SymbolicExpr::multiply(SymbolicExpr::number(-1), expr)->simplify();
-}
 
 static bool try_get_int(const std::shared_ptr<SymbolicExpr>& expr, long long& out) {
     if (!expr || !lamina::detail::node(expr)) return false;
@@ -160,41 +40,12 @@ static bool try_get_int(const std::shared_ptr<SymbolicExpr>& expr, long long& ou
     return false;
 }
 
-[[maybe_unused]] static std::shared_ptr<SymbolicExpr> make_pi() { return SymbolicExpr::number(LMMC_CONST_PI); }
 
-static int detect_parity(const std::shared_ptr<SymbolicExpr>& f, const std::string& var) {
-    if (!f) return 0;
-    auto neg_x = SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::variable(var));
-    auto f_neg = f->substitute(var, neg_x);
-    if (!f_neg) return 0;
-    f_neg = f_neg->simplify();
-    auto f_s = f->simplify();
-    auto diff_even = SymbolicExpr::add(f_neg, SymbolicExpr::multiply(SymbolicExpr::number(-1), f_s));
-    if (diff_even) { diff_even = diff_even->simplify(); if (diff_even->is_zero()) return 1; }
-    auto diff_odd = SymbolicExpr::add(f_neg, f_s);
-    if (diff_odd) { diff_odd = diff_odd->simplify(); if (diff_odd->is_zero()) return -1; }
-    return 0;
-}
 
 namespace lamina {
 
 namespace {
 
-Result<void> validate_power_series_coefficients(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
-    const std::string& operation,
-    const std::string& name)
-{
-    for (size_t i = 0; i < coeffs.size(); ++i) {
-        if (!coeffs[i] || !lamina::detail::node(coeffs[i])) {
-            return Result<void>::failure(
-                CasErrc::InvalidArgument,
-                name + " contains a null coefficient at index " + std::to_string(i),
-                operation);
-        }
-    }
-    return Result<void>::success();
-}
 
 Result<void> validate_power_series_order(
     int order,
@@ -212,6 +63,12 @@ Result<void> validate_power_series_order(
     return Result<void>::success();
 }
 
+
+
+
+} // namespace
+namespace detail::series_support {
+
 Result<void> validate_series_variable(const std::string& var,
                                       ComputationContext& context,
                                       const std::string& operation)
@@ -221,45 +78,6 @@ Result<void> validate_series_variable(const std::string& var,
     if (var.empty()) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "series variable name cannot be empty",
-                                     operation);
-    }
-    return Result<void>::success();
-}
-
-Result<void> validate_series_expr_point(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::shared_ptr<SymbolicExpr>& center,
-    const std::string& var,
-    ComputationContext& context,
-    const std::string& operation)
-{
-    auto var_check = validate_series_variable(var, context, operation);
-    if (!var_check) return var_check;
-    if (!expr || !lamina::detail::node(expr) || !center || !lamina::detail::node(center)) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "series expression and center cannot be null",
-                                     operation);
-    }
-    return Result<void>::success();
-}
-
-bool has_symbolic_nonzero_coefficient(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients)
-{
-    for (const auto& coefficient : coefficients) {
-        if (!coefficient || !lamina::detail::node(coefficient) || coefficient->is_zero()) continue;
-        if (!series_is_number(coefficient)) return true;
-    }
-    return false;
-}
-
-Result<void> validate_laurent_orders(int order_neg,
-                                     int order_pos,
-                                     const std::string& operation)
-{
-    if (order_neg < 0 || order_pos < 0 || order_neg > 64 || order_pos > 64) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "Laurent truncation orders must be between 0 and 64",
                                      operation);
     }
     return Result<void>::success();
@@ -314,253 +132,28 @@ std::optional<int> supported_laurent_integer_power(
         return total_power;
     }
     return std::nullopt;
+
+
 }
 
-} // namespace
-
-static std::shared_ptr<SymbolicExpr> convergence_radius_impl(
-    const std::vector<std::shared_ptr<SymbolicExpr>>&,
-    const std::string&);
-static ConvergenceInfo convergence_test_impl(
-    const std::shared_ptr<SymbolicExpr>&,
-    const std::string&);
-static LaurentResult laurent_series_full_impl(
-    const std::shared_ptr<SymbolicExpr>&,
-    const std::string&,
-    const std::shared_ptr<SymbolicExpr>&,
-    int, int);
-
-ExpressionResult convergence_radius_checked(
-    const std::shared_ptr<SymbolicExpr>& general_coefficient,
-    const std::string& index_var,
-    ComputationContext& context) {
-    constexpr const char* operation = "convergence_radius";
-    if (!general_coefficient || !lamina::detail::node(general_coefficient) ||
-        index_var.empty()) {
-        return ExpressionResult::failure(
-            CasErrc::InvalidArgument,
-            "convergence radius requires a coefficient term and index variable",
-            operation);
-    }
-    auto step = context.consume_steps(2, operation);
-    if (!step) return ExpressionResult::failure(step.error());
-    auto node = lamina::detail::node(general_coefficient);
-    if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        return ExpressionResult::success(
-            number->is_zero() ? SymbolicExpr::infinity()
-                              : SymbolicExpr::number(1));
-    }
-    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        auto exponent_variable = std::dynamic_pointer_cast<const VariableNode>(
-            power->exponent());
-        if (exponent_variable && exponent_variable->name() == index_var &&
-            !expression_depends_on_variable(power->base(), index_var)) {
-            auto absolute = lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<FunctionNode>(
-                    FunctionNode::FuncType::Abs,
-                    std::vector<std::shared_ptr<const SymbolicNode>>{
-                        power->base()}));
-            return ExpressionResult::success(
-                SymbolicExpr::divide(SymbolicExpr::number(1), absolute)->simplify());
-        }
-        auto base_variable = std::dynamic_pointer_cast<const VariableNode>(
-            power->base());
-        if (base_variable && base_variable->name() == index_var &&
-            !expression_depends_on_variable(power->exponent(), index_var)) {
-            return ExpressionResult::success(SymbolicExpr::number(1));
-        }
-    }
-    return ExpressionResult::failure(
-        CasErrc::Inconclusive,
-        "coefficient-term limit is outside the supported ratio/root-test domain",
-        operation);
-}
-
-ExpressionResult convergence_radius_checked(
-    const std::shared_ptr<SymbolicExpr>& general_coefficient,
-    const std::string& index_var) {
-    ComputationContext context;
-    return convergence_radius_checked(
-        general_coefficient, index_var, context);
-}
-
-/// Stubs for functions not yet fully implemented in this task
-ExpressionResult convergence_radius_checked(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
-    const std::string& var,
-    ComputationContext& context)
+Result<void> validate_power_series_coefficients(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
+    const std::string& operation,
+    const std::string& name)
 {
-    const std::string operation = "convergence_radius";
-    auto var_check = validate_series_variable(var, context, operation);
-    if (!var_check) return ExpressionResult::failure(var_check.error());
-    if (coefficients.empty()) {
-        return ExpressionResult::failure(CasErrc::InvalidArgument,
-                                         "coefficient list cannot be empty",
-                                         operation);
-    }
-    auto coeff_check = validate_power_series_coefficients(coefficients, operation, "series");
-    if (!coeff_check) return ExpressionResult::failure(coeff_check.error());
-    if (has_symbolic_nonzero_coefficient(coefficients)) {
-        return ExpressionResult::failure(
-            CasErrc::Inconclusive,
-            "convergence radius for symbolic coefficients is outside the current support domain",
-            operation);
-    }
-    auto budget = context.consume_steps(coefficients.size() * 4 + 4, operation);
-    if (!budget) return ExpressionResult::failure(budget.error());
-    try {
-        auto radius = convergence_radius_impl(coefficients, var);
-        if (!radius || !lamina::detail::node(radius)) {
-            return ExpressionResult::failure(
-                CasErrc::Inconclusive,
-                "convergence radius could not be constructed in the supported domain",
+    for (size_t i = 0; i < coeffs.size(); ++i) {
+        if (!coeffs[i] || !lamina::detail::node(coeffs[i])) {
+            return Result<void>::failure(
+                CasErrc::InvalidArgument,
+                name + " contains a null coefficient at index " + std::to_string(i),
                 operation);
         }
-        return ExpressionResult::success(radius);
-    } catch (const std::bad_alloc&) {
-        return ExpressionResult::failure(CasErrc::ResourceLimit,
-                                         "allocation failed while calculating convergence radius",
-                                         operation);
-    } catch (const std::exception& ex) {
-        return ExpressionResult::failure(CasErrc::InternalInvariant,
-                                         ex.what(),
-                                         operation);
     }
+    return Result<void>::success();
 }
+} // namespace detail::series_support
 
-ExpressionResult convergence_radius_checked(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
-    const std::string& var)
-{
-    ComputationContext context;
-    return convergence_radius_checked(coefficients, var, context);
-}
-
-static std::shared_ptr<SymbolicExpr> convergence_radius_impl(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients, const std::string& var) {
-    (void)var;
-    if (coefficients.size() < 2) return SymbolicExpr::infinity();
-    std::vector<size_t> nz;
-    for (size_t i = 0; i < coefficients.size(); ++i)
-        if (coefficients[i] && !coefficients[i]->is_zero()) nz.push_back(i);
-    if (nz.size() < 2) return SymbolicExpr::infinity();
-    std::vector<double> ratios;
-    for (size_t i = 0; i + 1 < nz.size(); ++i) {
-        auto a = coefficients[nz[i]]; auto b = coefficients[nz[i+1]];
-        if (!a || !b || b->is_zero()) continue;
-        if (series_is_number(a) && series_is_number(b)) {
-            double va = std::abs(series_get_double(a)), vb = std::abs(series_get_double(b));
-            if (vb > 1e-300) ratios.push_back(va / vb);
-        }
-    }
-    if (!ratios.empty()) {
-        double r = ratios.back();
-        if (std::isinf(r) || r > 1e15) return SymbolicExpr::infinity();
-        return SymbolicExpr::number(r);
-    }
-    return SymbolicExpr::infinity();
-}
-
-ConvergenceInfoResult convergence_test_checked(
-    const std::shared_ptr<SymbolicExpr>& general_term,
-    const std::string& index_var,
-    ComputationContext& context)
-{
-    const std::string operation = "convergence_test";
-    auto var_check = validate_series_variable(index_var, context, operation);
-    if (!var_check) return ConvergenceInfoResult::failure(var_check.error());
-    if (!general_term || !lamina::detail::node(general_term)) {
-        return ConvergenceInfoResult::failure(CasErrc::InvalidArgument,
-                                              "general term cannot be null",
-                                              operation);
-    }
-    auto budget = context.consume_steps(32, operation);
-    if (!budget) return ConvergenceInfoResult::failure(budget.error());
-    try {
-        auto info = convergence_test_impl(general_term, index_var);
-        if (info.result == ConvergenceResult::Inconclusive) {
-            return ConvergenceInfoResult::failure(
-                CasErrc::Inconclusive,
-                "convergence test is outside the current supported domain",
-                operation);
-        }
-        return ConvergenceInfoResult::success(std::move(info));
-    } catch (const std::bad_alloc&) {
-        return ConvergenceInfoResult::failure(CasErrc::ResourceLimit,
-                                              "allocation failed while testing convergence",
-                                              operation);
-    } catch (const std::exception& ex) {
-        return ConvergenceInfoResult::failure(CasErrc::InternalInvariant,
-                                              ex.what(),
-                                              operation);
-    }
-}
-
-ConvergenceInfoResult convergence_test_checked(
-    const std::shared_ptr<SymbolicExpr>& general_term,
-    const std::string& index_var)
-{
-    ComputationContext context;
-    return convergence_test_checked(general_term, index_var, context);
-}
-
-static ConvergenceInfo convergence_test_impl(
-    const std::shared_ptr<SymbolicExpr>& general_term, const std::string& index_var) {
-    if (!general_term || !lamina::detail::node(general_term)) return {ConvergenceResult::Inconclusive, ""};
-    if (auto power = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(general_term))) {
-        auto base_var = std::dynamic_pointer_cast<const VariableNode>(power->base());
-        auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
-        if (base_var && base_var->name() == index_var && exponent) {
-            double p = 0.0;
-            if (std::holds_alternative<BigInt>(exponent->value())) {
-                p = std::get<BigInt>(exponent->value()).to_double();
-            } else if (std::holds_alternative<Rational>(exponent->value())) {
-                p = std::get<Rational>(exponent->value()).to_double();
-            } else {
-                p = static_cast<double>(std::get<lmmc_real_t>(exponent->value()));
-            }
-            if (p < -1.0) return {ConvergenceResult::Convergent, "p-series"};
-            if (p >= -1.0 && p < 0.0) return {ConvergenceResult::Divergent, "p-series"};
-        }
-    }
-    /// Laurent 单项式 c*n^e 直接应用 p 级数判据.
-    /// 该路径使倒数幂保持在线性规则内,并跳过 Abs 比值极限的递归化简.
-    if (const auto laurent_power = supported_laurent_integer_power(
-            lamina::detail::node(general_term), index_var)) {
-        if (*laurent_power < -1) {
-            return {ConvergenceResult::Convergent, "p-series"};
-        }
-        if (*laurent_power >= -1 && *laurent_power < 0) {
-            return {ConvergenceResult::Divergent, "p-series"};
-        }
-    }
-    auto n = SymbolicExpr::variable(index_var);
-    auto n1 = SymbolicExpr::add(n, SymbolicExpr::number(1));
-    auto inf = SymbolicExpr::infinity();
-    auto a_n1 = general_term->substitute(index_var, n1);
-    if (a_n1) {
-        a_n1 = a_n1->simplify();
-        auto ratio = SymbolicExpr::divide(a_n1, general_term);
-        if (ratio) {
-            ratio = ratio->simplify();
-            auto abs_r = lamina::detail::make_expression_ptr(lamina::detail::make_node<FunctionNode>(
-                FunctionNode::FuncType::Abs, std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(ratio)}));
-            abs_r = abs_r->simplify();
-            auto lim = lamina::limit_expression_checked(abs_r, index_var, inf).value();
-            if (lim) {
-                auto ls = lim->simplify();
-                if (ls && series_is_number(ls)) {
-                    double v = series_get_double(ls);
-                    if (v < 1.0 - 1e-12) return {ConvergenceResult::Convergent, "ratio"};
-                    if (v > 1.0 + 1e-12) return {ConvergenceResult::Divergent, "ratio"};
-                }
-                if (ls && ls->is_zero()) return {ConvergenceResult::Convergent, "ratio"};
-                if (series_is_infinity(ls)) return {ConvergenceResult::Divergent, "ratio"};
-            }
-        }
-    }
-    return {ConvergenceResult::Inconclusive, ""};
-}
+using detail::series_support::validate_power_series_coefficients;
 
 std::vector<std::shared_ptr<SymbolicExpr>> power_series_add(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
@@ -642,7 +235,7 @@ PowerSeriesResult power_series_compose_checked(
         if (!step) return PowerSeriesResult::failure(step.error());
         auto multiplied = power_series_multiply_checked(gp[k-1], gp[1], order, context);
         if (!multiplied) return multiplied;
-        gp[k] = std::move(multiplied.value());
+        gp[k] = std::move(lamina::detail::propagate_result(multiplied));
     }
     for (size_t k = 0; k < std::min(f.size(), n); ++k) {
         auto step = context.consume_steps(1, operation);
@@ -663,260 +256,6 @@ PowerSeriesResult power_series_compose_checked(
 }
 
 
-std::shared_ptr<SymbolicExpr> fourier_series(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& period, int n_terms) {
-    if (!f || !period || n_terms < 0) return nullptr;
-
-    /// 周期 T,半周期 L = T/2,基频 w = 2pi/T
-    auto T = period;
-    auto pi = lamina::detail::make_expression_ptr(lamina::detail::make_node<VariableNode>("pi"));
-    auto two = SymbolicExpr::number(2);
-    auto L = SymbolicExpr::divide(T, two);          // 半周期
-    auto half_lo = SymbolicExpr::multiply(SymbolicExpr::number(-1), L);
-    auto half_hi = L;
-    auto w = SymbolicExpr::divide(SymbolicExpr::multiply(two, pi), T); // 2pi/T
-
-    int parity = detect_parity(f, var); // 1=even, -1=odd, 0=unknown
-
-    Integrator integrator;
-    auto x = SymbolicExpr::variable(var);
-
-    /// a0 = (1/L) integral_{-L}^{L} f dx ; 常数项 a0/2
-    std::shared_ptr<SymbolicExpr> a0 = SymbolicExpr::number(0);
-    {
-        auto integ = detail::propagate_result(
-            integrator.integrate_def(*f, var, *half_lo, *half_hi));
-        a0 = SymbolicExpr::divide(
-            lamina::detail::make_expression_ptr(integ), L)->simplify();
-    }
-    auto result = SymbolicExpr::divide(a0, two); // a0/2
-
-    for (int k = 1; k <= n_terms; ++k) {
-        auto kw = SymbolicExpr::multiply(SymbolicExpr::number(k), w); // k*2pi/T
-        auto arg = SymbolicExpr::multiply(kw, x);
-
-        /// a_k:奇函数时为 0
-        if (parity != -1) {
-            auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::cos(arg));
-            auto integ = detail::propagate_result(
-                integrator.integrate_def(*integrand, var, *half_lo, *half_hi));
-            auto ak = SymbolicExpr::divide(
-                lamina::detail::make_expression_ptr(integ), L)->simplify();
-            if (!(lamina::detail::node(ak) && lamina::detail::node(ak)->is_zero())) {
-                result = SymbolicExpr::add(result, SymbolicExpr::multiply(ak, SymbolicExpr::cos(arg)));
-            }
-        }
-        /// b_k:偶函数时为 0
-        if (parity != 1) {
-            auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::sin(arg));
-            auto integ = detail::propagate_result(
-                integrator.integrate_def(*integrand, var, *half_lo, *half_hi));
-            auto bk = SymbolicExpr::divide(
-                lamina::detail::make_expression_ptr(integ), L)->simplify();
-            if (!(lamina::detail::node(bk) && lamina::detail::node(bk)->is_zero())) {
-                result = SymbolicExpr::add(result, SymbolicExpr::multiply(bk, SymbolicExpr::sin(arg)));
-            }
-        }
-    }
-    return result->simplify();
-}
-
-
-ExpressionResult laurent_series_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& center,
-    int order_neg,
-    int order_pos,
-    ComputationContext& context)
-{
-    auto full = laurent_series_full_checked(
-        f, var, center, order_neg, order_pos, context);
-    if (!full) return ExpressionResult::failure(full.error());
-    auto simplified = f->simplify();
-    auto supported_power = simplified
-        ? supported_laurent_integer_power(
-              lamina::detail::node(simplified), var)
-        : std::nullopt;
-    if (center->is_zero() && supported_power && *supported_power < 0) {
-        return ExpressionResult::success(std::move(simplified));
-    }
-    return ExpressionResult::success(full.value().series);
-}
-
-ExpressionResult laurent_series_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& center,
-    int order_neg,
-    int order_pos)
-{
-    ComputationContext context;
-    return laurent_series_checked(f, var, center, order_neg, order_pos, context);
-}
-
-LaurentSeriesResult laurent_series_full_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& center,
-    int order_neg,
-    int order_pos,
-    ComputationContext& context)
-{
-    const std::string operation = "laurent_series_full";
-    auto input = validate_series_expr_point(f, center, var, context, operation);
-    if (!input) return LaurentSeriesResult::failure(input.error());
-    auto order_check = validate_laurent_orders(order_neg, order_pos, operation);
-    if (!order_check) return LaurentSeriesResult::failure(order_check.error());
-    auto budget = context.consume_steps(static_cast<std::size_t>(order_neg + order_pos + 1) * 16 + 16,
-                                        operation);
-    if (!budget) return LaurentSeriesResult::failure(budget.error());
-    auto simplified_input = f->simplify();
-    if (!simplified_input || !lamina::detail::node(simplified_input)) {
-        return LaurentSeriesResult::failure(
-            CasErrc::Inconclusive,
-            "checked Laurent input could not be simplified in the supported domain",
-            operation);
-    }
-    auto supported_power = supported_laurent_integer_power(
-        lamina::detail::node(simplified_input), var);
-    try {
-        auto result = laurent_series_full_impl(f, var, center, order_neg, order_pos);
-        if (!result.series || !lamina::detail::node(result.series)) {
-            return LaurentSeriesResult::failure(
-                CasErrc::Inconclusive,
-                "Laurent series could not be constructed in the supported domain",
-                operation);
-        }
-        if (!result.residue || !lamina::detail::node(result.residue)) {
-            return LaurentSeriesResult::failure(
-                CasErrc::InternalInvariant,
-                "Laurent series produced a null residue expression",
-                operation);
-        }
-        if (supported_power && center->is_zero()) {
-            int expected_pole_order =
-                *supported_power < 0 ? -*supported_power : 0;
-            if (result.pole_order != expected_pole_order) {
-                return LaurentSeriesResult::failure(
-                    CasErrc::Inconclusive,
-                    "Laurent pole order could not be verified",
-                    operation);
-            }
-        }
-        return LaurentSeriesResult::success(std::move(result));
-    } catch (const std::bad_alloc&) {
-        return LaurentSeriesResult::failure(CasErrc::ResourceLimit,
-                                            "allocation failed while calculating Laurent series",
-                                            operation);
-    } catch (const std::exception& ex) {
-        return LaurentSeriesResult::failure(CasErrc::InternalInvariant,
-                                            ex.what(),
-                                            operation);
-    }
-}
-
-LaurentSeriesResult laurent_series_full_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& center,
-    int order_neg,
-    int order_pos)
-{
-    ComputationContext context;
-    return laurent_series_full_checked(f, var, center, order_neg, order_pos, context);
-}
-
-static LaurentResult laurent_series_full_impl(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& center, int order_neg, int order_pos) {
-    LaurentResult res{nullptr, SingularityType::Removable, 0, SymbolicExpr::number(0)};
-    if (!f || !center) return res;
-
-    auto x = SymbolicExpr::variable(var);
-    /// (x - center)
-    auto shift = SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), center));
-
-    /// 寻找极点阶数 m:使 (x-c)^m * f 在 c 处解析(有限).
-    int pole_order = 0;
-    std::shared_ptr<SymbolicExpr> regular = f;
-    {
-        auto test = f;
-        const int MAX_M = (order_neg > 0 ? order_neg : 5);
-        /// 先判断 f 在 center 是否已解析
-        auto f_at = f->substitute(var, center);
-        if (f_at) f_at = f_at->simplify();
-        bool finite = f_at && f_at->is_number();
-        if (!finite) {
-            for (int m = 1; m <= MAX_M; ++m) {
-                auto powm = SymbolicExpr::power(shift, SymbolicExpr::number(m));
-                auto g = SymbolicExpr::multiply(powm, f)->simplify();
-                auto g_at = g->substitute(var, center);
-                if (g_at) g_at = g_at->simplify();
-                if (g_at && g_at->is_number()) {
-                    pole_order = m;
-                    regular = g;       // (x-c)^m f(x),在 c 处解析
-                    break;
-                }
-            }
-        }
-    }
-
-    /// 对 regular(解析部分)做 Taylor 展开
-    int taylor_order = order_pos + pole_order + 1;
-    if (taylor_order < 1) taylor_order = 1;
-    auto taylor = regular->series(var, center, taylor_order);
-    if (!taylor) return res;
-
-    /// Laurent = taylor / (x-c)^pole_order
-    std::shared_ptr<SymbolicExpr> laurent = taylor;
-    if (pole_order > 0) {
-        auto powm = SymbolicExpr::power(shift, SymbolicExpr::number(pole_order));
-        laurent = SymbolicExpr::divide(taylor, powm)->simplify();
-    }
-
-    res.series = laurent->simplify();
-    res.pole_order = pole_order;
-    if (pole_order == 0) res.singularity = SingularityType::Removable;
-    else res.singularity = SingularityType::Pole;
-
-    /// 留数 = Taylor 展开中 (x-c)^(pole_order-1) 的系数
-    if (pole_order >= 1) {
-        /// a_{m-1} = (1/(m-1)!) lim_{x->c} d^{m-1}/dx^{m-1} [regular]
-        auto deriv = regular;
-        for (int i = 0; i < pole_order - 1; ++i) deriv = deriv->differentiate(var);
-        /// 用极限求值,稳健处理 0/0 形式(如 z/(z(z+1)) 在 z=0).
-        auto val = lamina::limit_expression_checked(deriv, var, center).value();
-        if (!val) val = deriv->substitute(var, center);
-        long long fact = 1;
-        for (int i = 2; i <= pole_order - 1; ++i) fact *= i;
-        res.residue = SymbolicExpr::divide(val, SymbolicExpr::number((int)fact))->simplify();
-    }
-
-    return res;
-}
-
-std::shared_ptr<SymbolicExpr> asymptotic_expand(
-    const std::shared_ptr<SymbolicExpr>& f, const std::string& var, int order) {
-    if (!f || order < 0) return nullptr;
-    /// 通过 x = 1/t 替换,在 t=0 处做 Taylor 展开,再回代 t = 1/x,
-    /// 得到按 x 递减幂次的渐近展开.
-    auto x = SymbolicExpr::variable(var);
-    std::string tname = var + "__asym_t";
-    auto t = SymbolicExpr::variable(tname);
-    auto inv_t = SymbolicExpr::divide(SymbolicExpr::number(1), t);
-    auto g = f->substitute(var, inv_t);
-    if (!g) return nullptr;
-    g = g->simplify();
-    auto taylor_t = g->series(tname, SymbolicExpr::number(0), order + 1);
-    if (!taylor_t) return nullptr;
-    /// 回代 t = 1/x
-    auto inv_x = SymbolicExpr::divide(SymbolicExpr::number(1), x);
-    auto back = taylor_t->substitute(tname, inv_x);
-    if (!back) return nullptr;
-    return back->simplify();
-}
 
 std::shared_ptr<SymbolicExpr> symbolic_sum(
     const std::shared_ptr<SymbolicExpr>& body, const std::string& index,
@@ -970,76 +309,5 @@ std::shared_ptr<SymbolicExpr> symbolic_product(
 }
 
 
-std::shared_ptr<SymbolicExpr> lim_sup(
-    const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n) {
-    if (!a_n || !lamina::detail::node(a_n)) return nullptr;
-
-    /// Detect (-1)^n oscillation pattern
-    std::shared_ptr<SymbolicExpr> remainder;
-    if (series_extract_alternating(lamina::detail::node(a_n), n, remainder)) {
-        auto inf = SymbolicExpr::infinity();
-        auto lim_f = lamina::limit_expression_checked(remainder, n, inf).value();
-        if (lim_f) {
-            auto ls = lim_f->simplify();
-            if (ls && !series_is_infinity(ls)) return series_abs(ls);
-            if (series_is_infinity(ls)) return SymbolicExpr::infinity();
-        }
-        return series_abs(lim_f);
-    }
-
-    /// Detect sin/cos oscillation
-    std::shared_ptr<SymbolicExpr> amplitude;
-    if (series_detect_trig_oscillation(lamina::detail::node(a_n), n, amplitude)) {
-        auto inf = SymbolicExpr::infinity();
-        auto amp_lim = lamina::limit_expression_checked(amplitude, n, inf).value();
-        if (amp_lim) {
-            auto als = amp_lim->simplify();
-            if (als && series_is_number(als)) return SymbolicExpr::number(std::abs(series_get_double(als)));
-            if (als) return series_abs(als);
-        }
-    }
-
-    /// For convergent/monotone sequences: lim sup = lim
-    auto inf = SymbolicExpr::infinity();
-    auto lim = lamina::limit_expression_checked(a_n, n, inf).value();
-    if (lim) { auto s = lim->simplify(); if (s) return s; return lim; }
-    return nullptr;
-}
-
-std::shared_ptr<SymbolicExpr> lim_inf(
-    const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n) {
-    if (!a_n || !lamina::detail::node(a_n)) return nullptr;
-
-    /// Detect (-1)^n oscillation pattern
-    std::shared_ptr<SymbolicExpr> remainder;
-    if (series_extract_alternating(lamina::detail::node(a_n), n, remainder)) {
-        auto inf = SymbolicExpr::infinity();
-        auto lim_f = lamina::limit_expression_checked(remainder, n, inf).value();
-        if (lim_f) {
-            auto ls = lim_f->simplify();
-            if (ls && !series_is_infinity(ls)) return series_negate(series_abs(ls));
-            if (series_is_infinity(ls)) return SymbolicExpr::infinity(-1);
-        }
-        return series_negate(series_abs(lim_f));
-    }
-
-    /// Detect sin/cos oscillation
-    std::shared_ptr<SymbolicExpr> amplitude;
-    if (series_detect_trig_oscillation(lamina::detail::node(a_n), n, amplitude)) {
-        auto inf = SymbolicExpr::infinity();
-        auto amp_lim = lamina::limit_expression_checked(amplitude, n, inf).value();
-        if (amp_lim) {
-            auto als = amp_lim->simplify();
-            if (als && series_is_number(als)) return SymbolicExpr::number(-std::abs(series_get_double(als)));
-            if (als) return series_negate(series_abs(als));
-        }
-    }
-
-    /// For convergent/monotone sequences: lim inf = lim
-    auto inf = SymbolicExpr::infinity();
-    auto lim = lamina::limit_expression_checked(a_n, n, inf).value();
-    if (lim) { auto s = lim->simplify(); if (s) return s; return lim; }
-    return nullptr;
-}
 
 } // namespace lamina

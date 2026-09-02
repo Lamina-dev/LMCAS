@@ -26,7 +26,8 @@ static MultiFactorResult checked_factor_multivariate(const MultiPoly& poly)
 {
     auto result = factor_multivariate_checked(poly);
     if (!result) {
-        throw std::runtime_error(result.error().message);
+        throw std::runtime_error(
+            result.error().message + " while factoring " + poly.to_string());
     }
     return std::move(result.value().value);
 }
@@ -386,6 +387,28 @@ int main()
         EXPECT_TRUE(product == poly,
                     "factor product equals original for 6x^2*y - 3x*y^2");
     }
+    TEST_CASE("Constant Hensel correction keeps the univariate factor domain");
+    {
+        std::vector<std::string> vars = {"x", "y"};
+        MultiPoly poly({
+            make_term({1, 1}, Rational(-2)),
+            make_term({0, 2}, Rational(1)),
+            make_term({1, 0}, Rational(6)),
+            make_term({0, 1}, Rational(-5)),
+            make_term({0, 0}, Rational(6))
+        }, vars);
+
+        MultiFactorResult result = checked_factor_multivariate(poly);
+        MultiPoly reconstructed(Rational(result.constant), vars);
+        for (size_t i = 0; i < result.factors.size(); ++i) {
+            for (int m = 0; m < result.multiplicities[i]; ++m) {
+                reconstructed = reconstructed * result.factors[i];
+            }
+        }
+        EXPECT_TRUE(reconstructed == poly,
+                    "constant Hensel correction reconstructs -2xy+y^2+6x-5y+6");
+    }
+
 
 
     TEST_CASE("Factorization product correctness (random factorable bivariate)");
@@ -838,6 +861,17 @@ int main()
         EXPECT_TRUE(
             limited.error().code == CasErrc::ResourceLimit,
             "预算错误应报告 ResourceLimit");
+
+        CancellationToken cancellation;
+        cancellation.cancel();
+        ComputationContext cancelled_context({}, cancellation);
+        auto cancelled =
+            factor_multivariate_checked(difference, cancelled_context);
+        EXPECT_FALSE(cancelled.has_value(),
+                     "取消的受检分解不得降级为未决成功");
+        EXPECT_TRUE(
+            cancelled.error().code == CasErrc::Cancelled,
+            "取消应通过 CasError 显式传播");
 
     }
 

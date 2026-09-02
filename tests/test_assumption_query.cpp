@@ -324,24 +324,18 @@ static void EXPECT_TRIBOOL(Tribool actual, Tribool expected, const std::string& 
 
 
 void test_nan_handling() {
-    TEST_CASE("NaN handling");
+    TEST_CASE("NaN rejection");
 
-    AssumptionContext ctx;
-    QueryInterface qi(ctx);
-
-    auto nan_node = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(std::nan("")));
-    SymbolicExpr nan_expr = make_expr(nan_node);
-
-    EXPECT_TRIBOOL(qi.query_integer(nan_expr).value(), Tribool::False,
-                   "NaN: query_integer should return False");
-    EXPECT_TRIBOOL(qi.query_positive(nan_expr).value(), Tribool::Unknown,
-                   "NaN: query_positive should return Unknown");
-    EXPECT_TRIBOOL(qi.query_negative(nan_expr).value(), Tribool::Unknown,
-                   "NaN: query_negative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonnegative(nan_expr).value(), Tribool::Unknown,
-                   "NaN: query_nonnegative should return Unknown");
-    EXPECT_TRIBOOL(qi.query_nonzero(nan_expr).value(), Tribool::Unknown,
-                   "NaN: query_nonzero should return Unknown");
+    bool rejected = false;
+    try {
+        (void)lamina::detail::make_node<NumberNode>(
+            static_cast<lmmc_real_t>(std::nan("")));
+    } catch (const std::invalid_argument& error) {
+        rejected =
+            std::string(error.what()) == "approximate number must be finite";
+    }
+    EXPECT_TRUE(rejected,
+                "NaN NumberNode construction rejects the invalid AST state");
 }
 
 

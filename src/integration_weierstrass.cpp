@@ -241,7 +241,11 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
             auto dp_expr = poly_to_symbolic(Dp);
             integrand_t = SymbolicExpr::divide(np_expr, dp_expr);
         }
-    } catch (...) {
+    } catch (const std::invalid_argument&) {
+        integrand_t = SymbolicExpr::divide(num_poly, den_poly)->simplify();
+    } catch (const std::out_of_range&) {
+        integrand_t = SymbolicExpr::divide(num_poly, den_poly)->simplify();
+    } catch (const std::runtime_error&) {
         integrand_t = SymbolicExpr::divide(num_poly, den_poly)->simplify();
     }
 

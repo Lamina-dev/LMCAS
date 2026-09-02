@@ -342,21 +342,30 @@ SymbolicGcdResult symbolic_polynomial_gcd(
         MultiPoly gcd = make_monic(multivariate_gcd(
             lhs_polynomial.value(), rhs_polynomial.value()));
         if (!gcd.is_zero()) {
+            MultiPoly lhs_quotient;
+            MultiPoly rhs_quotient;
             try {
-                MultiPoly lhs_quotient = lhs_polynomial.value().exact_div(gcd);
-                MultiPoly rhs_quotient = rhs_polynomial.value().exact_div(gcd);
-                MultiPoly residual = make_monic(multivariate_gcd(
-                    lhs_quotient, rhs_quotient));
-                if (!residual.is_constant()) {
-                    return SymbolicGcdResult::failure(
-                        CasErrc::Inconclusive,
-                        "GCD candidate is not maximal", kOperation);
-                }
-            } catch (const std::exception&) {
+                lhs_quotient = lhs_polynomial.value().exact_div(gcd);
+                rhs_quotient = rhs_polynomial.value().exact_div(gcd);
+            } catch (const std::bad_alloc&) {
+                return SymbolicGcdResult::failure(
+                    CasErrc::ResourceLimit,
+                    "symbolic GCD verification allocation failed", kOperation);
+            } catch (const std::runtime_error&) {
                 return SymbolicGcdResult::failure(
                     CasErrc::Inconclusive,
                     "GCD candidate failed exact divisibility verification",
                     kOperation);
+            } catch (const std::exception& error) {
+                return SymbolicGcdResult::failure(
+                    CasErrc::InternalInvariant, error.what(), kOperation);
+            }
+            MultiPoly residual = make_monic(multivariate_gcd(
+                lhs_quotient, rhs_quotient));
+            if (!residual.is_constant()) {
+                return SymbolicGcdResult::failure(
+                    CasErrc::Inconclusive,
+                    "GCD candidate is not maximal", kOperation);
             }
         }
         return multivariate_polynomial_to_expression(gcd, context);
@@ -365,7 +374,7 @@ SymbolicGcdResult symbolic_polynomial_gcd(
             CasErrc::ResourceLimit, "symbolic GCD allocation failed", kOperation);
     } catch (const std::exception& error) {
         return SymbolicGcdResult::failure(
-            CasErrc::Inconclusive, error.what(), kOperation);
+            CasErrc::InternalInvariant, error.what(), kOperation);
     }
 }
 
@@ -393,7 +402,7 @@ Result<Rational> symbolic_polynomial_content(
             kOperation);
     } catch (const std::exception& error) {
         return Result<Rational>::failure(
-            CasErrc::Inconclusive, error.what(), kOperation);
+            CasErrc::InternalInvariant, error.what(), kOperation);
     }
 }
 

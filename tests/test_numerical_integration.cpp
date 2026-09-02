@@ -42,15 +42,18 @@ int main() {
         EXPECT_TRUE(close(r, 1.0/3.0), "Simpson ∫₀¹ x² dx = 1/3");
     }
 
-    // checked fixed Simpson exposes explicit approximate result metadata
+    // Fixed Simpson derives its error estimate from an actual refinement.
     {
-        auto f = SymbolicExpr::multiply(x, x);
+        auto f = SymbolicExpr::power(x, num(4));
         auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 10);
-        EXPECT_TRUE(r && std::abs(r.value().value - 1.0 / 3.0) < 1e-12,
-                    "checked fixed Simpson ∫₀¹ x² dx = 1/3");
+        const double observed_error =
+            r ? std::abs(r.value().value - 0.2) : 0.0;
+        EXPECT_TRUE(r && observed_error < 2e-5,
+                    "checked fixed Simpson integrates x^4 accurately");
         EXPECT_TRUE(r && r.value().status == NumericStatus::Finite &&
-                        r.value().absolute_error >= 0.0,
-                    "checked fixed Simpson reports finite ApproxReal metadata");
+                        r.value().absolute_error > 1e-8 &&
+                        observed_error <= r.value().absolute_error + 1e-14,
+                    "fixed Simpson reports its step-doubling error estimate");
     }
 
     // ∫₀¹ x^3 dx = 1/4 via Gauss-Legendre (n=2 exact up to degree 3)
@@ -67,6 +70,37 @@ int main() {
         auto r = quadrature_gaussian_numeric(f, "x", num(0), num(1), 2);
         EXPECT_TRUE(r && std::abs(r.value().value - 0.25) < 1e-12,
                     "checked Gauss ∫₀¹ x³ dx = 1/4");
+    }
+
+    // Orders above three must use LMMC Gauss-Legendre, not a Simpson fallback.
+    {
+        auto eighth_power = SymbolicExpr::power(x, num(8));
+        auto order_five = quadrature_gaussian_numeric(
+            eighth_power, "x", num(0), num(1), 5);
+        EXPECT_TRUE(order_five &&
+                        std::abs(order_five.value().value - 1.0 / 9.0) < 1e-13,
+                    "five-point Gauss integrates degree-eight polynomials exactly");
+
+        auto order_four = quadrature_gaussian_numeric(
+            eighth_power, "x", num(0), num(1), 4);
+        const double observed_error = order_four
+            ? std::abs(order_four.value().value - 1.0 / 9.0)
+            : 0.0;
+        EXPECT_TRUE(order_four && order_four.value().absolute_error > 1e-8 &&
+                        observed_error <= order_four.value().absolute_error + 1e-14,
+                    "Gaussian error metadata comes from an adjacent-order rule");
+
+        auto order_twenty = quadrature_gaussian_numeric(
+            eighth_power, "x", num(0), num(1), 20);
+        EXPECT_TRUE(order_twenty &&
+                        std::abs(order_twenty.value().value - 1.0 / 9.0) < 1e-13,
+                    "twenty-point Gauss is accepted and evaluated directly");
+
+        auto unsupported = quadrature_gaussian_numeric(
+            eighth_power, "x", num(0), num(1), 21);
+        EXPECT_TRUE(!unsupported &&
+                        unsupported.error().code == CasErrc::InvalidArgument,
+                    "Gaussian orders above twenty are rejected explicitly");
     }
 
     // adaptive_simpson on ∫₀¹ x^2 dx = 1/3

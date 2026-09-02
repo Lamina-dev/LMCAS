@@ -1,5 +1,6 @@
 #include "test_common.hpp"
 #include "inequality_solver.hpp"
+#include "symbolic_matrix.hpp"
 
 int main() {
     TEST_CASE("Solve System (Direct & Linear)");
@@ -47,30 +48,16 @@ int main() {
             {SymbolicExpr::number(0), SymbolicExpr::number(2)}
         };
         auto m = SymbolicExpr::matrix(m_data);
-        auto eigs = SymbolicExpr::eigenvectors(m);
-
-        if(eigs.size() == 2) {
-             EXPECT_TRUE(eigs.size() == 2, "Should return 2 eigenvectors");
-             for(auto& p : eigs) {
-                 std::cout << "Checking Lambda: " << p.first->to_string() << std::endl;
-                 if (p.first->to_string() == "1") {
-
-                     EXPECT_TRUE(p.second.size() == 1, "size 1");
-                     auto& v = p.second[0];
-
-                     if (v->get_type() == SymbolicExpr::Type::Matrix) {
-
-                     }
-                 } else if (p.first->to_string() == "2") {
-
-                     EXPECT_TRUE(p.second.size() == 1, "size 1");
-                     auto& v = p.second[0];
-                 }
-             }
-        } else {
-
-             std::cout << "Eigenvectors count: " << eigs.size() << " (Expected 2)" << std::endl;
-
+        auto checked_eigenvectors = lamina::matrix_eigenvectors_checked(m);
+        EXPECT_TRUE(checked_eigenvectors.has_value(),
+                    "checked eigenvector solve succeeds");
+        if (checked_eigenvectors) {
+            const auto& eigs = checked_eigenvectors.value();
+            EXPECT_TRUE(eigs.size() == 2, "Should return 2 eigenvectors");
+            for (const auto& vector : eigs) {
+                EXPECT_TRUE(vector.size() == 2,
+                            "each eigenvector has two components");
+            }
         }
     }
 

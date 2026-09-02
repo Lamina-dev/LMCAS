@@ -1,17 +1,35 @@
+#include "internal/lmmc_lifecycle.hpp"
+
 #include "lmmc/init.h"
 
+#include <exception>
+
+namespace lamina::detail {
 namespace {
 
-struct LmmcLifecycle {
+class LmmcLifecycle final {
+public:
     LmmcLifecycle() {
-        lmmc_init();
+        if (lmmc_init() != LMMC_STATUS_OK) {
+            std::terminate();
+        }
     }
 
     ~LmmcLifecycle() {
-        lmmc_deinit();
+        if (lmmc_deinit() != LMMC_STATUS_OK) {
+            std::terminate();
+        }
     }
+
+    LmmcLifecycle(const LmmcLifecycle&) = delete;
+    LmmcLifecycle& operator=(const LmmcLifecycle&) = delete;
 };
 
-LmmcLifecycle lmmc_lifecycle;
-
 } // namespace
+
+void ensure_lmmc_lifecycle() noexcept {
+    static thread_local LmmcLifecycle lifecycle;
+    (void)lifecycle;
+}
+
+} // namespace lamina::detail

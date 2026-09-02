@@ -36,13 +36,14 @@ struct ConvergenceInfo {
 using ConvergenceInfoResult = Result<ConvergenceInfo>;
 
 /**
- * @brief 计算幂级数的收敛半径.
+ * @brief 从无限级数通项计算幂级数收敛半径.
  *
- * 先尝试比值判别法 R = lim|a_n/a_n_+_1|,若不确定则使用根值判别法 R = 1/lim sup |a_n|^(1/n).
+ * 当前对常数通项,b^n 和 n^p 给出精确结果;无法证明尾项行为时返回
+ * ::CasErrc::Inconclusive,不会从有限样本外推极限.
  *
- * @param[in] coefficients 幂级数系数列表 {a_0, a_1, a_2, ...}
- * @param[in] var 级数变量名
- * @return 收敛半径表达式(可能为数值,infinity 或符号表达式)
+ * @param[in] general_coefficient 系数通项 a_n
+ * @param[in] index_var 系数指标变量名
+ * @return 已证明的收敛半径表达式
  */
 LAMINA_API ExpressionResult convergence_radius_checked(
     const std::shared_ptr<SymbolicExpr>& general_coefficient,
@@ -53,6 +54,13 @@ LAMINA_API ExpressionResult convergence_radius_checked(
     const std::shared_ptr<SymbolicExpr>& general_coefficient,
     const std::string& index_var);
 
+/**
+ * @brief 返回有限系数多项式的收敛半径.
+ *
+ * coefficients 完整表示有限多项式,未列出的高阶系数均为零,因此非空
+ * 有效输入的收敛半径恒为 infinity.若要表示无限级数,应使用通项重载;
+ * 有限前缀不足以证明无限尾项的收敛半径.
+ */
 LAMINA_API ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var,
@@ -281,21 +289,23 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_product(
 
 
 /**
- * @brief 计算数列的上极限 lim sup a_n.
- * @param[in] a_n 通项表达式
- * @param[in] n 指标变量名
- * @return 上极限表达式
+ * @brief 计算数列的上极限.
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> lim_sup(
+LAMINA_API ExpressionResult lim_sup_checked(
+    const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n,
+    ComputationContext& context);
+
+LAMINA_API ExpressionResult lim_sup_checked(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n);
 
 /**
- * @brief 计算数列的下极限 lim inf a_n.
- * @param[in] a_n 通项表达式
- * @param[in] n 指标变量名
- * @return 下极限表达式
+ * @brief 计算数列的下极限.
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> lim_inf(
+LAMINA_API ExpressionResult lim_inf_checked(
+    const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n,
+    ComputationContext& context);
+
+LAMINA_API ExpressionResult lim_inf_checked(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n);
 
 } // namespace lamina

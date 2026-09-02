@@ -2,8 +2,10 @@
 #include "symbolic_ast.hpp"
 #include "../include/symbolic.hpp"
 #include "internal/exact_matrix.hpp"
+#include "../include/solve_strategies.hpp"
 #include <vector>
 #include <cmath>
+#include <set>
 
 namespace lamina {
 
@@ -327,18 +329,71 @@ ExpressionResult matrix_scaling_checked(double sx, double sy, int dim) {
 }
 
 
-MatrixEigenvalueResult matrix_eigenvalues_checked(const std::shared_ptr<SymbolicExpr>& A,
-                                                  ComputationContext& context) {
-    const std::string operation = "matrix_eigenvalues";
-    auto mat_result = require_square_matrix(A, context, operation);
-    if (!mat_result) return MatrixEigenvalueResult::failure(mat_result.error());
-    auto mat = mat_result.value();
+ExpressionResult matrix_characteristic_polynomial_checked(
+    const std::shared_ptr<SymbolicExpr>& A, const std::string& variable,
+    ComputationContext& context) {
+    constexpr const char* operation = "matrix_characteristic_polynomial";
+    auto matrix_result = require_square_matrix(A, context, operation);
+    if (!matrix_result) return ExpressionResult::failure(matrix_result.error());
+    if (variable.empty()) {
+        return ExpressionResult::failure(
+            CasErrc::InvalidArgument,
+            "characteristic polynomial variable cannot be empty", operation);
+    }
+    try {
+        const auto& matrix = *matrix_result.value();
+        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> entries(
+            matrix.rows(),
+            std::vector<std::shared_ptr<SymbolicExpr>>(matrix.cols()));
+        auto lambda = SymbolicExpr::variable(variable);
+        for (std::size_t row = 0; row < matrix.rows(); ++row) {
+            for (std::size_t column = 0; column < matrix.cols(); ++column) {
+                auto value = detail::make_expression_ptr(
+                    matrix.get(row, column));
+                entries[row][column] = row == column
+                    ? SymbolicExpr::add(
+                          value,
+                          SymbolicExpr::multiply(
+                              lambda, SymbolicExpr::number(-1)))
+                    : std::move(value);
+            }
+        }
+        auto determinant = matrix_determinant_checked(
+            SymbolicExpr::matrix(entries), context);
+        if (!determinant) return ExpressionResult::failure(determinant.error());
+        return ExpressionResult::success(
+            std::move(determinant.value()));
+    } catch (const std::bad_alloc&) {
+        return ExpressionResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while constructing characteristic polynomial",
+            operation);
+    } catch (const std::exception& ex) {
+        return ExpressionResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+}
 
+ExpressionResult matrix_characteristic_polynomial_checked(
+    const std::shared_ptr<SymbolicExpr>& A, const std::string& variable) {
+    ComputationContext context;
+    return matrix_characteristic_polynomial_checked(A, variable, context);
+}
+
+MatrixEigenvalueResult matrix_eigenvalues_checked(
+    const std::shared_ptr<SymbolicExpr>& A, ComputationContext& context) {
+    constexpr const char* operation = "matrix_eigenvalues";
+    auto matrix_result = require_square_matrix(A, context, operation);
+    if (!matrix_result) {
+        return MatrixEigenvalueResult::failure(matrix_result.error());
+    }
+    const auto& matrix = *matrix_result.value();
     bool triangular = true;
-    for (size_t r = 0; r < mat->rows() && triangular; ++r) {
-        for (size_t c = 0; c < r; ++c) {
-            auto below = lamina::detail::make_expression_ptr(mat->get(r, c))->simplify();
-            if (!lamina::detail::node(below)->is_zero()) {
+    for (std::size_t row = 0; row < matrix.rows() && triangular; ++row) {
+        for (std::size_t column = 0; column < row; ++column) {
+            auto value =
+                detail::make_expression_ptr(matrix.get(row, column))->simplify();
+            if (!detail::node(value)->is_zero()) {
                 triangular = false;
                 break;
             }
@@ -346,80 +401,93 @@ MatrixEigenvalueResult matrix_eigenvalues_checked(const std::shared_ptr<Symbolic
     }
     if (triangular) {
         std::vector<std::shared_ptr<SymbolicExpr>> values;
-        values.reserve(mat->rows());
-        for (size_t i = 0; i < mat->rows(); ++i) {
-            values.push_back(lamina::detail::make_expression_ptr(mat->get(i, i))->simplify());
+        values.reserve(matrix.rows());
+        for (std::size_t index = 0; index < matrix.rows(); ++index) {
+            values.push_back(
+                detail::make_expression_ptr(
+                    matrix.get(index, index))->simplify());
         }
         return MatrixEigenvalueResult::success(std::move(values));
     }
 
-    auto values_matrix = SymbolicExpr::eigenvalues(A);
-    auto values_node = values_matrix ? std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(values_matrix)) : nullptr;
-    if (!values_node || values_node->rows() == 0) {
-        return MatrixEigenvalueResult::failure(
-            CasErrc::UnsupportedExpression,
-            "eigenvalue computation did not produce a matrix result",
-            operation);
+    auto polynomial = matrix_characteristic_polynomial_checked(
+        A, "lambda", context);
+    if (!polynomial) {
+        return MatrixEigenvalueResult::failure(polynomial.error());
     }
-
+    auto roots = solve_finite_checked(
+        polynomial.value(), "lambda", context, SolveOptions{});
+    if (!roots) return MatrixEigenvalueResult::failure(roots.error());
     std::vector<std::shared_ptr<SymbolicExpr>> values;
-    for (size_t c = 0; c < values_node->cols(); ++c) {
-        values.push_back(lamina::detail::make_expression_ptr(values_node->get(0, c))->simplify());
+    std::set<std::string> seen;
+    for (auto& root : roots.value()) {
+        const auto key = root->to_string();
+        if (seen.insert(key).second) values.push_back(std::move(root));
+    }
+    if (values.empty()) {
+        return MatrixEigenvalueResult::failure(
+            CasErrc::Inconclusive,
+            "eigenvalue solver produced no finite roots", operation);
     }
     return MatrixEigenvalueResult::success(std::move(values));
 }
 
-MatrixEigenvalueResult matrix_eigenvalues_checked(const std::shared_ptr<SymbolicExpr>& A) {
+MatrixEigenvalueResult matrix_eigenvalues_checked(
+    const std::shared_ptr<SymbolicExpr>& A) {
     ComputationContext context;
     return matrix_eigenvalues_checked(A, context);
 }
 
-
-MatrixEigenvectorResult matrix_eigenvectors_checked(const std::shared_ptr<SymbolicExpr>& A,
-                                                    ComputationContext& context) {
-    const std::string operation = "matrix_eigenvectors";
-    auto mat_result = require_square_matrix(A, context, operation);
-    if (!mat_result) return MatrixEigenvectorResult::failure(mat_result.error());
-    auto mat = mat_result.value();
-
-    if (mat->rows() == 2) {
-        auto a = lamina::detail::make_expression_ptr(mat->get(0, 0))->simplify();
-        auto b = lamina::detail::make_expression_ptr(mat->get(0, 1))->simplify();
-        auto lower = lamina::detail::make_expression_ptr(mat->get(1, 0))->simplify();
-        auto d = lamina::detail::make_expression_ptr(mat->get(1, 1))->simplify();
-        auto delta = SymbolicExpr::add(d, SymbolicExpr::multiply(SymbolicExpr::number(-1), a))->simplify();
-        if (lamina::detail::node(lower)->is_zero() && !lamina::detail::node(delta)->is_zero()) {
-            return MatrixEigenvectorResult::success({
-                {SymbolicExpr::number(1), SymbolicExpr::number(0)},
-                {b, delta}
-            });
-        }
+MatrixEigenvectorResult matrix_eigenvectors_checked(
+    const std::shared_ptr<SymbolicExpr>& A, ComputationContext& context) {
+    constexpr const char* operation = "matrix_eigenvectors";
+    auto matrix_result = require_square_matrix(A, context, operation);
+    if (!matrix_result) {
+        return MatrixEigenvectorResult::failure(matrix_result.error());
     }
-
+    auto eigenvalues = matrix_eigenvalues_checked(A, context);
+    if (!eigenvalues) {
+        return MatrixEigenvectorResult::failure(eigenvalues.error());
+    }
+    const auto& matrix = *matrix_result.value();
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> vectors;
-    auto pairs = SymbolicExpr::eigenvectors(A);
-    for (const auto& [lambda, vector_matrices] : pairs) {
-        (void)lambda;
-        for (const auto& vector_matrix : vector_matrices) {
-            auto vec_node = vector_matrix ? std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(vector_matrix)) : nullptr;
-            if (!vec_node || vec_node->cols() != 1) continue;
-            std::vector<std::shared_ptr<SymbolicExpr>> vector;
-            for (size_t r = 0; r < vec_node->rows(); ++r) {
-                vector.push_back(lamina::detail::make_expression_ptr(vec_node->get(r, 0))->simplify());
+    for (const auto& eigenvalue : eigenvalues.value()) {
+        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> shifted(
+            matrix.rows(),
+            std::vector<std::shared_ptr<SymbolicExpr>>(matrix.cols()));
+        for (std::size_t row = 0; row < matrix.rows(); ++row) {
+            for (std::size_t column = 0; column < matrix.cols(); ++column) {
+                auto value = detail::make_expression_ptr(
+                    matrix.get(row, column));
+                shifted[row][column] = row == column
+                    ? SymbolicExpr::add(
+                          value,
+                          SymbolicExpr::multiply(
+                              SymbolicExpr::number(-1), eigenvalue))->simplify()
+                    : std::move(value);
             }
+        }
+        auto nullspace = matrix_nullspace_checked(
+            SymbolicExpr::matrix(shifted), context);
+        if (!nullspace) {
+            if (nullspace.error().code == CasErrc::Inconclusive) continue;
+            return MatrixEigenvectorResult::failure(nullspace.error());
+        }
+        for (auto& vector : nullspace.value()) {
             vectors.push_back(std::move(vector));
         }
     }
     if (vectors.empty()) {
         return MatrixEigenvectorResult::failure(
-            CasErrc::UnsupportedExpression,
-            "eigenvector computation did not produce supported vectors",
+            CasErrc::Inconclusive,
+            "eigenvector computation produced no nonzero nullspace vectors",
             operation);
     }
     return MatrixEigenvectorResult::success(std::move(vectors));
 }
 
-MatrixEigenvectorResult matrix_eigenvectors_checked(const std::shared_ptr<SymbolicExpr>& A) {
+MatrixEigenvectorResult matrix_eigenvectors_checked(
+    const std::shared_ptr<SymbolicExpr>& A) {
     ComputationContext context;
     return matrix_eigenvectors_checked(A, context);
 }

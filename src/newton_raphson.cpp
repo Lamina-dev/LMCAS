@@ -1,57 +1,206 @@
 #include "newton_raphson.hpp"
+
 #include "internal/exact_sturm.hpp"
+#include "internal/lmmc_lifecycle.hpp"
+#include "lmmc/nonlinear.h"
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
+
 #include <algorithm>
 #include <cmath>
+#include <exception>
+#include <limits>
+#include <optional>
 
 namespace lamina {
-
 namespace {
 
 constexpr const char* kBisectionOperation = "bisection";
 constexpr const char* kNewtonOperation = "newton_raphson";
 
-Result<double> evaluate_root_function(const std::shared_ptr<SymbolicExpr>& expression,
-                                      const std::string& variable,
-                                      lmmc_real_t value,
-                                      ComputationContext& context,
-                                      const char* operation) {
+Result<double> evaluate_root_function(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable,
+    lmmc_real_t value,
+    ComputationContext& context,
+    const char* operation) {
     if (!expression) {
-        return Result<double>::failure(CasErrc::InvalidArgument,
-                                       "root function expression cannot be null",
-                                       operation);
+        return Result<double>::failure(
+            CasErrc::InvalidArgument,
+            "root function expression cannot be null",
+            operation);
     }
     if (variable.empty()) {
-        return Result<double>::failure(CasErrc::InvalidArgument,
-                                       "root variable cannot be empty",
-                                       operation);
+        return Result<double>::failure(
+            CasErrc::InvalidArgument,
+            "root variable cannot be empty",
+            operation);
     }
-
     auto evaluated = evaluate_numeric(
-        *expression, NumericBindings{{variable, static_cast<double>(value)}}, context);
+        *expression, NumericBindings{{variable, static_cast<double>(value)}},
+        context);
     if (!evaluated) return Result<double>::failure(evaluated.error());
-    if (!evaluated.value().is_finite()) {
-        return Result<double>::failure(CasErrc::NumericFailure,
-                                       "root function evaluation is not finite",
-                                       operation);
+    if (!evaluated.value().is_finite() ||
+        !std::isfinite(evaluated.value().value)) {
+        return Result<double>::failure(
+            CasErrc::NumericFailure,
+            "root function evaluation is not finite",
+            operation);
     }
     return Result<double>::success(evaluated.value().value);
 }
 
-NumericRootResult invalid_root_options(const SolveOptions& opts,
-                                       const char* operation) {
-    if (!std::isfinite(opts.tolerance) || opts.tolerance <= 0.0) {
-        return NumericRootResult::failure(CasErrc::InvalidArgument,
-                                          "root tolerance must be finite and positive",
-                                          operation);
+NumericRootResult invalid_root_options(
+    const SolveOptions& options,
+    const char* operation) {
+    if (!std::isfinite(options.tolerance) || options.tolerance <= 0.0) {
+        return NumericRootResult::failure(
+            CasErrc::InvalidArgument,
+            "root tolerance must be finite and positive",
+            operation);
     }
-    if (opts.max_newton_iterations <= 0) {
-        return NumericRootResult::failure(CasErrc::InvalidArgument,
-                                          "maximum iteration count must be positive",
-                                          operation);
+    if (options.max_newton_iterations <= 0) {
+        return NumericRootResult::failure(
+            CasErrc::InvalidArgument,
+            "maximum iteration count must be positive",
+            operation);
     }
     return NumericRootResult::success(std::nullopt);
+}
+
+struct RootCallbacks {
+    const std::shared_ptr<SymbolicExpr>* function = nullptr;
+    const std::shared_ptr<SymbolicExpr>* derivative = nullptr;
+    const std::string* variable = nullptr;
+    ComputationContext* context = nullptr;
+    const char* operation = nullptr;
+    bool enforce_bracket = false;
+    double bracket_lower = 0.0;
+    double bracket_upper = 0.0;
+    bool left_bracket = false;
+    std::optional<CasError> error;
+};
+
+double evaluate_root_callback(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    double x,
+    RootCallbacks& callbacks) {
+    if (callbacks.error) return std::numeric_limits<double>::quiet_NaN();
+    if (callbacks.enforce_bracket &&
+        (x < callbacks.bracket_lower || x > callbacks.bracket_upper)) {
+        callbacks.left_bracket = true;
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    auto value = evaluate_root_function(
+        expression, *callbacks.variable, x, *callbacks.context,
+        callbacks.operation);
+    if (!value) {
+        callbacks.error = value.error();
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return value.value();
+}
+
+double root_function_callback(double x, void* user_data) {
+    auto& callbacks = *static_cast<RootCallbacks*>(user_data);
+    return evaluate_root_callback(*callbacks.function, x, callbacks);
+}
+
+double root_derivative_callback(double x, void* user_data) {
+    auto& callbacks = *static_cast<RootCallbacks*>(user_data);
+    return evaluate_root_callback(*callbacks.derivative, x, callbacks);
+}
+
+lmmc_nonlinear_config_t root_config(
+    const SolveOptions& options,
+    std::size_t max_iterations) {
+    lmmc_nonlinear_config_t config{};
+    if (lmmc_nonlinear_default_config(&config) != LMMC_STATUS_OK) {
+        std::terminate();
+    }
+    config.abs_tol = options.tolerance;
+    config.rel_tol = 0.0;
+    config.max_iter = max_iterations;
+    config.min_derivative = 1.0e-15;
+    config.min_step = 0.0;
+    return config;
+}
+
+NumericRootResult backend_root_result(
+    const lmmc_nonlinear_result_t& backend,
+    double residual_limit) {
+    if (!backend.converged || !std::isfinite(backend.root) ||
+        !std::isfinite(backend.residual_norm) ||
+        backend.residual_norm > residual_limit) {
+        return NumericRootResult::success(std::nullopt);
+    }
+    const int iterations =
+        backend.num_iter > static_cast<std::size_t>(std::numeric_limits<int>::max())
+            ? std::numeric_limits<int>::max()
+            : static_cast<int>(backend.num_iter);
+    return NumericRootResult::success(
+        NumericRoot{backend.root, backend.residual_norm, iterations});
+}
+
+NumericRootResult run_bisection_backend(
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::string& variable,
+    double lower,
+    double upper,
+    ComputationContext& context,
+    const SolveOptions& options,
+    const char* operation) {
+    if (lower == upper) {
+        auto value = evaluate_root_function(
+            function, variable, lower, context, operation);
+        if (!value) return NumericRootResult::failure(value.error());
+        if (std::abs(value.value()) <= options.tolerance) {
+            return NumericRootResult::success(
+                NumericRoot{lower, std::abs(value.value()), 0});
+        }
+        return NumericRootResult::success(std::nullopt);
+    }
+
+    detail::ensure_lmmc_lifecycle();
+    RootCallbacks callbacks{
+        &function, nullptr, &variable, &context, operation,
+        false, lower, upper, false, std::nullopt};
+    const std::size_t max_iterations =
+        static_cast<std::size_t>(options.max_newton_iterations) * 3;
+    auto config = root_config(options, max_iterations);
+    lmmc_nonlinear_result_t backend{};
+    const auto status = lmmc_bisection_solve(
+        root_function_callback, &callbacks, lower, upper, &config, &backend);
+    if (callbacks.error) return NumericRootResult::failure(*callbacks.error);
+    if (status == LMMC_STATUS_INVALID_ARGUMENT &&
+        backend.failure_reason == LMMC_NONLINEAR_FAILURE_INVALID_BRACKET) {
+        return NumericRootResult::success(std::nullopt);
+    }
+    return backend_root_result(backend, options.tolerance * 100.0);
+}
+
+NumericRootResult run_newton_backend(
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::shared_ptr<SymbolicExpr>& derivative,
+    const std::string& variable,
+    double initial,
+    ComputationContext& context,
+    const SolveOptions& options,
+    bool enforce_bracket,
+    double bracket_lower,
+    double bracket_upper) {
+    detail::ensure_lmmc_lifecycle();
+    RootCallbacks callbacks{
+        &function, &derivative, &variable, &context, kNewtonOperation,
+        enforce_bracket, bracket_lower, bracket_upper, false, std::nullopt};
+    auto config = root_config(
+        options, static_cast<std::size_t>(options.max_newton_iterations));
+    lmmc_nonlinear_result_t backend{};
+    (void)lmmc_newton_solve(
+        root_function_callback, root_derivative_callback, &callbacks, initial,
+        &config, &backend);
+    if (callbacks.error) return NumericRootResult::failure(*callbacks.error);
+    return backend_root_result(backend, options.tolerance);
 }
 
 } // namespace
@@ -71,240 +220,110 @@ isolate_real_roots_checked(const Polynomial<Rational>& polynomial) {
 }
 
 NumericRootResult bisection_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    lmmc_real_t lo,
-    lmmc_real_t hi,
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::string& variable,
+    lmmc_real_t lower,
+    lmmc_real_t upper,
     ComputationContext& context,
-    const SolveOptions& opts)
-{
-    auto options = invalid_root_options(opts, kBisectionOperation);
-    if (!options) return options;
-    if (!std::isfinite(lo) || !std::isfinite(hi) || lo > hi) {
-        return NumericRootResult::failure(CasErrc::InvalidArgument,
-                                          "bisection interval must be finite and ordered",
-                                          kBisectionOperation);
+    const SolveOptions& options) {
+    auto valid = invalid_root_options(options, kBisectionOperation);
+    if (!valid) return valid;
+    if (!function || variable.empty() || !std::isfinite(lower) ||
+        !std::isfinite(upper) || lower > upper) {
+        return NumericRootResult::failure(
+            CasErrc::InvalidArgument,
+            "bisection function, variable, and ordered finite interval are required",
+            kBisectionOperation);
     }
-
-    auto f_lo_result = evaluate_root_function(f, var, lo, context, kBisectionOperation);
-    if (!f_lo_result) return NumericRootResult::failure(f_lo_result.error());
-    auto f_hi_result = evaluate_root_function(f, var, hi, context, kBisectionOperation);
-    if (!f_hi_result) return NumericRootResult::failure(f_hi_result.error());
-    lmmc_real_t f_lo = f_lo_result.value();
-    lmmc_real_t f_hi = f_hi_result.value();
-
-    if (std::abs(f_lo) < opts.tolerance) {
-        return NumericRootResult::success(NumericRoot{lo, std::abs(f_lo), 0});
-    }
-    if (std::abs(f_hi) < opts.tolerance) {
-        return NumericRootResult::success(NumericRoot{hi, std::abs(f_hi), 0});
-    }
-
-    if (f_lo * f_hi > 0) {
-        return NumericRootResult::success(std::nullopt);
-    }
-
-    lmmc_real_t best_x = std::abs(f_lo) <= std::abs(f_hi) ? lo : hi;
-    lmmc_real_t best_residual = std::min(std::abs(f_lo), std::abs(f_hi));
-    int best_iteration = 0;
-    int max_iter = opts.max_newton_iterations * 3;
-    for (int i = 1; i <= max_iter; ++i) {
-        auto step = context.consume_steps(1, kBisectionOperation);
-        if (!step) return NumericRootResult::failure(step.error());
-        lmmc_real_t mid = (lo + hi) * 0.5;
-        auto f_mid_result = evaluate_root_function(f, var, mid, context, kBisectionOperation);
-        if (!f_mid_result) return NumericRootResult::failure(f_mid_result.error());
-        lmmc_real_t f_mid = f_mid_result.value();
-        lmmc_real_t residual = std::abs(f_mid);
-        if (residual < best_residual) {
-            best_x = mid;
-            best_residual = residual;
-            best_iteration = i;
-        }
-
-        if (residual < opts.tolerance) {
-            return NumericRootResult::success(NumericRoot{mid, residual, i});
-        }
-
-        if (mid == lo || mid == hi) {
-            break;
-        }
-
-        if (f_lo * f_mid < 0) {
-            hi = mid;
-            f_hi = f_mid;
-        } else {
-            lo = mid;
-            f_lo = f_mid;
-        }
-    }
-
-    if (best_residual < opts.tolerance * 100.0) {
-        return NumericRootResult::success(
-            NumericRoot{best_x, best_residual, best_iteration});
-    }
-    return NumericRootResult::success(std::nullopt);
+    return run_bisection_backend(
+        function, variable, lower, upper, context, options,
+        kBisectionOperation);
 }
-
 
 NumericRootResult bisection_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    lmmc_real_t lo,
-    lmmc_real_t hi,
-    const SolveOptions& opts)
-{
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::string& variable,
+    lmmc_real_t lower,
+    lmmc_real_t upper,
+    const SolveOptions& options) {
     ComputationContext context;
-    return bisection_checked(f, var, lo, hi, context, opts);
+    return bisection_checked(
+        function, variable, lower, upper, context, options);
 }
 
 NumericRootResult newton_raphson_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& df,
-    const std::string& var,
-    lmmc_real_t x0,
-    lmmc_real_t bracket_lo,
-    lmmc_real_t bracket_hi,
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::shared_ptr<SymbolicExpr>& derivative,
+    const std::string& variable,
+    lmmc_real_t initial,
+    lmmc_real_t bracket_lower,
+    lmmc_real_t bracket_upper,
     ComputationContext& context,
-    const SolveOptions& opts)
-{
-    auto options = invalid_root_options(opts, kNewtonOperation);
-    if (!options) return options;
-    if (!f || !df) {
-        return NumericRootResult::failure(CasErrc::InvalidArgument,
-                                          "function and derivative cannot be null",
-                                          kNewtonOperation);
+    const SolveOptions& options) {
+    auto valid = invalid_root_options(options, kNewtonOperation);
+    if (!valid) return valid;
+    if (!function || !derivative || variable.empty() ||
+        !std::isfinite(initial) || !std::isfinite(bracket_lower) ||
+        !std::isfinite(bracket_upper) || bracket_lower > bracket_upper ||
+        initial < bracket_lower || initial > bracket_upper) {
+        return NumericRootResult::failure(
+            CasErrc::InvalidArgument,
+            "Newton function, derivative, variable, bracket, and initial value are invalid",
+            kNewtonOperation);
     }
-    if (!std::isfinite(x0) || !std::isfinite(bracket_lo) ||
-        !std::isfinite(bracket_hi) || bracket_lo > bracket_hi ||
-        x0 < bracket_lo || x0 > bracket_hi) {
-        return NumericRootResult::failure(CasErrc::InvalidArgument,
-                                          "Newton bracket and initial value must be finite and ordered",
-                                          kNewtonOperation);
-    }
-    lmmc_real_t x = x0;
-    for (int i = 1; i <= opts.max_newton_iterations; ++i) {
-        auto step = context.consume_steps(1, kNewtonOperation);
-        if (!step) return NumericRootResult::failure(step.error());
-
-        auto fx_result = evaluate_root_function(f, var, x, context, kNewtonOperation);
-        if (!fx_result) return NumericRootResult::failure(fx_result.error());
-        auto dfx_result = evaluate_root_function(df, var, x, context, kNewtonOperation);
-        if (!dfx_result) return NumericRootResult::failure(dfx_result.error());
-        lmmc_real_t fx = fx_result.value();
-        lmmc_real_t dfx = dfx_result.value();
-
-        if (std::abs(fx) < opts.tolerance) {
-            return NumericRootResult::success(NumericRoot{x, std::abs(fx), i});
-        }
-
-        if (std::abs(dfx) < 1e-15) {
-            return bisection_checked(f, var, bracket_lo, bracket_hi, context, opts);
-        }
-
-        lmmc_real_t x_new = x - fx / dfx;
-        if (!std::isfinite(x_new)) {
-            return NumericRootResult::failure(CasErrc::NumericFailure,
-                                              "Newton update produced a non-finite value",
-                                              kNewtonOperation);
-        }
-
-        if (i > 1 && std::abs(x_new - x) > 2.0 * std::abs(x - x0)) {
-            x_new = x - 0.5 * fx / dfx;
-        }
-
-        if (x_new < bracket_lo || x_new > bracket_hi) {
-            return bisection_checked(f, var, bracket_lo, bracket_hi, context, opts);
-        }
-
-        x = x_new;
-    }
-
-    return NumericRootResult::success(std::nullopt);
+    auto newton = run_newton_backend(
+        function, derivative, variable, initial, context, options, true,
+        bracket_lower, bracket_upper);
+    if (!newton || newton.value()) return newton;
+    return run_bisection_backend(
+        function, variable, bracket_lower, bracket_upper, context, options,
+        kBisectionOperation);
 }
 
-
 NumericRootResult newton_raphson_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& df,
-    const std::string& var,
-    lmmc_real_t x0,
-    lmmc_real_t bracket_lo,
-    lmmc_real_t bracket_hi,
-    const SolveOptions& opts)
-{
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::shared_ptr<SymbolicExpr>& derivative,
+    const std::string& variable,
+    lmmc_real_t initial,
+    lmmc_real_t bracket_lower,
+    lmmc_real_t bracket_upper,
+    const SolveOptions& options) {
     ComputationContext context;
     return newton_raphson_checked(
-        f, df, var, x0, bracket_lo, bracket_hi, context, opts);
+        function, derivative, variable, initial, bracket_lower, bracket_upper,
+        context, options);
 }
 
 NumericRootResult newton_raphson_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& df,
-    const std::string& var,
-    lmmc_real_t x0,
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::shared_ptr<SymbolicExpr>& derivative,
+    const std::string& variable,
+    lmmc_real_t initial,
     ComputationContext& context,
-    const SolveOptions& opts)
-{
-    auto options = invalid_root_options(opts, kNewtonOperation);
-    if (!options) return options;
-    if (!f || !df) {
-        return NumericRootResult::failure(CasErrc::InvalidArgument,
-                                          "function and derivative cannot be null",
-                                          kNewtonOperation);
+    const SolveOptions& options) {
+    auto valid = invalid_root_options(options, kNewtonOperation);
+    if (!valid) return valid;
+    if (!function || !derivative || variable.empty() ||
+        !std::isfinite(initial)) {
+        return NumericRootResult::failure(
+            CasErrc::InvalidArgument,
+            "Newton function, derivative, variable, and finite initial value are required",
+            kNewtonOperation);
     }
-    if (!std::isfinite(x0)) {
-        return NumericRootResult::failure(CasErrc::InvalidArgument,
-                                          "Newton initial value must be finite",
-                                          kNewtonOperation);
-    }
-    lmmc_real_t x = x0;
-    for (int i = 1; i <= opts.max_newton_iterations; ++i) {
-        auto step = context.consume_steps(1, kNewtonOperation);
-        if (!step) return NumericRootResult::failure(step.error());
-
-        auto fx_result = evaluate_root_function(f, var, x, context, kNewtonOperation);
-        if (!fx_result) return NumericRootResult::failure(fx_result.error());
-        auto dfx_result = evaluate_root_function(df, var, x, context, kNewtonOperation);
-        if (!dfx_result) return NumericRootResult::failure(dfx_result.error());
-        lmmc_real_t fx = fx_result.value();
-        lmmc_real_t dfx = dfx_result.value();
-
-        if (std::abs(fx) < opts.tolerance) {
-            return NumericRootResult::success(NumericRoot{x, std::abs(fx), i});
-        }
-
-        if (std::abs(dfx) < 1e-15) {
-            return NumericRootResult::success(std::nullopt);
-        }
-
-        lmmc_real_t x_new = x - fx / dfx;
-        if (!std::isfinite(x_new)) {
-            return NumericRootResult::failure(CasErrc::NumericFailure,
-                                              "Newton update produced a non-finite value",
-                                              kNewtonOperation);
-        }
-
-        if (i > 1 && std::abs(x_new - x) > 2.0 * std::abs(x - x0)) {
-            x_new = x - 0.5 * fx / dfx;
-        }
-
-        x = x_new;
-    }
-
-    return NumericRootResult::success(std::nullopt);
+    return run_newton_backend(
+        function, derivative, variable, initial, context, options, false, 0.0,
+        0.0);
 }
 
-
 NumericRootResult newton_raphson_checked(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& df,
-    const std::string& var,
-    lmmc_real_t x0,
-    const SolveOptions& opts)
-{
+    const std::shared_ptr<SymbolicExpr>& function,
+    const std::shared_ptr<SymbolicExpr>& derivative,
+    const std::string& variable,
+    lmmc_real_t initial,
+    const SolveOptions& options) {
     ComputationContext context;
-    return newton_raphson_checked(f, df, var, x0, context, opts);
+    return newton_raphson_checked(
+        function, derivative, variable, initial, context, options);
 }
 
 

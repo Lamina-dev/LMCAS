@@ -13,6 +13,10 @@ static Expr num(int n) { return SymbolicExpr::number(n); }
 static Expr rat(int p, int q) { return SymbolicExpr::number(Rational(p, q)); }
 static Expr var(const std::string& name) { return SymbolicExpr::variable(name); }
 static Expr inf() { return SymbolicExpr::infinity(); }
+static Expr checked_sequence_limit(lamina::ExpressionResult result) {
+    EXPECT_TRUE(result.has_value(), "checked sequence limit succeeds");
+    return result ? std::move(result.value()) : nullptr;
+}
 
 /**
  * @brief 辅助函数：将系数向量转为字符串便于调试。
@@ -310,10 +314,18 @@ static void test_series_analysis_checked_contracts() {
                 "checked convergence_radius rejects empty variable");
 
     Coeffs symbolic_coeffs = {num(1), var("a"), num(1)};
-    auto symbolic_radius = lamina::convergence_radius_checked(symbolic_coeffs, "x");
-    EXPECT_TRUE(!symbolic_radius &&
-                    symbolic_radius.error().code == lamina::CasErrc::Inconclusive,
-                "checked convergence_radius rejects unsupported symbolic coefficients");
+    auto symbolic_radius =
+        lamina::convergence_radius_checked(symbolic_coeffs, "x");
+    EXPECT_TRUE(symbolic_radius &&
+                    symbolic_radius.value()->to_string() == inf()->to_string(),
+                "finite polynomial with parameter coefficients has infinite radius");
+
+    Coeffs variable_coeffs = {num(1), var("x"), num(1)};
+    auto variable_radius =
+        lamina::convergence_radius_checked(variable_coeffs, "x");
+    EXPECT_TRUE(!variable_radius &&
+                    variable_radius.error().code == lamina::CasErrc::InvalidArgument,
+                "coefficient cannot depend on the series variable");
 
     auto n = var("n");
     auto p_term = SymbolicExpr::power(n, num(-2));
@@ -397,7 +409,7 @@ static void test_lim_sup_convergent_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-1));
 
-    auto result = lamina::lim_sup(a_n, "n");
+    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup(1/n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(0), "lim_sup(1/n) = 0");
@@ -410,7 +422,7 @@ static void test_lim_inf_convergent_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-1));
 
-    auto result = lamina::lim_inf(a_n, "n");
+    auto result = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_inf(1/n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(0), "lim_inf(1/n) = 0");
@@ -424,7 +436,7 @@ static void test_lim_sup_alternating_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(num(-1), n);
 
-    auto result = lamina::lim_sup(a_n, "n");
+    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup((-1)^n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(1), "lim_sup((-1)^n) = 1");
@@ -437,7 +449,7 @@ static void test_lim_inf_alternating_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(num(-1), n);
 
-    auto result = lamina::lim_inf(a_n, "n");
+    auto result = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_inf((-1)^n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(-1), "lim_inf((-1)^n) = -1");
@@ -450,7 +462,7 @@ static void test_lim_sup_monotone_polynomial() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(2));
 
-    auto result = lamina::lim_sup(a_n, "n");
+    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup(n^2) is not null");
     // Should be infinity
 }
@@ -463,7 +475,7 @@ static void test_lim_sup_rational_sequence() {
     auto a_n = SymbolicExpr::multiply(n, SymbolicExpr::power(
         SymbolicExpr::add(n, num(1)), num(-1)));
 
-    auto result = lamina::lim_sup(a_n, "n");
+    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup(n/(n+1)) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(1), "lim_sup(n/(n+1)) = 1");
@@ -477,7 +489,7 @@ static void test_lim_inf_rational_sequence() {
     auto a_n = SymbolicExpr::multiply(n, SymbolicExpr::power(
         SymbolicExpr::add(n, num(1)), num(-1)));
 
-    auto result = lamina::lim_inf(a_n, "n");
+    auto result = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_inf(n/(n+1)) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(1), "lim_inf(n/(n+1)) = 1");
@@ -490,8 +502,8 @@ static void test_lim_sup_lim_inf_equal_for_monotone() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-1));
 
-    auto sup = lamina::lim_sup(a_n, "n");
-    auto inf = lamina::lim_inf(a_n, "n");
+    auto sup = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
+    auto inf = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
 
     EXPECT_TRUE(sup != nullptr && inf != nullptr, "Both lim_sup and lim_inf exist");
     if (sup && inf) {
@@ -676,47 +688,41 @@ static void test_symbolic_product_unevaluated() {
 
 
 static void test_convergence_radius_geometric() {
-    TEST_CASE("convergence_radius: geometric series ∑x^n has R=1");
+    TEST_CASE("convergence_radius: finite coefficient polynomial has R=infinity");
 
-    // Coefficients of ∑x^n: all 1's → a_n = 1, ratio |a_n/a_{n+1}| = 1
     Coeffs coeffs = {num(1), num(1), num(1), num(1), num(1)};
-    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
-    EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
+    auto result = lamina::convergence_radius_checked(coeffs, "x");
+    EXPECT_TRUE(result && result.value() != nullptr,
+                "finite polynomial radius is constructed");
     if (result) {
-        EXPECT_EQ_EXPR(result, num(1), "R = 1 for geometric series");
+        EXPECT_EQ_EXPR(result.value(), inf(),
+                       "finite polynomial has infinite convergence radius");
     }
 }
 
 static void test_convergence_radius_exponential() {
-    TEST_CASE("convergence_radius: exponential series ∑x^n/n! has R=∞");
+    TEST_CASE("convergence_radius: finite factorial prefix is not extrapolated");
 
-    // Coefficients: 1, 1, 1/2, 1/6, 1/24 (= 1/n!)
-    // Ratio |a_n/a_{n+1}| = (n+1) → ∞, so R = ∞
     Coeffs coeffs = {num(1), num(1), rat(1, 2), rat(1, 6), rat(1, 24)};
-    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
-    EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
-    // The ratio of consecutive coefficients grows, so R should be large or infinity
+    auto result = lamina::convergence_radius_checked(coeffs, "x");
+    EXPECT_TRUE(result && result.value() != nullptr,
+                "finite factorial polynomial radius is constructed");
     if (result) {
-        // a_3/a_4 = (1/6)/(1/24) = 4, which is the last ratio computed
-        auto val = test_numeric_eval(result);
-        EXPECT_TRUE(val.has_value() && *val >= 4.0, "R >= 4 for exponential series (last ratio)");
+        EXPECT_EQ_EXPR(result.value(), inf(),
+                       "finite factorial prefix denotes a finite polynomial");
     }
 }
 
 static void test_convergence_radius_half() {
-    TEST_CASE("convergence_radius: ∑(2^n)x^n has R=1/2");
+    TEST_CASE("convergence_radius: finite geometric prefix is not extrapolated");
 
-    // Coefficients: 1, 2, 4, 8, 16 → a_n = 2^n
-    // Ratio |a_n/a_{n+1}| = 2^n / 2^(n+1) = 1/2
     Coeffs coeffs = {num(1), num(2), num(4), num(8), num(16)};
-    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
-    EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
+    auto result = lamina::convergence_radius_checked(coeffs, "x");
+    EXPECT_TRUE(result && result.value() != nullptr,
+                "finite geometric polynomial radius is constructed");
     if (result) {
-        auto val = test_numeric_eval(result);
-        EXPECT_TRUE(val.has_value(), "R is numeric");
-        if (val.has_value()) {
-            EXPECT_NEAR(*val, 0.5, 0.01, "R = 0.5 for ∑(2^n)x^n");
-        }
+        EXPECT_EQ_EXPR(result.value(), inf(),
+                       "finite geometric prefix denotes a finite polynomial");
     }
 }
 

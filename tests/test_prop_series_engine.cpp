@@ -372,16 +372,14 @@ static void test_convergence_radius_geometric() {
         double abs_r = std::abs(static_cast<double>(r));
         double expected_radius = 1.0 / abs_r;
 
-        // Build coefficient sequence: a_n = r^n for n = 0, 1, ..., N
-        int N = rand_int(5, 10);
-        std::vector<std::shared_ptr<SymbolicExpr>> coefficients;
-        int r_pow = 1;
-        for (int i = 0; i <= N; ++i) {
-            coefficients.push_back(num(r_pow));
-            r_pow *= r;
-        }
-
-        auto radius = lamina::convergence_radius_checked(coefficients, "x").value();
+        // Infinite geometric sequence a_n = r^n is represented by its
+        // general coefficient, never inferred from a finite prefix.
+        auto n = SymbolicExpr::variable("n");
+        auto coefficient = SymbolicExpr::power(num(r), n);
+        auto checked_radius =
+            lamina::convergence_radius_checked(coefficient, "n");
+        auto radius = checked_radius
+            ? checked_radius.value() : std::shared_ptr<SymbolicExpr>{};
 
         bool property_holds = false;
 

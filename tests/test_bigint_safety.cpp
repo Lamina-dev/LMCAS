@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <utility>
 
 int main() {
     TEST_CASE("BigInt exact narrowing");
@@ -32,5 +33,39 @@ int main() {
     EXPECT_EQ_STR(BigInt("15241578750190521").sqrt().to_string(), "123456789",
                   "large perfect square");
 
+    TEST_CASE("BigInt right shift canonicalizes zero");
+    BigInt shifted_one(1);
+    shifted_one >>= 64;
+    const BigInt canonical_zero(0);
+    EXPECT_EQ_STR(shifted_one.to_string(), "0",
+                  "exact-limb shift stringifies as zero");
+    EXPECT_TRUE(shifted_one == canonical_zero,
+                "shifted zero equals constructed zero");
+    EXPECT_FALSE(shifted_one < canonical_zero,
+                 "shifted zero is not less than zero");
+    EXPECT_FALSE(canonical_zero < shifted_one,
+                 "shifted zero is not greater than zero");
+    EXPECT_TRUE(shifted_one.hash() == canonical_zero.hash(),
+                "canonical zeros hash identically");
+
+    BigInt multi_limb("18446744073709551616");
+    multi_limb >>= 128;
+    EXPECT_TRUE(multi_limb == canonical_zero,
+                "multi-limb overshift canonicalizes zero");
+    BigInt negative(-1);
+    negative >>= 64;
+    EXPECT_TRUE(negative == canonical_zero,
+                "negative overshift canonicalizes zero");
+
+
+    TEST_CASE("BigInt moved-from storage is reusable");
+    BigInt source("18446744073709551616");
+    BigInt destination;
+    destination = std::move(source);
+    source = BigInt(7);
+    EXPECT_EQ_STR(destination.to_string(), "18446744073709551616",
+                  "move assignment preserves destination");
+    EXPECT_EQ_STR(source.to_string(), "7",
+                  "moved-from value can allocate storage again");
     return TEST_REPORT();
 }

@@ -183,8 +183,8 @@ lamina::SolveResult lamina::solve_equation(
 
     auto polynomial = recognize_rational_polynomial(*f_expr, var, context);
     if (!polynomial) return SolveResult::failure(polynomial.error());
-    if (polynomial.value()) {
-        const auto& exact = *polynomial.value();
+    if (lamina::detail::propagate_result(polynomial)) {
+        const auto& exact = *lamina::detail::propagate_result(polynomial);
         if (exact.is_zero()) {
             return SolveResult::success(SolutionSet{UniversalSolutions{}});
         }
@@ -247,7 +247,7 @@ lamina::SolveResult lamina::solve_equation(
 
     auto finite = solve_finite_vector_core(f_expr, var, context, opts);
     if (!finite) return SolveResult::failure(finite.error());
-    if (finite.value().empty()) {
+    if (lamina::detail::propagate_result(finite).empty()) {
         return SolveResult::failure(
             CasErrc::Inconclusive,
             "expression is outside the supported finite exact solve domain",
@@ -255,8 +255,8 @@ lamina::SolveResult lamina::solve_equation(
     }
 
     std::vector<FiniteSolution> solutions;
-    solutions.reserve(finite.value().size());
-    for (auto& value : finite.value()) {
+    solutions.reserve(lamina::detail::propagate_result(finite).size());
+    for (auto& value : lamina::detail::propagate_result(finite)) {
         solutions.push_back(FiniteSolution{std::move(value), 1, {}});
     }
     return SolveResult::success(
@@ -338,15 +338,15 @@ static SolveVectorResult solve_finite_vector_core(
                 if (!mixed) {
                     return SolveVectorResult::failure(mixed.error());
                 }
-                if (mixed.value().completeness == Completeness::Complete) {
+                if (lamina::detail::propagate_result(mixed).completeness == Completeness::Complete) {
                     return SolveVectorResult::success(
-                        std::move(mixed.value().value));
+                        std::move(lamina::detail::propagate_result(mixed).value));
                 }
                 return SolveVectorResult::failure(
                     CasErrc::Inconclusive,
-                    mixed.value().reason.empty()
+                    lamina::detail::propagate_result(mixed).reason.empty()
                         ? "mixed transcendental search is incomplete"
-                        : mixed.value().reason,
+                        : lamina::detail::propagate_result(mixed).reason,
                     operation);
             }
             return SolveVectorResult::failure(
@@ -359,10 +359,10 @@ static SolveVectorResult solve_finite_vector_core(
     if (opts.allow_numeric) {
         auto numeric_roots = solve_numeric_checked(f_expr, var, context, opts);
         if (!numeric_roots) return SolveVectorResult::failure(numeric_roots.error());
-        if (!numeric_roots.value().empty()) {
+        if (!lamina::detail::propagate_result(numeric_roots).empty()) {
             std::vector<std::shared_ptr<SymbolicExpr>> results;
-            results.reserve(numeric_roots.value().size());
-            for (const auto& root : numeric_roots.value()) {
+            results.reserve(lamina::detail::propagate_result(numeric_roots).size());
+            for (const auto& root : lamina::detail::propagate_result(numeric_roots)) {
                 results.push_back(SymbolicExpr::number(root.value));
             }
             return SolveVectorResult::success(std::move(results));
@@ -380,10 +380,12 @@ lamina::FiniteSolveResult lamina::solve_finite_checked(
     constexpr const char* operation = "solve_finite_projection";
     auto solved = solve_equation(expr, var, context, opts);
     if (!solved) return SolveVectorResult::failure(solved.error());
-    if (std::holds_alternative<EmptySolutions>(solved.value())) {
+    auto solution_set =
+        lamina::detail::propagate_result(std::move(solved));
+    if (std::holds_alternative<EmptySolutions>(solution_set)) {
         return SolveVectorResult::success({});
     }
-    auto* finite = std::get_if<FiniteSolutions>(&solved.value());
+    auto* finite = std::get_if<FiniteSolutions>(&solution_set);
     if (!finite) {
         return SolveVectorResult::failure(
             CasErrc::Inconclusive,
@@ -453,159 +455,6 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::
     return ParametricSolver::solve_system(equations, unknowns, parameters);
 }
 
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::charpoly(const std::shared_ptr<SymbolicExpr>& mat, const std::string& lambda_name) {
-    if (!mat) return SymbolicExpr::number(0);
-    auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
-    if (!mat_node) return SymbolicExpr::number(0);
-    size_t n = mat_node->rows();
-
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> data(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
-    auto lambda = SymbolicExpr::variable(lambda_name);
-
-    for(size_t i=0; i<n; ++i) {
-        for(size_t j=0; j<n; ++j) {
-            auto val = lamina::detail::make_expression_ptr(mat_node->get(i,j));
-            if (i == j) {
-                data[i][j] = SymbolicExpr::add(val, SymbolicExpr::multiply(lambda, SymbolicExpr::number(-1)));
-            } else {
-                data[i][j] = val;
-            }
-        }
-    }
-
-    auto poly_mat = SymbolicExpr::matrix(data);
-    return lamina::matrix_determinant_checked(poly_mat).value();
-}
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::eigenvalues(const std::shared_ptr<SymbolicExpr>& mat) {
-    auto cp = charpoly(mat, "lambda");
-    auto solutions = lamina::solve_finite_checked(cp, "lambda").value();
-
-    std::vector<std::shared_ptr<SymbolicExpr>> distinct_solutions;
-
-    std::set<std::string> seen;
-    for(auto& s : solutions) {
-        auto str = s->to_string();
-        if (seen.find(str) == seen.end()) {
-            seen.insert(str);
-            distinct_solutions.push_back(s);
-        }
-    }
-
-    std::vector<std::shared_ptr<const SymbolicNode>> vec_nodes;
-    for(auto& s : distinct_solutions) vec_nodes.push_back(lamina::detail::node(s));
-
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> mat_data;
-    mat_data.push_back(distinct_solutions);
-    return SymbolicExpr::matrix(mat_data);
-}
-
-std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr<SymbolicExpr>>>> SymbolicExpr::eigenvectors(const std::shared_ptr<SymbolicExpr>& mat) {
-    auto evals_expr = eigenvalues(mat);
-
-    std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr<SymbolicExpr>>>> result;
-
-    auto mat_node = evals_expr ? std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(evals_expr)) : nullptr;
-    if (!mat_node) {
-        return {};
-    }
-
-    size_t num_evals = mat_node->cols();
-
-    auto A_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
-    if (!A_node) return {};
-    size_t n = A_node->rows();
-
-    for(size_t i=0; i<num_evals; ++i) {
-        auto lambda_node = mat_node->get(0, i);
-        auto lambda = lamina::detail::make_expression_ptr(lambda_node);
-
-        std::vector<std::shared_ptr<SymbolicExpr>> equations;
-        std::vector<std::string> vars;
-        for(size_t k=0; k<n; ++k) vars.push_back("v" + std::to_string(k));
-
-        for(size_t i=0; i<n; ++i) {
-            std::vector<std::shared_ptr<SymbolicExpr>> terms;
-            for(size_t j=0; j<n; ++j) {
-                auto a_ij = lamina::detail::make_expression_ptr(A_node->get(i,j));
-                std::shared_ptr<SymbolicExpr> coeff;
-                if (i == j) {
-                    coeff = SymbolicExpr::add(a_ij, SymbolicExpr::multiply(lambda, SymbolicExpr::number(-1)));
-                } else {
-                    coeff = a_ij;
-                }
-
-                auto var = SymbolicExpr::variable(vars[j]);
-                terms.push_back(SymbolicExpr::multiply(coeff, var));
-            }
-            auto row_eq = terms[0];
-            for(size_t k=1; k<terms.size(); ++k) row_eq = SymbolicExpr::add(row_eq, terms[k]);
-            equations.push_back(row_eq->simplify());
-        }
-
-        auto sols = solve_system(equations, vars);
-
-        std::vector<std::shared_ptr<SymbolicExpr>> eigenvec;
-        bool sols_usable = !sols.empty();
-        if (sols_usable) {
-            for(const auto& v : vars) {
-                auto it = sols[0].find(v);
-                if (it == sols[0].end()) { sols_usable = false; break; }
-                eigenvec.push_back(it->second);
-            }
-        }
-
-        bool is_non_zero = false;
-        if (sols_usable) {
-            for(auto& x : eigenvec) if(!x->is_zero()) is_non_zero = true;
-        }
-
-        if (sols_usable && is_non_zero) {
-             std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> col_vec_data;
-             for(auto& val : eigenvec) col_vec_data.push_back({val});
-             result.push_back({lambda, {SymbolicExpr::matrix(col_vec_data)}});
-        } else {
-             if (n > 1) {
-                  bool found_vec = false;
-                  for(int free_var_idx = n-1; free_var_idx >= 0 && !found_vec; --free_var_idx) {
-                       std::vector<std::shared_ptr<SymbolicExpr>> sub_eqs;
-                       std::vector<std::string> sub_vars;
-
-                       for(size_t k=0; k<n; ++k) {
-                           auto eq_sub = equations[k]->substitute(vars[free_var_idx], SymbolicExpr::number(1))->simplify();
-                           if (!eq_sub->is_zero()) {
-                               sub_eqs.push_back(eq_sub);
-                           }
-                       }
-
-                       for(size_t k=0; k<n; ++k) {
-                           if (k != (size_t)free_var_idx) sub_vars.push_back(vars[k]);
-                       }
-
-                       auto sub_sols = solve_system(sub_eqs, sub_vars);
-                       if (!sub_sols.empty()) {
-                            std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> col_vec_data(n);
-                            bool ok = true;
-                            for(size_t k=0; k<n; ++k) {
-                                if (k == (size_t)free_var_idx) { col_vec_data[k] = {SymbolicExpr::number(1)}; continue; }
-                                auto it = sub_sols[0].find(vars[k]);
-                                if (it == sub_sols[0].end()) { ok = false; break; }
-                                col_vec_data[k] = {it->second};
-                            }
-                            if (ok) {
-                                auto vec_expr = SymbolicExpr::matrix(col_vec_data);
-                                result.push_back({lambda, {vec_expr}});
-                                found_vec = true;
-                            }
-                       }
-                  }
-             }
-        }
-    }
-
-    return result;
-}
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::transpose(const std::shared_ptr<SymbolicExpr>& mat) {
     if (!mat) return mat;

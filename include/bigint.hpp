@@ -1,6 +1,6 @@
 /**
  * @file bigint.hpp
- * @brief 任意精度整数 BigInt，底层调用 LAMMP 实现高性能大数运算。
+ * @brief 任意精度整数 BigInt，底层调用 LMMP 实现高性能大数运算。
  */
 #pragma once
 
@@ -8,9 +8,9 @@
 #define _STATIC_ASSERT(x) static_assert(x, #x)
 #endif
 
-#include "lammp/lmmp.h"
-#include "lammp/lmmpn.h"
-#include "lammp/numth.h"
+#include <lmmp.h>
+#include <lmmpn.h>
+#include <numth.h>
 #include "lmmc/init.h"
 #include <vector>
 #include <cstdlib>
@@ -40,7 +40,6 @@ private:
     mp_size_t _size = 0;
     mp_size_t _alloc = 0;
     int _sign = ZERO;
-    bool negative = false;
 
     void realloc_to(mp_size_t new_alloc);
 

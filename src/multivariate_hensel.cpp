@@ -192,7 +192,7 @@ std::vector<MultiPoly> multivariate_hensel_lift(
                 /// 执行除法:remainder / (lift_var - eval_point)
                 try {
                     remainder = remainder.exact_div(shift_powers[1]);
-                } catch (...) {
+                } catch (const std::runtime_error&) {
                     remainder = MultiPoly(Rational(0), vars);
                     break;
                 }
@@ -387,7 +387,7 @@ std::vector<MultiPoly> multivariate_diophantine(
             MultiPoly s1 = target.exact_div(factors[0]);
             s1 = truncate_mod_var(s1, var, degree_bound);
             return {s1};
-        } catch (...) {
+        } catch (const std::runtime_error&) {
             /// 若不整除,返回 target 本身(退化情形)
             return {truncate_mod_var(target, var, degree_bound)};
         }
@@ -412,7 +412,7 @@ std::vector<MultiPoly> multivariate_diophantine(
             f1_uni = factors[0].to_univariate();
             f2_uni = factors[1].to_univariate();
             converted = true;
-        } catch (...) {
+        } catch (const std::invalid_argument&) {
             /// 多元输入先在 var 处求值,再转换为一元多项式.
             try {
                 MultiPoly f1_eval = factors[0].eval(var, eval_point);
@@ -420,7 +420,7 @@ std::vector<MultiPoly> multivariate_diophantine(
                 f1_uni = f1_eval.to_univariate();
                 f2_uni = f2_eval.to_univariate();
                 converted = true;
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
                 converted = false;
             }
         }
@@ -438,11 +438,17 @@ std::vector<MultiPoly> multivariate_diophantine(
         Polynomial<Rational> target_uni;
         try {
             target_uni = target.to_univariate();
-        } catch (...) {
+            /// 直接转换只有在目标与因子位于同一一元变量域时有效。
+            /// 若目标仅含提升变量，必须先在提升点求值。
+            if (target_uni.degree() > 0 &&
+                target_uni.variable_name != f1_uni.variable_name) {
+                throw std::logic_error("target uses the lift variable");
+            }
+        } catch (const std::logic_error&) {
             try {
                 MultiPoly target_eval = target.eval(var, eval_point);
                 target_uni = target_eval.to_univariate();
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
                 /// target 为常数
                 if (target.is_constant()) {
                     Rational c = target.is_zero() ? Rational(0) : target.terms()[0].second;
@@ -452,6 +458,14 @@ std::vector<MultiPoly> multivariate_diophantine(
                 }
             }
         }
+        /// 常数多项式没有固有变量域；to_univariate() 会为其选择默认
+        /// 变量名。后续一元除法必须使用因子所在的变量域。
+        if (target_uni.degree() <= 0) {
+            target_uni.variable_name = f1_uni.variable_name;
+        } else if (target_uni.variable_name != f1_uni.variable_name) {
+            return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
+        }
+
 
         /// gcd 应为 1(因子互素),但处理一般情形
         /// s_1 = s * (target / gcd), s_2 = t * (target / gcd)

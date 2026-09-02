@@ -15,7 +15,8 @@ namespace lamina {
  *
  * Endpoints and samples are evaluated through evaluate_numeric(); invalid
  * arguments, odd subinterval counts, unbound variables, domain errors,
- * cancellation, and budget exhaustion are reported explicitly.
+ * cancellation, and budget exhaustion are reported explicitly. The returned
+ * absolute_error is a step-doubling Richardson estimate, not a certified bound.
  */
 LAMINA_API Result<ApproxReal> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -35,10 +36,11 @@ LAMINA_API Result<ApproxReal> quadrature_simpson_numeric(
 );
 
 /**
- * @brief Checked Gauss-Legendre integration for supported point counts.
+ * @brief Checked Gauss-Legendre integration for orders 1 through 20.
  *
- * Supports n = 1, 2, and 3 directly. Larger n falls back to checked composite
- * Simpson with 2n subintervals, matching the convenience overload's support domain.
+ * Every supported order is evaluated by LMMC's Gauss-Legendre implementation.
+ * The returned absolute_error is the difference from an adjacent-order rule,
+ * not a certified bound.
  */
 LAMINA_API Result<ApproxReal> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& f,

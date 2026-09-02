@@ -59,6 +59,9 @@ private:
         }
     }
 
+    std::shared_ptr<SymbolicExpr> factor_impl(
+        lamina::ComputationContext& context) const;
+
     friend struct lamina::detail::SymbolicExprAccess;
 
 public:
@@ -138,27 +141,6 @@ public:
     static std::shared_ptr<SymbolicExpr> transpose(const std::shared_ptr<SymbolicExpr>& mat);
 
 
-    /**
-     * @brief 计算矩阵的特征多项式.
-     * @param mat 矩阵表达式
-     * @param lambda 特征值变量名
-     * @return 特征多项式表达式
-     */
-    static std::shared_ptr<SymbolicExpr> charpoly(const std::shared_ptr<SymbolicExpr>& mat, const std::string& lambda);
-
-    /**
-     * @brief 计算矩阵的特征值.
-     * @param mat 矩阵表达式
-     * @return 特征值列表表达式
-     */
-    static std::shared_ptr<SymbolicExpr> eigenvalues(const std::shared_ptr<SymbolicExpr>& mat);
-
-    /**
-     * @brief 计算矩阵的特征向量.
-     * @param mat 矩阵表达式
-     * @return 特征值与对应特征向量的列表
-     */
-    static std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::vector<std::shared_ptr<SymbolicExpr>>>> eigenvectors(const std::shared_ptr<SymbolicExpr>& mat);
 
     /**
      * @brief 求解方程组(无参数变量版本).
@@ -225,10 +207,11 @@ public:
     static std::shared_ptr<SymbolicExpr> make_limit(const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, const std::shared_ptr<SymbolicExpr>& point);
 
     /**
-     * @brief 对表达式进行因式分解.
-     * @return 因式分解后的表达式
+     * @brief Factor this expression with explicit failure and budget reporting.
      */
-    std::shared_ptr<SymbolicExpr> factor() const;
+    lamina::ExpressionResult factor_checked(
+        lamina::ComputationContext& context) const;
+    lamina::ExpressionResult factor_checked() const;
 
     /**
      * @brief 有理函数约分(消去分子分母公因式).

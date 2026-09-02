@@ -163,7 +163,11 @@ bool LinearSubstitutionStrategy::extract_linear_arg(
     Polynomial<SymbolicPolyCoeff> poly;
     try {
         poly = symbolic_to_poly<SymbolicPolyCoeff>(make_expr_ptr(arg), var);
-    } catch (...) {
+    } catch (const std::invalid_argument&) {
+        return false;
+    } catch (const std::out_of_range&) {
+        return false;
+    } catch (const std::runtime_error&) {
         return false;
     }
 
@@ -380,7 +384,10 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate_raw(
                 return SymbolicExpr::multiply(scalar, make_arctan(inner));
             }
         }
-    } catch (...) {}
+    } catch (const std::invalid_argument&) {
+    } catch (const std::out_of_range&) {
+    } catch (const std::runtime_error&) {
+    }
 
     return nullptr;
 }

@@ -640,7 +640,11 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
         if (!extract_rational(expr, var, P, Q)) {
             return nullptr; // not rational -> let next strategy try
         }
-    } catch (...) {
+    } catch (const std::invalid_argument&) {
+        return nullptr;
+    } catch (const std::out_of_range&) {
+        return nullptr;
+    } catch (const std::runtime_error&) {
         return nullptr;
     }
     if (!P.is_zero() && P.degree() > 0 && P.degree() < Q.degree()) {
@@ -758,8 +762,15 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
             return simplified;
         }
         return result;
-    } catch (...) {
-        // Any unexpected runtime failure -> return unevaluated integral.
+    } catch (const std::invalid_argument&) {
+        return lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<IntegralNode>(
+                lamina::detail::node(expr), var));
+    } catch (const std::out_of_range&) {
+        return lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<IntegralNode>(
+                lamina::detail::node(expr), var));
+    } catch (const std::runtime_error&) {
         return lamina::detail::make_expression_ptr(
             lamina::detail::make_node<IntegralNode>(
                 lamina::detail::node(expr), var));

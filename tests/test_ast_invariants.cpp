@@ -362,6 +362,22 @@ int main() {
         (void)SymbolicFactory::create_complex(one, nullptr);
     }, "create_complex rejects null operands");
 
+    TEST_CASE("NumberNode rejects nonfinite approximate values");
+    expect_invalid([&]() {
+        (void)SymbolicExpr::number(
+            std::numeric_limits<double>::quiet_NaN());
+    }, "SymbolicExpr rejects NaN");
+    expect_invalid([&]() {
+        (void)SymbolicExpr::number(
+            std::numeric_limits<double>::infinity());
+    }, "SymbolicExpr rejects positive infinity");
+    expect_invalid([&]() {
+        (void)SymbolicExpr::number(
+            -std::numeric_limits<double>::infinity());
+    }, "SymbolicExpr rejects negative infinity");
+    EXPECT_TRUE(SymbolicExpr::infinity() != nullptr,
+                "explicit symbolic infinity remains valid");
+
     TEST_CASE("MatrixNode validates shape and storage");
     expect_invalid([&]() {
         (void)lamina::detail::make_node<MatrixNode>(
@@ -389,6 +405,16 @@ int main() {
         (void)lamina::detail::make_node<MatrixNode>(
             std::numeric_limits<size_t>::max(), 2, std::move(dense));
     }, "MatrixNode rejects dimension overflow");
+    MatrixNode::SparseStorage sparse;
+    sparse[0] = one;
+    auto sparse_matrix =
+        lamina::detail::make_node<MatrixNode>(2, 2, std::move(sparse));
+    auto first_missing = sparse_matrix->get(0, 1);
+    auto second_missing = sparse_matrix->get(1, 0);
+    EXPECT_TRUE(first_missing.get() == second_missing.get(),
+                "sparse missing coordinates share one immutable zero node");
+    EXPECT_TRUE(first_missing.get() == sparse_matrix->get(0, 1).get(),
+                "repeated sparse reads return the same zero node");
 
     TEST_CASE("SymbolicExpr factories reject null expressions");
     auto x = SymbolicExpr::variable("x");

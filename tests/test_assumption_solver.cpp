@@ -112,7 +112,7 @@ void test_x_squared_minus_4_real_domain() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // Both 2 and -2 are real, so both should be returned
     bool has_2 = solutions_contain_value(solutions, 2.0);
@@ -131,7 +131,7 @@ void test_x_squared_minus_4_positive_int() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // Only x=2 is a positive integer; x=-2 should be excluded
     bool has_2 = solutions_contain_value(solutions, 2.0);
@@ -150,7 +150,7 @@ void test_x_squared_minus_4_nonnegative_sign() {
     ctx.assume_domain("x", Domain::Real);
     ctx.assume_sign("x", Sign::NonNegative);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // Only x=2 satisfies NonNegative; x=-2 should be excluded
     bool has_2 = solutions_contain_value(solutions, 2.0);
@@ -169,7 +169,7 @@ void test_x_squared_plus_1_real_domain() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // x=i and x=-i are imaginary, so with Real domain both should be excluded
     EXPECT_TRUE(solutions.empty(),
@@ -182,7 +182,7 @@ void test_x_squared_plus_1_no_context() {
     auto eq = make_x_squared_plus("x", 1);
 
     // No context (nullptr) - all solutions returned unfiltered
-    auto solutions = solve_with_assumptions(eq, "x", nullptr);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", nullptr));
 
     /// 默认求解路径返回复数域中的虚数解.
     EXPECT_TRUE(solutions.size() >= 1,
@@ -199,7 +199,7 @@ void test_x_squared_minus_1_positive_sign() {
     ctx.assume_domain("x", Domain::Real);
     ctx.assume_sign("x", Sign::Positive);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);
@@ -217,7 +217,7 @@ void test_x_squared_minus_1_negative_sign() {
     ctx.assume_domain("x", Domain::Real);
     ctx.assume_sign("x", Sign::Negative);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);
@@ -233,7 +233,7 @@ void test_no_context_all_solutions_returned() {
     // x^2 - 4 = 0 -> x=2, x=-2
     auto eq = make_x_squared_minus("x", 4);
 
-    auto solutions = solve_with_assumptions(eq, "x", nullptr);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", nullptr));
 
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
@@ -248,7 +248,7 @@ void test_no_context_x_squared_minus_1() {
 
     auto eq = make_x_squared_minus("x", 1);
 
-    auto solutions = solve_with_assumptions(eq, "x", nullptr);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", nullptr));
 
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);
@@ -270,7 +270,7 @@ void test_all_solutions_filtered_empty_result() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     EXPECT_TRUE(solutions.empty(),
                 "All imaginary solutions filtered with Real domain → empty set");
@@ -288,7 +288,7 @@ void test_all_solutions_filtered_positive_int() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // sqrt(2) is irrational, not an integer. The solver may return it as a
     // symbolic expression. If it's not a pure NumberNode, the integer filter
@@ -314,7 +314,7 @@ void test_natural_domain_excludes_negative() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Natural);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // Natural = non-negative integers. x=2 is valid, x=-2 is not.
     bool has_2 = solutions_contain_value(solutions, 2.0);
@@ -332,7 +332,7 @@ void test_integer_domain_both_returned() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Integer);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // Both 2 and -2 are integers
     bool has_2 = solutions_contain_value(solutions, 2.0);
@@ -351,7 +351,7 @@ void test_complex_domain_no_filtering() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Complex);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // Complex is the default/least restrictive - no filtering
     EXPECT_TRUE(solutions.size() >= 1,
@@ -367,7 +367,7 @@ void test_nonpositive_sign_filtering() {
     ctx.assume_domain("x", Domain::Real);
     ctx.assume_sign("x", Sign::NonPositive);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
@@ -404,6 +404,23 @@ int main() {
     test_integer_domain_both_returned();
     test_complex_domain_no_filtering();
     test_nonpositive_sign_filtering();
+
+    TEST_CASE("Checked Assumption Solver Contract");
+    {
+        auto invalid = solve_with_assumptions_checked(nullptr, "x");
+        EXPECT_TRUE(!invalid &&
+                        invalid.error().code == CasErrc::InvalidArgument,
+                    "null assumption-aware equation is invalid");
+
+        ResourceLimits limits;
+        limits.max_steps = 0;
+        ComputationContext context(limits);
+        auto limited = solve_with_assumptions_checked(
+            make_x_squared_minus("x", 1), "x", nullptr, context);
+        EXPECT_TRUE(!limited &&
+                        limited.error().code == CasErrc::ResourceLimit,
+                    "assumption-aware solve preserves exhausted budget");
+    }
 
     return TEST_REPORT();
 }

@@ -208,7 +208,8 @@ static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&,
     const std::shared_ptr<SymbolicExpr>&,
-    int);
+    int,
+    ComputationContext&);
 static std::shared_ptr<SymbolicExpr> cauchy_integral_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&,
@@ -233,7 +234,7 @@ ExpressionResult calculate_residue_checked(
     if (!budget) return ExpressionResult::failure(budget.error());
 
     try {
-        auto result = calculate_residue_impl(f, z, z0, order);
+        auto result = calculate_residue_impl(f, z, z0, order, context);
         if (!result || !lamina::detail::node(result)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -241,6 +242,8 @@ ExpressionResult calculate_residue_checked(
                 operation);
         }
         return ExpressionResult::success(result);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ExpressionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                           "allocation failed while calculating residue",
@@ -266,7 +269,8 @@ static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
-    int order) {
+    int order,
+    ComputationContext& context) {
     if (order < 1) return SymbolicExpr::number(0);
     
     auto var_z = SymbolicExpr::variable(z);
@@ -284,7 +288,8 @@ static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
     
     F = SymbolicExpr::divide(F, SymbolicExpr::number(fact));
     
-    return lamina::limit_expression_checked(F, z, z0).value();
+    return detail::propagate_result(limit_expression_checked(
+        F, z, z0, LimitDirection::Both, context));
 }
 
 ExpressionResult cauchy_integral_checked(

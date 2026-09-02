@@ -59,6 +59,12 @@ Result<ExprPtr> determinant_exact(
     const ExactMatrixData& input,
     ComputationContext& context,
     const std::string& operation);
+Result<Rational> rational_determinant_exact(
+    std::size_t dimension,
+    std::vector<Rational> values,
+    ComputationContext& context,
+    const std::string& operation);
+
 
 Result<ExactMatrixData> rref_exact(
     ExactMatrixData input,

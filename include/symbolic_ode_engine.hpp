@@ -401,6 +401,7 @@ enum class ODESingularityType {
     RegularSingular,  ///< 正则奇点
     IrregularSingular ///< 非正则奇点
 };
+using ODESingularityResult = Result<ODESingularityType>;
 
 /**
  * @brief Frobenius 级数解结果.
@@ -450,19 +451,15 @@ LAMINA_API ODESolutionResult solve_variation_of_parameters_checked(
 
 /**
  * @brief 对 ODE 的指定点进行奇点分类.
- *
- * 给定 y'' + p(x)y' + q(x)y = 0,检查 x_0 处:
- * - 若 p(x) 和 q(x) 在 x_0 解析 -> 常点
- * - 若 (x-x_0)p(x) 和 (x-x_0)^2q(x) 在 x_0 解析 -> 正则奇点
- * - 否则 -> 非正则奇点
- *
- * @param[in] p 系数 p(x)(y' 的系数,方程已归一化)
- * @param[in] q 系数 q(x)(y 的系数,方程已归一化)
- * @param[in] x0 展开点
- * @param[in] x 自变量名
- * @return 奇点类型
  */
-LAMINA_API ODESingularityType classify_singular_point(
+LAMINA_API ODESingularityResult classify_singular_point_checked(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x,
+    ComputationContext& context);
+
+LAMINA_API ODESingularityResult classify_singular_point_checked(
     const std::shared_ptr<SymbolicExpr>& p,
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,

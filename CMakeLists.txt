@@ -13,7 +13,8 @@ option(LMCAS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSan
 option(LMCAS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMCAS_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
 option(LMCAS_WARNINGS_AS_ERRORS "Treat LMCAS compiler warnings as errors" OFF)
-option(LMCAS_USE_LAMMP_ASM "Enable the LAMMP assembly backend" OFF)
+set(LMCAS_LMMP_ASM "AUTO" CACHE STRING "LMMP assembly mode")
+set_property(CACHE LMCAS_LMMP_ASM PROPERTY STRINGS GENERIC X64 ARM64 AUTO)
 
 if(LMCAS_ENABLE_SANITIZERS AND LMCAS_ENABLE_TSAN)
     message(FATAL_ERROR "LMCAS_ENABLE_SANITIZERS and LMCAS_ENABLE_TSAN are mutually exclusive")
@@ -35,22 +36,17 @@ if(MSVC)
 endif()
 
 if(WIN32)
-    add_compile_definitions(LAMMP_WINDOWS)
+    add_compile_definitions(LMMP_WINDOWS)
 endif()
 
-if(NOT DEFINED USE_ASM)
-    set(USE_ASM "${LMCAS_USE_LAMMP_ASM}")
+if(NOT DEFINED LMMP_BUILD_TESTS)
+    set(LMMP_BUILD_TESTS OFF)
 endif()
-if(NOT DEFINED LAMMP_BUILD_TESTS)
-    set(LAMMP_BUILD_TESTS OFF)
+if(NOT DEFINED LMMP_BUILD_EXAMPLES)
+    set(LMMP_BUILD_EXAMPLES OFF)
 endif()
-if(NOT DEFINED LAMMP_BUILD_BENCHMARKS)
-    set(LAMMP_BUILD_BENCHMARKS OFF)
-endif()
-add_subdirectory(LMMC/LAMMP EXCLUDE_FROM_ALL)
-
-if(UNIX)
-    target_link_libraries(LammpCore PRIVATE m)
+if(NOT DEFINED LMMP_BUILD_BENCHMARKS)
+    set(LMMP_BUILD_BENCHMARKS OFF)
 endif()
 
 if(NOT DEFINED LMMC_BUILD_TESTS)
@@ -62,8 +58,8 @@ endif()
 if(NOT DEFINED LMMC_BUILD_SHARED)
     set(LMMC_BUILD_SHARED ON)
 endif()
-if(NOT DEFINED LAMMP_ROOT)
-    set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP")
+if(NOT DEFINED LMMP_ROOT)
+    set(LMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP")
 endif()
 if(NOT DEFINED LMMC_WARNINGS_AS_ERRORS)
     set(LMMC_WARNINGS_AS_ERRORS "${LMCAS_WARNINGS_AS_ERRORS}")
@@ -77,8 +73,8 @@ endif()
 if(NOT DEFINED LMMC_ENABLE_COVERAGE)
     set(LMMC_ENABLE_COVERAGE "${LMCAS_ENABLE_COVERAGE}")
 endif()
-if(NOT DEFINED LMMC_USE_LAMMP_ASM)
-    set(LMMC_USE_LAMMP_ASM "${LMCAS_USE_LAMMP_ASM}")
+if(NOT DEFINED LMMC_LMMP_ASM)
+    set(LMMC_LMMP_ASM "${LMCAS_LMMP_ASM}")
 endif()
 if(LMCAS_BUILD_LMMC_TESTS)
     add_subdirectory(LMMC)
@@ -86,13 +82,16 @@ else()
     add_subdirectory(LMMC EXCLUDE_FROM_ALL)
 endif()
 
-set_target_properties(LammpCore PROPERTIES
+if(NOT TARGET liblmmp)
+    message(FATAL_ERROR "LMMP did not define its liblmmp target")
+endif()
+set_target_properties(liblmmp PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"
 )
 foreach(_lmcas_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
-    set_target_properties(LammpCore PROPERTIES
+    set_target_properties(liblmmp PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY_${_lmcas_config}
             "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
         LIBRARY_OUTPUT_DIRECTORY_${_lmcas_config}
@@ -136,6 +135,7 @@ set(LMCAS_ALGEBRA_SOURCES
     src/symbolic_algebra_adapter.cpp
     src/symbolic_factor.cpp
     src/multivariate_factor.cpp
+    src/multivariate_factor_checked.cpp
     src/multivariate_factor_patterns.cpp
     src/multivariate_hensel.cpp
     src/multivariate_poly.cpp
@@ -155,6 +155,8 @@ set(LMCAS_ALGEBRA_SOURCES
     src/root_of_utils.cpp
     src/interval.cpp
     src/inequality_solver.cpp
+    src/inequality_solver_numeric.cpp
+    src/inequality_solver_polynomial.cpp
     src/parametric_solver.cpp
     src/transcendental_factor.cpp
     src/transcendental_rewrite.cpp
@@ -197,6 +199,8 @@ set(LMCAS_ANALYSIS_SOURCES
     src/vector_calculus_extrema.cpp
     src/vector_calculus_algebra.cpp
     src/series_engine.cpp
+    src/series_convergence.cpp
+    src/series_expansions.cpp
     src/transform_engine.cpp
     src/complex_analysis.cpp
     src/differential_geometry.cpp
@@ -215,6 +219,9 @@ set(LMCAS_FACADE_SOURCES
     src/lsr_expr_sets.cpp
     src/lsr_expr_solving.cpp
     src/lsr_expr_facade.cpp
+    src/lsr_expr_arithmetic.cpp
+    src/lsr_expr_transform.cpp
+    src/lsr_expr_values.cpp
     src/lsr_value_facade.cpp
 )
 
@@ -241,9 +248,6 @@ foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
     target_sources(lmcas PRIVATE $<TARGET_OBJECTS:${component}>)
 endforeach()
 
-if(WIN32)
-    target_sources(lmcas PRIVATE src/dllmain.c)
-endif()
 
 set_target_properties(lmcas PROPERTIES
     VERSION ${PROJECT_VERSION}
@@ -256,7 +260,8 @@ foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
     target_include_directories(${component} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP/include/lmmp
     )
     set_target_properties(${component} PROPERTIES
         CXX_EXTENSIONS OFF
@@ -288,12 +293,14 @@ target_compile_options(lmcas PRIVATE
 target_include_directories(lmcas PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LMMC/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LAMMP/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP/include/lmmp>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/lmmp>
 )
 
 target_link_libraries(lmcas
-    PUBLIC LammpCore lmmc
+    PUBLIC lmmp lmmc
 )
 
 function(lmcas_apply_instrumentation target_name)
@@ -359,7 +366,7 @@ install(TARGETS lmcas
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-install(TARGETS LammpCore
+install(TARGETS liblmmp
     EXPORT LMCASTargets
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -373,28 +380,20 @@ install(TARGETS lmmc
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-install(DIRECTORY include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING
-        PATTERN "*.hpp"
-        PATTERN "symbolic_ast.hpp" EXCLUDE
-        PATTERN "visitors" EXCLUDE
-        PATTERN "visitors/*" EXCLUDE
-)
+file(GLOB _lmcas_public_headers CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp")
+list(FILTER _lmcas_public_headers EXCLUDE REGEX "/symbolic_ast\\.hpp$")
+install(FILES ${_lmcas_public_headers}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(DIRECTORY LMMC/LAMMP/include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "*.hpp"
-)
+file(GLOB _lmmp_public_headers CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP/include/lmmp/*.h")
+install(FILES ${_lmmp_public_headers}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lmmp)
 
-install(DIRECTORY LMMC/include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "*.hpp"
-)
+install(DIRECTORY LMMC/include/lmmc/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lmmc
+    FILES_MATCHING PATTERN "*.h")
 
 install(EXPORT LMCASTargets
     NAMESPACE LMCAS::

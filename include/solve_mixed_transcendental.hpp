@@ -38,7 +38,8 @@ struct IsolatedInterval {
  * @brief 受检混合超越方程求解结果.
  *
  * `Complete` 表示给定有界区间内的全部求解路径均已穷尽;
- * `Inconclusive` 可携带已经通过区间与残差验证的候选根.
+ * `Inconclusive` 可携带已经通过区间与残差验证的候选根。恒零方程和
+ * 仅依赖未绑定参数的方程也返回 `Inconclusive`,因为有限向量无法表示其解集。
  */
 using MixedTranscendentalResult =
     Result<MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>>;

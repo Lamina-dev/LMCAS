@@ -259,7 +259,7 @@ factor_homogeneous_bivariate(const MultiPoly& poly)
     Polynomial<Rational> uni_poly;
     try {
         uni_poly = dehomogenized.to_univariate();
-    } catch (...) {
+    } catch (const std::invalid_argument&) {
         return std::nullopt;
     }
 
@@ -312,7 +312,7 @@ factor_homogeneous_bivariate(const MultiPoly& poly)
                     result.constant = -result.constant;
                 }
             }
-        } catch (...) {
+        } catch (const std::runtime_error&) {
             /// 若除法失败,使用首项系数比
             if (!product.terms().empty() && !poly.terms().empty()) {
                 result.constant = poly.terms()[0].second / product.terms()[0].second;

@@ -13,8 +13,8 @@
 #include <limits>
 #include <string>
 #include "computation_context.hpp"
-#include "lammp/lmmp.h"
-#include "lammp/numth.h"
+#include <lmmp.h>
+#include <numth.h>
 #include "result.hpp"
 
 namespace lamina {
@@ -75,7 +75,7 @@ inline int64_t extended_gcd(int64_t a, int64_t b, int64_t& s, int64_t& t) {
 }
 
 /**
- * @brief 计算两个无符号整数的最大公约数（调用 LAMMP）
+ * @brief 计算两个无符号整数的最大公约数（调用 LMMP）
  * @param a 第一个无符号整数
  * @param b 第二个无符号整数
  * @return gcd(a, b)

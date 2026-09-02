@@ -16,6 +16,8 @@ class AssumptionContext;
 namespace lamina {
 
 /** @brief 多项式方程组求解器，提供线性系统求解、Gröbner 基计算及多项式系统求解功能。 */
+using PolynomialSystemResult =
+    Result<std::vector<std::map<std::string, SymbolicExpr>>>;
 class LAMINA_API Solver {
 public:
 
@@ -40,12 +42,14 @@ public:
         const std::vector<std::string>& variables);
 
     /**
-     * @brief 求解多项式方程组，返回所有解。
-     * @param equations 方程列表（每个方程视为等于零的表达式）
-     * @param variables 待求解的变量名列表
-     * @return 解的列表，每个解为变量名到值的映射
+     * @brief 求解多项式方程组，显式报告失败。
      */
-    static std::vector<std::map<std::string, SymbolicExpr>> solve_polynomial_system(
+    static PolynomialSystemResult solve_polynomial_system_checked(
+        const std::vector<SymbolicExpr>& equations,
+        const std::vector<std::string>& variables,
+        ComputationContext& context);
+
+    static PolynomialSystemResult solve_polynomial_system_checked(
         const std::vector<SymbolicExpr>& equations,
         const std::vector<std::string>& variables);
 
@@ -84,26 +88,24 @@ public:
         int elim_count);
 };
 
+using AssumptionSolveResult =
+    Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
+
 /**
  * @brief Solve an equation with assumption-based domain filtering.
  *
- * Calls the existing SymbolicExpr::solve() to compute all solutions, then
- * applies domain filtering based on the variable's declared domain in the
- * AssumptionContext. Solutions that violate the domain constraint are excluded.
- *
- * Domain filtering rules:
- * - Real: exclude solutions containing sqrt(-1) or non-real numeric values
- * - PositiveInt: exclude non-integer or <= 0 solutions
- * - NonNegative (Natural): exclude solutions evaluating to < 0
- *
- * @param equation The equation to solve (equal to zero, or RelationalNode)
- * @param variable The variable name to solve for
- * @param ctx Optional assumption context; if nullptr, all solutions returned unfiltered
- * @return Filtered solutions preserving original order
+ * Computes all solutions and applies the optional assumption context's domain
+ * and sign constraints. The computation context is shared with nested solving.
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions(
+LAMINA_API AssumptionSolveResult solve_with_assumptions_checked(
     const std::shared_ptr<SymbolicExpr>& equation,
     const std::string& variable,
-    const AssumptionContext* ctx = nullptr);
+    const AssumptionContext* assumptions,
+    ComputationContext& context);
+
+LAMINA_API AssumptionSolveResult solve_with_assumptions_checked(
+    const std::shared_ptr<SymbolicExpr>& equation,
+    const std::string& variable,
+    const AssumptionContext* assumptions = nullptr);
 
 }

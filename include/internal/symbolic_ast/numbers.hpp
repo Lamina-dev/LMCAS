@@ -1,6 +1,8 @@
 /** @file internal/symbolic_ast/numbers.hpp */
 #pragma once
 #include "base.hpp"
+#include <cmath>
+#include <stdexcept>
 
 /**
  * @brief 数值节点，存储 BigInt、Rational 或浮点数。
@@ -10,11 +12,26 @@ private:
     LAMINA_AST_NODE_FACTORY_FRIEND;
 
     const std::variant<BigInt, Rational, lmmc_real_t> value_;
+    static lmmc_real_t validate_approximate(lmmc_real_t value) {
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument("approximate number must be finite");
+        }
+        return value;
+    }
+
+    static std::variant<BigInt, Rational, lmmc_real_t> validate_number(
+        std::variant<BigInt, Rational, lmmc_real_t> value) {
+        if (const auto* approximate = std::get_if<lmmc_real_t>(&value)) {
+            validate_approximate(*approximate);
+        }
+        return value;
+    }
 
     explicit NumberNode(const BigInt& v) : value_(v) {}
     explicit NumberNode(const Rational& v) : value_(v) {}
-    explicit NumberNode(lmmc_real_t v) : value_(v) {}
-    explicit NumberNode(std::variant<BigInt, Rational, lmmc_real_t> v) : value_(std::move(v)) {}
+    explicit NumberNode(lmmc_real_t v) : value_(validate_approximate(v)) {}
+    explicit NumberNode(std::variant<BigInt, Rational, lmmc_real_t> v)
+        : value_(validate_number(std::move(v))) {}
 
 public:
     const std::variant<BigInt, Rational, lmmc_real_t>& value() const noexcept {
@@ -59,12 +76,6 @@ protected:
             }
             const lmmc_real_t lhs = std::get<lmmc_real_t>(value_);
             const lmmc_real_t rhs = std::get<lmmc_real_t>(o.value_);
-            const bool lhs_nan = std::isnan(lhs);
-            const bool rhs_nan = std::isnan(rhs);
-            if (lhs_nan || rhs_nan) {
-                if (lhs_nan && rhs_nan) return 0;
-                return lhs_nan ? 1 : -1;
-            }
             if (lhs < rhs) return -1;
             if (lhs > rhs) return 1;
             return 0;

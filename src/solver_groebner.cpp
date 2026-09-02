@@ -809,22 +809,20 @@ std::vector<SymbolicExpr> Solver::groebner_basis(
     }
     return result;
 }
-
-std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system(
+static std::vector<std::map<std::string, SymbolicExpr>>
+solve_polynomial_system_impl(
     const std::vector<SymbolicExpr>& equations,
-    const std::vector<std::string>& variables)
+    const std::vector<std::string>& variables,
+    ComputationContext& context)
 {
     std::vector<SymbolicExpr> cleared_equations;
     std::vector<std::shared_ptr<SymbolicExpr>> denom_constraints;
     cleared_equations.reserve(equations.size());
-
     for (const auto& eq : equations) {
         if (!lamina::detail::node(eq)) return {};
-
         std::vector<std::shared_ptr<const SymbolicNode>> den_factors;
         std::vector<std::shared_ptr<SymbolicExpr>> den_local_constraints;
         if (!collect_denominator_factors(lamina::detail::node(eq), den_factors, den_local_constraints)) return {};
-
         auto denom_expr = multiply_factors(den_factors);
         auto cleared = to_ptr(eq);
         if (!den_factors.empty()) {
@@ -850,9 +848,10 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
             denom_constraints.push_back(c);
         }
     }
-
     if (cleared_equations.size() == 1 && variables.size() == 1) {
-        auto roots = lamina::solve_finite_checked(lamina::detail::make_expression_ptr(cleared_equations[0]), variables[0]).value();
+        auto roots = detail::propagate_result(solve_finite_checked(
+            detail::make_expression_ptr(cleared_equations[0]),
+            variables[0], context, SolveOptions{}));
         std::vector<std::map<std::string, SymbolicExpr>> single_solutions;
         for (const auto& r : roots) {
             single_solutions.push_back({{variables[0], *r}});
@@ -881,8 +880,7 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
         return filtered;
     }
 
-    auto G_basis = groebner_basis(cleared_equations, variables);
-
+    auto G_basis = Solver::groebner_basis(cleared_equations, variables);
     std::vector<std::shared_ptr<SymbolicExpr>> basis;
     basis.reserve(G_basis.size());
     for (const auto& g : G_basis) {
@@ -892,14 +890,12 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
             basis.push_back(simp);
         }
     }
-
     if (variables.empty()) {
         for (const auto& p : basis) {
             if (p->is_number() && !p->is_zero()) return {};
         }
         return {{} };
     }
-
     auto substitute_all = [&](const std::shared_ptr<SymbolicExpr>& expr,
                               const std::map<std::string, SymbolicExpr>& subs) {
         auto res = expr;
@@ -909,7 +905,6 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
         }
         return res->simplify();
     };
-
     auto solve_rec = [&](auto&& self, int var_pos,
                          const std::map<std::string, SymbolicExpr>& partial)
         -> std::vector<std::map<std::string, SymbolicExpr>> {
@@ -936,11 +931,9 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
 
             reduced.push_back(r);
         }
-
         if (var_pos < 0) {
             return {partial};
         }
-
         const auto& curr_var = variables[var_pos];
         bool curr_var_appears = false;
         std::shared_ptr<SymbolicExpr> target = nullptr;
@@ -966,18 +959,16 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
                 target = r;
             }
         }
-
         if (!curr_var_appears) {
             auto next_partial = partial;
             next_partial.insert_or_assign(curr_var, *SymbolicExpr::variable(curr_var));
             return self(self, var_pos - 1, next_partial);
         }
-
         if (!target) return {};
 
-        auto roots = lamina::solve_finite_checked(target, curr_var).value();
+        auto roots = detail::propagate_result(solve_finite_checked(
+            target, curr_var, context, SolveOptions{}));
         if (roots.empty()) return {};
-
         std::vector<std::map<std::string, SymbolicExpr>> results;
         for (const auto& r : roots) {
             auto next_partial = partial;
@@ -987,15 +978,11 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
         }
         return results;
     };
-
     std::map<std::string, SymbolicExpr> empty;
     auto candidates = solve_rec(solve_rec, static_cast<int>(variables.size()) - 1, empty);
-
     if (denom_constraints.empty()) return candidates;
-
     std::vector<std::map<std::string, SymbolicExpr>> filtered;
     filtered.reserve(candidates.size());
-
     for (const auto& sol : candidates) {
         bool ok = true;
         for (const auto& den : denom_constraints) {
@@ -1013,10 +1000,43 @@ std::vector<std::map<std::string, SymbolicExpr>> Solver::solve_polynomial_system
         }
         if (ok) filtered.push_back(sol);
     }
-
     return filtered;
 }
-
+PolynomialSystemResult Solver::solve_polynomial_system_checked(
+    const std::vector<SymbolicExpr>& equations,
+    const std::vector<std::string>& variables,
+    ComputationContext& context)
+{
+    constexpr const char* operation = "solve_polynomial_system";
+    if (equations.empty() || variables.empty()) {
+        return PolynomialSystemResult::failure(
+            CasErrc::InvalidArgument,
+            "polynomial system requires equations and variables", operation);
+    }
+    auto budget = context.consume_steps(
+        equations.size() * variables.size() + 1, operation);
+    if (!budget) return PolynomialSystemResult::failure(budget.error());
+    try {
+        return PolynomialSystemResult::success(
+            solve_polynomial_system_impl(equations, variables, context));
+    } catch (const detail::ResultPropagation& propagation) {
+        return PolynomialSystemResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return PolynomialSystemResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while solving polynomial system", operation);
+    } catch (const std::exception& ex) {
+        return PolynomialSystemResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+}
+PolynomialSystemResult Solver::solve_polynomial_system_checked(
+    const std::vector<SymbolicExpr>& equations,
+    const std::vector<std::string>& variables)
+{
+    ComputationContext context;
+    return solve_polynomial_system_checked(equations, variables, context);
+}
 std::vector<SymbolicExpr> Solver::reduced_groebner_basis(
     const std::vector<SymbolicExpr>& polynomials,
     const std::vector<std::string>& variables)

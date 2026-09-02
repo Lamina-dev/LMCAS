@@ -17,6 +17,7 @@
 #include <unordered_set>
 #include <vector>
 #include <new>
+#include <stdexcept>
 
 namespace lamina {
 
@@ -632,7 +633,9 @@ static lmmc_real_t evaluate_at(
         lmmc_real_t val = recursive_eval(lamina::detail::node(substituted));
         if (!std::isfinite(val)) return std::numeric_limits<lmmc_real_t>::quiet_NaN();
         return val;
-    } catch (...) {
+    } catch (const std::bad_alloc&) {
+        throw;
+    } catch (const std::exception&) {
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 }
@@ -1276,8 +1279,10 @@ static Result<std::vector<NumericRoot>> numerical_path(
                     lamina::detail::make_expression_ptr(derivative_node);
             }
         }
-    } catch (const std::exception&) {
-        // 缺少导数时仍可使用二分路径,但不能证明搜索完备.
+    } catch (const std::bad_alloc&) {
+        throw;
+    } catch (const std::logic_error&) {
+        // 缺少受支持的导数时仍可使用二分路径,但不能证明搜索完备.
         complete = false;
     }
 
@@ -1337,8 +1342,30 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
         if (!initial_step) {
             return MixedTranscendentalResult::failure(initial_step.error());
         }
-        if (!expression_depends_on_variable(
-                lamina::detail::node(expr), var)) {
+        const auto variables =
+            free_variables(lamina::detail::node(expr));
+        if (variables.find(var) == variables.end()) {
+            if (!variables.empty()) {
+                return MixedTranscendentalResult::success(
+                    MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>{
+                        {}, Completeness::Inconclusive,
+                        "equation depends on unresolved parameters but not the solve variable"});
+            }
+
+            const auto constant_value =
+                recursive_eval(lamina::detail::node(expr));
+            if (!std::isfinite(constant_value)) {
+                return MixedTranscendentalResult::success(
+                    MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>{
+                        {}, Completeness::Inconclusive,
+                        "constant equation could not be evaluated in the real domain"});
+            }
+            if (std::abs(constant_value) <= opts.tolerance) {
+                return MixedTranscendentalResult::success(
+                    MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>{
+                        {}, Completeness::Inconclusive,
+                        "equation is identically zero; every real value satisfies it"});
+            }
             return MixedTranscendentalResult::success(
                 MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>{
                     {}, Completeness::Complete, {}});
@@ -1419,17 +1446,15 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
                         accept_symbolic(solve_by_factoring(polynomial, var));
                         solved_as_polynomial = true;
                     }
-                } catch (const std::exception&) {
+                } catch (const std::invalid_argument&) {
+                    complete = false;
+                } catch (const std::domain_error&) {
                     complete = false;
                 }
             }
             if (solved_as_polynomial) continue;
 
-            try {
-                accept_symbolic(solve_transcendental(factor, var));
-            } catch (const std::exception&) {
-                complete = false;
-            }
+            accept_symbolic(solve_transcendental(factor, var));
 
             auto numeric =
                 numerical_path(factor, var, interval, opts, context, complete);

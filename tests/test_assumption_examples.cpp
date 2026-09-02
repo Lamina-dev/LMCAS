@@ -210,7 +210,7 @@ void test_solver_with_positive_int_domain() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
@@ -230,7 +230,7 @@ void test_solver_with_nonnegative_sign() {
     ctx.assume_domain("x", Domain::Real);
     ctx.assume_sign("x", Sign::NonNegative);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     bool has_3 = solutions_contain_value(solutions, 3.0);
     bool has_neg3 = solutions_contain_value(solutions, -3.0);
@@ -378,7 +378,7 @@ void test_domain_filtering_all_excluded_empty_set() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     EXPECT_TRUE(solutions.empty(),
                 "x^2+1=0 with Real domain -> empty set");
@@ -396,7 +396,7 @@ void test_domain_filtering_positive_int_excludes_all() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
 
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     // All numeric solutions should be excluded (sqrt(2) is not an integer)
     for (const auto& sol : solutions) {
@@ -451,19 +451,19 @@ void test_nesting_depth_128() {
 
 
 static void test_nan_handling() {
-    TEST_CASE("NaN NumberNode -> False for integer, Unknown for sign");
+    TEST_CASE("NaN NumberNode construction is rejected");
 
-    AssumptionContext ctx;
-
-    double nan_val = std::numeric_limits<double>::quiet_NaN();
-    auto nan_node = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(nan_val));
-    auto nan_expr = lamina::detail::expression_from_node(nan_node);
-    EXPECT_TRUE(ctx.is_integer(nan_expr).value() == Tribool::False,
-                "NaN is_integer -> False");
-    EXPECT_TRUE(ctx.is_positive(nan_expr).value() == Tribool::Unknown,
-                "NaN is_positive -> Unknown");
-    EXPECT_TRUE(ctx.is_negative(nan_expr).value() == Tribool::Unknown,
-                "NaN is_negative -> Unknown");
+    bool rejected = false;
+    try {
+        (void)lamina::detail::make_node<NumberNode>(
+            static_cast<lmmc_real_t>(
+                std::numeric_limits<double>::quiet_NaN()));
+    } catch (const std::invalid_argument& error) {
+        rejected =
+            std::string(error.what()) == "approximate number must be finite";
+    }
+    EXPECT_TRUE(rejected,
+                "NaN cannot enter the symbolic AST");
 }
 
 static void test_infinity_handling() {
@@ -524,7 +524,7 @@ void test_combined_pipeline() {
     auto eq = SymbolicExpr::add(
         SymbolicExpr::power(SymbolicExpr::variable("x"), SymbolicExpr::number(2)),
         SymbolicExpr::number(-1));
-    auto solutions = solve_with_assumptions(eq, "x", &ctx);
+    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
 
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);

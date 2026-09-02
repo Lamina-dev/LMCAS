@@ -442,5 +442,26 @@ int main() {
         EXPECT_TRUE(passed + skipped == 50, "all iterations accounted for");
     }
 
+    TEST_CASE("Checked Parametric Polynomial Contract");
+    {
+        auto invalid = ParametricSolver::solve_polynomial_parametric_checked(
+            {}, {"x"}, {});
+        EXPECT_TRUE(!invalid &&
+                        invalid.error().code == CasErrc::InvalidArgument,
+                    "empty parametric polynomial input is invalid");
+
+        ResourceLimits limits;
+        limits.max_steps = 0;
+        ComputationContext context(limits);
+        auto x = SymbolicExpr::variable("x");
+        auto limited = ParametricSolver::solve_polynomial_parametric_checked(
+            {SymbolicExpr::add(
+                SymbolicExpr::power(x, SymbolicExpr::number(2)),
+                SymbolicExpr::number(-1))},
+            {"x"}, {}, context);
+        EXPECT_TRUE(!limited &&
+                        limited.error().code == CasErrc::ResourceLimit,
+                    "parametric polynomial solve preserves exhausted budget");
+    }
     return TEST_REPORT();
 }

@@ -319,7 +319,12 @@ void test_complex_quadratic() {
     auto b = SymbolicExpr::number(0);
     auto c = SymbolicExpr::number(1);
 
-    auto roots = lamina::solve_complex_quadratic(a, b, c);
+    auto checked_roots = lamina::solve_complex_quadratic_checked(a, b, c);
+    EXPECT_TRUE(checked_roots.has_value(),
+                "z^2+1=0 checked solve succeeds");
+    auto roots = checked_roots
+        ? std::move(checked_roots.value())
+        : std::vector<lamina::ComplexSymbolic>{};
     EXPECT_TRUE(roots.size() == 2, "z^2+1=0 returns exactly 2 roots");
 
     // The roots should be +i and -i
@@ -347,7 +352,12 @@ void test_complex_locus() {
     {
         auto center = lamina::make_complex(SymbolicExpr::number(1), SymbolicExpr::number(2));
         auto radius = SymbolicExpr::number(3);
-        auto locus = lamina::complex_locus_circle(center, radius, "z");
+        auto checked_locus =
+            lamina::complex_locus_circle_checked(center, radius, "z");
+        EXPECT_TRUE(checked_locus.has_value(),
+                    "checked circle locus succeeds");
+        auto locus = checked_locus
+            ? std::move(checked_locus.value()) : nullptr;
         std::string s = locus ? locus->to_string() : "null";
         EXPECT_TRUE(s != "null", "locus_circle is not null");
         // Should contain z and structural elements of |z - a| = r
@@ -361,7 +371,12 @@ void test_complex_locus() {
     {
         auto a = lamina::make_complex(SymbolicExpr::number(1), SymbolicExpr::number(0));
         auto b = lamina::make_complex(SymbolicExpr::number(3), SymbolicExpr::number(0));
-        auto locus = lamina::complex_locus_perpendicular_bisector(a, b, "z");
+        auto checked_locus =
+            lamina::complex_locus_perpendicular_bisector_checked(a, b, "z");
+        EXPECT_TRUE(checked_locus.has_value(),
+                    "checked perpendicular-bisector locus succeeds");
+        auto locus = checked_locus
+            ? std::move(checked_locus.value()) : nullptr;
         std::string s = locus ? locus->to_string() : "null";
         EXPECT_TRUE(s != "null", "locus_perpendicular_bisector is not null");
         // Should contain z and structural elements

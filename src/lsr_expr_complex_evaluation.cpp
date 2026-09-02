@@ -247,7 +247,7 @@ Result<ApproxComplex> eval_complex(const SymbolicExpr& expression,
                                "complex evaluation allocation failed",
                                kEvalComplexOperation);
     } catch (const std::exception& error) {
-        return complex_failure(CasErrc::UnsupportedExpression, error.what(),
+        return complex_failure(CasErrc::InternalInvariant, error.what(),
                                kEvalComplexOperation);
     }
 }

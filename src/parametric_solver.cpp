@@ -1,4 +1,5 @@
 #include "parametric_solver.hpp"
+#include "internal/exact_matrix.hpp"
 #include "solver.hpp"
 #include "solve_strategies.hpp"
 #include "poly_utils.hpp"
@@ -185,11 +186,11 @@ ParametricSolver::solve_linear_parametric(
     return { solution };
 }
 
-std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
-ParametricSolver::solve_polynomial_parametric(
+ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
-    const std::vector<std::string>&)
+    const std::vector<std::string>&,
+    ComputationContext& context)
 {
     if (equations.empty() || unknowns.empty()) {
 
@@ -340,7 +341,8 @@ ParametricSolver::solve_polynomial_parametric(
             return self(self, var_pos - 1, next_partial);
         }
 
-        auto roots = lamina::solve_finite_checked(target, curr_var).value();
+        auto roots = detail::propagate_result(
+            solve_finite_checked(target, curr_var, context));
         if (roots.empty()) {
 
             auto next_partial = partial;
@@ -360,6 +362,51 @@ ParametricSolver::solve_polynomial_parametric(
 
     std::map<std::string, std::shared_ptr<SymbolicExpr>> empty;
     return solve_rec(solve_rec, static_cast<int>(unknowns.size()) - 1, empty);
+}
+
+ParametricSolutionsResult
+ParametricSolver::solve_polynomial_parametric_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
+    const std::vector<std::string>& unknowns,
+    const std::vector<std::string>& parameters,
+    ComputationContext& context)
+{
+    constexpr const char* operation = "solve_polynomial_parametric";
+    if (equations.empty() || unknowns.empty()) {
+        return ParametricSolutionsResult::failure(
+            CasErrc::InvalidArgument,
+            "parametric polynomial solve requires equations and unknowns",
+            operation);
+    }
+    auto budget = context.consume_steps(
+        equations.size() * unknowns.size() + 1, operation);
+    if (!budget) return ParametricSolutionsResult::failure(budget.error());
+    try {
+        return ParametricSolutionsResult::success(
+            solve_polynomial_parametric_impl(
+                equations, unknowns, parameters, context));
+    } catch (const detail::ResultPropagation& propagation) {
+        return ParametricSolutionsResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return ParametricSolutionsResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while solving parametric polynomial system",
+            operation);
+    } catch (const std::exception& ex) {
+        return ParametricSolutionsResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+}
+
+ParametricSolutionsResult
+ParametricSolver::solve_polynomial_parametric_checked(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
+    const std::vector<std::string>& unknowns,
+    const std::vector<std::string>& parameters)
+{
+    ComputationContext context;
+    return solve_polynomial_parametric_checked(
+        equations, unknowns, parameters, context);
 }
 
 std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
@@ -384,74 +431,29 @@ ParametricSolver::solve_system(
         return solve_linear_parametric(equations, unknowns, effective_params);
     }
 
-    return solve_polynomial_parametric(equations, unknowns, effective_params);
+    ComputationContext context;
+    return solve_polynomial_parametric_impl(
+        equations, unknowns, effective_params, context);
 }
 
 static std::shared_ptr<SymbolicExpr> compute_determinant(
     const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& matrix,
-    size_t n)
+    size_t dimension)
 {
-    if (n == 0) return SymbolicExpr::number(0);
-    if (n == 1) return matrix[0][0];
-
-    if (n == 2) {
-        auto ad = SymbolicExpr::multiply(matrix[0][0], matrix[1][1]);
-        auto bc = SymbolicExpr::multiply(matrix[0][1], matrix[1][0]);
-
-        auto neg_bc = SymbolicExpr::multiply(bc, SymbolicExpr::number(-1));
-        return SymbolicExpr::add(ad, neg_bc)->simplify();
-    }
-
-    if (n == 3) {
-
-        auto a = matrix[0][0], b = matrix[0][1], c = matrix[0][2];
-        auto d = matrix[1][0], e = matrix[1][1], f = matrix[1][2];
-        auto g = matrix[2][0], h = matrix[2][1], i = matrix[2][2];
-
-        auto ei = SymbolicExpr::multiply(e, i);
-        auto fh = SymbolicExpr::multiply(f, h);
-        auto ei_fh = SymbolicExpr::add(ei, SymbolicExpr::multiply(fh, SymbolicExpr::number(-1)));
-
-        auto di = SymbolicExpr::multiply(d, i);
-        auto fg = SymbolicExpr::multiply(f, g);
-        auto di_fg = SymbolicExpr::add(di, SymbolicExpr::multiply(fg, SymbolicExpr::number(-1)));
-
-        auto dh = SymbolicExpr::multiply(d, h);
-        auto eg = SymbolicExpr::multiply(e, g);
-        auto dh_eg = SymbolicExpr::add(dh, SymbolicExpr::multiply(eg, SymbolicExpr::number(-1)));
-
-        auto term1 = SymbolicExpr::multiply(a, ei_fh);
-        auto term2 = SymbolicExpr::multiply(b, di_fg);
-        auto term3 = SymbolicExpr::multiply(c, dh_eg);
-
-        auto neg_term2 = SymbolicExpr::multiply(term2, SymbolicExpr::number(-1));
-        auto sum12 = SymbolicExpr::add(term1, neg_term2);
-        return SymbolicExpr::add(sum12, term3)->simplify();
-    }
-
-    auto det = SymbolicExpr::number(0);
-    for (size_t j = 0; j < n; ++j) {
-
-        std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> minor(n - 1, std::vector<std::shared_ptr<SymbolicExpr>>(n - 1));
-        for (size_t row = 1; row < n; ++row) {
-            size_t minor_col = 0;
-            for (size_t col = 0; col < n; ++col) {
-                if (col == j) continue;
-                minor[row - 1][minor_col] = matrix[row][col];
-                minor_col++;
-            }
-        }
-
-        auto cofactor = compute_determinant(minor, n - 1);
-        auto term = SymbolicExpr::multiply(matrix[0][j], cofactor);
-
-        if (j % 2 == 0) {
-            det = SymbolicExpr::add(det, term);
-        } else {
-            det = SymbolicExpr::add(det, SymbolicExpr::multiply(term, SymbolicExpr::number(-1)));
+    if (dimension == 0 || matrix.size() != dimension) return nullptr;
+    detail::ExactMatrixData exact{dimension, dimension, {}};
+    exact.entries.reserve(dimension * dimension);
+    for (const auto& row : matrix) {
+        if (row.size() != dimension) return nullptr;
+        for (const auto& entry : row) {
+            if (!entry) return nullptr;
+            exact.entries.push_back(entry);
         }
     }
-    return det->simplify();
+    ComputationContext context;
+    auto determinant = detail::determinant_exact(
+        exact, context, "parametric_determinant");
+    return determinant ? lamina::detail::propagate_result(determinant) : nullptr;
 }
 
 static bool depends_on_parameters(
@@ -518,6 +520,16 @@ PiecewiseSolution ParametricSolver::solve_system_piecewise(
     }
 
     auto det = compute_determinant(A, n);
+    if (!det) {
+        auto solutions = solve_system(equations, unknowns, parameters);
+        if (!solutions.empty()) {
+            PiecewiseSolution::Case generic_case;
+            generic_case.condition = SymbolicExpr::number(1);
+            generic_case.solutions = std::move(solutions);
+            result.cases.push_back(std::move(generic_case));
+        }
+        return result;
+    }
 
     if (det->is_zero()) {
 

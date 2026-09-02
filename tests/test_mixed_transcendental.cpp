@@ -2493,53 +2493,69 @@ void test_exception_safety_extreme_values() {
 }
 
 void test_no_variable_dependence_returns_empty() {
-    TEST_CASE("expression without solve variable returns empty vector");
+    TEST_CASE("nonzero constant equation has a complete empty solution set");
 
-    // sin(3) + 5: no dependence on x at all
     auto expr = SymbolicExpr::add(
         SymbolicExpr::sin(SymbolicExpr::number(3)),
-        SymbolicExpr::number(5)
-    );
-
-    lamina::SolveOptions opts;
+        SymbolicExpr::number(5));
+    SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-12;
 
-    auto results = checked_mixed_candidates(expr, "x", opts);
-
-    EXPECT_TRUE(results.empty(),
-        "Expression sin(3)+5 has no dependence on x, should return empty vector");
+    auto result = solve_mixed_transcendental_checked(expr, "x", opts);
+    EXPECT_TRUE(result && result.value().value.empty(),
+                "sin(3)+5 has no solutions for x");
+    EXPECT_TRUE(result &&
+                    result.value().completeness == Completeness::Complete,
+                "a finite nonzero constant proves the empty solution set");
 }
 
 void test_no_variable_dependence_constant_expression() {
-    TEST_CASE("pure constant expression returns empty vector");
+    TEST_CASE("pure nonzero constant equation is complete and empty");
 
-    // 42: a plain number, no variable at all
-    auto expr = SymbolicExpr::number(42);
-
-    lamina::SolveOptions opts;
+    SolveOptions opts;
     opts.allow_numeric = true;
+    auto result = solve_mixed_transcendental_checked(
+        SymbolicExpr::number(42), "x", opts);
 
-    auto results = checked_mixed_candidates(expr, "x", opts);
+    EXPECT_TRUE(result && result.value().value.empty(),
+                "42 = 0 has no solutions");
+    EXPECT_TRUE(result &&
+                    result.value().completeness == Completeness::Complete,
+                "42 = 0 is a complete empty solution set");
+}
 
-    EXPECT_TRUE(results.empty(),
-        "Constant expression 42 has no dependence on x, should return empty vector");
+void test_identically_zero_equation_is_inconclusive() {
+    TEST_CASE("identically zero equation does not masquerade as no solutions");
+
+    SolveOptions opts;
+    opts.allow_numeric = true;
+    auto result = solve_mixed_transcendental_checked(
+        SymbolicExpr::number(0), "x", opts);
+
+    EXPECT_TRUE(result && result.value().value.empty(),
+                "finite result storage remains empty for an all-real solution set");
+    EXPECT_TRUE(result &&
+                    result.value().completeness == Completeness::Inconclusive &&
+                    !result.value().reason.empty(),
+                "0 = 0 reports an unrepresentable all-real solution set");
 }
 
 void test_no_variable_dependence_other_variable() {
-    TEST_CASE("expression with different variable returns empty vector");
+    TEST_CASE("parameter-dependent equation is not reported complete");
 
     auto y = SymbolicExpr::variable("y");
-    // sin(y) + y: depends on y, but NOT on x
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(y), y);
-
-    lamina::SolveOptions opts;
+    SolveOptions opts;
     opts.allow_numeric = true;
 
-    auto results = checked_mixed_candidates(expr, "x", opts);
-
-    EXPECT_TRUE(results.empty(),
-        "Expression sin(y)+y has no dependence on x, should return empty vector");
+    auto result = solve_mixed_transcendental_checked(expr, "x", opts);
+    EXPECT_TRUE(result && result.value().value.empty(),
+                "parameter-dependent equation has no finite x candidates");
+    EXPECT_TRUE(result &&
+                    result.value().completeness == Completeness::Inconclusive &&
+                    !result.value().reason.empty(),
+                "unresolved parameter y prevents a complete x solution claim");
 }
 
 
@@ -2854,6 +2870,7 @@ int main() {
 
     test_no_variable_dependence_returns_empty();
     test_no_variable_dependence_constant_expression();
+    test_identically_zero_equation_is_inconclusive();
     test_no_variable_dependence_other_variable();
 
     test_e2e_sin_x_plus_x_root_at_zero();

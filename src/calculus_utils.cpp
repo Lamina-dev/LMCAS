@@ -413,57 +413,76 @@ static bool calculus_utils_oblique_from_rational(
         intercept = SymbolicExpr::number(quotient.coeffs[0])->simplify();
         slope = SymbolicExpr::number(quotient.coeffs[1])->simplify();
         return !slope->is_zero();
-    } catch (...) {
+    } catch (const std::invalid_argument&) {
+        return false;
+    } catch (const std::out_of_range&) {
         return false;
     }
 }
 
 
-ContinuityType continuity_at(
+ContinuityResult continuity_at_checked(
+    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
+    const std::shared_ptr<SymbolicExpr>& point, ComputationContext& context)
+{
+    const std::string operation = "continuity_at";
+    try {
+        if (!f || !point || var.empty()) {
+            return ContinuityResult::failure(
+                CasErrc::InvalidArgument,
+                "continuity analysis requires an expression, point, and variable",
+                operation);
+        }
+        auto input = calculus_utils_validate_expr(f, var, context, operation);
+        if (!input) return ContinuityResult::failure(input.error());
+
+        auto left_lim = lamina::detail::propagate_result(
+            lamina::limit_expression_checked(
+                f, var, point, LimitDirection::FromBelow, context));
+        auto right_lim = lamina::detail::propagate_result(
+            lamina::limit_expression_checked(
+                f, var, point, LimitDirection::FromAbove, context));
+        auto func_val = f->substitute(var, point);
+
+        if (left_lim) left_lim = left_lim->simplify();
+        if (right_lim) right_lim = right_lim->simplify();
+        if (func_val) func_val = func_val->simplify();
+
+        const bool left_exists =
+            left_lim && !calculus_utils_is_infinity(left_lim);
+        const bool right_exists =
+            right_lim && !calculus_utils_is_infinity(right_lim);
+        if (!left_exists || !right_exists) {
+            return ContinuityResult::success(ContinuityType::Essential);
+        }
+        if (!calculus_utils_expr_equal(left_lim, right_lim)) {
+            return ContinuityResult::success(ContinuityType::Jump);
+        }
+
+        const bool val_exists =
+            func_val && !calculus_utils_is_infinity(func_val);
+        if (!val_exists || !calculus_utils_expr_equal(left_lim, func_val)) {
+            return ContinuityResult::success(ContinuityType::Removable);
+        }
+        return ContinuityResult::success(ContinuityType::Continuous);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ContinuityResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return ContinuityResult::failure(
+            CasErrc::ResourceLimit, "continuity analysis allocation failed",
+            operation);
+    } catch (const std::exception& ex) {
+        return ContinuityResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+}
+
+ContinuityResult continuity_at_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point)
 {
-    if (!f || !point) return ContinuityType::Essential;
-
-    /// 计算左极限
-    auto left_lim = lamina::limit_expression_checked(f, var, point, LimitDirection::FromBelow).value();
-    /// 计算右极限
-    auto right_lim = lamina::limit_expression_checked(f, var, point, LimitDirection::FromAbove).value();
-    /// 计算函数值(直接代入)
-    auto func_val = f->substitute(var, point);
-
-    /// 简化结果
-    if (left_lim) left_lim = left_lim->simplify();
-    if (right_lim) right_lim = right_lim->simplify();
-    if (func_val) func_val = func_val->simplify();
-
-    /// 检查极限是否存在(不为无穷)
-    bool left_exists = left_lim && !calculus_utils_is_infinity(left_lim);
-    bool right_exists = right_lim && !calculus_utils_is_infinity(right_lim);
-
-    /// 任一侧极限缺失或为无穷时,分类为本性间断点.
-    if (!left_exists || !right_exists) {
-        return ContinuityType::Essential;
-    }
-
-    /// 检查左极限是否等于右极限
-    bool limits_equal = calculus_utils_expr_equal(left_lim, right_lim);
-
-    if (!limits_equal) {
-        /// 左极限 != 右极限 -> 跳跃间断点
-        return ContinuityType::Jump;
-    }
-
-    /// 左极限 = 右极限,检查是否等于函数值
-    bool val_exists = func_val && !calculus_utils_is_infinity(func_val);
-
-    if (!val_exists || !calculus_utils_expr_equal(left_lim, func_val)) {
-        /// 极限存在但不等于函数值(或函数无定义) -> 可去间断点
-        return ContinuityType::Removable;
-    }
-
-    /// 左极限 = 右极限 = 函数值 -> 连续
-    return ContinuityType::Continuous;
+    ComputationContext context;
+    return continuity_at_checked(f, var, point, context);
 }
 
 
@@ -471,6 +490,7 @@ AsymptoteAnalysisResult asymptotes_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context)
 {
+    try {
     AsymptoteResult result;
     const std::string operation = "asymptotes";
     auto input = calculus_utils_validate_expr(f, var, context, operation);
@@ -485,7 +505,7 @@ AsymptoteAnalysisResult asymptotes_checked(
         auto solved_zeros = solve_equation(denominator, var, context, SolveOptions{});
         if (!solved_zeros) return AsymptoteAnalysisResult::failure(solved_zeros.error());
 
-        const auto& zero_set = solved_zeros.value();
+        const auto& zero_set = lamina::detail::propagate_result(solved_zeros);
         const auto* finite_zeros = std::get_if<FiniteSolutions>(&zero_set);
         if (!std::holds_alternative<EmptySolutions>(zero_set) &&
             !finite_zeros) {
@@ -526,13 +546,13 @@ AsymptoteAnalysisResult asymptotes_checked(
             if (!z || calculus_utils_is_infinity(z)) continue;
 
             /// 验证该点处极限为 +/-infinity
-            auto lim_at_z = lamina::limit_expression_checked(f, var, z).value();
+            auto lim_at_z = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, z, LimitDirection::Both, context));
             if (calculus_utils_is_infinity(lim_at_z)) {
                 result.vertical.push_back(z);
             } else {
                 /// 尝试单侧极限
-                auto lim_right = lamina::limit_expression_checked(f, var, z, LimitDirection::FromAbove).value();
-                auto lim_left = lamina::limit_expression_checked(f, var, z, LimitDirection::FromBelow).value();
+                auto lim_right = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, z, LimitDirection::FromAbove, context));
+                auto lim_left = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, z, LimitDirection::FromBelow, context));
                 if (calculus_utils_is_infinity(lim_right) || calculus_utils_is_infinity(lim_left)) {
                     result.vertical.push_back(z);
                 }
@@ -541,8 +561,8 @@ AsymptoteAnalysisResult asymptotes_checked(
     }
 
     /// 计算 x->+infinity 和 x->-infinity 的极限
-    auto lim_pos = lamina::limit_expression_checked(f, var, pos_inf).value();
-    auto lim_neg = lamina::limit_expression_checked(f, var, neg_inf).value();
+    auto lim_pos = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, pos_inf, LimitDirection::Both, context));
+    auto lim_neg = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, neg_inf, LimitDirection::Both, context));
 
     if (lim_pos) lim_pos = lim_pos->simplify();
     if (lim_neg) lim_neg = lim_neg->simplify();
@@ -576,14 +596,14 @@ AsymptoteAnalysisResult asymptotes_checked(
     if (!has_horiz_pos) {
         /// 计算 slope = lim(f/x) as x->+infinity
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
-        auto slope_pos = lamina::limit_expression_checked(f_over_x, var, pos_inf).value();
+        auto slope_pos = lamina::detail::propagate_result(lamina::limit_expression_checked(f_over_x, var, pos_inf, LimitDirection::Both, context));
         if (slope_pos) slope_pos = slope_pos->simplify();
 
         if (slope_pos && !calculus_utils_is_infinity(slope_pos) && !slope_pos->is_zero()) {
             /// 计算 intercept = lim(f - slope*x) as x->+infinity
             auto slope_times_x = SymbolicExpr::multiply(slope_pos, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
-            auto intercept_pos = lamina::limit_expression_checked(f_minus_mx, var, pos_inf).value();
+            auto intercept_pos = lamina::detail::propagate_result(lamina::limit_expression_checked(f_minus_mx, var, pos_inf, LimitDirection::Both, context));
             if (intercept_pos) intercept_pos = intercept_pos->simplify();
 
             if (intercept_pos && !calculus_utils_is_infinity(intercept_pos)) {
@@ -595,14 +615,14 @@ AsymptoteAnalysisResult asymptotes_checked(
     if (!has_horiz_neg) {
         /// 计算 slope = lim(f/x) as x->-infinity
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
-        auto slope_neg = lamina::limit_expression_checked(f_over_x, var, neg_inf).value();
+        auto slope_neg = lamina::detail::propagate_result(lamina::limit_expression_checked(f_over_x, var, neg_inf, LimitDirection::Both, context));
         if (slope_neg) slope_neg = slope_neg->simplify();
 
         if (slope_neg && !calculus_utils_is_infinity(slope_neg) && !slope_neg->is_zero()) {
             /// 计算 intercept = lim(f - slope*x) as x->-infinity
             auto slope_times_x = SymbolicExpr::multiply(slope_neg, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
-            auto intercept_neg = lamina::limit_expression_checked(f_minus_mx, var, neg_inf).value();
+            auto intercept_neg = lamina::detail::propagate_result(lamina::limit_expression_checked(f_minus_mx, var, neg_inf, LimitDirection::Both, context));
             if (intercept_neg) intercept_neg = intercept_neg->simplify();
 
             if (intercept_neg && !calculus_utils_is_infinity(intercept_neg)) {
@@ -623,6 +643,16 @@ AsymptoteAnalysisResult asymptotes_checked(
     }
 
     return AsymptoteAnalysisResult::success(std::move(result));
+    } catch (const detail::ResultPropagation& propagation) {
+        return AsymptoteAnalysisResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return AsymptoteAnalysisResult::failure(
+            CasErrc::ResourceLimit, "asymptote analysis allocation failed",
+            "asymptotes");
+    } catch (const std::exception& ex) {
+        return AsymptoteAnalysisResult::failure(
+            CasErrc::InternalInvariant, ex.what(), "asymptotes");
+    }
 }
 
 AsymptoteAnalysisResult asymptotes_checked(
@@ -699,7 +729,7 @@ ExpressionResult inverse_derivative_checked(
         std::vector<std::shared_ptr<SymbolicExpr>> candidates;
         auto inverse = inverse_function_checked(f, var, point, context);
         if (inverse) {
-            candidates = inverse.value();
+            candidates = lamina::detail::propagate_result(inverse);
         } else {
             return ExpressionResult::failure(inverse.error());
         }
@@ -826,7 +856,7 @@ SymbolicExprVectorResult inverse_function_checked(
         auto solved = solve_equation(eq, var, context, SolveOptions{});
         if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
-        const auto& solutions = solved.value();
+        const auto& solutions = lamina::detail::propagate_result(solved);
         if (std::holds_alternative<EmptySolutions>(solutions)) {
             return SymbolicExprVectorResult::success({});
         }
@@ -1083,7 +1113,7 @@ SymbolicExprVectorResult inflection_points_checked(
     auto solved = solve_equation(equation, var, context, SolveOptions{});
     if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
-    const auto& solutions = solved.value();
+    const auto& solutions = lamina::detail::propagate_result(solved);
     if (std::holds_alternative<EmptySolutions>(solutions)) {
         return SymbolicExprVectorResult::success({});
     }

@@ -25,17 +25,18 @@ enum class ContinuityType {
     Essential    ///< 本性间断点:至少一侧极限不存在或为无穷
 };
 
+using ContinuityResult = Result<ContinuityType>;
+
 /**
  * @brief 判断函数在指定点的连续性类型.
  *
  * 通过计算左极限,右极限和函数值来确定连续性分类.
- *
- * @param[in] f     待分析的函数表达式
- * @param[in] var   自变量名
- * @param[in] point 待检测的点
- * @return 连续性类型
  */
-LAMINA_API ContinuityType continuity_at(
+LAMINA_API ContinuityResult continuity_at_checked(
+    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
+    const std::shared_ptr<SymbolicExpr>& point, ComputationContext& context);
+
+LAMINA_API ContinuityResult continuity_at_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point);
 

@@ -1,0 +1,123 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 26,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "strict-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "LMCAS_BUILD_STANDALONE_TESTS": "ON",
+        "LMCAS_BUILD_LMMC_TESTS": "ON",
+        "LMCAS_BUILD_GTEST_TESTS": "OFF",
+        "LMCAS_BUILD_BENCHMARKS": "OFF",
+        "LMCAS_WARNINGS_AS_ERRORS": "ON",
+        "LMCAS_LMMP_ASM": "AUTO"
+      }
+    },
+    {
+      "name": "strict-debug",
+      "displayName": "Strict full LMCAS and LMMC test build",
+      "inherits": "strict-base"
+    },
+    {
+      "name": "linux-asan-ubsan",
+      "displayName": "Full LMCAS and LMMC ASan/UBSan build",
+      "inherits": "strict-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "LMCAS_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
+      "name": "linux-tsan",
+      "displayName": "Full LMCAS and LMMC TSan build",
+      "inherits": "strict-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "LMCAS_ENABLE_TSAN": "ON"
+      }
+    },
+    {
+      "name": "package",
+      "displayName": "Installable LMCAS package",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/package-install",
+        "BUILD_TESTING": "OFF",
+        "LMCAS_BUILD_STANDALONE_TESTS": "OFF",
+        "LMCAS_BUILD_LMMC_TESTS": "OFF",
+        "LMCAS_BUILD_GTEST_TESTS": "OFF",
+        "LMCAS_WARNINGS_AS_ERRORS": "ON",
+        "LMCAS_LMMP_ASM": "AUTO"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "strict-debug",
+      "configurePreset": "strict-debug",
+      "jobs": 4
+    },
+    {
+      "name": "linux-asan-ubsan",
+      "configurePreset": "linux-asan-ubsan",
+      "jobs": 4
+    },
+    {
+      "name": "linux-tsan",
+      "configurePreset": "linux-tsan",
+      "jobs": 4
+    },
+    {
+      "name": "package",
+      "configurePreset": "package",
+      "jobs": 4,
+      "targets": ["install"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "strict-debug",
+      "configurePreset": "strict-debug",
+      "output": { "outputOnFailure": true },
+      "execution": { "jobs": 4, "timeout": 300 }
+    },
+    {
+      "name": "linux-asan-ubsan",
+      "configurePreset": "linux-asan-ubsan",
+      "output": { "outputOnFailure": true },
+      "execution": { "jobs": 4, "timeout": 300 },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:strict_string_checks=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+      }
+    },
+    {
+      "name": "linux-tsan",
+      "configurePreset": "linux-tsan",
+      "output": { "outputOnFailure": true },
+      "execution": { "jobs": 4, "timeout": 300 },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
+      }
+    }
+  ]
+}

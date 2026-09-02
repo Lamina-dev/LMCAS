@@ -8,6 +8,16 @@
 
 using namespace lamina;
 
+static ODESingularityType checked_singularity(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& point,
+    const std::string& variable) {
+    auto result =
+        classify_singular_point_checked(p, q, point, variable);
+    EXPECT_TRUE(result.has_value(), "checked singularity classification succeeds");
+    return result ? result.value() : ODESingularityType::IrregularSingular;
+}
 
 void test_homogeneous_ode() {
     TEST_CASE("Homogeneous ODE: y' = y/x");
@@ -540,7 +550,7 @@ void test_frobenius() {
         auto q = SymbolicExpr::number(1);
         auto x0 = SymbolicExpr::number(0);
 
-        auto type = classify_singular_point(p, q, x0, "x");
+        auto type = checked_singularity(p, q, x0, "x");
         EXPECT_TRUE(type == ODESingularityType::Ordinary, "y''+y=0 at x=0 is ordinary");
     }
 
@@ -555,7 +565,7 @@ void test_frobenius() {
         auto q = SymbolicExpr::number(1);  // n=0 的 Bessel
         auto x0 = SymbolicExpr::number(0);
 
-        auto type = classify_singular_point(p, q, x0, "x");
+        auto type = checked_singularity(p, q, x0, "x");
         EXPECT_TRUE(type == ODESingularityType::RegularSingular,
             "Bessel at x=0 is regular singular");
     }
@@ -621,7 +631,7 @@ void test_frobenius() {
             SymbolicExpr::power(x, SymbolicExpr::number(3)));
         auto x0 = SymbolicExpr::number(0);
 
-        auto type = classify_singular_point(p, q, x0, "x");
+        auto type = checked_singularity(p, q, x0, "x");
         EXPECT_TRUE(type == ODESingularityType::IrregularSingular,
             "1/x^3 coefficient gives irregular singular point");
 

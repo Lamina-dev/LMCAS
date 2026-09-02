@@ -9,6 +9,30 @@
 #include "../include/quantity.hpp"
 
 int main() {
+    TEST_CASE("Result propagation preserves lvalue lifetime");
+    auto mutable_result =
+        lamina::Result<std::vector<int>>::success({1, 2, 3});
+    auto& mutable_value =
+        lamina::detail::propagate_result(mutable_result);
+    EXPECT_TRUE(&mutable_value == &mutable_result.value(),
+                "mutable propagation references the stored value");
+    mutable_value[0] = 7;
+    EXPECT_TRUE(mutable_result.value()[0] == 7,
+                "mutable propagation does not reference a temporary copy");
+
+    const auto const_result =
+        lamina::Result<std::vector<int>>::success({4, 5});
+    const auto& const_value =
+        lamina::detail::propagate_result(const_result);
+    EXPECT_TRUE(&const_value == &const_result.value(),
+                "const propagation references the stored value");
+
+    auto moved_value = lamina::detail::propagate_result(
+        lamina::Result<std::unique_ptr<int>>::success(
+            std::make_unique<int>(9)));
+    EXPECT_TRUE(moved_value && *moved_value == 9,
+                "rvalue propagation moves move-only values");
+
     TEST_CASE("SolutionSet alternatives are closed and state-specific");
 
     lamina::SolutionSet empty = lamina::EmptySolutions{};

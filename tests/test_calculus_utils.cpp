@@ -18,6 +18,15 @@ static std::shared_ptr<SymbolicExpr> bigint_num(const BigInt& n) {
             std::variant<BigInt, Rational, lmmc_real_t>{
                 std::in_place_type<BigInt>, n}));
 }
+static lamina::ContinuityType checked_continuity(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable,
+    const std::shared_ptr<SymbolicExpr>& point) {
+    auto result =
+        lamina::continuity_at_checked(expression, variable, point);
+    EXPECT_TRUE(result.has_value(), "checked continuity succeeds");
+    return result ? result.value() : lamina::ContinuityType::Essential;
+}
 
 int main() {
     TEST_CASE("continuity_at: polynomial is continuous everywhere");
@@ -25,7 +34,7 @@ int main() {
         // f(x) = x^2 is continuous at x=1
         auto x = var("x");
         auto f = SE::power(x, num(2));
-        auto result = lamina::continuity_at(f, "x", num(1));
+        auto result = checked_continuity(f, "x", num(1));
         EXPECT_TRUE(result == lamina::ContinuityType::Continuous,
                     "x^2 is continuous at x=1");
     }
@@ -35,7 +44,7 @@ int main() {
         // f(x) = 1/x has essential discontinuity at x=0 (limit is ±∞)
         auto x = var("x");
         auto f = SE::divide(num(1), x);
-        auto result = lamina::continuity_at(f, "x", num(0));
+        auto result = checked_continuity(f, "x", num(0));
         EXPECT_TRUE(result == lamina::ContinuityType::Essential,
                     "1/x has essential discontinuity at x=0");
     }
@@ -48,7 +57,7 @@ int main() {
         auto numerator = SE::add(SE::power(x, num(2)), num(-1)); // x^2 - 1
         auto denominator = SE::add(x, num(-1));                   // x - 1
         auto f = SE::divide(numerator, denominator);
-        auto result = lamina::continuity_at(f, "x", num(1));
+        auto result = checked_continuity(f, "x", num(1));
         EXPECT_TRUE(result == lamina::ContinuityType::Removable,
                     "(x^2-1)/(x-1) has removable discontinuity at x=1");
     }
@@ -64,16 +73,17 @@ int main() {
         auto exp_term = SE::exp(one_over_x);
         auto denom = SE::add(num(1), exp_term);
         auto f = SE::divide(num(1), denom);
-        auto result = lamina::continuity_at(f, "x", num(0));
+        auto result = checked_continuity(f, "x", num(0));
         EXPECT_TRUE(result == lamina::ContinuityType::Jump,
                     "1/(1+e^(1/x)) has jump discontinuity at x=0");
     }
 
-    TEST_CASE("continuity_at: null input returns Essential");
+    TEST_CASE("continuity_at_checked: null input is invalid");
     {
-        auto result = lamina::continuity_at(nullptr, "x", num(0));
-        EXPECT_TRUE(result == lamina::ContinuityType::Essential,
-                    "null input returns Essential");
+        auto result = lamina::continuity_at_checked(nullptr, "x", num(0));
+        EXPECT_TRUE(!result.has_value() &&
+                        result.error().code == lamina::CasErrc::InvalidArgument,
+                    "null continuity input is rejected");
     }
 
     TEST_CASE("asymptotes: 1/x has vertical at x=0, horizontal at y=0");

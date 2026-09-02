@@ -51,7 +51,13 @@ int main() {
         auto eq = SymbolicExpr::add(frac, SymbolicExpr::number(-2));
 
         std::vector<SymbolicExpr> eqs = {*eq};
-        auto sols = lamina::Solver::solve_polynomial_system(eqs, {"x"});
+        auto checked_solutions =
+            lamina::Solver::solve_polynomial_system_checked(eqs, {"x"});
+        EXPECT_TRUE(checked_solutions.has_value(),
+                    "checked rational system solve succeeds");
+        auto sols = checked_solutions
+            ? std::move(checked_solutions.value())
+            : std::vector<std::map<std::string, SymbolicExpr>>{};
         EXPECT_TRUE(sols.size() == 1, "rational system solutions size");
         if (!sols.empty()) {
             auto x_val = lamina::detail::make_expression_ptr(sols[0].at("x"));

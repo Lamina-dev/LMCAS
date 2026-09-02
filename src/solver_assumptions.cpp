@@ -274,13 +274,16 @@ static bool is_integer_value(double v) {
 
 } // anonymous namespace
 
-std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions(
+static std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions_impl(
     const std::shared_ptr<SymbolicExpr>& equation,
     const std::string& variable,
-    const AssumptionContext* ctx)
+    const AssumptionContext* ctx,
+    ComputationContext& context)
 {
     // Step 1: Compute all solutions using the existing solver
-    auto all_solutions = lamina::solve_finite_checked(std::const_pointer_cast<SymbolicExpr>(equation), variable).value();
+    auto all_solutions = detail::propagate_result(
+        solve_finite_checked(
+            std::const_pointer_cast<SymbolicExpr>(equation), variable, context));
 
     // Step 2: If no context provided, return all solutions unfiltered
     if (!ctx) {
@@ -382,6 +385,48 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions(
     }
 
     return filtered;
+}
+
+AssumptionSolveResult solve_with_assumptions_checked(
+    const std::shared_ptr<SymbolicExpr>& equation,
+    const std::string& variable,
+    const AssumptionContext* assumptions,
+    ComputationContext& context)
+{
+    constexpr const char* operation = "solve_with_assumptions";
+    if (!equation || variable.empty()) {
+        return AssumptionSolveResult::failure(
+            CasErrc::InvalidArgument,
+            "assumption-aware solve requires an equation and variable",
+            operation);
+    }
+    auto budget = context.consume_steps(1, operation);
+    if (!budget) return AssumptionSolveResult::failure(budget.error());
+    try {
+        return AssumptionSolveResult::success(
+            solve_with_assumptions_impl(
+                equation, variable, assumptions, context));
+    } catch (const detail::ResultPropagation& propagation) {
+        return AssumptionSolveResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return AssumptionSolveResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while solving with assumptions",
+            operation);
+    } catch (const std::exception& ex) {
+        return AssumptionSolveResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+}
+
+AssumptionSolveResult solve_with_assumptions_checked(
+    const std::shared_ptr<SymbolicExpr>& equation,
+    const std::string& variable,
+    const AssumptionContext* assumptions)
+{
+    ComputationContext context;
+    return solve_with_assumptions_checked(
+        equation, variable, assumptions, context);
 }
 
 

@@ -147,7 +147,7 @@ int main() {
                 SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(11), x),
                     SymbolicExpr::number(-6))));
 
-            auto factored = expr->factor();
+            auto factored = lamina::detail::propagate_result(expr->factor_checked());
             std::cout << "  Factored: " << factored->to_string() << std::endl;
 
             // 验证：代入 x=1, x=2, x=3 应得 0

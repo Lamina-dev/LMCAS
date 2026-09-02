@@ -120,7 +120,11 @@ bool sf_match_exp_neg_quad(const std::shared_ptr<const SymbolicNode>& node,
     Polynomial<Rational> poly;
     try {
         poly = symbolic_to_poly<Rational>(lamina::detail::make_expression_ptr(arg), var);
-    } catch (...) {
+    } catch (const std::invalid_argument&) {
+        return false;
+    } catch (const std::out_of_range&) {
+        return false;
+    } catch (const std::runtime_error&) {
         return false;
     }
     if (poly.degree() != 2) return false;

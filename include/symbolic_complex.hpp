@@ -183,42 +183,39 @@ LAMINA_API ComplexRootsResult solve_complex_nth_root_checked(
     int n);
 
 /**
- * @brief 求复系数一元二次方程 az^2 + bz + c = 0 的根
- * @param a 二次项系数
- * @param b 一次项系数
- * @param c 常数项
- * @return 两个复数根
+ * @brief 求复系数一元二次方程 az^2 + bz + c = 0 的根.
  */
-LAMINA_API std::vector<ComplexSymbolic> solve_complex_quadratic(
+LAMINA_API ComplexRootsResult solve_complex_quadratic_checked(
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
-    std::shared_ptr<SymbolicExpr> c
-);
+    std::shared_ptr<SymbolicExpr> c,
+    ComputationContext& context);
 
-/**
- * @brief 生成以 a 为圆心、r 为半径的复数轨迹方程 |z - a| = r
- * @param a 圆心复数
- * @param r 半径
- * @param z_var 复变量名，默认为 "z"
- * @return 轨迹方程的符号表达式
- */
-LAMINA_API std::shared_ptr<SymbolicExpr> complex_locus_circle(
+LAMINA_API ComplexRootsResult solve_complex_quadratic_checked(
+    std::shared_ptr<SymbolicExpr> a,
+    std::shared_ptr<SymbolicExpr> b,
+    std::shared_ptr<SymbolicExpr> c);
+
+LAMINA_API ExpressionResult complex_locus_circle_checked(
     const ComplexSymbolic& a,
     std::shared_ptr<SymbolicExpr> r,
-    const std::string& z_var = "z"
-);
+    const std::string& z_var,
+    ComputationContext& context);
 
-/**
- * @brief 生成复数 a 和 b 的中垂线轨迹方程 |z - a| = |z - b|
- * @param a 第一个复数点
- * @param b 第二个复数点
- * @param z_var 复变量名，默认为 "z"
- * @return 轨迹方程的符号表达式
- */
-LAMINA_API std::shared_ptr<SymbolicExpr> complex_locus_perpendicular_bisector(
+LAMINA_API ExpressionResult complex_locus_circle_checked(
+    const ComplexSymbolic& a,
+    std::shared_ptr<SymbolicExpr> r,
+    const std::string& z_var = "z");
+
+LAMINA_API ExpressionResult complex_locus_perpendicular_bisector_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
-    const std::string& z_var = "z"
-);
+    const std::string& z_var,
+    ComputationContext& context);
+
+LAMINA_API ExpressionResult complex_locus_perpendicular_bisector_checked(
+    const ComplexSymbolic& a,
+    const ComplexSymbolic& b,
+    const std::string& z_var = "z");
 
 }

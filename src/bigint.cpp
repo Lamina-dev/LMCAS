@@ -1,4 +1,5 @@
 #include "bigint.hpp"
+#include "internal/lmmc_lifecycle.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,10 +9,25 @@
 #include <stdexcept>
 
 namespace {
-void bigint_free(void* pointer) { lmmp_free(pointer); }
-void* bigint_alloc(std::size_t size) { return lmmp_alloc(size); }
-void bigint_mul_(mp_ptr destination, mp_srcptr lhs, mp_size_t lhs_size, mp_srcptr rhs, mp_size_t rhs_size) { ::lmmp_mul_(destination, lhs, lhs_size, rhs, rhs_size); }
-void bigint_div_(mp_ptr quotient, mp_ptr remainder, mp_srcptr numerator, mp_size_t numerator_size, mp_srcptr denominator, mp_size_t denominator_size) { ::lmmp_div_(quotient, remainder, numerator, numerator_size, denominator, denominator_size); }
+void bigint_free(void* pointer) noexcept {
+    ::operator delete[](pointer);
+}
+
+void* bigint_alloc(std::size_t size) {
+    return ::operator new[](size);
+}
+void bigint_mul_(mp_ptr destination, mp_srcptr lhs, mp_size_t lhs_size,
+                 mp_srcptr rhs, mp_size_t rhs_size) {
+    lamina::detail::ensure_lmmc_lifecycle();
+    ::lmmp_mul_(destination, lhs, lhs_size, rhs, rhs_size);
+}
+void bigint_div_(mp_ptr quotient, mp_ptr remainder, mp_srcptr numerator,
+                 mp_size_t numerator_size, mp_srcptr denominator,
+                 mp_size_t denominator_size) {
+    lamina::detail::ensure_lmmc_lifecycle();
+    ::lmmp_div_(quotient, remainder, numerator, numerator_size, denominator,
+                denominator_size);
+}
 } // namespace
 
 void BigInt::realloc_to(mp_size_t new_alloc) {
@@ -26,8 +42,8 @@ void BigInt::realloc_to(mp_size_t new_alloc) {
             throw std::length_error("BigInt allocation byte size overflow");
         }
 
-        mp_ptr new_data = static_cast<mp_ptr>(bigint_alloc(rounded * sizeof(mp_limb_t)));
-        if (!new_data) throw std::bad_alloc();
+        mp_ptr new_data =
+            static_cast<mp_ptr>(bigint_alloc(rounded * sizeof(mp_limb_t)));
 
         if (_size > 0 && _data) {
              std::memcpy(new_data, _data, _size * sizeof(mp_limb_t));
@@ -43,20 +59,17 @@ void BigInt::normalize() {
         }
         if (_size == 0) {
             _sign = ZERO;
-            negative = false;
-        } else {
-             if (_sign == ZERO) _sign = POSITIVE;
-             negative = (_sign == NEGATIVE);
+        } else if (_sign == ZERO) {
+            _sign = POSITIVE;
         }
     }
 
 void BigInt::zero() {
         _size = 0;
         _sign = ZERO;
-        negative = false;
     }
 
-BigInt::BigInt() : _data(nullptr), _size(0), _alloc(0), _sign(ZERO), negative(false) {}
+BigInt::BigInt() : _data(nullptr), _size(0), _alloc(0), _sign(ZERO) {}
 
 BigInt::~BigInt() {
         if (_data) bigint_free(_data);
@@ -68,19 +81,19 @@ BigInt::BigInt(const BigInt& other) {
             std::memcpy(_data, other._data, other._size * sizeof(mp_limb_t));
             _size = other._size;
             _sign = other._sign;
-            negative = other.negative;
+            ;
         } else {
             zero();
         }
     }
 
 BigInt::BigInt(BigInt&& other) noexcept
-        : _data(other._data), _size(other._size), _alloc(other._alloc), _sign(other._sign), negative(other.negative) {
+        : _data(other._data), _size(other._size), _alloc(other._alloc), _sign(other._sign) {
         other._data = nullptr;
         other._size = 0;
         other._alloc = 0;
         other._sign = ZERO;
-        other.negative = false;
+        ;
     }
 
 BigInt& BigInt::operator=(const BigInt& other) {
@@ -92,7 +105,7 @@ BigInt& BigInt::operator=(const BigInt& other) {
                 std::memcpy(_data, other._data, other._size * sizeof(mp_limb_t));
             _size = other._size;
             _sign = other._sign;
-            negative = other.negative;
+            ;
         }
         return *this;
     }
@@ -104,9 +117,10 @@ BigInt& BigInt::operator=(BigInt&& other) noexcept {
             _size = other._size;
             _alloc = other._alloc;
             _sign = other._sign;
-            negative = other.negative;
+            ;
 
             other._data = nullptr;
+            other._alloc = 0;
             other.zero();
         }
         return *this;
@@ -120,7 +134,7 @@ BigInt::BigInt(long long val) {
         realloc_to(1);
         if (val < 0) {
             _sign = NEGATIVE;
-            negative = true;
+            ;
 
             if (val == std::numeric_limits<long long>::min()) {
                  _data[0] = (uint64_t)(-(val + 1)) + 1;
@@ -129,7 +143,7 @@ BigInt::BigInt(long long val) {
             }
         } else {
             _sign = POSITIVE;
-            negative = false;
+            ;
             _data[0] = val;
         }
         _size = 1;
@@ -144,7 +158,7 @@ BigInt::BigInt(unsigned long long val) {
         }
         realloc_to(1);
         _sign = POSITIVE;
-        negative = false;
+        ;
         _data[0] = val;
         _size = 1;
     }
@@ -184,6 +198,7 @@ BigInt::BigInt(const std::string& str) {
 
         mp_size_t needed = len / 19 + 2;
         realloc_to(needed);
+        lamina::detail::ensure_lmmc_lifecycle();
 
         _size = lmmp_from_str_(_data, digit_buf.data(), len, 10);
 
@@ -191,12 +206,13 @@ BigInt::BigInt(const std::string& str) {
             zero();
         } else {
             _sign = sign;
-            negative = (_sign == NEGATIVE);
+            ;
         }
         normalize();
     }
 
 std::string BigInt::ToString() const {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (_size == 0) return "0";
 
         size_t len_needed = _size * 20 + 5;
@@ -330,9 +346,7 @@ std::size_t BigInt::hash() const {
         for (mp_size_t i = 0; i < _size; ++i) {
             seed ^= std::hash<uint64_t>{}(_data[i]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
         }
-        if (negative) {
-            seed ^= std::hash<int>{}(-1) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
+        if (_sign == NEGATIVE) { seed ^= std::hash<int>{}(-1) + 0x9e3779b9 + (seed << 6) + (seed >> 2); }
         return seed;
     }
 
@@ -340,7 +354,7 @@ BigInt BigInt::Abs() const {
         BigInt ret = *this;
         if (ret._size > 0) {
             ret._sign = POSITIVE;
-            ret.negative = false;
+            ;
         }
         return ret;
     }
@@ -351,7 +365,7 @@ BigInt BigInt::negate() const {
         BigInt ret = *this;
         if (ret._size > 0) {
             ret._sign = (ret._sign == POSITIVE) ? NEGATIVE : POSITIVE;
-            ret.negative = (ret._sign == NEGATIVE);
+            ;
         }
         return ret;
     }
@@ -420,7 +434,7 @@ BigInt BigInt::operator+(const BigInt& other) const {
         if (_sign == other._sign) {
             add_abs(res, *this, other);
             res._sign = _sign;
-            res.negative = (_sign == NEGATIVE);
+            ;
         } else {
 
             int cmp = cmp_abs(*this, other);
@@ -430,11 +444,11 @@ BigInt BigInt::operator+(const BigInt& other) const {
             if (cmp > 0) {
                 sub_abs(res, *this, other);
                 res._sign = _sign;
-                res.negative = (_sign == NEGATIVE);
+                ;
             } else {
                 sub_abs(res, other, *this);
                 res._sign = other._sign;
-                res.negative = (res._sign == NEGATIVE);
+                ;
             }
         }
         return res;
@@ -460,7 +474,7 @@ BigInt BigInt::operator*(const BigInt& other) const {
 
         res._size = na + nb;
         res._sign = (_sign == other._sign) ? POSITIVE : NEGATIVE;
-        res.negative = (res._sign == NEGATIVE);
+        ;
         res.normalize();
         return res;
     }
@@ -480,7 +494,7 @@ BigInt BigInt::operator/(const BigInt& other) const {
 
         q._size = na - nb + 1;
         q._sign = (_sign == other._sign) ? POSITIVE : NEGATIVE;
-        q.negative = (q._sign == NEGATIVE);
+        ;
         q.normalize();
         return q;
     }
@@ -501,7 +515,7 @@ BigInt BigInt::operator%(const BigInt& other) const {
 
         r._size = nb;
         r._sign = _sign;
-        r.negative = (r._sign == NEGATIVE);
+        ;
         r.normalize();
         return r;
     }
@@ -517,6 +531,7 @@ BigInt& BigInt::operator/=(const BigInt& other) { *this = *this / other; return 
 BigInt& BigInt::operator%=(const BigInt& other) { *this = *this % other; return *this; }
 
 BigInt BigInt::power(unsigned long exp) const {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (exp == 0) return BigInt(1);
         if (_size == 0) return BigInt(0);
 
@@ -528,10 +543,10 @@ BigInt BigInt::power(unsigned long exp) const {
 
         if (_sign == NEGATIVE && (exp & 1)) {
             res._sign = NEGATIVE;
-            res.negative = true;
+            ;
         } else {
             res._sign = POSITIVE;
-            res.negative = false;
+            ;
         }
         res.normalize();
         return res;
@@ -574,6 +589,7 @@ BigInt BigInt::power(BigInt exp) const {
     }
 
 BigInt BigInt::sqrt() const {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (_sign == NEGATIVE) throw std::domain_error("Sqrt of negative number");
         if (_size == 0) return BigInt(0);
         if (*this == BigInt(1)) return BigInt(1);
@@ -588,7 +604,7 @@ BigInt BigInt::sqrt() const {
 
         res._size = root_size;
         res._sign = POSITIVE;
-        res.negative = false;
+        ;
         res.normalize();
 
         return res;
@@ -604,6 +620,7 @@ bool BigInt::is_even() const {
     }
 
 mp_size_t BigInt::trailing_zeros() const {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (is_zero()) return 0;
         mp_size_t count = 0;
         for (mp_size_t i = 0; i < _size; ++i) {
@@ -618,6 +635,7 @@ mp_size_t BigInt::trailing_zeros() const {
     }
 
 BigInt& BigInt::operator>>=(mp_size_t shift) {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (shift == 0) return *this;
         if (is_zero()) return *this;
 
@@ -625,9 +643,7 @@ BigInt& BigInt::operator>>=(mp_size_t shift) {
         mp_size_t bit_shift = shift % LIMB_BITS;
 
         if (limb_shift >= _size) {
-            _size = 0;
-            _sign = POSITIVE;
-            negative = false;
+            zero();
             return *this;
         }
 
@@ -689,18 +705,20 @@ BigInt BigInt::operator<<(mp_size_t shift) const {
     }
 
 BigInt BigInt::factorial(unsigned int n) {
+        lamina::detail::ensure_lmmc_lifecycle();
         BigInt res;
         mp_bitcnt_t bits = 0;
         mp_size_t needed = lmmp_factorial_size_(n, &bits);
         res.realloc_to(needed);
         res._size = lmmp_factorial_(res._data, bits, needed, n);
         res._sign = POSITIVE;
-        res.negative = false;
+        ;
         res.normalize();
         return res;
     }
 
 BigInt BigInt::nPr(unsigned int n, unsigned int r) {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (r > n) return BigInt(0);
         BigInt res;
         mp_bitcnt_t bits = 0;
@@ -708,12 +726,13 @@ BigInt BigInt::nPr(unsigned int n, unsigned int r) {
         res.realloc_to(needed);
         res._size = lmmp_nPr_(res._data, bits, needed, n, r);
         res._sign = POSITIVE;
-        res.negative = false;
+        ;
         res.normalize();
         return res;
     }
 
 BigInt BigInt::nCr(unsigned int n, unsigned int r) {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (r > n) return BigInt(0);
         BigInt res;
         mp_bitcnt_t bits = 0;
@@ -721,12 +740,13 @@ BigInt BigInt::nCr(unsigned int n, unsigned int r) {
         res.realloc_to(needed);
         res._size = lmmp_nCr_(res._data, bits, needed, n, r);
         res._sign = POSITIVE;
-        res.negative = false;
+        ;
         res.normalize();
         return res;
     }
 
 BigInt BigInt::multinomial(unsigned int n, const std::vector<unsigned int>& r) {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (r.empty()) return BigInt(1);
 
         std::vector<uint> r_uints;
@@ -746,12 +766,13 @@ BigInt BigInt::multinomial(unsigned int n, const std::vector<unsigned int>& r) {
         res.realloc_to(needed);
         res._size = lmmp_multinomial_(res._data, needed, (uint)sum, r_uints.data(), (uint)r_uints.size());
         res._sign = POSITIVE;
-        res.negative = false;
+        ;
         res.normalize();
         return res;
     }
 
 BigInt BigInt::gcd(const BigInt& a, const BigInt& b) {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (a.is_zero()) return b.Abs();
         if (b.is_zero()) return a.Abs();
 
@@ -768,7 +789,7 @@ BigInt BigInt::gcd(const BigInt& a, const BigInt& b) {
         res._size = lmmp_gcd_lehmer_(res._data, abs_a._data, na, abs_b._data, nb);
 
         res._sign = POSITIVE;
-        res.negative = false;
+        ;
         res.normalize();
         return res;
     }
@@ -779,6 +800,7 @@ BigInt BigInt::lcm(const BigInt& a, const BigInt& b) {
     }
 
 BigInt BigInt::pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod) {
+         lamina::detail::ensure_lmmc_lifecycle();
          if (mod.is_zero()) throw std::runtime_error("Modulo by zero");
 
          if (base._size <= 1 && exp._size <= 1 && mod._size <= 1) {
@@ -803,6 +825,7 @@ BigInt BigInt::pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod)
     }
 
 bool BigInt::is_prime() const {
+        lamina::detail::ensure_lmmc_lifecycle();
         if (_sign == NEGATIVE) return false;
 
         if (_size <= 1) {

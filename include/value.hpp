@@ -112,7 +112,9 @@ public:
             try {
                 auto simp = sp->simplify();
                 return simp && simp->is_number();
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
+                return false;
+            } catch (const std::out_of_range&) {
                 return false;
             }
         }

@@ -170,6 +170,14 @@ LAMINA_API ExpressionResult matrix_scaling_checked(
 );
 
 
+LAMINA_API ExpressionResult matrix_characteristic_polynomial_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    const std::string& variable,
+    ComputationContext& context);
+
+LAMINA_API ExpressionResult matrix_characteristic_polynomial_checked(
+    const std::shared_ptr<SymbolicExpr>& A,
+    const std::string& variable = "lambda");
 /**
  * @brief 计算符号矩阵的特征值
  * @param A 输入矩阵

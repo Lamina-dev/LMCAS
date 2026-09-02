@@ -21,6 +21,10 @@ constexpr const char* kComplexAbsOperation = "complex_abs";
 constexpr const char* kComplexArgOperation = "complex_arg";
 constexpr const char* kComplexPolarOperation = "complex_polar_form";
 constexpr const char* kComplexNthRootOperation = "solve_complex_nth_root";
+constexpr const char* kComplexQuadraticOperation = "solve_complex_quadratic";
+constexpr const char* kComplexLocusCircleOperation = "complex_locus_circle";
+constexpr const char* kComplexLocusBisectorOperation =
+    "complex_locus_perpendicular_bisector";
 
 Result<void> validate_complex_symbolic(const ComplexSymbolic& z,
                                        const char* name,
@@ -64,6 +68,8 @@ template <typename T, typename F>
 Result<T> checked_construct(F&& f, const std::string& operation) {
     try {
         return Result<T>::success(f());
+    } catch (const detail::ResultPropagation& propagation) {
+        return Result<T>::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return Result<T>::failure(CasErrc::ResourceLimit,
                                   "symbolic complex allocation failed", operation);
@@ -267,9 +273,9 @@ ComplexRootsResult solve_complex_nth_root_checked(std::shared_ptr<SymbolicExpr> 
         for (int k = 0; k < n; ++k) {
             double root_r = std::pow(r, 1.0 / n);
             double root_theta = (theta + 2 * LMMC_CONST_PI * k) / n;
-            roots.push_back(complex_exp_form_checked(
+            roots.push_back(lamina::detail::propagate_result(complex_exp_form_checked(
                 SymbolicExpr::number(root_r),
-                SymbolicExpr::number(root_theta), context).value());
+                SymbolicExpr::number(root_theta), context)));
         }
         return roots;
     }, kComplexNthRootOperation);
@@ -279,34 +285,116 @@ ComplexRootsResult solve_complex_nth_root_checked(std::shared_ptr<SymbolicExpr> 
     return solve_complex_nth_root_checked(std::move(c), n, context);
 }
 
-std::vector<ComplexSymbolic> solve_complex_quadratic(std::shared_ptr<SymbolicExpr> a, std::shared_ptr<SymbolicExpr> b, std::shared_ptr<SymbolicExpr> c) {
-
-    auto four_ac = SymbolicExpr::multiply(SymbolicExpr::number(4), SymbolicExpr::multiply(a, c));
-    auto delta = SymbolicExpr::add(SymbolicExpr::power(b, SymbolicExpr::number(2)), SymbolicExpr::multiply(SymbolicExpr::number(-1), four_ac));
-    auto sqrt_delta = SymbolicExpr::sqrt(delta);
-    auto denom = SymbolicExpr::multiply(SymbolicExpr::number(2), a);
-    auto z1 = complex_div_checked(make_complex(SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(-1), b), sqrt_delta), SymbolicExpr::number(0)), make_complex(denom, SymbolicExpr::number(0))).value();
-    auto z2 = complex_div_checked(make_complex(SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(-1), b), SymbolicExpr::multiply(SymbolicExpr::number(-1), sqrt_delta)), SymbolicExpr::number(0)), make_complex(denom, SymbolicExpr::number(0))).value();
-    return {z1, z2};
+ComplexRootsResult solve_complex_quadratic_checked(
+    std::shared_ptr<SymbolicExpr> a, std::shared_ptr<SymbolicExpr> b,
+    std::shared_ptr<SymbolicExpr> c, ComputationContext& context) {
+    auto va = validate_expr(a, "a", context, kComplexQuadraticOperation);
+    if (!va) return ComplexRootsResult::failure(va.error());
+    auto vb = validate_expr(b, "b", context, kComplexQuadraticOperation);
+    if (!vb) return ComplexRootsResult::failure(vb.error());
+    auto vc = validate_expr(c, "c", context, kComplexQuadraticOperation);
+    if (!vc) return ComplexRootsResult::failure(vc.error());
+    return checked_construct<std::vector<ComplexSymbolic>>([&]() {
+        auto four_ac = SymbolicExpr::multiply(
+            SymbolicExpr::number(4), SymbolicExpr::multiply(a, c));
+        auto delta = SymbolicExpr::add(
+            SymbolicExpr::power(b, SymbolicExpr::number(2)),
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), four_ac));
+        auto sqrt_delta = SymbolicExpr::sqrt(delta);
+        auto denominator = SymbolicExpr::multiply(SymbolicExpr::number(2), a);
+        auto real_denominator =
+            make_complex(denominator, SymbolicExpr::number(0));
+        auto first_numerator = make_complex(
+            SymbolicExpr::add(
+                SymbolicExpr::multiply(SymbolicExpr::number(-1), b),
+                sqrt_delta),
+            SymbolicExpr::number(0));
+        auto second_numerator = make_complex(
+            SymbolicExpr::add(
+                SymbolicExpr::multiply(SymbolicExpr::number(-1), b),
+                SymbolicExpr::multiply(SymbolicExpr::number(-1), sqrt_delta)),
+            SymbolicExpr::number(0));
+        auto first = detail::propagate_result(
+            complex_div_checked(first_numerator, real_denominator, context));
+        auto second = detail::propagate_result(
+            complex_div_checked(second_numerator, real_denominator, context));
+        return std::vector<ComplexSymbolic>{std::move(first), std::move(second)};
+    }, kComplexQuadraticOperation);
 }
 
-std::shared_ptr<SymbolicExpr> complex_locus_circle(const ComplexSymbolic& a, std::shared_ptr<SymbolicExpr> r, const std::string& z_var) {
-
-    auto z = SymbolicExpr::variable(z_var);
-    auto z_minus_a = complex_sub_checked(
-        make_complex(z, SymbolicExpr::number(0)), a).value();
-    return SymbolicExpr::eq(complex_abs_checked(z_minus_a).value(), r);
+ComplexRootsResult solve_complex_quadratic_checked(
+    std::shared_ptr<SymbolicExpr> a, std::shared_ptr<SymbolicExpr> b,
+    std::shared_ptr<SymbolicExpr> c) {
+    ComputationContext context;
+    return solve_complex_quadratic_checked(
+        std::move(a), std::move(b), std::move(c), context);
 }
-std::shared_ptr<SymbolicExpr> complex_locus_perpendicular_bisector(const ComplexSymbolic& a, const ComplexSymbolic& b, const std::string& z_var) {
 
-    auto z = SymbolicExpr::variable(z_var);
-    auto z_minus_a = complex_sub_checked(
-        make_complex(z, SymbolicExpr::number(0)), a).value();
-    auto z_minus_b = complex_sub_checked(
-        make_complex(z, SymbolicExpr::number(0)), b).value();
-    return SymbolicExpr::eq(
-        complex_abs_checked(z_minus_a).value(),
-        complex_abs_checked(z_minus_b).value());
+ExpressionResult complex_locus_circle_checked(
+    const ComplexSymbolic& a, std::shared_ptr<SymbolicExpr> r,
+    const std::string& z_var, ComputationContext& context) {
+    auto va = validate_complex_symbolic(
+        a, "a", context, kComplexLocusCircleOperation);
+    if (!va) return ExpressionResult::failure(va.error());
+    auto vr = validate_expr(r, "r", context, kComplexLocusCircleOperation);
+    if (!vr) return ExpressionResult::failure(vr.error());
+    if (z_var.empty()) {
+        return ExpressionResult::failure(
+            CasErrc::InvalidArgument, "complex variable must not be empty",
+            kComplexLocusCircleOperation);
+    }
+    return checked_construct<std::shared_ptr<SymbolicExpr>>([&]() {
+        auto z = SymbolicExpr::variable(z_var);
+        auto difference = detail::propagate_result(complex_sub_checked(
+            make_complex(z, SymbolicExpr::number(0)), a, context));
+        auto magnitude =
+            detail::propagate_result(complex_abs_checked(difference, context));
+        return SymbolicExpr::eq(magnitude, r);
+    }, kComplexLocusCircleOperation);
+}
+
+ExpressionResult complex_locus_circle_checked(
+    const ComplexSymbolic& a, std::shared_ptr<SymbolicExpr> r,
+    const std::string& z_var) {
+    ComputationContext context;
+    return complex_locus_circle_checked(a, std::move(r), z_var, context);
+}
+
+ExpressionResult complex_locus_perpendicular_bisector_checked(
+    const ComplexSymbolic& a, const ComplexSymbolic& b,
+    const std::string& z_var, ComputationContext& context) {
+    auto va = validate_complex_symbolic(
+        a, "a", context, kComplexLocusBisectorOperation);
+    if (!va) return ExpressionResult::failure(va.error());
+    auto vb = validate_complex_symbolic(
+        b, "b", context, kComplexLocusBisectorOperation);
+    if (!vb) return ExpressionResult::failure(vb.error());
+    if (z_var.empty()) {
+        return ExpressionResult::failure(
+            CasErrc::InvalidArgument, "complex variable must not be empty",
+            kComplexLocusBisectorOperation);
+    }
+    return checked_construct<std::shared_ptr<SymbolicExpr>>([&]() {
+        auto z = SymbolicExpr::variable(z_var);
+        auto z_as_complex = make_complex(z, SymbolicExpr::number(0));
+        auto from_a = detail::propagate_result(
+            complex_sub_checked(z_as_complex, a, context));
+        auto from_b = detail::propagate_result(
+            complex_sub_checked(z_as_complex, b, context));
+        auto distance_a =
+            detail::propagate_result(complex_abs_checked(from_a, context));
+        auto distance_b =
+            detail::propagate_result(complex_abs_checked(from_b, context));
+        return SymbolicExpr::eq(distance_a, distance_b);
+    }, kComplexLocusBisectorOperation);
+}
+
+ExpressionResult complex_locus_perpendicular_bisector_checked(
+    const ComplexSymbolic& a, const ComplexSymbolic& b,
+    const std::string& z_var) {
+    ComputationContext context;
+    return complex_locus_perpendicular_bisector_checked(
+        a, b, z_var, context);
 }
 
 }

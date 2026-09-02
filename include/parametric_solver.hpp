@@ -21,6 +21,10 @@ struct PiecewiseSolution {
     std::vector<Case> cases; ///< 所有分段
 };
 
+using ParametricSolutionList =
+    std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>;
+using ParametricSolutionsResult = Result<ParametricSolutionList>;
+
 /** @brief 含参方程组求解器，支持线性与多项式方程组的参数化求解 */
 class LAMINA_API ParametricSolver {
 public:
@@ -50,6 +54,17 @@ public:
         const std::vector<std::string>& unknowns,
         const std::vector<std::string>& parameters);
 
+    static ParametricSolutionsResult solve_polynomial_parametric_checked(
+        const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
+        const std::vector<std::string>& unknowns,
+        const std::vector<std::string>& parameters,
+        ComputationContext& context);
+
+    static ParametricSolutionsResult solve_polynomial_parametric_checked(
+        const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
+        const std::vector<std::string>& unknowns,
+        const std::vector<std::string>& parameters);
+
 private:
 
     /** @brief 求解关于未知数为线性的含参方程组 */
@@ -60,11 +75,11 @@ private:
         const std::vector<std::string>& parameters);
 
     /** @brief 求解关于未知数为多项式的含参方程组 */
-    static std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
-    solve_polynomial_parametric(
+    static ParametricSolutionList solve_polynomial_parametric_impl(
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
         const std::vector<std::string>& unknowns,
-        const std::vector<std::string>& parameters);
+        const std::vector<std::string>& parameters,
+        ComputationContext& context);
 
     /**
      * @brief 判断方程组是否关于未知数为线性

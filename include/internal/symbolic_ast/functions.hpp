@@ -363,7 +363,9 @@ public:
             const auto& sparse = std::get<SparseStorage>(storage_);
             auto it = sparse.find(idx);
             if (it != sparse.end()) return it->second;
-            return lamina::detail::make_node<NumberNode>(BigInt(0));
+            static const std::shared_ptr<const SymbolicNode> zero =
+                lamina::detail::make_node<NumberNode>(BigInt(0));
+            return zero;
         }
     }
 

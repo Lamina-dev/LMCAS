@@ -1035,7 +1035,10 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 double period_val = std::stod(period_str);
                 period_expr = lamina::detail::make_expression_ptr(
                     lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(period_val)));
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
+                period_expr = lamina::detail::make_expression_ptr(
+                    lamina::detail::make_node<VariableNode>(period_str));
+            } catch (const std::out_of_range&) {
                 period_expr = lamina::detail::make_expression_ptr(
                     lamina::detail::make_node<VariableNode>(period_str));
             }
@@ -1092,7 +1095,9 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                     double val = std::stod(s);
                     return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(
                         static_cast<lmmc_real_t>(val)));
-                } catch (...) {}
+                } catch (const std::invalid_argument&) {
+                } catch (const std::out_of_range&) {
+                }
                 return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(s));
             };
 
@@ -1179,7 +1184,9 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                     try {
                         double val = std::stod(tok);
                         return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
-                    } catch (...) {}
+                    } catch (const std::invalid_argument&) {
+                    } catch (const std::out_of_range&) {
+                    }
                     return lamina::detail::make_node<VariableNode>(tok);
                 };
 

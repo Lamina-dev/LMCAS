@@ -788,7 +788,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
                 berlekamp_success = true;
                 break;
             }
-        } catch (...) {
+        } catch (const std::invalid_argument&) {
+            continue;
+        } catch (const std::out_of_range&) {
+            continue;
+        } catch (const std::runtime_error&) {
             continue;
         }
     }

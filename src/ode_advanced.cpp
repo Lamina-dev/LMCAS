@@ -21,7 +21,7 @@ static FrobeniusSolution solve_frobenius_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::shared_ptr<SymbolicExpr>&,
     const std::shared_ptr<SymbolicExpr>&,
-    const std::string&, int);
+    const std::string&, int, ODESingularityType, ComputationContext&);
 
 
 static ODESolution solve_variation_of_parameters_core(
@@ -146,48 +146,64 @@ static ODESolution solve_variation_of_parameters_core(
 
 
 
-ODESingularityType classify_singular_point(
+ODESingularityResult classify_singular_point_checked(
+    const std::shared_ptr<SymbolicExpr>& p,
+    const std::shared_ptr<SymbolicExpr>& q,
+    const std::shared_ptr<SymbolicExpr>& x0,
+    const std::string& x,
+    ComputationContext& context)
+{
+    const std::string operation = "classify_singular_point";
+    auto valid = validate_ode_two_expr_point(p, q, x0, x, context, operation);
+    if (!valid) return ODESingularityResult::failure(valid.error());
+    try {
+        auto p_at_x0 = p->substitute(x, x0)->simplify();
+        auto q_at_x0 = q->substitute(x, x0)->simplify();
+        const double p_val = try_eval_double(p_at_x0);
+        const double q_val = try_eval_double(q_at_x0);
+        if (std::isfinite(p_val) && std::isfinite(q_val)) {
+            return ODESingularityResult::success(
+                ODESingularityType::Ordinary);
+        }
+
+        auto x_var = SymbolicExpr::variable(x);
+        auto x_minus_x0 = SymbolicExpr::add(
+            x_var, SymbolicExpr::multiply(SymbolicExpr::number(-1), x0));
+        auto xp = SymbolicExpr::multiply(x_minus_x0, p)->simplify();
+        auto x2q = SymbolicExpr::multiply(
+            SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)),
+            q)->simplify();
+        auto xp_limit = detail::propagate_result(limit_expression_checked(
+            xp, x, x0, LimitDirection::Both, context));
+        auto x2q_limit = detail::propagate_result(limit_expression_checked(
+            x2q, x, x0, LimitDirection::Both, context));
+        const double xp_val = try_eval_double(xp_limit);
+        const double x2q_val = try_eval_double(x2q_limit);
+        return ODESingularityResult::success(
+            std::isfinite(xp_val) && std::isfinite(x2q_val)
+                ? ODESingularityType::RegularSingular
+                : ODESingularityType::IrregularSingular);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ODESingularityResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return ODESingularityResult::failure(
+            CasErrc::ResourceLimit,
+            "allocation failed while classifying ODE singularity",
+            operation);
+    } catch (const std::exception& ex) {
+        return ODESingularityResult::failure(
+            CasErrc::InternalInvariant, ex.what(), operation);
+    }
+}
+
+ODESingularityResult classify_singular_point_checked(
     const std::shared_ptr<SymbolicExpr>& p,
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
     const std::string& x)
 {
-    if (!p || !q) return ODESingularityType::Ordinary;
-
-    /// 检查 p(x) 和 q(x) 在 x₀ 处是否解析（有限）
-    auto p_at_x0 = p->substitute(x, x0)->simplify();
-    auto q_at_x0 = q->substitute(x, x0)->simplify();
-
-    double p_val = try_eval_double(p_at_x0);
-    double q_val = try_eval_double(q_at_x0);
-
-    if (!std::isnan(p_val) && !std::isinf(p_val) &&
-        !std::isnan(q_val) && !std::isinf(q_val)) {
-        return ODESingularityType::Ordinary;
-    }
-
-    /// 检查正则奇点条件
-    auto x_var = SymbolicExpr::variable(x);
-    auto x_minus_x0 = SymbolicExpr::add(x_var,
-        SymbolicExpr::multiply(SymbolicExpr::number(-1), x0));
-
-    auto xp = SymbolicExpr::multiply(x_minus_x0, p)->simplify();
-    auto x2q = SymbolicExpr::multiply(
-        SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
-
-    /// 尝试用极限计算 (x-x₀)·p(x) 和 (x-x₀)²·q(x) 在 x₀ 处的值
-    auto xp_limit = lamina::limit_expression_checked(xp, x, x0).value();
-    auto x2q_limit = lamina::limit_expression_checked(x2q, x, x0).value();
-
-    double xp_val = xp_limit ? try_eval_double(xp_limit) : std::numeric_limits<double>::quiet_NaN();
-    double x2q_val = x2q_limit ? try_eval_double(x2q_limit) : std::numeric_limits<double>::quiet_NaN();
-
-    if (!std::isnan(xp_val) && !std::isinf(xp_val) &&
-        !std::isnan(x2q_val) && !std::isinf(x2q_val)) {
-        return ODESingularityType::RegularSingular;
-    }
-
-    return ODESingularityType::IrregularSingular;
+    ComputationContext context;
+    return classify_singular_point_checked(p, q, x0, x, context);
 }
 
 
@@ -196,6 +212,7 @@ static Result<void> validate_frobenius_regular_singular_domain(
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
     const std::string& x,
+    ComputationContext& context,
     const std::string& operation)
 {
     auto x_var = SymbolicExpr::variable(x);
@@ -205,8 +222,10 @@ static Result<void> validate_frobenius_regular_singular_domain(
     auto x2q_expr = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
-    auto P0_expr = lamina::limit_expression_checked(xp_expr, x, x0).value();
-    auto Q0_expr = lamina::limit_expression_checked(x2q_expr, x, x0).value();
+    auto P0_expr = detail::propagate_result(limit_expression_checked(
+        xp_expr, x, x0, LimitDirection::Both, context));
+    auto Q0_expr = detail::propagate_result(limit_expression_checked(
+        x2q_expr, x, x0, LimitDirection::Both, context));
     double P0 = P0_expr ? try_eval_double(P0_expr) : std::numeric_limits<double>::quiet_NaN();
     double Q0 = Q0_expr ? try_eval_double(Q0_expr) : std::numeric_limits<double>::quiet_NaN();
     if (!std::isfinite(P0) || !std::isfinite(Q0)) {
@@ -252,7 +271,8 @@ FrobeniusSolutionResult solve_frobenius_checked(
     if (!budget) return FrobeniusSolutionResult::failure(budget.error());
 
     try {
-        auto point_type = classify_singular_point(p, q, x0, x);
+        auto point_type = detail::propagate_result(
+            classify_singular_point_checked(p, q, x0, x, context));
         if (point_type == ODESingularityType::IrregularSingular) {
             return FrobeniusSolutionResult::failure(
                 CasErrc::Inconclusive,
@@ -260,14 +280,15 @@ FrobeniusSolutionResult solve_frobenius_checked(
                 operation);
         }
         if (point_type == ODESingularityType::RegularSingular) {
-            auto regular_domain =
-                validate_frobenius_regular_singular_domain(p, q, x0, x, operation);
+            auto regular_domain = validate_frobenius_regular_singular_domain(
+                p, q, x0, x, context, operation);
             if (!regular_domain) {
                 return FrobeniusSolutionResult::failure(regular_domain.error());
             }
         }
 
-        auto solution = solve_frobenius_impl(p, q, x0, x, order);
+        auto solution =
+            solve_frobenius_impl(p, q, x0, x, order, point_type, context);
         if (!solution.series_solution || !lamina::detail::node(solution.series_solution)) {
             return FrobeniusSolutionResult::failure(
                 CasErrc::Inconclusive,
@@ -281,6 +302,8 @@ FrobeniusSolutionResult solve_frobenius_checked(
                 operation);
         }
         return FrobeniusSolutionResult::success(std::move(solution));
+    } catch (const detail::ResultPropagation& propagation) {
+        return FrobeniusSolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return FrobeniusSolutionResult::failure(
             CasErrc::ResourceLimit,
@@ -310,11 +333,13 @@ static FrobeniusSolution solve_frobenius_impl(
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
     const std::string& x,
-    int order)
+    int order,
+    ODESingularityType point_type,
+    ComputationContext& context)
 {
     FrobeniusSolution result;
     result.truncation_order = order;
-    result.point_type = classify_singular_point(p, q, x0, x);
+    result.point_type = point_type;
 
     auto x_var = SymbolicExpr::variable(x);
     auto x_minus_x0 = SymbolicExpr::add(x_var,
@@ -385,8 +410,10 @@ static FrobeniusSolution solve_frobenius_impl(
     auto x2q_expr = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
-    auto P0_expr = lamina::limit_expression_checked(xp_expr, x, x0).value();
-    auto Q0_expr = lamina::limit_expression_checked(x2q_expr, x, x0).value();
+    auto P0_expr = detail::propagate_result(limit_expression_checked(
+        xp_expr, x, x0, LimitDirection::Both, context));
+    auto Q0_expr = detail::propagate_result(limit_expression_checked(
+        x2q_expr, x, x0, LimitDirection::Both, context));
 
     double P0 = P0_expr ? try_eval_double(P0_expr) : 0.0;
     double Q0 = Q0_expr ? try_eval_double(Q0_expr) : 0.0;
@@ -433,11 +460,13 @@ static FrobeniusSolution solve_frobenius_impl(
             pv = try_eval_double(pv_expr);
             qv = try_eval_double(qv_expr);
             if (std::isnan(pv)) {
-                auto lim = lamina::limit_expression_checked(xp_current, x, x0).value();
+                auto lim = detail::propagate_result(limit_expression_checked(
+                    xp_current, x, x0, LimitDirection::Both, context));
                 pv = lim ? try_eval_double(lim) : 0.0;
             }
             if (std::isnan(qv)) {
-                auto lim = lamina::limit_expression_checked(x2q_current, x, x0).value();
+                auto lim = detail::propagate_result(limit_expression_checked(
+                    x2q_current, x, x0, LimitDirection::Both, context));
                 qv = lim ? try_eval_double(lim) : 0.0;
             }
         }

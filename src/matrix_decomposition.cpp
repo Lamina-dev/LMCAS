@@ -3,6 +3,7 @@
  * @brief 矩阵高级分解算法实现.
  */
 #include "matrix_decomposition.hpp"
+#include "internal/exact_matrix.hpp"
 #include "symbolic_matrix.hpp"
 #include "numeric_evaluation.hpp"
 #include "symbolic.hpp"
@@ -148,34 +149,10 @@ std::optional<std::vector<std::vector<Rational>>> exact_rational_matrix(
     return values;
 }
 
-Rational exact_det(std::vector<std::vector<Rational>> matrix) {
-    const size_t n = matrix.size();
-    Rational det(1);
-    int sign = 1;
-    for (size_t col = 0; col < n; ++col) {
-        size_t pivot = col;
-        while (pivot < n && matrix[pivot][col] == Rational(0)) {
-            ++pivot;
-        }
-        if (pivot == n) return Rational(0);
-        if (pivot != col) {
-            std::swap(matrix[pivot], matrix[col]);
-            sign = -sign;
-        }
-        const Rational pivot_value = matrix[col][col];
-        det = det * pivot_value;
-        for (size_t row = col + 1; row < n; ++row) {
-            const Rational factor = matrix[row][col] / pivot_value;
-            for (size_t k = col; k < n; ++k) {
-                matrix[row][k] = matrix[row][k] - factor * matrix[col][k];
-            }
-        }
-    }
-    return sign < 0 ? (Rational(0) - det) : det;
-}
 
 Result<void> prove_exact_spd(
     const std::shared_ptr<const MatrixNode>& matrix,
+    ComputationContext& context,
     const std::string& operation) {
     auto values = exact_rational_matrix(matrix);
     if (!values) {
@@ -196,14 +173,17 @@ Result<void> prove_exact_spd(
         }
     }
     for (size_t order = 1; order <= n; ++order) {
-        std::vector<std::vector<Rational>> leading(
-            order, std::vector<Rational>(order, Rational(0)));
+        std::vector<Rational> leading;
+        leading.reserve(order * order);
         for (size_t row = 0; row < order; ++row) {
             for (size_t col = 0; col < order; ++col) {
-                leading[row][col] = (*values)[row][col];
+                leading.push_back((*values)[row][col]);
             }
         }
-        if (exact_det(std::move(leading)) <= Rational(0)) {
+        auto determinant = detail::rational_determinant_exact(
+            order, std::move(leading), context, operation);
+        if (!determinant) return Result<void>::failure(determinant.error());
+        if (determinant.value() <= Rational(0)) {
             return Result<void>::failure(
                 CasErrc::DomainError,
                 "Cholesky input is not positive definite",
@@ -216,6 +196,7 @@ Result<void> prove_exact_spd(
 
 Result<void> prove_exact_full_column_rank_qr_support(
     const std::shared_ptr<const MatrixNode>& matrix,
+    ComputationContext& context,
     const std::string& operation) {
     auto values = exact_rational_matrix(matrix);
     if (!values) {
@@ -244,14 +225,17 @@ Result<void> prove_exact_full_column_rank_qr_support(
         }
     }
     for (size_t order = 1; order <= cols; ++order) {
-        std::vector<std::vector<Rational>> leading(
-            order, std::vector<Rational>(order, Rational(0)));
+        std::vector<Rational> leading;
+        leading.reserve(order * order);
         for (size_t row = 0; row < order; ++row) {
             for (size_t col = 0; col < order; ++col) {
-                leading[row][col] = gram[row][col];
+                leading.push_back(gram[row][col]);
             }
         }
-        if (exact_det(std::move(leading)) <= Rational(0)) {
+        auto determinant = detail::rational_determinant_exact(
+            order, std::move(leading), context, operation);
+        if (!determinant) return Result<void>::failure(determinant.error());
+        if (determinant.value() <= Rational(0)) {
             return Result<void>::failure(
                 CasErrc::Inconclusive,
                 "QR decomposition requires proven full column rank",
@@ -436,7 +420,8 @@ QRDecompositionResult qr_decomposition_checked(
     auto budget = context.consume_steps(matrix.value()->rows() * matrix.value()->cols() * 12 + 8,
                                         operation);
     if (!budget) return QRDecompositionResult::failure(budget.error());
-    auto full_rank = prove_exact_full_column_rank_qr_support(matrix.value(), operation);
+    auto full_rank = prove_exact_full_column_rank_qr_support(
+        matrix.value(), context, operation);
     if (!full_rank) return QRDecompositionResult::failure(full_rank.error());
     try {
         std::shared_ptr<SymbolicExpr> Q;
@@ -521,7 +506,7 @@ CholeskyDecompositionResult cholesky_decomposition_checked(
     auto budget = context.consume_steps(matrix.value()->rows() * matrix.value()->cols() * 10 + 8,
                                         operation);
     if (!budget) return CholeskyDecompositionResult::failure(budget.error());
-    auto spd = prove_exact_spd(matrix.value(), operation);
+    auto spd = prove_exact_spd(matrix.value(), context, operation);
     if (!spd) return CholeskyDecompositionResult::failure(spd.error());
     try {
         std::shared_ptr<SymbolicExpr> L;
@@ -646,20 +631,12 @@ std::shared_ptr<SymbolicExpr> matrix_exp(
         return SymbolicExpr::matrix(identity);
     }
     
-    auto eigen_V = SymbolicExpr::eigenvectors(A);
-    if (eigen_V.empty()) return SymbolicExpr::exp(A); // Fallback to AST node
-    
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> P_cols;
-    std::vector<std::shared_ptr<SymbolicExpr>> evals;
-    for (auto& pair : eigen_V) {
-        for (auto& vec : pair.second) {
-            auto v_mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(vec));
-            std::vector<std::shared_ptr<SymbolicExpr>> v_col;
-            for (size_t i = 0; i < n; i++) v_col.push_back(lamina::detail::make_expression_ptr(v_mat_node->get(i, 0)));
-            P_cols.push_back(v_col);
-            evals.push_back(pair.first);
-        }
-    }
+    auto eigenvectors = matrix_eigenvectors_checked(A);
+    auto eigenvalues = matrix_eigenvalues_checked(A);
+    if (!eigenvectors || !eigenvalues) return SymbolicExpr::exp(A);
+    auto P_cols = std::move(eigenvectors.value());
+    auto evals = std::move(eigenvalues.value());
+    if (P_cols.size() != evals.size()) return SymbolicExpr::exp(A);
     
     if (P_cols.size() != n) return SymbolicExpr::exp(A); // Not diagonalizable
     
@@ -737,21 +714,12 @@ std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A)
     if (!mat || mat->rows() != mat->cols()) return nullptr;
     size_t n = mat->rows();
 
-    auto eigen_V = SymbolicExpr::eigenvectors(A);
-    if (eigen_V.empty()) return nullptr;
-
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> P_cols;
-    std::vector<std::shared_ptr<SymbolicExpr>> evals;
-    for (auto& pr : eigen_V) {
-        for (auto& vec : pr.second) {
-            auto vnode = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(vec));
-            if (!vnode) return nullptr;
-            std::vector<std::shared_ptr<SymbolicExpr>> col;
-            for (size_t i = 0; i < n; ++i) col.push_back(lamina::detail::make_expression_ptr(vnode->get(i, 0)));
-            P_cols.push_back(col);
-            evals.push_back(pr.first);
-        }
-    }
+    auto eigenvectors = matrix_eigenvectors_checked(A);
+    auto eigenvalues = matrix_eigenvalues_checked(A);
+    if (!eigenvectors || !eigenvalues) return nullptr;
+    auto P_cols = std::move(eigenvectors.value());
+    auto evals = std::move(eigenvalues.value());
+    if (P_cols.size() != evals.size()) return nullptr;
     if (P_cols.size() != n) return nullptr;
 
     /// 检查特征值为正(实数对数存在性)
@@ -941,15 +909,9 @@ std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
 
 std::string classify_quadratic_form(const std::shared_ptr<SymbolicExpr>& A) {
     /// 使用特征多项式的根列表分类二次型,直接依据特征值符号.
-    auto evals_expr = SymbolicExpr::eigenvalues(A);
-    if (!evals_expr) return "unknown";
-    auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(evals_expr));
-    if (!mat_node || mat_node->cols() == 0) return "unknown";
-
-    std::vector<std::shared_ptr<SymbolicExpr>> evals;
-    for (size_t i = 0; i < mat_node->cols(); ++i) {
-        evals.push_back(lamina::detail::make_expression_ptr(mat_node->get(0, i)));
-    }
+    auto eigenvalues = matrix_eigenvalues_checked(A);
+    if (!eigenvalues) return "unknown";
+    auto evals = std::move(eigenvalues.value());
     if (evals.empty()) return "unknown";
 
     bool all_pos = true, all_neg = true, any_zero = false;
@@ -1065,21 +1027,12 @@ static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
         return true;
     }
 
-    auto eigen_V = SymbolicExpr::eigenvectors(A);
-    if (eigen_V.empty()) return false;
-
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> P_cols;
-    std::vector<std::shared_ptr<SymbolicExpr>> diag;
-    for (auto& pr : eigen_V) {
-        for (auto& vec : pr.second) {
-            auto vnode = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(vec));
-            if (!vnode) return false;
-            std::vector<std::shared_ptr<SymbolicExpr>> col;
-            for (size_t i = 0; i < n; ++i) col.push_back(lamina::detail::make_expression_ptr(vnode->get(i, 0)));
-            P_cols.push_back(col);
-            diag.push_back(pr.first);
-        }
-    }
+    auto eigenvectors = matrix_eigenvectors_checked(A);
+    auto eigenvalues = matrix_eigenvalues_checked(A);
+    if (!eigenvectors || !eigenvalues) return false;
+    auto P_cols = std::move(eigenvectors.value());
+    auto diag = std::move(eigenvalues.value());
+    if (P_cols.size() != diag.size()) return false;
     /// 特征向量数等于 n 时矩阵可对角化,Jordan 型即对角阵;
     /// 向量数小于 n 时返回 false,表示广义特征向量链位于当前支持域之外.
     if (P_cols.size() != n) return false;
