@@ -304,7 +304,7 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
 
 std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
-    ComputationContext&, int) {
+    ComputationContext& computation, int) {
 
     std::shared_ptr<SymbolicExpr> den = nullptr;
 
@@ -341,9 +341,9 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate_raw(
                 return nullptr;
             }
 
-            auto a_checked = try_checked_numeric_constant(a_expr);
-            auto b_checked = try_checked_numeric_constant(b_expr);
-            auto c_checked = try_checked_numeric_constant(c_expr);
+            auto a_checked = try_checked_numeric_constant(a_expr, computation);
+            auto b_checked = try_checked_numeric_constant(b_expr, computation);
+            auto c_checked = try_checked_numeric_constant(c_expr, computation);
             if (!a_checked || !b_checked || !c_checked) {
                 return nullptr;
             }

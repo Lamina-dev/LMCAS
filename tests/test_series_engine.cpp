@@ -791,10 +791,10 @@ static void test_fourier_series_square_wave() {
     auto one = num(1);
     auto period = SymbolicExpr::multiply(num(2), SymbolicExpr::number(LMMC_CONST_PI));
 
-    auto result = lamina::fourier_series(one, "x", period, 0);
-    EXPECT_TRUE(result != nullptr, "fourier_series returns a result");
+    auto result = lamina::fourier_series_checked(one, "x", period, 0);
+    EXPECT_TRUE(result.has_value(), "fourier_series returns a result");
     if (result) {
-        auto v = test_numeric_eval(result->simplify());
+        auto v = test_numeric_eval(result.value()->simplify());
         EXPECT_TRUE(v.has_value() && std::abs(*v - 1.0) < 1e-6,
             "Fourier constant term (a0/2) of f=1 is 1");
     }
@@ -807,15 +807,36 @@ static void test_fourier_series_odd_function() {
     auto x = var("x");
     auto period = SymbolicExpr::multiply(num(2), SymbolicExpr::number(LMMC_CONST_PI));
 
-    auto result = lamina::fourier_series(x, "x", period, 2);
-    EXPECT_TRUE(result != nullptr, "fourier_series(x) returns a result");
+    auto result = lamina::fourier_series_checked(x, "x", period, 2);
+    EXPECT_TRUE(result.has_value(), "fourier_series(x) returns a result");
     if (result) {
         // At x=0, all sine terms vanish; an odd function's series gives 0 there.
-        auto val = result->substitute("x", num(0));
+        auto val = result.value()->substitute("x", num(0));
         auto v = test_numeric_eval(val ? val->simplify() : nullptr);
         EXPECT_TRUE(v.has_value() && std::abs(*v) < 1e-6,
             "Fourier series of odd f=x is 0 at x=0 (no constant term)");
     }
+}
+
+static void test_fourier_series_checked_contracts() {
+    TEST_CASE("fourier_series: checked failures preserve diagnostics");
+
+    auto one = num(1);
+    auto period =
+        SymbolicExpr::multiply(num(2), SymbolicExpr::number(LMMC_CONST_PI));
+
+    auto invalid = lamina::fourier_series_checked(one, "x", period, -1);
+    EXPECT_TRUE(!invalid && invalid.error().code == lamina::CasErrc::InvalidArgument,
+                "negative Fourier order is rejected");
+
+    lamina::ResourceLimits limits;
+    limits.max_expansion_terms = 0;
+    lamina::ComputationContext context(limits);
+    auto limited =
+        lamina::fourier_series_checked(one, "x", period, 0, context);
+    EXPECT_TRUE(!limited &&
+                    limited.error().code == lamina::CasErrc::ResourceLimit,
+                "Fourier expansion observes the shared term budget");
 }
 
 
@@ -896,6 +917,7 @@ int main() {
     // Fourier series tests
     test_fourier_series_square_wave();
     test_fourier_series_odd_function();
+    test_fourier_series_checked_contracts();
 
     // Laurent series tests
     test_laurent_series_1_over_z();

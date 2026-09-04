@@ -13,6 +13,7 @@ option(LMCAS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSan
 option(LMCAS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMCAS_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
 option(LMCAS_WARNINGS_AS_ERRORS "Treat LMCAS compiler warnings as errors" OFF)
+option(LMCAS_ENABLE_CLANG_TIDY "Run clang-tidy on LMCAS C++ sources" OFF)
 set(LMCAS_LMMP_ASM "AUTO" CACHE STRING "LMMP assembly mode")
 set_property(CACHE LMCAS_LMMP_ASM PROPERTY STRINGS GENERIC X64 ARM64 AUTO)
 
@@ -72,6 +73,9 @@ if(NOT DEFINED LMMC_ENABLE_TSAN)
 endif()
 if(NOT DEFINED LMMC_ENABLE_COVERAGE)
     set(LMMC_ENABLE_COVERAGE "${LMCAS_ENABLE_COVERAGE}")
+endif()
+if(NOT DEFINED LMMC_ENABLE_CLANG_TIDY)
+    set(LMMC_ENABLE_CLANG_TIDY "${LMCAS_ENABLE_CLANG_TIDY}")
 endif()
 if(NOT DEFINED LMMC_LMMP_ASM)
     set(LMMC_LMMP_ASM "${LMCAS_LMMP_ASM}")
@@ -196,6 +200,7 @@ set(LMCAS_ANALYSIS_SOURCES
     src/vector_calculus_support.cpp
     src/vector_calculus_differential.cpp
     src/vector_calculus_integrals.cpp
+    src/vector_calculus_integral_api.cpp
     src/vector_calculus_extrema.cpp
     src/vector_calculus_algebra.cpp
     src/series_engine.cpp
@@ -253,6 +258,8 @@ set_target_properties(lmcas PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
     CXX_EXTENSIONS OFF
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN YES
 )
 
 foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
@@ -266,6 +273,8 @@ foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
     set_target_properties(${component} PROPERTIES
         CXX_EXTENSIONS OFF
         POSITION_INDEPENDENT_CODE ON
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN YES
     )
 endforeach()
 
@@ -276,6 +285,13 @@ set(_lmcas_warning_options
     $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wextra>
     $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wpedantic>
 )
+if(LMCAS_ENABLE_CLANG_TIDY)
+    find_program(LMCAS_CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
+    foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
+        set_property(TARGET ${component} PROPERTY CXX_CLANG_TIDY
+            "${LMCAS_CLANG_TIDY_EXECUTABLE};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy")
+    endforeach()
+endif()
 if(LMCAS_WARNINGS_AS_ERRORS)
     list(APPEND _lmcas_warning_options
         $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Werror>)

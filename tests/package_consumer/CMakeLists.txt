@@ -10,7 +10,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(LMCAS CONFIG REQUIRED)
 
-add_executable(lmcas_package_consumer main.cpp)
+add_executable(lmcas_package_consumer
+    main.cpp
+    lmmc_linalg_checks.cpp
+)
 target_link_libraries(lmcas_package_consumer PRIVATE LMCAS::lmcas)
 
 get_target_property(_lmcas_include_dirs LMCAS::lmcas INTERFACE_INCLUDE_DIRECTORIES)

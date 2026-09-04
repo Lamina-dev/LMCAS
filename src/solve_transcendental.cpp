@@ -5,6 +5,7 @@
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
+#include "internal/numeric_probe.hpp"
 #include "lmmc/config.h"
 #include <cmath>
 #include <vector>
@@ -34,15 +35,12 @@ static std::shared_ptr<SymbolicExpr> make_pi() {
     return SymbolicExpr::number(LMMC_CONST_PI);
 }
 
-static bool try_evaluate_numeric(const std::shared_ptr<SymbolicExpr>& expr, lmmc_real_t& out) {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    ComputationContext context;
-    auto evaluated = evaluate_numeric(*expr, NumericBindings{}, context);
-    if (!evaluated || !evaluated.value().is_finite() ||
-        !std::isfinite(evaluated.value().value)) {
-        return false;
-    }
-    out = static_cast<lmmc_real_t>(evaluated.value().value);
+static bool try_evaluate_numeric(
+    const std::shared_ptr<SymbolicExpr>& expr,
+    lmmc_real_t& out) {
+    auto numeric = detail::try_finite_numeric(expr);
+    if (!numeric) return false;
+    out = static_cast<lmmc_real_t>(*numeric);
     return true;
 }
 

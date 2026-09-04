@@ -2,7 +2,7 @@
 
 #include "assumption_context.hpp"
 #include "integration.hpp"
-#include "numeric_evaluation.hpp"
+#include "numeric_probe.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
 #include "polynomial.hpp"
@@ -43,14 +43,10 @@ inline std::shared_ptr<SymbolicExpr> sym_rational(long long numerator, long long
     return SymbolicExpr::number(Rational(BigInt(numerator), BigInt(denominator)));
 }
 
-inline std::optional<double> try_checked_numeric_constant(const SymbolicExpr& expr) {
-    ComputationContext context;
-    auto evaluated = evaluate_numeric(expr, NumericBindings{}, context);
-    if (!evaluated || !evaluated.value().is_finite() ||
-        !std::isfinite(evaluated.value().value)) {
-        return std::nullopt;
-    }
-    return evaluated.value().value;
+inline std::optional<double> try_checked_numeric_constant(
+    const SymbolicExpr& expr,
+    ComputationContext& context) {
+    return detail::try_finite_numeric(expr, &context);
 }
 
 inline std::shared_ptr<SymbolicExpr> make_arctan(

@@ -37,7 +37,8 @@
         "rhs": "Linux"
       },
       "cacheVariables": {
-        "LMCAS_ENABLE_SANITIZERS": "ON"
+        "LMCAS_ENABLE_SANITIZERS": "ON",
+        "LMCAS_LMMP_ASM": "GENERIC"
       }
     },
     {
@@ -50,7 +51,8 @@
         "rhs": "Linux"
       },
       "cacheVariables": {
-        "LMCAS_ENABLE_TSAN": "ON"
+        "LMCAS_ENABLE_TSAN": "ON",
+        "LMCAS_LMMP_ASM": "GENERIC"
       }
     },
     {

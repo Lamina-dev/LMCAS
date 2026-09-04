@@ -3,6 +3,8 @@
 #include "root_of_utils.hpp"
 #include "poly_utils.hpp"
 #include "numeric_evaluation.hpp"
+#include "internal/numeric_probe.hpp"
+#include "internal/expression_analysis.hpp"
 #include <cmath>
 #include <algorithm>
 #include <optional>
@@ -11,41 +13,7 @@
 namespace lamina {
 
 static bool is_purely_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return true;
-
-    struct VarDetector : public lamina::detail::RecursiveSymbolicVisitor {
-        bool has_var = false;
-        void visit(const NumberNode&) override {}
-        void visit(const VariableNode&) override { has_var = true; }
-        void visit(const AddNode& n) override { for (auto& op : n.operands()) { if (has_var) return; op->accept(*this); } }
-        void visit(const MultiplyNode& n) override { for (auto& op : n.operands()) { if (has_var) return; op->accept(*this); } }
-        void visit(const PowerNode& n) override { n.base()->accept(*this); if (!has_var) n.exponent()->accept(*this); }
-        void visit(const FunctionNode& n) override { for (auto& arg : n.arguments()) { if (has_var) return; arg->accept(*this); } }
-        void visit(const MatrixNode&) override {}
-        void visit(const RelationalNode& n) override { n.left()->accept(*this); if (!has_var) n.right()->accept(*this); }
-        void visit(const LogicalNode& n) override { n.left()->accept(*this); if (!has_var && n.right()) n.right()->accept(*this); }
-        void visit(const PiecewiseNode& n) override {
-            for (const auto& branch : n.branches()) {
-                if (has_var) return;
-                branch.expression->accept(*this);
-                if (!has_var) branch.condition->accept(*this);
-            }
-            if (!has_var && n.default_expr()) n.default_expr()->accept(*this);
-        }
-        void visit(const SummationNode& n) override { n.body()->accept(*this); if (!has_var) n.lower_bound()->accept(*this); if (!has_var) n.upper_bound()->accept(*this); }
-        void visit(const ProductNode& n) override { n.body()->accept(*this); if (!has_var) n.lower_bound()->accept(*this); if (!has_var) n.upper_bound()->accept(*this); }
-        void visit(const TransformNode& n) override { n.body()->accept(*this); }
-        void visit(const QuantifierNode& n) override { n.domain()->accept(*this); if (!has_var) n.predicate()->accept(*this); }
-        void visit(const SetBuilderNode& n) override { n.domain()->accept(*this); if (!has_var) n.predicate()->accept(*this); }
-        void visit(const ComplexNode& n) override { n.real()->accept(*this); if (!has_var) n.imag()->accept(*this); }
-        void visit(const FiniteSetNode& n) override { for (const auto& e : n.elements()) { if (has_var) return; e->accept(*this); } }
-        void visit(const IntervalNode& n) override { n.lower()->accept(*this); if (!has_var) n.upper()->accept(*this); }
-        void visit(const MembershipNode& n) override { n.element()->accept(*this); if (!has_var) n.set()->accept(*this); }
-        void visit(const QuantityNode& n) override { n.value()->accept(*this); }
-    } detector;
-
-    lamina::detail::node(expr)->accept(detector);
-    return !detector.has_var;
+    return !expr || free_variables(lamina::detail::node(expr)).empty();
 }
 
 static std::shared_ptr<SymbolicExpr> cbrt_expr(const std::shared_ptr<SymbolicExpr>& x) {
@@ -70,31 +38,28 @@ static std::shared_ptr<SymbolicExpr> sub(const std::shared_ptr<SymbolicExpr>& a,
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 [[maybe_unused]] static std::shared_ptr<SymbolicExpr> num_r(int p, int q) { return SymbolicExpr::number(Rational(p, q)); }
 
-static std::optional<double> finite_numeric_value(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr) return std::nullopt;
-    ComputationContext context;
-    auto evaluated = evaluate_numeric(*expr, NumericBindings{}, context);
-    if (!evaluated || !evaluated.value().is_finite() ||
-        !std::isfinite(evaluated.value().value)) {
-        return std::nullopt;
-    }
+static std::optional<double> finite_numeric_value(
+    const std::shared_ptr<SymbolicExpr>& expr) {
+    auto evaluated = detail::try_finite_numeric(expr);
+    if (!evaluated) return std::nullopt;
     auto simplified = expr->simplify();
     if (simplified && lamina::detail::node(simplified)) {
-        if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
+        if (auto num = std::dynamic_pointer_cast<const NumberNode>(
+                lamina::detail::node(simplified))) {
             if (std::holds_alternative<Rational>(num->value())) {
                 const auto& value = std::get<Rational>(num->value());
-                if (!value.get_numerator().is_zero() && evaluated.value().value == 0.0) {
+                if (!value.get_numerator().is_zero() && *evaluated == 0.0) {
                     return std::nullopt;
                 }
             } else if (std::holds_alternative<BigInt>(num->value())) {
                 const auto& value = std::get<BigInt>(num->value());
-                if (!value.is_zero() && evaluated.value().value == 0.0) {
+                if (!value.is_zero() && *evaluated == 0.0) {
                     return std::nullopt;
                 }
             }
         }
     }
-    return evaluated.value().value;
+    return evaluated;
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_quadratic_internal(

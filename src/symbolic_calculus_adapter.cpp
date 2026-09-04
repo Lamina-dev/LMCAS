@@ -15,8 +15,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(
     if (!impl_->root) return nullptr;
 
     lamina::Integrator integrator;
-    auto result = lamina::detail::make_expression_ptr(
-        lamina::detail::propagate_result(integrator.integrate(*this, variable)));
+    auto integrated = integrator.integrate(*this, variable);
+    if (!integrated) return nullptr;
+    auto result = lamina::detail::make_expression_ptr(integrated.value());
     return result->simplify();
 }
 
@@ -26,7 +27,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
     int order,
     const lamina::AssumptionContext*) const {
     if (!impl_->root || !point) return nullptr;
-    if (order < 0) return SymbolicExpr::number(0);
+    if (order < 0) return nullptr;
 
     auto variable_expr = SymbolicExpr::variable(variable);
     auto delta = SymbolicExpr::add(
@@ -38,12 +39,12 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
     for (int n = 0; n <= order; ++n) {
         if (n > 0) {
             derivative = derivative->differentiate(variable);
-            if (!derivative) break;
+            if (!derivative) return nullptr;
             derivative = derivative->simplify();
         }
 
         auto coefficient = derivative->substitute(variable, point);
-        if (!coefficient) break;
+        if (!coefficient) return nullptr;
         coefficient = coefficient->simplify();
 
         auto term = coefficient;

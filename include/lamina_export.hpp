@@ -8,6 +8,6 @@
 #define LAMINA_API __declspec(dllimport)
 #endif
 #else
-#define LAMINA_API
+#define LAMINA_API __attribute__((visibility("default")))
 #endif
 #endif

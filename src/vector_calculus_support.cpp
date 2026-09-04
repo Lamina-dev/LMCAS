@@ -1,6 +1,7 @@
 #include "internal/vector_calculus_support.hpp"
 #include "integration.hpp"
 #include "numeric_evaluation.hpp"
+#include "internal/numeric_probe.hpp"
 #include "solver.hpp"
 #include "symbolic_ast.hpp"
 
@@ -20,13 +21,10 @@ bool vector_calculus_checked_finite_numeric(
     double& value,
     ComputationContext* context)
 {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    ComputationContext local_context;
-    ComputationContext& eval_context = context ? *context : local_context;
-    auto evaluated = evaluate_numeric(*expr, NumericBindings{}, eval_context);
-    if (!evaluated || !evaluated.value().is_finite()) return false;
-    value = evaluated.value().value;
-    return std::isfinite(value);
+    auto numeric = detail::try_finite_numeric(expr, context);
+    if (!numeric) return false;
+    value = *numeric;
+    return true;
 }
 
 bool vector_calculus_contains_unevaluated_integral(

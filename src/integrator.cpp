@@ -512,8 +512,8 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
                           (lamina::detail::node(upper) && std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(upper)));
 
     if (is_inv_x && numeric_bounds) {
-        auto l_checked = try_checked_numeric_constant(lower);
-        auto u_checked = try_checked_numeric_constant(upper);
+        auto l_checked = try_checked_numeric_constant(lower, context);
+        auto u_checked = try_checked_numeric_constant(upper, context);
         if (l_checked && u_checked) {
             double l_val = *l_checked;
             double u_val = *u_checked;

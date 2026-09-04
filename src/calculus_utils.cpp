@@ -929,11 +929,13 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_try_symbolic_definite(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b)
+    const std::shared_ptr<SymbolicExpr>& b,
+    ComputationContext& context)
 {
     Integrator integrator;
     SymbolicExpr result = detail::propagate_result(
-        integrator.integrate_def(*integrand, var, *a, *b));
+        integrator.integrate_def_checked(
+            *integrand, var, *a, *b, context));
 
     if (calculus_utils_contains_unevaluated_integral(lamina::detail::node(result))) return nullptr;
     auto res = lamina::detail::make_expression_ptr(result);
@@ -1180,7 +1182,8 @@ ExpressionResult surface_area_revolution_x_checked(
         }
         auto integrand = SymbolicExpr::multiply(abs_f, arc_factor);
 
-        auto integral = calculus_utils_try_symbolic_definite(integrand, var, a, b);
+        auto integral = calculus_utils_try_symbolic_definite(
+            integrand, var, a, b, context);
         if (!integral || !lamina::detail::node(integral)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -1193,6 +1196,8 @@ ExpressionResult surface_area_revolution_x_checked(
         auto result = SymbolicExpr::multiply(two_pi, integral);
         auto simplified = result->simplify();
         return ExpressionResult::success(simplified ? simplified : result);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ExpressionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",
@@ -1245,7 +1250,8 @@ ExpressionResult surface_area_revolution_y_checked(
         }
         auto integrand = SymbolicExpr::multiply(abs_var, arc_factor);
 
-        auto integral = calculus_utils_try_symbolic_definite(integrand, var, a, b);
+        auto integral = calculus_utils_try_symbolic_definite(
+            integrand, var, a, b, context);
         if (!integral || !lamina::detail::node(integral)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -1258,6 +1264,8 @@ ExpressionResult surface_area_revolution_y_checked(
         auto result = SymbolicExpr::multiply(two_pi, integral);
         auto simplified = result->simplify();
         return ExpressionResult::success(simplified ? simplified : result);
+    } catch (const detail::ResultPropagation& propagation) {
+        return ExpressionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",

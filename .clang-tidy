@@ -1,0 +1,13 @@
+Checks: >-
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.*,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
+  clang-analyzer-deadcode.*,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-memory-comparison,
+  bugprone-use-after-move,
+  performance-move-const-arg
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*[\\/]LMCAS[\\/](include|src)[\\/].*'
+FormatStyle: none

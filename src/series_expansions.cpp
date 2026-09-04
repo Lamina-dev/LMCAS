@@ -65,63 +65,111 @@ static LaurentResult laurent_series_full_impl(
     const std::string&,
     const std::shared_ptr<SymbolicExpr>&,
     int, int, ComputationContext&);
-std::shared_ptr<SymbolicExpr> fourier_series(
+ExpressionResult fourier_series_checked(
+    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
+    const std::shared_ptr<SymbolicExpr>& period, int n_terms,
+    ComputationContext& context) {
+    constexpr const char* operation = "fourier_series";
+    if (!f || !period || var.empty() || n_terms < 0) {
+        return ExpressionResult::failure(
+            CasErrc::InvalidArgument,
+            "Fourier expansion requires an expression, variable, positive period, and non-negative term count",
+            operation);
+    }
+    const std::size_t expansion_terms =
+        1 + 2 * static_cast<std::size_t>(n_terms);
+    if (expansion_terms > context.limits().max_expansion_terms) {
+        return ExpressionResult::failure(
+            CasErrc::ResourceLimit,
+            "Fourier term count exceeds the expansion budget", operation);
+    }
+
+    try {
+        auto access = context.consume_steps(1, operation);
+        if (!access) return ExpressionResult::failure(access.error());
+
+        auto T = period;
+        auto pi = lamina::detail::make_expression_ptr(
+            lamina::detail::make_node<VariableNode>("pi"));
+        auto two = SymbolicExpr::number(2);
+        auto L = SymbolicExpr::divide(T, two);
+        auto half_lo = SymbolicExpr::multiply(SymbolicExpr::number(-1), L);
+        auto half_hi = L;
+        auto w = SymbolicExpr::divide(
+            SymbolicExpr::multiply(two, pi), T);
+
+        int parity = detect_parity(f, var);
+        Integrator integrator;
+        auto x = SymbolicExpr::variable(var);
+
+        auto a0_integral = integrator.integrate_def_checked(
+            *f, var, *half_lo, *half_hi, context);
+        if (!a0_integral) {
+            return ExpressionResult::failure(a0_integral.error());
+        }
+        auto a0 = SymbolicExpr::divide(
+            lamina::detail::make_expression_ptr(a0_integral.value()), L)->simplify();
+        auto result = SymbolicExpr::divide(a0, two);
+
+        for (int k = 1; k <= n_terms; ++k) {
+            auto kw = SymbolicExpr::multiply(SymbolicExpr::number(k), w);
+            auto arg = SymbolicExpr::multiply(kw, x);
+
+            if (parity != -1) {
+                auto integrand = SymbolicExpr::multiply(
+                    f, SymbolicExpr::cos(arg));
+                auto integrated = integrator.integrate_def_checked(
+                    *integrand, var, *half_lo, *half_hi, context);
+                if (!integrated) {
+                    return ExpressionResult::failure(integrated.error());
+                }
+                auto coefficient = SymbolicExpr::divide(
+                    lamina::detail::make_expression_ptr(integrated.value()), L)->simplify();
+                if (!(lamina::detail::node(coefficient) &&
+                      lamina::detail::node(coefficient)->is_zero())) {
+                    result = SymbolicExpr::add(
+                        result,
+                        SymbolicExpr::multiply(
+                            coefficient, SymbolicExpr::cos(arg)));
+                }
+            }
+            if (parity != 1) {
+                auto integrand = SymbolicExpr::multiply(
+                    f, SymbolicExpr::sin(arg));
+                auto integrated = integrator.integrate_def_checked(
+                    *integrand, var, *half_lo, *half_hi, context);
+                if (!integrated) {
+                    return ExpressionResult::failure(integrated.error());
+                }
+                auto coefficient = SymbolicExpr::divide(
+                    lamina::detail::make_expression_ptr(integrated.value()), L)->simplify();
+                if (!(lamina::detail::node(coefficient) &&
+                      lamina::detail::node(coefficient)->is_zero())) {
+                    result = SymbolicExpr::add(
+                        result,
+                        SymbolicExpr::multiply(
+                            coefficient, SymbolicExpr::sin(arg)));
+                }
+            }
+        }
+        return ExpressionResult::success(result->simplify());
+    } catch (const detail::ResultPropagation& propagation) {
+        return ExpressionResult::failure(propagation.error());
+    } catch (const std::bad_alloc&) {
+        return ExpressionResult::failure(
+            CasErrc::ResourceLimit,
+            "Fourier expansion allocation failed", operation);
+    } catch (const std::exception& error) {
+        return ExpressionResult::failure(
+            CasErrc::InternalInvariant, error.what(), operation);
+    }
+}
+
+ExpressionResult fourier_series_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& period, int n_terms) {
-    if (!f || !period || n_terms < 0) return nullptr;
-
-    /// 周期 T,半周期 L = T/2,基频 w = 2pi/T
-    auto T = period;
-    auto pi = lamina::detail::make_expression_ptr(lamina::detail::make_node<VariableNode>("pi"));
-    auto two = SymbolicExpr::number(2);
-    auto L = SymbolicExpr::divide(T, two);          // 半周期
-    auto half_lo = SymbolicExpr::multiply(SymbolicExpr::number(-1), L);
-    auto half_hi = L;
-    auto w = SymbolicExpr::divide(SymbolicExpr::multiply(two, pi), T); // 2pi/T
-
-    int parity = detect_parity(f, var); // 1=even, -1=odd, 0=unknown
-
-    Integrator integrator;
-    auto x = SymbolicExpr::variable(var);
-
-    /// a0 = (1/L) integral_{-L}^{L} f dx ; 常数项 a0/2
-    std::shared_ptr<SymbolicExpr> a0 = SymbolicExpr::number(0);
-    {
-        auto integ = detail::propagate_result(
-            integrator.integrate_def(*f, var, *half_lo, *half_hi));
-        a0 = SymbolicExpr::divide(
-            lamina::detail::make_expression_ptr(integ), L)->simplify();
-    }
-    auto result = SymbolicExpr::divide(a0, two); // a0/2
-
-    for (int k = 1; k <= n_terms; ++k) {
-        auto kw = SymbolicExpr::multiply(SymbolicExpr::number(k), w); // k*2pi/T
-        auto arg = SymbolicExpr::multiply(kw, x);
-
-        /// a_k:奇函数时为 0
-        if (parity != -1) {
-            auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::cos(arg));
-            auto integ = detail::propagate_result(
-                integrator.integrate_def(*integrand, var, *half_lo, *half_hi));
-            auto ak = SymbolicExpr::divide(
-                lamina::detail::make_expression_ptr(integ), L)->simplify();
-            if (!(lamina::detail::node(ak) && lamina::detail::node(ak)->is_zero())) {
-                result = SymbolicExpr::add(result, SymbolicExpr::multiply(ak, SymbolicExpr::cos(arg)));
-            }
-        }
-        /// b_k:偶函数时为 0
-        if (parity != 1) {
-            auto integrand = SymbolicExpr::multiply(f, SymbolicExpr::sin(arg));
-            auto integ = detail::propagate_result(
-                integrator.integrate_def(*integrand, var, *half_lo, *half_hi));
-            auto bk = SymbolicExpr::divide(
-                lamina::detail::make_expression_ptr(integ), L)->simplify();
-            if (!(lamina::detail::node(bk) && lamina::detail::node(bk)->is_zero())) {
-                result = SymbolicExpr::add(result, SymbolicExpr::multiply(bk, SymbolicExpr::sin(arg)));
-            }
-        }
-    }
-    return result->simplify();
+    ComputationContext context;
+    return fourier_series_checked(f, var, period, n_terms, context);
 }
 
 

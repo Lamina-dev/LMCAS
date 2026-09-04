@@ -16,9 +16,15 @@ jobs:
           - compiler: gcc
             cc: gcc
             cxx: g++
+            asm: AUTO
+          - compiler: gcc-generic
+            cc: gcc
+            cxx: g++
+            asm: GENERIC
           - compiler: clang
             cc: clang
             cxx: clang++
+            asm: AUTO
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +43,7 @@ jobs:
           -DLMCAS_BUILD_GTEST_TESTS=ON
           -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
-          -DLMCAS_LMMP_ASM=AUTO
+          -DLMCAS_LMMP_ASM=${{ matrix.asm }}
       - name: Build
         run: cmake --build build
       - name: Test
@@ -50,8 +56,13 @@ jobs:
         include:
           - compiler: gcc
             cc: gcc
+            asm: AUTO
+          - compiler: gcc-generic
+            cc: gcc
+            asm: GENERIC
           - compiler: clang
             cc: clang
+            asm: AUTO
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +78,7 @@ jobs:
           -DLMMC_BUILD_EXAMPLES=OFF
           -DLMMC_BUILD_SHARED=ON
           -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_LMMP_ASM=AUTO
+          -DLMMC_LMMP_ASM=${{ matrix.asm }}
       - name: Build
         run: cmake --build build
       - name: Test
@@ -169,7 +180,7 @@ jobs:
           -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_ENABLE_SANITIZERS=ON
-          -DLMCAS_LMMP_ASM=AUTO
+          -DLMCAS_LMMP_ASM=GENERIC
       - name: Build
         run: cmake --build build
       - name: Test
@@ -196,13 +207,36 @@ jobs:
           -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_ENABLE_TSAN=ON
-          -DLMCAS_LMMP_ASM=AUTO
+          -DLMCAS_LMMP_ASM=GENERIC
       - name: Build
         run: cmake --build build
       - name: Test
         env:
           TSAN_OPTIONS: halt_on_error=1
         run: ctest --test-dir build --output-on-failure --timeout 600
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Configure
+        run: >-
+          cmake -S . -B build-tidy -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=OFF
+          -DLMCAS_BUILD_BENCHMARKS=OFF
+          -DLMCAS_BUILD_STANDALONE_TESTS=OFF
+          -DLMCAS_BUILD_LMMC_TESTS=OFF
+          -DLMCAS_BUILD_GTEST_TESTS=OFF
+          -DLMCAS_WARNINGS_AS_ERRORS=ON
+          -DLMCAS_ENABLE_CLANG_TIDY=ON
+          -DLMCAS_LMMP_ASM=GENERIC
+      - name: Analyze
+        run: cmake --build build-tidy --target lmcas
 
   coverage:
     runs-on: ubuntu-latest
@@ -223,7 +257,7 @@ jobs:
           -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_ENABLE_COVERAGE=ON
-          -DLMCAS_LMMP_ASM=AUTO
+          -DLMCAS_LMMP_ASM=GENERIC
       - name: Build
         run: cmake --build build
       - name: Test

@@ -1052,7 +1052,6 @@ static std::optional<NumericRoot> refine_root_with_context(
             /// 保持符号变化的半区间
             if (f_lo * f_mid < 0.0) {
                 hi = mid;
-                f_hi = f_mid;
             } else {
                 lo = mid;
                 f_lo = f_mid;

@@ -16,7 +16,9 @@ struct QuadRadical {
     double a_sq = 0;       // a²
 };
 
-bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node, const std::string& var,
+bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
+                           const std::string& var,
+                           ComputationContext& context,
                            QuadRadical& out) {
     auto pw = std::dynamic_pointer_cast<const PowerNode>(node);
     if (!pw) return false;
@@ -46,8 +48,8 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node, cons
     if (expression_depends_on_variable(lamina::detail::node(c2e), var)) return false;
     if (expression_depends_on_variable(lamina::detail::node(c0e), var)) return false;
     if (!lamina::detail::node(c2e)->is_number() || !lamina::detail::node(c0e)->is_number()) return false;
-    auto c0_checked = try_checked_numeric_constant(*c0e);
-    auto c2_checked = try_checked_numeric_constant(*c2e);
+    auto c0_checked = try_checked_numeric_constant(*c0e, context);
+    auto c2_checked = try_checked_numeric_constant(*c2e, context);
     if (!c0_checked || !c2_checked) return false;
     double c0 = *c0_checked;
     double c2 = *c2_checked;
@@ -67,7 +69,7 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node, cons
 
 std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
-    ComputationContext&, int) {
+    ComputationContext& context, int) {
     if (!lamina::detail::node(expr)) return nullptr;
 
     auto x = SymbolicExpr::variable(var);
@@ -78,7 +80,10 @@ std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate_raw(
     ///   ∫ (x²-a²)^(-1/2) dx = arccosh(x/a) = ln(x + √(x²-a²))
     ///   ∫ (a²-x²)^( 1/2) dx = (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
     QuadRadical qr;
-    if (!trigsub_match_radical(lamina::detail::node(expr), var, qr)) return nullptr;
+    if (!trigsub_match_radical(
+            lamina::detail::node(expr), var, context, qr)) {
+        return nullptr;
+    }
 
     double a_sq = qr.a_sq;
     auto a_sq_expr = SymbolicExpr::number(a_sq);

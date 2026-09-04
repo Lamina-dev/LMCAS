@@ -190,7 +190,7 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
         auto real_part = rewrite_trig_basic_identity(complex_node->real());
         auto imag_part = rewrite_trig_basic_identity(complex_node->imag());
         auto value = complex(real_part, imag_part);
-        if (!value) throw std::runtime_error(value.error().message);
+        if (!value) throw detail::ResultPropagation(value.error());
         return value.value()->simplify();
     }
 
@@ -274,7 +274,7 @@ ExprPtr rewrite_exp_log_basic_identity(
         auto imag_part = rewrite_exp_log_basic_identity(complex_node->imag(),
                                                         assumptions);
         auto value = complex(real_part, imag_part);
-        if (!value) throw std::runtime_error(value.error().message);
+        if (!value) throw detail::ResultPropagation(value.error());
         return value.value()->simplify();
     }
 
@@ -364,7 +364,7 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
         if (is_imaginary_unit_name(variable->name())) {
             auto unit = imaginary_unit();
-            if (!unit) throw std::runtime_error(unit.error().message);
+            if (!unit) throw detail::ResultPropagation(unit.error());
             return unit.value();
         }
         return lamina::detail::make_expression_ptr(node);
@@ -406,7 +406,7 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
         auto imag_part = canonicalize_lsr_complex_product(
             *lamina::detail::make_expression_ptr(complex_node->imag()));
         auto value = complex(real_part, imag_part);
-        if (!value) throw std::runtime_error(value.error().message);
+        if (!value) throw detail::ResultPropagation(value.error());
         return value.value()->simplify();
     }
 
@@ -451,7 +451,7 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     }
     auto result = complex(real, imag);
     if (!result) {
-        throw std::runtime_error(result.error().message);
+        throw detail::ResultPropagation(result.error());
     }
     return result.value()->simplify();
 }
@@ -594,6 +594,8 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
                                    core_options);
         }
         return Result<bool>::success(false);
+    } catch (const detail::ResultPropagation& propagation) {
+        return Result<bool>::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return Result<bool>::failure(CasErrc::ResourceLimit,
                                      "equivalence check allocation failed",

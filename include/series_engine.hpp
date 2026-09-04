@@ -140,20 +140,18 @@ LAMINA_API PowerSeriesResult power_series_compose_checked(
 
 
 /**
- * @brief 计算函数的傅里叶级数展开.
+ * @brief Computes a bounded truncated Fourier expansion.
  *
- * 计算截断傅里叶级数:a_0/2 + sum(aₖcos(2pikx/T) + bₖsin(2pikx/T)),k=1..n_terms.
- * 系数公式:aₖ = (2/T)integralf(x)cos(2pikx/T)dx,bₖ = (2/T)integralf(x)sin(2pikx/T)dx.
- * 当函数为偶函数时,所有 bₖ = 0(余弦级数);
- * 当函数为奇函数时,所有 aₖ = 0(正弦级数).
- *
- * @param[in] f 待展开的函数表达式
- * @param[in] var 自变量名
- * @param[in] period 周期 T
- * @param[in] n_terms 展开项数
- * @return 截断傅里叶级数表达式
+ * All coefficient integrations share @p context. Resource exhaustion,
+ * cancellation, invalid inputs, and nested integration failures are returned
+ * without being collapsed to a null expression.
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> fourier_series(
+LAMINA_API ExpressionResult fourier_series_checked(
+    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
+    const std::shared_ptr<SymbolicExpr>& period, int n_terms,
+    ComputationContext& context);
+
+LAMINA_API ExpressionResult fourier_series_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& period, int n_terms);
 

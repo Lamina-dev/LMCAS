@@ -4,6 +4,7 @@
  */
 #include "matrix_decomposition.hpp"
 #include "internal/exact_matrix.hpp"
+#include "internal/numeric_probe.hpp"
 #include "symbolic_matrix.hpp"
 #include "numeric_evaluation.hpp"
 #include "symbolic.hpp"
@@ -63,15 +64,9 @@ Result<void> validate_decomposition_output(
     return Result<void>::success();
 }
 
-std::optional<double> checked_finite_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return std::nullopt;
-    ComputationContext context;
-    auto evaluated = evaluate_numeric(*expr, NumericBindings{}, context);
-    if (!evaluated || !evaluated.value().is_finite() ||
-        !std::isfinite(evaluated.value().value)) {
-        return std::nullopt;
-    }
-    return evaluated.value().value;
+std::optional<double> checked_finite_numeric(
+    const std::shared_ptr<SymbolicExpr>& expr) {
+    return detail::try_finite_numeric(expr);
 }
 
 std::optional<Rational> exact_rational_expr(const std::shared_ptr<const SymbolicNode>& node) {

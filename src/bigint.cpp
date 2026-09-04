@@ -54,6 +54,9 @@ void BigInt::realloc_to(mp_size_t new_alloc) {
     }
 
 void BigInt::normalize() {
+        if (_size > 0 && !_data) {
+            throw std::logic_error("BigInt invariant violated: nonzero size without storage");
+        }
         while (_size > 0 && _data[_size - 1] == 0) {
             _size--;
         }

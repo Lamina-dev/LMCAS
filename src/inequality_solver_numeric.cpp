@@ -5,6 +5,7 @@
 #include "solve_strategies.hpp"
 #include "symbolic_ast.hpp"
 #include "internal/expression_analysis.hpp"
+#include "internal/numeric_probe.hpp"
 #include "internal/inequality_solver_support.hpp"
 #include <algorithm>
 #include <cmath>
@@ -17,13 +18,7 @@
 namespace lamina::detail::inequality_support {
 
 std::optional<double> try_checked_numeric_constant(const SymbolicExpr& expr) {
-    ComputationContext context;
-    auto evaluated = evaluate_numeric(expr, NumericBindings{}, context);
-    if (!evaluated || !evaluated.value().is_finite() ||
-        !std::isfinite(evaluated.value().value)) {
-        return std::nullopt;
-    }
-    return evaluated.value().value;
+    return lamina::detail::try_finite_numeric(expr);
 }
 
 int exact_numeric_sign(const std::shared_ptr<SymbolicExpr>& expr) {

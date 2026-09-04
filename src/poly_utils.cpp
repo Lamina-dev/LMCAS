@@ -297,7 +297,7 @@ Polynomial<T> symbolic_to_poly_recursive(
 }
 
 template <typename T>
-Polynomial<T> symbolic_to_poly(
+LAMINA_API Polynomial<T> symbolic_to_poly(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable) {
     if (!expression || !lamina::detail::node(expression)) {
@@ -308,7 +308,7 @@ Polynomial<T> symbolic_to_poly(
 }
 
 template <typename T>
-std::shared_ptr<SymbolicExpr> poly_to_symbolic(
+LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
     const Polynomial<T>& polynomial) {
     if (polynomial.is_zero()) return SymbolicExpr::number(0);
 
@@ -354,18 +354,18 @@ std::shared_ptr<SymbolicExpr> poly_to_symbolic(
     return result;
 }
 
-template Polynomial<BigInt> symbolic_to_poly<BigInt>(
+template LAMINA_API Polynomial<BigInt> symbolic_to_poly<BigInt>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
-template Polynomial<Rational> symbolic_to_poly<Rational>(
+template LAMINA_API Polynomial<Rational> symbolic_to_poly<Rational>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
-template Polynomial<SymbolicPolyCoeff> symbolic_to_poly<SymbolicPolyCoeff>(
+template LAMINA_API Polynomial<SymbolicPolyCoeff> symbolic_to_poly<SymbolicPolyCoeff>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
 
-template std::shared_ptr<SymbolicExpr> poly_to_symbolic<BigInt>(
+template LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<BigInt>(
     const Polynomial<BigInt>&);
-template std::shared_ptr<SymbolicExpr> poly_to_symbolic<Rational>(
+template LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<Rational>(
     const Polynomial<Rational>&);
-template std::shared_ptr<SymbolicExpr> poly_to_symbolic<SymbolicPolyCoeff>(
+template LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<SymbolicPolyCoeff>(
     const Polynomial<SymbolicPolyCoeff>&);
 
 } // namespace lamina
