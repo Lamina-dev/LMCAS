@@ -11,3 +11,8 @@ Checks: >-
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*[\\/]LMCAS[\\/](include|src)[\\/].*'
 FormatStyle: none
+ExtraArgs:
+  - '-Xclang'
+  - '-analyzer-config'
+  - '-Xclang'
+  - 'c++-stdlib-inlining=false'
