@@ -27,6 +27,13 @@ enum class CasErrc {
 };
 
 struct CasError {
+    CasError() = default;
+    CasError(CasErrc error_code, std::string error_message,
+             std::string error_operation = {})
+        : code(error_code),
+          message(std::move(error_message)),
+          operation(std::move(error_operation)) {}
+
     CasErrc code = CasErrc::InternalInvariant;
     std::string message;
     std::string operation;
