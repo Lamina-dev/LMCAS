@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <set>
 
+using namespace LMCAS;
+
 using SE = SymbolicExpr;
 
 static auto num(int n) { return SE::number(n); }
@@ -131,7 +133,7 @@ static void test_log_differentiation_equivalence() {
     rc::check("log_differentiate(f, x) == f->differentiate(x) for polynomials", []() {
         auto f = gen_nonzero_polynomial("x");
 
-        auto log_diff = lamina::log_differentiate(f, "x");
+        auto log_diff = LMCAS::log_differentiate(f, "x");
         auto std_diff = f->differentiate("x");
 
         RC_ASSERT(log_diff != nullptr);
@@ -177,7 +179,7 @@ static void test_asymptotes_rational() {
         auto denom = (r == 0) ? x : SE::add(x, num(-r));
         auto f = SE::divide(num(1), denom);
 
-        auto result = lamina::asymptotes_checked(f, "x").value();
+        auto result = LMCAS::asymptotes_checked(f, "x").value();
 
         // The vertical asymptote should be at x = r
         bool found = false;
@@ -220,7 +222,7 @@ static void test_asymptotes_rational() {
         auto denom = (r == 0) ? x : SE::add(x, num(-r));
         auto f = SE::divide(num(a), denom);
 
-        auto result = lamina::asymptotes_checked(f, "x").value();
+        auto result = LMCAS::asymptotes_checked(f, "x").value();
 
         // Horizontal asymptote should be y = 0
         bool has_zero_horiz = false;
@@ -257,7 +259,7 @@ static void test_curvature_formula() {
         auto x_t = SE::multiply(R_expr, SE::cos(t));
         auto y_t = SE::multiply(R_expr, SE::sin(t));
 
-        auto kappa = lamina::curvature_parametric_checked(x_t, y_t, "t").value();
+        auto kappa = LMCAS::curvature_parametric_checked(x_t, y_t, "t").value();
         RC_ASSERT(kappa != nullptr);
 
         // Evaluate at t = 0 (or any point on the circle)
@@ -285,7 +287,7 @@ static void test_curvature_formula() {
         // Generate a random polynomial of degree 2-3
         auto f = gen_polynomial("x", 2, 3);
 
-        auto kappa = lamina::curvature_checked(f, "x").value();
+        auto kappa = LMCAS::curvature_checked(f, "x").value();
         RC_ASSERT(kappa != nullptr);
 
         // Compute manually: f' and f''
@@ -333,7 +335,7 @@ static void test_inflection_points() {
         auto f_prime = f->differentiate("x");
         auto f_double_prime = f_prime->differentiate("x");
 
-        auto inflections = lamina::inflection_points_checked(f, "x").value();
+        auto inflections = LMCAS::inflection_points_checked(f, "x").value();
 
         for (const auto& pt : inflections) {
             auto eval_expr = f_double_prime->substitute("x", pt)->simplify();

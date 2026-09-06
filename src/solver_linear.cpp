@@ -18,12 +18,12 @@
 #include <limits>
 #include "internal/solver_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 using namespace solver_detail;
 
 
 std::shared_ptr<SymbolicExpr> solver_detail::to_ptr(const SymbolicExpr& expr) {
-    return lamina::detail::make_expression_ptr(expr);
+    return LMCAS::detail::make_expression_ptr(expr);
 }
 
 static bool get_integer_value(const std::shared_ptr<const SymbolicNode>& node, long long& value) {
@@ -59,16 +59,16 @@ static std::shared_ptr<const NumberNode> add_number_nodes(const std::shared_ptr<
         };
         lmmc_real_t r1 = to_real(a->value());
         lmmc_real_t r2 = to_real(b->value());
-        return lamina::detail::make_node<NumberNode>(r1 + r2);
+        return LMCAS::detail::make_node<NumberNode>(r1 + r2);
     }
 
     if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
         Rational r1 = std::holds_alternative<Rational>(a->value()) ? std::get<Rational>(a->value()) : Rational(std::get<BigInt>(a->value()));
         Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) : Rational(std::get<BigInt>(b->value()));
-        return lamina::detail::make_node<NumberNode>(r1 + r2);
+        return LMCAS::detail::make_node<NumberNode>(r1 + r2);
     }
 
-    return lamina::detail::make_node<NumberNode>(std::get<BigInt>(a->value()) + std::get<BigInt>(b->value()));
+    return LMCAS::detail::make_node<NumberNode>(std::get<BigInt>(a->value()) + std::get<BigInt>(b->value()));
 }
 
 static std::shared_ptr<const NumberNode> multiply_number_nodes(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
@@ -80,16 +80,16 @@ static std::shared_ptr<const NumberNode> multiply_number_nodes(const std::shared
         };
         lmmc_real_t r1 = to_real(a->value());
         lmmc_real_t r2 = to_real(b->value());
-        return lamina::detail::make_node<NumberNode>(r1 * r2);
+        return LMCAS::detail::make_node<NumberNode>(r1 * r2);
     }
 
     if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
         Rational r1 = std::holds_alternative<Rational>(a->value()) ? std::get<Rational>(a->value()) : Rational(std::get<BigInt>(a->value()));
         Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) : Rational(std::get<BigInt>(b->value()));
-        return lamina::detail::make_node<NumberNode>(r1 * r2);
+        return LMCAS::detail::make_node<NumberNode>(r1 * r2);
     }
 
-    return lamina::detail::make_node<NumberNode>(std::get<BigInt>(a->value()) * std::get<BigInt>(b->value()));
+    return LMCAS::detail::make_node<NumberNode>(std::get<BigInt>(a->value()) * std::get<BigInt>(b->value()));
 }
 
 struct NodeLess {
@@ -112,7 +112,7 @@ std::shared_ptr<SymbolicExpr> solver_detail::multiply_no_expand(
     factors.insert(factors.end(), den_factors.begin(), den_factors.end());
 
     std::shared_ptr<const NumberNode> const_acc =
-        lamina::detail::make_node<NumberNode>(BigInt(1));
+        LMCAS::detail::make_node<NumberNode>(BigInt(1));
     std::map<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const NumberNode>, NodeLess> bases;
 
     for (const auto& op : factors) {
@@ -123,7 +123,7 @@ std::shared_ptr<SymbolicExpr> solver_detail::multiply_no_expand(
         }
 
         std::shared_ptr<const SymbolicNode> base = op;
-        std::shared_ptr<const NumberNode> exp = lamina::detail::make_node<NumberNode>(BigInt(1));
+        std::shared_ptr<const NumberNode> exp = LMCAS::detail::make_node<NumberNode>(BigInt(1));
         if (auto pow = std::dynamic_pointer_cast<const PowerNode>(op)) {
             base = pow->base();
             if (auto e_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
@@ -145,12 +145,12 @@ std::shared_ptr<SymbolicExpr> solver_detail::multiply_no_expand(
     for (const auto& [base, exp] : bases) {
         if (exp->is_zero()) continue;
         if (exp->is_one()) final_ops.push_back(base);
-        else final_ops.push_back(lamina::detail::make_node<PowerNode>(base, exp));
+        else final_ops.push_back(LMCAS::detail::make_node<PowerNode>(base, exp));
     }
 
     if (final_ops.empty()) return SymbolicExpr::number(1);
-    if (final_ops.size() == 1) return lamina::detail::make_expression_ptr(final_ops[0]);
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(final_ops));
+    if (final_ops.size() == 1) return LMCAS::detail::make_expression_ptr(final_ops[0]);
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(final_ops));
 }
 
 bool solver_detail::is_polynomial_node(const std::shared_ptr<const SymbolicNode>& node) {
@@ -184,9 +184,9 @@ bool solver_detail::is_polynomial_node(const std::shared_ptr<const SymbolicNode>
 
 std::shared_ptr<SymbolicExpr> solver_detail::multiply_factors(const std::vector<std::shared_ptr<const SymbolicNode>>& factors) {
     if (factors.empty()) return SymbolicExpr::number(1);
-    auto res = lamina::detail::make_expression_ptr(factors[0]);
+    auto res = LMCAS::detail::make_expression_ptr(factors[0]);
     for (size_t i = 1; i < factors.size(); ++i) {
-        res = SymbolicExpr::multiply(res, lamina::detail::make_expression_ptr(factors[i]));
+        res = SymbolicExpr::multiply(res, LMCAS::detail::make_expression_ptr(factors[i]));
     }
     return res->simplify();
 }
@@ -228,7 +228,7 @@ bool solver_detail::collect_denominator_factors(
             } else {
                 den_factors.push_back(SymbolicFactory::create_power(pow->base(), SymbolicFactory::create_number(BigInt(k))));
             }
-            den_constraints.push_back(lamina::detail::make_expression_ptr(pow->base()));
+            den_constraints.push_back(LMCAS::detail::make_expression_ptr(pow->base()));
             return true;
         }
 
@@ -252,7 +252,7 @@ static std::pair<SymbolicExpr, SymbolicExpr> isolate_linear_coeff(const Symbolic
     auto A_ptr = expr_ptr->differentiate(var);
 
     std::vector<std::shared_ptr<const SymbolicNode>> mops;
-    mops.push_back(lamina::detail::node(A_ptr));
+    mops.push_back(LMCAS::detail::node(A_ptr));
     mops.push_back(SymbolicFactory::create_variable(var));
     auto term_Ax = SymbolicFactory::create_multiply(mops);
 
@@ -262,18 +262,18 @@ static std::pair<SymbolicExpr, SymbolicExpr> isolate_linear_coeff(const Symbolic
     auto neg_term = SymbolicFactory::create_multiply(nops);
 
     std::vector<std::shared_ptr<const SymbolicNode>> aops;
-    aops.push_back(lamina::detail::node(expr));
+    aops.push_back(LMCAS::detail::node(expr));
     aops.push_back(neg_term);
     auto B_node = SymbolicFactory::create_add(aops);
 
-    auto B_expr = lamina::detail::expression_from_node(B_node);
+    auto B_expr = LMCAS::detail::expression_from_node(B_node);
     auto B_simp = to_ptr(B_expr)->simplify();
 
-    auto A_expr = lamina::detail::expression_from_node(lamina::detail::node(A_ptr));
+    auto A_expr = LMCAS::detail::expression_from_node(LMCAS::detail::node(A_ptr));
     auto A_simp = to_ptr(A_expr)->simplify();
 
-    return {lamina::detail::expression_from_node(lamina::detail::node(A_simp)),
-            lamina::detail::expression_from_node(lamina::detail::node(B_simp))};
+    return {LMCAS::detail::expression_from_node(LMCAS::detail::node(A_simp)),
+            LMCAS::detail::expression_from_node(LMCAS::detail::node(B_simp))};
 }
 
 std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
@@ -293,16 +293,16 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
 
         for (size_t j = 0; j < num_vars; ++j) {
             auto [coeff, remainder] = isolate_linear_coeff(constant_part, variables[j]);
-            matrix[i][j] = lamina::detail::make_expression_ptr(coeff);
+            matrix[i][j] = LMCAS::detail::make_expression_ptr(coeff);
 
             constant_part = remainder;
         }
 
         std::vector<std::shared_ptr<const SymbolicNode>> ops;
         ops.push_back(SymbolicFactory::create_number(BigInt(-1)));
-        ops.push_back(lamina::detail::node(constant_part));
+        ops.push_back(LMCAS::detail::node(constant_part));
         auto neg_const = SymbolicFactory::create_multiply(ops);
-        matrix[i][num_vars] = lamina::detail::make_expression_ptr(neg_const);
+        matrix[i][num_vars] = LMCAS::detail::make_expression_ptr(neg_const);
     }
 
     detail::ExactMatrixData augmented{
@@ -353,4 +353,4 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

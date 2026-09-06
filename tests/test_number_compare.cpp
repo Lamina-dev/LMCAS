@@ -1,5 +1,9 @@
 #include "test_common.hpp"
 #include <iostream>
+#include <limits>
+#include <stdexcept>
+
+using namespace LMCAS;
 
 int main() {
 
@@ -26,6 +30,33 @@ int main() {
     auto node6 = SymbolicExpr::number(Rational(33333333, 100000000));
 
     EXPECT_TRUE(node5->compare(node6) > 0, "1/3 should be greater than 33333333/100000000 exactly");
+
+    auto approximate = SymbolicExpr::number(1.5);
+    auto approximate_value = approximate->get_number();
+    EXPECT_TRUE(std::holds_alternative<Rational>(approximate_value) &&
+                    std::get<Rational>(approximate_value) ==
+                        Rational::from_double(1.5),
+                "get_number preserves a non-integral approximate value");
+
+    bool large_bigint_threw = false;
+    try {
+        (void)SymbolicExpr::number(
+            BigInt("999999999999999999999999999999"))->get_int();
+    } catch (const std::out_of_range&) {
+        large_bigint_threw = true;
+    }
+    EXPECT_TRUE(large_bigint_threw,
+                "get_int rejects BigInt values outside the int range");
+
+    bool large_approximate_threw = false;
+    try {
+        (void)SymbolicExpr::number(
+            static_cast<double>(std::numeric_limits<int>::max()) * 2.0)->get_int();
+    } catch (const std::out_of_range&) {
+        large_approximate_threw = true;
+    }
+    EXPECT_TRUE(large_approximate_threw,
+                "get_int rejects approximate integers outside the int range");
 
     return TEST_REPORT();
 }

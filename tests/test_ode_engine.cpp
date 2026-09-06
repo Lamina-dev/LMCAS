@@ -5,8 +5,10 @@
 #include "test_common.hpp"
 #include "symbolic_ode_engine.hpp"
 #include "poly_utils.hpp"
+#include "numeric_evaluation.hpp"
+#include <limits>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static ODESingularityType checked_singularity(
     const std::shared_ptr<SymbolicExpr>& p,
@@ -117,6 +119,45 @@ void test_bernoulli_ode() {
         std::string s = sol.general_solution->to_string();
         EXPECT_CONTAINS(s, {"C"}, "Bernoulli n=3 solution contains constant C");
     }
+    TEST_CASE("Bernoulli classifier supports general integer exponents");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto linear_term = SymbolicExpr::multiply(
+            SymbolicExpr::number(-2), y);
+        std::shared_ptr<SymbolicExpr> detected_p;
+        std::shared_ptr<SymbolicExpr> detected_q;
+        int detected_n = 0;
+
+        auto quartic_rhs = SymbolicExpr::add(
+            linear_term,
+            SymbolicExpr::multiply(
+                x, SymbolicExpr::power(y, SymbolicExpr::number(4))));
+        EXPECT_TRUE(
+            is_bernoulli_ode(
+                quartic_rhs, "x", "y", detected_p, detected_q, detected_n),
+            "quartic Bernoulli equation is recognized");
+        EXPECT_TRUE(detected_n == 4, "quartic Bernoulli exponent is preserved");
+        EXPECT_EQ_EXPR(detected_p, SymbolicExpr::number(2),
+                       "quartic Bernoulli P is extracted");
+        EXPECT_EQ_EXPR(detected_q, x, "quartic Bernoulli Q is extracted");
+
+        auto inverse_rhs = SymbolicExpr::add(
+            linear_term,
+            SymbolicExpr::multiply(
+                x, SymbolicExpr::power(y, SymbolicExpr::number(-1))));
+        EXPECT_TRUE(
+            is_bernoulli_ode(
+                inverse_rhs, "x", "y", detected_p, detected_q, detected_n),
+            "negative-exponent Bernoulli equation is recognized");
+        EXPECT_TRUE(detected_n == -1,
+                    "negative Bernoulli exponent is preserved");
+        EXPECT_EQ_EXPR(detected_p, SymbolicExpr::number(2),
+                       "negative-exponent Bernoulli P is extracted");
+        EXPECT_EQ_EXPR(detected_q, x,
+                       "negative-exponent Bernoulli Q is extracted");
+    }
+
 }
 
 
@@ -186,6 +227,24 @@ void test_exact_ode() {
         // 解应为 xy 形式
         EXPECT_CONTAINS(s, {"x"}, "exact xy solution contains x");
         EXPECT_CONTAINS(s, {"y"}, "exact xy solution contains y");
+    }
+
+    TEST_CASE("Exact ODE: fixed sample roots do not prove identity");
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto y = SymbolicExpr::variable("y");
+        auto factor = SymbolicExpr::multiply(
+            SymbolicExpr::multiply(
+                SymbolicExpr::add(x, SymbolicExpr::number(-1)),
+                SymbolicExpr::add(x, SymbolicExpr::number(-2))),
+            SymbolicExpr::add(
+                SymbolicExpr::multiply(SymbolicExpr::number(2), x),
+                SymbolicExpr::number(-1)));
+        auto M = SymbolicExpr::multiply(y, factor);
+        auto N = SymbolicExpr::number(0);
+
+        EXPECT_FALSE(is_exact_ode(M, N, "x", "y"),
+            "vanishing at the former sample points is not an exactness proof");
     }
 }
 
@@ -268,8 +327,8 @@ void test_first_order_ode_checked_contracts() {
         auto y = SymbolicExpr::variable("y");
         auto rhs = SymbolicExpr::divide(y, x);
 
-        lamina::CancellationToken cancellation;
-        lamina::ComputationContext cancelled_context({}, cancellation);
+        LMCAS::CancellationToken cancellation;
+        LMCAS::ComputationContext cancelled_context({}, cancellation);
         cancellation.cancel();
         auto cancelled = solve_homogeneous_ode_checked(rhs, "x", "y",
                                                        cancelled_context);
@@ -278,9 +337,9 @@ void test_first_order_ode_checked_contracts() {
         EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
             "checked homogeneous ODE reports Cancelled");
 
-        lamina::ResourceLimits limits;
+        LMCAS::ResourceLimits limits;
         limits.max_steps = 1;
-        lamina::ComputationContext limited_context(limits);
+        LMCAS::ComputationContext limited_context(limits);
         auto limited = solve_exact_ode_checked(y, x, "x", "y", limited_context);
         EXPECT_TRUE(!limited.has_value(),
             "checked exact ODE observes exhausted step budget");
@@ -308,6 +367,20 @@ void test_higher_order_euler_checked_contracts() {
             EXPECT_CONTAINS(s, {"C2"}, "higher-order solution contains C2");
         }
     }
+    {
+        auto repeated = solve_higher_order_ode_checked(
+            {1.0, -5.0, 10.0, -10.0, 5.0, -1.0},
+            nullptr, "x", "y");
+        EXPECT_TRUE(repeated.has_value(),
+            "checked fifth-order repeated-root ODE succeeds");
+        if (repeated) {
+            EXPECT_TRUE(repeated.value().general_solution != nullptr,
+                "fifth-order repeated-root ODE returns a solution");
+            EXPECT_TRUE(repeated.value().constants.size() == 5,
+                "multiplicity-five root yields exactly five basis solutions");
+        }
+    }
+
 
     {
         auto euler = solve_euler_ode_checked(
@@ -363,8 +436,256 @@ void test_higher_order_euler_checked_contracts() {
     }
 
     {
-        lamina::CancellationToken cancellation;
-        lamina::ComputationContext cancelled_context({}, cancellation);
+        auto large_root = solve_higher_order_ode_checked(
+            {1.0, -1.0e20}, nullptr, "x", "y");
+        EXPECT_TRUE(large_root.has_value(),
+            "checked higher-order ODE supports finite roots outside int range");
+        if (large_root && large_root.value().general_solution) {
+            auto unit_solution =
+                large_root.value().general_solution
+                    ->substitute("C1", SymbolicExpr::number(1))
+                    ->simplify();
+            auto derivative_at_zero = evaluate_numeric(
+                *unit_solution->differentiate("x"),
+                {{"x", 0.0}});
+            EXPECT_TRUE(derivative_at_zero.has_value(),
+                "large-root solution derivative is numerically evaluable");
+            if (derivative_at_zero) {
+                EXPECT_NEAR(
+                    derivative_at_zero.value().value, 1.0e20, 1.0e6,
+                    "large finite characteristic root is preserved");
+            }
+        }
+    }
+
+    {
+        auto separated_roots = solve_higher_order_ode_checked(
+            {1.0, 1.0e20, 1.0}, nullptr, "x", "y");
+        EXPECT_TRUE(separated_roots.has_value(),
+            "checked higher-order ODE supports widely separated quadratic roots");
+        if (separated_roots && separated_roots.value().general_solution) {
+            bool preserved_small_root = false;
+            for (const auto& selected : separated_roots.value().constants) {
+                auto basis = separated_roots.value().general_solution;
+                for (const auto& constant : separated_roots.value().constants) {
+                    basis = basis->substitute(
+                        constant,
+                        SymbolicExpr::number(constant == selected ? 1 : 0));
+                }
+                auto derivative = evaluate_numeric(
+                    *basis->differentiate("x"), {{"x", 0.0}});
+                if (derivative &&
+                    std::abs((derivative.value().value + 1.0e-20) / 1.0e-20) <
+                        1.0e-12) {
+                    preserved_small_root = true;
+                }
+            }
+            EXPECT_TRUE(preserved_small_root,
+                "quadratic solution preserves the small characteristic root");
+        }
+    }
+
+    {
+        auto unrepresentable_root = solve_higher_order_ode_checked(
+            {1.0e-14, std::numeric_limits<double>::max()},
+            nullptr, "x", "y");
+        EXPECT_TRUE(!unrepresentable_root.has_value(),
+            "checked higher-order ODE rejects an unrepresentable root");
+        if (!unrepresentable_root) {
+            EXPECT_TRUE(
+                unrepresentable_root.error().code == CasErrc::NumericFailure,
+                "unrepresentable characteristic roots report NumericFailure");
+        }
+    }
+    {
+        auto unverified_roots = solve_higher_order_ode_checked(
+            {1.0, 1.0e20, 0.0, 1.0e-40}, nullptr, "x", "y");
+        EXPECT_TRUE(!unverified_roots.has_value(),
+            "checked higher-order ODE rejects roots with large backward error");
+        if (!unverified_roots) {
+            EXPECT_TRUE(unverified_roots.error().code == CasErrc::NumericFailure,
+                "unverified characteristic roots report NumericFailure");
+        }
+    }
+    {
+        auto small_complex_roots = solve_higher_order_ode_checked(
+            {1.0, 1.0, 1.0e-20, 1.0e-20}, nullptr, "x", "y");
+        EXPECT_TRUE(small_complex_roots.has_value(),
+            "checked higher-order ODE supports small nonzero complex roots");
+        if (small_complex_roots &&
+            small_complex_roots.value().general_solution) {
+            bool preserved_cosine_basis = false;
+            bool preserved_sine_basis = false;
+            for (const auto& selected :
+                 small_complex_roots.value().constants) {
+                auto basis =
+                    small_complex_roots.value().general_solution;
+                for (const auto& constant :
+                     small_complex_roots.value().constants) {
+                    basis = basis->substitute(
+                        constant,
+                        SymbolicExpr::number(
+                            constant == selected ? 1 : 0));
+                }
+                auto first = evaluate_numeric(
+                    *basis->differentiate("x"), {{"x", 0.0}});
+                auto second = evaluate_numeric(
+                    *basis->differentiate("x")->differentiate("x"),
+                    {{"x", 0.0}});
+                if (first && second) {
+                    preserved_sine_basis =
+                        preserved_sine_basis ||
+                        std::abs(
+                            (first.value().value - 1.0e-10) /
+                            1.0e-10) < 1.0e-6;
+                    preserved_cosine_basis =
+                        preserved_cosine_basis ||
+                        std::abs(
+                            (second.value().value + 1.0e-20) /
+                            1.0e-20) < 1.0e-6;
+                }
+            }
+            EXPECT_TRUE(preserved_cosine_basis,
+                "small complex pair preserves its cosine basis");
+            EXPECT_TRUE(preserved_sine_basis,
+                "small complex pair preserves its sine basis");
+        }
+    }
+    {
+        auto close_complex_roots = solve_higher_order_ode_checked(
+            {1.0, -1.0, -0.9999999999, 1.0000000001},
+            nullptr, "x", "y");
+        EXPECT_TRUE(close_complex_roots.has_value(),
+            "checked higher-order ODE supports a close complex pair");
+        if (close_complex_roots &&
+            close_complex_roots.value().general_solution) {
+            bool preserved_sine_basis = false;
+            for (const auto& selected :
+                 close_complex_roots.value().constants) {
+                auto basis =
+                    close_complex_roots.value().general_solution;
+                for (const auto& constant :
+                     close_complex_roots.value().constants) {
+                    basis = basis->substitute(
+                        constant,
+                        SymbolicExpr::number(
+                            constant == selected ? 1 : 0));
+                }
+                auto first = evaluate_numeric(
+                    *basis->differentiate("x"), {{"x", 0.0}});
+                auto second = evaluate_numeric(
+                    *basis->differentiate("x")->differentiate("x"),
+                    {{"x", 0.0}});
+                if (first && second) {
+                    preserved_sine_basis =
+                        preserved_sine_basis ||
+                        (std::abs(
+                             (first.value().value - 1.0e-5) /
+                             1.0e-5) < 1.0e-5 &&
+                         std::abs(
+                             (second.value().value - 2.0e-5) /
+                             2.0e-5) < 1.0e-5);
+                }
+            }
+            EXPECT_TRUE(preserved_sine_basis,
+                "close complex pair is not projected onto the real axis");
+        }
+    }
+    {
+        auto uniformly_small_coefficients =
+            solve_higher_order_ode_checked(
+                {1.0e-300, 1.0e-300}, nullptr, "x", "y");
+        EXPECT_TRUE(uniformly_small_coefficients.has_value(),
+            "uniform coefficient scaling does not change an ODE");
+        if (uniformly_small_coefficients &&
+            uniformly_small_coefficients.value().general_solution) {
+            auto basis =
+                uniformly_small_coefficients.value().general_solution
+                    ->substitute("C1", SymbolicExpr::number(1))
+                    ->simplify();
+            auto derivative = evaluate_numeric(
+                *basis->differentiate("x"), {{"x", 0.0}});
+            EXPECT_TRUE(derivative.has_value(),
+                "uniformly scaled ODE solution is numerically evaluable");
+            if (derivative) {
+                EXPECT_NEAR(
+                    derivative.value().value, -1.0, 1.0e-12,
+                    "uniformly scaled ODE preserves its characteristic root");
+            }
+        }
+    }
+    {
+        const double root_scale = 1.0e100;
+        auto large_characteristic_roots =
+            solve_higher_order_ode_checked(
+                {1.0, -6.0e100, 1.1e201, -6.0e300},
+                nullptr, "x", "y");
+        EXPECT_TRUE(large_characteristic_roots.has_value(),
+            "finite large characteristic roots are supported");
+        if (large_characteristic_roots &&
+            large_characteristic_roots.value().general_solution) {
+            bool found_one = false;
+            bool found_two = false;
+            bool found_three = false;
+            for (const auto& selected :
+                 large_characteristic_roots.value().constants) {
+                auto basis =
+                    large_characteristic_roots.value().general_solution;
+                for (const auto& constant :
+                     large_characteristic_roots.value().constants) {
+                    basis = basis->substitute(
+                        constant,
+                        SymbolicExpr::number(
+                            constant == selected ? 1 : 0));
+                }
+                auto derivative = evaluate_numeric(
+                    *basis->differentiate("x"), {{"x", 0.0}});
+                if (derivative) {
+                    const double scaled_root =
+                        derivative.value().value / root_scale;
+                    found_one |= std::abs(scaled_root - 1.0) < 1.0e-8;
+                    found_two |= std::abs(scaled_root - 2.0) < 1.0e-8;
+                    found_three |= std::abs(scaled_root - 3.0) < 1.0e-8;
+                }
+            }
+            EXPECT_TRUE(found_one && found_two && found_three,
+                "large characteristic roots preserve their finite scale");
+        }
+    }
+
+
+
+
+
+    {
+        auto x = SymbolicExpr::variable("x");
+        auto ratio = SymbolicExpr::add(
+            SymbolicExpr::multiply(
+                SymbolicExpr::add(x, SymbolicExpr::number(-1)),
+                SymbolicExpr::add(x, SymbolicExpr::number(-2))),
+            SymbolicExpr::number(1));
+        auto sampled_coefficient =
+            SymbolicExpr::multiply(x, ratio)->simplify();
+        std::vector<double> constants{42.0};
+        EXPECT_FALSE(
+            is_euler_equation(
+                {sampled_coefficient, SymbolicExpr::number(1)},
+                "x", constants),
+            "matching at two sample points does not prove an Euler coefficient");
+        EXPECT_TRUE(constants.empty(),
+                    "failed Euler classification clears extracted constants");
+        EXPECT_FALSE(is_euler_equation({}, "x", constants),
+                     "an empty coefficient list is not an Euler equation");
+        EXPECT_FALSE(
+            is_euler_equation(
+                {SymbolicExpr::number(0), SymbolicExpr::number(1)},
+                "x", constants),
+            "a zero leading coefficient does not define the stated order");
+    }
+
+    {
+        LMCAS::CancellationToken cancellation;
+        LMCAS::ComputationContext cancelled_context({}, cancellation);
         cancellation.cancel();
         auto cancelled = solve_higher_order_ode_checked(
             {1.0, 0.0, 1.0}, nullptr, "x", "y", cancelled_context);
@@ -373,9 +694,9 @@ void test_higher_order_euler_checked_contracts() {
         EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
             "checked higher-order ODE reports Cancelled");
 
-        lamina::ResourceLimits limits;
+        LMCAS::ResourceLimits limits;
         limits.max_steps = 1;
-        lamina::ComputationContext limited_context(limits);
+        LMCAS::ComputationContext limited_context(limits);
         auto limited = solve_euler_ode_checked(
             {1.0, 1.0, -1.0}, nullptr, "x", "y", limited_context);
         EXPECT_TRUE(!limited.has_value(),
@@ -463,6 +784,76 @@ void test_classification() {
         auto cls = classify_first_order_ode(rhs, "x", "y");
         /// x^2 + y^2 进入一阶分类路径,可归类为恰当方程或 Unknown.
         EXPECT_TRUE(cls.order == 1, "classified as first order");
+    }
+
+    TEST_CASE("Classification rejects unrepresentable inputs");
+    {
+        std::shared_ptr<SymbolicExpr> null_rhs;
+        auto first_order = classify_first_order_ode(null_rhs, "x", "y");
+        EXPECT_TRUE(first_order.type == ODEType::Unknown,
+            "null first-order RHS is not classified as separable");
+
+        auto parameter = SymbolicExpr::variable("a");
+        std::vector<std::shared_ptr<SymbolicExpr>> coeffs{
+            parameter, SymbolicExpr::number(1), SymbolicExpr::number(1)};
+        auto higher_order =
+            classify_higher_order_ode(coeffs, SymbolicExpr::number(0), "x", "y");
+        EXPECT_TRUE(higher_order.type == ODEType::Unknown,
+            "symbolic constants are not represented as numeric zero coefficients");
+        EXPECT_TRUE(higher_order.const_coeffs.empty(),
+            "unsupported constant coefficients do not expose fabricated values");
+    }
+
+    TEST_CASE("Classifiers require symbolic proofs");
+    {
+        std::shared_ptr<SymbolicExpr> P;
+        std::shared_ptr<SymbolicExpr> Q;
+        std::shared_ptr<SymbolicExpr> null_rhs;
+        EXPECT_FALSE(is_linear_first_order(null_rhs, "x", "y", P, Q),
+            "null RHS is not a linear ODE");
+        EXPECT_FALSE(is_separable(null_rhs, "x", "y"),
+            "null RHS is not a separable ODE");
+
+        auto y = SymbolicExpr::variable("y");
+        auto nonlinear = SymbolicExpr::power(
+            y, SymbolicExpr::number(2));
+        P = SymbolicExpr::number(9);
+        Q = SymbolicExpr::number(9);
+        EXPECT_FALSE(
+            is_linear_first_order(nonlinear, "x", "y", P, Q),
+            "nonlinear RHS is not a linear ODE");
+        EXPECT_TRUE(!P && !Q,
+            "failed linear classification clears extracted coefficients");
+
+        auto one = SymbolicExpr::number(1);
+        EXPECT_FALSE(is_separable(one, "x", "x"),
+            "separable classifier rejects duplicate variable names");
+        EXPECT_FALSE(is_homogeneous_ode(one, "", "y"),
+            "homogeneous classifier rejects an empty variable name");
+        int bernoulli_n = 7;
+        EXPECT_FALSE(
+            is_bernoulli_ode(
+                nonlinear, "y", "y", P, Q, bernoulli_n),
+            "Bernoulli classifier rejects duplicate variable names");
+        EXPECT_TRUE(!P && !Q && bernoulli_n == 0,
+            "failed Bernoulli classification clears extracted outputs");
+        EXPECT_FALSE(is_exact_ode(one, one, "x", "x"),
+            "exact classifier rejects duplicate variable names");
+        EXPECT_FALSE(is_constant_coefficient({}, "x"),
+            "an empty coefficient list is not a constant-coefficient ODE");
+
+        auto x = SymbolicExpr::variable("x");
+        auto rhs = SymbolicExpr::multiply(
+            SymbolicExpr::multiply(
+                SymbolicExpr::add(
+                    SymbolicExpr::multiply(SymbolicExpr::number(2), x),
+                    SymbolicExpr::number(-1)),
+                SymbolicExpr::add(x, SymbolicExpr::number(-1))),
+            SymbolicExpr::multiply(
+                SymbolicExpr::add(x, SymbolicExpr::number(-2)),
+                SymbolicExpr::add(x, SymbolicExpr::number(-4))));
+        EXPECT_FALSE(is_homogeneous_ode(rhs, "x", "y"),
+            "zeros at fixed sample points do not prove homogeneity");
     }
 }
 
@@ -568,6 +959,18 @@ void test_frobenius() {
         auto type = checked_singularity(p, q, x0, "x");
         EXPECT_TRUE(type == ODESingularityType::RegularSingular,
             "Bessel at x=0 is regular singular");
+    }
+
+    TEST_CASE("Frobenius: symbolic coefficients are inconclusive");
+    {
+        auto parameter = SymbolicExpr::variable("a");
+        auto result = classify_singular_point_checked(
+            parameter, SymbolicExpr::number(1),
+            SymbolicExpr::number(0), "x");
+        EXPECT_TRUE(!result,
+            "symbolic point values are not mistaken for poles");
+        EXPECT_TRUE(!result && result.error().code == CasErrc::Inconclusive,
+            "symbolic singularity classification reports Inconclusive");
     }
 
     TEST_CASE("Frobenius: ordinary point series solution (y'' + y = 0)");
@@ -694,6 +1097,21 @@ void test_vop_frobenius_checked_contracts() {
 
     {
         auto x = SymbolicExpr::variable("x");
+        auto parameter = SymbolicExpr::variable("a");
+        auto p = SymbolicExpr::multiply(parameter, x);
+        auto q = SymbolicExpr::number(1);
+        auto x0 = SymbolicExpr::number(0);
+        auto sol = solve_frobenius_checked(p, q, x0, "x", 4);
+        EXPECT_TRUE(!sol.has_value(),
+            "checked Frobenius rejects coefficients that cannot be lowered numerically");
+        if (!sol) {
+            EXPECT_TRUE(sol.error().code == CasErrc::Inconclusive,
+                "checked Frobenius reports Inconclusive for symbolic Taylor coefficients");
+        }
+    }
+
+    {
+        auto x = SymbolicExpr::variable("x");
         auto p = SymbolicExpr::number(0);
         auto q = SymbolicExpr::divide(SymbolicExpr::number(1),
             SymbolicExpr::power(x, SymbolicExpr::number(3)));
@@ -724,8 +1142,8 @@ void test_vop_frobenius_checked_contracts() {
         auto y2 = SymbolicExpr::sin(x);
         auto g = SymbolicExpr::sin(x);
 
-        lamina::CancellationToken cancellation;
-        lamina::ComputationContext cancelled_context({}, cancellation);
+        LMCAS::CancellationToken cancellation;
+        LMCAS::ComputationContext cancelled_context({}, cancellation);
         cancellation.cancel();
         auto cancelled = solve_variation_of_parameters_checked(
             y1, y2, g, "x", cancelled_context);
@@ -734,9 +1152,9 @@ void test_vop_frobenius_checked_contracts() {
         EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
             "checked variation of parameters reports Cancelled");
 
-        lamina::ResourceLimits limits;
+        LMCAS::ResourceLimits limits;
         limits.max_steps = 1;
-        lamina::ComputationContext limited_context(limits);
+        LMCAS::ComputationContext limited_context(limits);
         auto p = SymbolicExpr::number(0);
         auto q = SymbolicExpr::number(1);
         auto x0 = SymbolicExpr::number(0);

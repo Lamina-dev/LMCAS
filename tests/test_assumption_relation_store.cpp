@@ -5,7 +5,7 @@
 #include "assumption.hpp"
 #include "symbolic.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 /// Helper: create a variable expression through the stable public factory.
 static SymbolicExpr make_var_expr(const std::string& name) {

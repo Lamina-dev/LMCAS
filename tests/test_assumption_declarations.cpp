@@ -7,14 +7,14 @@
 #include <string>
 #include <stdexcept>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static Interval make_closed_interval(double lo, double hi) {
-    auto lower_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lower_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto upper_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::closed(lower_val);
     iv.upper = Endpoint::closed(upper_val);
@@ -22,10 +22,10 @@ static Interval make_closed_interval(double lo, double hi) {
 }
 
 static Interval make_open_interval(double lo, double hi) {
-    auto lower_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lower_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto upper_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::open(lower_val);
     iv.upper = Endpoint::open(upper_val);
@@ -253,8 +253,8 @@ static void test_periodicity_declare_and_retrieve() {
     PropertyStore store;
 
     // Create a period expression: 2*pi (represented as a constant for simplicity)
-    auto period = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.283185307)));
+    auto period = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.283185307)));
 
     store.declare_periodic("sin_x", period);
 
@@ -280,10 +280,10 @@ static void test_periodicity_overwrite_period() {
 
     PropertyStore store;
 
-    auto period1 = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
-    auto period2 = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
+    auto period1 = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
+    auto period2 = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
 
     store.declare_periodic("f", period1);
     EXPECT_TRUE(store.is_periodic("f"), "f is periodic after first declaration");
@@ -304,10 +304,10 @@ static void test_periodicity_different_symbols() {
 
     PropertyStore store;
 
-    auto period_sin = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
-    auto period_tan = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
+    auto period_sin = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
+    auto period_tan = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
 
     store.declare_periodic("sin_x", period_sin);
     store.declare_periodic("tan_x", period_tan);

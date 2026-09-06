@@ -1,6 +1,6 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -91,12 +91,12 @@ std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const Sy
                 auto onem = SymbolicExpr::add(one, SymbolicExpr::multiply(SymbolicExpr::number(-1), t2)); // 1-t^2
                 auto two_t = SymbolicExpr::multiply(SymbolicExpr::number(2), t);
                 switch (fn->type()) {
-                    case FT::Sin: return lamina::detail::node(SymbolicExpr::divide(two_t, onep));
-                    case FT::Cos: return lamina::detail::node(SymbolicExpr::divide(onem, onep));
-                    case FT::Tan: return lamina::detail::node(SymbolicExpr::divide(two_t, onem));
-                    case FT::Csc: return lamina::detail::node(SymbolicExpr::divide(onep, two_t));
-                    case FT::Sec: return lamina::detail::node(SymbolicExpr::divide(onep, onem));
-                    case FT::Cot: return lamina::detail::node(SymbolicExpr::divide(onem, two_t));
+                    case FT::Sin: return LMCAS::detail::node(SymbolicExpr::divide(two_t, onep));
+                    case FT::Cos: return LMCAS::detail::node(SymbolicExpr::divide(onem, onep));
+                    case FT::Tan: return LMCAS::detail::node(SymbolicExpr::divide(two_t, onem));
+                    case FT::Csc: return LMCAS::detail::node(SymbolicExpr::divide(onep, two_t));
+                    case FT::Sec: return LMCAS::detail::node(SymbolicExpr::divide(onep, onem));
+                    case FT::Cot: return LMCAS::detail::node(SymbolicExpr::divide(onem, two_t));
                     default: break;
                 }
             }
@@ -104,20 +104,20 @@ std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const Sy
         /// 其它函数:递归替换参数
         std::vector<std::shared_ptr<const SymbolicNode>> new_args;
         for (auto& a : fn->arguments()) new_args.push_back(weier_replace(a, var, tvar));
-        return lamina::detail::make_node<FunctionNode>(fn->type(), new_args);
+        return LMCAS::detail::make_node<FunctionNode>(fn->type(), new_args);
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         std::vector<std::shared_ptr<const SymbolicNode>> ops;
         for (auto& op : add->operands()) ops.push_back(weier_replace(op, var, tvar));
-        return lamina::detail::make_node<AddNode>(ops);
+        return LMCAS::detail::make_node<AddNode>(ops);
     }
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         std::vector<std::shared_ptr<const SymbolicNode>> ops;
         for (auto& op : mul->operands()) ops.push_back(weier_replace(op, var, tvar));
-        return lamina::detail::make_node<MultiplyNode>(ops);
+        return LMCAS::detail::make_node<MultiplyNode>(ops);
     }
     if (auto pw = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return lamina::detail::make_node<PowerNode>(weier_replace(pw->base(), var, tvar),
+        return LMCAS::detail::make_node<PowerNode>(weier_replace(pw->base(), var, tvar),
                                            weier_replace(pw->exponent(), var, tvar));
     }
     return node->clone();
@@ -134,7 +134,7 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
 
     if (std::dynamic_pointer_cast<const NumberNode>(node) ||
         std::dynamic_pointer_cast<const VariableNode>(node)) {
-        return RatPair{lamina::detail::make_expression_ptr(node->clone()), one};
+        return RatPair{LMCAS::detail::make_expression_ptr(node->clone()), one};
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         /// 累加:a/b + c/d = (a*d + c*b)/(b*d)
@@ -198,19 +198,19 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
 
 } // anonymous namespace
 
-std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext& computation, int depth) {
-    if (!lamina::detail::node(expr)) return nullptr;
+    if (!LMCAS::detail::node(expr)) return nullptr;
 
     /// 必须确实含有 sin/cos(var) 且整体为其有理函数
-    if (!weier_has_trig_of_var(lamina::detail::node(expr), var)) return nullptr;
-    if (!weier_is_rational_trig(lamina::detail::node(expr), var)) return nullptr;
+    if (!weier_has_trig_of_var(LMCAS::detail::node(expr), var)) return nullptr;
+    if (!weier_is_rational_trig(LMCAS::detail::node(expr), var)) return nullptr;
 
     const std::string tvar = "__weier_t";
 
     /// 替换 sin/cos -> t 的有理式,并乘以 dx = 2/(1+t^2) dt
-    auto replaced = lamina::detail::make_expression_ptr(weier_replace(lamina::detail::node(expr), var, tvar));
+    auto replaced = LMCAS::detail::make_expression_ptr(weier_replace(LMCAS::detail::node(expr), var, tvar));
     auto t = SymbolicExpr::variable(tvar);
     auto t2 = SymbolicExpr::power(t, SymbolicExpr::number(2));
     auto onep = SymbolicExpr::add(SymbolicExpr::number(1), t2);
@@ -219,10 +219,10 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
 
     /// sin/cos 有理函数经代换后仍为 t 的有理函数.
     /// 通过多项式对递归求值整棵表达式树,直接得到 N(t)/D(t).
-    auto rat = weier_to_rational(lamina::detail::node(integrand_raw), tvar);
+    auto rat = weier_to_rational(LMCAS::detail::node(integrand_raw), tvar);
     if (!rat) return nullptr;  /// 节点位于多项式支持域之外.
     auto [num_poly, den_poly] = *rat;
-    if (!den_poly || lamina::detail::node(den_poly)->is_zero()) return nullptr;
+    if (!den_poly || LMCAS::detail::node(den_poly)->is_zero()) return nullptr;
 
     /// 使用多项式 GCD 将 num/den 化为最简有理函数,并保持单一分式结构.
     std::shared_ptr<SymbolicExpr> integrand_t;
@@ -255,7 +255,8 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
     auto rational_attempt = rds.try_integrate(
         *integrand_t, tvar, inner, computation, depth + 1);
     if (!rational_attempt) {
-        throw detail::ResultPropagation(rational_attempt.error());
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            rational_attempt.error());
     }
     std::shared_ptr<SymbolicExpr> integrated;
     if (auto* candidate =
@@ -263,26 +264,28 @@ std::shared_ptr<SymbolicExpr> WeierstrassStrategy::try_integrate_raw(
         integrated = candidate->expression;
     }
     if (!integrated) {
-        integrated = detail::propagate_result(
-            inner.integrate_recursive(*integrand_t, tvar, computation, 0));
+        auto recursive =
+            inner.integrate_recursive(*integrand_t, tvar, computation, 0);
+        if (!recursive) return recursive;
+        integrated = std::move(recursive.value());
     }
     if (!integrated) return nullptr;
 
     /// 若结果仍含未求值积分节点,视为失败
-    if (expression_depends_on_variable(lamina::detail::node(integrated), tvar) &&
-        lamina::detail::contains_node_type<IntegralNode>(
-            lamina::detail::node(integrated))) {
+    if (expression_depends_on_variable(LMCAS::detail::node(integrated), tvar) &&
+        LMCAS::detail::contains_node_type<IntegralNode>(
+            LMCAS::detail::node(integrated))) {
         return nullptr;
     }
 
     /// 回代 t = tan(x/2)
     auto half_x = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)),
                                          SymbolicExpr::variable(var));
-    auto tan_half = lamina::detail::make_expression_ptr(lamina::detail::make_node<FunctionNode>(
-        FunctionNode::FuncType::Tan, std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(half_x)}));
+    auto tan_half = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<FunctionNode>(
+        FunctionNode::FuncType::Tan, std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(half_x)}));
     auto result = integrated->substitute(tvar, tan_half);
     if (!result) return nullptr;
     return result->simplify();
 }
 
-} // namespace lamina
+} // namespace LMCAS

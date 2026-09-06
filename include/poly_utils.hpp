@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @brief Convert a symbolic expression to a univariate polynomial.
@@ -25,7 +25,7 @@ namespace lamina {
  * recognize_rational_polynomial().
  */
 template <typename T>
-LAMINA_API Polynomial<T> symbolic_to_poly(
+LMCAS_API Polynomial<T> symbolic_to_poly(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable);
 
@@ -36,7 +36,7 @@ LAMINA_API Polynomial<T> symbolic_to_poly(
  * coefficients.
  */
 template <typename T>
-LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
+LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
     const Polynomial<T>& polynomial);
 
 using OptionalRationalPolynomial = std::optional<Polynomial<Rational>>;
@@ -51,13 +51,13 @@ using SymbolicGcdResult = Result<std::shared_ptr<SymbolicExpr>>;
  * powers. Approximate numbers and non-polynomial nodes are rejected. A
  * successful result is verified to divide both inputs exactly.
  */
-LAMINA_API SymbolicGcdResult symbolic_polynomial_gcd(
+LMCAS_API SymbolicGcdResult symbolic_polynomial_gcd(
     const SymbolicExpr& lhs,
     const SymbolicExpr& rhs,
     ComputationContext& context);
 
 /** Return the positive coefficient content of an exact rational polynomial. */
-LAMINA_API Result<Rational> symbolic_polynomial_content(
+LMCAS_API Result<Rational> symbolic_polynomial_content(
     const SymbolicExpr& expression,
     ComputationContext& context);
 
@@ -67,7 +67,7 @@ LAMINA_API Result<Rational> symbolic_polynomial_content(
  * 成功且 optional 为空表示表达式位于当前结构支持域之外.
  * 精确系数仅来源于精确数值节点;遍历与展开计入所提供的上下文预算.
  */
-LAMINA_API Result<OptionalRationalPolynomial> recognize_rational_polynomial(
+LMCAS_API Result<OptionalRationalPolynomial> recognize_rational_polynomial(
     const SymbolicExpr& expression,
     const std::string& variable,
     ComputationContext& context);
@@ -140,17 +140,17 @@ inline SymbolicPolyCoeff extract_coeff_value<SymbolicPolyCoeff>(
 }
 
 template <>
-LAMINA_API BigInt extract_coeff_value<BigInt>(
+LMCAS_API BigInt extract_coeff_value<BigInt>(
     const std::shared_ptr<SymbolicExpr>& coefficient);
 
 template <>
-LAMINA_API Rational extract_coeff_value<Rational>(
+LMCAS_API Rational extract_coeff_value<Rational>(
     const std::shared_ptr<SymbolicExpr>& coefficient);
 
 /** @brief Return whether an expression contains a free occurrence of variable. */
-LAMINA_API bool contains(
+LMCAS_API bool contains(
     const SymbolicExpr& expression,
     const std::string& variable);
 
 
-} // namespace lamina
+} // namespace LMCAS

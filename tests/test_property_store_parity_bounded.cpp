@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 void test_declare_parity_even() {
@@ -167,10 +167,10 @@ void test_declare_bounded_with_interval() {
     TEST_CASE("Declare Bounded with Interval stores bounds");
     PropertyStore store;
 
-    auto lower_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(0)));
-    auto upper_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(10)));
+    auto lower_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);
@@ -241,10 +241,10 @@ void test_boundedness_unknown_can_be_set() {
     TEST_CASE("Setting boundedness to Unknown is allowed and clears bounds");
     PropertyStore store;
 
-    auto lower_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(0)));
-    auto upper_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(10)));
+    auto lower_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);

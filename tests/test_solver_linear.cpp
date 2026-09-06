@@ -2,40 +2,40 @@
 #include "test_common.hpp"
 #include <iostream>
 
-using namespace lamina;
+using namespace LMCAS;
 
 SymbolicExpr create_var(const std::string& name) {
-    return lamina::detail::expression_from_node(SymbolicFactory::create_variable(name));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_variable(name));
 }
 
 SymbolicExpr create_num(int n) {
-    return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(n)));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_number(BigInt(n)));
 }
 
 static SymbolicExpr operator+(const SymbolicExpr& a, const SymbolicExpr& b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
-    ops.push_back(lamina::detail::node(a));
-    ops.push_back(lamina::detail::node(b));
-    return lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
+    ops.push_back(LMCAS::detail::node(a));
+    ops.push_back(LMCAS::detail::node(b));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_add(ops));
 }
 
 static SymbolicExpr operator-(const SymbolicExpr& a, const SymbolicExpr& b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     ops.push_back(SymbolicFactory::create_number(BigInt(-1)));
-    ops.push_back(lamina::detail::node(b));
+    ops.push_back(LMCAS::detail::node(b));
     auto neg = SymbolicFactory::create_multiply(ops);
 
     std::vector<std::shared_ptr<const SymbolicNode>> aops;
-    aops.push_back(lamina::detail::node(a));
+    aops.push_back(LMCAS::detail::node(a));
     aops.push_back(neg);
-    return lamina::detail::expression_from_node(SymbolicFactory::create_add(aops));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_add(aops));
 }
 
 static SymbolicExpr operator*(const SymbolicExpr& a, const SymbolicExpr& b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
-    ops.push_back(lamina::detail::node(a));
-    ops.push_back(lamina::detail::node(b));
-    return lamina::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
+    ops.push_back(LMCAS::detail::node(a));
+    ops.push_back(LMCAS::detail::node(b));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
 }
 
 void test_linear_solver_2x2() {

@@ -3,7 +3,7 @@
 #include <sstream>
 #include <utility>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kUnitOperation = "unit";
@@ -148,4 +148,4 @@ Result<Rational> UnitSystem::conversion_factor(
         source_unit.value().scale_to_base / target_unit.value().scale_to_base);
 }
 
-} // namespace lamina
+} // namespace LMCAS

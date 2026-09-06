@@ -5,11 +5,17 @@
 #pragma once
 #include <sstream>
 #include <string>
-#include "../lamina_export.hpp"
+#include "../lmcas_export.hpp"
 #include "../symbolic_ast.hpp"
 
-/** @brief 打印访问器，遍历 AST 并生成可读的数学表达式字符串 */
-class LAMINA_API PrintVisitor : public lamina::detail::SymbolicVisitor {
+namespace LMCAS {
+
+/**
+ * @brief 打印访问器，遍历 AST 并生成可读的数学表达式字符串。
+ *
+ * 幂表达式为分数指数以及负数、分数和嵌套幂底数保留括号。
+ */
+class LMCAS_API PrintVisitor : public LMCAS::detail::SymbolicVisitor {
 public:
     PrintVisitor() = default;
 
@@ -49,3 +55,5 @@ public:
 private:
     std::stringstream buffer;
 };
+
+} // namespace LMCAS

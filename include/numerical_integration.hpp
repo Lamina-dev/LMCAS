@@ -8,17 +8,23 @@
 #include <memory>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @brief Checked composite Simpson integration.
  *
  * Endpoints and samples are evaluated through evaluate_numeric(); invalid
  * arguments, odd subinterval counts, unbound variables, domain errors,
- * cancellation, and budget exhaustion are reported explicitly. The returned
- * absolute_error is a step-doubling Richardson estimate, not a certified bound.
+ * cancellation, and budget exhaustion are reported explicitly. Equal finite
+ * endpoints return exact zero before reserving any integrand-sampling budget.
+ * Other finite endpoints are mapped through normalized coordinates, so their
+ * mathematical span need not itself be representable as a double when the
+ * result is finite.
+ * The returned value is the step-doubling Richardson extrapolation
+ * `S(2n) + (S(2n) - S(n)) / 15`; absolute_error is the corresponding
+ * `abs(S(2n) - S(n)) / 15` estimate, not a certified bound.
  */
-LAMINA_API Result<ApproxReal> quadrature_simpson_numeric(
+LMCAS_API Result<ApproxReal> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -27,22 +33,23 @@ LAMINA_API Result<ApproxReal> quadrature_simpson_numeric(
     int n = 100
 );
 
-LAMINA_API Result<ApproxReal> quadrature_simpson_numeric(
+LMCAS_API Result<ApproxReal> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
     int n = 100
 );
-
 /**
  * @brief Checked Gauss-Legendre integration for orders 1 through 20.
  *
  * Every supported order is evaluated by LMMC's Gauss-Legendre implementation.
+ * Equal finite endpoints return exact zero before reserving quadrature samples.
+ * Other finite extreme endpoints use an overflow-safe affine map to [-1,1].
  * The returned absolute_error is the difference from an adjacent-order rule,
  * not a certified bound.
  */
-LAMINA_API Result<ApproxReal> quadrature_gaussian_numeric(
+LMCAS_API Result<ApproxReal> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -51,7 +58,7 @@ LAMINA_API Result<ApproxReal> quadrature_gaussian_numeric(
     int n = 5
 );
 
-LAMINA_API Result<ApproxReal> quadrature_gaussian_numeric(
+LMCAS_API Result<ApproxReal> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -64,9 +71,10 @@ LAMINA_API Result<ApproxReal> quadrature_gaussian_numeric(
  *
  * All endpoint and integrand evaluation goes through evaluate_numeric(); missing
  * variables, domain errors, cancellation, and budget exhaustion are represented
- * by CasError in the Result channel.
+ * by CasError in the Result channel. Finite extreme endpoints are bisected and
+ * scaled through overflow-safe center and half-length formulas.
  */
-LAMINA_API Result<ApproxReal> adaptive_simpson_numeric(
+LMCAS_API Result<ApproxReal> adaptive_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -76,7 +84,7 @@ LAMINA_API Result<ApproxReal> adaptive_simpson_numeric(
     int max_depth = 50
 );
 
-LAMINA_API Result<ApproxReal> adaptive_simpson_numeric(
+LMCAS_API Result<ApproxReal> adaptive_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -86,7 +94,7 @@ LAMINA_API Result<ApproxReal> adaptive_simpson_numeric(
 );
 
 /** @brief Default checked numerical integration using composite Simpson. */
-LAMINA_API Result<ApproxReal> numerical_integrate_numeric(
+LMCAS_API Result<ApproxReal> numerical_integrate_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -95,7 +103,7 @@ LAMINA_API Result<ApproxReal> numerical_integrate_numeric(
     int n = 100
 );
 
-LAMINA_API Result<ApproxReal> numerical_integrate_numeric(
+LMCAS_API Result<ApproxReal> numerical_integrate_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -103,4 +111,4 @@ LAMINA_API Result<ApproxReal> numerical_integrate_numeric(
     int n = 100
 );
 
-} // namespace lamina
+} // namespace LMCAS

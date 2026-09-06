@@ -13,24 +13,24 @@
 #include <vector>
 #include <stdexcept>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static SymbolicExpr make_var_expr(const std::string& name) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
     return expr;
 }
 
 static SymbolicExpr make_num_expr(int v) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(v)));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(v)));
     return expr;
 }
 
 static SymbolicExpr make_relation_expr(const std::string& var_name,
                                        RelationalNode::Op op, int rhs_val) {
-    auto lhs = lamina::detail::make_node<VariableNode>(var_name);
-    auto rhs = lamina::detail::make_node<NumberNode>(BigInt(rhs_val));
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(lhs, rhs, op));
+    auto lhs = LMCAS::detail::make_node<VariableNode>(var_name);
+    auto rhs = LMCAS::detail::make_node<NumberNode>(BigInt(rhs_val));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(lhs, rhs, op));
     return expr;
 }
 
@@ -462,11 +462,11 @@ void test_assume_non_relational_expr_throws() {
 
     AssumptionContext ctx;
     // Create an expression with AddNode root (x + y)
-    auto x = lamina::detail::make_node<VariableNode>("x");
-    auto y = lamina::detail::make_node<VariableNode>("y");
-    auto add = lamina::detail::make_node<AddNode>(
+    auto x = LMCAS::detail::make_node<VariableNode>("x");
+    auto y = LMCAS::detail::make_node<VariableNode>("y");
+    auto add = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x, y});
-    auto add_expr = lamina::detail::expression_from_node(add);
+    auto add_expr = LMCAS::detail::expression_from_node(add);
     auto failure_479 = ctx.assume(add_expr);
     EXPECT_TRUE(!failure_479.has_value(), "assume(expr_with_AddNode_root) should throw std::invalid_argument");
 }

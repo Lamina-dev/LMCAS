@@ -4,11 +4,13 @@
 
 #include LMCAS_HEADER_UNDER_TEST
 
-#ifdef LAMINA_INTERNAL_AST_INCLUDED
+#ifdef LMCAS_INTERNAL_AST_INCLUDED
 #error "public module headers must not include the AST implementation"
 #endif
 
 #include <type_traits>
+
+using namespace LMCAS;
 
 template <typename T, typename = void>
 struct HeaderTypeIsComplete : std::false_type {};

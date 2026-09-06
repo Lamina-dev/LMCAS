@@ -2,7 +2,7 @@
 #include "test_common.hpp"
 #include "multivariate_factor.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 /**
  * @brief 辅助函数：构造 MultiPoly 项

@@ -8,11 +8,13 @@
 #include "integration.hpp"
 #include "symbolic.hpp"
 
+using namespace LMCAS;
+
 int main() {
     TEST_CASE("Integration enhanced - power round trip");
     auto x = SymbolicExpr::variable("x");
     auto integrand = SymbolicExpr::power(x, SymbolicExpr::number(2));
-    lamina::Integrator integrator;
+    LMCAS::Integrator integrator;
     auto antiderivative = integrator.integrate(*integrand, "x");
     EXPECT_TRUE(antiderivative.has_value(), "integration returns an antiderivative");
     auto derivative = antiderivative

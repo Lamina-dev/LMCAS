@@ -9,71 +9,71 @@
 #include <memory>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
 }
 
 /// Create a deeply nested expression: f(f(f(...f(x)...))) with given depth.
 /// Uses exp as the nesting function.
 static SymbolicExpr make_deeply_nested(const std::string& var_name, int depth) {
-    auto node = lamina::detail::make_node<VariableNode>(var_name);
+    auto node = LMCAS::detail::make_node<VariableNode>(var_name);
     std::shared_ptr<const SymbolicNode> current = node;
     for (int i = 0; i < depth; ++i) {
-        current = lamina::detail::make_node<FunctionNode>(
+        current = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
             std::vector<std::shared_ptr<const SymbolicNode>>{current});
     }
-    return lamina::detail::expression_from_node(current);
+    return LMCAS::detail::expression_from_node(current);
 }
 
 /// Create a nested AddNode expression: ((x + x) + (x + x)) + ... with given depth.
 /// Each level doubles the tree width, creating exponential node count but linear depth.
 static SymbolicExpr make_nested_add(const std::string& var_name, int depth) {
-    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
+    auto var_node = LMCAS::detail::make_node<VariableNode>(var_name);
     std::shared_ptr<const SymbolicNode> current = var_node;
     for (int i = 0; i < depth; ++i) {
-        current = lamina::detail::make_node<AddNode>(
+        current = LMCAS::detail::make_node<AddNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{current, var_node});
     }
-    return lamina::detail::expression_from_node(current);
+    return LMCAS::detail::expression_from_node(current);
 }
 
 /// Create a self-referential expression by sharing the same node pointer at multiple
 /// positions in the tree. This tests cycle detection via pointer identity.
 static SymbolicExpr make_shared_subexpr() {
     // Create a shared sub-expression node
-    auto x = lamina::detail::make_node<VariableNode>("x");
-    auto shared_add = lamina::detail::make_node<AddNode>(
+    auto x = LMCAS::detail::make_node<VariableNode>("x");
+    auto shared_add = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x, x});
 
     // Use the same shared_add node in two positions of a multiply
     // This creates a DAG (not a tree), where the same pointer appears twice.
-    auto mul = lamina::detail::make_node<MultiplyNode>(
+    auto mul = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{shared_add, shared_add});
 
-    return lamina::detail::expression_from_node(mul);
+    return LMCAS::detail::expression_from_node(mul);
 }
 
 /// 创建结构相同但地址不同的两个节点,验证循环检测基于遍历路径.
 static std::pair<SymbolicExpr, SymbolicExpr> make_structurally_identical_distinct() {
     /// 分别构造两个结构相同的 AddNode.
-    auto x1 = lamina::detail::make_node<VariableNode>("x");
-    auto x2 = lamina::detail::make_node<VariableNode>("x");
+    auto x1 = LMCAS::detail::make_node<VariableNode>("x");
+    auto x2 = LMCAS::detail::make_node<VariableNode>("x");
 
-    auto add1 = lamina::detail::make_node<AddNode>(
+    auto add1 = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x1, x1});
-    auto add2 = lamina::detail::make_node<AddNode>(
+    auto add2 = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x2, x2});
 
     // Multiply using two distinct but structurally identical nodes
-    auto mul = lamina::detail::make_node<MultiplyNode>(
+    auto mul = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{add1, add2});
 
-    return {lamina::detail::expression_from_node(mul), lamina::detail::expression_from_node(add1)};
+    return {LMCAS::detail::expression_from_node(mul), LMCAS::detail::expression_from_node(add1)};
 }
 
 
@@ -126,10 +126,10 @@ static void test_cycle_detection_multiply_shared_operand() {
     InferenceEngine engine(ctx);
 
     // Create x^2 as multiply(x, x) using the SAME variable node pointer
-    auto x_node = lamina::detail::make_node<VariableNode>("x");
-    auto mul = lamina::detail::make_node<MultiplyNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>("x");
+    auto mul = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node, x_node});
-    auto expr = lamina::detail::expression_from_node(mul);
+    auto expr = LMCAS::detail::expression_from_node(mul);
     // Query should complete. x*x with x Positive should be Positive.
     Tribool result = engine.query_positive_checked(expr).value();
 
@@ -149,15 +149,15 @@ static void test_cycle_detection_nested_function_shared_arg() {
     InferenceEngine engine(ctx);
 
     // Create exp(x) using a shared x node, then add(exp(x), exp(x)) using same exp node
-    auto x_node = lamina::detail::make_node<VariableNode>("x");
-    auto exp_node = lamina::detail::make_node<FunctionNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>("x");
+    auto exp_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Exp,
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
 
     // Use the same exp_node pointer twice in an AddNode
-    auto add = lamina::detail::make_node<AddNode>(
+    auto add = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{exp_node, exp_node});
-    auto expr = lamina::detail::expression_from_node(add);
+    auto expr = LMCAS::detail::expression_from_node(add);
     // exp(x) is always positive, so exp(x) + exp(x) should be positive.
     // But cycle detection may trigger on the shared exp_node.
     Tribool result = engine.query_positive_checked(expr).value();
@@ -420,18 +420,18 @@ static void test_depth_limit_multiple_variables() {
     engine.set_max_depth(4);
 
     // Create exp(exp(exp(exp(exp(a + b)))))
-    auto a_node = lamina::detail::make_node<VariableNode>("a");
-    auto b_node = lamina::detail::make_node<VariableNode>("b");
-    auto add = lamina::detail::make_node<AddNode>(
+    auto a_node = LMCAS::detail::make_node<VariableNode>("a");
+    auto b_node = LMCAS::detail::make_node<VariableNode>("b");
+    auto add = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{a_node, b_node});
 
     std::shared_ptr<const SymbolicNode> current = add;
     for (int i = 0; i < 5; ++i) {
-        current = lamina::detail::make_node<FunctionNode>(
+        current = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
             std::vector<std::shared_ptr<const SymbolicNode>>{current});
     }
-    auto expr = lamina::detail::expression_from_node(current);
+    auto expr = LMCAS::detail::expression_from_node(current);
     Tribool result = engine.query_positive_checked(expr).value();
 
     // Should return Unknown due to depth limit

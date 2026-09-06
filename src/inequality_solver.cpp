@@ -16,7 +16,7 @@
 #include <functional>
 #include <optional>
 
-namespace lamina {
+namespace LMCAS {
 using detail::inequality_support::depends_on_any_param;
 using detail::inequality_support::determine_leading_sign;
 using detail::inequality_support::exact_numeric_sign;
@@ -43,7 +43,7 @@ Result<IntervalUnion> InequalitySolver::solve_inequality_checked(
     InequalityType type,
     const std::string& variable,
     ComputationContext& context) {
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return Result<IntervalUnion>::failure(
             CasErrc::InvalidArgument, "inequality expression cannot be null",
             kCheckedInequalityOperation);
@@ -150,7 +150,7 @@ IntervalUnion InequalitySolver::solve_inequality(
     auto poly = symbolic_to_poly<SymbolicPolyCoeff>(expr, variable);
     if (poly.is_zero()) {
 
-        if (expression_depends_on_variable(lamina::detail::node(expr), variable)) {
+        if (expression_depends_on_variable(LMCAS::detail::node(expr), variable)) {
             return IntervalUnion::empty();
         }
 
@@ -186,7 +186,7 @@ IntervalUnion InequalitySolver::solve_inequality(
 
     {
         auto poly_rat = symbolic_to_poly<Rational>(expr, variable);
-        if (poly_rat.is_zero() && expression_depends_on_variable(lamina::detail::node(expr), variable)) {
+        if (poly_rat.is_zero() && expression_depends_on_variable(LMCAS::detail::node(expr), variable)) {
 
             return IntervalUnion::empty();
         }
@@ -277,7 +277,7 @@ IntervalUnion InequalitySolver::solve_rational_inequality(
 
     {
         auto num_poly_rat = symbolic_to_poly<Rational>(numerator, variable);
-        if (num_poly_rat.is_zero() && expression_depends_on_variable(lamina::detail::node(numerator), variable)) {
+        if (num_poly_rat.is_zero() && expression_depends_on_variable(LMCAS::detail::node(numerator), variable)) {
             return IntervalUnion::empty();
         }
 
@@ -285,7 +285,7 @@ IntervalUnion InequalitySolver::solve_rational_inequality(
 
     {
         auto den_poly_rat = symbolic_to_poly<Rational>(denominator, variable);
-        if (den_poly_rat.is_zero() && expression_depends_on_variable(lamina::detail::node(denominator), variable)) {
+        if (den_poly_rat.is_zero() && expression_depends_on_variable(LMCAS::detail::node(denominator), variable)) {
             return IntervalUnion::empty();
         }
 
@@ -456,7 +456,7 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
 
     if (poly.is_zero()) {
 
-        if (expression_depends_on_variable(lamina::detail::node(expr), variable)) {
+        if (expression_depends_on_variable(LMCAS::detail::node(expr), variable)) {
 
             return result;
         }
@@ -510,20 +510,20 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                 /// 尝试结构化符号判断
                 /// diff 为 (disc)^0.5 形式(PowerNode with exp=0.5)或含 sqrt 的乘积
                 auto check_positive = [](const std::shared_ptr<SymbolicExpr>& e) -> bool {
-                    if (!e || !lamina::detail::node(e)) return false;
+                    if (!e || !LMCAS::detail::node(e)) return false;
                     /// PowerNode with exponent in (0,1) -> non-negative
-                    if (auto pw = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(e))) {
-                        auto exp_e = lamina::detail::make_expression_ptr(pw->exponent());
+                    if (auto pw = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(e))) {
+                        auto exp_e = LMCAS::detail::make_expression_ptr(pw->exponent());
                         if (auto ev = try_checked_numeric_constant(*exp_e)) {
                             if (*ev > 0 && *ev < 1.0) return true;
                         }
                     }
                     /// FunctionNode::Sqrt -> non-negative
-                    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(e))) {
+                    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(e))) {
                         if (fn->type() == FunctionNode::FuncType::Sqrt) return true;
                     }
                     /// MultiplyNode: all factors positive
-                    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(e))) {
+                    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(e))) {
                         int sign = 1;
                         for (const auto& op : mul->operands()) {
                             if (auto n = std::dynamic_pointer_cast<const NumberNode>(op)) {
@@ -538,7 +538,7 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                                     else if (std::get<lmmc_real_t>(n->value()) == 0) return false;
                                 }
                             } else if (auto pw2 = std::dynamic_pointer_cast<const PowerNode>(op)) {
-                                auto exp_e2 = lamina::detail::make_expression_ptr(pw2->exponent());
+                                auto exp_e2 = LMCAS::detail::make_expression_ptr(pw2->exponent());
                                 auto ev2 = try_checked_numeric_constant(*exp_e2);
                                 if (ev2 && *ev2 > 0 && *ev2 < 1.0) { /* positive, sign unchanged */ }
                                 else return false; // can't determine
@@ -554,8 +554,8 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                     return false;
                 };
                 auto check_negative = [](const std::shared_ptr<SymbolicExpr>& e) -> bool {
-                    if (!e || !lamina::detail::node(e)) return false;
-                    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(e))) {
+                    if (!e || !LMCAS::detail::node(e)) return false;
+                    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(e))) {
                         int sign = 1;
                         for (const auto& op : mul->operands()) {
                             if (auto n = std::dynamic_pointer_cast<const NumberNode>(op)) {
@@ -570,7 +570,7 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                                     else if (std::get<lmmc_real_t>(n->value()) == 0) return false;
                                 }
                             } else if (auto pw2 = std::dynamic_pointer_cast<const PowerNode>(op)) {
-                                auto exp_e2 = lamina::detail::make_expression_ptr(pw2->exponent());
+                                auto exp_e2 = LMCAS::detail::make_expression_ptr(pw2->exponent());
                                 auto ev2 = try_checked_numeric_constant(*exp_e2);
                                 if (ev2 && *ev2 > 0 && *ev2 < 1.0) { /* positive */ }
                                 else return false;
@@ -618,10 +618,10 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
 
         {
             PiecewiseIntervalResult::Case pos_case;
-            pos_case.condition = lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<RelationalNode>(
-                    lamina::detail::node(leading_coeff),
-                    lamina::detail::node(SymbolicExpr::number(0)),
+            pos_case.condition = LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<RelationalNode>(
+                    LMCAS::detail::node(leading_coeff),
+                    LMCAS::detail::node(SymbolicExpr::number(0)),
                     RelationalNode::Op::GT));
 
             auto symbolic_roots = solve_symbolic_poly(poly, variable);
@@ -646,10 +646,10 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
 
         {
             PiecewiseIntervalResult::Case neg_case;
-            neg_case.condition = lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<RelationalNode>(
-                    lamina::detail::node(leading_coeff),
-                    lamina::detail::node(SymbolicExpr::number(0)),
+            neg_case.condition = LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<RelationalNode>(
+                    LMCAS::detail::node(leading_coeff),
+                    LMCAS::detail::node(SymbolicExpr::number(0)),
                     RelationalNode::Op::LT));
 
             auto symbolic_roots = solve_symbolic_poly(poly, variable);
@@ -674,10 +674,10 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
 
         {
             PiecewiseIntervalResult::Case degen_case;
-            degen_case.condition = lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<RelationalNode>(
-                    lamina::detail::node(leading_coeff),
-                    lamina::detail::node(SymbolicExpr::number(0)),
+            degen_case.condition = LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<RelationalNode>(
+                    LMCAS::detail::node(leading_coeff),
+                    LMCAS::detail::node(SymbolicExpr::number(0)),
                     RelationalNode::Op::EQ));
 
             /// 降阶多项式仍按参数分段时,expanded_into_subcases 标记各子分支
@@ -732,10 +732,10 @@ PiecewiseIntervalResult InequalitySolver::solve_parametric_inequality(
                             for (const auto& sub_case : sub_result.cases) {
                                 PiecewiseIntervalResult::Case merged;
                                 if (sub_case.condition) {
-                                    merged.condition = lamina::detail::make_expression_ptr(
-                                        lamina::detail::make_node<LogicalNode>(
-                                            lamina::detail::node(degen_case.condition),
-                                            lamina::detail::node(sub_case.condition),
+                                    merged.condition = LMCAS::detail::make_expression_ptr(
+                                        LMCAS::detail::make_node<LogicalNode>(
+                                            LMCAS::detail::node(degen_case.condition),
+                                            LMCAS::detail::node(sub_case.condition),
                                             LogicalNode::Op::And));
                                 } else {
                                     merged.condition = degen_case.condition;

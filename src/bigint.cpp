@@ -8,23 +8,18 @@
 #include <limits>
 #include <stdexcept>
 
-namespace {
-void bigint_free(void* pointer) noexcept {
-    ::operator delete[](pointer);
-}
+namespace LMCAS {
 
-void* bigint_alloc(std::size_t size) {
-    return ::operator new[](size);
-}
+namespace {
 void bigint_mul_(mp_ptr destination, mp_srcptr lhs, mp_size_t lhs_size,
                  mp_srcptr rhs, mp_size_t rhs_size) {
-    lamina::detail::ensure_lmmc_lifecycle();
+    LMCAS::detail::ensure_lmmc_lifecycle();
     ::lmmp_mul_(destination, lhs, lhs_size, rhs, rhs_size);
 }
 void bigint_div_(mp_ptr quotient, mp_ptr remainder, mp_srcptr numerator,
                  mp_size_t numerator_size, mp_srcptr denominator,
                  mp_size_t denominator_size) {
-    lamina::detail::ensure_lmmc_lifecycle();
+    LMCAS::detail::ensure_lmmc_lifecycle();
     ::lmmp_div_(quotient, remainder, numerator, numerator_size, denominator,
                 denominator_size);
 }
@@ -43,12 +38,12 @@ void BigInt::realloc_to(mp_size_t new_alloc) {
         }
 
         mp_ptr new_data =
-            static_cast<mp_ptr>(bigint_alloc(rounded * sizeof(mp_limb_t)));
+            static_cast<mp_ptr>(::operator new[](rounded * sizeof(mp_limb_t)));
 
         if (_size > 0 && _data) {
              std::memcpy(new_data, _data, _size * sizeof(mp_limb_t));
         }
-        if (_data) bigint_free(_data);
+        if (_data) ::operator delete[](_data);
         _data = new_data;
         _alloc = static_cast<mp_size_t>(rounded);
     }
@@ -75,7 +70,7 @@ void BigInt::zero() {
 BigInt::BigInt() : _data(nullptr), _size(0), _alloc(0), _sign(ZERO) {}
 
 BigInt::~BigInt() {
-        if (_data) bigint_free(_data);
+        if (_data) ::operator delete[](_data);
     }
 
 BigInt::BigInt(const BigInt& other) {
@@ -115,7 +110,7 @@ BigInt& BigInt::operator=(const BigInt& other) {
 
 BigInt& BigInt::operator=(BigInt&& other) noexcept {
         if (this != &other) {
-            if (_data) bigint_free(_data);
+            if (_data) ::operator delete[](_data);
             _data = other._data;
             _size = other._size;
             _alloc = other._alloc;
@@ -171,7 +166,9 @@ BigInt::BigInt(unsigned int val) : BigInt((unsigned long long)val) {}
 BigInt::BigInt(unsigned long val) : BigInt((unsigned long long)val) {}
 
 BigInt::BigInt(const std::string& str) {
-        if (str.empty()) { zero(); return; }
+        if (str.empty()) {
+            throw std::invalid_argument("BigInt: decimal string must contain digits");
+        }
         size_t start = 0;
         int sign = POSITIVE;
         if (str[0] == '-') {
@@ -181,7 +178,9 @@ BigInt::BigInt(const std::string& str) {
             start = 1;
         }
 
-        if (start == str.length()) { zero(); return; }
+        if (start == str.length()) {
+            throw std::invalid_argument("BigInt: sign must be followed by digits");
+        }
 
         size_t len = str.length() - start;
 
@@ -201,7 +200,7 @@ BigInt::BigInt(const std::string& str) {
 
         mp_size_t needed = len / 19 + 2;
         realloc_to(needed);
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
 
         _size = lmmp_from_str_(_data, digit_buf.data(), len, 10);
 
@@ -215,7 +214,7 @@ BigInt::BigInt(const std::string& str) {
     }
 
 std::string BigInt::ToString() const {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (_size == 0) return "0";
 
         size_t len_needed = _size * 20 + 5;
@@ -534,7 +533,7 @@ BigInt& BigInt::operator/=(const BigInt& other) { *this = *this / other; return 
 BigInt& BigInt::operator%=(const BigInt& other) { *this = *this % other; return *this; }
 
 BigInt BigInt::power(unsigned long exp) const {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (exp == 0) return BigInt(1);
         if (_size == 0) return BigInt(0);
 
@@ -592,7 +591,7 @@ BigInt BigInt::power(BigInt exp) const {
     }
 
 BigInt BigInt::sqrt() const {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (_sign == NEGATIVE) throw std::domain_error("Sqrt of negative number");
         if (_size == 0) return BigInt(0);
         if (*this == BigInt(1)) return BigInt(1);
@@ -623,7 +622,7 @@ bool BigInt::is_even() const {
     }
 
 mp_size_t BigInt::trailing_zeros() const {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (is_zero()) return 0;
         mp_size_t count = 0;
         for (mp_size_t i = 0; i < _size; ++i) {
@@ -638,7 +637,7 @@ mp_size_t BigInt::trailing_zeros() const {
     }
 
 BigInt& BigInt::operator>>=(mp_size_t shift) {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (shift == 0) return *this;
         if (is_zero()) return *this;
 
@@ -708,7 +707,7 @@ BigInt BigInt::operator<<(mp_size_t shift) const {
     }
 
 BigInt BigInt::factorial(unsigned int n) {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         BigInt res;
         mp_bitcnt_t bits = 0;
         mp_size_t needed = lmmp_factorial_size_(n, &bits);
@@ -721,7 +720,7 @@ BigInt BigInt::factorial(unsigned int n) {
     }
 
 BigInt BigInt::nPr(unsigned int n, unsigned int r) {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (r > n) return BigInt(0);
         BigInt res;
         mp_bitcnt_t bits = 0;
@@ -735,7 +734,7 @@ BigInt BigInt::nPr(unsigned int n, unsigned int r) {
     }
 
 BigInt BigInt::nCr(unsigned int n, unsigned int r) {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (r > n) return BigInt(0);
         BigInt res;
         mp_bitcnt_t bits = 0;
@@ -749,7 +748,7 @@ BigInt BigInt::nCr(unsigned int n, unsigned int r) {
     }
 
 BigInt BigInt::multinomial(unsigned int n, const std::vector<unsigned int>& r) {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (r.empty()) return BigInt(1);
 
         std::vector<uint> r_uints;
@@ -775,7 +774,7 @@ BigInt BigInt::multinomial(unsigned int n, const std::vector<unsigned int>& r) {
     }
 
 BigInt BigInt::gcd(const BigInt& a, const BigInt& b) {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (a.is_zero()) return b.Abs();
         if (b.is_zero()) return a.Abs();
 
@@ -803,32 +802,45 @@ BigInt BigInt::lcm(const BigInt& a, const BigInt& b) {
     }
 
 BigInt BigInt::pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod) {
-         lamina::detail::ensure_lmmc_lifecycle();
-         if (mod.is_zero()) throw std::runtime_error("Modulo by zero");
+        LMCAS::detail::ensure_lmmc_lifecycle();
+        if (exp.IsNegative()) {
+            throw std::domain_error(
+                "Negative exponent in modular integer power");
+        }
+        if (mod.is_zero() || mod.IsNegative()) {
+            throw std::domain_error(
+                "Modulus must be positive in modular integer power");
+        }
+        if (mod == BigInt(1)) return BigInt(0);
 
-         if (base._size <= 1 && exp._size <= 1 && mod._size <= 1) {
-             ulong b = base.is_zero() ? 0 : base._data[0];
-             ulong e = exp.is_zero() ? 0 : exp._data[0];
-             ulong m = mod._data[0];
+        if (base._size <= 1 && exp._size <= 1 && mod._size <= 1) {
+            const ulong modulus = mod._data[0];
+            ulong residue = base.is_zero() ? 0 : base._data[0] % modulus;
+            const ulong exponent = exp.is_zero() ? 0 : exp._data[0];
+            if (base.IsNegative() && residue != 0) {
+                residue = modulus - residue;
+            }
+            if ((modulus & 1U) != 0) {
+                return BigInt(
+                    lmmp_powmod_ulong_odd_(residue, exponent, modulus));
+            }
+        }
 
-             if ((m & 1U) != 0)
-                 return BigInt(lmmp_powmod_ulong_odd_(b % m, e, m));
-         }
+        BigInt result = 1;
+        BigInt residue = base % mod;
+        if (residue.IsNegative()) residue += mod;
+        BigInt exponent = exp;
 
-         BigInt res = 1;
-         BigInt b = base % mod;
-         BigInt e = exp;
-
-         while (!e.is_zero()) {
-             if (e.is_odd()) res = (res * b) % mod;
-             b = (b * b) % mod;
-             e >>= 1;
-         }
-         return res;
+        while (!exponent.is_zero()) {
+            if (exponent.is_odd()) result = (result * residue) % mod;
+            residue = (residue * residue) % mod;
+            exponent >>= 1;
+        }
+        return result;
     }
 
 bool BigInt::is_prime() const {
-        lamina::detail::ensure_lmmc_lifecycle();
+        LMCAS::detail::ensure_lmmc_lifecycle();
         if (_sign == NEGATIVE) return false;
 
         if (_size <= 1) {
@@ -878,3 +890,5 @@ bool BigInt::is_perfect_square() const {
         BigInt s = this->sqrt();
         return (s * s) == *this;
     }
+
+} // namespace LMCAS

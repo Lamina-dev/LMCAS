@@ -2,7 +2,7 @@
 #include "test_common.hpp"
 
 int main() {
-    using namespace lamina;
+    using namespace LMCAS;
 
     TEST_CASE("Checked interval normalization preserves exact large endpoints");
     const BigInt two_to_53("9007199254740992");
@@ -71,7 +71,7 @@ int main() {
     TEST_CASE("Square-root normalization preserves exactness domains");
     auto exact_irrational = SymbolicExpr::sqrt(SymbolicExpr::number(2))->simplify();
     auto exact_irrational_number = exact_irrational
-        ? std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(exact_irrational))
+        ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(exact_irrational))
         : nullptr;
     EXPECT_TRUE(exact_irrational &&
                     (!exact_irrational_number ||
@@ -82,7 +82,7 @@ int main() {
     auto exact_rational_root = SymbolicExpr::sqrt(
         SymbolicExpr::number(Rational(4, 9)))->simplify();
     auto exact_rational_number = exact_rational_root
-        ? std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(exact_rational_root))
+        ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(exact_rational_root))
         : nullptr;
     EXPECT_TRUE(exact_rational_number &&
                     std::holds_alternative<Rational>(exact_rational_number->value()) &&
@@ -92,7 +92,7 @@ int main() {
     auto approximate_root = SymbolicExpr::sqrt(
         SymbolicExpr::number(2.0))->simplify();
     auto approximate_number = approximate_root
-        ? std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(approximate_root))
+        ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(approximate_root))
         : nullptr;
     EXPECT_TRUE(approximate_number &&
                     std::holds_alternative<lmmc_real_t>(approximate_number->value()) &&
@@ -114,44 +114,44 @@ int main() {
     for (const auto& [type, expression] : exact_functions) {
         auto normalized = expression->simplify();
         auto function = normalized
-            ? std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(normalized))
+            ? std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(normalized))
             : nullptr;
         EXPECT_TRUE(function && function->type() == type,
                     "tiny exact elementary-function argument is not tolerance-folded");
     }
 
-    auto exact_abs = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    auto exact_abs = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Abs,
             std::vector<std::shared_ptr<const SymbolicNode>>{
-                lamina::detail::make_node<NumberNode>(Rational(-7, 3))}))->simplify();
+                LMCAS::detail::make_node<NumberNode>(Rational(-7, 3))}))->simplify();
     auto exact_abs_number = exact_abs
-        ? std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(exact_abs))
+        ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(exact_abs))
         : nullptr;
     EXPECT_TRUE(exact_abs_number &&
                     std::holds_alternative<Rational>(exact_abs_number->value()) &&
                     std::get<Rational>(exact_abs_number->value()) == Rational(7, 3),
                 "abs of an exact Rational remains exact");
 
-    auto exact_lambert = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    auto exact_lambert = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::LambertW,
             std::vector<std::shared_ptr<const SymbolicNode>>{
-                lamina::detail::make_node<NumberNode>(Rational(1))}))->simplify();
+                LMCAS::detail::make_node<NumberNode>(Rational(1))}))->simplify();
     auto exact_lambert_function = exact_lambert
-        ? std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(exact_lambert))
+        ? std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(exact_lambert))
         : nullptr;
     EXPECT_TRUE(exact_lambert_function &&
                     exact_lambert_function->type() == FunctionNode::FuncType::LambertW,
                 "LambertW of an exact non-identity input stays symbolic");
 
-    auto approximate_lambert = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    auto approximate_lambert = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::LambertW,
             std::vector<std::shared_ptr<const SymbolicNode>>{
-                lamina::detail::make_node<NumberNode>(1.0)}))->simplify();
+                LMCAS::detail::make_node<NumberNode>(1.0)}))->simplify();
     auto approximate_lambert_number = approximate_lambert
-        ? std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(approximate_lambert))
+        ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(approximate_lambert))
         : nullptr;
     EXPECT_TRUE(approximate_lambert_number &&
                     std::holds_alternative<lmmc_real_t>(
@@ -160,12 +160,12 @@ int main() {
 
     TEST_CASE("Normalization does not narrow oversized exact exponents");
     const BigInt oversized_exponent("9223372036854775808");
-    auto oversized_power = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<PowerNode>(
-            lamina::detail::make_node<NumberNode>(BigInt(2)),
-            lamina::detail::make_node<NumberNode>(oversized_exponent)))->simplify();
+    auto oversized_power = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<PowerNode>(
+            LMCAS::detail::make_node<NumberNode>(BigInt(2)),
+            LMCAS::detail::make_node<NumberNode>(oversized_exponent)))->simplify();
     auto preserved_power = oversized_power
-        ? std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(oversized_power))
+        ? std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(oversized_power))
         : nullptr;
     auto preserved_exponent = preserved_power
         ? std::dynamic_pointer_cast<const NumberNode>(preserved_power->exponent())

@@ -1,6 +1,6 @@
 #include "symbolic_implicit_diff.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 std::shared_ptr<SymbolicExpr> implicit_diff(
     std::shared_ptr<SymbolicExpr> expression,
@@ -17,4 +17,4 @@ std::shared_ptr<SymbolicExpr> implicit_diff(
     return SymbolicExpr::divide(numerator, denominator);
 }
 
-} // namespace lamina
+} // namespace LMCAS

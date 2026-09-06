@@ -12,6 +12,8 @@
 #include <iostream>
 #include <limits>
 
+namespace LMCAS {
+
 /**
  * @brief 计算 AST 节点的多项式次数
  * @param node 输入节点
@@ -37,9 +39,9 @@ inline int get_node_degree_helper(const std::shared_ptr<const SymbolicNode>& nod
 
 inline std::shared_ptr<const SymbolicNode> make_normalized_multiply_node(
     const std::vector<std::shared_ptr<const SymbolicNode>>& ops) {
-    if (ops.empty()) return lamina::detail::make_node<NumberNode>(BigInt(1));
+    if (ops.empty()) return LMCAS::detail::make_node<NumberNode>(BigInt(1));
     if (ops.size() == 1) return ops[0];
-    return lamina::detail::make_node<MultiplyNode>(ops);
+    return LMCAS::detail::make_node<MultiplyNode>(ops);
 }
 
 /**
@@ -51,7 +53,7 @@ inline std::shared_ptr<const SymbolicNode> norm_subst_index(
     const std::shared_ptr<const SymbolicNode>& node,
     const std::string& index_var,
     const std::shared_ptr<const SymbolicNode>& value) {
-    return lamina::substitute_free(node, index_var, value);
+    return LMCAS::substitute_free(node, index_var, value);
 }
 
 /** @brief 节点比较器，按多项式次数降序排列，用于同类项合并 */
@@ -89,7 +91,7 @@ inline std::shared_ptr<const NumberNode> add_numbers(const std::shared_ptr<const
          lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value()) ? std::get<lmmc_real_t>(b->value()) :
                      (std::holds_alternative<Rational>(b->value()) ? (lmmc_real_t)std::get<Rational>(b->value()).to_double() : (lmmc_real_t)std::get<BigInt>(b->value()).to_double());
          lmmc_real_t sum = v1 + v2;
-         return lamina::detail::make_node<NumberNode>(sum);
+         return LMCAS::detail::make_node<NumberNode>(sum);
      }
 
      if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
@@ -97,12 +99,12 @@ inline std::shared_ptr<const NumberNode> add_numbers(const std::shared_ptr<const
                        (std::holds_alternative<BigInt>(a->value()) ? Rational(std::get<BigInt>(a->value())) : Rational(0));
          Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) :
                        (std::holds_alternative<BigInt>(b->value()) ? Rational(std::get<BigInt>(b->value())) : Rational(0));
-         return lamina::detail::make_node<NumberNode>(r1 + r2);
+         return LMCAS::detail::make_node<NumberNode>(r1 + r2);
      }
 
      BigInt i1 = std::get<BigInt>(a->value());
      BigInt i2 = std::get<BigInt>(b->value());
-     return lamina::detail::make_node<NumberNode>(i1 + i2);
+     return LMCAS::detail::make_node<NumberNode>(i1 + i2);
 }
 
 /**
@@ -118,7 +120,7 @@ inline std::shared_ptr<const NumberNode> multiply_numbers(const std::shared_ptr<
          lmmc_real_t v2 = std::holds_alternative<lmmc_real_t>(b->value()) ? std::get<lmmc_real_t>(b->value()) :
                      (std::holds_alternative<Rational>(b->value()) ? (lmmc_real_t)std::get<Rational>(b->value()).to_double() : (lmmc_real_t)std::get<BigInt>(b->value()).to_double());
          lmmc_real_t prod = v1 * v2;
-         return lamina::detail::make_node<NumberNode>(prod);
+         return LMCAS::detail::make_node<NumberNode>(prod);
      }
 
      if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
@@ -126,12 +128,12 @@ inline std::shared_ptr<const NumberNode> multiply_numbers(const std::shared_ptr<
                        (std::holds_alternative<BigInt>(a->value()) ? Rational(std::get<BigInt>(a->value())) : Rational(1));
          Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) :
                        (std::holds_alternative<BigInt>(b->value()) ? Rational(std::get<BigInt>(b->value())) : Rational(1));
-         return lamina::detail::make_node<NumberNode>(r1 * r2);
+         return LMCAS::detail::make_node<NumberNode>(r1 * r2);
      }
 
      BigInt i1 = std::get<BigInt>(a->value());
      BigInt i2 = std::get<BigInt>(b->value());
-     return lamina::detail::make_node<NumberNode>(i1 * i2);
+     return LMCAS::detail::make_node<NumberNode>(i1 * i2);
 }
 
 /**
@@ -143,17 +145,17 @@ inline std::shared_ptr<const NumberNode> multiply_numbers(const std::shared_ptr<
 inline bool check_negative_arg(const std::shared_ptr<const SymbolicNode>& arg, std::shared_ptr<const SymbolicNode>& out_positive) {
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(arg)) {
         if (std::holds_alternative<lmmc_real_t>(num->value()) && std::get<lmmc_real_t>(num->value()) < 0) {
-             out_positive = lamina::detail::make_node<NumberNode>(std::abs(std::get<lmmc_real_t>(num->value())));
+             out_positive = LMCAS::detail::make_node<NumberNode>(std::abs(std::get<lmmc_real_t>(num->value())));
              return true;
         }
         if (std::holds_alternative<BigInt>(num->value()) &&
             std::get<BigInt>(num->value()).IsNegative()) {
-             out_positive = lamina::detail::make_node<NumberNode>(std::get<BigInt>(num->value()) * BigInt(-1));
+             out_positive = LMCAS::detail::make_node<NumberNode>(std::get<BigInt>(num->value()) * BigInt(-1));
              return true;
         }
         if (std::holds_alternative<Rational>(num->value()) &&
             std::get<Rational>(num->value()).get_numerator().IsNegative()) {
-             out_positive = lamina::detail::make_node<NumberNode>(std::get<Rational>(num->value()) * Rational(-1));
+             out_positive = LMCAS::detail::make_node<NumberNode>(std::get<Rational>(num->value()) * Rational(-1));
              return true;
         }
         return false;
@@ -165,15 +167,15 @@ inline bool check_negative_arg(const std::shared_ptr<const SymbolicNode>& arg, s
                  std::shared_ptr<const NumberNode> pos_num = nullptr;
                  if (std::holds_alternative<lmmc_real_t>(num->value()) && std::get<lmmc_real_t>(num->value()) < 0) {
                      is_neg = true;
-                     pos_num = lamina::detail::make_node<NumberNode>(std::abs(std::get<lmmc_real_t>(num->value())));
+                     pos_num = LMCAS::detail::make_node<NumberNode>(std::abs(std::get<lmmc_real_t>(num->value())));
                  } else if (std::holds_alternative<BigInt>(num->value()) &&
                             std::get<BigInt>(num->value()).IsNegative()) {
                      is_neg = true;
-                     pos_num = lamina::detail::make_node<NumberNode>(std::get<BigInt>(num->value()) * BigInt(-1));
+                     pos_num = LMCAS::detail::make_node<NumberNode>(std::get<BigInt>(num->value()) * BigInt(-1));
                  } else if (std::holds_alternative<Rational>(num->value()) &&
                             std::get<Rational>(num->value()).get_numerator().IsNegative()) {
                      is_neg = true;
-                     pos_num = lamina::detail::make_node<NumberNode>(std::get<Rational>(num->value()) * Rational(-1));
+                     pos_num = LMCAS::detail::make_node<NumberNode>(std::get<Rational>(num->value()) * Rational(-1));
                  }
 
                  if (is_neg) {
@@ -190,7 +192,7 @@ inline bool check_negative_arg(const std::shared_ptr<const SymbolicNode>& arg, s
 
                      if (is_minus_one) {
                          new_ops.erase(new_ops.begin());
-                         if (new_ops.empty()) out_positive = lamina::detail::make_node<NumberNode>(BigInt(1));
+                         if (new_ops.empty()) out_positive = LMCAS::detail::make_node<NumberNode>(BigInt(1));
                          else if (new_ops.size() == 1) out_positive = new_ops[0];
                          else out_positive = make_normalized_multiply_node(new_ops);
                      } else {
@@ -239,3 +241,5 @@ inline bool get_pi_coeff(const std::shared_ptr<const SymbolicNode>& node, Ration
     }
     return false;
 }
+
+} // namespace LMCAS

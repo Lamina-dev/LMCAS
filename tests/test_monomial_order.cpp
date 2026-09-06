@@ -3,7 +3,7 @@
 #include <iostream>
 
 int main() {
-    using namespace lamina;
+    using namespace LMCAS;
 
     Monomial a = {2, 1, 0};
     Monomial b = {1, 0, 2};

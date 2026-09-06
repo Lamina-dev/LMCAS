@@ -4,10 +4,10 @@
 #include <memory>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 符号积分器，协调各策略完成积分运算 */
-class LAMINA_API Integrator {
+class LMCAS_API Integrator {
 public:
     Integrator();
 
@@ -99,4 +99,4 @@ private:
     void resolve_cycle(std::shared_ptr<SymbolicExpr>& result, size_t cycle_idx);
 };
 
-} // namespace lamina
+} // namespace LMCAS

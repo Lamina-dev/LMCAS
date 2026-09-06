@@ -5,7 +5,7 @@
 #include <cmath>
 #include <limits>
 
-using namespace lamina;
+using namespace LMCAS;
 
 int main() {
 

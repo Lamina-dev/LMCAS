@@ -7,7 +7,7 @@
 #include <array>
 #include <new>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 ExprPtr normalized(ExprPtr expression) {
@@ -59,7 +59,7 @@ bool is_decided(const ResidualCheck& result) {
 ResidualCheckResult check_zero_residual(
     const ExprPtr& residual,
     ComputationContext& context,
-    const lsr::EqvOptions& options) {
+    const LMCAS::EqvOptions& options) {
     constexpr const char* operation = "residual.check_zero";
     if (!residual || !detail::node(residual)) {
         return ResidualCheckResult::failure(
@@ -89,12 +89,12 @@ ResidualCheckResult check_zero_residual(
 
         const auto zero = SymbolicExpr::number(0);
         for (const auto profile : {
-                 lsr::EqvProfile::Core,
-                 lsr::EqvProfile::TrigBasic,
-                 lsr::EqvProfile::ExpLogBasic}) {
+                 LMCAS::EqvProfile::Core,
+                 LMCAS::EqvProfile::TrigBasic,
+                 LMCAS::EqvProfile::ExpLogBasic}) {
             auto profile_options = options;
             profile_options.profile = profile;
-            auto equivalent = lsr::equivalent_core(
+            auto equivalent = LMCAS::equivalent_core(
                 *current, *zero, context, profile_options);
             if (!equivalent) {
                 if (equivalent.error().code == CasErrc::UnsupportedExpression ||
@@ -123,7 +123,7 @@ ResidualCheckResult check_equivalent(
     const ExprPtr& left,
     const ExprPtr& right,
     ComputationContext& context,
-    const lsr::EqvOptions& options) {
+    const LMCAS::EqvOptions& options) {
     if (!left || !right || !detail::node(left) || !detail::node(right)) {
         return ResidualCheckResult::failure(
             CasErrc::InvalidArgument,
@@ -147,4 +147,4 @@ ResidualCheckResult check_equivalent(
     }
 }
 
-} // namespace lamina
+} // namespace LMCAS

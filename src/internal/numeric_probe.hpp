@@ -6,7 +6,7 @@
 #include <memory>
 #include <optional>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 inline std::optional<double> try_finite_numeric(
     const SymbolicExpr& expression,
@@ -30,4 +30,4 @@ inline std::optional<double> try_finite_numeric(
     return expression ? try_finite_numeric(*expression, context) : std::nullopt;
 }
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

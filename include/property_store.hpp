@@ -17,7 +17,7 @@
 #include <vector>
 #include <stdexcept>
 
-namespace lamina {
+namespace LMCAS {
 
 using PropertyStoreResult = Result<void>;
 
@@ -34,7 +34,7 @@ struct SignHash {
  * Supports domain hierarchy implication, sign implication, contradiction
  * detection, and cross-constraint checking between domains and signs.
  */
-class LAMINA_API PropertyStore {
+class LMCAS_API PropertyStore {
 public:
     /// Declare domain for a symbol and report contradictions.
     PropertyStoreResult declare_domain(const std::string& symbol, Domain domain);
@@ -412,4 +412,4 @@ private:
 
 };
 
-} // namespace lamina
+} // namespace LMCAS

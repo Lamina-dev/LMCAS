@@ -2,6 +2,8 @@
 #include "bigint.hpp"
 #include "rational.hpp"
 
+using namespace LMCAS;
+
 void test_bigint() {
     TEST_CASE("BigInt Basic");
     BigInt a(1);

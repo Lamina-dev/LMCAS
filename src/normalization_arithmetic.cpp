@@ -1,6 +1,8 @@
 #include "visitors/normalization_visitor.hpp"
 #include "internal/normalization_utils.hpp"
 
+namespace LMCAS {
+
 std::shared_ptr<const SymbolicNode> NormalizationVisitor::get_result() const {
         return result;
     }
@@ -18,7 +20,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
             auto bd = expand_product(c_lhs->imag(), c_rhs->imag());
             auto ad = expand_product(c_lhs->real(), c_rhs->imag());
             auto bc = expand_product(c_lhs->imag(), c_rhs->real());
-            auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
+            auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
             auto neg_bd = expand_product(neg_one, bd);
             auto real_part = SymbolicFactory::create_add({ac, neg_bd});
             auto imag_part = SymbolicFactory::create_add({ad, bc});
@@ -52,7 +54,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
                 }
             }
 
-            return lamina::detail::make_node<AddNode>(new_terms);
+            return LMCAS::detail::make_node<AddNode>(new_terms);
         } else if (add_lhs) {
 
             std::vector<std::shared_ptr<const SymbolicNode>> new_terms;
@@ -60,7 +62,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
                  auto prod = expand_product(op, rhs);
                  new_terms.push_back(prod);
             }
-            return lamina::detail::make_node<AddNode>(new_terms);
+            return LMCAS::detail::make_node<AddNode>(new_terms);
         } else if (add_rhs) {
 
             std::vector<std::shared_ptr<const SymbolicNode>> new_terms;
@@ -68,10 +70,10 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
                  auto prod = expand_product(lhs, op);
                  new_terms.push_back(prod);
             }
-            return lamina::detail::make_node<AddNode>(new_terms);
+            return LMCAS::detail::make_node<AddNode>(new_terms);
         }
 
-        std::shared_ptr<const NumberNode> const_acc = lamina::detail::make_node<NumberNode>(BigInt(1));
+        std::shared_ptr<const NumberNode> const_acc = LMCAS::detail::make_node<NumberNode>(BigInt(1));
         struct FactorAccum {
             std::shared_ptr<const NumberNode> exponent;
             std::vector<std::shared_ptr<const SymbolicNode>> originals;
@@ -84,7 +86,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
                  const_acc = multiply_numbers(const_acc, num);
              } else {
                  std::shared_ptr<const SymbolicNode> base = factor;
-                 std::shared_ptr<const NumberNode> exp = lamina::detail::make_node<NumberNode>(BigInt(1));
+                 std::shared_ptr<const NumberNode> exp = LMCAS::detail::make_node<NumberNode>(BigInt(1));
 
                  if (auto pow = std::dynamic_pointer_cast<const PowerNode>(factor)) {
                      if (auto e_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
@@ -117,8 +119,8 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
             return true;
         };
 
-        if (!flatten_and_process(lhs)) return lamina::detail::make_node<NumberNode>(BigInt(0));
-        if (!flatten_and_process(rhs)) return lamina::detail::make_node<NumberNode>(BigInt(0));
+        if (!flatten_and_process(lhs)) return LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        if (!flatten_and_process(rhs)) return LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
         std::vector<std::shared_ptr<const SymbolicNode>> final_ops;
         if (!const_acc->is_one()) {
@@ -133,7 +135,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
             } else if (exp->is_one()) {
                 var_ops.push_back(base);
             } else {
-                var_ops.push_back(lamina::detail::make_node<PowerNode>(base, exp));
+                var_ops.push_back(LMCAS::detail::make_node<PowerNode>(base, exp));
             }
         }
 
@@ -146,7 +148,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const s
 
         final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
 
-        if (final_ops.empty()) return lamina::detail::make_node<NumberNode>(BigInt(1));
+        if (final_ops.empty()) return LMCAS::detail::make_node<NumberNode>(BigInt(1));
         if (final_ops.size() == 1) return final_ops[0];
 
         if (final_ops.size() > 1 && std::dynamic_pointer_cast<const NumberNode>(final_ops.back())) {
@@ -228,28 +230,28 @@ void NormalizationVisitor::visit(const AddNode& node) {
                          if (std::holds_alternative<MatrixNode::DenseStorage>(m->storage())) {
                              const auto& dense = std::get<MatrixNode::DenseStorage>(m->storage());
                              if (i < dense.size()) val = dense[i];
-                             else val = lamina::detail::make_node<NumberNode>(BigInt(0));
+                             else val = LMCAS::detail::make_node<NumberNode>(BigInt(0));
                          } else {
                              const auto& sparse = std::get<MatrixNode::SparseStorage>(m->storage());
                              auto it = sparse.find(i);
                              if (it != sparse.end()) val = it->second;
-                             else val = lamina::detail::make_node<NumberNode>(BigInt(0));
+                             else val = LMCAS::detail::make_node<NumberNode>(BigInt(0));
                          }
-                         if (!val) val = lamina::detail::make_node<NumberNode>(BigInt(0));
+                         if (!val) val = LMCAS::detail::make_node<NumberNode>(BigInt(0));
                          elem_ops.push_back(val);
                      }
 
-                     auto elem_add = lamina::detail::make_node<AddNode>(elem_ops);
+                     auto elem_add = LMCAS::detail::make_node<AddNode>(elem_ops);
                      elem_add->accept(*this);
                      new_elements.push_back(result);
                  }
 
-                 result = lamina::detail::make_node<MatrixNode>(rows, cols, new_elements);
+                 result = LMCAS::detail::make_node<MatrixNode>(rows, cols, new_elements);
                  return;
             }
         }
 
-        std::shared_ptr<const NumberNode> constant_acc = lamina::detail::make_node<NumberNode>(BigInt(0));
+        std::shared_ptr<const NumberNode> constant_acc = LMCAS::detail::make_node<NumberNode>(BigInt(0));
         std::map<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const NumberNode>, NodeCompare> terms;
 
         for (const auto& op : simplified_ops) {
@@ -257,7 +259,7 @@ void NormalizationVisitor::visit(const AddNode& node) {
                 constant_acc = add_numbers(constant_acc, num);
             } else {
                 std::shared_ptr<const SymbolicNode> term_part = op;
-                std::shared_ptr<const NumberNode> coeff_part = lamina::detail::make_node<NumberNode>(BigInt(1));
+                std::shared_ptr<const NumberNode> coeff_part = LMCAS::detail::make_node<NumberNode>(BigInt(1));
 
                 if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(op)) {
 
@@ -332,7 +334,7 @@ void NormalizationVisitor::visit(const AddNode& node) {
         }
 
         if (final_ops.empty()) {
-            result = lamina::detail::make_node<NumberNode>(BigInt(0));
+            result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
         } else if (final_ops.size() == 1) {
             result = final_ops[0];
         } else {
@@ -348,7 +350,7 @@ void NormalizationVisitor::visit(const AddNode& node) {
 
                 return l->compare(*r) < 0;
             });
-            result = lamina::detail::make_node<AddNode>(final_ops);
+            result = LMCAS::detail::make_node<AddNode>(final_ops);
         }
     }
 void NormalizationVisitor::visit(const ComplexNode& node) {
@@ -388,7 +390,7 @@ void NormalizationVisitor::visit(const MultiplyNode& node) {
 
         if (has_matrix) {
             std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
-            std::shared_ptr<const NumberNode> scalar_part = lamina::detail::make_node<NumberNode>(BigInt(1));
+            std::shared_ptr<const NumberNode> scalar_part = LMCAS::detail::make_node<NumberNode>(BigInt(1));
 
             for(const auto& op : sc) {
                 if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
@@ -437,29 +439,15 @@ void NormalizationVisitor::visit(const MultiplyNode& node) {
                                      }
 
                                      NormalizationVisitor elem_vis(assumptions_);
-                                     auto elem_node = lamina::detail::make_node<AddNode>(sum_ops);
+                                     auto elem_node = LMCAS::detail::make_node<AddNode>(sum_ops);
                                      elem_node->accept(elem_vis);
 
-                                     auto res_val = elem_vis.get_result();
-                                     if (auto num = std::dynamic_pointer_cast<const NumberNode>(res_val)) {
-                                         if (std::holds_alternative<lmmc_real_t>(num->value())) {
-                                              lmmc_real_t v = std::get<lmmc_real_t>(num->value());
-                                             int eq_0, eq_1;
-                                             lmmc_double_nearly_equal_tol(v, 0.0, 1e-10, 1e-10, &eq_0);
-                                             lmmc_double_nearly_equal_tol(v, 1.0, 1e-10, 1e-10, &eq_1);
-                                             if (eq_0) {
-                                                 res_val = lamina::detail::make_node<NumberNode>(BigInt(0));
-                                             } else if (eq_1) {
-                                                 res_val = lamina::detail::make_node<NumberNode>(BigInt(1));
-                                             }
-                                         }
-                                     }
-                                     res_data.push_back(res_val);
+                                     res_data.push_back(elem_vis.get_result());
                                  }
                              }
 
                              fused_ops.pop_back();
-                             fused_ops.push_back(lamina::detail::make_node<MatrixNode>(R, C, res_data));
+                             fused_ops.push_back(LMCAS::detail::make_node<MatrixNode>(R, C, res_data));
                              continue;
                          }
                     }
@@ -471,14 +459,14 @@ void NormalizationVisitor::visit(const MultiplyNode& node) {
                 fused_ops.insert(fused_ops.begin(), scalar_part);
             }
 
-            if (fused_ops.empty()) result = lamina::detail::make_node<NumberNode>(BigInt(1));
+            if (fused_ops.empty()) result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
             else if (fused_ops.size() == 1) result = fused_ops[0];
             else result = make_normalized_multiply_node(fused_ops);
 
             return;
         }
 
-        std::shared_ptr<const NumberNode> const_acc = lamina::detail::make_node<NumberNode>(BigInt(1));
+        std::shared_ptr<const NumberNode> const_acc = LMCAS::detail::make_node<NumberNode>(BigInt(1));
         struct FactorAccum {
             std::shared_ptr<const NumberNode> exponent;
             std::vector<std::shared_ptr<const SymbolicNode>> originals;
@@ -488,176 +476,31 @@ void NormalizationVisitor::visit(const MultiplyNode& node) {
         for (const auto& op : sc) {
              if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
                  if (num->is_zero()) {
-                     result = lamina::detail::make_node<NumberNode>(BigInt(0));
+                     result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
                      return;
                  }
                  const_acc = multiply_numbers(const_acc, num);
              } else {
                  std::shared_ptr<const SymbolicNode> base = op;
-                 std::shared_ptr<const NumberNode> exp = lamina::detail::make_node<NumberNode>(BigInt(1));
-                 bool is_number_power = false;
+                 std::shared_ptr<const NumberNode> exp = LMCAS::detail::make_node<NumberNode>(BigInt(1));
 
-                 if (auto pow = std::dynamic_pointer_cast<const PowerNode>(op)) {
-                     // Only split base/exponent of a PowerNode if the exponent is a NumberNode.
-                     // For symbolic exponents (e.g. 2^x), keep the PowerNode atomic so we
-                     // don't silently drop the exponent when accumulating into `bases`.
-                     auto e_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent());
-                     if (e_num) {
-                         auto pow_base = pow->base();
-
-                         if (auto b_num = std::dynamic_pointer_cast<const NumberNode>(pow_base)) {
-                             long long exp_val = 0;
-                             bool exp_ok = false;
-                             bool exp_is_half = false;
-
-                             if (std::holds_alternative<BigInt>(e_num->value())) {
-                                 auto converted =
-                                     std::get<BigInt>(e_num->value()).try_to_int64();
-                                 if (converted) {
-                                     exp_val = static_cast<long long>(*converted);
-                                     exp_ok = true;
-                                 }
-                                 } else if (std::holds_alternative<lmmc_real_t>(e_num->value())) {
-                                      lmmc_real_t d = std::get<lmmc_real_t>(e_num->value());
-                                     int eq_half;
-                                     lmmc_double_nearly_equal_tol(d, 0.5, 1e-9, 1e-9, &eq_half);
-                                     if (std::isfinite(d) && d == std::floor(d) &&
-                                         d >= static_cast<lmmc_real_t>(
-                                             std::numeric_limits<long long>::min()) &&
-                                         d <= static_cast<lmmc_real_t>(
-                                             std::numeric_limits<long long>::max())) {
-                                         exp_val = (long long)d;
-                                         exp_ok = true;
-                                     } else if (eq_half) {
-                                         exp_is_half = true;
-                                     }
-                                 } else if (std::holds_alternative<Rational>(e_num->value())) {
-                                 Rational r = std::get<Rational>(e_num->value());
-                                 if (r.get_denominator() == BigInt(1)) {
-                                     auto converted = r.get_numerator().try_to_int64();
-                                     if (converted) {
-                                         exp_val = static_cast<long long>(*converted);
-                                         exp_ok = true;
-                                     }
-                                 } else if (r.get_numerator() == BigInt(1) && r.get_denominator() == BigInt(2)) {
-                                     exp_is_half = true;
-                                 }
-                             }
-
-                             if (exp_ok) {
-                                 std::shared_ptr<const NumberNode> pow_val = nullptr;
-
-                                 if (exp_val == -1) {
-                                      if (std::holds_alternative<BigInt>(b_num->value())) {
-                                          const auto& bi = std::get<BigInt>(b_num->value());
-                                          if (!bi.is_zero()) pow_val = lamina::detail::make_node<NumberNode>(Rational(BigInt(1), bi));
-                                      } else if (std::holds_alternative<Rational>(b_num->value())) {
-                                          Rational r = std::get<Rational>(b_num->value());
-                                          if (!r.get_numerator().is_zero()) pow_val = lamina::detail::make_node<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
-                                      } else if (std::holds_alternative<lmmc_real_t>(b_num->value())) {
-                                          lmmc_real_t bv = std::get<lmmc_real_t>(b_num->value());
-                                          if (bv != 0.0) pow_val = lamina::detail::make_node<NumberNode>(1.0 / bv);
-                                      }
-                                 } else if (exp_val == 0) {
-                                      pow_val = lamina::detail::make_node<NumberNode>(BigInt(1));
-                                 } else if (std::abs(exp_val) > 0 && std::abs(exp_val) < 64) {
-
-                                      long long abs_exp = std::abs(exp_val);
-                                      std::shared_ptr<const NumberNode> base_pow_val = nullptr;
-
-                                      if (std::holds_alternative<BigInt>(b_num->value())) {
-                                          BigInt b = std::get<BigInt>(b_num->value());
-                                          BigInt res(1);
-                                          for(int k=0;k<abs_exp;++k) res = res * b;
-                                          base_pow_val = lamina::detail::make_node<NumberNode>(res);
-                                      } else if (std::holds_alternative<Rational>(b_num->value())) {
-                                          Rational b = std::get<Rational>(b_num->value());
-                                          Rational res(1);
-                                          for(int k=0;k<abs_exp;++k) res = res * b;
-                                          base_pow_val = lamina::detail::make_node<NumberNode>(res);
-                                      } else if (std::holds_alternative<lmmc_real_t>(b_num->value())) {
-                                          lmmc_real_t b = std::get<lmmc_real_t>(b_num->value());
-                                          lmmc_real_t res = 1.0;
-                                          for(int k=0;k<abs_exp;++k) res *= b;
-                                           base_pow_val = lamina::detail::make_node<NumberNode>(res);
-                                      }
-
-                                      if (base_pow_val) {
-                                          if (exp_val > 0) {
-                                              pow_val = base_pow_val;
-                                          } else {
-
-                                              if (std::holds_alternative<BigInt>(base_pow_val->value())) {
-                                                  const auto& bi = std::get<BigInt>(base_pow_val->value());
-                                                  if (!bi.is_zero()) pow_val = lamina::detail::make_node<NumberNode>(Rational(BigInt(1), bi));
-                                              } else if (std::holds_alternative<Rational>(base_pow_val->value())) {
-                                                  Rational r = std::get<Rational>(base_pow_val->value());
-                                                  if (!r.get_numerator().is_zero()) pow_val = lamina::detail::make_node<NumberNode>(Rational(r.get_denominator(), r.get_numerator()));
-                                              } else if (std::holds_alternative<lmmc_real_t>(base_pow_val->value())) {
-                                                  lmmc_real_t bv = std::get<lmmc_real_t>(base_pow_val->value());
-                                                  if (bv != 0.0) pow_val = lamina::detail::make_node<NumberNode>(1.0 / bv);
-                                              }
-                                          }
-                                      }
-                                 }
-
-                                 if (pow_val) {
-                                     const_acc = multiply_numbers(const_acc, pow_val);
-                                     is_number_power = true;
-                                 }
-                             } else if (exp_is_half) {
-
-                                 std::shared_ptr<const NumberNode> root_val = nullptr;
-                                 if (std::holds_alternative<BigInt>(b_num->value())) {
-                                     const BigInt value = std::get<BigInt>(b_num->value());
-                                     if (value >= BigInt(0)) {
-                                         const BigInt root = value.sqrt();
-                                         if (root * root == value) {
-                                             root_val = lamina::detail::make_node<NumberNode>(root);
-                                         }
-                                     }
-                                 } else if (std::holds_alternative<Rational>(b_num->value())) {
-                                     const Rational value = std::get<Rational>(b_num->value());
-                                     if (value >= Rational(0)) {
-                                         const BigInt numerator_root =
-                                             value.get_numerator().sqrt();
-                                         const BigInt denominator_root =
-                                             value.get_denominator().sqrt();
-                                         if (numerator_root * numerator_root ==
-                                                 value.get_numerator() &&
-                                             denominator_root * denominator_root ==
-                                                 value.get_denominator()) {
-                                             root_val = lamina::detail::make_node<NumberNode>(Rational(
-                                                 numerator_root, denominator_root));
-                                         }
-                                     }
-                                 } else if (std::holds_alternative<lmmc_real_t>(b_num->value())) {
-                                     double d = std::get<lmmc_real_t>(b_num->value());
-                                     if (d >= 0) root_val = lamina::detail::make_node<NumberNode>(std::sqrt(d));
-                                 }
-
-                                 if (root_val) {
-                                     const_acc = multiply_numbers(const_acc, root_val);
-                                     is_number_power = true;
-                                 }
-                             }
-                         }
-
-                         if (!is_number_power && is_positive_integer_number(e_num)) {
-                             base = pow_base;
-                             exp = e_num;
-                         }
+                 // Numeric powers are normalized with the operands above.
+                 // Positive integral powers participate in base accumulation.
+                 if (auto power = std::dynamic_pointer_cast<const PowerNode>(op)) {
+                     auto exponent = std::dynamic_pointer_cast<const NumberNode>(
+                         power->exponent());
+                     if (is_positive_integer_number(exponent)) {
+                         base = power->base();
+                         exp = exponent;
                      }
                  }
 
-                 if (!is_number_power) {
-                     auto it = bases.find(base);
-                     if (it == bases.end()) {
-                         bases.emplace(base, FactorAccum{exp, {op}});
-                     } else {
-                         it->second.exponent = add_numbers(it->second.exponent, exp);
-                         it->second.originals.push_back(op);
-                     }
+                 auto it = bases.find(base);
+                 if (it == bases.end()) {
+                     bases.emplace(base, FactorAccum{exp, {op}});
+                 } else {
+                     it->second.exponent = add_numbers(it->second.exponent, exp);
+                     it->second.originals.push_back(op);
                  }
              }
         }
@@ -675,7 +518,7 @@ void NormalizationVisitor::visit(const MultiplyNode& node) {
             } else if (exp->is_one()) {
                 var_ops.push_back(base);
             } else {
-                var_ops.push_back(lamina::detail::make_node<PowerNode>(base, exp));
+                var_ops.push_back(LMCAS::detail::make_node<PowerNode>(base, exp));
             }
         }
 
@@ -688,7 +531,9 @@ void NormalizationVisitor::visit(const MultiplyNode& node) {
 
         final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
 
-        if (final_ops.empty()) result = lamina::detail::make_node<NumberNode>(BigInt(1));
+        if (final_ops.empty()) result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
         else if (final_ops.size() == 1) result = final_ops[0];
         else result = make_normalized_multiply_node(final_ops);
     }
+
+} // namespace LMCAS

@@ -1,4 +1,5 @@
 #include "../include/symbolic_ode.hpp"
+#include "internal/ode_characteristic_roots.hpp"
 #include "symbolic_ast.hpp"
 #include "../include/symbolic.hpp"
 #include "../include/assumption_context.hpp"
@@ -10,7 +11,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -22,21 +23,16 @@ constexpr const char* kSolveLinear2OdeOperation = "solve_linear2_ode";
 static bool dep_var_is_positive(const std::string& y, const AssumptionContext* ctx) {
     if (!ctx) return false;
     auto y_expr = SymbolicExpr::variable(y);
-    return detail::propagate_result(ctx->is_positive(*y_expr)) == Tribool::True;
-}
-
-/// Check if a symbolic expression is known NonZero in the given context.
-static bool expr_is_nonzero(const std::shared_ptr<SymbolicExpr>& expr, const AssumptionContext* ctx) {
-    if (!ctx || !expr) return false;
-    return detail::propagate_result(ctx->is_nonzero(*expr)) == Tribool::True;
+    auto positive = ctx->is_positive(*y_expr);
+    return positive && positive.value() == Tribool::True;
 }
 
 /// Wrap an expression in abs() to signal positive-branch preference.
 static std::shared_ptr<SymbolicExpr> make_abs(std::shared_ptr<SymbolicExpr> expr) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Abs,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(expr)}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(expr)}));
 }
 
 // solve_separable_ode
@@ -94,6 +90,95 @@ std::shared_ptr<SymbolicExpr> solve_linear1_ode(
 
 // solve_linear2_ode
 
+static Result<std::shared_ptr<SymbolicExpr>>
+solve_linear2_homogeneous(
+    double a, double b, double c,
+    const std::string& x,
+    const std::string& y,
+    const AssumptionContext* ctx)
+{
+    if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c)) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            CasErrc::InvalidArgument,
+            "solve_linear2_ode: coefficients must be finite",
+            kSolveLinear2OdeOperation);
+    }
+    if (a == 0.0) {
+        if (b == 0.0) {
+            return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                CasErrc::InvalidArgument,
+                "solve_linear2_ode: leading and first-derivative coefficients are both zero",
+                kSolveLinear2OdeOperation);
+        }
+        const double normalized_c = c / b;
+        if (!std::isfinite(normalized_c)) {
+            return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                CasErrc::NumericFailure,
+                "solve_linear2_ode: degenerate coefficient normalization is non-finite",
+                kSolveLinear2OdeOperation);
+        }
+        auto solution = solve_linear1_ode(
+            SymbolicExpr::number(normalized_c),
+            SymbolicExpr::number(0), x, y, ctx);
+        return Result<std::shared_ptr<SymbolicExpr>>::success(
+            std::move(solution));
+    }
+
+    auto roots = ode_root_detail::find_characteristic_roots(
+        {a, b, c}, kSolveLinear2OdeOperation);
+    if (!roots) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(roots.error());
+    }
+
+    auto variable = SymbolicExpr::variable(x);
+    auto solution = SymbolicExpr::number(0);
+    int constant_index = 1;
+    for (const auto& root : roots.value()) {
+        auto exponential = SymbolicExpr::exp(
+            SymbolicExpr::multiply(
+                SymbolicExpr::number(root.real_part), variable));
+        if (root.is_complex) {
+            auto argument = SymbolicExpr::multiply(
+                SymbolicExpr::number(root.imag_part), variable);
+            auto cosine_basis = SymbolicExpr::multiply(
+                exponential, SymbolicExpr::cos(argument));
+            auto sine_basis = SymbolicExpr::multiply(
+                exponential, SymbolicExpr::sin(argument));
+            auto cosine_term = SymbolicExpr::multiply(
+                SymbolicExpr::variable(
+                    "C" + std::to_string(constant_index++)),
+                cosine_basis);
+            auto sine_term = SymbolicExpr::multiply(
+                SymbolicExpr::variable(
+                    "C" + std::to_string(constant_index++)),
+                sine_basis);
+            solution = SymbolicExpr::add(
+                solution,
+                SymbolicExpr::add(cosine_term, sine_term));
+            continue;
+        }
+        for (int power = 0; power < root.multiplicity; ++power) {
+            auto basis = exponential;
+            if (power > 0) {
+                basis = SymbolicExpr::multiply(
+                    SymbolicExpr::power(
+                        variable, SymbolicExpr::number(power)),
+                    exponential);
+            }
+            solution = SymbolicExpr::add(
+                solution,
+                SymbolicExpr::multiply(
+                    SymbolicExpr::variable(
+                        "C" + std::to_string(constant_index++)),
+                    basis));
+        }
+    }
+    solution = solution->simplify();
+    if (dep_var_is_positive(y, ctx)) solution = make_abs(solution);
+    return Result<std::shared_ptr<SymbolicExpr>>::success(
+        std::move(solution));
+}
+
 std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
@@ -101,77 +186,25 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     const std::string& y,
     const AssumptionContext* ctx
 ) {
-
-    // Determine whether the leading coefficient 'a' is known NonZero via
-    // assumptions. If so, skip the zero-coefficient degenerate case check.
-    bool a_known_nonzero = false;
-    if (ctx) {
-        auto a_expr = SymbolicExpr::number(a);
-        a_known_nonzero = expr_is_nonzero(a_expr, ctx);
+    if (!fx || !LMCAS::detail::node(fx)) {
+        throw std::invalid_argument(
+            "solve_linear2_ode: forcing expression must not be null");
     }
-
-    if (!a_known_nonzero) {
-        // Guard a == 0: equation degenerates to first-order (or constant) form.
-        int a_is_zero = 0;
-        lmmc_double_nearly_equal_tol(a, 0.0, 1e-12, 1e-12, &a_is_zero);
-        if (a_is_zero) {
-            int b_is_zero = 0;
-            lmmc_double_nearly_equal_tol(b, 0.0, 1e-12, 1e-12, &b_is_zero);
-            if (b_is_zero) {
-                // a == 0 and b == 0: not a proper second-order ODE.
-                throw std::invalid_argument(
-                    "solve_linear2_ode: leading and first-derivative coefficients are both zero");
-            }
-            // a == 0, b != 0: degenerates to b*y' + c*y = f(x), i.e. y' + (c/b)*y = f/b.
-            auto Px = SymbolicExpr::number(c / b);
-            auto Qx = fx->is_zero()
-                          ? SymbolicExpr::number(0)
-                          : SymbolicExpr::divide(fx, SymbolicExpr::number(b));
-            return solve_linear1_ode(Px, Qx, x, y, ctx);
-        }
-    }
-
-    double D = b*b - 4*a*c;
-    auto C1 = SymbolicExpr::variable("C1");
-    auto C2 = SymbolicExpr::variable("C2");
-    std::shared_ptr<SymbolicExpr> yh;
-    int eq;
-    lmmc_double_nearly_equal_tol(D, 0.0, 1e-12, 1e-12, &eq);
-    if (!eq && D > 0) {
-        double r1 = (-b + std::sqrt(D)) / (2*a);
-        double r2 = (-b - std::sqrt(D)) / (2*a);
-        yh = SymbolicExpr::add(
-            SymbolicExpr::multiply(C1, SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(r1), SymbolicExpr::variable(x)))),
-            SymbolicExpr::multiply(C2, SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(r2), SymbolicExpr::variable(x))))
-        );
-    } else if (eq) {
-        double r = -b / (2*a);
-        yh = SymbolicExpr::add(
-            SymbolicExpr::multiply(C1, SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(r), SymbolicExpr::variable(x)))),
-            SymbolicExpr::multiply(C2, SymbolicExpr::multiply(SymbolicExpr::variable(x), SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(r), SymbolicExpr::variable(x)))))
-        );
-    } else {
-        double real = -b / (2*a);
-        double imag = std::sqrt(-D) / (2*a);
-
-        auto exp_part = SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(real), SymbolicExpr::variable(x)));
-        auto cos_part = SymbolicExpr::cos(SymbolicExpr::multiply(SymbolicExpr::number(imag), SymbolicExpr::variable(x)));
-        auto sin_part = SymbolicExpr::sin(SymbolicExpr::multiply(SymbolicExpr::number(imag), SymbolicExpr::variable(x)));
-        yh = SymbolicExpr::multiply(exp_part, SymbolicExpr::add(SymbolicExpr::multiply(C1, cos_part), SymbolicExpr::multiply(C2, sin_part)));
-    }
-
     if (!fx->is_zero()) {
-        /// 非齐次特解当前位于支持域之外;显式诊断保留齐次解与通解的语义边界.
         throw std::logic_error(
             "solve_linear2_ode: non-homogeneous case is outside the current support domain");
     }
-
-    // When the dependent variable is known Positive, prefer positive branch.
-    if (dep_var_is_positive(y, ctx)) {
-        yh = make_abs(yh);
+    auto solution = solve_linear2_homogeneous(a, b, c, x, y, ctx);
+    if (!solution) {
+        if (solution.error().code == CasErrc::InvalidArgument) {
+            throw std::invalid_argument(solution.error().message);
+        }
+        if (solution.error().code == CasErrc::NumericFailure) {
+            throw std::overflow_error(solution.error().message);
+        }
+        throw std::logic_error(solution.error().message);
     }
-
-    return yh;
+    return std::move(solution.value());
 }
 
 Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
@@ -185,7 +218,7 @@ Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     auto step = context.consume_steps(1, kSolveLinear2OdeOperation);
     if (!step) return Result<std::shared_ptr<SymbolicExpr>>::failure(step.error());
 
-    if (!fx || !lamina::detail::node(fx)) {
+    if (!fx || !LMCAS::detail::node(fx)) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(
             CasErrc::InvalidArgument,
             "forcing expression must not be null",
@@ -206,8 +239,7 @@ Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
                 kSolveLinear2OdeOperation);
         }
 
-        return Result<std::shared_ptr<SymbolicExpr>>::success(
-            solve_linear2_ode(a, b, c, std::move(fx), x, y, ctx));
+        return solve_linear2_homogeneous(a, b, c, x, y, ctx);
     } catch (const std::invalid_argument& ex) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(
             CasErrc::InvalidArgument, ex.what(), kSolveLinear2OdeOperation);

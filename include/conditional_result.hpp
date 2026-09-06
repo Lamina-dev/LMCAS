@@ -10,9 +10,11 @@
 #include "proof_outcome.hpp"
 #include "result.hpp"
 
+namespace LMCAS {
+
 class SymbolicExpr;
 
-namespace lamina {
+
 
 using ExprPtr = std::shared_ptr<SymbolicExpr>;
 
@@ -87,4 +89,4 @@ using IntegralOutcome = std::variant<
     UnevaluatedIntegral>;
 using IntegralResult = Result<IntegralOutcome>;
 
-} // namespace lamina
+} // namespace LMCAS

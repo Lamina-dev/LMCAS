@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kCheckedInequalityOperation = "solve_inequality_checked";
@@ -50,7 +50,7 @@ Result<void> verify_quadratic_boundary(
     auto steps = context.consume_steps(2, kCheckedInequalityOperation);
     if (!steps) return steps;
 
-    if (!boundary || !lamina::detail::node(boundary) || polynomial.coeffs.size() < 3) {
+    if (!boundary || !LMCAS::detail::node(boundary) || polynomial.coeffs.size() < 3) {
         return Result<void>::failure(
             CasErrc::InternalInvariant,
             "quadratic boundary verification could not construct an expression",
@@ -227,7 +227,7 @@ Result<IntervalUnion> solve_exact_affine_inequality_impl(
 
 struct ExactInequalityRoot {
     std::shared_ptr<SymbolicExpr> expression;
-    lamina::detail::ExactRealAlgebraic algebraic;
+    LMCAS::detail::ExactRealAlgebraic algebraic;
     int multiplicity = 1;
 };
 
@@ -265,7 +265,7 @@ Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
             const auto& intervals = isolated.value();
             auto factor_expression = rational_polynomial_expression(factor);
             for (std::size_t index = 0; index < intervals.size(); ++index) {
-                auto algebraic = lamina::detail::make_exact_real_algebraic(
+                auto algebraic = LMCAS::detail::make_exact_real_algebraic(
                     factor, index, static_cast<std::size_t>(multiplicity), context);
                 if (!algebraic) {
                     return Result<IntervalUnion>::failure(algebraic.error());
@@ -543,4 +543,4 @@ IntervalUnion InequalitySolver::build_parametric_solution(
 
     return IntervalUnion(result_intervals);
 }
-} // namespace lamina
+} // namespace LMCAS

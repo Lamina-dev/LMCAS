@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 符号复数，由实部和虚部组成 */
 struct ComplexSymbolic {
@@ -41,12 +41,12 @@ inline ComplexSymbolic make_complex(
  * @return 和
  */
 
-LAMINA_API ComplexSymbolicResult complex_add_checked(
+LMCAS_API ComplexSymbolicResult complex_add_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
     ComputationContext& context);
 
-LAMINA_API ComplexSymbolicResult complex_add_checked(
+LMCAS_API ComplexSymbolicResult complex_add_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b);
 
@@ -57,12 +57,12 @@ LAMINA_API ComplexSymbolicResult complex_add_checked(
  * @return 差
  */
 
-LAMINA_API ComplexSymbolicResult complex_sub_checked(
+LMCAS_API ComplexSymbolicResult complex_sub_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
     ComputationContext& context);
 
-LAMINA_API ComplexSymbolicResult complex_sub_checked(
+LMCAS_API ComplexSymbolicResult complex_sub_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b);
 
@@ -73,12 +73,12 @@ LAMINA_API ComplexSymbolicResult complex_sub_checked(
  * @return 积
  */
 
-LAMINA_API ComplexSymbolicResult complex_mul_checked(
+LMCAS_API ComplexSymbolicResult complex_mul_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
     ComputationContext& context);
 
-LAMINA_API ComplexSymbolicResult complex_mul_checked(
+LMCAS_API ComplexSymbolicResult complex_mul_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b);
 
@@ -89,12 +89,12 @@ LAMINA_API ComplexSymbolicResult complex_mul_checked(
  * @return 商
  */
 
-LAMINA_API ComplexSymbolicResult complex_div_checked(
+LMCAS_API ComplexSymbolicResult complex_div_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
     ComputationContext& context);
 
-LAMINA_API ComplexSymbolicResult complex_div_checked(
+LMCAS_API ComplexSymbolicResult complex_div_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b);
 
@@ -104,11 +104,11 @@ LAMINA_API ComplexSymbolicResult complex_div_checked(
  * @return 共轭复数
  */
 
-LAMINA_API ComplexSymbolicResult complex_conj_checked(
+LMCAS_API ComplexSymbolicResult complex_conj_checked(
     const ComplexSymbolic& z,
     ComputationContext& context);
 
-LAMINA_API ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z);
+LMCAS_API ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z);
 
 /**
  * @brief 计算复数的模
@@ -116,11 +116,11 @@ LAMINA_API ComplexSymbolicResult complex_conj_checked(const ComplexSymbolic& z);
  * @return 模的符号表达式
  */
 
-LAMINA_API ExpressionResult complex_abs_checked(
+LMCAS_API ExpressionResult complex_abs_checked(
     const ComplexSymbolic& z,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult complex_abs_checked(const ComplexSymbolic& z);
+LMCAS_API ExpressionResult complex_abs_checked(const ComplexSymbolic& z);
 
 /**
  * @brief 计算复数的辐角
@@ -128,11 +128,11 @@ LAMINA_API ExpressionResult complex_abs_checked(const ComplexSymbolic& z);
  * @return 辐角的符号表达式
  */
 
-LAMINA_API ExpressionResult complex_arg_checked(
+LMCAS_API ExpressionResult complex_arg_checked(
     const ComplexSymbolic& z,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult complex_arg_checked(const ComplexSymbolic& z);
+LMCAS_API ExpressionResult complex_arg_checked(const ComplexSymbolic& z);
 
 /**
  * @brief 将极坐标形式转换为指数形式复数 r*e^(i*theta)
@@ -141,12 +141,12 @@ LAMINA_API ExpressionResult complex_arg_checked(const ComplexSymbolic& z);
  * @return 对应的符号复数
  */
 
-LAMINA_API ComplexSymbolicResult complex_exp_form_checked(
+LMCAS_API ComplexSymbolicResult complex_exp_form_checked(
     std::shared_ptr<SymbolicExpr> r,
     std::shared_ptr<SymbolicExpr> theta,
     ComputationContext& context);
 
-LAMINA_API ComplexSymbolicResult complex_exp_form_checked(
+LMCAS_API ComplexSymbolicResult complex_exp_form_checked(
     std::shared_ptr<SymbolicExpr> r,
     std::shared_ptr<SymbolicExpr> theta);
 
@@ -157,12 +157,12 @@ LAMINA_API ComplexSymbolicResult complex_exp_form_checked(
  * @return 对应的符号复数
  */
 
-LAMINA_API ComplexSymbolicResult complex_trig_form_checked(
+LMCAS_API ComplexSymbolicResult complex_trig_form_checked(
     std::shared_ptr<SymbolicExpr> r,
     std::shared_ptr<SymbolicExpr> theta,
     ComputationContext& context);
 
-LAMINA_API ComplexSymbolicResult complex_trig_form_checked(
+LMCAS_API ComplexSymbolicResult complex_trig_form_checked(
     std::shared_ptr<SymbolicExpr> r,
     std::shared_ptr<SymbolicExpr> theta);
 
@@ -173,47 +173,47 @@ LAMINA_API ComplexSymbolicResult complex_trig_form_checked(
  * @return n 个复数根的列表
  */
 
-LAMINA_API ComplexRootsResult solve_complex_nth_root_checked(
+LMCAS_API ComplexRootsResult solve_complex_nth_root_checked(
     std::shared_ptr<SymbolicExpr> c,
     int n,
     ComputationContext& context);
 
-LAMINA_API ComplexRootsResult solve_complex_nth_root_checked(
+LMCAS_API ComplexRootsResult solve_complex_nth_root_checked(
     std::shared_ptr<SymbolicExpr> c,
     int n);
 
 /**
  * @brief 求复系数一元二次方程 az^2 + bz + c = 0 的根.
  */
-LAMINA_API ComplexRootsResult solve_complex_quadratic_checked(
+LMCAS_API ComplexRootsResult solve_complex_quadratic_checked(
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
     std::shared_ptr<SymbolicExpr> c,
     ComputationContext& context);
 
-LAMINA_API ComplexRootsResult solve_complex_quadratic_checked(
+LMCAS_API ComplexRootsResult solve_complex_quadratic_checked(
     std::shared_ptr<SymbolicExpr> a,
     std::shared_ptr<SymbolicExpr> b,
     std::shared_ptr<SymbolicExpr> c);
 
-LAMINA_API ExpressionResult complex_locus_circle_checked(
+LMCAS_API ExpressionResult complex_locus_circle_checked(
     const ComplexSymbolic& a,
     std::shared_ptr<SymbolicExpr> r,
     const std::string& z_var,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult complex_locus_circle_checked(
+LMCAS_API ExpressionResult complex_locus_circle_checked(
     const ComplexSymbolic& a,
     std::shared_ptr<SymbolicExpr> r,
     const std::string& z_var = "z");
 
-LAMINA_API ExpressionResult complex_locus_perpendicular_bisector_checked(
+LMCAS_API ExpressionResult complex_locus_perpendicular_bisector_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
     const std::string& z_var,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult complex_locus_perpendicular_bisector_checked(
+LMCAS_API ExpressionResult complex_locus_perpendicular_bisector_checked(
     const ComplexSymbolic& a,
     const ComplexSymbolic& b,
     const std::string& z_var = "z");

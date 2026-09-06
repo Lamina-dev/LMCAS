@@ -14,19 +14,19 @@
 #include <string>
 #include <optional>
 
-namespace lamina {
+namespace LMCAS {
 
 using RootOfEvaluationResult = Result<lmmc_real_t>;
 using RootOfComplexEvaluationResult = Result<ApproxComplex>;
 using RootOfConstructionResult = Result<std::shared_ptr<SymbolicExpr>>;
 
-LAMINA_API RootOfConstructionResult make_rootof_checked(
+LMCAS_API RootOfConstructionResult make_rootof_checked(
     const std::shared_ptr<SymbolicExpr>& polynomial,
     const std::string& variable,
     std::size_t index,
     ComputationContext& context);
 
-LAMINA_API RootOfConstructionResult make_rootof_checked(
+LMCAS_API RootOfConstructionResult make_rootof_checked(
     const std::shared_ptr<SymbolicExpr>& polynomial,
     const std::string& variable,
     std::size_t index);
@@ -38,18 +38,18 @@ LAMINA_API RootOfConstructionResult make_rootof_checked(
  * selecting a non-real root returns `DomainError`. Malformed expressions
  * and invalid indices return `InvalidArgument`.
  */
-LAMINA_API RootOfEvaluationResult rootof_evaluate_checked(
+LMCAS_API RootOfEvaluationResult rootof_evaluate_checked(
     const std::shared_ptr<SymbolicExpr>& rootof_expr,
     ComputationContext& context);
 
-LAMINA_API RootOfEvaluationResult rootof_evaluate_checked(
+LMCAS_API RootOfEvaluationResult rootof_evaluate_checked(
     const std::shared_ptr<SymbolicExpr>& rootof_expr);
 
-LAMINA_API RootOfComplexEvaluationResult rootof_evaluate_complex_checked(
+LMCAS_API RootOfComplexEvaluationResult rootof_evaluate_complex_checked(
     const std::shared_ptr<SymbolicExpr>& rootof_expr,
     ComputationContext& context);
 
-LAMINA_API RootOfComplexEvaluationResult rootof_evaluate_complex_checked(
+LMCAS_API RootOfComplexEvaluationResult rootof_evaluate_complex_checked(
     const std::shared_ptr<SymbolicExpr>& rootof_expr);
 
 /**
@@ -57,7 +57,7 @@ LAMINA_API RootOfComplexEvaluationResult rootof_evaluate_complex_checked(
  * @param rootof_expr RootOf 符号表达式
  * @return 化简后的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> rootof_simplify(
+LMCAS_API std::shared_ptr<SymbolicExpr> rootof_simplify(
     const std::shared_ptr<SymbolicExpr>& rootof_expr);
 
 /**
@@ -66,7 +66,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> rootof_simplify(
  * @param var 求解变量名
  * @return RootOf 表达式列表，每个元素对应多项式的一个根
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> make_rootof_solutions(
+LMCAS_API std::vector<std::shared_ptr<SymbolicExpr>> make_rootof_solutions(
     const Polynomial<SymbolicPolyCoeff>& poly,
     const std::string& var);
 

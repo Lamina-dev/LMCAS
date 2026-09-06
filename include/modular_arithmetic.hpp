@@ -17,7 +17,7 @@
 #include <numth.h>
 #include "result.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 using CrtResult = Result<std::pair<int64_t, int64_t>>;
 using RationalReconstructionResult = Result<std::pair<int64_t, int64_t>>;

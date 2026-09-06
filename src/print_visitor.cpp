@@ -1,5 +1,8 @@
 #include "../include/visitors/print_visitor.hpp"
+#include <cmath>
 #include <iomanip>
+
+namespace LMCAS {
 
 void PrintVisitor::visit(const NumberNode& node) {
     if (std::holds_alternative<BigInt>(node.value())) {
@@ -63,15 +66,28 @@ void PrintVisitor::visit(const MultiplyNode& node) {
 }
 
 void PrintVisitor::visit(const PowerNode& node) {
-    bool base_parens = std::dynamic_pointer_cast<const AddNode>(node.base()) ||
-                      std::dynamic_pointer_cast<const MultiplyNode>(node.base());
+    bool base_parens = dynamic_cast<const AddNode*>(node.base().get()) ||
+                       dynamic_cast<const MultiplyNode*>(node.base().get()) ||
+                       dynamic_cast<const PowerNode*>(node.base().get());
+    if (const auto* number = dynamic_cast<const NumberNode*>(node.base().get())) {
+        const auto& value = number->value();
+        base_parens = std::holds_alternative<Rational>(value) ||
+                      (std::holds_alternative<BigInt>(value) &&
+                       std::get<BigInt>(value).IsNegative()) ||
+                      (std::holds_alternative<double>(value) &&
+                       std::signbit(std::get<double>(value)));
+    }
     if (base_parens) buffer << "(";
     node.base()->accept(*this);
     if (base_parens) buffer << ")";
     buffer << "^";
-    bool exp_parens = std::dynamic_pointer_cast<const AddNode>(node.exponent()) ||
-                     std::dynamic_pointer_cast<const MultiplyNode>(node.exponent()) ||
-                     std::dynamic_pointer_cast<const PowerNode>(node.exponent());
+    bool exp_parens = dynamic_cast<const AddNode*>(node.exponent().get()) ||
+                      dynamic_cast<const MultiplyNode*>(node.exponent().get()) ||
+                      dynamic_cast<const PowerNode*>(node.exponent().get());
+    if (const auto* number = dynamic_cast<const NumberNode*>(node.exponent().get())) {
+        const auto* rational = std::get_if<Rational>(&number->value());
+        exp_parens = rational && !rational->is_integer();
+    }
     if (exp_parens) buffer << "(";
     node.exponent()->accept(*this);
     if (exp_parens) buffer << ")";
@@ -354,3 +370,5 @@ void PrintVisitor::visit(const RootOfNode& node) {
     node.polynomial()->accept(*this);
     buffer << ", " << node.variable() << ", " << node.index() << ")";
 }
+
+} // namespace LMCAS

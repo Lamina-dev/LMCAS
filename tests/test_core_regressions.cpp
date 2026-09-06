@@ -1,7 +1,5 @@
-// Unit tests covering the review fixes applied across batches 1 & 2.
-//
-// Each section below targets one specific bug from the code review. The aim is
-// to lock down the new contracts so future regressions are caught immediately.
+// Cross-component regression contracts for previously corrected defects.
+// Each section exercises an observable boundary or invariant.
 
 #include "test_common.hpp"
 
@@ -21,12 +19,14 @@
 #include <stdexcept>
 #include <string>
 
-using lamina::IntervalUnion;
-using lamina::Endpoint;
-using lamina::Interval;
-using lamina::Polynomial;
-using lamina::PiecewiseIntervalResult;
-using lamina::symbolic_to_poly;
+using namespace LMCAS;
+
+using LMCAS::IntervalUnion;
+using LMCAS::Endpoint;
+using LMCAS::Interval;
+using LMCAS::Polynomial;
+using LMCAS::PiecewiseIntervalResult;
+using LMCAS::symbolic_to_poly;
 
 // Helper: assert that a callable throws a particular exception type.
 template <typename E, typename F>
@@ -97,9 +97,15 @@ void test_bigint_string_validation() {
     EXPECT_EQ_STR(BigInt("-42").to_string(), "-42", "negative literal works");
     EXPECT_EQ_STR(BigInt("+42").to_string(), "42", "+ prefix works");
 
-    // Empty after sign or fully empty -> 0 (existing behavior preserved).
-    EXPECT_TRUE(BigInt("").is_zero(), "empty -> 0");
-    EXPECT_TRUE(BigInt("-").is_zero(), "lone minus -> 0");
+    EXPECT_THROWS<std::invalid_argument>(
+        [] { BigInt(""); },
+        "empty input has no decimal digits");
+    EXPECT_THROWS<std::invalid_argument>(
+        [] { BigInt("-"); },
+        "sign-only input has no decimal digits");
+    EXPECT_THROWS<std::invalid_argument>(
+        [] { BigInt("+"); },
+        "plus-only input has no decimal digits");
 }
 
 void test_rational_string_sign() {
@@ -210,14 +216,14 @@ void test_matrix_clone_with_null_slot() {
     TEST_CASE("MatrixNode rejects nullptr dense entries");
 
     MatrixNode::DenseStorage dense;
-    dense.push_back(lamina::detail::make_node<NumberNode>(BigInt(1)));
+    dense.push_back(LMCAS::detail::make_node<NumberNode>(BigInt(1)));
     dense.push_back(nullptr); // intentional empty slot
-    dense.push_back(lamina::detail::make_node<NumberNode>(BigInt(2)));
-    dense.push_back(lamina::detail::make_node<NumberNode>(BigInt(3)));
+    dense.push_back(LMCAS::detail::make_node<NumberNode>(BigInt(2)));
+    dense.push_back(LMCAS::detail::make_node<NumberNode>(BigInt(3)));
 
     bool rejected = false;
     try {
-        (void)lamina::detail::make_node<MatrixNode>(2, 2, std::move(dense));
+        (void)LMCAS::detail::make_node<MatrixNode>(2, 2, std::move(dense));
     } catch (const std::invalid_argument&) {
         rejected = true;
     }
@@ -227,9 +233,9 @@ void test_matrix_clone_with_null_slot() {
 void test_numbernode_hash_consistent() {
     TEST_CASE("NumberNode hash matches compare_same_type for equivalent values");
 
-    auto n_int = lamina::detail::make_node<NumberNode>(BigInt(1));
-    auto n_rat = lamina::detail::make_node<NumberNode>(Rational(1, 1));
-    auto n_dbl = lamina::detail::make_node<NumberNode>((lmmc_real_t)1.0);
+    auto n_int = LMCAS::detail::make_node<NumberNode>(BigInt(1));
+    auto n_rat = LMCAS::detail::make_node<NumberNode>(Rational(1, 1));
+    auto n_dbl = LMCAS::detail::make_node<NumberNode>((lmmc_real_t)1.0);
 
     // BigInt and Rational are the same exact domain; approximate doubles are distinct.
     EXPECT_TRUE(n_int->compare(*n_rat) == 0, "BigInt 1 == Rational 1/1");
@@ -285,18 +291,18 @@ void test_extract_coeff_no_silent_truncate() {
     // 1.9 -> previously produced BigInt(1). Now we expect a non-truncated
     // sentinel (0) because 1.9 is not an integer and we refuse to lie about it.
     auto e = SymbolicExpr::number(1.9);
-    BigInt b = lamina::extract_coeff_value<BigInt>(e);
+    BigInt b = LMCAS::extract_coeff_value<BigInt>(e);
     EXPECT_TRUE(b == BigInt(0),
                 "1.9 -> BigInt(0) sentinel, not 1");
 
     // Integer-valued double still extracts normally.
     auto e2 = SymbolicExpr::number(7.0);
-    BigInt b2 = lamina::extract_coeff_value<BigInt>(e2);
+    BigInt b2 = LMCAS::extract_coeff_value<BigInt>(e2);
     EXPECT_TRUE(b2 == BigInt(7), "7.0 -> BigInt(7)");
 
     // Non-integer rational coefficient also returns the sentinel.
     auto e3 = SymbolicExpr::number(Rational(3, 2));
-    BigInt b3 = lamina::extract_coeff_value<BigInt>(e3);
+    BigInt b3 = LMCAS::extract_coeff_value<BigInt>(e3);
     EXPECT_TRUE(b3 == BigInt(0), "3/2 -> BigInt(0) sentinel");
 }
 

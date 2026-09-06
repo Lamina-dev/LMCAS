@@ -3,6 +3,8 @@
 #include <random>
 #include <cmath>
 
+using namespace LMCAS;
+
 
 static constexpr unsigned kPropertySeed = 0x53455249u;
 static std::mt19937 rng(kPropertySeed);
@@ -46,7 +48,7 @@ static void test_power_series_addition_componentwise() {
         auto a = rand_coeffs(len);
         auto b = rand_coeffs(len);
 
-        auto result = lamina::power_series_add(a, b);
+        auto result = LMCAS::power_series_add(a, b);
 
         bool property_holds = true;
 
@@ -109,7 +111,7 @@ static void test_power_series_multiplication_cauchy() {
         auto a = rand_coeffs(len_a, 3);
         auto b = rand_coeffs(len_b, 3);
 
-        auto result = lamina::power_series_multiply_checked(a, b, order).value();
+        auto result = LMCAS::power_series_multiply_checked(a, b, order).value();
 
         bool property_holds = true;
 
@@ -331,7 +333,7 @@ static void test_symbolic_summation_closed_form() {
         }
 
         // Use symbolic_sum with concrete bounds (direct evaluation path)
-        auto direct_result = lamina::symbolic_sum(body, "k", num(1), num(upper_val));
+        auto direct_result = LMCAS::symbolic_sum(body, "k", num(1), num(upper_val));
 
         bool property_holds = false;
 
@@ -377,7 +379,7 @@ static void test_convergence_radius_geometric() {
         auto n = SymbolicExpr::variable("n");
         auto coefficient = SymbolicExpr::power(num(r), n);
         auto checked_radius =
-            lamina::convergence_radius_checked(coefficient, "n");
+            LMCAS::convergence_radius_checked(coefficient, "n");
         auto radius = checked_radius
             ? checked_radius.value() : std::shared_ptr<SymbolicExpr>{};
 

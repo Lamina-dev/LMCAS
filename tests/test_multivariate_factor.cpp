@@ -12,7 +12,7 @@
 #include "multivariate_poly.hpp"
 #include "rapidcheck/rapidcheck.h"
 
-using namespace lamina;
+using namespace LMCAS;
 
 /**
  * @brief 辅助函数：构造 MultiPoly 项

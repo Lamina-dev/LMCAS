@@ -3,7 +3,10 @@
 
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <utility>
+
+using namespace LMCAS;
 
 int main() {
     TEST_CASE("BigInt exact narrowing");
@@ -57,6 +60,35 @@ int main() {
     EXPECT_TRUE(negative == canonical_zero,
                 "negative overshift canonicalizes zero");
 
+
+    TEST_CASE("BigInt modular power validates signs and canonicalizes residues");
+    EXPECT_EQ_STR(BigInt::pow_mod(BigInt(-2), BigInt(3), BigInt(5)).to_string(),
+                  "2", "negative bases produce canonical positive residues");
+    EXPECT_EQ_STR(
+        BigInt::pow_mod(BigInt("-18446744073709551618"), BigInt(3),
+                        BigInt("18446744073709551617")).to_string(),
+        "18446744073709551616",
+        "multi-limb modular power canonicalizes a negative base");
+    EXPECT_EQ_STR(BigInt::pow_mod(BigInt(99), BigInt(0), BigInt(1)).to_string(),
+                  "0", "modulus one always yields zero");
+
+    bool negative_exponent_rejected = false;
+    try {
+        (void)BigInt::pow_mod(BigInt(2), BigInt(-1), BigInt(5));
+    } catch (const std::domain_error&) {
+        negative_exponent_rejected = true;
+    }
+    EXPECT_TRUE(negative_exponent_rejected,
+                "negative modular exponents are rejected");
+
+    bool nonpositive_modulus_rejected = false;
+    try {
+        (void)BigInt::pow_mod(BigInt(2), BigInt(3), BigInt(-5));
+    } catch (const std::domain_error&) {
+        nonpositive_modulus_rejected = true;
+    }
+    EXPECT_TRUE(nonpositive_modulus_rejected,
+                "nonpositive modular moduli are rejected");
 
     TEST_CASE("BigInt moved-from storage is reusable");
     BigInt source("18446744073709551616");

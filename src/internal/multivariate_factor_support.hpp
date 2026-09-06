@@ -4,7 +4,7 @@
 #include "polynomial.hpp"
 #include "result.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 using UnivariateFactorResult =
     Result<MathResult<std::vector<Polynomial<Rational>>>>;
@@ -13,4 +13,4 @@ UnivariateFactorResult factor_univariate_bridge_checked(
     const Polynomial<Rational>& polynomial,
     ComputationContext& context);
 
-} // namespace lamina
+} // namespace LMCAS

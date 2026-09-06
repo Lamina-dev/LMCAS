@@ -1,6 +1,6 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 const std::vector<IntegrationEntry> IntegrationTable::empty_entries_;
 
@@ -45,9 +45,9 @@ void IntegrationTable::load_defaults() {
     using FT = FunctionNode::FuncType;
 
     auto make_fn = [](FT t, const std::shared_ptr<SymbolicExpr>& arg) {
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<FunctionNode>(
-                t, std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(arg)}));
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<FunctionNode>(
+                t, std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(arg)}));
     };
 
     // Condition: wildcard `_u` is bound to the integration variable itself.
@@ -55,7 +55,7 @@ void IntegrationTable::load_defaults() {
         return [wc](const MatchMap& m, const std::string& var) -> bool {
             auto it = m.find(wc);
             if (it == m.end()) return false;
-            auto v = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(it->second));
+            auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it->second));
             return v && v->name() == var;
         };
     };
@@ -65,11 +65,11 @@ void IntegrationTable::load_defaults() {
         return [u_wc, a_wc](const MatchMap& m, const std::string& var) -> bool {
             auto it_u = m.find(u_wc);
             if (it_u == m.end()) return false;
-            auto v = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(it_u->second));
+            auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it_u->second));
             if (!v || v->name() != var) return false;
             auto it_a = m.find(a_wc);
             if (it_a == m.end()) return false;
-            return !expression_depends_on_variable(lamina::detail::node(it_a->second), var);
+            return !expression_depends_on_variable(LMCAS::detail::node(it_a->second), var);
         };
     };
 
@@ -488,11 +488,11 @@ void IntegrationTable::load_defaults() {
             [](const MatchMap& m, const std::string& var) {
                 auto it_u = m.find("_u");
                 if (it_u == m.end()) return false;
-                auto v = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(it_u->second));
+                auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it_u->second));
                 if (!v || v->name() != var) return false;
                 auto it_n = m.find("_n");
                 if (it_n == m.end()) return false;
-                if (expression_depends_on_variable(lamina::detail::node(it_n->second), var)) return false;
+                if (expression_depends_on_variable(LMCAS::detail::node(it_n->second), var)) return false;
 
                 // Reject n = -1 (handled by the dedicated 1/x rule).
                 auto n_simp = it_n->second.simplify();
@@ -507,7 +507,7 @@ void IntegrationTable::load_defaults() {
     // x  -> x^2 / 2  (anchor entry for the bare integration variable)
     {
         auto u = wildcard("_u");
-        auto pat = lamina::detail::expression_from_node(lamina::detail::node(u));
+        auto pat = LMCAS::detail::expression_from_node(LMCAS::detail::node(u));
         auto res = *SymbolicExpr::multiply(
             SymbolicExpr::power(make_expr_ptr(u), SymbolicExpr::number(2)),
             sym_rational(1, 2));
@@ -626,4 +626,4 @@ void IntegrationTable::load_defaults() {
     }
 }
 
-} // namespace lamina
+} // namespace LMCAS

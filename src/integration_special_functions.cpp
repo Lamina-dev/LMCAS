@@ -1,6 +1,6 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -8,9 +8,9 @@ namespace {
 inline std::shared_ptr<SymbolicExpr> sf_make_fn(
     FunctionNode::FuncType t,
     const std::shared_ptr<SymbolicExpr>& arg) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
-            t, std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(arg)}));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
+            t, std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(arg)}));
 }
 
 // Build sqrt(pi).
@@ -116,10 +116,10 @@ bool sf_match_exp_neg_quad(const std::shared_ptr<const SymbolicNode>& node,
     auto fn = std::dynamic_pointer_cast<const FunctionNode>(node);
     if (!fn || fn->type() != FunctionNode::FuncType::Exp) return false;
     if (fn->arguments().size() != 1) return false;
-    auto arg = lamina::detail::expression_from_node(fn->arguments()[0]);
+    auto arg = LMCAS::detail::expression_from_node(fn->arguments()[0]);
     Polynomial<Rational> poly;
     try {
-        poly = symbolic_to_poly<Rational>(lamina::detail::make_expression_ptr(arg), var);
+        poly = symbolic_to_poly<Rational>(LMCAS::detail::make_expression_ptr(arg), var);
     } catch (const std::invalid_argument&) {
         return false;
     } catch (const std::out_of_range&) {
@@ -141,7 +141,7 @@ bool sf_match_exp_neg_quad(const std::shared_ptr<const SymbolicNode>& node,
 
 } // anonymous namespace
 
-std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext&, int depth) {
     (void)ctx;
@@ -151,7 +151,7 @@ std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate_raw(
 
     auto v = SymbolicExpr::variable(var);
 
-    if (sf_is_inv_ln_var(lamina::detail::node(expr), var)) {
+    if (sf_is_inv_ln_var(LMCAS::detail::node(expr), var)) {
         auto li = sf_make_fn(FT::Li, v);
         auto simp = li->simplify();
         return simp ? simp : li;
@@ -159,7 +159,7 @@ std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate_raw(
 
     {
         Rational c_rat;
-        if (sf_match_exp_neg_quad(lamina::detail::node(expr), var, c_rat)) {
+        if (sf_match_exp_neg_quad(LMCAS::detail::node(expr), var, c_rat)) {
             // Result: (sqrt(pi) / (2 * sqrt(c))) * erf(sqrt(c) * x)
             auto sqrt_pi = sf_sqrt_pi();
             auto sqrt_c = SymbolicExpr::sqrt(SymbolicExpr::number(c_rat));
@@ -183,7 +183,7 @@ std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate_raw(
     {
         std::vector<std::shared_ptr<const SymbolicNode>> others;
         bool has_inv = false;
-        if (sf_split_inv_var(lamina::detail::node(expr), var, others, has_inv) && has_inv && others.size() == 1) {
+        if (sf_split_inv_var(LMCAS::detail::node(expr), var, others, has_inv) && has_inv && others.size() == 1) {
             const auto& other = others[0];
             if (sf_is_fn_of_var(other, FT::Exp, var)) {
                 auto ei = sf_make_fn(FT::Ei, v);
@@ -207,4 +207,4 @@ std::shared_ptr<SymbolicExpr> SpecialFunctionStrategy::try_integrate_raw(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

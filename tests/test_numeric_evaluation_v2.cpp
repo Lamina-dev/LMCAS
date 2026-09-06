@@ -1,8 +1,9 @@
 #include "test_common.hpp"
 #include "numeric_evaluation.hpp"
+#include "symbolic_ast.hpp"
 
 int main() {
-    using namespace lamina;
+    using namespace LMCAS;
 
     TEST_CASE("Explicit numeric bindings");
     auto x = SymbolicExpr::variable("x");
@@ -49,6 +50,64 @@ int main() {
         EXPECT_NEAR(root.value().value, -std::sqrt(2.0), 1e-12,
                     "first real root of z^2-2 is -sqrt(2)");
     }
+
+    TEST_CASE("Real-axis complex arguments preserve the principal branch");
+    auto argument_expression = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::ComplexArg,
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(x)}));
+    const struct {
+        double input;
+        double expected;
+    } argument_cases[] = {
+        {-4.0, std::acos(-1.0)},
+        {4.0, 0.0},
+        {-0.0, std::acos(-1.0)},
+        {0.0, 0.0}
+    };
+    for (const auto& test : argument_cases) {
+        auto argument = evaluate_numeric(*argument_expression, {{"x", test.input}});
+        EXPECT_TRUE(argument && argument.value().is_finite(),
+                    "bound real-axis argument has a finite principal value");
+        if (argument) {
+            EXPECT_NEAR(argument.value().value, test.expected, 1e-14,
+                        "principal argument distinguishes positive and negative real axes");
+        }
+    }
+    auto imaginary_expression = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::ImagPart,
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(x)}));
+    auto imaginary = evaluate_numeric(*imaginary_expression, {{"x", -4.0}});
+    EXPECT_TRUE(imaginary && imaginary.value().value == 0.0,
+                "negative real values have zero imaginary part");
+
+    TEST_CASE("Exact power exponents preserve parity beyond double precision");
+    const BigInt odd_exponent("9007199254740993");
+    for (auto exponent : {SymbolicExpr::number(odd_exponent),
+                          SymbolicExpr::number(Rational(odd_exponent, BigInt(1)))}) {
+        auto odd_power = SymbolicExpr::power(x, exponent);
+        auto negative = evaluate_numeric(*odd_power, {{"x", -1.0}});
+        EXPECT_TRUE(negative && negative.value().value == -1.0,
+                    "an exact odd exponent keeps the sign of a negative base");
+        auto signed_zero = evaluate_numeric(*odd_power, {{"x", -0.0}});
+        EXPECT_TRUE(signed_zero && signed_zero.value().value == 0.0 &&
+                        std::signbit(signed_zero.value().value),
+                    "an exact odd exponent preserves negative zero");
+    }
+    auto even_power = SymbolicExpr::power(
+        x, SymbolicExpr::number(odd_exponent + BigInt(1)));
+    auto even_value = evaluate_numeric(*even_power, {{"x", -1.0}});
+    EXPECT_TRUE(even_value && even_value.value().value == 1.0,
+                "an adjacent exact even exponent produces a positive result");
+
+    TEST_CASE("Negative real powers retain exact exponent domain restrictions");
+    auto fractional_power = SymbolicExpr::power(
+        x, SymbolicExpr::number(Rational(odd_exponent, BigInt(2))));
+    auto fractional_value = evaluate_numeric(*fractional_power, {{"x", -1.0}});
+    EXPECT_TRUE(!fractional_value &&
+                    fractional_value.error().code == CasErrc::DomainError,
+                "a fraction rounded to an integer double remains outside the real power domain");
 
     TEST_CASE("Resource limits are enforced");
     ResourceLimits limits;

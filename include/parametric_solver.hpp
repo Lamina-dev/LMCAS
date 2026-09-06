@@ -9,7 +9,7 @@
 #include <string>
 #include <memory>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 含参方程组的分段解，按参数条件分类 */
 struct PiecewiseSolution {
@@ -26,7 +26,7 @@ using ParametricSolutionList =
 using ParametricSolutionsResult = Result<ParametricSolutionList>;
 
 /** @brief 含参方程组求解器，支持线性与多项式方程组的参数化求解 */
-class LAMINA_API ParametricSolver {
+class LMCAS_API ParametricSolver {
 public:
 
     /**
@@ -75,7 +75,7 @@ private:
         const std::vector<std::string>& parameters);
 
     /** @brief 求解关于未知数为多项式的含参方程组 */
-    static ParametricSolutionList solve_polynomial_parametric_impl(
+    static ParametricSolutionsResult solve_polynomial_parametric_impl(
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
         const std::vector<std::string>& unknowns,
         const std::vector<std::string>& parameters,

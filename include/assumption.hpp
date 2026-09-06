@@ -8,7 +8,7 @@
  */
 #pragma once
 
-namespace lamina {
+namespace LMCAS {
 
 /// Mathematical domain hierarchy (least specific → most specific).
 /// Complex ⊃ Real ⊃ Algebraic ⊃ Rational ⊃ Integer ⊃ Natural ⊃ PositiveInt
@@ -86,4 +86,4 @@ class InferenceEngine;
 class AssumptionContext;
 class QueryInterface;
 
-} // namespace lamina
+} // namespace LMCAS

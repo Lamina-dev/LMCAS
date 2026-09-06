@@ -89,6 +89,7 @@ endfunction()
 
 lmcas_add_public_header_checks(
     lmcas_public_header_checks
+    value.hpp
     complex_analysis.hpp
     calculus_utils.hpp
     differential_geometry.hpp
@@ -106,7 +107,7 @@ lmcas_add_public_header_checks(
     inference_engine.hpp
     poly_utils.hpp
     symbolic_implicit_diff.hpp
-    lsr_expr.hpp
+    expr.hpp
     quantity.hpp
     symbolic_set.hpp
 )
@@ -120,14 +121,14 @@ lmcas_add_standalone_test_group(
     test_main.cpp
     test_suite.cpp
     test_normalization.cpp
-    test_expand_debug.cpp
+    test_expansion_regressions.cpp
     test_ast_depth.cpp
     test_ast_invariants.cpp
     test_symbolic_public_header.cpp
     test_norm.cpp
     test_proof.cpp
     test_arithmetic.cpp
-    test_bigint_debug.cpp
+    test_bigint_core.cpp
     test_bigint_add_carry.cpp
     test_bigint_safety.cpp
     test_fraction.cpp
@@ -138,7 +139,7 @@ lmcas_add_standalone_test_group(
     test_computation_context.cpp
     test_domain_preserving_simplify.cpp
     test_result_contracts.cpp
-    test_lsr_expr.cpp
+    test_expr.cpp
     test_complex_arithmetic.cpp
     test_symbolic_complex.cpp
 )
@@ -173,7 +174,7 @@ lmcas_add_standalone_test_group(
     test_indeterminate_limits.cpp
     test_limits_at_infinity.cpp
     test_taylor_fallback.cpp
-    test_debug_limit.cpp
+    test_exponential_limit.cpp
     test_prop_calculus_utils.cpp
     test_trig_substitution.cpp
 )
@@ -218,7 +219,7 @@ lmcas_add_standalone_test_group(
     test_symbolic_geometry.cpp
     test_symbolic_vector_geometry.cpp
     test_new_features.cpp
-    test_review_fixes.cpp
+    test_core_regressions.cpp
     test_groebner_advanced.cpp
     test_modular_arithmetic.cpp
     test_modular_fglm.cpp

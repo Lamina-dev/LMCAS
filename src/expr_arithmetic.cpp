@@ -1,7 +1,7 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include "complex_analysis.hpp"
 #include "symbolic_ast.hpp"
-#include "internal/lsr_expr_common.hpp"
+#include "internal/expr_common.hpp"
 #include <cmath>
 #include <exception>
 #include <memory>
@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-namespace lamina::lsr {
+namespace LMCAS {
 
-using namespace detail::lsr_expr_common;
+using namespace expr_detail::expr_common;
 
 ExprResult add(const ExprPtr& lhs,
                const ExprPtr& rhs,
@@ -215,7 +215,7 @@ ExprResult log10(const ExprPtr& expression, ComputationContext& context) {
     if (!valid) return valid;
     auto step = context.consume_steps(1, kMathOperation);
     if (!step) return ExprResult::failure(step.error());
-    if (!expression || !lamina::detail::node(expression)) {
+    if (!expression || !LMCAS::detail::node(expression)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   "log10 argument cannot be null",
                                   kMathOperation);
@@ -224,7 +224,7 @@ ExprResult log10(const ExprPtr& expression, ComputationContext& context) {
         auto numerator = SymbolicExpr::ln(expression);
         auto denominator = SymbolicExpr::ln(SymbolicExpr::number(10));
         auto result = SymbolicExpr::divide(numerator, denominator);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       "log10 expression construction failed",
                                       kMathOperation);
@@ -281,24 +281,24 @@ ExprResult clamp(const ExprPtr& expression,
                  ComputationContext& context) {
     auto step = context.consume_steps(1, kMathOperation);
     if (!step) return ExprResult::failure(step.error());
-    if (!expression || !lamina::detail::node(expression) ||
-        !lower || !lamina::detail::node(lower) ||
-        !upper || !lamina::detail::node(upper)) {
+    if (!expression || !LMCAS::detail::node(expression) ||
+        !lower || !LMCAS::detail::node(lower) ||
+        !upper || !LMCAS::detail::node(upper)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   "clamp arguments cannot be null",
                                   kMathOperation);
     }
     try {
-        auto max_node = lamina::detail::make_node<FunctionNode>(
+        auto max_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Max,
             std::vector<std::shared_ptr<const SymbolicNode>>{
-                lamina::detail::node(expression), lamina::detail::node(lower)});
-        auto min_node = lamina::detail::make_node<FunctionNode>(
+                LMCAS::detail::node(expression), LMCAS::detail::node(lower)});
+        auto min_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Min,
             std::vector<std::shared_ptr<const SymbolicNode>>{
-                std::move(max_node), lamina::detail::node(upper)});
+                std::move(max_node), LMCAS::detail::node(upper)});
         return ExprResult::success(
-            lamina::detail::make_expression_ptr(std::move(min_node)));
+            LMCAS::detail::make_expression_ptr(std::move(min_node)));
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "clamp expression allocation failed",
@@ -358,7 +358,7 @@ ExprResult abs(const ExprPtr& expression, ComputationContext& context) {
         auto im_squared = SymbolicExpr::power(im.value(), SymbolicExpr::number(2));
         auto sum = SymbolicExpr::add(re_squared, im_squared);
         auto result = SymbolicExpr::sqrt(sum)->simplify();
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       "complex absolute value construction failed",
                                       kAbsOperation);
@@ -378,4 +378,4 @@ ExprResult abs(const ExprPtr& expression) {
     ComputationContext context;
     return abs(expression, context);
 }
-} // namespace lamina::lsr
+} // namespace LMCAS

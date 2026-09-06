@@ -15,7 +15,7 @@
 #include "assumption.hpp"
 #include "result.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 // Forward declaration - PropertyStore may not yet be compiled
 class PropertyStore;
@@ -44,7 +44,7 @@ struct Relation {
  *
  * 复合关系(多变量左端或任意右端)按原结构存储,供 InferenceEngine 后续推导.
  */
-class LAMINA_API RelationStore {
+class LMCAS_API RelationStore {
 public:
     /**
      * @brief Store a relation and optionally derive sign properties.
@@ -143,4 +143,4 @@ private:
         const Relation& new_rel, PropertyStore& prop_store);
 };
 
-} // namespace lamina
+} // namespace LMCAS

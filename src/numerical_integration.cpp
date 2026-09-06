@@ -15,7 +15,7 @@
 #include <optional>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 Result<double> checked_finite_value(
@@ -87,12 +87,6 @@ Result<NormalizedInterval> evaluate_interval(
     if (interval.lower > interval.upper) {
         std::swap(interval.lower, interval.upper);
         interval.sign = -1.0;
-    }
-    if (!std::isfinite(interval.upper - interval.lower)) {
-        return Result<NormalizedInterval>::failure(
-            CasErrc::NumericFailure,
-            "integration interval width is not representable as a finite double",
-            operation);
     }
     return Result<NormalizedInterval>::success(interval);
 }
@@ -189,6 +183,11 @@ Result<ApproxReal> quadrature_simpson_numeric(
             "Simpson refinement count overflows",
             operation);
     }
+    auto interval = evaluate_interval(lower, upper, context, operation);
+    if (!interval) return Result<ApproxReal>::failure(interval.error());
+    if (interval.value().lower == interval.value().upper) {
+        return Result<ApproxReal>::success(zero_quadrature_result());
+    }
     const auto refined_subdivisions =
         static_cast<std::size_t>(subdivisions) * 2;
     const auto samples =
@@ -196,11 +195,6 @@ Result<ApproxReal> quadrature_simpson_numeric(
         refined_subdivisions + 1;
     auto budget = context.consume_steps(samples, operation);
     if (!budget) return Result<ApproxReal>::failure(budget.error());
-    auto interval = evaluate_interval(lower, upper, context, operation);
-    if (!interval) return Result<ApproxReal>::failure(interval.error());
-    if (interval.value().lower == interval.value().upper) {
-        return Result<ApproxReal>::success(zero_quadrature_result());
-    }
 
     detail::ensure_lmmc_lifecycle();
     QuadratureCallback callback{
@@ -224,10 +218,11 @@ Result<ApproxReal> quadrature_simpson_numeric(
     if (status != LMMC_STATUS_OK) {
         return quadrature_failure<ApproxReal>(status, operation);
     }
-    const double estimated_error =
-        std::abs(refined_value - value) * (16.0 / 15.0);
+    const double correction = (refined_value - value) / 15.0;
+    const double extrapolated_value = refined_value + correction;
     return estimated_quadrature_result(
-        value, estimated_error, interval.value().sign, operation);
+        extrapolated_value, std::abs(correction),
+        interval.value().sign, operation);
 }
 
 Result<ApproxReal> quadrature_simpson_numeric(
@@ -258,15 +253,15 @@ Result<ApproxReal> quadrature_gaussian_numeric(
             "Gaussian quadrature order must be in [1, 20]",
             operation);
     }
-    const int comparison_order = order == 20 ? 19 : order + 1;
-    auto budget = context.consume_steps(
-        static_cast<std::size_t>(order + comparison_order + 2), operation);
-    if (!budget) return Result<ApproxReal>::failure(budget.error());
     auto interval = evaluate_interval(lower, upper, context, operation);
     if (!interval) return Result<ApproxReal>::failure(interval.error());
     if (interval.value().lower == interval.value().upper) {
         return Result<ApproxReal>::success(zero_quadrature_result());
     }
+    const int comparison_order = order == 20 ? 19 : order + 1;
+    auto budget = context.consume_steps(
+        static_cast<std::size_t>(order + comparison_order + 2), operation);
+    if (!budget) return Result<ApproxReal>::failure(budget.error());
 
     detail::ensure_lmmc_lifecycle();
     QuadratureCallback callback{
@@ -415,4 +410,4 @@ Result<ApproxReal> numerical_integrate_numeric(
         function, variable, lower, upper, context, subdivisions);
 }
 
-} // namespace lamina
+} // namespace LMCAS

@@ -2,12 +2,14 @@
 #pragma once
 #include "numbers.hpp"
 
+namespace LMCAS {
+
 /**
  * @brief 变量节点，表示一个符号变量。
  */
 class VariableNode : public SymbolicNode {
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::string name_;
 
@@ -29,8 +31,8 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<const SymbolicNode> clone() const override { return lamina::detail::make_node<VariableNode>(name_); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    std::shared_ptr<const SymbolicNode> clone() const override { return LMCAS::detail::make_node<VariableNode>(name_); }
 };
 
 /**
@@ -40,7 +42,7 @@ public:
  */
 class AddNode : public SymbolicNode {
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::vector<std::shared_ptr<const SymbolicNode>> operands_;
 
@@ -99,25 +101,28 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<const SymbolicNode> clone() const override {
         std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
         new_ops.reserve(operands_.size());
         for (const auto& op : operands_) new_ops.push_back(op->clone());
-        return lamina::detail::make_node<AddNode>(std::move(new_ops));
+        return LMCAS::detail::make_node<AddNode>(std::move(new_ops));
     }
 };
 
 /**
  * @brief 乘法节点，表示多个操作数的乘积。
  *
- * 构造时自动扁平化嵌套的 MultiplyNode，并按规范顺序排序操作数。
+ * 构造时扁平化嵌套乘积；纯标量因子按规范顺序排序，
+ * 包含矩阵的乘积保留因子的输入顺序。
  */
 class MultiplyNode : public SymbolicNode {
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::vector<std::shared_ptr<const SymbolicNode>> operands_;
+
+    static bool contains_matrix(const SymbolicNode& node);
 
     explicit MultiplyNode(std::vector<std::shared_ptr<const SymbolicNode>> ops)
         : operands_([&ops]() {
@@ -135,9 +140,14 @@ private:
                 flattened.push_back(op);
             }
         }
-        std::sort(flattened.begin(), flattened.end(), [](const auto& a, const auto& b) {
-            return a->compare(*b) < 0;
-        });
+        const bool scalar_product = std::none_of(
+            flattened.begin(), flattened.end(),
+            [](const auto& factor) { return contains_matrix(*factor); });
+        if (scalar_product) {
+            std::sort(flattened.begin(), flattened.end(), [](const auto& a, const auto& b) {
+                return a->compare(*b) < 0;
+            });
+        }
         return flattened;
     }()) {}
 
@@ -171,12 +181,12 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<const SymbolicNode> clone() const override {
         std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
         new_ops.reserve(operands_.size());
         for (const auto& op : operands_) new_ops.push_back(op->clone());
-        return lamina::detail::make_node<MultiplyNode>(std::move(new_ops));
+        return LMCAS::detail::make_node<MultiplyNode>(std::move(new_ops));
     }
 };
 
@@ -185,7 +195,7 @@ public:
  */
 class PowerNode : public SymbolicNode {
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::shared_ptr<const SymbolicNode> base_;
     const std::shared_ptr<const SymbolicNode> exponent_;
@@ -224,8 +234,10 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<const SymbolicNode> clone() const override {
-        return lamina::detail::make_node<PowerNode>(base_->clone(), exponent_->clone());
+        return LMCAS::detail::make_node<PowerNode>(base_->clone(), exponent_->clone());
     }
 };
+
+} // namespace LMCAS

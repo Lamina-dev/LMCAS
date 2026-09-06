@@ -9,7 +9,9 @@
 #include <cmath>
 #include <memory>
 
-using lamina::Integrator;
+using namespace LMCAS;
+
+using LMCAS::Integrator;
 
 namespace {
 
@@ -19,10 +21,10 @@ constexpr double kTolerance = 1e-10;
 
 std::shared_ptr<SymbolicExpr> sec_of(std::shared_ptr<SymbolicExpr> arg) {
     using FT = FunctionNode::FuncType;
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FT::Sec,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(arg)}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(arg)}));
 }
 
 std::shared_ptr<SymbolicExpr> sec_pow(std::shared_ptr<SymbolicExpr> arg, int n) {
@@ -77,9 +79,9 @@ NReport verify_n(int n) {
         rep.detail = std::string("integration failed: ") + integrated.error().message;
         return rep;
     }
-    auto result = lamina::detail::make_expression_ptr(integrated.value());
+    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
 
-    if (has_integral_node(lamina::detail::node(result))) {
+    if (has_integral_node(LMCAS::detail::node(result))) {
         rep.unevaluated = true;
         rep.detail = "unevaluated integral in result: " + result->to_string();
         return rep;

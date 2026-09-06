@@ -5,7 +5,7 @@
 #include <iostream>
 #include <cmath>
 
-using namespace lamina;
+using namespace LMCAS;
 
 void test_modint() {
     std::cout << "Test: ModInt arithmetic" << std::endl;

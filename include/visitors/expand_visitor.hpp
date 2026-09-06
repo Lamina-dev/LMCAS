@@ -7,8 +7,10 @@
 #include "../symbolic_ast.hpp"
 #include "normalization_visitor.hpp"
 
+namespace LMCAS {
+
 /** @brief 展开访问器，将乘积分配律和整数次幂展开为多项式形式 */
-class ExpandVisitor : public lamina::detail::SymbolicVisitor {
+class ExpandVisitor : public LMCAS::detail::SymbolicVisitor {
 public:
     std::shared_ptr<const SymbolicNode> result;  ///< 展开结果节点
 
@@ -29,7 +31,7 @@ public:
             op->accept(*this);
             new_ops.push_back(result);
         }
-        result = lamina::detail::make_node<AddNode>(new_ops);
+        result = LMCAS::detail::make_node<AddNode>(new_ops);
     }
 
     void visit(const MultiplyNode& node) override {
@@ -40,7 +42,7 @@ public:
         }
 
         if (expanded_ops.empty()) {
-            result = lamina::detail::make_node<NumberNode>(BigInt(1));
+            result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
             return;
         }
 
@@ -65,7 +67,7 @@ public:
             else if (std::holds_alternative<Rational>(exp_num->value())) e_val = (long long)std::get<Rational>(exp_num->value()).to_double();
 
             if (e_val == 0) {
-                result = lamina::detail::make_node<NumberNode>(BigInt(1));
+                result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
                 return;
             }
             if (e_val > 0 && e_val < 20) {
@@ -79,7 +81,7 @@ public:
             }
             // Exponent too large for expansion (>= 20) or negative — keep as PowerNode
         }
-        result = lamina::detail::make_node<PowerNode>(expanded_base, expanded_exp);
+        result = LMCAS::detail::make_node<PowerNode>(expanded_base, expanded_exp);
     }
 
     void visit(const FunctionNode& node) override {
@@ -88,7 +90,7 @@ public:
             arg->accept(*this);
             new_args.push_back(result);
         }
-        result = lamina::detail::make_node<FunctionNode>(node.type(), new_args);
+        result = LMCAS::detail::make_node<FunctionNode>(node.type(), new_args);
     }
     void visit(const UninterpretedFunctionNode& node) override {
         std::vector<std::shared_ptr<const SymbolicNode>> arguments;
@@ -97,7 +99,7 @@ public:
             argument->accept(*this);
             arguments.push_back(result);
         }
-        result = lamina::detail::make_node<UninterpretedFunctionNode>(
+        result = LMCAS::detail::make_node<UninterpretedFunctionNode>(
             node.name(), std::move(arguments));
     }
 
@@ -115,7 +117,7 @@ public:
             node.upper()->accept(*this);
             upper = result;
         }
-        result = lamina::detail::make_node<IntegralNode>(
+        result = LMCAS::detail::make_node<IntegralNode>(
             body, node.variable(), lower, upper);
     }
 
@@ -124,7 +126,7 @@ public:
         auto head = result;
         node.right()->accept(*this);
         auto tail = result;
-        result = lamina::detail::make_node<RelationalNode>(head, tail, node.op());
+        result = LMCAS::detail::make_node<RelationalNode>(head, tail, node.op());
     }
 
     void visit(const LogicalNode& node) override {
@@ -135,7 +137,7 @@ public:
             node.right()->accept(*this);
             tail = result;
         }
-        result = lamina::detail::make_node<LogicalNode>(head, tail, node.op());
+        result = LMCAS::detail::make_node<LogicalNode>(head, tail, node.op());
     }
 
     void visit(const PiecewiseNode& node) override {
@@ -153,7 +155,7 @@ public:
             node.default_expr()->accept(*this);
             default_expr = result;
         }
-        result = lamina::detail::make_node<PiecewiseNode>(std::move(branches), default_expr);
+        result = LMCAS::detail::make_node<PiecewiseNode>(std::move(branches), default_expr);
     }
 
     void visit(const SummationNode& node) override {
@@ -163,7 +165,7 @@ public:
         auto lower = result;
         node.upper_bound()->accept(*this);
         auto upper = result;
-        result = lamina::detail::make_node<SummationNode>(body, node.index_var(), lower, upper);
+        result = LMCAS::detail::make_node<SummationNode>(body, node.index_var(), lower, upper);
     }
 
     void visit(const ProductNode& node) override {
@@ -173,14 +175,14 @@ public:
         auto lower = result;
         node.upper_bound()->accept(*this);
         auto upper = result;
-        result = lamina::detail::make_node<ProductNode>(body, node.index_var(), lower, upper);
+        result = LMCAS::detail::make_node<ProductNode>(body, node.index_var(), lower, upper);
     }
 
     void visit(const TransformNode& node) override {
         node.body()->accept(*this);
         auto body = result;
         node.target()->accept(*this);
-        result = lamina::detail::make_node<TransformNode>(
+        result = LMCAS::detail::make_node<TransformNode>(
             node.transform_type(), body, node.source_var(), result);
     }
 
@@ -189,7 +191,7 @@ public:
         auto domain = result;
         node.predicate()->accept(*this);
         auto predicate = result;
-        result = lamina::detail::make_node<QuantifierNode>(
+        result = LMCAS::detail::make_node<QuantifierNode>(
             node.quantifier_type(), node.bound_var(), domain, predicate);
     }
 
@@ -198,7 +200,7 @@ public:
         auto domain = result;
         node.predicate()->accept(*this);
         auto predicate = result;
-        result = lamina::detail::make_node<SetBuilderNode>(node.element_var(), domain, predicate);
+        result = LMCAS::detail::make_node<SetBuilderNode>(node.element_var(), domain, predicate);
     }
 
     void visit(const FiniteSetNode& node) override {
@@ -208,14 +210,14 @@ public:
             element->accept(*this);
             elements.push_back(result);
         }
-        result = lamina::detail::make_node<FiniteSetNode>(std::move(elements));
+        result = LMCAS::detail::make_node<FiniteSetNode>(std::move(elements));
     }
 
     void visit(const IntervalNode& node) override {
         node.lower()->accept(*this);
         auto lower = result;
         node.upper()->accept(*this);
-        result = lamina::detail::make_node<IntervalNode>(
+        result = LMCAS::detail::make_node<IntervalNode>(
             lower, result, node.lower_closed(), node.upper_closed());
     }
 
@@ -223,12 +225,12 @@ public:
         node.element()->accept(*this);
         auto element = result;
         node.set()->accept(*this);
-        result = lamina::detail::make_node<MembershipNode>(element, result);
+        result = LMCAS::detail::make_node<MembershipNode>(element, result);
     }
 
     void visit(const QuantityNode& node) override {
         node.value()->accept(*this);
-        result = lamina::detail::make_node<QuantityNode>(
+        result = LMCAS::detail::make_node<QuantityNode>(
             result, node.dimension(), node.scale_to_base(), node.display_unit());
     }
 
@@ -243,9 +245,11 @@ public:
         node.body()->accept(*this);
         auto body = result;
         node.point()->accept(*this);
-        result = lamina::detail::make_node<LimitNode>(
+        result = LMCAS::detail::make_node<LimitNode>(
             body, node.variable(), result, node.direction());
     }
 
     void visit(const RootOfNode& node) override { result = node.clone(); }
 };
+
+} // namespace LMCAS

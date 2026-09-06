@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 using namespace vector_calculus_detail;
 
@@ -35,8 +35,6 @@ VectorCalculusExprResult curve_integral_scalar_checked(
     try {
         return curve_integral_scalar_strict(
             f, parametrization, t, a, b, context, operation);
-    } catch (const detail::ResultPropagation& propagation) {
-        return VectorCalculusExprResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return VectorCalculusExprResult::failure(CasErrc::ResourceLimit,
                                                  "curve integral allocation failed",
@@ -134,8 +132,6 @@ VectorCalculusExprResult curve_integral_vector_checked(
     try {
         return curve_integral_vector_strict(
             F, parametrization, t, a, b, context, operation);
-    } catch (const detail::ResultPropagation& propagation) {
-        return VectorCalculusExprResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return VectorCalculusExprResult::failure(CasErrc::ResourceLimit,
                                                  "curve integral allocation failed",
@@ -367,7 +363,7 @@ std::shared_ptr<SymbolicExpr> surface_integral_scalar(
     };
     auto result = integrate_multiple_checked(*integrand, steps, integrator, context);
     if (!result) throw std::runtime_error(result.error().message);
-    return lamina::detail::make_expression_ptr(result.value());
+    return LMCAS::detail::make_expression_ptr(result.value());
 }
 
 
@@ -473,7 +469,7 @@ std::shared_ptr<SymbolicExpr> surface_integral_vector(
     };
     auto result = integrate_multiple_checked(*dot_product, steps, integrator, context);
     if (!result) throw std::runtime_error(result.error().message);
-    return lamina::detail::make_expression_ptr(result.value());
+    return LMCAS::detail::make_expression_ptr(result.value());
 }
 
 
@@ -488,7 +484,7 @@ VectorCalculusExprResult greens_theorem_checked(
     const std::string operation = "greens_theorem";
     auto vars_valid = vector_calculus_validate_distinct_vars(vars, 2, context, operation);
     if (!vars_valid) return VectorCalculusExprResult::failure(vars_valid.error());
-    if (!P || !lamina::detail::node(P) || !Q || !lamina::detail::node(Q)) {
+    if (!P || !LMCAS::detail::node(P) || !Q || !LMCAS::detail::node(Q)) {
         return VectorCalculusExprResult::failure(
             CasErrc::InvalidArgument,
             "Green's theorem vector-field components cannot be null",
@@ -568,7 +564,7 @@ std::shared_ptr<SymbolicExpr> greens_theorem(
     };
     auto result = integrate_multiple_checked(*integrand, steps, integrator, context);
     if (!result) throw std::runtime_error(result.error().message);
-    return lamina::detail::make_expression_ptr(result.value());
+    return LMCAS::detail::make_expression_ptr(result.value());
 }
 
 
@@ -595,8 +591,6 @@ VectorCalculusExprResult greens_theorem_area_checked(
     try {
         return greens_theorem_area_strict(
             parametrization, t, a, b, context, operation);
-    } catch (const detail::ResultPropagation& propagation) {
-        return VectorCalculusExprResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return VectorCalculusExprResult::failure(CasErrc::ResourceLimit,
                                                  "Green's area allocation failed",
@@ -666,8 +660,8 @@ std::shared_ptr<SymbolicExpr> greens_theorem_area(
     }
 
     /// 乘以 1/2
-    auto half = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(Rational(1, 2)));
+    auto half = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(Rational(1, 2)));
     auto area = SymbolicExpr::multiply(half, integral_result);
     area = area->simplify();
 
@@ -752,7 +746,7 @@ std::shared_ptr<SymbolicExpr> divergence_theorem(
     };
     auto result = integrate_multiple_checked(*div_F, steps, integrator, context);
     if (!result) throw std::runtime_error(result.error().message);
-    return lamina::detail::make_expression_ptr(result.value());
+    return LMCAS::detail::make_expression_ptr(result.value());
 }
 
 
@@ -870,6 +864,6 @@ std::shared_ptr<SymbolicExpr> stokes_theorem(
     };
     auto result = integrate_multiple_checked(*dot_product, steps, integrator, context);
     if (!result) throw std::runtime_error(result.error().message);
-    return lamina::detail::make_expression_ptr(result.value());
+    return LMCAS::detail::make_expression_ptr(result.value());
 }
-} // namespace lamina
+} // namespace LMCAS

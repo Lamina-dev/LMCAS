@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina::vector_calculus_detail {
+namespace LMCAS::vector_calculus_detail {
 
 bool vector_calculus_checked_finite_numeric(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -30,7 +30,7 @@ bool vector_calculus_checked_finite_numeric(
 bool vector_calculus_contains_unevaluated_integral(
     const std::shared_ptr<const SymbolicNode>& node,
     std::size_t) {
-    return lamina::detail::contains_node_type<IntegralNode>(node);
+    return LMCAS::detail::contains_node_type<IntegralNode>(node);
 }
 
 Result<void> vector_calculus_validate_expr_vars(
@@ -41,7 +41,7 @@ Result<void> vector_calculus_validate_expr_vars(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!f || !lamina::detail::node(f)) {
+    if (!f || !LMCAS::detail::node(f)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "expression cannot be null", operation);
     }
@@ -84,7 +84,7 @@ Result<void> vector_calculus_validate_field_vars(
         }
     }
     for (const auto& component : field) {
-        if (!component || !lamina::detail::node(component)) {
+        if (!component || !LMCAS::detail::node(component)) {
             return Result<void>::failure(CasErrc::InvalidArgument,
                                          "vector field components cannot be null",
                                          operation);
@@ -119,7 +119,7 @@ Result<void> vector_calculus_validate_functions_vars(
         }
     }
     for (const auto& function : functions) {
-        if (!function || !lamina::detail::node(function)) {
+        if (!function || !LMCAS::detail::node(function)) {
             return Result<void>::failure(CasErrc::InvalidArgument,
                                          "function expressions cannot be null",
                                          operation);
@@ -148,13 +148,13 @@ Result<void> vector_calculus_validate_curve_parametrization(
                                      "parameter variable name cannot be empty",
                                      operation);
     }
-    if (!a || !lamina::detail::node(a) || !b || !lamina::detail::node(b)) {
+    if (!a || !LMCAS::detail::node(a) || !b || !LMCAS::detail::node(b)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "curve integral bounds cannot be null",
                                      operation);
     }
     for (const auto& component : parametrization) {
-        if (!component || !lamina::detail::node(component)) {
+        if (!component || !LMCAS::detail::node(component)) {
             return Result<void>::failure(CasErrc::InvalidArgument,
                                          "curve parametrization components cannot be null",
                                          operation);
@@ -174,7 +174,7 @@ Result<void> vector_calculus_validate_curve_scalar_inputs(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!f || !lamina::detail::node(f)) {
+    if (!f || !LMCAS::detail::node(f)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "scalar field cannot be null",
                                      operation);
@@ -205,7 +205,7 @@ Result<void> vector_calculus_validate_curve_vector_inputs(
                                      operation);
     }
     for (const auto& component : F) {
-        if (!component || !lamina::detail::node(component)) {
+        if (!component || !LMCAS::detail::node(component)) {
             return Result<void>::failure(CasErrc::InvalidArgument,
                                          "vector field components cannot be null",
                                          operation);
@@ -243,14 +243,14 @@ Result<void> vector_calculus_validate_surface_parametrization(
                                      "surface parameter variables must be distinct",
                                      operation);
     }
-    if (!u_lower || !lamina::detail::node(u_lower) || !u_upper || !lamina::detail::node(u_upper) ||
-        !v_lower || !lamina::detail::node(v_lower) || !v_upper || !lamina::detail::node(v_upper)) {
+    if (!u_lower || !LMCAS::detail::node(u_lower) || !u_upper || !LMCAS::detail::node(u_upper) ||
+        !v_lower || !LMCAS::detail::node(v_lower) || !v_upper || !LMCAS::detail::node(v_upper)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "surface integral bounds cannot be null",
                                      operation);
     }
     for (const auto& component : parametrization) {
-        if (!component || !lamina::detail::node(component)) {
+        if (!component || !LMCAS::detail::node(component)) {
             return Result<void>::failure(CasErrc::InvalidArgument,
                                          "surface parametrization components cannot be null",
                                          operation);
@@ -273,7 +273,7 @@ Result<void> vector_calculus_validate_surface_scalar_inputs(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!f || !lamina::detail::node(f)) {
+    if (!f || !LMCAS::detail::node(f)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "scalar field cannot be null",
                                      operation);
@@ -303,7 +303,7 @@ Result<void> vector_calculus_validate_surface_vector_inputs(
                                      operation);
     }
     for (const auto& component : F) {
-        if (!component || !lamina::detail::node(component)) {
+        if (!component || !LMCAS::detail::node(component)) {
             return Result<void>::failure(CasErrc::InvalidArgument,
                                          "surface vector field components cannot be null",
                                          operation);
@@ -322,7 +322,7 @@ Result<void> vector_calculus_validate_bound_pair(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!bounds.first || !lamina::detail::node(bounds.first) || !bounds.second || !lamina::detail::node(bounds.second)) {
+    if (!bounds.first || !LMCAS::detail::node(bounds.first) || !bounds.second || !LMCAS::detail::node(bounds.second)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      label + " bounds cannot be null",
                                      operation);
@@ -363,15 +363,15 @@ bool vector_calculus_expr_zero_after_substitution(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::map<std::string, std::shared_ptr<SymbolicExpr>>& point)
 {
-    if (!expr || !lamina::detail::node(expr)) return false;
+    if (!expr || !LMCAS::detail::node(expr)) return false;
     auto substituted = expr;
     for (const auto& [var, value] : point) {
-        if (!value || !lamina::detail::node(value)) return false;
+        if (!value || !LMCAS::detail::node(value)) return false;
         substituted = substituted->substitute(var, value);
-        if (!substituted || !lamina::detail::node(substituted)) return false;
+        if (!substituted || !LMCAS::detail::node(substituted)) return false;
     }
     substituted = substituted->simplify();
-    if (!substituted || !lamina::detail::node(substituted)) return false;
+    if (!substituted || !LMCAS::detail::node(substituted)) return false;
     if (substituted->is_zero()) return true;
     double value = 0.0;
     return vector_calculus_checked_finite_numeric(substituted, value) &&
@@ -384,7 +384,7 @@ bool vector_calculus_point_has_vars(
 {
     for (const auto& var : vars) {
         auto it = point.find(var);
-        if (it == point.end() || !it->second || !lamina::detail::node(it->second)) {
+        if (it == point.end() || !it->second || !LMCAS::detail::node(it->second)) {
             return false;
         }
     }
@@ -395,7 +395,7 @@ VectorCalculusExprResult vector_calculus_wrap_expr(
     std::shared_ptr<SymbolicExpr> expr,
     const std::string& operation)
 {
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return VectorCalculusExprResult::failure(
             CasErrc::InternalInvariant,
             "vector calculus construction produced a null expression",
@@ -409,7 +409,7 @@ VectorCalculusFieldResult vector_calculus_wrap_field(
     const std::string& operation)
 {
     for (const auto& component : field) {
-        if (!component || !lamina::detail::node(component)) {
+        if (!component || !LMCAS::detail::node(component)) {
             return VectorCalculusFieldResult::failure(
                 CasErrc::InternalInvariant,
                 "vector calculus construction produced a null component",
@@ -419,4 +419,4 @@ VectorCalculusFieldResult vector_calculus_wrap_field(
     return VectorCalculusFieldResult::success(std::move(field));
 }
 
-} // namespace lamina::vector_calculus_detail
+} // namespace LMCAS::vector_calculus_detail

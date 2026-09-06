@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 using namespace vector_calculus_detail;
 
@@ -63,7 +63,7 @@ VectorCalculusFieldResult vector_project(const VectorField& a, const VectorField
     auto bb_result = dot_product(b, b);
     if (!bb_result) return VectorCalculusFieldResult::failure(bb_result.error());
     auto bb = bb_result.value();
-    if (lamina::detail::node(bb) && lamina::detail::node(bb)->is_zero()) {
+    if (LMCAS::detail::node(bb) && LMCAS::detail::node(bb)->is_zero()) {
         return VectorCalculusFieldResult::success(
             VectorField(a.size(), SymbolicExpr::number(0)));
     }
@@ -84,7 +84,7 @@ VectorCalculusExprResult scalar_project(const VectorField& a, const VectorField&
     auto bb_result = dot_product(b, b);
     if (!bb_result) return bb_result;
     auto bb = bb_result.value();
-    if (lamina::detail::node(bb) && lamina::detail::node(bb)->is_zero()) {
+    if (LMCAS::detail::node(bb) && LMCAS::detail::node(bb)->is_zero()) {
         return VectorCalculusExprResult::success(nullptr);
     }
     auto ab_result = dot_product(a, b);
@@ -101,19 +101,19 @@ VectorCalculusExprResult vector_angle_symbolic(const VectorField& a, const Vecto
     if (!bb_result) return bb_result;
     auto aa = aa_result.value();
     auto bb = bb_result.value();
-    if ((lamina::detail::node(aa) && lamina::detail::node(aa)->is_zero()) ||
-        (lamina::detail::node(bb) && lamina::detail::node(bb)->is_zero())) {
+    if ((LMCAS::detail::node(aa) && LMCAS::detail::node(aa)->is_zero()) ||
+        (LMCAS::detail::node(bb) && LMCAS::detail::node(bb)->is_zero())) {
         return VectorCalculusExprResult::success(nullptr);
     }
     auto ab_result = dot_product(a, b);
     if (!ab_result) return ab_result;
     auto denom = SymbolicExpr::multiply(SymbolicExpr::sqrt(aa), SymbolicExpr::sqrt(bb));
     auto cos_theta = SymbolicExpr::divide(ab_result.value(), denom);
-    auto arccos_node = lamina::detail::make_node<FunctionNode>(
+    auto arccos_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::ArcCos,
-        std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(cos_theta)});
+        std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(cos_theta)});
     return VectorCalculusExprResult::success(
-        lamina::detail::make_expression_ptr(arccos_node)->simplify());
+        LMCAS::detail::make_expression_ptr(arccos_node)->simplify());
 }
 
 VectorCalculusExprResult mixed_product(
@@ -125,4 +125,4 @@ VectorCalculusExprResult mixed_product(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

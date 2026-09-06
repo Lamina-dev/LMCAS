@@ -13,7 +13,7 @@
 #include <map>
 #include <utility>
 
-namespace lamina {
+namespace LMCAS {
 
 /// 向量场类型：标量表达式的向量
 using VectorField = std::vector<std::shared_ptr<SymbolicExpr>>;
@@ -30,7 +30,7 @@ using VectorCalculusFieldResult = Result<VectorField>;
  * @param[in] vars 变量名列表
  * @return 梯度向量，各分量为对应偏导数
  */
-LAMINA_API VectorCalculusFieldResult gradient_checked(
+LMCAS_API VectorCalculusFieldResult gradient_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars,
     ComputationContext& context);
@@ -38,10 +38,10 @@ LAMINA_API VectorCalculusFieldResult gradient_checked(
 /**
  * @brief 使用默认计算上下文计算梯度，并显式报告无效输入。
  */
-LAMINA_API VectorCalculusFieldResult gradient_checked(
+LMCAS_API VectorCalculusFieldResult gradient_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
-LAMINA_API VectorField gradient(const std::shared_ptr<SymbolicExpr>& f,
+LMCAS_API VectorField gradient(const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
 
 
@@ -52,7 +52,7 @@ LAMINA_API VectorField gradient(const std::shared_ptr<SymbolicExpr>& f,
  * @param[in] vars 变量名列表（与 F 的分量一一对应）
  * @return 散度标量表达式
  */
-LAMINA_API VectorCalculusExprResult divergence_checked(
+LMCAS_API VectorCalculusExprResult divergence_checked(
     const VectorField& F,
     const std::vector<std::string>& vars,
     ComputationContext& context);
@@ -60,10 +60,10 @@ LAMINA_API VectorCalculusExprResult divergence_checked(
 /**
  * @brief 使用默认计算上下文计算散度，并显式报告无效输入。
  */
-LAMINA_API VectorCalculusExprResult divergence_checked(
+LMCAS_API VectorCalculusExprResult divergence_checked(
     const VectorField& F,
     const std::vector<std::string>& vars);
-LAMINA_API std::shared_ptr<SymbolicExpr> divergence(const VectorField& F,
+LMCAS_API std::shared_ptr<SymbolicExpr> divergence(const VectorField& F,
     const std::vector<std::string>& vars);
 
 
@@ -76,7 +76,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> divergence(const VectorField& F,
  * @param[in] vars 变量名列表
  * @return 旋度向量场
  */
-LAMINA_API VectorCalculusFieldResult curl_checked(
+LMCAS_API VectorCalculusFieldResult curl_checked(
     const VectorField& F,
     const std::vector<std::string>& vars,
     ComputationContext& context);
@@ -84,10 +84,10 @@ LAMINA_API VectorCalculusFieldResult curl_checked(
 /**
  * @brief 使用默认计算上下文计算旋度，并显式报告无效输入。
  */
-LAMINA_API VectorCalculusFieldResult curl_checked(
+LMCAS_API VectorCalculusFieldResult curl_checked(
     const VectorField& F,
     const std::vector<std::string>& vars);
-LAMINA_API VectorField curl(const VectorField& F,
+LMCAS_API VectorField curl(const VectorField& F,
     const std::vector<std::string>& vars);
 
 
@@ -98,7 +98,7 @@ LAMINA_API VectorField curl(const VectorField& F,
  * @param[in] vars 变量名列表
  * @return 拉普拉斯算子结果表达式
  */
-LAMINA_API VectorCalculusExprResult laplacian_checked(
+LMCAS_API VectorCalculusExprResult laplacian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars,
     ComputationContext& context);
@@ -106,10 +106,10 @@ LAMINA_API VectorCalculusExprResult laplacian_checked(
 /**
  * @brief 使用默认计算上下文计算拉普拉斯算子，并显式报告无效输入。
  */
-LAMINA_API VectorCalculusExprResult laplacian_checked(
+LMCAS_API VectorCalculusExprResult laplacian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
-LAMINA_API std::shared_ptr<SymbolicExpr> laplacian(const std::shared_ptr<SymbolicExpr>& f,
+LMCAS_API std::shared_ptr<SymbolicExpr> laplacian(const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
 
 
@@ -125,7 +125,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> laplacian(const std::shared_ptr<Symboli
  * @param[in] order     阶数（默认 1）
  * @return 方向导数表达式；方向向量为零时返回 nullptr
  */
-LAMINA_API VectorCalculusExprResult directional_derivative_checked(
+LMCAS_API VectorCalculusExprResult directional_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars,
     const VectorField& direction,
@@ -135,12 +135,12 @@ LAMINA_API VectorCalculusExprResult directional_derivative_checked(
 /**
  * @brief 使用默认计算上下文计算方向导数，并显式报告零方向和无效输入。
  */
-LAMINA_API VectorCalculusExprResult directional_derivative_checked(
+LMCAS_API VectorCalculusExprResult directional_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars,
     const VectorField& direction,
     int order = 1);
-LAMINA_API std::shared_ptr<SymbolicExpr> directional_derivative(
+LMCAS_API std::shared_ptr<SymbolicExpr> directional_derivative(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars,
     const VectorField& direction, int order = 1);
 
@@ -156,7 +156,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> directional_derivative(
  * @param[in] vars      变量名列表 (x₁, x₂, ..., xₙ)
  * @return 包含 MatrixNode 的 SymbolicExpr
  */
-LAMINA_API VectorCalculusExprResult jacobian_checked(
+LMCAS_API VectorCalculusExprResult jacobian_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& functions,
     const std::vector<std::string>& vars,
     ComputationContext& context);
@@ -164,10 +164,10 @@ LAMINA_API VectorCalculusExprResult jacobian_checked(
 /**
  * @brief 使用默认计算上下文计算雅可比矩阵，并显式报告无效输入。
  */
-LAMINA_API VectorCalculusExprResult jacobian_checked(
+LMCAS_API VectorCalculusExprResult jacobian_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& functions,
     const std::vector<std::string>& vars);
-LAMINA_API std::shared_ptr<SymbolicExpr> jacobian(
+LMCAS_API std::shared_ptr<SymbolicExpr> jacobian(
     const std::vector<std::shared_ptr<SymbolicExpr>>& functions,
     const std::vector<std::string>& vars);
 
@@ -181,7 +181,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> jacobian(
  * @param[in] vars 变量名列表 (x₁, x₂, ..., xₙ)
  * @return 包含 MatrixNode 的 SymbolicExpr
  */
-LAMINA_API VectorCalculusExprResult hessian_checked(
+LMCAS_API VectorCalculusExprResult hessian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars,
     ComputationContext& context);
@@ -189,10 +189,10 @@ LAMINA_API VectorCalculusExprResult hessian_checked(
 /**
  * @brief 使用默认计算上下文计算海森矩阵，并显式报告无效输入。
  */
-LAMINA_API VectorCalculusExprResult hessian_checked(
+LMCAS_API VectorCalculusExprResult hessian_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
-LAMINA_API std::shared_ptr<SymbolicExpr> hessian(
+LMCAS_API std::shared_ptr<SymbolicExpr> hessian(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars);
 
 
@@ -209,7 +209,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> hessian(
  * @param[in] b              参数上界
  * @return 曲线积分结果表达式
  */
-LAMINA_API VectorCalculusExprResult curve_integral_scalar_checked(
+LMCAS_API VectorCalculusExprResult curve_integral_scalar_checked(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
@@ -218,12 +218,12 @@ LAMINA_API VectorCalculusExprResult curve_integral_scalar_checked(
 /**
  * @brief 使用默认计算上下文计算第一类曲线积分，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult curve_integral_scalar_checked(
+LMCAS_API VectorCalculusExprResult curve_integral_scalar_checked(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> curve_integral_scalar(
+LMCAS_API std::shared_ptr<SymbolicExpr> curve_integral_scalar(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b);
@@ -240,7 +240,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> curve_integral_scalar(
  * @param[in] b              参数上界
  * @return 曲线积分结果表达式
  */
-LAMINA_API VectorCalculusExprResult curve_integral_vector_checked(
+LMCAS_API VectorCalculusExprResult curve_integral_vector_checked(
     const VectorField& F, const VectorField& parametrization,
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
@@ -249,12 +249,12 @@ LAMINA_API VectorCalculusExprResult curve_integral_vector_checked(
 /**
  * @brief 使用默认计算上下文计算第二类曲线积分，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult curve_integral_vector_checked(
+LMCAS_API VectorCalculusExprResult curve_integral_vector_checked(
     const VectorField& F, const VectorField& parametrization,
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> curve_integral_vector(
+LMCAS_API std::shared_ptr<SymbolicExpr> curve_integral_vector(
     const VectorField& F, const VectorField& parametrization,
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b);
@@ -274,7 +274,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> curve_integral_vector(
  * @param[in] v_upper        v 参数上界
  * @return 曲面积分结果表达式
  */
-LAMINA_API VectorCalculusExprResult surface_integral_scalar_checked(
+LMCAS_API VectorCalculusExprResult surface_integral_scalar_checked(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
     const std::string& u, const std::string& v,
     const std::shared_ptr<SymbolicExpr>& u_lower, const std::shared_ptr<SymbolicExpr>& u_upper,
@@ -284,13 +284,13 @@ LAMINA_API VectorCalculusExprResult surface_integral_scalar_checked(
 /**
  * @brief 使用默认计算上下文计算第一类曲面积分，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult surface_integral_scalar_checked(
+LMCAS_API VectorCalculusExprResult surface_integral_scalar_checked(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
     const std::string& u, const std::string& v,
     const std::shared_ptr<SymbolicExpr>& u_lower, const std::shared_ptr<SymbolicExpr>& u_upper,
     const std::shared_ptr<SymbolicExpr>& v_lower, const std::shared_ptr<SymbolicExpr>& v_upper);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> surface_integral_scalar(
+LMCAS_API std::shared_ptr<SymbolicExpr> surface_integral_scalar(
     const std::shared_ptr<SymbolicExpr>& f, const VectorField& parametrization,
     const std::string& u, const std::string& v,
     const std::shared_ptr<SymbolicExpr>& u_lower, const std::shared_ptr<SymbolicExpr>& u_upper,
@@ -311,7 +311,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> surface_integral_scalar(
  * @param[in] v_upper        v 参数上界
  * @return 曲面积分结果表达式
  */
-LAMINA_API VectorCalculusExprResult surface_integral_vector_checked(
+LMCAS_API VectorCalculusExprResult surface_integral_vector_checked(
     const VectorField& F, const VectorField& parametrization,
     const std::string& u, const std::string& v,
     const std::shared_ptr<SymbolicExpr>& u_lower, const std::shared_ptr<SymbolicExpr>& u_upper,
@@ -321,13 +321,13 @@ LAMINA_API VectorCalculusExprResult surface_integral_vector_checked(
 /**
  * @brief 使用默认计算上下文计算第二类曲面积分，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult surface_integral_vector_checked(
+LMCAS_API VectorCalculusExprResult surface_integral_vector_checked(
     const VectorField& F, const VectorField& parametrization,
     const std::string& u, const std::string& v,
     const std::shared_ptr<SymbolicExpr>& u_lower, const std::shared_ptr<SymbolicExpr>& u_upper,
     const std::shared_ptr<SymbolicExpr>& v_lower, const std::shared_ptr<SymbolicExpr>& v_upper);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> surface_integral_vector(
+LMCAS_API std::shared_ptr<SymbolicExpr> surface_integral_vector(
     const VectorField& F, const VectorField& parametrization,
     const std::string& u, const std::string& v,
     const std::shared_ptr<SymbolicExpr>& u_lower, const std::shared_ptr<SymbolicExpr>& u_upper,
@@ -347,7 +347,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> surface_integral_vector(
  * @param[in] y_bounds y 的积分区间 {下界(可含x), 上界(可含x)}
  * @return 格林定理计算的二重积分结果
  */
-LAMINA_API VectorCalculusExprResult greens_theorem_checked(
+LMCAS_API VectorCalculusExprResult greens_theorem_checked(
     const std::shared_ptr<SymbolicExpr>& P,
     const std::shared_ptr<SymbolicExpr>& Q,
     const std::vector<std::string>& vars,
@@ -358,14 +358,14 @@ LAMINA_API VectorCalculusExprResult greens_theorem_checked(
 /**
  * @brief 使用默认计算上下文计算格林定理面积分，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult greens_theorem_checked(
+LMCAS_API VectorCalculusExprResult greens_theorem_checked(
     const std::shared_ptr<SymbolicExpr>& P,
     const std::shared_ptr<SymbolicExpr>& Q,
     const std::vector<std::string>& vars,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& x_bounds,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& y_bounds);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> greens_theorem(
+LMCAS_API std::shared_ptr<SymbolicExpr> greens_theorem(
     const std::shared_ptr<SymbolicExpr>& P,
     const std::shared_ptr<SymbolicExpr>& Q,
     const std::vector<std::string>& vars,
@@ -381,7 +381,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> greens_theorem(
  * @param[in] b               参数上界
  * @return 面积表达式
  */
-LAMINA_API VectorCalculusExprResult greens_theorem_area_checked(
+LMCAS_API VectorCalculusExprResult greens_theorem_area_checked(
     const VectorField& parametrization,
     const std::string& t,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -391,13 +391,13 @@ LAMINA_API VectorCalculusExprResult greens_theorem_area_checked(
 /**
  * @brief 使用默认计算上下文计算格林面积公式，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult greens_theorem_area_checked(
+LMCAS_API VectorCalculusExprResult greens_theorem_area_checked(
     const VectorField& parametrization,
     const std::string& t,
     const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> greens_theorem_area(
+LMCAS_API std::shared_ptr<SymbolicExpr> greens_theorem_area(
     const VectorField& parametrization,
     const std::string& t,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -416,7 +416,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> greens_theorem_area(
  * @param[in] z_bounds      z 的积分区间（可含 x, y）
  * @return 散度定理计算的三重积分结果
  */
-LAMINA_API VectorCalculusExprResult divergence_theorem_checked(
+LMCAS_API VectorCalculusExprResult divergence_theorem_checked(
     const VectorField& F,
     const std::vector<std::string>& vars,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& x_bounds,
@@ -427,14 +427,14 @@ LAMINA_API VectorCalculusExprResult divergence_theorem_checked(
 /**
  * @brief 使用默认计算上下文计算散度定理体积分，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult divergence_theorem_checked(
+LMCAS_API VectorCalculusExprResult divergence_theorem_checked(
     const VectorField& F,
     const std::vector<std::string>& vars,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& x_bounds,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& y_bounds,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& z_bounds);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> divergence_theorem(
+LMCAS_API std::shared_ptr<SymbolicExpr> divergence_theorem(
     const VectorField& F,
     const std::vector<std::string>& vars,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& x_bounds,
@@ -456,7 +456,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> divergence_theorem(
  * @param[in] v_bounds        v 的积分区间
  * @return 斯托克斯定理计算的曲面积分结果
  */
-LAMINA_API VectorCalculusExprResult stokes_theorem_checked(
+LMCAS_API VectorCalculusExprResult stokes_theorem_checked(
     const VectorField& F,
     const std::vector<std::string>& vars,
     const VectorField& parametrization,
@@ -468,7 +468,7 @@ LAMINA_API VectorCalculusExprResult stokes_theorem_checked(
 /**
  * @brief 使用默认计算上下文计算斯托克斯定理曲面积分，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API VectorCalculusExprResult stokes_theorem_checked(
+LMCAS_API VectorCalculusExprResult stokes_theorem_checked(
     const VectorField& F,
     const std::vector<std::string>& vars,
     const VectorField& parametrization,
@@ -476,7 +476,7 @@ LAMINA_API VectorCalculusExprResult stokes_theorem_checked(
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& u_bounds,
     const std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>& v_bounds);
 
-LAMINA_API std::shared_ptr<SymbolicExpr> stokes_theorem(
+LMCAS_API std::shared_ptr<SymbolicExpr> stokes_theorem(
     const VectorField& F,
     const std::vector<std::string>& vars,
     const VectorField& parametrization,
@@ -520,7 +520,7 @@ using LagrangeResult =
  * @param[in] vars 变量名列表
  * @return 临界点列表，每个包含坐标和分类
  */
-LAMINA_API ExtremaResult find_extrema_checked(
+LMCAS_API ExtremaResult find_extrema_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars,
     ComputationContext& context);
@@ -528,11 +528,11 @@ LAMINA_API ExtremaResult find_extrema_checked(
 /**
  * @brief 使用默认计算上下文求多元函数极值点，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API ExtremaResult find_extrema_checked(
+LMCAS_API ExtremaResult find_extrema_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::string>& vars);
 
-LAMINA_API std::vector<CriticalPoint> find_extrema(
+LMCAS_API std::vector<CriticalPoint> find_extrema(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars);
 
 /**
@@ -546,7 +546,7 @@ LAMINA_API std::vector<CriticalPoint> find_extrema(
  * @param[in] vars        变量名列表
  * @return 所有临界点的列表，每个为变量名到值的映射（仅包含原始变量，不含乘数）
  */
-LAMINA_API LagrangeResult lagrange_multipliers_checked(
+LMCAS_API LagrangeResult lagrange_multipliers_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& constraints,
     const std::vector<std::string>& vars,
@@ -555,12 +555,12 @@ LAMINA_API LagrangeResult lagrange_multipliers_checked(
 /**
  * @brief 使用默认计算上下文求拉格朗日乘数候选，并显式报告无效输入和未覆盖域。
  */
-LAMINA_API LagrangeResult lagrange_multipliers_checked(
+LMCAS_API LagrangeResult lagrange_multipliers_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& constraints,
     const std::vector<std::string>& vars);
 
-LAMINA_API std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multipliers(
+LMCAS_API std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multipliers(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& constraints,
     const std::vector<std::string>& vars);
@@ -572,7 +572,7 @@ LAMINA_API std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lag
  * @param[in] b 向量 b（维度需与 a 相同）
  * @return 点积标量表达式
  */
-LAMINA_API VectorCalculusExprResult dot_product(
+LMCAS_API VectorCalculusExprResult dot_product(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -581,7 +581,7 @@ LAMINA_API VectorCalculusExprResult dot_product(
  * @param[in] b 三维向量 b
  * @return 叉积向量（三分量）
  */
-LAMINA_API VectorCalculusFieldResult cross_product(
+LMCAS_API VectorCalculusFieldResult cross_product(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -590,7 +590,7 @@ LAMINA_API VectorCalculusFieldResult cross_product(
  * @param[in] b 投影方向向量
  * @return 投影向量；b 为零向量时返回零向量
  */
-LAMINA_API VectorCalculusFieldResult vector_project(
+LMCAS_API VectorCalculusFieldResult vector_project(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -599,7 +599,7 @@ LAMINA_API VectorCalculusFieldResult vector_project(
  * @param[in] b 投影方向向量
  * @return 标量投影表达式；b 为零向量时返回 nullptr
  */
-LAMINA_API VectorCalculusExprResult scalar_project(
+LMCAS_API VectorCalculusExprResult scalar_project(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -608,7 +608,7 @@ LAMINA_API VectorCalculusExprResult scalar_project(
  * @param[in] b 向量 b
  * @return 夹角表达式（弧度）；任一向量为零时返回 nullptr
  */
-LAMINA_API VectorCalculusExprResult vector_angle_symbolic(
+LMCAS_API VectorCalculusExprResult vector_angle_symbolic(
     const VectorField& a, const VectorField& b);
 
 /**
@@ -618,7 +618,7 @@ LAMINA_API VectorCalculusExprResult vector_angle_symbolic(
  * @param[in] c 向量 c
  * @return 混合积标量表达式（等于以 a,b,c 为行的行列式）
  */
-LAMINA_API VectorCalculusExprResult mixed_product(
+LMCAS_API VectorCalculusExprResult mixed_product(
     const VectorField& a, const VectorField& b, const VectorField& c);
 
-} // namespace lamina
+} // namespace LMCAS

@@ -1,8 +1,8 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 
 #include <utility>
 
-namespace lamina::lsr {
+namespace LMCAS {
 
 ExprResult with_unit(const ExprPtr& value, const std::string& unit,
                      ComputationContext& context) {
@@ -54,4 +54,4 @@ ExprResult member(const ExprPtr& element, const ExprPtr& set,
     return make_membership(element, set, context);
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

@@ -4,12 +4,14 @@
 #include <cmath>
 #include <stdexcept>
 
+namespace LMCAS {
+
 /**
  * @brief 数值节点，存储 BigInt、Rational 或浮点数。
  */
 class NumberNode : public SymbolicNode {
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::variant<BigInt, Rational, lmmc_real_t> value_;
     static lmmc_real_t validate_approximate(lmmc_real_t value) {
@@ -109,12 +111,12 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<const SymbolicNode> clone() const override {
 
-        if (std::holds_alternative<BigInt>(value_)) return lamina::detail::make_node<NumberNode>(std::get<BigInt>(value_));
-        if (std::holds_alternative<Rational>(value_)) return lamina::detail::make_node<NumberNode>(std::get<Rational>(value_));
-        return lamina::detail::make_node<NumberNode>(std::get<lmmc_real_t>(value_));
+        if (std::holds_alternative<BigInt>(value_)) return LMCAS::detail::make_node<NumberNode>(std::get<BigInt>(value_));
+        if (std::holds_alternative<Rational>(value_)) return LMCAS::detail::make_node<NumberNode>(std::get<Rational>(value_));
+        return LMCAS::detail::make_node<NumberNode>(std::get<lmmc_real_t>(value_));
     }
 
     bool is_number() const override { return true; }
@@ -148,7 +150,7 @@ public:
  */
 class ComplexNode : public SymbolicNode {
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::shared_ptr<const SymbolicNode> real_;
     const std::shared_ptr<const SymbolicNode> imag_;
@@ -183,12 +185,14 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<const SymbolicNode> clone() const override {
-        return lamina::detail::make_node<ComplexNode>(real_->clone(), imag_->clone());
+        return LMCAS::detail::make_node<ComplexNode>(real_->clone(), imag_->clone());
     }
 
     bool is_zero() const override {
         return real_->is_zero() && imag_->is_zero();
     }
 };
+
+} // namespace LMCAS

@@ -13,27 +13,27 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-using namespace lamina;
+using namespace LMCAS;
 
 /// Helper: create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var_expr(const std::string& name) {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
 }
 
 /// Helper: create a FunctionNode expression (e.g., ln(x), sqrt(x), exp(x)).
 static SymbolicExpr make_func_expr(FunctionNode::FuncType type, const std::string& var_name) {
-    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
-    auto func_node = lamina::detail::make_node<FunctionNode>(
+    auto var_node = LMCAS::detail::make_node<VariableNode>(var_name);
+    auto func_node = LMCAS::detail::make_node<FunctionNode>(
         type, std::vector<std::shared_ptr<const SymbolicNode>>{var_node});
-    return lamina::detail::expression_from_node(func_node);
+    return LMCAS::detail::expression_from_node(func_node);
 }
 
 /// Helper: create a PowerNode expression (var^n).
 static SymbolicExpr make_power_expr(const std::string& var_name, int n) {
-    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
-    auto exp_node = lamina::detail::make_node<NumberNode>(BigInt(n));
-    auto pow_node = lamina::detail::make_node<PowerNode>(var_node, exp_node);
-    return lamina::detail::expression_from_node(pow_node);
+    auto var_node = LMCAS::detail::make_node<VariableNode>(var_name);
+    auto exp_node = LMCAS::detail::make_node<NumberNode>(BigInt(n));
+    auto pow_node = LMCAS::detail::make_node<PowerNode>(var_node, exp_node);
+    return LMCAS::detail::expression_from_node(pow_node);
 }
 
 
@@ -304,11 +304,11 @@ void test_no_rules_for_non_variable_operands() {
     InferenceEngine engine(ctx);
 
     // Create a composite LHS: x + 1
-    auto x_node = lamina::detail::make_node<VariableNode>("x");
-    auto one_node = lamina::detail::make_node<NumberNode>(BigInt(1));
-    auto add_node = lamina::detail::make_node<AddNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>("x");
+    auto one_node = LMCAS::detail::make_node<NumberNode>(BigInt(1));
+    auto add_node = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node, one_node});
-    auto composite_expr = lamina::detail::expression_from_node(add_node);
+    auto composite_expr = LMCAS::detail::expression_from_node(add_node);
     SymbolicExpr y_expr = make_var_expr("y");
 
     Relation rel{composite_expr, y_expr, RelationalNode::Op::GT};
@@ -338,7 +338,7 @@ void test_power_monotonicity_both_nonnegative() {
     // First, add a relation that contains a power expression with x^2
     // so that the exponent 2 is "appearing in expressions"
     SymbolicExpr x_squared = make_power_expr("x", 2);
-    auto zero_expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto zero_expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
     ctx.current_relations().add_relation(x_squared, zero_expr, RelationalNode::Op::GT, ctx.current_properties());
 
     // Now add x > y and apply monotonicity
@@ -370,7 +370,7 @@ void test_power_guard_missing_nonnegative() {
 
     // Add a power expression to provide exponent context
     SymbolicExpr x_squared = make_power_expr("x", 2);
-    auto zero_expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto zero_expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
     ctx.current_relations().add_relation(x_squared, zero_expr, RelationalNode::Op::GT, ctx.current_properties());
 
     Relation rel{x_expr, y_expr, RelationalNode::Op::GT};
@@ -469,10 +469,10 @@ void test_all_rules_applied_together() {
 
 /// Helper: create a closed interval [lo, hi] from numeric values.
 static Interval make_closed_interval(double lo, double hi) {
-    auto lo_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::closed(lo_expr);
     iv.upper = Endpoint::closed(hi_expr);
@@ -481,10 +481,10 @@ static Interval make_closed_interval(double lo, double hi) {
 
 /// Helper: create an open interval (lo, hi) from numeric values.
 static Interval make_open_interval(double lo, double hi) {
-    auto lo_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::open(lo_expr);
     iv.upper = Endpoint::open(hi_expr);
@@ -572,14 +572,14 @@ void test_negation_reverses_monotonicity() {
     InferenceEngine engine(ctx);
 
     // Create -exp(x) = MultiplyNode([-1, exp(x)])
-    auto x_node = lamina::detail::make_node<VariableNode>("x");
-    auto exp_node = lamina::detail::make_node<FunctionNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>("x");
+    auto exp_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Exp,
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
-    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
-    auto neg_exp = lamina::detail::make_node<MultiplyNode>(
+    auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+    auto neg_exp = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, exp_node});
-    auto neg_exp_x = lamina::detail::expression_from_node(neg_exp);
+    auto neg_exp_x = LMCAS::detail::expression_from_node(neg_exp);
     Interval entire = Interval::entire_line();
     Monotonicity mono = engine.infer_monotonicity(neg_exp_x, "x", entire);
 
@@ -597,14 +597,14 @@ void test_negation_reverses_ln() {
     InferenceEngine engine(ctx);
 
     // Create -ln(x)
-    auto x_node = lamina::detail::make_node<VariableNode>("x");
-    auto ln_node = lamina::detail::make_node<FunctionNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>("x");
+    auto ln_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Ln,
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
-    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
-    auto neg_ln = lamina::detail::make_node<MultiplyNode>(
+    auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+    auto neg_ln = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, ln_node});
-    auto neg_ln_x = lamina::detail::expression_from_node(neg_ln);
+    auto neg_ln_x = LMCAS::detail::expression_from_node(neg_ln);
     Interval iv = make_closed_interval(1.0, 100.0);
     Monotonicity mono = engine.infer_monotonicity(neg_ln_x, "x", iv);
 
@@ -721,12 +721,12 @@ void test_arctan_monotonicity_and_periodicity() {
             Tribool::False,
         "未声明周期性的自变量经 atan 后非周期");
 
-    auto sin_x = lamina::detail::make_node<FunctionNode>(
+    auto sin_x = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sin,
         std::vector<std::shared_ptr<const SymbolicNode>>{
-            lamina::detail::make_node<VariableNode>("x")});
-    SymbolicExpr atan_sin = lamina::detail::expression_from_node(
-        lamina::detail::make_node<FunctionNode>(
+            LMCAS::detail::make_node<VariableNode>("x")});
+    SymbolicExpr atan_sin = LMCAS::detail::expression_from_node(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::ArcTan,
             std::vector<std::shared_ptr<const SymbolicNode>>{sin_x}));
     EXPECT_TRUE(

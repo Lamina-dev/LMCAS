@@ -13,18 +13,24 @@
 #include "result.hpp"
 #include "unit.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 class AssumptionContext;
 
+/**
+ * Per-operation limits for APIs that accept a ComputationContext.
+ *
+ * Context-free BigInt and symbolic constructors are intentionally unbounded;
+ * use checked, context-aware entry points when processing untrusted input.
+ */
 struct ResourceLimits {
-    std::size_t max_ast_nodes = 1'000'000;
-    std::size_t max_steps = 10'000'000;
-    std::size_t max_recursion_depth = 256;
-    std::size_t max_integer_bits = 1'000'000;
-    std::size_t max_expansion_terms = 100'000;
-    std::size_t max_input_bytes = 1'048'576;
-    std::size_t max_diagnostics = 10'000;
+    std::size_t max_ast_nodes = 1'000'000;       ///< Cumulative reserved nodes.
+    std::size_t max_steps = 10'000'000;          ///< Cumulative checked steps.
+    std::size_t max_recursion_depth = 256;       ///< Simultaneous checked depth.
+    std::size_t max_integer_bits = 1'000'000;    ///< One checked integer result.
+    std::size_t max_expansion_terms = 100'000;   ///< One checked expansion.
+    std::size_t max_input_bytes = 1'048'576;     ///< One checked input buffer.
+    std::size_t max_diagnostics = 10'000;        ///< Stored diagnostics.
 };
 
 enum class DiagnosticSeverity { Info, Warning, Error };
@@ -144,6 +150,42 @@ public:
         return Result<void>::success();
     }
 
+    Result<void> require_integer_bits(
+        std::size_t amount, const std::string& operation = {}) const {
+        auto access = check_access(operation);
+        if (!access) return access;
+        if (amount > limits_.max_integer_bits) {
+            return Result<void>::failure(
+                CasErrc::ResourceLimit,
+                "integer bit budget exceeded", operation);
+        }
+        return Result<void>::success();
+    }
+
+    Result<void> require_expansion_terms(
+        std::size_t amount, const std::string& operation = {}) const {
+        auto access = check_access(operation);
+        if (!access) return access;
+        if (amount > limits_.max_expansion_terms) {
+            return Result<void>::failure(
+                CasErrc::ResourceLimit,
+                "expansion term budget exceeded", operation);
+        }
+        return Result<void>::success();
+    }
+
+    Result<void> require_input_bytes(
+        std::size_t amount, const std::string& operation = {}) const {
+        auto access = check_access(operation);
+        if (!access) return access;
+        if (amount > limits_.max_input_bytes) {
+            return Result<void>::failure(
+                CasErrc::ResourceLimit,
+                "input byte budget exceeded", operation);
+        }
+        return Result<void>::success();
+    }
+
     Result<void> add_diagnostic(Diagnostic diagnostic) {
         auto access = check_access(diagnostic.operation);
         if (!access) return access;
@@ -210,4 +252,4 @@ private:
     UnitSystem units_;
 };
 
-} // namespace lamina
+} // namespace LMCAS

@@ -1,7 +1,7 @@
 #define _USE_MATH_DEFINES
 #include "internal/inference_engine_impl.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 InferenceEngine::InferenceEngine(const AssumptionContext& ctx)
     : impl_(std::make_unique<Impl>(ctx)) {}
@@ -20,8 +20,9 @@ int InferenceEngine::get_max_depth() const {
     return impl_->max_depth;
 }
 
-InferenceEngine::DepthGuard::DepthGuard(const InferenceEngine& engine, const void* node)
-    : engine_(engine), node_(node) {
+InferenceEngine::DepthGuard::DepthGuard(
+    const InferenceEngine& engine, const SymbolicNode& node)
+    : engine_(engine), node_(&node) {
     engine_.impl_->current_depth++;
 
     if (engine_.impl_->current_depth > engine_.impl_->max_depth) {
@@ -31,24 +32,22 @@ InferenceEngine::DepthGuard::DepthGuard(const InferenceEngine& engine, const voi
 
     // Insert and detect cycles atomically. If allocation throws, restore the
     // depth counter because a throwing constructor has no matching destructor.
-    if (node_) {
-        try {
-            inserted_ = engine_.impl_->visited.insert(node_).second;
-        } catch (...) {
-            engine_.impl_->current_depth--;
-            if (engine_.impl_->current_depth == 0) {
-                engine_.impl_->visited.clear();
-            }
-            throw;
+    try {
+        inserted_ = engine_.impl_->visited.insert(node_).second;
+    } catch (...) {
+        engine_.impl_->current_depth--;
+        if (engine_.impl_->current_depth == 0) {
+            engine_.impl_->visited.clear();
         }
-        if (!inserted_) {
-            abort_ = true;
-        }
+        throw;
+    }
+    if (!inserted_) {
+        abort_ = true;
     }
 }
 
 InferenceEngine::DepthGuard::~DepthGuard() {
-    if (inserted_ && node_) {
+    if (inserted_) {
         engine_.impl_->visited.erase(node_);
     }
 
@@ -90,7 +89,7 @@ InferenceTriboolResult InferenceEngine::query_domain_of_checked(const SymbolicEx
         case Domain::Integer:  return query_integer_checked(expr);
         case Domain::Real:     return query_real_checked(expr);
         case Domain::Rational: {
-            if (!lamina::detail::node(expr)) {
+            if (!LMCAS::detail::node(expr)) {
                 return InferenceTriboolResult::failure(
                     CasErrc::InvalidArgument,
                     "inference expression must not be null",
@@ -104,13 +103,13 @@ InferenceTriboolResult InferenceEngine::query_domain_of_checked(const SymbolicEx
                     return InferenceTriboolResult::success(Tribool::True);
                 }
                 // Check if it's a Rational number literal
-                if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+                if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                     if (std::holds_alternative<Rational>(num->value())) {
                         return InferenceTriboolResult::success(Tribool::True);
                     }
                 }
                 // Check variable domain
-                if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+                if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                     const auto& props = impl_->ctx.current_properties();
                     if (props.has_domain(var->name(), Domain::Rational)) {
                         return InferenceTriboolResult::success(Tribool::True);
@@ -131,10 +130,10 @@ InferenceTriboolResult InferenceEngine::query_domain_of_checked(const SymbolicEx
         }
         case Domain::Natural: {
             return checked_inference_result<Tribool>(expr, "query_domain_of_checked",
-                [&]() {
+                [&]() -> InferenceTriboolResult {
                     // Natural: non-negative integers (0, 1, 2, ...)
                     // Check if it's a non-negative integer literal
-                    if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+                    if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                         if (is_integer_number(*num)) {
                             if (std::holds_alternative<BigInt>(num->value())) {
                                 const auto& b = std::get<BigInt>(num->value());
@@ -151,7 +150,7 @@ InferenceTriboolResult InferenceEngine::query_domain_of_checked(const SymbolicEx
                         return Tribool::False;
                     }
                     // Check variable domain
-                    if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+                    if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                         const auto& props = impl_->ctx.current_properties();
                         if (props.has_domain(var->name(), Domain::Natural)) return Tribool::True;
                     }
@@ -176,13 +175,13 @@ InferenceTriboolResult InferenceEngine::query_positive_checked(const SymbolicExp
             infinity > 0 ? Tribool::True : Tribool::False);
     }
     return checked_inference_result<Tribool>(expr, "query_positive_checked",
-        [&]() {
+        [&]() -> InferenceTriboolResult {
             // Depth guard: detect cycles and enforce depth limit
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // Handle NumberNode: determine sign directly from numeric value
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (num->is_positive()) return Tribool::True;
                 if (num->is_zero()) return Tribool::False;
                 // Check if negative; if not negative and not zero, it must be positive.
@@ -203,7 +202,7 @@ InferenceTriboolResult InferenceEngine::query_positive_checked(const SymbolicExp
             }
 
             // Handle VariableNode: check PropertyStore in the AssumptionContext
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.has_sign(var->name(), Sign::Positive)) return Tribool::True;
                 // If NonPositive or Negative or Zero, then not positive
@@ -213,24 +212,30 @@ InferenceTriboolResult InferenceEngine::query_positive_checked(const SymbolicExp
                 return Tribool::Unknown;
             }
 
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
-                auto result = detail::propagate_result(infer_add_sign_checked(add.get(), Sign::Positive));
-                if (result != Tribool::Unknown) return result;
-                return detail::propagate_result(infer_sign_from_relations_checked(expr, Sign::Positive));
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
+                auto result =
+                    infer_add_sign_checked(*add, Sign::Positive);
+                if (!result) return result;
+                if (result.value() != Tribool::Unknown) return result;
+                return infer_sign_from_relations_checked(
+                    expr, Sign::Positive);
             }
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
-                auto result = detail::propagate_result(infer_multiply_sign_checked(mul.get(), Sign::Positive));
-                if (result != Tribool::Unknown) return result;
-                return detail::propagate_result(infer_sign_from_relations_checked(expr, Sign::Positive));
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
+                auto result =
+                    infer_multiply_sign_checked(*mul, Sign::Positive);
+                if (!result) return result;
+                if (result.value() != Tribool::Unknown) return result;
+                return infer_sign_from_relations_checked(
+                    expr, Sign::Positive);
             }
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_power_property_checked(pow.get(), Sign::Positive));
+            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+                return infer_power_property_checked(*pow, Sign::Positive);
             }
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_function_property_checked(func.get(), Sign::Positive));
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+                return infer_function_property_checked(*func, Sign::Positive);
             }
             // For other expression types (e.g., variables handled above), check relations
-            return detail::propagate_result(infer_sign_from_relations_checked(expr, Sign::Positive));
+            return infer_sign_from_relations_checked(expr, Sign::Positive);
         });
 }
 
@@ -242,13 +247,13 @@ InferenceTriboolResult InferenceEngine::query_negative_checked(const SymbolicExp
             infinity < 0 ? Tribool::True : Tribool::False);
     }
     return checked_inference_result<Tribool>(expr, "query_negative_checked",
-        [&]() {
+        [&]() -> InferenceTriboolResult {
             // Depth guard: detect cycles and enforce depth limit
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // Handle NumberNode
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (num->is_zero()) return Tribool::False;
                 if (std::holds_alternative<BigInt>(num->value())) {
                     return std::get<BigInt>(num->value()).IsNegative() ? Tribool::True : Tribool::False;
@@ -268,7 +273,7 @@ InferenceTriboolResult InferenceEngine::query_negative_checked(const SymbolicExp
             }
 
             // Handle VariableNode
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.has_sign(var->name(), Sign::Negative)) return Tribool::True;
                 if (props.has_sign(var->name(), Sign::Positive) ||
@@ -277,17 +282,17 @@ InferenceTriboolResult InferenceEngine::query_negative_checked(const SymbolicExp
                 return Tribool::Unknown;
             }
 
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_add_sign_checked(add.get(), Sign::Negative));
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
+                return infer_add_sign_checked(*add, Sign::Negative);
             }
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_multiply_sign_checked(mul.get(), Sign::Negative));
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
+                return infer_multiply_sign_checked(*mul, Sign::Negative);
             }
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_power_property_checked(pow.get(), Sign::Negative));
+            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+                return infer_power_property_checked(*pow, Sign::Negative);
             }
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_function_property_checked(func.get(), Sign::Negative));
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+                return infer_function_property_checked(*func, Sign::Negative);
             }
             return Tribool::Unknown;
         });
@@ -301,13 +306,13 @@ InferenceTriboolResult InferenceEngine::query_nonnegative_checked(const Symbolic
             infinity > 0 ? Tribool::True : Tribool::False);
     }
     return checked_inference_result<Tribool>(expr, "query_nonnegative_checked",
-        [&]() {
+        [&]() -> InferenceTriboolResult {
             // Depth guard: detect cycles and enforce depth limit
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // Handle NumberNode
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (num->is_zero()) return Tribool::True;
                 if (num->is_positive()) return Tribool::True;
                 if (std::holds_alternative<BigInt>(num->value())) {
@@ -325,28 +330,34 @@ InferenceTriboolResult InferenceEngine::query_nonnegative_checked(const Symbolic
             }
 
             // Handle VariableNode
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.has_sign(var->name(), Sign::NonNegative)) return Tribool::True;
                 if (props.has_sign(var->name(), Sign::Negative)) return Tribool::False;
                 return Tribool::Unknown;
             }
 
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
-                auto result = detail::propagate_result(infer_add_sign_checked(add.get(), Sign::NonNegative));
-                if (result != Tribool::Unknown) return result;
-                return detail::propagate_result(infer_sign_from_relations_checked(expr, Sign::NonNegative));
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
+                auto result =
+                    infer_add_sign_checked(*add, Sign::NonNegative);
+                if (!result) return result;
+                if (result.value() != Tribool::Unknown) return result;
+                return infer_sign_from_relations_checked(
+                    expr, Sign::NonNegative);
             }
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
-                auto result = detail::propagate_result(infer_multiply_sign_checked(mul.get(), Sign::NonNegative));
-                if (result != Tribool::Unknown) return result;
-                return detail::propagate_result(infer_sign_from_relations_checked(expr, Sign::NonNegative));
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
+                auto result =
+                    infer_multiply_sign_checked(*mul, Sign::NonNegative);
+                if (!result) return result;
+                if (result.value() != Tribool::Unknown) return result;
+                return infer_sign_from_relations_checked(
+                    expr, Sign::NonNegative);
             }
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_power_property_checked(pow.get(), Sign::NonNegative));
+            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+                return infer_power_property_checked(*pow, Sign::NonNegative);
             }
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_function_property_checked(func.get(), Sign::NonNegative));
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+                return infer_function_property_checked(*func, Sign::NonNegative);
             }
             return Tribool::Unknown;
         });
@@ -355,13 +366,13 @@ InferenceTriboolResult InferenceEngine::query_nonnegative_checked(const Symbolic
 
 InferenceTriboolResult InferenceEngine::query_nonpositive_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_nonpositive_checked",
-        [&]() {
+        [&]() -> InferenceTriboolResult {
             // Depth guard: detect cycles and enforce depth limit
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // Handle NumberNode
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (num->is_zero()) return Tribool::True;
                 if (num->is_positive()) return Tribool::False;
                 if (std::holds_alternative<BigInt>(num->value())) {
@@ -379,24 +390,24 @@ InferenceTriboolResult InferenceEngine::query_nonpositive_checked(const Symbolic
             }
 
             // Handle VariableNode
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.has_sign(var->name(), Sign::NonPositive)) return Tribool::True;
                 if (props.has_sign(var->name(), Sign::Positive)) return Tribool::False;
                 return Tribool::Unknown;
             }
 
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_add_sign_checked(add.get(), Sign::NonPositive));
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
+                return infer_add_sign_checked(*add, Sign::NonPositive);
             }
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_multiply_sign_checked(mul.get(), Sign::NonPositive));
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
+                return infer_multiply_sign_checked(*mul, Sign::NonPositive);
             }
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_power_property_checked(pow.get(), Sign::NonPositive));
+            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+                return infer_power_property_checked(*pow, Sign::NonPositive);
             }
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_function_property_checked(func.get(), Sign::NonPositive));
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+                return infer_function_property_checked(*func, Sign::NonPositive);
             }
             return Tribool::Unknown;
         });
@@ -405,13 +416,13 @@ InferenceTriboolResult InferenceEngine::query_nonpositive_checked(const Symbolic
 
 InferenceTriboolResult InferenceEngine::query_real_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_real_checked",
-        [&]() {
+        [&]() -> InferenceTriboolResult {
             // Depth guard: detect cycles and enforce depth limit
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // Handle NumberNode: finite numbers are Real
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (std::holds_alternative<BigInt>(num->value())) return Tribool::True;
                 if (std::holds_alternative<Rational>(num->value())) return Tribool::True;
                 if (std::holds_alternative<lmmc_real_t>(num->value())) {
@@ -422,23 +433,23 @@ InferenceTriboolResult InferenceEngine::query_real_checked(const SymbolicExpr& e
             }
 
             // Handle VariableNode
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.has_domain(var->name(), Domain::Real)) return Tribool::True;
                 return Tribool::Unknown;
             }
 
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_add_domain_checked(add.get(), Domain::Real));
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
+                return infer_add_domain_checked(*add, Domain::Real);
             }
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_multiply_domain_checked(mul.get(), Domain::Real));
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
+                return infer_multiply_domain_checked(*mul, Domain::Real);
             }
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_power_domain_checked(pow.get(), Domain::Real));
+            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+                return infer_power_domain_checked(*pow, Domain::Real);
             }
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_function_domain_checked(func.get(), Domain::Real));
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+                return infer_function_domain_checked(*func, Domain::Real);
             }
             return Tribool::Unknown;
         });
@@ -450,13 +461,13 @@ InferenceTriboolResult InferenceEngine::query_integer_checked(const SymbolicExpr
         return InferenceTriboolResult::success(Tribool::False);
     }
     return checked_inference_result<Tribool>(expr, "query_integer_checked",
-        [&]() {
+        [&]() -> InferenceTriboolResult {
             // Depth guard: detect cycles and enforce depth limit
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // Handle NumberNode: BigInt values are Integer
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (std::holds_alternative<BigInt>(num->value())) return Tribool::True;
                 if (std::holds_alternative<Rational>(num->value())) {
                     const auto& r = std::get<Rational>(num->value());
@@ -472,23 +483,23 @@ InferenceTriboolResult InferenceEngine::query_integer_checked(const SymbolicExpr
             }
 
             // Handle VariableNode
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.has_domain(var->name(), Domain::Integer)) return Tribool::True;
                 return Tribool::Unknown;
             }
 
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_add_domain_checked(add.get(), Domain::Integer));
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
+                return infer_add_domain_checked(*add, Domain::Integer);
             }
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_multiply_domain_checked(mul.get(), Domain::Integer));
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
+                return infer_multiply_domain_checked(*mul, Domain::Integer);
             }
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_power_domain_checked(pow.get(), Domain::Integer));
+            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+                return infer_power_domain_checked(*pow, Domain::Integer);
             }
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_function_domain_checked(func.get(), Domain::Integer));
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+                return infer_function_domain_checked(*func, Domain::Integer);
             }
             return Tribool::Unknown;
         });
@@ -500,13 +511,13 @@ InferenceTriboolResult InferenceEngine::query_nonzero_checked(const SymbolicExpr
         return InferenceTriboolResult::success(Tribool::True);
     }
     return checked_inference_result<Tribool>(expr, "query_nonzero_checked",
-        [&]() {
+        [&]() -> InferenceTriboolResult {
             // Depth guard: detect cycles and enforce depth limit
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // Handle NumberNode
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (num->is_zero()) return Tribool::False;
                 if (num->is_positive()) return Tribool::True;
                 // Check if it's a non-zero number
@@ -525,30 +536,38 @@ InferenceTriboolResult InferenceEngine::query_nonzero_checked(const SymbolicExpr
             }
 
             // Handle VariableNode
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.has_sign(var->name(), Sign::NonZero)) return Tribool::True;
                 if (props.has_sign(var->name(), Sign::Zero)) return Tribool::False;
                 return Tribool::Unknown;
             }
 
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_multiply_sign_checked(mul.get(), Sign::NonZero));
+            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
+                return infer_multiply_sign_checked(*mul, Sign::NonZero);
             }
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_power_property_checked(pow.get(), Sign::NonZero));
+            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+                return infer_power_property_checked(*pow, Sign::NonZero);
             }
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-                return detail::propagate_result(infer_function_property_checked(func.get(), Sign::NonZero));
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+                return infer_function_property_checked(*func, Sign::NonZero);
             }
             // For addition, NonZero is hard to determine in general
             // (positive + positive = nonzero, but that's covered by positive inference)
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
                 // If the sum is positive or negative, it's nonzero
-                auto pos = detail::propagate_result(infer_add_sign_checked(add.get(), Sign::Positive));
-                if (pos == Tribool::True) return Tribool::True;
-                auto neg = detail::propagate_result(infer_add_sign_checked(add.get(), Sign::Negative));
-                if (neg == Tribool::True) return Tribool::True;
+                auto positive =
+                    infer_add_sign_checked(*add, Sign::Positive);
+                if (!positive) return positive;
+                if (positive.value() == Tribool::True) {
+                    return Tribool::True;
+                }
+                auto negative =
+                    infer_add_sign_checked(*add, Sign::Negative);
+                if (!negative) return negative;
+                if (negative.value() == Tribool::True) {
+                    return Tribool::True;
+                }
                 return Tribool::Unknown;
             }
             return Tribool::Unknown;
@@ -558,16 +577,9 @@ InferenceTriboolResult InferenceEngine::query_nonzero_checked(const SymbolicExpr
 // Subtraction sign inference
 
 
-InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const void* opaque_node, Sign target) const {
-    if (!opaque_node) {
-        return InferenceTriboolResult::failure(
-            CasErrc::InvalidArgument,
-            "subtraction inference node must not be null",
-            "infer_subtraction_sign_checked");
-    }
-
+InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(
+    const AddNode& node, Sign target) const {
     try {
-        const auto& node = *static_cast<const AddNode*>(opaque_node);
         if (node.operands().size() != 2) return InferenceTriboolResult::success(Tribool::Unknown);
 
         std::shared_ptr<const SymbolicNode> minuend_node;
@@ -611,13 +623,25 @@ InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const voi
             return InferenceTriboolResult::success(Tribool::Unknown);
         }
 
-        auto minuend_expr = lamina::detail::expression_from_node(minuend_node);
-        auto subtrahend_expr = lamina::detail::expression_from_node(subtrahend_node);
+        auto minuend_expr = LMCAS::detail::expression_from_node(minuend_node);
+        auto subtrahend_expr = LMCAS::detail::expression_from_node(subtrahend_node);
 
-        Tribool min_pos = detail::propagate_result(query_sign_of_checked(minuend_expr, Sign::Positive));
-        Tribool min_neg = detail::propagate_result(query_sign_of_checked(minuend_expr, Sign::Negative));
-        Tribool sub_pos = detail::propagate_result(query_sign_of_checked(subtrahend_expr, Sign::Positive));
-        Tribool sub_neg = detail::propagate_result(query_sign_of_checked(subtrahend_expr, Sign::Negative));
+        auto min_pos_result =
+            query_sign_of_checked(minuend_expr, Sign::Positive);
+        if (!min_pos_result) return min_pos_result;
+        const Tribool min_pos = min_pos_result.value();
+        auto min_neg_result =
+            query_sign_of_checked(minuend_expr, Sign::Negative);
+        if (!min_neg_result) return min_neg_result;
+        const Tribool min_neg = min_neg_result.value();
+        auto sub_pos_result =
+            query_sign_of_checked(subtrahend_expr, Sign::Positive);
+        if (!sub_pos_result) return sub_pos_result;
+        const Tribool sub_pos = sub_pos_result.value();
+        auto sub_neg_result =
+            query_sign_of_checked(subtrahend_expr, Sign::Negative);
+        if (!sub_neg_result) return sub_neg_result;
+        const Tribool sub_neg = sub_neg_result.value();
 
         if (min_pos == Tribool::True && sub_neg == Tribool::True) {
             switch (target) {
@@ -641,8 +665,14 @@ InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const voi
             }
         }
 
-        Tribool min_nn = detail::propagate_result(query_sign_of_checked(minuend_expr, Sign::NonNegative));
-        Tribool sub_np = detail::propagate_result(query_sign_of_checked(subtrahend_expr, Sign::NonPositive));
+        auto min_nn_result =
+            query_sign_of_checked(minuend_expr, Sign::NonNegative);
+        if (!min_nn_result) return min_nn_result;
+        const Tribool min_nn = min_nn_result.value();
+        auto sub_np_result =
+            query_sign_of_checked(subtrahend_expr, Sign::NonPositive);
+        if (!sub_np_result) return sub_np_result;
+        const Tribool sub_np = sub_np_result.value();
         if (min_nn == Tribool::True && sub_np == Tribool::True) {
             switch (target) {
                 case Sign::NonNegative: return InferenceTriboolResult::success(Tribool::True);
@@ -651,8 +681,14 @@ InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const voi
             }
         }
 
-        Tribool min_np = detail::propagate_result(query_sign_of_checked(minuend_expr, Sign::NonPositive));
-        Tribool sub_nn = detail::propagate_result(query_sign_of_checked(subtrahend_expr, Sign::NonNegative));
+        auto min_np_result =
+            query_sign_of_checked(minuend_expr, Sign::NonPositive);
+        if (!min_np_result) return min_np_result;
+        const Tribool min_np = min_np_result.value();
+        auto sub_nn_result =
+            query_sign_of_checked(subtrahend_expr, Sign::NonNegative);
+        if (!sub_nn_result) return sub_nn_result;
+        const Tribool sub_nn = sub_nn_result.value();
         if (min_np == Tribool::True && sub_nn == Tribool::True) {
             switch (target) {
                 case Sign::NonPositive: return InferenceTriboolResult::success(Tribool::True);
@@ -662,8 +698,6 @@ InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const voi
         }
 
         return InferenceTriboolResult::success(Tribool::Unknown);
-    } catch (const detail::ResultPropagation& ex) {
-        return InferenceTriboolResult::failure(ex.error());
     } catch (const std::bad_alloc&) {
         return InferenceTriboolResult::failure(
             CasErrc::ResourceLimit,
@@ -682,19 +716,19 @@ InferenceTriboolResult InferenceEngine::infer_subtraction_sign_checked(const voi
 
 InferenceTriboolResult InferenceEngine::query_algebraic_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_algebraic_checked",
-        [&]() {
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+        [&]() -> InferenceTriboolResult {
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // NumberNode: BigInt and Rational are algebraic; finite doubles are Unknown
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (std::holds_alternative<BigInt>(num->value())) return Tribool::True;
                 if (std::holds_alternative<Rational>(num->value())) return Tribool::True;
                 return Tribool::Unknown;
             }
 
             // VariableNode: check if domain is Algebraic or more specific
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 // Domain hierarchy: Algebraic ⊃ Rational ⊃ Integer ⊃ Natural ⊃ PositiveInt
                 if (props.has_domain(var->name(), Domain::Algebraic)) return Tribool::True;
@@ -711,19 +745,19 @@ InferenceTriboolResult InferenceEngine::query_algebraic_checked(const SymbolicEx
 
 InferenceTriboolResult InferenceEngine::query_transcendental_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_transcendental_checked",
-        [&]() {
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+        [&]() -> InferenceTriboolResult {
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // NumberNode: integers and rationals are algebraic, not transcendental
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (std::holds_alternative<BigInt>(num->value())) return Tribool::False;
                 if (std::holds_alternative<Rational>(num->value())) return Tribool::False;
                 return Tribool::Unknown;
             }
 
             // VariableNode: check the transcendental flag
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.is_transcendental(var->name())) return Tribool::True;
                 // If domain is Algebraic or more specific, not transcendental
@@ -739,12 +773,12 @@ InferenceTriboolResult InferenceEngine::query_transcendental_checked(const Symbo
 
 InferenceTriboolResult InferenceEngine::query_finite_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_finite_checked",
-        [&]() {
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+        [&]() -> InferenceTriboolResult {
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // NumberNode: finite numeric values are Finite
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (std::holds_alternative<BigInt>(num->value())) return Tribool::True;
                 if (std::holds_alternative<Rational>(num->value())) return Tribool::True;
                 if (std::holds_alternative<lmmc_real_t>(num->value())) {
@@ -755,7 +789,7 @@ InferenceTriboolResult InferenceEngine::query_finite_checked(const SymbolicExpr&
             }
 
             // VariableNode: check Finiteness in PropertyStore
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 Finiteness f = props.get_finiteness(var->name());
                 if (f == Finiteness::Finite) return Tribool::True;
@@ -771,12 +805,12 @@ InferenceTriboolResult InferenceEngine::query_finite_checked(const SymbolicExpr&
 
 InferenceTriboolResult InferenceEngine::query_divergent_checked(const SymbolicExpr& expr) const {
     return checked_inference_result<Tribool>(expr, "query_divergent_checked",
-        [&]() {
-            DepthGuard guard(*this, lamina::detail::node(expr).get());
+        [&]() -> InferenceTriboolResult {
+            DepthGuard guard(*this, *LMCAS::detail::node(expr));
             if (guard.should_abort()) return Tribool::Unknown;
 
             // NumberNode: finite numeric values are not divergent
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
                 if (std::holds_alternative<BigInt>(num->value())) return Tribool::False;
                 if (std::holds_alternative<Rational>(num->value())) return Tribool::False;
                 if (std::holds_alternative<lmmc_real_t>(num->value())) {
@@ -787,7 +821,7 @@ InferenceTriboolResult InferenceEngine::query_divergent_checked(const SymbolicEx
             }
 
             // VariableNode: check Finiteness in PropertyStore
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 Finiteness f = props.get_finiteness(var->name());
                 if (f == Finiteness::Divergent) return Tribool::True;
@@ -803,4 +837,4 @@ InferenceTriboolResult InferenceEngine::query_divergent_checked(const SymbolicEx
 // Addition sign inference
 
 
-} // namespace lamina
+} // namespace LMCAS

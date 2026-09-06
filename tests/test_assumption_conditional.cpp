@@ -6,7 +6,7 @@
 #include "symbolic_ast.hpp"
 #include <stdexcept>
 
-using namespace lamina;
+using namespace LMCAS;
 
 int main() {
     TEST_CASE("assume_conditional_checked rejects non-relational inputs transactionally");
@@ -14,9 +14,9 @@ int main() {
         AssumptionContext ctx;
         SymbolicExpr x = *SymbolicExpr::variable("x");
         SymbolicExpr zero = *SymbolicExpr::number(0);
-        auto conclusion = lamina::detail::expression_from_node(
-            lamina::detail::make_node<RelationalNode>(
-                lamina::detail::node(x), lamina::detail::node(zero), RelationOp::GT));
+        auto conclusion = LMCAS::detail::expression_from_node(
+            LMCAS::detail::make_node<RelationalNode>(
+                LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationOp::GT));
         const auto generation = ctx.cache_generation();
 
         auto result = ctx.assume_conditional_checked(x, conclusion);
@@ -38,36 +38,36 @@ int main() {
     TEST_CASE("assume_conditional: stores conditional in current scope");
     {
         AssumptionContext ctx;
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto one = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(1)));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto one = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(1)));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
         // condition: x > 1
-        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(one), RelationalNode::Op::GT));
+        auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(one), RelationalNode::Op::GT));
         // conclusion: x > 0 (ln(x) > 0 would be more realistic but harder to construct)
-        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
 
         ctx.assume_conditional(condition, conclusion);
 
         auto conditionals = ctx.get_active_conditionals();
         EXPECT_TRUE(conditionals.size() == 1, "One conditional stored");
-        EXPECT_TRUE(lamina::detail::node(conditionals[0].condition) != nullptr, "Condition is not null");
-        EXPECT_TRUE(lamina::detail::node(conditionals[0].conclusion) != nullptr, "Conclusion is not null");
+        EXPECT_TRUE(LMCAS::detail::node(conditionals[0].condition) != nullptr, "Condition is not null");
+        EXPECT_TRUE(LMCAS::detail::node(conditionals[0].conclusion) != nullptr, "Conclusion is not null");
     }
 
     TEST_CASE("Conditionals discarded on scope pop");
     {
         AssumptionContext ctx;
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto one = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(1)));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto one = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(1)));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
-        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(one), RelationalNode::Op::GT));
-        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(one), RelationalNode::Op::GT));
+        auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
 
         // Store conditional in root scope
         ctx.assume_conditional(condition, conclusion);
@@ -75,11 +75,11 @@ int main() {
 
         // Push and add another conditional
         ctx.push();
-        auto y = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("y"));
-        auto cond2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(y), lamina::detail::node(zero), RelationalNode::Op::GT));
-        auto concl2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(y), lamina::detail::node(one), RelationalNode::Op::GT));
+        auto y = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("y"));
+        auto cond2 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(y), LMCAS::detail::node(zero), RelationalNode::Op::GT));
+        auto concl2 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(y), LMCAS::detail::node(one), RelationalNode::Op::GT));
         ctx.assume_conditional(cond2, concl2);
 
         EXPECT_TRUE(ctx.get_active_conditionals().size() == 2, "Two conditionals (child + parent)");
@@ -94,30 +94,30 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Positive);
 
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
         // x > 0 should be satisfied since x is Positive
-        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::True,
                     "x > 0 satisfied when x is Positive");
 
         // x >= 0 should also be satisfied
-        auto cond_geq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GEQ));
+        auto cond_geq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_geq) == Tribool::True,
                     "x >= 0 satisfied when x is Positive");
 
         // x < 0 should be False
-        auto cond_lt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::LT));
+        auto cond_lt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::LT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::False,
                     "x < 0 is False when x is Positive");
 
         // x != 0 should be True
-        auto cond_neq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::NEQ));
+        auto cond_neq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::NEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True,
                     "x != 0 satisfied when x is Positive");
     }
@@ -127,11 +127,11 @@ int main() {
         AssumptionContext ctx;
         // No assumptions about x
 
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
-        auto cond = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto cond = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::Unknown,
                     "x > 0 is Unknown when no assumptions about x");
     }
@@ -141,18 +141,18 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Positive);
 
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
         // 0 < x (reversed pattern)
-        auto cond = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(zero), lamina::detail::node(x), RelationalNode::Op::LT));
+        auto cond = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(zero), LMCAS::detail::node(x), RelationalNode::Op::LT));
         EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::True,
                     "0 < x satisfied when x is Positive");
 
         // 0 > x should be False
-        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(zero), lamina::detail::node(x), RelationalNode::Op::GT));
+        auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(zero), LMCAS::detail::node(x), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
                     "0 > x is False when x is Positive");
     }
@@ -160,12 +160,12 @@ int main() {
     TEST_CASE("evaluate_condition: condition satisfied by stored relation");
     {
         AssumptionContext ctx;
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto y = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("y"));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto y = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("y"));
 
         // Store relation x > y
-        auto rel = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(y), RelationalNode::Op::GT));
+        auto rel = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(y), RelationalNode::Op::GT));
         ctx.assume(rel);
 
         // Evaluate x > y — should be True (stored directly)
@@ -176,7 +176,7 @@ int main() {
     TEST_CASE("evaluate_condition: non-relational expression returns Unknown");
     {
         AssumptionContext ctx;
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
         EXPECT_TRUE(ctx.evaluate_condition(x) == Tribool::Unknown,
                     "non-relational expression evaluates to Unknown");
     }
@@ -186,30 +186,30 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Negative);
 
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
         // x < 0 should be True
-        auto cond_lt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::LT));
+        auto cond_lt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::LT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::True,
                     "x < 0 satisfied when x is Negative");
 
         // x <= 0 should be True
-        auto cond_leq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::LEQ));
+        auto cond_leq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::LEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_leq) == Tribool::True,
                     "x <= 0 satisfied when x is Negative");
 
         // x > 0 should be False
-        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
                     "x > 0 is False when x is Negative");
 
         // x != 0 should be True
-        auto cond_neq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::NEQ));
+        auto cond_neq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::NEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True,
                     "x != 0 satisfied when x is Negative");
     }
@@ -219,24 +219,24 @@ int main() {
         AssumptionContext ctx;
         ctx.assume_sign("x", Sign::Zero);
 
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
         // x == 0 should be True
-        auto cond_eq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::EQ));
+        auto cond_eq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::EQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_eq) == Tribool::True,
                     "x == 0 satisfied when x is Zero");
 
         // x > 0 should be False
-        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
                     "x > 0 is False when x is Zero");
 
         // x != 0 should be False
-        auto cond_neq = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::NEQ));
+        auto cond_neq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::NEQ));
         EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::False,
                     "x != 0 is False when x is Zero");
     }
@@ -244,24 +244,24 @@ int main() {
     TEST_CASE("get_active_conditionals: multi-scope ordering");
     {
         AssumptionContext ctx;
-        auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-        auto y = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("y"));
-        auto z = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("z"));
-        auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+        auto y = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("y"));
+        auto z = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("z"));
+        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
         // Root scope conditional
-        auto cond1 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
-        auto concl1 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(y), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto cond1 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
+        auto concl1 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(y), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         ctx.assume_conditional(cond1, concl1);
 
         // Push and add child conditional
         ctx.push();
-        auto cond2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(y), lamina::detail::node(zero), RelationalNode::Op::GT));
-        auto concl2 = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-            lamina::detail::node(z), lamina::detail::node(zero), RelationalNode::Op::GT));
+        auto cond2 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(y), LMCAS::detail::node(zero), RelationalNode::Op::GT));
+        auto concl2 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+            LMCAS::detail::node(z), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         ctx.assume_conditional(cond2, concl2);
 
         auto all = ctx.get_active_conditionals();
@@ -269,11 +269,11 @@ int main() {
 
         // Most recent scope first
         // The child scope conditional should come first (top scope)
-        auto child_cond_var = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(all[0].condition));
+        auto child_cond_var = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(all[0].condition));
         auto child_lhs = std::dynamic_pointer_cast<const VariableNode>(child_cond_var->left());
         EXPECT_TRUE(child_lhs->name() == "y", "Child scope conditional comes first (most recent)");
 
-        auto parent_cond_var = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(all[1].condition));
+        auto parent_cond_var = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(all[1].condition));
         auto parent_lhs = std::dynamic_pointer_cast<const VariableNode>(parent_cond_var->left());
         EXPECT_TRUE(parent_lhs->name() == "x", "Parent scope conditional comes second");
 
@@ -295,13 +295,13 @@ int main() {
         ctx.assume_sign(var, Sign::Positive);
 
         // Create condition: var > 0
-        auto var_node = lamina::detail::make_node<VariableNode>(var);
-        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
-        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+        auto var_node = LMCAS::detail::make_node<VariableNode>(var);
+        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT));
 
         // Create conclusion: var != 0 (trivially implied by Positive, but tests the mechanism)
-        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+        auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::NEQ));
 
         ctx.assume_conditional(condition, conclusion);
@@ -327,14 +327,14 @@ int main() {
         ctx.push();
 
         // Create condition: var > 0 (unverifiable since no sign declared)
-        auto var_node = lamina::detail::make_node<VariableNode>(var);
-        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
-        auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+        auto var_node = LMCAS::detail::make_node<VariableNode>(var);
+        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT));
 
         // Create some conclusion
-        auto one_node = lamina::detail::make_node<NumberNode>(BigInt(1));
-        auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+        auto one_node = LMCAS::detail::make_node<NumberNode>(BigInt(1));
+        auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, one_node, RelationalNode::Op::GT));
 
         ctx.assume_conditional(condition, conclusion);
@@ -358,11 +358,11 @@ int main() {
         int num_conditionals = rc::gen::inRange(1, 5);
         for (int i = 0; i < num_conditionals; ++i) {
             std::string var = "pop_" + std::to_string(i) + "_" + std::to_string(rc::gen::inRange(0, 99));
-            auto var_node = lamina::detail::make_node<VariableNode>(var);
-            auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
-            auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            auto var_node = LMCAS::detail::make_node<VariableNode>(var);
+            auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+            auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GT));
-            auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+            auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GEQ));
             ctx.assume_conditional(condition, conclusion);
         }
@@ -389,11 +389,11 @@ int main() {
         Sign chosen_sign = rc::gen::elementOf(signs);
         ctx.assume_sign(var, chosen_sign);
 
-        auto var_node = lamina::detail::make_node<VariableNode>(var);
-        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto var_node = LMCAS::detail::make_node<VariableNode>(var);
+        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
         // Test condition: var > 0
-        auto cond_gt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+        auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT));
         Tribool gt_result = ctx.evaluate_condition(cond_gt);
 
@@ -406,7 +406,7 @@ int main() {
         // NonNegative: could be zero, so GT might be Unknown — that's acceptable
 
         // Test condition: var < 0
-        auto cond_lt = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
+        auto cond_lt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::LT));
         Tribool lt_result = ctx.evaluate_condition(cond_lt);
 

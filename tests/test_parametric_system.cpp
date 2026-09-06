@@ -7,7 +7,7 @@
 #include <cmath>
 #include <optional>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> build_linear_2x2(
     int c1, int c2, int c0,
@@ -55,8 +55,8 @@ static std::shared_ptr<SymbolicExpr> build_parametric_linear_2x2(
 /// 递归数值求值器用于验证符号化简后仍保留结构的残差.
 /// std::nullopt 表示表达式仍包含待替换符号或数值求值产生定义域诊断.
 static std::optional<double> numeric_eval(const std::shared_ptr<SymbolicExpr>& e) {
-    if (!e || !lamina::detail::node(e)) return 0.0;
-    auto root = lamina::detail::node(e);
+    if (!e || !LMCAS::detail::node(e)) return 0.0;
+    auto root = LMCAS::detail::node(e);
 
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(root)) {
         if (std::holds_alternative<lmmc_real_t>(num->value())) return std::get<lmmc_real_t>(num->value());
@@ -71,7 +71,7 @@ static std::optional<double> numeric_eval(const std::shared_ptr<SymbolicExpr>& e
     if (auto add = std::dynamic_pointer_cast<const AddNode>(root)) {
         double s = 0.0;
         for (auto& op : add->operands()) {
-            auto v = numeric_eval(lamina::detail::make_expression_ptr(op));
+            auto v = numeric_eval(LMCAS::detail::make_expression_ptr(op));
             if (!v) return std::nullopt;
             s += *v;
         }
@@ -80,15 +80,15 @@ static std::optional<double> numeric_eval(const std::shared_ptr<SymbolicExpr>& e
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(root)) {
         double s = 1.0;
         for (auto& op : mul->operands()) {
-            auto v = numeric_eval(lamina::detail::make_expression_ptr(op));
+            auto v = numeric_eval(LMCAS::detail::make_expression_ptr(op));
             if (!v) return std::nullopt;
             s *= *v;
         }
         return s;
     }
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(root)) {
-        auto b = numeric_eval(lamina::detail::make_expression_ptr(pow->base()));
-        auto x = numeric_eval(lamina::detail::make_expression_ptr(pow->exponent()));
+        auto b = numeric_eval(LMCAS::detail::make_expression_ptr(pow->base()));
+        auto x = numeric_eval(LMCAS::detail::make_expression_ptr(pow->exponent()));
         if (!b || !x) return std::nullopt;
         if (*b == 0.0 && *x < 0.0) return std::nullopt;
         double v = std::pow(*b, *x);

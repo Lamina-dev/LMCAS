@@ -1,6 +1,8 @@
 #include "poly_utils.hpp"
 
 
+namespace LMCAS {
+
 std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(
     const std::shared_ptr<SymbolicExpr>& left,
     const std::shared_ptr<SymbolicExpr>& right,
@@ -8,8 +10,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(
     if (!left || !right || variable.empty()) return nullptr;
 
     try {
-        auto left_poly = lamina::symbolic_to_poly<Rational>(left, variable);
-        auto right_poly = lamina::symbolic_to_poly<Rational>(right, variable);
+        auto left_poly = LMCAS::symbolic_to_poly<Rational>(left, variable);
+        auto right_poly = LMCAS::symbolic_to_poly<Rational>(right, variable);
         const int left_degree = left_poly.degree();
         const int right_degree = right_poly.degree();
         if (left_degree < 0 || right_degree < 0) return SymbolicExpr::number(0);
@@ -63,3 +65,5 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::poly_resultant(
         return nullptr;
     }
 }
+
+} // namespace LMCAS

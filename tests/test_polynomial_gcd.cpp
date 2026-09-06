@@ -6,7 +6,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 void test_gcd_primitive() {
     std::cout << "Testing Polynomial GCD with BigInt..." << std::endl;

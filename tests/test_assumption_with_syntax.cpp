@@ -8,7 +8,7 @@
 #include <vector>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Generate a random Domain from the valid set.

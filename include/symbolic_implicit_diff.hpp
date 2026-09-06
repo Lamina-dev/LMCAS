@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @brief 对隐函数 F(x, y) = 0 求 dy/dx
@@ -19,7 +19,7 @@ namespace lamina {
  * @param y 因变量名
  * @return dy/dx 的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> implicit_diff(
+LMCAS_API std::shared_ptr<SymbolicExpr> implicit_diff(
     std::shared_ptr<SymbolicExpr> F,
     const std::string& x,
     const std::string& y

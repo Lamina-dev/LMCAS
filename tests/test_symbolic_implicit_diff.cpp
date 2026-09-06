@@ -1,6 +1,8 @@
 #include "test_common.hpp"
 #include "symbolic_implicit_diff.hpp"
 
+using namespace LMCAS;
+
 void test_implicit_diff_circle() {
     TEST_CASE("Implicit Diff: Circle x^2 + y^2 - r^2 = 0 => dy/dx = -x/y");
     {
@@ -14,7 +16,7 @@ void test_implicit_diff_circle() {
         auto neg_r2 = SymbolicExpr::multiply(SymbolicExpr::number(-1), r2);
         auto F = SymbolicExpr::add(SymbolicExpr::add(x2, y2), neg_r2);
 
-        auto result = lamina::implicit_diff(F, "x", "y");
+        auto result = LMCAS::implicit_diff(F, "x", "y");
         std::string s = result ? result->to_string() : "null";
         // dy/dx = -F_x / F_y = -(2x) / (2y) = -x/y
         // The result should contain x and y, and represent -x/y (possibly unsimplified as (-1*2*x)/(2*y))
@@ -40,7 +42,7 @@ void test_implicit_diff_ellipse() {
         auto neg_one = SymbolicExpr::number(-1);
         auto F = SymbolicExpr::add(SymbolicExpr::add(term1, term2), neg_one);
 
-        auto result = lamina::implicit_diff(F, "x", "y");
+        auto result = LMCAS::implicit_diff(F, "x", "y");
         std::string s = result ? result->to_string() : "null";
         // Result should contain x, y, a, b representing -(b^2*x)/(a^2*y)
         EXPECT_CONTAINS(s, {"x", "y"}, "ellipse dy/dx contains x and y");
@@ -65,7 +67,7 @@ void test_implicit_diff_polynomial() {
         auto neg_three_xy = SymbolicExpr::multiply(SymbolicExpr::number(-1), three_xy);
         auto F = SymbolicExpr::add(SymbolicExpr::add(x3, y3), neg_three_xy);
 
-        auto result = lamina::implicit_diff(F, "x", "y");
+        auto result = LMCAS::implicit_diff(F, "x", "y");
         std::string s = result ? result->to_string() : "null";
         // Result should contain x and y terms
         EXPECT_CONTAINS(s, {"x", "y"}, "polynomial dy/dx contains x and y");
@@ -85,7 +87,7 @@ void test_implicit_diff_transcendental() {
         auto y2 = SymbolicExpr::power(y, SymbolicExpr::number(2));
         auto F = SymbolicExpr::add(sin_x, y2);
 
-        auto result = lamina::implicit_diff(F, "x", "y");
+        auto result = LMCAS::implicit_diff(F, "x", "y");
         std::string s = result ? result->to_string() : "null";
         // Result should contain cos (from derivative of sin(x)) and y
         EXPECT_CONTAINS(s, {"cos", "y"}, "transcendental dy/dx contains cos and y");

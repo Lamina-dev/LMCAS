@@ -8,10 +8,12 @@
 #include <algorithm>
 #include <optional>
 
+using namespace LMCAS;
+
 static std::optional<double> real_numeric_value(const std::shared_ptr<SymbolicExpr>& expr) {
     if (!expr) return std::nullopt;
-    lamina::ComputationContext context;
-    auto evaluated = lamina::evaluate_numeric(*expr, lamina::NumericBindings{}, context);
+    LMCAS::ComputationContext context;
+    auto evaluated = LMCAS::evaluate_numeric(*expr, LMCAS::NumericBindings{}, context);
     if (!evaluated || !evaluated.value().is_finite() ||
         !std::isfinite(evaluated.value().value)) {
         return std::nullopt;
@@ -28,7 +30,7 @@ int main() {
         auto x3 = SymbolicExpr::power(x, SymbolicExpr::number(3));
         auto eq = SymbolicExpr::add(x3, SymbolicExpr::number(-2));
 
-        auto sols = lamina::solve_finite_checked(eq, "x").value();
+        auto sols = LMCAS::solve_finite_checked(eq, "x").value();
         EXPECT_TRUE(sols.size() == 3, "cubic x^3-2 should return 3 roots");
     }
 
@@ -38,7 +40,7 @@ int main() {
         auto x = SymbolicExpr::variable("x");
         auto eq = SymbolicExpr::add(x, SymbolicExpr::exp(x));
 
-        auto sols = lamina::solve_finite_checked(eq, "x").value();
+        auto sols = LMCAS::solve_finite_checked(eq, "x").value();
 
         EXPECT_TRUE(!sols.empty(), "x+exp(x)=0 should have a solution");
     }
@@ -52,7 +54,7 @@ int main() {
 
         std::vector<SymbolicExpr> eqs = {*eq};
         auto checked_solutions =
-            lamina::Solver::solve_polynomial_system_checked(eqs, {"x"});
+            LMCAS::Solver::solve_polynomial_system_checked(eqs, {"x"});
         EXPECT_TRUE(checked_solutions.has_value(),
                     "checked rational system solve succeeds");
         auto sols = checked_solutions
@@ -60,7 +62,7 @@ int main() {
             : std::vector<std::map<std::string, SymbolicExpr>>{};
         EXPECT_TRUE(sols.size() == 1, "rational system solutions size");
         if (!sols.empty()) {
-            auto x_val = lamina::detail::make_expression_ptr(sols[0].at("x"));
+            auto x_val = LMCAS::detail::make_expression_ptr(sols[0].at("x"));
             EXPECT_EQ_EXPR(x_val, SymbolicExpr::number(2), "rational system x=2");
         }
     }
@@ -74,7 +76,7 @@ int main() {
 
         auto eq = SymbolicExpr::add(SymbolicExpr::sin(x), x_to_x);
 
-        lamina::SolveOptions opts;
+        LMCAS::SolveOptions opts;
         opts.allow_numeric = false;
         opts.return_rootof = true;
 
@@ -92,12 +94,12 @@ int main() {
         auto x_to_x = SymbolicExpr::power(x, x);
         auto eq = SymbolicExpr::add(x_to_x, SymbolicExpr::number(-2));
 
-        lamina::SolveOptions opts_no_numeric;
+        LMCAS::SolveOptions opts_no_numeric;
         opts_no_numeric.allow_numeric = false;
         auto sols_no_numeric = solve_vector_for_test(eq, "x", opts_no_numeric);
         EXPECT_TRUE(sols_no_numeric.empty(), "allow_numeric=false -> no solutions for x^x-2");
 
-        lamina::SolveOptions opts_numeric;
+        LMCAS::SolveOptions opts_numeric;
         opts_numeric.allow_numeric = true;
         opts_numeric.has_initial_guess = true;
         opts_numeric.initial_guess = 1.5;
@@ -117,7 +119,7 @@ int main() {
             SymbolicExpr::add(x5, SymbolicExpr::multiply(x, SymbolicExpr::number(-1))),
             SymbolicExpr::number(-1));
 
-        lamina::SolveOptions opts_rootof;
+        LMCAS::SolveOptions opts_rootof;
         opts_rootof.return_rootof = true;
         opts_rootof.allow_numeric = false;
         auto sols_rootof = solve_vector_for_test(eq, "x", opts_rootof);
@@ -127,7 +129,7 @@ int main() {
             EXPECT_CONTAINS(sols_rootof[0]->to_string(), {"rootof"}, "return_rootof=true produces RootOf expressions");
         }
 
-        lamina::SolveOptions opts_no_rootof;
+        LMCAS::SolveOptions opts_no_rootof;
         opts_no_rootof.return_rootof = false;
         opts_no_rootof.allow_numeric = false;
         auto sols_no_rootof = solve_vector_for_test(eq, "x", opts_no_rootof);
@@ -149,7 +151,7 @@ int main() {
         auto rhs = SymbolicExpr::add(x, SymbolicExpr::number(5));
         auto eq = SymbolicExpr::eq(lhs, rhs);
 
-        lamina::SolveOptions opts;
+        LMCAS::SolveOptions opts;
         auto sols = solve_vector_for_test(eq, "x", opts);
         EXPECT_TRUE(sols.size() == 1, "f(x)=g(x) form produces one solution");
         if (!sols.empty()) {
@@ -166,7 +168,7 @@ int main() {
 
         auto five = SymbolicExpr::number(5);
 
-        lamina::SolveOptions opts;
+        LMCAS::SolveOptions opts;
         auto sols = solve_vector_for_test(five, "x", opts);
         EXPECT_TRUE(sols.empty(), "degree-0 non-zero constant -> empty result");
     }
@@ -178,7 +180,7 @@ int main() {
         auto zero = SymbolicExpr::number(0);
         auto eq = SymbolicExpr::eq(three, zero);
 
-        lamina::SolveOptions opts;
+        LMCAS::SolveOptions opts;
         auto sols = solve_vector_for_test(eq, "x", opts);
         EXPECT_TRUE(sols.empty(), "3=0 equation -> empty (no solution exists)");
     }
@@ -211,7 +213,7 @@ int main() {
 
             auto expanded = poly_expr->expand();
 
-            auto solutions = lamina::solve_finite_checked(expanded, "x").value();
+            auto solutions = LMCAS::solve_finite_checked(expanded, "x").value();
 
             if ((int)solutions.size() == degree) {
                 pass_count++;
@@ -257,7 +259,7 @@ int main() {
                 SymbolicExpr::number(b_val)
             );
 
-            auto sols = lamina::solve_finite_checked(expr, "x").value();
+            auto sols = LMCAS::solve_finite_checked(expr, "x").value();
 
             if (sols.size() != 1) {
                 std::ostringstream msg;
@@ -318,7 +320,7 @@ int main() {
                 )
             );
 
-            auto sols = lamina::solve_finite_checked(expr, "x").value();
+            auto sols = LMCAS::solve_finite_checked(expr, "x").value();
 
             size_t expected_count = (disc == 0) ? 1 : 2;
 

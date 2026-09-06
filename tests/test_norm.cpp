@@ -1,5 +1,7 @@
 #include "test_common.hpp"
 
+using namespace LMCAS;
+
 bool symbolic_equal_check(const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b) {
     auto diff = SymbolicExpr::add(a, SymbolicExpr::multiply(SymbolicExpr::number(-1), b))->expand();
 

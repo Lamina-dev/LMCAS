@@ -17,9 +17,10 @@
 #include "../include/newton_raphson.hpp"
 #include "../include/root_of_utils.hpp"
 
-using namespace lamina;
+namespace LMCAS {
+
 using SolveVectorResult =
-    lamina::Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
+    LMCAS::Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
 std::shared_ptr<SymbolicExpr> get_coeff(const Polynomial<SymbolicPolyCoeff>& p, int deg) {
     if (deg < 0 || deg > p.degree()) return SymbolicExpr::number(0);
@@ -29,7 +30,7 @@ std::shared_ptr<SymbolicExpr> get_coeff(const Polynomial<SymbolicPolyCoeff>& p, 
 
 static bool solve_contains_rootof_node(
     const std::shared_ptr<const SymbolicNode>& node) {
-    return lamina::detail::contains_node_type<RootOfNode>(node);
+    return LMCAS::detail::contains_node_type<RootOfNode>(node);
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_filter_rootof_results(
@@ -40,7 +41,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_filter_rootof_results(
     std::vector<std::shared_ptr<SymbolicExpr>> filtered;
     filtered.reserve(results.size());
     for (auto& result : results) {
-        if (!result || !solve_contains_rootof_node(lamina::detail::node(result))) {
+        if (!result || !solve_contains_rootof_node(LMCAS::detail::node(result))) {
             filtered.push_back(std::move(result));
         }
     }
@@ -110,7 +111,7 @@ static std::optional<SolutionSet> solve_direct_function_family(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable) {
     auto function = std::dynamic_pointer_cast<const FunctionNode>(
-        lamina::detail::node(expression));
+        LMCAS::detail::node(expression));
     if (!function || function->arguments().size() != 1) {
         return std::nullopt;
     }
@@ -149,13 +150,13 @@ static SolveVectorResult solve_finite_vector_core(
     ComputationContext& context,
     const SolveOptions& opts);
 
-lamina::SolveResult lamina::solve_equation(
+LMCAS::SolveResult solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     ComputationContext& context,
     const SolveOptions& opts) {
     constexpr const char* operation = "solve_equation";
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return SolveResult::failure(
             CasErrc::InvalidArgument, "equation expression cannot be null", operation);
     }
@@ -168,23 +169,23 @@ lamina::SolveResult lamina::solve_equation(
     if (!step) return SolveResult::failure(step.error());
 
     std::shared_ptr<SymbolicExpr> f_expr = expr;
-    if (auto relation = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(expr))) {
+    if (auto relation = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(expr))) {
         if (relation->op() != RelationalNode::Op::EQ) {
             return SolveResult::failure(
                 CasErrc::InvalidArgument,
                 "solve_equation accepts equations, not inequalities",
                 operation);
         }
-        auto left = lamina::detail::make_expression_ptr(relation->left());
-        auto right = lamina::detail::make_expression_ptr(relation->right());
+        auto left = LMCAS::detail::make_expression_ptr(relation->left());
+        auto right = LMCAS::detail::make_expression_ptr(relation->right());
         f_expr = SymbolicExpr::add(
             left, SymbolicExpr::multiply(SymbolicExpr::number(-1), right));
     }
 
     auto polynomial = recognize_rational_polynomial(*f_expr, var, context);
     if (!polynomial) return SolveResult::failure(polynomial.error());
-    if (lamina::detail::propagate_result(polynomial)) {
-        const auto& exact = *lamina::detail::propagate_result(polynomial);
+    if (polynomial.value()) {
+        const auto& exact = *polynomial.value();
         if (exact.is_zero()) {
             return SolveResult::success(SolutionSet{UniversalSolutions{}});
         }
@@ -219,7 +220,7 @@ lamina::SolveResult lamina::solve_equation(
         for (auto& root : roots) {
             auto root_step = context.consume_steps(1, operation);
             if (!root_step) return SolveResult::failure(root_step.error());
-            if (!root || !lamina::detail::node(root)) {
+            if (!root || !LMCAS::detail::node(root)) {
                 return SolveResult::failure(
                     CasErrc::InternalInvariant,
                     "polynomial solver produced a null root", operation);
@@ -227,8 +228,8 @@ lamina::SolveResult lamina::solve_equation(
             auto existing = std::find_if(
                 solutions.begin(), solutions.end(),
                 [&](const FiniteSolution& solution) {
-                    return lamina::detail::node(solution.value)->equals(
-                        *lamina::detail::node(root));
+                    return LMCAS::detail::node(solution.value)->equals(
+                        *LMCAS::detail::node(root));
                 });
             if (existing != solutions.end()) {
                 ++existing->multiplicity;
@@ -247,7 +248,7 @@ lamina::SolveResult lamina::solve_equation(
 
     auto finite = solve_finite_vector_core(f_expr, var, context, opts);
     if (!finite) return SolveResult::failure(finite.error());
-    if (lamina::detail::propagate_result(finite).empty()) {
+    if (finite.value().empty()) {
         return SolveResult::failure(
             CasErrc::Inconclusive,
             "expression is outside the supported finite exact solve domain",
@@ -255,15 +256,15 @@ lamina::SolveResult lamina::solve_equation(
     }
 
     std::vector<FiniteSolution> solutions;
-    solutions.reserve(lamina::detail::propagate_result(finite).size());
-    for (auto& value : lamina::detail::propagate_result(finite)) {
+    solutions.reserve(finite.value().size());
+    for (auto& value : finite.value()) {
         solutions.push_back(FiniteSolution{std::move(value), 1, {}});
     }
     return SolveResult::success(
         SolutionSet{FiniteSolutions{std::move(solutions)}});
 }
 
-lamina::SolveResult lamina::solve_equation(
+LMCAS::SolveResult solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts) {
@@ -277,7 +278,7 @@ static SolveVectorResult solve_finite_vector_core(
     ComputationContext& context,
     const SolveOptions& opts) {
     constexpr const char* operation = "solve_dispatch_vector";
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return SolveVectorResult::failure(CasErrc::InvalidArgument,
                                           "expression cannot be null",
                                           operation);
@@ -289,17 +290,17 @@ static SolveVectorResult solve_finite_vector_core(
     }
 
     auto simplified = expr->simplify();
-    if (!simplified || !lamina::detail::node(simplified)) {
+    if (!simplified || !LMCAS::detail::node(simplified)) {
         return SolveVectorResult::failure(CasErrc::InvalidArgument,
                                           "expression simplification failed",
                                           operation);
     }
 
     std::shared_ptr<SymbolicExpr> f_expr = simplified;
-    if (auto rel = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(simplified))) {
+    if (auto rel = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(simplified))) {
         if (rel->op() == RelationalNode::Op::EQ) {
-            auto left = lamina::detail::make_expression_ptr(rel->left());
-            auto right = lamina::detail::make_expression_ptr(rel->right());
+            auto left = LMCAS::detail::make_expression_ptr(rel->left());
+            auto right = LMCAS::detail::make_expression_ptr(rel->right());
             f_expr = SymbolicExpr::add(
                 left, SymbolicExpr::multiply(right, SymbolicExpr::number(-1)));
         }
@@ -338,15 +339,15 @@ static SolveVectorResult solve_finite_vector_core(
                 if (!mixed) {
                     return SolveVectorResult::failure(mixed.error());
                 }
-                if (lamina::detail::propagate_result(mixed).completeness == Completeness::Complete) {
+                if (mixed.value().completeness == Completeness::Complete) {
                     return SolveVectorResult::success(
-                        std::move(lamina::detail::propagate_result(mixed).value));
+                        std::move(mixed.value().value));
                 }
                 return SolveVectorResult::failure(
                     CasErrc::Inconclusive,
-                    lamina::detail::propagate_result(mixed).reason.empty()
+                    mixed.value().reason.empty()
                         ? "mixed transcendental search is incomplete"
-                        : lamina::detail::propagate_result(mixed).reason,
+                        : mixed.value().reason,
                     operation);
             }
             return SolveVectorResult::failure(
@@ -359,10 +360,10 @@ static SolveVectorResult solve_finite_vector_core(
     if (opts.allow_numeric) {
         auto numeric_roots = solve_numeric_checked(f_expr, var, context, opts);
         if (!numeric_roots) return SolveVectorResult::failure(numeric_roots.error());
-        if (!lamina::detail::propagate_result(numeric_roots).empty()) {
+        if (!numeric_roots.value().empty()) {
             std::vector<std::shared_ptr<SymbolicExpr>> results;
-            results.reserve(lamina::detail::propagate_result(numeric_roots).size());
-            for (const auto& root : lamina::detail::propagate_result(numeric_roots)) {
+            results.reserve(numeric_roots.value().size());
+            for (const auto& root : numeric_roots.value()) {
                 results.push_back(SymbolicExpr::number(root.value));
             }
             return SolveVectorResult::success(std::move(results));
@@ -372,7 +373,7 @@ static SolveVectorResult solve_finite_vector_core(
     return SolveVectorResult::success({});
 }
 
-lamina::FiniteSolveResult lamina::solve_finite_checked(
+LMCAS::FiniteSolveResult solve_finite_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     ComputationContext& context,
@@ -380,8 +381,7 @@ lamina::FiniteSolveResult lamina::solve_finite_checked(
     constexpr const char* operation = "solve_finite_projection";
     auto solved = solve_equation(expr, var, context, opts);
     if (!solved) return SolveVectorResult::failure(solved.error());
-    auto solution_set =
-        lamina::detail::propagate_result(std::move(solved));
+    auto solution_set = std::move(solved.value());
     if (std::holds_alternative<EmptySolutions>(solution_set)) {
         return SolveVectorResult::success({});
     }
@@ -405,7 +405,7 @@ lamina::FiniteSolveResult lamina::solve_finite_checked(
     return SolveVectorResult::success(std::move(values));
 }
 
-lamina::FiniteSolveResult lamina::solve_finite_checked(
+LMCAS::FiniteSolveResult solve_finite_checked(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable,
     const SolveOptions& options) {
@@ -426,19 +426,19 @@ SymbolicExpr::solve_system(
         if (!equation) return {};
         if (auto relation =
                 std::dynamic_pointer_cast<const RelationalNode>(
-                    lamina::detail::node(equation))) {
+                    LMCAS::detail::node(equation))) {
             if (relation->op() != RelationalNode::Op::EQ) return {};
             auto normalized = SymbolicExpr::add(
-                lamina::detail::make_expression_ptr(relation->left()),
+                LMCAS::detail::make_expression_ptr(relation->left()),
                 SymbolicExpr::multiply(
                     SymbolicExpr::number(-1),
-                    lamina::detail::make_expression_ptr(relation->right())));
+                    LMCAS::detail::make_expression_ptr(relation->right())));
             values.push_back(*normalized->simplify());
         } else {
             values.push_back(*equation);
         }
     }
-    auto solved = lamina::Solver::solve_linear_system(values, vars);
+    auto solved = LMCAS::Solver::solve_linear_system(values, vars);
     if (solved.empty()) return {};
     std::map<std::string, std::shared_ptr<SymbolicExpr>> projected;
     for (auto& [variable, value] : solved) {
@@ -458,7 +458,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> SymbolicExpr::
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::transpose(const std::shared_ptr<SymbolicExpr>& mat) {
     if (!mat) return mat;
-    auto m_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    auto m_node = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     if (!m_node) return mat;
     size_t r = m_node->rows();
     size_t c = m_node->cols();
@@ -467,9 +467,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::transpose(const std::shared_ptr<Symb
 
     for(size_t i=0; i<r; ++i) {
         for(size_t j=0; j<c; ++j) {
-            new_data[j][i] = lamina::detail::make_expression_ptr(m_node->get(i,j));
+            new_data[j][i] = LMCAS::detail::make_expression_ptr(m_node->get(i,j));
         }
     }
 
     return SymbolicExpr::matrix(new_data);
 }
+
+} // namespace LMCAS

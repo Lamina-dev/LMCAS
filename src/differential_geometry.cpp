@@ -11,7 +11,7 @@
 #include <map>
 #include <numeric>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -23,13 +23,13 @@ Result<std::shared_ptr<const MatrixNode>> validate_metric_matrix(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return Result<std::shared_ptr<const MatrixNode>>::failure(step.error());
-    if (!metric || !lamina::detail::node(metric)) {
+    if (!metric || !LMCAS::detail::node(metric)) {
         return Result<std::shared_ptr<const MatrixNode>>::failure(
             CasErrc::InvalidArgument,
             "metric tensor cannot be null",
             operation);
     }
-    auto matrix = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(metric));
+    auto matrix = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(metric));
     if (!matrix) {
         return Result<std::shared_ptr<const MatrixNode>>::failure(
             CasErrc::InvalidArgument,
@@ -103,7 +103,7 @@ Result<void> validate_expr_vector(const std::vector<std::shared_ptr<SymbolicExpr
         }
     }
     for (const auto& value : values) {
-        if (!value || !lamina::detail::node(value)) {
+        if (!value || !LMCAS::detail::node(value)) {
             return Result<void>::failure(CasErrc::InvalidArgument,
                                          value_name + " components cannot be null",
                                          operation);
@@ -250,7 +250,7 @@ DifferentialGeometryExprResult christoffel_first_kind_checked(
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
         auto result = christoffel_first_kind_impl(g_ij, coords, k, i, j);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
                 "Christoffel symbol could not be constructed",
@@ -282,12 +282,12 @@ static std::shared_ptr<SymbolicExpr> christoffel_first_kind_impl(
     const std::vector<std::string>& coords,
     int k, int i, int j) {
     
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(g_ij));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(g_ij));
     if (!mat) return SymbolicExpr::number(0);
     
-    auto g_jk = lamina::detail::make_expression_ptr(mat->get(j, k));
-    auto g_ik = lamina::detail::make_expression_ptr(mat->get(i, k));
-    auto g_ij_comp = lamina::detail::make_expression_ptr(mat->get(i, j));
+    auto g_jk = LMCAS::detail::make_expression_ptr(mat->get(j, k));
+    auto g_ik = LMCAS::detail::make_expression_ptr(mat->get(i, k));
+    auto g_ij_comp = LMCAS::detail::make_expression_ptr(mat->get(i, j));
     
     auto term1 = g_jk->differentiate(coords[i]);
     auto term2 = g_ik->differentiate(coords[j]);
@@ -324,7 +324,7 @@ DifferentialGeometryExprResult christoffel_second_kind_checked(
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
         auto result = christoffel_second_kind_impl(g_ij, g_up_ij, coords, k, i, j);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
                 "Christoffel symbol could not be constructed",
@@ -358,14 +358,14 @@ static std::shared_ptr<SymbolicExpr> christoffel_second_kind_impl(
     const std::vector<std::string>& coords,
     int k, int i, int j) {
     
-    auto mat_up = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(g_up_ij));
+    auto mat_up = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(g_up_ij));
     if (!mat_up) return SymbolicExpr::number(0);
     
     size_t dim = coords.size();
     auto result = SymbolicExpr::number(0);
     
     for (size_t m = 0; m < dim; m++) {
-        auto g_up_km = lamina::detail::make_expression_ptr(mat_up->get(k, m));
+        auto g_up_km = LMCAS::detail::make_expression_ptr(mat_up->get(k, m));
         auto gamma_first = christoffel_first_kind_impl(g_ij, coords, m, i, j);
         auto term = SymbolicExpr::multiply(g_up_km, gamma_first);
         result = SymbolicExpr::add(result, term);
@@ -438,7 +438,7 @@ DifferentialGeometryExprResult riemann_curvature_tensor_checked(
         }
         auto result = riemann_curvature_tensor_with_inverse(
             g_ij, inverse_metric.value(), coords, rho, sigma, mu, nu);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
                 "Riemann curvature component could not be constructed",
@@ -476,7 +476,7 @@ DifferentialGeometryExprResult lie_derivative_checked(
     const std::string operation = "lie_derivative";
     auto step = context.consume_steps(1, operation);
     if (!step) return DifferentialGeometryExprResult::failure(step.error());
-    if (!f || !lamina::detail::node(f)) {
+    if (!f || !LMCAS::detail::node(f)) {
         return DifferentialGeometryExprResult::failure(CasErrc::InvalidArgument,
                                                        "scalar function cannot be null",
                                                        operation);
@@ -493,7 +493,7 @@ DifferentialGeometryExprResult lie_derivative_checked(
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
         auto result = lie_derivative_impl(f, X, vars, order);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return DifferentialGeometryExprResult::failure(
                 CasErrc::Inconclusive,
                 "Lie derivative could not be constructed",
@@ -584,7 +584,7 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
                                                          operation);
     }
     for (const auto& coeff : form_coeffs) {
-        if (!coeff || !lamina::detail::node(coeff)) {
+        if (!coeff || !LMCAS::detail::node(coeff)) {
             return DifferentialGeometryVectorResult::failure(CasErrc::InvalidArgument,
                                                              "form coefficients cannot be null",
                                                              operation);
@@ -633,7 +633,7 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
                 }
                 auto partial = form_coeffs[source->second]->differentiate(
                     vars[derivative_variable]);
-                if (!partial || !lamina::detail::node(partial)) {
+                if (!partial || !LMCAS::detail::node(partial)) {
                     return DifferentialGeometryVectorResult::failure(
                         CasErrc::InternalInvariant,
                         "exterior derivative produced a null partial derivative",
@@ -645,7 +645,7 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
                 component = SymbolicExpr::add(component, partial);
             }
             component = component->simplify();
-            if (!component || !lamina::detail::node(component)) {
+            if (!component || !LMCAS::detail::node(component)) {
                 return DifferentialGeometryVectorResult::failure(
                     CasErrc::InternalInvariant,
                     "exterior derivative produced a null component",
@@ -675,4 +675,4 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 
-using lamina::Integrator;
+using namespace LMCAS;
+
+using LMCAS::Integrator;
 
 namespace {
 
@@ -92,9 +94,9 @@ PairReport verify_pair(int m, int n) {
         rep.detail = std::string("integration failed: ") + integrated.error().message;
         return rep;
     }
-    auto result = lamina::detail::make_expression_ptr(integrated.value());
+    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
 
-    if (has_integral_node(lamina::detail::node(result))) {
+    if (has_integral_node(LMCAS::detail::node(result))) {
         rep.failed = true;
         rep.detail = "integrator returned unevaluated integral: " + result->to_string();
         return rep;

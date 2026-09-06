@@ -2,6 +2,8 @@
 
 #include "value.hpp"
 
+using namespace LMCAS;
+
 int main() {
     TEST_CASE("Prove: log_b(x) = ln(x)/ln(b)");
 

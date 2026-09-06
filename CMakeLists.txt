@@ -192,10 +192,12 @@ set(LMCAS_ANALYSIS_SOURCES
     src/ode_classification.cpp
     src/ode_first_order.cpp
     src/ode_linear.cpp
+    src/ode_characteristic_roots.cpp
     src/ode_advanced.cpp
     src/symbolic_geometry.cpp
     src/symbolic_implicit_diff.cpp
     src/symbolic_vector_geometry.cpp
+    src/symbolic_quadric_classification.cpp
     src/symbolic_complex.cpp
     src/vector_calculus_support.cpp
     src/vector_calculus_differential.cpp
@@ -217,17 +219,17 @@ set(LMCAS_LINEAR_ALGEBRA_SOURCES
 )
 
 set(LMCAS_FACADE_SOURCES
-    src/lsr_expr_complex_evaluation.cpp
-    src/lsr_expr_equivalence.cpp
-    src/lsr_expr_errors.cpp
-    src/lsr_expr_parsing.cpp
-    src/lsr_expr_sets.cpp
-    src/lsr_expr_solving.cpp
-    src/lsr_expr_facade.cpp
-    src/lsr_expr_arithmetic.cpp
-    src/lsr_expr_transform.cpp
-    src/lsr_expr_values.cpp
-    src/lsr_value_facade.cpp
+    src/expr_complex_evaluation.cpp
+    src/expr_equivalence.cpp
+    src/expr_errors.cpp
+    src/expr_parsing.cpp
+    src/expr_sets.cpp
+    src/expr_solving.cpp
+    src/expr_facade.cpp
+    src/expr_arithmetic.cpp
+    src/expr_transform.cpp
+    src/expr_values.cpp
+    src/value_facade.cpp
 )
 
 set(LMCAS_COMPONENT_TARGETS
@@ -248,6 +250,67 @@ add_library(lmcas_linear_algebra OBJECT ${LMCAS_LINEAR_ALGEBRA_SOURCES})
 add_library(lmcas_analysis OBJECT ${LMCAS_ANALYSIS_SOURCES})
 add_library(lmcas_facade OBJECT ${LMCAS_FACADE_SOURCES})
 
+# Component dependencies are intentionally acyclic and point from higher
+# layers to lower layers. Keep the final shared library as the only packaged
+# C++ target; object components are build boundaries, not public libraries.
+set_property(TARGET lmcas_core PROPERTY LMCAS_LAYER_RANK 0)
+set_property(TARGET lmcas_assumptions PROPERTY LMCAS_LAYER_RANK 1)
+set_property(TARGET lmcas_algebra PROPERTY LMCAS_LAYER_RANK 2)
+set_property(TARGET lmcas_linear_algebra PROPERTY LMCAS_LAYER_RANK 3)
+set_property(TARGET lmcas_calculus PROPERTY LMCAS_LAYER_RANK 3)
+set_property(TARGET lmcas_analysis PROPERTY LMCAS_LAYER_RANK 4)
+set_property(TARGET lmcas_facade PROPERTY LMCAS_LAYER_RANK 5)
+
+function(lmcas_component_depends component)
+    get_target_property(_component_rank ${component} LMCAS_LAYER_RANK)
+    foreach(dependency IN LISTS ARGN)
+        get_target_property(_dependency_rank ${dependency} LMCAS_LAYER_RANK)
+        if(_dependency_rank GREATER_EQUAL _component_rank)
+            message(FATAL_ERROR
+                "${component} cannot depend on same/higher layer ${dependency}")
+        endif()
+        target_link_libraries(${component} PRIVATE ${dependency})
+    endforeach()
+endfunction()
+
+lmcas_component_depends(lmcas_assumptions lmcas_core)
+lmcas_component_depends(lmcas_algebra lmcas_core lmcas_assumptions)
+lmcas_component_depends(lmcas_linear_algebra lmcas_core lmcas_algebra)
+lmcas_component_depends(lmcas_calculus
+    lmcas_core lmcas_assumptions lmcas_algebra)
+lmcas_component_depends(lmcas_analysis
+    lmcas_core lmcas_assumptions lmcas_algebra
+    lmcas_linear_algebra lmcas_calculus)
+lmcas_component_depends(lmcas_facade
+    lmcas_core lmcas_assumptions lmcas_algebra
+    lmcas_linear_algebra lmcas_calculus lmcas_analysis)
+
+# Every production translation unit belongs to exactly one component.
+set(_lmcas_component_sources
+    ${LMCAS_CORE_SOURCES}
+    ${LMCAS_ASSUMPTION_SOURCES}
+    ${LMCAS_ALGEBRA_SOURCES}
+    ${LMCAS_CALCULUS_SOURCES}
+    ${LMCAS_LINEAR_ALGEBRA_SOURCES}
+    ${LMCAS_ANALYSIS_SOURCES}
+    ${LMCAS_FACADE_SOURCES}
+)
+list(LENGTH _lmcas_component_sources _lmcas_component_source_count)
+list(REMOVE_DUPLICATES _lmcas_component_sources)
+list(LENGTH _lmcas_component_sources _lmcas_unique_source_count)
+if(NOT _lmcas_component_source_count EQUAL _lmcas_unique_source_count)
+    message(FATAL_ERROR
+        "A production source is assigned to more than one LMCAS component")
+endif()
+file(GLOB _lmcas_discovered_sources RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+list(SORT _lmcas_component_sources)
+list(SORT _lmcas_discovered_sources)
+if(NOT _lmcas_component_sources STREQUAL _lmcas_discovered_sources)
+    message(FATAL_ERROR
+        "Component source lists must cover every src/*.cpp file exactly once")
+endif()
+
 add_library(lmcas SHARED)
 foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
     target_sources(lmcas PRIVATE $<TARGET_OBJECTS:${component}>)
@@ -256,14 +319,14 @@ endforeach()
 
 set_target_properties(lmcas PROPERTIES
     VERSION ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR}
+    SOVERSION ${PROJECT_VERSION}
     CXX_EXTENSIONS OFF
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN YES
 )
 
 foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
-    target_compile_definitions(${component} PRIVATE LAMINA_CORE_EXPORTS)
+    target_compile_definitions(${component} PRIVATE LMCAS_EXPORTS)
     target_include_directories(${component} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/LMMC/include
@@ -278,7 +341,7 @@ foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
     )
 endforeach()
 
-target_compile_definitions(lmcas PRIVATE LAMINA_CORE_EXPORTS)
+target_compile_definitions(lmcas PRIVATE LMCAS_EXPORTS)
 
 set(_lmcas_warning_options
     $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wall>
@@ -425,7 +488,7 @@ configure_package_config_file(
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/LMCASConfigVersion.cmake
     VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
+    COMPATIBILITY ExactVersion
 )
 
 install(FILES

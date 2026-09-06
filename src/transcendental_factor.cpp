@@ -18,7 +18,7 @@
 #include <cmath>
 #include <limits>
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -193,9 +193,9 @@ static std::shared_ptr<const SymbolicNode> tf_substitute_expr(
 
     /// 按映射顺序检查当前节点是否匹配某个超越子表达式
     for (const auto& m : mappings) {
-        if (m.trans_expr && lamina::detail::node(m.trans_expr) &&
-            node->equals(*lamina::detail::node(m.trans_expr))) {
-            return lamina::detail::make_node<VariableNode>(m.indeterminate);
+        if (m.trans_expr && LMCAS::detail::node(m.trans_expr) &&
+            node->equals(*LMCAS::detail::node(m.trans_expr))) {
+            return LMCAS::detail::make_node<VariableNode>(m.indeterminate);
         }
     }
 
@@ -206,7 +206,7 @@ static std::shared_ptr<const SymbolicNode> tf_substitute_expr(
         for (const auto& arg : func->arguments()) {
             new_args.push_back(tf_substitute_expr(arg, mappings));
         }
-        return lamina::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
+        return LMCAS::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -215,7 +215,7 @@ static std::shared_ptr<const SymbolicNode> tf_substitute_expr(
         for (const auto& op : add->operands()) {
             new_ops.push_back(tf_substitute_expr(op, mappings));
         }
-        return lamina::detail::make_node<AddNode>(std::move(new_ops));
+        return LMCAS::detail::make_node<AddNode>(std::move(new_ops));
     }
 
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
@@ -224,13 +224,13 @@ static std::shared_ptr<const SymbolicNode> tf_substitute_expr(
         for (const auto& op : mul->operands()) {
             new_ops.push_back(tf_substitute_expr(op, mappings));
         }
-        return lamina::detail::make_node<MultiplyNode>(std::move(new_ops));
+        return LMCAS::detail::make_node<MultiplyNode>(std::move(new_ops));
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto new_base = tf_substitute_expr(pow->base(), mappings);
         auto new_exp = tf_substitute_expr(pow->exponent(), mappings);
-        return lamina::detail::make_node<PowerNode>(std::move(new_base), std::move(new_exp));
+        return LMCAS::detail::make_node<PowerNode>(std::move(new_base), std::move(new_exp));
     }
 
     /// 叶节点(NumberNode,VariableNode)直接返回
@@ -254,12 +254,12 @@ static void tf_detect_constraints(TransSubstitutionResult& result) {
     size_t n = mappings.size();
 
     for (size_t i = 0; i < n; ++i) {
-        auto node_i = lamina::detail::node(mappings[i].trans_expr);
+        auto node_i = LMCAS::detail::node(mappings[i].trans_expr);
         auto func_i = std::dynamic_pointer_cast<const FunctionNode>(node_i);
         if (!func_i || func_i->arguments().size() != 1) continue;
 
         for (size_t j = i + 1; j < n; ++j) {
-            auto node_j = lamina::detail::node(mappings[j].trans_expr);
+            auto node_j = LMCAS::detail::node(mappings[j].trans_expr);
             auto func_j = std::dynamic_pointer_cast<const FunctionNode>(node_j);
             if (!func_j || func_j->arguments().size() != 1) continue;
 
@@ -332,13 +332,13 @@ TransSubstitutionResult detect_trans_substitutions(
     TransSubstitutionResult result;
     result.poly_expr = nullptr;
 
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return result;
     }
 
     /// 收集所有依赖 var 的超越子表达式
     std::vector<std::shared_ptr<const SymbolicNode>> candidates;
-    tf_collect_transcendental(lamina::detail::node(expr), var, candidates);
+    tf_collect_transcendental(LMCAS::detail::node(expr), var, candidates);
 
     /// 结构去重
     tf_deduplicate(candidates);
@@ -346,7 +346,7 @@ TransSubstitutionResult detect_trans_substitutions(
     /// 为每个唯一的超越子表达式分配不定元
     for (size_t i = 0; i < candidates.size(); ++i) {
         TransSubstitution mapping;
-        mapping.trans_expr = lamina::detail::make_expression_ptr(candidates[i]);
+        mapping.trans_expr = LMCAS::detail::make_expression_ptr(candidates[i]);
         mapping.indeterminate = "u" + std::to_string(i);
         result.mappings.push_back(std::move(mapping));
     }
@@ -356,8 +356,8 @@ TransSubstitutionResult detect_trans_substitutions(
 
     /// 执行替换:将超越子表达式替换为对应不定元变量
     if (!result.mappings.empty()) {
-        auto substituted = tf_substitute_expr(lamina::detail::node(expr), result.mappings);
-        result.poly_expr = lamina::detail::make_expression_ptr(substituted);
+        auto substituted = tf_substitute_expr(LMCAS::detail::node(expr), result.mappings);
+        result.poly_expr = LMCAS::detail::make_expression_ptr(substituted);
     } else {
         /// 无超越子表达式时,poly_expr 即为原表达式
         result.poly_expr = expr;
@@ -459,12 +459,12 @@ static bool tf_validate_polynomial(
     const std::shared_ptr<SymbolicExpr>& poly_expr,
     const std::vector<std::string>& all_variables) {
 
-    if (!poly_expr || !lamina::detail::node(poly_expr)) return false;
+    if (!poly_expr || !LMCAS::detail::node(poly_expr)) return false;
 
     /// 对每个变量检查次数是否可确定
     for (const auto& var : all_variables) {
-        if (expression_depends_on_variable(lamina::detail::node(poly_expr), var)) {
-            int deg = tf_degree_in(lamina::detail::node(poly_expr), var);
+        if (expression_depends_on_variable(LMCAS::detail::node(poly_expr), var)) {
+            int deg = tf_degree_in(LMCAS::detail::node(poly_expr), var);
             if (deg < 0) return false;
         }
     }
@@ -492,7 +492,7 @@ TfPolyBuildResult tf_build_polynomial(
     TfPolyBuildResult result;
     result.success = false;
 
-    if (!poly_expr || !lamina::detail::node(poly_expr)) {
+    if (!poly_expr || !LMCAS::detail::node(poly_expr)) {
         return result;
     }
 
@@ -500,11 +500,11 @@ TfPolyBuildResult tf_build_polynomial(
     {
         std::vector<std::string> pre_vars;
         for (const auto& ind : indeterminates) {
-            if (expression_depends_on_variable(lamina::detail::node(poly_expr), ind)) {
+            if (expression_depends_on_variable(LMCAS::detail::node(poly_expr), ind)) {
                 pre_vars.push_back(ind);
             }
         }
-        if (expression_depends_on_variable(lamina::detail::node(poly_expr), original_var)) {
+        if (expression_depends_on_variable(LMCAS::detail::node(poly_expr), original_var)) {
             pre_vars.push_back(original_var);
         }
         if (!pre_vars.empty() && !tf_validate_polynomial(poly_expr, pre_vars)) {
@@ -514,18 +514,18 @@ TfPolyBuildResult tf_build_polynomial(
 
     /// 展开表达式以确保多项式结构可见
     auto expanded = poly_expr->expand();
-    if (!expanded || !lamina::detail::node(expanded)) {
+    if (!expanded || !LMCAS::detail::node(expanded)) {
         expanded = poly_expr;
     }
 
     /// 收集所有候选变量:不定元 + 原始变量(若表达式仍依赖它)
     std::vector<std::string> all_variables;
     for (const auto& ind : indeterminates) {
-        if (expression_depends_on_variable(lamina::detail::node(expanded), ind)) {
+        if (expression_depends_on_variable(LMCAS::detail::node(expanded), ind)) {
             all_variables.push_back(ind);
         }
     }
-    if (expression_depends_on_variable(lamina::detail::node(expanded), original_var)) {
+    if (expression_depends_on_variable(LMCAS::detail::node(expanded), original_var)) {
         all_variables.push_back(original_var);
     }
 
@@ -548,7 +548,7 @@ TfPolyBuildResult tf_build_polynomial(
     int max_degree = -1;
 
     for (const auto& var : all_variables) {
-        int deg = tf_degree_in(lamina::detail::node(expanded), var);
+        int deg = tf_degree_in(LMCAS::detail::node(expanded), var);
         if (deg > max_degree) {
             max_degree = deg;
             main_var = var;
@@ -604,7 +604,7 @@ TfPolyBuildResult tf_build_polynomial(
     for (const auto& var : all_variables) {
         if (var == main_var) continue;
 
-        int deg = tf_degree_in(lamina::detail::node(expanded), var);
+        int deg = tf_degree_in(LMCAS::detail::node(expanded), var);
         auto trial_poly = symbolic_to_poly<Rational>(expanded, var);
         if (trial_poly.degree() == deg && deg > 0) {
             result.main_variable = var;
@@ -705,7 +705,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !lamina::detail::node(expr)) return {};
+    if (!expr || !LMCAS::detail::node(expr)) return {};
 
     /// --- 预处理:毕达哥拉斯恒等式化简 ---
     /// 将 sin^2(f) + cos^2(f) 子模式替换为 1,简化后续分解
@@ -726,7 +726,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     }
 
     /// 若表达式不含超越函数,直接返回原表达式
-    if (!tf_contains_transcendental(lamina::detail::node(pyth_simplified), var)) {
+    if (!tf_contains_transcendental(LMCAS::detail::node(pyth_simplified), var)) {
         return {pyth_simplified};
     }
 
@@ -914,4 +914,4 @@ std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     return final_factors;
 }
 
-} // namespace lamina
+} // namespace LMCAS

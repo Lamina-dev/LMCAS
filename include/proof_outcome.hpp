@@ -3,9 +3,11 @@
 #include <memory>
 #include <variant>
 
+namespace LMCAS {
+
 class SymbolicExpr;
 
-namespace lamina {
+
 
 using ProofExprPtr = std::shared_ptr<SymbolicExpr>;
 
@@ -32,4 +34,4 @@ struct Verified {
     ProofCertificate certificate;
 };
 
-} // namespace lamina
+} // namespace LMCAS

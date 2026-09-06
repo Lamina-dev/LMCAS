@@ -8,28 +8,28 @@
 #include <string>
 #include <random>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a VariableNode
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 /// Create a NumberNode from an integer
 static std::shared_ptr<const SymbolicNode> make_num(int v) {
-    return lamina::detail::make_node<NumberNode>(BigInt(v));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(v));
 }
 
 /// Create a NumberNode from a double
 static std::shared_ptr<const SymbolicNode> make_num_d(double v) {
-    return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v));
+    return LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v));
 }
 
 /// Create a PowerNode expression
 static SymbolicExpr make_power_expr(std::shared_ptr<const SymbolicNode> base,
                                     std::shared_ptr<const SymbolicNode> exponent) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<PowerNode>(std::move(base), std::move(exponent)));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<PowerNode>(std::move(base), std::move(exponent)));
     return expr;
 }
 

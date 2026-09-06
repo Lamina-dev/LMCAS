@@ -3,7 +3,7 @@
 #include "transcendental_factor.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 bool tf_is_transcendental_type(FunctionNode::FuncType function_type);
 int tf_degree_in(
@@ -27,4 +27,4 @@ std::shared_ptr<SymbolicExpr> tf_simplify_pythagorean(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable);
 
-} // namespace lamina
+} // namespace LMCAS

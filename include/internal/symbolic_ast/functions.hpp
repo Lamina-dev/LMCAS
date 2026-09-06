@@ -2,6 +2,8 @@
 #pragma once
 #include "arithmetic.hpp"
 
+namespace LMCAS {
+
 /**
  * @brief 函数节点，表示数学函数调用（三角函数、对数、特殊函数等）。
  */
@@ -36,7 +38,7 @@ public:
     };
 
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const FuncType type_;
     const std::vector<std::shared_ptr<const SymbolicNode>> arguments_;
@@ -85,18 +87,18 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
     std::shared_ptr<const SymbolicNode> clone() const override {
         std::vector<std::shared_ptr<const SymbolicNode>> new_args;
         for (const auto& arg : arguments_) new_args.push_back(arg->clone());
-        return lamina::detail::make_node<FunctionNode>(type_, std::move(new_args));
+        return LMCAS::detail::make_node<FunctionNode>(type_, std::move(new_args));
     }
 };
 
 /** A symbolic call whose function name has no built-in semantics. */
 class UninterpretedFunctionNode : public SymbolicNode {
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
     const std::string name_;
     const std::vector<std::shared_ptr<const SymbolicNode>> arguments_;
 
@@ -141,8 +143,8 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override {
-        lamina::detail::SymbolicVisitor::DepthGuard guard(visitor);
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override {
+        LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor);
         visitor.visit(*this);
     }
 
@@ -150,12 +152,17 @@ public:
         std::vector<std::shared_ptr<const SymbolicNode>> arguments;
         arguments.reserve(arguments_.size());
         for (const auto& argument : arguments_) arguments.push_back(argument->clone());
-        return lamina::detail::make_node<UninterpretedFunctionNode>(
+        return LMCAS::detail::make_node<UninterpretedFunctionNode>(
             name_, std::move(arguments));
     }
 };
 
+} // namespace LMCAS
+
+
 #include <map>
+
+namespace LMCAS {
 
 /**
  * @brief 矩阵节点，支持稠密和稀疏两种存储方式。
@@ -247,7 +254,7 @@ public:
         const std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>& grid, size_t total_elements, size_t ncols);
 
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const size_t rows_;
     const size_t cols_;
@@ -326,7 +333,7 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
     std::shared_ptr<const SymbolicNode> clone() const override {
         if (std::holds_alternative<DenseStorage>(storage_)) {
@@ -336,14 +343,14 @@ public:
             for (const auto& e : dense) {
                 new_dense.push_back(e->clone());
             }
-            return lamina::detail::make_node<MatrixNode>(rows_, cols_, std::move(new_dense));
+            return LMCAS::detail::make_node<MatrixNode>(rows_, cols_, std::move(new_dense));
         } else {
             const auto& sparse = std::get<SparseStorage>(storage_);
             SparseStorage new_sparse;
             for(const auto& [idx, node] : sparse) {
                 new_sparse[idx] = node->clone();
             }
-            return lamina::detail::make_node<MatrixNode>(rows_, cols_, std::move(new_sparse));
+            return LMCAS::detail::make_node<MatrixNode>(rows_, cols_, std::move(new_sparse));
         }
     }
 
@@ -364,7 +371,7 @@ public:
             auto it = sparse.find(idx);
             if (it != sparse.end()) return it->second;
             static const std::shared_ptr<const SymbolicNode> zero =
-                lamina::detail::make_node<NumberNode>(BigInt(0));
+                LMCAS::detail::make_node<NumberNode>(BigInt(0));
             return zero;
         }
     }
@@ -375,6 +382,26 @@ public:
 private:
 
 };
+
+inline bool MultiplyNode::contains_matrix(const SymbolicNode& node) {
+    if (dynamic_cast<const MatrixNode*>(&node)) return true;
+    if (const auto* power = dynamic_cast<const PowerNode*>(&node)) {
+        return contains_matrix(*power->base());
+    }
+    const std::vector<std::shared_ptr<const SymbolicNode>>* children = nullptr;
+    if (const auto* sum = dynamic_cast<const AddNode*>(&node)) {
+        children = &sum->operands();
+    } else if (const auto* product = dynamic_cast<const MultiplyNode*>(&node)) {
+        children = &product->operands();
+    } else if (const auto* function = dynamic_cast<const FunctionNode*>(&node)) {
+        children = &function->arguments();
+    } else if (const auto* function = dynamic_cast<const UninterpretedFunctionNode*>(&node)) {
+        children = &function->arguments();
+    }
+    return children && std::any_of(
+        children->begin(), children->end(),
+        [](const auto& child) { return contains_matrix(*child); });
+}
 
 inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixNode::create_storage_from_grid(
     const std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>& grid, size_t total_elements, size_t ncols) {
@@ -411,3 +438,5 @@ inline std::variant<MatrixNode::DenseStorage, MatrixNode::SparseStorage> MatrixN
         return d;
     }
 }
+
+} // namespace LMCAS

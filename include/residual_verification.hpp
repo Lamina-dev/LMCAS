@@ -1,14 +1,14 @@
 #pragma once
 
 #include "computation_context.hpp"
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include "proof_outcome.hpp"
 #include "result.hpp"
 #include "symbolic.hpp"
 
 #include <variant>
 
-namespace lamina {
+namespace LMCAS {
 
 struct ProvedZeroResidual {
     ProofCertificate certificate;
@@ -29,15 +29,15 @@ using ResidualCheck = std::variant<
 
 using ResidualCheckResult = Result<ResidualCheck>;
 
-LAMINA_API ResidualCheckResult check_zero_residual(
+LMCAS_API ResidualCheckResult check_zero_residual(
     const ExprPtr& residual,
     ComputationContext& context,
-    const lsr::EqvOptions& options = {});
+    const LMCAS::EqvOptions& options = {});
 
-LAMINA_API ResidualCheckResult check_equivalent(
+LMCAS_API ResidualCheckResult check_equivalent(
     const ExprPtr& left,
     const ExprPtr& right,
     ComputationContext& context,
-    const lsr::EqvOptions& options = {});
+    const LMCAS::EqvOptions& options = {});
 
-} // namespace lamina
+} // namespace LMCAS

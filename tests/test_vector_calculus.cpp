@@ -11,7 +11,7 @@
 #include <vector>
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static void test_gradient_basic()
 {
@@ -406,25 +406,25 @@ static void test_div_curl_is_zero()
 static std::shared_ptr<SymbolicExpr> get_mat_entry(
     const std::shared_ptr<SymbolicExpr>& mat, size_t r, size_t c)
 {
-    if (!mat || !lamina::detail::node(mat)) return nullptr;
-    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat || !LMCAS::detail::node(mat)) return nullptr;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     if (!mn) return nullptr;
     auto node = mn->get(r, c);
     if (!node) return SymbolicExpr::number(0);
-    return lamina::detail::make_expression_ptr(node);
+    return LMCAS::detail::make_expression_ptr(node);
 }
 
 static size_t get_mat_rows(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !lamina::detail::node(mat)) return 0;
-    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat || !LMCAS::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     return mn ? mn->rows() : 0;
 }
 
 static size_t get_mat_cols(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !lamina::detail::node(mat)) return 0;
-    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat || !LMCAS::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     return mn ? mn->cols() : 0;
 }
 
@@ -476,17 +476,17 @@ static void test_vector_calculus_checked_contracts()
     EXPECT_TRUE(directional_derivative(f, {"x", "y"}, zero_dir) == nullptr,
                 "legacy directional derivative unwraps zero direction to nullptr");
 
-    lamina::CancellationToken cancellation;
-    lamina::ComputationContext cancelled_context({}, cancellation);
+    LMCAS::CancellationToken cancellation;
+    LMCAS::ComputationContext cancelled_context({}, cancellation);
     cancellation.cancel();
     auto cancelled = gradient_checked(f, {"x"}, cancelled_context);
     EXPECT_TRUE(!cancelled.has_value(), "checked gradient observes cancellation");
     EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
                 "checked gradient reports Cancelled");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_steps = 0;
-    lamina::ComputationContext limited_context(limits);
+    LMCAS::ComputationContext limited_context(limits);
     auto limited = laplacian_checked(f, {"x"}, limited_context);
     EXPECT_TRUE(!limited.has_value(), "checked laplacian observes exhausted step budget");
     EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
@@ -653,17 +653,17 @@ static void test_jacobian_hessian_checked_contracts()
     EXPECT_TRUE(empty_vars.error().code == CasErrc::InvalidArgument,
                 "checked Hessian reports InvalidArgument for empty variables");
 
-    lamina::CancellationToken cancellation;
-    lamina::ComputationContext cancelled_context({}, cancellation);
+    LMCAS::CancellationToken cancellation;
+    LMCAS::ComputationContext cancelled_context({}, cancellation);
     cancellation.cancel();
     auto cancelled = jacobian_checked({f}, {"x"}, cancelled_context);
     EXPECT_TRUE(!cancelled.has_value(), "checked Jacobian observes cancellation");
     EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
                 "checked Jacobian reports Cancelled");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_steps = 1;
-    lamina::ComputationContext limited_context(limits);
+    LMCAS::ComputationContext limited_context(limits);
     auto limited = hessian_checked(f, {"x"}, limited_context);
     EXPECT_TRUE(!limited.has_value(), "checked Hessian observes exhausted step budget");
     EXPECT_TRUE(limited.error().code == CasErrc::ResourceLimit,
@@ -1058,8 +1058,8 @@ static void test_curve_integral_checked_contracts()
     EXPECT_TRUE(mismatch.error().code == CasErrc::InvalidArgument,
                 "checked vector curve integral reports InvalidArgument for dimension mismatch");
 
-    lamina::CancellationToken cancellation;
-    lamina::ComputationContext cancelled_context({}, cancellation);
+    LMCAS::CancellationToken cancellation;
+    LMCAS::ComputationContext cancelled_context({}, cancellation);
     cancellation.cancel();
     auto cancelled = curve_integral_scalar_checked(
         SymbolicExpr::number(1), line, "t", zero, one, cancelled_context);
@@ -1068,9 +1068,9 @@ static void test_curve_integral_checked_contracts()
     EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
                 "checked scalar curve integral reports Cancelled");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_steps = 1;
-    lamina::ComputationContext limited_context(limits);
+    LMCAS::ComputationContext limited_context(limits);
     auto limited = curve_integral_vector_checked(field, diagonal, "t", zero, one,
                                                  limited_context);
     EXPECT_TRUE(!limited.has_value(),
@@ -1354,8 +1354,8 @@ static void test_surface_integral_checked_contracts()
     EXPECT_TRUE(field_dim_error.error().code == CasErrc::InvalidArgument,
                 "checked vector surface integral reports InvalidArgument for non-3D field");
 
-    lamina::CancellationToken cancellation;
-    lamina::ComputationContext cancelled_context({}, cancellation);
+    LMCAS::CancellationToken cancellation;
+    LMCAS::ComputationContext cancelled_context({}, cancellation);
     cancellation.cancel();
     auto cancelled = surface_integral_scalar_checked(
         SymbolicExpr::number(1), plane, "u", "v", zero, one, zero, one,
@@ -1365,9 +1365,9 @@ static void test_surface_integral_checked_contracts()
     EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
                 "checked scalar surface integral reports Cancelled");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_steps = 1;
-    lamina::ComputationContext limited_context(limits);
+    LMCAS::ComputationContext limited_context(limits);
     auto limited = surface_integral_vector_checked(
         flux_field, plane, "u", "v", zero, one, zero, one, limited_context);
     EXPECT_TRUE(!limited.has_value(),
@@ -1676,17 +1676,17 @@ static void test_extrema_lagrange_checked_contracts()
     EXPECT_TRUE(unsupported_lagrange.error().code == CasErrc::Inconclusive,
                 "checked Lagrange reports Inconclusive for unsupported derivatives");
 
-    lamina::CancellationToken cancellation;
-    lamina::ComputationContext cancelled_context({}, cancellation);
+    LMCAS::CancellationToken cancellation;
+    LMCAS::ComputationContext cancelled_context({}, cancellation);
     cancellation.cancel();
     auto cancelled = find_extrema_checked(parabola, {"x"}, cancelled_context);
     EXPECT_TRUE(!cancelled.has_value(), "checked extrema observes cancellation");
     EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
                 "checked extrema reports Cancelled");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_steps = 1;
-    lamina::ComputationContext limited_context(limits);
+    LMCAS::ComputationContext limited_context(limits);
     auto limited = lagrange_multipliers_checked(objective, {constraint}, {"x", "y"},
                                                 limited_context);
     EXPECT_TRUE(!limited.has_value(),

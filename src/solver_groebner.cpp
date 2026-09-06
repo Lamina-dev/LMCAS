@@ -18,7 +18,7 @@
 #include <limits>
 #include "internal/solver_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 using namespace solver_detail;
 namespace {
 
@@ -149,7 +149,7 @@ namespace {
 
     struct PolyContext;
 
-    class PolyBuilder : public lamina::detail::SymbolicVisitor {
+    class PolyBuilder : public LMCAS::detail::SymbolicVisitor {
         std::vector<std::string> vars;
 
         std::vector<std::string>& ext_vars;
@@ -162,7 +162,7 @@ namespace {
 
         size_t get_or_create_aux_var(const std::shared_ptr<const SymbolicNode>& node) {
 
-            auto tmp = lamina::detail::expression_from_node(node);
+            auto tmp = LMCAS::detail::expression_from_node(node);
             std::string key = tmp.to_string();
 
             auto it = transcendental_map.find(key);
@@ -241,7 +241,7 @@ namespace {
                     failed = true;
                     return;
                 }
-                size_t idx = get_or_create_aux_var(lamina::detail::make_node<VariableNode>(node.name()));
+                size_t idx = get_or_create_aux_var(LMCAS::detail::make_node<VariableNode>(node.name()));
 
                 result = Poly(ext_vars.size());
                 Monomial m(ext_vars.size(), 0);
@@ -351,7 +351,7 @@ namespace {
 
                 if (strict_mode) { failed = true; return; }
                 size_t idx = get_or_create_aux_var(
-                    lamina::detail::make_node<PowerNode>(node.base(), node.exponent()));
+                    LMCAS::detail::make_node<PowerNode>(node.base(), node.exponent()));
                 result = Poly(ext_vars.size());
                 Monomial m(ext_vars.size(), 0);
                 m[idx] = 1;
@@ -383,7 +383,7 @@ namespace {
 
                 if (strict_mode) { failed = true; return; }
                 size_t idx = get_or_create_aux_var(
-                    lamina::detail::make_node<PowerNode>(node.base(), node.exponent()));
+                    LMCAS::detail::make_node<PowerNode>(node.base(), node.exponent()));
                 result = Poly(ext_vars.size());
                 Monomial m(ext_vars.size(), 0);
                 m[idx] = 1;
@@ -408,10 +408,10 @@ namespace {
 
             if (!expression_depends_on_variables) {
 
-                auto func_expr = lamina::detail::expression_from_node(lamina::detail::make_node<FunctionNode>(node.type(), node.arguments()));
+                auto func_expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<FunctionNode>(node.type(), node.arguments()));
                 auto simplified = func_expr.simplify();
                 if (simplified && simplified->is_number()) {
-                    auto nn = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified));
+                    auto nn = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(simplified));
                     if (nn) {
 
                         if (std::holds_alternative<Rational>(nn->value())) {
@@ -432,7 +432,7 @@ namespace {
             }
 
             size_t idx = get_or_create_aux_var(
-                lamina::detail::make_node<FunctionNode>(node.type(), node.arguments()));
+                LMCAS::detail::make_node<FunctionNode>(node.type(), node.arguments()));
             result = Poly(ext_vars.size());
             Monomial m(ext_vars.size(), 0);
             m[idx] = 1;
@@ -503,7 +503,7 @@ namespace {
 
     Poly to_poly(const SymbolicExpr& expr, PolyContext& ctx) {
         PolyBuilder b(ctx.ext_vars, ctx);
-        lamina::detail::node(expr)->accept(b);
+        LMCAS::detail::node(expr)->accept(b);
         return b.get_result();
     }
 
@@ -512,12 +512,12 @@ namespace {
         std::vector<std::string> ext_vars = vars;
         std::unordered_map<std::string, size_t> trans_map;
         PolyBuilder b(vars, ext_vars, trans_map);
-        lamina::detail::node(expr)->accept(b);
+        LMCAS::detail::node(expr)->accept(b);
         return b.get_result();
     }
 
     [[maybe_unused]] SymbolicExpr from_poly(const Poly& p, const std::vector<std::string>& vars) {
-        if (p.terms.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
+        if (p.terms.empty()) return LMCAS::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
 
         std::vector<std::shared_ptr<const SymbolicNode>> add_ops;
 
@@ -552,14 +552,14 @@ namespace {
             }
         }
 
-        if (add_ops.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
-        if (add_ops.size() == 1) return lamina::detail::expression_from_node(add_ops[0]);
-        return lamina::detail::expression_from_node(SymbolicFactory::create_add(add_ops));
+        if (add_ops.empty()) return LMCAS::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
+        if (add_ops.size() == 1) return LMCAS::detail::expression_from_node(add_ops[0]);
+        return LMCAS::detail::expression_from_node(SymbolicFactory::create_add(add_ops));
     }
 
     SymbolicExpr from_poly_ext(const Poly& p, const PolyContext& ctx,
                                const std::vector<std::string>&) {
-        if (p.terms.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
+        if (p.terms.empty()) return LMCAS::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
 
         std::vector<std::shared_ptr<const SymbolicNode>> add_ops;
 
@@ -608,9 +608,9 @@ namespace {
             }
         }
 
-        if (add_ops.empty()) return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
-        if (add_ops.size() == 1) return lamina::detail::expression_from_node(add_ops[0]);
-        return lamina::detail::expression_from_node(SymbolicFactory::create_add(add_ops));
+        if (add_ops.empty()) return LMCAS::detail::expression_from_node(SymbolicFactory::create_number(BigInt(0)));
+        if (add_ops.size() == 1) return LMCAS::detail::expression_from_node(add_ops[0]);
+        return LMCAS::detail::expression_from_node(SymbolicFactory::create_add(add_ops));
     }
 
     Poly reduce(Poly p, const std::vector<Poly>& G) {
@@ -809,63 +809,67 @@ std::vector<SymbolicExpr> Solver::groebner_basis(
     }
     return result;
 }
-static std::vector<std::map<std::string, SymbolicExpr>>
-solve_polynomial_system_impl(
+using PolynomialSolution = std::map<std::string, SymbolicExpr>;
+using PolynomialSolutions = std::vector<PolynomialSolution>;
+static PolynomialSystemResult solve_polynomial_system_impl(
     const std::vector<SymbolicExpr>& equations,
     const std::vector<std::string>& variables,
-    ComputationContext& context)
-{
+    ComputationContext& context) {
     std::vector<SymbolicExpr> cleared_equations;
     std::vector<std::shared_ptr<SymbolicExpr>> denom_constraints;
     cleared_equations.reserve(equations.size());
     for (const auto& eq : equations) {
-        if (!lamina::detail::node(eq)) return {};
+        if (!LMCAS::detail::node(eq)) return PolynomialSolutions{};
         std::vector<std::shared_ptr<const SymbolicNode>> den_factors;
         std::vector<std::shared_ptr<SymbolicExpr>> den_local_constraints;
-        if (!collect_denominator_factors(lamina::detail::node(eq), den_factors, den_local_constraints)) return {};
+        if (!collect_denominator_factors(
+                LMCAS::detail::node(eq), den_factors, den_local_constraints))
+            return PolynomialSolutions{};
         auto denom_expr = multiply_factors(den_factors);
         auto cleared = to_ptr(eq);
         if (!den_factors.empty()) {
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(cleared))) {
+            if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(cleared))) {
                 std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
                 new_ops.reserve(add->operands().size());
                 for (const auto& op : add->operands()) {
                     auto prod = multiply_no_expand(op, den_factors);
-                    new_ops.push_back(lamina::detail::node(prod));
+                    new_ops.push_back(LMCAS::detail::node(prod));
                 }
-                cleared = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(new_ops));
+                cleared = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(new_ops));
             } else {
-                cleared = multiply_no_expand(lamina::detail::node(cleared), den_factors);
+                cleared = multiply_no_expand(LMCAS::detail::node(cleared), den_factors);
             }
         } else {
             cleared = cleared->simplify();
         }
-
-        if (!cleared || !lamina::detail::node(cleared) || !is_polynomial_node(lamina::detail::node(cleared))) return {};
+        if (!cleared || !LMCAS::detail::node(cleared) ||
+            !is_polynomial_node(LMCAS::detail::node(cleared)))
+            return PolynomialSolutions{};
         cleared_equations.push_back(*cleared);
-
         for (const auto& c : den_local_constraints) {
             denom_constraints.push_back(c);
         }
     }
     if (cleared_equations.size() == 1 && variables.size() == 1) {
-        auto roots = detail::propagate_result(solve_finite_checked(
+        auto solved = solve_finite_checked(
             detail::make_expression_ptr(cleared_equations[0]),
-            variables[0], context, SolveOptions{}));
-        std::vector<std::map<std::string, SymbolicExpr>> single_solutions;
+            variables[0], context, SolveOptions{});
+        if (!solved)
+            return PolynomialSystemResult::failure(solved.error());
+        auto roots = std::move(solved.value());
+        PolynomialSolutions single_solutions;
         for (const auto& r : roots) {
             single_solutions.push_back({{variables[0], *r}});
         }
         if (denom_constraints.empty()) return single_solutions;
-
-        std::vector<std::map<std::string, SymbolicExpr>> filtered;
+        PolynomialSolutions filtered;
         filtered.reserve(single_solutions.size());
         for (const auto& sol : single_solutions) {
             bool ok = true;
             for (const auto& den : denom_constraints) {
                 auto sub = den;
                 for (const auto& [name, val] : sol) {
-                    sub = sub->substitute(name, lamina::detail::make_expression_ptr(val));
+                    sub = sub->substitute(name, LMCAS::detail::make_expression_ptr(val));
                     if (!sub) break;
                 }
                 if (!sub) continue;
@@ -879,43 +883,39 @@ solve_polynomial_system_impl(
         }
         return filtered;
     }
-
     auto G_basis = Solver::groebner_basis(cleared_equations, variables);
     std::vector<std::shared_ptr<SymbolicExpr>> basis;
     basis.reserve(G_basis.size());
     for (const auto& g : G_basis) {
-        auto g_ptr = lamina::detail::make_expression_ptr(g);
+        auto g_ptr = LMCAS::detail::make_expression_ptr(g);
         auto simp = g_ptr->simplify();
-        if (simp && !simp->is_zero()) {
-            basis.push_back(simp);
-        }
+        if (simp && !simp->is_zero()) basis.push_back(simp);
     }
     if (variables.empty()) {
         for (const auto& p : basis) {
-            if (p->is_number() && !p->is_zero()) return {};
+            if (p->is_number() && !p->is_zero())
+                return PolynomialSolutions{};
         }
-        return {{} };
+        return PolynomialSolutions{PolynomialSolution{}};
     }
     auto substitute_all = [&](const std::shared_ptr<SymbolicExpr>& expr,
-                              const std::map<std::string, SymbolicExpr>& subs) {
+                              const PolynomialSolution& subs) {
         auto res = expr;
         for (const auto& [name, val] : subs) {
-            res = res->substitute(name, lamina::detail::make_expression_ptr(val));
+            res = res->substitute(name, LMCAS::detail::make_expression_ptr(val));
             if (!res) return std::shared_ptr<SymbolicExpr>(nullptr);
         }
         return res->simplify();
     };
     auto solve_rec = [&](auto&& self, int var_pos,
-                         const std::map<std::string, SymbolicExpr>& partial)
-        -> std::vector<std::map<std::string, SymbolicExpr>> {
+                         const PolynomialSolution& partial)
+        -> PolynomialSystemResult {
         std::vector<std::shared_ptr<SymbolicExpr>> reduced;
         reduced.reserve(basis.size());
-
         for (const auto& p : basis) {
             auto r = substitute_all(p, partial);
             if (!r) continue;
             if (r->is_zero()) continue;
-
             bool depends = false;
             for (int i = 0; i <= var_pos && i < (int)variables.size(); ++i) {
                 if (contains(*r, variables[i])) {
@@ -923,26 +923,23 @@ solve_polynomial_system_impl(
                     break;
                 }
             }
-
             if (!depends) {
-                if (r->is_number() && !r->is_zero()) return std::vector<std::map<std::string, SymbolicExpr>>{};
+                if (r->is_number() && !r->is_zero())
+                    return PolynomialSolutions{};
                 continue;
             }
-
             reduced.push_back(r);
         }
         if (var_pos < 0) {
-            return {partial};
+            return PolynomialSolutions{partial};
         }
         const auto& curr_var = variables[var_pos];
         bool curr_var_appears = false;
         std::shared_ptr<SymbolicExpr> target = nullptr;
         int best_deg = std::numeric_limits<int>::max();
-
         for (const auto& r : reduced) {
             if (!contains(*r, curr_var)) continue;
             curr_var_appears = true;
-
             bool has_other = false;
             for (int i = 0; i < var_pos; ++i) {
                 if (contains(*r, variables[i])) {
@@ -951,7 +948,6 @@ solve_polynomial_system_impl(
                 }
             }
             if (has_other) continue;
-
             auto poly = symbolic_to_poly<SymbolicPolyCoeff>(r, curr_var);
             int deg = poly.degree();
             if (deg >= 1 && deg < best_deg) {
@@ -964,31 +960,40 @@ solve_polynomial_system_impl(
             next_partial.insert_or_assign(curr_var, *SymbolicExpr::variable(curr_var));
             return self(self, var_pos - 1, next_partial);
         }
-        if (!target) return {};
-
-        auto roots = detail::propagate_result(solve_finite_checked(
-            target, curr_var, context, SolveOptions{}));
-        if (roots.empty()) return {};
-        std::vector<std::map<std::string, SymbolicExpr>> results;
+        if (!target) return PolynomialSolutions{};
+        auto solved = solve_finite_checked(
+            target, curr_var, context, SolveOptions{});
+        if (!solved)
+            return PolynomialSystemResult::failure(solved.error());
+        auto roots = std::move(solved.value());
+        if (roots.empty()) return PolynomialSolutions{};
+        PolynomialSolutions results;
         for (const auto& r : roots) {
             auto next_partial = partial;
             next_partial.insert_or_assign(curr_var, *r);
             auto sub_res = self(self, var_pos - 1, next_partial);
-            results.insert(results.end(), sub_res.begin(), sub_res.end());
+            if (!sub_res) return sub_res;
+            auto& values = sub_res.value();
+            results.insert(results.end(),
+                std::make_move_iterator(values.begin()),
+                std::make_move_iterator(values.end()));
         }
         return results;
     };
-    std::map<std::string, SymbolicExpr> empty;
-    auto candidates = solve_rec(solve_rec, static_cast<int>(variables.size()) - 1, empty);
+    PolynomialSolution empty;
+    auto solved_candidates = solve_rec(
+        solve_rec, static_cast<int>(variables.size()) - 1, empty);
+    if (!solved_candidates) return solved_candidates;
+    auto candidates = std::move(solved_candidates.value());
     if (denom_constraints.empty()) return candidates;
-    std::vector<std::map<std::string, SymbolicExpr>> filtered;
+    PolynomialSolutions filtered;
     filtered.reserve(candidates.size());
     for (const auto& sol : candidates) {
         bool ok = true;
         for (const auto& den : denom_constraints) {
             auto sub = den;
             for (const auto& [name, val] : sol) {
-                sub = sub->substitute(name, lamina::detail::make_expression_ptr(val));
+                sub = sub->substitute(name, LMCAS::detail::make_expression_ptr(val));
                 if (!sub) break;
             }
             if (!sub) continue;
@@ -1017,10 +1022,8 @@ PolynomialSystemResult Solver::solve_polynomial_system_checked(
         equations.size() * variables.size() + 1, operation);
     if (!budget) return PolynomialSystemResult::failure(budget.error());
     try {
-        return PolynomialSystemResult::success(
-            solve_polynomial_system_impl(equations, variables, context));
-    } catch (const detail::ResultPropagation& propagation) {
-        return PolynomialSystemResult::failure(propagation.error());
+        return solve_polynomial_system_impl(
+            equations, variables, context);
     } catch (const std::bad_alloc&) {
         return PolynomialSystemResult::failure(
             CasErrc::ResourceLimit,
@@ -1193,4 +1196,4 @@ std::vector<SymbolicExpr> Solver::elimination_ideal(
     return result;
 }
 
-} // namespace lamina
+} // namespace LMCAS

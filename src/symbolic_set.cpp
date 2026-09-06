@@ -6,7 +6,7 @@
 
 #include "symbolic_ast.hpp"
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kOperation = "symbolic_set";
@@ -179,4 +179,4 @@ SymbolicSetResult finite_set_symmetric_difference(
     return finite_set_union(*left.value(), *right.value(), context);
 }
 
-} // namespace lamina
+} // namespace LMCAS

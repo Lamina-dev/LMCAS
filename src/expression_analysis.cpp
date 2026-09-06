@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 class FreeVariableCollector final : public detail::RecursiveSymbolicVisitor {
@@ -264,4 +264,4 @@ detail::SymbolicNodePtr substitute_free(
     return substitution.rewrite(expression);
 }
 
-} // namespace lamina
+} // namespace LMCAS

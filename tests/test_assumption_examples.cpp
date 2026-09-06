@@ -16,29 +16,29 @@
 #include <cmath>
 #include <limits>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a VariableNode.
 static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 /// Create a NumberNode from int.
 static std::shared_ptr<const SymbolicNode> num(int v) {
-    return lamina::detail::make_node<NumberNode>(BigInt(v));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(v));
 }
 
 /// Create sqrt(expr) as FunctionNode(Sqrt, {expr}).
 static std::shared_ptr<const SymbolicNode> make_sqrt(const std::shared_ptr<const SymbolicNode>& arg) {
-    return lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sqrt,
         std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
 /// Create abs(expr) as FunctionNode(Abs, {expr}).
 static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const SymbolicNode>& arg) {
-    return lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Abs,
         std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
@@ -46,7 +46,7 @@ static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const 
 /// Create x^n as PowerNode(x, NumberNode(n)).
 static std::shared_ptr<const SymbolicNode> make_power(
     const std::shared_ptr<const SymbolicNode>& base, int exp) {
-    return lamina::detail::make_node<PowerNode>(base, num(exp));
+    return LMCAS::detail::make_node<PowerNode>(base, num(exp));
 }
 
 /// Normalize a node with an AssumptionContext.
@@ -94,8 +94,8 @@ static bool is_negation_of_var(const std::shared_ptr<const SymbolicNode>& node, 
 
 /// Try to extract a numeric double value from a solution expression.
 static bool try_numeric(const std::shared_ptr<SymbolicExpr>& expr, double& out) {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    auto n = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
+    if (!expr || !LMCAS::detail::node(expr)) return false;
+    auto n = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr));
     if (!n) return false;
 
     if (std::holds_alternative<BigInt>(n->value())) {
@@ -188,7 +188,7 @@ void test_end_to_end_query_after_assumption() {
     AssumptionContext ctx;
     ctx.assume_sign("x", Sign::Positive);
 
-    auto x_expr = lamina::detail::expression_from_node(var("x"));
+    auto x_expr = LMCAS::detail::expression_from_node(var("x"));
     EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "End-to-end: x is Positive after assume_sign(Positive)");
     EXPECT_TRUE(ctx.is_nonnegative(x_expr).value() == Tribool::True,
@@ -210,7 +210,7 @@ void test_solver_with_positive_int_domain() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
 
-    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
+    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
@@ -230,7 +230,7 @@ void test_solver_with_nonnegative_sign() {
     ctx.assume_domain("x", Domain::Real);
     ctx.assume_sign("x", Sign::NonNegative);
 
-    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
+    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     bool has_3 = solutions_contain_value(solutions, 3.0);
     bool has_neg3 = solutions_contain_value(solutions, -3.0);
@@ -244,7 +244,7 @@ void test_nested_scopes_query_roundtrip() {
     TEST_CASE("Integration: nested scopes push/assume/query/pop/query");
 
     AssumptionContext ctx;
-    auto x_expr = lamina::detail::expression_from_node(var("x"));
+    auto x_expr = LMCAS::detail::expression_from_node(var("x"));
     // Root scope: x has no assumptions
     EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::Unknown,
                 "Nested scopes: x is Unknown in root scope");
@@ -260,7 +260,7 @@ void test_nested_scopes_query_roundtrip() {
     ctx.push();
     ctx.assume_domain("y", Domain::Integer);
 
-    auto y_expr = lamina::detail::expression_from_node(var("y"));
+    auto y_expr = LMCAS::detail::expression_from_node(var("y"));
     EXPECT_TRUE(ctx.is_integer(y_expr).value() == Tribool::True,
                 "Nested scopes: y is Integer in scope 2");
     // x Positive is visible via read-through (has_sign reads all scopes)
@@ -327,10 +327,10 @@ void test_unrecognized_function_returns_unknown() {
     ctx.assume_sign("x", Sign::Positive);
 
     // LambertW is not in the recognized built-in list for property inference
-    auto lambert_w = lamina::detail::make_node<FunctionNode>(
+    auto lambert_w = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::LambertW,
         std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
-    auto expr = lamina::detail::expression_from_node(lambert_w);
+    auto expr = LMCAS::detail::expression_from_node(lambert_w);
     EXPECT_TRUE(ctx.is_positive(expr).value() == Tribool::Unknown,
                 "LambertW(x) is_positive -> Unknown");
     EXPECT_TRUE(ctx.is_negative(expr).value() == Tribool::Unknown,
@@ -351,10 +351,10 @@ void test_unrecognized_function_erf() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
 
-    auto erf_x = lamina::detail::make_node<FunctionNode>(
+    auto erf_x = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Erf,
         std::vector<std::shared_ptr<const SymbolicNode>>{var("x")});
-    auto expr = lamina::detail::expression_from_node(erf_x);
+    auto expr = LMCAS::detail::expression_from_node(erf_x);
     EXPECT_TRUE(ctx.is_positive(expr).value() == Tribool::Unknown,
                 "Erf(x) is_positive -> Unknown");
     EXPECT_TRUE(ctx.is_negative(expr).value() == Tribool::Unknown,
@@ -378,7 +378,7 @@ void test_domain_filtering_all_excluded_empty_set() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::Real);
 
-    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
+    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     EXPECT_TRUE(solutions.empty(),
                 "x^2+1=0 with Real domain -> empty set");
@@ -396,7 +396,7 @@ void test_domain_filtering_positive_int_excludes_all() {
     AssumptionContext ctx;
     ctx.assume_domain("x", Domain::PositiveInt);
 
-    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
+    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     // All numeric solutions should be excluded (sqrt(2) is not an integer)
     for (const auto& sol : solutions) {
@@ -435,7 +435,7 @@ void test_nesting_depth_128() {
 
     // Declare something in the deepest scope
     ctx.assume_sign("x", Sign::Positive);
-    auto x_expr = lamina::detail::expression_from_node(var("x"));
+    auto x_expr = LMCAS::detail::expression_from_node(var("x"));
     EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "Can declare and query at depth 129");
 
@@ -455,7 +455,7 @@ static void test_nan_handling() {
 
     bool rejected = false;
     try {
-        (void)lamina::detail::make_node<NumberNode>(
+        (void)LMCAS::detail::make_node<NumberNode>(
             static_cast<lmmc_real_t>(
                 std::numeric_limits<double>::quiet_NaN()));
     } catch (const std::invalid_argument& error) {
@@ -472,19 +472,19 @@ static void test_infinity_handling() {
     AssumptionContext ctx;
 
     // Positive infinity: FunctionNode(Infinity, {})
-    auto pos_inf = lamina::detail::make_node<FunctionNode>(
+    auto pos_inf = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Infinity,
         std::vector<std::shared_ptr<const SymbolicNode>>{});
-    auto pos_inf_expr = lamina::detail::expression_from_node(pos_inf);
+    auto pos_inf_expr = LMCAS::detail::expression_from_node(pos_inf);
     EXPECT_TRUE(ctx.is_integer(pos_inf_expr).value() == Tribool::False,
                 "+Infinity is_integer -> False");
     EXPECT_TRUE(ctx.is_positive(pos_inf_expr).value() == Tribool::True,
                 "+Infinity is_positive -> True");
 
     // Negative infinity: MultiplyNode(-1, Infinity)
-    auto neg_inf = lamina::detail::make_node<MultiplyNode>(
+    auto neg_inf = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{num(-1), pos_inf});
-    auto neg_inf_expr = lamina::detail::expression_from_node(neg_inf);
+    auto neg_inf_expr = LMCAS::detail::expression_from_node(neg_inf);
     EXPECT_TRUE(ctx.is_integer(neg_inf_expr).value() == Tribool::False,
                 "-Infinity is_integer -> False");
     EXPECT_TRUE(ctx.is_negative(neg_inf_expr).value() == Tribool::True,
@@ -502,7 +502,7 @@ void test_combined_pipeline() {
     ctx.assume_sign("x", Sign::Positive);
 
     // Step 2: Query properties
-    auto x_expr = lamina::detail::expression_from_node(var("x"));
+    auto x_expr = LMCAS::detail::expression_from_node(var("x"));
     EXPECT_TRUE(ctx.is_positive(x_expr).value() == Tribool::True,
                 "Pipeline: x is Positive");
     EXPECT_TRUE(ctx.is_real(x_expr).value() == Tribool::True,
@@ -524,7 +524,7 @@ void test_combined_pipeline() {
     auto eq = SymbolicExpr::add(
         SymbolicExpr::power(SymbolicExpr::variable("x"), SymbolicExpr::number(2)),
         SymbolicExpr::number(-1));
-    auto solutions = lamina::detail::propagate_result(solve_with_assumptions_checked(eq, "x", &ctx));
+    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);

@@ -1,6 +1,8 @@
 #include "symbolic.hpp"
 
-#ifdef LAMINA_INTERNAL_AST_INCLUDED
+using namespace LMCAS;
+
+#ifdef LMCAS_INTERNAL_AST_INCLUDED
 #error "symbolic.hpp must not include the AST implementation"
 #endif
 

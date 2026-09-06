@@ -5,12 +5,12 @@
 #include <variant>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 static std::shared_ptr<SymbolicExpr> bigint_num(const BigInt& n) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(
             std::variant<BigInt, Rational, lmmc_real_t>{std::in_place_type<BigInt>, n}));
 }
 
@@ -21,10 +21,10 @@ static std::shared_ptr<SymbolicExpr> exact_dense_matrix(
     MatrixNode::DenseStorage storage;
     storage.reserve(entries.size());
     for (const auto& entry : entries) {
-        storage.push_back(lamina::detail::node(entry));
+        storage.push_back(LMCAS::detail::node(entry));
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<MatrixNode>(rows, cols, std::move(storage)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<MatrixNode>(rows, cols, std::move(storage)));
 }
 
 static std::shared_ptr<SymbolicExpr> mat2(int a, int b, int c, int d) {
@@ -99,11 +99,11 @@ int main() {
         auto A = mat2(1,2, 3,4);
         auto B = mat2(0,1, 1,0);
         auto K = kronecker(A, B);
-        auto kn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(K));
+        auto kn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(K));
         EXPECT_TRUE(kn && kn->rows() == 4 && kn->cols() == 4, "kron(2x2,2x2) is 4x4");
         // top-left block = 1*B => [[0,1],[1,0]]; element (0,1) = 1
-        EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(kn->get(0,1)), num(1), "kron element (0,1)=1");
-        EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(kn->get(0,0)), num(0), "kron element (0,0)=0");
+        EXPECT_EQ_EXPR(LMCAS::detail::make_expression_ptr(kn->get(0,1)), num(1), "kron element (0,1)=1");
+        EXPECT_EQ_EXPR(LMCAS::detail::make_expression_ptr(kn->get(0,0)), num(0), "kron element (0,0)=0");
     }
 
     // ---- Frobenius norm ----
@@ -149,10 +149,10 @@ int main() {
     {
         auto Z = mat2(0,0, 0,0);
         auto E = matrix_exp(Z);
-        auto en = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(E));
+        auto en = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(E));
         if (en) {
-            EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(en->get(0,0))->simplify(), num(1), "exp(0)[0,0]=1");
-            EXPECT_EQ_EXPR(lamina::detail::make_expression_ptr(en->get(0,1))->simplify(), num(0), "exp(0)[0,1]=0");
+            EXPECT_EQ_EXPR(LMCAS::detail::make_expression_ptr(en->get(0,0))->simplify(), num(1), "exp(0)[0,0]=1");
+            EXPECT_EQ_EXPR(LMCAS::detail::make_expression_ptr(en->get(0,1))->simplify(), num(0), "exp(0)[0,1]=0");
         } else {
             EXPECT_TRUE(false, "matrix_exp of zero must return an explicit matrix");
         }

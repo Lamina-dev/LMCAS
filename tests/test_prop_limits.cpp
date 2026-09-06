@@ -3,6 +3,8 @@
 #include <random>
 #include <functional>
 
+using namespace LMCAS;
+
 
 static constexpr unsigned kPropertySeed = 0x4C4D4341u;
 static std::mt19937 rng(kPropertySeed);
@@ -149,7 +151,7 @@ static void test_indeterminate_termination() {
         } else if (direction == "-") {
             parsed_direction = LimitDirection::FromBelow;
         }
-        auto result = lamina::limit_expression_checked(
+        auto result = LMCAS::limit_expression_checked(
             expr, "x", limit_point, parsed_direction);
         (void)result;
         bool terminated = true;
@@ -189,7 +191,7 @@ static void test_rational_degree_rule() {
         auto Q_inv = SymbolicExpr::power(Q, neg_one);
         auto expr = SymbolicExpr::multiply(P, Q_inv);
 
-        auto result = lamina::limit_expression_checked(expr, "x", inf).value();
+        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
 
         bool property_holds = false;
 
@@ -280,7 +282,7 @@ static void test_squeeze_bounded_oscillation() {
         auto expr = SymbolicExpr::multiply(zero_factor, bounded_factor);
 
         // Compute limit as x→0
-        auto result = lamina::limit_expression_checked(expr, "x", zero).value();
+        auto result = LMCAS::limit_expression_checked(expr, "x", zero).value();
 
         bool property_holds = false;
         if (result) {

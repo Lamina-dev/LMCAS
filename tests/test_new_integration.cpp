@@ -13,7 +13,7 @@ void run_test(const std::string& name, const SymbolicExpr& expr, const std::stri
     std::cout << "case: " << name << std::endl;
     std::cout << "Expr: " << expr.to_string() << std::endl;
 
-    lamina::Integrator integrator;
+    LMCAS::Integrator integrator;
     auto result = integrator.integrate(expr, var);
     if (!result) {
         EXPECT_TRUE(false, name + ": integration failed: " + result.error().message);
@@ -50,13 +50,13 @@ void run_test(const std::string& name, const SymbolicExpr& expr, const std::stri
 
 }
 
-class WrongIntegrationStrategy final : public lamina::IntegrationStrategy {
+class WrongIntegrationStrategy final : public LMCAS::IntegrationStrategy {
 public:
-    std::shared_ptr<SymbolicExpr> try_integrate_raw(
+    LMCAS::Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr&,
         const std::string& variable,
-        lamina::Integrator&,
-        lamina::ComputationContext&,
+        LMCAS::Integrator&,
+        LMCAS::ComputationContext&,
         int) override {
         return SymbolicExpr::variable(variable);
     }
@@ -65,9 +65,9 @@ public:
 };
 
 int main() {
-    using namespace lamina;
+    using namespace LMCAS;
 
-    auto x_var = lamina::detail::make_expression_ptr(*SymbolicExpr::variable("x"));
+    auto x_var = LMCAS::detail::make_expression_ptr(*SymbolicExpr::variable("x"));
     TEST_CASE("Generated integration candidates require exact residual proof");
     Integrator gated_integrator;
     auto added = gated_integrator.add_strategy(
@@ -80,20 +80,20 @@ int main() {
                 "wrong integration candidate is rejected");
 
 
-    auto x2_ptr = SymbolicExpr::power(x_var, lamina::detail::make_expression_ptr(*SymbolicExpr::number(2)));
+    auto x2_ptr = SymbolicExpr::power(x_var, LMCAS::detail::make_expression_ptr(*SymbolicExpr::number(2)));
     run_test("Power Rule x^2", *x2_ptr, "x");
 
     auto exp_x_ptr = SymbolicExpr::exp(x_var);
     auto x_exp_x_ptr = SymbolicExpr::multiply(x_var, exp_x_ptr);
     run_test("IBP x * exp(x)", *x_exp_x_ptr, "x");
 
-    auto two_x_ptr = SymbolicExpr::multiply(lamina::detail::make_expression_ptr(*SymbolicExpr::number(2)), x_var);
+    auto two_x_ptr = SymbolicExpr::multiply(LMCAS::detail::make_expression_ptr(*SymbolicExpr::number(2)), x_var);
     auto cos_x2_ptr = SymbolicExpr::cos(x2_ptr);
     auto sub_expr_ptr = SymbolicExpr::multiply(cos_x2_ptr, two_x_ptr);
     run_test("Substitution cos(x^2)*2x", *sub_expr_ptr, "x");
 
-    auto denom_ptr = SymbolicExpr::add(x2_ptr, lamina::detail::make_expression_ptr(*SymbolicExpr::number(-1)));
-    auto pf_expr_ptr = SymbolicExpr::power(denom_ptr, lamina::detail::make_expression_ptr(*SymbolicExpr::number(-1)));
+    auto denom_ptr = SymbolicExpr::add(x2_ptr, LMCAS::detail::make_expression_ptr(*SymbolicExpr::number(-1)));
+    auto pf_expr_ptr = SymbolicExpr::power(denom_ptr, LMCAS::detail::make_expression_ptr(*SymbolicExpr::number(-1)));
     run_test("Partial Fraction 1/(x^2-1)", *pf_expr_ptr, "x");
 
     auto ln_x_ptr = SymbolicExpr::ln(x_var);

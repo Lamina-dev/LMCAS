@@ -9,7 +9,7 @@
 #include <limits>
 #include <sstream>
 
-namespace lamina {
+namespace LMCAS {
 
 // String conversion helpers for diagnostic messages
 
@@ -513,10 +513,10 @@ static bool endpoints_equivalent(const Endpoint& left, const Endpoint& right) {
     if (!left.value || !right.value) {
         return left.value == right.value;
     }
-    if (!lamina::detail::node(left.value) || !lamina::detail::node(right.value)) {
-        return lamina::detail::node(left.value) == lamina::detail::node(right.value);
+    if (!LMCAS::detail::node(left.value) || !LMCAS::detail::node(right.value)) {
+        return LMCAS::detail::node(left.value) == LMCAS::detail::node(right.value);
     }
-    return lamina::detail::node(left.value)->compare(*lamina::detail::node(right.value)) == 0;
+    return LMCAS::detail::node(left.value)->compare(*LMCAS::detail::node(right.value)) == 0;
 }
 
 static bool intervals_equivalent(const Interval& left, const Interval& right) {
@@ -1150,4 +1150,4 @@ std::vector<PropertyStore::MonotonicityInfo> PropertyStore::get_monotonicity_dec
     return result;
 }
 
-} // namespace lamina
+} // namespace LMCAS

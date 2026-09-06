@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static int domain_specificity(Domain d) {

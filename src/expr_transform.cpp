@@ -1,16 +1,16 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include "matcher.hpp"
 #include "symbolic_ast.hpp"
-#include "internal/lsr_expr_common.hpp"
+#include "internal/expr_common.hpp"
 #include <exception>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-namespace lamina::lsr {
+namespace LMCAS {
 
-using namespace detail::lsr_expr_common;
+using namespace expr_detail::expr_common;
 
 ExprResult simplify(const ExprPtr& expression, ComputationContext& context) {
     return checked_transform_expr(
@@ -78,7 +78,7 @@ ExprResult substitute(const ExprPtr& expression,
     }
     try {
         auto result = expression->substitute(variable, value);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       "substitution returned an empty expression",
                                       kSubstituteOperation);
@@ -102,18 +102,18 @@ ExprResult substitute(const ExprPtr& expression,
 }
 
 BindingResult binding(ExprPtr symbol, ExprPtr value) {
-    if (!symbol || !lamina::detail::node(symbol)) {
+    if (!symbol || !LMCAS::detail::node(symbol)) {
         return BindingResult::failure(
             CasErrc::InvalidArgument, "binding symbol cannot be null",
             kSubstituteOperation);
     }
-    if (!value || !lamina::detail::node(value)) {
+    if (!value || !LMCAS::detail::node(value)) {
         return BindingResult::failure(
             CasErrc::InvalidArgument, "binding value cannot be null",
             kSubstituteOperation);
     }
     if (!std::dynamic_pointer_cast<const VariableNode>(
-            lamina::detail::node(symbol))) {
+            LMCAS::detail::node(symbol))) {
         return BindingResult::failure(
             CasErrc::InvalidArgument,
             "binding left-hand side must be a symbol",
@@ -128,7 +128,7 @@ ExprResult substitute(const ExprPtr& expression,
     auto checked = binding(replacement.symbol, replacement.value);
     if (!checked) return ExprResult::failure(checked.error());
     const auto variable = std::dynamic_pointer_cast<const VariableNode>(
-        lamina::detail::node(checked.value().symbol));
+        LMCAS::detail::node(checked.value().symbol));
     return substitute(expression, variable->name(), checked.value().value, context);
 }
 
@@ -141,7 +141,7 @@ ExprResult substitute(const ExprPtr& expression,
 ExprResult substitute(const ExprPtr& expression,
                       const std::vector<Binding>& replacements,
                       ComputationContext& context) {
-    if (!expression || !lamina::detail::node(expression)) {
+    if (!expression || !LMCAS::detail::node(expression)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   "expression cannot be null",
                                   kSubstituteOperation);
@@ -167,12 +167,12 @@ ExprMatchResult expr_match(const ExprPtr& pattern,
                            ComputationContext& context) {
     auto step = context.consume_steps(1, kExprMatchOperation);
     if (!step) return ExprMatchResult::failure(step.error());
-    if (!pattern || !lamina::detail::node(pattern)) {
+    if (!pattern || !LMCAS::detail::node(pattern)) {
         return expr_match_failure(CasErrc::InvalidArgument,
                                   "match pattern cannot be null",
                                   kExprMatchOperation);
     }
-    if (!target || !lamina::detail::node(target)) {
+    if (!target || !LMCAS::detail::node(target)) {
         return expr_match_failure(CasErrc::InvalidArgument,
                                   "match target cannot be null",
                                   kExprMatchOperation);
@@ -213,7 +213,7 @@ ExprMatchResult expr_match(const ExprPtr& pattern,
         result.bindings.reserve(names.size());
         for (const auto& name : names) {
             const auto& value = raw_bindings.at(name);
-            auto node = lamina::detail::node(value);
+            auto node = LMCAS::detail::node(value);
             if (!node) {
                 return expr_match_failure(CasErrc::InternalInvariant,
                                           "matcher produced a null binding",
@@ -221,7 +221,7 @@ ExprMatchResult expr_match(const ExprPtr& pattern,
             }
             result.bindings.push_back(
                 ExprMatchBinding{name,
-                                 lamina::detail::make_expression_ptr(node)});
+                                 LMCAS::detail::make_expression_ptr(node)});
         }
         return ExprMatchResult::success(std::move(result));
     } catch (const std::bad_alloc&) {
@@ -240,4 +240,4 @@ ExprMatchResult expr_match(const ExprPtr& pattern,
     ComputationContext context;
     return expr_match(pattern, target, wildcards, context);
 }
-} // namespace lamina::lsr
+} // namespace LMCAS

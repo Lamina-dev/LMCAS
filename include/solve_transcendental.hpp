@@ -10,7 +10,7 @@
 #include <string>
 #include <optional>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 换元结果，记录换元表达式、换元后的多项式及换元变量名。 */
 struct SubstitutionResult {
@@ -25,7 +25,7 @@ struct SubstitutionResult {
  * @param var 求解变量名
  * @return 所有根的符号表达式列表
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> solve_transcendental(
+LMCAS_API std::vector<std::shared_ptr<SymbolicExpr>> solve_transcendental(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var);
 
@@ -35,7 +35,7 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> solve_transcendental(
  * @param var 目标变量名
  * @return 若检测到有效换元则返回 SubstitutionResult，否则返回 nullopt
  */
-LAMINA_API std::optional<SubstitutionResult> detect_substitution(
+LMCAS_API std::optional<SubstitutionResult> detect_substitution(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var);
 

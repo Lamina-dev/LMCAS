@@ -6,7 +6,7 @@
 #include <thread>
 #include <type_traits>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 TEST(ComputationContextTest, HasExclusiveValueSemantics) {
@@ -83,4 +83,4 @@ TEST(ComputationContextTest, RejectsCrossThreadUse) {
 }
 
 } // namespace
-} // namespace lamina
+} // namespace LMCAS

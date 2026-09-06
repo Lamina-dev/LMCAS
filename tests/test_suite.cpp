@@ -11,6 +11,8 @@
 #include "../include/visitors/normalization_visitor.hpp"
 #include "test_common.hpp"
 
+using namespace LMCAS;
+
 void check(const std::string& name, const std::shared_ptr<const SymbolicNode>& node, const std::string& expected = "") {
     if (!node) {
         EXPECT_TRUE(false, name + ": node is not null");
@@ -44,17 +46,17 @@ std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const Symbol
 void test_basic_arithmetic() {
     std::cout << "\n--- Testing Basic Arithmetic Nodes ---" << std::endl;
 
-    auto n1 = lamina::detail::make_node<NumberNode>(1.0);
-    auto n2 = lamina::detail::make_node<NumberNode>(2.0);
+    auto n1 = LMCAS::detail::make_node<NumberNode>(1.0);
+    auto n2 = LMCAS::detail::make_node<NumberNode>(2.0);
     std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {n1, n2};
-    auto add = lamina::detail::make_node<AddNode>(std::move(add_ops));
+    auto add = LMCAS::detail::make_node<AddNode>(std::move(add_ops));
 
     check("1 + 2", add, "1 + 2");
 
-    auto x = lamina::detail::make_node<VariableNode>("x");
-    auto y = lamina::detail::make_node<VariableNode>("y");
+    auto x = LMCAS::detail::make_node<VariableNode>("x");
+    auto y = LMCAS::detail::make_node<VariableNode>("y");
     std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {x, y};
-    auto mul = lamina::detail::make_node<MultiplyNode>(std::move(mul_ops));
+    auto mul = LMCAS::detail::make_node<MultiplyNode>(std::move(mul_ops));
 
     check("x * y", mul, "x*y");
 }
@@ -62,43 +64,43 @@ void test_basic_arithmetic() {
 void test_differentiation() {
     std::cout << "\n--- Testing Differentiation ---" << std::endl;
 
-    auto x = lamina::detail::make_node<VariableNode>("x");
+    auto x = LMCAS::detail::make_node<VariableNode>("x");
 
     check("d/dx(x)", diff(x, "x"), "1");
 
-    auto n5 = lamina::detail::make_node<NumberNode>(5.0);
+    auto n5 = LMCAS::detail::make_node<NumberNode>(5.0);
     check("d/dx(5)", diff(n5, "x"), "0");
 
     std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {x, n5};
-    auto add = lamina::detail::make_node<AddNode>(std::move(add_ops));
+    auto add = LMCAS::detail::make_node<AddNode>(std::move(add_ops));
     check("d/dx(x + 5)", diff(add, "x"), "1");
 
-    auto n2 = lamina::detail::make_node<NumberNode>(2.0);
-    auto pow = lamina::detail::make_node<PowerNode>(x, n2);
+    auto n2 = LMCAS::detail::make_node<NumberNode>(2.0);
+    auto pow = LMCAS::detail::make_node<PowerNode>(x, n2);
 
     check("d/dx(x^2)", diff(pow, "x"));
 
     std::vector<std::shared_ptr<const SymbolicNode>> sin_args = {x};
-    auto sin_x = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, sin_args);
+    auto sin_x = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, sin_args);
     check("d/dx(sin(x))", diff(sin_x, "x"));
 }
 
 void test_normalization_expansion() {
     std::cout << "\n--- Testing Normalization (Expansion) ---" << std::endl;
 
-    auto a = lamina::detail::make_node<VariableNode>("a");
-    auto b = lamina::detail::make_node<VariableNode>("b");
-    auto c = lamina::detail::make_node<VariableNode>("c");
-    auto d = lamina::detail::make_node<VariableNode>("d");
+    auto a = LMCAS::detail::make_node<VariableNode>("a");
+    auto b = LMCAS::detail::make_node<VariableNode>("b");
+    auto c = LMCAS::detail::make_node<VariableNode>("c");
+    auto d = LMCAS::detail::make_node<VariableNode>("d");
 
     std::vector<std::shared_ptr<const SymbolicNode>> ab_ops = {a, b};
-    auto a_plus_b = lamina::detail::make_node<AddNode>(std::move(ab_ops));
+    auto a_plus_b = LMCAS::detail::make_node<AddNode>(std::move(ab_ops));
 
     std::vector<std::shared_ptr<const SymbolicNode>> cd_ops = {c, d};
-    auto c_plus_d = lamina::detail::make_node<AddNode>(std::move(cd_ops));
+    auto c_plus_d = LMCAS::detail::make_node<AddNode>(std::move(cd_ops));
 
     std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {a_plus_b, c_plus_d};
-    auto expr = lamina::detail::make_node<MultiplyNode>(std::move(mul_ops));
+    auto expr = LMCAS::detail::make_node<MultiplyNode>(std::move(mul_ops));
 
     check("Original: (a+b)*(c+d)", expr);
 
@@ -110,17 +112,17 @@ void test_normalization_expansion() {
 void test_normalization_simplification() {
     std::cout << "\n--- Testing Normalization (Simplification) ---" << std::endl;
 
-    auto x = lamina::detail::make_node<VariableNode>("x");
-    auto zero = lamina::detail::make_node<NumberNode>(0.0);
+    auto x = LMCAS::detail::make_node<VariableNode>("x");
+    auto zero = LMCAS::detail::make_node<NumberNode>(0.0);
     std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {x, zero};
-    auto mul = lamina::detail::make_node<MultiplyNode>(std::move(mul_ops));
+    auto mul = LMCAS::detail::make_node<MultiplyNode>(std::move(mul_ops));
 
     check("x * 0", normalize(mul), "0");
 
-    auto n2 = lamina::detail::make_node<NumberNode>(2.0);
-    auto n3 = lamina::detail::make_node<NumberNode>(3.0);
+    auto n2 = LMCAS::detail::make_node<NumberNode>(2.0);
+    auto n3 = LMCAS::detail::make_node<NumberNode>(3.0);
     std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {n2, n3, x};
-    auto add = lamina::detail::make_node<AddNode>(std::move(add_ops));
+    auto add = LMCAS::detail::make_node<AddNode>(std::move(add_ops));
 
     check("2 + 3 + x", normalize(add), "x + 5");
 }

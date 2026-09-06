@@ -1,7 +1,7 @@
 #include "test_common.hpp"
 #include "interval.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 int main() {
 
@@ -165,6 +165,41 @@ int main() {
         EXPECT_TRUE(result->contains(2.0), "Should contain 2.0");
         EXPECT_TRUE(!result->contains(1.5), "Should not contain 1.5 (open)");
         EXPECT_TRUE(!result->contains(3.7), "Should not contain 3.7 (open)");
+    }
+
+    TEST_CASE("Parse preserves exact rational and arbitrary-precision endpoints");
+    {
+        auto rational = IntervalUnion::parse("[1/3, 2/3]");
+        EXPECT_TRUE(rational.has_value(), "Exact rational endpoints should parse");
+        if (rational) {
+            EXPECT_EQ_STR(rational->to_string(), "[1/3, 2/3]",
+                          "Exact rational endpoints should round-trip without approximation");
+        }
+
+        const std::string large = "1234567890123456789012345678901234567890";
+        auto arbitrary_precision = IntervalUnion::parse("[" + large + ", " + large + "]");
+        EXPECT_TRUE(arbitrary_precision.has_value(),
+                    "Arbitrary-precision integer endpoints should parse");
+        if (arbitrary_precision) {
+            EXPECT_EQ_STR(arbitrary_precision->to_string(),
+                          "[" + large + ", " + large + "]",
+                          "Arbitrary-precision integer endpoints should round-trip exactly");
+        }
+    }
+
+    TEST_CASE("Parse rejects invalid numeric intervals without leaking exceptions");
+    {
+        bool threw = false;
+        std::optional<IntervalUnion> invalid;
+        try {
+            invalid = IntervalUnion::parse("[1/0, 2]");
+        } catch (...) {
+            threw = true;
+        }
+        EXPECT_TRUE(!threw, "Malformed external input should not throw from optional parser");
+        EXPECT_TRUE(!invalid.has_value(), "Zero rational denominator should be rejected");
+        EXPECT_TRUE(!IntervalUnion::parse("[+\xe2\x88\x9e, 1]").has_value(),
+                    "Positive infinity cannot be a lower endpoint");
     }
 
     return TEST_REPORT();

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 namespace {
 
 bool valid_options(const NumericEvaluationOptions& options) {
@@ -16,11 +16,21 @@ bool valid_options(const NumericEvaluationOptions& options) {
 }
 
 double conversion_ulp(double value) {
+    if (!std::isfinite(value)) {
+        return std::numeric_limits<double>::infinity();
+    }
     const double upward = std::nextafter(
         value, std::numeric_limits<double>::infinity());
     const double downward = std::nextafter(
         value, -std::numeric_limits<double>::infinity());
-    return std::max(std::abs(upward - value), std::abs(value - downward));
+    double spacing = 0.0;
+    if (std::isfinite(upward)) {
+        spacing = std::max(spacing, std::abs(upward - value));
+    }
+    if (std::isfinite(downward)) {
+        spacing = std::max(spacing, std::abs(value - downward));
+    }
+    return spacing;
 }
 
 Result<ApproxReal> approximate_real_isolation(
@@ -168,4 +178,4 @@ Result<ApproxComplex> evaluate_root_complex(
         ApproxComplex{real_part, imaginary_part});
 }
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

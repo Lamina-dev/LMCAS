@@ -16,7 +16,7 @@
 #include "assumption_context.hpp"
 #include <cmath>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -31,15 +31,14 @@ Tribool query_or_unknown(QueryTriboolResult result) {
 QueryTriboolResult checked_query_result(
     const SymbolicExpr& expr,
     const std::string& operation,
-    const std::function<Tribool()>& query) {
-    if (!lamina::detail::node(expr)) {
+    const std::function<QueryTriboolResult()>& query) {
+    if (!LMCAS::detail::node(expr)) {
         return QueryTriboolResult::failure(
-            CasErrc::InvalidArgument, "query expression must not be null", operation);
+            CasErrc::InvalidArgument,
+            "query expression must not be null", operation);
     }
     try {
-        return QueryTriboolResult::success(query());
-    } catch (const detail::ResultPropagation& ex) {
-        return QueryTriboolResult::failure(ex.error());
+        return query();
     } catch (const std::bad_alloc&) {
         return QueryTriboolResult::failure(
             CasErrc::ResourceLimit, "query allocation failed", operation);
@@ -54,7 +53,7 @@ Result<T> checked_expression_result(
     const SymbolicExpr& expr,
     const std::string& operation,
     const std::function<T()>& query) {
-    if (!lamina::detail::node(expr)) {
+    if (!LMCAS::detail::node(expr)) {
         return Result<T>::failure(
             CasErrc::InvalidArgument, "query expression must not be null", operation);
     }
@@ -91,9 +90,8 @@ QueryTriboolResult QueryInterface::cached_query_checked(
     const SymbolicExpr& expr,
     PropType prop,
     const std::string& operation,
-    const std::function<Tribool()>& compute) const {
-    /// 空根节点直接返回参数诊断,其余节点进入哈希缓存.
-    if (!lamina::detail::node(expr)) {
+    const std::function<QueryTriboolResult()>& compute) const {
+    if (!LMCAS::detail::node(expr)) {
         return QueryTriboolResult::failure(
             CasErrc::InvalidArgument, "query expression must not be null", operation);
     }
@@ -106,25 +104,26 @@ QueryTriboolResult QueryInterface::cached_query_checked(
         observed_generation_ = current_gen;
     }
 
-    CacheKey key{lamina::detail::node(expr)->hash(), prop};
+    CacheKey key{LMCAS::detail::node(expr)->hash(), prop};
     auto it = cache_.find(key);
     if (it != cache_.end()) {
         for (const auto& entry : it->second) {
-            if (lamina::detail::node(entry.expression)->equals(*lamina::detail::node(expr))) {
+            if (LMCAS::detail::node(entry.expression)->equals(*LMCAS::detail::node(expr))) {
                 return QueryTriboolResult::success(entry.result);
             }
         }
     }
 
-    Tribool result = compute();
-    cache_[key].push_back(CacheEntry{expr, result});
-    return QueryTriboolResult::success(result);
+    auto result = compute();
+    if (!result) return result;
+    cache_[key].push_back(CacheEntry{expr, result.value()});
+    return result;
 }
 
 // Private helpers
 
 bool QueryInterface::is_unhandled_type(const SymbolicExpr& expression) const {
-    const auto& node = lamina::detail::node(expression);
+    const auto& node = LMCAS::detail::node(expression);
     if (!node) return true;
     if (std::dynamic_pointer_cast<const MatrixNode>(node)) return true;
     if (std::dynamic_pointer_cast<const RelationalNode>(node)) return true;
@@ -134,7 +133,7 @@ bool QueryInterface::is_unhandled_type(const SymbolicExpr& expression) const {
 
 bool QueryInterface::is_nan_number(const SymbolicExpr& expression) const {
     const auto node = std::dynamic_pointer_cast<const NumberNode>(
-        lamina::detail::node(expression));
+        LMCAS::detail::node(expression));
     if (node && std::holds_alternative<lmmc_real_t>(node->value())) {
         lmmc_real_t v = std::get<lmmc_real_t>(node->value());
         return std::isnan(v);
@@ -143,7 +142,7 @@ bool QueryInterface::is_nan_number(const SymbolicExpr& expression) const {
 }
 
 bool QueryInterface::is_infinity_node(const SymbolicExpr& expression) const {
-    const auto& node = lamina::detail::node(expression);
+    const auto& node = LMCAS::detail::node(expression);
     // Direct infinity: FunctionNode with FuncType::Infinity
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
         return func->type() == FunctionNode::FuncType::Infinity;
@@ -164,7 +163,7 @@ bool QueryInterface::is_infinity_node(const SymbolicExpr& expression) const {
 }
 
 int QueryInterface::get_infinity_sign(const SymbolicExpr& expression) const {
-    const auto& node = lamina::detail::node(expression);
+    const auto& node = LMCAS::detail::node(expression);
     // Direct infinity node -> positive infinity
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
         if (func->type() == FunctionNode::FuncType::Infinity) {
@@ -215,11 +214,11 @@ QueryTriboolResult QueryInterface::query_positive_checked(const SymbolicExpr& ex
     return checked_query_result(expr, "query_positive_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Positive, "query_positive_checked", [&]() -> Tribool {
+                expr, PropType::Positive, "query_positive_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -230,10 +229,9 @@ QueryTriboolResult QueryInterface::query_positive_checked(const SymbolicExpr& ex
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_positive_checked(expr));
+                    return engine.query_positive_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -245,11 +243,11 @@ QueryTriboolResult QueryInterface::query_negative_checked(const SymbolicExpr& ex
     return checked_query_result(expr, "query_negative_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Negative, "query_negative_checked", [&]() -> Tribool {
+                expr, PropType::Negative, "query_negative_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -260,10 +258,9 @@ QueryTriboolResult QueryInterface::query_negative_checked(const SymbolicExpr& ex
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_negative_checked(expr));
+                    return engine.query_negative_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -275,11 +272,11 @@ QueryTriboolResult QueryInterface::query_nonnegative_checked(const SymbolicExpr&
     return checked_query_result(expr, "query_nonnegative_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::NonNegative, "query_nonnegative_checked", [&]() -> Tribool {
+                expr, PropType::NonNegative, "query_nonnegative_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -290,10 +287,9 @@ QueryTriboolResult QueryInterface::query_nonnegative_checked(const SymbolicExpr&
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_nonnegative_checked(expr));
+                    return engine.query_nonnegative_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -305,11 +301,11 @@ QueryTriboolResult QueryInterface::query_real_checked(const SymbolicExpr& expr) 
     return checked_query_result(expr, "query_real_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Real, "query_real_checked", [&]() -> Tribool {
+                expr, PropType::Real, "query_real_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -317,10 +313,9 @@ QueryTriboolResult QueryInterface::query_real_checked(const SymbolicExpr& expr) 
                         return Tribool::Unknown;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_real_checked(expr));
+                    return engine.query_real_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -332,11 +327,11 @@ QueryTriboolResult QueryInterface::query_integer_checked(const SymbolicExpr& exp
     return checked_query_result(expr, "query_integer_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Integer, "query_integer_checked", [&]() -> Tribool {
+                expr, PropType::Integer, "query_integer_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::False;
                     }
@@ -344,10 +339,9 @@ QueryTriboolResult QueryInterface::query_integer_checked(const SymbolicExpr& exp
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_integer_checked(expr));
+                    return engine.query_integer_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -359,11 +353,11 @@ QueryTriboolResult QueryInterface::query_nonzero_checked(const SymbolicExpr& exp
     return checked_query_result(expr, "query_nonzero_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::NonZero, "query_nonzero_checked", [&]() -> Tribool {
+                expr, PropType::NonZero, "query_nonzero_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -371,10 +365,9 @@ QueryTriboolResult QueryInterface::query_nonzero_checked(const SymbolicExpr& exp
                         return Tribool::True;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_nonzero_checked(expr));
+                    return engine.query_nonzero_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -388,11 +381,11 @@ QueryTriboolResult QueryInterface::query_algebraic_checked(const SymbolicExpr& e
     return checked_query_result(expr, "query_algebraic_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Algebraic, "query_algebraic_checked", [&]() -> Tribool {
+                expr, PropType::Algebraic, "query_algebraic_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -400,10 +393,9 @@ QueryTriboolResult QueryInterface::query_algebraic_checked(const SymbolicExpr& e
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_algebraic_checked(expr));
+                    return engine.query_algebraic_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -415,11 +407,11 @@ QueryTriboolResult QueryInterface::query_transcendental_checked(const SymbolicEx
     return checked_query_result(expr, "query_transcendental_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Transcendental, "query_transcendental_checked", [&]() -> Tribool {
+                expr, PropType::Transcendental, "query_transcendental_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -427,10 +419,9 @@ QueryTriboolResult QueryInterface::query_transcendental_checked(const SymbolicEx
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_transcendental_checked(expr));
+                    return engine.query_transcendental_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -442,11 +433,11 @@ QueryTriboolResult QueryInterface::query_finite_checked(const SymbolicExpr& expr
     return checked_query_result(expr, "query_finite_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Finite, "query_finite_checked", [&]() -> Tribool {
+                expr, PropType::Finite, "query_finite_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -454,10 +445,9 @@ QueryTriboolResult QueryInterface::query_finite_checked(const SymbolicExpr& expr
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_finite_checked(expr));
+                    return engine.query_finite_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -469,11 +459,11 @@ QueryTriboolResult QueryInterface::query_divergent_checked(const SymbolicExpr& e
     return checked_query_result(expr, "query_divergent_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Divergent, "query_divergent_checked", [&]() -> Tribool {
+                expr, PropType::Divergent, "query_divergent_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
@@ -481,10 +471,9 @@ QueryTriboolResult QueryInterface::query_divergent_checked(const SymbolicExpr& e
                         return Tribool::True;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_divergent_checked(expr));
+                    return engine.query_divergent_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -496,11 +485,11 @@ QueryTriboolResult QueryInterface::query_periodic_checked(const SymbolicExpr& ex
     return checked_query_result(expr, "query_periodic_checked",
         [&]() {
             auto result = cached_query_checked(
-                expr, PropType::Periodic, "query_periodic_checked", [&]() -> Tribool {
+                expr, PropType::Periodic, "query_periodic_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr)) &&
+                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
                         is_nan_number(expr)) {
                         return Tribool::False;
                     }
@@ -508,10 +497,9 @@ QueryTriboolResult QueryInterface::query_periodic_checked(const SymbolicExpr& ex
                         return Tribool::False;
                     }
                     InferenceEngine engine(ctx_);
-                    return detail::propagate_result(
-                        engine.query_periodic_checked(expr));
+                    return engine.query_periodic_checked(expr);
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -522,7 +510,7 @@ QueryPeriodResult QueryInterface::get_period(const SymbolicExpr& expr) const {
 
 QueryPeriodResult QueryInterface::get_period_checked(
     const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) {
+    if (!LMCAS::detail::node(expr)) {
         return QueryPeriodResult::failure(
             CasErrc::InvalidArgument,
             "query expression must not be null",
@@ -547,9 +535,9 @@ QueryTriboolResult QueryInterface::query_positive_definite_checked(const Symboli
                 expr,
                 PropType::PositiveDefinite,
                 "query_positive_definite_checked",
-                [&]() -> Tribool {
+                [&]() -> QueryTriboolResult {
                     if (auto var = std::dynamic_pointer_cast<const VariableNode>(
-                            lamina::detail::node(expr))) {
+                            LMCAS::detail::node(expr))) {
                         const auto& props = ctx_.current_properties();
                         Definiteness d = props.get_definiteness(var->name());
                         if (d == Definiteness::PositiveDefinite) return Tribool::True;
@@ -560,7 +548,7 @@ QueryTriboolResult QueryInterface::query_positive_definite_checked(const Symboli
                     }
                     return Tribool::Unknown;
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -576,9 +564,9 @@ QueryTriboolResult QueryInterface::query_positive_semidefinite_checked(const Sym
                 expr,
                 PropType::PositiveSemiDefinite,
                 "query_positive_semidefinite_checked",
-                [&]() -> Tribool {
+                [&]() -> QueryTriboolResult {
                     if (auto var = std::dynamic_pointer_cast<const VariableNode>(
-                            lamina::detail::node(expr))) {
+                            LMCAS::detail::node(expr))) {
                         const auto& props = ctx_.current_properties();
                         Definiteness d = props.get_definiteness(var->name());
                         if (d == Definiteness::PositiveDefinite ||
@@ -590,7 +578,7 @@ QueryTriboolResult QueryInterface::query_positive_semidefinite_checked(const Sym
                     }
                     return Tribool::Unknown;
                 });
-            return detail::propagate_result(std::move(result));
+            return result;
         });
 }
 
@@ -603,15 +591,15 @@ QueryInterface::QueryConditionSetsResult QueryInterface::query_conditions(
 
 std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions_impl(
     const SymbolicExpr& expr, Sign target) const {
-    if (!lamina::detail::node(expr)) {
+    if (!LMCAS::detail::node(expr)) {
         return {};
     }
-    if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+    if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
         ConditionSet cs;
         cs.sign_conditions.emplace_back(var->name(), target);
         return {cs};
     }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
         if (add->operands().size() == 2) {
             std::shared_ptr<const SymbolicNode> pos_operand = nullptr;
             std::shared_ptr<const SymbolicNode> neg_operand = nullptr; // the term being subtracted
@@ -649,8 +637,8 @@ std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions_impl(
                     cs1.sign_conditions.emplace_back(lhs_var->name(), Sign::Positive);
                     cs1.sign_conditions.emplace_back(rhs_var->name(), Sign::Negative);
                     ConditionSet cs2;
-                    auto lhs_expr = lamina::detail::expression_from_node(pos_operand);
-                    auto rhs_expr = lamina::detail::expression_from_node(neg_operand);
+                    auto lhs_expr = LMCAS::detail::expression_from_node(pos_operand);
+                    auto rhs_expr = LMCAS::detail::expression_from_node(neg_operand);
                     Relation rel{lhs_expr, rhs_expr, RelationalNode::Op::GT};
                     cs2.relational_conditions.push_back(rel);
                     cs2.sign_conditions.emplace_back(rhs_var->name(), Sign::NonNegative);
@@ -662,8 +650,8 @@ std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions_impl(
                     cs1.sign_conditions.emplace_back(rhs_var->name(), Sign::Positive);
 
                     ConditionSet cs2;
-                    auto lhs_expr = lamina::detail::expression_from_node(pos_operand);
-                    auto rhs_expr = lamina::detail::expression_from_node(neg_operand);
+                    auto lhs_expr = LMCAS::detail::expression_from_node(pos_operand);
+                    auto rhs_expr = LMCAS::detail::expression_from_node(neg_operand);
                     Relation rel{rhs_expr, lhs_expr, RelationalNode::Op::GT};
                     cs2.relational_conditions.push_back(rel);
                     cs2.sign_conditions.emplace_back(lhs_var->name(), Sign::NonNegative);
@@ -675,8 +663,8 @@ std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions_impl(
                     cs1.sign_conditions.emplace_back(rhs_var->name(), Sign::NonPositive);
 
                     ConditionSet cs2;
-                    auto lhs_expr = lamina::detail::expression_from_node(pos_operand);
-                    auto rhs_expr = lamina::detail::expression_from_node(neg_operand);
+                    auto lhs_expr = LMCAS::detail::expression_from_node(pos_operand);
+                    auto rhs_expr = LMCAS::detail::expression_from_node(neg_operand);
                     Relation rel{lhs_expr, rhs_expr, RelationalNode::Op::GEQ};
                     cs2.relational_conditions.push_back(rel);
 
@@ -701,7 +689,7 @@ std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions_impl(
         }
         return {};
     }
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         if (mul->operands().size() == 2) {
             std::shared_ptr<const SymbolicNode> numerator = nullptr;
             std::shared_ptr<const SymbolicNode> denominator = nullptr;
@@ -788,4 +776,4 @@ QueryInterface::QueryConditionSetsResult QueryInterface::query_conditions_checke
         });
 }
 
-} // namespace lamina
+} // namespace LMCAS

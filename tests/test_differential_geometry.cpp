@@ -2,7 +2,7 @@
 #include "symbolic_ast.hpp"
 #include "test_common.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
@@ -51,8 +51,8 @@ int main() {
         bool all_zero = true;
         for (auto& c : d2) {
             auto simplified = c->simplify();
-            if (!(lamina::detail::node(simplified) &&
-                  lamina::detail::node(simplified)->is_zero())) {
+            if (!(LMCAS::detail::node(simplified) &&
+                  LMCAS::detail::node(simplified)->is_zero())) {
                 all_zero = false;
             }
         }
@@ -83,7 +83,7 @@ int main() {
             auto d_squared = exterior_derivative_checked(d_alpha.value(), 2, vars);
             EXPECT_TRUE(d_squared.has_value(), "d of a 2-form succeeds");
             if (d_squared && d_squared.value().size() == 1) {
-                EXPECT_TRUE(lamina::detail::node(d_squared.value()[0]->simplify())->is_zero(),
+                EXPECT_TRUE(LMCAS::detail::node(d_squared.value()[0]->simplify())->is_zero(),
                             "d squared is zero for a nontrivial 1-form");
             }
         }
@@ -128,8 +128,8 @@ int main() {
         EXPECT_TRUE(gamma1.has_value(), "checked first-kind Christoffel succeeds");
         if (gamma1) {
             auto simplified_gamma = gamma1.value()->simplify();
-            EXPECT_TRUE(lamina::detail::node(simplified_gamma) &&
-                        lamina::detail::node(simplified_gamma)->is_zero(),
+            EXPECT_TRUE(LMCAS::detail::node(simplified_gamma) &&
+                        LMCAS::detail::node(simplified_gamma)->is_zero(),
                         "flat first-kind Christoffel is zero");
         }
 

@@ -18,7 +18,7 @@
 #include <map>
 #include <functional>
 
-namespace lamina {
+namespace LMCAS {
 
 
 
@@ -26,7 +26,7 @@ static bool te_depends_on(const std::shared_ptr<SymbolicExpr>& expression,
                           const std::string& variable) {
     return expression &&
            expression_depends_on_variable(
-               lamina::detail::node(expression), variable);
+               LMCAS::detail::node(expression), variable);
 }
 
 static Result<void> te_validate_expr_vars(const std::shared_ptr<SymbolicExpr>& expr,
@@ -36,7 +36,7 @@ static Result<void> te_validate_expr_vars(const std::shared_ptr<SymbolicExpr>& e
                                           const std::string& operation) {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "transform expression cannot be null",
                                      operation);
@@ -62,7 +62,7 @@ static Result<void> te_validate_convolution_inputs(
     const std::string& operation) {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!f || !lamina::detail::node(f) || !g || !lamina::detail::node(g)) {
+    if (!f || !LMCAS::detail::node(f) || !g || !LMCAS::detail::node(g)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "convolution expressions cannot be null",
                                      operation);
@@ -77,20 +77,20 @@ static Result<void> te_validate_convolution_inputs(
 
 static bool te_contains_transform(
     const std::shared_ptr<const SymbolicNode>& node) {
-    return lamina::detail::contains_node_type<TransformNode>(node);
+    return LMCAS::detail::contains_node_type<TransformNode>(node);
 }
 
 static TransformEngineResult te_wrap_transform_result(
     std::shared_ptr<SymbolicExpr> expr,
     const std::string& operation) {
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return TransformEngineResult::failure(
             CasErrc::InternalInvariant,
             "transform construction produced a null expression",
             operation);
     }
 
-    if (te_contains_transform(lamina::detail::node(expr))) {
+    if (te_contains_transform(LMCAS::detail::node(expr))) {
         return TransformEngineResult::failure(
             CasErrc::Inconclusive,
             "transform is outside the current evaluated support domain",
@@ -106,13 +106,13 @@ static TransformEngineResult te_wrap_transform_result(
 static std::shared_ptr<SymbolicExpr> te_gt_condition(
     const std::shared_ptr<SymbolicExpr>& lhs,
     const std::shared_ptr<SymbolicExpr>& rhs) {
-    if (!lhs || !lamina::detail::node(lhs) || !rhs || !lamina::detail::node(rhs)) return nullptr;
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<RelationalNode>(lamina::detail::node(lhs), lamina::detail::node(rhs), RelationalNode::Op::GT));
+    if (!lhs || !LMCAS::detail::node(lhs) || !rhs || !LMCAS::detail::node(rhs)) return nullptr;
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<RelationalNode>(LMCAS::detail::node(lhs), LMCAS::detail::node(rhs), RelationalNode::Op::GT));
 }
 
 static bool te_is_zero(const std::shared_ptr<SymbolicExpr>& e) {
-    return e && lamina::detail::node(e) && e->is_zero();
+    return e && LMCAS::detail::node(e) && e->is_zero();
 }
 static double te_numval(const std::shared_ptr<const SymbolicNode>& nd) {
     auto n = std::dynamic_pointer_cast<const NumberNode>(nd);
@@ -126,20 +126,20 @@ static long long te_factorial(int n) {
 }
 static std::shared_ptr<SymbolicExpr> te_unevaluated_laplace(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::Laplace, lamina::detail::node(f)->clone(), t,
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+        TransformNode::TransformType::Laplace, LMCAS::detail::node(f)->clone(), t,
         SymbolicFactory::create_variable(s)));
 }
 static std::shared_ptr<SymbolicExpr> te_unevaluated_inv_laplace(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::InverseLaplace, lamina::detail::node(F)->clone(), s,
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+        TransformNode::TransformType::InverseLaplace, LMCAS::detail::node(F)->clone(), s,
         SymbolicFactory::create_variable(t)));
 }
 static std::pair<std::shared_ptr<SymbolicExpr>,std::shared_ptr<SymbolicExpr>>
 te_split_coeff(const std::shared_ptr<SymbolicExpr>& e, const std::string& v) {
-    if (!e || !lamina::detail::node(e) || !te_depends_on(e, v)) return {e ? e : SymbolicExpr::number(1), SymbolicExpr::number(1)};
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(e));
+    if (!e || !LMCAS::detail::node(e) || !te_depends_on(e, v)) return {e ? e : SymbolicExpr::number(1), SymbolicExpr::number(1)};
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(e));
     if (!mul) return {SymbolicExpr::number(1), e};
     std::vector<std::shared_ptr<const SymbolicNode>> cp, vp;
     for (auto& op : mul->operands()) {
@@ -147,18 +147,18 @@ te_split_coeff(const std::shared_ptr<SymbolicExpr>& e, const std::string& v) {
     }
     if (cp.empty()) return {SymbolicExpr::number(1), e};
     if (vp.empty()) return {e, SymbolicExpr::number(1)};
-    auto c = (cp.size()==1) ? lamina::detail::make_expression_ptr(cp[0])
-        : lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(cp));
-    auto b = (vp.size()==1) ? lamina::detail::make_expression_ptr(vp[0])
-        : lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(vp));
+    auto c = (cp.size()==1) ? LMCAS::detail::make_expression_ptr(cp[0])
+        : LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(cp));
+    auto b = (vp.size()==1) ? LMCAS::detail::make_expression_ptr(vp[0])
+        : LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(vp));
     return {c, b};
 }
 
 static bool te_is_power_of_var(const std::shared_ptr<SymbolicExpr>& e, const std::string& v, int& n) {
-    if (!e || !lamina::detail::node(e)) return false;
-    auto vn = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(e));
+    if (!e || !LMCAS::detail::node(e)) return false;
+    auto vn = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(e));
     if (vn && vn->name() == v) { n = 1; return true; }
-    auto pw = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(e));
+    auto pw = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(e));
     if (!pw) return false;
     auto bv = std::dynamic_pointer_cast<const VariableNode>(pw->base());
     if (!bv || bv->name() != v) return false;
@@ -171,8 +171,8 @@ static bool te_is_power_of_var(const std::shared_ptr<SymbolicExpr>& e, const std
 }
 static bool te_is_trig(const std::shared_ptr<SymbolicExpr>& e, const std::string& v,
                        bool& is_sin, std::shared_ptr<SymbolicExpr>& freq) {
-    if (!e || !lamina::detail::node(e)) return false;
-    auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(e));
+    if (!e || !LMCAS::detail::node(e)) return false;
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(e));
     if (!fn || fn->arguments().empty()) return false;
     if (fn->type() != FunctionNode::FuncType::Sin && fn->type() != FunctionNode::FuncType::Cos) return false;
     is_sin = (fn->type() == FunctionNode::FuncType::Sin);
@@ -182,7 +182,7 @@ static bool te_is_trig(const std::shared_ptr<SymbolicExpr>& e, const std::string
         for (size_t i = 0; i < 2; ++i) {
             auto vn = std::dynamic_pointer_cast<const VariableNode>(ml->operands()[i]);
             if (vn && vn->name() == v && !expression_depends_on_variable(ml->operands()[1-i], v)) {
-                freq = lamina::detail::make_expression_ptr(ml->operands()[1-i]); return true;
+                freq = LMCAS::detail::make_expression_ptr(ml->operands()[1-i]); return true;
             }
         }
     }
@@ -192,8 +192,8 @@ static bool te_is_trig(const std::shared_ptr<SymbolicExpr>& e, const std::string
 }
 static bool te_is_hyp(const std::shared_ptr<SymbolicExpr>& e, const std::string& v,
                       bool& is_sinh, std::shared_ptr<SymbolicExpr>& freq) {
-    if (!e || !lamina::detail::node(e)) return false;
-    auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(e));
+    if (!e || !LMCAS::detail::node(e)) return false;
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(e));
     if (!fn || fn->arguments().empty()) return false;
     if (fn->type() != FunctionNode::FuncType::Sinh && fn->type() != FunctionNode::FuncType::Cosh) return false;
     is_sinh = (fn->type() == FunctionNode::FuncType::Sinh);
@@ -203,7 +203,7 @@ static bool te_is_hyp(const std::shared_ptr<SymbolicExpr>& e, const std::string&
         for (size_t i = 0; i < 2; ++i) {
             auto vn = std::dynamic_pointer_cast<const VariableNode>(ml->operands()[i]);
             if (vn && vn->name() == v && !expression_depends_on_variable(ml->operands()[1-i], v)) {
-                freq = lamina::detail::make_expression_ptr(ml->operands()[1-i]); return true;
+                freq = LMCAS::detail::make_expression_ptr(ml->operands()[1-i]); return true;
             }
         }
     }
@@ -214,8 +214,8 @@ static bool te_is_hyp(const std::shared_ptr<SymbolicExpr>& e, const std::string&
 
 static bool te_extract_exp(const std::shared_ptr<SymbolicExpr>& e, const std::string& t,
                            std::shared_ptr<SymbolicExpr>& a_out, std::shared_ptr<SymbolicExpr>& rem_out) {
-    if (!e || !lamina::detail::node(e)) return false;
-    auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(e));
+    if (!e || !LMCAS::detail::node(e)) return false;
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(e));
     if (fn && fn->type() == FunctionNode::FuncType::Exp && !fn->arguments().empty()) {
         auto arg = fn->arguments()[0];
         auto ml = std::dynamic_pointer_cast<const MultiplyNode>(arg);
@@ -223,7 +223,7 @@ static bool te_extract_exp(const std::shared_ptr<SymbolicExpr>& e, const std::st
             for (size_t i = 0; i < 2; ++i) {
                 auto vn = std::dynamic_pointer_cast<const VariableNode>(ml->operands()[i]);
                 if (vn && vn->name() == t && !expression_depends_on_variable(ml->operands()[1-i], t)) {
-                    a_out = lamina::detail::make_expression_ptr(ml->operands()[1-i]);
+                    a_out = LMCAS::detail::make_expression_ptr(ml->operands()[1-i]);
                     rem_out = SymbolicExpr::number(1); return true;
                 }
             }
@@ -231,18 +231,18 @@ static bool te_extract_exp(const std::shared_ptr<SymbolicExpr>& e, const std::st
         auto vn = std::dynamic_pointer_cast<const VariableNode>(arg);
         if (vn && vn->name() == t) { a_out = SymbolicExpr::number(1); rem_out = SymbolicExpr::number(1); return true; }
     }
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(e));
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(e));
     if (mul) {
         for (size_t i = 0; i < mul->operands().size(); ++i) {
-            auto fac = lamina::detail::make_expression_ptr(mul->operands()[i]);
+            auto fac = LMCAS::detail::make_expression_ptr(mul->operands()[i]);
             std::shared_ptr<SymbolicExpr> at, rt;
             if (te_extract_exp(fac, t, at, rt)) {
                 std::vector<std::shared_ptr<const SymbolicNode>> rest;
                 for (size_t j = 0; j < mul->operands().size(); ++j)
                     if (j != i) rest.push_back(mul->operands()[j]);
                 if (rest.empty()) rem_out = SymbolicExpr::number(1);
-                else if (rest.size() == 1) rem_out = lamina::detail::make_expression_ptr(rest[0]);
-                else rem_out = lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(std::move(rest)));
+                else if (rest.size() == 1) rem_out = LMCAS::detail::make_expression_ptr(rest[0]);
+                else rem_out = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(std::move(rest)));
                 a_out = at; return true;
             }
         }
@@ -256,7 +256,7 @@ void TransformTable::init_laplace_pairs() { /* 变换对通过模式匹配硬编
 
 static std::shared_ptr<SymbolicExpr> te_laplace_lookup(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t, const std::string& s) {
-    if (!f || !lamina::detail::node(f)) return nullptr;
+    if (!f || !LMCAS::detail::node(f)) return nullptr;
     auto sv = SymbolicExpr::variable(s);
     if (!te_depends_on(f, t)) return SymbolicExpr::divide(f, sv);
     int n = 0;
@@ -284,7 +284,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> te_laplace_roc(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& t,
     const std::string& s) {
-    if (!f || !lamina::detail::node(f)) return {};
+    if (!f || !LMCAS::detail::node(f)) return {};
     auto sv = SymbolicExpr::variable(s);
     if (!te_depends_on(f, t)) {
         auto condition = te_gt_condition(sv, SymbolicExpr::number(0));
@@ -319,15 +319,15 @@ static std::shared_ptr<SymbolicExpr> laplace_transform_core(
     const std::string& s, ComputationContext& context) {
     auto step = context.consume_steps(1, "laplace_transform.recursive");
     if (!step) return nullptr;
-    if (!f || !lamina::detail::node(f)) return nullptr;
+    if (!f || !LMCAS::detail::node(f)) return nullptr;
     if (te_is_zero(f)) return SymbolicExpr::number(0);
     if (!te_depends_on(f, t)) return SymbolicExpr::divide(f, SymbolicExpr::variable(s));
-    auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(f));
+    auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(f));
     if (add) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add->operands()) {
             auto lt = laplace_transform_core(
-                lamina::detail::make_expression_ptr(op), t, s, context);
+                LMCAS::detail::make_expression_ptr(op), t, s, context);
             if (!lt) return te_unevaluated_laplace(f, t, s);
             result = result ? SymbolicExpr::add(result, lt) : lt;
         }
@@ -394,9 +394,9 @@ TransformEngineResult laplace_transform_checked(
 
 static std::shared_ptr<SymbolicExpr> te_inv_power(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
-    if (!F || !lamina::detail::node(F)) return nullptr;
+    if (!F || !LMCAS::detail::node(F)) return nullptr;
     auto tv = SymbolicExpr::variable(t);
-    auto pw = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(F));
+    auto pw = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(F));
     if (!pw) return nullptr;
     auto en = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
     if (!en) return nullptr;
@@ -406,9 +406,9 @@ static std::shared_ptr<SymbolicExpr> te_inv_power(
     if (std::abs(ev + n) > 1e-12 || n < 1) return nullptr;
     auto make_exp = [&](const std::shared_ptr<SymbolicExpr>& a) {
         auto arg = SymbolicExpr::multiply(a, tv);
-        return lamina::detail::make_expression_ptr(lamina::detail::make_node<FunctionNode>(
+        return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(arg)}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(arg)}));
     };
     auto bv = std::dynamic_pointer_cast<const VariableNode>(pw->base());
     if (bv && bv->name() == s) {
@@ -422,7 +422,7 @@ static std::shared_ptr<SymbolicExpr> te_inv_power(
         for (size_t i = 0; i < 2; ++i) {
             auto vn = std::dynamic_pointer_cast<const VariableNode>(ba->operands()[i]);
             if (vn && vn->name() == s) {
-                auto c = lamina::detail::make_expression_ptr(ba->operands()[1-i]);
+                auto c = LMCAS::detail::make_expression_ptr(ba->operands()[1-i]);
                 pole = SymbolicExpr::multiply(SymbolicExpr::number(-1), c); break;
             }
         }
@@ -442,8 +442,8 @@ static std::shared_ptr<SymbolicExpr> te_inv_power(
 
 static std::shared_ptr<SymbolicExpr> te_inv_product(
     const std::shared_ptr<SymbolicExpr>& F, const std::string& s, const std::string& t) {
-    if (!F || !lamina::detail::node(F)) return nullptr;
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(F));
+    if (!F || !LMCAS::detail::node(F)) return nullptr;
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(F));
     if (!mul || mul->operands().size() < 2) return nullptr;
     std::vector<std::shared_ptr<const SymbolicNode>> num_parts;
     std::shared_ptr<const SymbolicNode> den_part = nullptr;
@@ -458,10 +458,10 @@ static std::shared_ptr<SymbolicExpr> te_inv_product(
     if (!den_part) return nullptr;
     std::shared_ptr<SymbolicExpr> num_expr;
     if (num_parts.empty()) num_expr = SymbolicExpr::number(1);
-    else if (num_parts.size() == 1) num_expr = lamina::detail::make_expression_ptr(num_parts[0]);
-    else num_expr = lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(num_parts));
+    else if (num_parts.size() == 1) num_expr = LMCAS::detail::make_expression_ptr(num_parts[0]);
+    else num_expr = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(num_parts));
     if (!te_depends_on(num_expr, s)) {
-        auto inv = te_inv_power(lamina::detail::make_expression_ptr(den_part), s, t);
+        auto inv = te_inv_power(LMCAS::detail::make_expression_ptr(den_part), s, t);
         if (inv) return SymbolicExpr::multiply(num_expr, inv);
     }
     return nullptr;
@@ -472,14 +472,14 @@ static std::shared_ptr<SymbolicExpr> inverse_laplace_core(
     const std::string& t, ComputationContext& context) {
     auto step = context.consume_steps(1, "inverse_laplace.recursive");
     if (!step) return nullptr;
-    if (!F || !lamina::detail::node(F)) return nullptr;
+    if (!F || !LMCAS::detail::node(F)) return nullptr;
     if (te_is_zero(F)) return SymbolicExpr::number(0);
-    auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(F));
+    auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(F));
     if (add) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add->operands()) {
             auto ilt = inverse_laplace_core(
-                lamina::detail::make_expression_ptr(op), s, t, context);
+                LMCAS::detail::make_expression_ptr(op), s, t, context);
             if (!ilt) return te_unevaluated_inv_laplace(F, s, t);
             result = result ? SymbolicExpr::add(result, ilt) : ilt;
         }
@@ -518,7 +518,7 @@ TransformEngineResult inverse_laplace_checked(
         auto round_trip = laplace_transform_core(
             expression, t, s, context);
         if (!round_trip ||
-            te_contains_transform(lamina::detail::node(round_trip))) {
+            te_contains_transform(LMCAS::detail::node(round_trip))) {
             return TransformEngineResult::failure(
                 CasErrc::Inconclusive,
                 "inverse Laplace round trip is not proved", operation);
@@ -559,8 +559,8 @@ TransformEngineResult inverse_laplace_checked(
  */
 static bool te_is_gaussian(const std::shared_ptr<SymbolicExpr>& f, const std::string& t,
                             double& a_out) {
-    if (!f || !lamina::detail::node(f)) return false;
-    auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(f));
+    if (!f || !LMCAS::detail::node(f)) return false;
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(f));
     if (!fn || fn->type() != FunctionNode::FuncType::Exp || fn->arguments().empty()) return false;
     auto arg = fn->arguments()[0];
     auto mul = std::dynamic_pointer_cast<const MultiplyNode>(arg);
@@ -593,8 +593,8 @@ static bool te_is_gaussian(const std::shared_ptr<SymbolicExpr>& f, const std::st
  */
 static bool te_is_abs_exp(const std::shared_ptr<SymbolicExpr>& f, const std::string& t,
                            std::shared_ptr<SymbolicExpr>& a_out) {
-    if (!f || !lamina::detail::node(f)) return false;
-    auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(f));
+    if (!f || !LMCAS::detail::node(f)) return false;
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(f));
     if (!fn || fn->type() != FunctionNode::FuncType::Exp || fn->arguments().empty()) return false;
     auto arg = fn->arguments()[0];
     auto mul = std::dynamic_pointer_cast<const MultiplyNode>(arg);
@@ -615,7 +615,7 @@ static bool te_is_abs_exp(const std::shared_ptr<SymbolicExpr>& f, const std::str
                 has_neg = true;
                 a_candidate = SymbolicExpr::number(-v);
             } else {
-                a_candidate = lamina::detail::make_expression_ptr(op);
+                a_candidate = LMCAS::detail::make_expression_ptr(op);
             }
             continue;
         }
@@ -623,7 +623,7 @@ static bool te_is_abs_exp(const std::shared_ptr<SymbolicExpr>& f, const std::str
         auto vn = std::dynamic_pointer_cast<const VariableNode>(op);
         if (vn) {
             /// 假设符号变量为正 a，前面有负号处理
-            a_candidate = lamina::detail::make_expression_ptr(op);
+            a_candidate = LMCAS::detail::make_expression_ptr(op);
             continue;
         }
         return false;
@@ -640,26 +640,26 @@ static std::shared_ptr<SymbolicExpr> fourier_transform_core(
     const std::string& omega, ComputationContext& context) {
     auto step = context.consume_steps(1, "fourier_transform.recursive");
     if (!step) return nullptr;
-    if (!f || !lamina::detail::node(f)) return nullptr;
+    if (!f || !LMCAS::detail::node(f)) return nullptr;
     auto wv = SymbolicExpr::variable(omega);
 
     /// 不依赖 t：无有限 Fourier 变换（δ函数），返回未求值
     if (!te_depends_on(f, t)) {
-        return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-            TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t,
+        return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+            TransformNode::TransformType::Fourier, LMCAS::detail::node(f)->clone(), t,
             SymbolicFactory::create_variable(omega)));
     }
 
     /// 线性性：处理加法 F{af+bg} = aF{f} + bF{g}
-    auto add_node = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(f));
+    auto add_node = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(f));
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add_node->operands()) {
             auto ft = fourier_transform_core(
-                lamina::detail::make_expression_ptr(op), t, omega, context);
+                LMCAS::detail::make_expression_ptr(op), t, omega, context);
             if (!ft) {
-                return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-                    TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t,
+                return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+                    TransformNode::TransformType::Fourier, LMCAS::detail::node(f)->clone(), t,
                     SymbolicFactory::create_variable(omega)));
             }
             result = result ? SymbolicExpr::add(result, ft) : ft;
@@ -703,9 +703,9 @@ static std::shared_ptr<SymbolicExpr> fourier_transform_core(
     /// F{e^(-a*t)} (因果指数，a > 0): 1/(a + iω)
     {
         /// 提取指数 e^(arg)，其中 arg 关于 t 线性：arg = c * t（c 不依赖 t）。
-        auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(f));
+        auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(f));
         if (fn && fn->type() == FunctionNode::FuncType::Exp && fn->arguments().size() == 1) {
-            auto arg = lamina::detail::make_expression_ptr(fn->arguments()[0]);
+            auto arg = LMCAS::detail::make_expression_ptr(fn->arguments()[0]);
             /// c = d(arg)/dt；若 arg 关于 t 线性则 c 不依赖 t。
             auto c = arg->differentiate(t);
             if (c && !te_depends_on(c, t)) {
@@ -713,13 +713,13 @@ static std::shared_ptr<SymbolicExpr> fourier_transform_core(
                 auto linear = SymbolicExpr::multiply(c, SymbolicExpr::variable(t));
                 auto residual = SymbolicExpr::add(arg,
                     SymbolicExpr::multiply(SymbolicExpr::number(-1), linear))->simplify();
-                if (lamina::detail::node(residual) && lamina::detail::node(residual)->is_zero()) {
+                if (LMCAS::detail::node(residual) && LMCAS::detail::node(residual)->is_zero()) {
                     /// 衰减率 a = -c（要求 a>0，即 c 为负）。ℱ = 1/(a + iω)。
                     auto a = SymbolicExpr::multiply(SymbolicExpr::number(-1), c)->simplify();
-                    auto i_unit = lamina::detail::make_expression_ptr(
+                    auto i_unit = LMCAS::detail::make_expression_ptr(
                         SymbolicFactory::create_complex(
-                            lamina::detail::node(SymbolicExpr::number(0)),
-                            lamina::detail::node(SymbolicExpr::number(1))));
+                            LMCAS::detail::node(SymbolicExpr::number(0)),
+                            LMCAS::detail::node(SymbolicExpr::number(1))));
                     auto iw = SymbolicExpr::multiply(i_unit, wv);
                     auto denom = SymbolicExpr::add(a, iw);
                     return SymbolicExpr::divide(SymbolicExpr::number(1), denom)->simplify();
@@ -729,8 +729,8 @@ static std::shared_ptr<SymbolicExpr> fourier_transform_core(
     }
 
     /// 未知形式：返回未求值 TransformNode
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::Fourier, lamina::detail::node(f)->clone(), t,
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+        TransformNode::TransformType::Fourier, LMCAS::detail::node(f)->clone(), t,
         SymbolicFactory::create_variable(omega)));
 }
 
@@ -776,26 +776,26 @@ static std::shared_ptr<SymbolicExpr> inverse_fourier_transform_core(
     const std::string& t, ComputationContext& context) {
     auto step = context.consume_steps(1, "inverse_fourier_transform.recursive");
     if (!step) return nullptr;
-    if (!F || !lamina::detail::node(F)) return nullptr;
+    if (!F || !LMCAS::detail::node(F)) return nullptr;
     auto tv = SymbolicExpr::variable(t);
 
     /// 不依赖 ω：返回未求值
     if (!te_depends_on(F, omega)) {
-        return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-            TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega,
+        return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+            TransformNode::TransformType::InverseFourier, LMCAS::detail::node(F)->clone(), omega,
             SymbolicFactory::create_variable(t)));
     }
 
     /// 线性性
-    auto add_node = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(F));
+    auto add_node = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(F));
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add_node->operands()) {
             auto ift = inverse_fourier_transform_core(
-                lamina::detail::make_expression_ptr(op), omega, t, context);
+                LMCAS::detail::make_expression_ptr(op), omega, t, context);
             if (!ift) {
-                return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-                    TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega,
+                return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+                    TransformNode::TransformType::InverseFourier, LMCAS::detail::node(F)->clone(), omega,
                     SymbolicFactory::create_variable(t)));
             }
             result = result ? SymbolicExpr::add(result, ift) : ift;
@@ -818,8 +818,8 @@ static std::shared_ptr<SymbolicExpr> inverse_fourier_transform_core(
     }
 
     /// 未知形式：返回未求值
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::InverseFourier, lamina::detail::node(F)->clone(), omega,
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+        TransformNode::TransformType::InverseFourier, LMCAS::detail::node(F)->clone(), omega,
         SymbolicFactory::create_variable(t)));
 }
 
@@ -845,7 +845,7 @@ TransformEngineResult inverse_fourier_transform_checked(
         auto round_trip = fourier_transform_core(
             expression, t, omega, context);
         if (!round_trip ||
-            te_contains_transform(lamina::detail::node(round_trip))) {
+            te_contains_transform(LMCAS::detail::node(round_trip))) {
             return TransformEngineResult::failure(
                 CasErrc::Inconclusive,
                 "inverse Fourier round trip is not proved", operation);
@@ -889,11 +889,11 @@ static bool te_numeric_expr(
     const std::shared_ptr<SymbolicExpr>& expression,
     double& value)
 {
-    if (!expression || !lamina::detail::node(expression)) return false;
+    if (!expression || !LMCAS::detail::node(expression)) return false;
     auto number = std::dynamic_pointer_cast<const NumberNode>(
-        lamina::detail::node(expression));
+        LMCAS::detail::node(expression));
     if (!number) return false;
-    value = te_numval(lamina::detail::node(expression));
+    value = te_numval(LMCAS::detail::node(expression));
     return std::isfinite(value);
 }
 
@@ -903,7 +903,7 @@ static bool te_var_square(
 {
     auto power = expression
         ? std::dynamic_pointer_cast<const PowerNode>(
-              lamina::detail::node(expression))
+              LMCAS::detail::node(expression))
         : nullptr;
     if (!power) return false;
     auto base = std::dynamic_pointer_cast<const VariableNode>(power->base());
@@ -923,13 +923,13 @@ static bool te_match_positive_gaussian(
     if (!te_numeric_expr(parts.first, coefficient)) return false;
 
     auto function = std::dynamic_pointer_cast<const FunctionNode>(
-        lamina::detail::node(parts.second));
+        LMCAS::detail::node(parts.second));
     if (!function || function->type() != FunctionNode::FuncType::Exp ||
         function->arguments().size() != 1) {
         return false;
     }
     auto argument =
-        lamina::detail::make_expression_ptr(function->arguments()[0]);
+        LMCAS::detail::make_expression_ptr(function->arguments()[0]);
     auto exponent_parts = te_split_coeff(argument, variable);
     double exponent_coefficient = 0.0;
     if (!te_numeric_expr(exponent_parts.first, exponent_coefficient) ||
@@ -959,7 +959,7 @@ static TransformEngineResult te_convolve_core(
                             const std::shared_ptr<SymbolicExpr>& other,
                             bool sum_is_left) -> TransformEngineResult {
         auto addition = std::dynamic_pointer_cast<const AddNode>(
-            lamina::detail::node(sum));
+            LMCAS::detail::node(sum));
         if (!addition) {
             return TransformEngineResult::failure(
                 CasErrc::Inconclusive,
@@ -967,7 +967,7 @@ static TransformEngineResult te_convolve_core(
         }
         std::shared_ptr<SymbolicExpr> accumulated;
         for (const auto& operand : addition->operands()) {
-            auto term = lamina::detail::make_expression_ptr(operand);
+            auto term = LMCAS::detail::make_expression_ptr(operand);
             auto transformed = sum_is_left
                 ? te_convolve_core(term, other, variable, context)
                 : te_convolve_core(other, term, variable, context);
@@ -982,10 +982,10 @@ static TransformEngineResult te_convolve_core(
             operation);
     };
 
-    if (std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(f))) {
+    if (std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(f))) {
         return convolve_sum(f, g, true);
     }
-    if (std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(g))) {
+    if (std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(g))) {
         return convolve_sum(g, f, false);
     }
 
@@ -1070,12 +1070,12 @@ TransformEngineResult convolve_checked(
  */
 static bool zt_is_exp_seq(const std::shared_ptr<SymbolicExpr>& f, const std::string& n,
                            std::shared_ptr<SymbolicExpr>& base_out) {
-    if (!f || !lamina::detail::node(f)) return false;
-    auto pw = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(f));
+    if (!f || !LMCAS::detail::node(f)) return false;
+    auto pw = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(f));
     if (!pw) return false;
     auto exp_node = std::dynamic_pointer_cast<const VariableNode>(pw->exponent());
     if (!exp_node || exp_node->name() != n) return false;
-    auto base_expr = lamina::detail::make_expression_ptr(pw->base());
+    auto base_expr = LMCAS::detail::make_expression_ptr(pw->base());
     if (te_depends_on(base_expr, n)) return false;
     base_out = base_expr;
     return true;
@@ -1087,8 +1087,8 @@ static bool zt_is_exp_seq(const std::shared_ptr<SymbolicExpr>& f, const std::str
  */
 static bool zt_is_trig_seq(const std::shared_ptr<SymbolicExpr>& f, const std::string& n,
                             bool& is_sin_out, std::shared_ptr<SymbolicExpr>& omega_out) {
-    if (!f || !lamina::detail::node(f)) return false;
-    auto fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(f));
+    if (!f || !LMCAS::detail::node(f)) return false;
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(f));
     if (!fn || fn->arguments().empty()) return false;
     if (fn->type() != FunctionNode::FuncType::Sin && fn->type() != FunctionNode::FuncType::Cos) return false;
     is_sin_out = (fn->type() == FunctionNode::FuncType::Sin);
@@ -1097,7 +1097,7 @@ static bool zt_is_trig_seq(const std::shared_ptr<SymbolicExpr>& f, const std::st
     if (ml && ml->operands().size() == 2) {
         for (size_t i = 0; i < 2; ++i) {
             auto vn = std::dynamic_pointer_cast<const VariableNode>(ml->operands()[i]);
-            auto other = lamina::detail::make_expression_ptr(ml->operands()[1 - i]);
+            auto other = LMCAS::detail::make_expression_ptr(ml->operands()[1 - i]);
             if (vn && vn->name() == n && !te_depends_on(other, n)) {
                 omega_out = other;
                 return true;
@@ -1113,11 +1113,11 @@ static bool zt_is_trig_seq(const std::shared_ptr<SymbolicExpr>& f, const std::st
 }
 
 static std::shared_ptr<SymbolicExpr> zt_abs_expr(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return nullptr;
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    if (!expr || !LMCAS::detail::node(expr)) return nullptr;
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Abs,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(expr)}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(expr)}));
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> zt_unit_roc(const std::string& z) {
@@ -1140,13 +1140,13 @@ static std::vector<std::shared_ptr<SymbolicExpr>> zt_roc(
     const std::shared_ptr<SymbolicExpr>& f_n,
     const std::string& n,
     const std::string& z) {
-    if (!f_n || !lamina::detail::node(f_n)) return {};
+    if (!f_n || !LMCAS::detail::node(f_n)) return {};
 
-    auto add_node = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(f_n));
+    auto add_node = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(f_n));
     if (add_node) {
         std::vector<std::shared_ptr<SymbolicExpr>> combined;
         for (const auto& op : add_node->operands()) {
-            auto term_roc = zt_roc(lamina::detail::make_expression_ptr(op), n, z);
+            auto term_roc = zt_roc(LMCAS::detail::make_expression_ptr(op), n, z);
             combined.insert(combined.end(), term_roc.begin(), term_roc.end());
         }
         return combined;
@@ -1157,10 +1157,10 @@ static std::vector<std::shared_ptr<SymbolicExpr>> zt_roc(
     auto [coeff, body] = te_split_coeff(f_n, n);
     if (!coeff->is_one()) return zt_roc(body, n, z);
 
-    auto vn = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(f_n));
+    auto vn = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(f_n));
     if (vn && vn->name() == n) return zt_unit_roc(z);
 
-    auto pw = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(f_n));
+    auto pw = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(f_n));
     if (pw) {
         auto bv = std::dynamic_pointer_cast<const VariableNode>(pw->base());
         double ev = te_numval(pw->exponent());
@@ -1172,11 +1172,11 @@ static std::vector<std::shared_ptr<SymbolicExpr>> zt_roc(
     std::shared_ptr<SymbolicExpr> base_expr;
     if (zt_is_exp_seq(f_n, n, base_expr)) return zt_base_roc(base_expr, z);
 
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(f_n));
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(f_n));
     if (mul && mul->operands().size() == 2) {
         for (size_t i = 0; i < 2; ++i) {
             auto term_n = std::dynamic_pointer_cast<const VariableNode>(mul->operands()[i]);
-            auto other = lamina::detail::make_expression_ptr(mul->operands()[1 - i]);
+            auto other = LMCAS::detail::make_expression_ptr(mul->operands()[1 - i]);
             if (term_n && term_n->name() == n &&
                 zt_is_exp_seq(other, n, base_expr)) {
                 return zt_base_roc(base_expr, z);
@@ -1196,19 +1196,19 @@ static std::shared_ptr<SymbolicExpr> z_transform_core(
     const std::string& z, ComputationContext& context) {
     auto step = context.consume_steps(1, "z_transform.recursive");
     if (!step) return nullptr;
-    if (!f_n || !lamina::detail::node(f_n)) return nullptr;
+    if (!f_n || !LMCAS::detail::node(f_n)) return nullptr;
     auto zv = SymbolicExpr::variable(z);
 
     /// 线性性：处理加法
-    auto add_node = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(f_n));
+    auto add_node = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(f_n));
     if (add_node) {
         std::shared_ptr<SymbolicExpr> result;
         for (auto& op : add_node->operands()) {
             auto zt = z_transform_core(
-                lamina::detail::make_expression_ptr(op), n, z, context);
+                LMCAS::detail::make_expression_ptr(op), n, z, context);
             if (!zt) {
-                return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-                    TransformNode::TransformType::ZTransform, lamina::detail::node(f_n)->clone(), n,
+                return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+                    TransformNode::TransformType::ZTransform, LMCAS::detail::node(f_n)->clone(), n,
                     SymbolicFactory::create_variable(z)));
             }
             result = result ? SymbolicExpr::add(result, zt) : zt;
@@ -1231,7 +1231,7 @@ static std::shared_ptr<SymbolicExpr> z_transform_core(
 
     /// Z{n} = z/(z-1)^2
     {
-        auto vn = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(f_n));
+        auto vn = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(f_n));
         if (vn && vn->name() == n) {
             auto den = SymbolicExpr::power(
                 SymbolicExpr::add(zv, SymbolicExpr::number(-1)),
@@ -1242,7 +1242,7 @@ static std::shared_ptr<SymbolicExpr> z_transform_core(
 
     /// Z{n^2} = z*(z+1)/(z-1)^3
     {
-        auto pw = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(f_n));
+        auto pw = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(f_n));
         if (pw) {
             auto bv = std::dynamic_pointer_cast<const VariableNode>(pw->base());
             double ev = te_numval(pw->exponent());
@@ -1269,11 +1269,11 @@ static std::shared_ptr<SymbolicExpr> z_transform_core(
 
     /// Z{n·a^n} = a·z/(z-a)^2
     {
-        auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(f_n));
+        auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(f_n));
         if (mul && mul->operands().size() == 2) {
             for (size_t i = 0; i < 2; ++i) {
                 auto vn = std::dynamic_pointer_cast<const VariableNode>(mul->operands()[i]);
-                auto other = lamina::detail::make_expression_ptr(mul->operands()[1 - i]);
+                auto other = LMCAS::detail::make_expression_ptr(mul->operands()[1 - i]);
                 if (vn && vn->name() == n) {
                     std::shared_ptr<SymbolicExpr> base_expr;
                     if (zt_is_exp_seq(other, n, base_expr)) {
@@ -1316,8 +1316,8 @@ static std::shared_ptr<SymbolicExpr> z_transform_core(
     }
 
     /// 未知形式：返回未求值节点
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<TransformNode>(
-        TransformNode::TransformType::ZTransform, lamina::detail::node(f_n)->clone(), n,
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
+        TransformNode::TransformType::ZTransform, LMCAS::detail::node(f_n)->clone(), n,
         SymbolicFactory::create_variable(z)));
 }
 
@@ -1361,4 +1361,4 @@ TransformEngineResult z_transform_checked(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

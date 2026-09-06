@@ -5,28 +5,28 @@
 #include "symbolic_ast.hpp"
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 // Helper: create a SymbolicExpr wrapping a FunctionNode
 static SymbolicExpr make_func_expr(FunctionNode::FuncType type,
                                    std::shared_ptr<const SymbolicNode> arg) {
     std::vector<std::shared_ptr<const SymbolicNode>> args = {std::move(arg)};
-    return lamina::detail::expression_from_node(lamina::detail::make_node<FunctionNode>(type, std::move(args)));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<FunctionNode>(type, std::move(args)));
 }
 
 // Helper: create a VariableNode
 static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 // Helper: create a NumberNode from an integer
 static std::shared_ptr<const SymbolicNode> num(int v) {
-    return lamina::detail::make_node<NumberNode>(BigInt(v));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(v));
 }
 
 // Helper: create a NumberNode from a double
 static std::shared_ptr<const SymbolicNode> num_d(double v) {
-    return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v));
+    return LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v));
 }
 
 

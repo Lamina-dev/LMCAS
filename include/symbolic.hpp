@@ -4,7 +4,7 @@
  */
 #pragma once
 #define _USE_MATH_DEFINES
-#include "lamina_export.hpp"
+#include "lmcas_export.hpp"
 #include "bigint.hpp"
 #include "conditional_result.hpp"
 #include "limit_result.hpp"
@@ -19,9 +19,11 @@
 #include <functional>
 #include <stdexcept>
 
+namespace LMCAS {
+
 class SymbolicExpr;
 
-namespace lamina {
+
 class AssumptionContext;
 
 /** Result of an operation that produces a symbolic expression. */
@@ -40,7 +42,9 @@ enum class RelationOp {
 namespace detail {
 struct SymbolicExprAccess;
 } // namespace detail
-} // namespace lamina
+} namespace LMCAS {
+
+// namespace LMCAS
 
 /**
  * @brief 符号表达式主类,封装 AST 根节点并提供运算,化简,求解等接口.
@@ -48,7 +52,7 @@ struct SymbolicExprAccess;
  * 通过静态工厂方法创建表达式,支持算术运算,三角函数,微积分,
  * 矩阵运算,方程求解等符号计算功能.
  */
-class LAMINA_API SymbolicExpr : public std::enable_shared_from_this<SymbolicExpr> {
+class LMCAS_API SymbolicExpr : public std::enable_shared_from_this<SymbolicExpr> {
 private:
     struct Impl;
     std::shared_ptr<const Impl> impl_;
@@ -59,10 +63,10 @@ private:
         }
     }
 
-    std::shared_ptr<SymbolicExpr> factor_impl(
-        lamina::ComputationContext& context) const;
+    LMCAS::ExpressionResult factor_impl(
+        LMCAS::ComputationContext& context) const;
 
-    friend struct lamina::detail::SymbolicExprAccess;
+    friend struct LMCAS::detail::SymbolicExprAccess;
 
 public:
 
@@ -179,7 +183,7 @@ public:
      * @param ctx 可选的假设上下文,用于验证收敛域和选择展开形式
      * @return 级数表达式
      */
-    std::shared_ptr<SymbolicExpr> series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order, const lamina::AssumptionContext* ctx = nullptr) const;
+    std::shared_ptr<SymbolicExpr> series(const std::string& var, const std::shared_ptr<SymbolicExpr>& point, int order, const LMCAS::AssumptionContext* ctx = nullptr) const;
 
     /**
      * @brief 执行符号除法.
@@ -209,9 +213,9 @@ public:
     /**
      * @brief Factor this expression with explicit failure and budget reporting.
      */
-    lamina::ExpressionResult factor_checked(
-        lamina::ComputationContext& context) const;
-    lamina::ExpressionResult factor_checked() const;
+    LMCAS::ExpressionResult factor_checked(
+        LMCAS::ComputationContext& context) const;
+    LMCAS::ExpressionResult factor_checked() const;
 
     /**
      * @brief 有理函数约分(消去分子分母公因式).
@@ -231,7 +235,7 @@ public:
     std::vector<std::shared_ptr<SymbolicExpr>> get_operands() const;
 
     [[deprecated("Use numeric evaluation or public numeric predicates")]]
-    std::variant<int, ::BigInt, ::Rational> get_number_value() const;
+    std::variant<int, ::LMCAS::BigInt, ::LMCAS::Rational> get_number_value() const;
 
     [[deprecated("Use expression substitution and public symbol predicates")]]
     std::string get_identifier() const;
@@ -262,14 +266,14 @@ public:
      * @param bi 大整数
      * @return 数值表达式
      */
-    static std::shared_ptr<SymbolicExpr> number(const ::BigInt& bi);
+    static std::shared_ptr<SymbolicExpr> number(const ::LMCAS::BigInt& bi);
 
     /**
      * @brief 创建有理数数值表达式.
      * @param r 有理数
      * @return 数值表达式
      */
-    static std::shared_ptr<SymbolicExpr> number(const ::Rational& r);
+    static std::shared_ptr<SymbolicExpr> number(const ::LMCAS::Rational& r);
 
 	/**
 	 * @brief 创建无穷大表达式.
@@ -451,7 +455,7 @@ public:
      * @return 数值(int,BigInt 或 Rational)
      * @throws std::runtime_error 节点类型与数值访问器不匹配时抛出
      */
-    std::variant<int, ::BigInt, ::Rational> get_number() const;
+    std::variant<int, ::LMCAS::BigInt, ::LMCAS::Rational> get_number() const;
 
     int get_int() const;
     /**
@@ -459,18 +463,18 @@ public:
      * @return BigInt 值
      * @throws std::runtime_error 节点类型与 BigInt 访问器不匹配时抛出
      */
-    ::BigInt get_big_int() const;
+    ::LMCAS::BigInt get_big_int() const;
     /**
      * @brief 获取有理数值.
      * @return Rational 值
      * @throws std::runtime_error 节点类型与 Rational 访问器不匹配时抛出
      */
-    ::Rational get_rational() const;
+    ::LMCAS::Rational get_rational() const;
     /**
      * @brief 将数值表达式转换为 Rational(BigInt 也会转换).
      * @return 有理数值,非数值类型返回 Rational(0)
      */
-    ::Rational convert_rational() const;
+    ::LMCAS::Rational convert_rational() const;
 
     /**
      * @brief 将表达式求值为浮点数.
@@ -478,3 +482,5 @@ public:
      */
     lmmc_real_t to_numeric() const;
 };
+
+} // namespace LMCAS

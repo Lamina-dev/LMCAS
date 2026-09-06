@@ -1,7 +1,7 @@
 #include "internal/integration_support.hpp"
 #include "internal/exact_matrix.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -79,7 +79,7 @@ bool rd_collect_rational(const std::shared_ptr<const SymbolicNode>& node,
     // A NumberNode is a constant; convert directly.
     if (auto n = std::dynamic_pointer_cast<const NumberNode>(node)) {
         Polynomial<Rational> p =
-            symbolic_to_poly<Rational>(lamina::detail::make_expression_ptr(n), var);
+            symbolic_to_poly<Rational>(LMCAS::detail::make_expression_ptr(n), var);
         num.push_back(p);
         return true;
     }
@@ -214,7 +214,7 @@ bool RationalDecompositionStrategy::extract_rational(
     Polynomial<Rational>& P_out, Polynomial<Rational>& Q_out) {
 
     std::vector<Polynomial<Rational>> nums, dens;
-    if (!rd_collect_rational(lamina::detail::node(expr), var, nums, dens)) return false;
+    if (!rd_collect_rational(LMCAS::detail::node(expr), var, nums, dens)) return false;
 
     Polynomial<Rational> P({Rational(1)}, var);
     for (const auto& p : nums) P = P * p;
@@ -347,7 +347,7 @@ bool RationalDecompositionStrategy::factor_denominator(
     return true;
 }
 
-bool RationalDecompositionStrategy::solve_coefficients(
+Result<bool> RationalDecompositionStrategy::solve_coefficients(
     const Polynomial<Rational>& P,
     const Polynomial<Rational>& Q,
     const std::vector<std::pair<Polynomial<Rational>, int>>& factors,
@@ -500,7 +500,7 @@ bool RationalDecompositionStrategy::solve_coefficients(
             solved.error().code == CasErrc::DomainError) {
             return false;
         }
-        throw detail::ResultPropagation(solved.error());
+        return Result<bool>::failure(solved.error());
     }
     auto sol = std::move(solved.value());
 
@@ -577,9 +577,9 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::integrate_term(
             auto den_pw = SymbolicExpr::power(den_sym_base, rd_num_int(power));
             auto inv_den = SymbolicExpr::power(den_pw, rd_num_int(-1));
             auto integrand = SymbolicExpr::multiply(num_sym, inv_den);
-            return lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<IntegralNode>(
-                    lamina::detail::node(integrand), var));
+            return LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<IntegralNode>(
+                    LMCAS::detail::node(integrand), var));
         }
 
         // power == 1: integral (B x + C) / (x^2 + p x + q) dx
@@ -629,7 +629,7 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::integrate_term(
     return SymbolicExpr::number(0);
 }
 
-std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> RationalDecompositionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext& computation, int depth) {
     (void)ctx;
@@ -689,9 +689,9 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
         if (!factor_denominator(Q, factors)) {
             /// Q 上因式分解未决时保留未求值积分节点.
             return Integrator::depends_on(expr, var)
-                ? lamina::detail::make_expression_ptr(
-                      lamina::detail::make_node<IntegralNode>(
-                          lamina::detail::node(expr), var))
+                ? LMCAS::detail::make_expression_ptr(
+                      LMCAS::detail::make_node<IntegralNode>(
+                          LMCAS::detail::node(expr), var))
                 : nullptr;
         }
         if (factors.empty()) {
@@ -705,11 +705,16 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
         // Solve coefficients on the proper part rem / Q.
         std::vector<Polynomial<Rational>> numerators;
         if (!rd_is_zero_poly(rem)) {
-            if (!solve_coefficients(
-                    rem, Q, factors, numerators, computation)) {
-                return lamina::detail::make_expression_ptr(
-                    lamina::detail::make_node<IntegralNode>(
-                        lamina::detail::node(expr), var));
+            auto coefficients = solve_coefficients(
+                rem, Q, factors, numerators, computation);
+            if (!coefficients) {
+                return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                    coefficients.error());
+            }
+            if (!coefficients.value()) {
+                return LMCAS::detail::make_expression_ptr(
+                    LMCAS::detail::make_node<IntegralNode>(
+                        LMCAS::detail::node(expr), var));
             }
         }
 
@@ -744,9 +749,9 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
                     auto term = integrate_term(numerators[idx], fpoly, l, var);
                     if (!term) {
                         // Fallback: unevaluated integral over the original.
-                        return lamina::detail::make_expression_ptr(
-                            lamina::detail::make_node<IntegralNode>(
-                                lamina::detail::node(expr), var));
+                        return LMCAS::detail::make_expression_ptr(
+                            LMCAS::detail::make_node<IntegralNode>(
+                                LMCAS::detail::node(expr), var));
                     }
                     result = SymbolicExpr::add(result, term);
                 }
@@ -763,18 +768,18 @@ std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::try_integrate_raw(
         }
         return result;
     } catch (const std::invalid_argument&) {
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<IntegralNode>(
-                lamina::detail::node(expr), var));
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<IntegralNode>(
+                LMCAS::detail::node(expr), var));
     } catch (const std::out_of_range&) {
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<IntegralNode>(
-                lamina::detail::node(expr), var));
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<IntegralNode>(
+                LMCAS::detail::node(expr), var));
     } catch (const std::runtime_error&) {
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<IntegralNode>(
-                lamina::detail::node(expr), var));
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<IntegralNode>(
+                LMCAS::detail::node(expr), var));
     }
 }
 
-} // namespace lamina
+} // namespace LMCAS

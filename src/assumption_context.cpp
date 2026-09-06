@@ -8,14 +8,16 @@
  */
 
 #include "assumption_context.hpp"
-#include "inference_engine.hpp"
+#include "computation_context.hpp"
 #include "inference_engine.hpp"
 #include "interval.hpp"
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
+#include <cctype>
+#include <cmath>
 #include <sstream>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -174,11 +176,11 @@ AssumptionVoidResult AssumptionContext::assume_conditional_checked(
     const SymbolicExpr& condition,
     const SymbolicExpr& conclusion) {
     constexpr const char* operation = "assume_conditional";
-    if (!std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(condition))) {
+    if (!std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(condition))) {
         return AssumptionVoidResult::failure(
             CasErrc::InvalidArgument, "condition expression must be relational", operation);
     }
-    if (!std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(conclusion))) {
+    if (!std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(conclusion))) {
         return AssumptionVoidResult::failure(
             CasErrc::InvalidArgument, "conclusion expression must be relational", operation);
     }
@@ -215,16 +217,16 @@ std::vector<AssumptionContext::ConditionalAssumption> AssumptionContext::get_act
 }
 
 Tribool AssumptionContext::evaluate_condition(const SymbolicExpr& condition) const {
-    if (!lamina::detail::node(condition)) {
+    if (!LMCAS::detail::node(condition)) {
         return Tribool::Unknown;
     }
-    auto rel_node = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(condition));
+    auto rel_node = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(condition));
     if (!rel_node) {
         return Tribool::Unknown;
     }
 
-    auto lhs = lamina::detail::expression_from_node(rel_node->left());
-    auto rhs = lamina::detail::expression_from_node(rel_node->right());
+    auto lhs = LMCAS::detail::expression_from_node(rel_node->left());
+    auto rhs = LMCAS::detail::expression_from_node(rel_node->right());
     RelationalNode::Op op = rel_node->op();
     for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
         if (it->relations.has_relation(lhs, rhs, op)) {
@@ -369,18 +371,18 @@ AssumptionVoidResult AssumptionContext::assume(const SymbolicExpr& relation) {
 
 AssumptionVoidResult AssumptionContext::assume_checked(const SymbolicExpr& relation) {
     constexpr const char* operation = "assume";
-    if (!lamina::detail::node(relation)) {
+    if (!LMCAS::detail::node(relation)) {
         return AssumptionVoidResult::failure(
             CasErrc::InvalidArgument, "relation expression must not be null", operation);
     }
-    if (!std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(relation))) {
+    if (!std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(relation))) {
         return AssumptionVoidResult::failure(
             CasErrc::InvalidArgument, "relation expression root must be relational", operation);
     }
     try {
-        auto rel_node = std::dynamic_pointer_cast<const RelationalNode>(lamina::detail::node(relation));
-        auto lhs = lamina::detail::expression_from_node(rel_node->left());
-        auto rhs = lamina::detail::expression_from_node(rel_node->right());
+        auto rel_node = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(relation));
+        auto lhs = LMCAS::detail::expression_from_node(rel_node->left());
+        auto rhs = LMCAS::detail::expression_from_node(rel_node->right());
         auto result = scope_stack_.back().relations.add_relation_checked(
             lhs, rhs, rel_node->op(), scope_stack_.back().properties);
         if (!result.has_value()) {
@@ -745,6 +747,80 @@ RelationalNode::Op parse_relop(const std::string& s, int line_num) {
         "Line " + std::to_string(line_num) + ": unknown relational operator '" + s + "'");
 }
 
+void require_line_end(std::istringstream& input,
+                      int line_num,
+                      const std::string& keyword) {
+    std::string trailing;
+    if (input >> trailing) {
+        throw std::invalid_argument(
+            "Line " + std::to_string(line_num) + ": " + keyword +
+            " has unexpected trailing field '" + trailing + "'");
+    }
+}
+
+std::shared_ptr<const SymbolicNode> parse_finite_number_node(
+    const std::string& token,
+    int line_num) {
+    const auto invalid = [&]() {
+        return std::invalid_argument(
+            "Line " + std::to_string(line_num) +
+            ": invalid finite number '" + token + "'");
+    };
+    if (token.empty()) {
+        throw invalid();
+    }
+
+    const auto slash = token.find('/');
+    if (slash != std::string::npos) {
+        if (slash == 0 || slash + 1 == token.size() ||
+            token.find('/', slash + 1) != std::string::npos) {
+            throw invalid();
+        }
+        return LMCAS::detail::make_node<NumberNode>(
+            Rational(
+                BigInt(token.substr(0, slash)),
+                BigInt(token.substr(slash + 1))));
+    }
+    if (token.find_first_of(".eE") == std::string::npos) {
+        return LMCAS::detail::make_node<NumberNode>(BigInt(token));
+    }
+
+    std::size_t consumed = 0;
+    const double value = std::stod(token, &consumed);
+    if (consumed != token.size() || !std::isfinite(value)) {
+        throw invalid();
+    }
+    return LMCAS::detail::make_node<NumberNode>(
+        static_cast<lmmc_real_t>(value));
+}
+
+std::shared_ptr<const SymbolicNode> parse_serialized_atom_node(
+    const std::string& token,
+    int line_num) {
+    if (token.empty()) {
+        throw std::invalid_argument(
+            "Line " + std::to_string(line_num) + ": empty expression atom");
+    }
+
+    const auto is_identifier_start = [](unsigned char c) {
+        return std::isalpha(c) != 0 || c == '_' || c >= 0x80;
+    };
+    const auto is_identifier_continue = [](unsigned char c) {
+        return std::isalnum(c) != 0 || c == '_' || c >= 0x80;
+    };
+    if (is_identifier_start(static_cast<unsigned char>(token.front()))) {
+        for (char c : token) {
+            if (!is_identifier_continue(static_cast<unsigned char>(c))) {
+                throw std::invalid_argument(
+                    "Line " + std::to_string(line_num) +
+                    ": unsupported serialized expression '" + token + "'");
+            }
+        }
+        return LMCAS::detail::make_node<VariableNode>(token);
+    }
+    return parse_finite_number_node(token, line_num);
+}
+
 /// Serialize an interval endpoint to a numeric string.
 std::string endpoint_to_string(const Endpoint& ep) {
     if (ep.is_neg_infinity) return "-inf";
@@ -764,39 +840,58 @@ std::string interval_to_string(const Interval& iv) {
     return result;
 }
 
-/// Parse an interval from string format like [0.000000, 1.000000]
+/// Parse an interval from the canonical format: [lo, hi], (lo, hi], etc.
 Interval parse_interval(const std::string& s, int line_num) {
-    if (s.size() < 5) {
-        throw std::invalid_argument(
+    const auto malformed = [&]() {
+        return std::invalid_argument(
             "Line " + std::to_string(line_num) + ": malformed interval '" + s + "'");
+    };
+    if (s.size() < 5 ||
+        (s.front() != '[' && s.front() != '(') ||
+        (s.back() != ']' && s.back() != ')')) {
+        throw malformed();
     }
+
+    const bool lower_open = s.front() == '(';
+    const bool upper_open = s.back() == ')';
+    const std::string inner = s.substr(1, s.size() - 2);
+    const auto comma_pos = inner.find(", ");
+    if (comma_pos == std::string::npos ||
+        inner.find(", ", comma_pos + 2) != std::string::npos) {
+        throw malformed();
+    }
+
+    const std::string lo_str = inner.substr(0, comma_pos);
+    const std::string hi_str = inner.substr(comma_pos + 2);
+    if (lo_str.empty() || hi_str.empty()) {
+        throw malformed();
+    }
+    if ((lo_str == "-inf" && !lower_open) ||
+        (hi_str == "+inf" && !upper_open)) {
+        throw malformed();
+    }
+
+    const auto parse_finite_number =
+        [&](const std::string& token) -> std::shared_ptr<SymbolicExpr> {
+        try {
+            return LMCAS::detail::make_expression_ptr(
+                parse_finite_number_node(token, line_num));
+        } catch (const std::invalid_argument&) {
+            throw malformed();
+        }
+    };
 
     Interval iv;
-    bool lower_open = (s[0] == '(');
-    bool upper_open = (s.back() == ')');
-    std::string inner = s.substr(1, s.size() - 2);
-    auto comma_pos = inner.find(", ");
-    if (comma_pos == std::string::npos) {
-        throw std::invalid_argument(
-            "Line " + std::to_string(line_num) + ": malformed interval '" + s + "'");
-    }
-
-    std::string lo_str = inner.substr(0, comma_pos);
-    std::string hi_str = inner.substr(comma_pos + 2);
     if (lo_str == "-inf") {
         iv.lower = Endpoint::neg_inf();
     } else {
-        double lo_val = std::stod(lo_str);
-        auto lo_expr = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo_val)));
+        const auto lo_expr = parse_finite_number(lo_str);
         iv.lower = lower_open ? Endpoint::open(lo_expr) : Endpoint::closed(lo_expr);
     }
     if (hi_str == "+inf") {
         iv.upper = Endpoint::pos_inf();
     } else {
-        double hi_val = std::stod(hi_str);
-        auto hi_expr = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi_val)));
+        const auto hi_expr = parse_finite_number(hi_str);
         iv.upper = upper_open ? Endpoint::open(hi_expr) : Endpoint::closed(hi_expr);
     }
 
@@ -902,9 +997,13 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
             line.pop_back();
         }
         if (line.empty()) continue;
+        if (ended) {
+            throw std::invalid_argument(
+                "Line " + std::to_string(line_num) + ": data after END");
+        }
         if (line == "END") {
             ended = true;
-            break;
+            continue;
         }
         std::istringstream ls(line);
         std::string keyword;
@@ -916,12 +1015,16 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 throw std::invalid_argument(
                     "Line " + std::to_string(line_num) + ": SCOPE missing index");
             }
-            if (idx == 0) {
-                current_scope = 0;
-            } else {
-                ctx.push();
-                current_scope = idx;
+            require_line_end(ls, line_num, keyword);
+            if (idx != current_scope + 1) {
+                throw std::invalid_argument(
+                    "Line " + std::to_string(line_num) +
+                    ": SCOPE indices must be sequential from zero");
             }
+            if (idx > 0) {
+                ctx.push();
+            }
+            current_scope = idx;
         } else if (keyword == "DOMAIN") {
             if (current_scope < 0) {
                 throw std::invalid_argument(
@@ -932,6 +1035,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 throw std::invalid_argument(
                     "Line " + std::to_string(line_num) + ": DOMAIN requires symbol and domain");
             }
+            require_line_end(ls, line_num, keyword);
             Domain dom = parse_domain(dom_str, line_num);
             require_deserialization_update(
                 ctx.current_properties().declare_domain_checked(sym, dom), line_num, keyword);
@@ -945,6 +1049,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 throw std::invalid_argument(
                     "Line " + std::to_string(line_num) + ": SIGN requires symbol and sign");
             }
+            require_line_end(ls, line_num, keyword);
             Sign s = parse_sign(sign_str, line_num);
             require_deserialization_update(
                 ctx.current_properties().declare_sign_checked(sym, s), line_num, keyword);
@@ -958,6 +1063,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 throw std::invalid_argument(
                     "Line " + std::to_string(line_num) + ": PARITY requires symbol and parity");
             }
+            require_line_end(ls, line_num, keyword);
             Parity p = parse_parity(par_str, line_num);
             require_deserialization_update(
                 ctx.current_properties().declare_parity_checked(sym, p), line_num, keyword);
@@ -971,6 +1077,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 throw std::invalid_argument(
                     "Line " + std::to_string(line_num) + ": BOUNDED requires symbol and boundedness");
             }
+            require_line_end(ls, line_num, keyword);
             Boundedness b = parse_boundedness(bnd_str, line_num);
             require_deserialization_update(
                 ctx.current_properties().declare_bounded_checked(sym, b), line_num, keyword);
@@ -984,6 +1091,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 throw std::invalid_argument(
                     "Line " + std::to_string(line_num) + ": TRANSCENDENTAL requires symbol");
             }
+            require_line_end(ls, line_num, keyword);
             require_deserialization_update(
                 ctx.current_properties().declare_transcendental_checked(sym), line_num, keyword);
         } else if (keyword == "FINITENESS") {
@@ -997,6 +1105,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": FINITENESS requires symbol and value");
             }
             Finiteness f = parse_finiteness(fin_str, line_num);
+            require_line_end(ls, line_num, keyword);
             require_deserialization_update(
                 ctx.current_properties().declare_finiteness_checked(sym, f), line_num, keyword);
         } else if (keyword == "DEFINITENESS") {
@@ -1010,6 +1119,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": DEFINITENESS requires symbol and value");
             }
             Definiteness d = parse_definiteness(def_str, line_num);
+            require_line_end(ls, line_num, keyword);
             require_deserialization_update(
                 ctx.current_properties().declare_definiteness_checked(sym, d), line_num, keyword);
         } else if (keyword == "PERIODIC") {
@@ -1030,18 +1140,9 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                     "Line " + std::to_string(line_num) + ": PERIODIC requires period value");
             }
             period_str = period_str.substr(start);
-            std::shared_ptr<SymbolicExpr> period_expr;
-            try {
-                double period_val = std::stod(period_str);
-                period_expr = lamina::detail::make_expression_ptr(
-                    lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(period_val)));
-            } catch (const std::invalid_argument&) {
-                period_expr = lamina::detail::make_expression_ptr(
-                    lamina::detail::make_node<VariableNode>(period_str));
-            } catch (const std::out_of_range&) {
-                period_expr = lamina::detail::make_expression_ptr(
-                    lamina::detail::make_node<VariableNode>(period_str));
-            }
+            std::shared_ptr<SymbolicExpr> period_expr =
+                LMCAS::detail::make_expression_ptr(
+                    parse_serialized_atom_node(period_str, line_num));
             require_deserialization_update(
                 ctx.current_properties().declare_periodic_checked(sym, period_expr),
                 line_num, keyword);
@@ -1091,14 +1192,8 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
             std::string rhs_str = rest.substr(op_pos + 1 + op_str.size() + 1);
             RelationalNode::Op op = parse_relop(op_str, line_num);
             auto parse_simple_expr = [&](const std::string& s) -> SymbolicExpr {
-                try {
-                    double val = std::stod(s);
-                    return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(
-                        static_cast<lmmc_real_t>(val)));
-                } catch (const std::invalid_argument&) {
-                } catch (const std::out_of_range&) {
-                }
-                return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(s));
+                return LMCAS::detail::expression_from_node(
+                    parse_serialized_atom_node(s, line_num));
             };
 
             SymbolicExpr lhs = parse_simple_expr(lhs_str);
@@ -1147,8 +1242,7 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                     ": CONDITIONAL conclusion must end with ')'");
             }
             std::string concl_str = concl_part.substr(0, concl_part.size() - 1);
-            // We parse simple "var OP val" patterns for condition and conclusion.
-            // Complex expression deserialization is deferred per task spec.
+            // The persistence grammar intentionally supports relational atoms.
             auto parse_relational = [&](const std::string& s) -> SymbolicExpr {
                 std::string op_token;
                 size_t op_pos_local = std::string::npos;
@@ -1180,19 +1274,14 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 std::string lhs_s = s.substr(0, op_pos_local);
                 std::string rhs_s = s.substr(op_pos_local + 1 + op_token.size() + 1);
                 RelationalNode::Op rel_op = parse_relop(op_token, line_num);
-                auto parse_token = [](const std::string& tok) -> std::shared_ptr<const SymbolicNode> {
-                    try {
-                        double val = std::stod(tok);
-                        return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
-                    } catch (const std::invalid_argument&) {
-                    } catch (const std::out_of_range&) {
-                    }
-                    return lamina::detail::make_node<VariableNode>(tok);
+                auto parse_token =
+                    [&](const std::string& tok) -> std::shared_ptr<const SymbolicNode> {
+                    return parse_serialized_atom_node(tok, line_num);
                 };
 
                 auto lhs_node = parse_token(lhs_s);
                 auto rhs_node = parse_token(rhs_s);
-                return lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(lhs_node, rhs_node, rel_op));
+                return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(lhs_node, rhs_node, rel_op));
             };
 
             SymbolicExpr cond_expr = parse_relational(cond_str);
@@ -1288,8 +1377,8 @@ AssumptionContext AssumptionContext::deserialize_impl(const std::string& data) {
                 ctx.current_properties().declare_monotonicity_checked(sym, var, iv, m),
                 line_num, keyword);
         } else if (keyword == "END") {
-            ended = true;
-            break;
+            throw std::invalid_argument(
+                "Line " + std::to_string(line_num) + ": malformed END record");
         } else {
             throw std::invalid_argument(
                 "Line " + std::to_string(line_num) + ": unknown keyword '" + keyword + "'");
@@ -1308,19 +1397,32 @@ Result<AssumptionContext> AssumptionContext::deserialize(const std::string& data
     return deserialize_checked(data);
 }
 
-Result<AssumptionContext> AssumptionContext::deserialize_checked(const std::string& data) {
+Result<AssumptionContext> AssumptionContext::deserialize_checked(
+    const std::string& data) {
+    ComputationContext context;
+    return deserialize_checked(data, context);
+}
+
+Result<AssumptionContext> AssumptionContext::deserialize_checked(
+    const std::string& data, ComputationContext& context) {
     constexpr const char* operation = "deserialize";
+    auto input_budget = context.require_input_bytes(data.size(), operation);
+    if (!input_budget) {
+        return Result<AssumptionContext>::failure(input_budget.error());
+    }
     try {
         return Result<AssumptionContext>::success(deserialize_impl(data));
     } catch (const std::bad_alloc&) {
         return Result<AssumptionContext>::failure(
-            CasErrc::ResourceLimit, "assumption deserialization allocation failed", operation);
+            CasErrc::ResourceLimit,
+            "assumption deserialization allocation failed", operation);
     } catch (const std::invalid_argument& ex) {
-        return Result<AssumptionContext>::failure(CasErrc::ParseError, ex.what(), operation);
+        return Result<AssumptionContext>::failure(
+            CasErrc::ParseError, ex.what(), operation);
     } catch (const std::exception& ex) {
         return Result<AssumptionContext>::failure(
             CasErrc::InternalInvariant, ex.what(), operation);
     }
 }
 
-} // namespace lamina
+} // namespace LMCAS

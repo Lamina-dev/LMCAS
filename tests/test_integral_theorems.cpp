@@ -12,7 +12,7 @@
 #include <memory>
 #include <cmath>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static void test_greens_theorem_constant_field()
@@ -485,8 +485,8 @@ static void test_integral_theorems_checked_contracts()
     EXPECT_TRUE(null_surface.error().code == CasErrc::InvalidArgument,
                 "checked Stokes theorem reports InvalidArgument for null parametrization");
 
-    lamina::CancellationToken cancellation;
-    lamina::ComputationContext cancelled_context({}, cancellation);
+    LMCAS::CancellationToken cancellation;
+    LMCAS::ComputationContext cancelled_context({}, cancellation);
     cancellation.cancel();
     auto cancelled = greens_theorem_checked(
         SymbolicExpr::number(0), x, {"x", "y"}, {lo, hi}, {lo, hi},
@@ -495,9 +495,9 @@ static void test_integral_theorems_checked_contracts()
     EXPECT_TRUE(cancelled.error().code == CasErrc::Cancelled,
                 "checked Green's theorem reports Cancelled");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_steps = 1;
-    lamina::ComputationContext limited_context(limits);
+    LMCAS::ComputationContext limited_context(limits);
     auto limited = stokes_theorem_checked(
         stokes_field, {"x", "y", "z"}, surface, "u", "v",
         {lo, hi}, {lo, hi}, limited_context);

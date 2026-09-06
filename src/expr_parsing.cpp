@@ -1,17 +1,18 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
+#include "computation_context.hpp"
 
 #include <cctype>
 #include <exception>
 #include <utility>
 
-#include "lsr_expr_internal.hpp"
+#include "expr_internal.hpp"
 #include "symbolic_ast.hpp"
 #include "root_of_utils.hpp"
 
-namespace lamina::lsr {
+namespace LMCAS {
 namespace {
 
-constexpr const char* kParseOperation = "lsr.parse_expr";
+constexpr const char* kParseOperation = "LMCAS.parse_expr";
 
 class ExprParser {
 public:
@@ -400,9 +401,9 @@ private:
                                                     "relational operands cannot be null",
                                                     kParseOperation);
         try {
-            auto node = lamina::detail::make_node<RelationalNode>(
-                lamina::detail::node(lhs), lamina::detail::node(rhs), op);
-            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+            auto node = LMCAS::detail::make_node<RelationalNode>(
+                LMCAS::detail::node(lhs), LMCAS::detail::node(rhs), op);
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
         } catch (const std::bad_alloc&) {
             return expression_failure(CasErrc::ResourceLimit,
                                       "relational expression allocation failed",
@@ -420,11 +421,11 @@ private:
                                       kParseOperation);
         }
         try {
-            auto node = lamina::detail::make_node<LogicalNode>(
-                lamina::detail::node(lhs),
-                rhs ? lamina::detail::node(rhs) : nullptr,
+            auto node = LMCAS::detail::make_node<LogicalNode>(
+                LMCAS::detail::node(lhs),
+                rhs ? LMCAS::detail::node(rhs) : nullptr,
                 op);
-            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
         } catch (const std::bad_alloc&) {
             return expression_failure(CasErrc::ResourceLimit,
                                       "logical expression allocation failed",
@@ -440,15 +441,15 @@ private:
             std::vector<std::shared_ptr<const SymbolicNode>> nodes;
             nodes.reserve(elements.size());
             for (const auto& element : elements) {
-                if (!element || !lamina::detail::node(element)) {
+                if (!element || !LMCAS::detail::node(element)) {
                     return expression_failure(CasErrc::InvalidArgument,
                                               "set elements cannot be null",
                                               kParseOperation);
                 }
-                nodes.push_back(lamina::detail::node(element));
+                nodes.push_back(LMCAS::detail::node(element));
             }
-            auto node = lamina::detail::make_node<FiniteSetNode>(std::move(nodes));
-            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+            auto node = LMCAS::detail::make_node<FiniteSetNode>(std::move(nodes));
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
         } catch (const std::bad_alloc&) {
             return expression_failure(CasErrc::ResourceLimit,
                                       "set expression allocation failed",
@@ -469,10 +470,10 @@ private:
                                       kParseOperation);
         }
         try {
-            auto node = lamina::detail::make_node<IntervalNode>(
-                lamina::detail::node(lower), lamina::detail::node(upper),
+            auto node = LMCAS::detail::make_node<IntervalNode>(
+                LMCAS::detail::node(lower), LMCAS::detail::node(upper),
                 lower_closed, upper_closed);
-            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
         } catch (const std::bad_alloc&) {
             return expression_failure(CasErrc::ResourceLimit,
                                       "interval expression allocation failed",
@@ -493,13 +494,13 @@ private:
         }
         try {
             std::shared_ptr<const SymbolicNode> node =
-                lamina::detail::make_node<MembershipNode>(
-                    lamina::detail::node(element), lamina::detail::node(set));
+                LMCAS::detail::make_node<MembershipNode>(
+                    LMCAS::detail::node(element), LMCAS::detail::node(set));
             if (negated) {
-                node = lamina::detail::make_node<LogicalNode>(
+                node = LMCAS::detail::make_node<LogicalNode>(
                     std::move(node), nullptr, LogicalNode::Op::Not);
             }
-            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
         } catch (const std::bad_alloc&) {
             return expression_failure(CasErrc::ResourceLimit,
                                       "membership expression allocation failed",
@@ -517,15 +518,15 @@ private:
             std::vector<std::shared_ptr<const SymbolicNode>> nodes;
             nodes.reserve(arguments.size());
             for (const auto& argument : arguments) {
-                if (!argument || !lamina::detail::node(argument)) {
+                if (!argument || !LMCAS::detail::node(argument)) {
                     return expression_failure(CasErrc::InvalidArgument,
                                               "function arguments cannot be null",
                                               kParseOperation);
                 }
-                nodes.push_back(lamina::detail::node(argument));
+                nodes.push_back(LMCAS::detail::node(argument));
             }
-            auto node = lamina::detail::make_node<FunctionNode>(type, std::move(nodes));
-            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+            auto node = LMCAS::detail::make_node<FunctionNode>(type, std::move(nodes));
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
         } catch (const std::bad_alloc&) {
             return expression_failure(CasErrc::ResourceLimit,
                                       name + " expression allocation failed",
@@ -594,21 +595,21 @@ private:
         if ((name == "Integral" || name == "integral") &&
             (arguments.size() == 2 || arguments.size() == 4)) {
             auto variable = std::dynamic_pointer_cast<const VariableNode>(
-                lamina::detail::node(arguments[1]));
+                LMCAS::detail::node(arguments[1]));
             if (!variable) {
                 return fail("Integral variable must be a symbol");
             }
             try {
-                auto node = lamina::detail::make_node<IntegralNode>(
-                    lamina::detail::node(arguments[0]), variable->name(),
+                auto node = LMCAS::detail::make_node<IntegralNode>(
+                    LMCAS::detail::node(arguments[0]), variable->name(),
                     arguments.size() == 4
-                        ? lamina::detail::node(arguments[2])
+                        ? LMCAS::detail::node(arguments[2])
                         : nullptr,
                     arguments.size() == 4
-                        ? lamina::detail::node(arguments[3])
+                        ? LMCAS::detail::node(arguments[3])
                         : nullptr);
                 return ExprResult::success(
-                    lamina::detail::make_expression_ptr(std::move(node)));
+                    LMCAS::detail::make_expression_ptr(std::move(node)));
             } catch (const std::bad_alloc&) {
                 return expression_failure(
                     CasErrc::ResourceLimit,
@@ -621,9 +622,9 @@ private:
         }
         if ((name == "limit" || name == "Limit") && arguments.size() == 4) {
             auto variable = std::dynamic_pointer_cast<const VariableNode>(
-                lamina::detail::node(arguments[1]));
+                LMCAS::detail::node(arguments[1]));
             auto direction = std::dynamic_pointer_cast<const VariableNode>(
-                lamina::detail::node(arguments[3]));
+                LMCAS::detail::node(arguments[3]));
             if (!variable || !direction) {
                 return fail("limit variable and direction must be symbols");
             }
@@ -641,17 +642,17 @@ private:
             } else {
                 return fail("invalid limit direction");
             }
-            return ExprResult::success(lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<LimitNode>(
-                    lamina::detail::node(arguments[0]), variable->name(),
-                    lamina::detail::node(arguments[2]), parsed_direction)));
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<LimitNode>(
+                    LMCAS::detail::node(arguments[0]), variable->name(),
+                    LMCAS::detail::node(arguments[2]), parsed_direction)));
         }
         if ((name == "rootof" || name == "RootOf") &&
             arguments.size() == 3) {
             auto variable = std::dynamic_pointer_cast<const VariableNode>(
-                lamina::detail::node(arguments[1]));
+                LMCAS::detail::node(arguments[1]));
             auto index = std::dynamic_pointer_cast<const NumberNode>(
-                lamina::detail::node(arguments[2]));
+                LMCAS::detail::node(arguments[2]));
             if (!variable || !index ||
                 std::holds_alternative<lmmc_real_t>(index->value())) {
                 return fail("RootOf variable and index are invalid");
@@ -701,16 +702,16 @@ private:
             std::vector<std::shared_ptr<const SymbolicNode>> nodes;
             nodes.reserve(arguments.size());
             for (const auto& argument : arguments) {
-                if (!argument || !lamina::detail::node(argument)) {
+                if (!argument || !LMCAS::detail::node(argument)) {
                     return expression_failure(CasErrc::InvalidArgument,
                                               "function arguments cannot be null",
                                               kParseOperation);
                 }
-                nodes.push_back(lamina::detail::node(argument));
+                nodes.push_back(LMCAS::detail::node(argument));
             }
-            auto node = lamina::detail::make_node<UninterpretedFunctionNode>(
+            auto node = LMCAS::detail::make_node<UninterpretedFunctionNode>(
                 name, std::move(nodes));
-            return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+            return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
         } catch (const std::bad_alloc&) {
             return expression_failure(CasErrc::ResourceLimit,
                                       "function expression allocation failed",
@@ -725,6 +726,17 @@ private:
 } // namespace
 
 ExprResult parse_expr(const std::string& source) {
+    ComputationContext context;
+    return parse_expr(source, context);
+}
+
+ExprResult parse_expr(const std::string& source,
+                      ComputationContext& context) {
+    auto input_budget =
+        context.require_input_bytes(source.size(), kParseOperation);
+    if (!input_budget) {
+        return ExprResult::failure(input_budget.error());
+    }
     try {
         return ExprParser(source).parse();
     } catch (const std::bad_alloc&) {
@@ -737,4 +749,4 @@ ExprResult parse_expr(const std::string& source) {
     }
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

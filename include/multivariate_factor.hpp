@@ -12,7 +12,7 @@
  */
 #pragma once
 
-#include "lamina_export.hpp"
+#include "lmcas_export.hpp"
 #include "multivariate_poly.hpp"
 #include "computation_context.hpp"
 #include "result.hpp"
@@ -22,7 +22,7 @@
 #include <tuple>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @brief 多元因式分解结果
@@ -45,11 +45,11 @@ using MultiFactorCheckedResult = Result<MathResult<MultiFactorResult>>;
  * 的精确路径下不可约;有界或尚不支持的精确部分结果标记为
  * `Inconclusive`.资源、取消、分配与内部不变量失败均通过 CasError 返回.
  */
-LAMINA_API MultiFactorCheckedResult factor_multivariate_checked(
+LMCAS_API MultiFactorCheckedResult factor_multivariate_checked(
     const MultiPoly& poly,
     ComputationContext& context);
 
-LAMINA_API MultiFactorCheckedResult factor_multivariate_checked(
+LMCAS_API MultiFactorCheckedResult factor_multivariate_checked(
     const MultiPoly& poly);
 
 /// 内部算法组件（供测试使用）
@@ -63,7 +63,7 @@ LAMINA_API MultiFactorCheckedResult factor_multivariate_checked(
  * @param[in] main_var 主变量名
  * @return 容度多项式（辅助变量的多项式）
  */
-LAMINA_API MultiPoly multivariate_content(const MultiPoly& poly,
+LMCAS_API MultiPoly multivariate_content(const MultiPoly& poly,
                                           const std::string& main_var);
 
 /**
@@ -76,7 +76,7 @@ LAMINA_API MultiPoly multivariate_content(const MultiPoly& poly,
  * @param[in] main_var 主变量名
  * @return 本原部分多项式
  */
-LAMINA_API MultiPoly multivariate_primitive_part(const MultiPoly& poly,
+LMCAS_API MultiPoly multivariate_primitive_part(const MultiPoly& poly,
                                                  const std::string& main_var);
 
 /**
@@ -89,7 +89,7 @@ LAMINA_API MultiPoly multivariate_primitive_part(const MultiPoly& poly,
  * @param[in] b 第二个多项式
  * @return gcd(a, b)
  */
-LAMINA_API MultiPoly multivariate_gcd(const MultiPoly& a, const MultiPoly& b);
+LMCAS_API MultiPoly multivariate_gcd(const MultiPoly& a, const MultiPoly& b);
 
 /**
  * @brief 无平方因子分解结果
@@ -111,7 +111,7 @@ struct SquareFreeDecomp {
  * @param[in] main_var 主变量名
  * @return 无平方因子分解结果
  */
-LAMINA_API SquareFreeDecomp square_free_decompose(const MultiPoly& poly,
+LMCAS_API SquareFreeDecomp square_free_decompose(const MultiPoly& poly,
                                                   const std::string& main_var);
 
 /**
@@ -127,7 +127,7 @@ LAMINA_API SquareFreeDecomp square_free_decompose(const MultiPoly& poly,
  * @param[in] degree_bound      提升次数上界
  * @return 提升后的多元因子列表
  */
-LAMINA_API std::vector<MultiPoly> multivariate_hensel_lift(
+LMCAS_API std::vector<MultiPoly> multivariate_hensel_lift(
     const MultiPoly& poly,
     const std::vector<Polynomial<Rational>>& univariate_factors,
     const std::string& lift_var,
@@ -148,7 +148,7 @@ LAMINA_API std::vector<MultiPoly> multivariate_hensel_lift(
  * @param[in] degree_bound 次数上界
  * @return 解多项式列表 [s₁, s₂, ..., sᵣ]
  */
-LAMINA_API std::vector<MultiPoly> multivariate_diophantine(
+LMCAS_API std::vector<MultiPoly> multivariate_diophantine(
     const std::vector<MultiPoly>& factors,
     const MultiPoly& target,
     const std::string& var,
@@ -168,7 +168,7 @@ namespace detail {
  * @param[in] main_var 主变量名
  * @return 若关于 main_var 的次数 ≤ 1 则返回 true
  */
-LAMINA_API bool is_linear(const MultiPoly& poly, const std::string& main_var);
+LMCAS_API bool is_linear(const MultiPoly& poly, const std::string& main_var);
 
 /**
  * @brief 检测差平方模式 a² - b²
@@ -179,7 +179,7 @@ LAMINA_API bool is_linear(const MultiPoly& poly, const std::string& main_var);
  * @param[in] poly 输入多项式
  * @return 若匹配则返回 (a, b)，否则返回 nullopt
  */
-LAMINA_API std::optional<std::pair<MultiPoly, MultiPoly>>
+LMCAS_API std::optional<std::pair<MultiPoly, MultiPoly>>
 detect_difference_of_squares(const MultiPoly& poly);
 
 /**
@@ -191,7 +191,7 @@ detect_difference_of_squares(const MultiPoly& poly);
  * @param[in] poly 输入多项式
  * @return 若匹配则返回 (变量1, 变量2, 幂次)，否则返回 nullopt
  */
-LAMINA_API std::optional<std::tuple<std::string, std::string, int>>
+LMCAS_API std::optional<std::tuple<std::string, std::string, int>>
 detect_binomial_power(const MultiPoly& poly);
 
 /**
@@ -202,7 +202,7 @@ detect_binomial_power(const MultiPoly& poly);
  * @param[in] poly 输入多项式
  * @return pair(公因子单项式, 提取后的多项式)
  */
-LAMINA_API std::pair<Monomial, MultiPoly>
+LMCAS_API std::pair<Monomial, MultiPoly>
 extract_common_monomial(const MultiPoly& poly);
 
 /**
@@ -214,9 +214,9 @@ extract_common_monomial(const MultiPoly& poly);
  * @param[in] poly 输入多项式（须为齐次二元）
  * @return 若适用则返回分解结果，否则返回 nullopt
  */
-LAMINA_API std::optional<MultiFactorResult>
+LMCAS_API std::optional<MultiFactorResult>
 factor_homogeneous_bivariate(const MultiPoly& poly);
 
 } // namespace detail
 
-} // namespace lamina
+} // namespace LMCAS

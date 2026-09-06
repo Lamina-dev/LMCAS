@@ -1,22 +1,22 @@
-/** @file lsr_expr_internal.hpp */
+/** @file expr_internal.hpp */
 #pragma once
 
 #include <optional>
 #include <string>
 #include <utility>
 
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina::lsr {
+namespace LMCAS {
 
-// Operation tags shared by two or more of the lsr_expr_*.cpp translation units.
-inline constexpr const char* kEquivalentOperation = "lsr.equivalent_core";
+// Operation tags shared by two or more of the expr_*.cpp translation units.
+inline constexpr const char* kEquivalentOperation = "LMCAS.equivalent_core";
 inline constexpr const char* kEquivalentProfileOperation =
-    "lsr.equivalent_core.profile";
-inline constexpr const char* kExprSetOperation = "lsr.expr_set";
-inline constexpr const char* kSolveExprSetOperation = "lsr.solve_expr_set";
-inline constexpr const char* kEvalComplexOperation = "lsr.eval_complex";
+    "LMCAS.equivalent_core.profile";
+inline constexpr const char* kExprSetOperation = "LMCAS.expr_set";
+inline constexpr const char* kSolveExprSetOperation = "LMCAS.solve_expr_set";
+inline constexpr const char* kEvalComplexOperation = "LMCAS.eval_complex";
 
 inline ExprResult expression_failure(CasErrc code, std::string message,
                                      const char* operation) {
@@ -56,4 +56,4 @@ inline std::optional<int> exact_small_integer_node(
     return value.to_int();
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

@@ -1,4 +1,6 @@
 #include "computation_context.hpp"
+#include "assumption_context.hpp"
+#include "expr.hpp"
 #include "test_common.hpp"
 
 #include <limits>
@@ -6,7 +8,7 @@
 #include <type_traits>
 
 int main() {
-    using namespace lamina;
+    using namespace LMCAS;
 
     TEST_CASE("ComputationContext has exclusive value semantics");
     EXPECT_TRUE(!std::is_copy_constructible_v<ComputationContext>,
@@ -101,6 +103,32 @@ int main() {
                 "consumer exceptions become CasError values");
     EXPECT_TRUE(failing_consumer_context.diagnostics().empty(),
                 "failed dispatch does not retain a partial diagnostic");
+
+    TEST_CASE("Per-operation resource limits are enforced at checked boundaries");
+    ResourceLimits operation_limits;
+    operation_limits.max_integer_bits = 8;
+    operation_limits.max_expansion_terms = 3;
+    operation_limits.max_input_bytes = 8;
+    ComputationContext operation_context(operation_limits);
+    auto integer_limit =
+        operation_context.require_integer_bits(9, "test_integer_bits");
+    EXPECT_TRUE(!integer_limit &&
+                    integer_limit.error().code == CasErrc::ResourceLimit,
+                "integer bit limit is enforceable");
+    auto expansion_limit =
+        operation_context.require_expansion_terms(4, "test_expansion_terms");
+    EXPECT_TRUE(!expansion_limit &&
+                    expansion_limit.error().code == CasErrc::ResourceLimit,
+                "expansion term limit is enforceable");
+    auto parse_limit = LMCAS::parse_expr("123456789", operation_context);
+    EXPECT_TRUE(!parse_limit &&
+                    parse_limit.error().code == CasErrc::ResourceLimit,
+                "expression parser enforces input byte limit");
+    auto deserialize_limit = AssumptionContext::deserialize_checked(
+        "SCOPE 0\nEND\n", operation_context);
+    EXPECT_TRUE(!deserialize_limit &&
+                    deserialize_limit.error().code == CasErrc::ResourceLimit,
+                "assumption deserializer enforces input byte limit");
 
     TEST_CASE("Cross-thread context use is rejected");
     ComputationContext thread_context;

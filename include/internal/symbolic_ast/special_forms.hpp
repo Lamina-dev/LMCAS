@@ -8,12 +8,14 @@
 #include <cstddef>
 
 
+namespace LMCAS {
+
 /** Unevaluated limit syntax. The variable is bound only in the body. */
 class LimitNode : public SymbolicNode {
 private:
     template <typename Node, typename... Args>
     friend std::shared_ptr<const Node>
-        lamina::detail::make_node(Args&&... args);
+        LMCAS::detail::make_node(Args&&... args);
 
     const std::shared_ptr<const SymbolicNode> body_;
     const std::string variable_;
@@ -63,13 +65,13 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override {
-        lamina::detail::SymbolicVisitor::DepthGuard guard(visitor);
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override {
+        LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor);
         visitor.visit(*this);
     }
 
     std::shared_ptr<const SymbolicNode> clone() const override {
-        return lamina::detail::make_node<LimitNode>(
+        return LMCAS::detail::make_node<LimitNode>(
             body_->clone(), variable_, point_->clone(), direction_);
     }
 };
@@ -79,13 +81,13 @@ class RootOfNode : public SymbolicNode {
 private:
     template <typename Node, typename... Args>
     friend std::shared_ptr<const Node>
-        lamina::detail::make_node(Args&&... args);
+        LMCAS::detail::make_node(Args&&... args);
 
-    const lamina::detail::ExactRootId id_;
+    const LMCAS::detail::ExactRootId id_;
     const std::string display_variable_;
 
     explicit RootOfNode(
-        lamina::detail::ExactRootId id,
+        LMCAS::detail::ExactRootId id,
         std::string display_variable = "_root")
         : id_(std::move(id)),
           display_variable_(std::move(display_variable)) {
@@ -97,7 +99,7 @@ private:
     }
 
 public:
-    const lamina::detail::ExactRootId& exact_id() const noexcept { return id_; }
+    const LMCAS::detail::ExactRootId& exact_id() const noexcept { return id_; }
     std::size_t index() const noexcept { return id_.index; }
     const std::string& variable() const noexcept {
         return display_variable_;
@@ -144,13 +146,15 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override {
-        lamina::detail::SymbolicVisitor::DepthGuard guard(visitor);
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override {
+        LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor);
         visitor.visit(*this);
     }
 
     std::shared_ptr<const SymbolicNode> clone() const override {
-        return lamina::detail::make_node<RootOfNode>(
+        return LMCAS::detail::make_node<RootOfNode>(
             id_, display_variable_);
     }
 };
+
+} // namespace LMCAS

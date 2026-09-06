@@ -5,6 +5,8 @@
 #include <iostream>
 #include <cassert>
 
+using namespace LMCAS;
+
 bool test_sin_sq_add_cos_sq() {
     std::cout << "Testing sin(x)^2 + cos(x)^2 -> 1" << std::endl;
     auto x = SymbolicExpr::variable("x");

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 struct IntegrationStep {
     std::string variable;
@@ -12,10 +12,10 @@ struct IntegrationStep {
     std::shared_ptr<SymbolicExpr> upper;
 };
 
-LAMINA_API Result<SymbolicExpr> integrate_multiple_checked(
+LMCAS_API Result<SymbolicExpr> integrate_multiple_checked(
     const SymbolicExpr& integrand,
     const std::vector<IntegrationStep>& steps,
     Integrator& integrator,
     ComputationContext& context);
 
-} // namespace lamina
+} // namespace LMCAS

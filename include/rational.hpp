@@ -16,6 +16,8 @@
 #include <map>
 #include <stdint.h>
 
+namespace LMCAS {
+
 /** @brief 精确有理数类，以 BigInt 分子/分母表示，构造时自动约分 */
 class Rational {
 private:
@@ -500,7 +502,11 @@ public:
     }
 
     /**
-     * @brief 转换为浮点数
+     * @brief 转换为浮点数。
+     *
+     * 精确值可按 binary64 round-to-nearest 转为有限值时返回有限结果，
+     * 包括正负最大有限端点及其半 ULP 内邻域；
+     * 超出有限舍入范围或非零值下溢为零时抛出范围异常。
      * @return 对应的 double 值
      */
     lmmc_real_t to_double() const {
@@ -519,7 +525,24 @@ public:
         if (numerator.IsNegative()) value = -value;
         const lmmc_real_t converted = static_cast<lmmc_real_t>(value);
         if (!std::isfinite(converted)) {
-            throw std::overflow_error("Rational cannot be represented as a finite double");
+            /*
+             * A decimal-head approximation can round slightly above the
+             * binary64 endpoint even when the exact rational still rounds to
+             * DBL_MAX. Resolve that boundary case with exact integer
+             * arithmetic. Values below max + 0.5 ULP round to a finite value.
+             */
+            const BigInt max_finite_integer =
+                (BigInt(1) << 1024) - (BigInt(1) << 971);
+            const BigInt finite_rounding_limit =
+                max_finite_integer + (BigInt(1) << 970);
+            if (numerator.Abs() <
+                denominator * finite_rounding_limit) {
+                return std::copysign(
+                    std::numeric_limits<lmmc_real_t>::max(),
+                    numerator.IsNegative() ? -1.0 : 1.0);
+            }
+            throw std::overflow_error(
+                "Rational cannot be represented as a finite double");
         }
         if (converted == 0.0) {
             throw std::underflow_error("Rational underflow during double conversion");
@@ -666,3 +689,5 @@ public:
         return result;
     }
 };
+
+} // namespace LMCAS

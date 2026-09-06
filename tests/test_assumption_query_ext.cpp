@@ -7,59 +7,59 @@
 #include "rational.hpp"
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static SymbolicExpr make_var(const std::string& name) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
     return expr;
 }
 
 static SymbolicExpr make_int(int v) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(v)));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(v)));
     return expr;
 }
 
 /// Build x - y as AddNode([x, MultiplyNode([-1, y])])
 static SymbolicExpr make_subtraction(const std::string& lhs, const std::string& rhs) {
-    auto x_node = lamina::detail::make_node<VariableNode>(lhs);
-    auto y_node = lamina::detail::make_node<VariableNode>(rhs);
-    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
-    auto neg_y = lamina::detail::make_node<MultiplyNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>(lhs);
+    auto y_node = LMCAS::detail::make_node<VariableNode>(rhs);
+    auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+    auto neg_y = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, y_node});
-    auto add = lamina::detail::make_node<AddNode>(
+    auto add = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node, neg_y});
-    auto expr = lamina::detail::expression_from_node(add);
+    auto expr = LMCAS::detail::expression_from_node(add);
     return expr;
 }
 
 /// Build sin(x) as FunctionNode(Sin, [VariableNode(x)])
 static SymbolicExpr make_sin(const std::string& var_name) {
-    auto x_node = lamina::detail::make_node<VariableNode>(var_name);
-    auto sin_node = lamina::detail::make_node<FunctionNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>(var_name);
+    auto sin_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sin,
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
-    auto expr = lamina::detail::expression_from_node(sin_node);
+    auto expr = LMCAS::detail::expression_from_node(sin_node);
     return expr;
 }
 
 /// Build cos(x) as FunctionNode(Cos, [VariableNode(x)])
 static SymbolicExpr make_cos(const std::string& var_name) {
-    auto x_node = lamina::detail::make_node<VariableNode>(var_name);
-    auto cos_node = lamina::detail::make_node<FunctionNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>(var_name);
+    auto cos_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Cos,
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
-    auto expr = lamina::detail::expression_from_node(cos_node);
+    auto expr = LMCAS::detail::expression_from_node(cos_node);
     return expr;
 }
 
 /// Build tan(x) as FunctionNode(Tan, [VariableNode(x)])
 static SymbolicExpr make_tan(const std::string& var_name) {
-    auto x_node = lamina::detail::make_node<VariableNode>(var_name);
-    auto tan_node = lamina::detail::make_node<FunctionNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>(var_name);
+    auto tan_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Tan,
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node});
-    auto expr = lamina::detail::expression_from_node(tan_node);
+    auto expr = LMCAS::detail::expression_from_node(tan_node);
     return expr;
 }
 
@@ -424,8 +424,8 @@ void test_query_periodic_declared() {
 
     AssumptionContext ctx;
     // Declare f as periodic with period 2*pi (represented as a number for simplicity)
-    auto period_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(6)));  // Simplified period
+    auto period_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(6)));  // Simplified period
     ctx.current_properties().declare_periodic("f", period_expr);
 
     QueryInterface qi(ctx);
@@ -509,7 +509,7 @@ void test_checked_extended_query_contracts() {
     ctx.current_properties().declare_transcendental("tau");
     ctx.current_properties().declare_finiteness("finite_symbol", Finiteness::Finite);
     ctx.current_properties().declare_finiteness("divergent_symbol", Finiteness::Divergent);
-    ctx.current_properties().declare_periodic("periodic_symbol", lamina::detail::make_expression_ptr(make_int(6)));
+    ctx.current_properties().declare_periodic("periodic_symbol", LMCAS::detail::make_expression_ptr(make_int(6)));
     ctx.current_properties().declare_definiteness("M", Definiteness::PositiveDefinite);
 
     QueryInterface qi(ctx);

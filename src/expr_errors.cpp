@@ -1,14 +1,14 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 
 #include <string>
 
-#include "lsr_expr_internal.hpp"
+#include "expr_internal.hpp"
 
-namespace lamina::lsr {
+namespace LMCAS {
 namespace {
 
-constexpr const char* kSymOperation = "lsr.sym";
-constexpr const char* kComplexOperation = "lsr.complex";
+constexpr const char* kSymOperation = "LMCAS.sym";
+constexpr const char* kComplexOperation = "LMCAS.complex";
 
 } // namespace
 
@@ -83,4 +83,4 @@ const char* error_name(const CasError& error) noexcept {
     return error_name(error.code);
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

@@ -13,6 +13,8 @@
 #include <variant>
 #include <vector>
 
+namespace LMCAS {
+
 static int detect_parity(const std::shared_ptr<SymbolicExpr>& f, const std::string& var) {
     if (!f) return 0;
     auto neg_x = SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::variable(var));
@@ -26,7 +28,8 @@ static int detect_parity(const std::shared_ptr<SymbolicExpr>& f, const std::stri
     if (diff_odd) { diff_odd = diff_odd->simplify(); if (diff_odd->is_zero()) return -1; }
     return 0;
 }
-namespace lamina {
+
+
 
 using detail::series_support::supported_laurent_integer_power;
 using detail::series_support::validate_series_variable;
@@ -40,7 +43,7 @@ Result<void> validate_series_expr_point(
 {
     auto var_check = validate_series_variable(var, context, operation);
     if (!var_check) return var_check;
-    if (!expr || !lamina::detail::node(expr) || !center || !lamina::detail::node(center)) {
+    if (!expr || !LMCAS::detail::node(expr) || !center || !LMCAS::detail::node(center)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "series expression and center cannot be null",
                                      operation);
@@ -60,7 +63,7 @@ Result<void> validate_laurent_orders(int order_neg,
     }
     return Result<void>::success();
 }
-static LaurentResult laurent_series_full_impl(
+static LaurentSeriesResult laurent_series_full_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&,
     const std::shared_ptr<SymbolicExpr>&,
@@ -89,8 +92,8 @@ ExpressionResult fourier_series_checked(
         if (!access) return ExpressionResult::failure(access.error());
 
         auto T = period;
-        auto pi = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<VariableNode>("pi"));
+        auto pi = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<VariableNode>("pi"));
         auto two = SymbolicExpr::number(2);
         auto L = SymbolicExpr::divide(T, two);
         auto half_lo = SymbolicExpr::multiply(SymbolicExpr::number(-1), L);
@@ -108,7 +111,7 @@ ExpressionResult fourier_series_checked(
             return ExpressionResult::failure(a0_integral.error());
         }
         auto a0 = SymbolicExpr::divide(
-            lamina::detail::make_expression_ptr(a0_integral.value()), L)->simplify();
+            LMCAS::detail::make_expression_ptr(a0_integral.value()), L)->simplify();
         auto result = SymbolicExpr::divide(a0, two);
 
         for (int k = 1; k <= n_terms; ++k) {
@@ -124,9 +127,9 @@ ExpressionResult fourier_series_checked(
                     return ExpressionResult::failure(integrated.error());
                 }
                 auto coefficient = SymbolicExpr::divide(
-                    lamina::detail::make_expression_ptr(integrated.value()), L)->simplify();
-                if (!(lamina::detail::node(coefficient) &&
-                      lamina::detail::node(coefficient)->is_zero())) {
+                    LMCAS::detail::make_expression_ptr(integrated.value()), L)->simplify();
+                if (!(LMCAS::detail::node(coefficient) &&
+                      LMCAS::detail::node(coefficient)->is_zero())) {
                     result = SymbolicExpr::add(
                         result,
                         SymbolicExpr::multiply(
@@ -142,9 +145,9 @@ ExpressionResult fourier_series_checked(
                     return ExpressionResult::failure(integrated.error());
                 }
                 auto coefficient = SymbolicExpr::divide(
-                    lamina::detail::make_expression_ptr(integrated.value()), L)->simplify();
-                if (!(lamina::detail::node(coefficient) &&
-                      lamina::detail::node(coefficient)->is_zero())) {
+                    LMCAS::detail::make_expression_ptr(integrated.value()), L)->simplify();
+                if (!(LMCAS::detail::node(coefficient) &&
+                      LMCAS::detail::node(coefficient)->is_zero())) {
                     result = SymbolicExpr::add(
                         result,
                         SymbolicExpr::multiply(
@@ -153,8 +156,6 @@ ExpressionResult fourier_series_checked(
             }
         }
         return ExpressionResult::success(result->simplify());
-    } catch (const detail::ResultPropagation& propagation) {
-        return ExpressionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(
             CasErrc::ResourceLimit,
@@ -187,12 +188,12 @@ ExpressionResult laurent_series_checked(
     auto simplified = f->simplify();
     auto supported_power = simplified
         ? supported_laurent_integer_power(
-              lamina::detail::node(simplified), var)
+              LMCAS::detail::node(simplified), var)
         : std::nullopt;
     if (center->is_zero() && supported_power && *supported_power < 0) {
         return ExpressionResult::success(std::move(simplified));
     }
-    return ExpressionResult::success(lamina::detail::propagate_result(full).series);
+    return ExpressionResult::success(std::move(full.value().series));
 }
 
 ExpressionResult laurent_series_checked(
@@ -223,24 +224,26 @@ LaurentSeriesResult laurent_series_full_checked(
                                         operation);
     if (!budget) return LaurentSeriesResult::failure(budget.error());
     auto simplified_input = f->simplify();
-    if (!simplified_input || !lamina::detail::node(simplified_input)) {
+    if (!simplified_input || !LMCAS::detail::node(simplified_input)) {
         return LaurentSeriesResult::failure(
             CasErrc::Inconclusive,
             "checked Laurent input could not be simplified in the supported domain",
             operation);
     }
     auto supported_power = supported_laurent_integer_power(
-        lamina::detail::node(simplified_input), var);
+        LMCAS::detail::node(simplified_input), var);
     try {
-        auto result = laurent_series_full_impl(
+        auto built = laurent_series_full_impl(
             f, var, center, order_neg, order_pos, context);
-        if (!result.series || !lamina::detail::node(result.series)) {
+        if (!built) return built;
+        auto result = std::move(built.value());
+        if (!result.series || !LMCAS::detail::node(result.series)) {
             return LaurentSeriesResult::failure(
                 CasErrc::Inconclusive,
                 "Laurent series could not be constructed in the supported domain",
                 operation);
         }
-        if (!result.residue || !lamina::detail::node(result.residue)) {
+        if (!result.residue || !LMCAS::detail::node(result.residue)) {
             return LaurentSeriesResult::failure(
                 CasErrc::InternalInvariant,
                 "Laurent series produced a null residue expression",
@@ -257,8 +260,6 @@ LaurentSeriesResult laurent_series_full_checked(
             }
         }
         return LaurentSeriesResult::success(std::move(result));
-    } catch (const detail::ResultPropagation& propagation) {
-        return LaurentSeriesResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return LaurentSeriesResult::failure(CasErrc::ResourceLimit,
                                             "allocation failed while calculating Laurent series",
@@ -281,7 +282,7 @@ LaurentSeriesResult laurent_series_full_checked(
     return laurent_series_full_checked(f, var, center, order_neg, order_pos, context);
 }
 
-static LaurentResult laurent_series_full_impl(
+static LaurentSeriesResult laurent_series_full_impl(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center, int order_neg, int order_pos,
     ComputationContext& context) {
@@ -341,8 +342,12 @@ static LaurentResult laurent_series_full_impl(
         auto deriv = regular;
         for (int i = 0; i < pole_order - 1; ++i) deriv = deriv->differentiate(var);
         /// 用极限求值,稳健处理 0/0 形式(如 z/(z(z+1)) 在 z=0).
-        auto val = detail::propagate_result(limit_expression_checked(
-            deriv, var, center, LimitDirection::Both, context));
+        auto limited = limit_expression_checked(
+            deriv, var, center, LimitDirection::Both, context);
+        if (!limited) {
+            return LaurentSeriesResult::failure(limited.error());
+        }
+        auto val = std::move(limited.value());
         if (!val) val = deriv->substitute(var, center);
         long long fact = 1;
         for (int i = 2; i <= pole_order - 1; ++i) fact *= i;
@@ -372,4 +377,4 @@ std::shared_ptr<SymbolicExpr> asymptotic_expand(
     if (!back) return nullptr;
     return back->simplify();
 }
-} // namespace lamina
+} // namespace LMCAS

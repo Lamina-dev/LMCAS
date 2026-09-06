@@ -5,10 +5,10 @@
 #include <algorithm>
 #include <iostream>
 
-namespace lamina {
+namespace LMCAS {
 
 SymbolicExpr wildcard(const std::string& name) {
-    return lamina::detail::expression_from_node(SymbolicFactory::create_variable(name));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_variable(name));
 }
 
 static bool match_recursive(const std::shared_ptr<const SymbolicNode>& p_node,
@@ -76,9 +76,9 @@ static bool match_recursive(const std::shared_ptr<const SymbolicNode>& p_node,
     if (is_wildcard(p_node, wildcards, wname)) {
 
         if (const auto existing = results.find(wname); existing != results.end()) {
-            return lamina::detail::node(existing->second)->equals(*t_node);
+            return LMCAS::detail::node(existing->second)->equals(*t_node);
         } else {
-            results.emplace(wname, lamina::detail::expression_from_node(t_node));
+            results.emplace(wname, LMCAS::detail::expression_from_node(t_node));
             return true;
         }
     }
@@ -114,16 +114,16 @@ static bool match_recursive(const std::shared_ptr<const SymbolicNode>& p_node,
                     auto existing = found->second;
 
                     std::vector<std::shared_ptr<const SymbolicNode>> combined_ops;
-                    if (auto existing_add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(existing))) {
+                    if (auto existing_add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(existing))) {
                         combined_ops.insert(combined_ops.end(), existing_add->operands().begin(), existing_add->operands().end());
                     } else {
-                        combined_ops.push_back(lamina::detail::node(existing));
+                        combined_ops.push_back(LMCAS::detail::node(existing));
                     }
                     combined_ops.push_back(rest_node);
-                    found->second = lamina::detail::expression_from_node(
+                    found->second = LMCAS::detail::expression_from_node(
                         SymbolicFactory::create_add(combined_ops));
                 } else {
-                    results.emplace("__Add_REST__", lamina::detail::expression_from_node(rest_node));
+                    results.emplace("__Add_REST__", LMCAS::detail::expression_from_node(rest_node));
                 }
             }
             return true;
@@ -153,16 +153,16 @@ static bool match_recursive(const std::shared_ptr<const SymbolicNode>& p_node,
                 if (const auto found = results.find("__Mul_REST__"); found != results.end()) {
                     auto existing = found->second;
                     std::vector<std::shared_ptr<const SymbolicNode>> combined_ops;
-                    if (auto existing_mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(existing))) {
+                    if (auto existing_mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(existing))) {
                         combined_ops.insert(combined_ops.end(), existing_mul->operands().begin(), existing_mul->operands().end());
                     } else {
-                        combined_ops.push_back(lamina::detail::node(existing));
+                        combined_ops.push_back(LMCAS::detail::node(existing));
                     }
                     combined_ops.push_back(rest_node);
-                    found->second = lamina::detail::expression_from_node(
+                    found->second = LMCAS::detail::expression_from_node(
                         SymbolicFactory::create_multiply(combined_ops));
                 } else {
-                    results.emplace("__Mul_REST__", lamina::detail::expression_from_node(rest_node));
+                    results.emplace("__Mul_REST__", LMCAS::detail::expression_from_node(rest_node));
                 }
             }
             return true;
@@ -194,18 +194,18 @@ static bool match_recursive(const std::shared_ptr<const SymbolicNode>& p_node,
 bool Matcher::match(const SymbolicExpr& pattern, const SymbolicExpr& target,
                   const std::unordered_set<std::string>& wildcards,
                   MatchMap& results) {
-    if (!lamina::detail::node(pattern)) return !lamina::detail::node(target);
-    return match_recursive(lamina::detail::node(pattern), lamina::detail::node(target), wildcards, results);
+    if (!LMCAS::detail::node(pattern)) return !LMCAS::detail::node(target);
+    return match_recursive(LMCAS::detail::node(pattern), LMCAS::detail::node(target), wildcards, results);
 }
 
 
 SymbolicExpr Matcher::replace(const SymbolicExpr& template_expr, const MatchMap& bindings, bool use_rest) {
-    if (!lamina::detail::node(template_expr)) return template_expr;
+    if (!LMCAS::detail::node(template_expr)) return template_expr;
 
-    auto replaced = lamina::detail::node(template_expr);
-    std::set<std::string> occupied = lamina::free_variables(replaced);
+    auto replaced = LMCAS::detail::node(template_expr);
+    std::set<std::string> occupied = LMCAS::free_variables(replaced);
     for (const auto& [name, expression] : bindings) {
-        const auto names = lamina::free_variables(lamina::detail::node(expression));
+        const auto names = LMCAS::free_variables(LMCAS::detail::node(expression));
         occupied.insert(names.begin(), names.end());
     }
 
@@ -218,52 +218,52 @@ SymbolicExpr Matcher::replace(const SymbolicExpr& template_expr, const MatchMap&
         do {
             placeholder = "__lmcas_match_binding_" + std::to_string(suffix++);
         } while (!occupied.insert(placeholder).second);
-        replaced = lamina::substitute_free(
+        replaced = LMCAS::substitute_free(
             replaced, name, SymbolicFactory::create_variable(placeholder));
         placeholders.emplace_back(name, std::move(placeholder));
     }
     for (const auto& [name, placeholder] : placeholders) {
-        replaced = lamina::substitute_free(
-            replaced, placeholder, lamina::detail::node(bindings.at(name)));
+        replaced = LMCAS::substitute_free(
+            replaced, placeholder, LMCAS::detail::node(bindings.at(name)));
     }
 
-    auto res = lamina::detail::expression_from_node(std::move(replaced));
+    auto res = LMCAS::detail::expression_from_node(std::move(replaced));
     if (use_rest) {
 
         if (bindings.find("__Add_REST__") != bindings.end()) {
             auto rest = bindings.at("__Add_REST__");
 
             std::vector<std::shared_ptr<const SymbolicNode>> ops;
-            if (auto add_node = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(res))) {
+            if (auto add_node = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(res))) {
                 ops = add_node->operands();
             } else {
-                ops.push_back(lamina::detail::node(res));
+                ops.push_back(LMCAS::detail::node(res));
             }
 
-            if (auto rest_add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(rest))) {
+            if (auto rest_add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(rest))) {
                 ops.insert(ops.end(), rest_add->operands().begin(), rest_add->operands().end());
             } else {
-                ops.push_back(lamina::detail::node(rest));
+                ops.push_back(LMCAS::detail::node(rest));
             }
-            res = lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
+            res = LMCAS::detail::expression_from_node(SymbolicFactory::create_add(ops));
         }
 
         if (bindings.find("__Mul_REST__") != bindings.end()) {
             auto rest = bindings.at("__Mul_REST__");
 
             std::vector<std::shared_ptr<const SymbolicNode>> ops;
-            if (auto mul_node = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(res))) {
+            if (auto mul_node = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(res))) {
                 ops = mul_node->operands();
             } else {
-                ops.push_back(lamina::detail::node(res));
+                ops.push_back(LMCAS::detail::node(res));
             }
 
-            if (auto rest_mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(rest))) {
+            if (auto rest_mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(rest))) {
                 ops.insert(ops.end(), rest_mul->operands().begin(), rest_mul->operands().end());
             } else {
-                ops.push_back(lamina::detail::node(rest));
+                ops.push_back(LMCAS::detail::node(rest));
             }
-            res = lamina::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
+            res = LMCAS::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
         }
     }
 
@@ -274,7 +274,7 @@ void RewriteEngine::add_rule(const Rule& rule) {
     rules.push_back(rule);
 }
 
-class RewriteVisitor : public lamina::detail::SymbolicVisitor {
+class RewriteVisitor : public LMCAS::detail::SymbolicVisitor {
 public:
     const RewriteEngine& engine;
     ComputationContext& context;
@@ -287,7 +287,7 @@ public:
     std::shared_ptr<const SymbolicNode> get_result() const { return result; }
 
     std::shared_ptr<const SymbolicNode> try_match(std::shared_ptr<const SymbolicNode> node) {
-        auto current_expr = lamina::detail::expression_from_node(node);
+        auto current_expr = LMCAS::detail::expression_from_node(node);
         const auto& rules = engine.get_rules();
         const AssumptionContext* ctx = context.assumptions().get();
         for (const auto& rule : rules) {
@@ -314,7 +314,7 @@ public:
                 SymbolicExpr new_expr = Matcher::replace(rule.replacement, bindings, true);
 
                 changed = true;
-                return lamina::detail::node(new_expr);
+                return LMCAS::detail::node(new_expr);
             }
         }
         return node;
@@ -374,7 +374,7 @@ public:
         if (child_changed) {
             node_to_match = SymbolicFactory::create_add(new_ops);
         } else {
-            node_to_match = lamina::detail::make_node<AddNode>(node.operands());
+            node_to_match = LMCAS::detail::make_node<AddNode>(node.operands());
         }
 
         changed = child_changed;
@@ -405,7 +405,7 @@ public:
         if (child_changed) {
             node_to_match = SymbolicFactory::create_multiply(new_ops);
         } else {
-             node_to_match = lamina::detail::make_node<MultiplyNode>(node.operands());
+             node_to_match = LMCAS::detail::make_node<MultiplyNode>(node.operands());
         }
 
         changed = child_changed;
@@ -431,7 +431,7 @@ public:
         bool exp_changed = changed;
 
         bool child_changed = base_changed || exp_changed;
-        auto node_to_match = lamina::detail::make_node<PowerNode>(new_base, new_exp);
+        auto node_to_match = LMCAS::detail::make_node<PowerNode>(new_base, new_exp);
 
         changed = child_changed;
         auto matched = try_match(node_to_match);
@@ -457,7 +457,7 @@ public:
             else changed = current_changed;
         }
 
-        auto node_to_match = lamina::detail::make_node<FunctionNode>(node.type(), new_args);
+        auto node_to_match = LMCAS::detail::make_node<FunctionNode>(node.type(), new_args);
 
         changed = child_changed;
         auto matched = try_match(node_to_match);
@@ -478,7 +478,7 @@ public:
             for (const auto& entry : *dense) {
                 entries.push_back(visit_child(entry, child_changed));
             }
-            finish_rewrite(lamina::detail::make_node<MatrixNode>(
+            finish_rewrite(LMCAS::detail::make_node<MatrixNode>(
                                node.rows(), node.cols(), std::move(entries)),
                            child_changed, original_changed);
             return;
@@ -488,7 +488,7 @@ public:
              std::get<MatrixNode::SparseStorage>(node.storage())) {
             entries.emplace(index, visit_child(entry, child_changed));
         }
-        finish_rewrite(lamina::detail::make_node<MatrixNode>(
+        finish_rewrite(LMCAS::detail::make_node<MatrixNode>(
                            node.rows(), node.cols(), std::move(entries)),
                        child_changed, original_changed);
     }
@@ -498,7 +498,7 @@ public:
         bool child_changed = false;
         auto left = visit_child(node.left(), child_changed);
         auto right = visit_child(node.right(), child_changed);
-        finish_rewrite(lamina::detail::make_node<RelationalNode>(left, right, node.op()),
+        finish_rewrite(LMCAS::detail::make_node<RelationalNode>(left, right, node.op()),
                        child_changed, original_changed);
     }
 
@@ -508,7 +508,7 @@ public:
         auto left = visit_child(node.left(), child_changed);
         std::shared_ptr<const SymbolicNode> right = nullptr;
         if (node.right()) right = visit_child(node.right(), child_changed);
-        finish_rewrite(lamina::detail::make_node<LogicalNode>(left, right, node.op()),
+        finish_rewrite(LMCAS::detail::make_node<LogicalNode>(left, right, node.op()),
                        child_changed, original_changed);
     }
 
@@ -524,7 +524,7 @@ public:
         }
         std::shared_ptr<const SymbolicNode> default_expr = nullptr;
         if (node.default_expr()) default_expr = visit_child(node.default_expr(), child_changed);
-        finish_rewrite(lamina::detail::make_node<PiecewiseNode>(std::move(branches), default_expr),
+        finish_rewrite(LMCAS::detail::make_node<PiecewiseNode>(std::move(branches), default_expr),
                        child_changed, original_changed);
     }
 
@@ -534,7 +534,7 @@ public:
         auto body = visit_child(node.body(), child_changed);
         auto lower = visit_child(node.lower_bound(), child_changed);
         auto upper = visit_child(node.upper_bound(), child_changed);
-        finish_rewrite(lamina::detail::make_node<SummationNode>(body, node.index_var(), lower, upper),
+        finish_rewrite(LMCAS::detail::make_node<SummationNode>(body, node.index_var(), lower, upper),
                        child_changed, original_changed);
     }
 
@@ -544,7 +544,7 @@ public:
         auto body = visit_child(node.body(), child_changed);
         auto lower = visit_child(node.lower_bound(), child_changed);
         auto upper = visit_child(node.upper_bound(), child_changed);
-        finish_rewrite(lamina::detail::make_node<ProductNode>(body, node.index_var(), lower, upper),
+        finish_rewrite(LMCAS::detail::make_node<ProductNode>(body, node.index_var(), lower, upper),
                        child_changed, original_changed);
     }
 
@@ -553,7 +553,7 @@ public:
         bool child_changed = false;
         auto body = visit_child(node.body(), child_changed);
         auto target = visit_child(node.target(), child_changed);
-        finish_rewrite(lamina::detail::make_node<TransformNode>(
+        finish_rewrite(LMCAS::detail::make_node<TransformNode>(
                            node.transform_type(), body, node.source_var(), target),
                        child_changed, original_changed);
     }
@@ -563,7 +563,7 @@ public:
         bool child_changed = false;
         auto domain = visit_child(node.domain(), child_changed);
         auto predicate = visit_child(node.predicate(), child_changed);
-        finish_rewrite(lamina::detail::make_node<QuantifierNode>(
+        finish_rewrite(LMCAS::detail::make_node<QuantifierNode>(
                            node.quantifier_type(), node.bound_var(), domain, predicate),
                        child_changed, original_changed);
     }
@@ -573,7 +573,7 @@ public:
         bool child_changed = false;
         auto domain = visit_child(node.domain(), child_changed);
         auto predicate = visit_child(node.predicate(), child_changed);
-        finish_rewrite(lamina::detail::make_node<SetBuilderNode>(
+        finish_rewrite(LMCAS::detail::make_node<SetBuilderNode>(
                            node.element_var(), domain, predicate),
                        child_changed, original_changed);
     }
@@ -593,7 +593,7 @@ public:
         for (const auto& element : node.elements()) {
             elements.push_back(visit_child(element, child_changed));
         }
-        finish_rewrite(lamina::detail::make_node<FiniteSetNode>(std::move(elements)),
+        finish_rewrite(LMCAS::detail::make_node<FiniteSetNode>(std::move(elements)),
                        child_changed, original_changed);
     }
     void visit(const IntervalNode& node) override {
@@ -601,7 +601,7 @@ public:
         bool child_changed = false;
         auto lower = visit_child(node.lower(), child_changed);
         auto upper = visit_child(node.upper(), child_changed);
-        finish_rewrite(lamina::detail::make_node<IntervalNode>(
+        finish_rewrite(LMCAS::detail::make_node<IntervalNode>(
                            lower, upper, node.lower_closed(), node.upper_closed()),
                        child_changed, original_changed);
     }
@@ -610,7 +610,7 @@ public:
         bool child_changed = false;
         auto element = visit_child(node.element(), child_changed);
         auto set = visit_child(node.set(), child_changed);
-        finish_rewrite(lamina::detail::make_node<MembershipNode>(element, set),
+        finish_rewrite(LMCAS::detail::make_node<MembershipNode>(element, set),
                        child_changed, original_changed);
     }
     void visit(const UninterpretedFunctionNode& node) override {
@@ -621,7 +621,7 @@ public:
         for (const auto& argument : node.arguments()) {
             arguments.push_back(visit_child(argument, child_changed));
         }
-        finish_rewrite(lamina::detail::make_node<UninterpretedFunctionNode>(
+        finish_rewrite(LMCAS::detail::make_node<UninterpretedFunctionNode>(
                            node.name(), std::move(arguments)),
                        child_changed, original_changed);
     }
@@ -629,7 +629,7 @@ public:
         bool original_changed = changed;
         bool child_changed = false;
         auto value = visit_child(node.value(), child_changed);
-        finish_rewrite(lamina::detail::make_node<QuantityNode>(
+        finish_rewrite(LMCAS::detail::make_node<QuantityNode>(
                            value, node.dimension(), node.scale_to_base(), node.display_unit()),
                        child_changed, original_changed);
     }
@@ -641,7 +641,7 @@ public:
             ? visit_child(node.lower(), child_changed) : nullptr;
         auto upper = node.upper()
             ? visit_child(node.upper(), child_changed) : nullptr;
-        finish_rewrite(lamina::detail::make_node<IntegralNode>(
+        finish_rewrite(LMCAS::detail::make_node<IntegralNode>(
                            body, node.variable(), lower, upper),
                        child_changed, original_changed);
     }
@@ -650,7 +650,7 @@ public:
         bool child_changed = false;
         auto body = visit_child(node.body(), child_changed);
         auto point = visit_child(node.point(), child_changed);
-        finish_rewrite(lamina::detail::make_node<LimitNode>(
+        finish_rewrite(LMCAS::detail::make_node<LimitNode>(
                            body, node.variable(), point, node.direction()),
                        child_changed, original_changed);
     }
@@ -665,15 +665,15 @@ Result<SymbolicExpr> RewriteEngine::apply_step_checked(
     ComputationContext& context) const {
     auto budget = context.consume_steps(1, "rewrite.apply_step");
     if (!budget) return Result<SymbolicExpr>::failure(budget.error());
-    if (!lamina::detail::node(expr)) {
+    if (!LMCAS::detail::node(expr)) {
         return Result<SymbolicExpr>::failure(
             CasErrc::InvalidArgument, "rewrite expression must not be null",
             "rewrite.apply_step");
     }
     RewriteVisitor v(*this, context);
-    lamina::detail::node(expr)->accept(v);
+    LMCAS::detail::node(expr)->accept(v);
     return Result<SymbolicExpr>::success(
-        lamina::detail::expression_from_node(v.get_result()));
+        LMCAS::detail::expression_from_node(v.get_result()));
 }
 
 Result<SymbolicExpr> RewriteEngine::apply_checked(
@@ -690,7 +690,7 @@ Result<SymbolicExpr> RewriteEngine::apply_checked(
         auto next_result = apply_step_checked(current, context);
         if (!next_result) return next_result;
         SymbolicExpr next = std::move(next_result.value());
-        if (lamina::detail::node(next)->equals(*lamina::detail::node(current))) {
+        if (LMCAS::detail::node(next)->equals(*LMCAS::detail::node(current))) {
             return Result<SymbolicExpr>::success(std::move(current));
         }
         current = next;

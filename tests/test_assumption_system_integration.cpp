@@ -13,25 +13,25 @@
 #include <vector>
 #include <unordered_set>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const SymbolicNode>& arg) {
-    return lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Abs,
         std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
 static SymbolicExpr wrap(std::shared_ptr<const SymbolicNode> node) {
-    return lamina::detail::expression_from_node(std::move(node));
+    return LMCAS::detail::expression_from_node(std::move(node));
 }
 
 /// Check if an AST contains an abs() node wrapping the given variable.
@@ -91,11 +91,13 @@ static void test_integrator_positive_simplifies_abs() {
     TEST_CASE("Integrator: positive variable simplifies |x| to x");
 
     // Create integrand: |x|
-    auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
+    auto integrand = LMCAS::detail::expression_from_node(make_abs(make_var("x")));
     // Set up assumption context with x Positive
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
-    ctx.assume_domain("x", Domain::Real);
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value(),
+                "positive-sign setup succeeds");
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Real).has_value(),
+                "real-domain setup succeeds");
 
     // Integrate with assumption context
     Integrator integrator;
@@ -113,7 +115,7 @@ static void test_integrator_positive_simplifies_abs() {
 
     // The result should NOT contain abs(x) since x is positive, |x| = x
     // So integrating x gives x^2/2
-    EXPECT_FALSE(contains_abs_of(lamina::detail::node(result), "x"),
+    EXPECT_FALSE(contains_abs_of(LMCAS::detail::node(result), "x"),
                  "Integration result does not contain abs(x) when x is Positive");
 }
 
@@ -121,7 +123,7 @@ static void test_integrator_no_context_preserves_abs() {
     TEST_CASE("Integrator: no context preserves |x| behavior");
 
     // Create integrand: |x|
-    auto integrand = lamina::detail::expression_from_node(make_abs(make_var("x")));
+    auto integrand = LMCAS::detail::expression_from_node(make_abs(make_var("x")));
     /// Integrator 保持默认空假设上下文.
     Integrator integrator;
     auto result = integrator.integrate(integrand, "x");
@@ -133,7 +135,7 @@ static void test_integrator_no_context_preserves_abs() {
 
     /// 空上下文时积分结果保留 abs 或未求值积分结构,
     /// |x| = x 化简仅在符号假设充分时启用.
-    EXPECT_TRUE(lamina::detail::node(result.value()) != nullptr,
+    EXPECT_TRUE(LMCAS::detail::node(result.value()) != nullptr,
                 "Integration without context produces a result");
 }
 
@@ -144,14 +146,16 @@ static void test_limit_visitor_positive_resolves_sign() {
     // Compute limit of 1/x as x -> 0+ with x known Positive.
     // The LimitVisitor should use the assumption to determine the sign.
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
-    ctx.assume_domain("x", Domain::Real);
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value(),
+                "positive-sign setup succeeds");
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Real).has_value(),
+                "real-domain setup succeeds");
 
     // Build 1/x = x^(-1) = MultiplyNode([1, PowerNode(x, -1)])
-    auto one_over_x = lamina::detail::make_node<MultiplyNode>(
+    auto one_over_x = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{
             make_number(1),
-            lamina::detail::make_node<PowerNode>(make_var("x"), make_number(-1))
+            LMCAS::detail::make_node<PowerNode>(make_var("x"), make_number(-1))
         });
 
     auto point = make_number(0);
@@ -161,7 +165,7 @@ static void test_limit_visitor_positive_resolves_sign() {
     one_over_x->accept(visitor_with_ctx);
     auto result_with_ctx = visitor_with_ctx.get_result();
 
-    std::string result_str = result_with_ctx ? lamina::detail::expression_from_node(result_with_ctx).to_string() : "null";
+    std::string result_str = result_with_ctx ? LMCAS::detail::expression_from_node(result_with_ctx).to_string() : "null";
     std::cout << "  Limit of 1/x as x->0+ with x Positive: " << result_str << std::endl;
 
     // The result should be +infinity (positive infinity)
@@ -184,7 +188,7 @@ static void test_limit_visitor_nullptr_same_behavior() {
     TEST_CASE("LimitVisitor: nullptr context same as current behavior");
 
     /// 在空上下文中计算 x^2 于 x->2 的极限.
-    auto x_squared = lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2));
+    auto x_squared = LMCAS::detail::make_node<PowerNode>(make_var("x"), make_number(2));
     auto point = make_number(2);
 
     /// LimitVisitor 使用默认空上下文.
@@ -197,8 +201,8 @@ static void test_limit_visitor_nullptr_same_behavior() {
     x_squared->accept(visitor_null_ctx);
     auto result_null_ctx = visitor_null_ctx.get_result();
 
-    std::string s1 = result_no_ctx ? lamina::detail::expression_from_node(result_no_ctx).to_string() : "null";
-    std::string s2 = result_null_ctx ? lamina::detail::expression_from_node(result_null_ctx).to_string() : "null";
+    std::string s1 = result_no_ctx ? LMCAS::detail::expression_from_node(result_no_ctx).to_string() : "null";
+    std::string s2 = result_null_ctx ? LMCAS::detail::expression_from_node(result_null_ctx).to_string() : "null";
 
     std::cout << "  Limit of x^2 as x->2 (no ctx): " << s1 << std::endl;
     std::cout << "  Limit of x^2 as x->2 (nullptr): " << s2 << std::endl;
@@ -216,8 +220,10 @@ static void test_ode_solver_positive_branch() {
     auto rhs = SymbolicExpr::multiply(x, y);
 
     AssumptionContext ctx;
-    ctx.assume_sign("y", Sign::Positive);
-    ctx.assume_domain("y", Domain::Real);
+    EXPECT_TRUE(ctx.assume_sign("y", Sign::Positive).has_value(),
+                "positive-sign setup succeeds");
+    EXPECT_TRUE(ctx.assume_domain("y", Domain::Real).has_value(),
+                "real-domain setup succeeds");
 
     auto result_with_ctx = solve_separable_ode(rhs, "x", "y", &ctx);
 
@@ -228,7 +234,7 @@ static void test_ode_solver_positive_branch() {
     // positive branch preference
     EXPECT_TRUE(result_with_ctx != nullptr,
                 "ODE solver with positive dep var produces a result");
-    EXPECT_TRUE(contains_abs(lamina::detail::node(result_with_ctx)),
+    EXPECT_TRUE(contains_abs(LMCAS::detail::node(result_with_ctx)),
                 "ODE solver with positive dep var contains abs() wrapper");
 }
 
@@ -257,8 +263,8 @@ static void test_matcher_assumption_condition_matches() {
     TEST_CASE("Matcher: assumption_condition matches when context has variable Positive");
 
     // Create a rule with assumption_condition that checks if wildcard "A" is Positive
-    auto pattern = lamina::detail::expression_from_node(make_var("A"));
-    auto replacement = lamina::detail::expression_from_node(make_var("A"));
+    auto pattern = LMCAS::detail::expression_from_node(make_var("A"));
+    auto replacement = LMCAS::detail::expression_from_node(make_var("A"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     // The assumption_condition checks if the bound expression is Positive
@@ -274,11 +280,13 @@ static void test_matcher_assumption_condition_matches() {
 
     // Set up context with x Positive
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
-    ctx.assume_domain("x", Domain::Real);
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value(),
+                "positive-sign setup succeeds");
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Real).has_value(),
+                "real-domain setup succeeds");
 
     // Create target expression: x
-    auto target = lamina::detail::expression_from_node(make_var("x"));
+    auto target = LMCAS::detail::expression_from_node(make_var("x"));
 
     // Use RewriteEngine with assumption context
     RewriteEngine engine;
@@ -300,8 +308,8 @@ static void test_matcher_assumption_condition_no_match_without_context() {
     TEST_CASE("Matcher: assumption_condition fails without context");
 
     // Same rule as above
-    auto pattern = lamina::detail::expression_from_node(make_var("A"));
-    auto replacement = lamina::detail::expression_from_node(make_var("A"));
+    auto pattern = LMCAS::detail::expression_from_node(make_var("A"));
+    auto replacement = LMCAS::detail::expression_from_node(make_var("A"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     auto assumption_cond = [](const MatchMap& bindings, const AssumptionContext* ctx) -> bool {
@@ -315,7 +323,7 @@ static void test_matcher_assumption_condition_no_match_without_context() {
     Rule rule(pattern, replacement, wildcards, assumption_cond);
 
     // Target: x (but no context)
-    auto target = lamina::detail::expression_from_node(make_var("x"));
+    auto target = LMCAS::detail::expression_from_node(make_var("x"));
 
     MatchMap bindings;
     bool matched = Matcher::match(pattern, target, wildcards, bindings);
@@ -332,8 +340,8 @@ static void test_matcher_rewrite_engine_with_context() {
     TEST_CASE("Matcher: RewriteEngine uses assumption context during apply");
 
     // Create a rule: abs(A) -> A when A is Positive
-    auto abs_A = lamina::detail::expression_from_node(make_abs(make_var("A")));
-    auto just_A = lamina::detail::expression_from_node(make_var("A"));
+    auto abs_A = LMCAS::detail::expression_from_node(make_abs(make_var("A")));
+    auto just_A = LMCAS::detail::expression_from_node(make_var("A"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     auto assumption_cond = [](const MatchMap& bindings, const AssumptionContext* ctx) -> bool {
@@ -348,8 +356,10 @@ static void test_matcher_rewrite_engine_with_context() {
 
     // Set up context with x Positive
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
-    ctx.assume_domain("x", Domain::Real);
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value(),
+                "positive-sign setup succeeds");
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Real).has_value(),
+                "real-domain setup succeeds");
 
     RewriteEngine engine;
     engine.add_rule(rule);
@@ -359,7 +369,7 @@ static void test_matcher_rewrite_engine_with_context() {
     EXPECT_TRUE(set_assumptions.has_value(), "rewrite assumptions attach to context");
 
     // Apply to abs(x)
-    auto input = lamina::detail::expression_from_node(make_abs(make_var("x")));
+    auto input = LMCAS::detail::expression_from_node(make_abs(make_var("x")));
     auto checked_result = engine.apply_checked(input, computation_context);
     EXPECT_TRUE(checked_result.has_value(), "context-aware rewrite succeeds");
     auto result = checked_result.value();
@@ -368,7 +378,7 @@ static void test_matcher_rewrite_engine_with_context() {
     std::cout << "  RewriteEngine abs(x) with x Positive: " << result_str << std::endl;
 
     // The result should be x (abs removed because x is Positive)
-    EXPECT_FALSE(contains_abs(lamina::detail::node(result)),
+    EXPECT_FALSE(contains_abs(LMCAS::detail::node(result)),
                  "RewriteEngine removes abs(x) when x is Positive");
 }
 
@@ -377,7 +387,7 @@ static void test_integrator_nullptr_identical() {
     TEST_CASE("Integrator: nullptr identical to no context");
 
     // Integrate x^2
-    auto integrand = lamina::detail::expression_from_node(lamina::detail::make_node<PowerNode>(make_var("x"), make_number(2)));
+    auto integrand = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<PowerNode>(make_var("x"), make_number(2)));
     Integrator integrator1;
     // No context set (default nullptr)
     auto result1 = integrator1.integrate(integrand, "x");
@@ -416,8 +426,8 @@ static void test_ode_solver_nullptr_identical() {
 static void test_matcher_nullptr_identical() {
     TEST_CASE("Matcher: nullptr identical to no context");
 
-    auto pattern = lamina::detail::expression_from_node(make_var("A"));
-    auto target = lamina::detail::expression_from_node(make_var("x"));
+    auto pattern = LMCAS::detail::expression_from_node(make_var("A"));
+    auto target = LMCAS::detail::expression_from_node(make_var("x"));
     std::unordered_set<std::string> wildcards = {"A"};
 
     MatchMap bindings1;

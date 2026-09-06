@@ -14,7 +14,7 @@
 #include <functional>
 #include <unordered_set>
 
-namespace lamina {
+namespace LMCAS {
 
 bool is_integer_number(const NumberNode& number);
 bool is_even_integer_number(const NumberNode& number);
@@ -58,20 +58,21 @@ template <typename T>
 Result<T> checked_inference_result(
     const SymbolicExpr& expr,
     const std::string& operation,
-    const std::function<T()>& query) {
+    const std::function<Result<T>()>& query) {
     if (!detail::node(expr)) {
         return Result<T>::failure(
-            CasErrc::InvalidArgument, "inference expression must not be null", operation);
+            CasErrc::InvalidArgument,
+            "inference expression must not be null", operation);
     }
     try {
-        return Result<T>::success(query());
-    } catch (const detail::ResultPropagation& error) {
-        return Result<T>::failure(error.error());
+        return query();
     } catch (const std::bad_alloc&) {
         return Result<T>::failure(
-            CasErrc::ResourceLimit, "inference query allocation failed", operation);
+            CasErrc::ResourceLimit,
+            "inference query allocation failed", operation);
     } catch (const std::exception& error) {
-        return Result<T>::failure(CasErrc::InternalInvariant, error.what(), operation);
+        return Result<T>::failure(
+            CasErrc::InternalInvariant, error.what(), operation);
     }
 }
 
@@ -82,13 +83,13 @@ struct InferenceEngine::Impl {
 
     const AssumptionContext& ctx;
     int max_depth;
-    mutable std::unordered_set<const void*> visited;
+    mutable std::unordered_set<const SymbolicNode*> visited;
     mutable int current_depth = 0;
 };
 
 class InferenceEngine::DepthGuard {
 public:
-    DepthGuard(const InferenceEngine& engine, const void* node);
+    DepthGuard(const InferenceEngine& engine, const SymbolicNode& node);
     ~DepthGuard();
 
     bool should_abort() const { return abort_; }
@@ -98,9 +99,9 @@ public:
 
 private:
     const InferenceEngine& engine_;
-    const void* node_;
+    const SymbolicNode* node_;
     bool abort_ = false;
     bool inserted_ = false;
 };
 
-} // namespace lamina
+} // namespace LMCAS

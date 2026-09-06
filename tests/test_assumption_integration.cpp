@@ -13,19 +13,19 @@
 #include <string>
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -48,10 +48,10 @@ static void test_integrator_compatibility_entrypoint() {
         auto x_node = make_var("x");
         auto coeff_node = make_number(a);
         auto exp_node = make_number(n);
-        auto power_node = lamina::detail::make_node<PowerNode>(x_node, exp_node);
+        auto power_node = LMCAS::detail::make_node<PowerNode>(x_node, exp_node);
         std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {coeff_node, power_node};
-        auto mul_node = lamina::detail::make_node<MultiplyNode>(mul_ops);
-        auto integrand = lamina::detail::expression_from_node(mul_node);
+        auto mul_node = LMCAS::detail::make_node<MultiplyNode>(mul_ops);
+        auto integrand = LMCAS::detail::expression_from_node(mul_node);
         /// 使用默认空上下文的 Integrator.
         Integrator integrator_default;
         auto result_default = integrator_default.integrate(integrand, "x");
@@ -148,12 +148,12 @@ static void test_limit_nullptr_backward_compat() {
         auto a_node = make_number(a);
         auto b_node = make_number(b);
         std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {a_node, x_node};
-        auto ax = lamina::detail::make_node<MultiplyNode>(mul_ops);
+        auto ax = LMCAS::detail::make_node<MultiplyNode>(mul_ops);
         std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {ax, b_node};
-        auto expr_node = lamina::detail::make_node<AddNode>(add_ops);
+        auto expr_node = LMCAS::detail::make_node<AddNode>(add_ops);
 
         // Limit point: x -> 1
-        auto point = lamina::detail::make_node<NumberNode>(BigInt(1));
+        auto point = LMCAS::detail::make_node<NumberNode>(BigInt(1));
 
         /// 使用默认空上下文的 LimitVisitor.
         LimitVisitor visitor_default("x", point, "");
@@ -181,8 +181,8 @@ static void test_limit_trig_nullptr() {
     {
         auto x_node = make_var("x");
         std::vector<std::shared_ptr<const SymbolicNode>> args = {x_node};
-        auto sin_x = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, args);
-        auto point = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto sin_x = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, args);
+        auto point = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
         LimitVisitor visitor_default("x", point, "");
         sin_x->accept(visitor_default);
@@ -202,8 +202,8 @@ static void test_limit_trig_nullptr() {
     {
         auto x_node = make_var("x");
         std::vector<std::shared_ptr<const SymbolicNode>> args = {x_node};
-        auto cos_x = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Cos, args);
-        auto point = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto cos_x = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Cos, args);
+        auto point = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
         LimitVisitor visitor_default("x", point, "");
         cos_x->accept(visitor_default);
@@ -357,16 +357,16 @@ static void test_matcher_nullptr_backward_compat() {
     for (int num_val = 1; num_val <= 9; ++num_val) {
 
         // Pattern: _a + num_val
-        auto wc = lamina::detail::make_node<VariableNode>("_a");
+        auto wc = LMCAS::detail::make_node<VariableNode>("_a");
         auto num = make_number(num_val);
         std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {wc, num};
-        auto pat_node = lamina::detail::make_node<AddNode>(pat_ops);
-        auto pattern = lamina::detail::expression_from_node(pat_node);
+        auto pat_node = LMCAS::detail::make_node<AddNode>(pat_ops);
+        auto pattern = LMCAS::detail::expression_from_node(pat_node);
         // Target: x + num_val
         auto x_node = make_var("x");
         std::vector<std::shared_ptr<const SymbolicNode>> tgt_ops = {x_node, num};
-        auto tgt_node = lamina::detail::make_node<AddNode>(tgt_ops);
-        auto target = lamina::detail::expression_from_node(tgt_node);
+        auto tgt_node = LMCAS::detail::make_node<AddNode>(tgt_ops);
+        auto target = LMCAS::detail::expression_from_node(tgt_node);
         std::unordered_set<std::string> wildcards = {"_a"};
 
         /// 使用默认空上下文执行匹配.
@@ -401,9 +401,9 @@ static void test_rewrite_engine_nullptr() {
     // Rule: x + 0 -> x
     {
         auto wc_a = wildcard("_a");
-        auto zero_expr = lamina::detail::expression_from_node(make_number(0));
-        std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {lamina::detail::node(wc_a), lamina::detail::node(zero_expr)};
-        auto pattern = lamina::detail::expression_from_node(lamina::detail::make_node<AddNode>(pat_ops));
+        auto zero_expr = LMCAS::detail::expression_from_node(make_number(0));
+        std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {LMCAS::detail::node(wc_a), LMCAS::detail::node(zero_expr)};
+        auto pattern = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<AddNode>(pat_ops));
         SymbolicExpr replacement = wc_a;
         std::unordered_set<std::string> wcs = {"_a"};
 
@@ -412,7 +412,7 @@ static void test_rewrite_engine_nullptr() {
         // Target: y + 0
         auto y_node = make_var("y");
         std::vector<std::shared_ptr<const SymbolicNode>> tgt_ops = {y_node, make_number(0)};
-        auto target = lamina::detail::expression_from_node(lamina::detail::make_node<AddNode>(tgt_ops));
+        auto target = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<AddNode>(tgt_ops));
         /// 使用默认空上下文的 RewriteEngine.
         RewriteEngine engine_default;
         engine_default.add_rule(rule);
@@ -436,9 +436,9 @@ static void test_rewrite_engine_nullptr() {
     // Rule: _a * 1 -> _a
     {
         auto wc_a = wildcard("_a");
-        auto one_expr = lamina::detail::expression_from_node(make_number(1));
-        std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {lamina::detail::node(wc_a), lamina::detail::node(one_expr)};
-        auto pattern = lamina::detail::expression_from_node(lamina::detail::make_node<MultiplyNode>(pat_ops));
+        auto one_expr = LMCAS::detail::expression_from_node(make_number(1));
+        std::vector<std::shared_ptr<const SymbolicNode>> pat_ops = {LMCAS::detail::node(wc_a), LMCAS::detail::node(one_expr)};
+        auto pattern = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<MultiplyNode>(pat_ops));
         SymbolicExpr replacement = wc_a;
         std::unordered_set<std::string> wcs = {"_a"};
 
@@ -447,7 +447,7 @@ static void test_rewrite_engine_nullptr() {
         // Target: z * 1
         auto z_node = make_var("z");
         std::vector<std::shared_ptr<const SymbolicNode>> tgt_ops = {z_node, make_number(1)};
-        auto target = lamina::detail::expression_from_node(lamina::detail::make_node<MultiplyNode>(tgt_ops));
+        auto target = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<MultiplyNode>(tgt_ops));
         RewriteEngine engine_default;
         engine_default.add_rule(rule);
         auto result_default = engine_default.apply(target, 10);

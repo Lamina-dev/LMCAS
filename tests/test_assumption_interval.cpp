@@ -9,36 +9,36 @@
 #include <string>
 #include <cmath>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a VariableNode wrapped in a shared_ptr<SymbolicNode>
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 /// Create a NumberNode from a double value
 static std::shared_ptr<const SymbolicNode> make_num(double val) {
-    return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
+    return LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
 }
 
 /// Create a NumberNode from an int value (BigInt)
 static std::shared_ptr<const SymbolicNode> make_int_num(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 /// Wrap a SymbolicNode into a SymbolicExpr for querying
 static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 
 /// Declare bounded interval [lo, hi] for a variable in the context
 static void declare_bounds(AssumptionContext& ctx, const std::string& var, double lo, double hi) {
-    auto lower_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lower_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto upper_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);
@@ -48,7 +48,7 @@ static void declare_bounds(AssumptionContext& ctx, const std::string& var, doubl
 }
 
 static std::shared_ptr<SymbolicExpr> expr_from_node(std::shared_ptr<const SymbolicNode> node) {
-    return lamina::detail::make_expression_ptr(std::move(node));
+    return LMCAS::detail::make_expression_ptr(std::move(node));
 }
 
 static void declare_expr_bounds(
@@ -85,7 +85,7 @@ void test_addition_propagation() {
     declare_bounds(ctx, "y", 2.0, 5.0);
 
     // x + y
-    auto add_node = lamina::detail::make_node<AddNode>(
+    auto add_node = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), make_var("y")});
     auto expr = wrap_expr(add_node);
 
@@ -105,7 +105,7 @@ void test_addition_negative_bounds() {
     declare_bounds(ctx, "x", -2.0, 1.0);
     declare_bounds(ctx, "y", -3.0, 4.0);
 
-    auto add_node = lamina::detail::make_node<AddNode>(
+    auto add_node = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), make_var("y")});
     auto expr = wrap_expr(add_node);
 
@@ -122,13 +122,13 @@ void test_addition_negative_bounds() {
 void test_numeric_expression_endpoint_propagation() {
     TEST_CASE("Addition: expression endpoints [1+1, 3+2] + 1 = [3,6]");
     AssumptionContext ctx;
-    auto lo = expr_from_node(lamina::detail::make_node<AddNode>(
+    auto lo = expr_from_node(LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_int_num(1), make_int_num(1)}));
-    auto hi = expr_from_node(lamina::detail::make_node<AddNode>(
+    auto hi = expr_from_node(LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_int_num(3), make_int_num(2)}));
     declare_expr_bounds(ctx, "x", lo, hi);
 
-    auto add_node = lamina::detail::make_node<AddNode>(
+    auto add_node = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), make_int_num(1)});
     auto expr = wrap_expr(add_node);
 
@@ -151,9 +151,9 @@ void test_subtraction_propagation() {
     declare_bounds(ctx, "y", 2.0, 3.0);
 
     // x - y is represented as x + (-1)*y
-    auto neg_y = lamina::detail::make_node<MultiplyNode>(
+    auto neg_y = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_int_num(-1), make_var("y")});
-    auto sub_node = lamina::detail::make_node<AddNode>(
+    auto sub_node = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), neg_y});
     auto expr = wrap_expr(sub_node);
 
@@ -174,7 +174,7 @@ void test_multiplication_propagation() {
     declare_bounds(ctx, "x", 2.0, 3.0);
     declare_bounds(ctx, "y", 4.0, 5.0);
 
-    auto mul_node = lamina::detail::make_node<MultiplyNode>(
+    auto mul_node = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
@@ -194,7 +194,7 @@ void test_multiplication_mixed_signs() {
     declare_bounds(ctx, "x", -2.0, 3.0);
     declare_bounds(ctx, "y", 1.0, 4.0);
 
-    auto mul_node = lamina::detail::make_node<MultiplyNode>(
+    auto mul_node = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), make_var("y")});
     auto expr = wrap_expr(mul_node);
 
@@ -215,7 +215,7 @@ void test_squaring_nonnegative() {
     AssumptionContext ctx;
     declare_bounds(ctx, "x", 2.0, 5.0);
 
-    auto pow_node = lamina::detail::make_node<PowerNode>(make_var("x"), make_int_num(2));
+    auto pow_node = LMCAS::detail::make_node<PowerNode>(make_var("x"), make_int_num(2));
     auto expr = wrap_expr(pow_node);
 
     InferenceEngine engine(ctx);
@@ -233,7 +233,7 @@ void test_squaring_spanning_zero() {
     AssumptionContext ctx;
     declare_bounds(ctx, "x", -3.0, 2.0);
 
-    auto pow_node = lamina::detail::make_node<PowerNode>(make_var("x"), make_int_num(2));
+    auto pow_node = LMCAS::detail::make_node<PowerNode>(make_var("x"), make_int_num(2));
     auto expr = wrap_expr(pow_node);
 
     InferenceEngine engine(ctx);
@@ -251,7 +251,7 @@ void test_squaring_nonpositive() {
     AssumptionContext ctx;
     declare_bounds(ctx, "x", -5.0, -2.0);
 
-    auto pow_node = lamina::detail::make_node<PowerNode>(make_var("x"), make_int_num(2));
+    auto pow_node = LMCAS::detail::make_node<PowerNode>(make_var("x"), make_int_num(2));
     auto expr = wrap_expr(pow_node);
 
     InferenceEngine engine(ctx);
@@ -272,8 +272,8 @@ void test_division_positive() {
     declare_bounds(ctx, "y", 1.0, 3.0);
 
     // x / y is represented as x * y^(-1)
-    auto y_inv = lamina::detail::make_node<PowerNode>(make_var("y"), make_int_num(-1));
-    auto div_node = lamina::detail::make_node<MultiplyNode>(
+    auto y_inv = LMCAS::detail::make_node<PowerNode>(make_var("y"), make_int_num(-1));
+    auto div_node = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), y_inv});
     auto expr = wrap_expr(div_node);
 
@@ -295,8 +295,8 @@ void test_division_by_zero_containing() {
     declare_bounds(ctx, "y", -1.0, 2.0);
 
     // x / y = x * y^(-1)
-    auto y_inv = lamina::detail::make_node<PowerNode>(make_var("y"), make_int_num(-1));
-    auto div_node = lamina::detail::make_node<MultiplyNode>(
+    auto y_inv = LMCAS::detail::make_node<PowerNode>(make_var("y"), make_int_num(-1));
+    auto div_node = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), y_inv});
     auto expr = wrap_expr(div_node);
 
@@ -312,8 +312,8 @@ void test_division_by_zero_at_boundary() {
     declare_bounds(ctx, "x", 1.0, 5.0);
     declare_bounds(ctx, "y", 0.0, 3.0);
 
-    auto y_inv = lamina::detail::make_node<PowerNode>(make_var("y"), make_int_num(-1));
-    auto div_node = lamina::detail::make_node<MultiplyNode>(
+    auto y_inv = LMCAS::detail::make_node<PowerNode>(make_var("y"), make_int_num(-1));
+    auto div_node = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x"), y_inv});
     auto expr = wrap_expr(div_node);
 
@@ -329,7 +329,7 @@ void test_sin_propagation() {
     AssumptionContext ctx;
     declare_bounds(ctx, "x", 0.0, 6.28);
 
-    auto sin_node = lamina::detail::make_node<FunctionNode>(
+    auto sin_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sin,
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x")});
     auto expr = wrap_expr(sin_node);
@@ -349,7 +349,7 @@ void test_cos_propagation() {
     AssumptionContext ctx;
     declare_bounds(ctx, "x", 0.0, 3.14);
 
-    auto cos_node = lamina::detail::make_node<FunctionNode>(
+    auto cos_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Cos,
         std::vector<std::shared_ptr<const SymbolicNode>>{make_var("x")});
     auto expr = wrap_expr(cos_node);
@@ -404,7 +404,7 @@ void test_arctan_bounds() {
         "有限区间实数域假设应成功");
     declare_bounds(bounded_context, "x", -1.0, 1.0);
     auto bounded_expression = wrap_expr(
-        lamina::detail::make_node<FunctionNode>(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::ArcTan,
             std::vector<std::shared_ptr<const SymbolicNode>>{
                 make_var("x")}));

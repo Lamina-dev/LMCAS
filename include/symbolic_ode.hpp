@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 // Forward declaration to avoid circular include.
 class AssumptionContext;
@@ -23,7 +23,7 @@ class AssumptionContext;
  *            branches. When nullptr, behavior is identical to the unparameterized call.
  * @return 通解的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
+LMCAS_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
     std::shared_ptr<SymbolicExpr> rhs,
     const std::string& x,
     const std::string& y,
@@ -43,7 +43,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
  *            identical to the unparameterized call.
  * @return 通解的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
+LMCAS_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
     std::shared_ptr<SymbolicExpr> Px,
     std::shared_ptr<SymbolicExpr> Qx,
     const std::string& x,
@@ -53,20 +53,20 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear1_ode(
 
 /**
  * @brief 求解二阶常系数线性 ODE:a*y'' + b*y' + c*y = f(x)
+ *
+ * 齐次二阶路径与高阶 ODE 共用经过系数归一化、稳定二次公式和后向误差
+ * 验证的特征根实现；统一乘以任意有限非零常数不改变解。
  * @param a 二阶导数系数
  * @param b 一阶导数系数
  * @param c 零阶项系数
  * @param fx 非齐次项 f(x)
  * @param x 自变量名
  * @param y 因变量名
- * @param ctx Optional assumption context. When provided and a coefficient is
- *            known NonZero, the solver skips the zero-coefficient degenerate
- *            case check for that coefficient. When the dependent variable y is
+ * @param ctx Optional assumption context. When the dependent variable y is
  *            known Positive, the solver prefers positive solution branches.
- *            When nullptr, behavior is identical to the unparameterized call.
  * @return 通解的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
+LMCAS_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,
@@ -75,12 +75,13 @@ LAMINA_API std::shared_ptr<SymbolicExpr> solve_linear2_ode(
 );
 
 /**
- * @brief 求解二阶常系数常微分方程.
+ * @brief 求解二阶常系数常微分方程并显式报告错误.
  *
- * 当前支持齐次方程,以及 a == 0 且 b != 0 的一阶退化情形.
- * 二阶非齐次方程通过 `CasErrc::Inconclusive` 表示支持域边界.
+ * 当前支持齐次方程,以及 a == 0 且 b != 0 的一阶退化情形。
+ * 二阶非齐次方程通过 `CasErrc::Inconclusive` 表示支持域边界；
+ * 非有限系数及无法表示的特征根不会生成含 NaN/Inf 的伪解。
  */
-LAMINA_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
+LMCAS_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,
@@ -89,7 +90,7 @@ LAMINA_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     const AssumptionContext* ctx = nullptr
 );
 
-LAMINA_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
+LMCAS_API Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     double a, double b, double c,
     std::shared_ptr<SymbolicExpr> fx,
     const std::string& x,

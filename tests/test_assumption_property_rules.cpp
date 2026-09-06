@@ -7,15 +7,15 @@
 #include <stdexcept>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a closed interval [lo, hi] from numeric values.
 static Interval make_closed_interval(double lo, double hi) {
-    auto lo_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::closed(lo_expr);
     iv.upper = Endpoint::closed(hi_expr);
@@ -24,10 +24,10 @@ static Interval make_closed_interval(double lo, double hi) {
 
 /// Create an open interval (lo, hi) from numeric values.
 static Interval make_open_interval(double lo, double hi) {
-    auto lo_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto hi_expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lo_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto hi_expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::open(lo_expr);
     iv.upper = Endpoint::open(hi_expr);

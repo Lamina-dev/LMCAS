@@ -8,6 +8,7 @@
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
 #include "solve_strategies.hpp"
+using namespace LMCAS;
 
 inline int g_failures = 0;
 inline int g_passes = 0;
@@ -15,16 +16,16 @@ inline int g_passes = 0;
 inline std::vector<std::shared_ptr<SymbolicExpr>> solve_vector_for_test(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable,
-    const lamina::SolveOptions& options = {}) {
-    auto result = lamina::solve_equation(expression, variable, options);
+    const LMCAS::SolveOptions& options = {}) {
+    auto result = LMCAS::solve_equation(expression, variable, options);
     if (!result) {
-        if (result.error().code == lamina::CasErrc::Inconclusive) return {};
+        if (result.error().code == LMCAS::CasErrc::Inconclusive) return {};
         throw std::runtime_error(
             "checked solve failed: " + result.error().message);
     }
-    if (std::holds_alternative<lamina::EmptySolutions>(result.value())) return {};
+    if (std::holds_alternative<LMCAS::EmptySolutions>(result.value())) return {};
     const auto* finite =
-        std::get_if<lamina::FiniteSolutions>(&result.value());
+        std::get_if<LMCAS::FiniteSolutions>(&result.value());
     if (!finite) {
         throw std::runtime_error("solve result is not finitely enumerable");
     }
@@ -131,7 +132,7 @@ inline std::shared_ptr<const SymbolicNode> test_cancel_inverse_products_node(
         for (const auto& op : add->operands()) {
             ops.push_back(test_cancel_inverse_products_node(op));
         }
-        return lamina::detail::make_node<AddNode>(ops);
+        return LMCAS::detail::make_node<AddNode>(ops);
     }
 
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
@@ -166,13 +167,13 @@ inline std::shared_ptr<const SymbolicNode> test_cancel_inverse_products_node(
         for (size_t i = 0; i < ops.size(); ++i) {
             if (!used[i]) kept.push_back(ops[i]);
         }
-        if (kept.empty()) return lamina::detail::node(SymbolicExpr::number(1));
+        if (kept.empty()) return LMCAS::detail::node(SymbolicExpr::number(1));
         if (kept.size() == 1) return kept[0];
-        return lamina::detail::make_node<MultiplyNode>(kept);
+        return LMCAS::detail::make_node<MultiplyNode>(kept);
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return lamina::detail::make_node<PowerNode>(
+        return LMCAS::detail::make_node<PowerNode>(
             test_cancel_inverse_products_node(pow->base()),
             test_cancel_inverse_products_node(pow->exponent()));
     }
@@ -183,7 +184,7 @@ inline std::shared_ptr<const SymbolicNode> test_cancel_inverse_products_node(
         for (const auto& arg : func->arguments()) {
             args.push_back(test_cancel_inverse_products_node(arg));
         }
-        return lamina::detail::make_node<FunctionNode>(func->type(), args);
+        return LMCAS::detail::make_node<FunctionNode>(func->type(), args);
     }
 
     return node;
@@ -191,9 +192,9 @@ inline std::shared_ptr<const SymbolicNode> test_cancel_inverse_products_node(
 
 inline std::shared_ptr<SymbolicExpr> test_cancel_inverse_products(
     const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return expr;
-    return lamina::detail::make_expression_ptr(
-        test_cancel_inverse_products_node(lamina::detail::node(expr)));
+    if (!expr || !LMCAS::detail::node(expr)) return expr;
+    return LMCAS::detail::make_expression_ptr(
+        test_cancel_inverse_products_node(LMCAS::detail::node(expr)));
 }
 
 inline std::shared_ptr<SymbolicExpr> test_normalized_delta(
@@ -279,9 +280,10 @@ inline int TEST_REPORT() {
 #include <cmath>
 #include <limits>
 
+
 inline std::optional<double> test_numeric_eval(const std::shared_ptr<SymbolicExpr>& e) {
-    if (!e || !lamina::detail::node(e)) return std::nullopt;
-    auto root = lamina::detail::node(e);
+    if (!e || !LMCAS::detail::node(e)) return std::nullopt;
+    auto root = LMCAS::detail::node(e);
 
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(root)) {
         if (std::holds_alternative<lmmc_real_t>(num->value())) return std::get<lmmc_real_t>(num->value());
@@ -295,7 +297,7 @@ inline std::optional<double> test_numeric_eval(const std::shared_ptr<SymbolicExp
     if (auto add = std::dynamic_pointer_cast<const AddNode>(root)) {
         double s = 0.0;
         for (auto& op : add->operands()) {
-            auto v = test_numeric_eval(lamina::detail::make_expression_ptr(op));
+            auto v = test_numeric_eval(LMCAS::detail::make_expression_ptr(op));
             if (!v) return std::nullopt;
             s += *v;
         }
@@ -304,15 +306,15 @@ inline std::optional<double> test_numeric_eval(const std::shared_ptr<SymbolicExp
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(root)) {
         double s = 1.0;
         for (auto& op : mul->operands()) {
-            auto v = test_numeric_eval(lamina::detail::make_expression_ptr(op));
+            auto v = test_numeric_eval(LMCAS::detail::make_expression_ptr(op));
             if (!v) return std::nullopt;
             s *= *v;
         }
         return s;
     }
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(root)) {
-        auto b = test_numeric_eval(lamina::detail::make_expression_ptr(pow->base()));
-        auto x = test_numeric_eval(lamina::detail::make_expression_ptr(pow->exponent()));
+        auto b = test_numeric_eval(LMCAS::detail::make_expression_ptr(pow->base()));
+        auto x = test_numeric_eval(LMCAS::detail::make_expression_ptr(pow->exponent()));
         if (!b || !x) return std::nullopt;
         if (*b == 0.0 && *x < 0.0) return std::nullopt;
         double v = std::pow(*b, *x);
@@ -321,7 +323,7 @@ inline std::optional<double> test_numeric_eval(const std::shared_ptr<SymbolicExp
     }
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(root)) {
         if (func->arguments().size() == 1) {
-            auto arg = test_numeric_eval(lamina::detail::make_expression_ptr(func->arguments()[0]));
+            auto arg = test_numeric_eval(LMCAS::detail::make_expression_ptr(func->arguments()[0]));
             if (!arg) return std::nullopt;
             double v = std::numeric_limits<double>::quiet_NaN();
             switch (func->type()) {

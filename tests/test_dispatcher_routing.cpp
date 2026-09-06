@@ -63,7 +63,7 @@ static bool is_numeric_value(const std::shared_ptr<SymbolicExpr>& expr) {
 }
 
 int main() {
-    using namespace lamina;
+    using namespace LMCAS;
 
     std::mt19937 rng(314159);
     std::uniform_int_distribution<int> coeff_dist(-5, 5);

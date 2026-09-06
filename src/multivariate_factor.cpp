@@ -15,7 +15,7 @@
 #include <stdexcept>
 #include <new>
 #include "internal/multivariate_factor_support.hpp"
-namespace lamina {
+namespace LMCAS {
 static std::map<int, MultiPoly>
 extract_coefficients(const MultiPoly& poly, const std::string& main_var)
 {
@@ -472,4 +472,4 @@ SquareFreeDecomp square_free_decompose(const MultiPoly& poly, const std::string&
  *      Proceedings of SYMSAC 1976.
  */
 
-} // namespace lamina
+} // namespace LMCAS

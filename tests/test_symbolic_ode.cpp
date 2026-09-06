@@ -1,5 +1,8 @@
 #include "test_common.hpp"
 #include "symbolic_ode.hpp"
+#include "numeric_evaluation.hpp"
+
+using namespace LMCAS;
 
 void test_separable_ode() {
     TEST_CASE("Separable ODE: dy/dx = x/y");
@@ -8,7 +11,7 @@ void test_separable_ode() {
         auto y = SymbolicExpr::variable("y");
         // rhs = x / y
         auto rhs = SymbolicExpr::divide(x, y);
-        auto sol = lamina::solve_separable_ode(rhs, "x", "y");
+        auto sol = LMCAS::solve_separable_ode(rhs, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         // Solution involves y^2 term (from integrating y dy)
         EXPECT_CONTAINS(s, {"y"}, "separable x/y contains y");
@@ -21,7 +24,7 @@ void test_separable_ode() {
         auto y = SymbolicExpr::variable("y");
         // rhs = x * y
         auto rhs = SymbolicExpr::multiply(x, y);
-        auto sol = lamina::solve_separable_ode(rhs, "x", "y");
+        auto sol = LMCAS::solve_separable_ode(rhs, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         // Solution involves ln(y) (from integrating 1/y dy)
         EXPECT_CONTAINS(s, {"ln(y)"}, "separable x*y contains ln(y)");
@@ -34,7 +37,7 @@ void test_separable_ode() {
         auto y = SymbolicExpr::variable("y");
         // rhs = y / x
         auto rhs = SymbolicExpr::divide(y, x);
-        auto sol = lamina::solve_separable_ode(rhs, "x", "y");
+        auto sol = LMCAS::solve_separable_ode(rhs, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         // Solution involves ln(y) (from integrating 1/y dy)
         EXPECT_CONTAINS(s, {"ln(y)"}, "separable y/x contains ln(y)");
@@ -48,7 +51,7 @@ void test_linear1_ode() {
         // dy/dx + 2*y = 0 => P(x) = 2, Q(x) = 0
         auto Px = SymbolicExpr::number(2);
         auto Qx = SymbolicExpr::number(0);
-        auto sol = lamina::solve_linear1_ode(Px, Qx, "x", "y");
+        auto sol = LMCAS::solve_linear1_ode(Px, Qx, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         EXPECT_CONTAINS(s, {"C"}, "linear1 P=2 Q=0 contains integration constant C");
     }
@@ -59,7 +62,7 @@ void test_linear1_ode() {
         auto x = SymbolicExpr::variable("x");
         auto Px = x;
         auto Qx = SymbolicExpr::variable("x");
-        auto sol = lamina::solve_linear1_ode(Px, Qx, "x", "y");
+        auto sol = LMCAS::solve_linear1_ode(Px, Qx, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         EXPECT_CONTAINS(s, {"C"}, "linear1 P=x Q=x contains integration constant C");
     }
@@ -71,7 +74,7 @@ void test_linear1_ode() {
         auto one = SymbolicExpr::number(1);
         auto Px = SymbolicExpr::divide(one, x);
         auto Qx = SymbolicExpr::power(SymbolicExpr::variable("x"), SymbolicExpr::number(2));
-        auto sol = lamina::solve_linear1_ode(Px, Qx, "x", "y");
+        auto sol = LMCAS::solve_linear1_ode(Px, Qx, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         EXPECT_CONTAINS(s, {"C"}, "linear1 P=1/x Q=x^2 contains integration constant C");
     }
@@ -83,7 +86,7 @@ void test_linear2_ode() {
         // a=1, b=-3, c=2, f(x)=0
         // Characteristic: r^2 - 3r + 2 = 0 => r=1, r=2
         auto fx = SymbolicExpr::number(0);
-        auto sol = lamina::solve_linear2_ode(1, -3, 2, fx, "x", "y");
+        auto sol = LMCAS::solve_linear2_ode(1, -3, 2, fx, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         // Expect exponential terms e^x and e^(2x) with constants
         EXPECT_CONTAINS(s, {"C"}, "linear2 distinct roots contains constant C");
@@ -94,7 +97,7 @@ void test_linear2_ode() {
         // a=1, b=-2, c=1, f(x)=0
         // Characteristic: r^2 - 2r + 1 = 0 => r=1 (double)
         auto fx = SymbolicExpr::number(0);
-        auto sol = lamina::solve_linear2_ode(1, -2, 1, fx, "x", "y");
+        auto sol = LMCAS::solve_linear2_ode(1, -2, 1, fx, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         // Repeated root: solution is (C1 + C2*x)*e^x
         EXPECT_CONTAINS(s, {"C"}, "linear2 repeated root contains constant C");
@@ -105,7 +108,7 @@ void test_linear2_ode() {
         // a=1, b=0, c=1, f(x)=0
         // Characteristic: r^2 + 1 = 0 => r=+/-i
         auto fx = SymbolicExpr::number(0);
-        auto sol = lamina::solve_linear2_ode(1, 0, 1, fx, "x", "y");
+        auto sol = LMCAS::solve_linear2_ode(1, 0, 1, fx, "x", "y");
         std::string s = sol ? sol->to_string() : "null";
         // Complex roots: solution involves sin and cos
         EXPECT_CONTAINS(s, {"C"}, "linear2 complex roots contains constant C");
@@ -122,7 +125,7 @@ void test_linear2_nonhomogeneous() {
         auto fx = SymbolicExpr::exp(three_x);
         bool threw = false;
         try {
-            auto sol = lamina::solve_linear2_ode(1, -3, 2, fx, "x", "y");
+            auto sol = LMCAS::solve_linear2_ode(1, -3, 2, fx, "x", "y");
             // If it doesn't throw, verify the solution contains expected structure
             std::string s = sol ? sol->to_string() : "null";
             EXPECT_CONTAINS(s, {"C"}, "linear2 nonhomogeneous contains constant C");
@@ -138,7 +141,7 @@ void test_linear2_checked_contracts() {
     TEST_CASE("Checked Linear 2nd Order ODE: homogeneous success and explicit failures");
     {
         auto fx = SymbolicExpr::number(0);
-        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, fx, "x", "y");
+        auto result = LMCAS::solve_linear2_ode_checked(1, -3, 2, fx, "x", "y");
         EXPECT_TRUE(result.has_value(), "checked linear2 homogeneous succeeds");
         if (result) {
             EXPECT_TRUE(result.value() != nullptr, "checked linear2 homogeneous returns expression");
@@ -147,50 +150,113 @@ void test_linear2_checked_contracts() {
         }
     }
 
+    TEST_CASE("Checked Linear 2nd Order ODE: repeated zero root");
+    {
+        auto result = LMCAS::solve_linear2_ode_checked(
+            1, 0, 0, SymbolicExpr::number(0), "x", "y");
+        EXPECT_TRUE(result.has_value(),
+                    "checked linear2 verifies the repeated zero characteristic root");
+        if (result) {
+            double initial_values[2] = {};
+            double initial_slopes[2] = {};
+            for (int i = 0; i < 2; ++i) {
+                auto basis = result.value()
+                    ->substitute("C1", SymbolicExpr::number(i == 0 ? 1 : 0))
+                    ->substitute("C2", SymbolicExpr::number(i == 1 ? 1 : 0));
+                auto derivative = basis->differentiate("x");
+                EXPECT_TRUE(derivative->differentiate("x")->simplify()->is_zero(),
+                            "each repeated-zero-root basis solves y'' = 0 exactly");
+                auto value = LMCAS::evaluate_numeric(*basis, {{"x", 0.0}});
+                auto slope = LMCAS::evaluate_numeric(*derivative, {{"x", 0.0}});
+                EXPECT_TRUE(value.has_value() && slope.has_value(),
+                            "repeated-zero-root basis has finite initial data");
+                if (value && slope) {
+                    initial_values[i] = value.value().value;
+                    initial_slopes[i] = slope.value().value;
+                }
+            }
+            const double wronskian =
+                initial_values[0] * initial_slopes[1] -
+                initial_values[1] * initial_slopes[0];
+            EXPECT_TRUE(std::isfinite(wronskian) && std::abs(wronskian) > 1e-12,
+                        "repeated-zero-root solution spans arbitrary value and slope");
+        }
+    }
+
+    {
+        const double scale = 1.0e200;
+        auto result = LMCAS::solve_linear2_ode_checked(
+            scale, 3.0 * scale, 2.0 * scale,
+            SymbolicExpr::number(0), "x", "y");
+        EXPECT_TRUE(result.has_value(),
+                    "checked linear2 is invariant under finite coefficient scaling");
+        if (result) {
+            bool found_minus_one = false;
+            bool found_minus_two = false;
+            for (const char* selected : {"C1", "C2"}) {
+                auto basis = result.value()
+                    ->substitute("C1", SymbolicExpr::number(
+                        std::string(selected) == "C1" ? 1 : 0))
+                    ->substitute("C2", SymbolicExpr::number(
+                        std::string(selected) == "C2" ? 1 : 0));
+                auto derivative = LMCAS::evaluate_numeric(
+                    *basis->differentiate("x"), {{"x", 0.0}});
+                if (derivative) {
+                    found_minus_one |=
+                        std::abs(derivative.value().value + 1.0) < 1.0e-12;
+                    found_minus_two |=
+                        std::abs(derivative.value().value + 2.0) < 1.0e-12;
+                }
+            }
+            EXPECT_TRUE(found_minus_one && found_minus_two,
+                        "scaled linear2 preserves both characteristic roots");
+        }
+    }
+
     {
         auto x = SymbolicExpr::variable("x");
         auto three_x = SymbolicExpr::multiply(SymbolicExpr::number(3), x);
         auto fx = SymbolicExpr::exp(three_x);
-        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, fx, "x", "y");
+        auto result = LMCAS::solve_linear2_ode_checked(1, -3, 2, fx, "x", "y");
         EXPECT_TRUE(!result.has_value(), "checked linear2 nonhomogeneous is not a success");
-        EXPECT_TRUE(result.error().code == lamina::CasErrc::Inconclusive,
+        EXPECT_TRUE(result.error().code == LMCAS::CasErrc::Inconclusive,
                     "checked linear2 nonhomogeneous reports Inconclusive");
     }
 
     {
-        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, nullptr, "x", "y");
+        auto result = LMCAS::solve_linear2_ode_checked(1, -3, 2, nullptr, "x", "y");
         EXPECT_TRUE(!result.has_value(), "checked linear2 rejects null forcing expression");
-        EXPECT_TRUE(result.error().code == lamina::CasErrc::InvalidArgument,
+        EXPECT_TRUE(result.error().code == LMCAS::CasErrc::InvalidArgument,
                     "checked linear2 null forcing reports InvalidArgument");
     }
 
     {
         auto fx = SymbolicExpr::number(0);
-        auto result = lamina::solve_linear2_ode_checked(1, -3, 2, fx, "", "y");
+        auto result = LMCAS::solve_linear2_ode_checked(1, -3, 2, fx, "", "y");
         EXPECT_TRUE(!result.has_value(), "checked linear2 rejects empty independent variable");
-        EXPECT_TRUE(result.error().code == lamina::CasErrc::InvalidArgument,
+        EXPECT_TRUE(result.error().code == LMCAS::CasErrc::InvalidArgument,
                     "checked linear2 empty variable reports InvalidArgument");
     }
 
     {
-        lamina::CancellationToken cancellation;
-        lamina::ComputationContext context({}, cancellation);
+        LMCAS::CancellationToken cancellation;
+        LMCAS::ComputationContext context({}, cancellation);
         cancellation.cancel();
-        auto result = lamina::solve_linear2_ode_checked(
+        auto result = LMCAS::solve_linear2_ode_checked(
             1, -3, 2, SymbolicExpr::number(0), "x", "y", context);
         EXPECT_TRUE(!result.has_value(), "checked linear2 observes cancellation");
-        EXPECT_TRUE(result.error().code == lamina::CasErrc::Cancelled,
+        EXPECT_TRUE(result.error().code == LMCAS::CasErrc::Cancelled,
                     "checked linear2 cancellation reports Cancelled");
     }
 
     {
-        lamina::ResourceLimits limits;
+        LMCAS::ResourceLimits limits;
         limits.max_steps = 0;
-        lamina::ComputationContext context(limits);
-        auto result = lamina::solve_linear2_ode_checked(
+        LMCAS::ComputationContext context(limits);
+        auto result = LMCAS::solve_linear2_ode_checked(
             1, -3, 2, SymbolicExpr::number(0), "x", "y", context);
         EXPECT_TRUE(!result.has_value(), "checked linear2 observes exhausted step budget");
-        EXPECT_TRUE(result.error().code == lamina::CasErrc::ResourceLimit,
+        EXPECT_TRUE(result.error().code == LMCAS::CasErrc::ResourceLimit,
                     "checked linear2 exhausted budget reports ResourceLimit");
     }
 }

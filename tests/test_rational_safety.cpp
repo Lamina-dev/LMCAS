@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <string>
 
+using namespace LMCAS;
+
 namespace {
 
 void expect_rejected(const std::string& literal) {

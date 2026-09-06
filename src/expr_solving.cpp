@@ -1,15 +1,15 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 
 #include <exception>
 #include <optional>
 #include <utility>
 #include <vector>
 
-#include "lsr_expr_internal.hpp"
+#include "expr_internal.hpp"
 #include "poly_utils.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina::lsr {
+namespace LMCAS {
 namespace {
 
 Rational polynomial_coeff_or_zero(const Polynomial<Rational>& polynomial,
@@ -68,11 +68,11 @@ ExprPtr sqrt_rational_expression(const Rational& value) {
     return scaled ? scaled : radical;
 }
 
-ExprResult verified_lsr_complex(ExprPtr real_part, ExprPtr imag_part) {
+ExprResult verified_complex(ExprPtr real_part, ExprPtr imag_part) {
     auto value = complex(std::move(real_part), std::move(imag_part));
     if (!value) return value;
     auto simplified = value.value()->simplify();
-    if (!simplified || !lamina::detail::node(simplified)) {
+    if (!simplified || !LMCAS::detail::node(simplified)) {
         return expression_failure(CasErrc::InternalInvariant,
                                   "complex root simplification returned null",
                                   kSolveExprSetOperation);
@@ -88,12 +88,12 @@ ExprResult normalize_equation_to_zero(const ExprPtr& expression,
                                    "equation cannot be null",
                                    kSolveExprSetOperation);
     }
-    const auto& node = lamina::detail::node(*expression);
+    const auto& node = LMCAS::detail::node(*expression);
     if (const auto relation =
             std::dynamic_pointer_cast<const RelationalNode>(node)) {
         if (relation->op() == RelationalNode::Op::EQ) {
-            auto left = lamina::detail::make_expression_ptr(relation->left());
-            auto right = lamina::detail::make_expression_ptr(relation->right());
+            auto left = LMCAS::detail::make_expression_ptr(relation->left());
+            auto right = LMCAS::detail::make_expression_ptr(relation->right());
             if (!left || !right) {
                 return ExprResult::failure(
                     CasErrc::InternalInvariant,
@@ -134,7 +134,7 @@ ExprResult normalize_equation_to_zero(const ExprPtr& expression,
     return ExprResult::success(expression);
 }
 
-Result<std::optional<ExprSet>> try_lsr_closed_form_rational_poly_roots(
+Result<std::optional<ExprSet>> try_closed_form_rational_poly_roots(
     const ExprPtr& equation,
     const std::string& variable,
     ComputationContext& context) {
@@ -189,14 +189,14 @@ Result<std::optional<ExprSet>> try_lsr_closed_form_rational_poly_roots(
             auto imag_magnitude = SymbolicExpr::divide(
                 sqrt_rational_expression(positive_discriminant),
                 rational_expression(positive_denominator))->simplify();
-            auto positive = verified_lsr_complex(
+            auto positive = verified_complex(
                 rational_expression(real_component), imag_magnitude);
             if (!positive) {
                 return Result<std::optional<ExprSet>>::failure(positive.error());
             }
             auto negative_imag = SymbolicExpr::multiply(
                 SymbolicExpr::number(-1), imag_magnitude)->simplify();
-            auto negative = verified_lsr_complex(
+            auto negative = verified_complex(
                 rational_expression(real_component), negative_imag);
             if (!negative) {
                 return Result<std::optional<ExprSet>>::failure(negative.error());
@@ -235,12 +235,12 @@ SolveResult solve_set(const ExprPtr& equation,
                       const SolveOptions& options) {
     if (!equation) {
         return SolveResult::failure(CasErrc::InvalidArgument,
-                                    "equation cannot be null", "lsr.solve_set");
+                                    "equation cannot be null", "LMCAS.solve_set");
     }
     if (variable.empty()) {
         return SolveResult::failure(CasErrc::InvalidArgument,
                                     "solve variable cannot be empty",
-                                    "lsr.solve_set");
+                                    "LMCAS.solve_set");
     }
     return solve_equation(equation, variable, context, options);
 }
@@ -256,7 +256,7 @@ ExprSetResult solve_normalized_expr_set(const ExprPtr& normalized,
                                         const std::string& variable,
                                         ComputationContext& context,
                                         const SolveOptions& options) {
-    auto closed_form = try_lsr_closed_form_rational_poly_roots(
+    auto closed_form = try_closed_form_rational_poly_roots(
         normalized, variable, context);
     if (!closed_form) {
         return ExprSetResult::failure(closed_form.error());
@@ -346,4 +346,4 @@ ExprSetResult solve(const ExprPtr& equation,
     return solve(equation, variable, context, options);
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

@@ -1,6 +1,6 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 // Assumption-aware integrand simplification helpers
 
@@ -34,7 +34,7 @@ static std::shared_ptr<const SymbolicNode> simplify_abs_positive(
             new_ops.push_back(new_op);
         }
         if (changed) {
-            return lamina::detail::make_node<FunctionNode>(fn->type(), new_ops);
+            return LMCAS::detail::make_node<FunctionNode>(fn->type(), new_ops);
         }
         return node;
     }
@@ -47,7 +47,7 @@ static std::shared_ptr<const SymbolicNode> simplify_abs_positive(
             if (new_op != op) changed = true;
             new_ops.push_back(new_op);
         }
-        if (changed) return lamina::detail::make_node<AddNode>(new_ops);
+        if (changed) return LMCAS::detail::make_node<AddNode>(new_ops);
         return node;
     }
 
@@ -59,7 +59,7 @@ static std::shared_ptr<const SymbolicNode> simplify_abs_positive(
             if (new_op != op) changed = true;
             new_ops.push_back(new_op);
         }
-        if (changed) return lamina::detail::make_node<MultiplyNode>(new_ops);
+        if (changed) return LMCAS::detail::make_node<MultiplyNode>(new_ops);
         return node;
     }
 
@@ -67,7 +67,7 @@ static std::shared_ptr<const SymbolicNode> simplify_abs_positive(
         auto new_base = simplify_abs_positive(pow->base(), var);
         auto new_exp = simplify_abs_positive(pow->exponent(), var);
         if (new_base != pow->base() || new_exp != pow->exponent()) {
-            return lamina::detail::make_node<PowerNode>(new_base, new_exp);
+            return LMCAS::detail::make_node<PowerNode>(new_base, new_exp);
         }
         return node;
     }
@@ -83,19 +83,22 @@ static std::shared_ptr<const SymbolicNode> simplify_abs_positive(
  * replaces |var| with var throughout the integrand. Returns the original
  * expression unchanged if no simplifications apply.
  */
-static SymbolicExpr apply_assumption_simplifications(
+static Result<SymbolicExpr> apply_assumption_simplifications(
     const SymbolicExpr& expr, const std::string& var,
     const AssumptionContext* ctx) {
     if (!ctx) return expr;
 
-    // Check if the integration variable is known Positive
     SymbolicExpr var_expr = *SymbolicExpr::variable(var);
-    Tribool var_positive = detail::propagate_result(ctx->is_positive(var_expr));
+    auto positive = ctx->is_positive(var_expr);
+    if (!positive) {
+        return Result<SymbolicExpr>::failure(positive.error());
+    }
 
-    if (var_positive == Tribool::True) {
-        auto new_root = simplify_abs_positive(lamina::detail::node(expr), var);
-        if (new_root != lamina::detail::node(expr)) {
-            return lamina::detail::expression_from_node(new_root);
+    if (positive.value() == Tribool::True) {
+        auto new_root = simplify_abs_positive(
+            LMCAS::detail::node(expr), var);
+        if (new_root != LMCAS::detail::node(expr)) {
+            return LMCAS::detail::expression_from_node(new_root);
         }
     }
 
@@ -112,8 +115,12 @@ IntegrationStrategyResult IntegrationStrategy::try_integrate(
     auto access = computation.consume_steps(0, operation);
     if (!access) return IntegrationStrategyResult::failure(access.error());
     try {
-        auto expression = try_integrate_raw(
+        auto raw_result = try_integrate_raw(
             expr, var, integrator, computation, depth);
+        if (!raw_result) {
+            return IntegrationStrategyResult::failure(raw_result.error());
+        }
+        auto expression = std::move(raw_result.value());
         auto final_access = computation.consume_steps(0, operation);
         if (!final_access) {
             return IntegrationStrategyResult::failure(final_access.error());
@@ -124,8 +131,6 @@ IntegrationStrategyResult IntegrationStrategy::try_integrate(
         }
         return IntegrationStrategyResult::success(IntegrationCandidate{
             std::move(expression), name()});
-    } catch (const detail::ResultPropagation& propagation) {
-        return IntegrationStrategyResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return IntegrationStrategyResult::failure(
             CasErrc::ResourceLimit,
@@ -172,14 +177,14 @@ Result<void> Integrator::add_strategy(
 }
 
 bool Integrator::depends_on(const SymbolicExpr& expr, const std::string& var) {
-    return expression_depends_on_variable(lamina::detail::node(expr), var);
+    return expression_depends_on_variable(LMCAS::detail::node(expr), var);
 }
 
 std::shared_ptr<SymbolicExpr> Integrator::make_integral_node(
     const SymbolicExpr& expr, const std::string& var) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<IntegralNode>(
-            lamina::detail::node(expr), var));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<IntegralNode>(
+            LMCAS::detail::node(expr), var));
 }
 
 std::shared_ptr<SymbolicExpr> Integrator::check_cycle(
@@ -209,12 +214,12 @@ Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
     const SymbolicExpr& expr, const std::string& var,
     ComputationContext& context, int depth) {
 
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         std::vector<std::shared_ptr<const SymbolicNode>> constants;
         std::vector<std::shared_ptr<const SymbolicNode>> dependents;
 
         for (auto& op : mul->operands()) {
-            auto term = lamina::detail::expression_from_node(op);
+            auto term = LMCAS::detail::expression_from_node(op);
             if (!depends_on_integration_variable(term, var)) {
                 constants.push_back(op);
             } else {
@@ -224,15 +229,15 @@ Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
 
         if (!constants.empty() && dependents.size() < mul->operands().size()) {
             auto const_part = (constants.size() == 1)
-                ? lamina::detail::expression_from_node(constants[0])
-                : lamina::detail::expression_from_node(
-                      lamina::detail::make_node<MultiplyNode>(constants));
+                ? LMCAS::detail::expression_from_node(constants[0])
+                : LMCAS::detail::expression_from_node(
+                      LMCAS::detail::make_node<MultiplyNode>(constants));
             SymbolicExpr dep_part = (dependents.empty()) ?
                 *SymbolicExpr::number(1) :
                 ((dependents.size() == 1)
-                     ? lamina::detail::expression_from_node(dependents[0])
-                     : lamina::detail::expression_from_node(
-                           lamina::detail::make_node<MultiplyNode>(dependents)));
+                     ? LMCAS::detail::expression_from_node(dependents[0])
+                     : LMCAS::detail::expression_from_node(
+                           LMCAS::detail::make_node<MultiplyNode>(dependents)));
             if (dependents.size() > 1) {
                 std::vector<std::shared_ptr<const SymbolicNode>> exponents;
                 exponents.reserve(dependents.size());
@@ -249,8 +254,8 @@ Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
                     exponents.push_back(function->arguments()[0]);
                 }
                 if (all_exponential) {
-                    dep_part = lamina::detail::expression_from_node(
-                        lamina::detail::make_node<FunctionNode>(
+                    dep_part = LMCAS::detail::expression_from_node(
+                        LMCAS::detail::make_node<FunctionNode>(
                             FunctionNode::FuncType::Exp,
                             std::vector<std::shared_ptr<const SymbolicNode>>{
                                 SymbolicFactory::create_add(
@@ -265,27 +270,27 @@ Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
             }
             return Result<std::shared_ptr<SymbolicExpr>>::success(
                 SymbolicExpr::multiply(
-                    lamina::detail::make_expression_ptr(const_part),
+                    LMCAS::detail::make_expression_ptr(const_part),
                     int_part.value()));
         }
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(
-            lamina::detail::node(expr))) {
+            LMCAS::detail::node(expr))) {
         std::vector<std::shared_ptr<const SymbolicNode>> results;
         for (auto& op : add->operands()) {
-            auto term = lamina::detail::expression_from_node(op);
+            auto term = LMCAS::detail::expression_from_node(op);
             auto int_term = integrate_recursive(
                 term, var, context, depth + 1);
             if (!int_term) {
                 return Result<std::shared_ptr<SymbolicExpr>>::failure(
                     int_term.error());
             }
-            results.push_back(lamina::detail::node(int_term.value()));
+            results.push_back(LMCAS::detail::node(int_term.value()));
         }
         return Result<std::shared_ptr<SymbolicExpr>>::success(
-            lamina::detail::make_expression_ptr(
-                lamina::detail::make_node<AddNode>(results)));
+            LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<AddNode>(results)));
     }
     return Result<std::shared_ptr<SymbolicExpr>>::success(nullptr);
 }
@@ -323,8 +328,8 @@ Result<std::shared_ptr<SymbolicExpr>> Integrator::dispatch_strategies(
             auto normalized_derivative = derivative->simplify();
             auto normalized_integrand = make_expr_ptr(expr)->simplify();
             if (normalized_derivative && normalized_integrand &&
-                lamina::detail::node(normalized_derivative)->equals(
-                    *lamina::detail::node(normalized_integrand))) {
+                LMCAS::detail::node(normalized_derivative)->equals(
+                    *LMCAS::detail::node(normalized_integrand))) {
                 return Result<std::shared_ptr<SymbolicExpr>>::success(
                     candidate->expression);
             }
@@ -416,32 +421,34 @@ Result<SymbolicExpr> Integrator::integrate_checked(
         ~QueryExit() { --integrator.query_depth_; }
     } query_exit{*this};
 
-    if (auto pw = std::dynamic_pointer_cast<const PiecewiseNode>(lamina::detail::node(expr))) {
+    if (auto pw = std::dynamic_pointer_cast<const PiecewiseNode>(LMCAS::detail::node(expr))) {
         std::vector<PiecewiseNode::Branch> new_brs;
         for (const auto& br : pw->branches()) {
             PiecewiseNode::Branch nb;
             auto branch = integrate_checked(
-                lamina::detail::expression_from_node(br.expression), var_name, context);
+                LMCAS::detail::expression_from_node(br.expression), var_name, context);
             if (!branch) return branch;
-            nb.expression = lamina::detail::node(branch.value());
+            nb.expression = LMCAS::detail::node(branch.value());
             nb.condition = br.condition;
             new_brs.push_back(nb);
         }
         std::shared_ptr<const SymbolicNode> new_def = nullptr;
         if (pw->default_expr()) {
             auto default_result = integrate_checked(
-                lamina::detail::expression_from_node(pw->default_expr()), var_name, context);
+                LMCAS::detail::expression_from_node(pw->default_expr()), var_name, context);
             if (!default_result) return default_result;
-            new_def = lamina::detail::node(default_result.value());
+            new_def = LMCAS::detail::node(default_result.value());
         }
-        return Result<SymbolicExpr>::success(lamina::detail::expression_from_node(
-            lamina::detail::make_node<PiecewiseNode>(std::move(new_brs), new_def)));
+        return Result<SymbolicExpr>::success(LMCAS::detail::expression_from_node(
+            LMCAS::detail::make_node<PiecewiseNode>(std::move(new_brs), new_def)));
     }
 
     SymbolicExpr working_expr = expr;
     try {
-        working_expr = apply_assumption_simplifications(
+        auto assumed = apply_assumption_simplifications(
             expr, var_name, context.assumptions().get());
+        if (!assumed) return assumed;
+        working_expr = std::move(assumed.value());
         auto normalized = working_expr.simplify();
         if (!normalized) {
             return Result<SymbolicExpr>::failure(
@@ -486,11 +493,27 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
 
     auto access = context.consume_steps(1, "integrate.definite");
     if (!access) return Result<SymbolicExpr>::failure(access.error());
-    SymbolicExpr simp_expr_val = *apply_assumption_simplifications(
-        expr, var_name, context.assumptions().get()).simplify();
+    SymbolicExpr simp_expr_val = expr;
+    try {
+        auto assumed = apply_assumption_simplifications(
+            expr, var_name, context.assumptions().get());
+        if (!assumed) return assumed;
+        auto simplified = assumed.value().simplify();
+        if (!simplified) {
+            return Result<SymbolicExpr>::failure(
+                CasErrc::InternalInvariant,
+                "definite integrand normalization produced no expression",
+                "integrate.definite.preprocess");
+        }
+        simp_expr_val = *simplified;
+    } catch (const std::exception& error) {
+        return Result<SymbolicExpr>::failure(
+            CasErrc::InternalInvariant, error.what(),
+            "integrate.definite.preprocess");
+    }
     bool is_inv_x = false;
 
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(simp_expr_val))) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(simp_expr_val))) {
         if (auto v = std::dynamic_pointer_cast<const VariableNode>(pow->base())) {
             if (v->name() == var_name) {
                 if (auto en = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
@@ -508,8 +531,8 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
         }
     }
 
-    bool numeric_bounds = (lamina::detail::node(lower) && std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(lower))) &&
-                          (lamina::detail::node(upper) && std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(upper)));
+    bool numeric_bounds = (LMCAS::detail::node(lower) && std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(lower))) &&
+                          (LMCAS::detail::node(upper) && std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(upper)));
 
     if (is_inv_x && numeric_bounds) {
         auto l_checked = try_checked_numeric_constant(lower, context);
@@ -521,8 +544,8 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
             lmmc_double_nearly_equal_tol(l_val, 0.0, 1e-9, 1e-9, &eq_l);
             lmmc_double_nearly_equal_tol(u_val, 0.0, 1e-9, 1e-9, &eq_u);
             if (!eq_l && l_val < 0 && !eq_u && u_val > 0) {
-                auto t = lamina::detail::make_expression_ptr(*SymbolicExpr::variable("t"));
-                auto zero = lamina::detail::make_expression_ptr(*SymbolicExpr::number(0));
+                auto t = LMCAS::detail::make_expression_ptr(*SymbolicExpr::variable("t"));
+                auto zero = LMCAS::detail::make_expression_ptr(*SymbolicExpr::number(0));
                 auto int_left_result = integrate_def_checked(
                     expr, var_name, lower, *t, context);
                 if (!int_left_result) return int_left_result;
@@ -560,19 +583,38 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(
     SymbolicExpr indefinite = indefinite_result.value();
 
     if (std::dynamic_pointer_cast<const IntegralNode>(
-            lamina::detail::node(indefinite))) {
+            LMCAS::detail::node(indefinite))) {
         return Result<SymbolicExpr>::success(
-            lamina::detail::expression_from_node(
-                lamina::detail::make_node<IntegralNode>(
-                    lamina::detail::node(expr), var_name,
-                    lamina::detail::node(lower),
-                    lamina::detail::node(upper))));
+            LMCAS::detail::expression_from_node(
+                LMCAS::detail::make_node<IntegralNode>(
+                    LMCAS::detail::node(expr), var_name,
+                    LMCAS::detail::node(lower),
+                    LMCAS::detail::node(upper))));
     }
 
-    auto F_b = indefinite.substitute(var_name, make_expr_ptr(upper));
-    auto F_a = indefinite.substitute(var_name, make_expr_ptr(lower));
-    auto result = sym_sub(*F_b, *F_a);
-    return Result<SymbolicExpr>::success(*result->simplify());
+    try {
+        auto F_b = indefinite.substitute(var_name, make_expr_ptr(upper));
+        auto F_a = indefinite.substitute(var_name, make_expr_ptr(lower));
+        if (!F_b || !F_a) {
+            return Result<SymbolicExpr>::failure(
+                CasErrc::InternalInvariant,
+                "definite integration substitution produced no expression",
+                "integrate.definite.evaluate");
+        }
+        auto result = sym_sub(*F_b, *F_a);
+        auto simplified = result ? result->simplify() : nullptr;
+        if (!simplified) {
+            return Result<SymbolicExpr>::failure(
+                CasErrc::InternalInvariant,
+                "definite integration simplification produced no expression",
+                "integrate.definite.evaluate");
+        }
+        return Result<SymbolicExpr>::success(*simplified);
+    } catch (const std::exception& error) {
+        return Result<SymbolicExpr>::failure(
+            CasErrc::InternalInvariant, error.what(),
+            "integrate.definite.evaluate");
+    }
 }
 
 Result<SymbolicExpr> Integrator::integrate_def(
@@ -584,4 +626,4 @@ Result<SymbolicExpr> Integrator::integrate_def(
     return integrate_def_checked(expr, var_name, lower, upper, context);
 }
 
-} // namespace lamina
+} // namespace LMCAS

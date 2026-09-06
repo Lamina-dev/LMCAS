@@ -9,6 +9,7 @@
 #include "internal/expression_analysis.hpp"
 #include "internal/series_support.hpp"
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <cstdio>
@@ -19,18 +20,24 @@
 #include <optional>
 
 
+namespace LMCAS {
+
 static bool try_get_int(const std::shared_ptr<SymbolicExpr>& expr, long long& out) {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
+    if (!expr || !LMCAS::detail::node(expr)) return false;
+    auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr));
     if (!num) return false;
     if (std::holds_alternative<BigInt>(num->value())) {
-        out = static_cast<long long>(std::get<BigInt>(num->value()).to_int());
+        auto value = std::get<BigInt>(num->value()).try_to_int64();
+        if (!value) return false;
+        out = static_cast<long long>(*value);
         return true;
     }
     if (std::holds_alternative<Rational>(num->value())) {
         auto& r = std::get<Rational>(num->value());
         if (r.get_denominator() == BigInt(1)) {
-            out = static_cast<long long>(r.get_numerator().to_int());
+            auto value = r.get_numerator().try_to_int64();
+            if (!value) return false;
+            out = static_cast<long long>(*value);
             return true;
         }
         return false;
@@ -40,9 +47,12 @@ static bool try_get_int(const std::shared_ptr<SymbolicExpr>& expr, long long& ou
     return false;
 }
 
+} // namespace LMCAS
 
 
-namespace lamina {
+
+
+namespace LMCAS {
 
 namespace {
 
@@ -88,12 +98,18 @@ std::optional<int> integer_value_from_node(const std::shared_ptr<const SymbolicN
     auto number = std::dynamic_pointer_cast<const NumberNode>(node);
     if (!number) return std::nullopt;
     if (std::holds_alternative<BigInt>(number->value())) {
-        return std::get<BigInt>(number->value()).to_int();
+        auto value = std::get<BigInt>(number->value()).try_to_int64();
+        if (!value || *value < std::numeric_limits<int>::min() ||
+            *value > std::numeric_limits<int>::max()) return std::nullopt;
+        return static_cast<int>(*value);
     }
     if (std::holds_alternative<Rational>(number->value())) {
         const auto& rational = std::get<Rational>(number->value());
         if (rational.get_denominator() != BigInt(1)) return std::nullopt;
-        return rational.get_numerator().to_int();
+        auto value = rational.get_numerator().try_to_int64();
+        if (!value || *value < std::numeric_limits<int>::min() ||
+            *value > std::numeric_limits<int>::max()) return std::nullopt;
+        return static_cast<int>(*value);
     }
     double value = static_cast<double>(std::get<lmmc_real_t>(number->value()));
     if (!std::isfinite(value) || value != std::floor(value) ||
@@ -119,7 +135,10 @@ std::optional<int> supported_laurent_integer_power(
         if (base && base->name() == var) return *exponent;
         auto nested = supported_laurent_integer_power(power->base(), var);
         if (!nested) return std::nullopt;
-        return *nested * *exponent;
+        const long long product = static_cast<long long>(*nested) * *exponent;
+        if (product < std::numeric_limits<int>::min() ||
+            product > std::numeric_limits<int>::max()) return std::nullopt;
+        return static_cast<int>(product);
     }
     if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         int total_power = 0;
@@ -142,7 +161,7 @@ Result<void> validate_power_series_coefficients(
     const std::string& name)
 {
     for (size_t i = 0; i < coeffs.size(); ++i) {
-        if (!coeffs[i] || !lamina::detail::node(coeffs[i])) {
+        if (!coeffs[i] || !LMCAS::detail::node(coeffs[i])) {
             return Result<void>::failure(
                 CasErrc::InvalidArgument,
                 name + " contains a null coefficient at index " + std::to_string(i),
@@ -190,11 +209,11 @@ PowerSeriesResult power_series_multiply_checked(
             if (j >= a.size() || (k-j) >= b.size()) continue;
             auto aj = a[j] ? a[j] : SymbolicExpr::number(0);
             auto bkj = b[k-j] ? b[k-j] : SymbolicExpr::number(0);
-            terms.push_back(lamina::detail::node(SymbolicExpr::multiply(aj, bkj)));
+            terms.push_back(LMCAS::detail::node(SymbolicExpr::multiply(aj, bkj)));
         }
         if (terms.empty()) result[k] = SymbolicExpr::number(0);
-        else if (terms.size() == 1) result[k] = lamina::detail::make_expression_ptr(terms[0])->simplify();
-        else result[k] = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(terms))->simplify();
+        else if (terms.size() == 1) result[k] = LMCAS::detail::make_expression_ptr(terms[0])->simplify();
+        else result[k] = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(terms))->simplify();
     }
     return PowerSeriesResult::success(std::move(result));
 }
@@ -235,7 +254,7 @@ PowerSeriesResult power_series_compose_checked(
         if (!step) return PowerSeriesResult::failure(step.error());
         auto multiplied = power_series_multiply_checked(gp[k-1], gp[1], order, context);
         if (!multiplied) return multiplied;
-        gp[k] = std::move(lamina::detail::propagate_result(multiplied));
+        gp[k] = std::move(multiplied.value());
     }
     for (size_t k = 0; k < std::min(f.size(), n); ++k) {
         auto step = context.consume_steps(1, operation);
@@ -264,16 +283,19 @@ std::shared_ptr<SymbolicExpr> symbolic_sum(
     long long lv = 0, uv = 0;
     if (try_get_int(lower, lv) && try_get_int(upper, uv)) {
         if (uv < lv) return SymbolicExpr::number(0);
-        if (uv - lv < 100) {
+        const auto span = static_cast<std::uint64_t>(uv) -
+                          static_cast<std::uint64_t>(lv);
+        if (span < 100) {
             std::vector<std::shared_ptr<const SymbolicNode>> terms;
-            for (long long k = lv; k <= uv; ++k) {
-                auto val = SymbolicExpr::number(static_cast<int>(k));
+            for (long long k = lv;; ++k) {
+                auto val = SymbolicExpr::number(k);
                 auto term = body->substitute(index, val);
-                if (term) { term = term->simplify(); terms.push_back(lamina::detail::node(term)); }
+                if (term) { term = term->simplify(); terms.push_back(LMCAS::detail::node(term)); }
+                if (k == uv) break;
             }
             if (terms.empty()) return SymbolicExpr::number(0);
-            if (terms.size() == 1) return lamina::detail::make_expression_ptr(terms[0])->simplify();
-            return lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(terms))->simplify();
+            if (terms.size() == 1) return LMCAS::detail::make_expression_ptr(terms[0])->simplify();
+            return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(terms))->simplify();
         }
     }
     auto k_var = SymbolicExpr::variable(index);
@@ -285,7 +307,7 @@ std::shared_ptr<SymbolicExpr> symbolic_sum(
         auto sl = SymbolicExpr::divide(SymbolicExpr::multiply(lm1, l), SymbolicExpr::number(2));
         return SymbolicExpr::add(su, SymbolicExpr::multiply(SymbolicExpr::number(-1), sl))->simplify();
     }
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<SummationNode>(lamina::detail::node(body), index, lamina::detail::node(lower), lamina::detail::node(upper)));
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<SummationNode>(LMCAS::detail::node(body), index, LMCAS::detail::node(lower), LMCAS::detail::node(upper)));
 }
 
 std::shared_ptr<SymbolicExpr> symbolic_product(
@@ -295,19 +317,22 @@ std::shared_ptr<SymbolicExpr> symbolic_product(
     long long lv = 0, uv = 0;
     if (try_get_int(lower, lv) && try_get_int(upper, uv)) {
         if (uv < lv) return SymbolicExpr::number(1);
-        if (uv - lv < 50) {
+        const auto span = static_cast<std::uint64_t>(uv) -
+                          static_cast<std::uint64_t>(lv);
+        if (span < 50) {
             auto result = SymbolicExpr::number(1);
-            for (long long k = lv; k <= uv; ++k) {
-                auto val = SymbolicExpr::number(static_cast<int>(k));
+            for (long long k = lv;; ++k) {
+                auto val = SymbolicExpr::number(k);
                 auto term = body->substitute(index, val);
                 if (term) { term = term->simplify(); result = SymbolicExpr::multiply(result, term); }
+                if (k == uv) break;
             }
             return result->simplify();
         }
     }
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<ProductNode>(lamina::detail::node(body), index, lamina::detail::node(lower), lamina::detail::node(upper)));
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<ProductNode>(LMCAS::detail::node(body), index, LMCAS::detail::node(lower), LMCAS::detail::node(upper)));
 }
 
 
 
-} // namespace lamina
+} // namespace LMCAS

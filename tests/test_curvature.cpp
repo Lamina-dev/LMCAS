@@ -5,7 +5,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-using namespace lamina;
+using namespace LMCAS;
 
 int main()
 {
@@ -115,7 +115,7 @@ int main()
             surface_area_revolution_x_checked(f, "x", a, b);
         EXPECT_TRUE(
             !surface &&
-                surface.error().code == lamina::CasErrc::Inconclusive,
+                surface.error().code == LMCAS::CasErrc::Inconclusive,
             "sphere surface requiring implicit numeric fallback is Inconclusive");
     }
 

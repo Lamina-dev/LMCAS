@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 namespace {
 
 constexpr const char* kOperation = "exact_algebraic";
@@ -353,4 +353,4 @@ Result<int> compare_exact_real_algebraic(
     }
 }
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

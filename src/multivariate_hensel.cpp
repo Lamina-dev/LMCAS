@@ -12,7 +12,7 @@
 #include <set>
 #include <stdexcept>
 #include "internal/multivariate_factor_support.hpp"
-namespace lamina {
+namespace LMCAS {
 static MultiPoly truncate_mod_var(const MultiPoly& poly, const std::string& var,
                                   int degree_bound);
 /**
@@ -574,4 +574,4 @@ std::vector<MultiPoly> multivariate_diophantine(
     return result;
 }
 
-} // namespace lamina
+} // namespace LMCAS

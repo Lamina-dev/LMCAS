@@ -8,7 +8,7 @@
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -18,7 +18,7 @@ Result<void> validate_complex_expr_input(const std::shared_ptr<SymbolicExpr>& ex
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "expression cannot be null", operation);
     }
@@ -35,7 +35,7 @@ Result<void> validate_complex_expr_point_input(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!expr || !lamina::detail::node(expr) || !z0 || !lamina::detail::node(z0)) {
+    if (!expr || !LMCAS::detail::node(expr) || !z0 || !LMCAS::detail::node(z0)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "complex-analysis expressions cannot be null",
                                      operation);
@@ -204,7 +204,7 @@ bool has_function_of_explicit_complex(const std::shared_ptr<const SymbolicNode>&
 
 } // namespace
 
-static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
+static ExpressionResult calculate_residue_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&,
     const std::shared_ptr<SymbolicExpr>&,
@@ -234,16 +234,17 @@ ExpressionResult calculate_residue_checked(
     if (!budget) return ExpressionResult::failure(budget.error());
 
     try {
-        auto result = calculate_residue_impl(f, z, z0, order, context);
-        if (!result || !lamina::detail::node(result)) {
+        auto calculated =
+            calculate_residue_impl(f, z, z0, order, context);
+        if (!calculated) return calculated;
+        auto result = std::move(calculated.value());
+        if (!result || !LMCAS::detail::node(result)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "residue could not be constructed in the supported symbolic domain",
                 operation);
         }
-        return ExpressionResult::success(result);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ExpressionResult::failure(propagation.error());
+        return result;
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                           "allocation failed while calculating residue",
@@ -265,7 +266,7 @@ ExpressionResult calculate_residue_checked(
     return calculate_residue_checked(f, z, z0, order, context);
 }
 
-static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
+static ExpressionResult calculate_residue_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
@@ -288,8 +289,8 @@ static std::shared_ptr<SymbolicExpr> calculate_residue_impl(
     
     F = SymbolicExpr::divide(F, SymbolicExpr::number(fact));
     
-    return detail::propagate_result(limit_expression_checked(
-        F, z, z0, LimitDirection::Both, context));
+    return limit_expression_checked(
+        F, z, z0, LimitDirection::Both, context);
 }
 
 ExpressionResult cauchy_integral_checked(
@@ -308,7 +309,7 @@ ExpressionResult cauchy_integral_checked(
 
     try {
         auto result = cauchy_integral_impl(f, z, z0, n);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "Cauchy integral formula could not be constructed in the supported symbolic domain",
@@ -357,13 +358,13 @@ static std::shared_ptr<SymbolicExpr> cauchy_integral_impl(
     
     auto term = SymbolicExpr::divide(f_n_minus_1_z0, SymbolicExpr::number(fact));
     
-    auto pi_node = lamina::detail::make_node<VariableNode>("pi");
+    auto pi_node = LMCAS::detail::make_node<VariableNode>("pi");
     auto i_node = SymbolicFactory::create_complex(
-        lamina::detail::node(SymbolicExpr::number(0)),
-        lamina::detail::node(SymbolicExpr::number(1)));
+        LMCAS::detail::node(SymbolicExpr::number(0)),
+        LMCAS::detail::node(SymbolicExpr::number(1)));
     
-    auto pi_expr = lamina::detail::make_expression_ptr(pi_node);
-    auto i_expr = lamina::detail::make_expression_ptr(i_node);
+    auto pi_expr = LMCAS::detail::make_expression_ptr(pi_node);
+    auto i_expr = LMCAS::detail::make_expression_ptr(i_node);
     
     auto two_pi_i = SymbolicExpr::multiply(SymbolicExpr::number(2), SymbolicExpr::multiply(pi_expr, i_expr));
     
@@ -392,8 +393,8 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
     if (!node) return;
 
     if (auto cn = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        re = lamina::detail::make_expression_ptr(cn->real());
-        im = lamina::detail::make_expression_ptr(cn->imag());
+        re = LMCAS::detail::make_expression_ptr(cn->real());
+        im = LMCAS::detail::make_expression_ptr(cn->imag());
         return;
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -441,7 +442,7 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
         }
         std::shared_ptr<SymbolicExpr> baseR, baseI;
         split_real_imag(pw->base(), baseR, baseI);
-        bool base_real = lamina::detail::node(baseI) && lamina::detail::node(baseI)->is_zero();
+        bool base_real = LMCAS::detail::node(baseI) && LMCAS::detail::node(baseI)->is_zero();
         if (int_exp && e >= 0 && e <= 16 && !base_real) {
             /// (a+bi)^e via repeated complex multiplication
             std::shared_ptr<SymbolicExpr> accR = SymbolicExpr::number(1);
@@ -459,17 +460,17 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
         }
         /// 实底数或非整数指数：视为实值
         if (base_real) {
-            re = lamina::detail::make_expression_ptr(node);
+            re = LMCAS::detail::make_expression_ptr(node);
             im = SymbolicExpr::number(0);
             return;
         }
         /// 退化情形：原样返回为实部
-        re = lamina::detail::make_expression_ptr(node);
+        re = LMCAS::detail::make_expression_ptr(node);
         im = SymbolicExpr::number(0);
         return;
     }
     /// 默认：视为实值表达式
-    re = lamina::detail::make_expression_ptr(node);
+    re = LMCAS::detail::make_expression_ptr(node);
     im = SymbolicExpr::number(0);
 }
 
@@ -480,7 +481,7 @@ ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     const std::string operation = "real_part";
     auto input = validate_complex_expr_input(expr, context, operation);
     if (!input) return ExpressionResult::failure(input.error());
-    if (has_function_of_explicit_complex(lamina::detail::node(expr))) {
+    if (has_function_of_explicit_complex(LMCAS::detail::node(expr))) {
         return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "real part of functions with complex arguments is outside the current support domain",
@@ -488,9 +489,9 @@ ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     }
 
     std::shared_ptr<SymbolicExpr> re, im;
-    split_real_imag(lamina::detail::node(expr), re, im);
+    split_real_imag(LMCAS::detail::node(expr), re, im);
     auto simplified = re ? re->simplify() : nullptr;
-    if (!simplified || !lamina::detail::node(simplified)) {
+    if (!simplified || !LMCAS::detail::node(simplified)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "real part construction failed",
                                           operation);
@@ -509,7 +510,7 @@ ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     const std::string operation = "imag_part";
     auto input = validate_complex_expr_input(expr, context, operation);
     if (!input) return ExpressionResult::failure(input.error());
-    if (has_function_of_explicit_complex(lamina::detail::node(expr))) {
+    if (has_function_of_explicit_complex(LMCAS::detail::node(expr))) {
         return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "imaginary part of functions with complex arguments is outside the current support domain",
@@ -517,9 +518,9 @@ ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     }
 
     std::shared_ptr<SymbolicExpr> re, im;
-    split_real_imag(lamina::detail::node(expr), re, im);
+    split_real_imag(LMCAS::detail::node(expr), re, im);
     auto simplified = im ? im->simplify() : nullptr;
-    if (!simplified || !lamina::detail::node(simplified)) {
+    if (!simplified || !LMCAS::detail::node(simplified)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "imaginary part construction failed",
                                           operation);
@@ -538,7 +539,7 @@ ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
     const std::string operation = "conjugate";
     auto input = validate_complex_expr_input(expr, context, operation);
     if (!input) return ExpressionResult::failure(input.error());
-    if (has_function_of_explicit_complex(lamina::detail::node(expr))) {
+    if (has_function_of_explicit_complex(LMCAS::detail::node(expr))) {
         return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "conjugate of functions with complex arguments is outside the current support domain",
@@ -546,17 +547,17 @@ ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
     }
 
     std::shared_ptr<SymbolicExpr> re, im;
-    split_real_imag(lamina::detail::node(expr), re, im);
+    split_real_imag(LMCAS::detail::node(expr), re, im);
     /// conj(a+bi) = a - bi
     auto neg_im = SymbolicExpr::multiply(SymbolicExpr::number(-1), im)->simplify();
-    if (!re || !lamina::detail::node(re) || !neg_im || !lamina::detail::node(neg_im)) {
+    if (!re || !LMCAS::detail::node(re) || !neg_im || !LMCAS::detail::node(neg_im)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "conjugate construction failed",
                                           operation);
     }
-    if (lamina::detail::node(neg_im) && lamina::detail::node(neg_im)->is_zero()) {
+    if (LMCAS::detail::node(neg_im) && LMCAS::detail::node(neg_im)->is_zero()) {
         auto simplified_re = re->simplify();
-        if (!simplified_re || !lamina::detail::node(simplified_re)) {
+        if (!simplified_re || !LMCAS::detail::node(simplified_re)) {
             return ExpressionResult::failure(CasErrc::InternalInvariant,
                                               "conjugate construction failed",
                                               operation);
@@ -564,13 +565,13 @@ ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
         return ExpressionResult::success(simplified_re);
     }
     auto cn = SymbolicFactory::create_complex(
-        lamina::detail::node(re->simplify()), lamina::detail::node(neg_im));
+        LMCAS::detail::node(re->simplify()), LMCAS::detail::node(neg_im));
     if (!cn) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "conjugate construction failed",
                                           operation);
     }
-    return ExpressionResult::success(lamina::detail::make_expression_ptr(cn));
+    return ExpressionResult::success(LMCAS::detail::make_expression_ptr(cn));
 }
 
 ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr) {
@@ -590,7 +591,7 @@ ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
                                           "complex variable name cannot be empty",
                                           operation);
     }
-    if (has_z_dependent_function(lamina::detail::node(f), z)) {
+    if (has_z_dependent_function(LMCAS::detail::node(f), z)) {
         return ComplexBoolResult::failure(
             CasErrc::Inconclusive,
             "analyticity of functions depending on the complex variable is outside the current support domain",
@@ -625,10 +626,10 @@ static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::
     std::string xi = z + "_im";
     auto zr = SymbolicExpr::variable(xr);
     auto zi = SymbolicExpr::variable(xi);
-    auto i_unit = lamina::detail::make_expression_ptr(
+    auto i_unit = LMCAS::detail::make_expression_ptr(
         SymbolicFactory::create_complex(
-            lamina::detail::node(SymbolicExpr::number(0)),
-            lamina::detail::node(SymbolicExpr::number(1))));
+            LMCAS::detail::node(SymbolicExpr::number(0)),
+            LMCAS::detail::node(SymbolicExpr::number(1))));
     auto z_sub = SymbolicExpr::add(zr, SymbolicExpr::multiply(i_unit, zi));
 
     auto fz = f->substitute(z, z_sub);
@@ -636,7 +637,7 @@ static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::
     fz = fz->simplify();
 
     std::shared_ptr<SymbolicExpr> u, v;
-    split_real_imag(lamina::detail::node(fz), u, v);
+    split_real_imag(LMCAS::detail::node(fz), u, v);
 
     auto ux = u->differentiate(xr);
     auto uy = u->differentiate(xi);
@@ -647,7 +648,7 @@ static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::
     auto cr1 = SymbolicExpr::add(ux, SymbolicExpr::multiply(SymbolicExpr::number(-1), vy))->simplify();
     auto cr2 = SymbolicExpr::add(uy, vx)->simplify();
 
-    return lamina::detail::node(cr1) && lamina::detail::node(cr1)->is_zero() && lamina::detail::node(cr2) && lamina::detail::node(cr2)->is_zero();
+    return LMCAS::detail::node(cr1) && LMCAS::detail::node(cr1)->is_zero() && LMCAS::detail::node(cr2) && LMCAS::detail::node(cr2)->is_zero();
 }
 
 ExpressionResult residue_checked(
@@ -668,4 +669,4 @@ ExpressionResult residue_checked(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

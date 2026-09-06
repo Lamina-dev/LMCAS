@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kOperation = "recognize_rational_polynomial";
@@ -159,7 +159,7 @@ Result<OptionalRationalPolynomial> recognize_rational_polynomial(
     const SymbolicExpr& expression,
     const std::string& variable,
     ComputationContext& context) {
-    if (!lamina::detail::node(expression)) {
+    if (!LMCAS::detail::node(expression)) {
         return Result<OptionalRationalPolynomial>::failure(
             CasErrc::InvalidArgument, "expression cannot be null", kOperation);
     }
@@ -167,7 +167,7 @@ Result<OptionalRationalPolynomial> recognize_rational_polynomial(
         return Result<OptionalRationalPolynomial>::failure(
             CasErrc::InvalidArgument, "polynomial variable cannot be empty", kOperation);
     }
-    return recognize_node(lamina::detail::node(expression), variable, context);
+    return recognize_node(LMCAS::detail::node(expression), variable, context);
 }
 
 template <>
@@ -175,7 +175,7 @@ BigInt extract_coeff_value<BigInt>(
     const std::shared_ptr<SymbolicExpr>& coefficient) {
     auto simplified = coefficient->simplify();
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(
-            lamina::detail::node(simplified))) {
+            LMCAS::detail::node(simplified))) {
         if (std::holds_alternative<BigInt>(number->value())) {
             return std::get<BigInt>(number->value());
         }
@@ -201,7 +201,7 @@ Rational extract_coeff_value<Rational>(
     const std::shared_ptr<SymbolicExpr>& coefficient) {
     auto simplified = coefficient->simplify();
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(
-            lamina::detail::node(simplified))) {
+            LMCAS::detail::node(simplified))) {
         if (std::holds_alternative<Rational>(number->value())) {
             return std::get<Rational>(number->value());
         }
@@ -216,7 +216,7 @@ Rational extract_coeff_value<Rational>(
 
 bool contains(const SymbolicExpr& expression, const std::string& variable) {
     return expression_depends_on_variable(
-        lamina::detail::node(expression), variable);
+        LMCAS::detail::node(expression), variable);
 }
 
 template <typename T>
@@ -227,7 +227,7 @@ Polynomial<T> symbolic_to_poly_recursive(
 
     if (!expression_depends_on_variable(node, variable)) {
         return Polynomial<T>({extract_coeff_value<T>(
-            lamina::detail::make_expression_ptr(node))}, variable);
+            LMCAS::detail::make_expression_ptr(node))}, variable);
     }
 
     if (auto symbol = std::dynamic_pointer_cast<const VariableNode>(node)) {
@@ -297,18 +297,18 @@ Polynomial<T> symbolic_to_poly_recursive(
 }
 
 template <typename T>
-LAMINA_API Polynomial<T> symbolic_to_poly(
+LMCAS_API Polynomial<T> symbolic_to_poly(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable) {
-    if (!expression || !lamina::detail::node(expression)) {
+    if (!expression || !LMCAS::detail::node(expression)) {
         return Polynomial<T>(variable);
     }
     return symbolic_to_poly_recursive<T>(
-        lamina::detail::node(expression), variable);
+        LMCAS::detail::node(expression), variable);
 }
 
 template <typename T>
-LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
+LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
     const Polynomial<T>& polynomial) {
     if (polynomial.is_zero()) return SymbolicExpr::number(0);
 
@@ -354,18 +354,18 @@ LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
     return result;
 }
 
-template LAMINA_API Polynomial<BigInt> symbolic_to_poly<BigInt>(
+template LMCAS_API Polynomial<BigInt> symbolic_to_poly<BigInt>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
-template LAMINA_API Polynomial<Rational> symbolic_to_poly<Rational>(
+template LMCAS_API Polynomial<Rational> symbolic_to_poly<Rational>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
-template LAMINA_API Polynomial<SymbolicPolyCoeff> symbolic_to_poly<SymbolicPolyCoeff>(
+template LMCAS_API Polynomial<SymbolicPolyCoeff> symbolic_to_poly<SymbolicPolyCoeff>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
 
-template LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<BigInt>(
+template LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<BigInt>(
     const Polynomial<BigInt>&);
-template LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<Rational>(
+template LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<Rational>(
     const Polynomial<Rational>&);
-template LAMINA_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<SymbolicPolyCoeff>(
+template LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<SymbolicPolyCoeff>(
     const Polynomial<SymbolicPolyCoeff>&);
 
-} // namespace lamina
+} // namespace LMCAS

@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#include "lamina_export.hpp"
+#include "lmcas_export.hpp"
 #include "monomial_order.hpp"
 #include "rational.hpp"
 #include "polynomial.hpp"
@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @brief 多元多项式类，稀疏表示
@@ -26,7 +26,7 @@ namespace lamina {
  * 单项式按指定的 MonomialOrder 排序，系数为有理数。
  * 支持加减乘、求值、度数查询、一元转换等完整环运算接口。
  */
-class LAMINA_API MultiPoly {
+class LMCAS_API MultiPoly {
 public:
     /// 项类型：(单项式, 系数)
     using Term = std::pair<Monomial, Rational>;
@@ -210,4 +210,4 @@ private:
     void normalize();
 };
 
-} // namespace lamina
+} // namespace LMCAS

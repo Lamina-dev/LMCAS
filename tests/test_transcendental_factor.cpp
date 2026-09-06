@@ -2,7 +2,7 @@
 #include "transcendental_factor.hpp"
 #include "poly_utils.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::vector<Polynomial<Rational>> checked_zassenhaus(
     const Polynomial<Rational>& poly,

@@ -6,7 +6,7 @@
 
 #include <cstddef>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 struct ExactRealAlgebraic {
     Polynomial<Rational> polynomial;
@@ -20,32 +20,32 @@ struct ExactRealAlgebraic {
 
 using ExactRealAlgebraicResult = Result<ExactRealAlgebraic>;
 
-LAMINA_API ExactRealAlgebraicResult make_exact_real_algebraic(
+LMCAS_API ExactRealAlgebraicResult make_exact_real_algebraic(
     Polynomial<Rational> polynomial,
     std::size_t root_index,
     std::size_t multiplicity,
     ComputationContext& context);
 
-LAMINA_API Result<void> refine_exact_real_algebraic(
+LMCAS_API Result<void> refine_exact_real_algebraic(
     ExactRealAlgebraic& value,
     ComputationContext& context,
     const std::string& operation = "exact_algebraic.refine");
 
-LAMINA_API Result<void> refine_exact_real_algebraic_to_tolerance(
+LMCAS_API Result<void> refine_exact_real_algebraic_to_tolerance(
     ExactRealAlgebraic& value,
     double absolute_tolerance,
     double relative_tolerance,
     ComputationContext& context,
     const std::string& operation = "exact_algebraic.refine");
 
-LAMINA_API Result<bool> equal_exact_real_algebraic(
+LMCAS_API Result<bool> equal_exact_real_algebraic(
     ExactRealAlgebraic lhs,
     ExactRealAlgebraic rhs,
     ComputationContext& context);
 
-LAMINA_API Result<int> compare_exact_real_algebraic(
+LMCAS_API Result<int> compare_exact_real_algebraic(
     ExactRealAlgebraic lhs,
     ExactRealAlgebraic rhs,
     ComputationContext& context);
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

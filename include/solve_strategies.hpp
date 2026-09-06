@@ -11,7 +11,7 @@
 #include <memory>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 方程求解选项,控制数值求解行为和结果形式. */
 struct SolveOptions {
@@ -54,7 +54,7 @@ enum class SolveStrategy {
  * `allow_numeric` 启用时生成数值候选,并通过受检数值求值验证.
  * 符号支持域之外的输入返回 Inconclusive SolutionSet,保留解集完备性信息.
  */
-LAMINA_API SolveResult solve_equation(
+LMCAS_API SolveResult solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     ComputationContext& context,
@@ -63,7 +63,7 @@ LAMINA_API SolveResult solve_equation(
 /**
  * @brief Solves an equation using a default computation context.
  */
-LAMINA_API SolveResult solve_equation(
+LMCAS_API SolveResult solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts = {});
@@ -72,13 +72,13 @@ LAMINA_API SolveResult solve_equation(
 using FiniteSolveResult =
     Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
-LAMINA_API FiniteSolveResult solve_finite_checked(
+LMCAS_API FiniteSolveResult solve_finite_checked(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable,
     ComputationContext& context,
     const SolveOptions& options = {});
 
-LAMINA_API FiniteSolveResult solve_finite_checked(
+LMCAS_API FiniteSolveResult solve_finite_checked(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable,
     const SolveOptions& options = {});

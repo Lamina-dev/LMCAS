@@ -1,6 +1,6 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -56,7 +56,7 @@ int trig_match_of_var(const std::shared_ptr<const SymbolicNode>& node, const std
 
 // Try to extract a non-negative integer exponent.
 bool trig_extract_nonneg_int(const std::shared_ptr<const SymbolicNode>& exp_node, int& n_out) {
-    auto e = lamina::detail::expression_from_node(exp_node);
+    auto e = LMCAS::detail::expression_from_node(exp_node);
     auto simp = e.simplify();
     if (!simp || !simp->is_int()) return false;
     int n = simp->get_int();
@@ -95,10 +95,10 @@ bool TrigCombinationStrategy::extract_sin_cos_powers(
 
     int m = 0, n = 0;
     std::vector<std::shared_ptr<const SymbolicNode>> factors;
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         factors = mul->operands();
     } else {
-        factors.push_back(lamina::detail::node(expr));
+        factors.push_back(LMCAS::detail::node(expr));
     }
 
     for (const auto& f : factors) {
@@ -119,7 +119,7 @@ bool TrigCombinationStrategy::extract_sin_cos_powers(
 bool TrigCombinationStrategy::extract_tan_power(
     const SymbolicExpr& expr, const std::string& var, int& n_out) {
     int kind = -1, p = 0;
-    if (!trig_extract_factor(lamina::detail::node(expr), var, kind, p)) return false;
+    if (!trig_extract_factor(LMCAS::detail::node(expr), var, kind, p)) return false;
     if (kind != 2) return false;
     n_out = p;
     return true;
@@ -128,13 +128,13 @@ bool TrigCombinationStrategy::extract_tan_power(
 bool TrigCombinationStrategy::extract_sec_power(
     const SymbolicExpr& expr, const std::string& var, int& n_out) {
     int kind = -1, p = 0;
-    if (!trig_extract_factor(lamina::detail::node(expr), var, kind, p)) return false;
+    if (!trig_extract_factor(LMCAS::detail::node(expr), var, kind, p)) return false;
     if (kind != 3) return false;
     n_out = p;
     return true;
 }
 
-std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> TrigCombinationStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext&, int depth) {
 
@@ -234,14 +234,14 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_odd_case(
         if (den < 0) { num = -num; den = -den; }
         auto coeff = SymbolicExpr::number(Rational(BigInt(num), BigInt(den)));
         auto term = SymbolicExpr::multiply(coeff, u_to_pow);
-        add_terms.push_back(lamina::detail::node(term));
+        add_terms.push_back(LMCAS::detail::node(term));
     }
 
     if (add_terms.empty()) return SymbolicExpr::number(0);
     if (add_terms.size() == 1) {
-        return lamina::detail::make_expression_ptr(add_terms[0]);
+        return LMCAS::detail::make_expression_ptr(add_terms[0]);
     }
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(add_terms));
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(add_terms));
 }
 
 std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_even_case(
@@ -281,14 +281,14 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_even_case(
         if (den < 0) { num = -num; den = -den; }
         auto coeff = SymbolicExpr::number(Rational(BigInt(num), BigInt(den)));
         auto term = SymbolicExpr::multiply(coeff, inner);
-        add_terms.push_back(lamina::detail::node(term));
+        add_terms.push_back(LMCAS::detail::node(term));
     }
 
     if (add_terms.empty()) return SymbolicExpr::number(0);
     if (add_terms.size() == 1) {
-        return lamina::detail::make_expression_ptr(add_terms[0]);
+        return LMCAS::detail::make_expression_ptr(add_terms[0]);
     }
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(add_terms));
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(add_terms));
 }
 
 std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_tan_power(
@@ -334,9 +334,9 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_sec_power(
     auto v = SymbolicExpr::variable(var);
     auto tan_x = SymbolicExpr::tan(v);
     auto make_sec_x = [&]() -> std::shared_ptr<SymbolicExpr> {
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<FunctionNode>(FT::Sec,
-                std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(v)}));
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<FunctionNode>(FT::Sec,
+                std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(v)}));
     };
 
     if (n == 2) {
@@ -365,4 +365,4 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_sec_power(
     return SymbolicExpr::add(first, second);
 }
 
-} // namespace lamina
+} // namespace LMCAS

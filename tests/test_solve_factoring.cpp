@@ -9,7 +9,7 @@
 #include <map>
 #include <set>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static Polynomial<Rational> poly_from_roots(const std::vector<Rational>& roots, const std::string& var = "x") {
     Polynomial<Rational> result({Rational(1)}, var);
@@ -38,33 +38,33 @@ static int count_occurrences(const std::vector<Rational>& vec, const Rational& v
 }
 
 static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return 0.0;
+    if (!expr || !LMCAS::detail::node(expr)) return 0.0;
 
-    if (auto n = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+    if (auto n = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
         if (std::holds_alternative<lmmc_real_t>(n->value())) return std::get<lmmc_real_t>(n->value());
         if (std::holds_alternative<BigInt>(n->value())) return std::get<BigInt>(n->value()).to_double();
         if (std::holds_alternative<Rational>(n->value())) return std::get<Rational>(n->value()).to_double();
     }
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
         double result = 0.0;
         for (auto& op : add->operands()) {
-            result += eval_numeric(lamina::detail::make_expression_ptr(op));
+            result += eval_numeric(LMCAS::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         double result = 1.0;
         for (auto& op : mul->operands()) {
-            result *= eval_numeric(lamina::detail::make_expression_ptr(op));
+            result *= eval_numeric(LMCAS::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-        double base = eval_numeric(lamina::detail::make_expression_ptr(pow->base()));
-        double exp = eval_numeric(lamina::detail::make_expression_ptr(pow->exponent()));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+        double base = eval_numeric(LMCAS::detail::make_expression_ptr(pow->base()));
+        double exp = eval_numeric(LMCAS::detail::make_expression_ptr(pow->exponent()));
         if (base < 0.0 && std::abs(exp - std::round(exp)) > 1e-15) {
             double denom = std::round(1.0 / exp);
             if (std::abs(exp * denom - 1.0) < 1e-12 && ((int)denom % 2 == 1)) {
@@ -75,9 +75,9 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
         return std::pow(base, exp);
     }
 
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
         if (func->arguments().size() == 1) {
-            double arg = eval_numeric(lamina::detail::make_expression_ptr(func->arguments()[0]));
+            double arg = eval_numeric(LMCAS::detail::make_expression_ptr(func->arguments()[0]));
             switch (func->type()) {
                 case FunctionNode::FuncType::Sin: return std::sin(arg);
                 case FunctionNode::FuncType::Cos: return std::cos(arg);
@@ -96,7 +96,7 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
         }
     }
 
-    if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+    if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
         return std::nan("");
     }
 
@@ -114,9 +114,9 @@ static double eval_poly_at(const Polynomial<Rational>& poly, double x) {
 }
 
 static bool is_rootof(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return false;
+    if (!expr || !LMCAS::detail::node(expr)) return false;
     return std::dynamic_pointer_cast<const RootOfNode>(
-               lamina::detail::node(expr)) != nullptr;
+               LMCAS::detail::node(expr)) != nullptr;
 }
 
 void test_zero_constant_factor_out_x() {

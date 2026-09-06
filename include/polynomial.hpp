@@ -13,7 +13,7 @@
 #include "bigint.hpp"
 #include "rational.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @brief 计算两个系数的最大公约数(泛型实现)

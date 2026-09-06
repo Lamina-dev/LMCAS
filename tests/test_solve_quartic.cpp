@@ -5,6 +5,9 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <stdexcept>
+
+using namespace LMCAS;
 
 static double eval_quartic(double a, double b, double c, double d, double e, double x) {
     return a*x*x*x*x + b*x*x*x + c*x*x + d*x + e;
@@ -20,7 +23,7 @@ int main() {
         auto d = SymbolicExpr::number(0);
         auto e = SymbolicExpr::number(4);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "Biquadratic should return 4 roots");
 
         for (size_t i = 0; i < roots.size(); ++i) {
@@ -28,6 +31,68 @@ int main() {
             double residual = eval_quartic(1, 0, -5, 0, 4, val);
             EXPECT_TRUE(std::abs(residual) < 1e-8,
                 "Biquadratic root " + std::to_string(i) + " residual < 1e-8 (got " + std::to_string(residual) + ")");
+        }
+    }
+
+    TEST_CASE("Solve Quartic - Ill-conditioned biquadratic");
+    {
+        auto roots = LMCAS::solve_quartic(
+            SymbolicExpr::number(1),
+            SymbolicExpr::number(0),
+            SymbolicExpr::number(BigInt("-10000000000000000")),
+            SymbolicExpr::number(0),
+            SymbolicExpr::number(1),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 4,
+            "x^4-10^16*x^2+1 returns four real roots");
+
+        std::vector<double> magnitudes;
+        for (const auto& root : roots) {
+            magnitudes.push_back(std::abs(root->to_numeric()));
+        }
+        std::sort(magnitudes.begin(), magnitudes.end());
+        if (magnitudes.size() == 4) {
+            EXPECT_TRUE(
+                std::abs(magnitudes[0] - 1e-8) < 1e-20 &&
+                    std::abs(magnitudes[1] - 1e-8) < 1e-20,
+                "biquadratic preserves both small roots");
+            EXPECT_TRUE(
+                std::abs(magnitudes[2] - 1e8) < 1e-6 &&
+                    std::abs(magnitudes[3] - 1e8) < 1e-6,
+                "biquadratic preserves both large roots");
+        }
+    }
+
+    TEST_CASE("Solve Quartic - Overflow-resistant biquadratic");
+    {
+        auto roots = LMCAS::solve_quartic(
+            SymbolicExpr::number(1.0),
+            SymbolicExpr::number(0.0),
+            SymbolicExpr::number(-1.0e200),
+            SymbolicExpr::number(0.0),
+            SymbolicExpr::number(1.0),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 4,
+            "x^4-10^200*x^2+1 returns four finite roots");
+
+        std::vector<double> magnitudes;
+        for (const auto& root : roots) {
+            magnitudes.push_back(std::abs(root->to_numeric()));
+        }
+        std::sort(magnitudes.begin(), magnitudes.end());
+        if (magnitudes.size() == 4) {
+            EXPECT_TRUE(
+                std::isfinite(magnitudes[0]) &&
+                    std::abs(magnitudes[0] / 1e-100 - 1.0) < 1e-12 &&
+                    std::abs(magnitudes[1] / 1e-100 - 1.0) < 1e-12,
+                "scaled biquadratic preserves both finite small roots");
+            EXPECT_TRUE(
+                std::isfinite(magnitudes[2]) &&
+                    std::abs(magnitudes[2] / 1e100 - 1.0) < 1e-12 &&
+                    std::abs(magnitudes[3] / 1e100 - 1.0) < 1e-12,
+                "scaled biquadratic preserves both finite large roots");
         }
     }
 
@@ -40,7 +105,7 @@ int main() {
         auto d = SymbolicExpr::number(-50);
         auto e = SymbolicExpr::number(24);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "General quartic should return 4 roots");
 
         for (size_t i = 0; i < roots.size(); ++i) {
@@ -60,7 +125,7 @@ int main() {
         auto d = SymbolicExpr::number(-8);
         auto e = SymbolicExpr::number(12);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "Quartic (x-1)(x+2)(x-2)(x+3) should return 4 roots");
 
         for (size_t i = 0; i < roots.size(); ++i) {
@@ -69,6 +134,159 @@ int main() {
             EXPECT_TRUE(std::abs(residual) < 1e-8,
                 "Root " + std::to_string(i) + " residual < 1e-8 (val=" + std::to_string(val) + ", res=" + std::to_string(residual) + ")");
         }
+    }
+
+    TEST_CASE("Solve Quartic - Tiny nonzero depressed odd term");
+    {
+        auto roots = LMCAS::solve_quartic(
+            SymbolicExpr::number(1.0),
+            SymbolicExpr::number(0.0),
+            SymbolicExpr::number(0.0),
+            SymbolicExpr::number(1e-15),
+            SymbolicExpr::number(0.0),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 4,
+            "x^4+10^-15*x returns four roots with multiplicity");
+
+        bool found_nonzero_real_root = false;
+        for (const auto& root : roots) {
+            try {
+                const double value = root->to_numeric();
+                if (std::isfinite(value) && std::abs(value + 1e-5) < 1e-12) {
+                    found_nonzero_real_root = true;
+                }
+            } catch (const std::exception&) {
+            }
+        }
+        EXPECT_TRUE(
+            found_nonzero_real_root,
+            "tiny nonzero odd term must not be discarded as zero");
+    }
+
+    TEST_CASE("Solve Quartic - Resolvent scaling preserves tiny odd term");
+    {
+        std::vector<std::shared_ptr<SymbolicExpr>> roots;
+        bool threw = false;
+        try {
+            roots = LMCAS::solve_quartic(
+                SymbolicExpr::number(1.0),
+                SymbolicExpr::number(0.0),
+                SymbolicExpr::number(0.0),
+                SymbolicExpr::number(1e-200),
+                SymbolicExpr::number(0.0),
+                "x");
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        EXPECT_TRUE(
+            !threw && roots.size() == 4,
+            "x^4+10^-200*x must not underflow its resolvent cubic");
+
+        bool found_nonzero_real_root = false;
+        const double expected = -std::cbrt(1e-200);
+        for (const auto& root : roots) {
+            try {
+                const double value = root->to_numeric();
+                if (std::isfinite(value) &&
+                    std::abs((value - expected) / expected) < 1e-12) {
+                    found_nonzero_real_root = true;
+                }
+            } catch (const std::exception&) {
+            }
+        }
+        EXPECT_TRUE(
+            found_nonzero_real_root,
+            "scaled resolvent preserves the tiny nonzero real root");
+    }
+
+    TEST_CASE("Solve Quartic - Tiny negative quadratic resolvent root");
+    {
+        auto roots = LMCAS::solve_quartic(
+            SymbolicExpr::number(1.0),
+            SymbolicExpr::number(4.0),
+            SymbolicExpr::number(6.0 + 1e-15),
+            SymbolicExpr::number(4.0 + 2e-15),
+            SymbolicExpr::number(1.0 + 1e-15),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 4,
+            "shifted x^4+10^-15*x^2 form returns four roots with multiplicity");
+
+        int repeated_real_roots = 0;
+        int nonreal_roots = 0;
+        std::ostringstream root_details;
+        for (const auto& root : roots) {
+            const std::string text = root->simplify()->to_string();
+            root_details << " [" << text << "]";
+            if (text == "-1") {
+                ++repeated_real_roots;
+            } else {
+                ++nonreal_roots;
+            }
+        }
+        EXPECT_TRUE(
+            repeated_real_roots == 2 && nonreal_roots == 2,
+            "small negative u root must remain a conjugate imaginary pair; roots:" +
+                root_details.str());
+    }
+
+    TEST_CASE("Solve Quartic - Complex quadratic resolvent roots");
+    {
+        auto roots = LMCAS::solve_quartic(
+            SymbolicExpr::number(1),
+            SymbolicExpr::number(4),
+            SymbolicExpr::number(6),
+            SymbolicExpr::number(4),
+            SymbolicExpr::number(2),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 4,
+            "(x+1)^4+1 returns four complex roots");
+
+        bool fabricated_real_root = false;
+        for (const auto& root : roots) {
+            const std::string text = root->simplify()->to_string();
+            if (text == "0" || text == "-2") {
+                fabricated_real_root = true;
+            }
+        }
+        EXPECT_TRUE(
+            !fabricated_real_root,
+            "negative quadratic discriminant must not fabricate real u roots");
+    }
+
+    TEST_CASE("Solve Quartic - Tiny complex pair is not clamped real");
+    {
+        const double c1 = 0.25 + 3e-14;
+        const double c2 = 2.0;
+        auto roots = LMCAS::solve_quartic(
+            SymbolicExpr::number(1.0),
+            SymbolicExpr::number(0.0),
+            SymbolicExpr::number(c1 + c2 - 1.0),
+            SymbolicExpr::number(c2 - c1),
+            SymbolicExpr::number(c1 * c2),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 4,
+            "product of two complex quadratics returns four roots");
+
+        int nonreal_roots = 0;
+        std::ostringstream root_details;
+        for (const auto& root : roots) {
+            root_details << " [" << root->simplify()->to_string();
+            try {
+                root_details << " -> " << root->to_numeric();
+            } catch (const std::exception&) {
+                ++nonreal_roots;
+                root_details << " -> nonreal";
+            }
+            root_details << "]";
+        }
+        EXPECT_TRUE(
+            nonreal_roots == 4,
+            "small negative quadratic discriminant must remain nonreal; roots:" +
+                root_details.str());
     }
 
     TEST_CASE("Solve Quartic - Leading coefficient != 1");
@@ -80,7 +298,7 @@ int main() {
         auto d = SymbolicExpr::number(-100);
         auto e = SymbolicExpr::number(48);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "Quartic with a=2 should return 4 roots");
 
         for (size_t i = 0; i < roots.size(); ++i) {
@@ -90,6 +308,50 @@ int main() {
                 "Root " + std::to_string(i) + " residual < 1e-8 (val=" + std::to_string(val) + ", res=" + std::to_string(residual) + ")");
         }
     }
+    TEST_CASE("Solve Biquadratic - Degenerate leading coefficient");
+    {
+        auto roots = LMCAS::solve_biquadratic(
+            SymbolicExpr::number(0),
+            SymbolicExpr::number(1),
+            SymbolicExpr::number(-4),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 2,
+            "0*x^4+x^2-4 delegates to a quadratic in x");
+        if (roots.size() == 2) {
+            std::vector<double> values{
+                roots[0]->to_numeric(), roots[1]->to_numeric()};
+            std::sort(values.begin(), values.end());
+            EXPECT_TRUE(
+                std::abs(values[0] + 2.0) < 1e-12 &&
+                    std::abs(values[1] - 2.0) < 1e-12,
+                "degenerate biquadratic roots are -2 and 2");
+        }
+
+        auto no_roots = LMCAS::solve_biquadratic(
+            SymbolicExpr::number(0),
+            SymbolicExpr::number(0),
+            SymbolicExpr::number(1),
+            "x");
+        EXPECT_TRUE(
+            no_roots.empty(),
+            "nonzero constant equation has no roots");
+
+        bool rejected_indeterminate = false;
+        try {
+            (void)LMCAS::solve_biquadratic(
+                SymbolicExpr::number(0),
+                SymbolicExpr::number(0),
+                SymbolicExpr::number(0),
+                "x");
+        } catch (const std::invalid_argument&) {
+            rejected_indeterminate = true;
+        }
+        EXPECT_TRUE(
+            rejected_indeterminate,
+            "identically zero equation is rejected as indeterminate");
+    }
+
 
     TEST_CASE("Solve Quartic - a=0 delegates to cubic");
 
@@ -100,7 +362,7 @@ int main() {
         auto d = SymbolicExpr::number(11);
         auto e = SymbolicExpr::number(-6);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 3, "Quartic with a=0 should delegate to cubic and return 3 roots");
     }
 
@@ -113,7 +375,7 @@ int main() {
         auto d = SymbolicExpr::number(0);
         auto e = SymbolicExpr::number(4);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "Biquadratic x^4-5x^2+4 should return 4 roots");
 
         std::vector<double> vals;
@@ -137,7 +399,7 @@ int main() {
     TEST_CASE("Solve Biquadratic - exact huge coefficient avoids unsafe numeric conversion");
     {
         std::string huge_digits = "1" + std::string(400, '0');
-        auto roots = lamina::solve_biquadratic(
+        auto roots = LMCAS::solve_biquadratic(
             SymbolicExpr::number(BigInt(huge_digits)),
             SymbolicExpr::number(0),
             SymbolicExpr::number(-1),
@@ -169,7 +431,7 @@ int main() {
         auto d = SymbolicExpr::number(24);
         auto e = SymbolicExpr::number(9);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "q=0 quartic (x+1)^2(x+3)^2 should return 4 roots");
 
         for (size_t i = 0; i < roots.size(); ++i) {
@@ -201,7 +463,7 @@ int main() {
         auto d = SymbolicExpr::number(-4);
         auto e = SymbolicExpr::number(1);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "(x-1)^4 should return 4 roots");
 
         bool all_one = true;
@@ -226,7 +488,7 @@ int main() {
         auto d = SymbolicExpr::number(-12);
         auto e = SymbolicExpr::number(4);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "(x-1)^2(x-2)^2 should return 4 roots");
 
         for (size_t i = 0; i < roots.size(); ++i) {
@@ -261,7 +523,7 @@ int main() {
         auto d = SymbolicExpr::number(cd);
         auto e = SymbolicExpr::number(ce);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "Vieta quartic should return 4 roots");
 
         double sum = 0.0;
@@ -289,7 +551,7 @@ int main() {
         auto d = SymbolicExpr::number(cd);
         auto e = SymbolicExpr::number(ce);
 
-        auto roots = lamina::solve_quartic(a, b, c, d, e, "x");
+        auto roots = LMCAS::solve_quartic(a, b, c, d, e, "x");
         EXPECT_TRUE(roots.size() == 4, "Vieta quartic (1,2,3,4) should return 4 roots");
 
         double sum = 0.0;
@@ -334,7 +596,7 @@ int main() {
             int d_val = -(r1*r2*r3 + r1*r2*r4 + r1*r3*r4 + r2*r3*r4);
             int e_val = r1*r2*r3*r4;
 
-            auto roots = lamina::solve_quartic(
+            auto roots = LMCAS::solve_quartic(
                 SymbolicExpr::number(1),
                 SymbolicExpr::number(b_val),
                 SymbolicExpr::number(c_val),
@@ -388,7 +650,7 @@ int main() {
             int d_coeff = 0;
             int e_coeff = r1*r1 * r2*r2;
 
-            auto roots = lamina::solve_quartic(
+            auto roots = LMCAS::solve_quartic(
                 SymbolicExpr::number(a_coeff),
                 SymbolicExpr::number(b_coeff),
                 SymbolicExpr::number(c_coeff),
@@ -440,7 +702,7 @@ int main() {
             int d_val = -(r1*r2*r3 + r1*r2*r4 + r1*r3*r4 + r2*r3*r4);
             int e_val = r1*r2*r3*r4;
 
-            auto roots = lamina::solve_quartic(
+            auto roots = LMCAS::solve_quartic(
                 SymbolicExpr::number(1),
                 SymbolicExpr::number(b_val),
                 SymbolicExpr::number(c_val),

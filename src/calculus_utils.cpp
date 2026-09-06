@@ -17,7 +17,7 @@
 #include <utility>
 #include <memory>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -28,7 +28,7 @@ Result<void> calculus_utils_validate_expr(const std::shared_ptr<SymbolicExpr>& e
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "expression cannot be null", operation);
     }
@@ -48,7 +48,7 @@ Result<void> calculus_utils_validate_two_exprs(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!first || !lamina::detail::node(first) || !second || !lamina::detail::node(second)) {
+    if (!first || !LMCAS::detail::node(first) || !second || !LMCAS::detail::node(second)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "expression cannot be null", operation);
     }
@@ -68,7 +68,7 @@ Result<void> calculus_utils_validate_expr_target(
 {
     auto input = calculus_utils_validate_expr(expr, var, context, operation);
     if (!input) return input;
-    if (!target || !lamina::detail::node(target)) {
+    if (!target || !LMCAS::detail::node(target)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "target expression cannot be null",
                                      operation);
@@ -86,7 +86,7 @@ Result<void> calculus_utils_validate_expr_bounds(
 {
     auto input = calculus_utils_validate_expr(expr, var, context, operation);
     if (!input) return input;
-    if (!a || !lamina::detail::node(a) || !b || !lamina::detail::node(b)) {
+    if (!a || !LMCAS::detail::node(a) || !b || !LMCAS::detail::node(b)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "bounds cannot be null", operation);
     }
@@ -102,12 +102,12 @@ Result<void> calculus_utils_validate_expr_bounds(
  */
 static bool calculus_utils_is_infinity(const std::shared_ptr<SymbolicExpr>& expr)
 {
-    if (!expr || !lamina::detail::node(expr)) return false;
+    if (!expr || !LMCAS::detail::node(expr)) return false;
 
-    if (auto f = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+    if (auto f = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
         return f->type() == FunctionNode::FuncType::Infinity;
     }
-    if (auto m = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto m = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         for (auto& op : m->operands()) {
             if (auto f = std::dynamic_pointer_cast<const FunctionNode>(op)) {
                 if (f->type() == FunctionNode::FuncType::Infinity) return true;
@@ -124,15 +124,15 @@ static bool calculus_utils_is_infinity(const std::shared_ptr<SymbolicExpr>& expr
 static bool calculus_utils_expr_equal(const std::shared_ptr<SymbolicExpr>& a,
                                       const std::shared_ptr<SymbolicExpr>& b)
 {
-    if (!a || !lamina::detail::node(a) || !b || !lamina::detail::node(b)) {
-        return (!a || !lamina::detail::node(a)) && (!b || !lamina::detail::node(b));
+    if (!a || !LMCAS::detail::node(a) || !b || !LMCAS::detail::node(b)) {
+        return (!a || !LMCAS::detail::node(a)) && (!b || !LMCAS::detail::node(b));
     }
-    return lamina::detail::node(a)->equals(*lamina::detail::node(b));
+    return LMCAS::detail::node(a)->equals(*LMCAS::detail::node(b));
 }
 
 static bool calculus_utils_contains_rootof(
     const std::shared_ptr<const SymbolicNode>& node) {
-    return lamina::detail::contains_node_type<RootOfNode>(node);
+    return LMCAS::detail::contains_node_type<RootOfNode>(node);
 }
 
 static bool calculus_utils_contains_complex(const std::shared_ptr<const SymbolicNode>& node)
@@ -184,9 +184,9 @@ static bool calculus_utils_contains_nonreal_sqrt(const std::shared_ptr<const Sym
     if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
         if (function->type() == FunctionNode::FuncType::Sqrt &&
             function->arguments().size() == 1) {
-            auto argument = lamina::detail::make_expression_ptr(function->arguments()[0])->simplify();
+            auto argument = LMCAS::detail::make_expression_ptr(function->arguments()[0])->simplify();
             auto number = argument
-                ? std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(argument))
+                ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(argument))
                 : nullptr;
             if (calculus_utils_is_negative_number(number)) return true;
         }
@@ -230,25 +230,25 @@ static CalculusRealCandidateStatus calculus_utils_extract_real_candidate(
 {
     real_candidate.reset();
     auto simplified_candidate = rootof_simplify(candidate);
-    if (!simplified_candidate || !lamina::detail::node(simplified_candidate)) {
+    if (!simplified_candidate || !LMCAS::detail::node(simplified_candidate)) {
         return CalculusRealCandidateStatus::Inconclusive;
     }
-    if (calculus_utils_contains_rootof(lamina::detail::node(simplified_candidate))) {
+    if (calculus_utils_contains_rootof(LMCAS::detail::node(simplified_candidate))) {
         return CalculusRealCandidateStatus::Inconclusive;
     }
-    if (calculus_utils_contains_nonreal_sqrt(lamina::detail::node(simplified_candidate))) {
+    if (calculus_utils_contains_nonreal_sqrt(LMCAS::detail::node(simplified_candidate))) {
         return CalculusRealCandidateStatus::NonReal;
     }
 
     if (auto complex = std::dynamic_pointer_cast<const ComplexNode>(
-            lamina::detail::node(simplified_candidate))) {
-        auto imag = lamina::detail::make_expression_ptr(complex->imag())->simplify();
-        if (!imag || !lamina::detail::node(imag)) {
+            LMCAS::detail::node(simplified_candidate))) {
+        auto imag = LMCAS::detail::make_expression_ptr(complex->imag())->simplify();
+        if (!imag || !LMCAS::detail::node(imag)) {
             return CalculusRealCandidateStatus::Inconclusive;
         }
         if (imag->is_zero()) {
-            auto real = lamina::detail::make_expression_ptr(complex->real())->simplify();
-            if (!real || !lamina::detail::node(real)) {
+            auto real = LMCAS::detail::make_expression_ptr(complex->real())->simplify();
+            if (!real || !LMCAS::detail::node(real)) {
                 return CalculusRealCandidateStatus::Inconclusive;
             }
             real_candidate = real;
@@ -257,7 +257,7 @@ static CalculusRealCandidateStatus calculus_utils_extract_real_candidate(
         return CalculusRealCandidateStatus::NonReal;
     }
 
-    if (calculus_utils_contains_complex(lamina::detail::node(simplified_candidate))) {
+    if (calculus_utils_contains_complex(LMCAS::detail::node(simplified_candidate))) {
         return CalculusRealCandidateStatus::Inconclusive;
     }
 
@@ -275,10 +275,10 @@ static CalculusRealCandidateStatus calculus_utils_extract_real_candidate(
 static std::shared_ptr<SymbolicExpr> calculus_utils_extract_denominator(
     const std::shared_ptr<SymbolicExpr>& expr)
 {
-    if (!expr || !lamina::detail::node(expr)) return nullptr;
+    if (!expr || !LMCAS::detail::node(expr)) return nullptr;
 
     /// 检查是否为 PowerNode 且指数为负(如 x^(-1) 表示 1/x)
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
         if (auto num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
             double e = 0;
             if (std::holds_alternative<lmmc_real_t>(num->value()))
@@ -290,17 +290,17 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_extract_denominator(
 
             if (e < 0) {
                 if (e == -1.0) {
-                    return lamina::detail::make_expression_ptr(pow->base());
+                    return LMCAS::detail::make_expression_ptr(pow->base());
                 }
-                auto pos_exp = lamina::detail::make_node<NumberNode>(BigInt(static_cast<int>(-e)));
-                auto den_node = lamina::detail::make_node<PowerNode>(pow->base(), pos_exp);
-                return lamina::detail::make_expression_ptr(den_node);
+                auto pos_exp = LMCAS::detail::make_node<NumberNode>(BigInt(static_cast<int>(-e)));
+                auto den_node = LMCAS::detail::make_node<PowerNode>(pow->base(), pos_exp);
+                return LMCAS::detail::make_expression_ptr(den_node);
             }
         }
     }
 
     /// 检查 MultiplyNode 中是否有负指数因子
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         std::vector<std::shared_ptr<const SymbolicNode>> den_factors;
 
         for (auto& op : mul->operands()) {
@@ -318,8 +318,8 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_extract_denominator(
                         if (e == -1.0) {
                             den_factors.push_back(pow->base());
                         } else {
-                            auto pos_exp = lamina::detail::make_node<NumberNode>(BigInt(static_cast<int>(-e)));
-                            den_factors.push_back(lamina::detail::make_node<PowerNode>(pow->base(), pos_exp));
+                            auto pos_exp = LMCAS::detail::make_node<NumberNode>(BigInt(static_cast<int>(-e)));
+                            den_factors.push_back(LMCAS::detail::make_node<PowerNode>(pow->base(), pos_exp));
                         }
                     }
                 }
@@ -331,9 +331,9 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_extract_denominator(
             if (den_factors.size() == 1) {
                 den_node = den_factors[0];
             } else {
-                den_node = lamina::detail::make_node<MultiplyNode>(den_factors);
+                den_node = LMCAS::detail::make_node<MultiplyNode>(den_factors);
             }
-            return lamina::detail::make_expression_ptr(den_node);
+            return LMCAS::detail::make_expression_ptr(den_node);
         }
     }
 
@@ -344,8 +344,8 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_product(
     const std::vector<std::shared_ptr<const SymbolicNode>>& factors)
 {
     if (factors.empty()) return SymbolicExpr::number(1);
-    if (factors.size() == 1) return lamina::detail::make_expression_ptr(factors[0]);
-    return lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(factors))->simplify();
+    if (factors.size() == 1) return LMCAS::detail::make_expression_ptr(factors[0]);
+    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(factors))->simplify();
 }
 
 static bool calculus_utils_is_minus_one(const std::shared_ptr<const NumberNode>& number)
@@ -365,7 +365,7 @@ static bool calculus_utils_split_rational(
     std::shared_ptr<SymbolicExpr>& numerator,
     std::shared_ptr<SymbolicExpr>& denominator)
 {
-    if (!expr || !lamina::detail::node(expr)) return false;
+    if (!expr || !LMCAS::detail::node(expr)) return false;
 
     std::vector<std::shared_ptr<const SymbolicNode>> num_factors;
     std::vector<std::shared_ptr<const SymbolicNode>> den_factors;
@@ -381,10 +381,10 @@ static bool calculus_utils_split_rational(
         num_factors.push_back(factor);
     };
 
-    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         for (const auto& factor : multiply->operands()) collect_factor(factor);
     } else {
-        collect_factor(lamina::detail::node(expr));
+        collect_factor(LMCAS::detail::node(expr));
     }
 
     if (den_factors.empty()) return false;
@@ -436,12 +436,18 @@ ContinuityResult continuity_at_checked(
         auto input = calculus_utils_validate_expr(f, var, context, operation);
         if (!input) return ContinuityResult::failure(input.error());
 
-        auto left_lim = lamina::detail::propagate_result(
-            lamina::limit_expression_checked(
-                f, var, point, LimitDirection::FromBelow, context));
-        auto right_lim = lamina::detail::propagate_result(
-            lamina::limit_expression_checked(
-                f, var, point, LimitDirection::FromAbove, context));
+        auto left_result = LMCAS::limit_expression_checked(
+            f, var, point, LimitDirection::FromBelow, context);
+        if (!left_result) {
+            return ContinuityResult::failure(left_result.error());
+        }
+        auto right_result = LMCAS::limit_expression_checked(
+            f, var, point, LimitDirection::FromAbove, context);
+        if (!right_result) {
+            return ContinuityResult::failure(right_result.error());
+        }
+        auto left_lim = std::move(left_result.value());
+        auto right_lim = std::move(right_result.value());
         auto func_val = f->substitute(var, point);
 
         if (left_lim) left_lim = left_lim->simplify();
@@ -465,8 +471,6 @@ ContinuityResult continuity_at_checked(
             return ContinuityResult::success(ContinuityType::Removable);
         }
         return ContinuityResult::success(ContinuityType::Continuous);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ContinuityResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ContinuityResult::failure(
             CasErrc::ResourceLimit, "continuity analysis allocation failed",
@@ -505,7 +509,7 @@ AsymptoteAnalysisResult asymptotes_checked(
         auto solved_zeros = solve_equation(denominator, var, context, SolveOptions{});
         if (!solved_zeros) return AsymptoteAnalysisResult::failure(solved_zeros.error());
 
-        const auto& zero_set = lamina::detail::propagate_result(solved_zeros);
+        const auto& zero_set = solved_zeros.value();
         const auto* finite_zeros = std::get_if<FiniteSolutions>(&zero_set);
         if (!std::holds_alternative<EmptySolutions>(zero_set) &&
             !finite_zeros) {
@@ -519,20 +523,20 @@ AsymptoteAnalysisResult asymptotes_checked(
         if (finite_zeros) {
             zeros.reserve(finite_zeros->values.size());
             for (const auto& solution : finite_zeros->values) {
-                if (!solution.value || !lamina::detail::node(solution.value)) {
+                if (!solution.value || !LMCAS::detail::node(solution.value)) {
                     return AsymptoteAnalysisResult::failure(
                         CasErrc::InternalInvariant,
                         "checked solver returned a null vertical-asymptote candidate",
                         operation);
                 }
                 auto candidate = rootof_simplify(solution.value);
-                if (!candidate || !lamina::detail::node(candidate)) {
+                if (!candidate || !LMCAS::detail::node(candidate)) {
                     return AsymptoteAnalysisResult::failure(
                         CasErrc::InternalInvariant,
                         "checked solver returned a malformed vertical-asymptote candidate",
                         operation);
                 }
-                if (calculus_utils_contains_rootof(lamina::detail::node(candidate))) {
+                if (calculus_utils_contains_rootof(LMCAS::detail::node(candidate))) {
                     return AsymptoteAnalysisResult::failure(
                         CasErrc::Inconclusive,
                         "vertical-asymptote candidate could not be reduced to an exact explicit point",
@@ -546,13 +550,31 @@ AsymptoteAnalysisResult asymptotes_checked(
             if (!z || calculus_utils_is_infinity(z)) continue;
 
             /// 验证该点处极限为 +/-infinity
-            auto lim_at_z = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, z, LimitDirection::Both, context));
+            auto at_result = LMCAS::limit_expression_checked(
+                f, var, z, LimitDirection::Both, context);
+            if (!at_result) {
+                return AsymptoteAnalysisResult::failure(
+                    at_result.error());
+            }
+            auto lim_at_z = std::move(at_result.value());
             if (calculus_utils_is_infinity(lim_at_z)) {
                 result.vertical.push_back(z);
             } else {
                 /// 尝试单侧极限
-                auto lim_right = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, z, LimitDirection::FromAbove, context));
-                auto lim_left = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, z, LimitDirection::FromBelow, context));
+                auto right_result = LMCAS::limit_expression_checked(
+                    f, var, z, LimitDirection::FromAbove, context);
+                if (!right_result) {
+                    return AsymptoteAnalysisResult::failure(
+                        right_result.error());
+                }
+                auto left_result = LMCAS::limit_expression_checked(
+                    f, var, z, LimitDirection::FromBelow, context);
+                if (!left_result) {
+                    return AsymptoteAnalysisResult::failure(
+                        left_result.error());
+                }
+                auto lim_right = std::move(right_result.value());
+                auto lim_left = std::move(left_result.value());
                 if (calculus_utils_is_infinity(lim_right) || calculus_utils_is_infinity(lim_left)) {
                     result.vertical.push_back(z);
                 }
@@ -561,8 +583,18 @@ AsymptoteAnalysisResult asymptotes_checked(
     }
 
     /// 计算 x->+infinity 和 x->-infinity 的极限
-    auto lim_pos = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, pos_inf, LimitDirection::Both, context));
-    auto lim_neg = lamina::detail::propagate_result(lamina::limit_expression_checked(f, var, neg_inf, LimitDirection::Both, context));
+    auto positive_result = LMCAS::limit_expression_checked(
+        f, var, pos_inf, LimitDirection::Both, context);
+    if (!positive_result) {
+        return AsymptoteAnalysisResult::failure(positive_result.error());
+    }
+    auto negative_result = LMCAS::limit_expression_checked(
+        f, var, neg_inf, LimitDirection::Both, context);
+    if (!negative_result) {
+        return AsymptoteAnalysisResult::failure(negative_result.error());
+    }
+    auto lim_pos = std::move(positive_result.value());
+    auto lim_neg = std::move(negative_result.value());
 
     if (lim_pos) lim_pos = lim_pos->simplify();
     if (lim_neg) lim_neg = lim_neg->simplify();
@@ -596,14 +628,26 @@ AsymptoteAnalysisResult asymptotes_checked(
     if (!has_horiz_pos) {
         /// 计算 slope = lim(f/x) as x->+infinity
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
-        auto slope_pos = lamina::detail::propagate_result(lamina::limit_expression_checked(f_over_x, var, pos_inf, LimitDirection::Both, context));
+        auto slope_result = LMCAS::limit_expression_checked(
+            f_over_x, var, pos_inf, LimitDirection::Both, context);
+        if (!slope_result) {
+            return AsymptoteAnalysisResult::failure(
+                slope_result.error());
+        }
+        auto slope_pos = std::move(slope_result.value());
         if (slope_pos) slope_pos = slope_pos->simplify();
 
         if (slope_pos && !calculus_utils_is_infinity(slope_pos) && !slope_pos->is_zero()) {
             /// 计算 intercept = lim(f - slope*x) as x->+infinity
             auto slope_times_x = SymbolicExpr::multiply(slope_pos, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
-            auto intercept_pos = lamina::detail::propagate_result(lamina::limit_expression_checked(f_minus_mx, var, pos_inf, LimitDirection::Both, context));
+            auto intercept_result = LMCAS::limit_expression_checked(
+                f_minus_mx, var, pos_inf, LimitDirection::Both, context);
+            if (!intercept_result) {
+                return AsymptoteAnalysisResult::failure(
+                    intercept_result.error());
+            }
+            auto intercept_pos = std::move(intercept_result.value());
             if (intercept_pos) intercept_pos = intercept_pos->simplify();
 
             if (intercept_pos && !calculus_utils_is_infinity(intercept_pos)) {
@@ -615,14 +659,26 @@ AsymptoteAnalysisResult asymptotes_checked(
     if (!has_horiz_neg) {
         /// 计算 slope = lim(f/x) as x->-infinity
         auto f_over_x = SymbolicExpr::multiply(f, SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
-        auto slope_neg = lamina::detail::propagate_result(lamina::limit_expression_checked(f_over_x, var, neg_inf, LimitDirection::Both, context));
+        auto slope_result = LMCAS::limit_expression_checked(
+            f_over_x, var, neg_inf, LimitDirection::Both, context);
+        if (!slope_result) {
+            return AsymptoteAnalysisResult::failure(
+                slope_result.error());
+        }
+        auto slope_neg = std::move(slope_result.value());
         if (slope_neg) slope_neg = slope_neg->simplify();
 
         if (slope_neg && !calculus_utils_is_infinity(slope_neg) && !slope_neg->is_zero()) {
             /// 计算 intercept = lim(f - slope*x) as x->-infinity
             auto slope_times_x = SymbolicExpr::multiply(slope_neg, x_expr);
             auto f_minus_mx = SymbolicExpr::add(f, SymbolicExpr::multiply(SymbolicExpr::number(-1), slope_times_x));
-            auto intercept_neg = lamina::detail::propagate_result(lamina::limit_expression_checked(f_minus_mx, var, neg_inf, LimitDirection::Both, context));
+            auto intercept_result = LMCAS::limit_expression_checked(
+                f_minus_mx, var, neg_inf, LimitDirection::Both, context);
+            if (!intercept_result) {
+                return AsymptoteAnalysisResult::failure(
+                    intercept_result.error());
+            }
+            auto intercept_neg = std::move(intercept_result.value());
             if (intercept_neg) intercept_neg = intercept_neg->simplify();
 
             if (intercept_neg && !calculus_utils_is_infinity(intercept_neg)) {
@@ -643,8 +699,6 @@ AsymptoteAnalysisResult asymptotes_checked(
     }
 
     return AsymptoteAnalysisResult::success(std::move(result));
-    } catch (const detail::ResultPropagation& propagation) {
-        return AsymptoteAnalysisResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return AsymptoteAnalysisResult::failure(
             CasErrc::ResourceLimit, "asymptote analysis allocation failed",
@@ -667,7 +721,7 @@ AsymptoteAnalysisResult asymptotes_checked(
 std::shared_ptr<SymbolicExpr> log_differentiate(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
 {
-    if (!f || !lamina::detail::node(f)) return nullptr;
+    if (!f || !LMCAS::detail::node(f)) return nullptr;
 
     /// 计算 ln(f)
     auto ln_f = SymbolicExpr::ln(f);
@@ -685,7 +739,7 @@ std::shared_ptr<SymbolicExpr> log_differentiate(
 std::shared_ptr<SymbolicExpr> differential(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
 {
-    if (!f || !lamina::detail::node(f)) return nullptr;
+    if (!f || !LMCAS::detail::node(f)) return nullptr;
 
     /// 微分 df = f'(var) * dx,返回系数 f'(var)
     return f->differentiate(var);
@@ -695,7 +749,7 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> total_differe
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars)
 {
     std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> result;
-    if (!f || !lamina::detail::node(f)) return result;
+    if (!f || !LMCAS::detail::node(f)) return result;
 
     result.reserve(vars.size());
     for (const auto& v : vars) {
@@ -724,12 +778,12 @@ ExpressionResult inverse_derivative_checked(
         auto eq = SymbolicExpr::add(
             f, SymbolicExpr::multiply(SymbolicExpr::number(-1), point));
         auto simplified_eq = eq ? eq->simplify() : nullptr;
-        if (simplified_eq && lamina::detail::node(simplified_eq)) eq = simplified_eq;
+        if (simplified_eq && LMCAS::detail::node(simplified_eq)) eq = simplified_eq;
 
         std::vector<std::shared_ptr<SymbolicExpr>> candidates;
         auto inverse = inverse_function_checked(f, var, point, context);
         if (inverse) {
-            candidates = lamina::detail::propagate_result(inverse);
+            candidates = inverse.value();
         } else {
             return ExpressionResult::failure(inverse.error());
         }
@@ -751,7 +805,7 @@ ExpressionResult inverse_derivative_checked(
 
             auto residual = eq->substitute(var, real_candidate);
             auto simplified_residual = residual ? residual->simplify() : nullptr;
-            if (!simplified_residual || !lamina::detail::node(simplified_residual)) {
+            if (!simplified_residual || !LMCAS::detail::node(simplified_residual)) {
                 return ExpressionResult::failure(
                     CasErrc::InternalInvariant,
                     "inverse derivative candidate verification produced a null residual",
@@ -763,8 +817,8 @@ ExpressionResult inverse_derivative_checked(
 
             bool duplicate = false;
             for (const auto& existing : real_candidates) {
-                if (existing && lamina::detail::node(existing) &&
-                    lamina::detail::node(existing)->equals(*lamina::detail::node(real_candidate))) {
+                if (existing && LMCAS::detail::node(existing) &&
+                    LMCAS::detail::node(existing)->equals(*LMCAS::detail::node(real_candidate))) {
                     duplicate = true;
                     break;
                 }
@@ -787,7 +841,7 @@ ExpressionResult inverse_derivative_checked(
         }
 
         auto f_prime = f->differentiate(var);
-        if (!f_prime || !lamina::detail::node(f_prime)) {
+        if (!f_prime || !LMCAS::detail::node(f_prime)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "inverse derivative could not construct the derivative",
@@ -796,7 +850,7 @@ ExpressionResult inverse_derivative_checked(
 
         auto f_prime_at_x0 = f_prime->substitute(var, candidates[0]);
         auto simplified_derivative = f_prime_at_x0 ? f_prime_at_x0->simplify() : nullptr;
-        if (!simplified_derivative || !lamina::detail::node(simplified_derivative)) {
+        if (!simplified_derivative || !LMCAS::detail::node(simplified_derivative)) {
             return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "inverse derivative substitution produced a null expression",
@@ -812,7 +866,7 @@ ExpressionResult inverse_derivative_checked(
 
         auto result = SymbolicExpr::divide(SymbolicExpr::number(1), simplified_derivative);
         auto simplified = result ? result->simplify() : nullptr;
-        if (!simplified || !lamina::detail::node(simplified)) {
+        if (!simplified || !LMCAS::detail::node(simplified)) {
             return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "inverse derivative result construction failed",
@@ -851,12 +905,12 @@ SymbolicExprVectorResult inverse_function_checked(
         auto eq = SymbolicExpr::add(
             f, SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
         auto simplified_eq = eq ? eq->simplify() : nullptr;
-        if (simplified_eq && lamina::detail::node(simplified_eq)) eq = simplified_eq;
+        if (simplified_eq && LMCAS::detail::node(simplified_eq)) eq = simplified_eq;
 
         auto solved = solve_equation(eq, var, context, SolveOptions{});
         if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
-        const auto& solutions = lamina::detail::propagate_result(solved);
+        const auto& solutions = solved.value();
         if (std::holds_alternative<EmptySolutions>(solutions)) {
             return SymbolicExprVectorResult::success({});
         }
@@ -864,14 +918,14 @@ SymbolicExprVectorResult inverse_function_checked(
             std::vector<std::shared_ptr<SymbolicExpr>> values;
             values.reserve(finite->values.size());
             for (const auto& solution : finite->values) {
-                if (!solution.value || !lamina::detail::node(solution.value)) {
+                if (!solution.value || !LMCAS::detail::node(solution.value)) {
                     return SymbolicExprVectorResult::failure(
                         CasErrc::InternalInvariant,
                         "checked solver returned a null inverse candidate",
                         operation);
                 }
                 auto candidate = rootof_simplify(solution.value);
-                if (!candidate || !lamina::detail::node(candidate)) {
+                if (!candidate || !LMCAS::detail::node(candidate)) {
                     return SymbolicExprVectorResult::failure(
                         CasErrc::InternalInvariant,
                         "checked solver returned a malformed inverse candidate",
@@ -911,21 +965,21 @@ SymbolicExprVectorResult inverse_function_checked(
 static std::shared_ptr<SymbolicExpr> calculus_utils_make_abs(
     const std::shared_ptr<SymbolicExpr>& expr)
 {
-    if (!expr || !lamina::detail::node(expr)) return nullptr;
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    if (!expr || !LMCAS::detail::node(expr)) return nullptr;
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Abs,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(expr)}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(expr)}));
 }
 
 static bool calculus_utils_contains_unevaluated_integral(
     const std::shared_ptr<const SymbolicNode>& node,
     std::size_t = 0) {
-    return lamina::detail::contains_node_type<IntegralNode>(node);
+    return LMCAS::detail::contains_node_type<IntegralNode>(node);
 }
 
 /// 尝试符号定积分,若结果仍含未求值积分节点则返回 nullptr
-static std::shared_ptr<SymbolicExpr> calculus_utils_try_symbolic_definite(
+static ExpressionResult calculus_utils_try_symbolic_definite(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -933,16 +987,21 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_try_symbolic_definite(
     ComputationContext& context)
 {
     Integrator integrator;
-    SymbolicExpr result = detail::propagate_result(
-        integrator.integrate_def_checked(
-            *integrand, var, *a, *b, context));
+    auto integrated = integrator.integrate_def_checked(
+        *integrand, var, *a, *b, context);
+    if (!integrated) return ExpressionResult::failure(integrated.error());
+    SymbolicExpr result = std::move(integrated.value());
 
-    if (calculus_utils_contains_unevaluated_integral(lamina::detail::node(result))) return nullptr;
-    auto res = lamina::detail::make_expression_ptr(result);
+    if (calculus_utils_contains_unevaluated_integral(
+            LMCAS::detail::node(result))) {
+        return std::shared_ptr<SymbolicExpr>{};
+    }
+    auto res = LMCAS::detail::make_expression_ptr(result);
     auto simplified = res->simplify();
     if (simplified &&
-        calculus_utils_contains_unevaluated_integral(lamina::detail::node(simplified))) {
-        return nullptr;
+        calculus_utils_contains_unevaluated_integral(
+            LMCAS::detail::node(simplified))) {
+        return std::shared_ptr<SymbolicExpr>{};
     }
     return simplified ? simplified : res;
 }
@@ -959,14 +1018,14 @@ ExpressionResult curvature_checked(
 
     /// f' = df/dvar
     auto f_prime = f->differentiate(var);
-    if (!f_prime || !lamina::detail::node(f_prime)) {
+    if (!f_prime || !LMCAS::detail::node(f_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "first derivative could not be constructed",
                                            operation);
     }
     /// f'' = d^2f/dvar^2
     auto f_double_prime = f_prime->differentiate(var);
-    if (!f_double_prime || !lamina::detail::node(f_double_prime)) {
+    if (!f_double_prime || !LMCAS::detail::node(f_double_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "second derivative could not be constructed",
                                            operation);
@@ -974,7 +1033,7 @@ ExpressionResult curvature_checked(
 
     /// |f''|
     auto abs_f_pp = calculus_utils_make_abs(f_double_prime);
-    if (!abs_f_pp || !lamina::detail::node(abs_f_pp)) {
+    if (!abs_f_pp || !LMCAS::detail::node(abs_f_pp)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            "absolute value node construction failed",
                                            operation);
@@ -1013,13 +1072,13 @@ ExpressionResult curvature_parametric_checked(
 
     /// x' = dx/dt, x'' = d^2x/dt^2
     auto x_prime = x_t->differentiate(t);
-    if (!x_prime || !lamina::detail::node(x_prime)) {
+    if (!x_prime || !LMCAS::detail::node(x_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "x derivative could not be constructed",
                                            operation);
     }
     auto x_double_prime = x_prime->differentiate(t);
-    if (!x_double_prime || !lamina::detail::node(x_double_prime)) {
+    if (!x_double_prime || !LMCAS::detail::node(x_double_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "x second derivative could not be constructed",
                                            operation);
@@ -1027,13 +1086,13 @@ ExpressionResult curvature_parametric_checked(
 
     /// y' = dy/dt, y'' = d^2y/dt^2
     auto y_prime = y_t->differentiate(t);
-    if (!y_prime || !lamina::detail::node(y_prime)) {
+    if (!y_prime || !LMCAS::detail::node(y_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "y derivative could not be constructed",
                                            operation);
     }
     auto y_double_prime = y_prime->differentiate(t);
-    if (!y_double_prime || !lamina::detail::node(y_double_prime)) {
+    if (!y_double_prime || !LMCAS::detail::node(y_double_prime)) {
         return ExpressionResult::failure(CasErrc::UnsupportedExpression,
                                            "y second derivative could not be constructed",
                                            operation);
@@ -1054,7 +1113,7 @@ ExpressionResult curvature_parametric_checked(
 
     /// |x'y'' - y'x''|
     auto abs_cross = calculus_utils_make_abs(cross_term);
-    if (!abs_cross || !lamina::detail::node(abs_cross)) {
+    if (!abs_cross || !LMCAS::detail::node(abs_cross)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            "absolute value node construction failed",
                                            operation);
@@ -1095,7 +1154,7 @@ SymbolicExprVectorResult inflection_points_checked(
     
     /// f' = df/dvar
     auto f_prime = f->differentiate(var);
-    if (!f_prime || !lamina::detail::node(f_prime)) {
+    if (!f_prime || !LMCAS::detail::node(f_prime)) {
         return SymbolicExprVectorResult::failure(
             CasErrc::UnsupportedExpression,
             "first derivative could not be constructed", operation);
@@ -1103,19 +1162,19 @@ SymbolicExprVectorResult inflection_points_checked(
     
     /// f'' = d^2f/dvar^2
     auto f_double_prime = f_prime->differentiate(var);
-    if (!f_double_prime || !lamina::detail::node(f_double_prime)) {
+    if (!f_double_prime || !LMCAS::detail::node(f_double_prime)) {
         return SymbolicExprVectorResult::failure(
             CasErrc::UnsupportedExpression,
             "second derivative could not be constructed", operation);
     }
 
     auto equation = f_double_prime->simplify();
-    if (!equation || !lamina::detail::node(equation)) equation = f_double_prime;
+    if (!equation || !LMCAS::detail::node(equation)) equation = f_double_prime;
 
     auto solved = solve_equation(equation, var, context, SolveOptions{});
     if (!solved) return SymbolicExprVectorResult::failure(solved.error());
 
-    const auto& solutions = lamina::detail::propagate_result(solved);
+    const auto& solutions = solved.value();
     if (std::holds_alternative<EmptySolutions>(solutions)) {
         return SymbolicExprVectorResult::success({});
     }
@@ -1123,7 +1182,7 @@ SymbolicExprVectorResult inflection_points_checked(
         std::vector<std::shared_ptr<SymbolicExpr>> points;
         points.reserve(finite->values.size());
         for (const auto& solution : finite->values) {
-            if (!solution.value || !lamina::detail::node(solution.value)) {
+            if (!solution.value || !LMCAS::detail::node(solution.value)) {
                 return SymbolicExprVectorResult::failure(
                     CasErrc::InternalInvariant,
                     "checked solver returned a null inflection candidate",
@@ -1163,7 +1222,7 @@ ExpressionResult surface_area_revolution_x_checked(
 
     try {
         auto f_prime = f->differentiate(var);
-        if (!f_prime || !lamina::detail::node(f_prime)) {
+        if (!f_prime || !LMCAS::detail::node(f_prime)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface derivative is outside the supported domain",
@@ -1174,7 +1233,7 @@ ExpressionResult surface_area_revolution_x_checked(
         auto one_plus_fp_sq = SymbolicExpr::add(SymbolicExpr::number(1), f_prime_sq);
         auto arc_factor = SymbolicExpr::sqrt(one_plus_fp_sq);
         auto abs_f = calculus_utils_make_abs(f);
-        if (!abs_f || !lamina::detail::node(abs_f)) {
+        if (!abs_f || !LMCAS::detail::node(abs_f)) {
             return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "absolute value node construction failed",
@@ -1184,7 +1243,9 @@ ExpressionResult surface_area_revolution_x_checked(
 
         auto integral = calculus_utils_try_symbolic_definite(
             integrand, var, a, b, context);
-        if (!integral || !lamina::detail::node(integral)) {
+        if (!integral) return integral;
+        if (!integral.value() ||
+            !LMCAS::detail::node(integral.value())) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface area integral could not be evaluated exactly",
@@ -1193,11 +1254,10 @@ ExpressionResult surface_area_revolution_x_checked(
 
         auto two_pi = SymbolicExpr::multiply(
             SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
-        auto result = SymbolicExpr::multiply(two_pi, integral);
+        auto result = SymbolicExpr::multiply(
+            two_pi, std::move(integral.value()));
         auto simplified = result->simplify();
         return ExpressionResult::success(simplified ? simplified : result);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ExpressionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",
@@ -1230,7 +1290,7 @@ ExpressionResult surface_area_revolution_y_checked(
 
     try {
         auto f_prime = f->differentiate(var);
-        if (!f_prime || !lamina::detail::node(f_prime)) {
+        if (!f_prime || !LMCAS::detail::node(f_prime)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface derivative is outside the supported domain",
@@ -1242,7 +1302,7 @@ ExpressionResult surface_area_revolution_y_checked(
         auto arc_factor = SymbolicExpr::sqrt(one_plus_fp_sq);
         auto var_expr = SymbolicExpr::variable(var);
         auto abs_var = calculus_utils_make_abs(var_expr);
-        if (!abs_var || !lamina::detail::node(abs_var)) {
+        if (!abs_var || !LMCAS::detail::node(abs_var)) {
             return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
                 "absolute value node construction failed",
@@ -1252,7 +1312,9 @@ ExpressionResult surface_area_revolution_y_checked(
 
         auto integral = calculus_utils_try_symbolic_definite(
             integrand, var, a, b, context);
-        if (!integral || !lamina::detail::node(integral)) {
+        if (!integral) return integral;
+        if (!integral.value() ||
+            !LMCAS::detail::node(integral.value())) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
                 "surface area integral could not be evaluated exactly",
@@ -1261,11 +1323,10 @@ ExpressionResult surface_area_revolution_y_checked(
 
         auto two_pi = SymbolicExpr::multiply(
             SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
-        auto result = SymbolicExpr::multiply(two_pi, integral);
+        auto result = SymbolicExpr::multiply(
+            two_pi, std::move(integral.value()));
         auto simplified = result->simplify();
         return ExpressionResult::success(simplified ? simplified : result);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ExpressionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",
@@ -1285,4 +1346,4 @@ ExpressionResult surface_area_revolution_y_checked(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

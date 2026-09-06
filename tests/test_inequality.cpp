@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> linear(int a, int b) {
     auto x = SymbolicExpr::variable("x");
@@ -178,6 +178,49 @@ int main() {
                         ? "checked downward quadratic reverses the sign regions exactly"
                         : "checked downward quadratic failed: " +
                               downward_positive.error().message);
+    }
+
+    TEST_CASE("Unchecked quadratic inequalities preserve a small root");
+    {
+        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
+        auto bx = SymbolicExpr::multiply(
+            SymbolicExpr::number(BigInt("10000000000000000")), x);
+        auto ill_conditioned = SymbolicExpr::add(
+            SymbolicExpr::add(x2, bx), SymbolicExpr::number(1));
+        auto positive = InequalitySolver::solve_inequality(
+            ill_conditioned, InequalityType::GreaterThan, "x");
+
+        EXPECT_TRUE(
+            positive.contains(0.0),
+            "x^2 + 10^16*x + 1 > 0 must not turn its small negative root into zero");
+        EXPECT_TRUE(
+            positive.contains(-5e-17),
+            "quadratic sign chart includes points above its small negative root");
+        EXPECT_TRUE(
+            !positive.contains(-2e-16),
+            "quadratic sign chart excludes points between its two roots");
+    }
+
+    TEST_CASE("Unchecked inequalities keep distinct nearby exact roots");
+    {
+        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
+        auto scaled_x = SymbolicExpr::multiply(
+            SymbolicExpr::number(
+                Rational(BigInt(-1), BigInt("1000000000000"))), x);
+        auto nearby_roots = SymbolicExpr::add(x2, scaled_x);
+        auto negative = InequalitySolver::solve_inequality(
+            nearby_roots, InequalityType::LessThan, "x");
+
+        EXPECT_TRUE(
+            negative.contains(5e-13),
+            "x*(x-10^-12) < 0 contains the interval between both exact roots");
+        EXPECT_TRUE(
+            !negative.contains(-1e-13),
+            "nearby exact roots exclude the lower exterior: " +
+                negative.to_string());
+        EXPECT_TRUE(
+            !negative.contains(2e-12),
+            "nearby exact roots exclude the upper exterior");
     }
 
     TEST_CASE("Checked inequality conjunction contracts");

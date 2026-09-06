@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 using RationalInterval = std::pair<Rational, Rational>;
 
@@ -24,4 +24,4 @@ Result<std::size_t> count_real_roots_exact(
     ComputationContext& context,
     const std::string& operation);
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

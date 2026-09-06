@@ -9,11 +9,12 @@
 #include <algorithm>
 #include <optional>
 #include <stdexcept>
+#include <limits>
 
-namespace lamina {
+namespace LMCAS {
 
 static bool is_purely_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    return !expr || free_variables(lamina::detail::node(expr)).empty();
+    return !expr || free_variables(LMCAS::detail::node(expr)).empty();
 }
 
 static std::shared_ptr<SymbolicExpr> cbrt_expr(const std::shared_ptr<SymbolicExpr>& x) {
@@ -21,10 +22,10 @@ static std::shared_ptr<SymbolicExpr> cbrt_expr(const std::shared_ptr<SymbolicExp
 }
 
 [[maybe_unused]] static std::shared_ptr<SymbolicExpr> acos_expr(const std::shared_ptr<SymbolicExpr>& x) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::ArcCos,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(x)}));
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(x)}));
 }
 
 static std::shared_ptr<SymbolicExpr> negate(const std::shared_ptr<SymbolicExpr>& x) {
@@ -43,9 +44,9 @@ static std::optional<double> finite_numeric_value(
     auto evaluated = detail::try_finite_numeric(expr);
     if (!evaluated) return std::nullopt;
     auto simplified = expr->simplify();
-    if (simplified && lamina::detail::node(simplified)) {
+    if (simplified && LMCAS::detail::node(simplified)) {
         if (auto num = std::dynamic_pointer_cast<const NumberNode>(
-                lamina::detail::node(simplified))) {
+                LMCAS::detail::node(simplified))) {
             if (std::holds_alternative<Rational>(num->value())) {
                 const auto& value = std::get<Rational>(num->value());
                 if (!value.get_numerator().is_zero() && *evaluated == 0.0) {
@@ -87,6 +88,53 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_quadratic_internal(
     const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
     const std::shared_ptr<SymbolicExpr>& c) {
+    auto a_checked = finite_numeric_value(a);
+    auto b_checked = finite_numeric_value(b);
+    auto c_checked = finite_numeric_value(c);
+    if (is_purely_numeric(a) && is_purely_numeric(b) &&
+        is_purely_numeric(c) && a_checked && b_checked && c_checked &&
+        *a_checked != 0.0) {
+        const double av = *a_checked;
+        const double bv = *b_checked;
+        const double cv = *c_checked;
+        const double scale =
+            std::max({std::abs(av), std::abs(bv), std::abs(cv)});
+        const double an = av / scale;
+        const double bn = bv / scale;
+        const double cn = cv / scale;
+        const bool normalization_lost_coefficient =
+            (av != 0.0 && an == 0.0) ||
+            (bv != 0.0 && bn == 0.0) ||
+            (cv != 0.0 && cn == 0.0);
+
+        if (!normalization_lost_coefficient) {
+            const double discriminant =
+                std::fma(-4.0 * an, cn, bn * bn);
+            if (std::isfinite(discriminant) && discriminant >= 0.0) {
+                const double sqrt_discriminant = std::sqrt(discriminant);
+                if (sqrt_discriminant == 0.0) {
+                    return {
+                        SymbolicExpr::number(-bn / (2.0 * an))
+                    };
+                }
+
+                const double q =
+                    -0.5 * (bn + std::copysign(sqrt_discriminant, bn));
+                const double x1 = q / an;
+                const double x2 = cn / q;
+                const bool representable =
+                    std::isfinite(x1) && std::isfinite(x2) &&
+                    (cv == 0.0 || (x1 != 0.0 && x2 != 0.0));
+                if (representable) {
+                    return {
+                        SymbolicExpr::number(x1),
+                        SymbolicExpr::number(x2)
+                    };
+                }
+            }
+        }
+    }
+
 
     auto b2 = SymbolicExpr::power(b, num(2));
     auto four_ac = SymbolicExpr::multiply(num(4), SymbolicExpr::multiply(a, c));
@@ -114,117 +162,187 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
 
     auto a_simp = a->simplify();
     if (a_simp->get_number_value_is_zero()) {
-
         auto b_simp = b->simplify();
         if (b_simp->get_number_value_is_zero()) {
-
+            auto c_simp = c->simplify();
+            if (c_simp->get_number_value_is_zero()) {
+                auto d_simp = d->simplify();
+                if (d_simp->get_number_value_is_zero()) {
+                    throw std::invalid_argument(
+                        "solve_cubic: identically zero equation has no finite root list");
+                }
+                if (is_purely_numeric(d_simp)) {
+                    return {};
+                }
+                throw std::invalid_argument(
+                    "solve_cubic: equation is independent of the requested variable");
+            }
             return solve_linear_internal(c, d);
         }
-
         return solve_quadratic_internal(b, c, d);
     }
 
-    auto a2 = SymbolicExpr::power(a, num(2));
-    auto a3 = SymbolicExpr::power(a, num(3));
-    auto b2 = SymbolicExpr::power(b, num(2));
-    auto b3 = SymbolicExpr::power(b, num(3));
 
-    auto three_ac = SymbolicExpr::multiply(num(3), SymbolicExpr::multiply(a, c));
-    auto p_num = sub(three_ac, b2);
-    auto p_den = SymbolicExpr::multiply(num(3), a2);
-    auto p = SymbolicExpr::divide(p_num, p_den)->simplify();
-
-    auto two_b3 = SymbolicExpr::multiply(num(2), b3);
-    auto nine_abc = SymbolicExpr::multiply(num(9), SymbolicExpr::multiply(a, SymbolicExpr::multiply(b, c)));
-    auto twentyseven_a2d = SymbolicExpr::multiply(num(27), SymbolicExpr::multiply(a2, d));
-    auto q_num = SymbolicExpr::add(sub(two_b3, nine_abc), twentyseven_a2d);
-    auto q_den = SymbolicExpr::multiply(num(27), a3);
-    auto q = SymbolicExpr::divide(q_num, q_den)->simplify();
-
-    auto shift = SymbolicExpr::divide(b, SymbolicExpr::multiply(num(3), a))->simplify();
-
-    bool all_numeric = is_purely_numeric(p) && is_purely_numeric(q);
+    bool all_numeric = is_purely_numeric(a) && is_purely_numeric(b) &&
+                       is_purely_numeric(c) && is_purely_numeric(d);
 
     std::vector<std::shared_ptr<SymbolicExpr>> roots;
+    double p_val = 0.0;
+    double q_val = 0.0;
+    double shift_val = 0.0;
+    bool numeric_depression = false;
 
-    auto p_checked = finite_numeric_value(p);
-    auto q_checked = finite_numeric_value(q);
-    auto shift_checked = finite_numeric_value(shift);
+    auto a_checked = finite_numeric_value(a);
+    auto b_checked = finite_numeric_value(b);
+    auto c_checked = finite_numeric_value(c);
+    auto d_checked = finite_numeric_value(d);
+    if (all_numeric && a_checked && b_checked && c_checked && d_checked &&
+        *a_checked != 0.0) {
+        const double max_coefficient = std::max({
+            std::abs(*a_checked), std::abs(*b_checked),
+            std::abs(*c_checked), std::abs(*d_checked)});
+        /**
+         * Common binary scaling places the largest coefficient in [1, 2).
+         * Normal-range scaled values retain their binary significands.
+         * @see David Goldberg, "What Every Computer Scientist Should Know About
+         * Floating-Point Arithmetic" (1991), Theorem 7 proof.
+         * https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html
+         * @see S. Ghaderpanah and S. Klasa, "Polynomial Scaling" (1990),
+         * SIAM Journal on Numerical Analysis 27(1), 117-135 (scaling background).
+         * https://doi.org/10.1137/0727007
+         */
+        const int coefficient_exponent = std::ilogb(max_coefficient);
+        const double an = std::scalbn(*a_checked, -coefficient_exponent);
+        const double bn = std::scalbn(*b_checked, -coefficient_exponent);
+        const double cn = std::scalbn(*c_checked, -coefficient_exponent);
+        const double dn = std::scalbn(*d_checked, -coefficient_exponent);
+        if (an != 0.0) {
+            const double an_squared = an * an;
+            const double an_cubed = an_squared * an;
+            const double bn_squared = bn * bn;
+            const double p_left = 3.0 * an * cn;
+            double p_numerator = std::fma(-bn, bn, p_left);
+            const double p_roundoff =
+                16.0 * std::numeric_limits<double>::epsilon() *
+                (std::abs(p_left) + std::abs(bn_squared));
+            if (std::abs(p_numerator) <= p_roundoff) {
+                p_numerator = 0.0;
+            }
 
-    if (all_numeric && p_checked && q_checked && shift_checked) {
+            const double q_first = 2.0 * bn_squared * bn;
+            const double q_second = -9.0 * an * bn * cn;
+            const double q_third = 27.0 * an_squared * dn;
+            double q_numerator = (q_first + q_second) + q_third;
+            const double q_roundoff =
+                32.0 * std::numeric_limits<double>::epsilon() *
+                (std::abs(q_first) + std::abs(q_second) +
+                 std::abs(q_third));
+            if (std::abs(q_numerator) <= q_roundoff) {
+                q_numerator = 0.0;
+            }
 
-        double p_val = *p_checked;
-        double q_val = *q_checked;
-        double shift_val = *shift_checked;
+            const double p_denominator = 3.0 * an_squared;
+            const double q_denominator = 27.0 * an_cubed;
+            if (p_denominator != 0.0 && q_denominator != 0.0) {
+                p_val = p_numerator / p_denominator;
+                q_val = q_numerator / q_denominator;
+                shift_val = bn / (3.0 * an);
+                numeric_depression =
+                    std::isfinite(p_val) && std::isfinite(q_val) &&
+                    std::isfinite(shift_val);
+            }
+        }
+    }
 
-        double D = (q_val / 2.0) * (q_val / 2.0) + (p_val / 3.0) * (p_val / 3.0) * (p_val / 3.0);
+    if (numeric_depression) {
+        const double root_scale = std::max(
+            std::sqrt(std::abs(p_val)),
+            std::cbrt(std::abs(q_val)));
 
-        const double eps = 1e-12;
-
-        if (std::abs(p_val) < eps && std::abs(q_val) < eps) {
-
+        if (root_scale == 0.0) {
             auto root = SymbolicExpr::number(-shift_val);
             roots = { root, root, root };
-        } else if (std::abs(D) < eps) {
-
-            double q_half_val = q_val / 2.0;
-            double cbrt_q_half_val = std::cbrt(q_half_val);
-
-            double t1_val = -2.0 * cbrt_q_half_val;
-
-            double t2_val = cbrt_q_half_val;
-
-            auto x1 = SymbolicExpr::number(t1_val - shift_val);
-            auto x2 = SymbolicExpr::number(t2_val - shift_val);
-
-            roots = { x1, x2, x2 };
-        } else if (D > eps) {
-
-            double neg_q_half_val = -q_val / 2.0;
-            double sqrt_D_val = std::sqrt(D);
-
-            double u_arg_val = neg_q_half_val + sqrt_D_val;
-            double v_arg_val = neg_q_half_val - sqrt_D_val;
-
-            double u_val = std::cbrt(u_arg_val);
-            double v_val = std::cbrt(v_arg_val);
-
-            double t1_val = u_val + v_val;
-            double x1_val = t1_val - shift_val;
-
-            double real_part = -(u_val + v_val) / 2.0 - shift_val;
-            double imag_part_val = std::sqrt(3.0) * (u_val - v_val) / 2.0;
-
-            auto x1 = SymbolicExpr::number(x1_val);
-
-            auto i_unit = SymbolicExpr::sqrt(num(-1));
-            auto x2 = SymbolicExpr::add(
-                SymbolicExpr::number(real_part),
-                SymbolicExpr::multiply(SymbolicExpr::number(imag_part_val), i_unit))->simplify();
-            auto x3 = sub(
-                SymbolicExpr::number(real_part),
-                SymbolicExpr::multiply(SymbolicExpr::number(imag_part_val), i_unit))->simplify();
-
-            roots = { x1, x2, x3 };
         } else {
+            const double p_normalized = (p_val / root_scale) / root_scale;
+            const double q_normalized =
+                ((q_val / root_scale) / root_scale) / root_scale;
+            const double q_half = q_normalized / 2.0;
+            const double p_third = p_normalized / 3.0;
+            const double discriminant_q = q_half * q_half;
+            const double discriminant_p = p_third * p_third * p_third;
+            const double discriminant = discriminant_q + discriminant_p;
+            const double discriminant_tolerance =
+                32.0 * std::numeric_limits<double>::epsilon() *
+                (std::abs(discriminant_q) + std::abs(discriminant_p));
 
-            double neg_p3_over_27 = -(p_val * p_val * p_val) / 27.0;
-            double r_val = std::sqrt(neg_p3_over_27);
-            double cos_arg = -q_val / (2.0 * r_val);
+            if (std::abs(discriminant) <= discriminant_tolerance) {
+                const double cbrt_q_half = std::cbrt(q_half);
+                const double t1 = -2.0 * cbrt_q_half * root_scale;
+                const double t2 = cbrt_q_half * root_scale;
 
-            if (cos_arg > 1.0) cos_arg = 1.0;
-            if (cos_arg < -1.0) cos_arg = -1.0;
-            double theta_val = std::acos(cos_arg);
-            double two_cbrt_r = 2.0 * std::cbrt(r_val);
+                auto x1 = SymbolicExpr::number(t1 - shift_val);
+                auto x2 = SymbolicExpr::number(t2 - shift_val);
+                roots = { x1, x2, x2 };
+            } else if (discriminant > 0.0) {
+                const double sqrt_discriminant = std::sqrt(discriminant);
+                const double u = std::cbrt(-q_half + sqrt_discriminant);
+                const double v = std::cbrt(-q_half - sqrt_discriminant);
+                const double real_sum = (u + v) * root_scale;
+                const double x1_value = real_sum - shift_val;
+                const double real_part = -real_sum / 2.0 - shift_val;
+                const double imaginary_part =
+                    std::sqrt(3.0) * (u - v) * root_scale / 2.0;
 
-            for (int k = 0; k < 3; ++k) {
-                double angle = (theta_val + 2.0 * k * LMMC_CONST_PI) / 3.0;
-                double t_k_val = two_cbrt_r * std::cos(angle);
-                double x_k_val = t_k_val - shift_val;
-                roots.push_back(SymbolicExpr::number(x_k_val));
+                auto x1 = SymbolicExpr::number(x1_value);
+                auto i_unit = SymbolicExpr::sqrt(num(-1));
+                auto x2 = SymbolicExpr::add(
+                    SymbolicExpr::number(real_part),
+                    SymbolicExpr::multiply(
+                        SymbolicExpr::number(imaginary_part), i_unit))->simplify();
+                auto x3 = sub(
+                    SymbolicExpr::number(real_part),
+                    SymbolicExpr::multiply(
+                        SymbolicExpr::number(imaginary_part), i_unit))->simplify();
+                roots = { x1, x2, x3 };
+            } else {
+                const double radius =
+                    std::sqrt(-(p_normalized * p_normalized * p_normalized) / 27.0);
+                double cosine_argument = -q_normalized / (2.0 * radius);
+                cosine_argument = std::clamp(cosine_argument, -1.0, 1.0);
+                const double theta = std::acos(cosine_argument);
+                const double amplitude = 2.0 * std::cbrt(radius) * root_scale;
+
+                for (int k = 0; k < 3; ++k) {
+                    const double angle =
+                        (theta + 2.0 * k * LMMC_CONST_PI) / 3.0;
+                    roots.push_back(SymbolicExpr::number(
+                        amplitude * std::cos(angle) - shift_val));
+                }
             }
         }
     } else {
+        auto a2 = SymbolicExpr::power(a, num(2));
+        auto a3 = SymbolicExpr::power(a, num(3));
+        auto b2 = SymbolicExpr::power(b, num(2));
+        auto b3 = SymbolicExpr::power(b, num(3));
+        auto three_ac = SymbolicExpr::multiply(
+            num(3), SymbolicExpr::multiply(a, c));
+        auto p_num = sub(three_ac, b2);
+        auto p_den = SymbolicExpr::multiply(num(3), a2);
+        auto p = SymbolicExpr::divide(p_num, p_den)->simplify();
+        auto two_b3 = SymbolicExpr::multiply(num(2), b3);
+        auto nine_abc = SymbolicExpr::multiply(
+            num(9), SymbolicExpr::multiply(
+                a, SymbolicExpr::multiply(b, c)));
+        auto twentyseven_a2d = SymbolicExpr::multiply(
+            num(27), SymbolicExpr::multiply(a2, d));
+        auto q_num = SymbolicExpr::add(
+            sub(two_b3, nine_abc), twentyseven_a2d);
+        auto q_den = SymbolicExpr::multiply(num(27), a3);
+        auto q = SymbolicExpr::divide(q_num, q_den)->simplify();
+        auto shift = SymbolicExpr::divide(
+            b, SymbolicExpr::multiply(num(3), a))->simplify();
+
 
         auto q_half = SymbolicExpr::divide(q, num(2));
         auto p_third = SymbolicExpr::divide(p, num(3));
@@ -261,6 +379,25 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_biquadratic(
     const std::shared_ptr<SymbolicExpr>& b,
     const std::shared_ptr<SymbolicExpr>& c,
     const std::string&) {
+    auto a_simplified = a->simplify();
+    if (a_simplified->get_number_value_is_zero()) {
+        auto b_simplified = b->simplify();
+        if (!b_simplified->get_number_value_is_zero()) {
+            return solve_quadratic_internal(b, num(0), c);
+        }
+
+        auto c_simplified = c->simplify();
+        if (c_simplified->get_number_value_is_zero()) {
+            throw std::invalid_argument(
+                "solve_biquadratic: identically zero equation has no finite root list");
+        }
+        if (is_purely_numeric(c_simplified)) {
+            return {};
+        }
+        throw std::invalid_argument(
+            "solve_biquadratic: equation is independent of the requested variable");
+    }
+
 
     bool all_numeric = is_purely_numeric(a) && is_purely_numeric(b) && is_purely_numeric(c);
 
@@ -269,44 +406,54 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_biquadratic(
     auto c_checked = finite_numeric_value(c);
 
     if (all_numeric && a_checked && b_checked && c_checked && *a_checked != 0.0) {
-
         double av = *a_checked;
         double bv = *b_checked;
         double cv = *c_checked;
+        double scale = std::max({std::abs(av), std::abs(bv), std::abs(cv)});
+        double an = av / scale;
+        double bn = bv / scale;
+        double cn = cv / scale;
+        bool normalization_lost_coefficient =
+            (av != 0.0 && an == 0.0) ||
+            (bv != 0.0 && bn == 0.0) ||
+            (cv != 0.0 && cn == 0.0);
 
-        double disc = bv * bv - 4.0 * av * cv;
-        double sqrt_disc = std::sqrt(std::abs(disc));
-
-        std::vector<std::shared_ptr<SymbolicExpr>> results;
-        const double eps = 1e-12;
-
-        if (disc >= -eps) {
-            double u1 = (-bv + sqrt_disc) / (2.0 * av);
-            double u2 = (-bv - sqrt_disc) / (2.0 * av);
-
-            double u_vals[2] = {u1, u2};
-            for (int i = 0; i < 2; ++i) {
-                if (u_vals[i] >= -eps) {
-                    double x_pos = std::sqrt(std::max(0.0, u_vals[i]));
-                    results.push_back(SymbolicExpr::number(x_pos));
-                    results.push_back(SymbolicExpr::number(-x_pos));
+        if (!normalization_lost_coefficient) {
+            double disc = std::fma(-4.0 * an, cn, bn * bn);
+            if (std::isfinite(disc) && disc >= 0.0) {
+                double sqrt_disc = std::sqrt(disc);
+                double u1;
+                double u2;
+                if (sqrt_disc == 0.0) {
+                    u1 = -bn / (2.0 * an);
+                    u2 = u1;
                 } else {
+                    double q = -0.5 * (bn + std::copysign(sqrt_disc, bn));
+                    u1 = q / an;
+                    u2 = cn / q;
+                }
 
-                    auto u_expr = SymbolicExpr::number(u_vals[i]);
-                    results.push_back(SymbolicExpr::sqrt(u_expr)->simplify());
-                    results.push_back(negate(SymbolicExpr::sqrt(u_expr))->simplify());
+                bool representable =
+                    std::isfinite(u1) && std::isfinite(u2) &&
+                    (cv == 0.0 || (u1 != 0.0 && u2 != 0.0));
+                if (representable) {
+                    std::vector<std::shared_ptr<SymbolicExpr>> results;
+                    double u_vals[2] = {u1, u2};
+                    for (int i = 0; i < 2; ++i) {
+                        if (u_vals[i] >= 0.0) {
+                            double x_pos = std::sqrt(u_vals[i]);
+                            results.push_back(SymbolicExpr::number(x_pos));
+                            results.push_back(SymbolicExpr::number(-x_pos));
+                        } else {
+                            auto u_expr = SymbolicExpr::number(u_vals[i]);
+                            results.push_back(SymbolicExpr::sqrt(u_expr)->simplify());
+                            results.push_back(negate(SymbolicExpr::sqrt(u_expr))->simplify());
+                        }
+                    }
+                    return results;
                 }
             }
-        } else {
-
-            auto u_roots = solve_quadratic_internal(a, b, c);
-            for (const auto& u : u_roots) {
-                results.push_back(SymbolicExpr::sqrt(u)->simplify());
-                results.push_back(negate(SymbolicExpr::sqrt(u))->simplify());
-            }
         }
-
-        return results;
     }
 
     auto u_roots = solve_quadratic_internal(a, b, c);
@@ -392,166 +539,176 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_quartic(
 
         if (all_numeric) {
 
-        const double eps = 1e-12;
-
-        if (std::abs(q_val) < eps) {
-
-            double disc = p_val * p_val - 4.0 * r_val;
-            double sqrt_disc = std::sqrt(std::abs(disc));
-            double u1, u2;
-            if (disc >= 0) {
-                u1 = (-p_val + sqrt_disc) / 2.0;
-                u2 = (-p_val - sqrt_disc) / 2.0;
-            } else {
-
-                u1 = (-p_val + sqrt_disc) / 2.0;
-                u2 = (-p_val - sqrt_disc) / 2.0;
+        if (q_val == 0.0) {
+            auto u_roots = solve_quadratic_internal(
+                num(1),
+                SymbolicExpr::number(p_val),
+                SymbolicExpr::number(r_val));
+            if (u_roots.size() == 1) {
+                u_roots.push_back(u_roots.front());
             }
 
             std::vector<std::shared_ptr<SymbolicExpr>> results;
-            double u_vals[2] = {u1, u2};
-            for (int i = 0; i < 2; ++i) {
-                if (u_vals[i] >= -eps) {
-                    double y_pos = std::sqrt(std::max(0.0, u_vals[i]));
-                    results.push_back(SymbolicExpr::number(y_pos - shift_val));
-                    results.push_back(SymbolicExpr::number(-y_pos - shift_val));
-                } else {
-
-                    auto u_expr = SymbolicExpr::number(u_vals[i]);
-                    auto shift_expr = SymbolicExpr::number(shift_val);
-                    results.push_back(sub(SymbolicExpr::sqrt(u_expr), shift_expr)->simplify());
-                    results.push_back(sub(negate(SymbolicExpr::sqrt(u_expr)), shift_expr)->simplify());
-                }
+            auto shift_expr = SymbolicExpr::number(shift_val);
+            for (const auto& u_root : u_roots) {
+                auto square_root = SymbolicExpr::sqrt(u_root);
+                results.push_back(sub(square_root, shift_expr)->simplify());
+                results.push_back(
+                    sub(negate(square_root), shift_expr)->simplify());
             }
             return results;
         }
 
-        double rc_a = 8.0;
-        double rc_b = 8.0 * p_val;
-        double rc_c = 2.0 * p_val * p_val - 8.0 * r_val;
-        double rc_d = -(q_val * q_val);
+        const double root_scale = std::max({
+            std::sqrt(std::abs(p_val)),
+            std::cbrt(std::abs(q_val)),
+            std::sqrt(std::sqrt(std::abs(r_val)))
+        });
+        const double p_normalized =
+            (p_val / root_scale) / root_scale;
+        const double q_normalized =
+            ((q_val / root_scale) / root_scale) / root_scale;
+        const double r_normalized =
+            (((r_val / root_scale) / root_scale) / root_scale) / root_scale;
 
-        auto cubic_roots = solve_cubic(
-            SymbolicExpr::number(rc_a),
-            SymbolicExpr::number(rc_b),
-            SymbolicExpr::number(rc_c),
-            SymbolicExpr::number(rc_d),
-            var);
+        if (q_normalized != 0.0) {
+            auto cubic_roots = solve_cubic(
+                SymbolicExpr::number(8.0),
+                SymbolicExpr::number(8.0 * p_normalized),
+                SymbolicExpr::number(
+                    2.0 * p_normalized * p_normalized -
+                    8.0 * r_normalized),
+                SymbolicExpr::number(-(q_normalized * q_normalized)),
+                var);
 
-        double m_val = 0.0;
-        bool found_m = false;
-
-        for (const auto& root : cubic_roots) {
-            auto maybe_val = finite_numeric_value(root);
-            if (maybe_val && *maybe_val > eps) {
-                if (!found_m || *maybe_val > m_val) {
+            double m_val = 0.0;
+            bool found_m = false;
+            for (const auto& root : cubic_roots) {
+                auto maybe_val = finite_numeric_value(root);
+                if (maybe_val && *maybe_val > 0.0 &&
+                    (!found_m || *maybe_val > m_val)) {
                     m_val = *maybe_val;
                     found_m = true;
                 }
             }
-        }
-
-        if (!found_m) {
-            for (const auto& root : cubic_roots) {
-                auto maybe_val = finite_numeric_value(root);
-                if (maybe_val && std::abs(*maybe_val) > eps) {
-                    if (!found_m || std::abs(*maybe_val) > std::abs(m_val)) {
+            if (!found_m) {
+                for (const auto& root : cubic_roots) {
+                    auto maybe_val = finite_numeric_value(root);
+                    if (maybe_val && *maybe_val != 0.0 &&
+                        (!found_m ||
+                         std::abs(*maybe_val) > std::abs(m_val))) {
                         m_val = *maybe_val;
                         found_m = true;
                     }
                 }
             }
-        }
 
-        if (!found_m && !cubic_roots.empty()) {
-            auto maybe_val = finite_numeric_value(cubic_roots[0]);
-            if (maybe_val) {
-                m_val = *maybe_val;
-                found_m = true;
+            if (found_m && m_val != 0.0) {
+                if (m_val < 0.0) {
+                    auto shift_expr = SymbolicExpr::number(shift_val);
+                    auto scale_expr = SymbolicExpr::number(root_scale);
+                    auto p_expr = SymbolicExpr::number(p_normalized);
+                    auto q_expr = SymbolicExpr::number(q_normalized);
+                    auto s_expr = SymbolicExpr::sqrt(
+                        SymbolicExpr::number(2.0 * m_val));
+                    auto m_plus_p_half = SymbolicExpr::number(
+                        m_val + p_normalized / 2.0);
+                    auto q_over_2s = SymbolicExpr::divide(
+                        q_expr, SymbolicExpr::multiply(num(2), s_expr));
+                    auto quad1_c_expr =
+                        sub(m_plus_p_half, q_over_2s)->simplify();
+                    auto quad2_c_expr =
+                        SymbolicExpr::add(
+                            m_plus_p_half, q_over_2s)->simplify();
+                    auto y_roots1 = solve_quadratic_internal(
+                        num(1), s_expr, quad1_c_expr);
+                    auto y_roots2 = solve_quadratic_internal(
+                        num(1), negate(s_expr), quad2_c_expr);
+
+                    std::vector<std::shared_ptr<SymbolicExpr>> results;
+                    for (const auto& y : y_roots1) {
+                        auto scaled_y =
+                            SymbolicExpr::multiply(scale_expr, y)->simplify();
+                        results.push_back(
+                            sub(scaled_y, shift_expr)->simplify());
+                    }
+                    for (const auto& y : y_roots2) {
+                        auto scaled_y =
+                            SymbolicExpr::multiply(scale_expr, y)->simplify();
+                        results.push_back(
+                            sub(scaled_y, shift_expr)->simplify());
+                    }
+                    return results;
+                }
+
+                const double s_val = std::sqrt(2.0 * m_val);
+                const double quad1_c_val =
+                    m_val + p_normalized / 2.0 -
+                    q_normalized / (2.0 * s_val);
+                const double quad2_c_val =
+                    m_val + p_normalized / 2.0 +
+                    q_normalized / (2.0 * s_val);
+                std::vector<std::shared_ptr<SymbolicExpr>> results;
+
+                const double disc1 =
+                    s_val * s_val - 4.0 * quad1_c_val;
+                if (disc1 >= 0.0) {
+                    const double sqrt_disc1 = std::sqrt(disc1);
+                    const double y1 = (-s_val + sqrt_disc1) / 2.0;
+                    const double y2 = (-s_val - sqrt_disc1) / 2.0;
+                    results.push_back(SymbolicExpr::number(
+                        y1 * root_scale - shift_val));
+                    results.push_back(SymbolicExpr::number(
+                        y2 * root_scale - shift_val));
+                } else {
+                    const double real_part =
+                        -s_val * root_scale / 2.0 - shift_val;
+                    const double imag_part =
+                        std::sqrt(-disc1) * root_scale / 2.0;
+                    auto i_unit = SymbolicExpr::sqrt(num(-1));
+                    results.push_back(SymbolicExpr::add(
+                        SymbolicExpr::number(real_part),
+                        SymbolicExpr::multiply(
+                            SymbolicExpr::number(imag_part),
+                            i_unit))->simplify());
+                    results.push_back(sub(
+                        SymbolicExpr::number(real_part),
+                        SymbolicExpr::multiply(
+                            SymbolicExpr::number(imag_part),
+                            i_unit))->simplify());
+                }
+
+                const double disc2 =
+                    s_val * s_val - 4.0 * quad2_c_val;
+                if (disc2 >= 0.0) {
+                    const double sqrt_disc2 = std::sqrt(disc2);
+                    const double y3 = (s_val + sqrt_disc2) / 2.0;
+                    const double y4 = (s_val - sqrt_disc2) / 2.0;
+                    results.push_back(SymbolicExpr::number(
+                        y3 * root_scale - shift_val));
+                    results.push_back(SymbolicExpr::number(
+                        y4 * root_scale - shift_val));
+                } else {
+                    const double real_part =
+                        s_val * root_scale / 2.0 - shift_val;
+                    const double imag_part =
+                        std::sqrt(-disc2) * root_scale / 2.0;
+                    auto i_unit = SymbolicExpr::sqrt(num(-1));
+                    results.push_back(SymbolicExpr::add(
+                        SymbolicExpr::number(real_part),
+                        SymbolicExpr::multiply(
+                            SymbolicExpr::number(imag_part),
+                            i_unit))->simplify());
+                    results.push_back(sub(
+                        SymbolicExpr::number(real_part),
+                        SymbolicExpr::multiply(
+                            SymbolicExpr::number(imag_part),
+                            i_unit))->simplify());
+                }
+                return results;
             }
         }
-
-        if (!found_m) return {};
-
-        if (m_val < 0) {
-
-            auto shift_expr = SymbolicExpr::number(shift_val);
-            auto m_expr = SymbolicExpr::number(m_val);
-            auto p_expr = SymbolicExpr::number(p_val);
-            auto q_expr = SymbolicExpr::number(q_val);
-            auto two_m_expr = SymbolicExpr::number(2.0 * m_val);
-            auto s_expr = SymbolicExpr::sqrt(two_m_expr);
-            auto p_half_expr = SymbolicExpr::number(p_val / 2.0);
-            auto m_plus_p_half = SymbolicExpr::number(m_val + p_val / 2.0);
-            auto q_over_2s = SymbolicExpr::divide(q_expr, SymbolicExpr::multiply(num(2), s_expr));
-
-            auto quad1_c_expr = sub(m_plus_p_half, q_over_2s)->simplify();
-            auto quad2_c_expr = SymbolicExpr::add(m_plus_p_half, q_over_2s)->simplify();
-
-            auto y_roots1 = solve_quadratic_internal(num(1), s_expr, quad1_c_expr);
-            auto neg_s_expr = negate(s_expr);
-            auto y_roots2 = solve_quadratic_internal(num(1), neg_s_expr, quad2_c_expr);
-
-            std::vector<std::shared_ptr<SymbolicExpr>> results;
-            for (const auto& y : y_roots1) {
-                results.push_back(sub(y, shift_expr)->simplify());
-            }
-            for (const auto& y : y_roots2) {
-                results.push_back(sub(y, shift_expr)->simplify());
-            }
-            return results;
-        }
-
-        double s_val = std::sqrt(2.0 * m_val);
-
-        double quad1_c_val = m_val + p_val / 2.0 - q_val / (2.0 * s_val);
-
-        double quad2_c_val = m_val + p_val / 2.0 + q_val / (2.0 * s_val);
-
-        std::vector<std::shared_ptr<SymbolicExpr>> results;
-
-        double disc1 = s_val * s_val - 4.0 * quad1_c_val;
-        if (disc1 >= -eps) {
-            double sqrt_disc1 = std::sqrt(std::max(0.0, disc1));
-            double y1 = (-s_val + sqrt_disc1) / 2.0;
-            double y2 = (-s_val - sqrt_disc1) / 2.0;
-            results.push_back(SymbolicExpr::number(y1 - shift_val));
-            results.push_back(SymbolicExpr::number(y2 - shift_val));
-        } else {
-
-            double real_part = -s_val / 2.0 - shift_val;
-            double imag_part = std::sqrt(-disc1) / 2.0;
-            auto i_unit = SymbolicExpr::sqrt(num(-1));
-            results.push_back(SymbolicExpr::add(
-                SymbolicExpr::number(real_part),
-                SymbolicExpr::multiply(SymbolicExpr::number(imag_part), i_unit))->simplify());
-            results.push_back(sub(
-                SymbolicExpr::number(real_part),
-                SymbolicExpr::multiply(SymbolicExpr::number(imag_part), i_unit))->simplify());
-        }
-
-        double disc2 = s_val * s_val - 4.0 * quad2_c_val;
-        if (disc2 >= -eps) {
-            double sqrt_disc2 = std::sqrt(std::max(0.0, disc2));
-            double y3 = (s_val + sqrt_disc2) / 2.0;
-            double y4 = (s_val - sqrt_disc2) / 2.0;
-            results.push_back(SymbolicExpr::number(y3 - shift_val));
-            results.push_back(SymbolicExpr::number(y4 - shift_val));
-        } else {
-
-            double real_part = s_val / 2.0 - shift_val;
-            double imag_part = std::sqrt(-disc2) / 2.0;
-            auto i_unit = SymbolicExpr::sqrt(num(-1));
-            results.push_back(SymbolicExpr::add(
-                SymbolicExpr::number(real_part),
-                SymbolicExpr::multiply(SymbolicExpr::number(imag_part), i_unit))->simplify());
-            results.push_back(sub(
-                SymbolicExpr::number(real_part),
-                SymbolicExpr::multiply(SymbolicExpr::number(imag_part), i_unit))->simplify());
-        }
-
-        return results;
-        }
+    }
     }
 
     auto a2 = SymbolicExpr::power(a, num(2));
@@ -646,9 +803,8 @@ static std::vector<BigInt> positive_divisors(const BigInt& n) {
     BigInt abs_n = n.Abs();
 
     BigInt i(1);
-    BigInt limit(1000);
 
-    while (i * i <= abs_n && i <= limit) {
+    while (i * i <= abs_n) {
         BigInt rem = abs_n % i;
         if (rem.is_zero()) {
             divs.push_back(i);
@@ -759,62 +915,18 @@ static bool convert_to_rational_poly(
         }
 
         auto simplified = coeff_expr->simplify();
-
-        if (lamina::detail::node(simplified)) {
-            struct VarCheck : public lamina::detail::RecursiveSymbolicVisitor {
-                bool found = false;
-                void visit(const NumberNode&) override {}
-                void visit(const VariableNode&) override { found = true; }
-                void visit(const AddNode& n) override { for (auto& op : n.operands()) { if (found) return; op->accept(*this); } }
-                void visit(const MultiplyNode& n) override { for (auto& op : n.operands()) { if (found) return; op->accept(*this); } }
-                void visit(const PowerNode& n) override { n.base()->accept(*this); if (!found) n.exponent()->accept(*this); }
-                void visit(const FunctionNode& n) override { for (auto& arg : n.arguments()) { if (found) return; arg->accept(*this); } }
-                void visit(const MatrixNode&) override {}
-                void visit(const RelationalNode& n) override { n.left()->accept(*this); if (!found) n.right()->accept(*this); }
-                void visit(const LogicalNode& n) override { n.left()->accept(*this); if (!found && n.right()) n.right()->accept(*this); }
-                void visit(const PiecewiseNode& n) override {
-                    for (const auto& branch : n.branches()) {
-                        if (found) return;
-                        branch.expression->accept(*this);
-                        if (!found) branch.condition->accept(*this);
-                    }
-                    if (!found && n.default_expr()) n.default_expr()->accept(*this);
-                }
-                void visit(const SummationNode& n) override { n.body()->accept(*this); if (!found) n.lower_bound()->accept(*this); if (!found) n.upper_bound()->accept(*this); }
-                void visit(const ProductNode& n) override { n.body()->accept(*this); if (!found) n.lower_bound()->accept(*this); if (!found) n.upper_bound()->accept(*this); }
-                void visit(const TransformNode& n) override { n.body()->accept(*this); }
-                void visit(const QuantifierNode& n) override { n.domain()->accept(*this); if (!found) n.predicate()->accept(*this); }
-                void visit(const SetBuilderNode& n) override { n.domain()->accept(*this); if (!found) n.predicate()->accept(*this); }
-                void visit(const ComplexNode& n) override { n.real()->accept(*this); if (!found) n.imag()->accept(*this); }
-                void visit(const FiniteSetNode& n) override { for (const auto& e : n.elements()) { if (found) return; e->accept(*this); } }
-                void visit(const IntervalNode& n) override { n.lower()->accept(*this); if (!found) n.upper()->accept(*this); }
-                void visit(const MembershipNode& n) override { n.element()->accept(*this); if (!found) n.set()->accept(*this); }
-                void visit(const QuantityNode& n) override { n.value()->accept(*this); }
-            } checker;
-            lamina::detail::node(simplified)->accept(checker);
-            if (checker.found) return false;
+        auto num_node = std::dynamic_pointer_cast<const NumberNode>(
+            LMCAS::detail::node(simplified));
+        if (!num_node) {
+            return false;
         }
-
-        if (auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
-            if (std::holds_alternative<Rational>(num_node->value())) {
-                out_poly.coeffs[i] = std::get<Rational>(num_node->value());
-            } else if (std::holds_alternative<BigInt>(num_node->value())) {
-                out_poly.coeffs[i] = Rational(std::get<BigInt>(num_node->value()));
-            } else {
-                out_poly.coeffs[i] = Rational::from_double(std::get<double>(num_node->value()));
-            }
-        } else if (simplified->is_zero()) {
-            out_poly.coeffs[i] = Rational(0);
-        } else if (simplified->is_one()) {
-            out_poly.coeffs[i] = Rational(1);
+        if (std::holds_alternative<Rational>(num_node->value())) {
+            out_poly.coeffs[i] = std::get<Rational>(num_node->value());
+        } else if (std::holds_alternative<BigInt>(num_node->value())) {
+            out_poly.coeffs[i] =
+                Rational(std::get<BigInt>(num_node->value()));
         } else {
-            ComputationContext context;
-            auto evaluated = evaluate_numeric(*simplified, NumericBindings{}, context);
-            if (!evaluated || !evaluated.value().is_finite() ||
-                !std::isfinite(evaluated.value().value)) {
-                return false;
-            }
-            out_poly.coeffs[i] = Rational::from_double(evaluated.value().value);
+            return false;
         }
     }
 
@@ -907,7 +1019,9 @@ std::vector<Rational> find_rational_roots(const Polynomial<Rational>& poly) {
         return roots;
     }
 
-    Polynomial<Rational> current = poly;
+    // Monic normalization gives a scale-independent rational polynomial.
+    // Clearing its denominators gives a primitive integer candidate polynomial.
+    Polynomial<Rational> current = poly.make_monic();
 
     while (current.degree() >= 1 && current.coeffs[0] == Rational(0)) {
         roots.push_back(Rational(0));
@@ -920,6 +1034,12 @@ std::vector<Rational> find_rational_roots(const Polynomial<Rational>& poly) {
 
         Rational a0 = current.coeffs[0];
         Rational an = current.lead_coeff();
+
+        // A linear remainder is solved directly by exact rational division.
+        if (current.degree() == 1) {
+            roots.push_back(-a0 / an);
+            break;
+        }
 
         if (a0 == Rational(0)) {
 

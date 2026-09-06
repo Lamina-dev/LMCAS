@@ -8,7 +8,7 @@
 #include "property_store.hpp"
 #include <queue>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -35,9 +35,9 @@ RelationOp combine_ops(RelationOp op1, RelationOp op2) {
  * @brief Check structural equality of two expression roots.
  */
 bool expr_equals(const SymbolicExpr& a, const SymbolicExpr& b) {
-    if (!lamina::detail::node(a) && !lamina::detail::node(b)) return true;
-    if (!lamina::detail::node(a) || !lamina::detail::node(b)) return false;
-    return lamina::detail::node(a)->equals(*lamina::detail::node(b));
+    if (!LMCAS::detail::node(a) && !LMCAS::detail::node(b)) return true;
+    if (!LMCAS::detail::node(a) || !LMCAS::detail::node(b)) return false;
+    return LMCAS::detail::node(a)->equals(*LMCAS::detail::node(b));
 }
 
 RelationStoreResult require_sign_declaration(
@@ -57,14 +57,14 @@ RelationStoreResult RelationStore::add_relation_unchecked(
     // Store the relation regardless of pattern
     relations_.push_back(Relation{lhs, rhs, op});
 
-    if (!lamina::detail::node(lhs) || !lamina::detail::node(rhs)) {
+    if (!LMCAS::detail::node(lhs) || !LMCAS::detail::node(rhs)) {
         return RelationStoreResult::success();
     }
 
     // Detect simple "variable op 0" pattern for sign property derivation.
     // LHS must be a single VariableNode and RHS must be a NumberNode with value 0.
-    auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(lhs));
-    auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(rhs));
+    auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(lhs));
+    auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(rhs));
 
     if (var_node && num_node && num_node->is_zero()) {
         // Map operator to sign property
@@ -119,11 +119,11 @@ RelationStoreResult RelationStore::add_relation_checked(
     const SymbolicExpr& rhs,
     RelationOp op,
     PropertyStore& prop_store) {
-    if (!lamina::detail::node(lhs)) {
+    if (!LMCAS::detail::node(lhs)) {
         return RelationStoreResult::failure(
             CasErrc::InvalidArgument, "relation lhs must not be null", "add_relation");
     }
-    if (!lamina::detail::node(rhs)) {
+    if (!LMCAS::detail::node(rhs)) {
         return RelationStoreResult::failure(
             CasErrc::InvalidArgument, "relation rhs must not be null", "add_relation");
     }
@@ -188,13 +188,13 @@ RelationStoreResult RelationStore::compute_transitive_closure(
                     ++deductions;
 
                     // Derive sign properties for the new deduced relation
-                    if (lamina::detail::node(deduced_lhs) && lamina::detail::node(deduced_rhs)) {
+                    if (LMCAS::detail::node(deduced_lhs) && LMCAS::detail::node(deduced_rhs)) {
                         auto reversed = detect_reversed_pattern(
                             deduced_lhs, deduced_rhs, combined, prop_store);
                         if (!reversed) return reversed;
                         // Also check "variable op 0" pattern
-                        auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(deduced_lhs));
-                        auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(deduced_rhs));
+                        auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(deduced_lhs));
+                        auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(deduced_rhs));
                         if (var_node && num_node && num_node->is_zero()) {
                             switch (combined) {
                                 case RelationOp::GT: {
@@ -237,13 +237,13 @@ RelationStoreResult RelationStore::compute_transitive_closure(
                     ++deductions;
 
                     // Derive sign properties for the new deduced relation
-                    if (lamina::detail::node(deduced_lhs) && lamina::detail::node(deduced_rhs)) {
+                    if (LMCAS::detail::node(deduced_lhs) && LMCAS::detail::node(deduced_rhs)) {
                         auto reversed = detect_reversed_pattern(
                             deduced_lhs, deduced_rhs, combined, prop_store);
                         if (!reversed) return reversed;
                         // Also check "variable op 0" pattern
-                        auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(deduced_lhs));
-                        auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(deduced_rhs));
+                        auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(deduced_lhs));
+                        auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(deduced_rhs));
                         if (var_node && num_node && num_node->is_zero()) {
                             switch (combined) {
                                 case RelationOp::GT: {
@@ -277,13 +277,13 @@ RelationStoreResult RelationStore::detect_reversed_pattern(
     const SymbolicExpr& lhs, const SymbolicExpr& rhs,
     RelationOp op, PropertyStore& prop_store) {
     // LHS must be a NumberNode with value 0
-    auto num_node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(lhs));
+    auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(lhs));
     if (!num_node || !num_node->is_zero()) {
         return RelationStoreResult::success();
     }
 
     // RHS must be a single VariableNode
-    auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(rhs));
+    auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rhs));
     if (!var_node) {
         return RelationStoreResult::success();
     }
@@ -328,19 +328,19 @@ bool RelationStore::has_relation(const SymbolicExpr& lhs, const SymbolicExpr& rh
             continue;
         }
         // Compare LHS structurally
-        if (!lamina::detail::node(rel.lhs) && !lamina::detail::node(lhs)) {
+        if (!LMCAS::detail::node(rel.lhs) && !LMCAS::detail::node(lhs)) {
             // Both null — match on LHS
-        } else if (!lamina::detail::node(rel.lhs) || !lamina::detail::node(lhs)) {
+        } else if (!LMCAS::detail::node(rel.lhs) || !LMCAS::detail::node(lhs)) {
             continue;  // One null, one not — no match
-        } else if (!lamina::detail::node(rel.lhs)->equals(*lamina::detail::node(lhs))) {
+        } else if (!LMCAS::detail::node(rel.lhs)->equals(*LMCAS::detail::node(lhs))) {
             continue;
         }
         // Compare RHS structurally
-        if (!lamina::detail::node(rel.rhs) && !lamina::detail::node(rhs)) {
+        if (!LMCAS::detail::node(rel.rhs) && !LMCAS::detail::node(rhs)) {
             return true;  // Both null — full match
-        } else if (!lamina::detail::node(rel.rhs) || !lamina::detail::node(rhs)) {
+        } else if (!LMCAS::detail::node(rel.rhs) || !LMCAS::detail::node(rhs)) {
             continue;  // One null, one not — no match
-        } else if (lamina::detail::node(rel.rhs)->equals(*lamina::detail::node(rhs))) {
+        } else if (LMCAS::detail::node(rel.rhs)->equals(*LMCAS::detail::node(rhs))) {
             return true;
         }
     }
@@ -351,4 +351,4 @@ void RelationStore::clear() {
     relations_.clear();
 }
 
-} // namespace lamina
+} // namespace LMCAS

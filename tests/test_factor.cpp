@@ -1,5 +1,7 @@
 #include "test_common.hpp"
 
+using namespace LMCAS;
+
 bool str_contains(const std::string& s, const std::string& sub) {
     return s.find(sub) != std::string::npos;
 }
@@ -16,7 +18,7 @@ int main() {
             auto t2 = SymbolicExpr::multiply(two, y);
             auto expr1 = SymbolicExpr::add(t1, t2);
 
-            auto factored1 = lamina::detail::propagate_result(expr1->factor_checked());
+            auto factored1 = expr1->factor_checked().value();
             std::cout << "  Factored: " << factored1->to_string() << std::endl;
 
             std::string s = factored1->to_string();
@@ -34,7 +36,7 @@ int main() {
 
             auto expr2 = SymbolicExpr::add(x2, SymbolicExpr::add(x5, n6));
 
-            auto factored2 = lamina::detail::propagate_result(expr2->factor_checked());
+            auto factored2 = expr2->factor_checked().value();
             std::cout << "  Factored: " << factored2->to_string() << std::endl;
 
             std::string s = factored2->to_string();
@@ -49,7 +51,7 @@ int main() {
             auto n4 = SymbolicExpr::number(-4);
             auto expr3 = SymbolicExpr::add(x2, n4);
 
-            auto factored3 = lamina::detail::propagate_result(expr3->factor_checked());
+            auto factored3 = expr3->factor_checked().value();
             std::cout << "  Factored: " << factored3->to_string() << std::endl;
 
             std::string s = factored3->to_string();
@@ -59,12 +61,12 @@ int main() {
 
         TEST_CASE("Factor Checked Contract");
         {
-            lamina::ResourceLimits limits;
+            LMCAS::ResourceLimits limits;
             limits.max_steps = 0;
-            lamina::ComputationContext context(limits);
+            LMCAS::ComputationContext context(limits);
             auto limited = x->factor_checked(context);
             EXPECT_TRUE(!limited &&
-                            limited.error().code == lamina::CasErrc::ResourceLimit,
+                            limited.error().code == LMCAS::CasErrc::ResourceLimit,
                         "factor_checked preserves an exhausted budget");
         }
     } catch (const std::exception& e) {

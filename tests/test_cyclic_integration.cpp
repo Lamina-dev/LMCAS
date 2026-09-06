@@ -6,15 +6,15 @@
 #include "symbolic_ast.hpp"
 #include "test_common.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 bool test_cyclic_ibp() {
     std::cout << "Test Case: Cyclic IBP (e^x * sin(x))" << std::endl;
 
     auto x = *(SymbolicExpr::variable("x"));
-    auto ex = *(SymbolicExpr::exp(lamina::detail::make_expression_ptr(x)));
-    auto sinx = *(SymbolicExpr::sin(lamina::detail::make_expression_ptr(x)));
-    auto expr = *(SymbolicExpr::multiply(lamina::detail::make_expression_ptr(ex), lamina::detail::make_expression_ptr(sinx)));
+    auto ex = *(SymbolicExpr::exp(LMCAS::detail::make_expression_ptr(x)));
+    auto sinx = *(SymbolicExpr::sin(LMCAS::detail::make_expression_ptr(x)));
+    auto expr = *(SymbolicExpr::multiply(LMCAS::detail::make_expression_ptr(ex), LMCAS::detail::make_expression_ptr(sinx)));
 
     std::cout << "Integration of: " << expr.to_string() << std::endl;
     Integrator integrator;
@@ -28,7 +28,7 @@ bool test_cyclic_ibp() {
     auto diff = result.value().differentiate("x")->simplify();
     std::cout << "Derivative of result: " << diff->to_string() << std::endl;
 
-    auto diff_check = test_normalized_delta(diff, lamina::detail::make_expression_ptr(expr));
+    auto diff_check = test_normalized_delta(diff, LMCAS::detail::make_expression_ptr(expr));
 
     if (diff_check && diff_check->is_zero()) {
         std::cout << "[PASS]" << std::endl;

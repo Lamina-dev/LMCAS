@@ -3,20 +3,26 @@
  * @brief 运行时值类型 Value,支持数值,符号,容器类型.
  */
 #pragma once
-#include "lamina_export.hpp"
+#include "lmcas_export.hpp"
 #include "bigint.hpp"
 #include "irrational.hpp"
 #include "rational.hpp"
 #include "symbolic.hpp"
+#include "result.hpp"
 #include "numeric_evaluation.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
+#include <cmath>
 #include <iostream>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 #include <sstream>
+
+namespace LMCAS {
 
 /** @brief 运行时统一值类型,支持数值,符号,容器等类型的动态表示 */
 class Value final {
@@ -28,18 +34,28 @@ public:
         Infinity, Array, Matrix,
         String
     };
+private:
     Type type;  ///< 当前值的类型
 
+public:
     /** @brief 内部存储的 variant 类型 */
     using DataType = std::variant<
         std::nullptr_t,
         int, lmmc_real_t,
-        ::BigInt, ::Rational, ::Irrational,
+        ::LMCAS::BigInt, ::LMCAS::Rational, ::LMCAS::Irrational,
         std::shared_ptr<SymbolicExpr>,
         std::vector<Value>,
         std::vector<std::vector<Value>>>;
 
+private:
     DataType data;  ///< 实际存储的数据
+
+public:
+    /** @brief 返回只读类型标记。 */
+    Type kind() const noexcept { return type; }
+
+    /** @brief 返回只读底层存储，调用方不能破坏类型不变量。 */
+    const DataType& storage() const noexcept { return data; }
 
     ~Value() = default;
 
@@ -49,6 +65,9 @@ public:
     Value(std::nullptr_t) : type(Type::Null), data(std::in_place_index<0>, nullptr) {}
     Value(int i) : type(Type::Int), data(i) {}
     Value(lmmc_real_t f) : type(Type::Float), data(f) {
+        if (std::isnan(f)) {
+            throw std::invalid_argument("Value: floating-point value must not be NaN");
+        }
         int res;
         lmmc_isinf(f, &res);
         if (res) {
@@ -57,10 +76,11 @@ public:
             this->data = DataType(std::in_place_index<1>, res);
         }
     }
-    Value(const ::BigInt& bi) : type(Type::BigInt), data(bi) {}
-    Value(const ::Rational& r) : type(Type::Rational), data(r) {}
-    Value(const ::Irrational& ir) : type(Type::Irrational), data(ir) {}
-    Value(const std::shared_ptr<SymbolicExpr>& sym) : type(Type::Symbolic), data(sym) {}
+    Value(const ::LMCAS::BigInt& bi) : type(Type::BigInt), data(bi) {}
+    Value(const ::LMCAS::Rational& r) : type(Type::Rational), data(r) {}
+    Value(const ::LMCAS::Irrational& ir) : type(Type::Irrational), data(ir) {}
+    Value(const std::shared_ptr<SymbolicExpr>& sym)
+        : type(Type::Symbolic), data(require_symbolic(sym)) {}
     Value(const std::vector<Value>& arr) {
         bool is_matrix = !arr.empty() && arr[0].is_array();
         if (is_matrix) {
@@ -75,13 +95,14 @@ public:
                 }
             }
             type = Type::Matrix;
-            data = matrix;
+            data = validate_matrix(std::move(matrix));
         } else {
             type = Type::Array;
             data = arr;
         }
     }
-    Value(const std::vector<std::vector<Value>>& mat) : type(Type::Matrix), data(mat) {}
+    Value(const std::vector<std::vector<Value>>& mat)
+        : type(Type::Matrix), data(validate_matrix(mat)) {}
 
     /// 字符串使用独立的 Type::String 标记,与 Null 保持类型区分.
     Value(const std::string& s) : type(Type::String), data(nullptr), _str_cache(s) {}
@@ -121,111 +142,205 @@ public:
         return false;
     }
 
-    /**
-     * @brief 将值转换为浮点数
-     * @return 浮点数近似值,非数值类型返回 0.0
-     */
-    lmmc_real_t as_number() const {
+    /** @brief Checked conversion to a floating-point value. */
+    LMCAS::Result<lmmc_real_t> as_number_checked() const {
         if (type == Type::Infinity) {
             lmmc_real_t inf;
             lmmc_inf(&inf);
-            auto sign = std::get_if<int>(&data);
-            return (sign && *sign > 0) ? inf : -inf;
+            const auto sign = std::get_if<int>(&data);
+            return LMCAS::Result<lmmc_real_t>::success(
+                (sign && *sign > 0) ? inf : -inf);
         }
-        if (type == Type::Int) return static_cast<lmmc_real_t>(std::get<int>(data));
-        if (type == Type::Float) return std::get<lmmc_real_t>(data);
+        if (type == Type::Int) {
+            return LMCAS::Result<lmmc_real_t>::success(
+                static_cast<lmmc_real_t>(std::get<int>(data)));
+        }
+        if (type == Type::Float) {
+            return LMCAS::Result<lmmc_real_t>::success(
+                std::get<lmmc_real_t>(data));
+        }
         if (type == Type::BigInt) {
-            /// BigInt::to_double() 直接保留大整数的双精度近似.
-            return std::get<::BigInt>(data).to_double();
+            return LMCAS::Result<lmmc_real_t>::success(
+                std::get<::LMCAS::BigInt>(data).to_double());
         }
         if (type == Type::Rational) {
-            return std::get<::Rational>(data).to_double();
+            return LMCAS::Result<lmmc_real_t>::success(
+                std::get<::LMCAS::Rational>(data).to_double());
         }
         if (type == Type::Irrational) {
-            return std::get<::Irrational>(data).to_double();
+            return LMCAS::Result<lmmc_real_t>::success(
+                std::get<::LMCAS::Irrational>(data).to_double());
         }
         if (type == Type::Symbolic) {
-            const auto& expr = std::get<std::shared_ptr<SymbolicExpr>>(data);
-            if (!expr) {
-                throw std::runtime_error(
-                    "numeric evaluation failed: symbolic value is null");
+            const auto& expression =
+                std::get<std::shared_ptr<SymbolicExpr>>(data);
+            auto evaluated = LMCAS::evaluate_numeric(*expression);
+            if (!evaluated) {
+                return LMCAS::Result<lmmc_real_t>::failure(
+                    evaluated.error());
             }
-            auto evaluated = lamina::evaluate_numeric(*expr);
-            if (!evaluated || !evaluated.value().is_finite() ||
+            if (!evaluated.value().is_finite() ||
                 !std::isfinite(evaluated.value().value)) {
-                throw std::runtime_error(
-                    "numeric evaluation failed: " +
-                    (evaluated ? std::string("non-finite result")
-                               : evaluated.error().message));
+                return LMCAS::Result<lmmc_real_t>::failure(
+                    LMCAS::CasErrc::NumericFailure,
+                    "symbolic value did not evaluate to a finite number",
+                    "Value::as_number_checked");
             }
-            return static_cast<lmmc_real_t>(evaluated.value().value);
+            return LMCAS::Result<lmmc_real_t>::success(
+                static_cast<lmmc_real_t>(evaluated.value().value));
+        }
+        return LMCAS::Result<lmmc_real_t>::failure(
+            LMCAS::CasErrc::InvalidArgument,
+            "value is not numeric", "Value::as_number_checked");
+    }
+
+    /**
+     * @brief Legacy numeric conversion.
+     * @return Numeric value, or 0.0 for incompatible non-symbolic values.
+     */
+    lmmc_real_t as_number() const {
+        auto result = as_number_checked();
+        if (result) return result.value();
+        if (type == Type::Symbolic) {
+            throw std::runtime_error(
+                "numeric evaluation failed: " + result.error().message);
         }
         return 0.0;
     }
 
-    /**
-     * @brief 将值转换为有理数
-     * @return 有理数表示,非数值类型返回 0
-     */
-    ::Rational as_rational() const {
-        if (type == Type::Rational) return std::get<::Rational>(data);
-        if (type == Type::Int) return ::Rational(std::get<int>(data));
-        if (type == Type::Float) return ::Rational::from_double(std::get<lmmc_real_t>(data));
+    /** @brief Checked conversion to a rational value. */
+    LMCAS::Result<::LMCAS::Rational> as_rational_checked() const {
+        if (type == Type::Rational) {
+            return LMCAS::Result<::LMCAS::Rational>::success(
+                std::get<::LMCAS::Rational>(data));
+        }
+        if (type == Type::Int) {
+            return LMCAS::Result<::LMCAS::Rational>::success(
+                ::LMCAS::Rational(std::get<int>(data)));
+        }
+        if (type == Type::Float) {
+            return LMCAS::Result<::LMCAS::Rational>::success(
+                ::LMCAS::Rational::from_double(std::get<lmmc_real_t>(data)));
+        }
         if (type == Type::BigInt) {
-            /// 直接从 BigInt 构造 Rational,保留全部整数位.
-            return ::Rational(std::get<::BigInt>(data));
+            return LMCAS::Result<::LMCAS::Rational>::success(
+                ::LMCAS::Rational(std::get<::LMCAS::BigInt>(data)));
         }
         if (type == Type::Irrational) {
-            return ::Rational::from_double(std::get<::Irrational>(data).to_double());
+            return LMCAS::Result<::LMCAS::Rational>::success(
+                ::LMCAS::Rational::from_double(
+                    std::get<::LMCAS::Irrational>(data).to_double()));
         }
-        return ::Rational(0);
+        return LMCAS::Result<::LMCAS::Rational>::failure(
+            LMCAS::CasErrc::InvalidArgument,
+            "value cannot be represented as a rational",
+            "Value::as_rational_checked");
     }
 
-    /**
-     * @brief 将值转换为无理数表示
-     * @return 无理数对象
-     */
-    ::Irrational as_irrational() const {
-        if (type == Type::Irrational) return std::get<::Irrational>(data);
-        if (type == Type::Int) return ::Irrational::constant(std::get<int>(data));
-        if (type == Type::Float) return ::Irrational::constant(std::get<lmmc_real_t>(data));
-        if (type == Type::Rational) return ::Irrational::constant(std::get<::Rational>(data).to_double());
+    /** @brief Legacy rational conversion; incompatible values map to zero. */
+    ::LMCAS::Rational as_rational() const {
+        auto result = as_rational_checked();
+        return result ? result.value() : ::LMCAS::Rational(0);
+    }
+
+    /** @brief Checked conversion to an irrational-value wrapper. */
+    LMCAS::Result<::LMCAS::Irrational> as_irrational_checked() const {
+        if (type == Type::Irrational) {
+            return LMCAS::Result<::LMCAS::Irrational>::success(
+                std::get<::LMCAS::Irrational>(data));
+        }
+        if (type == Type::Int) {
+            return LMCAS::Result<::LMCAS::Irrational>::success(
+                ::LMCAS::Irrational::constant(std::get<int>(data)));
+        }
+        if (type == Type::Float) {
+            return LMCAS::Result<::LMCAS::Irrational>::success(
+                ::LMCAS::Irrational::constant(std::get<lmmc_real_t>(data)));
+        }
+        if (type == Type::Rational) {
+            return LMCAS::Result<::LMCAS::Irrational>::success(
+                ::LMCAS::Irrational::constant(
+                    std::get<::LMCAS::Rational>(data).to_double()));
+        }
         if (type == Type::BigInt) {
-            /// to_double() 直接生成大整数的浮点近似,保留超出 int 范围的数量级.
-            return ::Irrational::constant(std::get<::BigInt>(data).to_double());
+            return LMCAS::Result<::LMCAS::Irrational>::success(
+                ::LMCAS::Irrational::constant(
+                    std::get<::LMCAS::BigInt>(data).to_double()));
         }
-        return ::Irrational::constant(0);
+        return LMCAS::Result<::LMCAS::Irrational>::failure(
+            LMCAS::CasErrc::InvalidArgument,
+            "value cannot be represented as an irrational wrapper",
+            "Value::as_irrational_checked");
     }
 
-    /**
-     * @brief 将值转换为符号表达式
-     * @return 符号表达式智能指针,不可转换时返回数值 0
-     */
-    std::shared_ptr<SymbolicExpr> as_symbolic() const {
+    /** @brief Legacy irrational conversion; incompatible values map to zero. */
+    ::LMCAS::Irrational as_irrational() const {
+        auto result = as_irrational_checked();
+        return result ? result.value() : ::LMCAS::Irrational::constant(0);
+    }
+
+    /** @brief Checked conversion to a symbolic expression. */
+    LMCAS::Result<std::shared_ptr<SymbolicExpr>> as_symbolic_checked() const {
         if (type == Type::Infinity) {
-            auto sign = std::get_if<int>(&data);
-            return SymbolicExpr::infinity(sign ? *sign : 1);
+            const auto sign = std::get_if<int>(&data);
+            return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::success(
+                SymbolicExpr::infinity(sign ? *sign : 1));
         }
-        if (type == Type::Symbolic) return std::get<std::shared_ptr<SymbolicExpr>>(data);
-        if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) {
-            return SymbolicExpr::number(as_rational());
+        if (type == Type::Symbolic) {
+            return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::success(
+                std::get<std::shared_ptr<SymbolicExpr>>(data));
+        }
+        if (type == Type::Float) {
+            return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::success(
+                SymbolicExpr::number(std::get<lmmc_real_t>(data)));
+        }
+        if (type == Type::Int || type == Type::Rational ||
+            type == Type::BigInt) {
+            auto rational = as_rational_checked();
+            if (!rational) {
+                return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::failure(
+                    rational.error());
+            }
+            return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::success(
+                SymbolicExpr::number(rational.value()));
         }
         if (type == Type::Irrational) {
-            return as_irrational().to_symbolic();
+            return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::success(
+                std::get<::LMCAS::Irrational>(data).to_symbolic());
         }
         if (type == Type::Matrix) {
-            const auto& mat = std::get<std::vector<std::vector<Value>>>(data);
-            std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> sym_mat;
-            for (const auto& row : mat) {
-                std::vector<std::shared_ptr<SymbolicExpr>> sym_row;
-                for (const auto& val : row) {
-                    sym_row.push_back(val.as_symbolic());
+            const auto& matrix =
+                std::get<std::vector<std::vector<Value>>>(data);
+            std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>
+                symbolic_matrix;
+            symbolic_matrix.reserve(matrix.size());
+            for (const auto& row : matrix) {
+                std::vector<std::shared_ptr<SymbolicExpr>> symbolic_row;
+                symbolic_row.reserve(row.size());
+                for (const auto& value : row) {
+                    auto symbolic = value.as_symbolic_checked();
+                    if (!symbolic) {
+                        return LMCAS::Result<
+                            std::shared_ptr<SymbolicExpr>>::failure(
+                                symbolic.error());
+                    }
+                    symbolic_row.push_back(std::move(symbolic.value()));
                 }
-                sym_mat.push_back(sym_row);
+                symbolic_matrix.push_back(std::move(symbolic_row));
             }
-            return SymbolicExpr::matrix(sym_mat);
+            return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::success(
+                SymbolicExpr::matrix(symbolic_matrix));
         }
-        return SymbolicExpr::number(0);
+        return LMCAS::Result<std::shared_ptr<SymbolicExpr>>::failure(
+            LMCAS::CasErrc::InvalidArgument,
+            "value cannot be converted to a symbolic expression",
+            "Value::as_symbolic_checked");
+    }
+
+    /** @brief Legacy symbolic conversion; incompatible values map to zero. */
+    std::shared_ptr<SymbolicExpr> as_symbolic() const {
+        auto result = as_symbolic_checked();
+        return result ? result.value() : SymbolicExpr::number(0);
     }
 
     /**
@@ -233,8 +348,9 @@ public:
      * @return 若可转换则返回 true
      */
     bool as_symbolic_compatible() const {
-        if (type == Type::Symbolic) return true;
-        if (type == Type::Int || type == Type::Float || type == Type::Rational || type == Type::BigInt) return true;
+        if (type == Type::Symbolic || type == Type::Infinity) return true;
+        if (type == Type::Int || type == Type::Float ||
+            type == Type::Rational || type == Type::BigInt) return true;
         if (type == Type::Irrational) return true;
         if (type == Type::Matrix) return true;
         return false;
@@ -289,13 +405,17 @@ public:
                 return res;
             }
             case Type::BigInt:
-                return std::get<::BigInt>(data).to_string();
+                return std::get<::LMCAS::BigInt>(data).to_string();
             case Type::Rational:
-                return std::get<::Rational>(data).to_string();
+                return std::get<::LMCAS::Rational>(data).to_string();
             case Type::Irrational:
-                return std::get<::Irrational>(data).to_string();
-            case Type::Symbolic:
-                return std::get<std::shared_ptr<SymbolicExpr>>(data)->to_string();
+                return std::get<::LMCAS::Irrational>(data).to_string();
+            case Type::Symbolic: {
+                const auto& expression =
+                    std::get<std::shared_ptr<SymbolicExpr>>(data);
+                if (!expression) return "<invalid-symbolic>";
+                return expression->to_string();
+            }
             default:
                 return "<unknown>";
         }
@@ -342,75 +462,148 @@ public:
         }, data);
     }
 
-    /**
-     * @brief 向量加法
-     * @param other 另一个向量
-     * @return 逐元素相加的结果向量
-     */
+    /** @brief Checked element-wise vector addition. */
+    LMCAS::Result<Value> vector_add_checked(const Value& other) const {
+        if (!is_array() || !other.is_array()) {
+            return LMCAS::Result<Value>::failure(
+                LMCAS::CasErrc::InvalidArgument,
+                "vector addition requires two arrays",
+                "Value::vector_add_checked");
+        }
+        const auto& lhs = std::get<std::vector<Value>>(data);
+        const auto& rhs = std::get<std::vector<Value>>(other.data);
+        if (lhs.size() != rhs.size()) {
+            return LMCAS::Result<Value>::failure(
+                LMCAS::CasErrc::DimensionMismatch,
+                "vector lengths do not match",
+                "Value::vector_add_checked");
+        }
+        std::vector<Value> values;
+        values.reserve(lhs.size());
+        for (size_t index = 0; index < lhs.size(); ++index) {
+            auto left = lhs[index].as_number_checked();
+            if (!left) return LMCAS::Result<Value>::failure(left.error());
+            auto right = rhs[index].as_number_checked();
+            if (!right) return LMCAS::Result<Value>::failure(right.error());
+            values.emplace_back(left.value() + right.value());
+        }
+        return LMCAS::Result<Value>::success(Value(values));
+    }
+
+    /** @brief Legacy vector addition; failures map to Null. */
     Value vector_add(const Value& other) const {
-        if (!is_array() || !other.is_array()) return Value();
-        const auto& a = std::get<std::vector<Value>>(data);
-        const auto& b = std::get<std::vector<Value>>(other.data);
-        if (a.size() != b.size()) return Value();
-        std::vector<Value> result;
-        for (size_t i = 0; i < a.size(); ++i) {
-            if (a[i].is_numeric() && b[i].is_numeric()) {
-                result.push_back(Value(a[i].as_number() + b[i].as_number()));
-            } else {
-                return Value();
-            }
-        }
-        return Value(result);
+        auto result = vector_add_checked(other);
+        return result ? std::move(result.value()) : Value();
     }
 
-    /**
-     * @brief 向量点积
-     * @param other 另一个向量
-     * @return 点积标量值
-     */
+    /** @brief Checked vector dot product. */
+    LMCAS::Result<Value> dot_product_checked(const Value& other) const {
+        if (!is_array() || !other.is_array()) {
+            return LMCAS::Result<Value>::failure(
+                LMCAS::CasErrc::InvalidArgument,
+                "dot product requires two arrays",
+                "Value::dot_product_checked");
+        }
+        const auto& lhs = std::get<std::vector<Value>>(data);
+        const auto& rhs = std::get<std::vector<Value>>(other.data);
+        if (lhs.size() != rhs.size()) {
+            return LMCAS::Result<Value>::failure(
+                LMCAS::CasErrc::DimensionMismatch,
+                "vector lengths do not match",
+                "Value::dot_product_checked");
+        }
+        lmmc_real_t sum = 0.0;
+        for (size_t index = 0; index < lhs.size(); ++index) {
+            auto left = lhs[index].as_number_checked();
+            if (!left) return LMCAS::Result<Value>::failure(left.error());
+            auto right = rhs[index].as_number_checked();
+            if (!right) return LMCAS::Result<Value>::failure(right.error());
+            sum += left.value() * right.value();
+        }
+        return LMCAS::Result<Value>::success(Value(sum));
+    }
+
+    /** @brief Legacy dot product; failures map to Null. */
     Value dot_product(const Value& other) const {
-        if (!is_array() || !other.is_array()) return Value();
-        const auto& a = std::get<std::vector<Value>>(data);
-        const auto& b = std::get<std::vector<Value>>(other.data);
-        if (a.size() != b.size()) return Value();
-        lmmc_real_t result = 0.0;
-        for (size_t i = 0; i < a.size(); ++i) {
-            if (a[i].is_numeric() && b[i].is_numeric()) {
-                result += a[i].as_number() * b[i].as_number();
-            } else {
-                return Value();
-            }
-        }
-        return Value(result);
+        auto result = dot_product_checked(other);
+        return result ? std::move(result.value()) : Value();
     }
 
-    /**
-     * @brief 矩阵乘法
-     * @param other 右矩阵
-     * @return 乘积矩阵
-     */
-    Value matrix_multiply(const Value& other) const {
-        if (!is_matrix() || !other.is_matrix()) return Value();
-        const auto& a = std::get<std::vector<std::vector<Value>>>(data);
-        const auto& b = std::get<std::vector<std::vector<Value>>>(other.data);
-        if (a.empty() || b.empty() || a[0].size() != b.size()) return Value();
-        size_t rows = a.size();
-        size_t cols = b[0].size();
-        size_t inner = a[0].size();
-        std::vector<std::vector<Value>> result(rows, std::vector<Value>(cols, Value(0.0)));
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
+    /** @brief Checked matrix multiplication. */
+    LMCAS::Result<Value> matrix_multiply_checked(
+        const Value& other) const {
+        if (!is_matrix() || !other.is_matrix()) {
+            return LMCAS::Result<Value>::failure(
+                LMCAS::CasErrc::InvalidArgument,
+                "matrix multiplication requires two matrices",
+                "Value::matrix_multiply_checked");
+        }
+        const auto& lhs =
+            std::get<std::vector<std::vector<Value>>>(data);
+        const auto& rhs =
+            std::get<std::vector<std::vector<Value>>>(other.data);
+        if (lhs.empty() || rhs.empty() ||
+            lhs.front().size() != rhs.size()) {
+            return LMCAS::Result<Value>::failure(
+                LMCAS::CasErrc::DimensionMismatch,
+                "matrix dimensions are not multiplicatively compatible",
+                "Value::matrix_multiply_checked");
+        }
+        const size_t rows = lhs.size();
+        const size_t columns = rhs.front().size();
+        const size_t inner = lhs.front().size();
+        std::vector<std::vector<Value>> values(
+            rows, std::vector<Value>(columns, Value(0.0)));
+        for (size_t row = 0; row < rows; ++row) {
+            for (size_t column = 0; column < columns; ++column) {
                 lmmc_real_t sum = 0.0;
-                for (size_t k = 0; k < inner; ++k) {
-                    if (!a[i][k].is_numeric() || !b[k][j].is_numeric()) return Value();
-                    sum += a[i][k].as_number() * b[k][j].as_number();
+                for (size_t index = 0; index < inner; ++index) {
+                    auto left = lhs[row][index].as_number_checked();
+                    if (!left) {
+                        return LMCAS::Result<Value>::failure(left.error());
+                    }
+                    auto right = rhs[index][column].as_number_checked();
+                    if (!right) {
+                        return LMCAS::Result<Value>::failure(right.error());
+                    }
+                    sum += left.value() * right.value();
                 }
-                result[i][j] = Value(sum);
+                values[row][column] = Value(sum);
             }
         }
-        return Value(result);
+        return LMCAS::Result<Value>::success(Value(values));
+    }
+
+    /** @brief Legacy matrix multiplication; failures map to Null. */
+    Value matrix_multiply(const Value& other) const {
+        auto result = matrix_multiply_checked(other);
+        return result ? std::move(result.value()) : Value();
     }
 
 private:
+    static std::shared_ptr<SymbolicExpr> require_symbolic(
+        const std::shared_ptr<SymbolicExpr>& expression) {
+        if (!expression) {
+            throw std::invalid_argument(
+                "Value: symbolic expression must not be null");
+        }
+        return expression;
+    }
+
+    static std::vector<std::vector<Value>> validate_matrix(
+        std::vector<std::vector<Value>> matrix) {
+        if (matrix.empty()) return matrix;
+        const size_t columns = matrix.front().size();
+        for (const auto& row : matrix) {
+            if (row.size() != columns) {
+                throw std::invalid_argument(
+                    "Value: all matrix rows must have the same number of columns");
+            }
+        }
+        return matrix;
+    }
+
     std::string _str_cache;  ///< 字符串构造时的缓存(兼容旧测试)
 };
+
+} // namespace LMCAS

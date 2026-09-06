@@ -1,6 +1,6 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 static bool validate_integration_steps(const std::vector<IntegrationStep>& steps) {
     if (steps.empty()) return false;
@@ -34,7 +34,7 @@ Result<SymbolicExpr> integrate_multiple_checked(
             "integrate.multiple");
     }
 
-    auto current = lamina::detail::make_expression_ptr(integrand);
+    auto current = LMCAS::detail::make_expression_ptr(integrand);
 
     for (const auto& step : steps) {
         if (!current) {
@@ -49,7 +49,7 @@ Result<SymbolicExpr> integrate_multiple_checked(
         if (!definite) {
             auto result = integrator.integrate_checked(*current, step.variable, context);
             if (!result) return result;
-            current = lamina::detail::make_expression_ptr(result.value());
+            current = LMCAS::detail::make_expression_ptr(result.value());
         } else {
             if (!Integrator::depends_on(*current, step.variable)) {
                 auto diff = sym_sub(*step.upper, *step.lower);
@@ -60,7 +60,7 @@ Result<SymbolicExpr> integrate_multiple_checked(
                 auto result = integrator.integrate_def_checked(
                     *current, step.variable, *step.lower, *step.upper, context);
                 if (!result) return result;
-                auto res_ptr = lamina::detail::make_expression_ptr(result.value());
+                auto res_ptr = LMCAS::detail::make_expression_ptr(result.value());
                 auto simp = res_ptr->simplify();
                 current = simp ? simp : res_ptr;
             }
@@ -70,4 +70,4 @@ Result<SymbolicExpr> integrate_multiple_checked(
     return Result<SymbolicExpr>::success(*current);
 }
 
-} // namespace lamina
+} // namespace LMCAS

@@ -8,14 +8,22 @@
 
 #include <memory>
 
-namespace lamina {
+namespace LMCAS {
 class AssumptionContext;
 }
 
-class LAMINA_API NormalizationVisitor final : public lamina::detail::SymbolicVisitor {
+namespace LMCAS {
+
+/**
+ * Numeric powers share one normalization path. Exact operands retain integer
+ * and rational arithmetic; approximate roots require an exact half exponent.
+ * Finite floating power results are folded without forming reciprocal
+ * intermediates, while non-finite results retain their power expression.
+ */
+class LMCAS_API NormalizationVisitor final : public LMCAS::detail::SymbolicVisitor {
 public:
     NormalizationVisitor() = default;
-    explicit NormalizationVisitor(const lamina::AssumptionContext* assumptions)
+    explicit NormalizationVisitor(const LMCAS::AssumptionContext* assumptions)
         : assumptions_(assumptions) {}
 
     [[nodiscard]] std::shared_ptr<const SymbolicNode> get_result() const;
@@ -51,8 +59,10 @@ public:
 
 private:
     std::shared_ptr<const SymbolicNode> result;
-    const lamina::AssumptionContext* assumptions_ = nullptr;
+    const LMCAS::AssumptionContext* assumptions_ = nullptr;
 
+    bool try_normalize_squared_norm(
+        const SymbolicNode& node, std::shared_ptr<const SymbolicNode>& argument);
     static bool try_get_integer_value(
         const std::shared_ptr<const NumberNode>& node, long long& value);
     static bool is_positive_integer_number(
@@ -62,3 +72,5 @@ private:
     std::shared_ptr<const SymbolicNode> try_assumption_simplify(
         const std::shared_ptr<const SymbolicNode>& node);
 };
+
+} // namespace LMCAS

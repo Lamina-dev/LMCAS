@@ -14,12 +14,20 @@
 #include <memory>
 #include <optional>
 
+namespace LMCAS {
+
+class AddNode;
+class MultiplyNode;
+class PowerNode;
+class FunctionNode;
+
 // Forward declaration for Interval (avoid circular include with interval.hpp)
-namespace lamina {
+
+
 struct Interval;
 }
 
-namespace lamina {
+namespace LMCAS {
 
 // Forward declaration - AssumptionContext is implemented in a later task
 class AssumptionContext;
@@ -45,8 +53,14 @@ using InferencePeriodResult = Result<std::optional<SymbolicExpr>>;
  *   - Multiplication: all Integer -> Integer; all Real/Integer -> Real
  *   - Power: Real base + integer exponent -> Real
  *   - Functions: exp/sin/cos/abs/sqrt/ln/tan with Real argument -> Real
+ *
+ * @par Thread safety
+ * An instance is thread-confined. Concurrent calls on the same instance are
+ * unsupported because recursion guards and active-query state are mutable.
+ * Separate instances bound to immutable contexts may be used concurrently.
+ * A quiescent instance may be moved to another thread before its next call.
  */
-class LAMINA_API InferenceEngine {
+class LMCAS_API InferenceEngine {
 public:
     /**
      * @brief Construct an InferenceEngine bound to an AssumptionContext.
@@ -227,10 +241,10 @@ private:
 
     /// @name Sign inference for specific node types
     /// @{
-    InferenceTriboolResult infer_add_sign_checked(const void* node, Sign target) const;
-    InferenceTriboolResult infer_multiply_sign_checked(const void* node, Sign target) const;
-    InferenceTriboolResult infer_power_property_checked(const void* node, Sign target) const;
-    InferenceTriboolResult infer_function_property_checked(const void* node, Sign target) const;
+    InferenceTriboolResult infer_add_sign_checked(const AddNode& node, Sign target) const;
+    InferenceTriboolResult infer_multiply_sign_checked(const MultiplyNode& node, Sign target) const;
+    InferenceTriboolResult infer_power_property_checked(const PowerNode& node, Sign target) const;
+    InferenceTriboolResult infer_function_property_checked(const FunctionNode& node, Sign target) const;
     /// @}
 
     /**
@@ -259,7 +273,7 @@ private:
      *   positive / negative -> negative, negative / positive -> negative.
      * Returns Unknown when denominator sign is unknown or zero.
     */
-    InferenceTriboolResult infer_division_sign_checked(const void* node, Sign target) const;
+    InferenceTriboolResult infer_division_sign_checked(const MultiplyNode& node, Sign target) const;
 
     /**
      * @brief Infer the sign of an internally represented subtraction expression.
@@ -267,16 +281,16 @@ private:
      * Detects a negated subtrahend and applies subtraction sign rules, such as
      * positive minus negative producing a positive result.
      */
-    InferenceTriboolResult infer_subtraction_sign_checked(const void* node, Sign target) const;
+    InferenceTriboolResult infer_subtraction_sign_checked(const AddNode& node, Sign target) const;
 
     /// @}
 
     /// @name Domain inference for specific node types
     /// @{
-    InferenceTriboolResult infer_add_domain_checked(const void* node, Domain target) const;
-    InferenceTriboolResult infer_multiply_domain_checked(const void* node, Domain target) const;
-    InferenceTriboolResult infer_power_domain_checked(const void* node, Domain target) const;
-    InferenceTriboolResult infer_function_domain_checked(const void* node, Domain target) const;
+    InferenceTriboolResult infer_add_domain_checked(const AddNode& node, Domain target) const;
+    InferenceTriboolResult infer_multiply_domain_checked(const MultiplyNode& node, Domain target) const;
+    InferenceTriboolResult infer_power_domain_checked(const PowerNode& node, Domain target) const;
+    InferenceTriboolResult infer_function_domain_checked(const FunctionNode& node, Domain target) const;
     /// @}
 
     /// @name Helper methods for querying sub-expression properties
@@ -286,4 +300,4 @@ private:
     /// @}
 };
 
-} // namespace lamina
+} // namespace LMCAS

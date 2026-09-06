@@ -5,10 +5,10 @@
 #include <vector>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 std::shared_ptr<SymbolicExpr> mk_wildcard(const std::string& name) {
-    return lamina::detail::make_expression_ptr(wildcard(name));
+    return LMCAS::detail::make_expression_ptr(wildcard(name));
 }
 
 bool test_commutative_add() {
@@ -110,11 +110,11 @@ bool test_subset_match() {
     auto vd = SymbolicExpr::variable("d");
 
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
-    ops.push_back(lamina::detail::node(va));
-    ops.push_back(lamina::detail::node(vb));
-    ops.push_back(lamina::detail::node(vc));
-    ops.push_back(lamina::detail::node(vd));
-    auto target = lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
+    ops.push_back(LMCAS::detail::node(va));
+    ops.push_back(LMCAS::detail::node(vb));
+    ops.push_back(LMCAS::detail::node(vc));
+    ops.push_back(LMCAS::detail::node(vd));
+    auto target = LMCAS::detail::expression_from_node(SymbolicFactory::create_add(ops));
 
     MatchMap results;
     std::unordered_set<std::string> w = {"A", "B"};

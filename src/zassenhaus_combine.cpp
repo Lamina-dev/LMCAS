@@ -18,7 +18,7 @@
 #include <limits>
 
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -139,7 +139,7 @@ static bool zc_rational_reconstruction(
         const int64_t m_val = *m_small;
 
         auto reconstructed =
-            lamina::rational_reconstruction_checked(a_val, m_val);
+            LMCAS::rational_reconstruction_checked(a_val, m_val);
         if (!reconstructed) return false;
         const auto [p, q] = reconstructed.value();
         num = BigInt(static_cast<long long>(p));
@@ -503,4 +503,4 @@ ZassenhausResult zassenhaus_combine_checked(
         poly, lifted_factors, reconstruction_modulus, context);
 }
 
-} // namespace lamina
+} // namespace LMCAS

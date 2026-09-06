@@ -10,7 +10,7 @@
 #include <complex>
 #include <limits>
 
-namespace lamina {
+namespace LMCAS {
 
 RootOfConstructionResult make_rootof_checked(
     const std::shared_ptr<SymbolicExpr>& polynomial,
@@ -18,7 +18,7 @@ RootOfConstructionResult make_rootof_checked(
     std::size_t index,
     ComputationContext& context) {
     constexpr const char* operation = "rootof.construct";
-    if (!polynomial || !lamina::detail::node(polynomial) ||
+    if (!polynomial || !LMCAS::detail::node(polynomial) ||
         variable.empty()) {
         return RootOfConstructionResult::failure(
             CasErrc::InvalidArgument,
@@ -41,8 +41,8 @@ RootOfConstructionResult make_rootof_checked(
         return RootOfConstructionResult::failure(identity.error());
     }
     return RootOfConstructionResult::success(
-        lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<RootOfNode>(
+        LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<RootOfNode>(
                 std::move(identity.value()), variable)));
 }
 
@@ -68,7 +68,7 @@ static std::shared_ptr<SymbolicExpr> symbolic_poly_to_expr(
             if (auto simplified = coeff_expr->simplify()) {
                 coeff_expr = simplified;
             }
-            if (lamina::detail::node(coeff_expr) && coeff_expr->is_zero()) {
+            if (LMCAS::detail::node(coeff_expr) && coeff_expr->is_zero()) {
                 continue;
             }
         }
@@ -113,12 +113,12 @@ Result<RootOfRequest> parse_rootof_request(
     const std::shared_ptr<SymbolicExpr>& rootof_expr,
     ComputationContext& context,
     const std::string& operation) {
-    if (!rootof_expr || !lamina::detail::node(rootof_expr)) {
+    if (!rootof_expr || !LMCAS::detail::node(rootof_expr)) {
         return Result<RootOfRequest>::failure(
             CasErrc::InvalidArgument, "RootOf expression cannot be null", operation);
     }
     auto root = std::dynamic_pointer_cast<const RootOfNode>(
-        lamina::detail::node(rootof_expr));
+        LMCAS::detail::node(rootof_expr));
     if (!root) {
         return Result<RootOfRequest>::failure(
             CasErrc::InvalidArgument,
@@ -147,8 +147,8 @@ std::vector<std::shared_ptr<SymbolicExpr>> make_rootof_solutions(
     std::vector<std::shared_ptr<SymbolicExpr>> solutions;
     solutions.reserve(static_cast<std::size_t>(canonical.degree()));
     for (int index = 0; index < canonical.degree(); ++index) {
-        solutions.push_back(lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<RootOfNode>(
+        solutions.push_back(LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<RootOfNode>(
                 detail::ExactRootId{
                     canonical, static_cast<std::size_t>(index)},
                 var)));
@@ -258,10 +258,10 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_closed_form_from_poly(
 std::shared_ptr<SymbolicExpr> rootof_simplify(
     const std::shared_ptr<SymbolicExpr>& rootof_expr)
 {
-    if (!rootof_expr || !lamina::detail::node(rootof_expr)) return rootof_expr;
+    if (!rootof_expr || !LMCAS::detail::node(rootof_expr)) return rootof_expr;
 
     auto root = std::dynamic_pointer_cast<const RootOfNode>(
-        lamina::detail::node(rootof_expr));
+        LMCAS::detail::node(rootof_expr));
     if (!root) return rootof_expr;
 
     const std::string& var = root->variable();

@@ -1,4 +1,4 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include <exception>
 #include <memory>
 #include <string>
@@ -7,9 +7,9 @@
 #include "complex_analysis.hpp"
 #include "matcher.hpp"
 #include "symbolic_ast.hpp"
-#include "internal/lsr_expr_common.hpp"
-namespace lamina::lsr {
-namespace detail::lsr_expr_common {
+#include "internal/expr_common.hpp"
+namespace LMCAS {
+namespace expr_detail::expr_common {
 ExprResult expression_failure(CasErrc code, std::string message,
                               const char* operation) {
     return ExprResult::failure(code, std::move(message), operation);
@@ -26,7 +26,7 @@ ExprResult make_unary_math_expr(const ExprPtr& expression,
                                 ExprPtr (*factory)(ExprPtr)) {
     auto step = context.consume_steps(1, kMathOperation);
     if (!step) return ExprResult::failure(step.error());
-    if (!expression || !lamina::detail::node(expression)) {
+    if (!expression || !LMCAS::detail::node(expression)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   std::string(function_name) +
                                       " argument cannot be null",
@@ -34,7 +34,7 @@ ExprResult make_unary_math_expr(const ExprPtr& expression,
     }
     try {
         auto result = factory(expression);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       std::string(function_name) +
                                           " expression construction failed",
@@ -59,18 +59,18 @@ ExprResult make_unary_function_expr(const ExprPtr& expression,
                                     FunctionNode::FuncType type) {
     auto step = context.consume_steps(1, kMathOperation);
     if (!step) return ExprResult::failure(step.error());
-    if (!expression || !lamina::detail::node(expression)) {
+    if (!expression || !LMCAS::detail::node(expression)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   std::string(function_name) +
                                       " argument cannot be null",
                                   kMathOperation);
     }
     try {
-        auto node = lamina::detail::make_node<FunctionNode>(
+        auto node = LMCAS::detail::make_node<FunctionNode>(
             type, std::vector<std::shared_ptr<const SymbolicNode>>{
-                      lamina::detail::node(expression)});
+                      LMCAS::detail::node(expression)});
         return ExprResult::success(
-            lamina::detail::make_expression_ptr(std::move(node)));
+            LMCAS::detail::make_expression_ptr(std::move(node)));
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
                                   std::string(function_name) +
@@ -87,7 +87,7 @@ ExprResult expr_from_complex_result(const ExpressionResult& result,
     if (!result) {
         return ExprResult::failure(result.error());
     }
-    if (!result.value() || !lamina::detail::node(result.value())) {
+    if (!result.value() || !LMCAS::detail::node(result.value())) {
         return expression_failure(CasErrc::InternalInvariant,
                                   "complex expression result is null",
                                   operation);
@@ -107,7 +107,7 @@ bool is_imaginary_unit_name(const std::string& name) {
 
 ExprResult require_dimensionless(const ExprPtr& expression,
                                  const char* function_name) {
-    if (!expression || !lamina::detail::node(expression)) {
+    if (!expression || !LMCAS::detail::node(expression)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   std::string(function_name) + " argument cannot be null",
                                   kMathOperation);
@@ -125,18 +125,18 @@ ExprResult require_dimensionless(const ExprPtr& expression,
 
 ExprResult comparison_value(const ExprPtr& expression,
                             ComputationContext& context) {
-    if (std::dynamic_pointer_cast<const QuantityNode>(lamina::detail::node(expression))) {
+    if (std::dynamic_pointer_cast<const QuantityNode>(LMCAS::detail::node(expression))) {
         return strip_unit(expression, UnitStripMode::BaseValue, context);
     }
     return ExprResult::success(expression);
 }
 
-} // namespace detail::lsr_expr_common
-using namespace detail::lsr_expr_common;
+} // namespace expr_detail::expr_common
+using namespace expr_detail::expr_common;
 
 
 ExprResult function(const std::string& name, std::vector<ExprPtr> arguments) {
-    constexpr const char* operation = "lsr.function";
+    constexpr const char* operation = "LMCAS.function";
     if (name.empty()) {
         return expression_failure(CasErrc::InvalidArgument,
                                   "function name cannot be empty", operation);
@@ -144,15 +144,15 @@ ExprResult function(const std::string& name, std::vector<ExprPtr> arguments) {
     std::vector<std::shared_ptr<const SymbolicNode>> nodes;
     nodes.reserve(arguments.size());
     for (const auto& argument : arguments) {
-        if (!argument || !lamina::detail::node(argument)) {
+        if (!argument || !LMCAS::detail::node(argument)) {
             return expression_failure(CasErrc::InvalidArgument,
                                       "function arguments cannot be null", operation);
         }
-        nodes.push_back(lamina::detail::node(argument));
+        nodes.push_back(LMCAS::detail::node(argument));
     }
     try {
-        return ExprResult::success(lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<UninterpretedFunctionNode>(
+        return ExprResult::success(LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<UninterpretedFunctionNode>(
                 name, std::move(nodes))));
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
@@ -175,15 +175,15 @@ ExprResult interval(ExprPtr lower, ExprPtr upper,
 }
 
 ExprResult relation(const ExprPtr& lhs, const ExprPtr& rhs, RelationOp op) {
-    constexpr const char* operation = "lsr.relation";
+    constexpr const char* operation = "LMCAS.relation";
     if (!lhs || !rhs) {
         return expression_failure(CasErrc::InvalidArgument,
                                   "relation operands cannot be null", operation);
     }
     try {
-        return ExprResult::success(lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<RelationalNode>(
-                lamina::detail::node(lhs), lamina::detail::node(rhs), op)));
+        return ExprResult::success(LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<RelationalNode>(
+                LMCAS::detail::node(lhs), LMCAS::detail::node(rhs), op)));
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "relation allocation failed", operation);
@@ -221,10 +221,10 @@ ExprResult logical_expression(const ExprPtr& lhs, const ExprPtr& rhs,
                                   "logical operands cannot be null", operation);
     }
     try {
-        return ExprResult::success(lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<LogicalNode>(
-                lamina::detail::node(lhs),
-                rhs ? lamina::detail::node(rhs) : nullptr, op)));
+        return ExprResult::success(LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<LogicalNode>(
+                LMCAS::detail::node(lhs),
+                rhs ? LMCAS::detail::node(rhs) : nullptr, op)));
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "logical expression allocation failed",
@@ -237,16 +237,16 @@ ExprResult logical_expression(const ExprPtr& lhs, const ExprPtr& rhs,
 } // namespace
 
 ExprResult logical_and(const ExprPtr& lhs, const ExprPtr& rhs) {
-    return logical_expression(lhs, rhs, LogicalNode::Op::And, "lsr.logical_and");
+    return logical_expression(lhs, rhs, LogicalNode::Op::And, "LMCAS.logical_and");
 }
 
 ExprResult logical_or(const ExprPtr& lhs, const ExprPtr& rhs) {
-    return logical_expression(lhs, rhs, LogicalNode::Op::Or, "lsr.logical_or");
+    return logical_expression(lhs, rhs, LogicalNode::Op::Or, "LMCAS.logical_or");
 }
 
 ExprResult logical_not(const ExprPtr& expression) {
     return logical_expression(expression, nullptr, LogicalNode::Op::Not,
-                              "lsr.logical_not");
+                              "LMCAS.logical_not");
 }
 
 ExprResult membership(const ExprPtr& element, const ExprPtr& set, bool negated) {
@@ -256,4 +256,4 @@ ExprResult membership(const ExprPtr& element, const ExprPtr& set, bool negated) 
     return logical_not(result.value());
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

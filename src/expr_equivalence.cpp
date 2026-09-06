@@ -1,4 +1,4 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 
 #include <exception>
 #include <memory>
@@ -8,11 +8,11 @@
 #include <utility>
 
 #include "assumption_context.hpp"
-#include "lsr_expr_internal.hpp"
+#include "expr_internal.hpp"
 #include "poly_utils.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina::lsr {
+namespace LMCAS {
 namespace {
 
 Result<EqvProfile> eqv_profile_failure(std::string message) {
@@ -78,9 +78,9 @@ std::optional<ExprPtr> unwrap_trig_negated_argument(
     }
     if (!found_negative_one || remaining.empty()) return std::nullopt;
     if (remaining.size() == 1) {
-        return lamina::detail::make_expression_ptr(remaining.front());
+        return LMCAS::detail::make_expression_ptr(remaining.front());
     }
-    return lamina::detail::make_expression_ptr(
+    return LMCAS::detail::make_expression_ptr(
         SymbolicFactory::create_multiply(std::move(remaining)))->simplify();
 }
 
@@ -92,7 +92,7 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
         rewritten.reserve(add->operands().size());
         for (const auto& operand : add->operands()) {
             auto child = rewrite_trig_basic_identity(operand);
-            rewritten.push_back(lamina::detail::node(child));
+            rewritten.push_back(LMCAS::detail::node(child));
         }
 
         std::vector<bool> used(rewritten.size(), false);
@@ -126,7 +126,7 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
                     used[i] = true;
                     used[j] = true;
                     result_nodes.push_back(
-                        lamina::detail::node(SymbolicExpr::number(1)));
+                        LMCAS::detail::node(SymbolicExpr::number(1)));
                     break;
                 }
             }
@@ -138,7 +138,7 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
         if (result_nodes.empty()) {
             return SymbolicExpr::number(0);
         }
-        return lamina::detail::make_expression_ptr(
+        return LMCAS::detail::make_expression_ptr(
             SymbolicFactory::create_add(std::move(result_nodes)))->simplify();
     }
 
@@ -147,9 +147,9 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
         operands.reserve(multiply->operands().size());
         for (const auto& operand : multiply->operands()) {
             auto child = rewrite_trig_basic_identity(operand);
-            operands.push_back(lamina::detail::node(child));
+            operands.push_back(LMCAS::detail::node(child));
         }
-        return lamina::detail::make_expression_ptr(
+        return LMCAS::detail::make_expression_ptr(
             SymbolicFactory::create_multiply(std::move(operands)))->simplify();
     }
 
@@ -164,7 +164,7 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
         args.reserve(function->arguments().size());
         for (const auto& argument : function->arguments()) {
             auto child = rewrite_trig_basic_identity(argument);
-            args.push_back(lamina::detail::node(child));
+            args.push_back(LMCAS::detail::node(child));
         }
 
         if (args.size() == 1) {
@@ -181,8 +181,8 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
             }
         }
 
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<FunctionNode>(function->type(),
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<FunctionNode>(function->type(),
                                                     std::move(args)))->simplify();
     }
 
@@ -190,11 +190,13 @@ ExprPtr rewrite_trig_basic_identity(const std::shared_ptr<const SymbolicNode>& n
         auto real_part = rewrite_trig_basic_identity(complex_node->real());
         auto imag_part = rewrite_trig_basic_identity(complex_node->imag());
         auto value = complex(real_part, imag_part);
-        if (!value) throw detail::ResultPropagation(value.error());
+        if (!value) {
+            return LMCAS::detail::make_expression_ptr(node);
+        }
         return value.value()->simplify();
     }
 
-    return lamina::detail::make_expression_ptr(node);
+    return LMCAS::detail::make_expression_ptr(node);
 }
 
 ExprPtr rewrite_exp_log_basic_identity(
@@ -207,9 +209,9 @@ ExprPtr rewrite_exp_log_basic_identity(
         operands.reserve(add->operands().size());
         for (const auto& operand : add->operands()) {
             auto child = rewrite_exp_log_basic_identity(operand, assumptions);
-            operands.push_back(lamina::detail::node(child));
+            operands.push_back(LMCAS::detail::node(child));
         }
-        return lamina::detail::make_expression_ptr(
+        return LMCAS::detail::make_expression_ptr(
             SymbolicFactory::create_add(std::move(operands)))->simplify();
     }
 
@@ -218,9 +220,9 @@ ExprPtr rewrite_exp_log_basic_identity(
         operands.reserve(multiply->operands().size());
         for (const auto& operand : multiply->operands()) {
             auto child = rewrite_exp_log_basic_identity(operand, assumptions);
-            operands.push_back(lamina::detail::node(child));
+            operands.push_back(LMCAS::detail::node(child));
         }
-        return lamina::detail::make_expression_ptr(
+        return LMCAS::detail::make_expression_ptr(
             SymbolicFactory::create_multiply(std::move(operands)))->simplify();
     }
 
@@ -235,7 +237,7 @@ ExprPtr rewrite_exp_log_basic_identity(
         args.reserve(function->arguments().size());
         for (const auto& argument : function->arguments()) {
             auto child = rewrite_exp_log_basic_identity(argument, assumptions);
-            args.push_back(lamina::detail::node(child));
+            args.push_back(LMCAS::detail::node(child));
         }
 
         if (function->type() == FunctionNode::FuncType::Exp &&
@@ -251,20 +253,22 @@ ExprPtr rewrite_exp_log_basic_identity(
             auto inner_ln = std::dynamic_pointer_cast<const FunctionNode>(args[0]);
             if (inner_ln && inner_ln->type() == FunctionNode::FuncType::Ln &&
                 inner_ln->arguments().size() == 1) {
-                auto ln_arg = lamina::detail::make_expression_ptr(
+                auto ln_arg = LMCAS::detail::make_expression_ptr(
                     inner_ln->arguments()[0]);
-                const bool known_positive = inner_ln->arguments()[0]->is_positive() ||
-                    (assumptions &&
-                     detail::propagate_result(assumptions->is_positive(*ln_arg)) ==
-                         Tribool::True);
+                auto positive = assumptions
+                    ? assumptions->is_positive(*ln_arg)
+                    : Result<Tribool>::success(Tribool::Unknown);
+                const bool known_positive =
+                    inner_ln->arguments()[0]->is_positive() ||
+                    (positive && positive.value() == Tribool::True);
                 if (known_positive) {
                     return ln_arg->simplify();
                 }
             }
         }
 
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<FunctionNode>(function->type(),
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<FunctionNode>(function->type(),
                                                     std::move(args)))->simplify();
     }
 
@@ -274,11 +278,13 @@ ExprPtr rewrite_exp_log_basic_identity(
         auto imag_part = rewrite_exp_log_basic_identity(complex_node->imag(),
                                                         assumptions);
         auto value = complex(real_part, imag_part);
-        if (!value) throw detail::ResultPropagation(value.error());
+        if (!value) {
+            return LMCAS::detail::make_expression_ptr(node);
+        }
         return value.value()->simplify();
     }
 
-    return lamina::detail::make_expression_ptr(node);
+    return LMCAS::detail::make_expression_ptr(node);
 }
 
 void collect_variable_names(
@@ -334,7 +340,7 @@ Result<std::optional<bool>> prove_rational_polynomial_equivalence(
     if (!step) return Result<std::optional<bool>>::failure(step.error());
 
     auto expanded = difference->expand();
-    if (!expanded || !lamina::detail::node(expanded)) {
+    if (!expanded || !LMCAS::detail::node(expanded)) {
         return Result<std::optional<bool>>::failure(
             CasErrc::InternalInvariant,
             "equivalence expansion returned null",
@@ -342,7 +348,7 @@ Result<std::optional<bool>> prove_rational_polynomial_equivalence(
     }
 
     std::set<std::string> variables;
-    collect_variable_names(lamina::detail::node(expanded), variables);
+    collect_variable_names(LMCAS::detail::node(expanded), variables);
     if (variables.size() > 1) {
         return Result<std::optional<bool>>::success(std::nullopt);
     }
@@ -358,61 +364,65 @@ Result<std::optional<bool>> prove_rational_polynomial_equivalence(
     return Result<std::optional<bool>>::success(recognized.value()->is_zero());
 }
 
-ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
-    const auto& node = lamina::detail::node(expression);
+ExprPtr canonicalize_complex_product(const SymbolicExpr& expression) {
+    const auto& node = LMCAS::detail::node(expression);
 
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
         if (is_imaginary_unit_name(variable->name())) {
             auto unit = imaginary_unit();
-            if (!unit) throw detail::ResultPropagation(unit.error());
+            if (!unit) {
+                return LMCAS::detail::make_expression_ptr(node);
+            }
             return unit.value();
         }
-        return lamina::detail::make_expression_ptr(node);
+        return LMCAS::detail::make_expression_ptr(node);
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         std::vector<std::shared_ptr<const SymbolicNode>> operands;
         operands.reserve(add->operands().size());
         for (const auto& operand : add->operands()) {
-            auto canonical_operand = canonicalize_lsr_complex_product(
-                *lamina::detail::make_expression_ptr(operand));
-            operands.push_back(lamina::detail::node(canonical_operand));
+            auto canonical_operand = canonicalize_complex_product(
+                *LMCAS::detail::make_expression_ptr(operand));
+            operands.push_back(LMCAS::detail::node(canonical_operand));
         }
-        return lamina::detail::make_expression_ptr(
+        return LMCAS::detail::make_expression_ptr(
             SymbolicFactory::create_add(std::move(operands)))->simplify();
     }
 
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto exponent = exact_small_integer_node(power->exponent(), 0, 16);
         if (exponent) {
-            auto canonical_base = canonicalize_lsr_complex_product(
-                *lamina::detail::make_expression_ptr(power->base()));
+            auto canonical_base = canonicalize_complex_product(
+                *LMCAS::detail::make_expression_ptr(power->base()));
             if (std::dynamic_pointer_cast<const ComplexNode>(
-                    lamina::detail::node(canonical_base))) {
+                    LMCAS::detail::node(canonical_base))) {
                 auto result = SymbolicExpr::number(1);
                 for (int i = 0; i < *exponent; ++i) {
-                    result = canonicalize_lsr_complex_product(
+                    result = canonicalize_complex_product(
                         *SymbolicExpr::multiply(result, canonical_base));
                 }
                 return result->simplify();
             }
         }
-        return lamina::detail::make_expression_ptr(node);
+        return LMCAS::detail::make_expression_ptr(node);
     }
 
     if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        auto real_part = canonicalize_lsr_complex_product(
-            *lamina::detail::make_expression_ptr(complex_node->real()));
-        auto imag_part = canonicalize_lsr_complex_product(
-            *lamina::detail::make_expression_ptr(complex_node->imag()));
+        auto real_part = canonicalize_complex_product(
+            *LMCAS::detail::make_expression_ptr(complex_node->real()));
+        auto imag_part = canonicalize_complex_product(
+            *LMCAS::detail::make_expression_ptr(complex_node->imag()));
         auto value = complex(real_part, imag_part);
-        if (!value) throw detail::ResultPropagation(value.error());
+        if (!value) {
+            return LMCAS::detail::make_expression_ptr(node);
+        }
         return value.value()->simplify();
     }
 
     auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node);
     if (!multiply) {
-        return lamina::detail::make_expression_ptr(node);
+        return LMCAS::detail::make_expression_ptr(node);
     }
 
     bool saw_complex = false;
@@ -420,16 +430,16 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     auto imag = SymbolicExpr::number(0);
 
     for (const auto& operand : multiply->operands()) {
-        auto canonical_operand = canonicalize_lsr_complex_product(
-            *lamina::detail::make_expression_ptr(operand));
-        const auto& operand_node = lamina::detail::node(canonical_operand);
+        auto canonical_operand = canonicalize_complex_product(
+            *LMCAS::detail::make_expression_ptr(operand));
+        const auto& operand_node = LMCAS::detail::node(canonical_operand);
         ExprPtr factor_real;
         ExprPtr factor_imag;
         if (auto complex_operand = std::dynamic_pointer_cast<const ComplexNode>(
                 operand_node)) {
             saw_complex = true;
-            factor_real = lamina::detail::make_expression_ptr(complex_operand->real());
-            factor_imag = lamina::detail::make_expression_ptr(complex_operand->imag());
+            factor_real = LMCAS::detail::make_expression_ptr(complex_operand->real());
+            factor_imag = LMCAS::detail::make_expression_ptr(complex_operand->imag());
         } else {
             factor_real = canonical_operand;
             factor_imag = SymbolicExpr::number(0);
@@ -447,11 +457,11 @@ ExprPtr canonicalize_lsr_complex_product(const SymbolicExpr& expression) {
     }
 
     if (!saw_complex) {
-        return lamina::detail::make_expression_ptr(node);
+        return LMCAS::detail::make_expression_ptr(node);
     }
     auto result = complex(real, imag);
     if (!result) {
-        throw detail::ResultPropagation(result.error());
+        return LMCAS::detail::make_expression_ptr(node);
     }
     return result.value()->simplify();
 }
@@ -498,8 +508,8 @@ Result<void> set_eqv_budget(EqvOptions& options,
 }
 
 bool structurally_equal(const SymbolicExpr& lhs, const SymbolicExpr& rhs) {
-    const auto& left = lamina::detail::node(lhs);
-    const auto& right = lamina::detail::node(rhs);
+    const auto& left = LMCAS::detail::node(lhs);
+    const auto& right = LMCAS::detail::node(rhs);
     if (!left || !right) return left == right;
     return left->equals(*right);
 }
@@ -523,18 +533,18 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
         }
         auto lhs_ptr = std::make_shared<SymbolicExpr>(lhs);
         auto rhs_ptr = std::make_shared<SymbolicExpr>(rhs);
-        if (std::dynamic_pointer_cast<const QuantityNode>(lamina::detail::node(lhs))) {
+        if (std::dynamic_pointer_cast<const QuantityNode>(LMCAS::detail::node(lhs))) {
             auto stripped = strip_unit(lhs_ptr, UnitStripMode::BaseValue, context);
             if (!stripped) return Result<bool>::failure(stripped.error());
             lhs_ptr = stripped.value();
         }
-        if (std::dynamic_pointer_cast<const QuantityNode>(lamina::detail::node(rhs))) {
+        if (std::dynamic_pointer_cast<const QuantityNode>(LMCAS::detail::node(rhs))) {
             auto stripped = strip_unit(rhs_ptr, UnitStripMode::BaseValue, context);
             if (!stripped) return Result<bool>::failure(stripped.error());
             rhs_ptr = stripped.value();
         }
-        auto canonical_lhs = canonicalize_lsr_complex_product(*lhs_ptr);
-        auto canonical_rhs = canonicalize_lsr_complex_product(*rhs_ptr);
+        auto canonical_lhs = canonicalize_complex_product(*lhs_ptr);
+        auto canonical_rhs = canonicalize_complex_product(*rhs_ptr);
         if (structurally_equal(*canonical_lhs, *canonical_rhs)) {
             return Result<bool>::success(true);
         }
@@ -568,8 +578,8 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
             }
             auto trig_step = context.consume_steps(8, kEquivalentOperation);
             if (!trig_step) return Result<bool>::failure(trig_step.error());
-            auto trig_lhs = rewrite_trig_basic_identity(lamina::detail::node(lhs));
-            auto trig_rhs = rewrite_trig_basic_identity(lamina::detail::node(rhs));
+            auto trig_lhs = rewrite_trig_basic_identity(LMCAS::detail::node(lhs));
+            auto trig_rhs = rewrite_trig_basic_identity(LMCAS::detail::node(rhs));
             EqvOptions core_options = options;
             core_options.profile = EqvProfile::Core;
             return equivalent_core(*trig_lhs, *trig_rhs, context,
@@ -585,17 +595,15 @@ Result<bool> equivalent_core(const SymbolicExpr& lhs,
             auto exp_log_step = context.consume_steps(8, kEquivalentOperation);
             if (!exp_log_step) return Result<bool>::failure(exp_log_step.error());
             auto exp_log_lhs = rewrite_exp_log_basic_identity(
-                lamina::detail::node(lhs), context.assumptions().get());
+                LMCAS::detail::node(lhs), context.assumptions().get());
             auto exp_log_rhs = rewrite_exp_log_basic_identity(
-                lamina::detail::node(rhs), context.assumptions().get());
+                LMCAS::detail::node(rhs), context.assumptions().get());
             EqvOptions core_options = options;
             core_options.profile = EqvProfile::Core;
             return equivalent_core(*exp_log_lhs, *exp_log_rhs, context,
                                    core_options);
         }
         return Result<bool>::success(false);
-    } catch (const detail::ResultPropagation& propagation) {
-        return Result<bool>::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return Result<bool>::failure(CasErrc::ResourceLimit,
                                      "equivalence check allocation failed",
@@ -638,4 +646,4 @@ Result<bool> equivalent(const SymbolicExpr& lhs,
     return equivalent(lhs, rhs, context, EqvOptions{});
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

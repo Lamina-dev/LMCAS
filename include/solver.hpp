@@ -9,16 +9,16 @@
 #include <map>
 
 // Forward declaration for assumption-aware solving
-namespace lamina {
+namespace LMCAS {
 class AssumptionContext;
 }
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 多项式方程组求解器，提供线性系统求解、Gröbner 基计算及多项式系统求解功能。 */
 using PolynomialSystemResult =
     Result<std::vector<std::map<std::string, SymbolicExpr>>>;
-class LAMINA_API Solver {
+class LMCAS_API Solver {
 public:
 
     /**
@@ -97,13 +97,13 @@ using AssumptionSolveResult =
  * Computes all solutions and applies the optional assumption context's domain
  * and sign constraints. The computation context is shared with nested solving.
  */
-LAMINA_API AssumptionSolveResult solve_with_assumptions_checked(
+LMCAS_API AssumptionSolveResult solve_with_assumptions_checked(
     const std::shared_ptr<SymbolicExpr>& equation,
     const std::string& variable,
     const AssumptionContext* assumptions,
     ComputationContext& context);
 
-LAMINA_API AssumptionSolveResult solve_with_assumptions_checked(
+LMCAS_API AssumptionSolveResult solve_with_assumptions_checked(
     const std::shared_ptr<SymbolicExpr>& equation,
     const std::string& variable,
     const AssumptionContext* assumptions = nullptr);

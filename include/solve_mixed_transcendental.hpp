@@ -19,7 +19,7 @@
 #include <optional>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 /// 搜索区间
 struct SearchInterval {
@@ -53,7 +53,7 @@ using MixedTranscendentalResult =
  * @param[in] context 计算预算与取消状态
  * @return 受检的完整或未决结果
  */
-LAMINA_API MixedTranscendentalResult solve_mixed_transcendental_checked(
+LMCAS_API MixedTranscendentalResult solve_mixed_transcendental_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts,
@@ -62,7 +62,7 @@ LAMINA_API MixedTranscendentalResult solve_mixed_transcendental_checked(
 /**
  * @brief 使用默认计算上下文执行受检混合超越方程求解.
  */
-LAMINA_API MixedTranscendentalResult solve_mixed_transcendental_checked(
+LMCAS_API MixedTranscendentalResult solve_mixed_transcendental_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts);
@@ -77,7 +77,7 @@ LAMINA_API MixedTranscendentalResult solve_mixed_transcendental_checked(
  * @param[in] var  目标变量名
  * @return 包含依赖 var 的超越函数时返回 true,否则返回 false
  */
-LAMINA_API bool contains_transcendental_of_var(
+LMCAS_API bool contains_transcendental_of_var(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var);
 
@@ -107,7 +107,7 @@ bool is_polynomial_after_substitution(
  * @param[in] opts 求解选项
  * @return 有效搜索区间;区间无效(lo >= hi 或宽度 <= tolerance)时返回 nullopt
  */
-LAMINA_API std::optional<SearchInterval> determine_search_interval(
+LMCAS_API std::optional<SearchInterval> determine_search_interval(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const SolveOptions& opts);
@@ -130,7 +130,7 @@ LAMINA_API std::optional<SearchInterval> determine_search_interval(
  * @param[in] opts       求解选项(max_roots,tolerance)
  * @return 隔离子区间列表
  */
-LAMINA_API std::vector<IsolatedInterval> isolate_roots(
+LMCAS_API std::vector<IsolatedInterval> isolate_roots(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var,
@@ -148,7 +148,7 @@ LAMINA_API std::vector<IsolatedInterval> isolate_roots(
  * @param[in]     max_roots 最大返回根数(-1 表示不限制)
  * @return 去重,排序后的根值列表
  */
-LAMINA_API std::vector<lmmc_real_t> deduplicate_roots(
+LMCAS_API std::vector<lmmc_real_t> deduplicate_roots(
     std::vector<NumericRoot>& roots,
     lmmc_real_t tolerance,
     int max_roots);
@@ -167,11 +167,11 @@ LAMINA_API std::vector<lmmc_real_t> deduplicate_roots(
  * @param[in] opts       求解选项(tolerance, max_newton_iterations)
  * @return 精化后的数值根;未收敛或残差超限时返回 nullopt
  */
-LAMINA_API std::optional<NumericRoot> refine_root(
+LMCAS_API std::optional<NumericRoot> refine_root(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var,
     const IsolatedInterval& interval,
     const SolveOptions& opts);
 
-} // namespace lamina
+} // namespace LMCAS

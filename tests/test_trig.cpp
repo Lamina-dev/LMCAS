@@ -1,6 +1,8 @@
 #include "test_common.hpp"
 #include "symbolic.hpp"
 
+using namespace LMCAS;
+
 int main() {
     auto x = SymbolicExpr::variable("x");
     auto pi = SymbolicExpr::variable("pi");

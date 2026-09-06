@@ -10,30 +10,30 @@
 #include <string>
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static std::shared_ptr<const SymbolicNode> make_var_node(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 static SymbolicExpr make_var_expr(const std::string& name) {
-    auto expr = lamina::detail::expression_from_node(make_var_node(name));
+    auto expr = LMCAS::detail::expression_from_node(make_var_node(name));
     return expr;
 }
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 /// Build a division expression: numerator_var / denominator_var
 static SymbolicExpr make_division(const std::string& num_var, const std::string& den_var) {
     auto num = make_var_node(num_var);
     auto den = make_var_node(den_var);
-    auto den_inv = lamina::detail::make_node<PowerNode>(den, make_number(-1));
-    auto mul = lamina::detail::make_node<MultiplyNode>(
+    auto den_inv = LMCAS::detail::make_node<PowerNode>(den, make_number(-1));
+    auto mul = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{num, den_inv});
-    auto expr = lamina::detail::expression_from_node(mul);
+    auto expr = LMCAS::detail::expression_from_node(mul);
     return expr;
 }
 
@@ -43,7 +43,7 @@ static SymbolicExpr make_add_expr(const std::vector<std::string>& var_names) {
     for (const auto& name : var_names) {
         operands.push_back(make_var_node(name));
     }
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<AddNode>(std::move(operands)));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<AddNode>(std::move(operands)));
     return expr;
 }
 
@@ -265,11 +265,11 @@ static void test_invalidation_on_assume_relation() {
         RC_ASSERT(result_before == Tribool::Unknown);
 
         // Add relation: var > 0 (which derives Positive sign)
-        auto var_node = lamina::detail::make_node<VariableNode>(var_name);
-        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
-        auto rel_node = lamina::detail::make_node<RelationalNode>(
+        auto var_node = LMCAS::detail::make_node<VariableNode>(var_name);
+        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        auto rel_node = LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT);
-        auto rel_expr = lamina::detail::expression_from_node(rel_node);
+        auto rel_expr = LMCAS::detail::expression_from_node(rel_node);
         ctx.assume(rel_expr);
 
         qi.invalidate_cache();

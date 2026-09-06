@@ -10,8 +10,10 @@
 #include <memory>
 #include <functional>
 
-using lamina::Integrator;
-using lamina::IntegrationStep;
+using namespace LMCAS;
+
+using LMCAS::Integrator;
+using LMCAS::IntegrationStep;
 
 namespace {
 
@@ -111,7 +113,7 @@ ComboReport verify_combo(const FunctionSpec& f,
     auto y_hi = SymbolicExpr::number(by.hi);
 
     Integrator integrator;
-    lamina::ComputationContext context;
+    LMCAS::ComputationContext context;
 
     std::vector<IntegrationStep> steps = {
         {"x", x_lo, x_hi},
@@ -119,21 +121,21 @@ ComboReport verify_combo(const FunctionSpec& f,
     };
 
     std::shared_ptr<SymbolicExpr> engine_result;
-    auto integrated = lamina::integrate_multiple_checked(
+    auto integrated = LMCAS::integrate_multiple_checked(
         *integrand, steps, integrator, context);
     if (!integrated) {
         rep.failed = true;
         rep.detail = "multiple integration failed: " + integrated.error().message;
         return rep;
     }
-    engine_result = lamina::detail::make_expression_ptr(integrated.value());
+    engine_result = LMCAS::detail::make_expression_ptr(integrated.value());
 
     if (!engine_result) {
         rep.failed = true;
         rep.detail = "engine.evaluate returned null";
         return rep;
     }
-    if (has_integral_node(lamina::detail::node(engine_result))) {
+    if (has_integral_node(LMCAS::detail::node(engine_result))) {
         rep.unevaluated = true;
         rep.detail = "engine result contains unevaluated integral";
         return rep;
@@ -154,10 +156,10 @@ ComboReport verify_combo(const FunctionSpec& f,
         rep.detail = std::string("y integration failed: ") + iy_result.error().message;
         return rep;
     }
-    auto Ix = lamina::detail::make_expression_ptr(ix_result.value());
-    auto Iy = lamina::detail::make_expression_ptr(iy_result.value());
+    auto Ix = LMCAS::detail::make_expression_ptr(ix_result.value());
+    auto Iy = LMCAS::detail::make_expression_ptr(iy_result.value());
 
-    if (has_integral_node(lamina::detail::node(Ix)) || has_integral_node(lamina::detail::node(Iy))) {
+    if (has_integral_node(LMCAS::detail::node(Ix)) || has_integral_node(LMCAS::detail::node(Iy))) {
         rep.unevaluated = true;
         rep.detail = "per-variable integrate_def left unevaluated integral";
         return rep;
@@ -230,7 +232,7 @@ int main() {
     TEST_CASE("Checked multiple integration supports more than three binders");
     {
         Integrator integrator;
-        lamina::ComputationContext context;
+        LMCAS::ComputationContext context;
         auto zero = SymbolicExpr::number(0);
         auto one = SymbolicExpr::number(1);
         std::vector<IntegrationStep> steps{
@@ -245,7 +247,7 @@ int main() {
                     "fourfold exact integral succeeds");
         if (fourfold) {
             auto value = test_numeric_eval(
-                lamina::detail::make_expression_ptr(fourfold.value()));
+                LMCAS::detail::make_expression_ptr(fourfold.value()));
             EXPECT_TRUE(value && std::abs(*value - 1.0) < 1e-12,
                         "unit four-cube integrates to one");
         }

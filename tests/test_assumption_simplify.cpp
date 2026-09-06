@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Normalize a node with an AssumptionContext.
@@ -32,24 +32,24 @@ static std::shared_ptr<const SymbolicNode> normalize_no_ctx(
 
 /// Create a VariableNode.
 static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 /// Create a NumberNode from int.
 static std::shared_ptr<const SymbolicNode> num(int v) {
-    return lamina::detail::make_node<NumberNode>(BigInt(v));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(v));
 }
 
 /// Create sqrt(expr) as FunctionNode(Sqrt, {expr}).
 static std::shared_ptr<const SymbolicNode> make_sqrt(const std::shared_ptr<const SymbolicNode>& arg) {
-    return lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Sqrt,
         std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
 
 /// Create abs(expr) as FunctionNode(Abs, {expr}).
 static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const SymbolicNode>& arg) {
-    return lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Abs,
         std::vector<std::shared_ptr<const SymbolicNode>>{arg});
 }
@@ -57,7 +57,7 @@ static std::shared_ptr<const SymbolicNode> make_abs(const std::shared_ptr<const 
 /// Create x^n as PowerNode(x, NumberNode(n)).
 static std::shared_ptr<const SymbolicNode> make_power(
     const std::shared_ptr<const SymbolicNode>& base, int exp) {
-    return lamina::detail::make_node<PowerNode>(base, num(exp));
+    return LMCAS::detail::make_node<PowerNode>(base, num(exp));
 }
 
 /// Check if a node is a VariableNode with the given name.
@@ -309,9 +309,9 @@ void test_backward_compat_various_expressions() {
         // Number
         num(42),
         // x + y
-        lamina::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{var("x"), var("y")}),
+        LMCAS::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{var("x"), var("y")}),
         // x * y
-        lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{var("x"), var("y")}),
+        LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{var("x"), var("y")}),
         // x^3
         make_power(var("x"), 3),
         // sqrt(x)
@@ -321,11 +321,11 @@ void test_backward_compat_various_expressions() {
         // sqrt(y^2)
         make_sqrt(make_power(var("y"), 2)),
         // sin(x)
-        lamina::detail::make_node<FunctionNode>(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sin,
             std::vector<std::shared_ptr<const SymbolicNode>>{var("x")}),
         // exp(x)
-        lamina::detail::make_node<FunctionNode>(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
             std::vector<std::shared_ptr<const SymbolicNode>>{var("x")}),
     };
@@ -412,7 +412,7 @@ void test_sqrt_x_squared_in_larger_expression() {
 
     // Build: sqrt(x^2) + 1
     auto sqrt_x_sq = make_sqrt(make_power(var("x"), 2));
-    auto expr = lamina::detail::make_node<AddNode>(
+    auto expr = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{sqrt_x_sq, num(1)});
 
     auto result = normalize_with_ctx(expr, ctx);
@@ -453,7 +453,7 @@ void test_abs_in_larger_expression() {
 
     // Build: 2 * abs(x)
     auto abs_x = make_abs(var("x"));
-    auto expr = lamina::detail::make_node<MultiplyNode>(
+    auto expr = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{num(2), abs_x});
 
     auto result = normalize_with_ctx(expr, ctx);

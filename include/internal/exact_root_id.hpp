@@ -5,7 +5,7 @@
 
 #include <cstddef>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 struct ExactRootId {
     Polynomial<Rational> polynomial;
@@ -38,4 +38,4 @@ struct ExactRootId {
     }
 };
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

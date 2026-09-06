@@ -3,38 +3,38 @@
 #include "matcher.hpp"
 #include "test_common.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 SymbolicExpr var(const std::string& name) {
-    return lamina::detail::expression_from_node(SymbolicFactory::create_variable(name));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_variable(name));
 }
 
 SymbolicExpr num(int n) {
-    return lamina::detail::expression_from_node(SymbolicFactory::create_number(BigInt(n)));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_number(BigInt(n)));
 }
 
 SymbolicExpr add(SymbolicExpr a, SymbolicExpr b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
-    ops.push_back(lamina::detail::node(a));
-    ops.push_back(lamina::detail::node(b));
-    return lamina::detail::expression_from_node(SymbolicFactory::create_add(ops));
+    ops.push_back(LMCAS::detail::node(a));
+    ops.push_back(LMCAS::detail::node(b));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_add(ops));
 }
 
 SymbolicExpr mul(SymbolicExpr a, SymbolicExpr b) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
-    ops.push_back(lamina::detail::node(a));
-    ops.push_back(lamina::detail::node(b));
-    return lamina::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
+    ops.push_back(LMCAS::detail::node(a));
+    ops.push_back(LMCAS::detail::node(b));
+    return LMCAS::detail::expression_from_node(SymbolicFactory::create_multiply(ops));
 }
 
 SymbolicExpr pow(SymbolicExpr b, SymbolicExpr e) {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<PowerNode>(lamina::detail::node(b), lamina::detail::node(e)));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<PowerNode>(LMCAS::detail::node(b), LMCAS::detail::node(e)));
 }
 
 SymbolicExpr func(FunctionNode::FuncType type, SymbolicExpr arg) {
     std::vector<std::shared_ptr<const SymbolicNode>> args;
-    args.push_back(lamina::detail::node(arg));
-    return lamina::detail::expression_from_node(lamina::detail::make_node<FunctionNode>(type, args));
+    args.push_back(LMCAS::detail::node(arg));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<FunctionNode>(type, args));
 }
 
 void test_basic_match() {
@@ -59,7 +59,7 @@ void test_basic_match() {
     EXPECT_TRUE(matched, "basic wildcard pattern matches target");
     EXPECT_TRUE(bindings.count("x") == 1, "basic match binds wildcard x");
     EXPECT_TRUE(bindings.count("x") == 1 &&
-                    lamina::detail::node(bindings.at("x"))->equals(*lamina::detail::node(y)),
+                    LMCAS::detail::node(bindings.at("x"))->equals(*LMCAS::detail::node(y)),
                 "basic match binds x to y");
 
     std::cout << "Basic match passed." << std::endl;
@@ -91,12 +91,12 @@ void test_trig_identity() {
     EXPECT_TRUE(matched, "trig identity pattern matches target");
     EXPECT_TRUE(bindings.count("A") == 1, "trig identity binds wildcard A");
     EXPECT_TRUE(bindings.count("A") == 1 &&
-                    lamina::detail::node(bindings.at("A"))->equals(*lamina::detail::node(y)),
+                    LMCAS::detail::node(bindings.at("A"))->equals(*LMCAS::detail::node(y)),
                 "trig identity binds A to y");
 
     auto replacement = num(1);
     auto result = Matcher::replace(replacement, bindings);
-    EXPECT_TRUE(lamina::detail::node(result)->is_one(), "trig identity replacement returns one");
+    EXPECT_TRUE(LMCAS::detail::node(result)->is_one(), "trig identity replacement returns one");
 
     std::cout << "Trig identity passed." << std::endl;
 }
@@ -122,8 +122,8 @@ void test_rewrite_engine() {
     EXPECT_TRUE(result.has_value(), "rewrite engine application succeeds");
     if (!result) return;
 
-    EXPECT_TRUE(lamina::detail::node(result.value())->equals(
-                    *lamina::detail::node(inner)),
+    EXPECT_TRUE(LMCAS::detail::node(result.value())->equals(
+                    *LMCAS::detail::node(inner)),
                 "rewrite engine removes additive zero");
 
     std::cout << "Rewrite engine passed." << std::endl;

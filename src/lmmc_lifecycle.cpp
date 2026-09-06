@@ -4,7 +4,7 @@
 
 #include <exception>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 namespace {
 
 class LmmcLifecycle final {
@@ -32,4 +32,4 @@ void ensure_lmmc_lifecycle() noexcept {
     (void)lifecycle;
 }
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

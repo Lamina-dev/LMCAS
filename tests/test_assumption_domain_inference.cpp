@@ -9,32 +9,32 @@
 #include <string>
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 static std::shared_ptr<const SymbolicNode> make_power(
     std::shared_ptr<const SymbolicNode> base,
     std::shared_ptr<const SymbolicNode> exp) {
-    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exp));
+    return LMCAS::detail::make_node<PowerNode>(std::move(base), std::move(exp));
 }
 
 static std::shared_ptr<const SymbolicNode> make_function(
     FunctionNode::FuncType type,
     std::shared_ptr<const SymbolicNode> arg) {
-    return lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_node<FunctionNode>(
         type, std::vector<std::shared_ptr<const SymbolicNode>>{std::move(arg)});
 }
 
 static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 

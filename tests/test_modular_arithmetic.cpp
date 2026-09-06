@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static void test_crt_checked_contracts() {
     TEST_CASE("modular_arithmetic checked CRT: explicit errors and context");

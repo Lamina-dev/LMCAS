@@ -12,7 +12,7 @@
 #include <utility>
 #include <memory>
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -32,11 +32,11 @@ using ContinuityResult = Result<ContinuityType>;
  *
  * 通过计算左极限,右极限和函数值来确定连续性分类.
  */
-LAMINA_API ContinuityResult continuity_at_checked(
+LMCAS_API ContinuityResult continuity_at_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point, ComputationContext& context);
 
-LAMINA_API ContinuityResult continuity_at_checked(
+LMCAS_API ContinuityResult continuity_at_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point);
 
@@ -65,14 +65,14 @@ using SymbolicExprVectorResult = Result<std::vector<std::shared_ptr<SymbolicExpr
  * @param[in] var 自变量名
  * @return 渐近线分析结果
  */
-LAMINA_API AsymptoteAnalysisResult asymptotes_checked(
+LMCAS_API AsymptoteAnalysisResult asymptotes_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context);
 
 /**
  * @brief 使用默认计算上下文计算函数的渐近线,并显式报告无效输入.
  */
-LAMINA_API AsymptoteAnalysisResult asymptotes_checked(
+LMCAS_API AsymptoteAnalysisResult asymptotes_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 
@@ -87,7 +87,7 @@ LAMINA_API AsymptoteAnalysisResult asymptotes_checked(
  * @param[in] var 求导变量名
  * @return 对数微分结果表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> log_differentiate(
+LMCAS_API std::shared_ptr<SymbolicExpr> log_differentiate(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 /**
@@ -99,7 +99,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> log_differentiate(
  * @param[in] var 微分变量名
  * @return f'(var) 表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> differential(
+LMCAS_API std::shared_ptr<SymbolicExpr> differential(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 /**
@@ -112,7 +112,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> differential(
  * @param[in] vars 变量名列表
  * @return (partialf/partialxᵢ, "xᵢ") 对的向量
  */
-LAMINA_API std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> total_differential(
+LMCAS_API std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> total_differential(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars);
 
 /**
@@ -120,7 +120,7 @@ LAMINA_API std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> to
  *
  * Checked API 只在反函数候选唯一且 f'(x_0) 可构造,非零时成功.
  */
-LAMINA_API ExpressionResult inverse_derivative_checked(
+LMCAS_API ExpressionResult inverse_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point,
     ComputationContext& context);
@@ -128,7 +128,7 @@ LAMINA_API ExpressionResult inverse_derivative_checked(
 /**
  * @brief 使用默认计算上下文计算反函数导数,并显式报告失败语义.
  */
-LAMINA_API ExpressionResult inverse_derivative_checked(
+LMCAS_API ExpressionResult inverse_derivative_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& point);
 
@@ -150,14 +150,14 @@ LAMINA_API ExpressionResult inverse_derivative_checked(
  * Checked API 使用 solution-set dispatcher;只在有限精确解或可证明空集
  * 时成功,超出支持域返回 `CasErrc::Inconclusive`.
  */
-LAMINA_API SymbolicExprVectorResult inverse_function_checked(
+LMCAS_API SymbolicExprVectorResult inverse_function_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& y, ComputationContext& context);
 
 /**
  * @brief 使用默认计算上下文求解反函数,并显式报告失败语义.
  */
-LAMINA_API SymbolicExprVectorResult inverse_function_checked(
+LMCAS_API SymbolicExprVectorResult inverse_function_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& y);
 
@@ -179,14 +179,14 @@ LAMINA_API SymbolicExprVectorResult inverse_function_checked(
  * @param[in] var 自变量名称
  * @return 曲率的符号表达式
  */
-LAMINA_API ExpressionResult curvature_checked(
+LMCAS_API ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context);
 
 /**
  * @brief 使用默认计算上下文计算显式曲线曲率,并显式报告无效输入.
  */
-LAMINA_API ExpressionResult curvature_checked(
+LMCAS_API ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 
@@ -197,7 +197,7 @@ LAMINA_API ExpressionResult curvature_checked(
  * @param[in] t 参数变量名称
  * @return 曲率的符号表达式
  */
-LAMINA_API ExpressionResult curvature_parametric_checked(
+LMCAS_API ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t,
     ComputationContext& context);
@@ -205,7 +205,7 @@ LAMINA_API ExpressionResult curvature_parametric_checked(
 /**
  * @brief 使用默认计算上下文计算参数曲线曲率,并显式报告无效输入和零速度.
  */
-LAMINA_API ExpressionResult curvature_parametric_checked(
+LMCAS_API ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t);
 
@@ -218,14 +218,14 @@ LAMINA_API ExpressionResult curvature_parametric_checked(
  * @param[in] var 自变量名称
  * @return 拐点的 x 坐标列表
  */
-LAMINA_API SymbolicExprVectorResult inflection_points_checked(
+LMCAS_API SymbolicExprVectorResult inflection_points_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context);
 
 /**
  * @brief 使用默认计算上下文计算拐点,并显式报告无效输入.
  */
-LAMINA_API SymbolicExprVectorResult inflection_points_checked(
+LMCAS_API SymbolicExprVectorResult inflection_points_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var);
 
 
@@ -237,7 +237,7 @@ LAMINA_API SymbolicExprVectorResult inflection_points_checked(
  * Checked API 只接受可精确求值的符号定积分;超出支持域返回
  * `CasErrc::Inconclusive`.
  */
-LAMINA_API ExpressionResult surface_area_revolution_x_checked(
+LMCAS_API ExpressionResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context);
@@ -245,7 +245,7 @@ LAMINA_API ExpressionResult surface_area_revolution_x_checked(
 /**
  * @brief 使用默认计算上下文计算绕 x 轴旋转面积,并显式报告失败语义.
  */
-LAMINA_API ExpressionResult surface_area_revolution_x_checked(
+LMCAS_API ExpressionResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 
@@ -268,7 +268,7 @@ LAMINA_API ExpressionResult surface_area_revolution_x_checked(
  * Checked API 只接受可精确求值的符号定积分;超出支持域返回
  * `CasErrc::Inconclusive`.
  */
-LAMINA_API ExpressionResult surface_area_revolution_y_checked(
+LMCAS_API ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context);
@@ -276,7 +276,7 @@ LAMINA_API ExpressionResult surface_area_revolution_y_checked(
 /**
  * @brief 使用默认计算上下文计算绕 y 轴旋转面积,并显式报告失败语义.
  */
-LAMINA_API ExpressionResult surface_area_revolution_y_checked(
+LMCAS_API ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b);
 
@@ -292,4 +292,4 @@ LAMINA_API ExpressionResult surface_area_revolution_y_checked(
  * @return 旋转面面积的符号表达式
  */
 
-} // namespace lamina
+} // namespace LMCAS

@@ -12,6 +12,8 @@ find_package(LMCAS CONFIG REQUIRED)
 
 add_executable(lmcas_package_consumer
     main.cpp
+    expr_checks.cpp
+    lmmc_stdlib_checks.cpp
     lmmc_linalg_checks.cpp
 )
 target_link_libraries(lmcas_package_consumer PRIVATE LMCAS::lmcas)

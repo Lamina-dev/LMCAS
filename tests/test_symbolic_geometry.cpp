@@ -1,6 +1,8 @@
 #include "test_common.hpp"
 #include "symbolic_geometry.hpp"
 
+using namespace LMCAS;
+
 void test_volume_revolution_x() {
     TEST_CASE("Volume of Revolution X: f(x) = x on [0, h] (cone)");
     {
@@ -8,7 +10,7 @@ void test_volume_revolution_x() {
         auto x = SymbolicExpr::variable("x");
         auto h = SymbolicExpr::variable("h");
         auto zero = SymbolicExpr::number(0);
-        auto result = lamina::volume_of_revolution_x_checked(x, zero, h).value();
+        auto result = LMCAS::volume_of_revolution_x_checked(x, zero, h).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Cone volume result: " << s << std::endl;
         // The result should keep the exact pi/3 factor.
@@ -27,7 +29,7 @@ void test_volume_revolution_x() {
         auto x_sq = SymbolicExpr::power(x, SymbolicExpr::number(2));
         auto inner = SymbolicExpr::add(r_sq, SymbolicExpr::multiply(SymbolicExpr::number(-1), x_sq));
         auto fx = SymbolicExpr::sqrt(inner);
-        auto result = lamina::volume_of_revolution_x_checked(fx, neg_r, r).value();
+        auto result = LMCAS::volume_of_revolution_x_checked(fx, neg_r, r).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Sphere volume result: " << s << std::endl;
         // The result should stay exact and must not leave the polynomial integral unevaluated.
@@ -50,7 +52,7 @@ void test_arc_length_x() {
         );
         auto zero = SymbolicExpr::number(0);
         auto three = SymbolicExpr::number(3);
-        auto result = lamina::arc_length_x_checked(fx, zero, three).value();
+        auto result = LMCAS::arc_length_x_checked(fx, zero, three).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Linear arc length result: " << s << std::endl;
         // For linear function, the integrand sqrt(1+4)=sqrt(5) is constant
@@ -68,10 +70,10 @@ void test_arc_length_x() {
         auto zero = SymbolicExpr::number(0);
         auto one = SymbolicExpr::number(1);
 
-        auto checked = lamina::arc_length_x_checked(fx, zero, one);
+        auto checked = LMCAS::arc_length_x_checked(fx, zero, one);
         EXPECT_TRUE(!checked.has_value(),
                     "checked x^2 arc length rejects unsupported integral");
-        EXPECT_TRUE(checked.error().code == lamina::CasErrc::Inconclusive,
+        EXPECT_TRUE(checked.error().code == LMCAS::CasErrc::Inconclusive,
                     "checked x^2 arc length reports Inconclusive");
     }
 }
@@ -83,7 +85,7 @@ void test_volume_revolution_y() {
         auto y = SymbolicExpr::variable("y");
         auto h = SymbolicExpr::variable("h");
         auto zero = SymbolicExpr::number(0);
-        auto result = lamina::volume_of_revolution_y_checked(y, zero, h).value();
+        auto result = LMCAS::volume_of_revolution_y_checked(y, zero, h).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Y-axis cone volume result: " << s << std::endl;
         // The result should keep the exact pi/3 factor.
@@ -104,7 +106,7 @@ void test_arc_length_y() {
         );
         auto zero = SymbolicExpr::number(0);
         auto three = SymbolicExpr::number(3);
-        auto result = lamina::arc_length_y_checked(fy, zero, three).value();
+        auto result = LMCAS::arc_length_y_checked(fy, zero, three).value();
         std::string s = result ? result->to_string() : "null";
         std::cout << "  Y-axis linear arc length result: " << s << std::endl;
         EXPECT_TRUE(result != nullptr, "y-axis linear arc length is not null");
@@ -118,51 +120,51 @@ void test_symbolic_geometry_checked_contracts() {
         auto zero = SymbolicExpr::number(0);
         auto one = SymbolicExpr::number(1);
 
-        auto volume = lamina::volume_of_revolution_x_checked(x, zero, one);
+        auto volume = LMCAS::volume_of_revolution_x_checked(x, zero, one);
         EXPECT_TRUE(volume.has_value(), "checked volume_of_revolution_x succeeds");
         if (volume) {
             EXPECT_TRUE(volume.value() != nullptr,
                         "checked volume_of_revolution_x returns an expression");
         }
 
-        auto null_profile = lamina::volume_of_revolution_x_checked(nullptr, zero, one);
+        auto null_profile = LMCAS::volume_of_revolution_x_checked(nullptr, zero, one);
         EXPECT_TRUE(!null_profile.has_value(),
                     "checked volume_of_revolution_x rejects null profile");
-        EXPECT_TRUE(null_profile.error().code == lamina::CasErrc::InvalidArgument,
+        EXPECT_TRUE(null_profile.error().code == LMCAS::CasErrc::InvalidArgument,
                     "checked volume_of_revolution_x reports InvalidArgument");
 
         std::shared_ptr<SymbolicExpr> null_root;
-        auto null_bound = lamina::arc_length_x_checked(x, null_root, one);
+        auto null_bound = LMCAS::arc_length_x_checked(x, null_root, one);
         EXPECT_TRUE(!null_bound.has_value(),
                     "checked arc_length_x rejects null bound");
-        EXPECT_TRUE(null_bound.error().code == lamina::CasErrc::InvalidArgument,
+        EXPECT_TRUE(null_bound.error().code == LMCAS::CasErrc::InvalidArgument,
                     "checked arc_length_x reports InvalidArgument for null bound");
 
         auto unsupported_profile = SymbolicExpr::eq(x, zero);
-        auto unsupported_arc = lamina::arc_length_x_checked(
+        auto unsupported_arc = LMCAS::arc_length_x_checked(
             unsupported_profile, zero, one);
         EXPECT_TRUE(!unsupported_arc.has_value(),
                     "checked arc_length_x rejects unsupported derivatives");
-        EXPECT_TRUE(unsupported_arc.error().code == lamina::CasErrc::Inconclusive,
+        EXPECT_TRUE(unsupported_arc.error().code == LMCAS::CasErrc::Inconclusive,
                     "checked arc_length_x reports Inconclusive for unsupported derivatives");
 
-        lamina::CancellationToken cancellation;
-        lamina::ComputationContext cancelled_context({}, cancellation);
+        LMCAS::CancellationToken cancellation;
+        LMCAS::ComputationContext cancelled_context({}, cancellation);
         cancellation.cancel();
-        auto cancelled = lamina::volume_of_revolution_y_checked(
+        auto cancelled = LMCAS::volume_of_revolution_y_checked(
             x, zero, one, cancelled_context);
         EXPECT_TRUE(!cancelled.has_value(),
                     "checked volume_of_revolution_y observes cancellation");
-        EXPECT_TRUE(cancelled.error().code == lamina::CasErrc::Cancelled,
+        EXPECT_TRUE(cancelled.error().code == LMCAS::CasErrc::Cancelled,
                     "checked volume_of_revolution_y reports Cancelled");
 
-        lamina::ResourceLimits limits;
+        LMCAS::ResourceLimits limits;
         limits.max_steps = 0;
-        lamina::ComputationContext limited_context(limits);
-        auto limited = lamina::arc_length_y_checked(x, zero, one, limited_context);
+        LMCAS::ComputationContext limited_context(limits);
+        auto limited = LMCAS::arc_length_y_checked(x, zero, one, limited_context);
         EXPECT_TRUE(!limited.has_value(),
                     "checked arc_length_y observes exhausted step budget");
-        EXPECT_TRUE(limited.error().code == lamina::CasErrc::ResourceLimit,
+        EXPECT_TRUE(limited.error().code == LMCAS::CasErrc::ResourceLimit,
                     "checked arc_length_y reports ResourceLimit");
     }
 }

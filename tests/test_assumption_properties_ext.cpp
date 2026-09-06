@@ -15,33 +15,33 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
 }
 
 /// Create a FunctionNode expression (e.g., sin(x), cos(x), tan(x)).
 static SymbolicExpr make_func(FunctionNode::FuncType type, const std::string& var_name) {
-    auto var_node = lamina::detail::make_node<VariableNode>(var_name);
-    auto func_node = lamina::detail::make_node<FunctionNode>(
+    auto var_node = LMCAS::detail::make_node<VariableNode>(var_name);
+    auto func_node = LMCAS::detail::make_node<FunctionNode>(
         type, std::vector<std::shared_ptr<const SymbolicNode>>{var_node});
-    return lamina::detail::expression_from_node(func_node);
+    return LMCAS::detail::expression_from_node(func_node);
 }
 
 /// Create a numeric SymbolicExpr from a double value.
 static std::shared_ptr<SymbolicExpr> make_number_expr(double val) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val)));
 }
 
 /// Extract a numeric value from a SymbolicExpr (if it's a simple number or product).
 static std::optional<double> extract_numeric(const SymbolicExpr& expr) {
-    if (!lamina::detail::node(expr)) return std::nullopt;
+    if (!LMCAS::detail::node(expr)) return std::nullopt;
 
-    if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
         if (std::holds_alternative<lmmc_real_t>(num->value()))
             return std::get<lmmc_real_t>(num->value());
         if (std::holds_alternative<BigInt>(num->value()))
@@ -52,7 +52,7 @@ static std::optional<double> extract_numeric(const SymbolicExpr& expr) {
     }
 
     // Handle MultiplyNode (e.g., 2*pi)
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         double product = 1.0;
         for (const auto& op : mul->operands()) {
             auto num = std::dynamic_pointer_cast<const NumberNode>(op);

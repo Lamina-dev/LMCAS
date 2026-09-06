@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <set>
 
-namespace lamina {
+namespace LMCAS {
 
 static std::shared_ptr<SymbolicExpr> extract_coefficient(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -186,7 +186,7 @@ ParametricSolver::solve_linear_parametric(
     return { solution };
 }
 
-ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
+ParametricSolutionsResult ParametricSolver::solve_polynomial_parametric_impl(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
     const std::vector<std::string>&,
@@ -198,13 +198,13 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
         for (const auto& var : unknowns) {
             solution[var] = SymbolicExpr::variable(var);
         }
-        return { solution };
+        return ParametricSolutionList{std::move(solution)};
     }
 
     std::vector<SymbolicExpr> input_polys;
     input_polys.reserve(equations.size());
     for (const auto& eq : equations) {
-        if (eq && lamina::detail::node(eq)) {
+        if (eq && LMCAS::detail::node(eq)) {
             auto simplified = eq->simplify();
             if (simplified && !simplified->is_zero()) {
                 input_polys.push_back(*simplified);
@@ -218,7 +218,7 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
         for (const auto& var : unknowns) {
             solution[var] = SymbolicExpr::variable(var);
         }
-        return { solution };
+        return ParametricSolutionList{std::move(solution)};
     }
 
     auto G_basis = Solver::groebner_basis(input_polys, unknowns);
@@ -226,7 +226,7 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
     std::vector<std::shared_ptr<SymbolicExpr>> basis;
     basis.reserve(G_basis.size());
     for (const auto& g : G_basis) {
-        auto g_ptr = lamina::detail::make_expression_ptr(g);
+        auto g_ptr = LMCAS::detail::make_expression_ptr(g);
         auto simp = g_ptr->simplify();
         if (simp && !simp->is_zero()) {
             basis.push_back(simp);
@@ -235,9 +235,12 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
 
     if (unknowns.empty()) {
         for (const auto& p : basis) {
-            if (p->is_number() && !p->is_zero()) return {};
+            if (p->is_number() && !p->is_zero()) {
+                return ParametricSolutionList{};
+            }
         }
-        return { {} };
+        return ParametricSolutionList{
+            std::map<std::string, std::shared_ptr<SymbolicExpr>>{}};
     }
 
     for (const auto& p : basis) {
@@ -251,7 +254,7 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
         if (!depends_on_unknown) {
 
             if (!p->is_zero()) {
-                return {};
+                return ParametricSolutionList{};
             }
         }
     }
@@ -268,8 +271,9 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
     };
 
     auto solve_rec = [&](auto&& self, int var_pos,
-                         const std::map<std::string, std::shared_ptr<SymbolicExpr>>& partial)
-        -> std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> {
+                         const std::map<std::string,
+                                        std::shared_ptr<SymbolicExpr>>& partial)
+        -> ParametricSolutionsResult {
 
         std::vector<std::shared_ptr<SymbolicExpr>> reduced;
         reduced.reserve(basis.size());
@@ -290,7 +294,7 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
             if (!depends) {
 
                 if (r->is_number() && !r->is_zero()) {
-                    return {};
+                    return ParametricSolutionList{};
                 }
 
                 continue;
@@ -300,7 +304,7 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
         }
 
         if (var_pos < 0) {
-            return { partial };
+            return ParametricSolutionList{partial};
         }
 
         const auto& curr_var = unknowns[var_pos];
@@ -341,8 +345,11 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
             return self(self, var_pos - 1, next_partial);
         }
 
-        auto roots = detail::propagate_result(
-            solve_finite_checked(target, curr_var, context));
+        auto solved = solve_finite_checked(target, curr_var, context);
+        if (!solved) {
+            return ParametricSolutionsResult::failure(solved.error());
+        }
+        auto roots = std::move(solved.value());
         if (roots.empty()) {
 
             auto next_partial = partial;
@@ -355,13 +362,19 @@ ParametricSolutionList ParametricSolver::solve_polynomial_parametric_impl(
             auto next_partial = partial;
             next_partial[curr_var] = r;
             auto sub_res = self(self, var_pos - 1, next_partial);
-            results.insert(results.end(), sub_res.begin(), sub_res.end());
+            if (!sub_res) return sub_res;
+            auto& values = sub_res.value();
+            results.insert(
+                results.end(),
+                std::make_move_iterator(values.begin()),
+                std::make_move_iterator(values.end()));
         }
         return results;
     };
 
     std::map<std::string, std::shared_ptr<SymbolicExpr>> empty;
-    return solve_rec(solve_rec, static_cast<int>(unknowns.size()) - 1, empty);
+    return solve_rec(
+        solve_rec, static_cast<int>(unknowns.size()) - 1, empty);
 }
 
 ParametricSolutionsResult
@@ -382,11 +395,8 @@ ParametricSolver::solve_polynomial_parametric_checked(
         equations.size() * unknowns.size() + 1, operation);
     if (!budget) return ParametricSolutionsResult::failure(budget.error());
     try {
-        return ParametricSolutionsResult::success(
-            solve_polynomial_parametric_impl(
-                equations, unknowns, parameters, context));
-    } catch (const detail::ResultPropagation& propagation) {
-        return ParametricSolutionsResult::failure(propagation.error());
+        return solve_polynomial_parametric_impl(
+            equations, unknowns, parameters, context);
     } catch (const std::bad_alloc&) {
         return ParametricSolutionsResult::failure(
             CasErrc::ResourceLimit,
@@ -432,8 +442,9 @@ ParametricSolver::solve_system(
     }
 
     ComputationContext context;
-    return solve_polynomial_parametric_impl(
+    auto solved = solve_polynomial_parametric_impl(
         equations, unknowns, effective_params, context);
+    return solved ? std::move(solved.value()) : ParametricSolutionList{};
 }
 
 static std::shared_ptr<SymbolicExpr> compute_determinant(
@@ -453,7 +464,7 @@ static std::shared_ptr<SymbolicExpr> compute_determinant(
     ComputationContext context;
     auto determinant = detail::determinant_exact(
         exact, context, "parametric_determinant");
-    return determinant ? lamina::detail::propagate_result(determinant) : nullptr;
+    return determinant ? std::move(determinant.value()) : nullptr;
 }
 
 static bool depends_on_parameters(

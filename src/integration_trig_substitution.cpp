@@ -1,6 +1,6 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -32,9 +32,9 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
     if (std::abs(e - 0.5) > 1e-9 && std::abs(e + 0.5) > 1e-9) return false;
 
     /// base 必须是 c0 + c2*x²（关于 var 的二次、无一次项）
-    auto base = lamina::detail::expression_from_node(pw->base());
+    auto base = LMCAS::detail::expression_from_node(pw->base());
     auto b = base.expand();
-    if (!b) b = lamina::detail::make_expression_ptr(pw->base());
+    if (!b) b = LMCAS::detail::make_expression_ptr(pw->base());
     /// 提取关于 var 的系数：c0（常数）、c1（一次）、c2（二次）
     /// 用求导法：c2 = (1/2) d²/dx² ; c1 = d/dx |_{x=0} ; c0 = base|_{x=0}
     auto d1 = b->differentiate(var);
@@ -44,10 +44,10 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
     auto c1e = d1->substitute(var, zero)->simplify();
     auto c2e = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1,2)), d2)->simplify();
     /// 必须 c1=0，且 c2 为非零常数，c0 常数，且 d2 不依赖 var（纯二次）
-    if (!lamina::detail::node(c1e) || !lamina::detail::node(c1e)->is_zero()) return false;
-    if (expression_depends_on_variable(lamina::detail::node(c2e), var)) return false;
-    if (expression_depends_on_variable(lamina::detail::node(c0e), var)) return false;
-    if (!lamina::detail::node(c2e)->is_number() || !lamina::detail::node(c0e)->is_number()) return false;
+    if (!LMCAS::detail::node(c1e) || !LMCAS::detail::node(c1e)->is_zero()) return false;
+    if (expression_depends_on_variable(LMCAS::detail::node(c2e), var)) return false;
+    if (expression_depends_on_variable(LMCAS::detail::node(c0e), var)) return false;
+    if (!LMCAS::detail::node(c2e)->is_number() || !LMCAS::detail::node(c0e)->is_number()) return false;
     auto c0_checked = try_checked_numeric_constant(*c0e, context);
     auto c2_checked = try_checked_numeric_constant(*c2e, context);
     if (!c0_checked || !c2_checked) return false;
@@ -67,10 +67,10 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
 
 } // anonymous namespace
 
-std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext& context, int) {
-    if (!lamina::detail::node(expr)) return nullptr;
+    if (!LMCAS::detail::node(expr)) return nullptr;
 
     auto x = SymbolicExpr::variable(var);
 
@@ -81,7 +81,7 @@ std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate_raw(
     ///   ∫ (a²-x²)^( 1/2) dx = (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
     QuadRadical qr;
     if (!trigsub_match_radical(
-            lamina::detail::node(expr), var, context, qr)) {
+            LMCAS::detail::node(expr), var, context, qr)) {
         return nullptr;
     }
 
@@ -101,8 +101,8 @@ std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate_raw(
     auto x_over_a = SymbolicExpr::divide(x, a_expr);
 
     auto arcsin = [&](const std::shared_ptr<SymbolicExpr>& u) {
-        return lamina::detail::make_expression_ptr(lamina::detail::make_node<FunctionNode>(
-            FunctionNode::FuncType::ArcSin, std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(u)}));
+        return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::ArcSin, std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(u)}));
     };
     auto ln = [&](const std::shared_ptr<SymbolicExpr>& u) { return SymbolicExpr::ln(u); };
 
@@ -150,4 +150,4 @@ std::shared_ptr<SymbolicExpr> TrigSubstitutionStrategy::try_integrate_raw(
     }
 }
 
-} // namespace lamina
+} // namespace LMCAS

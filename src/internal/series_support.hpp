@@ -6,10 +6,12 @@
 #include <string>
 #include <vector>
 
+namespace LMCAS {
+
 class SymbolicNode;
 class SymbolicExpr;
 
-namespace lamina {
+
 class ComputationContext;
 
 namespace detail::series_support {
@@ -28,4 +30,4 @@ std::optional<int> supported_laurent_integer_power(
     const std::string& variable);
 
 } // namespace detail::series_support
-} // namespace lamina
+} // namespace LMCAS

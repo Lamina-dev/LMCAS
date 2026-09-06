@@ -13,7 +13,7 @@
 #include <string>
 #include <utility>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 符号图条目,记录区间及其上的符号 */
 struct SignChartEntry {
@@ -22,7 +22,7 @@ struct SignChartEntry {
 };
 
 /** @brief 参数化不等式的分段解集 */
-struct LAMINA_API PiecewiseIntervalResult {
+struct LMCAS_API PiecewiseIntervalResult {
     /** @brief 单个分段:条件 + 对应解集 */
     struct Case {
         std::shared_ptr<SymbolicExpr> condition; ///< 参数满足的条件
@@ -56,7 +56,7 @@ struct LAMINA_API PiecewiseIntervalResult {
 };
 
 /** @brief 不等式求解器,提供多项式,有理式及参数化不等式的求解 */
-class LAMINA_API InequalitySolver {
+class LMCAS_API InequalitySolver {
 public:
 
     /**
@@ -101,6 +101,13 @@ public:
      * @param type 不等式类型
      * @param variable 求解变量名
      * @return 解集
+     *
+     * Exact quadratic coefficients are converted to numerical roots with a
+     * cancellation-resistant quadratic formula. Integer snapping requires an
+     * exactly integral approximation, and exact roots are deduplicated
+     * symbolically rather than by a fixed floating-point distance before the
+     * sign chart is constructed. Prefer solve_inequality_checked() when a
+     * proved exact result is required.
      */
     static IntervalUnion solve_inequality(
         const std::shared_ptr<SymbolicExpr>& expr,

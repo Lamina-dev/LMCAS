@@ -16,7 +16,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -158,9 +158,9 @@ bool MultiPoly::is_univariate() const
 bool MultiPoly::is_homogeneous() const
 {
     if (terms_.empty()) return true;
-    int deg = lamina::total_degree(terms_[0].first);
+    int deg = LMCAS::total_degree(terms_[0].first);
     for (size_t i = 1; i < terms_.size(); ++i) {
-        if (lamina::total_degree(terms_[i].first) != deg) return false;
+        if (LMCAS::total_degree(terms_[i].first) != deg) return false;
     }
     return true;
 }
@@ -190,7 +190,7 @@ int MultiPoly::total_degree() const
     if (terms_.empty()) return -1;
     int max_deg = 0;
     for (const auto& term : terms_) {
-        int deg = lamina::total_degree(term.first);
+        int deg = LMCAS::total_degree(term.first);
         if (deg > max_deg) max_deg = deg;
     }
     return max_deg;
@@ -884,4 +884,4 @@ std::string MultiPoly::to_string() const
     return oss.str();
 }
 
-} // namespace lamina
+} // namespace LMCAS

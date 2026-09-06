@@ -2,6 +2,8 @@
 #include "poly_utils.hpp"
 #include "solve_strategies.hpp"
 
+using namespace LMCAS;
+
 int main() {
     TEST_CASE("New Features (Expand, GCD, Solve, Resultant)");
     auto x = SymbolicExpr::variable("x");
@@ -22,8 +24,8 @@ int main() {
 
         auto Q = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(-1));
 
-        lamina::ComputationContext gcd_context;
-        auto gcd = lamina::symbolic_polynomial_gcd(
+        LMCAS::ComputationContext gcd_context;
+        auto gcd = LMCAS::symbolic_polynomial_gcd(
             *P, *Q, gcd_context).value();
 
         EXPECT_CONTAINS(gcd->to_string(), {"x", "1"}, "GCD(x^2+2x+1, x^2-1)");
@@ -32,7 +34,7 @@ int main() {
     {
 
         auto eq = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(-4));
-        auto sol = lamina::solve_finite_checked(eq, "x").value();
+        auto sol = LMCAS::solve_finite_checked(eq, "x").value();
 
         EXPECT_TRUE(!sol.empty(), "Solve x^2-4=0 returned empty");
 
@@ -122,7 +124,7 @@ int main() {
 
         auto zero = SymbolicExpr::number(0);
         auto lim_res =
-            lamina::limit_expression_checked(sinx_x, "x", zero).value();
+            LMCAS::limit_expression_checked(sinx_x, "x", zero).value();
         if (lim_res) {
              EXPECT_EQ_EXPR_STR(lim_res, "1", "Limit(sin(x)/x, x->0) = 1");
         }

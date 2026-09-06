@@ -1,8 +1,8 @@
 #include "internal/integration_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
-std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> TableLookupStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext& computation, int) {
     (void)computation;
@@ -39,7 +39,7 @@ std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate_raw(
 
             SymbolicExpr result = Matcher::replace(entry->result, bindings, false);
             auto simplified = result.simplify();
-            if (simplified && !contains_unevaluated_integral(lamina::detail::node(simplified))) {
+            if (simplified && !contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
                 return simplified;
             }
         }
@@ -47,11 +47,11 @@ std::shared_ptr<SymbolicExpr> TableLookupStrategy::try_integrate_raw(
     return nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> PowerRuleStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext&, int) {
 
-    if (auto v_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+    if (auto v_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
         if (v_node->name() == var) {
             return SymbolicExpr::multiply(
                 SymbolicExpr::power(make_expr_ptr(expr), SymbolicExpr::number(2)),
@@ -59,10 +59,10 @@ std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate_raw(
         }
     }
 
-    if (auto p_node = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-        auto base = lamina::detail::expression_from_node(p_node->base());
-        auto exp_expr = lamina::detail::expression_from_node(p_node->exponent());
-        if (auto b_var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(base))) {
+    if (auto p_node = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+        auto base = LMCAS::detail::expression_from_node(p_node->base());
+        auto exp_expr = LMCAS::detail::expression_from_node(p_node->exponent());
+        if (auto b_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(base))) {
             if (b_var->name() == var && !depends_on_integration_variable(exp_expr, var)) {
                 auto n_plus_1 = SymbolicExpr::add(make_expr_ptr(exp_expr), SymbolicExpr::number(1))->simplify();
                 if (n_plus_1->is_zero()) {
@@ -78,26 +78,26 @@ std::shared_ptr<SymbolicExpr> PowerRuleStrategy::try_integrate_raw(
     return nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> SubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext& computation, int) {
 
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         ops = mul->operands();
     } else {
-        ops.push_back(lamina::detail::node(expr));
+        ops.push_back(LMCAS::detail::node(expr));
     }
 
     for (size_t i = 0; i < ops.size(); ++i) {
-        auto candidate_term = lamina::detail::expression_from_node(ops[i]);
+        auto candidate_term = LMCAS::detail::expression_from_node(ops[i]);
         std::optional<SymbolicExpr> u;
 
-        if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(candidate_term))) {
-            u = lamina::detail::expression_from_node(pow->base());
-        } else if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(candidate_term))) {
+        if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(candidate_term))) {
+            u = LMCAS::detail::expression_from_node(pow->base());
+        } else if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(candidate_term))) {
             if (!func->arguments().empty()) {
-                u = lamina::detail::expression_from_node(func->arguments()[0]);
+                u = LMCAS::detail::expression_from_node(func->arguments()[0]);
             }
         }
 
@@ -112,9 +112,13 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate_raw(
             auto ratio = SymbolicExpr::divide(make_expr_ptr(expr), term_times_du)->simplify();
             bool ratio_independent = !depends_on_integration_variable(*ratio, var);
             if (!ratio_independent && computation.assumptions()) {
-                Tribool du_nonzero = detail::propagate_result(
-                    computation.assumptions()->is_nonzero(*du));
-                if (du_nonzero == Tribool::True) {
+                auto nonzero =
+                    computation.assumptions()->is_nonzero(*du);
+                if (!nonzero) {
+                    return Result<std::shared_ptr<SymbolicExpr>>::failure(
+                        nonzero.error());
+                }
+                if (nonzero.value() == Tribool::True) {
                     ratio_independent = !depends_on_integration_variable(*ratio, var);
                 }
             }
@@ -122,8 +126,8 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate_raw(
             if (ratio_independent) {
                 std::shared_ptr<SymbolicExpr> prim = nullptr;
 
-                if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(candidate_term))) {
-                    auto n = lamina::detail::expression_from_node(pow->exponent());
+                if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(candidate_term))) {
+                    auto n = LMCAS::detail::expression_from_node(pow->exponent());
                     auto np1 = SymbolicExpr::add(make_expr_ptr(n), SymbolicExpr::number(1))->simplify();
                     if (np1->is_zero()) {
                         prim = SymbolicExpr::ln(make_expr_ptr(*u));
@@ -131,7 +135,7 @@ std::shared_ptr<SymbolicExpr> SubstitutionStrategy::try_integrate_raw(
                         prim = SymbolicExpr::divide(
                             SymbolicExpr::power(make_expr_ptr(*u), np1), np1);
                     }
-                } else if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(candidate_term))) {
+                } else if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(candidate_term))) {
                     if (func->type() == FunctionNode::FuncType::Cos) {
                         prim = SymbolicExpr::sin(make_expr_ptr(*u));
                     } else if (func->type() == FunctionNode::FuncType::Sin) {
@@ -158,7 +162,7 @@ bool LinearSubstitutionStrategy::extract_linear_arg(
     std::shared_ptr<SymbolicExpr>& b_out) {
 
     // Argument must actually depend on the integration variable.
-    if (!expression_depends_on_variable(lamina::detail::node(arg), var)) return false;
+    if (!expression_depends_on_variable(LMCAS::detail::node(arg), var)) return false;
 
     Polynomial<SymbolicPolyCoeff> poly;
     try {
@@ -180,8 +184,8 @@ bool LinearSubstitutionStrategy::extract_linear_arg(
     if (!a_expr || !b_expr) return false;
 
     // Coefficients must not depend on the integration variable.
-    if (expression_depends_on_variable(lamina::detail::node(a_expr), var)) return false;
-    if (expression_depends_on_variable(lamina::detail::node(b_expr), var)) return false;
+    if (expression_depends_on_variable(LMCAS::detail::node(a_expr), var)) return false;
+    if (expression_depends_on_variable(LMCAS::detail::node(b_expr), var)) return false;
 
     auto a_simp = a_expr->simplify();
     auto b_simp = b_expr->simplify();
@@ -196,7 +200,7 @@ bool LinearSubstitutionStrategy::extract_linear_arg(
     return true;
 }
 
-std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> LinearSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext& computation, int depth) {
 
@@ -210,7 +214,7 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
     std::shared_ptr<const FunctionNode> base_fn;  // inner FunctionNode of a PowerNode
     std::optional<SymbolicExpr> arg_expr;   // the linear-candidate sub-expression
 
-    if ((fn = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr)))) {
+    if ((fn = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr)))) {
         // Skip wrappers that are not "real" single-argument functions.
         switch (fn->type()) {
             case FT::Infinity:
@@ -221,13 +225,13 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
                 break;
         }
         if (fn->arguments().size() != 1) return nullptr;
-        arg_expr = lamina::detail::expression_from_node(fn->arguments()[0]);
+        arg_expr = LMCAS::detail::expression_from_node(fn->arguments()[0]);
         kind = Wrapper::Function;
-    } else if ((pn = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr)))) {
+    } else if ((pn = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr)))) {
         // Exponent must be independent of the integration variable so that
         // substituting the linear argument back is sound.
-        auto exp_expr = lamina::detail::expression_from_node(pn->exponent());
-        if (expression_depends_on_variable(lamina::detail::node(exp_expr), var)) return nullptr;
+        auto exp_expr = LMCAS::detail::expression_from_node(pn->exponent());
+        if (expression_depends_on_variable(LMCAS::detail::node(exp_expr), var)) return nullptr;
 
         if ((base_fn = std::dynamic_pointer_cast<const FunctionNode>(pn->base()))) {
             switch (base_fn->type()) {
@@ -239,11 +243,11 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
                     break;
             }
             if (base_fn->arguments().size() != 1) return nullptr;
-            arg_expr = lamina::detail::expression_from_node(base_fn->arguments()[0]);
+            arg_expr = LMCAS::detail::expression_from_node(base_fn->arguments()[0]);
             kind = Wrapper::PowerOfFunction;
         } else {
             // Treat the whole base as the linear-candidate (e.g. (2x+1)^n).
-            arg_expr = lamina::detail::expression_from_node(pn->base());
+            arg_expr = LMCAS::detail::expression_from_node(pn->base());
             kind = Wrapper::PowerOfLinear;
         }
     } else {
@@ -265,17 +269,17 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
 
     std::shared_ptr<SymbolicExpr> test_expr;
     if (kind == Wrapper::Function) {
-        std::vector<std::shared_ptr<const SymbolicNode>> new_args{lamina::detail::node(dummy_var)};
-        test_expr = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<FunctionNode>(fn->type(), new_args));
+        std::vector<std::shared_ptr<const SymbolicNode>> new_args{LMCAS::detail::node(dummy_var)};
+        test_expr = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<FunctionNode>(fn->type(), new_args));
     } else if (kind == Wrapper::PowerOfFunction) {
-        std::vector<std::shared_ptr<const SymbolicNode>> new_args{lamina::detail::node(dummy_var)};
-        auto new_fn = lamina::detail::make_node<FunctionNode>(base_fn->type(), new_args);
-        test_expr = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<PowerNode>(new_fn, pn->exponent()));
+        std::vector<std::shared_ptr<const SymbolicNode>> new_args{LMCAS::detail::node(dummy_var)};
+        auto new_fn = LMCAS::detail::make_node<FunctionNode>(base_fn->type(), new_args);
+        test_expr = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<PowerNode>(new_fn, pn->exponent()));
     } else { // Wrapper::PowerOfLinear
-        test_expr = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<PowerNode>(lamina::detail::node(dummy_var), pn->exponent()));
+        test_expr = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<PowerNode>(LMCAS::detail::node(dummy_var), pn->exponent()));
     }
     if (!test_expr) return nullptr;
 
@@ -283,7 +287,8 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
     auto table_attempt = table_only.try_integrate(
         *test_expr, dummy_name, ctx, computation, depth);
     if (!table_attempt) {
-        throw detail::ResultPropagation(table_attempt.error());
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(
+            table_attempt.error());
     }
     auto* table_candidate =
         std::get_if<IntegrationCandidate>(&table_attempt.value());
@@ -296,19 +301,19 @@ std::shared_ptr<SymbolicExpr> LinearSubstitutionStrategy::try_integrate_raw(
     auto result = SymbolicExpr::multiply(inv_a, F_substituted);
 
     auto simplified = result->simplify();
-    if (simplified && !contains_unevaluated_integral(lamina::detail::node(simplified))) {
+    if (simplified && !contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
         return simplified;
     }
     return result;
 }
 
-std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> PartialFractionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext& computation, int) {
 
     std::shared_ptr<SymbolicExpr> den = nullptr;
 
-    if (auto p = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
+    if (auto p = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
         double exp_val = 0;
         bool is_inv = false;
         if (auto num_node = std::dynamic_pointer_cast<const NumberNode>(p->exponent())) {
@@ -323,7 +328,7 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate_raw(
             if (eq) is_inv = true;
         }
         if (is_inv) {
-            den = make_expr_ptr(lamina::detail::expression_from_node(p->base()));
+            den = make_expr_ptr(LMCAS::detail::expression_from_node(p->base()));
         }
     }
 
@@ -392,22 +397,22 @@ std::shared_ptr<SymbolicExpr> PartialFractionStrategy::try_integrate_raw(
     return nullptr;
 }
 
-std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate_raw(
+Result<std::shared_ptr<SymbolicExpr>> IBPStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
     ComputationContext& computation, int depth) {
 
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         ops = mul->operands();
     } else {
-        ops.push_back(lamina::detail::node(expr));
+        ops.push_back(LMCAS::detail::node(expr));
     }
 
     int best_u_idx = -1;
     int best_score = 100;
 
     auto get_score = [&](const std::shared_ptr<const SymbolicNode>& node) -> int {
-        auto e = lamina::detail::expression_from_node(node);
+        auto e = LMCAS::detail::expression_from_node(node);
         if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
             if (fn->type() == FunctionNode::FuncType::Ln || fn->type() == FunctionNode::FuncType::Log) return 1;
             if (fn->type() == FunctionNode::FuncType::ArcSin || fn->type() == FunctionNode::FuncType::ArcTan) return 2;
@@ -425,7 +430,7 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate_raw(
         if (s <= 2) best_u_idx = 0;
     } else {
         for (size_t i = 0; i < ops.size(); ++i) {
-            if (!depends_on_integration_variable(lamina::detail::expression_from_node(ops[i]), var)) continue;
+            if (!depends_on_integration_variable(LMCAS::detail::expression_from_node(ops[i]), var)) continue;
             int s = get_score(ops[i]);
             if (s < best_score) {
                 best_score = s;
@@ -436,7 +441,7 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate_raw(
 
     if (best_u_idx == -1) return nullptr;
 
-    auto u = lamina::detail::expression_from_node(ops[best_u_idx]);
+    auto u = LMCAS::detail::expression_from_node(ops[best_u_idx]);
     std::vector<std::shared_ptr<const SymbolicNode>> dv_ops;
     for (size_t i = 0; i < ops.size(); ++i) {
         if ((int)i != best_u_idx) dv_ops.push_back(ops[i]);
@@ -445,33 +450,37 @@ std::shared_ptr<SymbolicExpr> IBPStrategy::try_integrate_raw(
     std::shared_ptr<SymbolicExpr> dv;
     if (dv_ops.empty()) dv = SymbolicExpr::number(1);
     else if (dv_ops.size() == 1) {
-        dv = make_expr_ptr(lamina::detail::expression_from_node(dv_ops[0]));
+        dv = make_expr_ptr(LMCAS::detail::expression_from_node(dv_ops[0]));
     }
-    else dv = lamina::detail::make_expression_ptr(lamina::detail::make_node<MultiplyNode>(dv_ops));
+    else dv = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(dv_ops));
 
-    auto v = detail::propagate_result(
-        ctx.integrate_recursive(*dv, var, computation, depth + 1));
-    if (!v || !lamina::detail::node(v)) return nullptr;
-    if (contains_unevaluated_integral(lamina::detail::node(v))) return nullptr;
+    auto integrated_v =
+        ctx.integrate_recursive(*dv, var, computation, depth + 1);
+    if (!integrated_v) return integrated_v;
+    auto v = std::move(integrated_v.value());
+    if (!v || !LMCAS::detail::node(v)) return nullptr;
+    if (contains_unevaluated_integral(LMCAS::detail::node(v))) return nullptr;
 
     auto du_ptr = u.differentiate(var);
     if (!du_ptr) return nullptr;
     auto simplified_du = du_ptr->simplify();
-    if (!simplified_du || !lamina::detail::node(simplified_du)) return nullptr;
+    if (!simplified_du || !LMCAS::detail::node(simplified_du)) return nullptr;
     auto du = make_expr_ptr(*simplified_du);
 
     auto uv = SymbolicExpr::multiply(make_expr_ptr(u), v);
     auto vdu = SymbolicExpr::multiply(v, du);
     if (!uv || !vdu) return nullptr;
     vdu = vdu->cancel()->simplify();
-    auto int_vdu = detail::propagate_result(
-        ctx.integrate_recursive(*vdu, var, computation, depth + 1));
-    if (!int_vdu || !lamina::detail::node(int_vdu) ||
-        contains_unevaluated_integral(lamina::detail::node(int_vdu))) {
+    auto integrated_vdu =
+        ctx.integrate_recursive(*vdu, var, computation, depth + 1);
+    if (!integrated_vdu) return integrated_vdu;
+    auto int_vdu = std::move(integrated_vdu.value());
+    if (!int_vdu || !LMCAS::detail::node(int_vdu) ||
+        contains_unevaluated_integral(LMCAS::detail::node(int_vdu))) {
         return nullptr;
     }
 
     return sym_sub(*uv, *int_vdu);
 }
 
-} // namespace lamina
+} // namespace LMCAS

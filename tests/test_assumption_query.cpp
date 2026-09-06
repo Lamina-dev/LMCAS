@@ -8,23 +8,23 @@
 #include <memory>
 #include <cmath>
 
-using namespace lamina;
+using namespace LMCAS;
 
 // Helper: create a SymbolicExpr wrapping a NumberNode from BigInt
 static SymbolicExpr make_bigint_expr(int v) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(v)));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(v)));
     return expr;
 }
 
 // Helper: create a SymbolicExpr wrapping a NumberNode from Rational
 static SymbolicExpr make_rational_expr(int num, int den) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(Rational(BigInt(num), BigInt(den))));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(Rational(BigInt(num), BigInt(den))));
     return expr;
 }
 
 // Helper: create a SymbolicExpr wrapping a NumberNode from double
 static SymbolicExpr make_double_expr(double v) {
-    auto expr = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v)));
+    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(v)));
     return expr;
 }
 
@@ -292,18 +292,18 @@ void test_integer_double() {
 
 // Helper: create a SymbolicExpr from a node
 static SymbolicExpr make_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 
 // Helper: create a VariableNode
 static std::shared_ptr<const SymbolicNode> var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 // Helper: create a NumberNode from an integer (shared_ptr)
 static std::shared_ptr<const SymbolicNode> num(int v) {
-    return lamina::detail::make_node<NumberNode>(BigInt(v));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(v));
 }
 
 // Helper: check Tribool equality with descriptive output
@@ -328,7 +328,7 @@ void test_nan_handling() {
 
     bool rejected = false;
     try {
-        (void)lamina::detail::make_node<NumberNode>(
+        (void)LMCAS::detail::make_node<NumberNode>(
             static_cast<lmmc_real_t>(std::nan("")));
     } catch (const std::invalid_argument& error) {
         rejected =
@@ -346,7 +346,7 @@ void test_infinity_handling() {
     QueryInterface qi(ctx);
 
     // Positive infinity: FunctionNode with FuncType::Infinity
-    auto inf_node = lamina::detail::make_node<FunctionNode>(
+    auto inf_node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Infinity,
         std::vector<std::shared_ptr<const SymbolicNode>>{});
     SymbolicExpr pos_inf_expr = make_expr(inf_node);
@@ -361,11 +361,11 @@ void test_infinity_handling() {
                    "+Infinity: query_nonzero should return True");
 
     // Negative infinity: MultiplyNode(-1, Infinity)
-    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
-    auto inf_node2 = lamina::detail::make_node<FunctionNode>(
+    auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+    auto inf_node2 = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Infinity,
         std::vector<std::shared_ptr<const SymbolicNode>>{});
-    auto neg_inf_node = lamina::detail::make_node<MultiplyNode>(
+    auto neg_inf_node = LMCAS::detail::make_node<MultiplyNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{neg_one, inf_node2});
     SymbolicExpr neg_inf_expr = make_expr(neg_inf_node);
 
@@ -408,7 +408,7 @@ void test_matrix_node() {
     std::vector<std::vector<std::shared_ptr<const SymbolicNode>>> grid = {
         {num(1)}
     };
-    auto mat_node = lamina::detail::make_node<MatrixNode>(grid);
+    auto mat_node = LMCAS::detail::make_node<MatrixNode>(grid);
     SymbolicExpr mat_expr = make_expr(mat_node);
 
     EXPECT_TRIBOOL(qi.query_positive(mat_expr).value(), Tribool::Unknown,
@@ -432,7 +432,7 @@ void test_relational_node() {
     AssumptionContext ctx;
     QueryInterface qi(ctx);
 
-    auto rel_node = lamina::detail::make_node<RelationalNode>(
+    auto rel_node = LMCAS::detail::make_node<RelationalNode>(
         var("x"), num(0), RelationalNode::Op::GT);
     SymbolicExpr rel_expr = make_expr(rel_node);
 
@@ -457,11 +457,11 @@ void test_logical_node() {
     AssumptionContext ctx;
     QueryInterface qi(ctx);
 
-    auto left_rel = lamina::detail::make_node<RelationalNode>(
+    auto left_rel = LMCAS::detail::make_node<RelationalNode>(
         var("x"), num(0), RelationalNode::Op::GT);
-    auto right_rel = lamina::detail::make_node<RelationalNode>(
+    auto right_rel = LMCAS::detail::make_node<RelationalNode>(
         var("y"), num(0), RelationalNode::Op::GT);
-    auto logical_node = lamina::detail::make_node<LogicalNode>(
+    auto logical_node = LMCAS::detail::make_node<LogicalNode>(
         left_rel, right_rel, LogicalNode::Op::And);
     SymbolicExpr logical_expr = make_expr(logical_node);
 
@@ -530,7 +530,7 @@ void test_checked_query_interface_contracts() {
                     "checked query_nonzero returns False for zero");
     }
 
-    auto rel_node = lamina::detail::make_node<RelationalNode>(
+    auto rel_node = LMCAS::detail::make_node<RelationalNode>(
         var("x"), num(0), RelationalNode::Op::GT);
     SymbolicExpr rel_expr = make_expr(rel_node);
     auto relation_result = qi.query_real_checked(rel_expr);

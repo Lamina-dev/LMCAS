@@ -19,7 +19,7 @@
 #include <new>
 #include <stdexcept>
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -43,9 +43,9 @@ bool contains_transcendental_of_var(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var)
 {
-    if (!expr || !lamina::detail::node(expr)) return false;
+    if (!expr || !LMCAS::detail::node(expr)) return false;
 
-    struct TranscendentalDetector : public lamina::detail::RecursiveSymbolicVisitor {
+    struct TranscendentalDetector : public LMCAS::detail::RecursiveSymbolicVisitor {
         const std::string& target_var;
         bool found = false;
 
@@ -143,7 +143,7 @@ bool contains_transcendental_of_var(
         }
     } detector(var);
 
-    lamina::detail::node(expr)->accept(detector);
+    LMCAS::detail::node(expr)->accept(detector);
     return detector.found;
 }
 
@@ -227,9 +227,9 @@ bool is_polynomial_after_substitution(
     const TransSubstitutionResult& sub_result)
 {
     if (sub_result.mappings.empty()) return false;
-    if (!sub_result.poly_expr || !lamina::detail::node(sub_result.poly_expr)) return false;
+    if (!sub_result.poly_expr || !LMCAS::detail::node(sub_result.poly_expr)) return false;
 
-    const auto& root = lamina::detail::node(sub_result.poly_expr);
+    const auto& root = LMCAS::detail::node(sub_result.poly_expr);
 
     for (const auto& m : sub_result.mappings) {
         if (expression_depends_on_variable(root, m.indeterminate)) {
@@ -362,7 +362,7 @@ static bool is_periodic_func(FunctionNode::FuncType t) {
  * 对每个 sin/cos/tan 节点,若其参数为 k*x + c 形式,
  * 计算周期(sin/cos: 2pi/|k|, tan: pi/|k|).
  */
-struct PeriodicCollector : public lamina::detail::RecursiveSymbolicVisitor {
+struct PeriodicCollector : public LMCAS::detail::RecursiveSymbolicVisitor {
     const std::string& target_var;
     lmmc_real_t max_period = 0.0;
     bool found_periodic = false;
@@ -479,9 +479,9 @@ std::optional<SearchInterval> determine_search_interval(
     lmmc_real_t lo = -10.0;
     lmmc_real_t hi = 10.0;
 
-    if (expr && lamina::detail::node(expr)) {
+    if (expr && LMCAS::detail::node(expr)) {
         PeriodicCollector collector(var);
-        lamina::detail::node(expr)->accept(collector);
+        LMCAS::detail::node(expr)->accept(collector);
 
         if (collector.found_periodic && !collector.has_nonlinear_periodic && collector.max_period > 0.0) {
             /// 扩展区间覆盖 2 个完整周期(对称于 0)
@@ -628,9 +628,9 @@ static lmmc_real_t evaluate_at(
 {
     try {
         auto substituted = expr->substitute(var, SymbolicExpr::number(static_cast<double>(x)));
-        if (!substituted || !lamina::detail::node(substituted))
+        if (!substituted || !LMCAS::detail::node(substituted))
             return std::numeric_limits<lmmc_real_t>::quiet_NaN();
-        lmmc_real_t val = recursive_eval(lamina::detail::node(substituted));
+        lmmc_real_t val = recursive_eval(LMCAS::detail::node(substituted));
         if (!std::isfinite(val)) return std::numeric_limits<lmmc_real_t>::quiet_NaN();
         return val;
     } catch (const std::bad_alloc&) {
@@ -1269,13 +1269,13 @@ static Result<std::vector<NumericRoot>> numerical_path(
     std::vector<NumericRoot> roots;
     std::shared_ptr<SymbolicExpr> derivative;
     try {
-        if (factor && lamina::detail::node(factor)) {
+        if (factor && LMCAS::detail::node(factor)) {
             DifferentiationVisitor visitor(var);
-            lamina::detail::node(factor)->accept(visitor);
+            LMCAS::detail::node(factor)->accept(visitor);
             auto derivative_node = visitor.get_result();
             if (derivative_node) {
                 derivative =
-                    lamina::detail::make_expression_ptr(derivative_node);
+                    LMCAS::detail::make_expression_ptr(derivative_node);
             }
         }
     } catch (const std::bad_alloc&) {
@@ -1314,7 +1314,7 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
     ComputationContext& context)
 {
     constexpr const char* operation = "solve_mixed_transcendental_checked";
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return MixedTranscendentalResult::failure(
             CasErrc::InvalidArgument, "待求解表达式不能为空", operation);
     }
@@ -1342,7 +1342,7 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
             return MixedTranscendentalResult::failure(initial_step.error());
         }
         const auto variables =
-            free_variables(lamina::detail::node(expr));
+            free_variables(LMCAS::detail::node(expr));
         if (variables.find(var) == variables.end()) {
             if (!variables.empty()) {
                 return MixedTranscendentalResult::success(
@@ -1352,7 +1352,7 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
             }
 
             const auto constant_value =
-                recursive_eval(lamina::detail::node(expr));
+                recursive_eval(LMCAS::detail::node(expr));
             if (!std::isfinite(constant_value)) {
                 return MixedTranscendentalResult::success(
                     MathResult<std::vector<std::shared_ptr<SymbolicExpr>>>{
@@ -1406,12 +1406,12 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
                     continue;
                 }
                 auto simplified = root->simplify();
-                if (!simplified || !lamina::detail::node(simplified)) {
+                if (!simplified || !LMCAS::detail::node(simplified)) {
                     complete = false;
                     continue;
                 }
                 accept_value(
-                    recursive_eval(lamina::detail::node(simplified)), 0);
+                    recursive_eval(LMCAS::detail::node(simplified)), 0);
             }
         };
 
@@ -1426,12 +1426,12 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
                 return MixedTranscendentalResult::failure(
                     factor_step.error());
             }
-            if (!factor || !lamina::detail::node(factor)) {
+            if (!factor || !LMCAS::detail::node(factor)) {
                 complete = false;
                 continue;
             }
             if (!expression_depends_on_variable(
-                    lamina::detail::node(factor), var)) {
+                    LMCAS::detail::node(factor), var)) {
                 continue;
             }
 
@@ -1498,4 +1498,4 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
     return solve_mixed_transcendental_checked(expr, var, opts, context);
 }
 
-} // namespace lamina
+} // namespace LMCAS

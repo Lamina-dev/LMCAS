@@ -8,7 +8,7 @@
 #include <vector>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static const std::vector<Domain> ALL_DOMAINS = {
@@ -151,10 +151,10 @@ void test_relation_roundtrip() {
     AssumptionContext ctx;
 
     // Create a simple relation: x > 0
-    auto var_x = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<VariableNode>("x"));
-    auto zero = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto var_x = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<VariableNode>("x"));
+    auto zero = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
     // Before push: no relations, no sign for x
     EXPECT_TRUE(ctx.current_relations().get_relations().empty(),

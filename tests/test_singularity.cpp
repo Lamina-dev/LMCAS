@@ -4,10 +4,10 @@
 #include <iostream>
 #include <cmath>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> MakeSymbolicExprPtr(const SymbolicExpr& e) {
-    return lamina::detail::make_expression_ptr(e);
+    return LMCAS::detail::make_expression_ptr(e);
 }
 
 void test_one_sided_limit() {
@@ -18,14 +18,14 @@ void test_one_sided_limit() {
     auto expr = SymbolicExpr::power(MakeSymbolicExprPtr(*x), SymbolicExpr::number(-1));
     auto zero = SymbolicExpr::number(0);
 
-    auto limit_right = lamina::limit_expression_checked(expr, "x", MakeSymbolicExprPtr(*zero), LimitDirection::FromAbove).value();
+    auto limit_right = LMCAS::limit_expression_checked(expr, "x", MakeSymbolicExprPtr(*zero), LimitDirection::FromAbove).value();
     std::cout << "Limit x->0+ 1/x = " << limit_right->to_string() << std::endl;
 
-    auto limit_left = lamina::limit_expression_checked(expr, "x", MakeSymbolicExprPtr(*zero), LimitDirection::FromBelow).value();
+    auto limit_left = LMCAS::limit_expression_checked(expr, "x", MakeSymbolicExprPtr(*zero), LimitDirection::FromBelow).value();
     std::cout << "Limit x->0- 1/x = " << limit_left->to_string() << std::endl;
 
     bool has_inf = false;
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(limit_right))) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(limit_right))) {
         if(func->type() == FunctionNode::FuncType::Infinity) has_inf = true;
     }
     EXPECT_TRUE(has_inf, "right-hand limit of 1/x at 0 is infinity");
@@ -46,7 +46,7 @@ void test_improper_integral_singularity() {
     if (!res) return;
     std::cout << "Result: " << res.value().to_string() << std::endl;
 
-    EXPECT_TRUE(lamina::detail::node(res.value()) != nullptr,
+    EXPECT_TRUE(LMCAS::detail::node(res.value()) != nullptr,
                 "improper integral returns a non-null expression");
 }
 

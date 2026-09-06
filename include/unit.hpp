@@ -4,14 +4,14 @@
 #include <string>
 #include <unordered_map>
 
-#include "lamina_export.hpp"
+#include "lmcas_export.hpp"
 #include "rational.hpp"
 #include "result.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 /** A canonical product of base dimensions raised to exact rational powers. */
-class LAMINA_API DimensionSignature {
+class LMCAS_API DimensionSignature {
 public:
     using Exponents = std::map<std::string, Rational>;
 
@@ -45,7 +45,7 @@ struct UnitDefinition {
 };
 
 /** Owns unit declarations for one computation context. */
-class LAMINA_API UnitSystem {
+class LMCAS_API UnitSystem {
 public:
     UnitSystem();
 
@@ -60,4 +60,4 @@ private:
     std::unordered_map<std::string, UnitDefinition> units_;
 };
 
-} // namespace lamina
+} // namespace LMCAS

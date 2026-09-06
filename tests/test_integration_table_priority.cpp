@@ -5,8 +5,10 @@
 #include <string>
 #include <vector>
 
-using lamina::IntegrationTable;
-using lamina::IntegrationEntry;
+using namespace LMCAS;
+
+using LMCAS::IntegrationTable;
+using LMCAS::IntegrationEntry;
 
 namespace {
 

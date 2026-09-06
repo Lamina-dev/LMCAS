@@ -1,5 +1,7 @@
 #include "test_common.hpp"
 
+using namespace LMCAS;
+
 int main() {
     try {
         auto x = SymbolicExpr::variable("x");
@@ -147,7 +149,7 @@ int main() {
                 SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(11), x),
                     SymbolicExpr::number(-6))));
 
-            auto factored = lamina::detail::propagate_result(expr->factor_checked());
+            auto factored = expr->factor_checked().value();
             std::cout << "  Factored: " << factored->to_string() << std::endl;
 
             // 验证：代入 x=1, x=2, x=3 应得 0

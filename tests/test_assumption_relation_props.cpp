@@ -8,17 +8,17 @@
 #include <string>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
 }
 
 /// Create a SymbolicExpr wrapping a NumberNode with value 0.
 static SymbolicExpr make_zero() {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 }
 
 
@@ -179,9 +179,9 @@ static void test_transitive_no_duplicate_deduction() {
     // x > z should be deduced once
     size_t count = 0;
     for (const auto& rel : rs.get_relations()) {
-        if (lamina::detail::node(rel.lhs) && lamina::detail::node(rel.rhs)) {
-            auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(rel.lhs));
-            auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(rel.rhs));
+        if (LMCAS::detail::node(rel.lhs) && LMCAS::detail::node(rel.rhs)) {
+            auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.lhs));
+            auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.rhs));
             if (lhs_var && rhs_var &&
                 lhs_var->name() == "x" && rhs_var->name() == "z" &&
                 rel.op == RelationalNode::Op::GT) {
@@ -426,11 +426,11 @@ static void test_reversed_non_variable_rhs_no_derivation() {
     SymbolicExpr zero = make_zero();
 
     // RHS is a composite expression (x + y), not a single variable
-    auto x_node = lamina::detail::make_node<VariableNode>("x");
-    auto y_node = lamina::detail::make_node<VariableNode>("y");
-    auto add_node = lamina::detail::make_node<AddNode>(
+    auto x_node = LMCAS::detail::make_node<VariableNode>("x");
+    auto y_node = LMCAS::detail::make_node<VariableNode>("y");
+    auto add_node = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node, y_node});
-    auto composite = lamina::detail::expression_from_node(add_node);
+    auto composite = LMCAS::detail::expression_from_node(add_node);
     rs.add_relation(zero, composite, RelationalNode::Op::LT, ps);
 
     // Neither x nor y should have sign derived
@@ -451,7 +451,7 @@ static void test_reversed_non_zero_lhs_no_derivation() {
     PropertyStore ps;
 
     // LHS is 5, not 0
-    auto five = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(5)));
+    auto five = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(5)));
     SymbolicExpr x = make_var("x");
 
     rs.add_relation(five, x, RelationalNode::Op::LT, ps);

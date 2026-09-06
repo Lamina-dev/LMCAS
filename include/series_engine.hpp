@@ -11,7 +11,7 @@
 #include <string>
 #include <memory>
 
-namespace lamina {
+namespace LMCAS {
 
 using PowerSeriesResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
@@ -45,12 +45,12 @@ using ConvergenceInfoResult = Result<ConvergenceInfo>;
  * @param[in] index_var 系数指标变量名
  * @return 已证明的收敛半径表达式
  */
-LAMINA_API ExpressionResult convergence_radius_checked(
+LMCAS_API ExpressionResult convergence_radius_checked(
     const std::shared_ptr<SymbolicExpr>& general_coefficient,
     const std::string& index_var,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult convergence_radius_checked(
+LMCAS_API ExpressionResult convergence_radius_checked(
     const std::shared_ptr<SymbolicExpr>& general_coefficient,
     const std::string& index_var);
 
@@ -61,12 +61,12 @@ LAMINA_API ExpressionResult convergence_radius_checked(
  * 有效输入的收敛半径恒为 infinity.若要表示无限级数,应使用通项重载;
  * 有限前缀不足以证明无限尾项的收敛半径.
  */
-LAMINA_API ExpressionResult convergence_radius_checked(
+LMCAS_API ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult convergence_radius_checked(
+LMCAS_API ExpressionResult convergence_radius_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coefficients,
     const std::string& var);
 
@@ -80,12 +80,12 @@ LAMINA_API ExpressionResult convergence_radius_checked(
  * @param[in] index_var 求和指标变量名
  * @return 收敛性判定信息
  */
-LAMINA_API ConvergenceInfoResult convergence_test_checked(
+LMCAS_API ConvergenceInfoResult convergence_test_checked(
     const std::shared_ptr<SymbolicExpr>& general_term,
     const std::string& index_var,
     ComputationContext& context);
 
-LAMINA_API ConvergenceInfoResult convergence_test_checked(
+LMCAS_API ConvergenceInfoResult convergence_test_checked(
     const std::shared_ptr<SymbolicExpr>& general_term,
     const std::string& index_var);
 
@@ -98,7 +98,7 @@ LAMINA_API ConvergenceInfoResult convergence_test_checked(
  * @param[in] b 第二个幂级数系数列表
  * @return 和级数的系数列表
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_add(
+LMCAS_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_add(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b);
 
@@ -110,12 +110,12 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> power_series_add(
  * @param[in] order 截断阶数
  * @return 乘积级数的系数列表(截断到 order 项)
  */
-LAMINA_API PowerSeriesResult power_series_multiply_checked(
+LMCAS_API PowerSeriesResult power_series_multiply_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b, int order,
     ComputationContext& context);
 
-LAMINA_API PowerSeriesResult power_series_multiply_checked(
+LMCAS_API PowerSeriesResult power_series_multiply_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b, int order);
 
@@ -128,12 +128,12 @@ LAMINA_API PowerSeriesResult power_series_multiply_checked(
  * @param[in] order 截断阶数
  * @return 复合级数的系数列表
  */
-LAMINA_API PowerSeriesResult power_series_compose_checked(
+LMCAS_API PowerSeriesResult power_series_compose_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& g, int order,
     ComputationContext& context);
 
-LAMINA_API PowerSeriesResult power_series_compose_checked(
+LMCAS_API PowerSeriesResult power_series_compose_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& g, int order);
 
@@ -146,12 +146,12 @@ LAMINA_API PowerSeriesResult power_series_compose_checked(
  * cancellation, invalid inputs, and nested integration failures are returned
  * without being collapsed to a null expression.
  */
-LAMINA_API ExpressionResult fourier_series_checked(
+LMCAS_API ExpressionResult fourier_series_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& period, int n_terms,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult fourier_series_checked(
+LMCAS_API ExpressionResult fourier_series_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& period, int n_terms);
 
@@ -194,7 +194,7 @@ using LaurentSeriesResult = Result<LaurentResult>;
  * @param[in] order_pos 正幂次最大阶数
  * @return 洛朗级数表达式
  */
-LAMINA_API ExpressionResult laurent_series_checked(
+LMCAS_API ExpressionResult laurent_series_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -202,7 +202,7 @@ LAMINA_API ExpressionResult laurent_series_checked(
     int order_pos,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult laurent_series_checked(
+LMCAS_API ExpressionResult laurent_series_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -220,7 +220,7 @@ LAMINA_API ExpressionResult laurent_series_checked(
  * @param[in] order_pos 正幂次最大阶数
  * @return 洛朗级数展开结果(含奇点分类和留数)
  */
-LAMINA_API LaurentSeriesResult laurent_series_full_checked(
+LMCAS_API LaurentSeriesResult laurent_series_full_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -228,7 +228,7 @@ LAMINA_API LaurentSeriesResult laurent_series_full_checked(
     int order_pos,
     ComputationContext& context);
 
-LAMINA_API LaurentSeriesResult laurent_series_full_checked(
+LMCAS_API LaurentSeriesResult laurent_series_full_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -248,7 +248,7 @@ LAMINA_API LaurentSeriesResult laurent_series_full_checked(
  * @param[in] order 展开项数
  * @return 渐近展开表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> asymptotic_expand(
+LMCAS_API std::shared_ptr<SymbolicExpr> asymptotic_expand(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var, int order);
 
 
@@ -264,7 +264,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> asymptotic_expand(
  * @param[in] upper 上界
  * @return 求和结果表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_sum(
+LMCAS_API std::shared_ptr<SymbolicExpr> symbolic_sum(
     const std::shared_ptr<SymbolicExpr>& body, const std::string& index,
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper);
 
@@ -281,7 +281,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_sum(
  * @param[in] upper 上界
  * @return 乘积结果表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_product(
+LMCAS_API std::shared_ptr<SymbolicExpr> symbolic_product(
     const std::shared_ptr<SymbolicExpr>& body, const std::string& index,
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper);
 
@@ -289,21 +289,21 @@ LAMINA_API std::shared_ptr<SymbolicExpr> symbolic_product(
 /**
  * @brief 计算数列的上极限.
  */
-LAMINA_API ExpressionResult lim_sup_checked(
+LMCAS_API ExpressionResult lim_sup_checked(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult lim_sup_checked(
+LMCAS_API ExpressionResult lim_sup_checked(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n);
 
 /**
  * @brief 计算数列的下极限.
  */
-LAMINA_API ExpressionResult lim_inf_checked(
+LMCAS_API ExpressionResult lim_inf_checked(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult lim_inf_checked(
+LMCAS_API ExpressionResult lim_inf_checked(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n);
 
-} // namespace lamina
+} // namespace LMCAS

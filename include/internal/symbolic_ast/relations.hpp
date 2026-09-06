@@ -2,15 +2,17 @@
 #pragma once
 #include "functions.hpp"
 
+namespace LMCAS {
+
 /**
  * @brief 关系运算节点，表示两个表达式之间的比较关系。
  */
 class RelationalNode : public SymbolicNode {
 public:
-    using Op = lamina::RelationOp;
+    using Op = LMCAS::RelationOp;
 
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::shared_ptr<const SymbolicNode> left_;
     const std::shared_ptr<const SymbolicNode> right_;
@@ -28,10 +30,10 @@ public:
     const std::shared_ptr<const SymbolicNode>& right() const noexcept { return right_; }
     Op op() const noexcept { return op_; }
 
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
     std::shared_ptr<const SymbolicNode> clone() const override {
-        return lamina::detail::make_node<RelationalNode>(left_->clone(), right_->clone(), op_);
+        return LMCAS::detail::make_node<RelationalNode>(left_->clone(), right_->clone(), op_);
     }
 
     int type_priority() const override { return 100; }
@@ -83,7 +85,7 @@ public:
     };
 
 private:
-    LAMINA_AST_NODE_FACTORY_FRIEND;
+    LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::shared_ptr<const SymbolicNode> left_;
     const std::shared_ptr<const SymbolicNode> right_;
@@ -104,10 +106,10 @@ public:
     const std::shared_ptr<const SymbolicNode>& right() const noexcept { return right_; }
     Op op() const noexcept { return op_; }
 
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override { lamina::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
 
     std::shared_ptr<const SymbolicNode> clone() const override {
-        return lamina::detail::make_node<LogicalNode>(
+        return LMCAS::detail::make_node<LogicalNode>(
             left_ ? left_->clone() : nullptr,
             right_ ? right_->clone() : nullptr,
             op_);
@@ -157,3 +159,5 @@ public:
         }
     }
 };
+
+} // namespace LMCAS

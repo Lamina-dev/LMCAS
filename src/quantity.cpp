@@ -5,7 +5,7 @@
 
 #include "symbolic_ast.hpp"
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kOperation = "quantity";
@@ -299,4 +299,4 @@ QuantityResult quantity_power(const std::shared_ptr<SymbolicExpr>& base,
         dimension, Rational(1), dimension.to_string());
 }
 
-} // namespace lamina
+} // namespace LMCAS

@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina::detail::inequality_support {
+namespace LMCAS::detail::inequality_support {
 
 Result<IntervalUnion> solve_exact_affine_inequality(
     const Polynomial<Rational>& polynomial,
@@ -40,4 +40,4 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_symbolic_poly(
     const Polynomial<SymbolicPolyCoeff>& polynomial,
     const std::string& variable);
 
-} // namespace lamina::detail::inequality_support
+} // namespace LMCAS::detail::inequality_support

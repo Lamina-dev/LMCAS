@@ -10,35 +10,35 @@
 #include <string>
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 static std::shared_ptr<const SymbolicNode> make_power(
     std::shared_ptr<const SymbolicNode> base,
     std::shared_ptr<const SymbolicNode> exp) {
-    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exp));
+    return LMCAS::detail::make_node<PowerNode>(std::move(base), std::move(exp));
 }
 
 static std::shared_ptr<const SymbolicNode> make_multiply(
     std::vector<std::shared_ptr<const SymbolicNode>> ops) {
-    return lamina::detail::make_node<MultiplyNode>(std::move(ops));
+    return LMCAS::detail::make_node<MultiplyNode>(std::move(ops));
 }
 
 static std::shared_ptr<const SymbolicNode> make_add(
     std::vector<std::shared_ptr<const SymbolicNode>> ops) {
-    return lamina::detail::make_node<AddNode>(std::move(ops));
+    return LMCAS::detail::make_node<AddNode>(std::move(ops));
 }
 
 static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -281,16 +281,16 @@ static void test_gt_nonneg_implies_positive() {
         AssumptionContext ctx;
 
         // Add relation x > 0 - this triggers sign derivation in RelationStore
-        auto x_var = lamina::detail::make_node<VariableNode>(x_name);
-        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
-        auto rel_node = lamina::detail::make_node<RelationalNode>(
+        auto x_var = LMCAS::detail::make_node<VariableNode>(x_name);
+        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        auto rel_node = LMCAS::detail::make_node<RelationalNode>(
             x_var, zero_node, RelationalNode::Op::GT);
-        auto rel_expr = lamina::detail::expression_from_node(rel_node);
+        auto rel_expr = LMCAS::detail::expression_from_node(rel_node);
         ctx.assume(rel_expr);
 
         InferenceEngine engine(ctx);
 
-        auto x_expr = lamina::detail::expression_from_node(make_var(x_name));
+        auto x_expr = LMCAS::detail::expression_from_node(make_var(x_name));
         // x > 0 should derive Positive sign for x in the PropertyStore
         RC_ASSERT(engine.query_positive_checked(x_expr).value() == Tribool::True);
     });
@@ -344,17 +344,17 @@ static void test_add_with_gt_zero_relations() {
         AssumptionContext ctx;
         std::vector<std::shared_ptr<const SymbolicNode>> operands;
 
-        auto zero_node = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
         for (int i = 0; i < num_operands; ++i) {
             std::string name = "r" + std::to_string(i);
             operands.push_back(make_var(name));
 
             // Add relation: r_i > 0
-            auto var_node = lamina::detail::make_node<VariableNode>(name);
-            auto rel_node = lamina::detail::make_node<RelationalNode>(
+            auto var_node = LMCAS::detail::make_node<VariableNode>(name);
+            auto rel_node = LMCAS::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GT);
-            auto rel_expr = lamina::detail::expression_from_node(rel_node);
+            auto rel_expr = LMCAS::detail::expression_from_node(rel_node);
             ctx.assume(rel_expr);
         }
 

@@ -3,6 +3,8 @@
 #include "symbolic.hpp"
 #include "test_common.hpp"
 
+using namespace LMCAS;
+
 void print_expr(const std::string& label, const std::shared_ptr<SymbolicExpr>& expr) {
     std::cout << label << ": " << expr->to_string() << std::endl;
 }

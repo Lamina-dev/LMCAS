@@ -5,34 +5,34 @@
 #include <cmath>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> MakeSymbolicExprPtr(const SymbolicExpr& e) {
-    return lamina::detail::make_expression_ptr(e);
+    return LMCAS::detail::make_expression_ptr(e);
 }
 
 double evaluate_symbolic(const SymbolicExpr& expr) {
-    if (!lamina::detail::node(expr)) return 0.0;
-    if (auto n = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+    if (!LMCAS::detail::node(expr)) return 0.0;
+    if (auto n = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
         if (std::holds_alternative<double>(n->value())) return std::get<double>(n->value());
         if (std::holds_alternative<BigInt>(n->value())) return std::get<BigInt>(n->value()).to_double();
         if (std::holds_alternative<Rational>(n->value())) return std::get<Rational>(n->value()).to_double();
     }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
         double sum = 0;
-        for (auto& op : add->operands()) sum += evaluate_symbolic(lamina::detail::expression_from_node(op));
+        for (auto& op : add->operands()) sum += evaluate_symbolic(LMCAS::detail::expression_from_node(op));
         return sum;
     }
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         double prod = 1;
-        for (auto& op : mul->operands()) prod *= evaluate_symbolic(lamina::detail::expression_from_node(op));
+        for (auto& op : mul->operands()) prod *= evaluate_symbolic(LMCAS::detail::expression_from_node(op));
         return prod;
     }
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-        return std::pow(evaluate_symbolic(lamina::detail::expression_from_node(pow->base())), evaluate_symbolic(lamina::detail::expression_from_node(pow->exponent())));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+        return std::pow(evaluate_symbolic(LMCAS::detail::expression_from_node(pow->base())), evaluate_symbolic(LMCAS::detail::expression_from_node(pow->exponent())));
     }
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
-        double arg = evaluate_symbolic(lamina::detail::expression_from_node(func->arguments()[0]));
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
+        double arg = evaluate_symbolic(LMCAS::detail::expression_from_node(func->arguments()[0]));
         if (func->type() == FunctionNode::FuncType::Sin) return std::sin(arg);
         if (func->type() == FunctionNode::FuncType::Cos) return std::cos(arg);
         if (func->type() == FunctionNode::FuncType::Tan) return std::tan(arg);
@@ -120,7 +120,7 @@ void test_improper_split_ignores_nonrepresentable_exact_bounds() {
                 "integrate_def preserves symbolic result for nonrepresentable exact bounds");
     if (!result) return;
 
-    auto res = lamina::detail::make_expression_ptr(result.value());
+    auto res = LMCAS::detail::make_expression_ptr(result.value());
     std::cout << "Definite Integral result: " << res->to_string() << std::endl;
     std::cout << "[PASS]" << std::endl;
 }

@@ -17,7 +17,7 @@
 #include <vector>
 #include <functional>
 
-namespace lamina {
+namespace LMCAS {
 
 
 
@@ -42,7 +42,7 @@ struct TransformTableEntry {
  * - 双曲余弦 cosh(at) <-> s/(s^2-a^2)
  * - 阶跃函数 u(t) <-> 1/s
  */
-class LAMINA_API TransformTable {
+class LMCAS_API TransformTable {
 public:
     TransformTable();
 
@@ -78,7 +78,7 @@ private:
  * @param[in] s 频域变量名
  * @return Laplace 变换结果 F(s)
  */
-LAMINA_API TransformEngineResult laplace_transform_checked(
+LMCAS_API TransformEngineResult laplace_transform_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& t,
     const std::string& s,
@@ -87,7 +87,7 @@ LAMINA_API TransformEngineResult laplace_transform_checked(
 /**
  * @brief 使用默认计算上下文计算 Laplace 变换,并返回条件/ROC 容器.
  */
-LAMINA_API TransformEngineResult laplace_transform_checked(
+LMCAS_API TransformEngineResult laplace_transform_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& t,
     const std::string& s);
@@ -108,7 +108,7 @@ LAMINA_API TransformEngineResult laplace_transform_checked(
  * @param[in] t 时域变量名
  * @return 逆 Laplace 变换结果 f(t)
  */
-LAMINA_API TransformEngineResult inverse_laplace_checked(
+LMCAS_API TransformEngineResult inverse_laplace_checked(
     const std::shared_ptr<SymbolicExpr>& F,
     const std::string& s,
     const std::string& t,
@@ -117,7 +117,7 @@ LAMINA_API TransformEngineResult inverse_laplace_checked(
 /**
  * @brief 使用默认计算上下文计算逆 Laplace 变换,并返回条件/ROC 容器.
  */
-LAMINA_API TransformEngineResult inverse_laplace_checked(
+LMCAS_API TransformEngineResult inverse_laplace_checked(
     const std::shared_ptr<SymbolicExpr>& F,
     const std::string& s,
     const std::string& t);
@@ -130,7 +130,7 @@ LAMINA_API TransformEngineResult inverse_laplace_checked(
  * @param[in] omega 频域变量名
  * @return Fourier 变换结果
  */
-LAMINA_API TransformEngineResult fourier_transform_checked(
+LMCAS_API TransformEngineResult fourier_transform_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& t,
     const std::string& omega,
@@ -139,7 +139,7 @@ LAMINA_API TransformEngineResult fourier_transform_checked(
 /**
  * @brief 使用默认计算上下文计算 Fourier 变换,并返回条件/ROC 容器.
  */
-LAMINA_API TransformEngineResult fourier_transform_checked(
+LMCAS_API TransformEngineResult fourier_transform_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& t,
     const std::string& omega);
@@ -151,7 +151,7 @@ LAMINA_API TransformEngineResult fourier_transform_checked(
  * @param[in] t 时域变量名
  * @return 逆 Fourier 变换结果
  */
-LAMINA_API TransformEngineResult inverse_fourier_transform_checked(
+LMCAS_API TransformEngineResult inverse_fourier_transform_checked(
     const std::shared_ptr<SymbolicExpr>& F,
     const std::string& omega,
     const std::string& t,
@@ -160,7 +160,7 @@ LAMINA_API TransformEngineResult inverse_fourier_transform_checked(
 /**
  * @brief 使用默认计算上下文计算逆 Fourier 变换,并返回条件/ROC 容器.
  */
-LAMINA_API TransformEngineResult inverse_fourier_transform_checked(
+LMCAS_API TransformEngineResult inverse_fourier_transform_checked(
     const std::shared_ptr<SymbolicExpr>& F,
     const std::string& omega,
     const std::string& t);
@@ -172,7 +172,7 @@ LAMINA_API TransformEngineResult inverse_fourier_transform_checked(
  * @param[in] var 卷积变量名
  * @return 卷积结果
  */
-LAMINA_API TransformEngineResult convolve_checked(
+LMCAS_API TransformEngineResult convolve_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::shared_ptr<SymbolicExpr>& g,
     const std::string& var,
@@ -181,7 +181,7 @@ LAMINA_API TransformEngineResult convolve_checked(
 /**
  * @brief 使用默认计算上下文计算卷积,并显式报告无效输入.
  */
-LAMINA_API TransformEngineResult convolve_checked(
+LMCAS_API TransformEngineResult convolve_checked(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::shared_ptr<SymbolicExpr>& g,
     const std::string& var);
@@ -194,7 +194,7 @@ LAMINA_API TransformEngineResult convolve_checked(
  * @param[in] z Z 域变量名
  * @return Z 变换结果
  */
-LAMINA_API TransformEngineResult z_transform_checked(
+LMCAS_API TransformEngineResult z_transform_checked(
     const std::shared_ptr<SymbolicExpr>& f_n,
     const std::string& n,
     const std::string& z,
@@ -203,9 +203,9 @@ LAMINA_API TransformEngineResult z_transform_checked(
 /**
  * @brief 使用默认计算上下文计算 Z 变换,并返回条件/ROC 容器.
  */
-LAMINA_API TransformEngineResult z_transform_checked(
+LMCAS_API TransformEngineResult z_transform_checked(
     const std::shared_ptr<SymbolicExpr>& f_n,
     const std::string& n,
     const std::string& z);
 
-} // namespace lamina
+} // namespace LMCAS

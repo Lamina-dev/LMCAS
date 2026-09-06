@@ -7,27 +7,27 @@
 #include <vector>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Create a VariableNode wrapped in a shared_ptr<SymbolicNode>
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 /// Create a NumberNode from a BigInt value
 static std::shared_ptr<const SymbolicNode> make_num(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 /// Create an AddNode from a vector of operands (bypasses factory simplification)
 static std::shared_ptr<const AddNode> make_add(std::vector<std::shared_ptr<const SymbolicNode>> ops) {
-    return lamina::detail::make_node<AddNode>(std::move(ops));
+    return LMCAS::detail::make_node<AddNode>(std::move(ops));
 }
 
 /// Wrap an AddNode into a SymbolicExpr for querying
 static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -283,7 +283,7 @@ void test_empty_add_returns_unknown() {
 
     bool rejected = false;
     try {
-        (void)lamina::detail::make_node<AddNode>(
+        (void)LMCAS::detail::make_node<AddNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{});
     } catch (const std::invalid_argument&) {
         rejected = true;

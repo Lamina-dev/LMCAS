@@ -4,7 +4,7 @@
 #include <cmath>
 #include <exception>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -16,12 +16,12 @@ Result<void> validate_geometry_inputs(const std::shared_ptr<SymbolicExpr>& funct
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!function || !lamina::detail::node(function)) {
+    if (!function || !LMCAS::detail::node(function)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "profile expression cannot be null",
                                      operation);
     }
-    if (!lower || !lamina::detail::node(lower) || !upper || !lamina::detail::node(upper)) {
+    if (!lower || !LMCAS::detail::node(lower) || !upper || !LMCAS::detail::node(upper)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "integration bounds cannot be null",
                                      operation);
@@ -32,23 +32,23 @@ Result<void> validate_geometry_inputs(const std::shared_ptr<SymbolicExpr>& funct
 bool contains_unevaluated_integral(
     const std::shared_ptr<const SymbolicNode>& node,
     std::size_t = 0) {
-    return lamina::detail::contains_node_type<IntegralNode>(node);
+    return LMCAS::detail::contains_node_type<IntegralNode>(node);
 }
 
 ExpressionResult simplify_geometry_checked(std::shared_ptr<SymbolicExpr> expr,
                                              const std::string& operation,
                                              const std::string& message)
 {
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return ExpressionResult::failure(CasErrc::Inconclusive,
                                            message, operation);
     }
     auto simplified = expr->simplify();
-    if (!simplified || !lamina::detail::node(simplified)) {
+    if (!simplified || !LMCAS::detail::node(simplified)) {
         return ExpressionResult::failure(CasErrc::Inconclusive,
                                            message, operation);
     }
-    if (contains_unevaluated_integral(lamina::detail::node(simplified))) {
+    if (contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
         return ExpressionResult::failure(CasErrc::Inconclusive,
                                            "geometry integral is outside the supported domain",
                                            operation);
@@ -81,15 +81,15 @@ ExpressionResult definite_integral_geometry_checked(
     const std::shared_ptr<SymbolicExpr>& upper_bound,
     const std::string& operation)
 {
-    if (!integrand || !lamina::detail::node(integrand)) {
+    if (!integrand || !LMCAS::detail::node(integrand)) {
         return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "geometry integrand is outside the supported domain",
             operation);
     }
     auto integral = integrand->integrate(variable);
-    if (!integral || !lamina::detail::node(integral) ||
-        contains_unevaluated_integral(lamina::detail::node(integral))) {
+    if (!integral || !LMCAS::detail::node(integral) ||
+        contains_unevaluated_integral(LMCAS::detail::node(integral))) {
         return ExpressionResult::failure(
             CasErrc::Inconclusive,
             "geometry integral is outside the supported domain",
@@ -107,18 +107,18 @@ ExpressionResult definite_integral_geometry_checked(
 
 std::shared_ptr<SymbolicExpr> squared_profile(const std::shared_ptr<SymbolicExpr>& f) {
     if (f) {
-        if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(f))) {
+        if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(f))) {
             if (func->type() == FunctionNode::FuncType::Sqrt && func->arguments().size() == 1) {
-                return lamina::detail::make_expression_ptr(func->arguments()[0])->simplify();
+                return LMCAS::detail::make_expression_ptr(func->arguments()[0])->simplify();
             }
         }
-        if (auto power = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(f))) {
+        if (auto power = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(f))) {
             auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
             if (exponent && std::holds_alternative<Rational>(exponent->value())) {
                 const auto& rational = std::get<Rational>(exponent->value());
                 if (rational.get_numerator() == BigInt(1) &&
                     rational.get_denominator() == BigInt(2)) {
-                    return lamina::detail::make_expression_ptr(power->base())->simplify();
+                    return LMCAS::detail::make_expression_ptr(power->base())->simplify();
                 }
             }
         }

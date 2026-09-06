@@ -1,7 +1,7 @@
 #define _USE_MATH_DEFINES
 #include "internal/inference_engine_impl.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 // Periodicity inference
 
@@ -10,7 +10,7 @@ InferenceTriboolResult InferenceEngine::query_periodic_checked(const SymbolicExp
     return checked_inference_result<Tribool>(expr, "query_periodic_checked",
         [&]() {
             // FunctionNode: sin, cos, tan are periodic
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
                 switch (func->type()) {
                     case FunctionNode::FuncType::Sin:
                     case FunctionNode::FuncType::Cos:
@@ -20,7 +20,7 @@ InferenceTriboolResult InferenceEngine::query_periodic_checked(const SymbolicExp
                         if (func->arguments().size() != 1) {
                             return Tribool::Unknown;
                         }
-                        auto argument = lamina::detail::expression_from_node(
+                        auto argument = LMCAS::detail::expression_from_node(
                             func->arguments()[0]);
                         if (auto variable =
                                 std::dynamic_pointer_cast<const VariableNode>(
@@ -44,7 +44,7 @@ InferenceTriboolResult InferenceEngine::query_periodic_checked(const SymbolicExp
             }
 
             // VariableNode: check PropertyStore for declared periodicity
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 if (props.is_periodic(var->name())) return Tribool::True;
             }
@@ -57,22 +57,22 @@ InferencePeriodResult InferenceEngine::infer_period_checked(const SymbolicExpr& 
     return checked_inference_result<std::optional<SymbolicExpr>>(
         expr, "infer_period_checked", [&]() -> std::optional<SymbolicExpr> {
             // FunctionNode: known periods for trig functions
-            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+            if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
                 switch (func->type()) {
                     case FunctionNode::FuncType::Sin:
                     case FunctionNode::FuncType::Cos: {
                         // Period = 2*pi
-                        auto two = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(2.0));
-                        auto pi_val = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(LMMC_CONST_PI));
-                        auto two_pi = lamina::detail::make_node<MultiplyNode>(
+                        auto two = LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(2.0));
+                        auto pi_val = LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(LMMC_CONST_PI));
+                        auto two_pi = LMCAS::detail::make_node<MultiplyNode>(
                             std::vector<std::shared_ptr<const SymbolicNode>>{two, pi_val});
-                        auto period = lamina::detail::expression_from_node(two_pi);
+                        auto period = LMCAS::detail::expression_from_node(two_pi);
                         return period;
                     }
                     case FunctionNode::FuncType::Tan: {
                         // Period = pi
-                        auto pi_val = lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(LMMC_CONST_PI));
-                        auto period = lamina::detail::expression_from_node(pi_val);
+                        auto pi_val = LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(LMMC_CONST_PI));
+                        auto period = LMCAS::detail::expression_from_node(pi_val);
                         return period;
                     }
                     default:
@@ -81,7 +81,7 @@ InferencePeriodResult InferenceEngine::infer_period_checked(const SymbolicExpr& 
             }
 
             // VariableNode: check PropertyStore for declared period
-            if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+            if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
                 const auto& props = impl_->ctx.current_properties();
                 auto stored_period = props.get_period(var->name());
                 if (stored_period.has_value() && *stored_period) {
@@ -126,10 +126,10 @@ static std::shared_ptr<const SymbolicNode> detect_negation(const std::shared_ptr
 Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
                                                   const std::string& var,
                                                   const Interval& interval) const {
-    if (!lamina::detail::node(expr)) return Monotonicity::Unknown;
+    if (!LMCAS::detail::node(expr)) return Monotonicity::Unknown;
 
     // FunctionNode: auto-infer for known functions
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
         // Check that the function argument is the queried variable
         if (func->arguments().empty()) return Monotonicity::Unknown;
         auto arg_var = std::dynamic_pointer_cast<const VariableNode>(func->arguments()[0]);
@@ -169,8 +169,8 @@ Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
     }
 
     // Negation: multiply by -1 reverses monotonicity
-    if (auto inner = detect_negation(lamina::detail::node(expr))) {
-        auto inner_expr = lamina::detail::expression_from_node(inner);
+    if (auto inner = detect_negation(LMCAS::detail::node(expr))) {
+        auto inner_expr = LMCAS::detail::expression_from_node(inner);
         Monotonicity inner_mono = infer_monotonicity(inner_expr, var, interval);
         switch (inner_mono) {
             case Monotonicity::Increasing:    return Monotonicity::Decreasing;
@@ -182,10 +182,11 @@ Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
     }
 
     // VariableNode: check PropertyStore for declared monotonicity
-    if (auto var_node = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+    if (auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
         const auto& props = impl_->ctx.current_properties();
-        return detail::propagate_result(
-            props.get_monotonicity(var_node->name(), var, interval));
+        auto monotonicity =
+            props.get_monotonicity(var_node->name(), var, interval);
+        return monotonicity ? monotonicity.value() : Monotonicity::Unknown;
     }
 
     return Monotonicity::Unknown;
@@ -241,8 +242,8 @@ static std::vector<int> collect_power_exponents(const RelationStore& store,
 
     // Scan all relations in the store for PowerNode expressions
     for (const auto& rel : store.get_relations()) {
-        check_node(lamina::detail::node(rel.lhs));
-        check_node(lamina::detail::node(rel.rhs));
+        check_node(LMCAS::detail::node(rel.lhs));
+        check_node(LMCAS::detail::node(rel.rhs));
     }
 
     return std::vector<int>(exponents.begin(), exponents.end());
@@ -265,8 +266,8 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
     if (rel.op != RelationalNode::Op::GT) return Result<void>::success();
 
     // Extract LHS and RHS — both must be single VariableNodes
-    auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(rel.lhs));
-    auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(rel.rhs));
+    auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.lhs));
+    auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.rhs));
     if (!lhs_var || !rhs_var) return Result<void>::success();
 
     const std::string& x_name = lhs_var->name();
@@ -300,43 +301,43 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
                             impl_->ctx.has_sign(y_name, Sign::NonNegative);
 
     if (both_positive) {
-        auto ln_x_node = lamina::detail::make_node<FunctionNode>(
+        auto ln_x_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Ln,
             std::vector<std::shared_ptr<const SymbolicNode>>{lhs_var->clone()});
-        auto ln_y_node = lamina::detail::make_node<FunctionNode>(
+        auto ln_y_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Ln,
             std::vector<std::shared_ptr<const SymbolicNode>>{rhs_var->clone()});
 
-        auto ln_x = lamina::detail::expression_from_node(ln_x_node);
-        auto ln_y = lamina::detail::expression_from_node(ln_y_node);
+        auto ln_x = LMCAS::detail::expression_from_node(ln_x_node);
+        auto ln_y = LMCAS::detail::expression_from_node(ln_y_node);
         auto deduced = add_deduced(ln_x, ln_y);
         if (!deduced.has_value()) return deduced;
     }
 
     if (both_positive) {
-        auto sqrt_x_node = lamina::detail::make_node<FunctionNode>(
+        auto sqrt_x_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sqrt,
             std::vector<std::shared_ptr<const SymbolicNode>>{lhs_var->clone()});
-        auto sqrt_y_node = lamina::detail::make_node<FunctionNode>(
+        auto sqrt_y_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sqrt,
             std::vector<std::shared_ptr<const SymbolicNode>>{rhs_var->clone()});
 
-        auto sqrt_x = lamina::detail::expression_from_node(sqrt_x_node);
-        auto sqrt_y = lamina::detail::expression_from_node(sqrt_y_node);
+        auto sqrt_x = LMCAS::detail::expression_from_node(sqrt_x_node);
+        auto sqrt_y = LMCAS::detail::expression_from_node(sqrt_y_node);
         auto deduced = add_deduced(sqrt_x, sqrt_y);
         if (!deduced.has_value()) return deduced;
     }
 
     if (both_real) {
-        auto exp_x_node = lamina::detail::make_node<FunctionNode>(
+        auto exp_x_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
             std::vector<std::shared_ptr<const SymbolicNode>>{lhs_var->clone()});
-        auto exp_y_node = lamina::detail::make_node<FunctionNode>(
+        auto exp_y_node = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
             std::vector<std::shared_ptr<const SymbolicNode>>{rhs_var->clone()});
 
-        auto exp_x = lamina::detail::expression_from_node(exp_x_node);
-        auto exp_y = lamina::detail::expression_from_node(exp_y_node);
+        auto exp_x = LMCAS::detail::expression_from_node(exp_x_node);
+        auto exp_y = LMCAS::detail::expression_from_node(exp_y_node);
         auto deduced = add_deduced(exp_x, exp_y);
         if (!deduced.has_value()) return deduced;
     }
@@ -345,12 +346,12 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
         std::vector<int> exponents = collect_power_exponents(store, x_name, y_name);
 
         for (int n : exponents) {
-            auto exp_node = lamina::detail::make_node<NumberNode>(BigInt(n));
-            auto pow_x_node = lamina::detail::make_node<PowerNode>(lhs_var->clone(), exp_node->clone());
-            auto pow_y_node = lamina::detail::make_node<PowerNode>(rhs_var->clone(), exp_node->clone());
+            auto exp_node = LMCAS::detail::make_node<NumberNode>(BigInt(n));
+            auto pow_x_node = LMCAS::detail::make_node<PowerNode>(lhs_var->clone(), exp_node->clone());
+            auto pow_y_node = LMCAS::detail::make_node<PowerNode>(rhs_var->clone(), exp_node->clone());
 
-            auto pow_x = lamina::detail::expression_from_node(pow_x_node);
-            auto pow_y = lamina::detail::expression_from_node(pow_y_node);
+            auto pow_x = LMCAS::detail::expression_from_node(pow_x_node);
+            auto pow_y = LMCAS::detail::expression_from_node(pow_y_node);
             auto deduced = add_deduced(pow_x, pow_y);
             if (!deduced.has_value()) return deduced;
         }
@@ -360,4 +361,4 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

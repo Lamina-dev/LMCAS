@@ -11,7 +11,7 @@
 #include <vector>
 #include <functional>
 
-namespace lamina {
+namespace LMCAS {
 
 // Forward declaration for optional assumption context integration
 class AssumptionContext;
@@ -20,7 +20,7 @@ class AssumptionContext;
 using MatchMap = std::unordered_map<std::string, SymbolicExpr>;
 
 /** @brief 符号表达式模式匹配器 */
-class LAMINA_API Matcher {
+class LMCAS_API Matcher {
 public:
 
     /**
@@ -46,7 +46,7 @@ public:
 };
 
 /** @brief 重写规则，定义模式到替换表达式的变换 */
-struct LAMINA_API Rule {
+struct LMCAS_API Rule {
     SymbolicExpr pattern;                          ///< 匹配模式
     SymbolicExpr replacement;                      ///< 替换模板
     std::unordered_set<std::string> wildcards;     ///< 通配符集合
@@ -67,7 +67,7 @@ struct LAMINA_API Rule {
 };
 
 /** @brief 基于规则的表达式重写引擎 */
-class LAMINA_API RewriteEngine {
+class LMCAS_API RewriteEngine {
     std::vector<Rule> rules;
 
 public:
@@ -110,6 +110,6 @@ public:
  * @param name 通配符名称
  * @return 表示通配符的符号表达式
  */
-LAMINA_API SymbolicExpr wildcard(const std::string& name);
+LMCAS_API SymbolicExpr wildcard(const std::string& name);
 
 }

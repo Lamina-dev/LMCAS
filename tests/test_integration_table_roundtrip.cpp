@@ -9,10 +9,12 @@
 #include <cmath>
 #include <memory>
 
-using lamina::IntegrationTable;
-using lamina::IntegrationEntry;
-using lamina::Matcher;
-using lamina::MatchMap;
+using namespace LMCAS;
+
+using LMCAS::IntegrationTable;
+using LMCAS::IntegrationEntry;
+using LMCAS::Matcher;
+using LMCAS::MatchMap;
 
 namespace {
 
@@ -61,8 +63,8 @@ EntryReport verify_entry(const IntegrationEntry& entry) {
     SymbolicExpr pat_inst = Matcher::replace(entry.pattern, bindings, false);
     SymbolicExpr res_inst = Matcher::replace(entry.result,  bindings, false);
 
-    auto pattern = lamina::detail::make_expression_ptr(pat_inst);
-    auto result  = lamina::detail::make_expression_ptr(res_inst);
+    auto pattern = LMCAS::detail::make_expression_ptr(pat_inst);
+    auto result  = LMCAS::detail::make_expression_ptr(res_inst);
 
     auto pattern_simp = pattern->simplify();
     auto result_simp  = result->simplify();

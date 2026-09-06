@@ -12,7 +12,7 @@
 #include <set>
 #include <stdexcept>
 #include "internal/multivariate_factor_support.hpp"
-namespace lamina {
+namespace LMCAS {
 namespace detail {
 
 /**
@@ -324,4 +324,4 @@ factor_homogeneous_bivariate(const MultiPoly& poly)
 }
 
 } // namespace detail
-} // namespace lamina
+} // namespace LMCAS

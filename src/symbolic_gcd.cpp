@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kOperation = "symbolic_polynomial_gcd";
@@ -406,4 +406,4 @@ Result<Rational> symbolic_polynomial_content(
     }
 }
 
-} // namespace lamina
+} // namespace LMCAS

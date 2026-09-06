@@ -9,7 +9,7 @@
 #include <variant>
 #include <vector>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 enum class ZeroProof {
     Zero,
@@ -118,4 +118,4 @@ Result<std::vector<std::vector<ExprPtr>>> nullspace_exact(
     ComputationContext& context,
     const std::string& operation);
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

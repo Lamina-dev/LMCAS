@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <limits>
 #include <set>
 #include "../include/symbolic.hpp"
 #include "../include/symbolic_ast.hpp"
@@ -16,36 +17,38 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
+namespace LMCAS {
+
 std::shared_ptr<SymbolicExpr> SymbolicExpr::number(int n) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(n)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(n)));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::number(long long n) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(n)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(n)));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::number(double n) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(n)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(n)));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::number(const BigInt& value) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(value));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(value));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::number(const Rational& value) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(value));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(value));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::infinity(int sign) {
-    auto node = lamina::detail::make_node<FunctionNode>(
+    auto node = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Infinity,
         std::vector<std::shared_ptr<const SymbolicNode>>{});
-    auto expression = lamina::detail::make_expression_ptr(node);
+    auto expression = LMCAS::detail::make_expression_ptr(node);
     return sign < 0 ? multiply(number(-1), expression) : expression;
 }
 
@@ -54,9 +57,9 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::sqrt(
     if (!operand || !operand->impl_->root) {
         throw std::invalid_argument("sqrt operand cannot be null");
     }
-    auto half = lamina::detail::make_node<NumberNode>(Rational(1, 2));
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<PowerNode>(operand->impl_->root, half));
+    auto half = LMCAS::detail::make_node<NumberNode>(Rational(1, 2));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<PowerNode>(operand->impl_->root, half));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::multiply(
@@ -67,8 +70,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::multiply(
     }
     std::vector<std::shared_ptr<const SymbolicNode>> operands{
         left->impl_->root, right->impl_->root};
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<MultiplyNode>(std::move(operands)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<MultiplyNode>(std::move(operands)));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::add(
@@ -79,8 +82,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::add(
     }
     std::vector<std::shared_ptr<const SymbolicNode>> operands{
         left->impl_->root, right->impl_->root};
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<AddNode>(std::move(operands)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<AddNode>(std::move(operands)));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::power(
@@ -89,8 +92,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::power(
     if (!base || !base->impl_->root || !exponent || !exponent->impl_->root) {
         throw std::invalid_argument("power operands cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<PowerNode>(base->impl_->root, exponent->impl_->root));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<PowerNode>(base->impl_->root, exponent->impl_->root));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::sin(
@@ -98,8 +101,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::sin(
     if (!operand || !operand->impl_->root) {
         throw std::invalid_argument("sin operand cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sin,
             std::vector<std::shared_ptr<const SymbolicNode>>{operand->impl_->root}));
 }
@@ -109,8 +112,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::cos(
     if (!operand || !operand->impl_->root) {
         throw std::invalid_argument("cos operand cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Cos,
             std::vector<std::shared_ptr<const SymbolicNode>>{operand->impl_->root}));
 }
@@ -120,8 +123,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::tan(
     if (!operand || !operand->impl_->root) {
         throw std::invalid_argument("tan operand cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Tan,
             std::vector<std::shared_ptr<const SymbolicNode>>{operand->impl_->root}));
 }
@@ -131,8 +134,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::ln(
     if (!operand || !operand->impl_->root) {
         throw std::invalid_argument("ln operand cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Ln,
             std::vector<std::shared_ptr<const SymbolicNode>>{operand->impl_->root}));
 }
@@ -142,8 +145,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::exp(
     if (!operand || !operand->impl_->root) {
         throw std::invalid_argument("exp operand cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp,
             std::vector<std::shared_ptr<const SymbolicNode>>{operand->impl_->root}));
 }
@@ -153,8 +156,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::lambertw(
     if (!operand || !operand->impl_->root) {
         throw std::invalid_argument("lambertw operand cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::LambertW,
             std::vector<std::shared_ptr<const SymbolicNode>>{operand->impl_->root}));
 }
@@ -165,8 +168,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::log(
     if (!value || !value->impl_->root || !base || !base->impl_->root) {
         throw std::invalid_argument("log operands cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Log,
             std::vector<std::shared_ptr<const SymbolicNode>>{
                 value->impl_->root, base->impl_->root}));
@@ -178,8 +181,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::atan2(
     if (!y || !y->impl_->root || !x || !x->impl_->root) {
         throw std::invalid_argument("atan2 operands cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Atan2,
             std::vector<std::shared_ptr<const SymbolicNode>>{y->impl_->root, x->impl_->root}));
 }
@@ -192,7 +195,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::root_of(
         throw std::invalid_argument("root_of polynomial cannot be null");
     }
     if (index < 0) throw std::invalid_argument("root_of index cannot be negative");
-    auto result = lamina::make_rootof_checked(
+    auto result = LMCAS::make_rootof_checked(
         polynomial, variable_name, static_cast<std::size_t>(index));
     if (!result) throw std::invalid_argument(result.error().message);
     return std::move(result.value());
@@ -204,8 +207,8 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::eq(
     if (!left || !left->impl_->root || !right || !right->impl_->root) {
         throw std::invalid_argument("eq operands cannot be null");
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<RelationalNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<RelationalNode>(
             left->impl_->root, right->impl_->root, RelationalNode::Op::EQ));
 }
 
@@ -236,14 +239,14 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::matrix(
         }
         node_elements.push_back(std::move(node_row));
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<MatrixNode>(std::move(node_elements)));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<MatrixNode>(std::move(node_elements)));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::variable(
     const std::string& name) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<VariableNode>(name));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<VariableNode>(name));
 }
 
 bool SymbolicExpr::is_number() const {
@@ -292,7 +295,7 @@ std::variant<int, BigInt, Rational> SymbolicExpr::get_number() const {
     if (std::holds_alternative<Rational>(number_node->value())) {
         return std::get<Rational>(number_node->value());
     }
-    return static_cast<int>(std::get<lmmc_real_t>(number_node->value()));
+    return Rational::from_double(std::get<lmmc_real_t>(number_node->value()));
 }
 
 int SymbolicExpr::get_int() const {
@@ -301,12 +304,28 @@ int SymbolicExpr::get_int() const {
     }
     auto number_node = std::dynamic_pointer_cast<const NumberNode>(impl_->root);
     if (std::holds_alternative<BigInt>(number_node->value())) {
-        return std::get<BigInt>(number_node->value()).to_int();
+        auto value = std::get<BigInt>(number_node->value()).try_to_int64();
+        if (!value || *value < std::numeric_limits<int>::min() ||
+            *value > std::numeric_limits<int>::max()) {
+            throw std::out_of_range("integer value does not fit in int");
+        }
+        return static_cast<int>(*value);
     }
     if (std::holds_alternative<Rational>(number_node->value())) {
-        return std::get<Rational>(number_node->value()).to_BigInt().to_int();
+        auto value = std::get<Rational>(number_node->value())
+                         .to_BigInt().try_to_int64();
+        if (!value || *value < std::numeric_limits<int>::min() ||
+            *value > std::numeric_limits<int>::max()) {
+            throw std::out_of_range("integer value does not fit in int");
+        }
+        return static_cast<int>(*value);
     }
-    return static_cast<int>(std::get<lmmc_real_t>(number_node->value()));
+    const auto value = std::get<lmmc_real_t>(number_node->value());
+    if (value < static_cast<lmmc_real_t>(std::numeric_limits<int>::min()) ||
+        value > static_cast<lmmc_real_t>(std::numeric_limits<int>::max())) {
+        throw std::out_of_range("integer value does not fit in int");
+    }
+    return static_cast<int>(value);
 }
 
 BigInt SymbolicExpr::get_big_int() const {
@@ -335,20 +354,20 @@ Rational SymbolicExpr::convert_rational() const {
 
 
 int SymbolicExpr::compare(const std::shared_ptr<SymbolicExpr>& other) const {
-    if (!impl_->root || !lamina::detail::node(other)) return 0;
+    if (!impl_->root || !LMCAS::detail::node(other)) return 0;
 
-    return impl_->root->compare(*lamina::detail::node(other));
+    return impl_->root->compare(*LMCAS::detail::node(other));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(
     const std::string& var_name,
     const std::shared_ptr<SymbolicExpr>& value) const {
     if (!value) return nullptr;
-    auto substituted = lamina::substitute_free(
-        impl_->root, var_name, lamina::detail::node(value));
+    auto substituted = LMCAS::substitute_free(
+        impl_->root, var_name, LMCAS::detail::node(value));
     NormalizationVisitor normalization;
     substituted->accept(normalization);
-    return lamina::detail::make_expression_ptr(normalization.get_result());
+    return LMCAS::detail::make_expression_ptr(normalization.get_result());
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
@@ -360,7 +379,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
     auto result_node = v.get_result();
     if (!result_node) return nullptr;
 
-    return lamina::detail::make_expression_ptr(result_node)->simplify();
+    return LMCAS::detail::make_expression_ptr(result_node)->simplify();
 }
 
 std::string SymbolicExpr::to_string() const {
@@ -373,7 +392,7 @@ std::string SymbolicExpr::to_string() const {
 }
 
 lmmc_real_t SymbolicExpr::to_numeric() const {
-    auto evaluated = lamina::evaluate_numeric(*this);
+    auto evaluated = LMCAS::evaluate_numeric(*this);
     if (!evaluated) {
         throw std::runtime_error("numeric evaluation failed: " + evaluated.error().message);
     }
@@ -389,8 +408,8 @@ bool SymbolicExpr::is_zero() const {
             lmmc_double_nearly_equal(v, 0.0, &eq);
             return eq != 0;
         }
-        if (std::holds_alternative<::BigInt>(num->value())) return std::get<::BigInt>(num->value()).to_int() == 0;
-        if (std::holds_alternative<::Rational>(num->value())) return std::get<::Rational>(num->value()).get_numerator().to_int() == 0;
+        if (std::holds_alternative<::LMCAS::BigInt>(num->value())) return std::get<::LMCAS::BigInt>(num->value()).to_int() == 0;
+        if (std::holds_alternative<::LMCAS::Rational>(num->value())) return std::get<::LMCAS::Rational>(num->value()).get_numerator().to_int() == 0;
     }
     return false;
 }
@@ -404,8 +423,8 @@ bool SymbolicExpr::is_one() const {
             lmmc_double_nearly_equal(v, 1.0, &eq);
             return eq != 0;
         }
-        if (std::holds_alternative<::BigInt>(num->value())) return std::get<::BigInt>(num->value()).to_int() == 1;
-        if (std::holds_alternative<::Rational>(num->value())) return std::get<::Rational>(num->value()).to_double() == 1.0;
+        if (std::holds_alternative<::LMCAS::BigInt>(num->value())) return std::get<::LMCAS::BigInt>(num->value()).to_int() == 1;
+        if (std::holds_alternative<::LMCAS::Rational>(num->value())) return std::get<::LMCAS::Rational>(num->value()).to_double() == 1.0;
     }
     return false;
 }
@@ -414,18 +433,18 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
     if (!impl_->root) return nullptr;
     NormalizationVisitor v;
     impl_->root->accept(v);
-    return lamina::detail::make_expression_ptr(v.get_result());
+    return LMCAS::detail::make_expression_ptr(v.get_result());
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_trig() const {
     auto res = simplify();
-    if (!lamina::detail::node(res)) return nullptr;
+    if (!LMCAS::detail::node(res)) return nullptr;
 
-    static const lamina::RewriteEngine engine = [] {
-        lamina::RewriteEngine configured;
-        using namespace lamina;
+    static const LMCAS::RewriteEngine engine = [] {
+        LMCAS::RewriteEngine configured;
+        using namespace LMCAS;
         auto x_val = wildcard("x");
-        auto x = lamina::detail::make_expression_ptr(x_val);
+        auto x = LMCAS::detail::make_expression_ptr(x_val);
 
         auto sinx = SymbolicExpr::sin(x);
         auto cosx = SymbolicExpr::cos(x);
@@ -452,11 +471,11 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_trig() const {
         return configured;
     }();
 
-    lamina::ComputationContext context;
+    LMCAS::ComputationContext context;
     auto rewritten = engine.apply_checked(*res, context);
     if (!rewritten) return res;
     auto simplified = std::move(rewritten.value());
-    auto result_ptr = lamina::detail::make_expression_ptr(simplified);
+    auto result_ptr = LMCAS::detail::make_expression_ptr(simplified);
     return result_ptr->simplify();
 }
 
@@ -468,7 +487,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate(const std::string& var
     NormalizationVisitor norm;
     v.get_result()->accept(norm);
 
-    return lamina::detail::make_expression_ptr(norm.get_result());
+    return LMCAS::detail::make_expression_ptr(norm.get_result());
 }
 
 
@@ -517,23 +536,25 @@ std::vector<std::shared_ptr<SymbolicExpr>> SymbolicExpr::get_operands() const {
     if (!impl_->root) return ops;
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(impl_->root)) {
-        for (const auto& op : add->operands()) ops.push_back(lamina::detail::make_expression_ptr(op));
+        for (const auto& op : add->operands()) ops.push_back(LMCAS::detail::make_expression_ptr(op));
     } else if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(impl_->root)) {
-        for (const auto& op : mul->operands()) ops.push_back(lamina::detail::make_expression_ptr(op));
+        for (const auto& op : mul->operands()) ops.push_back(LMCAS::detail::make_expression_ptr(op));
     } else if (auto pow = std::dynamic_pointer_cast<const PowerNode>(impl_->root)) {
-        ops.push_back(lamina::detail::make_expression_ptr(pow->base()));
-        ops.push_back(lamina::detail::make_expression_ptr(pow->exponent()));
+        ops.push_back(LMCAS::detail::make_expression_ptr(pow->base()));
+        ops.push_back(LMCAS::detail::make_expression_ptr(pow->exponent()));
     } else if (auto func = std::dynamic_pointer_cast<const FunctionNode>(impl_->root)) {
-        for (const auto& arg : func->arguments()) ops.push_back(lamina::detail::make_expression_ptr(arg));
+        for (const auto& arg : func->arguments()) ops.push_back(LMCAS::detail::make_expression_ptr(arg));
     }
     return ops;
 }
 
-std::variant<int, ::BigInt, ::Rational> SymbolicExpr::get_number_value() const {
+std::variant<int, ::LMCAS::BigInt, ::LMCAS::Rational> SymbolicExpr::get_number_value() const {
     if (auto node = std::dynamic_pointer_cast<const NumberNode>(impl_->root)) {
         if (std::holds_alternative<BigInt>(node->value())) return std::get<BigInt>(node->value());
         if (std::holds_alternative<Rational>(node->value())) return std::get<Rational>(node->value());
-        if (std::holds_alternative<lmmc_real_t>(node->value())) return (int)std::get<lmmc_real_t>(node->value());
+        if (std::holds_alternative<lmmc_real_t>(node->value())) {
+            return Rational::from_double(std::get<lmmc_real_t>(node->value()));
+        }
     }
     return 0;
 }
@@ -542,3 +563,5 @@ std::string SymbolicExpr::get_identifier() const {
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(impl_->root)) return v->name();
     return "";
 }
+
+} // namespace LMCAS

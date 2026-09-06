@@ -6,6 +6,8 @@
 #include "integration.hpp"
 #include "test_common.hpp"
 
+using namespace LMCAS;
+
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
 // Verify ∫f dx by differentiating the antiderivative and numerically comparing
@@ -13,7 +15,7 @@ static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n)
 static void check_roundtrip(const std::string& name, const std::shared_ptr<SymbolicExpr>& f,
                             const std::string& var, const std::vector<double>& pts) {
     std::cout << "---- " << name << " ----\n";
-    lamina::Integrator integ;
+    LMCAS::Integrator integ;
     auto F = integ.integrate(*f, var);
     if (!F) {
         EXPECT_TRUE(false, name + ": integration failed: " + F.error().message);
@@ -52,7 +54,7 @@ static void check_roundtrip(const std::string& name, const std::shared_ptr<Symbo
 // Check the antiderivative is not just an unevaluated integral node.
 static void check_evaluated(const std::string& name, const std::shared_ptr<SymbolicExpr>& f,
                             const std::string& var) {
-    lamina::Integrator integ;
+    LMCAS::Integrator integ;
     auto F = integ.integrate(*f, var);
     if (!F) {
         EXPECT_TRUE(false, name + ": integration failed: " + F.error().message);

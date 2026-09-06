@@ -1,6 +1,6 @@
 /**
- * @file symbolic_ode_engine.cpp
- * @brief 统一 ODE 求解引擎实现:类型检测与分类.
+ * @file ode_linear.cpp
+ * @brief 常系数高阶与 Euler ODE 的解表达式构造和受检 API。
  */
 #include "../include/symbolic_ode_engine.hpp"
 #include "symbolic_ast.hpp"
@@ -10,217 +10,28 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include "internal/ode_support.hpp"
+#include "internal/ode_characteristic_roots.hpp"
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
-static ODESolution solve_higher_order_ode_impl(
+static Result<ODESolution> solve_higher_order_ode_impl(
     const std::vector<double>&,
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&, const std::string&);
-static ODESolution solve_euler_ode_impl(
+static Result<ODESolution> solve_euler_ode_impl(
     const std::vector<double>&,
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&, const std::string&);
 
-/**
- * @internal
- * @brief 表示特征多项式的一个根及其重数.
- */
-struct CharRoot {
-    double real_part;   ///< 实部
-    double imag_part;   ///< 虚部(为零表示实根)
-    int multiplicity;   ///< 重数
-    bool is_complex;    ///< 是否为复根
-};
 
-/**
- * @internal
- * @brief 使用数值方法求解特征多项式的所有根.
- *
- * 对于度数 <= 4 的多项式使用解析公式,
- * 对于度数 5-6 使用 Durand-Kerner 迭代法.
- */
-[[maybe_unused]] static std::vector<CharRoot> find_characteristic_roots(
-    const std::vector<double>& coeffs)
-{
-    int n = static_cast<int>(coeffs.size()) - 1;
-    if (n <= 0) return {};
-
-    std::vector<CharRoot> roots;
-
-    /// 归一化系数(使最高次项系数为 1)
-    double leading = coeffs[0];
-    if (std::abs(leading) < 1e-15) return {};
-
-    std::vector<double> norm_coeffs(coeffs.size());
-    for (size_t i = 0; i < coeffs.size(); ++i) {
-        norm_coeffs[i] = coeffs[i] / leading;
-    }
-
-    /// 对于低阶多项式,使用解析公式
-    if (n == 1) {
-        /// r + norm_coeffs[1] = 0
-        double r = -norm_coeffs[1];
-        roots.push_back({r, 0.0, 1, false});
-        return roots;
-    }
-
-    if (n == 2) {
-        double b = norm_coeffs[1];
-        double c = norm_coeffs[2];
-        double D = b * b - 4.0 * c;
-        int eq;
-        lmmc_double_nearly_equal_tol(D, 0.0, 1e-10, 1e-10, &eq);
-        if (eq) {
-            roots.push_back({-b / 2.0, 0.0, 2, false});
-        } else if (D > 0) {
-            double r1 = (-b + std::sqrt(D)) / 2.0;
-            double r2 = (-b - std::sqrt(D)) / 2.0;
-            roots.push_back({r1, 0.0, 1, false});
-            roots.push_back({r2, 0.0, 1, false});
-        } else {
-            double re = -b / 2.0;
-            double im = std::sqrt(-D) / 2.0;
-            roots.push_back({re, im, 1, true});
-        }
-        return roots;
-    }
-
-    /// 对于 n >= 3,使用 Durand-Kerner 方法求所有根
-    /// 初始化:在单位圆上均匀分布初始猜测
-    struct Complex {
-        double re, im;
-        Complex(double r = 0, double i = 0) : re(r), im(i) {}
-        Complex operator*(const Complex& o) const {
-            return {re * o.re - im * o.im, re * o.im + im * o.re};
-        }
-        Complex operator+(const Complex& o) const {
-            return {re + o.re, im + o.im};
-        }
-        Complex operator-(const Complex& o) const {
-            return {re - o.re, im - o.im};
-        }
-        Complex operator/(const Complex& o) const {
-            double d = o.re * o.re + o.im * o.im;
-            if (d < 1e-30) return {0, 0};
-            return {(re * o.re + im * o.im) / d,
-                    (im * o.re - re * o.im) / d};
-        }
-        double mag() const { return std::sqrt(re * re + im * im); }
-    };
-
-    std::vector<Complex> z(n);
-    /// 初始猜测采用不同半径,提供非对称起点以区分各根.
-    for (int i = 0; i < n; ++i) {
-        double angle = 2.0 * 3.14159265358979323846 * i / n + 0.1;
-        double radius = 1.0 + 0.3 * i;
-        z[i] = {radius * std::cos(angle), radius * std::sin(angle)};
-    }
-
-    /// 求值多项式 p(z)
-    auto eval_poly = [&](const Complex& val) -> Complex {
-        Complex result = {1.0, 0.0};
-        for (int i = 1; i <= n; ++i) {
-            result = result * val + Complex{norm_coeffs[i], 0.0};
-        }
-        return result;
-    };
-
-    /// Durand-Kerner 迭代
-    for (int iter = 0; iter < 1000; ++iter) {
-        double max_change = 0.0;
-        for (int i = 0; i < n; ++i) {
-            Complex num = eval_poly(z[i]);
-            Complex denom = {1.0, 0.0};
-            for (int j = 0; j < n; ++j) {
-                if (j != i) {
-                    denom = denom * (z[i] - z[j]);
-                }
-            }
-            Complex delta = num / denom;
-            z[i] = z[i] - delta;
-            double change = delta.mag();
-            if (change > max_change) max_change = change;
-        }
-        if (max_change < 1e-12) break;
-    }
-
-    /// 将数值根分类为实根和复共轭对,并检测重根
-    std::vector<bool> used(n, false);
-    for (int i = 0; i < n; ++i) {
-        if (used[i]) continue;
-
-        /// 检查是否为实根(虚部接近零)
-        int is_real;
-        lmmc_double_nearly_equal_tol(z[i].im, 0.0, 1e-8, 1e-8, &is_real);
-
-        if (is_real) {
-            double r = z[i].re;
-            int mult = 1;
-            used[i] = true;
-            /// 检查重根
-            for (int j = i + 1; j < n; ++j) {
-                if (used[j]) continue;
-                int j_real;
-                lmmc_double_nearly_equal_tol(z[j].im, 0.0, 1e-8, 1e-8, &j_real);
-                if (!j_real) continue;
-                int same;
-                lmmc_double_nearly_equal_tol(z[j].re, r, 1e-8, 1e-8, &same);
-                if (same) {
-                    mult++;
-                    used[j] = true;
-                }
-            }
-            roots.push_back({r, 0.0, mult, false});
-        } else {
-            /// 复根:找共轭对
-            double re = z[i].re;
-            double im = std::abs(z[i].im);
-            used[i] = true;
-            int mult = 1;
-
-            /// 找到共轭根并标记
-            for (int j = i + 1; j < n; ++j) {
-                if (used[j]) continue;
-                int same_re, conj_im;
-                lmmc_double_nearly_equal_tol(z[j].re, re, 1e-8, 1e-8, &same_re);
-                lmmc_double_nearly_equal_tol(z[j].im, -z[i].im, 1e-8, 1e-8, &conj_im);
-                if (same_re && conj_im) {
-                    used[j] = true;
-                    break;
-                }
-            }
-            /// 检查重复的复共轭对
-            for (int j = i + 1; j < n; ++j) {
-                if (used[j]) continue;
-                int same_re, same_im;
-                lmmc_double_nearly_equal_tol(z[j].re, re, 1e-8, 1e-8, &same_re);
-                lmmc_double_nearly_equal_tol(std::abs(z[j].im), im, 1e-8, 1e-8, &same_im);
-                if (same_re && same_im) {
-                    mult++;
-                    used[j] = true;
-                    /// 也标记其共轭
-                    for (int k = j + 1; k < n; ++k) {
-                        if (used[k]) continue;
-                        int k_re, k_im;
-                        lmmc_double_nearly_equal_tol(z[k].re, re, 1e-8, 1e-8, &k_re);
-                        lmmc_double_nearly_equal_tol(z[k].im, -z[j].im, 1e-8, 1e-8, &k_im);
-                        if (k_re && k_im) {
-                            used[k] = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            roots.push_back({re, im, mult, true});
-        }
-    }
-
-    return roots;
-}
+using namespace ode_root_detail;
 
 /**
  * @internal
@@ -229,20 +40,33 @@ struct CharRoot {
  * 若值接近整数或简单分数,使用精确表示.
  */
 static std::shared_ptr<SymbolicExpr> clean_number(double val) {
-    /// 检查是否接近整数
+    /// 只在转换可表示时提升为精确小整数，避免浮点到整数的越界转换。
     double rounded = std::round(val);
-    int eq;
-    lmmc_double_nearly_equal_tol(val, rounded, 1e-10, 1e-10, &eq);
-    if (eq) {
-        return SymbolicExpr::number(static_cast<int>(rounded));
+    int eq = 0;
+    if (std::isfinite(rounded) &&
+        rounded >= static_cast<double>(std::numeric_limits<int>::min()) &&
+        rounded <= static_cast<double>(std::numeric_limits<int>::max())) {
+        lmmc_double_nearly_equal_tol(
+            val, rounded, 1e-10, 1e-10, &eq);
+        if (eq && (rounded != 0.0 || val == 0.0)) {
+            return SymbolicExpr::number(static_cast<int>(rounded));
+        }
     }
 
-    /// 检查是否接近简单分数 p/q (q <= 12)
+    /// 检查是否接近简单分数 p/q (q <= 12)。
     for (int q = 2; q <= 12; ++q) {
         double p = val * q;
         double p_rounded = std::round(p);
-        lmmc_double_nearly_equal_tol(p, p_rounded, 1e-10, 1e-10, &eq);
-        if (eq) {
+        if (!std::isfinite(p_rounded) ||
+            p_rounded < static_cast<double>(
+                std::numeric_limits<int>::min()) ||
+            p_rounded > static_cast<double>(
+                std::numeric_limits<int>::max())) {
+            continue;
+        }
+        lmmc_double_nearly_equal_tol(
+            p, p_rounded, 1e-10, 1e-10, &eq);
+        if (eq && (p_rounded != 0.0 || p == 0.0)) {
             return SymbolicExpr::divide(
                 SymbolicExpr::number(static_cast<int>(p_rounded)),
                 SymbolicExpr::number(q));
@@ -253,7 +77,7 @@ static std::shared_ptr<SymbolicExpr> clean_number(double val) {
 }
 
 static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
-    return forcing && lamina::detail::node(forcing) && !forcing->is_zero();
+    return forcing && LMCAS::detail::node(forcing) && !forcing->is_zero();
 }
 
 /**
@@ -288,10 +112,8 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
                     term = SymbolicExpr::multiply(term, x_pow);
                 }
 
-                /// e^(r*x) 因子
-                int r_zero;
-                lmmc_double_nearly_equal_tol(root.real_part, 0.0, 1e-10, 1e-10, &r_zero);
-                if (!r_zero) {
+                /// e^(r*x) 因子。精确零才可省略；小的非零根仍改变解。
+                if (root.real_part != 0.0) {
                     auto r_expr = clean_number(root.real_part);
                     auto exp_arg = SymbolicExpr::multiply(r_expr, x_var);
                     auto exp_term = SymbolicExpr::exp(exp_arg);
@@ -315,11 +137,9 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
                 auto cos_term = SymbolicExpr::cos(beta_x);
                 auto sin_term = SymbolicExpr::sin(beta_x);
 
-                /// e^(alphax) 因子
+                /// e^(alphax) 因子。精确零才可省略。
                 std::shared_ptr<SymbolicExpr> exp_factor = nullptr;
-                int alpha_zero;
-                lmmc_double_nearly_equal_tol(root.real_part, 0.0, 1e-10, 1e-10, &alpha_zero);
-                if (!alpha_zero) {
+                if (root.real_part != 0.0) {
                     auto alpha_expr = clean_number(root.real_part);
                     auto exp_arg = SymbolicExpr::multiply(alpha_expr, x_var);
                     exp_factor = SymbolicExpr::exp(exp_arg);
@@ -423,6 +243,14 @@ ODESolutionResult solve_higher_order_ode_checked(
 
     auto coeff_check = validate_numeric_ode_coefficients(coeffs, 2, 7, operation);
     if (!coeff_check) return ODESolutionResult::failure(coeff_check.error());
+    for (double coefficient : coeffs) {
+        if (!std::isfinite(coefficient / coeffs.front())) {
+            return ODESolutionResult::failure(
+                CasErrc::NumericFailure,
+                "normalizing the characteristic polynomial exceeds the finite numeric domain",
+                operation);
+        }
+    }
 
     auto budget = context.consume_steps(coeffs.size() * 20 + 20, operation);
     if (!budget) return ODESolutionResult::failure(budget.error());
@@ -437,8 +265,11 @@ ODESolutionResult solve_higher_order_ode_checked(
     }
 
     try {
-        auto solution = solve_higher_order_ode_impl(
+        auto solution_result = solve_higher_order_ode_impl(
             coeffs, nullptr, x, y);
+        if (!solution_result)
+            return ODESolutionResult::failure(solution_result.error());
+        auto solution = std::move(solution_result.value());
         if (nonzero_forcing && solution.general_solution) {
             auto particular = SymbolicExpr::divide(
                 forcing, SymbolicExpr::number(coeffs.back()))->simplify();
@@ -472,31 +303,31 @@ ODESolutionResult solve_higher_order_ode_checked(
     return solve_higher_order_ode_checked(coeffs, forcing, x, y, context);
 }
 
-static ODESolution solve_higher_order_ode_impl(
+static Result<ODESolution> solve_higher_order_ode_impl(
     const std::vector<double>& coeffs,
     const std::shared_ptr<SymbolicExpr>& forcing,
     const std::string& x,
     const std::string&)
 {
+    const std::string operation = "solve_higher_order_ode";
     ODESolution result;
     result.method_used = ODEType::HigherOrder_ConstCoeff;
 
     if (coeffs.size() < 2 || has_nonzero_forcing(forcing)) {
-        result.general_solution = nullptr;
-        return result;
+        return Result<ODESolution>::failure(
+            CasErrc::Inconclusive,
+            "higher-order ODE is outside the implemented support domain",
+            operation);
     }
 
-    auto roots = find_characteristic_roots(coeffs);
-    if (roots.empty()) {
-        result.general_solution = nullptr;
-        return result;
-    }
-
-    result.general_solution = build_homogeneous_solution(roots, x, result.constants);
+    auto roots = find_characteristic_roots(coeffs, operation);
+    if (!roots) return Result<ODESolution>::failure(roots.error());
+    result.general_solution =
+        build_homogeneous_solution(roots.value(), x, result.constants);
     if (result.general_solution) {
         result.general_solution = result.general_solution->simplify();
     }
-    return result;
+    return Result<ODESolution>::success(std::move(result));
 }
 
 ODESolutionResult solve_euler_ode_checked(
@@ -526,8 +357,11 @@ ODESolutionResult solve_euler_ode_checked(
     }
 
     try {
-        auto solution = solve_euler_ode_impl(
+        auto solution_result = solve_euler_ode_impl(
             euler_coeffs, nullptr, x, y);
+        if (!solution_result)
+            return ODESolutionResult::failure(solution_result.error());
+        auto solution = std::move(solution_result.value());
         if (nonzero_forcing && solution.general_solution) {
             auto particular = SymbolicExpr::divide(
                 forcing,
@@ -562,19 +396,22 @@ ODESolutionResult solve_euler_ode_checked(
     return solve_euler_ode_checked(euler_coeffs, forcing, x, y, context);
 }
 
-static ODESolution solve_euler_ode_impl(
+static Result<ODESolution> solve_euler_ode_impl(
     const std::vector<double>& euler_coeffs,
     const std::shared_ptr<SymbolicExpr>& forcing,
     const std::string& x,
     const std::string&)
 {
+    const std::string operation = "solve_euler_ode";
     ODESolution result;
     result.method_used = ODEType::Euler;
 
     if ((euler_coeffs.size() != 3 && euler_coeffs.size() != 4) ||
         has_nonzero_forcing(forcing)) {
-        result.general_solution = nullptr;
-        return result;
+        return Result<ODESolution>::failure(
+            CasErrc::Inconclusive,
+            "Euler ODE is outside the implemented support domain",
+            operation);
     }
 
     std::vector<double> characteristic;
@@ -591,17 +428,14 @@ static ODESolution solve_euler_ode_impl(
         characteristic = {a, b - 3.0 * a, 2.0 * a - b + c, d};
     }
 
-    auto roots = find_characteristic_roots(characteristic);
-    if (roots.empty()) {
-        result.general_solution = nullptr;
-        return result;
-    }
-
-    result.general_solution = build_euler_solution(roots, x, result.constants);
+    auto roots = find_characteristic_roots(characteristic, operation);
+    if (!roots) return Result<ODESolution>::failure(roots.error());
+    result.general_solution =
+        build_euler_solution(roots.value(), x, result.constants);
     if (result.general_solution) {
         result.general_solution = result.general_solution->simplify();
     }
-    return result;
+    return Result<ODESolution>::success(std::move(result));
 }
 
 /**
@@ -614,4 +448,4 @@ static ODESolution solve_euler_ode_impl(
  * - 三角: cos(bx), sin(bx)
  */
 
-} // namespace lamina
+} // namespace LMCAS

@@ -1,5 +1,7 @@
 #include "test_common.hpp"
 
+using namespace LMCAS;
+
 int main() {
     TEST_CASE("Complex Arithmetic");
 

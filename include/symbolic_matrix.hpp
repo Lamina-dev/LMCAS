@@ -11,7 +11,7 @@
 #include <string>
 #include <variant>
 
-namespace lamina {
+namespace LMCAS {
 
 using MatrixEigenvalueResult = Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 using MatrixEigenvectorResult =
@@ -19,17 +19,22 @@ using MatrixEigenvectorResult =
 
 /**
  * @brief 计算两个符号矩阵的乘积
+ *
+ * 归一化后的近似元素保留浮点计算值，精确元素保持精确算术。
+ * 误差容限用于显式数值比较，不参与矩阵元素的归一化。
+ * 矩阵因子按输入顺序相乘，结果形状为左矩阵行数乘以右矩阵列数。
+ *
  * @param A 左矩阵
  * @param B 右矩阵
  * @return 乘积矩阵的符号表达式
  */
-LAMINA_API ExpressionResult matrix_multiply_checked(
+LMCAS_API ExpressionResult matrix_multiply_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::shared_ptr<SymbolicExpr>& B,
     ComputationContext& context
 );
 
-LAMINA_API ExpressionResult matrix_multiply_checked(
+LMCAS_API ExpressionResult matrix_multiply_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::shared_ptr<SymbolicExpr>& B
 );
@@ -40,12 +45,12 @@ LAMINA_API ExpressionResult matrix_multiply_checked(
  * @param A 输入矩阵
  * @return 行列式的符号表达式
  */
-LAMINA_API ExpressionResult matrix_determinant_checked(
+LMCAS_API ExpressionResult matrix_determinant_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API ExpressionResult matrix_determinant_checked(
+LMCAS_API ExpressionResult matrix_determinant_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -55,12 +60,12 @@ LAMINA_API ExpressionResult matrix_determinant_checked(
  * @param A 输入矩阵
  * @return 逆矩阵的符号表达式
  */
-LAMINA_API ExpressionResult matrix_inverse_checked(
+LMCAS_API ExpressionResult matrix_inverse_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API ExpressionResult matrix_inverse_checked(
+LMCAS_API ExpressionResult matrix_inverse_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -87,29 +92,29 @@ using MatrixLinearSolution = std::variant<
     MatrixInconsistentLinearSolution>;
 using MatrixLinearSolveResult = Result<MatrixLinearSolution>;
 
-LAMINA_API MatrixRankResult matrix_rank_checked(
+LMCAS_API MatrixRankResult matrix_rank_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context);
-LAMINA_API MatrixRankResult matrix_rank_checked(
+LMCAS_API MatrixRankResult matrix_rank_checked(
     const std::shared_ptr<SymbolicExpr>& A);
 
-LAMINA_API ExpressionResult matrix_rref_checked(
+LMCAS_API ExpressionResult matrix_rref_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context);
-LAMINA_API ExpressionResult matrix_rref_checked(
+LMCAS_API ExpressionResult matrix_rref_checked(
     const std::shared_ptr<SymbolicExpr>& A);
 
-LAMINA_API MatrixNullspaceResult matrix_nullspace_checked(
+LMCAS_API MatrixNullspaceResult matrix_nullspace_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context);
-LAMINA_API MatrixNullspaceResult matrix_nullspace_checked(
+LMCAS_API MatrixNullspaceResult matrix_nullspace_checked(
     const std::shared_ptr<SymbolicExpr>& A);
 
-LAMINA_API MatrixLinearSolveResult matrix_solve_linear_checked(
+LMCAS_API MatrixLinearSolveResult matrix_solve_linear_checked(
     const std::shared_ptr<SymbolicExpr>& coefficients,
     const std::shared_ptr<SymbolicExpr>& right_hand_side,
     ComputationContext& context);
-LAMINA_API MatrixLinearSolveResult matrix_solve_linear_checked(
+LMCAS_API MatrixLinearSolveResult matrix_solve_linear_checked(
     const std::shared_ptr<SymbolicExpr>& coefficients,
     const std::shared_ptr<SymbolicExpr>& right_hand_side);
 
@@ -119,13 +124,13 @@ LAMINA_API MatrixLinearSolveResult matrix_solve_linear_checked(
  * @param dim 矩阵维度，默认为 2
  * @return 旋转矩阵的符号表达式
  */
-LAMINA_API ExpressionResult matrix_rotation_checked(
+LMCAS_API ExpressionResult matrix_rotation_checked(
     double theta,
     int dim,
     ComputationContext& context
 );
 
-LAMINA_API ExpressionResult matrix_rotation_checked(
+LMCAS_API ExpressionResult matrix_rotation_checked(
     double theta,
     int dim = 2
 );
@@ -137,13 +142,13 @@ LAMINA_API ExpressionResult matrix_rotation_checked(
  * @param dim 矩阵维度，默认为 2
  * @return 反射矩阵的符号表达式
  */
-LAMINA_API ExpressionResult matrix_reflection_checked(
+LMCAS_API ExpressionResult matrix_reflection_checked(
     double angle,
     int dim,
     ComputationContext& context
 );
 
-LAMINA_API ExpressionResult matrix_reflection_checked(
+LMCAS_API ExpressionResult matrix_reflection_checked(
     double angle,
     int dim = 2
 );
@@ -156,26 +161,26 @@ LAMINA_API ExpressionResult matrix_reflection_checked(
  * @param dim 矩阵维度，默认为 2
  * @return 缩放矩阵的符号表达式
  */
-LAMINA_API ExpressionResult matrix_scaling_checked(
+LMCAS_API ExpressionResult matrix_scaling_checked(
     double sx,
     double sy,
     int dim,
     ComputationContext& context
 );
 
-LAMINA_API ExpressionResult matrix_scaling_checked(
+LMCAS_API ExpressionResult matrix_scaling_checked(
     double sx,
     double sy,
     int dim = 2
 );
 
 
-LAMINA_API ExpressionResult matrix_characteristic_polynomial_checked(
+LMCAS_API ExpressionResult matrix_characteristic_polynomial_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::string& variable,
     ComputationContext& context);
 
-LAMINA_API ExpressionResult matrix_characteristic_polynomial_checked(
+LMCAS_API ExpressionResult matrix_characteristic_polynomial_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::string& variable = "lambda");
 /**
@@ -183,12 +188,12 @@ LAMINA_API ExpressionResult matrix_characteristic_polynomial_checked(
  * @param A 输入矩阵
  * @return 特征值列表
  */
-LAMINA_API MatrixEigenvalueResult matrix_eigenvalues_checked(
+LMCAS_API MatrixEigenvalueResult matrix_eigenvalues_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API MatrixEigenvalueResult matrix_eigenvalues_checked(
+LMCAS_API MatrixEigenvalueResult matrix_eigenvalues_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -198,12 +203,12 @@ LAMINA_API MatrixEigenvalueResult matrix_eigenvalues_checked(
  * @param A 输入矩阵
  * @return 特征向量列表，每个特征向量为一组分量
  */
-LAMINA_API MatrixEigenvectorResult matrix_eigenvectors_checked(
+LMCAS_API MatrixEigenvectorResult matrix_eigenvectors_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API MatrixEigenvectorResult matrix_eigenvectors_checked(
+LMCAS_API MatrixEigenvectorResult matrix_eigenvectors_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 

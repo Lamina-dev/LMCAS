@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 using namespace vector_calculus_detail;
 
@@ -351,7 +351,7 @@ VectorCalculusExprResult directional_derivative_checked(
                                                  operation);
     }
     auto mag_sq = vector_calculus_magnitude_squared(direction);
-    if (!mag_sq || !lamina::detail::node(mag_sq)) {
+    if (!mag_sq || !LMCAS::detail::node(mag_sq)) {
         return VectorCalculusExprResult::failure(
             CasErrc::InternalInvariant,
             "direction magnitude construction failed",
@@ -554,4 +554,4 @@ std::shared_ptr<SymbolicExpr> hessian(
 
     return SymbolicExpr::matrix(grid);
 }
-} // namespace lamina
+} // namespace LMCAS

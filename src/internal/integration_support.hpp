@@ -19,7 +19,7 @@
 #include <optional>
 #include <variant>
 
-namespace lamina {
+namespace LMCAS {
 
 inline std::shared_ptr<SymbolicExpr> make_expr_ptr(const SymbolicExpr& expr) {
     return detail::make_expression_ptr(expr);
@@ -61,4 +61,4 @@ inline bool contains_unevaluated_integral(
     return detail::contains_node_type<IntegralNode>(node);
 }
 
-} // namespace lamina
+} // namespace LMCAS

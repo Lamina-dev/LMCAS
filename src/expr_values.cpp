@@ -1,15 +1,15 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include "symbolic_ast.hpp"
-#include "internal/lsr_expr_common.hpp"
+#include "internal/expr_common.hpp"
 #include <cmath>
 #include <exception>
 #include <memory>
 #include <string>
 #include <utility>
 
-namespace lamina::lsr {
+namespace LMCAS {
 
-using namespace detail::lsr_expr_common;
+using namespace expr_detail::expr_common;
 
 ExprResult sym(const std::string& name) {
     if (name.empty()) {
@@ -92,7 +92,7 @@ ExprResult approx_real(double value) {
 ExprResult constant_symbol(const char* name) {
     try {
         auto expression = SymbolicExpr::variable(name);
-        if (!expression || !lamina::detail::node(expression)) {
+        if (!expression || !LMCAS::detail::node(expression)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       "constant factory returned null",
                                       kConstantOperation);
@@ -139,9 +139,9 @@ ExprResult complex(ExprPtr real, ExprPtr imag) {
                                   kComplexOperation);
     }
     try {
-        auto node = SymbolicFactory::create_complex(lamina::detail::node(real),
-                                                    lamina::detail::node(imag));
-        return ExprResult::success(lamina::detail::make_expression_ptr(std::move(node)));
+        auto node = SymbolicFactory::create_complex(LMCAS::detail::node(real),
+                                                    LMCAS::detail::node(imag));
+        return ExprResult::success(LMCAS::detail::make_expression_ptr(std::move(node)));
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "complex expression allocation failed",
@@ -152,4 +152,4 @@ ExprResult complex(ExprPtr real, ExprPtr imag) {
     }
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

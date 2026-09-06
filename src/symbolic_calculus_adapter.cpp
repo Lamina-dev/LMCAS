@@ -3,6 +3,8 @@
 #include "symbolic_ast.hpp"
 #include "visitors/limit_visitor.hpp"
 
+namespace LMCAS {
+
 std::shared_ptr<SymbolicExpr> SymbolicExpr::integral(
     std::shared_ptr<SymbolicExpr> operand,
     const std::string& variable_name) {
@@ -14,10 +16,10 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(
     const std::string& variable) const {
     if (!impl_->root) return nullptr;
 
-    lamina::Integrator integrator;
+    LMCAS::Integrator integrator;
     auto integrated = integrator.integrate(*this, variable);
     if (!integrated) return nullptr;
-    auto result = lamina::detail::make_expression_ptr(integrated.value());
+    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
     return result->simplify();
 }
 
@@ -25,7 +27,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& point,
     int order,
-    const lamina::AssumptionContext*) const {
+    const LMCAS::AssumptionContext*) const {
     if (!impl_->root || !point) return nullptr;
     if (order < 0) return nullptr;
 
@@ -34,7 +36,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
         variable_expr,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), point));
     std::vector<std::shared_ptr<const SymbolicNode>> terms;
-    auto derivative = lamina::detail::make_expression_ptr(impl_->root->clone());
+    auto derivative = LMCAS::detail::make_expression_ptr(impl_->root->clone());
 
     for (int n = 0; n <= order; ++n) {
         if (n > 0) {
@@ -59,21 +61,21 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
                 term,
                 SymbolicExpr::number(Rational(BigInt(1), factorial)));
         }
-        terms.push_back(lamina::detail::node(term));
+        terms.push_back(LMCAS::detail::node(term));
     }
 
     if (terms.empty()) return SymbolicExpr::number(0);
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<AddNode>(terms))->simplify();
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<AddNode>(terms))->simplify();
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_integral(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable) {
     if (!expression) return nullptr;
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<IntegralNode>(
-            lamina::detail::node(expression), variable));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<IntegralNode>(
+            LMCAS::detail::node(expression), variable));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(
@@ -81,8 +83,10 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& point) {
     if (!expression || !point) return nullptr;
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<LimitNode>(
-            lamina::detail::node(expression), variable,
-            lamina::detail::node(point), LimitDirection::Both));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<LimitNode>(
+            LMCAS::detail::node(expression), variable,
+            LMCAS::detail::node(point), LimitDirection::Both));
 }
+
+} // namespace LMCAS

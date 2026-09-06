@@ -4,7 +4,7 @@
 #include "symbolic.hpp"
 #include <stdexcept>
 
-using namespace lamina;
+using namespace LMCAS;
 
 void test_positive_implies_nonnegative_and_nonzero() {
     TEST_CASE("Positive implies NonNegative and NonZero");

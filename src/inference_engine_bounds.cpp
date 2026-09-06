@@ -1,7 +1,7 @@
 #define _USE_MATH_DEFINES
 #include "internal/inference_engine_impl.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 // Interval propagation
 
@@ -11,7 +11,7 @@ namespace lamina {
  */
 std::optional<double> endpoint_to_double(const Endpoint& ep) {
     if (ep.is_neg_infinity || ep.is_pos_infinity) return std::nullopt;
-    if (!ep.value || !lamina::detail::node(ep.value)) return std::nullopt;
+    if (!ep.value || !LMCAS::detail::node(ep.value)) return std::nullopt;
     ComputationContext context;
     auto evaluated = evaluate_numeric(*ep.value, NumericBindings{}, context);
     if (!evaluated || !evaluated.value().is_finite()) return std::nullopt;
@@ -24,8 +24,8 @@ std::optional<double> endpoint_to_double(const Endpoint& ep) {
  * @brief Helper: create a closed Endpoint from a double value.
  */
 static Endpoint make_closed_endpoint(double val) {
-    auto expr = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val)));
+    auto expr = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val)));
     return Endpoint::closed(expr);
 }
 
@@ -78,10 +78,10 @@ bool is_exponent_neg_one(const std::shared_ptr<const SymbolicNode>& node) {
 }
 
 std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& expr) const {
-    if (!lamina::detail::node(expr)) return std::nullopt;
+    if (!LMCAS::detail::node(expr)) return std::nullopt;
 
     // --- NumberNode: point interval [n, n] ---
-    if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+    if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
         double val = 0.0;
         if (std::holds_alternative<BigInt>(num->value())) {
             val = std::get<BigInt>(num->value()).to_double();
@@ -95,7 +95,7 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
     }
 
     // --- VariableNode: look up bounds from AssumptionContext ---
-    if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+    if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
         auto bounds = impl_->ctx.get_bounds(var->name());
         if (!bounds.has_value()) return std::nullopt;
 
@@ -108,17 +108,17 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
     }
 
     // --- AddNode: [a,b] + [c,d] → [a+c, b+d] for each operand ---
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
         if (add->operands().empty()) return std::nullopt;
 
         // Start with the bounds of the first operand
-        auto first_expr = lamina::detail::expression_from_node(add->operands()[0]);
+        auto first_expr = LMCAS::detail::expression_from_node(add->operands()[0]);
         auto result = propagate_bounds(first_expr);
         if (!result.has_value()) return std::nullopt;
 
         // Accumulate bounds for remaining operands
         for (size_t i = 1; i < add->operands().size(); ++i) {
-            auto op_expr = lamina::detail::expression_from_node(add->operands()[i]);
+            auto op_expr = LMCAS::detail::expression_from_node(add->operands()[i]);
             auto op_bounds = propagate_bounds(op_expr);
             if (!op_bounds.has_value()) return std::nullopt;
 
@@ -137,7 +137,7 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
     }
 
     // --- MultiplyNode: handle multiplication and division ---
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         if (mul->operands().empty()) return std::nullopt;
 
         // Separate operands into numerator terms and denominator terms (PowerNode with exp -1)
@@ -160,12 +160,12 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
             // All operands are denominators; numerator is implicitly 1
             num_result = make_interval(1.0, 1.0);
         } else {
-            auto first_expr = lamina::detail::expression_from_node(numerator_ops[0]);
+            auto first_expr = LMCAS::detail::expression_from_node(numerator_ops[0]);
             num_result = propagate_bounds(first_expr);
             if (!num_result.has_value()) return std::nullopt;
 
             for (size_t i = 1; i < numerator_ops.size(); ++i) {
-                auto op_expr = lamina::detail::expression_from_node(numerator_ops[i]);
+                auto op_expr = LMCAS::detail::expression_from_node(numerator_ops[i]);
                 auto op_bounds = propagate_bounds(op_expr);
                 if (!op_bounds.has_value()) return std::nullopt;
 
@@ -195,12 +195,12 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
 
         // Compute denominator product bounds, then divide
         // First compute the combined denominator interval
-        auto den_first_expr = lamina::detail::expression_from_node(denominator_ops[0]);
+        auto den_first_expr = LMCAS::detail::expression_from_node(denominator_ops[0]);
         auto den_result = propagate_bounds(den_first_expr);
         if (!den_result.has_value()) return std::nullopt;
 
         for (size_t i = 1; i < denominator_ops.size(); ++i) {
-            auto op_expr = lamina::detail::expression_from_node(denominator_ops[i]);
+            auto op_expr = LMCAS::detail::expression_from_node(denominator_ops[i]);
             auto op_bounds = propagate_bounds(op_expr);
             if (!op_bounds.has_value()) return std::nullopt;
 
@@ -249,10 +249,10 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
     }
 
     // --- PowerNode: handle squaring ---
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
         // Squaring: x^2 where x >= 0 → [a², b²]
         if (is_exponent_two(pow->exponent())) {
-            auto base_expr = lamina::detail::expression_from_node(pow->base());
+            auto base_expr = LMCAS::detail::expression_from_node(pow->base());
             auto base_bounds = propagate_bounds(base_expr);
             if (!base_bounds.has_value()) return std::nullopt;
 
@@ -281,10 +281,10 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
     }
 
     // --- FunctionNode: sin/cos → [-1, 1] ---
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
         if (func->arguments().empty()) return std::nullopt;
 
-        auto arg_expr = lamina::detail::expression_from_node(func->arguments()[0]);
+        auto arg_expr = LMCAS::detail::expression_from_node(func->arguments()[0]);
         switch (func->type()) {
             case FunctionNode::FuncType::Sin:
             case FunctionNode::FuncType::Cos: {
@@ -347,4 +347,4 @@ std::optional<Interval> InferenceEngine::propagate_bounds(const SymbolicExpr& ex
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

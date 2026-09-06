@@ -8,28 +8,28 @@
 #include <string>
 #include <memory>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 static std::shared_ptr<const SymbolicNode> make_number_real(double val) {
-    return lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
+    return LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(val));
 }
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 static std::shared_ptr<const SymbolicNode> make_multiply(
     std::vector<std::shared_ptr<const SymbolicNode>> ops) {
-    return lamina::detail::make_node<MultiplyNode>(std::move(ops));
+    return LMCAS::detail::make_node<MultiplyNode>(std::move(ops));
 }
 
 static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -97,7 +97,7 @@ void test_zero_rational_and_float() {
 
     // Rational(0) * x
     {
-        auto zero_rat = lamina::detail::make_node<NumberNode>(Rational(0));
+        auto zero_rat = LMCAS::detail::make_node<NumberNode>(Rational(0));
         auto mul_node = make_multiply({zero_rat, make_var("x")});
         auto expr = wrap_expr(mul_node);
         EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::False,
@@ -107,7 +107,7 @@ void test_zero_rational_and_float() {
     }
     // 0.0 * x
     {
-        auto zero_float = lamina::detail::make_node<NumberNode>(
+        auto zero_float = LMCAS::detail::make_node<NumberNode>(
             static_cast<lmmc_real_t>(0.0));
         auto mul_node = make_multiply({zero_float, make_var("x")});
         auto expr = wrap_expr(mul_node);
@@ -426,7 +426,7 @@ void test_empty_operands() {
     TEST_CASE("Empty MultiplyNode is rejected");
     bool rejected = false;
     try {
-        (void)lamina::detail::make_node<MultiplyNode>(
+        (void)LMCAS::detail::make_node<MultiplyNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{});
     } catch (const std::invalid_argument&) {
         rejected = true;
@@ -653,7 +653,7 @@ void test_empty_multiply_domain() {
     TEST_CASE("Empty MultiplyNode has no domain query state");
     bool rejected = false;
     try {
-        (void)lamina::detail::make_node<MultiplyNode>(
+        (void)LMCAS::detail::make_node<MultiplyNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{});
     } catch (const std::invalid_argument&) {
         rejected = true;
@@ -667,7 +667,7 @@ void test_rational_not_integer() {
     InferenceEngine engine(ctx);
 
     // multiply(Rational(1,2), 3)
-    auto rat_node = lamina::detail::make_node<NumberNode>(Rational(1, 2));
+    auto rat_node = LMCAS::detail::make_node<NumberNode>(Rational(1, 2));
     auto mul_node = make_multiply({rat_node, make_number(3)});
     auto expr = wrap_expr(mul_node);
 

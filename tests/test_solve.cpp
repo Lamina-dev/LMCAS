@@ -2,6 +2,8 @@
 #include "inequality_solver.hpp"
 #include "symbolic_matrix.hpp"
 
+using namespace LMCAS;
+
 int main() {
     TEST_CASE("Solve System (Direct & Linear)");
 
@@ -48,7 +50,7 @@ int main() {
             {SymbolicExpr::number(0), SymbolicExpr::number(2)}
         };
         auto m = SymbolicExpr::matrix(m_data);
-        auto checked_eigenvectors = lamina::matrix_eigenvectors_checked(m);
+        auto checked_eigenvectors = LMCAS::matrix_eigenvectors_checked(m);
         EXPECT_TRUE(checked_eigenvectors.has_value(),
                     "checked eigenvector solve succeeds");
         if (checked_eigenvectors) {
@@ -66,8 +68,8 @@ int main() {
         auto x = SymbolicExpr::variable("x");
         auto left = SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), x), SymbolicExpr::number(-6));
 
-        auto solution = lamina::InequalitySolver::solve_inequality_checked(
-            left, lamina::InequalityType::GreaterThan, "x");
+        auto solution = LMCAS::InequalitySolver::solve_inequality_checked(
+            left, LMCAS::InequalityType::GreaterThan, "x");
         EXPECT_TRUE(
             solution && !solution.value().intervals().empty(),
             "checked inequality solver returns a nonempty interval");

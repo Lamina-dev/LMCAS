@@ -1,18 +1,18 @@
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 
 #include <cmath>
 #include <exception>
 #include <utility>
 #include <vector>
 
-#include "lsr_expr_internal.hpp"
+#include "expr_internal.hpp"
 #include "symbolic_ast.hpp"
 #include "root_of_utils.hpp"
 
-namespace lamina::lsr {
+namespace LMCAS {
 namespace {
 
-constexpr const char* kNumberDomainOperation = "lsr.number_domain";
+constexpr const char* kNumberDomainOperation = "LMCAS.number_domain";
 
 Result<bool> bool_failure(CasErrc code, std::string message,
                           const char* operation) {
@@ -179,7 +179,7 @@ Result<bool> domain_contains_node(
     }
 
     if (std::dynamic_pointer_cast<const RootOfNode>(node)) {
-        auto expression = lamina::detail::make_expression_ptr(node);
+        auto expression = LMCAS::detail::make_expression_ptr(node);
         if (domain == NumberDomain::Complexes) {
             auto value = rootof_evaluate_complex_checked(expression);
             return value ? Result<bool>::success(true)
@@ -292,11 +292,11 @@ Result<ExprSet> ExprSet::make(std::vector<ExprPtr> elements) {
     auto expression = make_finite_set(elements, context);
     if (!expression) return Result<ExprSet>::failure(expression.error());
     auto node = std::dynamic_pointer_cast<const FiniteSetNode>(
-        lamina::detail::node(expression.value()));
+        LMCAS::detail::node(expression.value()));
     std::vector<ExprPtr> unique;
     unique.reserve(node->elements().size());
     for (const auto& element : node->elements()) {
-        unique.push_back(lamina::detail::make_expression_ptr(element));
+        unique.push_back(LMCAS::detail::make_expression_ptr(element));
     }
     return Result<ExprSet>::success(
         ExprSet(std::move(unique), expression.value()));
@@ -377,12 +377,12 @@ bool NumberDomainSet::subset_of(const NumberDomainSet& other) const noexcept {
 }
 
 Result<bool> NumberDomainSet::contains(const ExprPtr& element) const {
-    if (!element || !lamina::detail::node(element)) {
+    if (!element || !LMCAS::detail::node(element)) {
         return bool_failure(CasErrc::InvalidArgument,
                             "domain membership element must not be null",
                             kNumberDomainOperation);
     }
-    return domain_contains_node(domain_, lamina::detail::node(element));
+    return domain_contains_node(domain_, LMCAS::detail::node(element));
 }
 
 ExprSetResult expr_set(std::vector<ExprPtr> elements) {
@@ -508,4 +508,4 @@ ExprSetResult expr_set_symmetric_difference(const ExprSet& lhs,
     }
 }
 
-} // namespace lamina::lsr
+} // namespace LMCAS

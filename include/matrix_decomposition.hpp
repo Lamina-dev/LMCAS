@@ -10,7 +10,7 @@
 #include <vector>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 struct LUDecomposition {
     std::shared_ptr<SymbolicExpr> P;
@@ -51,12 +51,12 @@ using JordanDecompositionResult = Result<JordanDecomposition>;
  * @param U 输出的上三角矩阵
  * @return 成功返回 true
  */
-LAMINA_API LUDecompositionResult lu_decomposition_checked(
+LMCAS_API LUDecompositionResult lu_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API LUDecompositionResult lu_decomposition_checked(
+LMCAS_API LUDecompositionResult lu_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -68,12 +68,12 @@ LAMINA_API LUDecompositionResult lu_decomposition_checked(
  * @param R 输出的上三角矩阵
  * @return 成功返回 true
  */
-LAMINA_API QRDecompositionResult qr_decomposition_checked(
+LMCAS_API QRDecompositionResult qr_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API QRDecompositionResult qr_decomposition_checked(
+LMCAS_API QRDecompositionResult qr_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -84,12 +84,12 @@ LAMINA_API QRDecompositionResult qr_decomposition_checked(
  * @param L 输出的下三角矩阵
  * @return 成功返回 true
  */
-LAMINA_API CholeskyDecompositionResult cholesky_decomposition_checked(
+LMCAS_API CholeskyDecompositionResult cholesky_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API CholeskyDecompositionResult cholesky_decomposition_checked(
+LMCAS_API CholeskyDecompositionResult cholesky_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -102,12 +102,12 @@ LAMINA_API CholeskyDecompositionResult cholesky_decomposition_checked(
  * @param V 输出的右奇异矩阵
  * @return 成功返回 true
  */
-LAMINA_API SVDDecompositionResult svd_decomposition_checked(
+LMCAS_API SVDDecompositionResult svd_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API SVDDecompositionResult svd_decomposition_checked(
+LMCAS_API SVDDecompositionResult svd_decomposition_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -117,7 +117,7 @@ LAMINA_API SVDDecompositionResult svd_decomposition_checked(
  * @param A 输入矩阵
  * @return 指数矩阵的符号表达式
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_exp(
+LMCAS_API std::shared_ptr<SymbolicExpr> matrix_exp(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -126,7 +126,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> matrix_exp(
  * @param A 输入方阵
  * @return 迹的符号表达式；非方阵返回 nullptr
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_trace(
+LMCAS_API std::shared_ptr<SymbolicExpr> matrix_trace(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -137,7 +137,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> matrix_trace(
  * @param normalize 为 true 时返回标准正交基，否则仅正交
  * @return 正交（或标准正交）向量列表；线性相关的向量被跳过
  */
-LAMINA_API std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
+LMCAS_API std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
     const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& vectors,
     bool normalize = false
 );
@@ -147,7 +147,7 @@ LAMINA_API std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
  * @param A 输入方阵
  * @return log(A) 的符号表达式；不可对角化或含非正特征值时返回 nullptr
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_log(
+LMCAS_API std::shared_ptr<SymbolicExpr> matrix_log(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -157,7 +157,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> matrix_log(
  * @param B p×q 矩阵
  * @return (mp)×(nq) 矩阵
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> kronecker(
+LMCAS_API std::shared_ptr<SymbolicExpr> kronecker(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::shared_ptr<SymbolicExpr>& B
 );
@@ -168,7 +168,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> kronecker(
  * @param type 范数类型："frobenius"、"1"（最大列和）、"inf"（最大行和）
  * @return 范数的符号表达式；类型无效返回 nullptr
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> matrix_norm(
+LMCAS_API std::shared_ptr<SymbolicExpr> matrix_norm(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::string& type = "frobenius"
 );
@@ -179,7 +179,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> matrix_norm(
  * @param vars 变量名列表
  * @return 对称矩阵；提取失败返回 nullptr
  */
-LAMINA_API std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
+LMCAS_API std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::vector<std::string>& vars
 );
@@ -190,7 +190,7 @@ LAMINA_API std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
  * @return 分类字符串："positive_definite"、"negative_definite"、
  *         "positive_semidefinite"、"negative_semidefinite"、"indefinite"、"unknown"
  */
-LAMINA_API std::string classify_quadratic_form(
+LMCAS_API std::string classify_quadratic_form(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
@@ -201,14 +201,14 @@ LAMINA_API std::string classify_quadratic_form(
  * @param P 输出变换矩阵
  * @return 成功返回 true（可对角化或可求 Jordan 块时）
  */
-LAMINA_API JordanDecompositionResult jordan_form_checked(
+LMCAS_API JordanDecompositionResult jordan_form_checked(
     const std::shared_ptr<SymbolicExpr>& A,
     ComputationContext& context
 );
 
-LAMINA_API JordanDecompositionResult jordan_form_checked(
+LMCAS_API JordanDecompositionResult jordan_form_checked(
     const std::shared_ptr<SymbolicExpr>& A
 );
 
 
-} // namespace lamina
+} // namespace LMCAS

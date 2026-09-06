@@ -7,7 +7,7 @@
 #include <string_view>
 #include <utility>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 /** Scope information for an AST node that introduces one lexical binder. */
 struct BinderView {
@@ -367,4 +367,4 @@ private:
     SymbolicNodePtr result_;
 };
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 static const std::vector<Domain> ALL_DOMAINS = {
@@ -506,10 +506,10 @@ void test_bounded_with_interval() {
     TEST_CASE("Bounded with interval stores bounds");
     PropertyStore store;
 
-    auto lower_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(0)));
-    auto upper_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(BigInt(10)));
+    auto lower_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(0)));
+    auto upper_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(BigInt(10)));
 
     Interval bounds;
     bounds.lower = Endpoint::closed(lower_val);

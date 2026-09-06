@@ -7,6 +7,8 @@
 
 #include "symbolic.hpp"
 
+using namespace LMCAS;
+
 class Timer {
     std::string name;
     std::chrono::high_resolution_clock::time_point start;

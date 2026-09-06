@@ -3,11 +3,13 @@
 
 #include "relations.hpp"
 
+namespace LMCAS {
+
 class IntegralNode : public SymbolicNode {
 private:
     template <typename Node, typename... Args>
     friend std::shared_ptr<const Node>
-        lamina::detail::make_node(Args&&... args);
+        LMCAS::detail::make_node(Args&&... args);
     const std::shared_ptr<const SymbolicNode> body_;
     const std::string variable_;
     const std::shared_ptr<const SymbolicNode> lower_;
@@ -57,15 +59,17 @@ protected:
     }
 
 public:
-    void accept(lamina::detail::SymbolicVisitor& visitor) const override {
-        lamina::detail::SymbolicVisitor::DepthGuard guard(visitor);
+    void accept(LMCAS::detail::SymbolicVisitor& visitor) const override {
+        LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor);
         visitor.visit(*this);
     }
 
     std::shared_ptr<const SymbolicNode> clone() const override {
-        return lamina::detail::make_node<IntegralNode>(
+        return LMCAS::detail::make_node<IntegralNode>(
             body_->clone(), variable_,
             lower_ ? lower_->clone() : nullptr,
             upper_ ? upper_->clone() : nullptr);
     }
 };
+
+} // namespace LMCAS

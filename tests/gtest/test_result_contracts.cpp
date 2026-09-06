@@ -3,7 +3,9 @@
 #include "solve_strategies.hpp"
 #include "symbolic.hpp"
 
-namespace lamina {
+using namespace LMCAS;
+
+namespace LMCAS {
 namespace {
 
 TEST(ResultContractsTest, SolutionSetAlternativesAreExplicit) {
@@ -56,4 +58,4 @@ TEST(ResultContractsTest, ResourceLimitsAreErrors) {
 }
 
 } // namespace
-} // namespace lamina
+} // namespace LMCAS

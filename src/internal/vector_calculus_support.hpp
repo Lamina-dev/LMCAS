@@ -3,7 +3,7 @@
 #include "vector_calculus.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina::vector_calculus_detail {
+namespace LMCAS::vector_calculus_detail {
 
 std::vector<std::string> vector_calculus_coord_vars(std::size_t dimension);
 
@@ -216,9 +216,9 @@ VectorCalculusFieldResult vector_calculus_wrap_field(
     VectorField field,
     const std::string& operation);
 
-} // namespace lamina::vector_calculus_detail
+} // namespace LMCAS::vector_calculus_detail
 
-namespace lamina {
+namespace LMCAS {
 
 VectorCalculusExprResult vector_calculus_simplify_strict(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -230,4 +230,4 @@ VectorCalculusExprResult vector_calculus_differentiate_strict(
     const std::string& variable,
     const std::string& operation);
 
-} // namespace lamina
+} // namespace LMCAS

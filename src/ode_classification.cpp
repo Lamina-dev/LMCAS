@@ -6,15 +6,21 @@
 #include "symbolic_ast.hpp"
 #include "../include/symbolic.hpp"
 #include "../include/poly_utils.hpp"
+#include "../include/residual_verification.hpp"
 #include "internal/expression_analysis.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include "internal/ode_support.hpp"
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <limits>
+#include <map>
+#include <optional>
+#include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -23,9 +29,9 @@ namespace lamina {
  * @return 若表达式为纯数值返回其值，否则返回 NaN。
  */
 double try_eval_double(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return std::numeric_limits<double>::quiet_NaN();
+    if (!expr || !LMCAS::detail::node(expr)) return std::numeric_limits<double>::quiet_NaN();
     if (expr->is_number()) {
-        auto node = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
+        auto node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr));
         if (!node) return std::numeric_limits<double>::quiet_NaN();
         if (std::holds_alternative<BigInt>(node->value()))
             return std::get<BigInt>(node->value()).to_double();
@@ -45,7 +51,7 @@ Result<void> validate_ode_expr_var_pair(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "ODE expression cannot be null",
                                      operation);
@@ -73,7 +79,7 @@ Result<void> validate_ode_pair_var_pair(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!first || !lamina::detail::node(first) || !second || !lamina::detail::node(second)) {
+    if (!first || !LMCAS::detail::node(first) || !second || !LMCAS::detail::node(second)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "ODE expressions cannot be null",
                                      operation);
@@ -95,7 +101,7 @@ ODESolutionResult wrap_ode_solution(ODESolution solution,
                                            ODEType expected_method,
                                            const std::string& operation)
 {
-    if (!solution.general_solution || !lamina::detail::node(solution.general_solution)) {
+    if (!solution.general_solution || !LMCAS::detail::node(solution.general_solution)) {
         return ODESolutionResult::failure(
             CasErrc::Inconclusive,
             "ODE solver produced no solution in the supported domain",
@@ -142,7 +148,7 @@ Result<void> validate_numeric_ode_coefficients(
                                      "ODE coefficient list has unsupported size",
                                      operation);
     }
-    if (!std::isfinite(coeffs.front()) || std::abs(coeffs.front()) < 1e-15) {
+    if (!std::isfinite(coeffs.front()) || coeffs.front() == 0.0) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "ODE leading coefficient must be finite and nonzero",
                                      operation);
@@ -167,8 +173,8 @@ Result<void> validate_ode_three_expr_one_var(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!first || !lamina::detail::node(first) || !second || !lamina::detail::node(second) ||
-        !third || !lamina::detail::node(third)) {
+    if (!first || !LMCAS::detail::node(first) || !second || !LMCAS::detail::node(second) ||
+        !third || !LMCAS::detail::node(third)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "ODE expressions cannot be null",
                                      operation);
@@ -191,7 +197,7 @@ Result<void> validate_ode_two_expr_point(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return step;
-    if (!p || !lamina::detail::node(p) || !q || !lamina::detail::node(q) || !x0 || !lamina::detail::node(x0)) {
+    if (!p || !LMCAS::detail::node(p) || !q || !LMCAS::detail::node(q) || !x0 || !LMCAS::detail::node(x0)) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "Frobenius inputs cannot be null",
                                      operation);
@@ -211,8 +217,8 @@ Result<void> validate_ode_two_expr_point(
 [[maybe_unused]] static bool is_constant_expr(const std::shared_ptr<SymbolicExpr>& expr,
                                               const std::string& x,
                                               const std::string& y) {
-    if (!expr || !lamina::detail::node(expr)) return true;
-    return !expression_depends_on_variable(lamina::detail::node(expr), x) && !expression_depends_on_variable(lamina::detail::node(expr), y);
+    if (!expr || !LMCAS::detail::node(expr)) return true;
+    return !expression_depends_on_variable(LMCAS::detail::node(expr), x) && !expression_depends_on_variable(LMCAS::detail::node(expr), y);
 }
 
 /**
@@ -222,8 +228,15 @@ Result<void> validate_ode_two_expr_point(
 [[maybe_unused]] static bool depends_only_on(const std::shared_ptr<SymbolicExpr>& expr,
                                              const std::string&,
                                              const std::string& other_var) {
-    if (!expr || !lamina::detail::node(expr)) return true;
-    return !expression_depends_on_variable(lamina::detail::node(expr), other_var);
+    if (!expr || !LMCAS::detail::node(expr)) return true;
+    return !expression_depends_on_variable(LMCAS::detail::node(expr), other_var);
+}
+
+static bool valid_classifier_variables(
+    const std::string& x,
+    const std::string& y)
+{
+    return !x.empty() && !y.empty() && x != y;
 }
 
 
@@ -232,16 +245,17 @@ bool is_separable(
     const std::string& x,
     const std::string& y)
 {
-    if (!rhs || !lamina::detail::node(rhs)) return true;
+    if (!rhs || !LMCAS::detail::node(rhs)) return false;
+    if (!valid_classifier_variables(x, y)) return false;
 
-    bool has_x = expression_depends_on_variable(lamina::detail::node(rhs), x);
-    bool has_y = expression_depends_on_variable(lamina::detail::node(rhs), y);
+    bool has_x = expression_depends_on_variable(LMCAS::detail::node(rhs), x);
+    bool has_y = expression_depends_on_variable(LMCAS::detail::node(rhs), y);
 
     /// 若只依赖一个变量或都不依赖，则可分离
     if (!has_x || !has_y) return true;
 
     /// 检查乘法形式 f(x)*g(y)
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(rhs));
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(rhs));
     if (mul) {
         /// 将因子分为仅含 x 的和仅含 y 的
         bool all_separable = true;
@@ -257,11 +271,11 @@ bool is_separable(
     }
 
     /// 检查除法形式 f(x)/g(y) 或 g(y)/f(x)
-    auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(rhs));
+    auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(rhs));
     if (pow) {
         auto exp_node = std::dynamic_pointer_cast<const NumberNode>(pow->exponent());
         if (exp_node) {
-            double exp_val = try_eval_double(lamina::detail::make_expression_ptr(pow->exponent()));
+            double exp_val = try_eval_double(LMCAS::detail::make_expression_ptr(pow->exponent()));
             int eq;
             lmmc_double_nearly_equal_tol(exp_val, -1.0, 1e-12, 1e-12, &eq);
             if (eq) {
@@ -279,15 +293,16 @@ bool is_separable(
 
 bool is_linear_first_order(
     const std::shared_ptr<SymbolicExpr>& rhs,
-    const std::string&,
+    const std::string& x,
     const std::string& y,
     std::shared_ptr<SymbolicExpr>& P,
     std::shared_ptr<SymbolicExpr>& Q)
 {
-    if (!rhs || !lamina::detail::node(rhs)) {
-        P = SymbolicExpr::number(0);
-        Q = SymbolicExpr::number(0);
-        return true;
+    P.reset();
+    Q.reset();
+    if (!rhs || !LMCAS::detail::node(rhs) ||
+        !valid_classifier_variables(x, y)) {
+        return false;
     }
 
     /// 方程形式: y' = rhs(x, y)
@@ -295,7 +310,7 @@ bool is_linear_first_order(
     /// 即 rhs 关于 y 是线性的: rhs = A(x) + B(x)*y，其中 Q = A, P = -B
 
     /// 若 rhs 不依赖 y，则 P=0, Q=rhs
-    if (!expression_depends_on_variable(lamina::detail::node(rhs), y)) {
+    if (!expression_depends_on_variable(LMCAS::detail::node(rhs), y)) {
         P = SymbolicExpr::number(0);
         Q = rhs;
         return true;
@@ -303,7 +318,7 @@ bool is_linear_first_order(
 
     /// 对 rhs 关于 y 求导，若结果不依赖 y，则 rhs 关于 y 是线性的
     auto drhs_dy = rhs->differentiate(y);
-    if (!drhs_dy || expression_depends_on_variable(lamina::detail::node(drhs_dy), y)) {
+    if (!drhs_dy || expression_depends_on_variable(LMCAS::detail::node(drhs_dy), y)) {
         return false;
     }
 
@@ -313,7 +328,7 @@ bool is_linear_first_order(
     if (!A) return false;
 
     /// 验证 A 不依赖 y
-    if (expression_depends_on_variable(lamina::detail::node(A), y)) return false;
+    if (expression_depends_on_variable(LMCAS::detail::node(A), y)) return false;
 
     /// B(x) = drhs_dy（已验证不依赖 y）
     /// 线性形式: y' = A(x) + B(x)*y  →  y' - B(x)*y = A(x)  →  y' + (-B(x))*y = A(x)
@@ -329,7 +344,8 @@ bool is_homogeneous_ode(
     const std::string& x,
     const std::string& y)
 {
-    if (!rhs || !lamina::detail::node(rhs)) return false;
+    if (!rhs || !LMCAS::detail::node(rhs)) return false;
+    if (!valid_classifier_variables(x, y)) return false;
 
     /// 齐次方程: f(tx, ty) = f(x, y) 对所有 t 成立
     /// 用 t=2 进行数值测试：f(2x, 2y) 应等于 f(x, y)
@@ -348,149 +364,154 @@ bool is_homogeneous_ode(
 
     if (diff->is_zero()) return true;
 
-    /// 数值验证：在具体点 (x=1, y=1) 和 (x=2, y=3) 测试
-    auto test_at = [&](double xv, double yv) -> bool {
-        auto f_orig = rhs->substitute(x, SymbolicExpr::number(xv));
-        f_orig = f_orig->substitute(y, SymbolicExpr::number(yv));
-        f_orig = f_orig->simplify();
-
-        double t_test = 2.0;
-        auto f_sc = rhs->substitute(x, SymbolicExpr::number(t_test * xv));
-        f_sc = f_sc->substitute(y, SymbolicExpr::number(t_test * yv));
-        f_sc = f_sc->simplify();
-
-        double v_orig = try_eval_double(f_orig);
-        double v_sc = try_eval_double(f_sc);
-
-        if (std::isnan(v_orig) || std::isnan(v_sc)) return false;
-        if (std::abs(v_orig) < 1e-15 && std::abs(v_sc) < 1e-15) return true;
-        if (std::abs(v_orig) < 1e-15) return false;
-
-        int eq;
-        lmmc_double_nearly_equal_tol(v_orig, v_sc, 1e-9, 1e-9, &eq);
-        return eq != 0;
-    };
-
-    /// 在多个点测试
-    if (test_at(1.0, 1.0) && test_at(2.0, 3.0) && test_at(0.5, 1.5)) {
-        return true;
-    }
-
-    return false;
+    ComputationContext context;
+    auto verified = check_zero_residual(diff, context);
+    return verified &&
+        std::holds_alternative<ProvedZeroResidual>(verified.value());
 }
 
 
+static std::optional<int> bernoulli_integer_exponent(const NumberNode& number)
+{
+    std::optional<std::int64_t> value;
+    if (std::holds_alternative<BigInt>(number.value())) {
+        value = std::get<BigInt>(number.value()).try_to_int64();
+    } else if (std::holds_alternative<Rational>(number.value())) {
+        const auto& rational = std::get<Rational>(number.value());
+        if (!rational.is_integer()) return std::nullopt;
+        value = rational.to_BigInt().try_to_int64();
+    } else {
+        const lmmc_real_t approximate =
+            std::get<lmmc_real_t>(number.value());
+        if (!std::isfinite(approximate) ||
+            approximate != std::floor(approximate) ||
+            approximate < std::numeric_limits<int>::min() ||
+            approximate > std::numeric_limits<int>::max()) {
+            return std::nullopt;
+        }
+        return static_cast<int>(approximate);
+    }
+    if (!value || *value < std::numeric_limits<int>::min() ||
+        *value > std::numeric_limits<int>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<int>(*value);
+}
+
+static bool extract_bernoulli_monomial(
+    const std::shared_ptr<const SymbolicNode>& term,
+    const std::string& y,
+    int& exponent,
+    std::shared_ptr<SymbolicExpr>& coefficient)
+{
+    exponent = 0;
+    coefficient = SymbolicExpr::number(1);
+    std::vector<std::shared_ptr<const SymbolicNode>> factors;
+    if (auto product = std::dynamic_pointer_cast<const MultiplyNode>(term)) {
+        factors = product->operands();
+    } else {
+        factors.push_back(term);
+    }
+
+    for (const auto& factor : factors) {
+        if (auto variable =
+                std::dynamic_pointer_cast<const VariableNode>(factor);
+            variable && variable->name() == y) {
+            if (exponent == std::numeric_limits<int>::max()) return false;
+            ++exponent;
+            continue;
+        }
+
+        if (auto power = std::dynamic_pointer_cast<const PowerNode>(factor)) {
+            auto base =
+                std::dynamic_pointer_cast<const VariableNode>(power->base());
+            auto power_value =
+                std::dynamic_pointer_cast<const NumberNode>(power->exponent());
+            if (base && base->name() == y && power_value) {
+                auto value = bernoulli_integer_exponent(*power_value);
+                if (!value ||
+                    (*value > 0 &&
+                     exponent > std::numeric_limits<int>::max() - *value) ||
+                    (*value < 0 &&
+                     exponent < std::numeric_limits<int>::min() - *value)) {
+                    return false;
+                }
+                exponent += *value;
+                continue;
+            }
+        }
+
+        if (expression_depends_on_variable(factor, y)) return false;
+        coefficient = SymbolicExpr::multiply(
+            coefficient, LMCAS::detail::make_expression_ptr(factor))->simplify();
+    }
+    return true;
+}
+
 bool is_bernoulli_ode(
     const std::shared_ptr<SymbolicExpr>& rhs,
-    const std::string&,
+    const std::string& x,
     const std::string& y,
     std::shared_ptr<SymbolicExpr>& P,
     std::shared_ptr<SymbolicExpr>& Q,
     int& n)
 {
-    if (!rhs || !lamina::detail::node(rhs)) return false;
-    if (!expression_depends_on_variable(lamina::detail::node(rhs), y)) return false;
-
-    /// Bernoulli: y' + P(x)*y = Q(x)*y^n  →  y' = -P(x)*y + Q(x)*y^n
-    /// 即 rhs = -P(x)*y + Q(x)*y^n = y*(-P(x) + Q(x)*y^{n-1})
-
-    /// 尝试 rhs / y 并检查结果是否为 A(x) + B(x)*y^m 形式
-    /// 其中 m = n-1, P = -A, Q = B, n = m+1
-
-    /// 首先检查 rhs 是否含 y 的幂次
-    /// 对 rhs 关于 y 求两次导，检查是否为 y 的幂函数
-    auto d1 = rhs->differentiate(y);
-    if (!d1) return false;
-    auto d2 = d1->differentiate(y);
-    if (!d2) return false;
-
-    /// 若 d2 不依赖 y，则 rhs 关于 y 最多是二次的
-    /// 对于 Bernoulli，我们需要 rhs = A(x)*y + B(x)*y^n
-    /// 尝试特定的 n 值: 2, 3, -1
-    for (int test_n : {2, 3, -1, 4}) {
-        /// rhs 应为 -P(x)*y + Q(x)*y^n
-        /// 令 rhs / y = -P(x) + Q(x)*y^{n-1}
-        /// 若 n=2: rhs/y = -P(x) + Q(x)*y → 关于 y 线性
-        /// 若 n=3: rhs/y = -P(x) + Q(x)*y^2 → 关于 y 二次
-
-        /// 计算 rhs 在 y=1 和 y=2 处的值来推断结构
-        auto rhs_at_y1 = rhs->substitute(y, SymbolicExpr::number(1))->simplify();
-        auto rhs_at_y0 = rhs->substitute(y, SymbolicExpr::number(0))->simplify();
-
-        /// 若 rhs(x, 0) = 0，则 rhs 含 y 因子
-        if (!rhs_at_y0->is_zero()) continue;
-
-        /// rhs = y * h(x, y)，计算 h = rhs / y
-        /// h(x, y) = -P(x) + Q(x)*y^{n-1}
-        /// h(x, 0) = -P(x)
-        /// h(x, 1) = -P(x) + Q(x)
-
-        /// 用 y 除 rhs：对 rhs 做 substitute 检查
-        /// 实际上，若 rhs(x,0)=0，则 rhs 含 y 因子
-        /// 计算 ∂rhs/∂y|_{y=0} = h(x, 0) = -P(x)
-        auto h_at_0 = d1->substitute(y, SymbolicExpr::number(0))->simplify();
-        if (expression_depends_on_variable(lamina::detail::node(h_at_0), y)) continue;
-
-        /// 对于 Bernoulli n=test_n:
-        /// rhs = -P*y + Q*y^n
-        /// d(rhs)/dy = -P + n*Q*y^{n-1}
-        /// d(rhs)/dy|_{y=0} = -P (对 n>=2)
-        /// d²(rhs)/dy²|_{y=0} = n*(n-1)*Q*y^{n-2}|_{y=0}
-        ///   对 n=2: = 2*Q
-        ///   对 n=3: = 0 (需要 y=0 时 y^1 = 0)
-
-        if (test_n == 2) {
-            /// d²rhs/dy² = 2*Q(x) (常数关于 y)
-            auto d2_simplified = d2->simplify();
-            if (expression_depends_on_variable(lamina::detail::node(d2_simplified), y)) continue;
-
-            /// 验证三阶导为零
-            auto d3 = d2->differentiate(y)->simplify();
-            if (!d3->is_zero()) continue;
-
-            /// P = -(d1|_{y=0}), Q = d2/2
-            P = SymbolicExpr::multiply(SymbolicExpr::number(-1), h_at_0)->simplify();
-            Q = SymbolicExpr::divide(d2_simplified, SymbolicExpr::number(2))->simplify();
-
-            /// 验证 Q 不依赖 y
-            if (expression_depends_on_variable(lamina::detail::node(Q), y)) continue;
-
-            n = 2;
-            return true;
-        }
-
-        if (test_n == 3) {
-            /// rhs = -P*y + Q*y^3
-            /// d1 = -P + 3*Q*y^2
-            /// d2 = 6*Q*y
-            /// d3 = 6*Q
-            auto d2_at_0 = d2->substitute(y, SymbolicExpr::number(0))->simplify();
-            if (!d2_at_0->is_zero()) continue;
-
-            auto d3 = d2->differentiate(y)->simplify();
-            if (expression_depends_on_variable(lamina::detail::node(d3), y)) continue;
-
-            auto d4 = d3->differentiate(y)->simplify();
-            if (!d4->is_zero()) continue;
-
-            P = SymbolicExpr::multiply(SymbolicExpr::number(-1), h_at_0)->simplify();
-            Q = SymbolicExpr::divide(d3, SymbolicExpr::number(6))->simplify();
-
-            if (expression_depends_on_variable(lamina::detail::node(Q), y)) continue;
-
-            n = 3;
-            return true;
-        }
-
-        /// 对于 n=-1 和 n=4，使用数值验证
-        /// rhs = -P*y + Q*y^n
-        /// 在 y=1: rhs(x,1) = -P + Q
-        /// 在 y=2: rhs(x,2) = -2P + Q*2^n
-        /// 在 y=3: rhs(x,3) = -3P + Q*3^n
-        /// 从两个方程解出 P 和 Q，用第三个验证
+    P.reset();
+    Q.reset();
+    n = 0;
+    if (!rhs || !LMCAS::detail::node(rhs) ||
+        !valid_classifier_variables(x, y)) return false;
+    if (!expression_depends_on_variable(LMCAS::detail::node(rhs), y)) {
+        return false;
     }
 
-    return false;
+    std::vector<std::shared_ptr<const SymbolicNode>> terms;
+    if (auto sum =
+            std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(rhs))) {
+        terms = sum->operands();
+    } else {
+        terms.push_back(LMCAS::detail::node(rhs));
+    }
+
+    std::map<int, std::shared_ptr<SymbolicExpr>> coefficients;
+    for (const auto& term : terms) {
+        int exponent = 0;
+        std::shared_ptr<SymbolicExpr> coefficient;
+        if (!extract_bernoulli_monomial(
+                term, y, exponent, coefficient)) {
+            return false;
+        }
+        auto& combined = coefficients[exponent];
+        combined = combined
+            ? SymbolicExpr::add(combined, coefficient)->simplify()
+            : coefficient->simplify();
+    }
+
+    auto linear_coefficient = SymbolicExpr::number(0);
+    std::shared_ptr<SymbolicExpr> nonlinear_coefficient;
+    int nonlinear_exponent = 0;
+    for (auto& [exponent, coefficient] : coefficients) {
+        coefficient = coefficient->simplify();
+        if (coefficient->is_zero()) continue;
+        if (exponent == 1) {
+            linear_coefficient = coefficient;
+            continue;
+        }
+        if (exponent == 0 || nonlinear_coefficient) return false;
+        nonlinear_exponent = exponent;
+        nonlinear_coefficient = coefficient;
+    }
+
+    if (!nonlinear_coefficient ||
+        nonlinear_exponent == 0 || nonlinear_exponent == 1) {
+        return false;
+    }
+
+    P = SymbolicExpr::multiply(
+        SymbolicExpr::number(-1), linear_coefficient)->simplify();
+    Q = nonlinear_coefficient->simplify();
+    n = nonlinear_exponent;
+    return true;
 }
 
 
@@ -500,7 +521,9 @@ bool is_exact_ode(
     const std::string& x,
     const std::string& y)
 {
-    if (!M || !N) return false;
+    if (!M || !LMCAS::detail::node(M) ||
+        !N || !LMCAS::detail::node(N) ||
+        !valid_classifier_variables(x, y)) return false;
 
     /// 恰当条件: ∂M/∂y = ∂N/∂x
     auto dM_dy = M->differentiate(y);
@@ -519,23 +542,11 @@ bool is_exact_ode(
 
     if (diff->is_zero()) return true;
 
-    /// 数值验证：在几个点检查
-    auto eval_at = [&](double xv, double yv) -> bool {
-        auto d = diff->substitute(x, SymbolicExpr::number(xv));
-        d = d->substitute(y, SymbolicExpr::number(yv));
-        d = d->simplify();
-        double val = try_eval_double(d);
-        if (std::isnan(val)) return false;
-        int eq;
-        lmmc_double_nearly_equal_tol(val, 0.0, 1e-9, 1e-9, &eq);
-        return eq != 0;
-    };
+    ComputationContext context;
+    auto verified = check_zero_residual(diff, context);
+    return verified &&
+        std::holds_alternative<ProvedZeroResidual>(verified.value());
 
-    if (eval_at(1.0, 1.0) && eval_at(2.0, 3.0) && eval_at(0.5, -1.0)) {
-        return true;
-    }
-
-    return false;
 }
 
 
@@ -543,9 +554,10 @@ bool is_constant_coefficient(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
     const std::string& x)
 {
+    if (coeffs.empty() || x.empty()) return false;
     for (const auto& c : coeffs) {
-        if (!c) continue;
-        if (expression_depends_on_variable(lamina::detail::node(c), x)) return false;
+        if (!c || !LMCAS::detail::node(c)) return false;
+        if (expression_depends_on_variable(LMCAS::detail::node(c), x)) return false;
     }
     return true;
 }
@@ -556,54 +568,45 @@ bool is_euler_equation(
     const std::string& x,
     std::vector<double>& euler_consts)
 {
-    /// Euler 方程: 第 k 阶导数的系数为 a_k * x^k
-    /// coeffs[0] 对应最高阶 (阶数 n)，coeffs[i] 对应阶数 n-i
-    int n = static_cast<int>(coeffs.size()) - 1;
     euler_consts.clear();
-    euler_consts.resize(coeffs.size(), 0.0);
-
-    for (int i = 0; i <= n; ++i) {
-        int order = n - i;  // 该系数对应的导数阶数
-
-        if (!coeffs[i] || coeffs[i]->is_zero()) {
-            euler_consts[i] = 0.0;
-            continue;
-        }
-
-        if (order == 0) {
-            /// 零阶项系数应为常数
-            if (expression_depends_on_variable(lamina::detail::node(coeffs[i]), x)) return false;
-            double val = try_eval_double(coeffs[i]);
-            if (std::isnan(val)) return false;
-            euler_consts[i] = val;
-            continue;
-        }
-
-        /// 第 order 阶导数的系数应为 a_k * x^order
-        /// 除以 x^order 后应为常数
-        auto x_power = SymbolicExpr::power(
-            SymbolicExpr::variable(x),
-            SymbolicExpr::number(order));
-        auto ratio = SymbolicExpr::divide(coeffs[i], x_power)->simplify();
-
-        if (expression_depends_on_variable(lamina::detail::node(ratio), x)) {
-            /// 数值验证：在 x=1 和 x=2 处检查比值是否相同
-            auto at_1 = ratio->substitute(x, SymbolicExpr::number(1.0))->simplify();
-            auto at_2 = ratio->substitute(x, SymbolicExpr::number(2.0))->simplify();
-            double v1 = try_eval_double(at_1);
-            double v2 = try_eval_double(at_2);
-            if (std::isnan(v1) || std::isnan(v2)) return false;
-            int eq;
-            lmmc_double_nearly_equal_tol(v1, v2, 1e-9, 1e-9, &eq);
-            if (!eq) return false;
-            euler_consts[i] = v1;
-        } else {
-            double val = try_eval_double(ratio);
-            if (std::isnan(val)) return false;
-            euler_consts[i] = val;
-        }
+    if (coeffs.empty() || x.empty()) return false;
+    if (!coeffs.front() || !LMCAS::detail::node(coeffs.front()) ||
+        coeffs.front()->is_zero()) {
+        return false;
     }
 
+    const int highest_order = static_cast<int>(coeffs.size()) - 1;
+    std::vector<double> extracted(coeffs.size(), 0.0);
+    for (int index = 0; index <= highest_order; ++index) {
+        const int derivative_order = highest_order - index;
+        if (!coeffs[index] || !LMCAS::detail::node(coeffs[index])) {
+            return false;
+        }
+        if (coeffs[index]->is_zero()) continue;
+
+        std::shared_ptr<SymbolicExpr> ratio;
+        if (derivative_order == 0) {
+            ratio = coeffs[index]->simplify();
+        } else {
+            auto x_power = SymbolicExpr::power(
+                SymbolicExpr::variable(x),
+                SymbolicExpr::number(derivative_order));
+            ratio = SymbolicExpr::divide(
+                coeffs[index], x_power)->simplify();
+        }
+        if (!ratio || !LMCAS::detail::node(ratio)) return false;
+
+        if (expression_depends_on_variable(
+                LMCAS::detail::node(ratio), x)) {
+            return false;
+        }
+
+        const double value = try_eval_double(ratio);
+        if (!std::isfinite(value)) return false;
+        extracted[index] = value;
+    }
+
+    euler_consts = std::move(extracted);
     return true;
 }
 
@@ -616,8 +619,8 @@ ODEClassification classify_first_order_ode(
     ODEClassification result;
     result.order = 1;
 
-    if (!rhs || !lamina::detail::node(rhs)) {
-        result.type = ODEType::Separable;
+    if (!rhs || !LMCAS::detail::node(rhs)) {
+        result.type = ODEType::Unknown;
         return result;
     }
 
@@ -686,20 +689,23 @@ ODEClassification classify_higher_order_ode(
         return result;
     }
 
-    /// 1. 检测常系数
+    /// 1. 检测当前数值分类结果能够表示的常系数
     if (is_constant_coefficient(coeffs, x)) {
-        if (result.order == 2) {
-            result.type = ODEType::Linear2_ConstCoeff;
-        } else {
-            result.type = ODEType::HigherOrder_ConstCoeff;
-        }
-
-        /// 提取数值系数
-        result.const_coeffs.clear();
+        std::vector<double> numeric_coeffs;
+        numeric_coeffs.reserve(coeffs.size());
         for (const auto& c : coeffs) {
             double val = try_eval_double(c);
-            result.const_coeffs.push_back(std::isnan(val) ? 0.0 : val);
+            if (!std::isfinite(val)) {
+                result.type = ODEType::Unknown;
+                return result;
+            }
+            numeric_coeffs.push_back(val);
         }
+
+        result.type = result.order == 2
+            ? ODEType::Linear2_ConstCoeff
+            : ODEType::HigherOrder_ConstCoeff;
+        result.const_coeffs = std::move(numeric_coeffs);
         result.forcing_func = forcing;
         return result;
     }
@@ -717,4 +723,4 @@ ODEClassification classify_higher_order_ode(
     return result;
 }
 
-} // namespace lamina
+} // namespace LMCAS

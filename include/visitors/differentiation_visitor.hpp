@@ -7,8 +7,10 @@
 #include <stdexcept>
 #include <string>
 
+namespace LMCAS {
+
 /** @brief 微分访问器，对符号 AST 执行求导运算，支持普通求导和隐函数求导 */
-class DifferentiationVisitor : public lamina::detail::SymbolicVisitor {
+class DifferentiationVisitor : public LMCAS::detail::SymbolicVisitor {
     std::string var;
 
     [[noreturn]] void unsupported(const char* node_type) const {
@@ -114,21 +116,21 @@ public:
 
             auto n_minus_1 = SymbolicFactory::create_add({n, SymbolicFactory::create_number(BigInt(-1))});
 
-            auto u_pow = lamina::detail::make_node<PowerNode>(u, n_minus_1);
+            auto u_pow = LMCAS::detail::make_node<PowerNode>(u, n_minus_1);
 
             result = SymbolicFactory::create_multiply({n, u_pow, du});
         } else {
 
-            auto ln_u = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln, std::vector<std::shared_ptr<const SymbolicNode>>{u});
+            auto ln_u = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln, std::vector<std::shared_ptr<const SymbolicNode>>{u});
 
             auto t1 = SymbolicFactory::create_multiply({dv, ln_u});
 
-            auto u_inv = lamina::detail::make_node<PowerNode>(u, SymbolicFactory::create_number(BigInt(-1)));
+            auto u_inv = LMCAS::detail::make_node<PowerNode>(u, SymbolicFactory::create_number(BigInt(-1)));
             auto t2 = SymbolicFactory::create_multiply({v, du, u_inv});
 
             auto sum = SymbolicFactory::create_add({t1, t2});
 
-            auto u_pow_v = lamina::detail::make_node<PowerNode>(u, v);
+            auto u_pow_v = LMCAS::detail::make_node<PowerNode>(u, v);
             result = SymbolicFactory::create_multiply({u_pow_v, sum});
         }
     }
@@ -152,25 +154,25 @@ public:
 
         switch (node.type()) {
             case FunctionNode::FuncType::Sin:
-                d_outer = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Cos, node.arguments());
+                d_outer = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Cos, node.arguments());
                 break;
             case FunctionNode::FuncType::Cos:
                 d_outer = SymbolicFactory::create_multiply({
                     SymbolicFactory::create_number(BigInt(-1)),
-                    lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, node.arguments())
+                    LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, node.arguments())
                 });
                 break;
             case FunctionNode::FuncType::Tan:
                 {
-                    auto sec = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sec, node.arguments());
-                    d_outer = lamina::detail::make_node<PowerNode>(sec, SymbolicFactory::create_number(BigInt(2)));
+                    auto sec = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sec, node.arguments());
+                    d_outer = LMCAS::detail::make_node<PowerNode>(sec, SymbolicFactory::create_number(BigInt(2)));
                 }
                 break;
             case FunctionNode::FuncType::Cot:
                 {
                     // d/dx cot(x) = -csc(x)^2
-                    auto csc = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Csc, node.arguments());
-                    auto csc_sq = lamina::detail::make_node<PowerNode>(csc, SymbolicFactory::create_number(BigInt(2)));
+                    auto csc = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Csc, node.arguments());
+                    auto csc_sq = LMCAS::detail::make_node<PowerNode>(csc, SymbolicFactory::create_number(BigInt(2)));
                     d_outer = SymbolicFactory::create_multiply({
                         SymbolicFactory::create_number(BigInt(-1)),
                         csc_sq
@@ -180,16 +182,16 @@ public:
             case FunctionNode::FuncType::Sec:
                 {
                     // d/dx sec(x) = sec(x) * tan(x)
-                    auto sec = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sec, node.arguments());
-                    auto tan = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Tan, node.arguments());
+                    auto sec = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sec, node.arguments());
+                    auto tan = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Tan, node.arguments());
                     d_outer = SymbolicFactory::create_multiply({sec, tan});
                 }
                 break;
             case FunctionNode::FuncType::Csc:
                 {
                     // d/dx csc(x) = -csc(x) * cot(x)
-                    auto csc = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Csc, node.arguments());
-                    auto cot = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Cot, node.arguments());
+                    auto csc = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Csc, node.arguments());
+                    auto cot = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Cot, node.arguments());
                     d_outer = SymbolicFactory::create_multiply({
                         SymbolicFactory::create_number(BigInt(-1)),
                         csc, cot
@@ -199,28 +201,28 @@ public:
             case FunctionNode::FuncType::ArcSin:
                 {
                     // d/dx arcsin(x) = 1/sqrt(1 - x^2) = (1 - x^2)^(-1/2)
-                    auto arg_sq = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
+                    auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
                     auto neg_arg_sq = SymbolicFactory::create_multiply({
                         SymbolicFactory::create_number(BigInt(-1)), arg_sq
                     });
                     auto one_minus_sq = SymbolicFactory::create_add({
                         SymbolicFactory::create_number(BigInt(1)), neg_arg_sq
                     });
-                    d_outer = lamina::detail::make_node<PowerNode>(
+                    d_outer = LMCAS::detail::make_node<PowerNode>(
                         one_minus_sq, SymbolicFactory::create_number(Rational(-1, 2)));
                 }
                 break;
             case FunctionNode::FuncType::ArcCos:
                 {
                     // d/dx arccos(x) = -1/sqrt(1 - x^2) = -(1 - x^2)^(-1/2)
-                    auto arg_sq = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
+                    auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
                     auto neg_arg_sq = SymbolicFactory::create_multiply({
                         SymbolicFactory::create_number(BigInt(-1)), arg_sq
                     });
                     auto one_minus_sq = SymbolicFactory::create_add({
                         SymbolicFactory::create_number(BigInt(1)), neg_arg_sq
                     });
-                    auto inv_sqrt = lamina::detail::make_node<PowerNode>(
+                    auto inv_sqrt = LMCAS::detail::make_node<PowerNode>(
                         one_minus_sq, SymbolicFactory::create_number(Rational(-1, 2)));
                     d_outer = SymbolicFactory::create_multiply({
                         SymbolicFactory::create_number(BigInt(-1)), inv_sqrt
@@ -230,75 +232,75 @@ public:
             case FunctionNode::FuncType::ArcTan:
                 {
                     // d/dx arctan(x) = 1/(1 + x^2) = (1 + x^2)^(-1)
-                    auto arg_sq = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
+                    auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
                     auto one_plus_sq = SymbolicFactory::create_add({
                         SymbolicFactory::create_number(BigInt(1)), arg_sq
                     });
-                    d_outer = lamina::detail::make_node<PowerNode>(
+                    d_outer = LMCAS::detail::make_node<PowerNode>(
                         one_plus_sq, SymbolicFactory::create_number(BigInt(-1)));
                 }
                 break;
             case FunctionNode::FuncType::Sinh:
-                d_outer = lamina::detail::make_node<FunctionNode>(
+                d_outer = LMCAS::detail::make_node<FunctionNode>(
                     FunctionNode::FuncType::Cosh, node.arguments());
                 break;
             case FunctionNode::FuncType::Cosh:
-                d_outer = lamina::detail::make_node<FunctionNode>(
+                d_outer = LMCAS::detail::make_node<FunctionNode>(
                     FunctionNode::FuncType::Sinh, node.arguments());
                 break;
             case FunctionNode::FuncType::Tanh:
                 {
                     // d/dx tanh(x) = sech(x)^2 = 1/cosh(x)^2 = cosh(x)^(-2)
-                    auto cosh = lamina::detail::make_node<FunctionNode>(
+                    auto cosh = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Cosh, node.arguments());
-                    d_outer = lamina::detail::make_node<PowerNode>(
+                    d_outer = LMCAS::detail::make_node<PowerNode>(
                         cosh, SymbolicFactory::create_number(BigInt(-2)));
                 }
                 break;
             case FunctionNode::FuncType::Exp:
-                 d_outer = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Exp, node.arguments());
+                 d_outer = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Exp, node.arguments());
                  break;
             case FunctionNode::FuncType::Ln:
-                 d_outer = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
+                 d_outer = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
                  break;
             case FunctionNode::FuncType::Sqrt:
                  d_outer = SymbolicFactory::create_multiply({
                     SymbolicFactory::create_number(Rational(1, 2)),
-                    lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(Rational(-1, 2)))
+                    LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(Rational(-1, 2)))
                  });
                  break;
             case FunctionNode::FuncType::Abs:
                 {
                     /// d/dx |u| = u / |u| = sgn(u)  (undefined at u=0)
-                    auto abs_arg = lamina::detail::make_node<FunctionNode>(
+                    auto abs_arg = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Abs, node.arguments());
-                    auto abs_inv = lamina::detail::make_node<PowerNode>(abs_arg, SymbolicFactory::create_number(BigInt(-1)));
+                    auto abs_inv = LMCAS::detail::make_node<PowerNode>(abs_arg, SymbolicFactory::create_number(BigInt(-1)));
                     d_outer = SymbolicFactory::create_multiply({arg, abs_inv});
                 }
                 break;
             case FunctionNode::FuncType::LambertW:
                 {
-                    auto W = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::LambertW, node.arguments());
+                    auto W = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::LambertW, node.arguments());
                     auto one = SymbolicFactory::create_number(BigInt(1));
                     auto one_plus_W = SymbolicFactory::create_add({one, W});
                     auto denom = SymbolicFactory::create_multiply({arg, one_plus_W});
-                    auto denom_inv = lamina::detail::make_node<PowerNode>(denom, SymbolicFactory::create_number(BigInt(-1)));
+                    auto denom_inv = LMCAS::detail::make_node<PowerNode>(denom, SymbolicFactory::create_number(BigInt(-1)));
                     d_outer = SymbolicFactory::create_multiply({W, denom_inv});
                 }
                 break;
             case FunctionNode::FuncType::Erf:
                 {
                     // d/dx erf(x) = (2/sqrt(pi)) * exp(-x^2)
-                    auto pi = lamina::detail::make_node<VariableNode>("pi");
-                    auto sqrt_pi = lamina::detail::make_node<FunctionNode>(
+                    auto pi = LMCAS::detail::make_node<VariableNode>("pi");
+                    auto sqrt_pi = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Sqrt,
                         std::vector<std::shared_ptr<const SymbolicNode>>{pi});
-                    auto sqrt_pi_inv = lamina::detail::make_node<PowerNode>(sqrt_pi, SymbolicFactory::create_number(BigInt(-1)));
+                    auto sqrt_pi_inv = LMCAS::detail::make_node<PowerNode>(sqrt_pi, SymbolicFactory::create_number(BigInt(-1)));
                     auto two = SymbolicFactory::create_number(BigInt(2));
                     auto neg_one = SymbolicFactory::create_number(BigInt(-1));
-                    auto arg_sq = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
+                    auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
                     auto neg_arg_sq = SymbolicFactory::create_multiply({neg_one, arg_sq});
-                    auto exp_term = lamina::detail::make_node<FunctionNode>(
+                    auto exp_term = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Exp,
                         std::vector<std::shared_ptr<const SymbolicNode>>{neg_arg_sq});
                     d_outer = SymbolicFactory::create_multiply({two, sqrt_pi_inv, exp_term});
@@ -307,36 +309,36 @@ public:
             case FunctionNode::FuncType::Ei:
                 {
                     // d/dx Ei(x) = exp(x) / x
-                    auto exp_arg = lamina::detail::make_node<FunctionNode>(
+                    auto exp_arg = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Exp, node.arguments());
-                    auto arg_inv = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
+                    auto arg_inv = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
                     d_outer = SymbolicFactory::create_multiply({exp_arg, arg_inv});
                 }
                 break;
             case FunctionNode::FuncType::Si:
                 {
                     // d/dx Si(x) = sin(x) / x
-                    auto sin_arg = lamina::detail::make_node<FunctionNode>(
+                    auto sin_arg = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Sin, node.arguments());
-                    auto arg_inv = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
+                    auto arg_inv = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
                     d_outer = SymbolicFactory::create_multiply({sin_arg, arg_inv});
                 }
                 break;
             case FunctionNode::FuncType::Ci:
                 {
                     // d/dx Ci(x) = cos(x) / x
-                    auto cos_arg = lamina::detail::make_node<FunctionNode>(
+                    auto cos_arg = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Cos, node.arguments());
-                    auto arg_inv = lamina::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
+                    auto arg_inv = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
                     d_outer = SymbolicFactory::create_multiply({cos_arg, arg_inv});
                 }
                 break;
             case FunctionNode::FuncType::Li:
                 {
                     // d/dx Li(x) = 1 / ln(x)
-                    auto ln_arg = lamina::detail::make_node<FunctionNode>(
+                    auto ln_arg = LMCAS::detail::make_node<FunctionNode>(
                         FunctionNode::FuncType::Ln, node.arguments());
-                    d_outer = lamina::detail::make_node<PowerNode>(ln_arg, SymbolicFactory::create_number(BigInt(-1)));
+                    d_outer = LMCAS::detail::make_node<PowerNode>(ln_arg, SymbolicFactory::create_number(BigInt(-1)));
                 }
                 break;
             default:
@@ -359,7 +361,7 @@ public:
                     new_dense.push_back(nullptr);
                  }
              }
-             result = lamina::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_dense);
+             result = LMCAS::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_dense);
         } else {
              const auto& sparse = std::get<MatrixNode::SparseStorage>(node.storage());
              MatrixNode::SparseStorage new_sparse;
@@ -369,7 +371,7 @@ public:
                      new_sparse[idx] = result;
                  }
              }
-             result = lamina::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_sparse);
+             result = LMCAS::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_sparse);
         }
     }
 
@@ -403,7 +405,7 @@ public:
             node.default_expr()->accept(*this);
             new_def = result;
         }
-        result = lamina::detail::make_node<PiecewiseNode>(std::move(new_branches), new_def);
+        result = LMCAS::detail::make_node<PiecewiseNode>(std::move(new_branches), new_def);
     }
 
     void visit(const UninterpretedFunctionNode&) override {
@@ -434,7 +436,7 @@ public:
     void visit(const MembershipNode&) override { unsupported("MembershipNode"); }
     void visit(const QuantityNode& node) override {
         node.value()->accept(*this);
-        result = lamina::detail::make_node<QuantityNode>(
+        result = LMCAS::detail::make_node<QuantityNode>(
             result, node.dimension(), node.scale_to_base(), node.display_unit());
     }
 
@@ -445,7 +447,7 @@ public:
                 return;
             }
             node.body()->accept(*this);
-            result = lamina::detail::make_node<IntegralNode>(
+            result = LMCAS::detail::make_node<IntegralNode>(
                 result, node.variable());
             return;
         }
@@ -454,17 +456,17 @@ public:
         if (node.variable() != var) {
             node.body()->accept(*this);
             if (!result->is_zero()) {
-                terms.push_back(lamina::detail::make_node<IntegralNode>(
+                terms.push_back(LMCAS::detail::make_node<IntegralNode>(
                     result, node.variable(), node.lower(), node.upper()));
             }
         }
 
-        auto body_expression = lamina::detail::make_expression_ptr(
-            lamina::detail::expression_from_node(node.body()));
-        auto upper_expression = lamina::detail::make_expression_ptr(
-            lamina::detail::expression_from_node(node.upper()));
-        auto lower_expression = lamina::detail::make_expression_ptr(
-            lamina::detail::expression_from_node(node.lower()));
+        auto body_expression = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::expression_from_node(node.body()));
+        auto upper_expression = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::expression_from_node(node.upper()));
+        auto lower_expression = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::expression_from_node(node.lower()));
 
         node.upper()->accept(*this);
         auto upper_derivative = result;
@@ -472,7 +474,7 @@ public:
             auto at_upper = body_expression->substitute(
                 node.variable(), upper_expression);
             terms.push_back(SymbolicFactory::create_multiply(
-                {lamina::detail::node(at_upper), upper_derivative}));
+                {LMCAS::detail::node(at_upper), upper_derivative}));
         }
 
         node.lower()->accept(*this);
@@ -482,7 +484,7 @@ public:
                 node.variable(), lower_expression);
             terms.push_back(SymbolicFactory::create_multiply({
                 SymbolicFactory::create_number(BigInt(-1)),
-                lamina::detail::node(at_lower),
+                LMCAS::detail::node(at_lower),
                 lower_derivative}));
         }
         result = SymbolicFactory::create_add(std::move(terms));
@@ -490,3 +492,5 @@ public:
     void visit(const LimitNode&) override { unsupported("LimitNode"); }
     void visit(const RootOfNode&) override { unsupported("RootOfNode"); }
 };
+
+} // namespace LMCAS

@@ -11,7 +11,7 @@
 #include <string>
 #include <cctype>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -22,7 +22,7 @@ struct ComparableEndpoint {
     Rational rational{};
     Rational radical_coefficient{};
     Rational radicand{};
-    std::optional<lamina::detail::ExactRealAlgebraic> algebraic;
+    std::optional<LMCAS::detail::ExactRealAlgebraic> algebraic;
 
     ComparableEndpoint(int infinity_value = 0,
                        Rational rational_value = {},
@@ -58,11 +58,9 @@ Result<Rational> exact_double_rational(double value,
     const std::size_t required_bits = binary_exponent < 0
         ? static_cast<std::size_t>(-binary_exponent) + 1
         : static_cast<std::size_t>(binary_exponent) + 54;
-    if (required_bits > context.limits().max_integer_bits) {
-        return Result<Rational>::failure(
-            CasErrc::ResourceLimit,
-            "IEEE endpoint conversion exceeds the integer bit budget",
-            operation);
+    auto bit_budget = context.require_integer_bits(required_bits, operation);
+    if (!bit_budget) {
+        return Result<Rational>::failure(bit_budget.error());
     }
 
     BigInt numerator(static_cast<long long>(mantissa));
@@ -213,7 +211,7 @@ Result<int> compare_comparable(const ComparableEndpoint& left,
         return Result<int>::success(0);
     }
     auto compare_algebraic_to_rational =
-        [](const lamina::detail::ExactRealAlgebraic& algebraic,
+        [](const LMCAS::detail::ExactRealAlgebraic& algebraic,
            const Rational& rational) -> int {
             if (algebraic.upper < rational) return -1;
             if (rational < algebraic.lower) return 1;
@@ -234,13 +232,13 @@ Result<int> compare_comparable(const ComparableEndpoint& left,
             -compare_algebraic_to_rational(*right.algebraic, left.rational));
     }
     auto to_algebraic = [&](const ComparableEndpoint& endpoint)
-        -> lamina::detail::ExactRealAlgebraicResult {
+        -> LMCAS::detail::ExactRealAlgebraicResult {
         if (endpoint.algebraic) {
-            return lamina::detail::ExactRealAlgebraicResult::success(
+            return LMCAS::detail::ExactRealAlgebraicResult::success(
                 *endpoint.algebraic);
         }
         if (endpoint.radical_coefficient == Rational(0)) {
-            return lamina::detail::make_exact_real_algebraic(
+            return LMCAS::detail::make_exact_real_algebraic(
                 Polynomial<Rational>({
                     Rational(0) - endpoint.rational,
                     Rational(1)
@@ -250,7 +248,7 @@ Result<int> compare_comparable(const ComparableEndpoint& left,
         const Rational a = endpoint.rational;
         const Rational b = endpoint.radical_coefficient;
         const Rational d = endpoint.radicand;
-        auto value = lamina::detail::make_exact_real_algebraic(
+        auto value = LMCAS::detail::make_exact_real_algebraic(
             Polynomial<Rational>({
                 a * a - b * b * d,
                 Rational(-2) * a,
@@ -263,7 +261,7 @@ Result<int> compare_comparable(const ComparableEndpoint& left,
     if (!left_algebraic) return Result<int>::failure(left_algebraic.error());
     auto right_algebraic = to_algebraic(right);
     if (!right_algebraic) return Result<int>::failure(right_algebraic.error());
-    return lamina::detail::compare_exact_real_algebraic(
+    return LMCAS::detail::compare_exact_real_algebraic(
         left_algebraic.value(), right_algebraic.value(), context);
 }
 
@@ -297,7 +295,7 @@ Result<ComparableEndpoint> comparable_endpoint(
             ComparableEndpoint{endpoint.is_neg_infinity ? -1 : 1,
                                Rational(0), Rational(0), Rational(0)});
     }
-    if (!endpoint.value || !lamina::detail::node(endpoint.value)) {
+    if (!endpoint.value || !LMCAS::detail::node(endpoint.value)) {
         return Result<ComparableEndpoint>::failure(
             CasErrc::InvalidArgument,
             "finite interval endpoint must contain an expression",
@@ -305,14 +303,14 @@ Result<ComparableEndpoint> comparable_endpoint(
     }
 
     auto simplified = endpoint.value->simplify();
-    if (!simplified || !lamina::detail::node(simplified)) {
+    if (!simplified || !LMCAS::detail::node(simplified)) {
         return Result<ComparableEndpoint>::failure(
             CasErrc::InternalInvariant,
             "interval endpoint simplification produced a null expression",
             operation);
     }
 
-    if (auto number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
+    if (auto number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(simplified))) {
         if (std::holds_alternative<BigInt>(number->value())) {
             return Result<ComparableEndpoint>::success(ComparableEndpoint{
                 0, Rational(std::get<BigInt>(number->value())),
@@ -330,12 +328,12 @@ Result<ComparableEndpoint> comparable_endpoint(
                                Rational(0), Rational(0)});
     }
 
-    if (auto surd = parse_quadratic_surd(lamina::detail::node(simplified))) {
+    if (auto surd = parse_quadratic_surd(LMCAS::detail::node(simplified))) {
         if (surd->radical_coefficient != Rational(0)) {
             const Rational a = surd->rational;
             const Rational b = surd->radical_coefficient;
             const Rational d = surd->radicand;
-            auto algebraic = lamina::detail::make_exact_real_algebraic(
+            auto algebraic = LMCAS::detail::make_exact_real_algebraic(
                 Polynomial<Rational>({
                     a * a - b * b * d,
                     Rational(-2) * a,
@@ -351,13 +349,13 @@ Result<ComparableEndpoint> comparable_endpoint(
     }
 
     if (auto root = std::dynamic_pointer_cast<const RootOfNode>(
-            lamina::detail::node(simplified))) {
-        auto isolated = lamina::detail::isolate_exact_root(
+            LMCAS::detail::node(simplified))) {
+        auto isolated = LMCAS::detail::isolate_exact_root(
             root->exact_id(), context, operation);
         if (!isolated) {
             return Result<ComparableEndpoint>::failure(isolated.error());
         }
-        auto* real = std::get_if<lamina::detail::RealIsolation>(
+        auto* real = std::get_if<LMCAS::detail::RealIsolation>(
             &isolated.value());
         if (!real) {
             return Result<ComparableEndpoint>::failure(
@@ -370,13 +368,13 @@ Result<ComparableEndpoint> comparable_endpoint(
         return Result<ComparableEndpoint>::success(std::move(endpoint_value));
     }
 
-    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(simplified))) {
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(simplified))) {
         return Result<ComparableEndpoint>::failure(
             CasErrc::UnboundSymbol,
             "interval endpoint contains unbound symbol '" + variable->name() + "'",
             operation);
     }
-    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(simplified))) {
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(simplified))) {
         if (function->arguments().size() == 1) {
             auto argument = exact_number_value(function->arguments()[0]);
             if (argument &&
@@ -914,24 +912,48 @@ static size_t skip_ws(const std::string& str, size_t pos) {
     return pos;
 }
 
-static std::shared_ptr<SymbolicExpr> parse_numeric_value(const std::string& str, size_t& pos) {
-    size_t start = pos;
+static std::shared_ptr<SymbolicExpr> parse_numeric_value(
+    const std::string& str, size_t& pos) {
+    const size_t start = pos;
     bool has_digit = false;
-    bool has_dot = false;
+    bool approximate = false;
 
     if (pos < str.size() && (str[pos] == '-' || str[pos] == '+')) {
         ++pos;
     }
 
-    while (pos < str.size() && std::isdigit(static_cast<unsigned char>(str[pos]))) {
+    while (pos < str.size() &&
+           std::isdigit(static_cast<unsigned char>(str[pos]))) {
         has_digit = true;
         ++pos;
     }
 
+    if (has_digit && pos < str.size() && str[pos] == '/') {
+        const size_t slash = pos++;
+        const size_t denominator_start = pos;
+        while (pos < str.size() &&
+               std::isdigit(static_cast<unsigned char>(str[pos]))) {
+            ++pos;
+        }
+        if (pos == denominator_start) {
+            pos = start;
+            return nullptr;
+        }
+        const BigInt numerator(str.substr(start, slash - start));
+        const BigInt denominator(
+            str.substr(denominator_start, pos - denominator_start));
+        if (denominator.is_zero()) {
+            pos = start;
+            return nullptr;
+        }
+        return SymbolicExpr::number(Rational(numerator, denominator));
+    }
+
     if (pos < str.size() && str[pos] == '.') {
-        has_dot = true;
+        approximate = true;
         ++pos;
-        while (pos < str.size() && std::isdigit(static_cast<unsigned char>(str[pos]))) {
+        while (pos < str.size() &&
+               std::isdigit(static_cast<unsigned char>(str[pos]))) {
             has_digit = true;
             ++pos;
         }
@@ -942,15 +964,35 @@ static std::shared_ptr<SymbolicExpr> parse_numeric_value(const std::string& str,
         return nullptr;
     }
 
-    std::string num_str = str.substr(start, pos - start);
-    if (has_dot) {
-        double val = std::stod(num_str);
-        return SymbolicExpr::number(val);
-    } else {
-
-        long long val = std::stoll(num_str);
-        return SymbolicExpr::number(val);
+    if (pos < str.size() && (str[pos] == 'e' || str[pos] == 'E')) {
+        approximate = true;
+        ++pos;
+        if (pos < str.size() && (str[pos] == '-' || str[pos] == '+')) {
+            ++pos;
+        }
+        const size_t exponent_start = pos;
+        while (pos < str.size() &&
+               std::isdigit(static_cast<unsigned char>(str[pos]))) {
+            ++pos;
+        }
+        if (pos == exponent_start) {
+            pos = start;
+            return nullptr;
+        }
     }
+
+    const std::string token = str.substr(start, pos - start);
+    if (!approximate) {
+        return SymbolicExpr::number(BigInt(token));
+    }
+
+    size_t consumed = 0;
+    const double value = std::stod(token, &consumed);
+    if (consumed != token.size() || !std::isfinite(value)) {
+        pos = start;
+        return nullptr;
+    }
+    return SymbolicExpr::number(value);
 }
 
 static bool parse_endpoint_value(const std::string& str, size_t& pos, Endpoint& ep) {
@@ -984,21 +1026,23 @@ static bool parse_endpoint_value(const std::string& str, size_t& pos, Endpoint& 
     return true;
 }
 
-static bool parse_single_interval(const std::string& str, size_t& pos, Interval& iv) {
+static bool parse_single_interval(
+    const std::string& str, size_t& pos, Interval& iv) {
     pos = skip_ws(str, pos);
     if (pos >= str.size()) return false;
 
-    char lower_bracket = str[pos];
+    const char lower_bracket = str[pos];
     if (lower_bracket != '(' && lower_bracket != '[') return false;
-    bool lower_open = (lower_bracket == '(');
+    const bool lower_open = lower_bracket == '(';
     ++pos;
 
     Endpoint lower;
     if (!parse_endpoint_value(str, pos, lower)) return false;
-
-    if (!lower.is_neg_infinity && !lower.is_pos_infinity) {
-        lower.is_open = lower_open;
+    if (lower.is_pos_infinity ||
+        (lower.is_neg_infinity && !lower_open)) {
+        return false;
     }
+    if (!lower.is_neg_infinity) lower.is_open = lower_open;
 
     pos = skip_ws(str, pos);
     if (pos >= str.size() || str[pos] != ',') return false;
@@ -1009,17 +1053,19 @@ static bool parse_single_interval(const std::string& str, size_t& pos, Interval&
 
     pos = skip_ws(str, pos);
     if (pos >= str.size()) return false;
-    char upper_bracket = str[pos];
+    const char upper_bracket = str[pos];
     if (upper_bracket != ')' && upper_bracket != ']') return false;
-    bool upper_open = (upper_bracket == ')');
+    const bool upper_open = upper_bracket == ')';
     ++pos;
 
-    if (!upper.is_neg_infinity && !upper.is_pos_infinity) {
-        upper.is_open = upper_open;
+    if (upper.is_neg_infinity ||
+        (upper.is_pos_infinity && !upper_open)) {
+        return false;
     }
+    if (!upper.is_pos_infinity) upper.is_open = upper_open;
 
-    iv.lower = lower;
-    iv.upper = upper;
+    iv.lower = std::move(lower);
+    iv.upper = std::move(upper);
     return true;
 }
 
@@ -1030,30 +1076,40 @@ std::optional<IntervalUnion> IntervalUnion::parse(const std::string& str) {
         return IntervalUnion::empty();
     }
 
-    std::vector<Interval> intervals;
-    size_t pos = 0;
+    try {
+        std::vector<Interval> intervals;
+        size_t pos = 0;
 
-    Interval iv;
-    if (!parse_single_interval(str, pos, iv)) return std::nullopt;
-    intervals.push_back(iv);
+        Interval iv;
+        if (!parse_single_interval(str, pos, iv)) return std::nullopt;
+        intervals.push_back(std::move(iv));
 
-    while (pos < str.size()) {
-        pos = skip_ws(str, pos);
-        if (pos >= str.size()) break;
+        while (pos < str.size()) {
+            pos = skip_ws(str, pos);
+            if (pos >= str.size()) break;
 
-        if (!starts_with_at(str, pos, "\xe2\x88\xaa")) {
-            return std::nullopt;
+            if (!starts_with_at(str, pos, "\xe2\x88\xaa")) {
+                return std::nullopt;
+            }
+            pos += 3;
+            pos = skip_ws(str, pos);
+
+            Interval next_iv;
+            if (!parse_single_interval(str, pos, next_iv)) {
+                return std::nullopt;
+            }
+            intervals.push_back(std::move(next_iv));
         }
-        pos += 3;
 
-        pos = skip_ws(str, pos);
-
-        Interval next_iv;
-        if (!parse_single_interval(str, pos, next_iv)) return std::nullopt;
-        intervals.push_back(next_iv);
+        auto normalized =
+            IntervalUnion::from_intervals_checked(std::move(intervals));
+        if (!normalized) return std::nullopt;
+        return std::move(normalized.value());
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
     }
-
-    return IntervalUnion(std::move(intervals));
 }
 
 std::shared_ptr<SymbolicExpr> IntervalUnion::to_expr(const std::string& var) const {
@@ -1062,26 +1118,26 @@ std::shared_ptr<SymbolicExpr> IntervalUnion::to_expr(const std::string& var) con
         return nullptr;
     }
 
-    auto var_node = lamina::detail::node(SymbolicExpr::variable(var));
+    auto var_node = LMCAS::detail::node(SymbolicExpr::variable(var));
 
     auto interval_to_expr = [&](const Interval& iv) -> std::shared_ptr<const SymbolicNode> {
         std::shared_ptr<const SymbolicNode> lower_cond = nullptr;
         std::shared_ptr<const SymbolicNode> upper_cond = nullptr;
 
         if (!iv.lower.is_neg_infinity) {
-            auto bound = iv.lower.value ? lamina::detail::node(iv.lower.value) : lamina::detail::make_node<NumberNode>(0.0);
+            auto bound = iv.lower.value ? LMCAS::detail::node(iv.lower.value) : LMCAS::detail::make_node<NumberNode>(0.0);
             RelationalNode::Op op = iv.lower.is_open ? RelationalNode::Op::GT : RelationalNode::Op::GEQ;
-            lower_cond = lamina::detail::make_node<RelationalNode>(var_node, bound, op);
+            lower_cond = LMCAS::detail::make_node<RelationalNode>(var_node, bound, op);
         }
 
         if (!iv.upper.is_pos_infinity) {
-            auto bound = iv.upper.value ? lamina::detail::node(iv.upper.value) : lamina::detail::make_node<NumberNode>(0.0);
+            auto bound = iv.upper.value ? LMCAS::detail::node(iv.upper.value) : LMCAS::detail::make_node<NumberNode>(0.0);
             RelationalNode::Op op = iv.upper.is_open ? RelationalNode::Op::LT : RelationalNode::Op::LEQ;
-            upper_cond = lamina::detail::make_node<RelationalNode>(var_node, bound, op);
+            upper_cond = LMCAS::detail::make_node<RelationalNode>(var_node, bound, op);
         }
 
         if (lower_cond && upper_cond) {
-            return lamina::detail::make_node<LogicalNode>(lower_cond, upper_cond, LogicalNode::Op::And);
+            return LMCAS::detail::make_node<LogicalNode>(lower_cond, upper_cond, LogicalNode::Op::And);
         } else if (lower_cond) {
             return lower_cond;
         } else if (upper_cond) {
@@ -1100,14 +1156,14 @@ std::shared_ptr<SymbolicExpr> IntervalUnion::to_expr(const std::string& var) con
     if (intervals_.size() == 1) {
         auto node = interval_to_expr(intervals_[0]);
         if (!node) return nullptr;
-        return lamina::detail::make_expression_ptr(node);
+        return LMCAS::detail::make_expression_ptr(node);
     }
 
     auto result = interval_to_expr(intervals_[0]);
     for (size_t i = 1; i < intervals_.size(); ++i) {
         auto next = interval_to_expr(intervals_[i]);
         if (result && next) {
-            result = lamina::detail::make_node<LogicalNode>(result, next, LogicalNode::Op::Or);
+            result = LMCAS::detail::make_node<LogicalNode>(result, next, LogicalNode::Op::Or);
         } else if (next) {
             result = next;
         }
@@ -1115,7 +1171,7 @@ std::shared_ptr<SymbolicExpr> IntervalUnion::to_expr(const std::string& var) con
     }
 
     if (!result) return nullptr;
-    return lamina::detail::make_expression_ptr(result);
+    return LMCAS::detail::make_expression_ptr(result);
 }
 
 }

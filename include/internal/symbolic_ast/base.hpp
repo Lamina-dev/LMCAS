@@ -3,7 +3,7 @@
  * @brief Internal AST ownership, node protocol, visitor contract, and factory declarations.
  */
 #pragma once
-#define LAMINA_INTERNAL_AST_INCLUDED 1
+#define LMCAS_INTERNAL_AST_INCLUDED 1
 #include <memory>
 #include <vector>
 #include <string>
@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <limits>
-#include "lamina_export.hpp"
+#include "lmcas_export.hpp"
 #include "symbolic.hpp"
 #include "rational.hpp"
 #include "bigint.hpp"
@@ -24,6 +24,8 @@
 #include <atomic>
 #include <type_traits>
 #include <utility>
+
+namespace LMCAS {
 
 class SymbolicNode;
 class NumberNode;
@@ -62,53 +64,56 @@ struct SymbolicExpr::Impl {
     const std::shared_ptr<const SymbolicNode> root;
 };
 
-namespace lamina::detail {
+} // namespace LMCAS
+
+
+namespace LMCAS::detail {
 
 using SymbolicNodePtr = std::shared_ptr<const SymbolicNode>;
 
 struct SymbolicExprAccess {
-    static const SymbolicNodePtr& node(const ::SymbolicExpr& expression) noexcept {
+    static const SymbolicNodePtr& node(const ::LMCAS::SymbolicExpr& expression) noexcept {
         return expression.impl_->root;
     }
 
-    static ::SymbolicExpr expression_from_node(SymbolicNodePtr root) {
-        return ::SymbolicExpr(
-            std::make_shared<const ::SymbolicExpr::Impl>(std::move(root)));
+    static ::LMCAS::SymbolicExpr expression_from_node(SymbolicNodePtr root) {
+        return ::LMCAS::SymbolicExpr(
+            std::make_shared<const ::LMCAS::SymbolicExpr::Impl>(std::move(root)));
     }
 
-    static std::shared_ptr<::SymbolicExpr> make_expression_ptr(SymbolicNodePtr root) {
-        return std::shared_ptr<::SymbolicExpr>(new ::SymbolicExpr(
-            std::make_shared<const ::SymbolicExpr::Impl>(std::move(root))));
+    static std::shared_ptr<::LMCAS::SymbolicExpr> make_expression_ptr(SymbolicNodePtr root) {
+        return std::shared_ptr<::LMCAS::SymbolicExpr>(new ::LMCAS::SymbolicExpr(
+            std::make_shared<const ::LMCAS::SymbolicExpr::Impl>(std::move(root))));
     }
 };
 
-inline const SymbolicNodePtr& node(const ::SymbolicExpr& expression) noexcept {
+inline const SymbolicNodePtr& node(const ::LMCAS::SymbolicExpr& expression) noexcept {
     return SymbolicExprAccess::node(expression);
 }
 
 inline const SymbolicNodePtr& node(
-    const std::shared_ptr<::SymbolicExpr>& expression) noexcept {
+    const std::shared_ptr<::LMCAS::SymbolicExpr>& expression) noexcept {
     static const SymbolicNodePtr empty;
     return expression ? node(*expression) : empty;
 }
 
 inline const SymbolicNodePtr& node(
-    const std::shared_ptr<const ::SymbolicExpr>& expression) noexcept {
+    const std::shared_ptr<const ::LMCAS::SymbolicExpr>& expression) noexcept {
     static const SymbolicNodePtr empty;
     return expression ? node(*expression) : empty;
 }
 
-inline ::SymbolicExpr expression_from_node(SymbolicNodePtr root) {
+inline ::LMCAS::SymbolicExpr expression_from_node(SymbolicNodePtr root) {
     return SymbolicExprAccess::expression_from_node(std::move(root));
 }
 
-inline std::shared_ptr<::SymbolicExpr> make_expression_ptr(SymbolicNodePtr root) {
+inline std::shared_ptr<::LMCAS::SymbolicExpr> make_expression_ptr(SymbolicNodePtr root) {
     return SymbolicExprAccess::make_expression_ptr(std::move(root));
 }
 
-inline std::shared_ptr<::SymbolicExpr> make_expression_ptr(
-    const ::SymbolicExpr& expression) {
-    return std::make_shared<::SymbolicExpr>(expression);
+inline std::shared_ptr<::LMCAS::SymbolicExpr> make_expression_ptr(
+    const ::LMCAS::SymbolicExpr& expression) {
+    return std::make_shared<::LMCAS::SymbolicExpr>(expression);
 }
 
 class SymbolicVisitor;
@@ -121,12 +126,14 @@ std::shared_ptr<const Node> make_node(Args&&... args) {
         new Node(std::forward<Args>(args)...));
 }
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail
 
-#define LAMINA_AST_NODE_FACTORY_FRIEND                                      \
+#define LMCAS_AST_NODE_FACTORY_FRIEND                                      \
     template <typename Node, typename... Args>                              \
     friend std::shared_ptr<const Node>                                      \
-        lamina::detail::make_node(Args&&... args)
+        LMCAS::detail::make_node(Args&&... args)
+
+namespace LMCAS {
 
 /**
  * @brief 将一个哈希值混合到种子中,用于组合多个字段的哈希.
@@ -162,7 +169,7 @@ public:
     virtual ~SymbolicNode() = default;
 
     /** @brief 接受 Visitor 访问. */
-    virtual void accept(lamina::detail::SymbolicVisitor& visitor) const = 0;
+    virtual void accept(LMCAS::detail::SymbolicVisitor& visitor) const = 0;
 
     /** @brief 深拷贝当前节点及其子树. */
     virtual std::shared_ptr<const SymbolicNode> clone() const = 0;
@@ -224,7 +231,10 @@ public:
  * 子类实现各 visit 方法以处理不同节点类型.
  * 深度计数达到资源上限时返回诊断,使递归保持在配置范围内.
  */
-namespace lamina::detail {
+
+} // namespace LMCAS
+
+namespace LMCAS::detail {
 
 class SymbolicVisitor {
 protected:
@@ -272,7 +282,9 @@ public:
     virtual void visit(const RootOfNode& node) = 0;
 };
 
-} // namespace lamina::detail
+} namespace LMCAS {
+
+// namespace LMCAS::detail
 
 /** @brief 基于节点哈希的哈希函数对象,用于无序容器. */
 struct NodeHash {
@@ -302,9 +314,9 @@ using NodeSet = std::unordered_set<std::shared_ptr<const SymbolicNode>, NodeHash
 class SymbolicFactory {
 public:
     /** @brief 创建大整数数值节点. */
-    static std::shared_ptr<const SymbolicNode> create_number(const ::BigInt& v);
+    static std::shared_ptr<const SymbolicNode> create_number(const ::LMCAS::BigInt& v);
     /** @brief 创建有理数数值节点. */
-    static std::shared_ptr<const SymbolicNode> create_number(const ::Rational& v);
+    static std::shared_ptr<const SymbolicNode> create_number(const ::LMCAS::Rational& v);
     /** @brief 创建浮点数值节点. */
     static std::shared_ptr<const SymbolicNode> create_number(lmmc_real_t v);
     /** @brief 创建变量节点. */
@@ -337,3 +349,5 @@ public:
      */
     static std::shared_ptr<const SymbolicNode> create_complex(std::shared_ptr<const SymbolicNode> real, std::shared_ptr<const SymbolicNode> imag);
 };
+
+} // namespace LMCAS

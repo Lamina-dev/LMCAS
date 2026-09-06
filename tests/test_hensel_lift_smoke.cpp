@@ -5,7 +5,7 @@
 #include "test_common.hpp"
 #include "multivariate_factor.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 static MultiPoly::Term make_term(const std::vector<int>& exponents, const Rational& coeff) {
     return {Monomial(exponents.begin(), exponents.end()), coeff};

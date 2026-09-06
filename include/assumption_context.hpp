@@ -22,10 +22,11 @@
 #include <initializer_list>
 #include <variant>
 
-namespace lamina {
+namespace LMCAS {
 
 // Forward declarations
 class InferenceEngine;
+class ComputationContext;
 struct Interval;
 
 using AssumptionVoidResult = Result<void>;
@@ -39,7 +40,7 @@ using AssumptionTriboolResult = Result<Tribool>;
  * 查询按子作用域到父作用域的顺序定位首个符号声明.
  * 子作用域声明覆盖查询结果,同时保留父作用域状态;弹出作用域后恢复先前结果.
  */
-class LAMINA_API AssumptionContext {
+class LMCAS_API AssumptionContext {
 public:
     AssumptionContext();
 
@@ -225,6 +226,9 @@ public:
 
     /// 面向不可信输入的受检反序列化接口,通过 CasError 传递格式与约束诊断.
     static Result<AssumptionContext> deserialize_checked(const std::string& data);
+    /// Checked deserialization using the caller's resource and cancellation policy.
+    static Result<AssumptionContext> deserialize_checked(
+        const std::string& data, ComputationContext& context);
 
     /**
      * @brief Query whether a symbol is continuous on a given interval (read-through all scopes).
@@ -429,10 +433,6 @@ auto with_assumptions(AssumptionContext& ctx,
         auto popped = ctx.pop();
         if (!popped) return Result<ReturnT>::failure(popped.error());
         return Result<ReturnT>::success(std::move(result));
-    } catch (const detail::ResultPropagation& ex) {
-        auto popped = ctx.pop();
-        if (!popped) return Result<ReturnT>::failure(popped.error());
-        return Result<ReturnT>::failure(ex.error());
     } catch (const std::bad_alloc&) {
         auto popped = ctx.pop();
         if (!popped) return Result<ReturnT>::failure(popped.error());
@@ -466,10 +466,6 @@ auto with_assumptions(AssumptionContext& ctx,
         auto popped = ctx.pop();
         if (!popped) return AssumptionVoidResult::failure(popped.error());
         return AssumptionVoidResult::success();
-    } catch (const detail::ResultPropagation& ex) {
-        auto popped = ctx.pop();
-        if (!popped) return AssumptionVoidResult::failure(popped.error());
-        return AssumptionVoidResult::failure(ex.error());
     } catch (const std::bad_alloc&) {
         auto popped = ctx.pop();
         if (!popped) return AssumptionVoidResult::failure(popped.error());
@@ -494,4 +490,4 @@ auto with_assumptions(AssumptionContext& ctx,
         ctx, std::vector<AssumptionDecl>(decls), std::forward<F>(callable));
 }
 
-} // namespace lamina
+} // namespace LMCAS

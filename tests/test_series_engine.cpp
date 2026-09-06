@@ -6,6 +6,8 @@
 #include "test_common.hpp"
 #include "series_engine.hpp"
 
+using namespace LMCAS;
+
 using Expr = std::shared_ptr<SymbolicExpr>;
 using Coeffs = std::vector<Expr>;
 
@@ -13,7 +15,7 @@ static Expr num(int n) { return SymbolicExpr::number(n); }
 static Expr rat(int p, int q) { return SymbolicExpr::number(Rational(p, q)); }
 static Expr var(const std::string& name) { return SymbolicExpr::variable(name); }
 static Expr inf() { return SymbolicExpr::infinity(); }
-static Expr checked_sequence_limit(lamina::ExpressionResult result) {
+static Expr checked_sequence_limit(LMCAS::ExpressionResult result) {
     EXPECT_TRUE(result.has_value(), "checked sequence limit succeeds");
     return result ? std::move(result.value()) : nullptr;
 }
@@ -39,7 +41,7 @@ static void test_power_series_add_basic() {
     // b(x) = 4 + 5x + 6x²
     Coeffs b = {num(4), num(5), num(6)};
 
-    auto result = lamina::power_series_add(a, b);
+    auto result = LMCAS::power_series_add(a, b);
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     EXPECT_EQ_EXPR(result[0], num(5), "c[0] = 1+4 = 5");
@@ -55,7 +57,7 @@ static void test_power_series_add_different_lengths() {
     // b(x) = 3 + 4x + 5x² + 6x³
     Coeffs b = {num(3), num(4), num(5), num(6)};
 
-    auto result = lamina::power_series_add(a, b);
+    auto result = LMCAS::power_series_add(a, b);
 
     EXPECT_TRUE(result.size() == 4, "Result has 4 coefficients (max length)");
     EXPECT_EQ_EXPR(result[0], num(4), "c[0] = 1+3 = 4");
@@ -70,7 +72,7 @@ static void test_power_series_add_empty() {
     Coeffs a = {};
     Coeffs b = {num(1), num(2)};
 
-    auto result = lamina::power_series_add(a, b);
+    auto result = LMCAS::power_series_add(a, b);
     EXPECT_TRUE(result.size() == 2, "Result has 2 coefficients");
     EXPECT_EQ_EXPR(result[0], num(1), "c[0] = 0+1 = 1");
     EXPECT_EQ_EXPR(result[1], num(2), "c[1] = 0+2 = 2");
@@ -84,7 +86,7 @@ static void test_power_series_multiply_basic() {
     // b(x) = 1 + x
     Coeffs b = {num(1), num(1)};
 
-    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
+    auto result = LMCAS::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     EXPECT_EQ_EXPR(result[0], num(1), "c[0] = 1*1 = 1");
@@ -102,7 +104,7 @@ static void test_power_series_multiply_truncation() {
 
     // Full product: 1 + 2x + 3x² + 2x³ + x⁴
     // Truncate to order 3: 1 + 2x + 3x²
-    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
+    auto result = LMCAS::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients (truncated)");
     EXPECT_EQ_EXPR(result[0], num(1), "c[0] = 1");
@@ -116,7 +118,7 @@ static void test_power_series_multiply_zero() {
     Coeffs a = {num(1), num(2), num(3)};
     Coeffs b = {num(0)};
 
-    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
+    auto result = LMCAS::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     EXPECT_EQ_EXPR(result[0], num(0), "c[0] = 0");
@@ -132,7 +134,7 @@ static void test_power_series_multiply_constants() {
     // b(x) = 1 + 2x + 4x²
     Coeffs b = {num(1), num(2), num(4)};
 
-    auto result = lamina::power_series_multiply_checked(a, b, 3).value();
+    auto result = LMCAS::power_series_multiply_checked(a, b, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     EXPECT_EQ_EXPR(result[0], num(3), "c[0] = 3*1 = 3");
@@ -148,7 +150,7 @@ static void test_power_series_compose_basic() {
     // g(x) = x (i.e., g(0)=0, g[1]=1)
     Coeffs g = {num(0), num(1)};
 
-    auto result = lamina::power_series_compose_checked(f, g, 3).value();
+    auto result = LMCAS::power_series_compose_checked(f, g, 3).value();
 
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
     // f(g(x)) = f(x) = 1 + x
@@ -165,7 +167,7 @@ static void test_power_series_compose_quadratic() {
     // g(x) = 2x (g(0)=0)
     Coeffs g = {num(0), num(2)};
 
-    auto result = lamina::power_series_compose_checked(f, g, 3).value();
+    auto result = LMCAS::power_series_compose_checked(f, g, 3).value();
 
     // f(2x) = 1 + 2x + 4x²
     EXPECT_TRUE(result.size() == 3, "Result has 3 coefficients");
@@ -181,8 +183,8 @@ static void test_power_series_compose_g0_nonzero() {
     // g(x) = 1 + x (g(0) = 1 ≠ 0)
     Coeffs g = {num(1), num(1)};
 
-    auto result = lamina::power_series_compose_checked(f, g, 3);
-    EXPECT_TRUE(!result && result.error().code == lamina::CasErrc::DomainError,
+    auto result = LMCAS::power_series_compose_checked(f, g, 3);
+    EXPECT_TRUE(!result && result.error().code == LMCAS::CasErrc::DomainError,
                 "g(0) != 0 is a checked domain error");
 }
 
@@ -197,7 +199,7 @@ static void test_power_series_compose_exp_like() {
     // g(x) = 2x
     Coeffs g = {num(0), num(2)};
 
-    auto result = lamina::power_series_compose_checked(f, g, 4).value();
+    auto result = LMCAS::power_series_compose_checked(f, g, 4).value();
 
     // exp(2x) = 1 + 2x + 2x² + (4/3)x³
     EXPECT_TRUE(result.size() == 4, "Result has 4 coefficients");
@@ -213,8 +215,8 @@ static void test_power_series_multiply_order_zero() {
     Coeffs a = {num(1), num(2)};
     Coeffs b = {num(3), num(4)};
 
-    auto result = lamina::power_series_multiply_checked(a, b, 0);
-    EXPECT_TRUE(!result && result.error().code == lamina::CasErrc::InvalidArgument,
+    auto result = LMCAS::power_series_multiply_checked(a, b, 0);
+    EXPECT_TRUE(!result && result.error().code == LMCAS::CasErrc::InvalidArgument,
                 "order zero is a checked invalid argument");
 }
 
@@ -223,7 +225,7 @@ static void test_power_series_checked_contracts() {
 
     Coeffs a = {num(1), num(1)};
     Coeffs b = {num(1), num(1)};
-    auto checked_product = lamina::power_series_multiply_checked(a, b, 3);
+    auto checked_product = LMCAS::power_series_multiply_checked(a, b, 3);
     EXPECT_TRUE(checked_product.has_value(), "checked multiply succeeds");
     if (checked_product) {
         EXPECT_TRUE(checked_product.value().size() == 3,
@@ -232,20 +234,20 @@ static void test_power_series_checked_contracts() {
                        "checked multiply coefficient c[1] = 2");
     }
 
-    auto bad_order = lamina::power_series_multiply_checked(a, b, 0);
+    auto bad_order = LMCAS::power_series_multiply_checked(a, b, 0);
     EXPECT_TRUE(!bad_order &&
-                    bad_order.error().code == lamina::CasErrc::InvalidArgument,
+                    bad_order.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked multiply rejects non-positive order");
 
     Coeffs with_null = {num(1), nullptr};
-    auto null_coeff = lamina::power_series_multiply_checked(with_null, b, 2);
+    auto null_coeff = LMCAS::power_series_multiply_checked(with_null, b, 2);
     EXPECT_TRUE(!null_coeff &&
-                    null_coeff.error().code == lamina::CasErrc::InvalidArgument,
+                    null_coeff.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked multiply rejects null coefficients");
 
     Coeffs f = {num(1), num(1)};
     Coeffs g = {num(0), num(2)};
-    auto checked_compose = lamina::power_series_compose_checked(f, g, 3);
+    auto checked_compose = LMCAS::power_series_compose_checked(f, g, 3);
     EXPECT_TRUE(checked_compose.has_value(), "checked compose succeeds");
     if (checked_compose) {
         EXPECT_EQ_EXPR(checked_compose.value()[0], num(1),
@@ -255,17 +257,17 @@ static void test_power_series_checked_contracts() {
     }
 
     Coeffs bad_g = {num(1), num(1)};
-    auto nonzero_g0 = lamina::power_series_compose_checked(f, bad_g, 3);
+    auto nonzero_g0 = LMCAS::power_series_compose_checked(f, bad_g, 3);
     EXPECT_TRUE(!nonzero_g0 &&
-                    nonzero_g0.error().code == lamina::CasErrc::DomainError,
+                    nonzero_g0.error().code == LMCAS::CasErrc::DomainError,
                 "checked compose reports g(0) != 0 as domain error");
 
-    lamina::CancellationToken token;
+    LMCAS::CancellationToken token;
     token.cancel();
-    lamina::ComputationContext context({}, token);
-    auto cancelled = lamina::power_series_multiply_checked(a, b, 3, context);
+    LMCAS::ComputationContext context({}, token);
+    auto cancelled = LMCAS::power_series_multiply_checked(a, b, 3, context);
     EXPECT_TRUE(!cancelled &&
-                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                    cancelled.error().code == LMCAS::CasErrc::Cancelled,
                 "checked multiply observes cancelled context");
 }
 
@@ -273,7 +275,7 @@ static void test_series_analysis_checked_contracts() {
     TEST_CASE("series analysis checked APIs: explicit errors and context");
 
     Coeffs geometric = {num(1), num(1), num(1)};
-    auto radius = lamina::convergence_radius_checked(geometric, "x");
+    auto radius = LMCAS::convergence_radius_checked(geometric, "x");
     EXPECT_TRUE(radius.has_value(), "checked convergence_radius succeeds");
     if (radius) {
         EXPECT_TRUE(radius.value() != nullptr,
@@ -282,7 +284,7 @@ static void test_series_analysis_checked_contracts() {
 
     auto sequence_index = var("n");
     auto exponential_term = SymbolicExpr::power(num(2), sequence_index);
-    auto exponential_radius = lamina::convergence_radius_checked(
+    auto exponential_radius = LMCAS::convergence_radius_checked(
         exponential_term, "n");
     EXPECT_TRUE(exponential_radius &&
                     std::abs(exponential_radius.value()->to_numeric() - 0.5) <
@@ -290,66 +292,66 @@ static void test_series_analysis_checked_contracts() {
                 "coefficient term 2^n has radius 1/2");
 
     auto polynomial_term = SymbolicExpr::power(sequence_index, num(3));
-    auto polynomial_radius = lamina::convergence_radius_checked(
+    auto polynomial_radius = LMCAS::convergence_radius_checked(
         polynomial_term, "n");
     EXPECT_TRUE(polynomial_radius &&
                     std::abs(polynomial_radius.value()->to_numeric() - 1.0) <
                         1e-12,
                 "coefficient term n^3 has radius 1");
 
-    auto empty_coeffs = lamina::convergence_radius_checked(Coeffs{}, "x");
+    auto empty_coeffs = LMCAS::convergence_radius_checked(Coeffs{}, "x");
     EXPECT_TRUE(!empty_coeffs &&
-                    empty_coeffs.error().code == lamina::CasErrc::InvalidArgument,
+                    empty_coeffs.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked convergence_radius rejects empty coefficients");
 
     Coeffs with_null = {num(1), nullptr};
-    auto null_coeff = lamina::convergence_radius_checked(with_null, "x");
+    auto null_coeff = LMCAS::convergence_radius_checked(with_null, "x");
     EXPECT_TRUE(!null_coeff &&
-                    null_coeff.error().code == lamina::CasErrc::InvalidArgument,
+                    null_coeff.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked convergence_radius rejects null coefficients");
 
-    auto bad_var = lamina::convergence_radius_checked(geometric, "");
+    auto bad_var = LMCAS::convergence_radius_checked(geometric, "");
     EXPECT_TRUE(!bad_var &&
-                    bad_var.error().code == lamina::CasErrc::InvalidArgument,
+                    bad_var.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked convergence_radius rejects empty variable");
 
     Coeffs symbolic_coeffs = {num(1), var("a"), num(1)};
     auto symbolic_radius =
-        lamina::convergence_radius_checked(symbolic_coeffs, "x");
+        LMCAS::convergence_radius_checked(symbolic_coeffs, "x");
     EXPECT_TRUE(symbolic_radius &&
                     symbolic_radius.value()->to_string() == inf()->to_string(),
                 "finite polynomial with parameter coefficients has infinite radius");
 
     Coeffs variable_coeffs = {num(1), var("x"), num(1)};
     auto variable_radius =
-        lamina::convergence_radius_checked(variable_coeffs, "x");
+        LMCAS::convergence_radius_checked(variable_coeffs, "x");
     EXPECT_TRUE(!variable_radius &&
-                    variable_radius.error().code == lamina::CasErrc::InvalidArgument,
+                    variable_radius.error().code == LMCAS::CasErrc::InvalidArgument,
                 "coefficient cannot depend on the series variable");
 
     auto n = var("n");
     auto p_term = SymbolicExpr::power(n, num(-2));
-    auto convergence = lamina::convergence_test_checked(p_term, "n");
+    auto convergence = LMCAS::convergence_test_checked(p_term, "n");
     EXPECT_TRUE(convergence.has_value(), "checked convergence_test succeeds");
     if (convergence) {
-        EXPECT_TRUE(convergence.value().result == lamina::ConvergenceResult::Convergent,
+        EXPECT_TRUE(convergence.value().result == LMCAS::ConvergenceResult::Convergent,
                     "checked convergence_test detects p-series convergence");
     }
 
-    auto null_term = lamina::convergence_test_checked(nullptr, "n");
+    auto null_term = LMCAS::convergence_test_checked(nullptr, "n");
     EXPECT_TRUE(!null_term &&
-                    null_term.error().code == lamina::CasErrc::InvalidArgument,
+                    null_term.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked convergence_test rejects null term");
 
     auto unsupported_term = SymbolicExpr::sin(n);
-    auto unsupported_convergence = lamina::convergence_test_checked(unsupported_term, "n");
+    auto unsupported_convergence = LMCAS::convergence_test_checked(unsupported_term, "n");
     EXPECT_TRUE(!unsupported_convergence &&
-                    unsupported_convergence.error().code == lamina::CasErrc::Inconclusive,
+                    unsupported_convergence.error().code == LMCAS::CasErrc::Inconclusive,
                 "checked convergence_test reports Inconclusive for unsupported terms");
 
     auto z = var("z");
     auto f = SymbolicExpr::divide(num(1), z);
-    auto laurent = lamina::laurent_series_full_checked(f, "z", num(0), 2, 2);
+    auto laurent = LMCAS::laurent_series_full_checked(f, "z", num(0), 2, 2);
     EXPECT_TRUE(laurent.has_value(), "checked Laurent series succeeds for 1/z");
     if (laurent) {
         EXPECT_TRUE(laurent.value().series != nullptr,
@@ -358,46 +360,46 @@ static void test_series_analysis_checked_contracts() {
                     "checked Laurent detects simple pole");
     }
 
-    auto laurent_expr = lamina::laurent_series_checked(f, "z", num(0), 2, 2);
+    auto laurent_expr = LMCAS::laurent_series_checked(f, "z", num(0), 2, 2);
     EXPECT_TRUE(laurent_expr.has_value(), "checked Laurent expression succeeds");
 
-    auto bad_order = lamina::laurent_series_full_checked(f, "z", num(0), -1, 2);
+    auto bad_order = LMCAS::laurent_series_full_checked(f, "z", num(0), -1, 2);
     EXPECT_TRUE(!bad_order &&
-                    bad_order.error().code == lamina::CasErrc::InvalidArgument,
+                    bad_order.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked Laurent rejects negative truncation order");
 
-    auto null_center = lamina::laurent_series_full_checked(f, "z", nullptr, 2, 2);
+    auto null_center = LMCAS::laurent_series_full_checked(f, "z", nullptr, 2, 2);
     EXPECT_TRUE(!null_center &&
-                    null_center.error().code == lamina::CasErrc::InvalidArgument,
+                    null_center.error().code == LMCAS::CasErrc::InvalidArgument,
                 "checked Laurent rejects null center");
 
-    auto analytic_laurent = lamina::laurent_series_full_checked(
+    auto analytic_laurent = LMCAS::laurent_series_full_checked(
         SymbolicExpr::sin(z), "z", num(0), 2, 2);
     EXPECT_TRUE(analytic_laurent &&
                     analytic_laurent.value().pole_order == 0,
                 "checked Laurent expands supported analytic functions");
 
-    auto shifted_laurent = lamina::laurent_series_full_checked(
+    auto shifted_laurent = LMCAS::laurent_series_full_checked(
         f, "z", num(1), 2, 2);
     EXPECT_TRUE(shifted_laurent &&
                     shifted_laurent.value().pole_order == 0,
                 "checked Laurent supports a nonzero regular center");
 
-    lamina::CancellationToken token;
+    LMCAS::CancellationToken token;
     token.cancel();
-    lamina::ComputationContext cancelled_context({}, token);
-    auto cancelled = lamina::convergence_test_checked(p_term, "n", cancelled_context);
+    LMCAS::ComputationContext cancelled_context({}, token);
+    auto cancelled = LMCAS::convergence_test_checked(p_term, "n", cancelled_context);
     EXPECT_TRUE(!cancelled &&
-                    cancelled.error().code == lamina::CasErrc::Cancelled,
+                    cancelled.error().code == LMCAS::CasErrc::Cancelled,
                 "checked convergence_test observes cancellation");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_steps = 1;
-    lamina::ComputationContext limited_context(limits);
-    auto limited = lamina::laurent_series_full_checked(f, "z", num(0), 2, 2,
+    LMCAS::ComputationContext limited_context(limits);
+    auto limited = LMCAS::laurent_series_full_checked(f, "z", num(0), 2, 2,
                                                        limited_context);
     EXPECT_TRUE(!limited &&
-                    limited.error().code == lamina::CasErrc::ResourceLimit,
+                    limited.error().code == LMCAS::CasErrc::ResourceLimit,
                 "checked Laurent observes exhausted step budget");
 }
 
@@ -409,7 +411,7 @@ static void test_lim_sup_convergent_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-1));
 
-    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
+    auto result = checked_sequence_limit(LMCAS::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup(1/n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(0), "lim_sup(1/n) = 0");
@@ -422,7 +424,7 @@ static void test_lim_inf_convergent_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-1));
 
-    auto result = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
+    auto result = checked_sequence_limit(LMCAS::lim_inf_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_inf(1/n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(0), "lim_inf(1/n) = 0");
@@ -436,7 +438,7 @@ static void test_lim_sup_alternating_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(num(-1), n);
 
-    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
+    auto result = checked_sequence_limit(LMCAS::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup((-1)^n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(1), "lim_sup((-1)^n) = 1");
@@ -449,7 +451,7 @@ static void test_lim_inf_alternating_sequence() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(num(-1), n);
 
-    auto result = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
+    auto result = checked_sequence_limit(LMCAS::lim_inf_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_inf((-1)^n) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(-1), "lim_inf((-1)^n) = -1");
@@ -462,7 +464,7 @@ static void test_lim_sup_monotone_polynomial() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(2));
 
-    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
+    auto result = checked_sequence_limit(LMCAS::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup(n^2) is not null");
     // Should be infinity
 }
@@ -475,7 +477,7 @@ static void test_lim_sup_rational_sequence() {
     auto a_n = SymbolicExpr::multiply(n, SymbolicExpr::power(
         SymbolicExpr::add(n, num(1)), num(-1)));
 
-    auto result = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
+    auto result = checked_sequence_limit(LMCAS::lim_sup_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_sup(n/(n+1)) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(1), "lim_sup(n/(n+1)) = 1");
@@ -489,7 +491,7 @@ static void test_lim_inf_rational_sequence() {
     auto a_n = SymbolicExpr::multiply(n, SymbolicExpr::power(
         SymbolicExpr::add(n, num(1)), num(-1)));
 
-    auto result = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
+    auto result = checked_sequence_limit(LMCAS::lim_inf_checked(a_n, "n"));
     EXPECT_TRUE(result != nullptr, "lim_inf(n/(n+1)) is not null");
     if (result) {
         EXPECT_EQ_EXPR(result, num(1), "lim_inf(n/(n+1)) = 1");
@@ -502,8 +504,8 @@ static void test_lim_sup_lim_inf_equal_for_monotone() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-1));
 
-    auto sup = checked_sequence_limit(lamina::lim_sup_checked(a_n, "n"));
-    auto inf = checked_sequence_limit(lamina::lim_inf_checked(a_n, "n"));
+    auto sup = checked_sequence_limit(LMCAS::lim_sup_checked(a_n, "n"));
+    auto inf = checked_sequence_limit(LMCAS::lim_inf_checked(a_n, "n"));
 
     EXPECT_TRUE(sup != nullptr && inf != nullptr, "Both lim_sup and lim_inf exist");
     if (sup && inf) {
@@ -515,7 +517,7 @@ static void test_lim_sup_lim_inf_equal_for_monotone() {
 static void test_symbolic_sum_constant() {
     TEST_CASE("symbolic_sum: constant body");
     // sum_{k=1}^{5} 3 = 15
-    auto result = lamina::symbolic_sum(num(3), "k", num(1), num(5));
+    auto result = LMCAS::symbolic_sum(num(3), "k", num(1), num(5));
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) EXPECT_EQ_EXPR(result, num(15), "sum of constant 3 from 1 to 5 = 15");
 }
@@ -525,7 +527,7 @@ static void test_symbolic_sum_linear() {
     // sum_{k=1}^{n} k = n(n+1)/2
     auto n = var("n");
     auto k = var("k");
-    auto result = lamina::symbolic_sum(k, "k", num(1), n);
+    auto result = LMCAS::symbolic_sum(k, "k", num(1), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     // Evaluate at n=10: should be 55
     if (result) {
@@ -543,7 +545,7 @@ static void test_symbolic_sum_quadratic() {
     auto n = var("n");
     auto k = var("k");
     auto k_sq = SymbolicExpr::power(k, num(2));
-    auto result = lamina::symbolic_sum(k_sq, "k", num(1), n);
+    auto result = LMCAS::symbolic_sum(k_sq, "k", num(1), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
         auto val = result->substitute("n", num(5));
@@ -561,7 +563,7 @@ static void test_symbolic_sum_cubic() {
     auto n = var("n");
     auto k = var("k");
     auto k_cubed = SymbolicExpr::power(k, num(3));
-    auto result = lamina::symbolic_sum(k_cubed, "k", num(1), n);
+    auto result = LMCAS::symbolic_sum(k_cubed, "k", num(1), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
         auto val = result->substitute("n", num(4));
@@ -578,7 +580,7 @@ static void test_symbolic_sum_geometric() {
     auto n = var("n");
     auto k = var("k");
     auto two_pow_k = SymbolicExpr::power(num(2), k);
-    auto result = lamina::symbolic_sum(two_pow_k, "k", num(0), n);
+    auto result = LMCAS::symbolic_sum(two_pow_k, "k", num(0), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
         auto val = result->substitute("n", num(3));
@@ -594,7 +596,7 @@ static void test_symbolic_sum_direct_eval() {
     TEST_CASE("symbolic_sum: direct evaluation for small range");
     auto k = var("k");
     auto k_sq = SymbolicExpr::power(k, num(2));
-    auto result = lamina::symbolic_sum(k_sq, "k", num(1), num(4));
+    auto result = LMCAS::symbolic_sum(k_sq, "k", num(1), num(4));
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
         result = result->simplify();
@@ -606,7 +608,7 @@ static void test_symbolic_sum_direct_eval() {
 static void test_symbolic_sum_empty_range() {
     TEST_CASE("symbolic_sum: empty range returns 0");
     auto k = var("k");
-    auto result = lamina::symbolic_sum(k, "k", num(5), num(3));
+    auto result = LMCAS::symbolic_sum(k, "k", num(5), num(3));
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) EXPECT_EQ_EXPR(result, num(0), "sum with upper < lower = 0");
 }
@@ -617,12 +619,34 @@ static void test_symbolic_sum_unevaluated() {
     auto n = var("n");
     // sin(k) has no simple closed form
     auto body = SymbolicExpr::sin(k);
-    auto result = lamina::symbolic_sum(body, "k", num(1), n);
+    auto result = LMCAS::symbolic_sum(body, "k", num(1), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     // Should be a SummationNode
     if (result) {
-        auto sn = std::dynamic_pointer_cast<const SummationNode>(lamina::detail::node(result));
+        auto sn = std::dynamic_pointer_cast<const SummationNode>(LMCAS::detail::node(result));
         EXPECT_TRUE(sn != nullptr, "result is SummationNode for sin(k)");
+    }
+}
+
+static void test_symbolic_sum_large_exact_bounds() {
+    TEST_CASE("symbolic_sum: arbitrary-precision bounds are not narrowed");
+
+    const BigInt lower_value("999999999999999999999999999999");
+    const BigInt upper_value("1000000000000000000000000000000");
+    auto k = var("k");
+    auto body = SymbolicExpr::power(k, k);
+    auto result = LMCAS::symbolic_sum(
+        body, "k", SymbolicExpr::number(lower_value),
+        SymbolicExpr::number(upper_value));
+
+    EXPECT_TRUE(result != nullptr, "large-bound summation remains representable");
+    if (result) {
+        result = result->simplify();
+        const std::string text = result ? result->to_string() : "";
+        EXPECT_TRUE(text.find(lower_value.to_string()) != std::string::npos,
+                    "large lower bound remains exact after normalization");
+        EXPECT_TRUE(text.find(upper_value.to_string()) != std::string::npos,
+                    "large upper bound remains exact after normalization");
     }
 }
 
@@ -630,7 +654,7 @@ static void test_symbolic_sum_unevaluated() {
 static void test_symbolic_product_factorial() {
     TEST_CASE("symbolic_product: product of k from 1 to n = n!");
     auto k = var("k");
-    auto result = lamina::symbolic_product(k, "k", num(1), num(5));
+    auto result = LMCAS::symbolic_product(k, "k", num(1), num(5));
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
         result = result->simplify();
@@ -643,7 +667,7 @@ static void test_symbolic_product_direct_eval() {
     TEST_CASE("symbolic_product: direct evaluation");
     auto k = var("k");
     auto k_plus_1 = SymbolicExpr::add(k, num(1));
-    auto result = lamina::symbolic_product(k_plus_1, "k", num(1), num(4));
+    auto result = LMCAS::symbolic_product(k_plus_1, "k", num(1), num(4));
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
         result = result->simplify();
@@ -655,7 +679,7 @@ static void test_symbolic_product_direct_eval() {
 static void test_symbolic_product_empty_range() {
     TEST_CASE("symbolic_product: empty range returns 1");
     auto k = var("k");
-    auto result = lamina::symbolic_product(k, "k", num(5), num(3));
+    auto result = LMCAS::symbolic_product(k, "k", num(5), num(3));
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) EXPECT_EQ_EXPR(result, num(1), "product with upper < lower = 1");
 }
@@ -664,7 +688,7 @@ static void test_symbolic_product_pochhammer() {
     TEST_CASE("symbolic_product: Pochhammer (k+2) from 1 to 4");
     auto k = var("k");
     auto body = SymbolicExpr::add(k, num(2));
-    auto result = lamina::symbolic_product(body, "k", num(1), num(4));
+    auto result = LMCAS::symbolic_product(body, "k", num(1), num(4));
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
         result = result->simplify();
@@ -678,10 +702,10 @@ static void test_symbolic_product_unevaluated() {
     auto k = var("k");
     auto n = var("n");
     auto body = SymbolicExpr::sin(k);
-    auto result = lamina::symbolic_product(body, "k", num(1), n);
+    auto result = LMCAS::symbolic_product(body, "k", num(1), n);
     EXPECT_TRUE(result != nullptr, "result is not null");
     if (result) {
-        auto pn = std::dynamic_pointer_cast<const ProductNode>(lamina::detail::node(result));
+        auto pn = std::dynamic_pointer_cast<const ProductNode>(LMCAS::detail::node(result));
         EXPECT_TRUE(pn != nullptr, "result is ProductNode for sin(k)");
     }
 }
@@ -691,7 +715,7 @@ static void test_convergence_radius_geometric() {
     TEST_CASE("convergence_radius: finite coefficient polynomial has R=infinity");
 
     Coeffs coeffs = {num(1), num(1), num(1), num(1), num(1)};
-    auto result = lamina::convergence_radius_checked(coeffs, "x");
+    auto result = LMCAS::convergence_radius_checked(coeffs, "x");
     EXPECT_TRUE(result && result.value() != nullptr,
                 "finite polynomial radius is constructed");
     if (result) {
@@ -704,7 +728,7 @@ static void test_convergence_radius_exponential() {
     TEST_CASE("convergence_radius: finite factorial prefix is not extrapolated");
 
     Coeffs coeffs = {num(1), num(1), rat(1, 2), rat(1, 6), rat(1, 24)};
-    auto result = lamina::convergence_radius_checked(coeffs, "x");
+    auto result = LMCAS::convergence_radius_checked(coeffs, "x");
     EXPECT_TRUE(result && result.value() != nullptr,
                 "finite factorial polynomial radius is constructed");
     if (result) {
@@ -717,7 +741,7 @@ static void test_convergence_radius_half() {
     TEST_CASE("convergence_radius: finite geometric prefix is not extrapolated");
 
     Coeffs coeffs = {num(1), num(2), num(4), num(8), num(16)};
-    auto result = lamina::convergence_radius_checked(coeffs, "x");
+    auto result = LMCAS::convergence_radius_checked(coeffs, "x");
     EXPECT_TRUE(result && result.value() != nullptr,
                 "finite geometric polynomial radius is constructed");
     if (result) {
@@ -730,7 +754,7 @@ static void test_convergence_radius_single_coeff() {
     TEST_CASE("convergence_radius: single coefficient returns ∞");
 
     Coeffs coeffs = {num(5)};
-    auto result = lamina::convergence_radius_checked(coeffs, "x").value();
+    auto result = LMCAS::convergence_radius_checked(coeffs, "x").value();
     EXPECT_TRUE(result != nullptr, "convergence_radius returns non-null");
     // A polynomial (finite terms) has infinite radius of convergence
 }
@@ -744,11 +768,11 @@ static void test_convergence_test_geometric_convergent() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(rat(1, 2), n);
 
-    auto info = lamina::convergence_test_checked(a_n, "n");
+    auto info = LMCAS::convergence_test_checked(a_n, "n");
     EXPECT_TRUE(
-        (!info && info.error().code == lamina::CasErrc::Inconclusive) ||
+        (!info && info.error().code == LMCAS::CasErrc::Inconclusive) ||
             (info && info.value().result ==
-                         lamina::ConvergenceResult::Convergent),
+                         LMCAS::ConvergenceResult::Convergent),
         "geometric convergence is proved or explicitly Inconclusive");
 }
 
@@ -759,11 +783,11 @@ static void test_convergence_test_geometric_divergent() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(num(2), n);
 
-    auto info = lamina::convergence_test_checked(a_n, "n");
+    auto info = LMCAS::convergence_test_checked(a_n, "n");
     EXPECT_TRUE(
-        (!info && info.error().code == lamina::CasErrc::Inconclusive) ||
+        (!info && info.error().code == LMCAS::CasErrc::Inconclusive) ||
             (info && info.value().result ==
-                         lamina::ConvergenceResult::Divergent),
+                         LMCAS::ConvergenceResult::Divergent),
         "geometric divergence is proved or explicitly Inconclusive");
 }
 
@@ -774,11 +798,11 @@ static void test_convergence_test_p_series() {
     auto n = var("n");
     auto a_n = SymbolicExpr::power(n, num(-2));
 
-    auto info = lamina::convergence_test_checked(a_n, "n");
+    auto info = LMCAS::convergence_test_checked(a_n, "n");
     EXPECT_TRUE(
-        (!info && info.error().code == lamina::CasErrc::Inconclusive) ||
+        (!info && info.error().code == LMCAS::CasErrc::Inconclusive) ||
             (info && info.value().result ==
-                         lamina::ConvergenceResult::Convergent),
+                         LMCAS::ConvergenceResult::Convergent),
         "p-series is proved convergent or explicitly Inconclusive");
 }
 
@@ -791,7 +815,7 @@ static void test_fourier_series_square_wave() {
     auto one = num(1);
     auto period = SymbolicExpr::multiply(num(2), SymbolicExpr::number(LMMC_CONST_PI));
 
-    auto result = lamina::fourier_series_checked(one, "x", period, 0);
+    auto result = LMCAS::fourier_series_checked(one, "x", period, 0);
     EXPECT_TRUE(result.has_value(), "fourier_series returns a result");
     if (result) {
         auto v = test_numeric_eval(result.value()->simplify());
@@ -807,7 +831,7 @@ static void test_fourier_series_odd_function() {
     auto x = var("x");
     auto period = SymbolicExpr::multiply(num(2), SymbolicExpr::number(LMMC_CONST_PI));
 
-    auto result = lamina::fourier_series_checked(x, "x", period, 2);
+    auto result = LMCAS::fourier_series_checked(x, "x", period, 2);
     EXPECT_TRUE(result.has_value(), "fourier_series(x) returns a result");
     if (result) {
         // At x=0, all sine terms vanish; an odd function's series gives 0 there.
@@ -825,17 +849,17 @@ static void test_fourier_series_checked_contracts() {
     auto period =
         SymbolicExpr::multiply(num(2), SymbolicExpr::number(LMMC_CONST_PI));
 
-    auto invalid = lamina::fourier_series_checked(one, "x", period, -1);
-    EXPECT_TRUE(!invalid && invalid.error().code == lamina::CasErrc::InvalidArgument,
+    auto invalid = LMCAS::fourier_series_checked(one, "x", period, -1);
+    EXPECT_TRUE(!invalid && invalid.error().code == LMCAS::CasErrc::InvalidArgument,
                 "negative Fourier order is rejected");
 
-    lamina::ResourceLimits limits;
+    LMCAS::ResourceLimits limits;
     limits.max_expansion_terms = 0;
-    lamina::ComputationContext context(limits);
+    LMCAS::ComputationContext context(limits);
     auto limited =
-        lamina::fourier_series_checked(one, "x", period, 0, context);
+        LMCAS::fourier_series_checked(one, "x", period, 0, context);
     EXPECT_TRUE(!limited &&
-                    limited.error().code == lamina::CasErrc::ResourceLimit,
+                    limited.error().code == LMCAS::CasErrc::ResourceLimit,
                 "Fourier expansion observes the shared term budget");
 }
 
@@ -847,7 +871,7 @@ static void test_laurent_series_1_over_z() {
     auto z = var("z");
     auto f = SymbolicExpr::power(z, num(-1));
 
-    auto result = lamina::laurent_series_checked(f, "z", num(0), 2, 2).value();
+    auto result = LMCAS::laurent_series_checked(f, "z", num(0), 2, 2).value();
     EXPECT_TRUE(result != nullptr, "laurent_series(1/z) returns a result");
     if (result) {
         // result should equal 1/z
@@ -862,7 +886,7 @@ static void test_laurent_series_full_1_over_z() {
     auto z = var("z");
     auto f = SymbolicExpr::power(z, num(-1));
 
-    auto result = lamina::laurent_series_full_checked(f, "z", num(0), 2, 2).value();
+    auto result = LMCAS::laurent_series_full_checked(f, "z", num(0), 2, 2).value();
     EXPECT_TRUE(result.series != nullptr, "laurent_series_full: series not null");
     EXPECT_TRUE(result.pole_order == 1, "laurent_series_full: pole_order = 1 for 1/z");
     if (result.residue) {
@@ -880,7 +904,7 @@ static void test_laurent_series_1_over_sin_z() {
     auto denom = SymbolicExpr::multiply(z, SymbolicExpr::add(z, num(1)));
     auto f = SymbolicExpr::divide(num(1), denom);
 
-    auto result = lamina::laurent_series_full_checked(f, "z", num(0), 3, 3).value();
+    auto result = LMCAS::laurent_series_full_checked(f, "z", num(0), 3, 3).value();
     EXPECT_TRUE(result.pole_order == 1, "1/(z(z+1)): pole_order = 1");
     if (result.residue) {
         EXPECT_EQ_EXPR(result.residue->simplify(), num(1), "residue of 1/(z(z+1)) at 0 is 1");
@@ -943,6 +967,7 @@ int main() {
     test_symbolic_sum_direct_eval();
     test_symbolic_sum_empty_range();
     test_symbolic_sum_unevaluated();
+    test_symbolic_sum_large_exact_bounds();
 
     // symbolic_product tests
     test_symbolic_product_factorial();

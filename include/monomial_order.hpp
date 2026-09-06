@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <functional>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 单项式类型，以整数向量表示各变量的指数 */
 using Monomial = std::vector<int>;

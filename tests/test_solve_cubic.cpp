@@ -5,37 +5,40 @@
 #include <sstream>
 #include <algorithm>
 #include <string>
+#include <stdexcept>
+
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
 static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return 0.0;
+    if (!expr || !LMCAS::detail::node(expr)) return 0.0;
 
-    if (auto n = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr))) {
+    if (auto n = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
         if (std::holds_alternative<lmmc_real_t>(n->value())) return std::get<lmmc_real_t>(n->value());
         if (std::holds_alternative<BigInt>(n->value())) return std::get<BigInt>(n->value()).to_double();
         if (std::holds_alternative<Rational>(n->value())) return std::get<Rational>(n->value()).to_double();
     }
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
         double result = 0.0;
         for (auto& op : add->operands()) {
-            result += eval_numeric(lamina::detail::make_expression_ptr(op));
+            result += eval_numeric(LMCAS::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         double result = 1.0;
         for (auto& op : mul->operands()) {
-            result *= eval_numeric(lamina::detail::make_expression_ptr(op));
+            result *= eval_numeric(LMCAS::detail::make_expression_ptr(op));
         }
         return result;
     }
 
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
-        double base = eval_numeric(lamina::detail::make_expression_ptr(pow->base()));
-        double exp = eval_numeric(lamina::detail::make_expression_ptr(pow->exponent()));
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
+        double base = eval_numeric(LMCAS::detail::make_expression_ptr(pow->base()));
+        double exp = eval_numeric(LMCAS::detail::make_expression_ptr(pow->exponent()));
 
         if (base < 0.0 && std::abs(exp - std::round(exp)) > 1e-15) {
             double denom = std::round(1.0 / exp);
@@ -47,9 +50,9 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
         return std::pow(base, exp);
     }
 
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
         if (func->arguments().size() == 1) {
-            double arg = eval_numeric(lamina::detail::make_expression_ptr(func->arguments()[0]));
+            double arg = eval_numeric(LMCAS::detail::make_expression_ptr(func->arguments()[0]));
             switch (func->type()) {
                 case FunctionNode::FuncType::Sin: return std::sin(arg);
                 case FunctionNode::FuncType::Cos: return std::cos(arg);
@@ -68,7 +71,7 @@ static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
         }
     }
 
-    if (auto var = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(expr))) {
+    if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
         return std::nan("");
     }
 
@@ -88,13 +91,13 @@ int main() {
         auto c = num(11);
         auto d = num(-6);
 
-        auto roots = lamina::solve_cubic(a, b, c, d, "x");
+        auto roots = LMCAS::solve_cubic(a, b, c, d, "x");
         EXPECT_TRUE(roots.size() == 3, "Cubic should return 3 roots");
     }
 
     TEST_CASE("Cubic D > 0: x^3 - 2x - 5 = 0");
     {
-        auto roots = lamina::solve_cubic(num(1), num(0), num(-2), num(-5), "x");
+        auto roots = LMCAS::solve_cubic(num(1), num(0), num(-2), num(-5), "x");
         EXPECT_TRUE(roots.size() == 3, "D>0: should return exactly 3 roots");
 
         if (roots.size() >= 1) {
@@ -127,7 +130,7 @@ int main() {
 
     TEST_CASE("Cubic Triple Root: (x-1)^3 = x^3 - 3x^2 + 3x - 1 = 0");
     {
-        auto roots = lamina::solve_cubic(num(1), num(-3), num(3), num(-1), "x");
+        auto roots = LMCAS::solve_cubic(num(1), num(-3), num(3), num(-1), "x");
         EXPECT_TRUE(roots.size() == 3, "Triple root: should return exactly 3 roots");
 
         if (roots.size() == 3) {
@@ -147,9 +150,55 @@ int main() {
         }
     }
 
+    TEST_CASE("Cubic discriminant classification is scale relative");
+    {
+        auto roots = LMCAS::solve_cubic(
+            num(1),
+            num(0),
+            num(0),
+            SymbolicExpr::number(-1e-200),
+            "x");
+        EXPECT_TRUE(roots.size() == 3, "tiny nonzero constant still has three cubic roots");
+        if (roots.size() == 3) {
+            const double expected = std::cbrt(1e-200);
+            const double real_root = eval_numeric(roots[0]);
+            EXPECT_TRUE(
+                std::abs(real_root - expected) <= expected * 1e-12,
+                "tiny nonzero constant must not be classified as a triple zero root");
+        }
+    }
+
+    TEST_CASE("Cubic common coefficient scale does not overflow depression");
+    {
+        const double scale = 1e200;
+        auto roots = LMCAS::solve_cubic(
+            SymbolicExpr::number(scale),
+            SymbolicExpr::number(-6.0 * scale),
+            SymbolicExpr::number(11.0 * scale),
+            SymbolicExpr::number(-6.0 * scale),
+            "x");
+        EXPECT_TRUE(
+            roots.size() == 3,
+            "scaled (x-1)(x-2)(x-3) returns three roots");
+        if (roots.size() == 3) {
+            std::vector<double> values{
+                eval_numeric(roots[0]),
+                eval_numeric(roots[1]),
+                eval_numeric(roots[2])};
+            std::sort(values.begin(), values.end());
+            EXPECT_TRUE(
+                std::isfinite(values[0]) && std::isfinite(values[1]) &&
+                    std::isfinite(values[2]) &&
+                    std::abs(values[0] - 1.0) < 1e-12 &&
+                    std::abs(values[1] - 2.0) < 1e-12 &&
+                    std::abs(values[2] - 3.0) < 1e-12,
+                "common coefficient scaling preserves roots 1, 2, and 3");
+        }
+    }
+
     TEST_CASE("Cubic D=0, p!=0: x^3 - 3x + 2 = (x-1)^2(x+2) = 0");
     {
-        auto roots = lamina::solve_cubic(num(1), num(0), num(-3), num(2), "x");
+        auto roots = LMCAS::solve_cubic(num(1), num(0), num(-3), num(2), "x");
         EXPECT_TRUE(roots.size() == 3, "D=0 p!=0: should return exactly 3 roots");
 
         if (roots.size() == 3) {
@@ -177,7 +226,7 @@ int main() {
 
     TEST_CASE("Cubic D < 0 (casus irreducibilis): x^3 - 3x + 1 = 0");
     {
-        auto roots = lamina::solve_cubic(num(1), num(0), num(-3), num(1), "x");
+        auto roots = LMCAS::solve_cubic(num(1), num(0), num(-3), num(1), "x");
         EXPECT_TRUE(roots.size() == 3, "D<0: should return exactly 3 roots");
 
         if (roots.size() == 3) {
@@ -209,7 +258,7 @@ int main() {
     TEST_CASE("Cubic Symbolic Coefficients: x^3 + a*x^2 + x + 1 = 0");
     {
         auto sym_a = SymbolicExpr::variable("a");
-        auto roots = lamina::solve_cubic(num(1), sym_a, num(1), num(1), "x");
+        auto roots = LMCAS::solve_cubic(num(1), sym_a, num(1), num(1), "x");
         EXPECT_TRUE(roots.size() == 3, "Symbolic: should return exactly 3 roots");
 
         if (roots.size() == 3) {
@@ -241,7 +290,7 @@ int main() {
     TEST_CASE("Cubic exact huge coefficient avoids unsafe numeric underflow");
     {
         std::string huge_digits = "1" + std::string(400, '0');
-        auto roots = lamina::solve_cubic(
+        auto roots = LMCAS::solve_cubic(
             SymbolicExpr::number(BigInt(huge_digits)),
             num(0),
             num(0),
@@ -268,7 +317,7 @@ int main() {
     TEST_CASE("Cubic a=0 Delegation to Quadratic: 0*x^3 + 2*x^2 - 4*x + 2 = 0");
     {
 
-        auto roots = lamina::solve_cubic(num(0), num(2), num(-4), num(2), "x");
+        auto roots = LMCAS::solve_cubic(num(0), num(2), num(-4), num(2), "x");
         EXPECT_TRUE(roots.size() >= 1 && roots.size() <= 2,
             "a=0 delegation: returns 1-2 roots (quadratic)");
 
@@ -282,7 +331,7 @@ int main() {
     TEST_CASE("Cubic a=0 Delegation to Linear: 0*x^3 + 0*x^2 + 3*x - 6 = 0");
     {
 
-        auto roots = lamina::solve_cubic(num(0), num(0), num(3), num(-6), "x");
+        auto roots = LMCAS::solve_cubic(num(0), num(0), num(3), num(-6), "x");
         EXPECT_TRUE(roots.size() == 1,
             "a=0 b=0 delegation: returns 1 root (linear)");
 
@@ -291,6 +340,26 @@ int main() {
             EXPECT_TRUE(std::abs(r1 - 2.0) < 1e-10,
                 "a=0 b=0 delegation: root = 2");
         }
+    }
+
+    TEST_CASE("Cubic degeneration to a constant equation");
+    {
+        auto no_roots = LMCAS::solve_cubic(
+            num(0), num(0), num(0), num(7), "x");
+        EXPECT_TRUE(
+            no_roots.empty(),
+            "nonzero constant cubic degeneration has no roots");
+
+        bool rejected_indeterminate = false;
+        try {
+            (void)LMCAS::solve_cubic(
+                num(0), num(0), num(0), num(0), "x");
+        } catch (const std::invalid_argument&) {
+            rejected_indeterminate = true;
+        }
+        EXPECT_TRUE(
+            rejected_indeterminate,
+            "identically zero cubic is rejected as indeterminate");
     }
 
     TEST_CASE("Cubic root verification");
@@ -312,7 +381,7 @@ int main() {
             int c_val = coeff_dist(rng_cubic);
             int d_val = coeff_dist(rng_cubic);
 
-            auto roots = lamina::solve_cubic(num(a_val), num(b_val), num(c_val), num(d_val), "x");
+            auto roots = LMCAS::solve_cubic(num(a_val), num(b_val), num(c_val), num(d_val), "x");
 
             if (roots.size() != 3) {
                 std::ostringstream msg;
@@ -376,7 +445,7 @@ int main() {
         int c_val = r1_int * r2_int + r1_int * r3_int + r2_int * r3_int;
         int d_val = -(r1_int * r2_int * r3_int);
 
-        auto roots = lamina::solve_cubic(num(1), num(b_val), num(c_val), num(d_val), "x");
+        auto roots = LMCAS::solve_cubic(num(1), num(b_val), num(c_val), num(d_val), "x");
 
         if (roots.size() != 3) {
             std::ostringstream msg;

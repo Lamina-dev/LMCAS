@@ -2,20 +2,22 @@
 #include "symbolic.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 
 #include <limits>
 #include <stdexcept>
 #include <thread>
 #include <type_traits>
 
+using namespace LMCAS;
+
 namespace {
 
 bool node_depends_on(
     const std::shared_ptr<const SymbolicNode>& node,
     const std::string& variable) {
-    return lamina::contains(
-        lamina::detail::expression_from_node(node), variable);
+    return LMCAS::contains(
+        LMCAS::detail::expression_from_node(node), variable);
 }
 
 template <typename Fn>
@@ -31,7 +33,7 @@ void expect_invalid(Fn&& fn, const std::string& label) {
     EXPECT_TRUE(rejected, label);
 }
 
-class ExhaustiveProbeVisitor : public lamina::detail::SymbolicVisitor {
+class ExhaustiveProbeVisitor : public LMCAS::detail::SymbolicVisitor {
 public:
     void visit(const NumberNode&) override {}
     void visit(const VariableNode&) override {}
@@ -60,7 +62,7 @@ public:
 };
 
 static_assert(!std::is_abstract<ExhaustiveProbeVisitor>::value,
-              "lamina::detail::SymbolicVisitor implementations must explicitly cover every node type");
+              "LMCAS::detail::SymbolicVisitor implementations must explicitly cover every node type");
 
 template <typename T, typename = void>
 struct HasPublicRoot : std::false_type {};
@@ -69,47 +71,47 @@ template <typename T>
 struct HasPublicRoot<T, std::void_t<decltype(std::declval<T>().root)>>
     : std::true_type {};
 
-#define LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(TraitName, MemberName)             \
+#define LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(TraitName, MemberName)             \
     template <typename T, typename = void>                                  \
     struct TraitName : std::false_type {};                                  \
     template <typename T>                                                   \
     struct TraitName<T, std::void_t<decltype(std::declval<T>().MemberName)>> \
         : std::true_type {}
 
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicRealField, real);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicImagField, imag);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBranchesField, branches);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicDefaultExprField, default_expr);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBodyField, body);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicIndexVarField, index_var);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicLowerBoundField, lower_bound);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicUpperBoundField, upper_bound);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicTransformTypeField, transform_type);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicSourceVarField, source_var);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicTargetVarField, target_var);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicQuantifierTypeField, quantifier_type);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBoundVarField, bound_var);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicElementVarField, element_var);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicDomainField, domain);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicPredicateField, predicate);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicOperandsField, operands);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBaseField, base);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicExponentField, exponent);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicArgumentsField, arguments);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicTypeField, type);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicRowsField, rows);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicColsField, cols);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicStorageField, storage);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicLeftField, left);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicRightField, right);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicOpField, op);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicValueField, value);
-LAMINA_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicNameField, name);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicRealField, real);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicImagField, imag);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBranchesField, branches);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicDefaultExprField, default_expr);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBodyField, body);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicIndexVarField, index_var);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicLowerBoundField, lower_bound);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicUpperBoundField, upper_bound);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicTransformTypeField, transform_type);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicSourceVarField, source_var);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicTargetVarField, target_var);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicQuantifierTypeField, quantifier_type);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBoundVarField, bound_var);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicElementVarField, element_var);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicDomainField, domain);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicPredicateField, predicate);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicOperandsField, operands);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicBaseField, base);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicExponentField, exponent);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicArgumentsField, arguments);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicTypeField, type);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicRowsField, rows);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicColsField, cols);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicStorageField, storage);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicLeftField, left);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicRightField, right);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicOpField, op);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicValueField, value);
+LMCAS_DEFINE_PUBLIC_MEMBER_PROBE(HasPublicNameField, name);
 
-#undef LAMINA_DEFINE_PUBLIC_MEMBER_PROBE
+#undef LMCAS_DEFINE_PUBLIC_MEMBER_PROBE
 
 using RootPointer = std::decay_t<decltype(
-    lamina::detail::node(std::declval<const SymbolicExpr&>()))>;
+    LMCAS::detail::node(std::declval<const SymbolicExpr&>()))>;
 using RootElement = typename RootPointer::element_type;
 using AddOperandPointer = typename std::decay_t<
     decltype(std::declval<const AddNode&>().operands())>::value_type;
@@ -255,7 +257,7 @@ static_assert(!std::is_constructible<ComplexNode,
 static_assert(std::is_const<typename AddOperandPointer::element_type>::value,
               "AST child edges must point to const nodes");
 static_assert(std::is_same<decltype(&SymbolicNode::accept),
-                           void (SymbolicNode::*)(lamina::detail::SymbolicVisitor&) const>::value,
+                           void (SymbolicNode::*)(LMCAS::detail::SymbolicVisitor&) const>::value,
               "AST traversal must not expose mutable nodes");
 
 } // namespace
@@ -263,89 +265,89 @@ static_assert(std::is_same<decltype(&SymbolicNode::accept),
 int main() {
     TEST_CASE("SymbolicExpr rejects an empty AST root");
     expect_invalid([]() {
-        (void)lamina::detail::expression_from_node(std::shared_ptr<const SymbolicNode>{});
+        (void)LMCAS::detail::expression_from_node(std::shared_ptr<const SymbolicNode>{});
     }, "SymbolicExpr rejects null root construction");
 
     TEST_CASE("AST nodes reject null children");
-    auto one = lamina::detail::make_node<NumberNode>(BigInt(1));
+    auto one = LMCAS::detail::make_node<NumberNode>(BigInt(1));
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<AddNode>(
+        (void)LMCAS::detail::make_node<AddNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{one, nullptr});
     }, "AddNode rejects null operands");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<MultiplyNode>(
+        (void)LMCAS::detail::make_node<MultiplyNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{one, nullptr});
     }, "MultiplyNode rejects null operands");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<PowerNode>(one, nullptr);
+        (void)LMCAS::detail::make_node<PowerNode>(one, nullptr);
     }, "PowerNode rejects null exponent");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<FunctionNode>(
+        (void)LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sin,
             std::vector<std::shared_ptr<const SymbolicNode>>{nullptr});
     }, "FunctionNode rejects null arguments");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<ComplexNode>(one, nullptr);
+        (void)LMCAS::detail::make_node<ComplexNode>(one, nullptr);
     }, "ComplexNode rejects null part");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<RelationalNode>(
+        (void)LMCAS::detail::make_node<RelationalNode>(
             one, nullptr, RelationalNode::Op::EQ);
     }, "RelationalNode rejects null operand");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<LogicalNode>(
+        (void)LMCAS::detail::make_node<LogicalNode>(
             one, nullptr, LogicalNode::Op::And);
     }, "LogicalNode rejects null binary operand");
 
     TEST_CASE("Extended AST nodes reject invalid children");
-    auto zero = lamina::detail::make_node<NumberNode>(BigInt(0));
-    auto condition = lamina::detail::make_node<RelationalNode>(one, zero, RelationalNode::Op::GT);
+    auto zero = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+    auto condition = LMCAS::detail::make_node<RelationalNode>(one, zero, RelationalNode::Op::GT);
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<PiecewiseNode>(
+        (void)LMCAS::detail::make_node<PiecewiseNode>(
             std::vector<PiecewiseNode::Branch>{});
     }, "PiecewiseNode rejects empty branch list");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<PiecewiseNode>(
+        (void)LMCAS::detail::make_node<PiecewiseNode>(
             std::vector<PiecewiseNode::Branch>{{one, nullptr}});
     }, "PiecewiseNode rejects null condition");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<SummationNode>(nullptr, "k", zero, one);
+        (void)LMCAS::detail::make_node<SummationNode>(nullptr, "k", zero, one);
     }, "SummationNode rejects null body");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<SummationNode>(one, "", zero, one);
+        (void)LMCAS::detail::make_node<SummationNode>(one, "", zero, one);
     }, "SummationNode rejects empty index variable");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<ProductNode>(one, "k", zero, nullptr);
+        (void)LMCAS::detail::make_node<ProductNode>(one, "k", zero, nullptr);
     }, "ProductNode rejects null bound");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<TransformNode>(
+        (void)LMCAS::detail::make_node<TransformNode>(
             TransformNode::TransformType::Laplace, nullptr, "t",
             SymbolicFactory::create_variable("s"));
     }, "TransformNode rejects null body");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<TransformNode>(
+        (void)LMCAS::detail::make_node<TransformNode>(
             TransformNode::TransformType::Laplace, one, "",
             SymbolicFactory::create_variable("s"));
     }, "TransformNode rejects empty source variable");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<QuantifierNode>(
+        (void)LMCAS::detail::make_node<QuantifierNode>(
             QuantifierNode::Type::ForAll, "x", nullptr, condition);
     }, "QuantifierNode rejects null domain");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<SetBuilderNode>("", one, condition);
+        (void)LMCAS::detail::make_node<SetBuilderNode>("", one, condition);
     }, "SetBuilderNode rejects empty element variable");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<FiniteSetNode>(
+        (void)LMCAS::detail::make_node<FiniteSetNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{nullptr});
     }, "FiniteSetNode rejects null elements");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<IntervalNode>(nullptr, one, true, true);
+        (void)LMCAS::detail::make_node<IntervalNode>(nullptr, one, true, true);
     }, "IntervalNode rejects null endpoints");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<MembershipNode>(one, nullptr);
+        (void)LMCAS::detail::make_node<MembershipNode>(one, nullptr);
     }, "MembershipNode rejects null sets");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<QuantityNode>(
-            one, lamina::DimensionSignature::base("m"), Rational(0), "m");
+        (void)LMCAS::detail::make_node<QuantityNode>(
+            one, LMCAS::DimensionSignature::base("m"), Rational(0), "m");
     }, "QuantityNode rejects zero scale");
 
     TEST_CASE("SymbolicFactory rejects null children");
@@ -380,35 +382,35 @@ int main() {
 
     TEST_CASE("MatrixNode validates shape and storage");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<MatrixNode>(
+        (void)LMCAS::detail::make_node<MatrixNode>(
             std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>{});
     }, "MatrixNode rejects empty grid");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<MatrixNode>(
+        (void)LMCAS::detail::make_node<MatrixNode>(
             std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>{{one}, {one, one}});
     }, "MatrixNode rejects ragged grid");
     expect_invalid([&]() {
-        (void)lamina::detail::make_node<MatrixNode>(
+        (void)LMCAS::detail::make_node<MatrixNode>(
             std::vector<std::vector<std::shared_ptr<const SymbolicNode>>>{{one, nullptr}});
     }, "MatrixNode rejects null grid elements");
     expect_invalid([&]() {
         MatrixNode::DenseStorage dense = {one};
-        (void)lamina::detail::make_node<MatrixNode>(1, 2, std::move(dense));
+        (void)LMCAS::detail::make_node<MatrixNode>(1, 2, std::move(dense));
     }, "MatrixNode rejects dense storage size mismatch");
     expect_invalid([&]() {
         MatrixNode::SparseStorage sparse;
         sparse[2] = one;
-        (void)lamina::detail::make_node<MatrixNode>(1, 2, std::move(sparse));
+        (void)LMCAS::detail::make_node<MatrixNode>(1, 2, std::move(sparse));
     }, "MatrixNode rejects sparse index out of bounds");
     expect_invalid([&]() {
         MatrixNode::DenseStorage dense;
-        (void)lamina::detail::make_node<MatrixNode>(
+        (void)LMCAS::detail::make_node<MatrixNode>(
             std::numeric_limits<size_t>::max(), 2, std::move(dense));
     }, "MatrixNode rejects dimension overflow");
     MatrixNode::SparseStorage sparse;
     sparse[0] = one;
     auto sparse_matrix =
-        lamina::detail::make_node<MatrixNode>(2, 2, std::move(sparse));
+        LMCAS::detail::make_node<MatrixNode>(2, 2, std::move(sparse));
     auto first_missing = sparse_matrix->get(0, 1);
     auto second_missing = sparse_matrix->get(1, 0);
     EXPECT_TRUE(first_missing.get() == second_missing.get(),
@@ -430,96 +432,96 @@ int main() {
     }, "SymbolicExpr::matrix rejects null expression");
 
     TEST_CASE("Visitor-dependent helpers respect bound variables");
-    auto x_node = lamina::detail::make_node<VariableNode>("x");
-    auto k_node = lamina::detail::make_node<VariableNode>("k");
-    auto n_node = lamina::detail::make_node<VariableNode>("n");
+    auto x_node = LMCAS::detail::make_node<VariableNode>("x");
+    auto k_node = LMCAS::detail::make_node<VariableNode>("k");
+    auto n_node = LMCAS::detail::make_node<VariableNode>("n");
     auto sum_body = SymbolicFactory::create_add({k_node, x_node});
-    auto sum = lamina::detail::make_node<SummationNode>(sum_body, "k", zero, n_node);
+    auto sum = LMCAS::detail::make_node<SummationNode>(sum_body, "k", zero, n_node);
     EXPECT_TRUE(!node_depends_on(sum, "k"), "Summation bound variable is not free");
     EXPECT_TRUE(node_depends_on(sum, "x"), "Summation body free variable is detected");
     EXPECT_TRUE(node_depends_on(sum, "n"), "Summation bound free variable is detected");
 
-    auto sum_expr = lamina::detail::make_expression_ptr(sum);
+    auto sum_expr = LMCAS::detail::make_expression_ptr(sum);
     auto substituted_bound = sum_expr->substitute("k", SymbolicExpr::number(5));
-    auto substituted_sum = std::dynamic_pointer_cast<const SummationNode>(lamina::detail::node(substituted_bound));
+    auto substituted_sum = std::dynamic_pointer_cast<const SummationNode>(LMCAS::detail::node(substituted_bound));
     EXPECT_TRUE(substituted_sum != nullptr, "Substitution preserves SummationNode");
     EXPECT_TRUE(node_depends_on(substituted_sum->body(), "k"),
                 "Substitution does not replace bound summation variable in body");
 
     auto substituted_free = sum_expr->substitute("x", SymbolicExpr::number(5));
-    auto substituted_free_sum = std::dynamic_pointer_cast<const SummationNode>(lamina::detail::node(substituted_free));
+    auto substituted_free_sum = std::dynamic_pointer_cast<const SummationNode>(LMCAS::detail::node(substituted_free));
     EXPECT_TRUE(substituted_free_sum != nullptr, "Free substitution preserves SummationNode");
     EXPECT_TRUE(!node_depends_on(substituted_free_sum->body(), "x"),
                 "Substitution replaces free variable inside summation body");
 
     TEST_CASE("Extended nodes are traversed by expand");
-    auto y_node = lamina::detail::make_node<VariableNode>("y");
+    auto y_node = LMCAS::detail::make_node<VariableNode>("y");
     auto x_plus_one = SymbolicFactory::create_add({x_node, one});
     auto y_plus_one = SymbolicFactory::create_add({y_node, one});
     auto product = SymbolicFactory::create_multiply({x_plus_one, y_plus_one});
-    auto positive_x = lamina::detail::make_node<RelationalNode>(x_node, zero, RelationalNode::Op::GT);
-    auto piecewise = lamina::detail::make_node<PiecewiseNode>(
+    auto positive_x = LMCAS::detail::make_node<RelationalNode>(x_node, zero, RelationalNode::Op::GT);
+    auto piecewise = LMCAS::detail::make_node<PiecewiseNode>(
         std::vector<PiecewiseNode::Branch>{{product, positive_x}});
-    auto expanded = lamina::detail::make_expression_ptr(piecewise)->expand();
-    auto expanded_piecewise = std::dynamic_pointer_cast<const PiecewiseNode>(lamina::detail::node(expanded));
+    auto expanded = LMCAS::detail::make_expression_ptr(piecewise)->expand();
+    auto expanded_piecewise = std::dynamic_pointer_cast<const PiecewiseNode>(LMCAS::detail::node(expanded));
     EXPECT_TRUE(expanded_piecewise != nullptr, "Expand preserves PiecewiseNode");
     EXPECT_TRUE(std::dynamic_pointer_cast<const AddNode>(expanded_piecewise->branches()[0].expression) != nullptr,
                 "Expand traverses and expands PiecewiseNode branch expression");
 
     TEST_CASE("Substitution respects quantifier binding");
-    auto domain = lamina::detail::make_node<VariableNode>("R");
-    auto y_node_for_predicate = lamina::detail::make_node<VariableNode>("y");
-    auto predicate = lamina::detail::make_node<RelationalNode>(x_node, y_node_for_predicate, RelationalNode::Op::GT);
-    auto quantified = lamina::detail::make_node<QuantifierNode>(
+    auto domain = LMCAS::detail::make_node<VariableNode>("R");
+    auto y_node_for_predicate = LMCAS::detail::make_node<VariableNode>("y");
+    auto predicate = LMCAS::detail::make_node<RelationalNode>(x_node, y_node_for_predicate, RelationalNode::Op::GT);
+    auto quantified = LMCAS::detail::make_node<QuantifierNode>(
         QuantifierNode::Type::ForAll, "x", domain, predicate);
-    auto quantified_expr = lamina::detail::make_expression_ptr(quantified);
+    auto quantified_expr = LMCAS::detail::make_expression_ptr(quantified);
     auto q_bound_sub = quantified_expr->substitute("x", SymbolicExpr::number(3));
-    auto q_bound = std::dynamic_pointer_cast<const QuantifierNode>(lamina::detail::node(q_bound_sub));
+    auto q_bound = std::dynamic_pointer_cast<const QuantifierNode>(LMCAS::detail::node(q_bound_sub));
     EXPECT_TRUE(q_bound != nullptr, "Substitution preserves QuantifierNode");
     EXPECT_TRUE(node_depends_on(q_bound->predicate(), "x"),
                 "Substitution does not replace bound quantifier variable");
     auto q_free_sub = quantified_expr->substitute("y", SymbolicExpr::number(3));
-    auto q_free = std::dynamic_pointer_cast<const QuantifierNode>(lamina::detail::node(q_free_sub));
+    auto q_free = std::dynamic_pointer_cast<const QuantifierNode>(LMCAS::detail::node(q_free_sub));
     EXPECT_TRUE(q_free != nullptr, "Free substitution preserves QuantifierNode");
     EXPECT_TRUE(!node_depends_on(q_free->predicate(), "y"),
                 "Substitution replaces free variable in quantifier predicate");
 
     TEST_CASE("Capture-avoiding substitution covers every binder scope");
     auto replacement_k = SymbolicFactory::create_variable("k");
-    auto capture_source = lamina::detail::make_node<SummationNode>(
+    auto capture_source = LMCAS::detail::make_node<SummationNode>(
         SymbolicFactory::create_add({k_node, x_node}), "k", x_node, n_node);
     auto capture_result = std::dynamic_pointer_cast<const SummationNode>(
-        lamina::substitute_free(capture_source, "x", replacement_k));
+        LMCAS::substitute_free(capture_source, "x", replacement_k));
     EXPECT_TRUE(capture_result && capture_result->index_var() != "k",
                 "Summation binder alpha-renames to avoid capture");
     EXPECT_TRUE(capture_result && node_depends_on(capture_result->body(), "k"),
                 "Replacement variable remains free after alpha-renaming");
     EXPECT_TRUE(capture_result && node_depends_on(capture_result->lower_bound(), "k"),
                 "Summation bounds remain outside binder scope");
-    auto product_source = lamina::detail::make_node<ProductNode>(
+    auto product_source = LMCAS::detail::make_node<ProductNode>(
         SymbolicFactory::create_add({k_node, x_node}), "k", x_node, n_node);
     auto product_result = std::dynamic_pointer_cast<const ProductNode>(
-        lamina::substitute_free(product_source, "x", replacement_k));
+        LMCAS::substitute_free(product_source, "x", replacement_k));
     EXPECT_TRUE(product_result && product_result->index_var() != "k" &&
                     node_depends_on(product_result->lower_bound(), "k"),
                 "Product alpha-renames its body binder but rewrites bounds");
 
 
-    auto integral = lamina::detail::make_node<IntegralNode>(
+    auto integral = LMCAS::detail::make_node<IntegralNode>(
         SymbolicFactory::create_add({x_node, k_node}), "k", x_node, n_node);
     auto substituted_integral = std::dynamic_pointer_cast<const IntegralNode>(
-        lamina::substitute_free(integral, "x", replacement_k));
+        LMCAS::substitute_free(integral, "x", replacement_k));
     EXPECT_TRUE(substituted_integral && substituted_integral->variable() != "k",
                 "Integral binder alpha-renames to avoid capture");
     EXPECT_TRUE(substituted_integral &&
                     node_depends_on(substituted_integral->lower(), "k"),
                 "Integral bounds remain outside binder scope");
 
-    auto transform = lamina::detail::make_node<TransformNode>(
+    auto transform = LMCAS::detail::make_node<TransformNode>(
         TransformNode::TransformType::Laplace,
         SymbolicFactory::create_add({x_node, k_node}), "k", x_node);
     auto substituted_transform = std::dynamic_pointer_cast<const TransformNode>(
-        lamina::substitute_free(transform, "x", replacement_k));
+        LMCAS::substitute_free(transform, "x", replacement_k));
     EXPECT_TRUE(substituted_transform &&
                     substituted_transform->source_var() != "k",
                 "Transform source binder alpha-renames to avoid capture");
@@ -527,23 +529,23 @@ int main() {
                     node_depends_on(substituted_transform->target(), "k"),
                 "Transform target is a free structural child");
 
-    auto set_builder = lamina::detail::make_node<SetBuilderNode>(
+    auto set_builder = LMCAS::detail::make_node<SetBuilderNode>(
         "k", x_node,
-        lamina::detail::make_node<RelationalNode>(
+        LMCAS::detail::make_node<RelationalNode>(
             x_node, k_node, RelationalNode::Op::GT));
     auto substituted_set = std::dynamic_pointer_cast<const SetBuilderNode>(
-        lamina::substitute_free(set_builder, "x", replacement_k));
+        LMCAS::substitute_free(set_builder, "x", replacement_k));
     EXPECT_TRUE(substituted_set && substituted_set->element_var() != "k",
                 "Set-builder binder alpha-renames to avoid capture");
     EXPECT_TRUE(substituted_set && node_depends_on(substituted_set->domain(), "k"),
                 "Set-builder domain remains outside binder scope");
-    auto quantified_domain = lamina::detail::make_node<QuantifierNode>(
+    auto quantified_domain = LMCAS::detail::make_node<QuantifierNode>(
         QuantifierNode::Type::ForAll, "x", x_node,
-        lamina::detail::make_node<RelationalNode>(
+        LMCAS::detail::make_node<RelationalNode>(
             x_node, zero, RelationalNode::Op::GT));
     auto substituted_quantified_domain =
         std::dynamic_pointer_cast<const QuantifierNode>(
-            lamina::substitute_free(
+            LMCAS::substitute_free(
                 quantified_domain, "x",
                 SymbolicFactory::create_number(BigInt(9))));
     EXPECT_TRUE(substituted_quantified_domain &&
@@ -552,12 +554,12 @@ int main() {
                         substituted_quantified_domain->predicate(), "x"),
                 "Quantifier domain is outside its predicate binder");
 
-    auto nested_shadow = lamina::detail::make_node<SummationNode>(
-        lamina::detail::make_node<ProductNode>(
+    auto nested_shadow = LMCAS::detail::make_node<SummationNode>(
+        LMCAS::detail::make_node<ProductNode>(
             SymbolicFactory::create_add({k_node, x_node}), "k", zero, n_node),
         "k", zero, n_node);
     auto shadow_result = std::dynamic_pointer_cast<const SummationNode>(
-        lamina::substitute_free(
+        LMCAS::substitute_free(
             nested_shadow, "k", SymbolicFactory::create_number(BigInt(4))));
     auto shadow_product = shadow_result
         ? std::dynamic_pointer_cast<const ProductNode>(shadow_result->body())
@@ -568,39 +570,39 @@ int main() {
 
 
     TEST_CASE("Traversal reaches matrices and uninterpreted functions");
-    auto nested_sum = lamina::detail::make_node<SummationNode>(
+    auto nested_sum = LMCAS::detail::make_node<SummationNode>(
         SymbolicFactory::create_add({k_node, x_node}), "k", zero, n_node);
-    auto uninterpreted = lamina::detail::make_node<UninterpretedFunctionNode>(
+    auto uninterpreted = LMCAS::detail::make_node<UninterpretedFunctionNode>(
         "f", std::vector<std::shared_ptr<const SymbolicNode>>{nested_sum});
-    auto matrix = lamina::detail::make_node<MatrixNode>(
+    auto matrix = LMCAS::detail::make_node<MatrixNode>(
         1, 1, MatrixNode::DenseStorage{uninterpreted});
-    const auto matrix_free = lamina::free_variables(matrix);
+    const auto matrix_free = LMCAS::free_variables(matrix);
     EXPECT_TRUE(matrix_free.count("x") == 1 && matrix_free.count("n") == 1 &&
                     matrix_free.count("k") == 0,
                 "Free-variable traversal reaches matrix and function arguments");
-    auto matrix_substituted = lamina::substitute_free(
+    auto matrix_substituted = LMCAS::substitute_free(
         matrix, "x", SymbolicFactory::create_number(BigInt(7)));
-    EXPECT_TRUE(!lamina::expression_depends_on_variable(matrix_substituted, "x"),
+    EXPECT_TRUE(!LMCAS::expression_depends_on_variable(matrix_substituted, "x"),
                 "Substitution reaches matrix and function arguments");
 
     TEST_CASE("Recursive traversal enforces depth limit");
     std::shared_ptr<const SymbolicNode> deep = x_node;
     for (int depth = 0; depth < 205; ++depth) {
-        deep = lamina::detail::make_node<PowerNode>(deep, one);
+        deep = LMCAS::detail::make_node<PowerNode>(deep, one);
     }
     bool depth_rejected = false;
     try {
-        lamina::detail::RecursiveSymbolicVisitor traversal;
+        LMCAS::detail::RecursiveSymbolicVisitor traversal;
         deep->accept(traversal);
     } catch (const std::runtime_error&) {
         depth_rejected = true;
     }
     EXPECT_TRUE(depth_rejected, "Recursive traversal rejects excessive depth");
     TEST_CASE("Limit and RootOf expose precise binder scopes");
-    auto scoped_limit = lamina::detail::make_node<LimitNode>(
+    auto scoped_limit = LMCAS::detail::make_node<LimitNode>(
         SymbolicFactory::create_add({x_node, y_node_for_predicate}),
         "x", x_node, LimitDirection::Both);
-    const auto limit_free = lamina::free_variables(scoped_limit);
+    const auto limit_free = LMCAS::free_variables(scoped_limit);
     EXPECT_TRUE(limit_free.count("x") == 1 && limit_free.count("y") == 1,
                 "Limit binds its body variable but not its point");
     auto root_polynomial_expression = SymbolicExpr::add(
@@ -610,26 +612,26 @@ int main() {
     auto root_expression = SymbolicExpr::root_of(
         root_polynomial_expression, "x", 1);
     auto root_node = std::dynamic_pointer_cast<const RootOfNode>(
-        lamina::detail::node(root_expression));
-    const auto root_free = lamina::free_variables(root_node);
+        LMCAS::detail::node(root_expression));
+    const auto root_free = LMCAS::free_variables(root_node);
     EXPECT_TRUE(root_free.empty(),
                 "canonical RootOf identity has no dummy free variable");
 
     TEST_CASE("Limit and RootOf print parse round trips preserve structure");
-    auto limit_node = lamina::detail::make_node<LimitNode>(
+    auto limit_node = LMCAS::detail::make_node<LimitNode>(
         SymbolicFactory::create_add({x_node, one}), "x", zero,
         LimitDirection::FromAbove);
-    auto limit_expression = lamina::detail::make_expression_ptr(limit_node);
-    auto parsed_limit = lamina::lsr::parse_expr(limit_expression->to_string());
+    auto limit_expression = LMCAS::detail::make_expression_ptr(limit_node);
+    auto parsed_limit = LMCAS::parse_expr(limit_expression->to_string());
     EXPECT_TRUE(parsed_limit &&
-                    lamina::detail::node(parsed_limit.value())->equals(*limit_node),
+                    LMCAS::detail::node(parsed_limit.value())->equals(*limit_node),
                 "LimitNode survives print/parse round trip");
 
     EXPECT_TRUE(root_node != nullptr,
                 "checked RootOf construction returns a RootOfNode");
-    auto parsed_root = lamina::lsr::parse_expr(root_expression->to_string());
+    auto parsed_root = LMCAS::parse_expr(root_expression->to_string());
     EXPECT_TRUE(parsed_root &&
-                    lamina::detail::node(parsed_root.value())->equals(*root_node),
+                    LMCAS::detail::node(parsed_root.value())->equals(*root_node),
                 "RootOfNode survives print/parse round trip");
 
 
@@ -637,7 +639,7 @@ int main() {
     auto shared_expr = SymbolicExpr::add(
         SymbolicExpr::power(SymbolicExpr::variable("x"), SymbolicExpr::number(2)),
         SymbolicExpr::number(1));
-    const auto expected_hash = lamina::detail::node(shared_expr)->hash();
+    const auto expected_hash = LMCAS::detail::node(shared_expr)->hash();
     const auto expected_text = shared_expr->to_string();
     constexpr std::size_t worker_count = 8;
     std::vector<std::size_t> hashes(worker_count);
@@ -647,9 +649,9 @@ int main() {
     workers.reserve(worker_count);
     for (std::size_t i = 0; i < worker_count; ++i) {
         workers.emplace_back([&, i] {
-            hashes[i] = lamina::detail::node(shared_expr)->hash();
+            hashes[i] = LMCAS::detail::node(shared_expr)->hash();
             texts[i] = shared_expr->to_string();
-            equal[i] = lamina::detail::node(shared_expr)->equals(*lamina::detail::node(shared_expr)) ? 1 : 0;
+            equal[i] = LMCAS::detail::node(shared_expr)->equals(*LMCAS::detail::node(shared_expr)) ? 1 : 0;
         });
     }
     for (auto& worker : workers) worker.join();

@@ -2,13 +2,13 @@
 #include "symbolic_ast.hpp"
 #include "test_common.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 static std::shared_ptr<SymbolicExpr> cmplx(int a, int b) {
-    return lamina::detail::make_expression_ptr(
+    return LMCAS::detail::make_expression_ptr(
         SymbolicFactory::create_complex(
-            lamina::detail::node(num(a)), lamina::detail::node(num(b))));
+            LMCAS::detail::node(num(a)), LMCAS::detail::node(num(b))));
 }
 
 int main() {

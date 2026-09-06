@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 using namespace vector_calculus_detail;
 
@@ -26,7 +26,7 @@ static bool vector_calculus_evaluate_hessian_at_point(
     size_t n,
     std::vector<double>& numeric_H)
 {
-    auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(H));
+    auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(H));
     if (!mat_node || mat_node->rows() != n || mat_node->cols() != n) {
         return false;
     }
@@ -39,7 +39,7 @@ static bool vector_calculus_evaluate_hessian_at_point(
                 numeric_H[i * n + j] = 0.0;
                 continue;
             }
-            auto elem = lamina::detail::make_expression_ptr(elem_node);
+            auto elem = LMCAS::detail::make_expression_ptr(elem_node);
             /// 代入临界点坐标
             for (const auto& [var_name, val] : pt) {
                 elem = elem->substitute(var_name, val);
@@ -168,7 +168,7 @@ ExtremaResult find_extrema_checked(
         for (const auto& var : vars) {
             auto partial = vector_calculus_differentiate_strict(f, var, operation);
             if (!partial) return ExtremaResult::failure(partial.error());
-            gradient.push_back(std::move(lamina::detail::propagate_result(partial)));
+            gradient.push_back(std::move(partial.value()));
         }
 
         auto extrema = find_extrema(f, vars);
@@ -257,7 +257,7 @@ std::vector<CriticalPoint> find_extrema(
         for (const auto& sol : poly_solutions) {
             std::map<std::string, std::shared_ptr<SymbolicExpr>> pt;
             for (const auto& [name, val] : sol) {
-                pt[name] = lamina::detail::make_expression_ptr(val);
+                pt[name] = LMCAS::detail::make_expression_ptr(val);
             }
             solutions.push_back(pt);
         }
@@ -312,7 +312,7 @@ static LagrangeResult lagrange_multipliers_strict(
     for (const auto& var : vars) {
         auto partial = vector_calculus_differentiate_strict(f, var, operation);
         if (!partial) return LagrangeResult::failure(partial.error());
-        grad_f.push_back(std::move(lamina::detail::propagate_result(partial)));
+        grad_f.push_back(std::move(partial.value()));
     }
 
     std::vector<VectorField> grad_constraints;
@@ -324,7 +324,7 @@ static LagrangeResult lagrange_multipliers_strict(
             auto partial = vector_calculus_differentiate_strict(
                 constraint, var, operation);
             if (!partial) return LagrangeResult::failure(partial.error());
-            grad_g.push_back(std::move(lamina::detail::propagate_result(partial)));
+            grad_g.push_back(std::move(partial.value()));
         }
         grad_constraints.push_back(std::move(grad_g));
     }
@@ -348,7 +348,7 @@ static LagrangeResult lagrange_multipliers_strict(
         auto eq_checked = vector_calculus_simplify_strict(
             eq, operation, "Lagrange stationarity equation is outside the supported domain");
         if (!eq_checked) return LagrangeResult::failure(eq_checked.error());
-        equations.push_back(std::move(lamina::detail::propagate_result(eq_checked)));
+        equations.push_back(std::move(eq_checked.value()));
     }
     for (const auto& constraint : constraints) {
         equations.push_back(constraint);
@@ -363,7 +363,7 @@ static LagrangeResult lagrange_multipliers_strict(
     std::vector<SymbolicExpr> poly_eqs;
     poly_eqs.reserve(equations.size());
     for (const auto& eq : equations) {
-        if (!eq || !lamina::detail::node(eq)) {
+        if (!eq || !LMCAS::detail::node(eq)) {
             return LagrangeResult::failure(
                 CasErrc::Inconclusive,
                 "Lagrange equation construction failed in the supported domain",
@@ -380,7 +380,7 @@ static LagrangeResult lagrange_multipliers_strict(
     for (const auto& sol : poly_solutions) {
         std::map<std::string, std::shared_ptr<SymbolicExpr>> pt;
         for (const auto& [name, val] : sol) {
-            pt[name] = lamina::detail::make_expression_ptr(val);
+            pt[name] = LMCAS::detail::make_expression_ptr(val);
         }
         full_solutions.push_back(std::move(pt));
     }
@@ -454,7 +454,7 @@ LagrangeResult lagrange_multipliers_checked(
                                        operation);
     }
     for (const auto& constraint : constraints) {
-        if (!constraint || !lamina::detail::node(constraint)) {
+        if (!constraint || !LMCAS::detail::node(constraint)) {
             return LagrangeResult::failure(CasErrc::InvalidArgument,
                                            "constraint expressions cannot be null",
                                            operation);
@@ -578,7 +578,7 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
         for (const auto& sol : poly_solutions) {
             std::map<std::string, std::shared_ptr<SymbolicExpr>> pt;
             for (const auto& [name, val] : sol) {
-                pt[name] = lamina::detail::make_expression_ptr(val);
+                pt[name] = LMCAS::detail::make_expression_ptr(val);
             }
             solutions.push_back(pt);
         }
@@ -609,4 +609,4 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

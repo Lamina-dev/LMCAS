@@ -19,6 +19,8 @@
 #define LMMC_E 2.71828182845904523536
 #endif
 
+namespace LMCAS {
+
 /**
  * @brief 计算浮点数的平方根(封装 LMMC 接口)
  * @param x 被开方数
@@ -58,7 +60,7 @@ public:
                 } else if (is_one_tol(coefficient)) {
                     return sqrtExpr;
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), sqrtExpr);
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::LMCAS::Rational::from_double(coefficient)), sqrtExpr);
                 }
             }
             case Type::PI:
@@ -68,7 +70,7 @@ public:
                 } else if (is_one_tol(coefficient)) {
                     return SymbolicExpr::variable("π");
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("π"));
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::LMCAS::Rational::from_double(coefficient)), SymbolicExpr::variable("π"));
                 }
             case Type::E:
                 if (is_zero_tol(coefficient)) {
@@ -76,14 +78,14 @@ public:
                 } else if (is_one_tol(coefficient)) {
                     return SymbolicExpr::variable("e");
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("e"));
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::LMCAS::Rational::from_double(coefficient)), SymbolicExpr::variable("e"));
                 }
             case Type::LOG:
 
                 if (is_zero_tol(coefficient)) {
                     return SymbolicExpr::number(0);
                 } else {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
+                    return SymbolicExpr::multiply(SymbolicExpr::number(::LMCAS::Rational::from_double(coefficient)), SymbolicExpr::variable("log(" + std::to_string(radicand) + ")"));
                 }
             case Type::COMPLEX: {
                 /// 重建完整线性组合,使 constant_term 与全部基向量共同参与结果.
@@ -97,7 +99,7 @@ public:
                 };
 
                 if (!is_zero_tol(constant_term)) {
-                    add_term(SymbolicExpr::number(::Rational::from_double(constant_term)));
+                    add_term(SymbolicExpr::number(::LMCAS::Rational::from_double(constant_term)));
                 }
 
                 for (const auto& [key, coeff] : coefficients) {
@@ -116,7 +118,7 @@ public:
                     }
                     std::shared_ptr<SymbolicExpr> term = is_one_tol(coeff)
                         ? basis
-                        : SymbolicExpr::multiply(SymbolicExpr::number(::Rational::from_double(coeff)), basis);
+                        : SymbolicExpr::multiply(SymbolicExpr::number(::LMCAS::Rational::from_double(coeff)), basis);
                     add_term(term);
                 }
 
@@ -710,3 +712,5 @@ public:
      */
     Type get_type() const { return type; }
 };
+
+} // namespace LMCAS

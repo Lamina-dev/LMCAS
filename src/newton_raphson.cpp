@@ -12,11 +12,18 @@
 #include <limits>
 #include <optional>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kBisectionOperation = "bisection";
 constexpr const char* kNewtonOperation = "newton_raphson";
+
+double finite_midpoint(double lower, double upper) {
+    if (lower < 0.0 && upper > 0.0) {
+        return lower * 0.5 + upper * 0.5;
+    }
+    return lower + (upper - lower) * 0.5;
+}
 
 Result<double> evaluate_root_function(
     const std::shared_ptr<SymbolicExpr>& expression,
@@ -388,7 +395,7 @@ NumericRootsResult solve_numeric_checked(
 
             lmmc_real_t lo = lo_rat.to_double();
             lmmc_real_t hi = hi_rat.to_double();
-            lmmc_real_t x0 = (lo + hi) * 0.5;
+            lmmc_real_t x0 = finite_midpoint(lo, hi);
             auto root_result = newton_raphson_checked(
                 expr, df_expr, var, x0, lo, hi, context, opts);
             if (!root_result) return NumericRootsResult::failure(root_result.error());

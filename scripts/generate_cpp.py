@@ -59,10 +59,10 @@ class Number(Node):
         
     def to_cpp(self):
         if self.denom:
-             return f"SymbolicExpr::number(Rational({self.value}, {self.denom}))"
+             return f"LMCAS::SymbolicExpr::number(LMCAS::Rational({self.value}, {self.denom}))"
         if '.' in str(self.value):
-             return f"SymbolicExpr::number({self.value})"
-        return f"SymbolicExpr::number(BigInt({self.value}))"
+             return f"LMCAS::SymbolicExpr::number({self.value})"
+        return f"LMCAS::SymbolicExpr::number(LMCAS::BigInt({self.value}))"
 
 class Variable(Node):
     def __init__(self, name):
@@ -82,31 +82,31 @@ class Binary(Node):
 
 class Add(Binary):
     def to_cpp(self):
-        return f"SymbolicExpr::add({self.left.to_cpp()}, {self.right.to_cpp()})"
+        return f"LMCAS::SymbolicExpr::add({self.left.to_cpp()}, {self.right.to_cpp()})"
 
 class Subtract(Binary):
     def to_cpp(self):
         return (
-            f"SymbolicExpr::add({self.left.to_cpp()}, "
-            f"SymbolicExpr::multiply(SymbolicExpr::number(-1), {self.right.to_cpp()}))"
+            f"LMCAS::SymbolicExpr::add({self.left.to_cpp()}, "
+            f"LMCAS::SymbolicExpr::multiply(LMCAS::SymbolicExpr::number(-1), {self.right.to_cpp()}))"
         )
 
 class Multiply(Binary):
     def to_cpp(self):
-        return f"SymbolicExpr::multiply({self.left.to_cpp()}, {self.right.to_cpp()})"
+        return f"LMCAS::SymbolicExpr::multiply({self.left.to_cpp()}, {self.right.to_cpp()})"
 
 class Divide(Binary):
     def to_cpp(self):
         if isinstance(self.left, Number) and isinstance(self.right, Number) and not '.' in str(self.left.value) and not '.' in str(self.right.value):
-            return f"SymbolicExpr::number(Rational({self.left.value}, {self.right.value}))"
+            return f"LMCAS::SymbolicExpr::number(LMCAS::Rational({self.left.value}, {self.right.value}))"
         return (
-            f"SymbolicExpr::multiply({self.left.to_cpp()}, "
-            f"SymbolicExpr::power({self.right.to_cpp()}, SymbolicExpr::number(-1)))"
+            f"LMCAS::SymbolicExpr::multiply({self.left.to_cpp()}, "
+            f"LMCAS::SymbolicExpr::power({self.right.to_cpp()}, LMCAS::SymbolicExpr::number(-1)))"
         )
 
 class Power(Binary):
     def to_cpp(self):
-        return f"SymbolicExpr::power({self.left.to_cpp()}, {self.right.to_cpp()})"
+        return f"LMCAS::SymbolicExpr::power({self.left.to_cpp()}, {self.right.to_cpp()})"
 
 class ListNode(Node):
     def __init__(self, elements):
@@ -147,15 +147,15 @@ class Function(Node):
 
         if cpp_func == 'log':
             if len(self.args) == 1:
-                return f"SymbolicExpr::ln({self.args[0].to_cpp()})"
+                return f"LMCAS::SymbolicExpr::ln({self.args[0].to_cpp()})"
             elif len(self.args) == 2:
-                return f"SymbolicExpr::log({self.args[0].to_cpp()}, {self.args[1].to_cpp()})"
+                return f"LMCAS::SymbolicExpr::log({self.args[0].to_cpp()}, {self.args[1].to_cpp()})"
             else:
                 raise ParserError("log expects 1 or 2 arguments")
 
         if cpp_func == 'vector':
              rows = ", ".join(f"{{{e.to_cpp()}}}" for e in self.args)
-             return f"SymbolicExpr::matrix({{{rows}}})"
+             return f"LMCAS::SymbolicExpr::matrix({{{rows}}})"
 
         if cpp_func == 'matrix':
             rows_cpp = []
@@ -163,12 +163,12 @@ class Function(Node):
                 if not isinstance(arg, ListNode):
                      raise ParserError("Elements of matrix must be lists (rows)")
                 rows_cpp.append("{" + ", ".join(e.to_cpp() for e in arg.elements) + "}")
-            return f"SymbolicExpr::matrix({{{', '.join(rows_cpp)}}})"
+            return f"LMCAS::SymbolicExpr::matrix({{{', '.join(rows_cpp)}}})"
 
         if len(self.args) != 1:
              raise ParserError(f"Function {self.name} expects 1 argument")
         
-        return f"SymbolicExpr::{cpp_func}({self.args[0].to_cpp()})"
+        return f"LMCAS::SymbolicExpr::{cpp_func}({self.args[0].to_cpp()})"
 
 # ==========================================
 # 语法分析 (Parser)
@@ -308,14 +308,14 @@ def generate_code(exprs: List[str]):
         '',
         'int main() {',
         '    // Setup aliases',
-        '    using Expr = std::shared_ptr<SymbolicExpr>;',
+        '    using Expr = std::shared_ptr<LMCAS::SymbolicExpr>;',
         ''
     ]
 
     if all_vars:
         lines.append('    // Variables')
         for v in sorted(list(all_vars)):
-            lines.append(f'    auto {v} = SymbolicExpr::variable("{v}");')
+            lines.append(f'    auto {v} = LMCAS::SymbolicExpr::variable("{v}");')
         lines.append('')
     
     if asts:

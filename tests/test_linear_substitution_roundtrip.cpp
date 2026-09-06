@@ -11,7 +11,9 @@
 #include <functional>
 #include <sstream>
 
-using lamina::Integrator;
+using namespace LMCAS;
+
+using LMCAS::Integrator;
 
 namespace {
 
@@ -156,11 +158,11 @@ ComboReport verify_combo(const Pattern& pat, const ABPair& ab) {
         rep.detail = std::string("integration failed: ") + integrated.error().message;
         return rep;
     }
-    auto result = lamina::detail::make_expression_ptr(integrated.value());
+    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
 
     // Combinations that left an unevaluated integral are not evidence for
     // the round-trip property; they fall outside its conditional scope.
-    if (has_integral_node(lamina::detail::node(result))) {
+    if (has_integral_node(LMCAS::detail::node(result))) {
         rep.unevaluated = true;
         rep.detail = "unevaluated integral in result";
         return rep;

@@ -17,7 +17,7 @@
 #include <optional>
 #include <limits>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 /**
@@ -26,7 +26,7 @@ namespace {
  * The imaginary unit in LMCAS is represented as sqrt(-1), i.e., a FunctionNode
  * with type Sqrt and a single argument that is a NumberNode with value -1.
  */
-class ContainsImaginaryVisitor : public lamina::detail::RecursiveSymbolicVisitor {
+class ContainsImaginaryVisitor : public LMCAS::detail::RecursiveSymbolicVisitor {
 public:
     bool found = false;
 
@@ -236,17 +236,17 @@ public:
 
 /// Check if a solution expression contains imaginary components (sqrt of negative).
 static bool contains_imaginary(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return false;
+    if (!expr || !LMCAS::detail::node(expr)) return false;
     ContainsImaginaryVisitor visitor;
-    lamina::detail::node(expr)->accept(visitor);
+    LMCAS::detail::node(expr)->accept(visitor);
     return visitor.found;
 }
 
 /// Try to extract a numeric double value from a solution expression.
 /// Returns true if the expression is a pure numeric value, and sets out_value.
 static bool try_get_numeric_value(const std::shared_ptr<SymbolicExpr>& expr, double& out_value) {
-    if (!expr || !lamina::detail::node(expr)) return false;
-    auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(expr));
+    if (!expr || !LMCAS::detail::node(expr)) return false;
+    auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr));
     if (!num) return false;
 
     if (std::holds_alternative<BigInt>(num->value())) {
@@ -274,16 +274,17 @@ static bool is_integer_value(double v) {
 
 } // anonymous namespace
 
-static std::vector<std::shared_ptr<SymbolicExpr>> solve_with_assumptions_impl(
+static AssumptionSolveResult solve_with_assumptions_impl(
     const std::shared_ptr<SymbolicExpr>& equation,
     const std::string& variable,
     const AssumptionContext* ctx,
     ComputationContext& context)
 {
     // Step 1: Compute all solutions using the existing solver
-    auto all_solutions = detail::propagate_result(
-        solve_finite_checked(
-            std::const_pointer_cast<SymbolicExpr>(equation), variable, context));
+    auto solved = solve_finite_checked(
+        std::const_pointer_cast<SymbolicExpr>(equation), variable, context);
+    if (!solved) return AssumptionSolveResult::failure(solved.error());
+    auto all_solutions = std::move(solved.value());
 
     // Step 2: If no context provided, return all solutions unfiltered
     if (!ctx) {
@@ -403,11 +404,8 @@ AssumptionSolveResult solve_with_assumptions_checked(
     auto budget = context.consume_steps(1, operation);
     if (!budget) return AssumptionSolveResult::failure(budget.error());
     try {
-        return AssumptionSolveResult::success(
-            solve_with_assumptions_impl(
-                equation, variable, assumptions, context));
-    } catch (const detail::ResultPropagation& propagation) {
-        return AssumptionSolveResult::failure(propagation.error());
+        return solve_with_assumptions_impl(
+            equation, variable, assumptions, context);
     } catch (const std::bad_alloc&) {
         return AssumptionSolveResult::failure(
             CasErrc::ResourceLimit,
@@ -430,4 +428,4 @@ AssumptionSolveResult solve_with_assumptions_checked(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

@@ -18,7 +18,7 @@
 #include <cstdint>
 #include <algorithm>
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -804,4 +804,4 @@ BerlekampResult berlekamp_factor(
     return result;
 }
 
-} // namespace lamina
+} // namespace LMCAS

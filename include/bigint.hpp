@@ -24,9 +24,11 @@
 #include <limits>
 #include <optional>
 #include "lmmc/config.h"
-#include "lamina_export.hpp"
+#include "lmcas_export.hpp"
 
-class LAMINA_API BigInt {
+namespace LMCAS {
+
+class LMCAS_API BigInt {
 public:
     /** @brief 符号枚举 */
     enum Sign {
@@ -86,6 +88,7 @@ public:
     /**
      * @brief 从十进制字符串构造
      * @param str 十进制数字字符串，可带正负号
+     * @throws std::invalid_argument 若字符串为空、仅含符号或包含非十进制字符
      */
     BigInt(const std::string& str);
 
@@ -313,12 +316,12 @@ public:
     static BigInt lcm(const BigInt& a, const BigInt& b);
 
     /**
-     * @brief 模幂运算
-     * @param base 底数
-     * @param exp 指数
-     * @param mod 模数
-     * @return base^exp mod mod
-     * @throw std::runtime_error 模数为零时抛出
+     * @brief Compute the canonical residue @c base^exp mod mod.
+     * @param base Signed integer base.
+     * @param exp Nonnegative integer exponent.
+     * @param mod Strictly positive modulus.
+     * @return A value in the half-open interval @c [0,mod).
+     * @throw std::domain_error If @p exp is negative or @p mod is not positive.
      */
     static BigInt pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod);
 
@@ -334,3 +337,5 @@ public:
      */
     bool is_perfect_square() const;
 };
+
+} // namespace LMCAS

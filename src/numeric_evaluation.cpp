@@ -9,10 +9,11 @@
 
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
+#include "internal/squared_norm.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 constexpr const char* kOperation = "evaluate_numeric";
@@ -118,6 +119,21 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
         return make_approx(value);
     }
 
+    /**
+     * Real square sums are evaluated as norms before any squaring.
+     * @see ISO C11 committee draft N1570, 7.12.7.3 (hypot).
+     * https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf
+     */
+    const auto squares = detail::squared_norm_terms(*node);
+    if (squares[0]) {
+        auto first = evaluate_node(squares[0]->base(), bindings, context);
+        if (!first) return first;
+        if (!squares[1]) return make_approx(std::abs(first.value().value));
+        auto second = evaluate_node(squares[1]->base(), bindings, context);
+        if (!second) return second;
+        return make_approx(std::hypot(first.value().value, second.value().value));
+    }
+
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto base = evaluate_node(power->base(), bindings, context);
         if (!base) return base;
@@ -127,11 +143,38 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
             return failure(CasErrc::DomainError,
                            "zero cannot be raised to a non-positive power");
         }
+        const double base_value = base.value().value;
+        const double exponent_value = exponent.value().value;
+        if (std::signbit(base_value) && std::isfinite(exponent_value)) {
+            const auto* number = dynamic_cast<const NumberNode*>(power->exponent().get());
+            const auto* integer = number ? std::get_if<BigInt>(&number->value()) : nullptr;
+            const auto* rational = number ? std::get_if<Rational>(&number->value()) : nullptr;
+            bool integral;
+            bool odd;
+            if (integer) {
+                integral = true;
+                odd = integer->is_odd();
+            } else if (rational) {
+                integral = rational->is_integer();
+                odd = integral && rational->get_numerator().is_odd();
+            } else {
+                integral = std::trunc(exponent_value) == exponent_value;
+                odd = integral && std::fmod(exponent_value, 2.0) != 0.0;
+            }
+            if (base_value < 0.0 && std::isfinite(base_value) && !integral) {
+                return failure(CasErrc::DomainError,
+                               "a negative real base requires an integer exponent");
+            }
+            if (integral) {
+                const double magnitude = std::pow(std::abs(base_value), exponent_value);
+                return make_approx(odd ? -magnitude : magnitude);
+            }
+        }
         return make_approx(std::pow(base.value().value, exponent.value().value));
     }
 
     if (std::dynamic_pointer_cast<const RootOfNode>(node)) {
-        auto root_expression = lamina::detail::make_expression_ptr(node);
+        auto root_expression = LMCAS::detail::make_expression_ptr(node);
         auto root = rootof_evaluate_checked(root_expression, context);
         if (!root) return Result<ApproxReal>::failure(root.error());
         return make_approx(root.value());
@@ -238,8 +281,10 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
             case FunctionNode::FuncType::Conjugate:
                 result = x;
                 break;
-            case FunctionNode::FuncType::ImagPart:
             case FunctionNode::FuncType::ComplexArg:
+                result = std::atan2(0.0, x);
+                break;
+            case FunctionNode::FuncType::ImagPart:
                 result = 0.0;
                 break;
             case FunctionNode::FuncType::ComplexAbs:
@@ -261,12 +306,12 @@ Result<ApproxReal> evaluate_node(const std::shared_ptr<const SymbolicNode>& node
 Result<ApproxReal> evaluate_numeric(const SymbolicExpr& expression,
                                     const NumericBindings& bindings,
                                     ComputationContext& context) {
-    if (!lamina::detail::node(expression)) {
+    if (!LMCAS::detail::node(expression)) {
         return Result<ApproxReal>::failure(CasErrc::InvalidArgument,
                                            "cannot evaluate an empty expression",
                                            kOperation);
     }
-    return evaluate_node(lamina::detail::node(expression), bindings, context);
+    return evaluate_node(LMCAS::detail::node(expression), bindings, context);
 }
 
-} // namespace lamina
+} // namespace LMCAS

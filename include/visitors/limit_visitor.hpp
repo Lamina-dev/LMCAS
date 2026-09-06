@@ -4,7 +4,7 @@
  */
 #pragma once
 
-#include "../lamina_export.hpp"
+#include "../lmcas_export.hpp"
 #include "../symbolic_ast.hpp"
 #include "../assumption_context.hpp"
 #include "normalization_visitor.hpp"
@@ -15,14 +15,16 @@
 #include <limits>
 #include <utility>
 
+namespace LMCAS {
+
 class SymbolicExpr;
 
 /** @brief 极限访问器，通过代入求值和 L'Hôpital 法则计算符号表达式的极限 */
-class LAMINA_API LimitVisitor : public lamina::detail::SymbolicVisitor {
+class LMCAS_API LimitVisitor : public LMCAS::detail::SymbolicVisitor {
     std::string var;
     std::shared_ptr<const SymbolicNode> point;
     std::string direction;
-    const lamina::AssumptionContext* assumption_ctx_ = nullptr;
+    const LMCAS::AssumptionContext* assumption_ctx_ = nullptr;
     int lhopital_depth_ = 0;
     static constexpr int max_lhopital_depth = 5;
     static int& active_limit_depth();
@@ -89,7 +91,7 @@ public:
     std::shared_ptr<const SymbolicNode> result;
 
     LimitVisitor(std::string v, std::shared_ptr<const SymbolicNode> p, std::string dir = "",
-                 const lamina::AssumptionContext* ctx = nullptr)
+                 const LMCAS::AssumptionContext* ctx = nullptr)
         : var(std::move(v)), point(std::move(p)), direction(std::move(dir)), assumption_ctx_(ctx) {}
 
     std::shared_ptr<const SymbolicNode> get_result() const;
@@ -119,3 +121,5 @@ public:
     void visit(const LimitNode& node) override;
     void visit(const RootOfNode& node) override;
 };
+
+} // namespace LMCAS

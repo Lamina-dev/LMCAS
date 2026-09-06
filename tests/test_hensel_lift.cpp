@@ -12,7 +12,7 @@
 #include <vector>
 #include <cmath>
 
-using namespace lamina;
+using namespace LMCAS;
 
 /**
  * @brief 测试简单多项式 (x^2 - 1) 的 Mignotte 界合理性.

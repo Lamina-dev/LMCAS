@@ -15,7 +15,7 @@
 #include <limits>
 #include <optional>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -27,13 +27,13 @@ Result<std::shared_ptr<const MatrixNode>> validate_decomposition_matrix(
 {
     auto step = context.consume_steps(1, operation);
     if (!step) return Result<std::shared_ptr<const MatrixNode>>::failure(step.error());
-    if (!A || !lamina::detail::node(A)) {
+    if (!A || !LMCAS::detail::node(A)) {
         return Result<std::shared_ptr<const MatrixNode>>::failure(
             CasErrc::InvalidArgument,
             "matrix input cannot be null",
             operation);
     }
-    auto matrix = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto matrix = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!matrix) {
         return Result<std::shared_ptr<const MatrixNode>>::failure(
             CasErrc::InvalidArgument,
@@ -54,8 +54,8 @@ Result<void> validate_decomposition_output(
     const std::string& name,
     const std::string& operation)
 {
-    if (!expr || !lamina::detail::node(expr) ||
-        !std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(expr))) {
+    if (!expr || !LMCAS::detail::node(expr) ||
+        !std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(expr))) {
         return Result<void>::failure(
             CasErrc::InternalInvariant,
             name + " output is not a matrix",
@@ -109,22 +109,22 @@ std::optional<Rational> exact_rational_expr(const std::shared_ptr<const Symbolic
 }
 
 std::optional<Rational> exact_rational_expr(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return std::nullopt;
-    auto direct = exact_rational_expr(lamina::detail::node(expr));
+    if (!expr || !LMCAS::detail::node(expr)) return std::nullopt;
+    auto direct = exact_rational_expr(LMCAS::detail::node(expr));
     if (direct) return direct;
     auto simplified = expr->simplify();
-    return simplified ? exact_rational_expr(lamina::detail::node(simplified)) : std::nullopt;
+    return simplified ? exact_rational_expr(LMCAS::detail::node(simplified)) : std::nullopt;
 }
 
 std::shared_ptr<SymbolicExpr> exact_number_expr(const Rational& value) {
     if (value.get_denominator() == BigInt(1)) {
-        return lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<NumberNode>(
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<NumberNode>(
                 std::variant<BigInt, Rational, lmmc_real_t>{
                     std::in_place_type<BigInt>, value.get_numerator()}));
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(
         std::variant<BigInt, Rational, lmmc_real_t>{
             std::in_place_type<Rational>, value}));
 }
@@ -454,7 +454,7 @@ static bool qr_decomposition_impl(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& Q,
     std::shared_ptr<SymbolicExpr>& R) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat) return false;
     size_t m = mat->rows();
     size_t n = mat->cols();
@@ -464,7 +464,7 @@ static bool qr_decomposition_impl(
     
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> A_cols(n, std::vector<std::shared_ptr<SymbolicExpr>>(m));
     for (size_t j = 0; j < n; j++) {
-        for (size_t i = 0; i < m; i++) A_cols[j][i] = lamina::detail::make_expression_ptr(mat->get(i, j));
+        for (size_t i = 0; i < m; i++) A_cols[j][i] = LMCAS::detail::make_expression_ptr(mat->get(i, j));
     }
     
     for (size_t j = 0; j < n; j++) {
@@ -536,7 +536,7 @@ CholeskyDecompositionResult cholesky_decomposition_checked(
 static bool cholesky_decomposition_impl(
     const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& L) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat || mat->rows() != mat->cols()) return false;
     size_t n = mat->rows();
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> L_grid(n, std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
@@ -544,7 +544,7 @@ static bool cholesky_decomposition_impl(
         for (size_t j = 0; j <= i; j++) {
             auto sum = SymbolicExpr::number(0);
             for (size_t k = 0; k < j; k++) sum = SymbolicExpr::add(sum, SymbolicExpr::multiply(L_grid[i][k], L_grid[j][k]));
-            auto a_ij = lamina::detail::make_expression_ptr(mat->get(i, j));
+            auto a_ij = LMCAS::detail::make_expression_ptr(mat->get(i, j));
             auto diff = SymbolicExpr::add(a_ij, SymbolicExpr::multiply(SymbolicExpr::number(-1), sum));
             if (i == j) L_grid[i][j] = SymbolicExpr::sqrt(diff);
             else L_grid[i][j] = SymbolicExpr::divide(diff, L_grid[j][j]);
@@ -603,15 +603,15 @@ SVDDecompositionResult svd_decomposition_checked(
 
 std::shared_ptr<SymbolicExpr> matrix_exp(
     const std::shared_ptr<SymbolicExpr>& A) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat || mat->rows() != mat->cols()) return SymbolicExpr::exp(A);
     size_t n = mat->rows();
 
     bool is_zero_matrix = true;
     for (size_t r = 0; r < n && is_zero_matrix; ++r) {
         for (size_t c = 0; c < n; ++c) {
-            auto entry = lamina::detail::make_expression_ptr(mat->get(r, c))->simplify();
-            if (!lamina::detail::node(entry)->is_zero()) {
+            auto entry = LMCAS::detail::make_expression_ptr(mat->get(r, c))->simplify();
+            if (!LMCAS::detail::node(entry)->is_zero()) {
                 is_zero_matrix = false;
                 break;
             }
@@ -653,11 +653,11 @@ std::shared_ptr<SymbolicExpr> matrix_exp(
 
 
 std::shared_ptr<SymbolicExpr> matrix_trace(const std::shared_ptr<SymbolicExpr>& A) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat || mat->rows() != mat->cols()) return nullptr;
     auto sum = SymbolicExpr::number(0);
     for (size_t i = 0; i < mat->rows(); ++i) {
-        sum = SymbolicExpr::add(sum, lamina::detail::make_expression_ptr(mat->get(i, i)));
+        sum = SymbolicExpr::add(sum, LMCAS::detail::make_expression_ptr(mat->get(i, i)));
     }
     return sum->simplify();
 }
@@ -677,7 +677,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
                 vb = SymbolicExpr::add(vb, SymbolicExpr::multiply(v[k], b[k]));
                 bb = SymbolicExpr::add(bb, SymbolicExpr::multiply(b[k], b[k]));
             }
-            if (lamina::detail::node(bb) && lamina::detail::node(bb)->is_zero()) continue;
+            if (LMCAS::detail::node(bb) && LMCAS::detail::node(bb)->is_zero()) continue;
             auto coeff = SymbolicExpr::divide(vb, bb);
             for (size_t k = 0; k < u.size(); ++k) {
                 u[k] = SymbolicExpr::add(u[k],
@@ -689,7 +689,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
         auto norm_sq = SymbolicExpr::number(0);
         for (auto& x : u) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(x, x));
         norm_sq = norm_sq->simplify();
-        if (lamina::detail::node(norm_sq) && lamina::detail::node(norm_sq)->is_zero()) continue;
+        if (LMCAS::detail::node(norm_sq) && LMCAS::detail::node(norm_sq)->is_zero()) continue;
         basis.push_back(u);
     }
     if (normalize) {
@@ -705,7 +705,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
 
 
 std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat || mat->rows() != mat->cols()) return nullptr;
     size_t n = mat->rows();
 
@@ -746,18 +746,18 @@ std::shared_ptr<SymbolicExpr> matrix_log(const std::shared_ptr<SymbolicExpr>& A)
 
 std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
     const std::shared_ptr<SymbolicExpr>& B) {
-    auto a = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
-    auto b = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(B));
+    auto a = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
+    auto b = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(B));
     if (!a || !b) return nullptr;
     size_t m = a->rows(), n = a->cols(), p = b->rows(), q = b->cols();
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> grid(m * p,
         std::vector<std::shared_ptr<SymbolicExpr>>(n * q));
     for (size_t i = 0; i < m; ++i)
         for (size_t j = 0; j < n; ++j) {
-            auto aij = lamina::detail::make_expression_ptr(a->get(i, j));
+            auto aij = LMCAS::detail::make_expression_ptr(a->get(i, j));
             for (size_t k = 0; k < p; ++k)
                 for (size_t l = 0; l < q; ++l) {
-                    auto bkl = lamina::detail::make_expression_ptr(b->get(k, l));
+                    auto bkl = LMCAS::detail::make_expression_ptr(b->get(k, l));
                     grid[i * p + k][j * q + l] = SymbolicExpr::multiply(aij, bkl)->simplify();
                 }
         }
@@ -767,21 +767,21 @@ std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
 
 std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A,
     const std::string& type) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat) return nullptr;
     size_t m = mat->rows(), n = mat->cols();
 
     auto abs_of = [](const std::shared_ptr<SymbolicExpr>& e) {
-        auto node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Abs,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(e)});
-        return lamina::detail::make_expression_ptr(node);
+        auto node = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Abs,
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(e)});
+        return LMCAS::detail::make_expression_ptr(node);
     };
 
     if (type == "frobenius") {
         auto sum = SymbolicExpr::number(0);
         for (size_t i = 0; i < m; ++i)
             for (size_t j = 0; j < n; ++j) {
-                auto e = lamina::detail::make_expression_ptr(mat->get(i, j));
+                auto e = LMCAS::detail::make_expression_ptr(mat->get(i, j));
                 sum = SymbolicExpr::add(sum, SymbolicExpr::multiply(e, e));
             }
         return SymbolicExpr::sqrt(sum)->simplify();
@@ -795,7 +795,7 @@ std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A
             auto colsum = SymbolicExpr::number(0);
             std::optional<Rational> exact_sum = Rational(0);
             for (size_t i = 0; i < m; ++i) {
-                auto entry = lamina::detail::make_expression_ptr(mat->get(i, j));
+                auto entry = LMCAS::detail::make_expression_ptr(mat->get(i, j));
                 colsum = SymbolicExpr::add(colsum, abs_of(entry));
                 if (exact_sum) {
                     auto exact_entry = exact_rational_expr(entry);
@@ -840,7 +840,7 @@ std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A
             auto rowsum = SymbolicExpr::number(0);
             std::optional<Rational> exact_sum = Rational(0);
             for (size_t j = 0; j < n; ++j) {
-                auto entry = lamina::detail::make_expression_ptr(mat->get(i, j));
+                auto entry = LMCAS::detail::make_expression_ptr(mat->get(i, j));
                 rowsum = SymbolicExpr::add(rowsum, abs_of(entry));
                 if (exact_sum) {
                     auto exact_entry = exact_rational_expr(entry);
@@ -993,7 +993,7 @@ JordanDecompositionResult jordan_form_checked(
 
 static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
     std::shared_ptr<SymbolicExpr>& J, std::shared_ptr<SymbolicExpr>& P) {
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(A));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat || mat->rows() != mat->cols()) return false;
     size_t n = mat->rows();
 
@@ -1001,8 +1001,8 @@ static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
     for (size_t r = 0; r < n && is_diagonal; ++r) {
         for (size_t c = 0; c < n; ++c) {
             if (r == c) continue;
-            auto entry = lamina::detail::make_expression_ptr(mat->get(r, c))->simplify();
-            if (!lamina::detail::node(entry)->is_zero()) {
+            auto entry = LMCAS::detail::make_expression_ptr(mat->get(r, c))->simplify();
+            if (!LMCAS::detail::node(entry)->is_zero()) {
                 is_diagonal = false;
                 break;
             }
@@ -1014,7 +1014,7 @@ static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> P_grid(
             n, std::vector<std::shared_ptr<SymbolicExpr>>(n, SymbolicExpr::number(0)));
         for (size_t i = 0; i < n; ++i) {
-            J_grid[i][i] = lamina::detail::make_expression_ptr(mat->get(i, i))->simplify();
+            J_grid[i][i] = LMCAS::detail::make_expression_ptr(mat->get(i, i))->simplify();
             P_grid[i][i] = SymbolicExpr::number(1);
         }
         J = SymbolicExpr::matrix(J_grid);
@@ -1045,4 +1045,4 @@ static bool jordan_form_impl(const std::shared_ptr<SymbolicExpr>& A,
     return true;
 }
 
-} // namespace lamina
+} // namespace LMCAS

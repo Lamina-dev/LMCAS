@@ -7,7 +7,7 @@
 #include <cmath>
 #include <set>
 
-namespace lamina {
+namespace LMCAS {
 
 namespace {
 
@@ -24,11 +24,11 @@ Result<std::shared_ptr<const MatrixNode>> require_matrix(
 {
     auto step = matrix_consume_step(context, operation);
     if (!step) return Result<std::shared_ptr<const MatrixNode>>::failure(step.error());
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return Result<std::shared_ptr<const MatrixNode>>::failure(
             CasErrc::InvalidArgument, "matrix expression cannot be null", operation);
     }
-    auto mat = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(expr));
+    auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(expr));
     if (!mat) {
         return Result<std::shared_ptr<const MatrixNode>>::failure(
             CasErrc::InvalidArgument, "expression is not a matrix", operation);
@@ -53,7 +53,7 @@ Result<std::shared_ptr<const MatrixNode>> require_square_matrix(
 ExpressionResult require_matrix_result(std::shared_ptr<SymbolicExpr> result,
                                        const std::string& operation)
 {
-    if (!result || !lamina::detail::node(result)) {
+    if (!result || !LMCAS::detail::node(result)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                          "matrix operation returned an empty expression",
                                          operation);
@@ -67,7 +67,7 @@ detail::ExactMatrixData exact_matrix_data(const MatrixNode& matrix) {
     for (std::size_t row = 0; row < matrix.rows(); ++row) {
         for (std::size_t column = 0; column < matrix.cols(); ++column) {
             data.entries.push_back(
-                lamina::detail::make_expression_ptr(matrix.get(row, column)));
+                LMCAS::detail::make_expression_ptr(matrix.get(row, column)));
         }
     }
     return data;
@@ -78,10 +78,10 @@ std::shared_ptr<SymbolicExpr> exact_matrix_expression(
     MatrixNode::DenseStorage entries;
     entries.reserve(matrix.entries.size());
     for (const auto& entry : matrix.entries) {
-        entries.push_back(lamina::detail::node(entry));
+        entries.push_back(LMCAS::detail::node(entry));
     }
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<MatrixNode>(
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<MatrixNode>(
             matrix.rows, matrix.cols, std::move(entries)));
 }
 
@@ -233,11 +233,11 @@ MatrixLinearSolveResult matrix_solve_linear_checked(
         for (std::size_t column = 0;
              column < matrix.value()->cols(); ++column) {
             augmented.entries.push_back(
-                lamina::detail::make_expression_ptr(
+                LMCAS::detail::make_expression_ptr(
                     matrix.value()->get(row, column)));
         }
         augmented.entries.push_back(
-            lamina::detail::make_expression_ptr(rhs.value()->get(row, 0)));
+            LMCAS::detail::make_expression_ptr(rhs.value()->get(row, 0)));
     }
     auto solved = detail::solve_linear_exact(
         std::move(augmented), matrix.value()->cols(), context, operation);

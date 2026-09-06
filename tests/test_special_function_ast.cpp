@@ -7,7 +7,9 @@
 #include <string>
 #include <vector>
 
-using lamina::Integrator;
+using namespace LMCAS;
+
+using LMCAS::Integrator;
 
 namespace {
 
@@ -136,9 +138,9 @@ void verify_case(const Case& c) {
                     c.name + ": integration failed: " + integrated.error().message);
         return;
     }
-    auto result = lamina::detail::make_expression_ptr(integrated.value());
+    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
 
-    bool ok = ast_contains_functype(lamina::detail::node(result), c.expected);
+    bool ok = ast_contains_functype(LMCAS::detail::node(result), c.expected);
     if (!ok) {
         std::string msg = c.name
             + ": expected FunctionNode with FuncType::"

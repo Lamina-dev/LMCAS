@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 using namespace vector_calculus_detail;
 
@@ -29,7 +29,7 @@ std::vector<std::string> vector_calculus_detail::vector_calculus_coord_vars(
  * @internal
  * @brief 尝试符号定积分，若结果仍含未求值积分节点则返回 nullptr。
  */
-static std::shared_ptr<SymbolicExpr> vector_calculus_try_definite(
+static VectorCalculusExprResult vector_calculus_try_definite(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -37,17 +37,23 @@ static std::shared_ptr<SymbolicExpr> vector_calculus_try_definite(
     ComputationContext& context)
 {
     Integrator integrator;
-    SymbolicExpr result = detail::propagate_result(
-        integrator.integrate_def_checked(
-            *integrand, var, *a, *b, context));
-
-    if (vector_calculus_contains_unevaluated_integral(lamina::detail::node(result))) {
-        return nullptr;
+    auto integrated = integrator.integrate_def_checked(
+        *integrand, var, *a, *b, context);
+    if (!integrated) {
+        return VectorCalculusExprResult::failure(integrated.error());
     }
-    auto res = lamina::detail::make_expression_ptr(result);
+    SymbolicExpr result = std::move(integrated.value());
+
+    if (vector_calculus_contains_unevaluated_integral(
+            LMCAS::detail::node(result))) {
+        return std::shared_ptr<SymbolicExpr>{};
+    }
+    auto res = LMCAS::detail::make_expression_ptr(result);
     auto simplified = res->simplify();
-    if (simplified && vector_calculus_contains_unevaluated_integral(lamina::detail::node(simplified))) {
-        return nullptr;
+    if (simplified &&
+        vector_calculus_contains_unevaluated_integral(
+            LMCAS::detail::node(simplified))) {
+        return std::shared_ptr<SymbolicExpr>{};
     }
     return simplified ? simplified : res;
 }
@@ -56,7 +62,7 @@ static std::shared_ptr<SymbolicExpr> vector_calculus_try_definite(
  * @internal
  * @brief 数值定积分回退（复合 Simpson 法）。
  */
-static std::shared_ptr<SymbolicExpr> vector_calculus_numerical_definite(
+static VectorCalculusExprResult vector_calculus_numerical_definite(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -67,27 +73,27 @@ static std::shared_ptr<SymbolicExpr> vector_calculus_numerical_definite(
     double b_val = 0.0;
     if (!vector_calculus_checked_finite_numeric(a, a_val, &context) ||
         !vector_calculus_checked_finite_numeric(b, b_val, &context)) {
-        return nullptr;
+        return std::shared_ptr<SymbolicExpr>{};
     }
 
     int n = 1000;
     double h = (b_val - a_val) / n;
-    if (!std::isfinite(h)) return nullptr;
+    if (!std::isfinite(h)) return std::shared_ptr<SymbolicExpr>{};
     double sum = 0.0;
 
     for (int i = 0; i <= n; ++i) {
         auto step_result =
             context.consume_steps(1, "vector_calculus.numeric_integral");
         if (!step_result) {
-            throw detail::ResultPropagation(step_result.error());
+            return VectorCalculusExprResult::failure(step_result.error());
         }
         double xi = a_val + i * h;
-        if (!std::isfinite(xi)) return nullptr;
+        if (!std::isfinite(xi)) return std::shared_ptr<SymbolicExpr>{};
         auto xi_expr = SymbolicExpr::number(xi);
         auto fi = integrand->substitute(var, xi_expr);
         double fi_val = 0.0;
         if (!vector_calculus_checked_finite_numeric(fi, fi_val, &context)) {
-            return nullptr;
+            return std::shared_ptr<SymbolicExpr>{};
         }
 
         double weight = 1.0;
@@ -99,10 +105,10 @@ static std::shared_ptr<SymbolicExpr> vector_calculus_numerical_definite(
             weight = 2.0;
         }
         sum += weight * fi_val;
-        if (!std::isfinite(sum)) return nullptr;
+        if (!std::isfinite(sum)) return std::shared_ptr<SymbolicExpr>{};
     }
     sum *= h / 3.0;
-    if (!std::isfinite(sum)) return nullptr;
+    if (!std::isfinite(sum)) return std::shared_ptr<SymbolicExpr>{};
 
     return SymbolicExpr::number(sum);
 }
@@ -121,11 +127,13 @@ vector_calculus_detail::vector_calculus_integrate_with_fallback(
 {
     auto symbolic_result = vector_calculus_try_definite(
         integrand, var, a, b, context);
-    if (symbolic_result) {
-        return symbolic_result;
+    if (symbolic_result && symbolic_result.value()) {
+        return std::move(symbolic_result.value());
     }
-    return vector_calculus_numerical_definite(
+    if (!symbolic_result) return nullptr;
+    auto numerical_result = vector_calculus_numerical_definite(
         integrand, var, a, b, context);
+    return numerical_result ? std::move(numerical_result.value()) : nullptr;
 }
 
 static VectorCalculusExprResult vector_calculus_inconclusive(
@@ -141,11 +149,11 @@ VectorCalculusExprResult vector_calculus_simplify_strict(
     const std::string& operation,
     const std::string& message)
 {
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return vector_calculus_inconclusive(operation, message);
     }
     auto simplified = expr->simplify();
-    if (!simplified || !lamina::detail::node(simplified)) {
+    if (!simplified || !LMCAS::detail::node(simplified)) {
         return vector_calculus_inconclusive(operation, message);
     }
     return VectorCalculusExprResult::success(std::move(simplified));
@@ -156,7 +164,7 @@ VectorCalculusExprResult vector_calculus_differentiate_strict(
     const std::string& var,
     const std::string& operation)
 {
-    if (!expr || !lamina::detail::node(expr)) {
+    if (!expr || !LMCAS::detail::node(expr)) {
         return vector_calculus_inconclusive(
             operation, "expression derivative is outside the supported domain");
     }
@@ -177,18 +185,18 @@ static VectorCalculusExprResult vector_calculus_substitute_coords_strict(
     const VectorField& values,
     const std::string& operation)
 {
-    if (!expr || !lamina::detail::node(expr) || coord_vars.size() != values.size()) {
+    if (!expr || !LMCAS::detail::node(expr) || coord_vars.size() != values.size()) {
         return vector_calculus_inconclusive(
             operation, "coordinate substitution is outside the supported domain");
     }
     auto substituted = expr;
     for (size_t i = 0; i < coord_vars.size(); ++i) {
-        if (!values[i] || !lamina::detail::node(values[i])) {
+        if (!values[i] || !LMCAS::detail::node(values[i])) {
             return vector_calculus_inconclusive(
                 operation, "coordinate substitution is outside the supported domain");
         }
         substituted = substituted->substitute(coord_vars[i], values[i]);
-        if (!substituted || !lamina::detail::node(substituted)) {
+        if (!substituted || !LMCAS::detail::node(substituted)) {
             return vector_calculus_inconclusive(
                 operation, "coordinate substitution is outside the supported domain");
         }
@@ -208,11 +216,13 @@ static VectorCalculusExprResult vector_calculus_definite_integral_strict(
 {
     auto result = vector_calculus_try_definite(
         integrand, var, a, b, context);
-    if (!result || !lamina::detail::node(result)) {
+    if (!result) return result;
+    if (!result.value() || !LMCAS::detail::node(result.value())) {
         return vector_calculus_inconclusive(
-            operation, "integral could not be evaluated exactly in the supported domain");
+            operation,
+            "integral could not be evaluated exactly in the supported domain");
     }
-    return VectorCalculusExprResult::success(std::move(result));
+    return result;
 }
 
 static VectorCalculusExprResult vector_calculus_multiple_integral_strict(
@@ -221,14 +231,14 @@ static VectorCalculusExprResult vector_calculus_multiple_integral_strict(
     ComputationContext& context,
     const std::string& operation)
 {
-    if (!integrand || !lamina::detail::node(integrand)) {
+    if (!integrand || !LMCAS::detail::node(integrand)) {
         return vector_calculus_inconclusive(
             operation, "integrand construction is outside the supported domain");
     }
     Integrator integrator;
     auto integrated = integrate_multiple_checked(*integrand, steps, integrator, context);
     if (!integrated) return VectorCalculusExprResult::failure(integrated.error());
-    auto result = lamina::detail::make_expression_ptr(integrated.value());
+    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
     return vector_calculus_simplify_strict(
         result, operation,
         "integral result simplification is outside the supported domain");
@@ -504,8 +514,8 @@ VectorCalculusExprResult vector_calculus_detail::greens_theorem_area_strict(
     auto integrand_checked = vector_calculus_simplify_strict(
         integrand, operation, "Green's area integrand is outside the supported domain");
     if (!integrand_checked) return integrand_checked;
-    lsr::EqvOptions trig_options;
-    trig_options.profile = lsr::EqvProfile::TrigBasic;
+    LMCAS::EqvOptions trig_options;
+    trig_options.profile = LMCAS::EqvProfile::TrigBasic;
     auto unit_identity = check_equivalent(
         integrand_checked.value(), SymbolicExpr::number(1),
         context, trig_options);
@@ -520,8 +530,8 @@ VectorCalculusExprResult vector_calculus_detail::greens_theorem_area_strict(
         integrand_checked.value(), t, a, b, context, operation);
     if (!integral) return integral;
 
-    auto half = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(Rational(1, 2)));
+    auto half = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(Rational(1, 2)));
     auto area = SymbolicExpr::multiply(half, integral.value());
     return vector_calculus_simplify_strict(
         area, operation, "Green's area result is outside the supported domain");
@@ -644,4 +654,4 @@ VectorCalculusExprResult vector_calculus_detail::stokes_theorem_strict(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

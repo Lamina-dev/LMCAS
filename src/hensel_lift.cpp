@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <exception>
 
-namespace lamina {
+namespace LMCAS {
 
 
 /**
@@ -770,4 +770,4 @@ HenselLiftResult hensel_lift_checked(
 }
 
 
-} // namespace lamina
+} // namespace LMCAS

@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <string>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static AssumptionContext deserialize_success(const std::string& data) {
     auto result = AssumptionContext::deserialize(data);
@@ -18,10 +18,10 @@ static AssumptionContext deserialize_success(const std::string& data) {
 
 
 static Interval make_closed_interval(double lo, double hi) {
-    auto lower_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
+    auto lower_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
+    auto upper_val = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
     Interval iv;
     iv.lower = Endpoint::closed(lower_val);
     iv.upper = Endpoint::closed(upper_val);
@@ -37,16 +37,16 @@ static void test_conditional_active_when_condition_satisfied() {
     // Declare x as Positive
     ctx.assume_sign("x", Sign::Positive);
 
-    auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-    auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
-    auto y = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("y"));
+    auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+    auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
+    auto y = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("y"));
 
     // Condition: x > 0 (which is satisfied since x is Positive)
-    auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-        lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
+    auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+        LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
     // Conclusion: y > 0
-    auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-        lamina::detail::node(y), lamina::detail::node(zero), RelationalNode::Op::GT));
+    auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+        LMCAS::detail::node(y), LMCAS::detail::node(zero), RelationalNode::Op::GT));
 
     ctx.assume_conditional(condition, conclusion);
 
@@ -65,16 +65,16 @@ static void test_conditional_discarded_on_pop() {
 
     AssumptionContext ctx;
 
-    auto x = lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>("x"));
-    auto zero = lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+    auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
+    auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
     // Push a new scope and add a conditional there
     ctx.push();
 
-    auto condition = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-        lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GT));
-    auto conclusion = lamina::detail::expression_from_node(lamina::detail::make_node<RelationalNode>(
-        lamina::detail::node(x), lamina::detail::node(zero), RelationalNode::Op::GEQ));
+    auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+        LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
+    auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
+        LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GEQ));
 
     ctx.assume_conditional(condition, conclusion);
     EXPECT_TRUE(ctx.get_active_conditionals().size() == 1,

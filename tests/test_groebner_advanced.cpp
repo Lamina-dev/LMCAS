@@ -4,7 +4,7 @@
 #include <iostream>
 
 int main() {
-    using namespace lamina;
+    using namespace LMCAS;
 
     auto x = SymbolicExpr::variable("x");
     auto y = SymbolicExpr::variable("y");

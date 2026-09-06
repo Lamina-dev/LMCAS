@@ -1,31 +1,31 @@
 #pragma once
 
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include "symbolic_ast.hpp"
 #include <exception>
 #include <memory>
 #include <string>
 #include <utility>
 
-namespace lamina::lsr::detail::lsr_expr_common {
+namespace LMCAS::expr_detail::expr_common {
 
-inline constexpr const char* kSymOperation = "lsr.sym";
-inline constexpr const char* kIntegerOperation = "lsr.integer";
-inline constexpr const char* kRationalOperation = "lsr.rational";
-inline constexpr const char* kApproxOperation = "lsr.approx_real";
-inline constexpr const char* kConstantOperation = "lsr.constant";
-inline constexpr const char* kComplexOperation = "lsr.complex";
-inline constexpr const char* kExprOperation = "lsr.expr_op";
-inline constexpr const char* kMathOperation = "lsr.math";
-inline constexpr const char* kRealOperation = "lsr.real";
-inline constexpr const char* kImagOperation = "lsr.imag";
-inline constexpr const char* kConjOperation = "lsr.conj";
-inline constexpr const char* kAbsOperation = "lsr.abs";
-inline constexpr const char* kSimplifyOperation = "lsr.simplify";
-inline constexpr const char* kExpandOperation = "lsr.expand";
-inline constexpr const char* kDifferentiateOperation = "lsr.differentiate";
-inline constexpr const char* kSubstituteOperation = "lsr.substitute";
-inline constexpr const char* kExprMatchOperation = "lsr.expr_match";
+inline constexpr const char* kSymOperation = "LMCAS.sym";
+inline constexpr const char* kIntegerOperation = "LMCAS.integer";
+inline constexpr const char* kRationalOperation = "LMCAS.rational";
+inline constexpr const char* kApproxOperation = "LMCAS.approx_real";
+inline constexpr const char* kConstantOperation = "LMCAS.constant";
+inline constexpr const char* kComplexOperation = "LMCAS.complex";
+inline constexpr const char* kExprOperation = "LMCAS.expr_op";
+inline constexpr const char* kMathOperation = "LMCAS.math";
+inline constexpr const char* kRealOperation = "LMCAS.real";
+inline constexpr const char* kImagOperation = "LMCAS.imag";
+inline constexpr const char* kConjOperation = "LMCAS.conj";
+inline constexpr const char* kAbsOperation = "LMCAS.abs";
+inline constexpr const char* kSimplifyOperation = "LMCAS.simplify";
+inline constexpr const char* kExpandOperation = "LMCAS.expand";
+inline constexpr const char* kDifferentiateOperation = "LMCAS.differentiate";
+inline constexpr const char* kSubstituteOperation = "LMCAS.substitute";
+inline constexpr const char* kExprMatchOperation = "LMCAS.expr_match";
 
 ExprResult expression_failure(CasErrc code, std::string message,
                               const char* operation);
@@ -60,8 +60,8 @@ ExprResult make_binary_math_expr(const ExprPtr& lhs,
                                  Factory&& factory) {
     auto step = context.consume_steps(1, kMathOperation);
     if (!step) return ExprResult::failure(step.error());
-    if (!lhs || !lamina::detail::node(lhs) ||
-        !rhs || !lamina::detail::node(rhs)) {
+    if (!lhs || !LMCAS::detail::node(lhs) ||
+        !rhs || !LMCAS::detail::node(rhs)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   std::string(function_name) +
                                       " arguments cannot be null",
@@ -69,7 +69,7 @@ ExprResult make_binary_math_expr(const ExprPtr& lhs,
     }
     try {
         auto result = std::forward<Factory>(factory)(lhs, rhs);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       std::string(function_name) +
                                           " expression construction failed",
@@ -95,8 +95,8 @@ ExprResult make_binary_expr(const ExprPtr& lhs,
                             Factory&& factory) {
     auto step = context.consume_steps(1, kExprOperation);
     if (!step) return ExprResult::failure(step.error());
-    if (!lhs || !lamina::detail::node(lhs) ||
-        !rhs || !lamina::detail::node(rhs)) {
+    if (!lhs || !LMCAS::detail::node(lhs) ||
+        !rhs || !LMCAS::detail::node(rhs)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   std::string(operation_name) +
                                       " operands cannot be null",
@@ -104,7 +104,7 @@ ExprResult make_binary_expr(const ExprPtr& lhs,
     }
     try {
         auto result = std::forward<Factory>(factory)(lhs, rhs);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       std::string(operation_name) +
                                           " expression construction failed",
@@ -130,7 +130,7 @@ ExprResult checked_transform_expr(const ExprPtr& expression,
                                   Transform&& transform) {
     auto step = context.consume_steps(1, operation);
     if (!step) return ExprResult::failure(step.error());
-    if (!expression || !lamina::detail::node(expression)) {
+    if (!expression || !LMCAS::detail::node(expression)) {
         return expression_failure(CasErrc::InvalidArgument,
                                   std::string(transform_name) +
                                       " argument cannot be null",
@@ -138,7 +138,7 @@ ExprResult checked_transform_expr(const ExprPtr& expression,
     }
     try {
         auto result = std::forward<Transform>(transform)(*expression);
-        if (!result || !lamina::detail::node(result)) {
+        if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       std::string(transform_name) +
                                           " returned null",
@@ -156,4 +156,4 @@ ExprResult checked_transform_expr(const ExprPtr& expression,
     }
 }
 
-} // namespace lamina::lsr::detail::lsr_expr_common
+} // namespace LMCAS::expr_detail::expr_common

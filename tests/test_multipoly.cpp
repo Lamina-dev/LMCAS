@@ -6,7 +6,7 @@
 #include "test_common.hpp"
 #include "multivariate_poly.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 int main()
 {

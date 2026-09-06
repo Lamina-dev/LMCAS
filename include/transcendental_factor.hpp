@@ -20,7 +20,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace lamina {
+namespace LMCAS {
 
 /// 换元映射条目:超越子表达式 -> 代数不定元名
 struct TransSubstitution {
@@ -55,7 +55,7 @@ struct BerlekampResult {
  * @param[in] var  目标变量名
  * @return 不可约因子的列表(乘积等于原表达式,可能含常数因子)
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
+LMCAS_API std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var);
 
@@ -69,7 +69,7 @@ LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> factor_transcendental(
  * @param[in] var  目标变量名
  * @return 换元结果,包含映射表,换元后多项式表达式及约束列表
  */
-LAMINA_API TransSubstitutionResult detect_trans_substitutions(
+LMCAS_API TransSubstitutionResult detect_trans_substitutions(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var);
 
@@ -85,7 +85,7 @@ LAMINA_API TransSubstitutionResult detect_trans_substitutions(
  *
  * @internal
  */
-LAMINA_API BerlekampResult berlekamp_factor(
+LMCAS_API BerlekampResult berlekamp_factor(
     const Polynomial<Rational>& poly,
     int64_t prime);
 
@@ -97,7 +97,7 @@ using HenselLiftResult = Result<std::vector<Polynomial<BigInt>>>;
  * 空因子列表,非法素数,零或常数输入,多项式零因子,以及模 p 因子乘积
  * 与原多项式不一致等输入均通过 CasError 返回具体诊断.
  */
-LAMINA_API HenselLiftResult hensel_lift_checked(
+LMCAS_API HenselLiftResult hensel_lift_checked(
     const Polynomial<BigInt>& poly,
     const std::vector<Polynomial<ModInt>>& mod_factors,
     int64_t prime,
@@ -113,13 +113,13 @@ using ZassenhausResult =
  * 候选子集按字典序枚举,不受机器字宽限制.计算预算耗尽时,精确部分分解
  * 以 `Inconclusive` 返回.
  */
-LAMINA_API ZassenhausResult zassenhaus_combine_checked(
+LMCAS_API ZassenhausResult zassenhaus_combine_checked(
     const Polynomial<Rational>& poly,
     const std::vector<Polynomial<BigInt>>& lifted_factors,
     const BigInt& reconstruction_modulus,
     ComputationContext& context);
 
-LAMINA_API ZassenhausResult zassenhaus_combine_checked(
+LMCAS_API ZassenhausResult zassenhaus_combine_checked(
     const Polynomial<Rational>& poly,
     const std::vector<Polynomial<BigInt>>& lifted_factors,
     const BigInt& reconstruction_modulus);
@@ -158,7 +158,7 @@ struct HenselLiftPair {
  * @see Zassenhaus, H. "On Hensel factorization, I."
  *      Journal of Number Theory, 1(3), 1969.
  */
-LAMINA_API HenselLiftPair hl_two_factor_lift(
+LMCAS_API HenselLiftPair hl_two_factor_lift(
     const std::vector<BigInt>& f,
     const HenselLiftPair& current);
 
@@ -182,7 +182,7 @@ struct TfSquareFreeResult {
  *
  * @internal
  */
-LAMINA_API TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly);
+LMCAS_API TfSquareFreeResult tf_square_free(const Polynomial<Rational>& poly);
 
 /// 多项式构造结果
 struct TfPolyBuildResult {
@@ -208,7 +208,7 @@ struct TfPolyBuildResult {
  *
  * @internal
  */
-LAMINA_API TfPolyBuildResult tf_build_polynomial(
+LMCAS_API TfPolyBuildResult tf_build_polynomial(
     const std::shared_ptr<SymbolicExpr>& poly_expr,
     const std::vector<std::string>& indeterminates,
     const std::string& original_var);
@@ -224,7 +224,7 @@ LAMINA_API TfPolyBuildResult tf_build_polynomial(
  *
  * @internal
  */
-LAMINA_API std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
+LMCAS_API std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
     std::vector<std::shared_ptr<SymbolicExpr>>& factors);
 
-} // namespace lamina
+} // namespace LMCAS

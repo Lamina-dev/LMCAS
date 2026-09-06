@@ -9,7 +9,7 @@
 #include <memory>
 #include <stdexcept>
 
-using namespace lamina;
+using namespace LMCAS;
 
 
 /// Generate a random variable name for property tests

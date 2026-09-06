@@ -19,7 +19,7 @@
 #include <cassert>
 #include <functional>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief FGLM 算法中使用的多项式表示,以 (单项式, 系数) 对列表存储 */
 struct FGLMPoly {

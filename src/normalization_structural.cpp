@@ -1,6 +1,10 @@
 #include "visitors/normalization_visitor.hpp"
 #include "internal/normalization_utils.hpp"
 
+#include <cstdint>
+
+namespace LMCAS {
+
 void NormalizationVisitor::visit(const MatrixNode& node) {
         if (std::holds_alternative<MatrixNode::DenseStorage>(node.storage())) {
              auto& dense = std::get<MatrixNode::DenseStorage>(node.storage());
@@ -13,7 +17,7 @@ void NormalizationVisitor::visit(const MatrixNode& node) {
                     new_dense.push_back(nullptr);
                  }
              }
-             result = lamina::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_dense);
+             result = LMCAS::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_dense);
         } else {
              auto& sparse = std::get<MatrixNode::SparseStorage>(node.storage());
              MatrixNode::SparseStorage new_sparse;
@@ -23,7 +27,7 @@ void NormalizationVisitor::visit(const MatrixNode& node) {
                      new_sparse[idx] = result;
                  }
              }
-             result = lamina::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_sparse);
+             result = LMCAS::detail::make_node<MatrixNode>(node.rows(), node.cols(), new_sparse);
         }
     }
 void NormalizationVisitor::visit(const RelationalNode& node) {
@@ -44,13 +48,13 @@ void NormalizationVisitor::visit(const RelationalNode& node) {
         if (!new_left) new_left = node.left();
         if (!new_right) new_right = node.right();
 
-        result = lamina::detail::make_node<RelationalNode>(new_left, new_right, node.op());
+        result = LMCAS::detail::make_node<RelationalNode>(new_left, new_right, node.op());
     }
 void NormalizationVisitor::visit(const LogicalNode& node) {
         /// Implication: A ⇒ B = ¬A ∨ B
         if (node.op() == LogicalNode::Op::Implies) {
-            auto not_left = lamina::detail::make_node<LogicalNode>(node.left(), nullptr, LogicalNode::Op::Not);
-            auto or_node = lamina::detail::make_node<LogicalNode>(not_left, node.right(), LogicalNode::Op::Or);
+            auto not_left = LMCAS::detail::make_node<LogicalNode>(node.left(), nullptr, LogicalNode::Op::Not);
+            auto or_node = LMCAS::detail::make_node<LogicalNode>(not_left, node.right(), LogicalNode::Op::Or);
             or_node->accept(*this);
             return;
         }
@@ -73,23 +77,23 @@ void NormalizationVisitor::visit(const LogicalNode& node) {
                 }
                 /// De Morgan's law: ¬(A∧B) = ¬A∨¬B
                 if (inner_logical->op() == LogicalNode::Op::And) {
-                    auto not_a = lamina::detail::make_node<LogicalNode>(inner_logical->left(), nullptr, LogicalNode::Op::Not);
-                    auto not_b = lamina::detail::make_node<LogicalNode>(inner_logical->right(), nullptr, LogicalNode::Op::Not);
-                    auto or_node = lamina::detail::make_node<LogicalNode>(not_a, not_b, LogicalNode::Op::Or);
+                    auto not_a = LMCAS::detail::make_node<LogicalNode>(inner_logical->left(), nullptr, LogicalNode::Op::Not);
+                    auto not_b = LMCAS::detail::make_node<LogicalNode>(inner_logical->right(), nullptr, LogicalNode::Op::Not);
+                    auto or_node = LMCAS::detail::make_node<LogicalNode>(not_a, not_b, LogicalNode::Op::Or);
                     or_node->accept(*this);
                     return;
                 }
                 /// De Morgan's law: ¬(A∨B) = ¬A∧¬B
                 if (inner_logical->op() == LogicalNode::Op::Or) {
-                    auto not_a = lamina::detail::make_node<LogicalNode>(inner_logical->left(), nullptr, LogicalNode::Op::Not);
-                    auto not_b = lamina::detail::make_node<LogicalNode>(inner_logical->right(), nullptr, LogicalNode::Op::Not);
-                    auto and_node = lamina::detail::make_node<LogicalNode>(not_a, not_b, LogicalNode::Op::And);
+                    auto not_a = LMCAS::detail::make_node<LogicalNode>(inner_logical->left(), nullptr, LogicalNode::Op::Not);
+                    auto not_b = LMCAS::detail::make_node<LogicalNode>(inner_logical->right(), nullptr, LogicalNode::Op::Not);
+                    auto and_node = LMCAS::detail::make_node<LogicalNode>(not_a, not_b, LogicalNode::Op::And);
                     and_node->accept(*this);
                     return;
                 }
             }
 
-            result = lamina::detail::make_node<LogicalNode>(new_left, nullptr, LogicalNode::Op::Not);
+            result = LMCAS::detail::make_node<LogicalNode>(new_left, nullptr, LogicalNode::Op::Not);
             return;
         }
 
@@ -109,7 +113,7 @@ void NormalizationVisitor::visit(const LogicalNode& node) {
         if (!new_left) new_left = node.left();
         if (!new_right) new_right = node.right();
 
-        result = lamina::detail::make_node<LogicalNode>(new_left, new_right, node.op());
+        result = LMCAS::detail::make_node<LogicalNode>(new_left, new_right, node.op());
     }
 void NormalizationVisitor::visit(const PiecewiseNode& node) {
         std::vector<PiecewiseNode::Branch> new_branches;
@@ -135,7 +139,7 @@ void NormalizationVisitor::visit(const PiecewiseNode& node) {
             new_default = result;
         }
 
-        result = lamina::detail::make_node<PiecewiseNode>(std::move(new_branches), new_default);
+        result = LMCAS::detail::make_node<PiecewiseNode>(std::move(new_branches), new_default);
     }
 void NormalizationVisitor::visit(const SummationNode& node) {
         node.body()->accept(*this);
@@ -152,26 +156,32 @@ void NormalizationVisitor::visit(const SummationNode& node) {
         auto hi_n = std::dynamic_pointer_cast<const NumberNode>(new_upper);
         if (lo_n && hi_n && std::holds_alternative<BigInt>(lo_n->value())
             && std::holds_alternative<BigInt>(hi_n->value())) {
-            long long lo = (long long)std::get<BigInt>(lo_n->value()).to_int();
-            long long hi = (long long)std::get<BigInt>(hi_n->value()).to_int();
-            if (hi < lo) { result = lamina::detail::make_node<NumberNode>(BigInt(0)); return; }
-            if (hi - lo < 1000) {
+            auto lo = std::get<BigInt>(lo_n->value()).try_to_int64();
+            auto hi = std::get<BigInt>(hi_n->value()).try_to_int64();
+            if (lo && hi && *hi < *lo) {
+                result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+                return;
+            }
+            if (lo && hi &&
+                static_cast<std::uint64_t>(*hi) -
+                    static_cast<std::uint64_t>(*lo) < 1000) {
                 std::vector<std::shared_ptr<const SymbolicNode>> terms;
-                for (long long kk = lo; kk <= hi; ++kk) {
-                    auto kval = lamina::detail::make_node<NumberNode>(BigInt((long long)kk));
+                for (std::int64_t kk = *lo;; ++kk) {
+                    auto kval = LMCAS::detail::make_node<NumberNode>(BigInt(kk));
                     auto term = norm_subst_index(new_body, node.index_var(), kval);
                     NormalizationVisitor inner;
                     term->accept(inner);
                     terms.push_back(inner.get_result());
+                    if (kk == *hi) break;
                 }
-                if (terms.empty()) { result = lamina::detail::make_node<NumberNode>(BigInt(0)); return; }
-                auto sum_node = lamina::detail::make_node<AddNode>(terms);
+                if (terms.empty()) { result = LMCAS::detail::make_node<NumberNode>(BigInt(0)); return; }
+                auto sum_node = LMCAS::detail::make_node<AddNode>(terms);
                 sum_node->accept(*this);
                 return;
             }
         }
 
-        result = lamina::detail::make_node<SummationNode>(new_body, node.index_var(), new_lower, new_upper);
+        result = LMCAS::detail::make_node<SummationNode>(new_body, node.index_var(), new_lower, new_upper);
     }
 void NormalizationVisitor::visit(const ProductNode& node) {
         node.body()->accept(*this);
@@ -187,33 +197,39 @@ void NormalizationVisitor::visit(const ProductNode& node) {
         auto hi_n = std::dynamic_pointer_cast<const NumberNode>(new_upper);
         if (lo_n && hi_n && std::holds_alternative<BigInt>(lo_n->value())
             && std::holds_alternative<BigInt>(hi_n->value())) {
-            long long lo = (long long)std::get<BigInt>(lo_n->value()).to_int();
-            long long hi = (long long)std::get<BigInt>(hi_n->value()).to_int();
-            if (hi < lo) { result = lamina::detail::make_node<NumberNode>(BigInt(1)); return; }
-            if (hi - lo < 1000) {
+            auto lo = std::get<BigInt>(lo_n->value()).try_to_int64();
+            auto hi = std::get<BigInt>(hi_n->value()).try_to_int64();
+            if (lo && hi && *hi < *lo) {
+                result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
+                return;
+            }
+            if (lo && hi &&
+                static_cast<std::uint64_t>(*hi) -
+                    static_cast<std::uint64_t>(*lo) < 1000) {
                 std::vector<std::shared_ptr<const SymbolicNode>> factors;
-                for (long long kk = lo; kk <= hi; ++kk) {
-                    auto kval = lamina::detail::make_node<NumberNode>(BigInt((long long)kk));
+                for (std::int64_t kk = *lo;; ++kk) {
+                    auto kval = LMCAS::detail::make_node<NumberNode>(BigInt(kk));
                     auto term = norm_subst_index(new_body, node.index_var(), kval);
                     NormalizationVisitor inner;
                     term->accept(inner);
                     factors.push_back(inner.get_result());
+                    if (kk == *hi) break;
                 }
-                if (factors.empty()) { result = lamina::detail::make_node<NumberNode>(BigInt(1)); return; }
+                if (factors.empty()) { result = LMCAS::detail::make_node<NumberNode>(BigInt(1)); return; }
                 auto prod_node = make_normalized_multiply_node(factors);
                 prod_node->accept(*this);
                 return;
             }
         }
 
-        result = lamina::detail::make_node<ProductNode>(new_body, node.index_var(), new_lower, new_upper);
+        result = LMCAS::detail::make_node<ProductNode>(new_body, node.index_var(), new_lower, new_upper);
     }
 void NormalizationVisitor::visit(const TransformNode& node) {
         node.body()->accept(*this);
         auto new_body = result;
         node.target()->accept(*this);
         auto new_target = result;
-        result = lamina::detail::make_node<TransformNode>(
+        result = LMCAS::detail::make_node<TransformNode>(
             node.transform_type(), new_body, node.source_var(), new_target);
     }
 void NormalizationVisitor::visit(const QuantifierNode& node) {
@@ -226,7 +242,7 @@ void NormalizationVisitor::visit(const QuantifierNode& node) {
         /// Simplify ∀x∈S: true → true
         if (node.quantifier_type() == QuantifierNode::Type::ForAll) {
             if (new_predicate->is_one()) {
-                result = lamina::detail::make_node<NumberNode>(BigInt(1));
+                result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
                 return;
             }
         }
@@ -234,12 +250,12 @@ void NormalizationVisitor::visit(const QuantifierNode& node) {
         /// Simplify ∃x∈S: false → false
         if (node.quantifier_type() == QuantifierNode::Type::Exists) {
             if (new_predicate->is_zero()) {
-                result = lamina::detail::make_node<NumberNode>(BigInt(0));
+                result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
                 return;
             }
         }
 
-        result = lamina::detail::make_node<QuantifierNode>(node.quantifier_type(), node.bound_var(), new_domain, new_predicate);
+        result = LMCAS::detail::make_node<QuantifierNode>(node.quantifier_type(), node.bound_var(), new_domain, new_predicate);
     }
 void NormalizationVisitor::visit(const SetBuilderNode& node) {
         node.domain()->accept(*this);
@@ -248,7 +264,7 @@ void NormalizationVisitor::visit(const SetBuilderNode& node) {
         node.predicate()->accept(*this);
         auto new_predicate = result;
 
-        result = lamina::detail::make_node<SetBuilderNode>(node.element_var(), new_domain, new_predicate);
+        result = LMCAS::detail::make_node<SetBuilderNode>(node.element_var(), new_domain, new_predicate);
     }
 
 void NormalizationVisitor::visit(const FiniteSetNode& node) {
@@ -258,14 +274,14 @@ void NormalizationVisitor::visit(const FiniteSetNode& node) {
         element->accept(*this);
         elements.push_back(result);
     }
-    result = lamina::detail::make_node<FiniteSetNode>(std::move(elements));
+    result = LMCAS::detail::make_node<FiniteSetNode>(std::move(elements));
 }
 
 void NormalizationVisitor::visit(const IntervalNode& node) {
     node.lower()->accept(*this);
     auto lower = result;
     node.upper()->accept(*this);
-    result = lamina::detail::make_node<IntervalNode>(
+    result = LMCAS::detail::make_node<IntervalNode>(
         lower, result, node.lower_closed(), node.upper_closed());
 }
 
@@ -275,16 +291,16 @@ void NormalizationVisitor::visit(const MembershipNode& node) {
     node.set()->accept(*this);
     auto set = result;
     if (auto finite = std::dynamic_pointer_cast<const FiniteSetNode>(set)) {
-        result = lamina::detail::make_node<NumberNode>(
+        result = LMCAS::detail::make_node<NumberNode>(
             BigInt(finite->contains(*element) ? 1 : 0));
         return;
     }
-    result = lamina::detail::make_node<MembershipNode>(element, set);
+    result = LMCAS::detail::make_node<MembershipNode>(element, set);
 }
 
 void NormalizationVisitor::visit(const QuantityNode& node) {
     node.value()->accept(*this);
-    result = lamina::detail::make_node<QuantityNode>(
+    result = LMCAS::detail::make_node<QuantityNode>(
         result, node.dimension(), node.scale_to_base(), node.display_unit());
 }
 
@@ -299,7 +315,7 @@ void NormalizationVisitor::visit(const IntegralNode& node) {
         node.upper()->accept(*this);
         upper = result;
     }
-    result = lamina::detail::make_node<IntegralNode>(
+    result = LMCAS::detail::make_node<IntegralNode>(
         std::move(body), node.variable(), std::move(lower), std::move(upper));
 }
 
@@ -307,10 +323,12 @@ void NormalizationVisitor::visit(const LimitNode& node) {
     node.body()->accept(*this);
     auto body = result;
     node.point()->accept(*this);
-    result = lamina::detail::make_node<LimitNode>(
+    result = LMCAS::detail::make_node<LimitNode>(
         body, node.variable(), result, node.direction());
 }
 
 void NormalizationVisitor::visit(const RootOfNode& node) {
     result = node.clone();
 }
+
+} // namespace LMCAS

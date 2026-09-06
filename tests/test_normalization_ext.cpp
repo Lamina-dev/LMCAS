@@ -9,6 +9,11 @@
 #include "../include/symbolic_ast.hpp"
 #include "../include/visitors/normalization_visitor.hpp"
 #include "../include/visitors/print_visitor.hpp"
+#include "../include/expr.hpp"
+#include "../include/assumption_context.hpp"
+#include <cmath>
+
+using namespace LMCAS;
 
 static std::string to_str(const std::shared_ptr<const SymbolicNode>& node) {
     PrintVisitor pv;
@@ -23,36 +28,110 @@ static std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const
 }
 
 int main() {
+    TEST_CASE("Approximate square-root functions preserve their numeric domain");
+    for (double argument : {1e-30, 1e200, 9.0 + 1e-11, 4.0}) {
+        auto root = LMCAS::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::Sqrt,
+            std::vector<std::shared_ptr<const SymbolicNode>>{
+                LMCAS::detail::node(SymbolicExpr::number(argument))});
+        auto value = LMCAS::detail::make_expression_ptr(normalize(root));
+        EXPECT_TRUE(LMCAS::structurally_equal(
+                        *value, *SymbolicExpr::number(std::sqrt(argument))),
+                    "approximate function roots retain small, large, and near-integer values");
+    }
+
+    TEST_CASE("Power normalization preserves approximate exponents and final range");
+    const struct {
+        double base;
+        double exponent;
+    } power_cases[] = {
+        {1e200, 0.5000000001},
+        {1e110, -3},
+        {1e-108, -3},
+        {1e200, -2},
+        {1e100, -3},
+        {2.0, 0x1p63},
+        {2.0, -0x1p63}
+    };
+    for (const auto& test : power_cases) {
+        auto power = SymbolicExpr::power(
+            SymbolicExpr::number(test.base), SymbolicExpr::number(test.exponent));
+        for (auto expression : {power, SymbolicExpr::multiply(
+                                   SymbolicExpr::variable("power_factor"), power)}) {
+            auto simplified = LMCAS::simplify(expression);
+            EXPECT_TRUE(simplified.has_value(), "numeric powers remain valid expressions");
+            if (!simplified) continue;
+            auto value = LMCAS::evaluate_numeric(*simplified.value(), {{"power_factor", 1.0}});
+            const double expected = std::pow(test.base, test.exponent);
+            if (std::isfinite(expected)) {
+                EXPECT_TRUE(value && value.value().value == expected,
+                            "normalization preserves the directly evaluated power");
+            } else {
+                EXPECT_TRUE(value && value.value().status == LMCAS::NumericStatus::PositiveInfinity,
+                            "true overflow remains an explicit numeric result");
+            }
+        }
+    }
+    auto exact_reciprocal = SymbolicExpr::power(
+        SymbolicExpr::number(10), SymbolicExpr::number(-3))->simplify();
+    EXPECT_TRUE(LMCAS::structurally_equal(
+                    *exact_reciprocal, *SymbolicExpr::number(Rational(1, 1000))),
+                "exact negative powers retain exact rational results");
+    auto perturbed_root = SymbolicExpr::power(
+        SymbolicExpr::number(-1.0 - 1e-13), SymbolicExpr::number(Rational(1, 2)));
+    auto perturbed_square = SymbolicExpr::power(perturbed_root, SymbolicExpr::number(2));
+    EXPECT_TRUE(LMCAS::structurally_equal(
+                    *perturbed_square->simplify(), *perturbed_square),
+                "a nearby negative base is not classified as the imaginary unit");
+
+    TEST_CASE("Nonnegative assumptions preserve nearby non-square exponents");
+    LMCAS::AssumptionContext assumptions;
+    auto nonnegative = assumptions.assume_sign("root_base", LMCAS::Sign::NonNegative);
+    EXPECT_TRUE(nonnegative.has_value(), "nonnegative root-base assumption is accepted");
+    const double near_two = 2.0 + 1e-13;
+    auto near_square = SymbolicExpr::power(
+        SymbolicExpr::variable("root_base"), SymbolicExpr::number(near_two));
+    auto root_function = LMCAS::detail::make_node<FunctionNode>(
+        FunctionNode::FuncType::Sqrt,
+        std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(near_square)});
+    NormalizationVisitor assumed_normalizer(&assumptions);
+    root_function->accept(assumed_normalizer);
+    auto assumed_root = LMCAS::detail::make_expression_ptr(assumed_normalizer.get_result());
+    auto assumed_value = LMCAS::evaluate_numeric(*assumed_root, {{"root_base", 1e100}});
+    EXPECT_TRUE(assumed_value &&
+                    assumed_value.value().value == std::sqrt(std::pow(1e100, near_two)),
+                "nonnegative assumptions do not round a nearby exponent to two");
+
     TEST_CASE("PiecewiseNode normalization");
     {
         // piecewise(2+3 if x>0, 1*y if x<0) should normalize expressions
-        auto x = lamina::detail::make_node<VariableNode>("x");
-        auto y = lamina::detail::make_node<VariableNode>("y");
-        auto zero = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto x = LMCAS::detail::make_node<VariableNode>("x");
+        auto y = LMCAS::detail::make_node<VariableNode>("y");
+        auto zero = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
-        auto cond1 = lamina::detail::make_node<RelationalNode>(x, zero, RelationalNode::Op::GT);
-        auto cond2 = lamina::detail::make_node<RelationalNode>(x, zero, RelationalNode::Op::LT);
+        auto cond1 = LMCAS::detail::make_node<RelationalNode>(x, zero, RelationalNode::Op::GT);
+        auto cond2 = LMCAS::detail::make_node<RelationalNode>(x, zero, RelationalNode::Op::LT);
 
         // Expression: 2 + 3 (should normalize to 5)
         std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {
-            lamina::detail::make_node<NumberNode>(BigInt(2)),
-            lamina::detail::make_node<NumberNode>(BigInt(3))
+            LMCAS::detail::make_node<NumberNode>(BigInt(2)),
+            LMCAS::detail::make_node<NumberNode>(BigInt(3))
         };
-        auto expr1 = lamina::detail::make_node<AddNode>(add_ops);
+        auto expr1 = LMCAS::detail::make_node<AddNode>(add_ops);
 
         // Expression: 1 * y (should normalize to y)
         std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {
-            lamina::detail::make_node<NumberNode>(BigInt(1)),
+            LMCAS::detail::make_node<NumberNode>(BigInt(1)),
             y
         };
-        auto expr2 = lamina::detail::make_node<MultiplyNode>(mul_ops);
+        auto expr2 = LMCAS::detail::make_node<MultiplyNode>(mul_ops);
 
         std::vector<PiecewiseNode::Branch> branches;
         PiecewiseNode::Branch b1; b1.expression = expr1; b1.condition = cond1;
         PiecewiseNode::Branch b2; b2.expression = expr2; b2.condition = cond2;
         branches.push_back(b1);
         branches.push_back(b2);
-        auto pw = lamina::detail::make_node<PiecewiseNode>(branches);
+        auto pw = LMCAS::detail::make_node<PiecewiseNode>(branches);
         auto result = normalize(pw);
 
         auto pw_result = std::dynamic_pointer_cast<const PiecewiseNode>(result);
@@ -74,16 +153,16 @@ int main() {
 
     TEST_CASE("De Morgan's law: NOT(A AND B) = NOT(A) OR NOT(B)");
     {
-        auto a = lamina::detail::make_node<VariableNode>("a");
-        auto b = lamina::detail::make_node<VariableNode>("b");
-        auto zero = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto a = LMCAS::detail::make_node<VariableNode>("a");
+        auto b = LMCAS::detail::make_node<VariableNode>("b");
+        auto zero = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
-        auto cond_a = lamina::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
-        auto cond_b = lamina::detail::make_node<RelationalNode>(b, zero, RelationalNode::Op::GT);
+        auto cond_a = LMCAS::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
+        auto cond_b = LMCAS::detail::make_node<RelationalNode>(b, zero, RelationalNode::Op::GT);
 
         // NOT(A AND B)
-        auto and_node = lamina::detail::make_node<LogicalNode>(cond_a, cond_b, LogicalNode::Op::And);
-        auto not_and = lamina::detail::make_node<LogicalNode>(and_node, nullptr, LogicalNode::Op::Not);
+        auto and_node = LMCAS::detail::make_node<LogicalNode>(cond_a, cond_b, LogicalNode::Op::And);
+        auto not_and = LMCAS::detail::make_node<LogicalNode>(and_node, nullptr, LogicalNode::Op::Not);
 
         auto result = normalize(not_and);
         // Should become (NOT(A) OR NOT(B))
@@ -102,16 +181,16 @@ int main() {
 
     TEST_CASE("De Morgan's law: NOT(A OR B) = NOT(A) AND NOT(B)");
     {
-        auto a = lamina::detail::make_node<VariableNode>("a");
-        auto b = lamina::detail::make_node<VariableNode>("b");
-        auto zero = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto a = LMCAS::detail::make_node<VariableNode>("a");
+        auto b = LMCAS::detail::make_node<VariableNode>("b");
+        auto zero = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
-        auto cond_a = lamina::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
-        auto cond_b = lamina::detail::make_node<RelationalNode>(b, zero, RelationalNode::Op::GT);
+        auto cond_a = LMCAS::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
+        auto cond_b = LMCAS::detail::make_node<RelationalNode>(b, zero, RelationalNode::Op::GT);
 
         // NOT(A OR B)
-        auto or_node = lamina::detail::make_node<LogicalNode>(cond_a, cond_b, LogicalNode::Op::Or);
-        auto not_or = lamina::detail::make_node<LogicalNode>(or_node, nullptr, LogicalNode::Op::Not);
+        auto or_node = LMCAS::detail::make_node<LogicalNode>(cond_a, cond_b, LogicalNode::Op::Or);
+        auto not_or = LMCAS::detail::make_node<LogicalNode>(or_node, nullptr, LogicalNode::Op::Not);
 
         auto result = normalize(not_or);
         // Should become (NOT(A) AND NOT(B))
@@ -130,13 +209,13 @@ int main() {
 
     TEST_CASE("Double negation: NOT(NOT(A)) = A");
     {
-        auto a = lamina::detail::make_node<VariableNode>("a");
-        auto zero = lamina::detail::make_node<NumberNode>(BigInt(0));
-        auto cond_a = lamina::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
+        auto a = LMCAS::detail::make_node<VariableNode>("a");
+        auto zero = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        auto cond_a = LMCAS::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
 
         // NOT(NOT(cond_a))
-        auto not_a = lamina::detail::make_node<LogicalNode>(cond_a, nullptr, LogicalNode::Op::Not);
-        auto not_not_a = lamina::detail::make_node<LogicalNode>(not_a, nullptr, LogicalNode::Op::Not);
+        auto not_a = LMCAS::detail::make_node<LogicalNode>(cond_a, nullptr, LogicalNode::Op::Not);
+        auto not_not_a = LMCAS::detail::make_node<LogicalNode>(not_a, nullptr, LogicalNode::Op::Not);
 
         auto result = normalize(not_not_a);
         // Should be cond_a (a > 0)
@@ -149,15 +228,15 @@ int main() {
 
     TEST_CASE("Implication: A => B = NOT(A) OR B");
     {
-        auto a = lamina::detail::make_node<VariableNode>("a");
-        auto b = lamina::detail::make_node<VariableNode>("b");
-        auto zero = lamina::detail::make_node<NumberNode>(BigInt(0));
+        auto a = LMCAS::detail::make_node<VariableNode>("a");
+        auto b = LMCAS::detail::make_node<VariableNode>("b");
+        auto zero = LMCAS::detail::make_node<NumberNode>(BigInt(0));
 
-        auto cond_a = lamina::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
-        auto cond_b = lamina::detail::make_node<RelationalNode>(b, zero, RelationalNode::Op::GT);
+        auto cond_a = LMCAS::detail::make_node<RelationalNode>(a, zero, RelationalNode::Op::GT);
+        auto cond_b = LMCAS::detail::make_node<RelationalNode>(b, zero, RelationalNode::Op::GT);
 
         // A => B
-        auto implies = lamina::detail::make_node<LogicalNode>(cond_a, cond_b, LogicalNode::Op::Implies);
+        auto implies = LMCAS::detail::make_node<LogicalNode>(cond_a, cond_b, LogicalNode::Op::Implies);
 
         auto result = normalize(implies);
         // Should become (NOT(A) OR B)
@@ -174,13 +253,13 @@ int main() {
     TEST_CASE("Imaginary unit: i^2 = -1");
     {
         // i = (-1)^(1/2), so i^2 = (-1)^(2/2) = (-1)^1 = -1
-        auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
-        auto half = lamina::detail::make_node<NumberNode>(Rational(1, 2));
-        auto i_node = lamina::detail::make_node<PowerNode>(neg_one, half);
+        auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+        auto half = LMCAS::detail::make_node<NumberNode>(Rational(1, 2));
+        auto i_node = LMCAS::detail::make_node<PowerNode>(neg_one, half);
 
         // i^2 = ((-1)^(1/2))^2
-        auto two = lamina::detail::make_node<NumberNode>(BigInt(2));
-        auto i_squared = lamina::detail::make_node<PowerNode>(i_node, two);
+        auto two = LMCAS::detail::make_node<NumberNode>(BigInt(2));
+        auto i_squared = LMCAS::detail::make_node<PowerNode>(i_node, two);
 
         auto result = normalize(i_squared);
         auto num = std::dynamic_pointer_cast<const NumberNode>(result);
@@ -196,12 +275,12 @@ int main() {
     TEST_CASE("Imaginary unit: i^4 = 1");
     {
         // i^4 = ((-1)^(1/2))^4 = (-1)^(4/2) = (-1)^2 = 1
-        auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
-        auto half = lamina::detail::make_node<NumberNode>(Rational(1, 2));
-        auto i_node = lamina::detail::make_node<PowerNode>(neg_one, half);
+        auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+        auto half = LMCAS::detail::make_node<NumberNode>(Rational(1, 2));
+        auto i_node = LMCAS::detail::make_node<PowerNode>(neg_one, half);
 
-        auto four = lamina::detail::make_node<NumberNode>(BigInt(4));
-        auto i_fourth = lamina::detail::make_node<PowerNode>(i_node, four);
+        auto four = LMCAS::detail::make_node<NumberNode>(BigInt(4));
+        auto i_fourth = LMCAS::detail::make_node<PowerNode>(i_node, four);
 
         auto result = normalize(i_fourth);
         auto num = std::dynamic_pointer_cast<const NumberNode>(result);
@@ -217,12 +296,12 @@ int main() {
     TEST_CASE("Imaginary unit: i^3 = -i");
     {
         // i^3 = ((-1)^(1/2))^3 = (-1)^(3/2)
-        auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
-        auto half = lamina::detail::make_node<NumberNode>(Rational(1, 2));
-        auto i_node = lamina::detail::make_node<PowerNode>(neg_one, half);
+        auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+        auto half = LMCAS::detail::make_node<NumberNode>(Rational(1, 2));
+        auto i_node = LMCAS::detail::make_node<PowerNode>(neg_one, half);
 
-        auto three = lamina::detail::make_node<NumberNode>(BigInt(3));
-        auto i_cubed = lamina::detail::make_node<PowerNode>(i_node, three);
+        auto three = LMCAS::detail::make_node<NumberNode>(BigInt(3));
+        auto i_cubed = LMCAS::detail::make_node<PowerNode>(i_node, three);
 
         auto result = normalize(i_cubed);
         // Should be -1 * (-1)^(1/2) = -i
@@ -257,10 +336,10 @@ int main() {
 
     TEST_CASE("Quantifier: ForAll x in S: true -> true");
     {
-        auto domain = lamina::detail::make_node<VariableNode>("S");
-        auto pred_true = lamina::detail::make_node<NumberNode>(BigInt(1)); // true = 1
+        auto domain = LMCAS::detail::make_node<VariableNode>("S");
+        auto pred_true = LMCAS::detail::make_node<NumberNode>(BigInt(1)); // true = 1
 
-        auto forall = lamina::detail::make_node<QuantifierNode>(
+        auto forall = LMCAS::detail::make_node<QuantifierNode>(
             QuantifierNode::Type::ForAll, "x", domain, pred_true);
 
         auto result = normalize(forall);
@@ -273,10 +352,10 @@ int main() {
 
     TEST_CASE("Quantifier: Exists x in S: false -> false");
     {
-        auto domain = lamina::detail::make_node<VariableNode>("S");
-        auto pred_false = lamina::detail::make_node<NumberNode>(BigInt(0)); // false = 0
+        auto domain = LMCAS::detail::make_node<VariableNode>("S");
+        auto pred_false = LMCAS::detail::make_node<NumberNode>(BigInt(0)); // false = 0
 
-        auto exists = lamina::detail::make_node<QuantifierNode>(
+        auto exists = LMCAS::detail::make_node<QuantifierNode>(
             QuantifierNode::Type::Exists, "x", domain, pred_false);
 
         auto result = normalize(exists);
@@ -290,14 +369,14 @@ int main() {
     TEST_CASE("SummationNode normalization");
     {
         // Sum(2+3, k=0..n) should normalize body to 5
-        auto body = lamina::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
-            lamina::detail::make_node<NumberNode>(BigInt(2)),
-            lamina::detail::make_node<NumberNode>(BigInt(3))
+        auto body = LMCAS::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+            LMCAS::detail::make_node<NumberNode>(BigInt(2)),
+            LMCAS::detail::make_node<NumberNode>(BigInt(3))
         });
-        auto lower = lamina::detail::make_node<NumberNode>(BigInt(0));
-        auto upper = lamina::detail::make_node<VariableNode>("n");
+        auto lower = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        auto upper = LMCAS::detail::make_node<VariableNode>("n");
 
-        auto sum = lamina::detail::make_node<SummationNode>(body, "k", lower, upper);
+        auto sum = LMCAS::detail::make_node<SummationNode>(body, "k", lower, upper);
         auto result = normalize(sum);
 
         auto sum_result = std::dynamic_pointer_cast<const SummationNode>(result);
@@ -316,14 +395,14 @@ int main() {
     TEST_CASE("ProductNode normalization");
     {
         // Product(1*x, k=1..n) should normalize body to x
-        auto x = lamina::detail::make_node<VariableNode>("x");
-        auto body = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
-            lamina::detail::make_node<NumberNode>(BigInt(1)), x
+        auto x = LMCAS::detail::make_node<VariableNode>("x");
+        auto body = LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+            LMCAS::detail::make_node<NumberNode>(BigInt(1)), x
         });
-        auto lower = lamina::detail::make_node<NumberNode>(BigInt(1));
-        auto upper = lamina::detail::make_node<VariableNode>("n");
+        auto lower = LMCAS::detail::make_node<NumberNode>(BigInt(1));
+        auto upper = LMCAS::detail::make_node<VariableNode>("n");
 
-        auto prod = lamina::detail::make_node<ProductNode>(body, "k", lower, upper);
+        auto prod = LMCAS::detail::make_node<ProductNode>(body, "k", lower, upper);
         auto result = normalize(prod);
 
         auto prod_result = std::dynamic_pointer_cast<const ProductNode>(result);
@@ -337,12 +416,12 @@ int main() {
     TEST_CASE("TransformNode normalization");
     {
         // Laplace{2+3}(s) should normalize body to 5
-        auto body = lamina::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
-            lamina::detail::make_node<NumberNode>(BigInt(2)),
-            lamina::detail::make_node<NumberNode>(BigInt(3))
+        auto body = LMCAS::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+            LMCAS::detail::make_node<NumberNode>(BigInt(2)),
+            LMCAS::detail::make_node<NumberNode>(BigInt(3))
         });
 
-        auto transform = lamina::detail::make_node<TransformNode>(
+        auto transform = LMCAS::detail::make_node<TransformNode>(
             TransformNode::TransformType::Laplace, body, "t",
             SymbolicFactory::create_variable("s"));
         auto result = normalize(transform);
@@ -363,15 +442,15 @@ int main() {
     TEST_CASE("SetBuilderNode normalization");
     {
         // {x in S | 2+3 > 0} should normalize predicate condition
-        auto domain = lamina::detail::make_node<VariableNode>("S");
-        auto sum_node = lamina::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
-            lamina::detail::make_node<NumberNode>(BigInt(2)),
-            lamina::detail::make_node<NumberNode>(BigInt(3))
+        auto domain = LMCAS::detail::make_node<VariableNode>("S");
+        auto sum_node = LMCAS::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+            LMCAS::detail::make_node<NumberNode>(BigInt(2)),
+            LMCAS::detail::make_node<NumberNode>(BigInt(3))
         });
-        auto zero = lamina::detail::make_node<NumberNode>(BigInt(0));
-        auto pred = lamina::detail::make_node<RelationalNode>(sum_node, zero, RelationalNode::Op::GT);
+        auto zero = LMCAS::detail::make_node<NumberNode>(BigInt(0));
+        auto pred = LMCAS::detail::make_node<RelationalNode>(sum_node, zero, RelationalNode::Op::GT);
 
-        auto setb = lamina::detail::make_node<SetBuilderNode>("x", domain, pred);
+        auto setb = LMCAS::detail::make_node<SetBuilderNode>("x", domain, pred);
         auto result = normalize(setb);
 
         auto sb_result = std::dynamic_pointer_cast<const SetBuilderNode>(result);

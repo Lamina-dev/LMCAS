@@ -1,7 +1,7 @@
 #pragma once
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 void ensure_lmmc_lifecycle() noexcept;
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

@@ -1,6 +1,8 @@
 #include "test_common.hpp"
 #include <iostream>
 
+using namespace LMCAS;
+
 int main() {
 
     BigInt a1 = BigInt(2).power(128) - BigInt(1);

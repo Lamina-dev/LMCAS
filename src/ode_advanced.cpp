@@ -15,16 +15,16 @@
 #include <memory>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
-static FrobeniusSolution solve_frobenius_impl(
+static FrobeniusSolutionResult solve_frobenius_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::shared_ptr<SymbolicExpr>&,
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&, int, ODESingularityType, ComputationContext&);
 
 
-static ODESolution solve_variation_of_parameters_core(
+static ODESolutionResult solve_variation_of_parameters_core(
     const std::shared_ptr<SymbolicExpr>& y1,
     const std::shared_ptr<SymbolicExpr>& y2,
     const std::shared_ptr<SymbolicExpr>& g,
@@ -46,13 +46,13 @@ ODESolutionResult solve_variation_of_parameters_checked(
     if (!budget) return ODESolutionResult::failure(budget.error());
 
     try {
+        auto solved = solve_variation_of_parameters_core(
+            y1, y2, g, x, context);
+        if (!solved) return solved;
         return wrap_ode_solution(
-            solve_variation_of_parameters_core(
-                y1, y2, g, x, context),
+            std::move(solved.value()),
             ODEType::HigherOrder_ConstCoeff,
             operation);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(
             CasErrc::ResourceLimit,
@@ -76,7 +76,7 @@ ODESolutionResult solve_variation_of_parameters_checked(
     return solve_variation_of_parameters_checked(y1, y2, g, x, context);
 }
 
-static ODESolution solve_variation_of_parameters_core(
+static ODESolutionResult solve_variation_of_parameters_core(
     const std::shared_ptr<SymbolicExpr>& y1,
     const std::shared_ptr<SymbolicExpr>& y2,
     const std::shared_ptr<SymbolicExpr>& g,
@@ -127,12 +127,20 @@ static ODESolution solve_variation_of_parameters_core(
     u2_prime = u2_prime->simplify();
 
     Integrator integrator;
-    auto u1_value = detail::propagate_result(
-        integrator.integrate_checked(*u1_prime, x, context));
-    auto u2_value = detail::propagate_result(
-        integrator.integrate_checked(*u2_prime, x, context));
-    auto u1 = std::make_shared<SymbolicExpr>(std::move(u1_value));
-    auto u2 = std::make_shared<SymbolicExpr>(std::move(u2_value));
+    auto u1_value =
+        integrator.integrate_checked(*u1_prime, x, context);
+    if (!u1_value) {
+        return ODESolutionResult::failure(u1_value.error());
+    }
+    auto u2_value =
+        integrator.integrate_checked(*u2_prime, x, context);
+    if (!u2_value) {
+        return ODESolutionResult::failure(u2_value.error());
+    }
+    auto u1 = std::make_shared<SymbolicExpr>(
+        std::move(u1_value.value()));
+    auto u2 = std::make_shared<SymbolicExpr>(
+        std::move(u2_value.value()));
 
     /// 特解: y_p = u₁·y₁ + u₂·y₂
     auto y_p = SymbolicExpr::add(
@@ -165,6 +173,15 @@ ODESingularityResult classify_singular_point_checked(
             return ODESingularityResult::success(
                 ODESingularityType::Ordinary);
         }
+        if ((!std::isfinite(p_val) &&
+             !free_variables(detail::node(p_at_x0)).empty()) ||
+            (!std::isfinite(q_val) &&
+             !free_variables(detail::node(q_at_x0)).empty())) {
+            return ODESingularityResult::failure(
+                CasErrc::Inconclusive,
+                "singularity classification requires numeric coefficient values",
+                operation);
+        }
 
         auto x_var = SymbolicExpr::variable(x);
         auto x_minus_x0 = SymbolicExpr::add(
@@ -173,18 +190,22 @@ ODESingularityResult classify_singular_point_checked(
         auto x2q = SymbolicExpr::multiply(
             SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)),
             q)->simplify();
-        auto xp_limit = detail::propagate_result(limit_expression_checked(
-            xp, x, x0, LimitDirection::Both, context));
-        auto x2q_limit = detail::propagate_result(limit_expression_checked(
-            x2q, x, x0, LimitDirection::Both, context));
-        const double xp_val = try_eval_double(xp_limit);
-        const double x2q_val = try_eval_double(x2q_limit);
+        auto xp_limit = limit_expression_checked(
+            xp, x, x0, LimitDirection::Both, context);
+        if (!xp_limit) {
+            return ODESingularityResult::failure(xp_limit.error());
+        }
+        auto x2q_limit = limit_expression_checked(
+            x2q, x, x0, LimitDirection::Both, context);
+        if (!x2q_limit) {
+            return ODESingularityResult::failure(x2q_limit.error());
+        }
+        const double xp_val = try_eval_double(xp_limit.value());
+        const double x2q_val = try_eval_double(x2q_limit.value());
         return ODESingularityResult::success(
             std::isfinite(xp_val) && std::isfinite(x2q_val)
                 ? ODESingularityType::RegularSingular
                 : ODESingularityType::IrregularSingular);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ODESingularityResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESingularityResult::failure(
             CasErrc::ResourceLimit,
@@ -222,12 +243,20 @@ static Result<void> validate_frobenius_regular_singular_domain(
     auto x2q_expr = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
-    auto P0_expr = detail::propagate_result(limit_expression_checked(
-        xp_expr, x, x0, LimitDirection::Both, context));
-    auto Q0_expr = detail::propagate_result(limit_expression_checked(
-        x2q_expr, x, x0, LimitDirection::Both, context));
-    double P0 = P0_expr ? try_eval_double(P0_expr) : std::numeric_limits<double>::quiet_NaN();
-    double Q0 = Q0_expr ? try_eval_double(Q0_expr) : std::numeric_limits<double>::quiet_NaN();
+    auto P0_result = limit_expression_checked(
+        xp_expr, x, x0, LimitDirection::Both, context);
+    if (!P0_result) return Result<void>::failure(P0_result.error());
+    auto Q0_result = limit_expression_checked(
+        x2q_expr, x, x0, LimitDirection::Both, context);
+    if (!Q0_result) return Result<void>::failure(Q0_result.error());
+    const auto& P0_expr = P0_result.value();
+    const auto& Q0_expr = Q0_result.value();
+    double P0 = P0_expr
+        ? try_eval_double(P0_expr)
+        : std::numeric_limits<double>::quiet_NaN();
+    double Q0 = Q0_expr
+        ? try_eval_double(Q0_expr)
+        : std::numeric_limits<double>::quiet_NaN();
     if (!std::isfinite(P0) || !std::isfinite(Q0)) {
         return Result<void>::failure(
             CasErrc::Inconclusive,
@@ -271,8 +300,12 @@ FrobeniusSolutionResult solve_frobenius_checked(
     if (!budget) return FrobeniusSolutionResult::failure(budget.error());
 
     try {
-        auto point_type = detail::propagate_result(
-            classify_singular_point_checked(p, q, x0, x, context));
+        auto classified =
+            classify_singular_point_checked(p, q, x0, x, context);
+        if (!classified) {
+            return FrobeniusSolutionResult::failure(classified.error());
+        }
+        const auto point_type = classified.value();
         if (point_type == ODESingularityType::IrregularSingular) {
             return FrobeniusSolutionResult::failure(
                 CasErrc::Inconclusive,
@@ -287,9 +320,13 @@ FrobeniusSolutionResult solve_frobenius_checked(
             }
         }
 
-        auto solution =
-            solve_frobenius_impl(p, q, x0, x, order, point_type, context);
-        if (!solution.series_solution || !lamina::detail::node(solution.series_solution)) {
+        auto solved =
+            solve_frobenius_impl(
+                p, q, x0, x, order, point_type, context);
+        if (!solved) return solved;
+        auto solution = std::move(solved.value());
+        if (!solution.series_solution ||
+            !LMCAS::detail::node(solution.series_solution)) {
             return FrobeniusSolutionResult::failure(
                 CasErrc::Inconclusive,
                 "Frobenius solver produced no series in the supported domain",
@@ -302,8 +339,6 @@ FrobeniusSolutionResult solve_frobenius_checked(
                 operation);
         }
         return FrobeniusSolutionResult::success(std::move(solution));
-    } catch (const detail::ResultPropagation& propagation) {
-        return FrobeniusSolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return FrobeniusSolutionResult::failure(
             CasErrc::ResourceLimit,
@@ -328,7 +363,7 @@ FrobeniusSolutionResult solve_frobenius_checked(
     return solve_frobenius_checked(p, q, x0, x, order, context);
 }
 
-static FrobeniusSolution solve_frobenius_impl(
+static FrobeniusSolutionResult solve_frobenius_impl(
     const std::shared_ptr<SymbolicExpr>& p,
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
@@ -340,6 +375,19 @@ static FrobeniusSolution solve_frobenius_impl(
     FrobeniusSolution result;
     result.truncation_order = order;
     result.point_type = point_type;
+
+    auto unsupported_numeric = [] {
+        return FrobeniusSolutionResult::failure(
+            CasErrc::Inconclusive,
+            "Frobenius series coefficients are outside the checked numeric support domain",
+            "solve_frobenius");
+    };
+    auto arithmetic_failure = [] {
+        return FrobeniusSolutionResult::failure(
+            CasErrc::NumericFailure,
+            "Frobenius coefficient recurrence produced a non-finite value",
+            "solve_frobenius");
+    };
 
     auto x_var = SymbolicExpr::variable(x);
     auto x_minus_x0 = SymbolicExpr::add(x_var,
@@ -365,8 +413,11 @@ static FrobeniusSolution solve_frobenius_impl(
             auto q_val_expr = q_current->substitute(x, x0)->simplify();
             double pv = try_eval_double(p_val_expr);
             double qv = try_eval_double(q_val_expr);
-            p_coeffs[k] = std::isnan(pv) ? 0.0 : pv / factorial;
-            q_coeffs[k] = std::isnan(qv) ? 0.0 : qv / factorial;
+            if (!std::isfinite(pv) || !std::isfinite(qv)) {
+                return unsupported_numeric();
+            }
+            p_coeffs[k] = pv / factorial;
+            q_coeffs[k] = qv / factorial;
             p_current = p_current->differentiate(x);
             q_current = q_current->differentiate(x);
             if (!p_current) p_current = SymbolicExpr::number(0);
@@ -386,6 +437,9 @@ static FrobeniusSolution solve_frobenius_impl(
             }
             double denom = static_cast<double>((n_idx + 2) * (n_idx + 1));
             a[n_idx + 2] = -sum / denom;
+            if (!std::isfinite(a[n_idx + 2])) {
+                return arithmetic_failure();
+            }
         }
 
         /// 构造级数解
@@ -410,20 +464,36 @@ static FrobeniusSolution solve_frobenius_impl(
     auto x2q_expr = SymbolicExpr::multiply(
         SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
 
-    auto P0_expr = detail::propagate_result(limit_expression_checked(
-        xp_expr, x, x0, LimitDirection::Both, context));
-    auto Q0_expr = detail::propagate_result(limit_expression_checked(
-        x2q_expr, x, x0, LimitDirection::Both, context));
+    auto P0_result = limit_expression_checked(
+        xp_expr, x, x0, LimitDirection::Both, context);
+    if (!P0_result) {
+        return FrobeniusSolutionResult::failure(P0_result.error());
+    }
+    auto Q0_result = limit_expression_checked(
+        x2q_expr, x, x0, LimitDirection::Both, context);
+    if (!Q0_result) {
+        return FrobeniusSolutionResult::failure(Q0_result.error());
+    }
+    auto P0_expr = std::move(P0_result.value());
+    auto Q0_expr = std::move(Q0_result.value());
 
-    double P0 = P0_expr ? try_eval_double(P0_expr) : 0.0;
-    double Q0 = Q0_expr ? try_eval_double(Q0_expr) : 0.0;
-    if (std::isnan(P0)) P0 = 0.0;
-    if (std::isnan(Q0)) Q0 = 0.0;
+    double P0 = P0_expr
+        ? try_eval_double(P0_expr)
+        : std::numeric_limits<double>::quiet_NaN();
+    double Q0 = Q0_expr
+        ? try_eval_double(Q0_expr)
+        : std::numeric_limits<double>::quiet_NaN();
+    if (!std::isfinite(P0) || !std::isfinite(Q0)) {
+        return unsupported_numeric();
+    }
 
     /// 指标方程: r(r-1) + P₀·r + Q₀ = 0  →  r² + (P₀-1)·r + Q₀ = 0
     double ind_b = P0 - 1.0;
     double ind_c = Q0;
     double ind_D = ind_b * ind_b - 4.0 * ind_c;
+    if (!std::isfinite(ind_D)) {
+        return arithmetic_failure();
+    }
 
     double r1, r2;
     int eq;
@@ -459,19 +529,36 @@ static FrobeniusSolution solve_frobenius_impl(
             auto qv_expr = x2q_current->substitute(x, x0)->simplify();
             pv = try_eval_double(pv_expr);
             qv = try_eval_double(qv_expr);
-            if (std::isnan(pv)) {
-                auto lim = detail::propagate_result(limit_expression_checked(
-                    xp_current, x, x0, LimitDirection::Both, context));
-                pv = lim ? try_eval_double(lim) : 0.0;
+            if (!std::isfinite(pv)) {
+                auto limited = limit_expression_checked(
+                    xp_current, x, x0, LimitDirection::Both, context);
+                if (!limited) {
+                    return FrobeniusSolutionResult::failure(
+                        limited.error());
+                }
+                const auto& lim = limited.value();
+                pv = lim
+                    ? try_eval_double(lim)
+                    : std::numeric_limits<double>::quiet_NaN();
             }
-            if (std::isnan(qv)) {
-                auto lim = detail::propagate_result(limit_expression_checked(
-                    x2q_current, x, x0, LimitDirection::Both, context));
-                qv = lim ? try_eval_double(lim) : 0.0;
+            if (!std::isfinite(qv)) {
+                auto limited = limit_expression_checked(
+                    x2q_current, x, x0, LimitDirection::Both, context);
+                if (!limited) {
+                    return FrobeniusSolutionResult::failure(
+                        limited.error());
+                }
+                const auto& lim = limited.value();
+                qv = lim
+                    ? try_eval_double(lim)
+                    : std::numeric_limits<double>::quiet_NaN();
             }
         }
-        pn_coeffs[k] = std::isnan(pv) ? 0.0 : pv / fact;
-        qn_coeffs[k] = std::isnan(qv) ? 0.0 : qv / fact;
+        if (!std::isfinite(pv) || !std::isfinite(qv)) {
+            return unsupported_numeric();
+        }
+        pn_coeffs[k] = pv / fact;
+        qn_coeffs[k] = qv / fact;
 
         xp_current = xp_current->differentiate(x);
         x2q_current = x2q_current->differentiate(x);
@@ -490,6 +577,9 @@ static FrobeniusSolution solve_frobenius_impl(
 
     for (int n_idx = 1; n_idx <= order; ++n_idx) {
         double F_val = indicial_poly(r1 + n_idx);
+        if (!std::isfinite(F_val)) {
+            return arithmetic_failure();
+        }
         if (std::abs(F_val) < 1e-15) {
             a[n_idx] = 0.0;
             continue;
@@ -503,6 +593,9 @@ static FrobeniusSolution solve_frobenius_impl(
             sum += ((r1 + k) * p_term + q_term) * a[k];
         }
         a[n_idx] = -sum / F_val;
+        if (!std::isfinite(a[n_idx])) {
+            return arithmetic_failure();
+        }
     }
 
     /// 构造级数解: y = (x-x₀)^r₁ · ∑aₙ·(x-x₀)ⁿ
@@ -522,4 +615,4 @@ static FrobeniusSolution solve_frobenius_impl(
     return result;
 }
 
-} // namespace lamina
+} // namespace LMCAS

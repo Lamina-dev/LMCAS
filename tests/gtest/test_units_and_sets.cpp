@@ -1,12 +1,14 @@
 #include <gtest/gtest.h>
 
-#include "lsr_expr.hpp"
+#include "expr.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina {
+using namespace LMCAS;
+
+namespace LMCAS {
 namespace {
 
-using namespace lsr;
+using namespace LMCAS;
 
 ExprPtr exact(long long value) {
     auto result = integer(value);
@@ -151,4 +153,4 @@ TEST(IntervalTest, HonorsOpenAndClosedEndpoints) {
 }
 
 } // namespace
-} // namespace lamina
+} // namespace LMCAS

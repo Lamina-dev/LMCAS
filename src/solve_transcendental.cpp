@@ -11,24 +11,24 @@
 #include <vector>
 #include <algorithm>
 
-namespace lamina {
+namespace LMCAS {
 
 static std::shared_ptr<SymbolicExpr> make_arcsin(const std::shared_ptr<SymbolicExpr>& c) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::ArcSin,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(c)}));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::ArcSin,
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(c)}));
 }
 
 static std::shared_ptr<SymbolicExpr> make_arccos(const std::shared_ptr<SymbolicExpr>& c) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::ArcCos,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(c)}));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::ArcCos,
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(c)}));
 }
 
 static std::shared_ptr<SymbolicExpr> make_arctan(const std::shared_ptr<SymbolicExpr>& c) {
-    return lamina::detail::make_expression_ptr(
-        lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::ArcTan,
-            std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(c)}));
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::ArcTan,
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(c)}));
 }
 
 static std::shared_ptr<SymbolicExpr> make_pi() {
@@ -54,9 +54,9 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !lamina::detail::node(expr)) return std::nullopt;
+    if (!expr || !LMCAS::detail::node(expr)) return std::nullopt;
 
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(expr))) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
         if (func->arguments().size() == 1 && expression_depends_on_variable(func->arguments()[0], var)) {
             auto ft = func->type();
             if (ft == FunctionNode::FuncType::Sin || ft == FunctionNode::FuncType::Cos ||
@@ -64,14 +64,14 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
                 ft == FunctionNode::FuncType::Ln) {
                 return InversePattern{
                     ft,
-                    lamina::detail::make_expression_ptr(func->arguments()[0]),
+                    LMCAS::detail::make_expression_ptr(func->arguments()[0]),
                     SymbolicExpr::number(0)
                 };
             }
         }
     }
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
 
         std::shared_ptr<const FunctionNode> func_term = nullptr;
         std::shared_ptr<const SymbolicNode> func_coeff = nullptr;
@@ -86,7 +86,7 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
                          ft == FunctionNode::FuncType::Tan || ft == FunctionNode::FuncType::Exp ||
                          ft == FunctionNode::FuncType::Ln) && !func_term) {
                         func_term = f;
-                        func_coeff = lamina::detail::make_node<NumberNode>(BigInt(1));
+                        func_coeff = LMCAS::detail::make_node<NumberNode>(BigInt(1));
                         continue;
                     }
                 }
@@ -129,24 +129,24 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
             if (const_terms.empty()) {
                 const_sum = SymbolicExpr::number(0);
             } else if (const_terms.size() == 1) {
-                const_sum = lamina::detail::make_expression_ptr(const_terms[0]);
+                const_sum = LMCAS::detail::make_expression_ptr(const_terms[0]);
             } else {
-                const_sum = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(const_terms));
+                const_sum = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(const_terms));
             }
 
             auto neg_const = SymbolicExpr::multiply(const_sum, SymbolicExpr::number(-1));
-            auto coeff_expr = lamina::detail::make_expression_ptr(func_coeff);
+            auto coeff_expr = LMCAS::detail::make_expression_ptr(func_coeff);
             auto rhs = SymbolicExpr::divide(neg_const, coeff_expr)->simplify();
 
             return InversePattern{
                 func_term->type(),
-                lamina::detail::make_expression_ptr(func_term->arguments()[0]),
+                LMCAS::detail::make_expression_ptr(func_term->arguments()[0]),
                 rhs
             };
         }
     }
 
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         for (auto& op : mul->operands()) {
             if (auto f = std::dynamic_pointer_cast<const FunctionNode>(op)) {
                 if (f->arguments().size() == 1 && expression_depends_on_variable(f->arguments()[0], var)) {
@@ -156,7 +156,7 @@ static std::optional<InversePattern> decompose_trig_exp_pattern(
                         ft == FunctionNode::FuncType::Ln) {
                         return InversePattern{
                             ft,
-                            lamina::detail::make_expression_ptr(f->arguments()[0]),
+                            LMCAS::detail::make_expression_ptr(f->arguments()[0]),
                             SymbolicExpr::number(0)
                         };
                     }
@@ -182,7 +182,7 @@ static std::optional<LambertWPattern> decompose_lambert_w_pattern(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !lamina::detail::node(expr)) return std::nullopt;
+    if (!expr || !LMCAS::detail::node(expr)) return std::nullopt;
 
     auto check_mul_is_g_exp_g = [&](const std::shared_ptr<const MultiplyNode>& mul)
         -> std::optional<std::shared_ptr<SymbolicExpr>> {
@@ -200,11 +200,11 @@ static std::optional<LambertWPattern> decompose_lambert_w_pattern(
                     if (remaining.size() == 1) {
                         g_node = remaining[0];
                     } else {
-                        g_node = lamina::detail::make_node<MultiplyNode>(remaining);
+                        g_node = LMCAS::detail::make_node<MultiplyNode>(remaining);
                     }
 
                     if (nodes_equal(g_node, exp_arg) && expression_depends_on_variable(g_node, var)) {
-                        return lamina::detail::make_expression_ptr(g_node);
+                        return LMCAS::detail::make_expression_ptr(g_node);
                     }
                 }
             }
@@ -212,14 +212,14 @@ static std::optional<LambertWPattern> decompose_lambert_w_pattern(
         return std::nullopt;
     };
 
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr))) {
+    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
         auto g = check_mul_is_g_exp_g(mul);
         if (g) {
             return LambertWPattern{*g, SymbolicExpr::number(0)};
         }
     }
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
         std::optional<std::shared_ptr<SymbolicExpr>> g_found;
         std::vector<std::shared_ptr<const SymbolicNode>> const_terms;
         bool has_other_var_terms = false;
@@ -244,9 +244,9 @@ static std::optional<LambertWPattern> decompose_lambert_w_pattern(
             if (const_terms.empty()) {
                 const_sum = SymbolicExpr::number(0);
             } else if (const_terms.size() == 1) {
-                const_sum = lamina::detail::make_expression_ptr(const_terms[0]);
+                const_sum = LMCAS::detail::make_expression_ptr(const_terms[0]);
             } else {
-                const_sum = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(const_terms));
+                const_sum = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(const_terms));
             }
             auto rhs = SymbolicExpr::multiply(const_sum, SymbolicExpr::number(-1))->simplify();
             return LambertWPattern{*g_found, rhs};
@@ -266,14 +266,14 @@ static std::optional<ExpBasePattern> decompose_exp_base_pattern(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !lamina::detail::node(expr)) return std::nullopt;
+    if (!expr || !LMCAS::detail::node(expr)) return std::nullopt;
 
     auto check_power_is_a_to_g = [&](const std::shared_ptr<const PowerNode>& pow)
         -> std::optional<std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>> {
 
         if (!expression_depends_on_variable(pow->base(), var) && expression_depends_on_variable(pow->exponent(), var)) {
-            auto base_expr = lamina::detail::make_expression_ptr(pow->base());
-            auto exp_expr = lamina::detail::make_expression_ptr(pow->exponent());
+            auto base_expr = LMCAS::detail::make_expression_ptr(pow->base());
+            auto exp_expr = LMCAS::detail::make_expression_ptr(pow->exponent());
 
             lmmc_real_t base_val;
             if (try_evaluate_numeric(base_expr, base_val)) {
@@ -285,7 +285,7 @@ static std::optional<ExpBasePattern> decompose_exp_base_pattern(
         return std::nullopt;
     };
 
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(expr))) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
         auto result = check_power_is_a_to_g(pow);
         if (result) {
 
@@ -293,7 +293,7 @@ static std::optional<ExpBasePattern> decompose_exp_base_pattern(
         }
     }
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr))) {
+    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
         std::optional<std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>>> found;
         std::vector<std::shared_ptr<const SymbolicNode>> const_terms;
         bool has_other_var_terms = false;
@@ -318,9 +318,9 @@ static std::optional<ExpBasePattern> decompose_exp_base_pattern(
             if (const_terms.empty()) {
                 const_sum = SymbolicExpr::number(0);
             } else if (const_terms.size() == 1) {
-                const_sum = lamina::detail::make_expression_ptr(const_terms[0]);
+                const_sum = LMCAS::detail::make_expression_ptr(const_terms[0]);
             } else {
-                const_sum = lamina::detail::make_expression_ptr(lamina::detail::make_node<AddNode>(const_terms));
+                const_sum = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(const_terms));
             }
             auto rhs = SymbolicExpr::multiply(const_sum, SymbolicExpr::number(-1))->simplify();
             return ExpBasePattern{found->first, found->second, rhs};
@@ -546,9 +546,9 @@ static std::vector<std::shared_ptr<SymbolicExpr>> invert_substitution_h(
     const std::shared_ptr<SymbolicExpr>& u_root,
     const std::string& var) {
 
-    if (!h_expr || !lamina::detail::node(h_expr)) return {};
+    if (!h_expr || !LMCAS::detail::node(h_expr)) return {};
 
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(lamina::detail::node(h_expr))) {
+    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(h_expr))) {
         if (func->arguments().size() == 1) {
 
             if (auto v = std::dynamic_pointer_cast<const VariableNode>(func->arguments()[0])) {
@@ -571,14 +571,14 @@ static std::vector<std::shared_ptr<SymbolicExpr>> invert_substitution_h(
         }
     }
 
-    if (auto v = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(h_expr))) {
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(h_expr))) {
         if (v->name() == var) {
 
             return {u_root};
         }
     }
 
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(lamina::detail::node(h_expr))) {
+    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(h_expr))) {
         if (auto v = std::dynamic_pointer_cast<const VariableNode>(pow->base())) {
             if (v->name() == var && !expression_depends_on_variable(pow->exponent(), var)) {
                 if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
@@ -621,7 +621,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_inner_equation(
     const std::string& var,
     int depth) {
 
-    if (auto v = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(inner))) {
+    if (auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(inner))) {
         if (v->name() == var) {
             return {value};
         }
@@ -644,7 +644,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_transcendental_impl(
     const std::string& var,
     int depth) {
 
-    if (!expr || !lamina::detail::node(expr)) return {};
+    if (!expr || !LMCAS::detail::node(expr)) return {};
 
     if (depth > MAX_TRANSCENDENTAL_DEPTH) return {};
 
@@ -753,7 +753,7 @@ static void collect_transcendental_subexprs(
                 ft == FunctionNode::FuncType::Sin ||
                 ft == FunctionNode::FuncType::Cos ||
                 ft == FunctionNode::FuncType::Tan) {
-                candidates.push_back(lamina::detail::make_expression_ptr(node));
+                candidates.push_back(LMCAS::detail::make_expression_ptr(node));
             }
         }
 
@@ -776,7 +776,7 @@ static void collect_transcendental_subexprs(
 
                 if (e_val >= 2) {
 
-                    auto base_expr = lamina::detail::make_expression_ptr(pow->base());
+                    auto base_expr = LMCAS::detail::make_expression_ptr(pow->base());
                     candidates.push_back(base_expr);
                 }
             }
@@ -872,9 +872,9 @@ static std::shared_ptr<const SymbolicNode> rewrite_exp_as_u_power(
 
     int k = extract_exp_multiplier(node, var);
     if (k > 0) {
-        auto u_node = lamina::detail::make_node<VariableNode>(u_var);
+        auto u_node = LMCAS::detail::make_node<VariableNode>(u_var);
         if (k == 1) return u_node;
-        return SymbolicFactory::create_power(u_node, lamina::detail::make_node<NumberNode>(BigInt(k)));
+        return SymbolicFactory::create_power(u_node, LMCAS::detail::make_node<NumberNode>(BigInt(k)));
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -907,7 +907,7 @@ static std::shared_ptr<const SymbolicNode> rewrite_exp_as_u_power(
         for (auto& arg : func->arguments()) {
             new_args.push_back(rewrite_exp_as_u_power(arg, var, u_var));
         }
-        return lamina::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
+        return LMCAS::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
     }
 
     return node;
@@ -942,19 +942,19 @@ std::optional<SubstitutionResult> detect_substitution(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !lamina::detail::node(expr)) return std::nullopt;
+    if (!expr || !LMCAS::detail::node(expr)) return std::nullopt;
 
-    if (!expression_depends_on_variable(lamina::detail::node(expr), var)) return std::nullopt;
+    if (!expression_depends_on_variable(LMCAS::detail::node(expr), var)) return std::nullopt;
 
     const std::string u_var = "_u_subst";
 
     std::vector<std::shared_ptr<SymbolicExpr>> candidates;
-    collect_transcendental_subexprs(lamina::detail::node(expr), var, candidates);
+    collect_transcendental_subexprs(LMCAS::detail::node(expr), var, candidates);
     deduplicate_candidates(candidates);
 
     for (auto& h : candidates) {
 
-        if (auto v = std::dynamic_pointer_cast<const VariableNode>(lamina::detail::node(h))) {
+        if (auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(h))) {
             if (v->name() == var) {
 
                 auto poly = symbolic_to_poly<SymbolicPolyCoeff>(expr, var);
@@ -975,7 +975,7 @@ std::optional<SubstitutionResult> detect_substitution(
                 if (!node) return node;
 
                 if (node->equals(*target)) {
-                    return lamina::detail::make_node<VariableNode>(u_name);
+                    return LMCAS::detail::make_node<VariableNode>(u_name);
                 }
 
                 if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -1005,7 +1005,7 @@ std::optional<SubstitutionResult> detect_substitution(
                     for (auto& arg : func->arguments()) {
                         new_args.push_back(replace(arg));
                     }
-                    return lamina::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
+                    return LMCAS::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
                 }
 
                 return node;
@@ -1013,14 +1013,14 @@ std::optional<SubstitutionResult> detect_substitution(
         };
 
         SubstNodeVisitor visitor;
-        visitor.target = lamina::detail::node(h);
+        visitor.target = LMCAS::detail::node(h);
         visitor.u_name = u_var;
 
-        auto substituted_node = visitor.replace(lamina::detail::node(expr));
-        auto substituted_expr = lamina::detail::make_expression_ptr(substituted_node);
+        auto substituted_node = visitor.replace(LMCAS::detail::node(expr));
+        auto substituted_expr = LMCAS::detail::make_expression_ptr(substituted_node);
         substituted_expr = substituted_expr->simplify();
 
-        if (!expression_depends_on_variable(lamina::detail::node(substituted_expr), var)) {
+        if (!expression_depends_on_variable(LMCAS::detail::node(substituted_expr), var)) {
 
             auto poly = symbolic_to_poly<SymbolicPolyCoeff>(substituted_expr, u_var);
             if (!poly.is_zero() && poly.degree() >= 2) {
@@ -1029,12 +1029,12 @@ std::optional<SubstitutionResult> detect_substitution(
         }
     }
 
-    if (has_exp_k_var_terms(lamina::detail::node(expr), var)) {
-        auto rewritten_node = rewrite_exp_as_u_power(lamina::detail::node(expr), var, u_var);
-        auto rewritten_expr = lamina::detail::make_expression_ptr(rewritten_node);
+    if (has_exp_k_var_terms(LMCAS::detail::node(expr), var)) {
+        auto rewritten_node = rewrite_exp_as_u_power(LMCAS::detail::node(expr), var, u_var);
+        auto rewritten_expr = LMCAS::detail::make_expression_ptr(rewritten_node);
         rewritten_expr = rewritten_expr->simplify();
 
-        if (!expression_depends_on_variable(lamina::detail::node(rewritten_expr), var)) {
+        if (!expression_depends_on_variable(LMCAS::detail::node(rewritten_expr), var)) {
 
             auto poly = symbolic_to_poly<SymbolicPolyCoeff>(rewritten_expr, u_var);
             if (!poly.is_zero() && poly.degree() >= 2) {

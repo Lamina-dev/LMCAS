@@ -2,6 +2,8 @@
 #include <iostream>
 #include <string>
 
+using namespace LMCAS;
+
 int main() {
     auto y = SymbolicExpr::variable("y");
     auto res = y->integrate("x");

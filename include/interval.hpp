@@ -10,7 +10,7 @@
 #include <memory>
 #include <optional>
 
-namespace lamina {
+namespace LMCAS {
 
 class InequalitySolver;
 
@@ -23,7 +23,7 @@ enum class InequalityType {
 };
 
 /** @brief 区间端点，支持有限值与正负无穷 */
-struct LAMINA_API Endpoint {
+struct LMCAS_API Endpoint {
     std::shared_ptr<SymbolicExpr> value{}; ///< 端点值（无穷时为空）
     bool is_open = false;          ///< 是否为开端点
     bool is_neg_infinity = false;  ///< 是否为负无穷
@@ -57,7 +57,7 @@ struct LAMINA_API Endpoint {
 };
 
 /** @brief 单个区间 [a, b] 或 (a, b) 等 */
-struct LAMINA_API Interval {
+struct LMCAS_API Interval {
     Endpoint lower; ///< 下端点
     Endpoint upper; ///< 上端点
 
@@ -101,7 +101,7 @@ struct LAMINA_API Interval {
 };
 
 /** @brief 区间并集，表示不等式的解集 */
-class LAMINA_API IntervalUnion {
+class LMCAS_API IntervalUnion {
 public:
     IntervalUnion();
 
@@ -224,9 +224,9 @@ public:
     std::string to_string() const;
 
     /**
-     * @brief 从字符串解析区间并集
-     * @param str 字符串表示
-     * @return 解析成功返回并集，失败返回 nullopt
+     * @brief 从规范字符串解析数值端点区间并集
+     * @param str 区间表示；端点支持任意精度十进制整数、精确分数和有限浮点数
+     * @return 解析及区间规范化成功时返回并集；无效输入返回 nullopt
      */
     static std::optional<IntervalUnion> parse(const std::string& str);
 
@@ -246,21 +246,21 @@ private:
 };
 
 /** @brief Checked numeric membership test for an interval. */
-LAMINA_API Result<bool> interval_contains_checked(
+LMCAS_API Result<bool> interval_contains_checked(
     const Interval& interval,
     double value,
     ComputationContext& context);
 
-LAMINA_API Result<bool> interval_contains_checked(
+LMCAS_API Result<bool> interval_contains_checked(
     const Interval& interval,
     double value);
 
 /** @brief Checked emptiness decision for an interval. */
-LAMINA_API Result<bool> interval_is_empty_checked(
+LMCAS_API Result<bool> interval_is_empty_checked(
     const Interval& interval,
     ComputationContext& context);
 
-LAMINA_API Result<bool> interval_is_empty_checked(const Interval& interval);
+LMCAS_API Result<bool> interval_is_empty_checked(const Interval& interval);
 
 /**
  * @brief Validate, sort, remove empty intervals, and merge proven overlaps.
@@ -269,11 +269,11 @@ LAMINA_API Result<bool> interval_is_empty_checked(const Interval& interval);
  * exact IEEE binary values. Any incomparable or invalid endpoint returns an
  * error before a normalized list is produced.
  */
-LAMINA_API Result<std::vector<Interval>> normalize_intervals_checked(
+LMCAS_API Result<std::vector<Interval>> normalize_intervals_checked(
     std::vector<Interval> intervals,
     ComputationContext& context);
 
-LAMINA_API Result<std::vector<Interval>> normalize_intervals_checked(
+LMCAS_API Result<std::vector<Interval>> normalize_intervals_checked(
     std::vector<Interval> intervals);
 
 }

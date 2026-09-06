@@ -1,6 +1,8 @@
 #include "test_common.hpp"
 #include <iostream>
 
+using namespace LMCAS;
+
 int main() {
     auto expr = SymbolicExpr::variable("x");
     for (int i = 0; i < 510; ++i) {

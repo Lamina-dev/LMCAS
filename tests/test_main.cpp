@@ -2,6 +2,8 @@
 
 #include "value.hpp"
 
+using namespace LMCAS;
+
 Value cas_simplify(const std::vector<Value>& args) {
     if (args.empty()) return Value(SymbolicExpr::number(0));
     auto expr = args[0].as_symbolic();
@@ -21,7 +23,7 @@ Value cas_solve(const std::vector<Value>& args) {
     auto expr = args[0].as_symbolic();
     std::string var = args[1].to_string();
 
-    auto solutions = lamina::solve_finite_checked(expr, var).value();
+    auto solutions = LMCAS::solve_finite_checked(expr, var).value();
 
     std::vector<Value> val_sols;
     for (const auto& s : solutions) {

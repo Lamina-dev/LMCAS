@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <map>
 
-using namespace lamina;
+using namespace LMCAS;
 
 Polynomial<Rational> poly_from_roots(const std::vector<Rational>& roots, const std::string& var = "x") {
     Polynomial<Rational> result({Rational(1)}, var);
@@ -140,6 +140,49 @@ void test_constant_polynomial() {
     auto roots = find_rational_roots(p);
     EXPECT_TRUE(roots.empty(), "constant polynomial returns no rational roots");
     std::cout << "PASSED\n";
+}
+
+void test_divisors_beyond_legacy_scan_limit() {
+    std::cout << "Test: rational roots with prime divisors above 1000 ... ";
+    auto p = poly_from_roots({Rational(1009), Rational(1013)});
+    auto roots = find_rational_roots(p);
+    EXPECT_TRUE(
+        roots.size() == 2,
+        "candidate enumeration must not stop before sqrt(constant term)");
+    EXPECT_TRUE(
+        count_occurrences(roots, Rational(1009)) == 1,
+        "prime root 1009 is found");
+    EXPECT_TRUE(
+        count_occurrences(roots, Rational(1013)) == 1,
+        "prime root 1013 is found");
+    std::cout << "PASSED\n";
+}
+
+void test_large_common_scale() {
+    auto p = poly_from_roots({Rational(-1, 2), Rational(-1, 2), Rational(2, 3)});
+    const Rational scale(BigInt(std::string("-1000000000000000000000000000000")),
+                         BigInt(7));
+    for (auto& coefficient : p.coeffs) {
+        coefficient = coefficient * scale;
+    }
+    auto roots = find_rational_roots(p);
+    EXPECT_TRUE(roots.size() == 3, "common rational scaling preserves root count");
+    EXPECT_TRUE(count_occurrences(roots, Rational(-1, 2)) == 2,
+                "common rational scaling preserves repeated fractional roots");
+    EXPECT_TRUE(count_occurrences(roots, Rational(2, 3)) == 1,
+                "common rational scaling preserves the remaining fractional root");
+}
+
+void test_large_linear_root_after_deflation() {
+    const Rational root(BigInt(std::string("1000000000000000000000000000001")),
+                        BigInt(std::string("1000000000000000000000000000003")));
+    auto p = poly_from_roots({Rational(0), root});
+    auto roots = find_rational_roots(p);
+    EXPECT_TRUE(roots.size() == 2, "linear remainder returns both exact roots");
+    EXPECT_TRUE(count_occurrences(roots, Rational(0)) == 1,
+                "zero root is retained before linear solution");
+    EXPECT_TRUE(count_occurrences(roots, root) == 1,
+                "large rational linear root is solved without divisor enumeration");
 }
 
 void test_degree_stops_at_4() {
@@ -302,7 +345,10 @@ int main() {
     test_high_degree_partial();
     test_zero_polynomial();
     test_constant_polynomial();
+    test_divisors_beyond_legacy_scan_limit();
     test_degree_stops_at_4();
+    test_large_common_scale();
+    test_large_linear_root_after_deflation();
 
     auto result = test_rational_root_completeness();
 

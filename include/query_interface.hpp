@@ -18,7 +18,7 @@
 #include <utility>
 #include <optional>
 
-namespace lamina {
+namespace LMCAS {
 
 // Forward declaration
 class AssumptionContext;
@@ -90,7 +90,7 @@ struct CacheKeyHash {
  *   - FunctionNode::Infinity -> derive sign from infinity's sign, False for integer
  *   - All other nodes -> delegate to InferenceEngine
  */
-class LAMINA_API QueryInterface {
+class LMCAS_API QueryInterface {
 public:
     /**
      * @brief Construct a QueryInterface bound to an AssumptionContext.
@@ -273,11 +273,11 @@ private:
         const SymbolicExpr& expr,
         PropType prop,
         const std::string& operation,
-        const std::function<Tribool()>& compute) const;
+        const std::function<QueryTriboolResult()>& compute) const;
 
     std::vector<ConditionSet> query_conditions_impl(
         const SymbolicExpr& expr,
         Sign target) const;
 };
 
-} // namespace lamina
+} // namespace LMCAS

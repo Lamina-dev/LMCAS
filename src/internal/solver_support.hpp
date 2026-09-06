@@ -3,7 +3,7 @@
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
 
-namespace lamina::solver_detail {
+namespace LMCAS::solver_detail {
 
 std::shared_ptr<SymbolicExpr> to_ptr(const SymbolicExpr& expression);
 std::shared_ptr<SymbolicExpr> multiply_no_expand(
@@ -17,4 +17,4 @@ bool collect_denominator_factors(
     std::vector<std::shared_ptr<const SymbolicNode>>& denominator_factors,
     std::vector<std::shared_ptr<SymbolicExpr>>& denominator_constraints);
 
-} // namespace lamina::solver_detail
+} // namespace LMCAS::solver_detail

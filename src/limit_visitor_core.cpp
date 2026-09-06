@@ -8,6 +8,8 @@
 #include <optional>
 #include <utility>
 
+namespace LMCAS {
+
 int& LimitVisitor::active_limit_depth() {
     static thread_local int depth = 0;
     return depth;
@@ -15,9 +17,9 @@ int& LimitVisitor::active_limit_depth() {
 
 std::shared_ptr<const SymbolicNode> LimitVisitor::make_product_or_one(
     const std::vector<std::shared_ptr<const SymbolicNode>>& factors) {
-    if (factors.empty()) return lamina::detail::make_node<NumberNode>(BigInt(1));
+    if (factors.empty()) return LMCAS::detail::make_node<NumberNode>(BigInt(1));
     if (factors.size() == 1) return factors[0];
-    return lamina::detail::make_node<MultiplyNode>(factors);
+    return LMCAS::detail::make_node<MultiplyNode>(factors);
 }
 
 LimitVisitor::EvaluationScope::EvaluationScope() {
@@ -48,7 +50,7 @@ void LimitVisitor::visit(const MatrixNode& node) {
             entry->accept(*this);
             entries.push_back(result);
         }
-        result = lamina::detail::make_node<MatrixNode>(
+        result = LMCAS::detail::make_node<MatrixNode>(
             node.rows(), node.cols(), std::move(entries));
         return;
     }
@@ -58,7 +60,7 @@ void LimitVisitor::visit(const MatrixNode& node) {
         entry->accept(*this);
         entries.emplace(index, result);
     }
-    result = lamina::detail::make_node<MatrixNode>(
+    result = LMCAS::detail::make_node<MatrixNode>(
         node.rows(), node.cols(), std::move(entries));
 }
 
@@ -66,7 +68,7 @@ void LimitVisitor::visit(const RelationalNode& node) {
     node.left()->accept(*this);
     auto left = result;
     node.right()->accept(*this);
-    result = lamina::detail::make_node<RelationalNode>(left, result, node.op());
+    result = LMCAS::detail::make_node<RelationalNode>(left, result, node.op());
 }
 
 void LimitVisitor::visit(const LogicalNode& node) {
@@ -77,7 +79,7 @@ void LimitVisitor::visit(const LogicalNode& node) {
         node.right()->accept(*this);
         right = result;
     }
-    result = lamina::detail::make_node<LogicalNode>(left, right, node.op());
+    result = LMCAS::detail::make_node<LogicalNode>(left, right, node.op());
 }
 
 void LimitVisitor::visit(const SummationNode& node) {
@@ -90,7 +92,7 @@ void LimitVisitor::visit(const SummationNode& node) {
         body->accept(*this);
         body = result;
     }
-    result = lamina::detail::make_node<SummationNode>(
+    result = LMCAS::detail::make_node<SummationNode>(
         body, node.index_var(), lower, upper);
 }
 void LimitVisitor::visit(const ProductNode& node) {
@@ -103,7 +105,7 @@ void LimitVisitor::visit(const ProductNode& node) {
         body->accept(*this);
         body = result;
     }
-    result = lamina::detail::make_node<ProductNode>(
+    result = LMCAS::detail::make_node<ProductNode>(
         body, node.index_var(), lower, upper);
 }
 void LimitVisitor::visit(const TransformNode& node) {
@@ -114,7 +116,7 @@ void LimitVisitor::visit(const TransformNode& node) {
         body->accept(*this);
         body = result;
     }
-    result = lamina::detail::make_node<TransformNode>(
+    result = LMCAS::detail::make_node<TransformNode>(
         node.transform_type(), body, node.source_var(), target);
 }
 void LimitVisitor::visit(const QuantifierNode& node) {
@@ -125,7 +127,7 @@ void LimitVisitor::visit(const QuantifierNode& node) {
         predicate->accept(*this);
         predicate = result;
     }
-    result = lamina::detail::make_node<QuantifierNode>(
+    result = LMCAS::detail::make_node<QuantifierNode>(
         node.quantifier_type(), node.bound_var(), domain, predicate);
 }
 void LimitVisitor::visit(const SetBuilderNode& node) {
@@ -136,7 +138,7 @@ void LimitVisitor::visit(const SetBuilderNode& node) {
         predicate->accept(*this);
         predicate = result;
     }
-    result = lamina::detail::make_node<SetBuilderNode>(
+    result = LMCAS::detail::make_node<SetBuilderNode>(
         node.element_var(), domain, predicate);
 }
 void LimitVisitor::visit(const FiniteSetNode& node) {
@@ -146,20 +148,20 @@ void LimitVisitor::visit(const FiniteSetNode& node) {
         element->accept(*this);
         elements.push_back(result);
     }
-    result = lamina::detail::make_node<FiniteSetNode>(std::move(elements));
+    result = LMCAS::detail::make_node<FiniteSetNode>(std::move(elements));
 }
 void LimitVisitor::visit(const IntervalNode& node) {
     node.lower()->accept(*this);
     auto lower = result;
     node.upper()->accept(*this);
-    result = lamina::detail::make_node<IntervalNode>(
+    result = LMCAS::detail::make_node<IntervalNode>(
         lower, result, node.lower_closed(), node.upper_closed());
 }
 void LimitVisitor::visit(const MembershipNode& node) {
     node.element()->accept(*this);
     auto element = result;
     node.set()->accept(*this);
-    result = lamina::detail::make_node<MembershipNode>(element, result);
+    result = LMCAS::detail::make_node<MembershipNode>(element, result);
 }
 void LimitVisitor::visit(const UninterpretedFunctionNode& node) {
     std::vector<std::shared_ptr<const SymbolicNode>> arguments;
@@ -168,7 +170,7 @@ void LimitVisitor::visit(const UninterpretedFunctionNode& node) {
         argument->accept(*this);
         arguments.push_back(result);
     }
-    result = lamina::detail::make_node<UninterpretedFunctionNode>(
+    result = LMCAS::detail::make_node<UninterpretedFunctionNode>(
         node.name(), std::move(arguments));
 }
 void LimitVisitor::visit(const IntegralNode& node) {
@@ -185,7 +187,7 @@ void LimitVisitor::visit(const IntegralNode& node) {
         body->accept(*this);
         body = result;
     }
-    result = lamina::detail::make_node<IntegralNode>(
+    result = LMCAS::detail::make_node<IntegralNode>(
         body, node.variable(), lower, upper);
 }
 void LimitVisitor::visit(const LimitNode& node) {
@@ -196,7 +198,7 @@ void LimitVisitor::visit(const LimitNode& node) {
         body->accept(*this);
         body = result;
     }
-    result = lamina::detail::make_node<LimitNode>(
+    result = LMCAS::detail::make_node<LimitNode>(
         body, node.variable(), nested_point, node.direction());
 }
 void LimitVisitor::visit(const RootOfNode& node) {
@@ -204,7 +206,7 @@ void LimitVisitor::visit(const RootOfNode& node) {
 }
 void LimitVisitor::visit(const QuantityNode& node) {
     node.value()->accept(*this);
-    result = lamina::detail::make_node<QuantityNode>(
+    result = LMCAS::detail::make_node<QuantityNode>(
         result, node.dimension(), node.scale_to_base(), node.display_unit());
 }
 
@@ -405,7 +407,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::try_squeeze(const std::shared_
             ? other_factors[0]
             : make_product_or_one(other_factors);
         if (tends_to_zero(remaining)) {
-            return lamina::detail::make_node<NumberNode>(BigInt(0));
+            return LMCAS::detail::make_node<NumberNode>(BigInt(0));
         }
         return nullptr;
     }
@@ -435,7 +437,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::try_squeeze(const std::shared_
         if (!squeeze_to_zero_terms.empty() && !other_terms.empty()) {
             auto remaining_expr = other_terms.size() == 1
                 ? other_terms[0]
-                : std::static_pointer_cast<const SymbolicNode>(lamina::detail::make_node<AddNode>(other_terms));
+                : std::static_pointer_cast<const SymbolicNode>(LMCAS::detail::make_node<AddNode>(other_terms));
             /// Compute the limit of the remaining terms
             auto remaining_limit = eval_limit(remaining_expr);
             if (remaining_limit && !is_inf(remaining_limit)) {
@@ -457,7 +459,7 @@ std::pair<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const SymbolicNod
                     if (std::holds_alternative<double>(nn->value())) e = std::get<double>(nn->value());
                     else if (std::holds_alternative<BigInt>(nn->value())) e = std::get<BigInt>(nn->value()).to_double();
                     else if (std::holds_alternative<Rational>(nn->value())) e = std::get<Rational>(nn->value()).to_double();
-                    if (e < 0) { dp.push_back(lamina::detail::make_node<PowerNode>(pow->base(), lamina::detail::make_node<NumberNode>(-e))); continue; }
+                    if (e < 0) { dp.push_back(LMCAS::detail::make_node<PowerNode>(pow->base(), LMCAS::detail::make_node<NumberNode>(-e))); continue; }
                 }
             }
             np.push_back(op);
@@ -474,10 +476,10 @@ std::pair<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const SymbolicNod
             if (std::holds_alternative<double>(nn->value())) e = std::get<double>(nn->value());
             else if (std::holds_alternative<BigInt>(nn->value())) e = std::get<BigInt>(nn->value()).to_double();
             else if (std::holds_alternative<Rational>(nn->value())) e = std::get<Rational>(nn->value()).to_double();
-            if (e < 0) return {lamina::detail::make_node<NumberNode>(BigInt(1)), lamina::detail::make_node<PowerNode>(pow->base(), lamina::detail::make_node<NumberNode>(-e))};
+            if (e < 0) return {LMCAS::detail::make_node<NumberNode>(BigInt(1)), LMCAS::detail::make_node<PowerNode>(pow->base(), LMCAS::detail::make_node<NumberNode>(-e))};
         }
     }
-    return {expr, lamina::detail::make_node<NumberNode>(BigInt(1))};
+    return {expr, LMCAS::detail::make_node<NumberNode>(BigInt(1))};
 }
 
 std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_zero_times_inf(const std::vector<std::shared_ptr<const SymbolicNode>>& factors, const std::vector<std::shared_ptr<const SymbolicNode>>& factor_vals) {
@@ -512,18 +514,18 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_zero_times_inf(const s
 
     if (prefer_inf_over_inf) {
         /// Try infinity/infinity form first: g / (1/f)
-        auto f_inv = lamina::detail::make_node<PowerNode>(f, lamina::detail::make_node<NumberNode>(BigInt(-1)));
+        auto f_inv = LMCAS::detail::make_node<PowerNode>(f, LMCAS::detail::make_node<NumberNode>(BigInt(-1)));
         res = apply_lhopital(g, f_inv);
         if (!res) {
-            auto g_inv = lamina::detail::make_node<PowerNode>(g, lamina::detail::make_node<NumberNode>(BigInt(-1)));
+            auto g_inv = LMCAS::detail::make_node<PowerNode>(g, LMCAS::detail::make_node<NumberNode>(BigInt(-1)));
             res = apply_lhopital(f, g_inv);
         }
     } else {
         /// Try 0/0 form first: f / (1/g)
-        auto g_inv = lamina::detail::make_node<PowerNode>(g, lamina::detail::make_node<NumberNode>(BigInt(-1)));
+        auto g_inv = LMCAS::detail::make_node<PowerNode>(g, LMCAS::detail::make_node<NumberNode>(BigInt(-1)));
         res = apply_lhopital(f, g_inv);
         if (!res) {
-            auto f_inv = lamina::detail::make_node<PowerNode>(f, lamina::detail::make_node<NumberNode>(BigInt(-1)));
+            auto f_inv = LMCAS::detail::make_node<PowerNode>(f, LMCAS::detail::make_node<NumberNode>(BigInt(-1)));
             res = apply_lhopital(g, f_inv);
         }
     }
@@ -532,7 +534,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_zero_times_inf(const s
         std::vector<std::shared_ptr<const SymbolicNode>> ff; ff.push_back(res);
         for (auto& of : other_f) { auto ov = eval_limit(of); if (ov) ff.push_back(ov); }
         if (ff.size() == 1) return ff[0];
-        auto prod = lamina::detail::make_node<MultiplyNode>(ff);
+        auto prod = LMCAS::detail::make_node<MultiplyNode>(ff);
         NormalizationVisitor norm; prod->accept(norm); return norm.get_result();
     }
     return res;
@@ -547,8 +549,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_inf_minus_inf(const Ad
     /// Fall back to Taylor expansion at the limit point.
     if (!has_nontrivial_den) {
         /// Try Taylor fallback: treat the whole expression as numerator / 1
-        auto whole_expr = node.operands().size() == 1 ? node.operands()[0] : std::static_pointer_cast<const SymbolicNode>(lamina::detail::make_node<AddNode>(node.operands()));
-        auto one_node = lamina::detail::make_node<NumberNode>(BigInt(1));
+        auto whole_expr = node.operands().size() == 1 ? node.operands()[0] : std::static_pointer_cast<const SymbolicNode>(LMCAS::detail::make_node<AddNode>(node.operands()));
+        auto one_node = LMCAS::detail::make_node<NumberNode>(BigInt(1));
         auto tf_result = taylor_fallback(whole_expr, one_node);
         return tf_result;
     }
@@ -560,7 +562,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_inf_minus_inf(const Ad
         for (size_t j = 0; j < dens.size(); ++j) { if (j != i) tf.push_back(dens[j]); }
         new_num_terms.push_back(make_product_or_one(tf));
     }
-    auto combined_num = new_num_terms.size() == 1 ? new_num_terms[0] : std::static_pointer_cast<const SymbolicNode>(lamina::detail::make_node<AddNode>(new_num_terms));
+    auto combined_num = new_num_terms.size() == 1 ? new_num_terms[0] : std::static_pointer_cast<const SymbolicNode>(LMCAS::detail::make_node<AddNode>(new_num_terms));
     NormalizationVisitor norm;
     combined_num->accept(norm); combined_num = norm.get_result();
     common_den->accept(norm); common_den = norm.get_result();
@@ -568,7 +570,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_inf_minus_inf(const Ad
     bool nz = nv && nv->is_zero(), dz = dv && dv->is_zero();
     if ((nz && dz) || (is_inf(nv) && is_inf(dv))) return apply_lhopital(combined_num, common_den);
     if (!dz && !is_inf(dv) && dv) {
-        auto ratio = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{combined_num, lamina::detail::make_node<PowerNode>(common_den, lamina::detail::make_node<NumberNode>(BigInt(-1)))});
+        auto ratio = LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{combined_num, LMCAS::detail::make_node<PowerNode>(common_den, LMCAS::detail::make_node<NumberNode>(BigInt(-1)))});
         return eval_limit(ratio);
     }
     return nullptr;
@@ -576,18 +578,18 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_inf_minus_inf(const Ad
 
 std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_exponential_form(const std::shared_ptr<const SymbolicNode>& base, const std::shared_ptr<const SymbolicNode>& exponent) {
     std::vector<std::shared_ptr<const SymbolicNode>> ln_args = {base};
-    auto ln_base = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln, ln_args);
+    auto ln_base = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln, ln_args);
     std::vector<std::shared_ptr<const SymbolicNode>> prod_ops = {exponent, ln_base};
-    auto product = lamina::detail::make_node<MultiplyNode>(prod_ops);
+    auto product = LMCAS::detail::make_node<MultiplyNode>(prod_ops);
     auto inner_limit = eval_limit(product);
     if (!inner_limit) return nullptr;
     if (!is_inf(inner_limit)) {
         std::vector<std::shared_ptr<const SymbolicNode>> exp_args = {inner_limit};
-        auto exp_result = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Exp, exp_args);
+        auto exp_result = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Exp, exp_args);
         NormalizationVisitor norm; exp_result->accept(norm); return norm.get_result();
     }
-    if (is_inf(inner_limit) && !is_neg_inf(inner_limit)) { std::vector<std::shared_ptr<const SymbolicNode>> inf_args; return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args); }
-    if (is_neg_inf(inner_limit)) return lamina::detail::make_node<NumberNode>(BigInt(0));
+    if (is_inf(inner_limit) && !is_neg_inf(inner_limit)) { std::vector<std::shared_ptr<const SymbolicNode>> inf_args; return LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args); }
+    if (is_neg_inf(inner_limit)) return LMCAS::detail::make_node<NumberNode>(BigInt(0));
     return nullptr;
 }
 
@@ -609,8 +611,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
     /// with common factors (e.g., x^-2) that cancel, avoiding infinite 0/0 loops.
     {
         std::vector<std::shared_ptr<const SymbolicNode>> ratio_ops = {
-            dN, lamina::detail::make_node<PowerNode>(dD, lamina::detail::make_node<NumberNode>(BigInt(-1)))};
-        auto ratio_node = lamina::detail::make_node<MultiplyNode>(ratio_ops);
+            dN, LMCAS::detail::make_node<PowerNode>(dD, LMCAS::detail::make_node<NumberNode>(BigInt(-1)))};
+        auto ratio_node = LMCAS::detail::make_node<MultiplyNode>(ratio_ops);
         /// Wrap in SymbolicExpr for simplification (defined in limit_visitor.cpp)
         auto simp_result = simplify_and_eval_ratio(ratio_node);
         if (simp_result) return simp_result;
@@ -642,8 +644,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
         LimitVisitor sub(var, point, direction, assumption_ctx_);
         sub.lhopital_depth_ = this->lhopital_depth_ + 1;
         /// Build ratio as MultiplyNode for the sub-visitor
-        std::vector<std::shared_ptr<const SymbolicNode>> ratio_ops = {dN, lamina::detail::make_node<PowerNode>(dD, lamina::detail::make_node<NumberNode>(BigInt(-1)))};
-        auto ratio = lamina::detail::make_node<MultiplyNode>(ratio_ops);
+        std::vector<std::shared_ptr<const SymbolicNode>> ratio_ops = {dN, LMCAS::detail::make_node<PowerNode>(dD, LMCAS::detail::make_node<NumberNode>(BigInt(-1)))};
+        auto ratio = LMCAS::detail::make_node<MultiplyNode>(ratio_ops);
         ratio->accept(sub);
         return sub.get_result();
     }
@@ -656,30 +658,30 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(const std::shar
             if (s) sign_n = *s;
         }
         std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-        auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+        auto inf_node = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
         if (sign_n < 0) {
-            std::vector<std::shared_ptr<const SymbolicNode>> m = {lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
-            return lamina::detail::make_node<MultiplyNode>(m);
+            std::vector<std::shared_ptr<const SymbolicNode>> m = {LMCAS::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
+            return LMCAS::detail::make_node<MultiplyNode>(m);
         }
         return inf_node;
     }
 
     /// Normal case: compute the ratio of limits
     if (!d_zero && !d_inf) {
-        auto ratio_result = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
-            val_n, lamina::detail::make_node<PowerNode>(val_d, lamina::detail::make_node<NumberNode>(BigInt(-1)))});
+        auto ratio_result = LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+            val_n, LMCAS::detail::make_node<PowerNode>(val_d, LMCAS::detail::make_node<NumberNode>(BigInt(-1)))});
         ratio_result->accept(norm);
         return norm.get_result();
     }
 
     /// Numerator is finite, denominator is infinity -> 0
     if (!n_inf && !n_zero && d_inf) {
-        return lamina::detail::make_node<NumberNode>(BigInt(0));
+        return LMCAS::detail::make_node<NumberNode>(BigInt(0));
     }
 
     /// Fallback: evaluate the ratio expression directly
-    std::vector<std::shared_ptr<const SymbolicNode>> ratio_ops = {dN, lamina::detail::make_node<PowerNode>(dD, lamina::detail::make_node<NumberNode>(BigInt(-1)))};
-    auto ratio = lamina::detail::make_node<MultiplyNode>(ratio_ops);
+    std::vector<std::shared_ptr<const SymbolicNode>> ratio_ops = {dN, LMCAS::detail::make_node<PowerNode>(dD, LMCAS::detail::make_node<NumberNode>(BigInt(-1)))};
+    auto ratio = LMCAS::detail::make_node<MultiplyNode>(ratio_ops);
     LimitVisitor sub(var, point, direction, assumption_ctx_);
     sub.lhopital_depth_ = this->lhopital_depth_ + 1;
     ratio->accept(sub);
@@ -712,24 +714,24 @@ int LimitVisitor::determine_sign_near_point(const std::shared_ptr<const Symbolic
 void LimitVisitor::visit(const AddNode& node) {
     /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity()) {
-        auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<AddNode>(node.operands()));
+        auto neg_inf_result = handle_neg_infinity_limit(LMCAS::detail::make_node<AddNode>(node.operands()));
         if (neg_inf_result) { result = neg_inf_result; return; }
     }
     /// General squeeze theorem for AddNode: detect terms that are products of
     /// bounded x zero-tending (squeeze to 0) and compute limit of remaining terms.
-    auto squeeze_result = try_squeeze(lamina::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
+    auto squeeze_result = try_squeeze(LMCAS::detail::make_node<AddNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
     if (squeeze_result) { result = squeeze_result; return; }
     std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
     for (auto& op : node.operands()) { op->accept(*this); new_ops.push_back(result); }
     auto form = classify_add_form(new_ops);
     if (form == IndeterminateForm::InfMinusInf) { auto resolved = resolve_inf_minus_inf(node, new_ops); if (resolved) { result = resolved; return; } }
-    NormalizationVisitor norm; lamina::detail::make_node<AddNode>(new_ops)->accept(norm); result = norm.get_result();
+    NormalizationVisitor norm; LMCAS::detail::make_node<AddNode>(new_ops)->accept(norm); result = norm.get_result();
 }
 
 void LimitVisitor::visit(const MultiplyNode& node) {
     /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity()) {
-        auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
+        auto neg_inf_result = handle_neg_infinity_limit(LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
         if (neg_inf_result) { result = neg_inf_result; return; }
     }
     {
@@ -765,7 +767,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
                 has_log_var = has_log_var || is_log_of_limit_var(op);
             }
             if (has_positive_var_power && has_log_var) {
-                result = lamina::detail::make_node<NumberNode>(BigInt(0));
+                result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
                 return;
             }
         }
@@ -792,7 +794,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
             }
             if (!has_one || !small_num) continue;
 
-            std::shared_ptr<const SymbolicNode> numerator = lamina::detail::make_node<NumberNode>(BigInt(1));
+            std::shared_ptr<const SymbolicNode> numerator = LMCAS::detail::make_node<NumberNode>(BigInt(1));
             bool denominator_is_var = false;
             if (auto power = std::dynamic_pointer_cast<const PowerNode>(small_num)) {
                 auto base_var = std::dynamic_pointer_cast<const VariableNode>(power->base());
@@ -877,7 +879,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
                 }
             }
             if (other_growth_is_slower) {
-                result = lamina::detail::make_node<NumberNode>(BigInt(0));
+                result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
                 return;
             }
         }
@@ -929,7 +931,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
                     }
                     remaining_limits.push_back(remaining_limit);
                 }
-                remaining_limits.push_back(lamina::detail::make_node<NumberNode>(BigInt(1)));
+                remaining_limits.push_back(LMCAS::detail::make_node<NumberNode>(BigInt(1)));
                 auto reduced = remaining_limits.size() == 1
                     ? remaining_limits[0]
                     : make_product_or_one(remaining_limits);
@@ -940,12 +942,12 @@ void LimitVisitor::visit(const MultiplyNode& node) {
             }
         }
     }
-    auto squeeze_result = try_squeeze(lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
+    auto squeeze_result = try_squeeze(LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>(node.operands().begin(), node.operands().end())));
     if (squeeze_result) { result = squeeze_result; return; }
     std::vector<std::shared_ptr<const SymbolicNode>> subs_ops;
     for (auto& op : node.operands()) { op->accept(*this); subs_ops.push_back(result); }
     NormalizationVisitor norm;
-    auto subs_res = lamina::detail::make_node<MultiplyNode>(subs_ops); subs_res->accept(norm); auto final_subs = norm.get_result();
+    auto subs_res = LMCAS::detail::make_node<MultiplyNode>(subs_ops); subs_res->accept(norm); auto final_subs = norm.get_result();
     std::vector<std::shared_ptr<const SymbolicNode>> num_nodes, den_nodes;
     for (auto& op : node.operands()) {
         if (auto pow = std::dynamic_pointer_cast<const PowerNode>(op)) {
@@ -954,7 +956,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
                 if (std::holds_alternative<double>(num->value())) e = std::get<double>(num->value());
                 else if (std::holds_alternative<BigInt>(num->value())) e = std::get<BigInt>(num->value()).to_double();
                 else if (std::holds_alternative<Rational>(num->value())) e = std::get<Rational>(num->value()).to_double();
-                if (e < 0) { den_nodes.push_back(lamina::detail::make_node<PowerNode>(pow->base(), lamina::detail::make_node<NumberNode>(-e))); continue; }
+                if (e < 0) { den_nodes.push_back(LMCAS::detail::make_node<PowerNode>(pow->base(), LMCAS::detail::make_node<NumberNode>(-e))); continue; }
             }
         }
         num_nodes.push_back(op);
@@ -989,8 +991,8 @@ void LimitVisitor::visit(const MultiplyNode& node) {
         int sign_d = (direction == "-" ? -1 : 1);
         int final_sign = sign_n * sign_d;
         std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-        auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
-        if (final_sign < 0) { std::vector<std::shared_ptr<const SymbolicNode>> m_args = {lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node}; result = lamina::detail::make_node<MultiplyNode>(m_args); }
+        auto inf_node = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+        if (final_sign < 0) { std::vector<std::shared_ptr<const SymbolicNode>> m_args = {LMCAS::detail::make_node<NumberNode>(BigInt(-1)), inf_node}; result = LMCAS::detail::make_node<MultiplyNode>(m_args); }
         else { result = inf_node; }
         return;
     }
@@ -1000,7 +1002,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
 void LimitVisitor::visit(const PowerNode& node) {
     /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity()) {
-        auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<PowerNode>(node.base(), node.exponent()));
+        auto neg_inf_result = handle_neg_infinity_limit(LMCAS::detail::make_node<PowerNode>(node.base(), node.exponent()));
         if (neg_inf_result) { result = neg_inf_result; return; }
     }
     if (is_limit_at_infinity()) {
@@ -1015,7 +1017,7 @@ void LimitVisitor::visit(const PowerNode& node) {
                 else small_term = op;
             }
             bool exponent_has_var = false;
-            std::shared_ptr<const SymbolicNode> exponent_coeff = lamina::detail::make_node<NumberNode>(BigInt(1));
+            std::shared_ptr<const SymbolicNode> exponent_coeff = LMCAS::detail::make_node<NumberNode>(BigInt(1));
             std::vector<std::shared_ptr<const SymbolicNode>> coeff_terms;
             if (exponent_var && exponent_var->name() == var) {
                 exponent_has_var = true;
@@ -1036,7 +1038,7 @@ void LimitVisitor::visit(const PowerNode& node) {
             }
             if (has_one && small_term && exponent_has_var) {
                 std::shared_ptr<const SymbolicNode> small_num = small_term;
-                std::shared_ptr<const SymbolicNode> small_den = lamina::detail::make_node<NumberNode>(BigInt(1));
+                std::shared_ptr<const SymbolicNode> small_den = LMCAS::detail::make_node<NumberNode>(BigInt(1));
                 if (auto small_mul = std::dynamic_pointer_cast<const MultiplyNode>(small_term)) {
                     std::vector<std::shared_ptr<const SymbolicNode>> num_parts;
                     for (const auto& op : small_mul->operands()) {
@@ -1056,9 +1058,9 @@ void LimitVisitor::visit(const PowerNode& node) {
                         }
                         num_parts.push_back(op);
                     }
-                    if (small_den && small_den->compare(*lamina::detail::make_node<VariableNode>(var)) == 0) {
+                    if (small_den && small_den->compare(*LMCAS::detail::make_node<VariableNode>(var)) == 0) {
                         small_num = num_parts.empty()
-                            ? std::static_pointer_cast<const SymbolicNode>(lamina::detail::make_node<NumberNode>(BigInt(1)))
+                            ? std::static_pointer_cast<const SymbolicNode>(LMCAS::detail::make_node<NumberNode>(BigInt(1)))
                             : make_product_or_one(num_parts);
                     }
                 } else if (auto small_power = std::dynamic_pointer_cast<const PowerNode>(small_term)) {
@@ -1070,7 +1072,7 @@ void LimitVisitor::visit(const PowerNode& node) {
                         else if (std::holds_alternative<BigInt>(exp_num->value())) exp_value = std::get<BigInt>(exp_num->value()).to_double();
                         else if (std::holds_alternative<Rational>(exp_num->value())) exp_value = std::get<Rational>(exp_num->value()).to_double();
                         if (exp_value == -1.0) {
-                            small_num = lamina::detail::make_node<NumberNode>(BigInt(1));
+                            small_num = LMCAS::detail::make_node<NumberNode>(BigInt(1));
                             small_den = small_power->base();
                         }
                     }
@@ -1078,12 +1080,12 @@ void LimitVisitor::visit(const PowerNode& node) {
 
                 auto den_var = std::dynamic_pointer_cast<const VariableNode>(small_den);
                 if (den_var && den_var->name() == var) {
-                    auto inner = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+                    auto inner = LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
                         small_num, exponent_coeff});
                     NormalizationVisitor norm;
                     inner->accept(norm);
                     std::vector<std::shared_ptr<const SymbolicNode>> exp_args = {norm.get_result()};
-                    auto exp_result = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Exp, exp_args);
+                    auto exp_result = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Exp, exp_args);
                     exp_result->accept(norm);
                     result = norm.get_result();
                     return;
@@ -1102,10 +1104,10 @@ void LimitVisitor::visit(const PowerNode& node) {
             if (std::holds_alternative<double>(e_num->value())) ev = std::get<double>(e_num->value());
             else if (std::holds_alternative<BigInt>(e_num->value())) ev = std::get<BigInt>(e_num->value()).to_double();
             else if (std::holds_alternative<Rational>(e_num->value())) ev = std::get<Rational>(e_num->value()).to_double();
-            if (ev < 0) { result = lamina::detail::make_node<NumberNode>(BigInt(0)); return; }
+            if (ev < 0) { result = LMCAS::detail::make_node<NumberNode>(BigInt(0)); return; }
             if (ev > 0) {
                 std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-                result = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                result = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                 return;
             }
         }
@@ -1121,7 +1123,7 @@ void LimitVisitor::visit(const PowerNode& node) {
                 /// base->0, exponent is negative, direction specified -> +/-infinity
                 /// Determine sign based on approach direction and exponent parity
                 std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-                auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                auto inf_node = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                 int exp_int = static_cast<int>(ev);
                 bool odd_exponent = (exp_int % 2 != 0);
                 if (odd_exponent) {
@@ -1129,8 +1131,8 @@ void LimitVisitor::visit(const PowerNode& node) {
                     /// x->0+ gives +infinity, x->0- gives -infinity
                     int base_sign = determine_sign_near_point(node.base(), direction);
                     if (base_sign < 0) {
-                        std::vector<std::shared_ptr<const SymbolicNode>> m = {lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
-                        result = lamina::detail::make_node<MultiplyNode>(m);
+                        std::vector<std::shared_ptr<const SymbolicNode>> m = {LMCAS::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
+                        result = LMCAS::detail::make_node<MultiplyNode>(m);
                         return;
                     }
                 }
@@ -1140,13 +1142,13 @@ void LimitVisitor::visit(const PowerNode& node) {
             }
         }
     }
-    NormalizationVisitor norm; lamina::detail::make_node<PowerNode>(b, e)->accept(norm); result = norm.get_result();
+    NormalizationVisitor norm; LMCAS::detail::make_node<PowerNode>(b, e)->accept(norm); result = norm.get_result();
 }
 
 void LimitVisitor::visit(const FunctionNode& node) {
     /// Handle negative infinity: substitute x = -t and evaluate lim(t->+infinity)
     if (is_limit_at_neg_infinity() && node.type() != FunctionNode::FuncType::Infinity) {
-        auto neg_inf_result = handle_neg_infinity_limit(lamina::detail::make_node<FunctionNode>(node.type(), node.arguments()));
+        auto neg_inf_result = handle_neg_infinity_limit(LMCAS::detail::make_node<FunctionNode>(node.type(), node.arguments()));
         if (neg_inf_result) { result = neg_inf_result; return; }
     }
     /// 方向感知的符号函数处理
@@ -1167,7 +1169,7 @@ void LimitVisitor::visit(const FunctionNode& node) {
             if (auto num = std::dynamic_pointer_cast<const NumberNode>(inner_lim)) {
                 std::vector<std::shared_ptr<const SymbolicNode>> new_args = {inner_lim};
                 NormalizationVisitor norm;
-                lamina::detail::make_node<FunctionNode>(node.type(), new_args)->accept(norm);
+                LMCAS::detail::make_node<FunctionNode>(node.type(), new_args)->accept(norm);
                 result = norm.get_result();
                 return;
             }
@@ -1176,15 +1178,15 @@ void LimitVisitor::visit(const FunctionNode& node) {
                 bool neg = is_neg_inf(inner_lim);
                 switch (node.type()) {
                     case FunctionNode::FuncType::Exp:
-                        if (neg) { result = lamina::detail::make_node<NumberNode>(BigInt(0)); }
-                        else { std::vector<std::shared_ptr<const SymbolicNode>> inf_args; result = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args); }
+                        if (neg) { result = LMCAS::detail::make_node<NumberNode>(BigInt(0)); }
+                        else { std::vector<std::shared_ptr<const SymbolicNode>> inf_args; result = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args); }
                         return;
                     case FunctionNode::FuncType::Ln:
-                        if (!neg) { std::vector<std::shared_ptr<const SymbolicNode>> inf_args; result = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args); }
+                        if (!neg) { std::vector<std::shared_ptr<const SymbolicNode>> inf_args; result = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args); }
                         return;
                     case FunctionNode::FuncType::ArcTan:
-                        if (neg) { result = lamina::detail::make_node<NumberNode>(Rational(-1, 2)); result = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{result, lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<const SymbolicNode>>{})}); }
-                        else { result = lamina::detail::make_node<NumberNode>(Rational(1, 2)); result = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{result, lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<const SymbolicNode>>{})}); }
+                        if (neg) { result = LMCAS::detail::make_node<NumberNode>(Rational(-1, 2)); result = LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{result, LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<const SymbolicNode>>{})}); }
+                        else { result = LMCAS::detail::make_node<NumberNode>(Rational(1, 2)); result = LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{result, LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, std::vector<std::shared_ptr<const SymbolicNode>>{})}); }
                         return;
                     default:
                         break;
@@ -1194,5 +1196,7 @@ void LimitVisitor::visit(const FunctionNode& node) {
     }
     std::vector<std::shared_ptr<const SymbolicNode>> new_args;
     for (auto& a : node.arguments()) { a->accept(*this); new_args.push_back(result); }
-    NormalizationVisitor norm; lamina::detail::make_node<FunctionNode>(node.type(), new_args)->accept(norm); result = norm.get_result();
+    NormalizationVisitor norm; LMCAS::detail::make_node<FunctionNode>(node.type(), new_args)->accept(norm); result = norm.get_result();
 }
+
+} // namespace LMCAS

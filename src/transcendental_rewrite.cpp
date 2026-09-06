@@ -19,7 +19,7 @@
 
 #include "internal/transcendental_support.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @brief 将因子表达式中的不定元变量替换回原始超越子表达式.
@@ -37,7 +37,7 @@ std::shared_ptr<SymbolicExpr> tf_back_substitute(
     const std::shared_ptr<SymbolicExpr>& factor_expr,
     const std::vector<TransSubstitution>& mappings) {
 
-    if (!factor_expr || !lamina::detail::node(factor_expr)) return factor_expr;
+    if (!factor_expr || !LMCAS::detail::node(factor_expr)) return factor_expr;
     if (mappings.empty()) return factor_expr;
 
     auto result = factor_expr;
@@ -46,7 +46,7 @@ std::shared_ptr<SymbolicExpr> tf_back_substitute(
         if (!m.trans_expr || m.indeterminate.empty()) continue;
 
         /// 仅当表达式依赖该不定元时才执行替换
-        if (expression_depends_on_variable(lamina::detail::node(result), m.indeterminate)) {
+        if (expression_depends_on_variable(LMCAS::detail::node(result), m.indeterminate)) {
             result = result->substitute(m.indeterminate, m.trans_expr);
         }
     }
@@ -109,16 +109,16 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
     Rational constant_product(1);
 
     for (auto& factor : factors) {
-        if (!factor || !lamina::detail::node(factor)) continue;
+        if (!factor || !LMCAS::detail::node(factor)) continue;
 
         /// 调用 simplify() 规范化因子
         auto simplified = factor->simplify();
-        if (!simplified || !lamina::detail::node(simplified)) {
+        if (!simplified || !LMCAS::detail::node(simplified)) {
             simplified = factor;
         }
 
         /// 情形 1:因子为纯数值
-        if (auto num = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(simplified))) {
+        if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(simplified))) {
             Rational val;
             if (tf_extract_rational(num, val)) {
                 if (val != Rational(0)) {
@@ -138,7 +138,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
         }
 
         /// 情形 2:因子为乘积形式,检查是否含数值前导系数
-        if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(simplified))) {
+        if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(simplified))) {
             std::vector<std::shared_ptr<const SymbolicNode>> numeric_ops;
             std::vector<std::shared_ptr<const SymbolicNode>> non_numeric_ops;
 
@@ -165,10 +165,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
 
                 /// 重建非常数部分
                 if (non_numeric_ops.size() == 1) {
-                    result.push_back(lamina::detail::make_expression_ptr(non_numeric_ops[0]));
+                    result.push_back(LMCAS::detail::make_expression_ptr(non_numeric_ops[0]));
                 } else {
-                    result.push_back(lamina::detail::make_expression_ptr(
-                        lamina::detail::make_node<MultiplyNode>(std::move(non_numeric_ops))));
+                    result.push_back(LMCAS::detail::make_expression_ptr(
+                        LMCAS::detail::make_node<MultiplyNode>(std::move(non_numeric_ops))));
                 }
             } else if (numeric_ops.empty()) {
                 /// 无数值操作数,保留原因子
@@ -218,10 +218,10 @@ bool tf_is_linear_irreducible(
     const TransSubstitutionResult& sub_result,
     const std::string& var) {
 
-    if (!sub_result.poly_expr || !lamina::detail::node(sub_result.poly_expr)) return false;
+    if (!sub_result.poly_expr || !LMCAS::detail::node(sub_result.poly_expr)) return false;
     if (sub_result.mappings.empty()) return false;
 
-    const auto& root = lamina::detail::node(sub_result.poly_expr);
+    const auto& root = LMCAS::detail::node(sub_result.poly_expr);
 
     /// 检查每个不定元的次数是否 <= 1
     for (const auto& m : sub_result.mappings) {
@@ -251,9 +251,9 @@ bool tf_is_linear_irreducible(
 std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_multiplicative_structure(
     const std::shared_ptr<SymbolicExpr>& expr) {
 
-    if (!expr || !lamina::detail::node(expr)) return {};
+    if (!expr || !LMCAS::detail::node(expr)) return {};
 
-    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(lamina::detail::node(expr));
+    auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr));
     if (!mul || mul->operands().size() < 2) return {};
 
     std::vector<std::shared_ptr<SymbolicExpr>> factors;
@@ -272,14 +272,14 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_multiplicative_structure(
                     constant_acc = constant_acc * std::get<Rational>(num->value());
                 } else {
                     /// 浮点数值:作为独立因子保留
-                    factors.push_back(lamina::detail::make_expression_ptr(op));
+                    factors.push_back(LMCAS::detail::make_expression_ptr(op));
                 }
             }
             continue;
         }
 
         /// 非数值操作数作为独立因子
-        factors.push_back(lamina::detail::make_expression_ptr(op));
+        factors.push_back(LMCAS::detail::make_expression_ptr(op));
     }
 
     /// 仅当存在至少两个非常数因子(或一个非常数因子加一个非 1 常数)时才视为有效乘积分解
@@ -358,7 +358,7 @@ static std::shared_ptr<const SymbolicNode> tf_remove_exp_factor(
 
     /// 节点本身即为 exp 因子
     if (node->equals(*exp_factor)) {
-        return lamina::detail::make_node<NumberNode>(BigInt(1));
+        return LMCAS::detail::make_node<NumberNode>(BigInt(1));
     }
 
     /// 乘积形式:移除匹配的操作数
@@ -377,12 +377,12 @@ static std::shared_ptr<const SymbolicNode> tf_remove_exp_factor(
         if (!removed) return node;
 
         if (remaining_ops.empty()) {
-            return lamina::detail::make_node<NumberNode>(BigInt(1));
+            return LMCAS::detail::make_node<NumberNode>(BigInt(1));
         }
         if (remaining_ops.size() == 1) {
             return remaining_ops[0];
         }
-        return lamina::detail::make_node<MultiplyNode>(std::move(remaining_ops));
+        return LMCAS::detail::make_node<MultiplyNode>(std::move(remaining_ops));
     }
 
     return node;
@@ -408,9 +408,9 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !lamina::detail::node(expr)) return {};
+    if (!expr || !LMCAS::detail::node(expr)) return {};
 
-    auto add = std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(expr));
+    auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr));
     if (!add || add->operands().size() < 2) return {};
 
     /// 从第一个加法项中提取 exp 因子作为候选公因子
@@ -436,19 +436,19 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separation(
     }
 
     /// 构造结果
-    auto exp_factor_expr = lamina::detail::make_expression_ptr(common_exp);
+    auto exp_factor_expr = LMCAS::detail::make_expression_ptr(common_exp);
 
     std::shared_ptr<SymbolicExpr> sum_expr;
     if (remainder_terms.size() == 1) {
-        sum_expr = lamina::detail::make_expression_ptr(remainder_terms[0]);
+        sum_expr = LMCAS::detail::make_expression_ptr(remainder_terms[0]);
     } else {
-        sum_expr = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<AddNode>(std::move(remainder_terms)));
+        sum_expr = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<AddNode>(std::move(remainder_terms)));
     }
 
     /// 化简剩余和
     auto simplified_sum = sum_expr->simplify();
-    if (simplified_sum && lamina::detail::node(simplified_sum)) {
+    if (simplified_sum && LMCAS::detail::node(simplified_sum)) {
         sum_expr = simplified_sum;
     }
 
@@ -599,7 +599,7 @@ static bool tf_extract_coeff_trig_squared(
             if (coeff_ops.size() == 1) {
                 coeff = coeff_ops[0];
             } else {
-                coeff = lamina::detail::make_node<MultiplyNode>(std::move(coeff_ops));
+                coeff = LMCAS::detail::make_node<MultiplyNode>(std::move(coeff_ops));
             }
             return true;
         }
@@ -693,7 +693,7 @@ static std::shared_ptr<const SymbolicNode> tf_simplify_pythagorean_node(
 
                 if (!coeff_i) {
                     /// 系数为 1:替换为 NumberNode(1)
-                    result_ops.push_back(lamina::detail::make_node<NumberNode>(BigInt(1)));
+                    result_ops.push_back(LMCAS::detail::make_node<NumberNode>(BigInt(1)));
                 } else {
                     /// 有公共系数:替换为系数本身
                     result_ops.push_back(coeff_i);
@@ -708,12 +708,12 @@ static std::shared_ptr<const SymbolicNode> tf_simplify_pythagorean_node(
 
         /// 重建 AddNode
         if (result_ops.empty()) {
-            return lamina::detail::make_node<NumberNode>(BigInt(0));
+            return LMCAS::detail::make_node<NumberNode>(BigInt(0));
         }
         if (result_ops.size() == 1) {
             return result_ops[0];
         }
-        return lamina::detail::make_node<AddNode>(std::move(result_ops));
+        return LMCAS::detail::make_node<AddNode>(std::move(result_ops));
     }
 
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
@@ -722,13 +722,13 @@ static std::shared_ptr<const SymbolicNode> tf_simplify_pythagorean_node(
         for (const auto& op : mul->operands()) {
             new_ops.push_back(tf_simplify_pythagorean_node(op, var));
         }
-        return lamina::detail::make_node<MultiplyNode>(std::move(new_ops));
+        return LMCAS::detail::make_node<MultiplyNode>(std::move(new_ops));
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto new_base = tf_simplify_pythagorean_node(pow->base(), var);
         auto new_exp = tf_simplify_pythagorean_node(pow->exponent(), var);
-        return lamina::detail::make_node<PowerNode>(std::move(new_base), std::move(new_exp));
+        return LMCAS::detail::make_node<PowerNode>(std::move(new_base), std::move(new_exp));
     }
 
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
@@ -737,7 +737,7 @@ static std::shared_ptr<const SymbolicNode> tf_simplify_pythagorean_node(
         for (const auto& arg : func->arguments()) {
             new_args.push_back(tf_simplify_pythagorean_node(arg, var));
         }
-        return lamina::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
+        return LMCAS::detail::make_node<FunctionNode>(func->type(), std::move(new_args));
     }
 
     /// 叶节点(NumberNode,VariableNode)直接返回
@@ -759,18 +759,18 @@ std::shared_ptr<SymbolicExpr> tf_simplify_pythagorean(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var) {
 
-    if (!expr || !lamina::detail::node(expr)) return expr;
+    if (!expr || !LMCAS::detail::node(expr)) return expr;
 
-    auto simplified_root = tf_simplify_pythagorean_node(lamina::detail::node(expr), var);
+    auto simplified_root = tf_simplify_pythagorean_node(LMCAS::detail::node(expr), var);
 
     if (!simplified_root) return expr;
 
     /// 化简结果与原表达式结构相同时复用原对象.
-    if (simplified_root->equals(*lamina::detail::node(expr))) {
+    if (simplified_root->equals(*LMCAS::detail::node(expr))) {
         return expr;
     }
 
-    return lamina::detail::make_expression_ptr(simplified_root);
+    return LMCAS::detail::make_expression_ptr(simplified_root);
 }
 
-} // namespace lamina
+} // namespace LMCAS

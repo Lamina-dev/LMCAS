@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <exception>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 namespace {
 
 using SturmSequence = std::vector<Polynomial<Rational>>;
@@ -200,6 +200,12 @@ Result<std::vector<RationalInterval>> isolate_real_roots_exact(
         if (polynomial.degree() <= 0) {
             return Result<std::vector<RationalInterval>>::success({});
         }
+        if (polynomial.degree() == 1) {
+            const Rational root =
+                -polynomial.coeffs[0] / polynomial.coeffs[1];
+            return Result<std::vector<RationalInterval>>::success(
+                {{root, root}});
+        }
         auto square_free = polynomial.square_free_part().make_monic();
         auto sequence = make_sturm_sequence(square_free, context, operation);
         if (!sequence) {
@@ -333,4 +339,4 @@ Result<std::vector<RationalInterval>> isolate_real_roots_exact(
     }
 }
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

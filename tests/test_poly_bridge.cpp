@@ -4,7 +4,7 @@
 #include "test_common.hpp"
 #include <iostream>
 
-using namespace lamina;
+using namespace LMCAS;
 
 void test_bridge() {
     std::cout << "Testing Symbolic <-> Polynomial Bridge..." << std::endl;

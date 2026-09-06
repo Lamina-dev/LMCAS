@@ -8,7 +8,7 @@
 #include <cmath>
 #include <algorithm>
 
-using namespace lamina;
+using namespace LMCAS;
 using SE = SymbolicExpr;
 
 static auto num(int n) { return SE::number(n); }
@@ -18,25 +18,25 @@ static auto var(const std::string& name) { return SE::variable(name); }
 static std::shared_ptr<SymbolicExpr> get_mat_entry(
     const std::shared_ptr<SymbolicExpr>& mat, size_t r, size_t c)
 {
-    if (!mat || !lamina::detail::node(mat)) return nullptr;
-    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat || !LMCAS::detail::node(mat)) return nullptr;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     if (!mn) return nullptr;
     auto node = mn->get(r, c);
     if (!node) return SE::number(0);
-    return lamina::detail::make_expression_ptr(node);
+    return LMCAS::detail::make_expression_ptr(node);
 }
 
 static size_t get_mat_rows(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !lamina::detail::node(mat)) return 0;
-    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat || !LMCAS::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     return mn ? mn->rows() : 0;
 }
 
 static size_t get_mat_cols(const std::shared_ptr<SymbolicExpr>& mat)
 {
-    if (!mat || !lamina::detail::node(mat)) return 0;
-    auto mn = std::dynamic_pointer_cast<const MatrixNode>(lamina::detail::node(mat));
+    if (!mat || !LMCAS::detail::node(mat)) return 0;
+    auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     return mn ? mn->cols() : 0;
 }
 
@@ -447,7 +447,7 @@ static void test_mixed_product_det() {
             {c[0], c[1], c[2]}
         };
         auto mat = SE::matrix(mat_elems);
-        auto d = lamina::matrix_determinant_checked(mat).value();
+        auto d = LMCAS::matrix_determinant_checked(mat).value();
 
         auto dp_val = test_numeric_eval(dp.value()->simplify());
         auto d_val = test_numeric_eval(d->simplify());

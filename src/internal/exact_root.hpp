@@ -8,7 +8,7 @@
 #include <variant>
 #include <vector>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 
 struct RealIsolation {
     ExactRealAlgebraic value;
@@ -63,4 +63,4 @@ Result<ApproxComplex> evaluate_root_complex(
     const NumericEvaluationOptions& options,
     ComputationContext& context);
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

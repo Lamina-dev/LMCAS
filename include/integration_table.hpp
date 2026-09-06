@@ -7,10 +7,10 @@
 #include <unordered_set>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 /** @brief 积分表条目，描述一条积分规则（模式 → 结果） */
-struct LAMINA_API IntegrationEntry {
+struct LMCAS_API IntegrationEntry {
 
     std::string name;                    ///< 规则名称
 
@@ -33,7 +33,7 @@ struct LAMINA_API IntegrationEntry {
 };
 
 /** @brief 积分查找表，按类别管理积分规则 */
-class LAMINA_API IntegrationTable {
+class LMCAS_API IntegrationTable {
 public:
     /** @brief 积分规则类别 */
     enum class Category {
@@ -84,4 +84,4 @@ private:
     static const std::vector<IntegrationEntry> empty_entries_;
 };
 
-} // namespace lamina
+} // namespace LMCAS

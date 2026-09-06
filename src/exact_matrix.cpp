@@ -9,7 +9,7 @@
 #include <optional>
 #include <set>
 
-namespace lamina::detail {
+namespace LMCAS::detail {
 namespace {
 
 Result<void> validate_matrix(
@@ -885,4 +885,4 @@ Result<std::vector<std::vector<ExprPtr>>> nullspace_exact(
         std::move(basis));
 }
 
-} // namespace lamina::detail
+} // namespace LMCAS::detail

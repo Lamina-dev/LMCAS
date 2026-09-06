@@ -14,7 +14,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::vector<std::shared_ptr<SymbolicExpr>> checked_mixed_candidates(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -137,7 +137,7 @@ void test_allow_numeric_false_returns_empty() {
         SymbolicExpr::number(-1)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = false;
 
     auto results = solve_vector_for_test(expr, "x", opts);
@@ -156,7 +156,7 @@ void test_allow_numeric_true_permits_solving() {
         SymbolicExpr::number(-1)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -191,7 +191,7 @@ void test_allow_numeric_false_cos_equation_returns_empty() {
         )
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = false;
 
     auto results = solve_vector_for_test(expr, "x", opts);
@@ -210,7 +210,7 @@ void test_routing_pure_polynomial_not_hybrid() {
         SymbolicExpr::number(-4)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     // Even with allow_numeric=true, a pure polynomial should NOT go through hybrid solver
     opts.allow_numeric = true;
 
@@ -250,7 +250,7 @@ void test_routing_transcendental_substitution_not_hybrid() {
         SymbolicExpr::number(-2)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     // With allow_numeric=false, the transcendental solver path should still find ln(2)
     opts.allow_numeric = false;
 
@@ -294,7 +294,7 @@ void test_routing_polynomial_with_allow_numeric_false() {
         SymbolicExpr::number(-4)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = false;
 
     auto results = solve_vector_for_test(expr, "x", opts);
@@ -339,7 +339,7 @@ void test_backward_compat_cubic_polynomial() {
     );
 
     // Test with allow_numeric=true - polynomial path should still handle it
-    lamina::SolveOptions opts_numeric;
+    LMCAS::SolveOptions opts_numeric;
     opts_numeric.allow_numeric = true;
     auto results_numeric = solve_vector_for_test(expr, "x", opts_numeric);
 
@@ -362,7 +362,7 @@ void test_backward_compat_cubic_polynomial() {
     }
 
     // Test with allow_numeric=false - polynomial path should still produce same results
-    lamina::SolveOptions opts_symbolic;
+    LMCAS::SolveOptions opts_symbolic;
     opts_symbolic.allow_numeric = false;
     auto results_symbolic = solve_vector_for_test(expr, "x", opts_symbolic);
 
@@ -399,7 +399,7 @@ void test_backward_compat_transcendental_substitution() {
 
     /// allow_numeric=false 时超越求解器仍返回 ln(2),
     /// 证明可约超越方程由符号路径处理.
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = false;
 
     auto results = solve_vector_for_test(expr, "x", opts);
@@ -425,7 +425,7 @@ void test_backward_compat_transcendental_substitution() {
     }
 
     // With allow_numeric=true, should produce the same result (not go through hybrid)
-    lamina::SolveOptions opts_numeric;
+    LMCAS::SolveOptions opts_numeric;
     opts_numeric.allow_numeric = true;
     auto results_numeric = solve_vector_for_test(expr, "x", opts_numeric);
 
@@ -442,12 +442,12 @@ void test_search_interval_user_specified() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = true;
     opts.search_lo = 2.0;
     opts.search_hi = 5.0;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "User-specified valid interval should return a value");
     if (result) {
         EXPECT_NEAR(result->lo, 2.0, 1e-15, "lo should be 2.0");
@@ -461,12 +461,12 @@ void test_search_interval_user_invalid_lo_ge_hi() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = true;
     opts.search_lo = 5.0;
     opts.search_hi = 2.0;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_FALSE(result.has_value(), "Invalid interval (lo >= hi) should return nullopt");
 }
 
@@ -476,12 +476,12 @@ void test_search_interval_user_invalid_equal() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = true;
     opts.search_lo = 3.0;
     opts.search_hi = 3.0;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_FALSE(result.has_value(), "Equal bounds (lo == hi) should return nullopt");
 }
 
@@ -491,13 +491,13 @@ void test_search_interval_user_width_le_tolerance() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = true;
     opts.search_lo = 1.0;
     opts.search_hi = 1.0 + 1e-13;  // width = 1e-13 <= default tolerance 1e-12
     opts.tolerance = 1e-12;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_FALSE(result.has_value(), "Interval width <= tolerance should return nullopt");
 }
 
@@ -509,10 +509,10 @@ void test_search_interval_default_no_periodic() {
     auto expr = SymbolicExpr::add(SymbolicExpr::exp(x),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), x));
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Default interval should be valid");
     if (result) {
         EXPECT_NEAR(result->lo, -10.0, 1e-15, "Default lo should be -10");
@@ -527,10 +527,10 @@ void test_search_interval_sin_x_periodic_extension() {
     // sin(x) + x: k=1, period = 2pi ~= 6.28
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
         // Default [-10, 10] already covers 2pi ~= 6.28, so no extension needed
@@ -549,10 +549,10 @@ void test_search_interval_sin_small_k_periodic_extension() {
     auto sin_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.2), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
         double expected_period = 2.0 * M_PI / 0.2;  // 10pi ~= 31.4
@@ -575,10 +575,10 @@ void test_search_interval_tan_periodic_extension() {
     auto tan_arg = SymbolicExpr::multiply(SymbolicExpr::number(1.0/3.0), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::tan(tan_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
         // period = pi/(1/3) = 3pi ~= 9.42 < 10, so default [-10, 10] is used
@@ -596,10 +596,10 @@ void test_search_interval_tan_small_k_extension() {
     auto tan_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.1), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::tan(tan_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Periodic extension should produce valid interval");
     if (result) {
         double expected_period = M_PI / 0.1;  // 10pi ~= 31.4
@@ -619,10 +619,10 @@ void test_search_interval_clamp_to_100() {
     auto sin_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.01), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Clamped interval should be valid");
     if (result) {
         EXPECT_NEAR(result->lo, -100.0, 1e-15, "Should be clamped to -100");
@@ -638,10 +638,10 @@ void test_search_interval_nonlinear_arg_default() {
     auto sin_arg = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Non-linear periodic arg should fall back to default");
     if (result) {
         EXPECT_NEAR(result->lo, -10.0, 1e-15, "Non-linear arg: default lo = -10");
@@ -661,10 +661,10 @@ void test_search_interval_cos_2x_plus_1() {
     );
     auto expr = SymbolicExpr::add(SymbolicExpr::cos(cos_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "Linear periodic arg should produce valid interval");
     if (result) {
         EXPECT_NEAR(result->lo, -10.0, 1e-10, "cos(2x+1): period π < 10, default used");
@@ -680,12 +680,12 @@ void test_search_interval_user_overrides_periodic() {
     auto sin_arg = SymbolicExpr::multiply(SymbolicExpr::number(0.01), x);
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = true;
     opts.search_lo = -1.0;
     opts.search_hi = 1.0;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "User-specified interval should override periodic extension");
     if (result) {
         EXPECT_NEAR(result->lo, -1.0, 1e-15, "User override: lo = -1");
@@ -707,10 +707,10 @@ void test_sin_x_plus_x_two_periods() {
     // Key check: the returned interval width >= 4pi ~= 12.57
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "sin(x)+x should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
@@ -734,10 +734,10 @@ void test_cos_half_x_minus_x_two_periods() {
         SymbolicExpr::multiply(SymbolicExpr::number(-1), x)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "cos(0.5*x)-x should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
@@ -758,10 +758,10 @@ void test_tan_x_plus_x_two_periods() {
     // Key check: interval width >= 2pi ~= 6.28
     auto expr = SymbolicExpr::add(SymbolicExpr::tan(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "tan(x)+x should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
@@ -786,10 +786,10 @@ void test_sin_small_k_clamped() {
         SymbolicExpr::multiply(SymbolicExpr::number(0.01), x)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "sin(0.1*x)+x/100 should produce valid interval");
     if (result) {
         double width = result->hi - result->lo;
@@ -813,10 +813,10 @@ void test_sin_x_squared_nonlinear_default() {
     auto sin_arg = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto expr = SymbolicExpr::add(SymbolicExpr::sin(sin_arg), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.has_search_interval = false;
 
-    auto result = lamina::determine_search_interval(expr, "x", opts);
+    auto result = LMCAS::determine_search_interval(expr, "x", opts);
     EXPECT_TRUE(result.has_value(), "sin(x^2)+x should produce valid interval");
     if (result) {
         EXPECT_NEAR(result->lo, -10.0, 1e-15,
@@ -835,14 +835,14 @@ void test_max_roots_2_sin_x() {
     // Compute derivative: cos(x)
     auto derivative = SymbolicExpr::cos(x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-12;
     opts.max_roots = 2;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SearchInterval interval{-10.0, 10.0};
 
-    auto result = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(result.size() <= 2,
         "sin(x) on [-10,10] with max_roots=2: got " + std::to_string(result.size()) +
@@ -857,14 +857,14 @@ void test_max_roots_1_sin_x() {
 
     auto derivative = SymbolicExpr::cos(x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-12;
     opts.max_roots = 1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SearchInterval interval{-10.0, 10.0};
 
-    auto result = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(result.size() <= 1,
         "sin(x) on [-10,10] with max_roots=1: got " + std::to_string(result.size()) +
@@ -879,14 +879,14 @@ void test_max_roots_unlimited_sin_x() {
 
     auto derivative = SymbolicExpr::cos(x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;  // unlimited
 
-    lamina::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SearchInterval interval{-10.0, 10.0};
 
-    auto result = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     // sin(x) has roots at -3pi, -2pi, -pi, 0, pi, 2pi, 3pi in [-10,10]
     // That's approximately 7 roots. We expect at least 3 to confirm unlimited works.
@@ -911,14 +911,14 @@ void test_max_roots_3_cos_x_minus_half() {
         SymbolicExpr::sin(x)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-12;
     opts.max_roots = 3;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SearchInterval interval{-10.0, 10.0};
 
-    auto result = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(result.size() <= 3,
         "cos(x)-0.5 on [-10,10] with max_roots=3: got " + std::to_string(result.size()) +
@@ -935,11 +935,11 @@ void test_min_width_sin_x_plus_x_over_10() {
         SymbolicExpr::multiply(SymbolicExpr::number(0.1), x)
     );
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
 
-    auto intervals = lamina::isolate_roots(expr, nullptr, "x", interval, opts);
+    auto intervals = LMCAS::isolate_roots(expr, nullptr, "x", interval, opts);
 
     std::cout << "  [INFO] isolate_roots returned " << intervals.size() << " interval(s)" << std::endl;
 
@@ -962,11 +962,11 @@ void test_min_width_tan_x_minus_x() {
         SymbolicExpr::multiply(SymbolicExpr::number(-1), x)
     );
 
-    lamina::SearchInterval interval{-5.0, 5.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{-5.0, 5.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
 
-    auto intervals = lamina::isolate_roots(expr, nullptr, "x", interval, opts);
+    auto intervals = LMCAS::isolate_roots(expr, nullptr, "x", interval, opts);
 
     std::cout << "  [INFO] isolate_roots returned " << intervals.size() << " interval(s)" << std::endl;
 
@@ -989,11 +989,11 @@ void test_min_width_narrow_interval() {
         SymbolicExpr::multiply(SymbolicExpr::number(0.1), x)
     );
 
-    lamina::SearchInterval interval{0.0, 0.001};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{0.0, 0.001};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
 
-    auto intervals = lamina::isolate_roots(expr, nullptr, "x", interval, opts);
+    auto intervals = LMCAS::isolate_roots(expr, nullptr, "x", interval, opts);
 
     std::cout << "  [INFO] isolate_roots on [0, 0.001] returned " << intervals.size() << " interval(s)" << std::endl;
 
@@ -1023,13 +1023,13 @@ static std::optional<double> eval_at(const std::shared_ptr<SymbolicExpr>& expr,
 /// Helper: compute derivative of expr with respect to var using DifferentiationVisitor
 static std::shared_ptr<SymbolicExpr> compute_derivative(
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
-    if (!expr || !lamina::detail::node(expr)) return nullptr;
+    if (!expr || !LMCAS::detail::node(expr)) return nullptr;
     try {
         DifferentiationVisitor dv(var);
-        lamina::detail::node(expr)->accept(dv);
+        LMCAS::detail::node(expr)->accept(dv);
         auto result_node = dv.get_result();
         if (!result_node) return nullptr;
-        return lamina::detail::make_expression_ptr(result_node);
+        return LMCAS::detail::make_expression_ptr(result_node);
     } catch (...) {
         return nullptr;
     }
@@ -1044,12 +1044,12 @@ void test_sign_change_sin_x_plus_x_div_10() {
 
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] sin(x) on [-10,10]: " << intervals.size() << " intervals found" << std::endl;
 
@@ -1091,12 +1091,12 @@ void test_sign_change_exp_x_minus_x_minus_2() {
 
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-5.0, 5.0};
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    LMCAS::SearchInterval interval{-5.0, 5.0};
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] exp(x)-x-2 on [-5,5]: " << intervals.size() << " intervals found" << std::endl;
 
@@ -1132,12 +1132,12 @@ void test_sign_change_x_cos_x_minus_1() {
 
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] x*cos(x)-1 on [-10,10]: " << intervals.size() << " intervals found" << std::endl;
 
@@ -1172,12 +1172,12 @@ void test_x_squared_plus_one_always_positive() {
     );
     auto derivative = expr->differentiate("x");
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;
 
-    auto isolated = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto isolated = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(isolated.empty(),
         "x^2 + 1 is always positive on [-10, 10], isolate_roots should return empty");
@@ -1194,12 +1194,12 @@ void test_exp_x_plus_one_always_positive() {
     );
     auto derivative = expr->differentiate("x");
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;
 
-    auto isolated = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto isolated = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(isolated.empty(),
         "exp(x) + 1 is always positive on [-10, 10], isolate_roots should return empty");
@@ -1219,12 +1219,12 @@ void test_neg_x_squared_minus_one_always_negative() {
     );
     auto derivative = expr->differentiate("x");
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;
 
-    auto isolated = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto isolated = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(isolated.empty(),
         "-(x^2 + 1) is always negative on [-10, 10], isolate_roots should return empty");
@@ -1241,12 +1241,12 @@ void test_sin_x_plus_five_always_positive() {
     );
     auto derivative = expr->differentiate("x");
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_roots = -1;
 
-    auto isolated = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto isolated = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(isolated.empty(),
         "sin(x) + 5 is always positive on [-10, 10], isolate_roots should return empty");
@@ -1260,12 +1260,12 @@ void test_refine_root_sin_x_newton_raphson() {
     auto expr = SymbolicExpr::sin(x);
     auto derivative = compute_derivative(expr, "x");  // cos(x)
 
-    lamina::IsolatedInterval interval{3.0, 3.5, true};
-    lamina::SolveOptions opts;
+    LMCAS::IsolatedInterval interval{3.0, 3.5, true};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
 
-    auto result = lamina::refine_root(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::refine_root(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(result.has_value(), "refine_root should converge for sin(x) on [3.0, 3.5]");
     if (result) {
@@ -1283,13 +1283,13 @@ void test_refine_root_sin_x_bisection_fallback() {
     auto x = SymbolicExpr::variable("x");
     auto expr = SymbolicExpr::sin(x);
 
-    lamina::IsolatedInterval interval{3.0, 3.5, false};
-    lamina::SolveOptions opts;
+    LMCAS::IsolatedInterval interval{3.0, 3.5, false};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
 
     // No derivative -> pure bisection
-    auto result = lamina::refine_root(expr, nullptr, "x", interval, opts);
+    auto result = LMCAS::refine_root(expr, nullptr, "x", interval, opts);
 
     EXPECT_TRUE(result.has_value(), "refine_root (bisection) should converge for sin(x) on [3.0, 3.5]");
     if (result) {
@@ -1314,12 +1314,12 @@ void test_refine_root_exp_x_minus_x_minus_2() {
     );
     auto derivative = compute_derivative(expr, "x");  // exp(x) - 1
 
-    lamina::IsolatedInterval interval{1.0, 1.5, true};
-    lamina::SolveOptions opts;
+    LMCAS::IsolatedInterval interval{1.0, 1.5, true};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
 
-    auto result = lamina::refine_root(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::refine_root(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(result.has_value(), "refine_root should converge for exp(x)-x-2 on [1.0, 1.5]");
     if (result) {
@@ -1345,12 +1345,12 @@ void test_refine_root_x_cos_x_minus_1() {
     );
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::IsolatedInterval interval{4.5, 5.0, true};
-    lamina::SolveOptions opts;
+    LMCAS::IsolatedInterval interval{4.5, 5.0, true};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
 
-    auto result = lamina::refine_root(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::refine_root(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(result.has_value(), "refine_root should converge for x*cos(x)-1 on [4.5, 5.0]");
     if (result) {
@@ -1373,12 +1373,12 @@ void test_refine_root_discards_when_no_convergence() {
     auto derivative = compute_derivative(expr, "x");
 
     // This interval has no sign change, so refinement should fail
-    lamina::IsolatedInterval interval{-1.0, 1.0, false};
-    lamina::SolveOptions opts;
+    LMCAS::IsolatedInterval interval{-1.0, 1.0, false};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 50;
 
-    auto result = lamina::refine_root(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::refine_root(expr, derivative, "x", interval, opts);
 
     EXPECT_FALSE(result.has_value(),
         "refine_root should return nullopt for x^2+1 (no real root in [-1, 1])");
@@ -1392,12 +1392,12 @@ void test_refine_root_derivative_zero_bisection_step() {
     auto expr = SymbolicExpr::power(x, SymbolicExpr::number(3));
     auto derivative = compute_derivative(expr, "x");  // 3*x^2
 
-    lamina::IsolatedInterval interval{-1.0, 1.0, false};
-    lamina::SolveOptions opts;
+    LMCAS::IsolatedInterval interval{-1.0, 1.0, false};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 200;
 
-    auto result = lamina::refine_root(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::refine_root(expr, derivative, "x", interval, opts);
 
     EXPECT_TRUE(result.has_value(), "refine_root should converge for x^3 on [-1, 1]");
     if (result) {
@@ -1415,12 +1415,12 @@ void test_refine_root_max_iterations_exceeded() {
     auto expr = SymbolicExpr::sin(x);
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::IsolatedInterval interval{3.0, 3.5, true};
-    lamina::SolveOptions opts;
+    LMCAS::IsolatedInterval interval{3.0, 3.5, true};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-15;  // Very tight tolerance
     opts.max_newton_iterations = 2;  // Very few iterations
 
-    auto result = lamina::refine_root(expr, derivative, "x", interval, opts);
+    auto result = LMCAS::refine_root(expr, derivative, "x", interval, opts);
 
     // With only 2 iterations and 1e-15 tolerance, Newton-Raphson might still converge
     // (it's quadratically convergent). If it does, great. If not, it should return nullopt.
@@ -1479,20 +1479,20 @@ void test_pipeline_sin_x_ascending() {
     auto expr = SymbolicExpr::sin(x);
     auto derivative = compute_derivative(expr, "x");  // cos(x)
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SearchInterval interval{-10.0, 10.0};
 
     // Step 1: isolate roots
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     // Step 2: refine each root
     std::vector<NumericRoot> refined_roots;
     for (const auto& iso : intervals) {
-        auto root = lamina::refine_root(expr, derivative, "x", iso, opts);
+        auto root = LMCAS::refine_root(expr, derivative, "x", iso, opts);
         if (root.has_value()) {
             refined_roots.push_back(*root);
         }
@@ -1523,20 +1523,20 @@ void test_pipeline_cos_x_ascending() {
     auto expr = SymbolicExpr::cos(x);
     auto derivative = compute_derivative(expr, "x");  // -sin(x)
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SearchInterval interval{-10.0, 10.0};
 
     // Step 1: isolate roots
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     // Step 2: refine each root
     std::vector<NumericRoot> refined_roots;
     for (const auto& iso : intervals) {
-        auto root = lamina::refine_root(expr, derivative, "x", iso, opts);
+        auto root = LMCAS::refine_root(expr, derivative, "x", iso, opts);
         if (root.has_value()) {
             refined_roots.push_back(*root);
         }
@@ -1600,8 +1600,8 @@ void test_roots_within_interval_sin_x() {
     auto expr = SymbolicExpr::sin(x);
     auto derivative = compute_derivative(expr, "x");  // cos(x)
 
-    lamina::SearchInterval interval{-3.0, 3.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{-3.0, 3.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
@@ -1609,14 +1609,14 @@ void test_roots_within_interval_sin_x() {
     opts.search_lo = -3.0;
     opts.search_hi = 3.0;
 
-    auto isolated = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto isolated = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] sin(x) on [-3,3]: " << isolated.size() << " isolated interval(s)" << std::endl;
 
     // sin(x) has a root at x=0 within [-3, 3]. +/-pi ~= +/-3.14 are outside.
     // Regardless of how many roots are found, ALL must be within [-3, 3].
     for (size_t i = 0; i < isolated.size(); ++i) {
-        auto refined = lamina::refine_root(expr, derivative, "x", isolated[i], opts);
+        auto refined = LMCAS::refine_root(expr, derivative, "x", isolated[i], opts);
         if (refined.has_value()) {
             EXPECT_TRUE(refined->value >= -3.0,
                 "Root " + std::to_string(refined->value) + " should be >= -3.0 (lower bound)");
@@ -1626,17 +1626,17 @@ void test_roots_within_interval_sin_x() {
     }
 
     // Also test with a wider interval that definitely contains multiple roots
-    lamina::SearchInterval interval2{-4.0, 4.0};
+    LMCAS::SearchInterval interval2{-4.0, 4.0};
     opts.search_lo = -4.0;
     opts.search_hi = 4.0;
 
-    auto isolated2 = lamina::isolate_roots(expr, derivative, "x", interval2, opts);
+    auto isolated2 = LMCAS::isolate_roots(expr, derivative, "x", interval2, opts);
 
     std::cout << "  [INFO] sin(x) on [-4,4]: " << isolated2.size() << " isolated interval(s)" << std::endl;
 
     // sin(x) has roots at -pi, 0, pi within [-4, 4]
     for (size_t i = 0; i < isolated2.size(); ++i) {
-        auto refined = lamina::refine_root(expr, derivative, "x", isolated2[i], opts);
+        auto refined = LMCAS::refine_root(expr, derivative, "x", isolated2[i], opts);
         if (refined.has_value()) {
             EXPECT_TRUE(refined->value >= -4.0,
                 "Root " + std::to_string(refined->value) + " should be >= -4.0 (lower bound)");
@@ -1665,8 +1665,8 @@ void test_roots_within_interval_cos_x_minus_half() {
         SymbolicExpr::sin(x)
     );
 
-    lamina::SearchInterval interval{0.0, 5.0};
-    lamina::SolveOptions opts;
+    LMCAS::SearchInterval interval{0.0, 5.0};
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
@@ -1674,7 +1674,7 @@ void test_roots_within_interval_cos_x_minus_half() {
     opts.search_lo = 0.0;
     opts.search_hi = 5.0;
 
-    auto isolated = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto isolated = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] cos(x)-0.5 on [0,5]: " << isolated.size() << " isolated interval(s)" << std::endl;
 
@@ -1685,7 +1685,7 @@ void test_roots_within_interval_cos_x_minus_half() {
     // So we expect 1 root in [0,5].
 
     for (size_t i = 0; i < isolated.size(); ++i) {
-        auto refined = lamina::refine_root(expr, derivative, "x", isolated[i], opts);
+        auto refined = LMCAS::refine_root(expr, derivative, "x", isolated[i], opts);
         if (refined.has_value()) {
             EXPECT_TRUE(refined->value >= 0.0,
                 "Root " + std::to_string(refined->value) + " should be >= 0.0 (lower bound)");
@@ -1703,13 +1703,13 @@ void test_output_validity_sin_x_refined_roots() {
     auto expr = SymbolicExpr::sin(x);
     auto derivative = compute_derivative(expr, "x");  // cos(x)
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] sin(x) on [-10,10]: " << intervals.size() << " intervals isolated" << std::endl;
 
@@ -1717,7 +1717,7 @@ void test_output_validity_sin_x_refined_roots() {
         "sin(x) on [-10,10] should produce at least one isolated interval");
 
     for (size_t i = 0; i < intervals.size(); ++i) {
-        auto root_result = lamina::refine_root(expr, derivative, "x", intervals[i], opts);
+        auto root_result = LMCAS::refine_root(expr, derivative, "x", intervals[i], opts);
 
         EXPECT_TRUE(root_result.has_value(),
             "Interval " + std::to_string(i) + " should produce a refined root");
@@ -1737,8 +1737,8 @@ void test_output_validity_sin_x_refined_roots() {
             auto number_expr = SymbolicExpr::number(root_result->value);
             EXPECT_TRUE(number_expr != nullptr,
                 "Root " + std::to_string(i) + " should be convertible to SymbolicExpr");
-            if (number_expr && lamina::detail::node(number_expr)) {
-                auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
+            if (number_expr && LMCAS::detail::node(number_expr)) {
+                auto as_number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(number_expr));
                 EXPECT_TRUE(as_number != nullptr,
                     "Root " + std::to_string(i) + " expression should be a NumberNode");
             }
@@ -1760,13 +1760,13 @@ void test_output_validity_exp_x_minus_x_minus_2() {
     );
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-5.0, 5.0};
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    LMCAS::SearchInterval interval{-5.0, 5.0};
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] exp(x)-x-2 on [-5,5]: " << intervals.size() << " intervals isolated" << std::endl;
 
@@ -1774,7 +1774,7 @@ void test_output_validity_exp_x_minus_x_minus_2() {
         "exp(x)-x-2 on [-5,5] should produce at least one isolated interval");
 
     for (size_t i = 0; i < intervals.size(); ++i) {
-        auto root_result = lamina::refine_root(expr, derivative, "x", intervals[i], opts);
+        auto root_result = LMCAS::refine_root(expr, derivative, "x", intervals[i], opts);
 
         if (root_result.has_value()) {
             // (a) Value is finite
@@ -1790,10 +1790,10 @@ void test_output_validity_exp_x_minus_x_minus_2() {
 
             // (c) Can be converted to NumberNode
             auto number_expr = SymbolicExpr::number(root_result->value);
-            EXPECT_TRUE(number_expr != nullptr && lamina::detail::node(number_expr) != nullptr,
+            EXPECT_TRUE(number_expr != nullptr && LMCAS::detail::node(number_expr) != nullptr,
                 "Root " + std::to_string(i) + " should produce a valid SymbolicExpr");
-            if (number_expr && lamina::detail::node(number_expr)) {
-                auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
+            if (number_expr && LMCAS::detail::node(number_expr)) {
+                auto as_number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(number_expr));
                 EXPECT_TRUE(as_number != nullptr,
                     "Root " + std::to_string(i) + " expression root should be NumberNode");
             }
@@ -1808,18 +1808,18 @@ void test_max_roots_limit_after_deduplication() {
     auto expr = SymbolicExpr::sin(x);
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
     opts.max_roots = 2;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     // Refine all isolated intervals
     std::vector<NumericRoot> refined_roots;
     for (size_t i = 0; i < intervals.size(); ++i) {
-        auto root_result = lamina::refine_root(expr, derivative, "x", intervals[i], opts);
+        auto root_result = LMCAS::refine_root(expr, derivative, "x", intervals[i], opts);
         if (root_result.has_value()) {
             refined_roots.push_back(*root_result);
         }
@@ -1828,7 +1828,7 @@ void test_max_roots_limit_after_deduplication() {
     std::cout << "  [INFO] Refined " << refined_roots.size() << " root(s) before deduplication" << std::endl;
 
     // (d) After deduplication with max_roots=2, at most 2 roots returned
-    auto deduped = lamina::deduplicate_roots(refined_roots, opts.tolerance, opts.max_roots);
+    auto deduped = LMCAS::deduplicate_roots(refined_roots, opts.tolerance, opts.max_roots);
 
     EXPECT_TRUE(deduped.size() <= 2,
         "deduplicate_roots with max_roots=2 should return at most 2 roots, got " +
@@ -1841,10 +1841,10 @@ void test_max_roots_limit_after_deduplication() {
             std::to_string(deduped[i]) + " should be finite");
 
         auto number_expr = SymbolicExpr::number(deduped[i]);
-        EXPECT_TRUE(number_expr != nullptr && lamina::detail::node(number_expr) != nullptr,
+        EXPECT_TRUE(number_expr != nullptr && LMCAS::detail::node(number_expr) != nullptr,
             "Deduplicated root " + std::to_string(i) + " should be convertible to NumberNode");
-        if (number_expr && lamina::detail::node(number_expr)) {
-            auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
+        if (number_expr && LMCAS::detail::node(number_expr)) {
+            auto as_number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(number_expr));
             EXPECT_TRUE(as_number != nullptr,
                 "Deduplicated root " + std::to_string(i) + " expression should be NumberNode");
         }
@@ -1862,13 +1862,13 @@ void test_output_validity_x_cos_x_minus_1() {
     );
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    LMCAS::SearchInterval interval{-10.0, 10.0};
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     std::cout << "  [INFO] x*cos(x)-1 on [-10,10]: " << intervals.size() << " intervals isolated" << std::endl;
 
@@ -1877,7 +1877,7 @@ void test_output_validity_x_cos_x_minus_1() {
 
     std::vector<NumericRoot> all_roots;
     for (size_t i = 0; i < intervals.size(); ++i) {
-        auto root_result = lamina::refine_root(expr, derivative, "x", intervals[i], opts);
+        auto root_result = LMCAS::refine_root(expr, derivative, "x", intervals[i], opts);
 
         if (root_result.has_value()) {
             // (a) Value is finite
@@ -1891,7 +1891,7 @@ void test_output_validity_x_cos_x_minus_1() {
 
             // (c) NumberNode representation
             auto number_expr = SymbolicExpr::number(root_result->value);
-            auto as_number = std::dynamic_pointer_cast<const NumberNode>(lamina::detail::node(number_expr));
+            auto as_number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(number_expr));
             EXPECT_TRUE(as_number != nullptr,
                 "Root " + std::to_string(i) + " should be representable as NumberNode");
 
@@ -1900,7 +1900,7 @@ void test_output_validity_x_cos_x_minus_1() {
     }
 
     // Verify deduplication preserves validity
-    auto deduped = lamina::deduplicate_roots(all_roots, opts.tolerance, -1);
+    auto deduped = LMCAS::deduplicate_roots(all_roots, opts.tolerance, -1);
     std::cout << "  [INFO] After deduplication: " << deduped.size() << " unique root(s)" << std::endl;
 
     for (size_t i = 0; i < deduped.size(); ++i) {
@@ -1914,7 +1914,7 @@ void test_assemble_results_basic() {
     TEST_CASE("Result assembly: deduplicate roots then convert to NumberNode expressions");
 
     // Create a few NumericRoot values with varying residuals
-    std::vector<lamina::NumericRoot> roots = {
+    std::vector<LMCAS::NumericRoot> roots = {
         {3.14159, 1e-13, 5},
         {-1.5,    2e-14, 3},
         {0.0,     0.0,   1},
@@ -1925,7 +1925,7 @@ void test_assemble_results_basic() {
     int max_roots = -1;
 
     // Deduplicate (no duplicates in this set)
-    auto deduped = lamina::deduplicate_roots(roots, tolerance, max_roots);
+    auto deduped = LMCAS::deduplicate_roots(roots, tolerance, max_roots);
 
     // Verify deduplication produced sorted ascending values
     EXPECT_TRUE(deduped.size() == 4, "Should have 4 unique roots");
@@ -1948,7 +1948,7 @@ void test_assemble_results_basic() {
         EXPECT_TRUE(results[i] != nullptr,
             "Result " + std::to_string(i) + " should not be null");
         auto num = std::dynamic_pointer_cast<const NumberNode>(
-            lamina::detail::node(results[i]));
+            LMCAS::detail::node(results[i]));
         EXPECT_TRUE(num != nullptr,
             "Result " + std::to_string(i) + " root should be a NumberNode");
     }
@@ -1973,11 +1973,11 @@ void test_assemble_results_basic() {
 void test_assemble_results_empty() {
     TEST_CASE("Result assembly: empty root list produces empty expression vector");
 
-    std::vector<lamina::NumericRoot> roots;
+    std::vector<LMCAS::NumericRoot> roots;
     lmmc_real_t tolerance = 1e-12;
     int max_roots = -1;
 
-    auto deduped = lamina::deduplicate_roots(roots, tolerance, max_roots);
+    auto deduped = LMCAS::deduplicate_roots(roots, tolerance, max_roots);
     EXPECT_TRUE(deduped.empty(), "Deduplication of empty input should return empty");
 
     // Assemble (simulating assemble_results with empty input)
@@ -1992,7 +1992,7 @@ void test_assemble_results_with_duplicates() {
     TEST_CASE("Result assembly: duplicates removed before conversion to NumberNode");
 
     // Create roots with duplicates (values within 10*tolerance of each other)
-    std::vector<lamina::NumericRoot> roots = {
+    std::vector<LMCAS::NumericRoot> roots = {
         {1.0,           1e-13, 5},
         {1.0 + 5e-12,  2e-13, 6},  // duplicate of 1.0 (diff < 10*1e-12)
         {2.0,           3e-14, 3},
@@ -2003,7 +2003,7 @@ void test_assemble_results_with_duplicates() {
     lmmc_real_t tolerance = 1e-12;
     int max_roots = -1;
 
-    auto deduped = lamina::deduplicate_roots(roots, tolerance, max_roots);
+    auto deduped = LMCAS::deduplicate_roots(roots, tolerance, max_roots);
 
     // Should have 3 unique roots: -3.0, 1.0, 2.0
     EXPECT_TRUE(deduped.size() == 3,
@@ -2055,7 +2055,7 @@ void test_deduplicate_roots_direct() {
     roots.push_back(NumericRoot{2.0 + 3e-12, 1e-14, 6});   // within 1e-11 of 2.0
     roots.push_back(NumericRoot{3.0, 5e-14, 3});
 
-    auto result = lamina::deduplicate_roots(roots, tolerance, -1);
+    auto result = LMCAS::deduplicate_roots(roots, tolerance, -1);
 
     // After deduplication, only 3 distinct roots should remain
     EXPECT_TRUE(result.size() == 3,
@@ -2085,7 +2085,7 @@ void test_deduplicate_roots_no_duplicates() {
     roots.push_back(NumericRoot{0.0, 2e-14, 4});
     roots.push_back(NumericRoot{5.0, 1e-13, 5});
 
-    auto result = lamina::deduplicate_roots(roots, tolerance, -1);
+    auto result = LMCAS::deduplicate_roots(roots, tolerance, -1);
 
     EXPECT_TRUE(result.size() == 3,
         "All well-separated roots should be kept, got " + std::to_string(result.size()));
@@ -2115,7 +2115,7 @@ void test_deduplicate_roots_all_duplicates() {
     roots.push_back(NumericRoot{1.0 + 4e-12, 3e-13, 9});
     roots.push_back(NumericRoot{1.0 + 7e-12, 2e-13, 7});
 
-    auto result = lamina::deduplicate_roots(roots, tolerance, -1);
+    auto result = LMCAS::deduplicate_roots(roots, tolerance, -1);
 
     EXPECT_TRUE(result.size() == 1,
         "All roots within threshold should collapse to 1, got " + std::to_string(result.size()));
@@ -2130,20 +2130,20 @@ void test_deduplicate_pipeline_sin_x() {
     auto expr = SymbolicExpr::sin(x);
     auto derivative = compute_derivative(expr, "x");
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.tolerance = 1e-12;
     opts.max_newton_iterations = 100;
     opts.max_roots = -1;
 
-    lamina::SearchInterval interval{-10.0, 10.0};
+    LMCAS::SearchInterval interval{-10.0, 10.0};
 
     // Step 1: Isolate roots
-    auto intervals = lamina::isolate_roots(expr, derivative, "x", interval, opts);
+    auto intervals = LMCAS::isolate_roots(expr, derivative, "x", interval, opts);
 
     // Step 2: Refine each isolated root
     std::vector<NumericRoot> refined_roots;
     for (const auto& iso : intervals) {
-        auto root = lamina::refine_root(expr, derivative, "x", iso, opts);
+        auto root = LMCAS::refine_root(expr, derivative, "x", iso, opts);
         if (root.has_value()) {
             refined_roots.push_back(*root);
         }
@@ -2152,7 +2152,7 @@ void test_deduplicate_pipeline_sin_x() {
     // Step 3: Deduplicate
     lmmc_real_t tolerance = opts.tolerance;
     lmmc_real_t dedup_threshold = 10.0 * tolerance;
-    auto deduped = lamina::deduplicate_roots(refined_roots, tolerance, -1);
+    auto deduped = LMCAS::deduplicate_roots(refined_roots, tolerance, -1);
 
     std::cout << "  [INFO] sin(x) pipeline: " << intervals.size() << " intervals -> "
               << refined_roots.size() << " refined -> " << deduped.size() << " deduplicated" << std::endl;
@@ -2198,7 +2198,7 @@ void test_factored_sin_x_minus_half_times_x_minus_3() {
     auto factor2 = SymbolicExpr::add(x, SymbolicExpr::number(-3));
     auto expr = SymbolicExpr::multiply(factor1, factor2);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2261,7 +2261,7 @@ void test_factored_sin_x_times_cos_x() {
         SymbolicExpr::cos(x)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2329,7 +2329,7 @@ void test_exception_safety_division_by_zero_expression() {
         SymbolicExpr::sin(x)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2368,7 +2368,7 @@ void test_exception_safety_ln_negative_domain() {
     // Default interval [-10, 10] includes negative values where ln produces NaN.
     auto expr = SymbolicExpr::add(SymbolicExpr::ln(x), x);
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2405,7 +2405,7 @@ void test_exception_safety_tan_near_singularity() {
         SymbolicExpr::multiply(SymbolicExpr::number(-1), x)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2436,7 +2436,7 @@ void test_exception_safety_nullptr_expression() {
 
     std::shared_ptr<SymbolicExpr> expr = nullptr;
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
 
     bool threw = false;
@@ -2463,7 +2463,7 @@ void test_exception_safety_extreme_values() {
         SymbolicExpr::number(-1e300)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2571,7 +2571,7 @@ void test_e2e_sin_x_plus_x_root_at_zero() {
         SymbolicExpr::multiply(SymbolicExpr::number(-0.5), x)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2620,7 +2620,7 @@ void test_e2e_exp_x_minus_x_minus_2() {
         )
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;
@@ -2675,7 +2675,7 @@ void test_e2e_x_cos_x_minus_1() {
         SymbolicExpr::number(-1)
     );
 
-    lamina::SolveOptions opts;
+    LMCAS::SolveOptions opts;
     opts.allow_numeric = true;
     opts.tolerance = 1e-10;
     opts.max_newton_iterations = 100;

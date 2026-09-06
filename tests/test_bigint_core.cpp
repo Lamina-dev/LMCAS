@@ -2,6 +2,8 @@
 #include "bigint.hpp"
 #include "rational.hpp"
 
+using namespace LMCAS;
+
 void test_bigint_strings() {
     TEST_CASE("BigInt to_string");
 
@@ -35,8 +37,8 @@ void test_bigint_ops() {
     EXPECT_EQ_STR(rem.to_string(), "9", "987654321 % 123456789 = 9");
 }
 
-void test_rational_debug() {
-    TEST_CASE("Rational Debug");
+void test_rational_large_multiplication() {
+    TEST_CASE("Rational large multiplication");
 
     BigInt n1("123456789");
     BigInt n2("987654321");
@@ -74,7 +76,7 @@ int main() {
         test_gcd_logic();
         test_bigint_strings();
         test_bigint_ops();
-        test_rational_debug();
+        test_rational_large_multiplication();
     } catch (const std::exception& e) {
         std::cout << "[FAIL] Exception: " << e.what() << std::endl;
         g_failures++;

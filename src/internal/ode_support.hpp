@@ -2,7 +2,7 @@
 
 #include "symbolic_ode_engine.hpp"
 
-namespace lamina {
+namespace LMCAS {
 
 double try_eval_double(const std::shared_ptr<SymbolicExpr>& expression);
 
@@ -54,4 +54,4 @@ Result<void> validate_ode_two_expr_point(
     ComputationContext& context,
     const std::string& operation);
 
-} // namespace lamina
+} // namespace LMCAS

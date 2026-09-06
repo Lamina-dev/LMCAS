@@ -9,7 +9,7 @@
 #include <memory>
 #include <type_traits>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static_assert(sizeof(InferenceEngine) == sizeof(void*),
               "InferenceEngine must keep implementation state out of the public layout");
@@ -18,32 +18,32 @@ static_assert(!std::is_copy_constructible_v<InferenceEngine>,
 
 
 static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return lamina::detail::make_node<NumberNode>(BigInt(val));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
 }
 
 static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return lamina::detail::make_node<VariableNode>(name);
+    return LMCAS::detail::make_node<VariableNode>(name);
 }
 
 static std::shared_ptr<const SymbolicNode> make_multiply(
     std::vector<std::shared_ptr<const SymbolicNode>> ops) {
-    return lamina::detail::make_node<MultiplyNode>(std::move(ops));
+    return LMCAS::detail::make_node<MultiplyNode>(std::move(ops));
 }
 
 static std::shared_ptr<const SymbolicNode> make_power(
     std::shared_ptr<const SymbolicNode> base, std::shared_ptr<const SymbolicNode> exp) {
-    return lamina::detail::make_node<PowerNode>(std::move(base), std::move(exp));
+    return LMCAS::detail::make_node<PowerNode>(std::move(base), std::move(exp));
 }
 
 static std::shared_ptr<const SymbolicNode> make_function(
     FunctionNode::FuncType type, std::shared_ptr<const SymbolicNode> arg) {
-    return lamina::detail::make_node<FunctionNode>(type,
+    return LMCAS::detail::make_node<FunctionNode>(type,
         std::vector<std::shared_ptr<const SymbolicNode>>{std::move(arg)});
 }
 
 static std::shared_ptr<const SymbolicNode> make_add(
     std::vector<std::shared_ptr<const SymbolicNode>> ops) {
-    return lamina::detail::make_node<AddNode>(std::move(ops));
+    return LMCAS::detail::make_node<AddNode>(std::move(ops));
 }
 
 /// Create a division expression: num / den represented as MultiplyNode([num, PowerNode(den, -1)])
@@ -61,7 +61,7 @@ static std::shared_ptr<const SymbolicNode> make_subtraction(
 }
 
 static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = lamina::detail::expression_from_node(std::move(node));
+    auto expr = LMCAS::detail::expression_from_node(std::move(node));
     return expr;
 }
 
@@ -393,7 +393,7 @@ void test_checked_inference_query_contracts() {
     ctx.current_properties().declare_finiteness("divergent_symbol", Finiteness::Divergent);
     ctx.current_properties().declare_transcendental("tau_symbol");
     ctx.current_properties().declare_periodic("periodic_symbol",
-        lamina::detail::make_expression_ptr(wrap_expr(make_number(6))));
+        LMCAS::detail::make_expression_ptr(wrap_expr(make_number(6))));
     InferenceEngine engine(ctx);
 
     auto x = wrap_expr(make_var("x"));

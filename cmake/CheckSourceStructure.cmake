@@ -11,17 +11,18 @@ foreach(entry IN ITEMS
     "include/visitors/limit_visitor.hpp|200"
     "include/visitors/normalization_visitor.hpp|200"
     "include/bigint.hpp|400"
+    "include/value.hpp|650"
     "src/bigint.cpp|900"
     "src/integration_table.cpp|900"
     "src/integration_rational.cpp|900"
     "src/inference_engine_arithmetic.cpp|1200"
-    "src/lsr_expr_complex_evaluation.cpp|1000"
-    "src/lsr_expr_equivalence.cpp|1000"
-    "src/lsr_expr_errors.cpp|1000"
-    "src/lsr_expr_parsing.cpp|1000"
-    "src/lsr_expr_sets.cpp|1000"
-    "src/lsr_expr_solving.cpp|1000"
-    "src/lsr_expr_facade.cpp|1150"
+    "src/expr_complex_evaluation.cpp|1000"
+    "src/expr_equivalence.cpp|1000"
+    "src/expr_errors.cpp|1000"
+    "src/expr_parsing.cpp|1000"
+    "src/expr_sets.cpp|1000"
+    "src/expr_solving.cpp|1000"
+    "src/expr_facade.cpp|1150"
     "src/multivariate_factor_patterns.cpp|400"
     "src/multivariate_factor.cpp|1500"
     "src/multivariate_hensel.cpp|650"
@@ -64,6 +65,32 @@ foreach(path IN LISTS implementation_files public_headers)
         file(RELATIVE_PATH relative_path "${LMCAS_SOURCE_DIR}" "${path}")
         string(APPEND failures
             "\n  ${relative_path}: ${line_count} lines (maximum ${maximum_lines})")
+    endif()
+endforeach()
+
+# Public headers may expose the symbolic_ast umbrella, but must not bind
+# consumers to implementation-only directories directly.
+foreach(path IN LISTS public_headers)
+    get_filename_component(header_name "${path}" NAME)
+    if(header_name STREQUAL "symbolic_ast.hpp")
+        continue()
+    endif()
+    file(READ "${path}" contents)
+    if(contents MATCHES "#[ \t]*include[ \t]*[<\"](internal|visitors)/")
+        file(RELATIVE_PATH relative_path "${LMCAS_SOURCE_DIR}" "${path}")
+        string(APPEND failures
+            "\n  ${relative_path}: public header includes a private implementation header")
+    endif()
+endforeach()
+
+# Translation units are independent component members; textual inclusion of
+# another implementation file bypasses target ownership and ODR checks.
+foreach(path IN LISTS implementation_files)
+    file(READ "${path}" contents)
+    if(contents MATCHES "#[ \t]*include[ \t]*[<\"][^\"]*\\.cpp[>\"]")
+        file(RELATIVE_PATH relative_path "${LMCAS_SOURCE_DIR}" "${path}")
+        string(APPEND failures
+            "\n  ${relative_path}: implementation files must not include .cpp files")
     endif()
 endforeach()
 
@@ -137,6 +164,8 @@ foreach(path IN LISTS implementation_files public_headers)
         "SeriesExprResult"
         "SymbolicExprResult"
         "MatrixExprResult"
+        "ResultPropagation"
+        "propagate_result"
         "VectorExprResult")
         if(contents MATCHES "${forbidden_name}")
             string(APPEND failures

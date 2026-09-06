@@ -2,6 +2,8 @@
 #include "symbolic.hpp"
 #include "limit_result.hpp"
 
+using namespace LMCAS;
+
 int main() {
     auto x = SymbolicExpr::variable("x");
 
@@ -9,7 +11,7 @@ int main() {
     {
 
         auto f = SymbolicExpr::add(x, SymbolicExpr::number(1));
-        auto lim = lamina::limit_expression_checked(f, "x", SymbolicExpr::number(2)).value();
+        auto lim = LMCAS::limit_expression_checked(f, "x", SymbolicExpr::number(2)).value();
         EXPECT_EQ_STR(lim->to_string(), "3", "limit(x+1, x->2)");
     }
 
@@ -20,25 +22,25 @@ int main() {
         auto den = SymbolicExpr::add(x, SymbolicExpr::number(-1));
         auto f = SymbolicExpr::divide(num, den);
 
-        auto lim = lamina::limit_expression_checked(f, "x", SymbolicExpr::number(1)).value();
+        auto lim = LMCAS::limit_expression_checked(f, "x", SymbolicExpr::number(1)).value();
         EXPECT_EQ_STR(lim->to_string(), "2", "limit((x^2-1)/(x-1), x->1)");
     }
 
     TEST_CASE("Checked limit distinguishes nonexistence from unsupported");
     {
-        auto finite = lamina::limit_checked(
+        auto finite = LMCAS::limit_checked(
             SymbolicExpr::add(x, SymbolicExpr::number(1)),
             "x", SymbolicExpr::number(2));
         const auto* finite_value = finite
-            ? std::get_if<lamina::FiniteLimit>(&finite.value().value)
+            ? std::get_if<LMCAS::FiniteLimit>(&finite.value().value)
             : nullptr;
         EXPECT_TRUE(finite_value &&
                         finite_value->value->to_string() == "3",
                     "checked finite limit returns a proved finite outcome");
-        auto oscillatory = lamina::limit_checked(
+        auto oscillatory = LMCAS::limit_checked(
             SymbolicExpr::sin(x), "x", SymbolicExpr::infinity());
         EXPECT_TRUE(oscillatory &&
-                        std::holds_alternative<lamina::LimitDoesNotExist>(
+                        std::holds_alternative<LMCAS::LimitDoesNotExist>(
                             oscillatory.value().value),
                     "sin(x) at infinity is DoesNotExist rather than Inconclusive");
     }

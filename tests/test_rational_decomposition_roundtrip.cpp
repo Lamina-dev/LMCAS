@@ -13,7 +13,9 @@
 #include <utility>
 #include <vector>
 
-using lamina::Integrator;
+using namespace LMCAS;
+
+using LMCAS::Integrator;
 
 namespace {
 
@@ -206,14 +208,14 @@ ComboReport verify_combo(const Poly& P, const Poly& Q) {
         rep.detail = std::string("integration failed: ") + integrated.error().message;
         return rep;
     }
-    auto result = lamina::detail::make_expression_ptr(integrated.value());
+    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
 
     // The design explicitly allows the strategy to return an unevaluated
     // integral node when factoring fails or when the partial fraction term
     // requires a higher power of an irreducible quadratic. Such cases fall
     // outside the property's conditional scope ("Q has degree <= 5 with
     // linear/irreducible quadratic factors"), but we still report them.
-    if (has_integral_node(lamina::detail::node(result))) {
+    if (has_integral_node(LMCAS::detail::node(result))) {
         rep.unevaluated = true;
         rep.detail = "integrator left unevaluated integral";
         return rep;

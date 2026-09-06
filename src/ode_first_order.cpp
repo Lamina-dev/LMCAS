@@ -14,7 +14,7 @@
 #include <memory>
 #include <string>
 
-namespace lamina {
+namespace LMCAS {
 
 static ODESolution solve_homogeneous_ode_impl(
     const std::shared_ptr<SymbolicExpr>&,
@@ -45,8 +45,6 @@ ODESolutionResult solve_homogeneous_ode_checked(
         return wrap_ode_solution(solve_homogeneous_ode_impl(rhs, x, y),
                                  ODEType::Homogeneous,
                                  operation);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(CasErrc::ResourceLimit,
                                           "homogeneous ODE allocation failed",
@@ -147,8 +145,6 @@ ODESolutionResult solve_bernoulli_ode_checked(
         return wrap_ode_solution(solve_bernoulli_ode_impl(P, Q, n, x, y),
                                  ODEType::Bernoulli,
                                  operation);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(CasErrc::ResourceLimit,
                                           "Bernoulli ODE allocation failed",
@@ -249,7 +245,7 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     /// 尝试 mu = mu(x): (partialM/partialy - partialN/partialx) / N 仅依赖 x
     if (N && !N->is_zero()) {
         auto ratio_x = SymbolicExpr::divide(diff, N)->simplify();
-        if (!expression_depends_on_variable(lamina::detail::node(ratio_x), y)) {
+        if (!expression_depends_on_variable(LMCAS::detail::node(ratio_x), y)) {
             /// mu(x) = exp(integral ratio_x dx)
             auto int_ratio = ratio_x->integrate(x);
             return SymbolicExpr::exp(int_ratio);
@@ -260,7 +256,7 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     if (M && !M->is_zero()) {
         auto neg_diff = SymbolicExpr::multiply(SymbolicExpr::number(-1), diff)->simplify();
         auto ratio_y = SymbolicExpr::divide(neg_diff, M)->simplify();
-        if (!expression_depends_on_variable(lamina::detail::node(ratio_y), x)) {
+        if (!expression_depends_on_variable(LMCAS::detail::node(ratio_y), x)) {
             /// mu(y) = exp(integral ratio_y dy)
             auto int_ratio = ratio_y->integrate(y);
             return SymbolicExpr::exp(int_ratio);
@@ -288,8 +284,6 @@ ODESolutionResult solve_exact_ode_checked(
         return wrap_ode_solution(solve_exact_ode_impl(M, N, x, y),
                                  ODEType::Exact,
                                  operation);
-    } catch (const detail::ResultPropagation& propagation) {
-        return ODESolutionResult::failure(propagation.error());
     } catch (const std::bad_alloc&) {
         return ODESolutionResult::failure(CasErrc::ResourceLimit,
                                           "exact ODE allocation failed",
@@ -365,4 +359,4 @@ static ODESolution solve_exact_ode_impl(
     return result;
 }
 
-} // namespace lamina
+} // namespace LMCAS

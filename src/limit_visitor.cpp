@@ -12,6 +12,8 @@
 #include "../include/visitors/limit_visitor.hpp"
 #include "../include/visitors/normalization_visitor.hpp"
 
+namespace LMCAS {
+
 /**
  * @brief 对 L'Hôpital 法则产生的导数比进行代数化简后求极限.
  *
@@ -27,9 +29,9 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
 
     if (!ratio_node) return nullptr;
 
-    auto ratio_expr = lamina::detail::make_expression_ptr(ratio_node->clone());
+    auto ratio_expr = LMCAS::detail::make_expression_ptr(ratio_node->clone());
     auto simplified = ratio_expr->simplify();
-    if (!simplified || !lamina::detail::node(simplified)) return nullptr;
+    if (!simplified || !LMCAS::detail::node(simplified)) return nullptr;
 
     /// Check if simplification actually changed the expression (avoid infinite loops)
     auto orig_str = ratio_expr->to_string();
@@ -41,11 +43,11 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
     /// negative powers, evaluating the limit of that sum can trigger infinity-infinity detection,
     /// which calls resolve_inf_minus_inf -> apply_lhopital -> simplify_and_eval_ratio
     /// again, creating an infinite loop.
-    if (std::dynamic_pointer_cast<const AddNode>(lamina::detail::node(simplified))) return nullptr;
+    if (std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(simplified))) return nullptr;
 
     LimitVisitor sub_simp(var, point, direction, assumption_ctx_);
     sub_simp.lhopital_depth_ = this->lhopital_depth_ + 1;
-    lamina::detail::node(simplified)->accept(sub_simp);
+    LMCAS::detail::node(simplified)->accept(sub_simp);
     auto simp_result = sub_simp.get_result();
     if (!simp_result) return nullptr;
 
@@ -81,9 +83,9 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
 
     if (!num || !den) return nullptr;
 
-    auto num_expr = lamina::detail::make_expression_ptr(num->clone());
-    auto den_expr = lamina::detail::make_expression_ptr(den->clone());
-    auto point_expr = lamina::detail::make_expression_ptr(point->clone());
+    auto num_expr = LMCAS::detail::make_expression_ptr(num->clone());
+    auto den_expr = LMCAS::detail::make_expression_ptr(den->clone());
+    auto point_expr = LMCAS::detail::make_expression_ptr(point->clone());
 
     bool at_infinity = is_inf(point);
 
@@ -133,44 +135,44 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
 
             if (power_diff > 0) {
                 /// 分子阶数更高 -> 极限为 0
-                return lamina::detail::make_node<NumberNode>(BigInt(0));
+                return LMCAS::detail::make_node<NumberNode>(BigInt(0));
             } else if (power_diff < 0) {
                 /// 分母阶数更高 -> 极限为 +/-infinity
                 /// 确定符号
                 auto ratio = SymbolicExpr::multiply(
-                    lamina::detail::make_expression_ptr(num_leading.first),
+                    LMCAS::detail::make_expression_ptr(num_leading.first),
                     SymbolicExpr::power(
-                        lamina::detail::make_expression_ptr(den_leading.first),
+                        LMCAS::detail::make_expression_ptr(den_leading.first),
                         SymbolicExpr::number(-1)));
                 ratio = ratio->simplify();
                 if (!ratio) {
                     std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-                    return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                    return LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                 }
-                int sign = get_sign(lamina::detail::node(ratio));
+                int sign = get_sign(LMCAS::detail::node(ratio));
                 std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-                auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+                auto inf_node = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
                 if (sign < 0) {
                     std::vector<std::shared_ptr<const SymbolicNode>> m = {
-                        lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
-                    return lamina::detail::make_node<MultiplyNode>(m);
+                        LMCAS::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
+                    return LMCAS::detail::make_node<MultiplyNode>(m);
                 }
                 return inf_node;
             } else {
                 /// 同阶 -> 极限为系数之比
                 auto ratio = SymbolicExpr::multiply(
-                    lamina::detail::make_expression_ptr(num_leading.first),
+                    LMCAS::detail::make_expression_ptr(num_leading.first),
                     SymbolicExpr::power(
-                        lamina::detail::make_expression_ptr(den_leading.first),
+                        LMCAS::detail::make_expression_ptr(den_leading.first),
                         SymbolicExpr::number(-1)));
                 ratio = ratio->simplify();
-                if (ratio) return lamina::detail::node(ratio);
+                if (ratio) return LMCAS::detail::node(ratio);
             }
         }
 
         /// 如果分子首项为零但分母不为零,极限为 0
         if (num_leading.first->is_zero() && !den_leading.first->is_zero()) {
-            return lamina::detail::make_node<NumberNode>(BigInt(0));
+            return LMCAS::detail::make_node<NumberNode>(BigInt(0));
         }
 
         /// 两者都为零 -> 需要更高阶展开
@@ -207,9 +209,9 @@ std::pair<std::shared_ptr<const SymbolicNode>, int> LimitVisitor::find_leading_t
         if (!val) return {nullptr, 0};
         val = val->simplify();
 
-        if (val && lamina::detail::node(val) && !lamina::detail::node(val)->is_zero()) {
+        if (val && LMCAS::detail::node(val) && !LMCAS::detail::node(val)->is_zero()) {
             /// 系数为 val / n!(但对于比较比值,n! 会约掉,所以直接返回 val)
-            return {lamina::detail::node(val), n};
+            return {LMCAS::detail::node(val), n};
         }
 
         /// 对当前表达式求导以获取下一阶系数
@@ -218,7 +220,7 @@ std::pair<std::shared_ptr<const SymbolicNode>, int> LimitVisitor::find_leading_t
         current = current->simplify();
     }
 
-    return {lamina::detail::make_node<NumberNode>(BigInt(0)), max_order + 1};
+    return {LMCAS::detail::make_node<NumberNode>(BigInt(0)), max_order + 1};
 }
 
 /**
@@ -371,10 +373,11 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         double rv = get_numeric_value(right_num);
         double pv = get_point_value();
         if (std::isnan(pv) || std::isnan(rv)) return std::nullopt;
-        double av = (dir == "+") ? pv + 1e-10 : pv - 1e-10;
-        double diff = av - rv;
-        if (diff > 1e-15) return 1;
-        if (diff < -1e-15) return -1;
+        if (pv < rv) return -1;
+        if (pv > rv) return 1;
+        if (!std::isfinite(pv)) return 0;
+        if (dir == "+") return 1;
+        if (dir == "-") return -1;
         return 0;
     }
     /// 模式:number op var
@@ -384,17 +387,18 @@ std::optional<int> LimitVisitor::evaluate_relational_sign(
         double lv = get_numeric_value(left_num);
         double pv = get_point_value();
         if (std::isnan(pv) || std::isnan(lv)) return std::nullopt;
-        double av = (dir == "+") ? pv + 1e-10 : pv - 1e-10;
-        double diff = lv - av;
-        if (diff > 1e-15) return 1;
-        if (diff < -1e-15) return -1;
+        if (lv < pv) return -1;
+        if (lv > pv) return 1;
+        if (!std::isfinite(pv)) return 0;
+        if (dir == "+") return -1;
+        if (dir == "-") return 1;
         return 0;
     }
     /// 通用:计算 (left - right) 的极限符号
-    auto neg_one = lamina::detail::make_node<NumberNode>(BigInt(-1));
+    auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
     std::vector<std::shared_ptr<const SymbolicNode>> neg_ops = {neg_one, rel->right()->clone()};
-    std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {rel->left()->clone(), lamina::detail::make_node<MultiplyNode>(neg_ops)};
-    auto diff_expr = lamina::detail::make_node<AddNode>(add_ops);
+    std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {rel->left()->clone(), LMCAS::detail::make_node<MultiplyNode>(neg_ops)};
+    auto diff_expr = LMCAS::detail::make_node<AddNode>(add_ops);
     LimitVisitor sv(var, point, dir, assumption_ctx_);
     diff_expr->accept(sv);
     auto val = sv.get_result();
@@ -421,13 +425,13 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_sgn_li
     al = norm.get_result();
     if (!al->is_zero()) {
         auto s = get_node_sign(al);
-        if (s) return lamina::detail::make_node<NumberNode>(BigInt(*s));
+        if (s) return LMCAS::detail::make_node<NumberNode>(BigInt(*s));
         return std::nullopt;
     }
     /// 参数极限为零,根据方向确定符号
     int sign = determine_sign_near_point(arg, direction);
-    if (sign != 0) return lamina::detail::make_node<NumberNode>(BigInt(sign));
-    return lamina::detail::make_node<NumberNode>(BigInt(0));
+    if (sign != 0) return LMCAS::detail::make_node<NumberNode>(BigInt(sign));
+    return LMCAS::detail::make_node<NumberNode>(BigInt(0));
 }
 
 /**
@@ -444,13 +448,13 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_abs_li
     al = norm.get_result();
     if (is_inf(al)) {
         std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-        return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+        return LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     }
     auto s = get_node_sign(al);
     if (s) {
         if (*s >= 0) return al;
-        std::vector<std::shared_ptr<const SymbolicNode>> neg_ops = {lamina::detail::make_node<NumberNode>(BigInt(-1)), al};
-        auto neg_result = lamina::detail::make_node<MultiplyNode>(neg_ops);
+        std::vector<std::shared_ptr<const SymbolicNode>> neg_ops = {LMCAS::detail::make_node<NumberNode>(BigInt(-1)), al};
+        auto neg_result = LMCAS::detail::make_node<MultiplyNode>(neg_ops);
         neg_result->accept(norm);
         return norm.get_result();
     }
@@ -571,20 +575,20 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::get_leading_coefficient(const 
     }
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (v->name() == var) return lamina::detail::make_node<NumberNode>(BigInt(1));
+        if (v->name() == var) return LMCAS::detail::make_node<NumberNode>(BigInt(1));
         return node->clone();
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto base_var = std::dynamic_pointer_cast<const VariableNode>(pow->base());
         if (base_var && base_var->name() == var) {
-            return lamina::detail::make_node<NumberNode>(BigInt(1));
+            return LMCAS::detail::make_node<NumberNode>(BigInt(1));
         }
         /// constant^n
         auto base_lc = get_leading_coefficient(pow->base());
         if (!base_lc) return nullptr;
         if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
-            return lamina::detail::make_node<PowerNode>(base_lc, pow->exponent()->clone());
+            return LMCAS::detail::make_node<PowerNode>(base_lc, pow->exponent()->clone());
         }
         return nullptr;
     }
@@ -597,7 +601,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::get_leading_coefficient(const 
             lc_parts.push_back(lc);
         }
         if (lc_parts.size() == 1) return lc_parts[0];
-        auto prod = lamina::detail::make_node<MultiplyNode>(lc_parts);
+        auto prod = LMCAS::detail::make_node<MultiplyNode>(lc_parts);
         NormalizationVisitor norm;
         prod->accept(norm);
         return norm.get_result();
@@ -615,7 +619,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::get_leading_coefficient(const 
         }
         if (leading_terms.empty()) return nullptr;
         if (leading_terms.size() == 1) return leading_terms[0];
-        auto sum = lamina::detail::make_node<AddNode>(leading_terms);
+        auto sum = LMCAS::detail::make_node<AddNode>(leading_terms);
         NormalizationVisitor norm;
         sum->accept(norm);
         return norm.get_result();
@@ -646,7 +650,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_rational_at_infinity(
     if (deg_num < 0 || deg_den < 0) return nullptr;
 
     if (deg_num < deg_den) {
-        return lamina::detail::make_node<NumberNode>(BigInt(0));
+        return LMCAS::detail::make_node<NumberNode>(BigInt(0));
     }
 
     if (deg_num == deg_den) {
@@ -654,8 +658,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_rational_at_infinity(
         auto lc_den = get_leading_coefficient(den);
         if (!lc_num || !lc_den) return nullptr;
 
-        auto ratio = lamina::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
-            lc_num, lamina::detail::make_node<PowerNode>(lc_den, lamina::detail::make_node<NumberNode>(BigInt(-1)))
+        auto ratio = LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
+            lc_num, LMCAS::detail::make_node<PowerNode>(lc_den, LMCAS::detail::make_node<NumberNode>(BigInt(-1)))
         });
         NormalizationVisitor norm;
         ratio->accept(norm);
@@ -670,10 +674,10 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_rational_at_infinity(
     int final_sign = sign_num * sign_den;
 
     std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-    auto inf_node = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+    auto inf_node = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     if (final_sign < 0) {
-        std::vector<std::shared_ptr<const SymbolicNode>> m = {lamina::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
-        return lamina::detail::make_node<MultiplyNode>(m);
+        std::vector<std::shared_ptr<const SymbolicNode>> m = {LMCAS::detail::make_node<NumberNode>(BigInt(-1)), inf_node};
+        return LMCAS::detail::make_node<MultiplyNode>(m);
     }
     return inf_node;
 }
@@ -815,22 +819,22 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::limit_by_growth_comparison(
     if (static_cast<int>(num_growth) > static_cast<int>(den_growth)) {
         /// Numerator grows faster -> +/-infinity
         std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-        return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+        return LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
     }
 
     if (static_cast<int>(num_growth) < static_cast<int>(den_growth)) {
         /// Denominator grows faster -> 0
-        return lamina::detail::make_node<NumberNode>(BigInt(0));
+        return LMCAS::detail::make_node<NumberNode>(BigInt(0));
     }
 
     /// Same growth class - compare within class
     if (num_growth == GrowthClass::Polynomial) {
         int num_deg = get_growth_polynomial_degree(num);
         int den_deg = get_growth_polynomial_degree(den);
-        if (num_deg < den_deg) return lamina::detail::make_node<NumberNode>(BigInt(0));
+        if (num_deg < den_deg) return LMCAS::detail::make_node<NumberNode>(BigInt(0));
         if (num_deg > den_deg) {
             std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-            return lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+            return LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
         }
         /// Same degree - fall through to L'Hôpital or other methods
     }
@@ -863,7 +867,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
 
     /// Evaluate lim(t->+infinity) of the substituted expression
     std::vector<std::shared_ptr<const SymbolicNode>> inf_args;
-    auto pos_inf = lamina::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
+    auto pos_inf = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Infinity, inf_args);
 
     LimitVisitor sub_vis(t_var, pos_inf, "", assumption_ctx_);
     sub_vis.lhopital_depth_ = this->lhopital_depth_;
@@ -891,10 +895,10 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
         if (v->name() == var) {
             /// x = -t -> multiply(-1, t)
             std::vector<std::shared_ptr<const SymbolicNode>> ops = {
-                lamina::detail::make_node<NumberNode>(BigInt(-1)),
-                lamina::detail::make_node<VariableNode>(t_var)
+                LMCAS::detail::make_node<NumberNode>(BigInt(-1)),
+                LMCAS::detail::make_node<VariableNode>(t_var)
             };
-            return lamina::detail::make_node<MultiplyNode>(ops);
+            return LMCAS::detail::make_node<MultiplyNode>(ops);
         }
         return node->clone();
     }
@@ -906,7 +910,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
             if (!sub) return nullptr;
             new_ops.push_back(sub);
         }
-        return lamina::detail::make_node<AddNode>(new_ops);
+        return LMCAS::detail::make_node<AddNode>(new_ops);
     }
 
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
@@ -916,14 +920,14 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
             if (!sub) return nullptr;
             new_ops.push_back(sub);
         }
-        return lamina::detail::make_node<MultiplyNode>(new_ops);
+        return LMCAS::detail::make_node<MultiplyNode>(new_ops);
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto new_base = substitute_neg_t(pow->base(), t_var);
         auto new_exp = substitute_neg_t(pow->exponent(), t_var);
         if (!new_base || !new_exp) return nullptr;
-        return lamina::detail::make_node<PowerNode>(new_base, new_exp);
+        return LMCAS::detail::make_node<PowerNode>(new_base, new_exp);
     }
 
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
@@ -936,9 +940,11 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
             if (!sub) return nullptr;
             new_args.push_back(sub);
         }
-        return lamina::detail::make_node<FunctionNode>(func->type(), new_args);
+        return LMCAS::detail::make_node<FunctionNode>(func->type(), new_args);
     }
 
     /// For other node types, clone as-is
     return node->clone();
 }
+
+} // namespace LMCAS

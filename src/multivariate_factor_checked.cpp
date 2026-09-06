@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace lamina {
+namespace LMCAS {
 
 /**
  * @internal
@@ -725,4 +725,4 @@ static void precompute_leading_coefficients(
     }
     first_factor = Polynomial<Rational>(new_coeffs, first_factor.variable_name);
 }
-} // namespace lamina
+} // namespace LMCAS

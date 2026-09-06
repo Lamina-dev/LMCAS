@@ -4,14 +4,17 @@
 #include "poly_utils.hpp"
 #include <cmath>
 #include <algorithm>
+#include <limits>
 #include <vector>
 
-using lamina::Polynomial;
+using namespace LMCAS;
+
+using LMCAS::Polynomial;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
 static double eval_numeric(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !lamina::detail::node(expr)) return std::nan("");
+    if (!expr || !LMCAS::detail::node(expr)) return std::nan("");
     return expr->to_numeric();
 }
 
@@ -22,34 +25,51 @@ int main() {
         auto x = SymbolicExpr::variable("x");
         auto exact_poly = SymbolicExpr::add(SymbolicExpr::power(x, num(2)), num(-4));
 
-        lamina::ComputationContext valid_context;
-        auto valid = lamina::rootof_evaluate_checked(
+        LMCAS::ComputationContext valid_context;
+        auto valid = LMCAS::rootof_evaluate_checked(
             SymbolicExpr::root_of(exact_poly, "x", 0), valid_context);
         EXPECT_TRUE(valid && std::abs(valid.value() + 2.0) < 1e-10,
                     "checked RootOf verifies an exact real root");
 
-        lamina::ComputationContext invalid_index_context;
-        auto invalid_index = lamina::make_rootof_checked(
+        const BigInt largest_finite_integer =
+            (BigInt(1) << 1024) - (BigInt(1) << 971);
+        Polynomial<Rational> endpoint_poly(
+            {Rational(-largest_finite_integer), Rational(1)}, "x");
+        auto endpoint_root = LMCAS::rootof_evaluate_checked(
+            SymbolicExpr::root_of(
+                LMCAS::poly_to_symbolic(endpoint_poly), "x", 0));
+        const std::string endpoint_message =
+            endpoint_root
+                ? "checked RootOf represents the largest finite double root"
+                : "largest finite RootOf failed: " +
+                      endpoint_root.error().message;
+        EXPECT_TRUE(
+            endpoint_root &&
+                endpoint_root.value() == std::numeric_limits<double>::max(),
+            endpoint_message);
+
+        LMCAS::ComputationContext invalid_index_context;
+        auto invalid_index = LMCAS::make_rootof_checked(
             exact_poly, "x", 2, invalid_index_context);
         EXPECT_TRUE(!invalid_index &&
-                        invalid_index.error().code == lamina::CasErrc::InvalidArgument,
+                        invalid_index.error().code == LMCAS::CasErrc::InvalidArgument,
                     "out-of-range RootOf construction is InvalidArgument");
 
         auto complex_poly = SymbolicExpr::add(SymbolicExpr::power(x, num(2)), num(1));
-        lamina::ComputationContext complex_context;
+        LMCAS::ComputationContext complex_context;
         auto complex_expression = SymbolicExpr::root_of(complex_poly, "x", 0);
-        auto complex_root = lamina::rootof_evaluate_checked(
+        auto complex_root = LMCAS::rootof_evaluate_checked(
             complex_expression, complex_context);
         EXPECT_TRUE(!complex_root &&
-                        complex_root.error().code == lamina::CasErrc::DomainError,
+                        complex_root.error().code == LMCAS::CasErrc::DomainError,
                     "real RootOf wrapper rejects a non-real selected root");
-        auto complex_value = lamina::rootof_evaluate_complex_checked(
+        auto complex_value = LMCAS::rootof_evaluate_complex_checked(
             complex_expression);
         EXPECT_TRUE(complex_value &&
                         std::abs(complex_value.value().real.value) < 1e-9 &&
                         std::abs(complex_value.value().imag.value + 1.0) < 1e-8,
                     "complex RootOf evaluates the first ordered root as -i");
-        auto conjugate_value = lamina::rootof_evaluate_complex_checked(
+        auto conjugate_value = LMCAS::rootof_evaluate_complex_checked(
             SymbolicExpr::root_of(complex_poly, "x", 1));
         EXPECT_TRUE(conjugate_value &&
                         std::abs(conjugate_value.value().imag.value - 1.0) < 1e-8,
@@ -57,38 +77,38 @@ int main() {
 
         auto parametric_poly = SymbolicExpr::add(
             SymbolicExpr::power(x, num(2)), SymbolicExpr::variable("a"));
-        lamina::ComputationContext parametric_context;
-        auto parametric = lamina::make_rootof_checked(
+        LMCAS::ComputationContext parametric_context;
+        auto parametric = LMCAS::make_rootof_checked(
             parametric_poly, "x", 0, parametric_context);
         EXPECT_TRUE(!parametric &&
-                        parametric.error().code == lamina::CasErrc::Inconclusive,
+                        parametric.error().code == LMCAS::CasErrc::Inconclusive,
                     "parametric RootOf construction is explicitly inconclusive");
 
         auto approximate_poly = SymbolicExpr::add(
             SymbolicExpr::power(x, num(2)), SymbolicExpr::number(-4.0));
-        lamina::ComputationContext approximate_context;
-        auto approximate = lamina::make_rootof_checked(
+        LMCAS::ComputationContext approximate_context;
+        auto approximate = LMCAS::make_rootof_checked(
             approximate_poly, "x", 0, approximate_context);
         EXPECT_TRUE(!approximate &&
-                        approximate.error().code == lamina::CasErrc::Inconclusive,
+                        approximate.error().code == LMCAS::CasErrc::Inconclusive,
                     "ApproxReal coefficients are not silently exactified");
 
-        lamina::CancellationToken cancellation;
+        LMCAS::CancellationToken cancellation;
         cancellation.cancel();
-        lamina::ComputationContext cancelled_context({}, cancellation);
-        auto cancelled = lamina::rootof_evaluate_checked(
+        LMCAS::ComputationContext cancelled_context({}, cancellation);
+        auto cancelled = LMCAS::rootof_evaluate_checked(
             SymbolicExpr::root_of(exact_poly, "x", 0), cancelled_context);
         EXPECT_TRUE(!cancelled &&
-                        cancelled.error().code == lamina::CasErrc::Cancelled,
+                        cancelled.error().code == LMCAS::CasErrc::Cancelled,
                     "checked RootOf observes cancellation");
 
-        lamina::ResourceLimits limits;
+        LMCAS::ResourceLimits limits;
         limits.max_steps = 1;
-        lamina::ComputationContext limited_context(limits);
-        auto limited = lamina::rootof_evaluate_checked(
+        LMCAS::ComputationContext limited_context(limits);
+        auto limited = LMCAS::rootof_evaluate_checked(
             SymbolicExpr::root_of(exact_poly, "x", 0), limited_context);
         EXPECT_TRUE(!limited &&
-                        limited.error().code == lamina::CasErrc::ResourceLimit,
+                        limited.error().code == LMCAS::CasErrc::ResourceLimit,
                     "checked RootOf enforces traversal budgets");
     }
 
@@ -101,11 +121,11 @@ int main() {
             num(1));
         for (const std::size_t index : {std::size_t(3), std::size_t(5),
                                         std::size_t(100)}) {
-            auto result = lamina::make_rootof_checked(
+            auto result = LMCAS::make_rootof_checked(
                 poly_expr, "x", index);
             EXPECT_TRUE(!result &&
                             result.error().code ==
-                                lamina::CasErrc::InvalidArgument,
+                                LMCAS::CasErrc::InvalidArgument,
                         "out-of-range RootOf index is rejected");
         }
     }
@@ -156,16 +176,16 @@ int main() {
         auto renamed_root = SymbolicExpr::root_of(renamed, "y", 0);
         auto repeated_root = SymbolicExpr::root_of(repeated, "x", 0);
         EXPECT_TRUE(
-            lamina::detail::node(canonical)->equals(
-                *lamina::detail::node(scaled_root)) &&
-            lamina::detail::node(canonical)->equals(
-                *lamina::detail::node(renamed_root)) &&
-            lamina::detail::node(canonical)->equals(
-                *lamina::detail::node(repeated_root)),
+            LMCAS::detail::node(canonical)->equals(
+                *LMCAS::detail::node(scaled_root)) &&
+            LMCAS::detail::node(canonical)->equals(
+                *LMCAS::detail::node(renamed_root)) &&
+            LMCAS::detail::node(canonical)->equals(
+                *LMCAS::detail::node(repeated_root)),
             "canonical RootOf identities are structurally equal");
         EXPECT_TRUE(
-            lamina::detail::node(canonical)->hash() ==
-                lamina::detail::node(repeated_root)->hash(),
+            LMCAS::detail::node(canonical)->hash() ==
+                LMCAS::detail::node(repeated_root)->hash(),
             "canonical RootOf identities share a hash");
     }
 
@@ -179,10 +199,10 @@ int main() {
                 SymbolicExpr::power(x, num(3)),
                 SymbolicExpr::multiply(a, x)),
             num(1));
-        auto result = lamina::make_rootof_checked(
+        auto result = LMCAS::make_rootof_checked(
             poly_expr, "x", 0);
         EXPECT_TRUE(!result &&
-                        result.error().code == lamina::CasErrc::Inconclusive,
+                        result.error().code == LMCAS::CasErrc::Inconclusive,
                     "parametric RootOf construction is Inconclusive");
     }
 
@@ -196,10 +216,10 @@ int main() {
                 SymbolicExpr::power(x, num(2)),
                 SymbolicExpr::multiply(b, x)),
             c);
-        auto result = lamina::make_rootof_checked(
+        auto result = LMCAS::make_rootof_checked(
             poly_expr, "x", 0);
         EXPECT_TRUE(!result &&
-                        result.error().code == lamina::CasErrc::Inconclusive,
+                        result.error().code == LMCAS::CasErrc::Inconclusive,
                     "multiple parametric coefficients are Inconclusive");
     }
 
@@ -212,7 +232,7 @@ int main() {
             num(-4));
 
         auto rootof_k0 = SymbolicExpr::root_of(poly_expr, "x", 0);
-        auto simplified_k0 = lamina::rootof_simplify(rootof_k0);
+        auto simplified_k0 = LMCAS::rootof_simplify(rootof_k0);
 
         std::string s0 = simplified_k0->to_string();
         EXPECT_TRUE(s0.find("RootOf") == std::string::npos,
@@ -223,7 +243,7 @@ int main() {
             "rootof_simplify(x^2-4, x, 0) = -2");
 
         auto rootof_k1 = SymbolicExpr::root_of(poly_expr, "x", 1);
-        auto simplified_k1 = lamina::rootof_simplify(rootof_k1);
+        auto simplified_k1 = LMCAS::rootof_simplify(rootof_k1);
 
         std::string s1 = simplified_k1->to_string();
         EXPECT_TRUE(s1.find("RootOf") == std::string::npos,
@@ -239,10 +259,10 @@ int main() {
         auto x = SymbolicExpr::variable("x");
         auto unsupported = SymbolicExpr::add(
             SymbolicExpr::power(x, num(2)), SymbolicExpr::sin(x));
-        auto root = lamina::make_rootof_checked(
+        auto root = LMCAS::make_rootof_checked(
             unsupported, "x", 0);
         EXPECT_TRUE(!root &&
-                        root.error().code == lamina::CasErrc::Inconclusive,
+                        root.error().code == LMCAS::CasErrc::Inconclusive,
                     "non-polynomial RootOf input is rejected");
     }
 
@@ -259,12 +279,12 @@ int main() {
             num(-6));
         for (int index = 0; index < 3; ++index) {
             auto root = SymbolicExpr::root_of(poly_expr, "x", index);
-            auto simplified = lamina::rootof_simplify(root);
+            auto simplified = LMCAS::rootof_simplify(root);
             EXPECT_TRUE(
-                lamina::detail::node(simplified)->equals(
-                    *lamina::detail::node(root)),
+                LMCAS::detail::node(simplified)->equals(
+                    *LMCAS::detail::node(root)),
                 "cubic RootOf simplification preserves identity");
-            auto value = lamina::rootof_evaluate_checked(root);
+            auto value = LMCAS::rootof_evaluate_checked(root);
             EXPECT_TRUE(value &&
                             std::abs(value.value() -
                                      static_cast<double>(index + 1)) < 1e-8,
@@ -284,12 +304,12 @@ int main() {
         const double expected[] = {-2.0, -1.0, 1.0, 2.0};
         for (int index = 0; index < 4; ++index) {
             auto root = SymbolicExpr::root_of(poly_expr, "x", index);
-            auto simplified = lamina::rootof_simplify(root);
+            auto simplified = LMCAS::rootof_simplify(root);
             EXPECT_TRUE(
-                lamina::detail::node(simplified)->equals(
-                    *lamina::detail::node(root)),
+                LMCAS::detail::node(simplified)->equals(
+                    *LMCAS::detail::node(root)),
                 "quartic RootOf simplification preserves identity");
-            auto value = lamina::rootof_evaluate_checked(root);
+            auto value = LMCAS::rootof_evaluate_checked(root);
             EXPECT_TRUE(value &&
                             std::abs(value.value() - expected[index]) < 1e-8,
                         "quartic RootOf exact order is stable");
@@ -309,7 +329,7 @@ int main() {
             num(-6));
 
         auto rootof_k0 = SymbolicExpr::root_of(poly_expr, "x", 0);
-        auto result0 = lamina::rootof_evaluate_checked(rootof_k0);
+        auto result0 = LMCAS::rootof_evaluate_checked(rootof_k0);
         EXPECT_TRUE(result0.has_value(),
             "checked RootOf evaluation with valid k=0 returns a value");
         if (result0.has_value()) {
@@ -318,7 +338,7 @@ int main() {
         }
 
         auto rootof_k2 = SymbolicExpr::root_of(poly_expr, "x", 2);
-        auto result2 = lamina::rootof_evaluate_checked(rootof_k2);
+        auto result2 = LMCAS::rootof_evaluate_checked(rootof_k2);
         EXPECT_TRUE(result2.has_value(),
             "checked RootOf evaluation with valid k=2 returns a value");
         if (result2.has_value()) {
@@ -332,14 +352,14 @@ int main() {
     {
         Polynomial<Rational> cubic(
             {Rational(-1), Rational(0), Rational(0), Rational(1)}, "x");
-        auto cubic_expr = lamina::poly_to_symbolic(cubic);
+        auto cubic_expr = LMCAS::poly_to_symbolic(cubic);
         const double cubic_expected[][2] = {
             {1.0, 0.0},
             {-0.5, -std::sqrt(3.0) / 2.0},
             {-0.5, std::sqrt(3.0) / 2.0}};
         for (int index = 0; index < 3; ++index) {
             auto root = SymbolicExpr::root_of(cubic_expr, "x", index);
-            auto value = lamina::rootof_evaluate_complex_checked(root);
+            auto value = LMCAS::rootof_evaluate_complex_checked(root);
             EXPECT_TRUE(
                 value &&
                     std::abs(value.value().real.value -
@@ -348,12 +368,12 @@ int main() {
                              cubic_expected[index][1]) < 1e-9,
                 "x^3-1 RootOf index has certified real-first complex order");
             if (index != 0) {
-                lamina::ComputationContext real_context;
-                auto real = lamina::rootof_evaluate_checked(
+                LMCAS::ComputationContext real_context;
+                auto real = LMCAS::rootof_evaluate_checked(
                     root, real_context);
                 EXPECT_TRUE(
                     !real &&
-                        real.error().code == lamina::CasErrc::DomainError,
+                        real.error().code == LMCAS::CasErrc::DomainError,
                     "real evaluation rejects a selected cubic non-real root");
             }
         }
@@ -361,12 +381,12 @@ int main() {
         Polynomial<Rational> shifted(
             {Rational(10), Rational(-6), Rational(3),
              Rational(0), Rational(1)}, "x");
-        auto shifted_expr = lamina::poly_to_symbolic(shifted);
+        auto shifted_expr = LMCAS::poly_to_symbolic(shifted);
         const double shifted_expected[][2] = {
             {-1.0, -2.0}, {-1.0, 2.0},
             {1.0, -1.0}, {1.0, 1.0}};
         for (int index = 0; index < 4; ++index) {
-            auto value = lamina::rootof_evaluate_complex_checked(
+            auto value = LMCAS::rootof_evaluate_complex_checked(
                 SymbolicExpr::root_of(shifted_expr, "x", index));
             EXPECT_TRUE(
                 value &&
@@ -386,12 +406,12 @@ int main() {
             Polynomial<Rational>({small, Rational(0), Rational(1)}, "x") *
             Polynomial<Rational>({Rational(4) * small,
                                   Rational(0), Rational(1)}, "x");
-        auto expression = lamina::poly_to_symbolic(polynomial);
+        auto expression = LMCAS::poly_to_symbolic(polynomial);
         const double expected[] = {
             -1.0 / 512.0, -1.0 / 1024.0,
             1.0 / 1024.0, 1.0 / 512.0};
         for (int index = 0; index < 4; ++index) {
-            auto value = lamina::rootof_evaluate_complex_checked(
+            auto value = LMCAS::rootof_evaluate_complex_checked(
                 SymbolicExpr::root_of(expression, "x", index));
             EXPECT_TRUE(
                 value &&
@@ -408,10 +428,10 @@ int main() {
         Polynomial<Rational> polynomial(
             {Rational(1), Rational(1), Rational(0),
              Rational(0), Rational(0), Rational(1)}, "x");
-        auto expression = lamina::poly_to_symbolic(polynomial);
-        std::vector<lamina::ApproxComplex> values;
+        auto expression = LMCAS::poly_to_symbolic(polynomial);
+        std::vector<LMCAS::ApproxComplex> values;
         for (int index = 0; index < 5; ++index) {
-            auto value = lamina::rootof_evaluate_complex_checked(
+            auto value = LMCAS::rootof_evaluate_complex_checked(
                 SymbolicExpr::root_of(expression, "x", index));
             EXPECT_TRUE(
                 value && std::isfinite(value.value().real.value) &&
@@ -435,24 +455,24 @@ int main() {
             "generic quintic roots are one real root plus certified conjugate pairs");
 
         auto selected = SymbolicExpr::root_of(expression, "x", 1);
-        lamina::CancellationToken cancellation;
+        LMCAS::CancellationToken cancellation;
         cancellation.cancel();
-        lamina::ComputationContext cancelled({}, cancellation);
+        LMCAS::ComputationContext cancelled({}, cancellation);
         auto cancelled_value =
-            lamina::rootof_evaluate_complex_checked(selected, cancelled);
+            LMCAS::rootof_evaluate_complex_checked(selected, cancelled);
         EXPECT_TRUE(
             !cancelled_value &&
-                cancelled_value.error().code == lamina::CasErrc::Cancelled,
+                cancelled_value.error().code == LMCAS::CasErrc::Cancelled,
             "higher-degree complex isolation propagates cancellation");
 
-        lamina::ResourceLimits limits;
+        LMCAS::ResourceLimits limits;
         limits.max_steps = 8;
-        lamina::ComputationContext limited(limits);
+        LMCAS::ComputationContext limited(limits);
         auto limited_value =
-            lamina::rootof_evaluate_complex_checked(selected, limited);
+            LMCAS::rootof_evaluate_complex_checked(selected, limited);
         EXPECT_TRUE(
             !limited_value &&
-                limited_value.error().code == lamina::CasErrc::ResourceLimit,
+                limited_value.error().code == LMCAS::CasErrc::ResourceLimit,
             "higher-degree complex isolation enforces step budgets");
 
         auto repeated_expression = SymbolicExpr::power(expression, num(2));
@@ -461,8 +481,8 @@ int main() {
             auto repeated = SymbolicExpr::root_of(
                 repeated_expression, "x", index);
             EXPECT_TRUE(
-                lamina::detail::node(canonical)->equals(
-                    *lamina::detail::node(repeated)),
+                LMCAS::detail::node(canonical)->equals(
+                    *LMCAS::detail::node(repeated)),
                 "square-free canonicalization preserves quintic complex identity");
         }
     }

@@ -7,7 +7,7 @@
 
 #include <exception>
 
-namespace lamina {
+namespace LMCAS {
 namespace {
 
 bool is_infinity(const std::shared_ptr<const SymbolicNode>& node) {
@@ -33,7 +33,7 @@ bool is_negative_infinity(const std::shared_ptr<const SymbolicNode>& node) {
 
 bool depends_on(const LimitExprPtr& expression, const std::string& variable) {
     return expression_depends_on_variable(
-        lamina::detail::node(expression), variable);
+        LMCAS::detail::node(expression), variable);
 }
 
 } // namespace
@@ -45,8 +45,8 @@ LimitResult limit_checked(
     LimitDirection direction,
     ComputationContext& context) {
     constexpr const char* operation = "limit";
-    if (!expression || !point || !lamina::detail::node(expression) ||
-        !lamina::detail::node(point) || variable.empty()) {
+    if (!expression || !point || !LMCAS::detail::node(expression) ||
+        !LMCAS::detail::node(point) || variable.empty()) {
         return LimitResult::failure(
             CasErrc::InvalidArgument,
             "limit requires an expression, named variable, and point",
@@ -55,10 +55,10 @@ LimitResult limit_checked(
     auto step = context.consume_steps(1, operation);
     if (!step) return LimitResult::failure(step.error());
 
-    if (is_infinity(lamina::detail::node(point)) ||
-        is_negative_infinity(lamina::detail::node(point))) {
+    if (is_infinity(LMCAS::detail::node(point)) ||
+        is_negative_infinity(LMCAS::detail::node(point))) {
         auto function = std::dynamic_pointer_cast<const FunctionNode>(
-            lamina::detail::node(expression));
+            LMCAS::detail::node(expression));
         if (function && function->arguments().size() == 1 &&
             (function->type() == FunctionNode::FuncType::Sin ||
              function->type() == FunctionNode::FuncType::Cos) &&
@@ -73,19 +73,19 @@ LimitResult limit_checked(
         if (direction == LimitDirection::FromAbove) direction_token = "+";
         if (direction == LimitDirection::FromBelow) direction_token = "-";
         LimitVisitor visitor(
-            variable, lamina::detail::node(point), direction_token,
+            variable, LMCAS::detail::node(point), direction_token,
             context.assumptions().get());
-        lamina::detail::node(expression)->accept(visitor);
+        LMCAS::detail::node(expression)->accept(visitor);
         auto result_node = visitor.get_result();
         if (!result_node ||
-            lamina::detail::contains_node_type<LimitNode>(result_node) ||
+            LMCAS::detail::contains_node_type<LimitNode>(result_node) ||
             expression_depends_on_variable(result_node, variable)) {
             return LimitResult::failure(
                 CasErrc::Inconclusive,
                 "limit could not be proved in the supported domain",
                 operation);
         }
-        auto value = lamina::detail::make_expression_ptr(result_node);
+        auto value = LMCAS::detail::make_expression_ptr(result_node);
         if (is_infinity(result_node)) {
             return LimitResult::success(Verified<LimitOutcome>{
                 PositiveInfinityLimit{}, ByConstructionProof{}});
@@ -147,4 +147,4 @@ LimitExpressionResult limit_expression_checked(
         expression, variable, point, direction, context);
 }
 
-} // namespace lamina
+} // namespace LMCAS

@@ -6,16 +6,16 @@
 #include "symbolic.hpp"
 #include "symbolic_ast.hpp"
 
-using namespace lamina;
+using namespace LMCAS;
 
 /// Helper: create a SymbolicExpr wrapping a VariableNode.
 static SymbolicExpr make_var(const std::string& name) {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<VariableNode>(name));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
 }
 
 /// Helper: create a SymbolicExpr wrapping a NumberNode with value 0.
 static SymbolicExpr make_zero() {
-    return lamina::detail::expression_from_node(lamina::detail::make_node<NumberNode>(BigInt(0)));
+    return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 }
 
 

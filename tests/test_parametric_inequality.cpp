@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-using namespace lamina;
+using namespace LMCAS;
 
 int main() {
 

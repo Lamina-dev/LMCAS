@@ -4,7 +4,7 @@
 #include <cmath>
 #include <limits>
 
-using namespace lamina;
+using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
@@ -55,6 +55,45 @@ int main() {
                         observed_error <= r.value().absolute_error + 1e-14,
                     "fixed Simpson reports its step-doubling error estimate");
     }
+    // Step doubling should return the Richardson-extrapolated value, not
+    // discard the finer evaluation and return the coarse rule.
+    {
+        auto f = SymbolicExpr::power(x, num(4));
+        auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 2);
+        EXPECT_TRUE(r && std::abs(r.value().value - 0.2) < 1e-15,
+                    "fixed Simpson returns its Richardson-extrapolated quartic value");
+        EXPECT_TRUE(r && r.value().absolute_error < 1e-3,
+                    "fixed Simpson reports the fine-grid Richardson error scale");
+    }
+    // The finite endpoint span may exceed DBL_MAX even when the integral does not.
+    {
+        const double largest = std::numeric_limits<double>::max();
+        auto tiny_constant = SymbolicExpr::number(1.0 / largest);
+        auto r = quadrature_simpson_numeric(
+            tiny_constant, "x", SymbolicExpr::number(-largest),
+            SymbolicExpr::number(largest), 10);
+        EXPECT_TRUE(r && std::abs(r.value().value - 2.0) < 1e-12,
+                    "fixed Simpson maps a full finite interval without width overflow");
+    }
+
+    // A zero-measure interval does not spend an integrand sampling budget.
+    {
+        ResourceLimits limits;
+        limits.max_steps = 2;
+        ComputationContext simpson_context(limits);
+        auto simpson = quadrature_simpson_numeric(
+            x, "x", num(1), num(1), simpson_context, 100);
+        EXPECT_TRUE(simpson && simpson.value().value == 0.0,
+                    "zero-width Simpson returns zero before sample reservation");
+
+        ComputationContext gaussian_context(limits);
+        auto gaussian = quadrature_gaussian_numeric(
+            x, "x", num(1), num(1), gaussian_context, 20);
+        EXPECT_TRUE(gaussian && gaussian.value().value == 0.0,
+                    "zero-width Gaussian returns zero before sample reservation");
+    }
+
+
 
     // ∫₀¹ x^3 dx = 1/4 via Gauss-Legendre (n=2 exact up to degree 3)
     {
@@ -102,6 +141,16 @@ int main() {
                         unsupported.error().code == CasErrc::InvalidArgument,
                     "Gaussian orders above twenty are rejected explicitly");
     }
+    {
+        const double largest = std::numeric_limits<double>::max();
+        auto tiny_constant = SymbolicExpr::number(1.0 / largest);
+        auto r = quadrature_gaussian_numeric(
+            tiny_constant, "x", SymbolicExpr::number(-largest),
+            SymbolicExpr::number(largest), 2);
+        EXPECT_TRUE(r && std::abs(r.value().value - 2.0) < 1e-12,
+                    "Gauss maps a full finite interval without width overflow");
+    }
+
 
     // adaptive_simpson on ∫₀¹ x^2 dx = 1/3
     {
@@ -134,10 +183,10 @@ int main() {
 
     // A caller-imposed recursion limit must not return an unverified estimate.
     {
-        auto absolute = lamina::detail::make_expression_ptr(
-            lamina::detail::make_node<FunctionNode>(
+        auto absolute = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Abs,
-                std::vector<std::shared_ptr<const SymbolicNode>>{lamina::detail::node(x)}));
+                std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(x)}));
         ComputationContext context;
         auto r = adaptive_simpson_numeric(
             absolute, "x", num(-1), num(1), context, 1e-14, 0);
@@ -155,13 +204,15 @@ int main() {
                     "adaptive Simpson propagates cancellation");
     }
 
-    // Finite endpoints can still define a width that overflows IEEE double.
+    // Finite extreme endpoints remain usable when the transformed integral is finite.
     {
         const double largest = std::numeric_limits<double>::max();
+        auto scaled_constant = SymbolicExpr::number(1.0 / largest);
         auto r = adaptive_simpson_numeric(
-            x, "x", SymbolicExpr::number(-largest), SymbolicExpr::number(largest), 1e-10);
-        EXPECT_TRUE(!r && r.error().code == CasErrc::NumericFailure,
-                    "unrepresentable interval width returns NumericFailure");
+            scaled_constant, "x", SymbolicExpr::number(-largest),
+            SymbolicExpr::number(largest), 1e-10);
+        EXPECT_TRUE(r && std::abs(r.value().value - 2.0) < 1e-12,
+                    "adaptive Simpson maps a full finite interval safely");
     }
 
     // Reversed limits preserve orientation.
