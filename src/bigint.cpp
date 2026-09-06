@@ -147,6 +147,8 @@ BigInt::BigInt(long long val) {
         _size = 1;
     }
 
+BigInt::BigInt(long val) : BigInt(static_cast<long long>(val)) {}
+
 BigInt::BigInt(int val) : BigInt((long long)val) {}
 
 BigInt::BigInt(unsigned long long val) {

@@ -9,6 +9,14 @@
 using namespace LMCAS;
 
 int main() {
+    TEST_CASE("BigInt signed long boundaries");
+    const long long_min = std::numeric_limits<long>::min();
+    const long long_max = std::numeric_limits<long>::max();
+    EXPECT_EQ_STR(BigInt(long_min).to_string(), std::to_string(long_min),
+                  "LONG_MIN preserves its sign and magnitude");
+    EXPECT_EQ_STR(BigInt(long_max).to_string(), std::to_string(long_max),
+                  "LONG_MAX is not narrowed");
+
     TEST_CASE("BigInt exact narrowing");
     auto zero = BigInt(0).try_to_int64();
     EXPECT_TRUE(zero && *zero == 0, "zero converts exactly");

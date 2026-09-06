@@ -90,19 +90,19 @@ jobs:
       matrix:
         include:
           - name: x64-debug-shared
-            msystem: MINGW64
+            msystem: UCRT64
             build_type: Debug
             shared: "ON"
           - name: x64-debug-static
-            msystem: MINGW64
+            msystem: UCRT64
             build_type: Debug
             shared: "OFF"
           - name: x64-release-shared
-            msystem: MINGW64
+            msystem: UCRT64
             build_type: Release
             shared: "ON"
           - name: x64-release-static
-            msystem: MINGW64
+            msystem: UCRT64
             build_type: Release
             shared: "OFF"
     name: mingw-${{ matrix.name }}

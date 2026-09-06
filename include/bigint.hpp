@@ -72,6 +72,8 @@ public:
      * @param val 整数值
      */
     BigInt(long long val);
+    /** @brief 从 long 构造，兼容 LP64 平台的 int64_t */
+    BigInt(long val);
     /** @brief 从 int 构造 */
     BigInt(int val);
 
