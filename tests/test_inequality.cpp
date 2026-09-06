@@ -342,6 +342,9 @@ int main() {
         EXPECT_TRUE(result.contains(-5.0), "x^3 - x < 0: x=-5 in solution");
         EXPECT_TRUE(result.contains(-2.0), "x^3 - x < 0: x=-2 in solution");
         EXPECT_TRUE(!result.contains(-1.0), "x^3 - x < 0: x=-1 not in solution (strict, root)");
+        EXPECT_TRUE(result.contains(std::nextafter(-1.0, -2.0)) &&
+                        !result.contains(std::nextafter(-1.0, 0.0)),
+                    "strict cubic boundary separates adjacent representable values");
         EXPECT_TRUE(!result.contains(1.0), "x^3 - x < 0: x=1 not in solution (strict, root)");
         EXPECT_TRUE(result.contains(0.5), "x^3 - x < 0: x=0.5 in solution");
         EXPECT_TRUE(!result.contains(2.0), "x^3 - x < 0: x=2 not in solution");

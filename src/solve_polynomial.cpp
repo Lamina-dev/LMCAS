@@ -951,7 +951,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_by_factoring(
 
     if (poly.is_zero() || poly.degree() < 1) return {};
 
-    if (poly.degree() <= 4) {
+    if (poly.degree() <= 2) {
         return solve_closed_form_poly(poly, var);
     }
 
@@ -959,10 +959,13 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_by_factoring(
 
     Polynomial<Rational> rat_poly;
     if (!convert_to_rational_poly(poly, rat_poly)) {
-
+        if (poly.degree() <= 4) {
+            return solve_closed_form_poly(poly, var);
+        }
         return make_rootof_solutions(poly, var);
     }
 
+    // Keep rational boundaries exact before cubic/quartic floating formulas.
     auto rational_roots = find_rational_roots(rat_poly);
 
     for (const auto& r : rational_roots) {
