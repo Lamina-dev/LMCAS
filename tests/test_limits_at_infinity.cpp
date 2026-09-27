@@ -1,127 +1,75 @@
-/**
- * @file test_limits_at_infinity.cpp
- * @brief 测试极限在无穷处的增强功能：有理函数次数比较、增长速率比较、
- *        复合函数、负无穷代换。
- */
+#include "limit_result.hpp"
 #include "test_common.hpp"
+#include "expr.hpp"
+#include "numeric_evaluation.hpp"
+#include "residual_verification.hpp"
 
 using namespace LMCAS;
 
-int main() {
-    auto x = SymbolicExpr::variable("x");
-    auto inf = SymbolicExpr::infinity(1);
-    auto neg_inf = SymbolicExpr::infinity(-1);
-
-    TEST_CASE("Rational function: deg(P) < deg(Q) -> 0");
-    {
-        // lim(x→∞) x / x^2 = lim(x→∞) 1/x = 0
-        auto num = x;
-        auto den = SymbolicExpr::power(x, SymbolicExpr::number(2));
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) x/x^2 = 0");
+TEST(LimitsAtInfinity, FiniteTailLimits) {
+    struct Sample {
+        const char *expression;
+        int tail;
+        Rational expected;
+    };
+    const Sample samples[] = {
+        {"x/x^2", 1, Rational(0)},
+        {"(3*x^2+x)/(2*x^2+1)", 1, Rational(3, 2)},
+        {"-2*x^2/x^2", 1, Rational(-2)},
+        {"x^2/exp(x)", 1, Rational(0)},
+        {"x^10/exp(x)", 1, Rational(0)},
+        {"ln(x)/x", 1, Rational(0)},
+        {"exp(-x)", 1, Rational(0)},
+        {"x^2/(x^2+1)", -1, Rational(1)},
+        {"exp(x)", -1, Rational(0)},
+        {"1/x", -1, Rational(0)},
+        {"sin(1/x)", 1, Rational(0)},
+        {"sin(1/x)", -1, Rational(0)},
+        {"cos(1/x)", 1, Rational(1)},
+        {"cos(1/x)", -1, Rational(1)},
+        {"x*exp(-ln(x))", 1, Rational(1)},
+        {"x*exp(-x)", 1, Rational(0)},
+        {"x^10*exp(-x)", 1, Rational(0)},
+        {"x*exp(-sqrt(x))", 1, Rational(0)}};
+    for (const auto &sample : samples) {
+        auto expression = parse_expr(sample.expression);
+        ASSERT_TRUE((expression.has_value())) << "tail fixture parses";
+        if (!expression)
+            continue;
+        auto result = limit_checked(expression.value(), "x", SymbolicExpr::infinity(sample.tail));
+        const auto *finite = result ? std::get_if<FiniteLimit>(&result.value().value) : nullptr;
+        EXPECT_TRUE((finite != nullptr)) << sample.expression;
+        if (!finite)
+            continue;
+        ComputationContext context;
+        auto proof = check_equivalent(finite->value, SymbolicExpr::number(sample.expected), context);
+        EXPECT_TRUE((proof && std::holds_alternative<ProvedZeroResidual>(proof.value()))) << sample.expression;
+        auto numeric = evaluate_numeric(*finite->value);
+        EXPECT_TRUE((numeric && numeric.value().is_finite())) << "finite tail payload evaluates finitely";
     }
+}
 
-    TEST_CASE("Rational function: deg(P) = deg(Q) -> ratio of leading coefficients");
-    {
-        // lim(x→∞) (3x^2 + x) / (2x^2 + 1) = 3/2
-        auto three = SymbolicExpr::number(3);
-        auto two = SymbolicExpr::number(2);
-        auto one = SymbolicExpr::number(1);
-        auto x2 = SymbolicExpr::power(x, two);
-        auto num = SymbolicExpr::add(SymbolicExpr::multiply(three, x2), x);
-        auto den = SymbolicExpr::add(SymbolicExpr::multiply(two, x2), one);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_EQ_EXPR_STR(result, "3/2", "lim(x->inf) (3x^2+x)/(2x^2+1) = 3/2");
+TEST(LimitsAtInfinity, InfiniteAndOscillatoryTails) {
+    auto polynomial = parse_expr("x^3/x");
+    ASSERT_TRUE((polynomial.has_value())) << "polynomial fixture parses";
+    if (polynomial) {
+        auto value = limit_checked(polynomial.value(), "x", SymbolicExpr::infinity());
+        EXPECT_TRUE((value && std::holds_alternative<PositiveInfinityLimit>(value.value().value))) << "positive quadratic tail diverges positively";
     }
-
-    TEST_CASE("Rational function: deg(P) > deg(Q) -> infinity");
-    {
-        // lim(x→∞) x^3 / x = lim(x→∞) x^2 = ∞
-        auto x3 = SymbolicExpr::power(x, SymbolicExpr::number(3));
-        auto expr = SymbolicExpr::multiply(x3, SymbolicExpr::power(x, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        // Should be infinity
-        EXPECT_TRUE(result != nullptr, "lim(x->inf) x^3/x is not null");
-        if (result) {
-            auto str = result->to_string();
-            EXPECT_TRUE(str.find("inf") != std::string::npos || str.find("Inf") != std::string::npos || str.find("∞") != std::string::npos,
-                "lim(x->inf) x^3/x = infinity");
+    for (int sign : {-1, 1}) {
+        for (const char *source : {"sin(x)", "cos(x)", "sin(x^3)"}) {
+            auto expression = parse_expr(source);
+            ASSERT_TRUE((expression.has_value())) << "oscillation fixture parses";
+            if (!expression)
+                continue;
+            auto value = limit_checked(expression.value(), "x", SymbolicExpr::infinity(sign));
+            EXPECT_TRUE((value && std::holds_alternative<LimitDoesNotExist>(value.value().value))) << "continuous argument escaping to infinity produces oscillation";
         }
     }
-
-    TEST_CASE("Rational function: equal degree with negative leading coeff");
-    {
-        // lim(x→∞) (-2x^2) / (x^2) = -2
-        auto neg_two = SymbolicExpr::number(-2);
-        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
-        auto num = SymbolicExpr::multiply(neg_two, x2);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(x2, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_EQ_EXPR_STR(result, "-2", "lim(x->inf) -2x^2/x^2 = -2");
+    auto invalid = parse_expr("ln(-x)");
+    ASSERT_TRUE((invalid.has_value())) << "invalid-tail fixture parses";
+    if (invalid) {
+        auto value = limit_checked(invalid.value(), "x", SymbolicExpr::infinity());
+        EXPECT_TRUE((!value && value.error().code == CasErrc::Inconclusive)) << "logarithm of a negative real tail is not a finite or infinite real limit";
     }
-
-    TEST_CASE("Growth rate: exp(x) dominates polynomial");
-    {
-        // lim(x→∞) x^2 / exp(x) = 0
-        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
-        auto exp_x = SymbolicExpr::exp(x);
-        auto expr = SymbolicExpr::multiply(x2, SymbolicExpr::power(exp_x, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) x^2/exp(x) = 0");
-    }
-
-    TEST_CASE("Growth rate: polynomial dominates logarithmic");
-    {
-        // lim(x→∞) ln(x) / x = 0
-        auto ln_x = SymbolicExpr::ln(x);
-        auto expr = SymbolicExpr::multiply(ln_x, SymbolicExpr::power(x, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) ln(x)/x = 0");
-    }
-
-    TEST_CASE("Growth rate: exp(x) dominates x^n for large n");
-    {
-        // lim(x→∞) x^10 / exp(x) = 0
-        auto x10 = SymbolicExpr::power(x, SymbolicExpr::number(10));
-        auto exp_x = SymbolicExpr::exp(x);
-        auto expr = SymbolicExpr::multiply(x10, SymbolicExpr::power(exp_x, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) x^10/exp(x) = 0");
-    }
-
-    TEST_CASE("Composed function: exp(-x) as x->inf");
-    {
-        // lim(x→∞) exp(-x) = 0
-        auto neg_x = SymbolicExpr::multiply(SymbolicExpr::number(-1), x);
-        auto expr = SymbolicExpr::exp(neg_x);
-        auto result = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_EQ_EXPR_STR(result, "0", "lim(x->inf) exp(-x) = 0");
-    }
-
-    TEST_CASE("Negative infinity: lim(x->-inf) x^2 / (x^2 + 1) = 1");
-    {
-        auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
-        auto den = SymbolicExpr::add(x2, SymbolicExpr::number(1));
-        auto expr = SymbolicExpr::multiply(x2, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
-        auto result = LMCAS::limit_expression_checked(expr, "x", neg_inf).value();
-        EXPECT_EQ_EXPR_STR(result, "1", "lim(x->-inf) x^2/(x^2+1) = 1");
-    }
-
-    TEST_CASE("Negative infinity: lim(x->-inf) exp(x) = 0");
-    {
-        auto expr = SymbolicExpr::exp(x);
-        auto result = LMCAS::limit_expression_checked(expr, "x", neg_inf).value();
-        EXPECT_EQ_EXPR_STR(result, "0", "lim(x->-inf) exp(x) = 0");
-    }
-
-    TEST_CASE("Negative infinity: lim(x->-inf) 1/x = 0");
-    {
-        auto expr = SymbolicExpr::power(x, SymbolicExpr::number(-1));
-        auto result = LMCAS::limit_expression_checked(expr, "x", neg_inf).value();
-        EXPECT_EQ_EXPR_STR(result, "0", "lim(x->-inf) 1/x = 0");
-    }
-
-    return TEST_REPORT();
 }

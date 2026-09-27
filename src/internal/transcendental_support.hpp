@@ -1,7 +1,7 @@
 #pragma once
 
 #include "transcendental_factor.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 namespace LMCAS {
 

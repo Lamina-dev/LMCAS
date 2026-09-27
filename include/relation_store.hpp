@@ -14,6 +14,10 @@
 #include "symbolic.hpp"
 #include "assumption.hpp"
 #include "result.hpp"
+#include <cstdint>
+#include <array>
+#include <cstddef>
+#include <optional>
 
 namespace LMCAS {
 
@@ -46,6 +50,15 @@ struct Relation {
  */
 class LMCAS_API RelationStore {
 public:
+    RelationStore() = default;
+    RelationStore(const RelationStore&) = default;
+    RelationStore(RelationStore&& other) noexcept;
+    RelationStore& operator=(const RelationStore& other);
+    RelationStore& operator=(RelationStore&& other) noexcept;
+
+    /** @brief 成功提交（含赋值）均更新此存储的修订号。 */
+    std::uint64_t revision() const noexcept { return revision_; }
+
     /**
      * @brief Store a relation and optionally derive sign properties.
      *
@@ -97,7 +110,19 @@ public:
     void clear();
 
 private:
+    friend class AssumptionContext;
+    using Premises = std::array<std::size_t, 2>;
+    struct RelationProofs {
+        bool declared = false;
+        std::vector<Premises> alternatives;
+    };
     std::vector<Relation> relations_;
+    std::vector<RelationProofs> proofs_;
+    std::vector<std::size_t> declaration_order_;
+    std::uint64_t revision_ = 0;
+
+    std::optional<std::size_t> find_relation(
+        const SymbolicExpr& lhs, const SymbolicExpr& rhs, RelationOp op) const;
 
     RelationStoreResult add_relation_unchecked(
         const SymbolicExpr& lhs,
@@ -108,39 +133,23 @@ private:
     /// Maximum number of new relations deduced per add_relation call via transitive closure.
     static constexpr int MAX_TRANSITIVE_DEDUCTIONS = 64;
 
-    /**
-     * @brief Detect reversed "0 op variable" patterns and derive sign properties.
-     *
-     * When exact zero appears on the left and a variable on the right, the
-     * operator semantics are reversed to derive the variable's sign:
-     *   - 0 LT  var -> var is Positive   (0 < var means var > 0)
-     *   - 0 GT  var -> var is Negative   (0 > var means var < 0)
-     *   - 0 GEQ var -> var is NonPositive (0 >= var means var <= 0)
-     *   - 0 LEQ var -> var is NonNegative (0 <= var means var >= 0)
-     *   - 0 NEQ var -> var is NonZero
-     *
-     * @param lhs Left-hand side expression (expected to be zero)
-     * @param rhs Right-hand side expression (expected to be a variable)
-     * @param op  Relational operator
-     * @param prop_store PropertyStore to update with derived sign
-     */
-    RelationStoreResult detect_reversed_pattern(
-        const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-        RelationOp op, PropertyStore& prop_store);
+    struct TransitiveWork;
+    RelationStoreResult enqueue_transitive_deduction(
+        const Relation& deduced, Premises premises,
+        PropertyStore& prop_store, TransitiveWork& work);
 
     /**
-     * @brief Compute transitive closure after adding a new relation.
+     * @brief 新增关系后计算传递闭包。
      *
-     * BFS from the new relation, combining GT/GEQ operators transitively:
-     *   GT+GT->GT, GT+GEQ->GT, GEQ+GT->GT, GEQ+GEQ->GEQ.
-     * Only GT and GEQ participate in transitive closure.
-     * Stops after MAX_TRANSITIVE_DEDUCTIONS new relations are deduced.
-     *
-     * @param new_rel The newly added relation that triggers closure computation
-     * @param prop_store PropertyStore for sign derivation of deduced relations
+     * 从新关系开始 BFS，仅对 GT、GEQ 进行传递组合：
+     * GT+GT→GT、GT+GEQ→GT、GEQ+GT→GT、GEQ+GEQ→GEQ。
+     * 最多新增 MAX_TRANSITIVE_DEDUCTIONS 个结论，之后仍登记已有结论的替代证明。
+     * @param new_relation 触发本轮闭包计算的关系索引
+     * @param prop_store 用于推导关系符号的属性存储
+     * @return 本轮是否新增结论或替代证明。
      */
-    RelationStoreResult compute_transitive_closure(
-        const Relation& new_rel, PropertyStore& prop_store);
+    Result<bool> compute_transitive_closure(
+        std::size_t new_relation, PropertyStore& prop_store);
 };
 
 } // namespace LMCAS

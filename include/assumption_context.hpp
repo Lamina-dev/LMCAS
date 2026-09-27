@@ -28,6 +28,7 @@ namespace LMCAS {
 class InferenceEngine;
 class ComputationContext;
 struct Interval;
+namespace detail { class RewriteBudget; }
 
 using AssumptionVoidResult = Result<void>;
 using AssumptionTriboolResult = Result<Tribool>;
@@ -43,6 +44,13 @@ using AssumptionTriboolResult = Result<Tribool>;
 class LMCAS_API AssumptionContext {
 public:
     AssumptionContext();
+    AssumptionContext(const AssumptionContext&) = default;
+    AssumptionContext(AssumptionContext&& other);
+    AssumptionContext& operator=(const AssumptionContext& other);
+    AssumptionContext& operator=(AssumptionContext&& other) noexcept;
+
+    /** @brief 在本次调用中借用作用域栈事实进行规范化；事实查询未知或失败时保留未证明的表达式。 */
+    std::shared_ptr<SymbolicExpr> simplify(const SymbolicExpr& expression) const;
 
     // --- Scope management ---
 
@@ -57,7 +65,10 @@ public:
 
     // --- Direct access to current (top) scope stores ---
 
-    /// Access the current scope's PropertyStore (mutable, for declarations).
+    /**
+     * @brief 访问当前作用域可修改的 PropertyStore，用于声明。
+     * push 可能使引用失效，pop 销毁弹出的存储；仍有效的引用可观察后续提交。
+     */
     PropertyStore& current_properties();
 
     /// Access the current scope's PropertyStore (const).
@@ -94,6 +105,27 @@ public:
 
     /// Get interval bounds for a symbol (read-through).
     std::optional<Interval> get_bounds(const std::string& symbol) const;
+
+    bool is_transcendental(const std::string& symbol) const;
+    Finiteness get_finiteness(const std::string& symbol) const;
+    Definiteness get_definiteness(const std::string& symbol) const;
+    std::optional<SymbolicExpr> get_period(
+        const std::string& symbol, const std::string& variable) const;
+    bool is_periodic(const std::string& symbol, const std::string& variable) const;
+    /** @brief 仅查询周期声明元数据；不透明周期符号仍按非常量处理。 */
+    bool has_period_declarations(const std::string& symbol) const;
+    Result<Monotonicity> get_monotonicity_checked(
+        const std::string& symbol, const std::string& variable,
+        const Interval& interval) const;
+
+    /** @brief 继承父作用域关系时排除被较近声明遮蔽的关系；仅使用已有关系，不构造跨作用域传递闭包。 */
+    bool has_relation(const SymbolicExpr& lhs, const SymbolicExpr& rhs, RelationOp op) const;
+    std::vector<Relation> get_visible_relations() const;
+    Result<bool> has_relation_checked(
+        const SymbolicExpr& lhs, const SymbolicExpr& rhs, RelationOp op,
+        ComputationContext& context) const;
+    Result<std::vector<Relation>> get_visible_relations_checked(
+        ComputationContext& context) const;
 
     /// Declare domain for a variable in the current scope.
     /// Returns an explicit error if the variable name is empty or contradictory.
@@ -172,36 +204,48 @@ public:
 
     /** @brief Queries positivity and propagates computation failures. */
     AssumptionTriboolResult is_positive_checked(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_positive_checked(
+        const SymbolicExpr& expr, ComputationContext& context) const;
 
     /// Query whether the expression is negative (< 0).
     AssumptionTriboolResult is_negative(const SymbolicExpr& expr) const;
 
     /** @brief Queries negativity and propagates computation failures. */
     AssumptionTriboolResult is_negative_checked(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_negative_checked(
+        const SymbolicExpr& expr, ComputationContext& context) const;
 
     /// Query whether the expression is non-negative (>= 0).
     AssumptionTriboolResult is_nonnegative(const SymbolicExpr& expr) const;
 
     /** @brief Queries non-negativity and propagates computation failures. */
     AssumptionTriboolResult is_nonnegative_checked(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_nonnegative_checked(
+        const SymbolicExpr& expr, ComputationContext& context) const;
 
     /// Query whether the expression is real.
     AssumptionTriboolResult is_real(const SymbolicExpr& expr) const;
 
     /** @brief Queries real-domain membership and propagates computation failures. */
     AssumptionTriboolResult is_real_checked(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_real_checked(
+        const SymbolicExpr& expr, ComputationContext& context) const;
 
     /// Query whether the expression is an integer.
     AssumptionTriboolResult is_integer(const SymbolicExpr& expr) const;
 
     /** @brief Queries integer-domain membership and propagates computation failures. */
     AssumptionTriboolResult is_integer_checked(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_integer_checked(
+        const SymbolicExpr& expr, ComputationContext& context) const;
 
     /// Query whether the expression is non-zero (!= 0).
     AssumptionTriboolResult is_nonzero(const SymbolicExpr& expr) const;
 
     /** @brief Queries nonzero status and propagates computation failures. */
     AssumptionTriboolResult is_nonzero_checked(const SymbolicExpr& expr) const;
+    AssumptionTriboolResult is_nonzero_checked(
+        const SymbolicExpr& expr, ComputationContext& context) const;
 
     /**
      * @brief Serialize the entire AssumptionContext to a human-readable string.
@@ -291,27 +335,39 @@ public:
     int get_max_query_depth() const;
 
 private:
-    static AssumptionContext deserialize_impl(const std::string& data);
+    static AssumptionContext deserialize_impl(
+        const std::string& data, ComputationContext& context);
 
     struct Scope {
         PropertyStore properties;
         RelationStore relations;
         std::vector<ConditionalAssumption> conditionals;
+        mutable std::uint64_t observed_property_revision = 0;
+        mutable std::uint64_t observed_relation_revision = 0;
     };
 
     std::vector<Scope> scope_stack_;
+    struct RelationShadowing;
+    RelationShadowing collect_relation_shadowing(
+        std::size_t scope, detail::RewriteBudget& budget) const;
+    static bool relation_shadowed(
+        const Relation& relation, const RelationShadowing& shadowing,
+        detail::RewriteBudget& budget);
+    std::vector<bool> relation_visibility(
+        std::size_t scope, detail::RewriteBudget& budget) const;
+    Result<bool> has_relation_in_scope(
+        std::size_t scope, const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+        RelationOp op, detail::RewriteBudget& budget) const;
 
     /// Maximum recursion depth for inference queries (default 32).
     int max_query_depth_ = 32;
 
-    /// Generation counter incremented on every mutation (push/pop/assume).
-    /// Used by QueryInterface to detect stale caches.
+    /** @brief QueryInterface 观察到的缓存代数；存储提交采用惰性检测。 */
     mutable uint64_t cache_generation_ = 0;
 
 public:
-    /// Return the current cache generation counter.
-    /// Incremented on every state mutation (push, pop, assume_domain, assume_sign, assume).
-    uint64_t cache_generation() const { return cache_generation_; }
+    /** @brief 观察事务修订并返回当前缓存代数。 */
+    uint64_t cache_generation() const;
 };
 
 /**
@@ -433,6 +489,10 @@ auto with_assumptions(AssumptionContext& ctx,
         auto popped = ctx.pop();
         if (!popped) return Result<ReturnT>::failure(popped.error());
         return Result<ReturnT>::success(std::move(result));
+    } catch (const CasError& error) {
+        auto popped = ctx.pop();
+        if (!popped) return Result<ReturnT>::failure(popped.error());
+        return Result<ReturnT>::failure(error);
     } catch (const std::bad_alloc&) {
         auto popped = ctx.pop();
         if (!popped) return Result<ReturnT>::failure(popped.error());
@@ -443,6 +503,10 @@ auto with_assumptions(AssumptionContext& ctx,
         if (!popped) return Result<ReturnT>::failure(popped.error());
         return Result<ReturnT>::failure(
             CasErrc::InternalInvariant, ex.what(), "with_assumptions");
+    } catch (...) {
+        auto popped = ctx.pop();
+        if (!popped) return Result<ReturnT>::failure(popped.error());
+        throw;
     }
 }
 
@@ -466,6 +530,10 @@ auto with_assumptions(AssumptionContext& ctx,
         auto popped = ctx.pop();
         if (!popped) return AssumptionVoidResult::failure(popped.error());
         return AssumptionVoidResult::success();
+    } catch (const CasError& error) {
+        auto popped = ctx.pop();
+        if (!popped) return AssumptionVoidResult::failure(popped.error());
+        return AssumptionVoidResult::failure(error);
     } catch (const std::bad_alloc&) {
         auto popped = ctx.pop();
         if (!popped) return AssumptionVoidResult::failure(popped.error());
@@ -476,6 +544,10 @@ auto with_assumptions(AssumptionContext& ctx,
         if (!popped) return AssumptionVoidResult::failure(popped.error());
         return AssumptionVoidResult::failure(
             CasErrc::InternalInvariant, ex.what(), "with_assumptions");
+    } catch (...) {
+        auto popped = ctx.pop();
+        if (!popped) return AssumptionVoidResult::failure(popped.error());
+        throw;
     }
 }
 

@@ -4,22 +4,13 @@
 #include "inference_engine.hpp"
 #include "assumption.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <stdexcept>
 #include <string>
 #include <memory>
 #include <vector>
 
 using namespace LMCAS;
-
-
-static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return LMCAS::detail::make_node<VariableNode>(name);
-}
-
-static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
-}
 
 static std::shared_ptr<const SymbolicNode> make_power(
     std::shared_ptr<const SymbolicNode> base, std::shared_ptr<const SymbolicNode> exp) {
@@ -29,179 +20,146 @@ static std::shared_ptr<const SymbolicNode> make_power(
 static std::shared_ptr<const SymbolicNode> make_function(
     FunctionNode::FuncType type, std::shared_ptr<const SymbolicNode> arg) {
     return LMCAS::detail::make_node<FunctionNode>(type,
-        std::vector<std::shared_ptr<const SymbolicNode>>{std::move(arg)});
+                                                  std::vector<std::shared_ptr<const SymbolicNode>>{std::move(arg)});
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = LMCAS::detail::expression_from_node(std::move(node));
-    return expr;
-}
-
-
-static void test_x_squared_nonnegative_when_real() {
-    TEST_CASE("Propagation: x² non-negative when x is Real");
-
+TEST(AssumptionPropagationUnit, XSquaredNonnegativeWhenReal) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
     InferenceEngine engine(ctx);
 
     // Build x^2 = PowerNode(x, 2)
-    auto x_squared = wrap_expr(make_power(make_var("x"), make_number(2)));
+    auto x_squared = test_expression_from_node(make_power(test_variable_node("x"), test_integer_node(2)));
 
-    EXPECT_TRUE(engine.query_nonnegative_checked(x_squared).value() == Tribool::True,
-                "x² is NonNegative when x is Real");
+    EXPECT_TRUE((engine.query_nonnegative_checked(x_squared).value() == Tribool::True)) << "x² is NonNegative when x is Real";
 }
 
-static void test_x_squared_integer_when_integer() {
-    TEST_CASE("Propagation: x² Integer when x is Integer");
-
+TEST(AssumptionPropagationUnit, XSquaredIntegerWhenInteger) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Integer).has_value());
     InferenceEngine engine(ctx);
 
     // Build x^2 = PowerNode(x, 2)
-    auto x_squared = wrap_expr(make_power(make_var("x"), make_number(2)));
+    auto x_squared = test_expression_from_node(make_power(test_variable_node("x"), test_integer_node(2)));
 
-    EXPECT_TRUE(engine.query_integer_checked(x_squared).value() == Tribool::True,
-                "x² is Integer when x is Integer");
+    EXPECT_TRUE((engine.query_integer_checked(x_squared).value() == Tribool::True)) << "x² is Integer when x is Integer";
 }
 
-static void test_abs_positive_when_x_positive() {
-    TEST_CASE("Propagation: |x| positive when x is Positive");
-
+TEST(AssumptionPropagationUnit, AbsPositiveWhenXPositive) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
     InferenceEngine engine(ctx);
 
     // Build |x| = FunctionNode::Abs(x)
-    auto abs_x = wrap_expr(make_function(FunctionNode::FuncType::Abs, make_var("x")));
+    auto abs_x = test_expression_from_node(make_function(FunctionNode::FuncType::Abs, test_variable_node("x")));
 
-    EXPECT_TRUE(engine.query_positive_checked(abs_x).value() == Tribool::True,
-                "|x| is Positive when x is Positive");
+    EXPECT_TRUE((engine.query_positive_checked(abs_x).value() == Tribool::True)) << "|x| is Positive when x is Positive";
 }
 
-static void test_abs_positive_when_x_negative() {
-    TEST_CASE("Propagation: |x| positive when x is Negative");
-
+TEST(AssumptionPropagationUnit, AbsPositiveWhenXNegative) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Negative);
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Negative).has_value());
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
     InferenceEngine engine(ctx);
 
     // Build |x| = FunctionNode::Abs(x)
-    auto abs_x = wrap_expr(make_function(FunctionNode::FuncType::Abs, make_var("x")));
+    auto abs_x = test_expression_from_node(make_function(FunctionNode::FuncType::Abs, test_variable_node("x")));
 
-    EXPECT_TRUE(engine.query_positive_checked(abs_x).value() == Tribool::True,
-                "|x| is Positive when x is Negative");
+    EXPECT_TRUE((engine.query_positive_checked(abs_x).value() == Tribool::True)) << "|x| is Positive when x is Negative";
 }
 
-static void test_abs_positive_when_x_nonzero() {
-    TEST_CASE("Propagation: |x| positive when x is NonZero");
-
+TEST(AssumptionPropagationUnit, AbsPositiveWhenXNonzero) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::NonZero);
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::NonZero).has_value());
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
     InferenceEngine engine(ctx);
 
     // Build |x| = FunctionNode::Abs(x)
-    auto abs_x = wrap_expr(make_function(FunctionNode::FuncType::Abs, make_var("x")));
+    auto abs_x = test_expression_from_node(make_function(FunctionNode::FuncType::Abs, test_variable_node("x")));
 
-    EXPECT_TRUE(engine.query_positive_checked(abs_x).value() == Tribool::True,
-                "|x| is Positive when x is NonZero");
+    EXPECT_TRUE((engine.query_positive_checked(abs_x).value() == Tribool::True)) << "|x| is Positive when x is NonZero";
 }
 
-
-static void test_diagnostic_transcendental_then_integer() {
-    TEST_CASE("Diagnostics: Transcendental + Integer contradiction");
-
+TEST(AssumptionPropagationUnit, DiagnosticTranscendentalThenInteger) {
     AssumptionContext ctx;
-    ctx.current_properties().declare_transcendental("x");
+    EXPECT_TRUE((ctx.current_properties().declare_transcendental("x").has_value())) << "transcendental declaration succeeds";
 
     auto failure_119 = ctx.assume_domain("x", Domain::Integer);
-    EXPECT_TRUE(!failure_119.has_value(), "Transcendental + Integer returns InvalidArgument");
-    EXPECT_TRUE(failure_119.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    const std::string& msg = failure_119.error().message;
+    EXPECT_TRUE((!failure_119.has_value())) << "Transcendental + Integer returns InvalidArgument";
+    EXPECT_TRUE((failure_119.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
+    const std::string &msg = failure_119.error().message;
     // Message should contain the symbol name and relevant domain info
-    EXPECT_CONTAINS(msg, {"x", "Integer"},
-                    "Result error message contains 'x' and 'Integer'");
+    {
+        const std::string actual_text = (msg);
+        for (const auto &token : std::vector<std::string>{"x", "Integer"}) {
+            EXPECT_NE(actual_text.find(token), std::string::npos) << "Result error message contains 'x' and 'Integer'" << ": missing " << token << " in " << actual_text;
+        }
+    }
     // Should also mention Transcendental or Real (the existing constraint)
     bool has_transcendental_or_real =
         (msg.find("Transcendental") != std::string::npos) ||
         (msg.find("Real") != std::string::npos) ||
         (msg.find("transcendental") != std::string::npos);
-    EXPECT_TRUE(has_transcendental_or_real,
-                "Result error message mentions Transcendental or Real");
+    EXPECT_TRUE((has_transcendental_or_real)) << "Result error message mentions Transcendental or Real";
 }
 
-static void test_diagnostic_positive_then_negative() {
-    TEST_CASE("Diagnostics: Positive + Negative contradiction");
-
+TEST(AssumptionPropagationUnit, DiagnosticPositiveThenNegative) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
     auto failure_147 = ctx.assume_sign("x", Sign::Negative);
-    EXPECT_TRUE(!failure_147.has_value(), "Positive + Negative returns InvalidArgument");
-    EXPECT_TRUE(failure_147.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    const std::string& msg = failure_147.error().message;
+    EXPECT_TRUE((!failure_147.has_value())) << "Positive + Negative returns InvalidArgument";
+    EXPECT_TRUE((failure_147.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
+    const std::string &msg = failure_147.error().message;
     /// 诊断包含符号名与 Positive;实现可报告由 Negative 推导出的
     /// NonPositive 冲突.
-    EXPECT_CONTAINS(msg, {"x", "Positive"},
-                    "Result error message contains 'x' and 'Positive'");
+    {
+        const std::string actual_text = (msg);
+        for (const auto &token : std::vector<std::string>{"x", "Positive"}) {
+            EXPECT_NE(actual_text.find(token), std::string::npos) << "Result error message contains 'x' and 'Positive'" << ": missing " << token << " in " << actual_text;
+        }
+    }
     bool has_negative_or_nonpositive =
         (msg.find("Negative") != std::string::npos) ||
         (msg.find("NonPositive") != std::string::npos);
-    EXPECT_TRUE(has_negative_or_nonpositive,
-                "Result error message mentions Negative or NonPositive");
+    EXPECT_TRUE((has_negative_or_nonpositive)) << "Result error message mentions Negative or NonPositive";
 }
 
-static void test_diagnostic_natural_then_negative() {
-    TEST_CASE("Diagnostics: Natural + Negative contradiction");
-
+TEST(AssumptionPropagationUnit, DiagnosticNaturalThenNegative) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Natural);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Natural).has_value());
 
     auto failure_175 = ctx.assume_sign("x", Sign::Negative);
-    EXPECT_TRUE(!failure_175.has_value(), "Natural + Negative returns InvalidArgument");
-    EXPECT_TRUE(failure_175.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    const std::string& msg = failure_175.error().message;
-    EXPECT_CONTAINS(msg, {"Natural", "Negative"},
-                    "Result error message contains 'Natural' and 'Negative'");
+    EXPECT_TRUE((!failure_175.has_value())) << "Natural + Negative returns InvalidArgument";
+    EXPECT_TRUE((failure_175.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
+    const std::string &msg = failure_175.error().message;
+    {
+        const std::string actual_text = (msg);
+        for (const auto &token : std::vector<std::string>{"Natural", "Negative"}) {
+            EXPECT_NE(actual_text.find(token), std::string::npos) << "Result error message contains 'Natural' and 'Negative'" << ": missing " << token << " in " << actual_text;
+        }
+    }
 }
 
-static void test_diagnostic_positiveint_then_zero() {
-    TEST_CASE("Diagnostics: PositiveInt + Zero contradiction");
-
+TEST(AssumptionPropagationUnit, DiagnosticPositiveintThenZero) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::PositiveInt);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::PositiveInt).has_value());
 
     auto failure_195 = ctx.assume_sign("x", Sign::Zero);
-    EXPECT_TRUE(!failure_195.has_value(), "PositiveInt + Zero returns InvalidArgument");
-    EXPECT_TRUE(failure_195.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    const std::string& msg = failure_195.error().message;
+    EXPECT_TRUE((!failure_195.has_value())) << "PositiveInt + Zero returns InvalidArgument";
+    EXPECT_TRUE((failure_195.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
+    const std::string &msg = failure_195.error().message;
     /// 诊断包含 PositiveInt,并可使用 Zero 推导出的 NonPositive
     /// 描述与隐含 Positive 的冲突.
-    EXPECT_CONTAINS(msg, {"PositiveInt"},
-                    "Result error message contains 'PositiveInt'");
+    {
+        const std::string actual_text = (msg);
+        for (const auto &token : std::vector<std::string>{"PositiveInt"}) {
+            EXPECT_NE(actual_text.find(token), std::string::npos) << "Result error message contains 'PositiveInt'" << ": missing " << token << " in " << actual_text;
+        }
+    }
     bool has_zero_or_nonpositive =
         (msg.find("Zero") != std::string::npos) ||
         (msg.find("NonPositive") != std::string::npos);
-    EXPECT_TRUE(has_zero_or_nonpositive,
-                "Result error message mentions Zero or NonPositive");
-}
-
-
-int main() {
-    test_x_squared_nonnegative_when_real();
-    test_x_squared_integer_when_integer();
-    test_abs_positive_when_x_positive();
-    test_abs_positive_when_x_negative();
-    test_abs_positive_when_x_nonzero();
-
-    test_diagnostic_transcendental_then_integer();
-    test_diagnostic_positive_then_negative();
-    test_diagnostic_natural_then_negative();
-    test_diagnostic_positiveint_then_zero();
-
-    return TEST_REPORT();
+    EXPECT_TRUE((has_zero_or_nonpositive)) << "Result error message mentions Zero or NonPositive";
 }

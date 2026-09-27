@@ -2,8 +2,8 @@
  * @file transform_engine.hpp
  * @brief 积分变换引擎:Laplace 变换,逆 Laplace 变换,Fourier 变换,Z 变换.
  *
- * 提供基于变换表查找,线性性质和位移定理的符号积分变换计算;
- * 当前规则集之外的表达式映射为未求值 TransformNode.
+ * 提供基于内置规则匹配,线性性质和位移定理的符号积分变换计算;
+ * 当前规则集之外的表达式由 checked API 返回 Inconclusive.
  */
 #pragma once
 
@@ -14,54 +14,17 @@
 #include <memory>
 #include <string>
 
-#include <vector>
-#include <functional>
 
 namespace LMCAS {
 
 
-
 /**
- * @brief 变换表条目,存储一对时域/频域对应关系.
+ * @brief checked 变换仅返回已求值并认证的表达式。
+ * 条件与收敛域约束须在给定上下文假设下同时成立，并非全局已证事实。
+ * 支持范围未知或收敛域无法表示时返回 Inconclusive；资源与取消错误原样传播。
+ * 成功结果仅在保留的定义域内有效，规则集可不完备。
  */
-struct TransformTableEntry {
-    std::string name;                          ///< 条目名称
-    std::shared_ptr<SymbolicExpr> time_domain; ///< 时域表达式
-    std::shared_ptr<SymbolicExpr> freq_domain; ///< 频域表达式
-};
 
-/**
- * @brief Laplace 变换表,管理已知变换对.
- *
- * 内置常见函数的 Laplace 变换对:
- * - 多项式 t^n <-> n!/s^(n+1)
- * - 指数 e^(at) <-> 1/(s-a)
- * - 正弦 sin(at) <-> a/(s^2+a^2)
- * - 余弦 cos(at) <-> s/(s^2+a^2)
- * - 双曲正弦 sinh(at) <-> a/(s^2-a^2)
- * - 双曲余弦 cosh(at) <-> s/(s^2-a^2)
- * - 阶跃函数 u(t) <-> 1/s
- */
-class LMCAS_API TransformTable {
-public:
-    TransformTable();
-
-    /**
-     * @brief 获取所有变换对条目.
-     * @return 变换对列表的常引用
-     */
-    const std::vector<TransformTableEntry>& entries() const { return entries_; }
-
-    /**
-     * @brief 添加自定义变换对.
-     * @param[in] entry 变换表条目
-     */
-    void add_entry(TransformTableEntry entry);
-
-private:
-    std::vector<TransformTableEntry> entries_;
-    void init_laplace_pairs();
-};
 
 
 /**
@@ -69,9 +32,12 @@ private:
  *
  * 算法:
  * 1. 线性性:L{af + bg} = aL{f} + bL{g}
- * 2. 变换表查找:匹配已知变换对(t^n, e^at, sin, cos, sinh, cosh)
+ * 2. 内置规则匹配:识别已支持的变换对(t^n, e^at, sin, cos, sinh, cosh)
  * 3. 位移定理:L{e^(at)*f(t)} = F(s-a)
- * 4. 当前规则集之外的表达式映射为未求值 LaplaceNode
+ * 4. 当前规则集之外的表达式返回 Inconclusive
+ *
+ * 多项式次数与阶乘系数保持为精确 BigInt。
+ * 阶乘计算消耗上下文的步数和整数位数预算；耗尽时返回 checked 阶乘错误，保持精确语义。
  *
  * @param[in] f 时域函数表达式
  * @param[in] t 时域变量名
@@ -101,7 +67,7 @@ LMCAS_API TransformEngineResult laplace_transform_checked(
  * 3. 对每个部分分式项查表求逆变换
  * 4. 重极点处理:L-¹{1/(s-a)^n} = t^(n-1)*e^(at)/(n-1)!
  * 5. 逆位移定理:L-¹{F(s-a)} = e^(at)*f(t)
- * 6. 当前规则集之外的表达式映射为未求值逆 Laplace 节点
+ * 6. 当前规则集之外的表达式返回 Inconclusive
  *
  * @param[in] F 频域函数表达式
  * @param[in] s 频域变量名
@@ -125,6 +91,12 @@ LMCAS_API TransformEngineResult inverse_laplace_checked(
 
 /**
  * @brief 计算函数的 Fourier 变换 F{f(t)} = F(omega).
+ *
+ * 指数衰减率须由上下文假设证明为实数；无约束符号参数须显式声明为实数。
+ * exp(-a*abs(t)) 的变换为 2*a/(a*a+omega*omega)，保留所有与 t 无关的因子；
+ * a 的正性未知时附带 a > 0 条件。
+ * 已知非正、复数或实性未证的衰减率返回 Inconclusive。
+ * 线性组合与缩放保留各已求值项的条件。
  * @param[in] f 时域函数表达式
  * @param[in] t 时域变量名
  * @param[in] omega 频域变量名

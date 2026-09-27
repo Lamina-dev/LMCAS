@@ -56,7 +56,7 @@ TEST(ComputationContextTest, DiagnosticEngineEnforcesBudgetAndDispatches) {
     limits.max_diagnostics = 1;
     ComputationContext context(limits);
     std::size_t consumed = 0;
-    context.set_diagnostic_consumer([&](const Diagnostic&) { ++consumed; });
+    ASSERT_TRUE(context.set_diagnostic_consumer([&](const Diagnostic&) { ++consumed; }));
 
     EXPECT_TRUE(context.add_diagnostic(
         {DiagnosticSeverity::Warning, "test.diagnostics", "first"}));

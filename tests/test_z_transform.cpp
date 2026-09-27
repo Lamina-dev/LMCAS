@@ -1,154 +1,86 @@
-/**
- * @file test_z_transform.cpp
- * @brief Z 变换单元测试。
- */
 #include "test_common.hpp"
 #include "transform_engine.hpp"
-#include "symbolic_ast.hpp"
+#include <limits>
 
 using namespace LMCAS;
 
-int main() {
-    TEST_CASE("Z transform: unit step (constant 1)");
-    {
-        // Z{1} = z/(z-1)
-        auto one = SymbolicExpr::number(1);
-        auto result = z_transform_checked(one, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{1} should not be null");
-        auto z = SymbolicExpr::variable("z");
-        auto expected = SymbolicExpr::divide(z,
-            SymbolicExpr::add(z, SymbolicExpr::number(-1)));
-        EXPECT_EQ_EXPR(result->simplify(), expected->simplify(),
-            "Z{1} = z/(z-1)");
-    }
+static double z_value(const std::shared_ptr<SymbolicExpr> &sequence, double z) {
+    auto result = z_transform_checked(sequence, "n", "z");
+    EXPECT_TRUE((result.has_value())) << "supported sequence has an evaluated Z transform";
+    if (!result)
+        return std::numeric_limits<double>::quiet_NaN();
+    return result.value().value.expression->substitute("z", SymbolicExpr::number(z))->simplify()->to_numeric();
+}
 
-    TEST_CASE("Z transform: exponential sequence a^n");
-    {
-        // Z{(1/2)^n} = z/(z - 1/2)
-        auto half = SymbolicExpr::number(0.5);
-        auto n = SymbolicExpr::variable("n");
-        auto f_n = SymbolicExpr::power(half, n);
-        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{(1/2)^n} should not be null");
-        auto z = SymbolicExpr::variable("z");
-        auto expected = SymbolicExpr::divide(z,
-            SymbolicExpr::add(z, SymbolicExpr::number(-0.5)));
-        EXPECT_EQ_EXPR(result->simplify(), expected->simplify(),
-            "Z{(1/2)^n} = z/(z-0.5)");
-    }
+TEST(ZTransform, ConstantSequences) {
+    EXPECT_NEAR(z_value(SymbolicExpr::number(1), 2), 2.0, 1e-12) << "Z{1}(2)=2";
+    EXPECT_NEAR(z_value(SymbolicExpr::number(5), 3), 7.5, 1e-12) << "Z{5}(3)=15/2";
+}
 
-    TEST_CASE("Z transform: polynomial sequence n");
+TEST(ZTransform, ExponentialSequence) {
+    auto sequence = SymbolicExpr::power(SymbolicExpr::number(0.5), SymbolicExpr::variable("n"));
     {
-        // Z{n} = z/(z-1)^2
-        auto n = SymbolicExpr::variable("n");
-        auto result = z_transform_checked(n, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{n} should not be null");
-        auto z = SymbolicExpr::variable("z");
-        auto db = SymbolicExpr::add(z, SymbolicExpr::number(-1));
-        auto expected = SymbolicExpr::divide(z,
-            SymbolicExpr::power(db, SymbolicExpr::number(2)));
-        EXPECT_EQ_EXPR(result->simplify(), expected->simplify(),
-            "Z{n} = z/(z-1)^2");
+        const double actual_value = (z_value(sequence, 2));
+        const double expected_value = (4.0 / 3.0);
+        const double tolerance = (1e-12);
+        EXPECT_TRUE(std::isfinite(actual_value));
+        EXPECT_NEAR(actual_value, expected_value, tolerance);
     }
+}
 
-    TEST_CASE("Z transform: sinusoidal sequence sin(w*n)");
+TEST(ZTransform, PolynomialSequences) {
+    auto n = SymbolicExpr::variable("n");
+    EXPECT_NEAR(z_value(n, 3), 0.75, 1e-12) << "Z{n}(3)=3/4";
+    EXPECT_NEAR(z_value(SymbolicExpr::power(n, SymbolicExpr::number(2)), 3), 1.5, 1e-12) << "Z{n^2}(3)=3*(3+1)/(3-1)^3";
+}
+
+TEST(ZTransform, PolynomialExponentMustBeExactIntegerTwo) {
+    auto near_two = SymbolicExpr::number(Rational(
+        BigInt("20000000000001"), BigInt("10000000000000")));
+    auto sequence = SymbolicExpr::power(
+        SymbolicExpr::variable("n"), near_two);
+
+    auto result = z_transform_checked(sequence, "n", "z");
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, CasErrc::Inconclusive)
+        << "n^(2+10^-13) cannot use the quadratic-sequence formula";
+}
+
+TEST(ZTransform, TrigonometricSequences) {
+    auto angle = SymbolicExpr::multiply(SymbolicExpr::number(0.7), SymbolicExpr::variable("n"));
+    const double denominator = 5.0 - 4.0 * std::cos(0.7);
     {
-        // Z{sin(w*n)} = z*sin(w) / (z^2 - 2z*cos(w) + 1)
-        auto w = SymbolicExpr::variable("w");
-        auto n = SymbolicExpr::variable("n");
-        auto f_n = SymbolicExpr::sin(SymbolicExpr::multiply(w, n));
-        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{sin(w*n)} should not be null");
-        // Verify it's not an unevaluated node
-        EXPECT_FALSE(
-            std::dynamic_pointer_cast<const TransformNode>(LMCAS::detail::node(result)) != nullptr,
-            "Z{sin(w*n)} should be evaluated (not unevaluated)");
-        // Check the result contains expected components
-        auto str = result->simplify()->to_string();
-        EXPECT_CONTAINS(str, {"z", "sin"}, "Z{sin(w*n)} contains z and sin");
+        const double actual_value = (z_value(SymbolicExpr::sin(angle), 2));
+        const double expected_value = (2.0 * std::sin(0.7) / denominator);
+        const double tolerance = (1e-12);
+        EXPECT_TRUE(std::isfinite(actual_value));
+        EXPECT_NEAR(actual_value, expected_value, tolerance);
     }
-
-    TEST_CASE("Z transform: cosine sequence cos(w*n)");
     {
-        // Z{cos(w*n)} = z*(z - cos(w)) / (z^2 - 2z*cos(w) + 1)
-        auto w = SymbolicExpr::variable("w");
-        auto n = SymbolicExpr::variable("n");
-        auto f_n = SymbolicExpr::cos(SymbolicExpr::multiply(w, n));
-        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{cos(w*n)} should not be null");
-        EXPECT_FALSE(
-            std::dynamic_pointer_cast<const TransformNode>(LMCAS::detail::node(result)) != nullptr,
-            "Z{cos(w*n)} should be evaluated");
-        auto str = result->simplify()->to_string();
-        EXPECT_CONTAINS(str, {"z", "cos"}, "Z{cos(w*n)} contains z and cos");
+        const double actual_value = (z_value(SymbolicExpr::cos(angle), 2));
+        const double expected_value = (2.0 * (2.0 - std::cos(0.7)) / denominator);
+        const double tolerance = (1e-12);
+        EXPECT_TRUE(std::isfinite(actual_value));
+        EXPECT_NEAR(actual_value, expected_value, tolerance);
     }
+}
 
-    TEST_CASE("Z transform: constant sequence c");
-    {
-        // Z{5} = 5*z/(z-1)
-        auto five = SymbolicExpr::number(5);
-        auto result = z_transform_checked(five, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{5} should not be null");
-        auto z = SymbolicExpr::variable("z");
-        auto expected = SymbolicExpr::multiply(five,
-            SymbolicExpr::divide(z,
-                SymbolicExpr::add(z, SymbolicExpr::number(-1))));
-        EXPECT_EQ_EXPR(result->simplify(), expected->simplify(),
-            "Z{5} = 5*z/(z-1)");
-    }
+TEST(ZTransform, Linearity) {
+    auto n = SymbolicExpr::variable("n");
+    auto sum = SymbolicExpr::add(SymbolicExpr::number(1), n);
+    EXPECT_NEAR(z_value(sum, 3), 2.25, 1e-12) << "Z{1+n}(3)=3/2+3/4";
+    auto scaled = SymbolicExpr::multiply(SymbolicExpr::number(3),
+                                         SymbolicExpr::power(SymbolicExpr::number(2), n));
+    EXPECT_NEAR(z_value(scaled, 4), 6.0, 1e-12) << "Z{3*2^n}(4)=6";
+}
 
-    TEST_CASE("Z transform: linearity (sum)");
-    {
-        // Z{1 + n} = Z{1} + Z{n} = z/(z-1) + z/(z-1)^2
-        auto one = SymbolicExpr::number(1);
-        auto n = SymbolicExpr::variable("n");
-        auto f_n = SymbolicExpr::add(one, n);
-        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{1+n} should not be null");
-        EXPECT_FALSE(
-            std::dynamic_pointer_cast<const TransformNode>(LMCAS::detail::node(result)) != nullptr,
-            "Z{1+n} should be evaluated");
-    }
+TEST(ZTransform, WeightedExponential) {
+    auto n = SymbolicExpr::variable("n");
+    auto sequence = SymbolicExpr::multiply(n, SymbolicExpr::power(SymbolicExpr::number(2), n));
+    EXPECT_NEAR(z_value(sequence, 4), 2.0, 1e-12) << "Z{n*2^n}(4)=2*4/(4-2)^2";
+}
 
-    TEST_CASE("Z transform: linearity (scalar multiple)");
-    {
-        // Z{3*a^n} = 3*z/(z-a)
-        auto three = SymbolicExpr::number(3);
-        auto a = SymbolicExpr::variable("a");
-        auto n = SymbolicExpr::variable("n");
-        auto f_n = SymbolicExpr::multiply(three,
-            SymbolicExpr::power(a, n));
-        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{3*a^n} should not be null");
-        EXPECT_FALSE(
-            std::dynamic_pointer_cast<const TransformNode>(LMCAS::detail::node(result)) != nullptr,
-            "Z{3*a^n} should be evaluated");
-    }
-
-    TEST_CASE("Z transform: unsupported form is Inconclusive");
-    {
-        auto n = SymbolicExpr::variable("n");
-        auto f_n = SymbolicExpr::ln(n);
-        auto result = z_transform_checked(f_n, "n", "z");
-        EXPECT_TRUE(!result &&
-                        result.error().code == CasErrc::Inconclusive,
-                    "Z{ln(n)} is explicitly Inconclusive");
-    }
-
-    TEST_CASE("Z transform: n*a^n");
-    {
-        // Z{n*a^n} = a*z/(z-a)^2
-        auto a = SymbolicExpr::variable("a");
-        auto n = SymbolicExpr::variable("n");
-        auto f_n = SymbolicExpr::multiply(n, SymbolicExpr::power(a, n));
-        auto result = z_transform_checked(f_n, "n", "z").value().value.expression;
-        EXPECT_TRUE(result != nullptr, "Z{n*a^n} should not be null");
-        EXPECT_FALSE(
-            std::dynamic_pointer_cast<const TransformNode>(LMCAS::detail::node(result)) != nullptr,
-            "Z{n*a^n} should be evaluated");
-        auto str = result->simplify()->to_string();
-        EXPECT_CONTAINS(str, {"z", "a"}, "Z{n*a^n} contains z and a");
-    }
-
-    return TEST_REPORT();
+TEST(ZTransform, UnsupportedSequence) {
+    auto result = z_transform_checked(SymbolicExpr::ln(SymbolicExpr::variable("n")), "n", "z");
+    EXPECT_TRUE((!result && result.error().code == CasErrc::Inconclusive)) << "Z{ln(n)} cannot fabricate an evaluated result";
 }

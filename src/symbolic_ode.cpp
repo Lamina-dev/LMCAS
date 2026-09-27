@@ -1,8 +1,11 @@
-#include "../include/symbolic_ode.hpp"
+#include "symbolic_ode.hpp"
 #include "internal/ode_characteristic_roots.hpp"
-#include "symbolic_ast.hpp"
-#include "../include/symbolic.hpp"
-#include "../include/assumption_context.hpp"
+#include "internal/expression_analysis.hpp"
+#include "internal/normalization_utils.hpp"
+#include "symbolic_ode_engine.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "symbolic.hpp"
+#include "assumption_context.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include <cmath>
@@ -17,11 +20,37 @@ namespace {
 
 constexpr const char* kSolveLinear2OdeOperation = "solve_linear2_ode";
 
-} // namespace
+// Separation only describes regions where g(y) is finite and nonzero.
+// In that region reciprocal integer powers can be combined without extending
+// the domain of the original ODE, unlike unconditional normalization.
+std::shared_ptr<const SymbolicNode> reciprocal_on_regular_region(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    if (const auto product = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
+        std::vector<std::shared_ptr<const SymbolicNode>> factors;
+        factors.reserve(product->operands().size());
+        for (const auto& factor : product->operands()) {
+            factors.push_back(reciprocal_on_regular_region(factor));
+        }
+        return detail::make_node<MultiplyNode>(std::move(factors));
+    }
+    if (const auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        BigInt exponent;
+        if (try_get_integer_value(
+                std::dynamic_pointer_cast<const NumberNode>(power->exponent()), exponent)) {
+            return detail::make_node<PowerNode>(
+                power->base(), detail::make_node<NumberNode>(-exponent));
+        }
+    }
+    return detail::make_node<PowerNode>(node, detail::make_node<NumberNode>(BigInt(-1)));
+}
+
+}
 
 /// Check if the dependent variable is known Positive in the given context.
 static bool dep_var_is_positive(const std::string& y, const AssumptionContext* ctx) {
-    if (!ctx) return false;
+    if (!ctx) {
+        return false;
+    }
     auto y_expr = SymbolicExpr::variable(y);
     auto positive = ctx->is_positive(*y_expr);
     return positive && positive.value() == Tribool::True;
@@ -44,15 +73,39 @@ std::shared_ptr<SymbolicExpr> solve_separable_ode(
     const AssumptionContext* ctx
 ) {
 
-    auto inv_y = SymbolicExpr::divide(SymbolicExpr::number(1), rhs);
+    if (!is_separable(rhs, x, y)) {
+        return nullptr;
+    }
+
+    std::shared_ptr<SymbolicExpr> f;
+    std::shared_ptr<SymbolicExpr> g;
+    const auto& root = detail::node(rhs);
+    if (!expression_depends_on_variable(root, y)) {
+        f = rhs;
+        g = SymbolicExpr::number(1);
+    } else if (!expression_depends_on_variable(root, x)) {
+        f = SymbolicExpr::number(1);
+        g = rhs;
+    } else {
+        // The shared classifier guarantees a product of uncoupled factors here.
+        const auto& product = static_cast<const MultiplyNode&>(*root);
+        std::vector<std::shared_ptr<const SymbolicNode>> x_factors;
+        std::vector<std::shared_ptr<const SymbolicNode>> y_factors;
+        for (const auto& factor : product.operands()) {
+            auto& factors = expression_depends_on_variable(factor, y) ? y_factors : x_factors;
+            factors.push_back(factor);
+        }
+        f = detail::make_expression_ptr(detail::make_node<MultiplyNode>(std::move(x_factors)));
+        g = detail::make_expression_ptr(detail::make_node<MultiplyNode>(std::move(y_factors)));
+    }
+
+    auto inv_y = detail::make_expression_ptr(reciprocal_on_regular_region(detail::node(g)))->simplify();
     auto int_y = inv_y->integrate(y);
-    auto int_x = SymbolicExpr::number(1)->integrate(x);
+    auto int_x = f->simplify()->integrate(x);
+    auto result = SymbolicExpr::add(
+        int_y, SymbolicExpr::multiply(SymbolicExpr::number(-1), int_x))->simplify();
 
-    auto result = SymbolicExpr::add(int_y, SymbolicExpr::multiply(SymbolicExpr::number(-1), int_x));
-
-    // When the dependent variable is known Positive, prefer the positive
-    // solution branch by wrapping in abs() (which simplifies to identity for
-    // positive expressions, signaling downstream that only positive values apply).
+    // Preserve the existing positive-context branch marker.
     if (dep_var_is_positive(y, ctx)) {
         result = make_abs(result);
     }
@@ -89,6 +142,54 @@ std::shared_ptr<SymbolicExpr> solve_linear1_ode(
 }
 
 // solve_linear2_ode
+
+static std::shared_ptr<SymbolicExpr> linear2_root_basis(
+    const std::vector<ode_root_detail::CharRoot>& roots,
+    const std::string& x) {
+    auto variable = SymbolicExpr::variable(x);
+    auto solution = SymbolicExpr::number(0);
+    int constant_index = 1;
+    for (const auto& root : roots) {
+        auto exponential = SymbolicExpr::exp(
+            SymbolicExpr::multiply(
+                SymbolicExpr::number(root.real_part), variable));
+        if (root.is_complex) {
+            auto argument = SymbolicExpr::multiply(
+                SymbolicExpr::number(root.imag_part), variable);
+            auto cosine_basis = SymbolicExpr::multiply(
+                exponential, SymbolicExpr::cos(argument));
+            auto sine_basis = SymbolicExpr::multiply(
+                exponential, SymbolicExpr::sin(argument));
+            auto cosine_term = SymbolicExpr::multiply(
+                SymbolicExpr::variable(
+                    "C" + std::to_string(constant_index++)),
+                cosine_basis);
+            auto sine_term = SymbolicExpr::multiply(
+                SymbolicExpr::variable(
+                    "C" + std::to_string(constant_index++)),
+                sine_basis);
+            solution = SymbolicExpr::add(
+                solution, SymbolicExpr::add(cosine_term, sine_term));
+            continue;
+        }
+        for (int power = 0; power < root.multiplicity; ++power) {
+            auto basis = exponential;
+            if (power > 0) {
+                basis = SymbolicExpr::multiply(
+                    SymbolicExpr::power(
+                        variable, SymbolicExpr::number(power)),
+                    exponential);
+            }
+            solution = SymbolicExpr::add(
+                solution,
+                SymbolicExpr::multiply(
+                    SymbolicExpr::variable(
+                        "C" + std::to_string(constant_index++)),
+                    basis));
+        }
+    }
+    return solution;
+}
 
 static Result<std::shared_ptr<SymbolicExpr>>
 solve_linear2_homogeneous(
@@ -130,51 +231,11 @@ solve_linear2_homogeneous(
         return Result<std::shared_ptr<SymbolicExpr>>::failure(roots.error());
     }
 
-    auto variable = SymbolicExpr::variable(x);
-    auto solution = SymbolicExpr::number(0);
-    int constant_index = 1;
-    for (const auto& root : roots.value()) {
-        auto exponential = SymbolicExpr::exp(
-            SymbolicExpr::multiply(
-                SymbolicExpr::number(root.real_part), variable));
-        if (root.is_complex) {
-            auto argument = SymbolicExpr::multiply(
-                SymbolicExpr::number(root.imag_part), variable);
-            auto cosine_basis = SymbolicExpr::multiply(
-                exponential, SymbolicExpr::cos(argument));
-            auto sine_basis = SymbolicExpr::multiply(
-                exponential, SymbolicExpr::sin(argument));
-            auto cosine_term = SymbolicExpr::multiply(
-                SymbolicExpr::variable(
-                    "C" + std::to_string(constant_index++)),
-                cosine_basis);
-            auto sine_term = SymbolicExpr::multiply(
-                SymbolicExpr::variable(
-                    "C" + std::to_string(constant_index++)),
-                sine_basis);
-            solution = SymbolicExpr::add(
-                solution,
-                SymbolicExpr::add(cosine_term, sine_term));
-            continue;
-        }
-        for (int power = 0; power < root.multiplicity; ++power) {
-            auto basis = exponential;
-            if (power > 0) {
-                basis = SymbolicExpr::multiply(
-                    SymbolicExpr::power(
-                        variable, SymbolicExpr::number(power)),
-                    exponential);
-            }
-            solution = SymbolicExpr::add(
-                solution,
-                SymbolicExpr::multiply(
-                    SymbolicExpr::variable(
-                        "C" + std::to_string(constant_index++)),
-                    basis));
-        }
-    }
+    auto solution = linear2_root_basis(roots.value(), x);
     solution = solution->simplify();
-    if (dep_var_is_positive(y, ctx)) solution = make_abs(solution);
+    if (dep_var_is_positive(y, ctx)) {
+        solution = make_abs(solution);
+    }
     return Result<std::shared_ptr<SymbolicExpr>>::success(
         std::move(solution));
 }
@@ -216,7 +277,9 @@ Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
     const AssumptionContext* ctx
 ) {
     auto step = context.consume_steps(1, kSolveLinear2OdeOperation);
-    if (!step) return Result<std::shared_ptr<SymbolicExpr>>::failure(step.error());
+    if (!step) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(step.error());
+    }
 
     if (!fx || !LMCAS::detail::node(fx)) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(

@@ -2,6 +2,7 @@
 
 #include "internal/exact_sturm.hpp"
 #include "internal/lmmc_lifecycle.hpp"
+#include "internal/solver_support.hpp"
 #include "lmmc/nonlinear.h"
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
@@ -18,12 +19,6 @@ namespace {
 constexpr const char* kBisectionOperation = "bisection";
 constexpr const char* kNewtonOperation = "newton_raphson";
 
-double finite_midpoint(double lower, double upper) {
-    if (lower < 0.0 && upper > 0.0) {
-        return lower * 0.5 + upper * 0.5;
-    }
-    return lower + (upper - lower) * 0.5;
-}
 
 Result<double> evaluate_root_function(
     const std::shared_ptr<SymbolicExpr>& expression,
@@ -46,7 +41,9 @@ Result<double> evaluate_root_function(
     auto evaluated = evaluate_numeric(
         *expression, NumericBindings{{variable, static_cast<double>(value)}},
         context);
-    if (!evaluated) return Result<double>::failure(evaluated.error());
+    if (!evaluated) {
+        return Result<double>::failure(evaluated.error());
+    }
     if (!evaluated.value().is_finite() ||
         !std::isfinite(evaluated.value().value)) {
         return Result<double>::failure(
@@ -92,7 +89,9 @@ double evaluate_root_callback(
     const std::shared_ptr<SymbolicExpr>& expression,
     double x,
     RootCallbacks& callbacks) {
-    if (callbacks.error) return std::numeric_limits<double>::quiet_NaN();
+    if (callbacks.error) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
     if (callbacks.enforce_bracket &&
         (x < callbacks.bracket_lower || x > callbacks.bracket_upper)) {
         callbacks.left_bracket = true;
@@ -160,7 +159,9 @@ NumericRootResult run_bisection_backend(
     if (lower == upper) {
         auto value = evaluate_root_function(
             function, variable, lower, context, operation);
-        if (!value) return NumericRootResult::failure(value.error());
+        if (!value) {
+            return NumericRootResult::failure(value.error());
+        }
         if (std::abs(value.value()) <= options.tolerance) {
             return NumericRootResult::success(
                 NumericRoot{lower, std::abs(value.value()), 0});
@@ -178,7 +179,9 @@ NumericRootResult run_bisection_backend(
     lmmc_nonlinear_result_t backend{};
     const auto status = lmmc_bisection_solve(
         root_function_callback, &callbacks, lower, upper, &config, &backend);
-    if (callbacks.error) return NumericRootResult::failure(*callbacks.error);
+    if (callbacks.error) {
+        return NumericRootResult::failure(*callbacks.error);
+    }
     if (status == LMMC_STATUS_INVALID_ARGUMENT &&
         backend.failure_reason == LMMC_NONLINEAR_FAILURE_INVALID_BRACKET) {
         return NumericRootResult::success(std::nullopt);
@@ -206,8 +209,80 @@ NumericRootResult run_newton_backend(
     (void)lmmc_newton_solve(
         root_function_callback, root_derivative_callback, &callbacks, initial,
         &config, &backend);
-    if (callbacks.error) return NumericRootResult::failure(*callbacks.error);
+    if (callbacks.error) {
+        return NumericRootResult::failure(*callbacks.error);
+    }
     return backend_root_result(backend, options.tolerance);
+}
+
+std::optional<CasError> append_verified_root(
+    std::vector<NumericRoot>& results, const NumericRootResult& candidate,
+    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var,
+    ComputationContext& context, lmmc_real_t tolerance) {
+    if (!candidate) {
+        return candidate.error();
+    }
+    if (!candidate.value()) {
+        return std::nullopt;
+    }
+    auto root = *candidate.value();
+    auto verified = evaluate_root_function(expr, var, root.value, context, "solve_numeric");
+    if (!verified) {
+        return std::move(verified.error());
+    }
+    root.residual = std::abs(verified.value());
+    if (root.residual <= tolerance) {
+        results.push_back(root);
+    }
+    return std::nullopt;
+}
+
+NumericRootsResult solve_isolated_polynomial(
+    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var,
+    const Polynomial<Rational>& polynomial, ComputationContext& context,
+    const SolveOptions& opts) {
+    std::vector<NumericRoot> results;
+    auto derivative = expr->differentiate(var);
+    auto isolated = isolate_real_roots_checked(polynomial, context);
+    if (!isolated) {
+        return NumericRootsResult::failure(isolated.error());
+    }
+    for (const auto& [lower, upper] : isolated.value()) {
+        if (opts.max_roots > 0 &&
+            static_cast<int>(results.size()) >= opts.max_roots) {
+            break;
+        }
+        auto step = context.consume_steps(1, "solve_numeric");
+        if (!step) {
+            return NumericRootsResult::failure(step.error());
+        }
+        const lmmc_real_t lo = lower.to_double();
+        const lmmc_real_t hi = upper.to_double();
+        const lmmc_real_t initial = solver_detail::finite_midpoint(lo, hi);
+        auto candidate = newton_raphson_checked(
+            expr, derivative, var, initial, lo, hi, context, opts);
+        auto failure = append_verified_root(
+            results, candidate, expr, var, context, opts.tolerance * 100.0);
+        if (failure) {
+            return NumericRootsResult::failure(std::move(*failure));
+        }
+    }
+    return NumericRootsResult::success(std::move(results));
+}
+
+NumericRootsResult solve_initial_guess(
+    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var,
+    ComputationContext& context, const SolveOptions& opts) {
+    std::vector<NumericRoot> results;
+    const lmmc_real_t initial = opts.has_initial_guess ? opts.initial_guess : 0.0;
+    auto derivative = expr->differentiate(var);
+    auto candidate = newton_raphson_checked(expr, derivative, var, initial, context, opts);
+    auto failure = append_verified_root(
+        results, candidate, expr, var, context, opts.tolerance);
+    if (failure) {
+        return NumericRootsResult::failure(std::move(*failure));
+    }
+    return NumericRootsResult::success(std::move(results));
 }
 
 } // namespace
@@ -234,7 +309,9 @@ NumericRootResult bisection_checked(
     ComputationContext& context,
     const SolveOptions& options) {
     auto valid = invalid_root_options(options, kBisectionOperation);
-    if (!valid) return valid;
+    if (!valid) {
+        return valid;
+    }
     if (!function || variable.empty() || !std::isfinite(lower) ||
         !std::isfinite(upper) || lower > upper) {
         return NumericRootResult::failure(
@@ -258,6 +335,15 @@ NumericRootResult bisection_checked(
         function, variable, lower, upper, context, options);
 }
 
+static bool valid_newton_bracket(
+    lmmc_real_t initial, lmmc_real_t lower, lmmc_real_t upper) {
+    if (!std::isfinite(initial) || !std::isfinite(lower) ||
+        !std::isfinite(upper)) {
+        return false;
+    }
+    return lower <= upper && initial >= lower && initial <= upper;
+}
+
 NumericRootResult newton_raphson_checked(
     const std::shared_ptr<SymbolicExpr>& function,
     const std::shared_ptr<SymbolicExpr>& derivative,
@@ -268,11 +354,11 @@ NumericRootResult newton_raphson_checked(
     ComputationContext& context,
     const SolveOptions& options) {
     auto valid = invalid_root_options(options, kNewtonOperation);
-    if (!valid) return valid;
+    if (!valid) {
+        return valid;
+    }
     if (!function || !derivative || variable.empty() ||
-        !std::isfinite(initial) || !std::isfinite(bracket_lower) ||
-        !std::isfinite(bracket_upper) || bracket_lower > bracket_upper ||
-        initial < bracket_lower || initial > bracket_upper) {
+        !valid_newton_bracket(initial, bracket_lower, bracket_upper)) {
         return NumericRootResult::failure(
             CasErrc::InvalidArgument,
             "Newton function, derivative, variable, bracket, and initial value are invalid",
@@ -281,7 +367,9 @@ NumericRootResult newton_raphson_checked(
     auto newton = run_newton_backend(
         function, derivative, variable, initial, context, options, true,
         bracket_lower, bracket_upper);
-    if (!newton || newton.value()) return newton;
+    if (!newton || newton.value()) {
+        return newton;
+    }
     return run_bisection_backend(
         function, variable, bracket_lower, bracket_upper, context, options,
         kBisectionOperation);
@@ -309,7 +397,9 @@ NumericRootResult newton_raphson_checked(
     ComputationContext& context,
     const SolveOptions& options) {
     auto valid = invalid_root_options(options, kNewtonOperation);
-    if (!valid) return valid;
+    if (!valid) {
+        return valid;
+    }
     if (!function || !derivative || variable.empty() ||
         !std::isfinite(initial)) {
         return NumericRootResult::failure(
@@ -350,9 +440,10 @@ NumericRootsResult solve_numeric_checked(
     const SolveOptions& opts)
 {
     constexpr const char* operation = "solve_numeric";
-    std::vector<NumericRoot> results;
     auto options = invalid_root_options(opts, operation);
-    if (!options) return NumericRootsResult::failure(options.error());
+    if (!options) {
+        return NumericRootsResult::failure(options.error());
+    }
     if (!expr) {
         return NumericRootsResult::failure(CasErrc::InvalidArgument,
                                            "expression cannot be null",
@@ -369,66 +460,25 @@ NumericRootsResult solve_numeric_checked(
                                            operation);
     }
     if (opts.max_roots == 0) {
-        return NumericRootsResult::success(std::move(results));
+        return NumericRootsResult::success({});
     }
 
     auto initial_step = context.consume_steps(1, operation);
-    if (!initial_step) return NumericRootsResult::failure(initial_step.error());
+    if (!initial_step) {
+        return NumericRootsResult::failure(initial_step.error());
+    }
 
     auto recognized_poly = recognize_rational_polynomial(*expr, var, context);
-    if (!recognized_poly) return NumericRootsResult::failure(recognized_poly.error());
+    if (!recognized_poly) {
+        return NumericRootsResult::failure(recognized_poly.error());
+    }
 
     if (recognized_poly.value() && !recognized_poly.value()->is_zero() &&
         recognized_poly.value()->degree() >= 1) {
-        const Polynomial<Rational>& poly = *recognized_poly.value();
-        auto df_expr = expr->differentiate(var);
-        auto isolated = isolate_real_roots_checked(poly, context);
-        if (!isolated) return NumericRootsResult::failure(isolated.error());
-        for (const auto& [lo_rat, hi_rat] : isolated.value()) {
-            if (opts.max_roots > 0 &&
-                static_cast<int>(results.size()) >= opts.max_roots) {
-                break;
-            }
-
-            auto interval_step = context.consume_steps(1, operation);
-            if (!interval_step) return NumericRootsResult::failure(interval_step.error());
-
-            lmmc_real_t lo = lo_rat.to_double();
-            lmmc_real_t hi = hi_rat.to_double();
-            lmmc_real_t x0 = finite_midpoint(lo, hi);
-            auto root_result = newton_raphson_checked(
-                expr, df_expr, var, x0, lo, hi, context, opts);
-            if (!root_result) return NumericRootsResult::failure(root_result.error());
-            if (!root_result.value()) continue;
-
-            NumericRoot root = *root_result.value();
-            auto verified = evaluate_root_function(
-                expr, var, root.value, context, operation);
-            if (!verified) return NumericRootsResult::failure(verified.error());
-            root.residual = std::abs(verified.value());
-            if (root.residual <= opts.tolerance * 100.0) {
-                results.push_back(root);
-            }
-        }
-    } else {
-        lmmc_real_t x0 = opts.has_initial_guess ? opts.initial_guess : 0.0;
-        auto df_expr = expr->differentiate(var);
-        auto root_result = newton_raphson_checked(
-            expr, df_expr, var, x0, context, opts);
-        if (!root_result) return NumericRootsResult::failure(root_result.error());
-        if (root_result.value()) {
-            NumericRoot root = *root_result.value();
-            auto verified = evaluate_root_function(
-                expr, var, root.value, context, operation);
-            if (!verified) return NumericRootsResult::failure(verified.error());
-            root.residual = std::abs(verified.value());
-            if (root.residual <= opts.tolerance) {
-                results.push_back(root);
-            }
-        }
+        return solve_isolated_polynomial(
+            expr, var, *recognized_poly.value(), context, opts);
     }
-
-    return NumericRootsResult::success(std::move(results));
+    return solve_initial_guess(expr, var, context, opts);
 }
 
 }

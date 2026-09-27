@@ -183,7 +183,15 @@ LMCAS_API ComplexRootsResult solve_complex_nth_root_checked(
     int n);
 
 /**
- * @brief 求复系数一元二次方程 az^2 + bz + c = 0 的根.
+ * @brief 求解系数已证为实数且 a 非零的方程 az^2 + bz + c = 0。
+ *
+ * 按公式的 (+sqrt, -sqrt) 顺序返回两个直角坐标形式的根，保留重数。
+ * 负判别式的平方根仅进入虚部；返回前须将所有候选根代入
+ * 直角坐标多项式并将残差化简为零。
+ * 空输入返回 InvalidArgument；a 已证为零返回 DomainError；
+ * 系数未证为实数返回 UnsupportedExpression。
+ * a 的非零性、判别式符号或零残差未获证明时返回 Inconclusive。
+ * 使用上下文假设并传播计算错误。
  */
 LMCAS_API ComplexRootsResult solve_complex_quadratic_checked(
     std::shared_ptr<SymbolicExpr> a,

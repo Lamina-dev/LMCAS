@@ -4,10 +4,174 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: "2"
+  RC_PARAMS: "seed=42"
 
 jobs:
+  source-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Export Git-visible sources including nested dependencies
+        working-directory: ${{ github.workspace }}
+        run: python LMMC/cmake/check_package.py --project lmcas --snapshot-dir "$RUNNER_TEMP/lmcas-source"
+      - name: Install locked quality tools
+        working-directory: ${{ runner.temp }}/lmcas-source
+        run: python -m pip install --require-hashes -r cmake/quality-requirements.txt
+      - name: Configure all first-party source owners
+        working-directory: ${{ runner.temp }}/lmcas-source
+        run: >-
+          cmake -S . -B build/source-quality -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug -DLMCAS_WARNINGS_AS_ERRORS=ON
+          -DBUILD_TESTING=ON -DLMCAS_BUILD_TESTS=ON
+          -DLMCAS_BUILD_LMMC_TESTS=ON
+          -DLMCAS_BUILD_BENCHMARKS=ON
+          -DLMMC_BUILD_EXAMPLES=ON -DLMCAS_ENABLE_QUALITY_GATES=ON
+      - name: Build all first-party targets and installed consumers
+        working-directory: ${{ runner.temp }}/lmcas-source
+        run: cmake --build build/source-quality --parallel 2
+      - name: Enforce both projects' quality and compiled architecture
+        working-directory: ${{ runner.temp }}/lmcas-source
+        run: >-
+          cmake --build build/source-quality
+          --target lmcas_quality lmcas_source_structure lmcas_source_ownership lmcas_integer_boundaries lmcas_naming
+          lmmc_quality lmmc_source_structure lmmc_source_ownership lmmc_integer_boundaries lmmc_naming
+          lmcas_architecture
+      - name: Run mandatory quality CTests without label filters
+        working-directory: ${{ runner.temp }}/lmcas-source
+        run: >-
+          ctest --test-dir build/source-quality --output-on-failure --no-tests=error --timeout 600
+          -R '^(lmcas|lmmc)_(quality|source_structure|source_ownership|integer_boundaries|naming|architecture)$'
+      - name: Reject negative quality fixtures
+        working-directory: ${{ runner.temp }}/lmcas-source
+        run: >-
+          ctest --test-dir build/source-quality --output-on-failure --no-tests=error --timeout 600
+          -R '^(lmcas_architecture_negative_fixtures|lmmc_naming_negative_fixtures)$'
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            asm: AUTO
+            quality: "ON"
+          - runner: macos-15-intel
+            arch: x86_64
+            asm: GENERIC
+            quality: "OFF"
+    name: macos-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Confirm native runner architecture
+        run: test "$(uname -m)" = "${{ matrix.arch }}"
+      - name: Install arm64 architecture evidence tools
+        if: matrix.quality == 'ON'
+        run: |
+          brew install llvm
+          echo "LLVM_NM=$(brew --prefix llvm)/bin/llvm-nm" >> "$GITHUB_ENV"
+          python3 -m pip install --require-hashes -r cmake/quality-requirements.txt
+      - name: Configure full Debug stack
+        run: |
+          args=(
+            -S . -B build/debug -G Ninja
+            -DCMAKE_BUILD_TYPE=Debug
+            "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
+            -DBUILD_TESTING=ON
+            -DLMCAS_BUILD_TESTS=ON
+            -DLMCAS_BUILD_LMMC_TESTS=ON
+            -DLMCAS_BUILD_BENCHMARKS=ON
+            -DLMMC_BUILD_EXAMPLES=ON
+            -DLMCAS_WARNINGS_AS_ERRORS=ON
+            "-DLMCAS_LMMP_ASM=${{ matrix.asm }}"
+            "-DLMCAS_ENABLE_QUALITY_GATES=${{ matrix.quality }}"
+            -DCMAKE_INSTALL_LIBDIR=lib
+          )
+          if [[ "${{ matrix.quality }}" == "ON" ]]; then
+            args+=("-DCMAKE_NM=$LLVM_NM")
+          fi
+          cmake "${args[@]}"
+      - name: Build full Debug stack
+        run: cmake --build build/debug --parallel 2
+      - name: Enforce arm64 quality and compiled architecture
+        if: matrix.quality == 'ON'
+        run: >-
+          cmake --build build/debug --parallel 2
+          --target lmcas_quality lmcas_source_structure lmcas_source_ownership
+          lmcas_integer_boundaries lmcas_naming lmcas_architecture
+          lmmc_quality lmmc_source_structure lmmc_source_ownership
+          lmmc_integer_boundaries lmmc_naming
+      - name: Reject arm64 negative quality fixtures
+        if: matrix.quality == 'ON'
+        run: >-
+          ctest --test-dir build/debug --output-on-failure --no-tests=error --timeout 600
+          -R '^(lmcas_architecture_negative_fixtures|lmmc_naming_negative_fixtures)$'
+      - name: Run full Debug test stack
+        run: ctest --test-dir build/debug --output-on-failure --no-tests=error --timeout 600
+      - name: Configure standalone Release package producers
+        run: |
+          common=(
+            -G Ninja
+            -DCMAKE_BUILD_TYPE=Release
+            "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
+            -DCMAKE_INSTALL_LIBDIR=lib
+          )
+          if [[ "${{ matrix.quality }}" == "ON" ]]; then
+            common+=("-DCMAKE_NM=$LLVM_NM")
+          fi
+          cmake -S . -B build/lmcas-release "${common[@]}" \
+            -DBUILD_TESTING=OFF \
+            -DLMCAS_BUILD_TESTS=OFF \
+            -DLMCAS_BUILD_LMMC_TESTS=OFF \
+            -DLMCAS_BUILD_BENCHMARKS=OFF \
+            -DLMCAS_WARNINGS_AS_ERRORS=ON \
+            "-DLMCAS_LMMP_ASM=${{ matrix.asm }}"
+          cmake -S LMMC -B build/lmmc-release "${common[@]}" \
+            -DLMMC_BUILD_TESTS=OFF \
+            -DLMMC_BUILD_EXAMPLES=OFF \
+            -DLMMC_BUILD_SHARED=ON \
+            -DLMMC_WARNINGS_AS_ERRORS=ON \
+            "-DLMMC_LMMP_ASM=${{ matrix.asm }}"
+      - name: Check relocated standalone LMCAS package
+        run: >-
+          python3 LMMC/cmake/check_package.py --project lmcas
+          --build-dir build/lmcas-release
+          --work-dir "$RUNNER_TEMP/lmcas-macos-package"
+          --config Release --parallel 2
+      - name: Check relocated standalone LMMC package
+        run: >-
+          python3 LMMC/cmake/check_package.py --project lmmc
+          --build-dir build/lmmc-release
+          --work-dir "$RUNNER_TEMP/lmmc-macos-package"
+          --config Release --parallel 2
+      - name: Confirm packaged libraries are native
+        run: |
+          for report in \
+            "$RUNNER_TEMP/lmcas-macos-package/package_report.json" \
+            "$RUNNER_TEMP/lmmc-macos-package/package_report.json"; do
+            while IFS= read -r library; do
+              test "$(lipo -archs "$library")" = "${{ matrix.arch }}"
+            done < <(python3 -c \
+              'import json,sys; data=json.load(open(sys.argv[1])); files=[v["file"] for v in data["targets"].values() if v["type"] == "SHARED_LIBRARY"]; assert files; print(*files, sep="\n")' \
+              "$report")
+          done
+
   linux:
     strategy:
       fail-fast: false
@@ -38,16 +202,15 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DBUILD_TESTING=ON
-          -DLMCAS_BUILD_BENCHMARKS=OFF
+          -DLMCAS_BUILD_TESTS=ON
+          -DLMCAS_BUILD_BENCHMARKS=ON
           -DLMCAS_BUILD_LMMC_TESTS=ON
-          -DLMCAS_BUILD_GTEST_TESTS=ON
-          -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_LMMP_ASM=${{ matrix.asm }}
       - name: Build
         run: cmake --build build
       - name: Test
-        run: ctest --test-dir build --output-on-failure --timeout 300
+        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 300
 
   lmmc-linux:
     strategy:
@@ -56,12 +219,15 @@ jobs:
         include:
           - compiler: gcc
             cc: gcc
+            cxx: g++
             asm: AUTO
           - compiler: gcc-generic
             cc: gcc
+            cxx: g++
             asm: GENERIC
           - compiler: clang
             cc: clang
+            cxx: clang++
             asm: AUTO
     runs-on: ubuntu-latest
     steps:
@@ -71,6 +237,7 @@ jobs:
       - name: Configure
         env:
           CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: >-
           cmake -S LMMC -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
@@ -125,43 +292,76 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -DBUILD_TESTING=ON
-          -DLMCAS_BUILD_BENCHMARKS=OFF
+          -DLMCAS_BUILD_TESTS=ON
+          -DLMCAS_BUILD_BENCHMARKS=ON
           -DLMCAS_BUILD_LMMC_TESTS=ON
-          -DLMCAS_BUILD_GTEST_TESTS=ON
-          -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_LMMP_ASM=AUTO
           -DLMMC_BUILD_SHARED=${{ matrix.shared }}
+          -DCMAKE_INSTALL_LIBDIR=lib
       - name: Build
         run: cmake --build build
       - name: Test
-        run: ctest --test-dir build --output-on-failure --timeout 300
+        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 300
+      - name: Check relocated MinGW package exports and consumers
+        if: matrix.build_type == 'Release' && matrix.shared == 'ON'
+        run: >-
+          python LMMC/cmake/check_package.py --project lmcas
+          --build-dir build --work-dir "$RUNNER_TEMP/lmcas-mingw-package-check"
+          --config Release --parallel 2
 
   package-consumer:
+    needs: source-quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Export Git-visible package sources
+        working-directory: ${{ github.workspace }}
+        run: python3 LMMC/cmake/check_package.py --project lmcas --snapshot-dir "$RUNNER_TEMP/lmcas-package-source"
       - name: Configure package build
+        working-directory: ${{ runner.temp }}/lmcas-package-source
         run: >-
           cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_BUILD_TYPE=Release
           -DBUILD_TESTING=OFF
           -DLMCAS_BUILD_BENCHMARKS=OFF
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_LMMP_ASM=AUTO
-          -DCMAKE_INSTALL_PREFIX="$PWD/dist"
-      - name: Build lmcas
-        run: cmake --build build --target lmcas
-      - name: Install
-        run: cmake --install build
-      - name: Configure consumer
-        run: cmake -S tests/package_consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PWD/dist"
-      - name: Build consumer
-        run: cmake --build build-consumer
-      - name: Run consumer
-        run: LD_LIBRARY_PATH="$PWD/dist/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ./build-consumer/lmcas_package_consumer
+          -DCMAKE_INSTALL_LIBDIR=lib
+      - name: Check relocated unversioned package exports and standalone headers
+        working-directory: ${{ runner.temp }}/lmcas-package-source
+        run: >-
+          python3 LMMC/cmake/check_package.py --project lmcas
+          --build-dir build --work-dir "$RUNNER_TEMP/lmcas-package-check"
+          --config Release --parallel 2
+
+  static-pic:
+    name: Release LMCAS shared, LMMC static + LMMP shared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure static-PIC LMMC in the shared LMCAS stack
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON -DLMCAS_BUILD_TESTS=ON
+          -DLMCAS_BUILD_LMMC_TESTS=ON
+          -DLMCAS_BUILD_BENCHMARKS=ON
+          -DLMCAS_WARNINGS_AS_ERRORS=ON -DLMCAS_LMMP_ASM=GENERIC
+          -DLMMC_BUILD_SHARED=OFF
+          -DCMAKE_INSTALL_LIBDIR=lib
+      - name: Build full Release stack including benchmarks
+        run: cmake --build build
+      - name: Run all Release suites and benchmark smoke
+        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 600
+      - name: Install relocate and exercise the shared LMCAS consumer
+        run: >-
+          python3 LMMC/cmake/check_package.py --project lmcas
+          --build-dir build --work-dir "$RUNNER_TEMP/lmcas-static-pic-package-check"
+          --config Release --parallel 2
 
   sanitizers:
     runs-on: ubuntu-latest
@@ -174,10 +374,9 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DBUILD_TESTING=ON
-          -DLMCAS_BUILD_BENCHMARKS=OFF
+          -DLMCAS_BUILD_TESTS=ON
+          -DLMCAS_BUILD_BENCHMARKS=ON
           -DLMCAS_BUILD_LMMC_TESTS=ON
-          -DLMCAS_BUILD_GTEST_TESTS=ON
-          -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_ENABLE_SANITIZERS=ON
           -DLMCAS_LMMP_ASM=GENERIC
@@ -186,9 +385,9 @@ jobs:
       - name: Test
         env:
           ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
-          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp:print_suppressions=0
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir build --output-on-failure --timeout 600
+        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 600
 
   thread-sanitizer:
     runs-on: ubuntu-latest
@@ -201,10 +400,9 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DBUILD_TESTING=ON
-          -DLMCAS_BUILD_BENCHMARKS=OFF
+          -DLMCAS_BUILD_TESTS=ON
+          -DLMCAS_BUILD_BENCHMARKS=ON
           -DLMCAS_BUILD_LMMC_TESTS=ON
-          -DLMCAS_BUILD_GTEST_TESTS=ON
-          -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_ENABLE_TSAN=ON
           -DLMCAS_LMMP_ASM=GENERIC
@@ -213,7 +411,7 @@ jobs:
       - name: Test
         env:
           TSAN_OPTIONS: halt_on_error=1
-        run: ctest --test-dir build --output-on-failure --timeout 600
+        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 600
 
   static-analysis:
     runs-on: ubuntu-latest
@@ -229,9 +427,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug
           -DBUILD_TESTING=OFF
           -DLMCAS_BUILD_BENCHMARKS=OFF
-          -DLMCAS_BUILD_STANDALONE_TESTS=OFF
+          -DLMCAS_BUILD_TESTS=OFF
           -DLMCAS_BUILD_LMMC_TESTS=OFF
-          -DLMCAS_BUILD_GTEST_TESTS=OFF
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_ENABLE_CLANG_TIDY=ON
           -DLMCAS_LMMP_ASM=GENERIC
@@ -251,23 +448,23 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DBUILD_TESTING=ON
-          -DLMCAS_BUILD_BENCHMARKS=OFF
+          -DLMCAS_BUILD_TESTS=ON
+          -DLMCAS_BUILD_BENCHMARKS=ON
           -DLMCAS_BUILD_LMMC_TESTS=ON
-          -DLMCAS_BUILD_GTEST_TESTS=ON
-          -DLMCAS_FETCH_GTEST=ON
           -DLMCAS_WARNINGS_AS_ERRORS=ON
           -DLMCAS_ENABLE_COVERAGE=ON
           -DLMCAS_LMMP_ASM=GENERIC
       - name: Build
         run: cmake --build build
       - name: Test
-        run: ctest --test-dir build --output-on-failure --timeout 300
+        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 300
       - name: Generate coverage report
         if: always()
         run: >-
           python3 -m gcovr
           --config .gcovr.cfg
           --object-directory build
+          --fail-under-line 77 --fail-under-branch 44
           --json-summary build/coverage-summary.json
           --xml-pretty --xml build/coverage.xml
           --html-details build/coverage.html

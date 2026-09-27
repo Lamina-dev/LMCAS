@@ -13,14 +13,7 @@ int run_lmmc_linalg_consumer_checks();
 int run_expr_consumer_checks();
 int run_lmmc_stdlib_consumer_checks();
 
-int main() {
-    auto x = SymbolicExpr::variable("x");
-    auto expr = SymbolicExpr::add(x, SymbolicExpr::number(1));
-    if (!expr) {
-        std::cerr << "failed to construct expression\n";
-        return 1;
-    }
-
+static int check_equation_and_polynomial(const std::shared_ptr<SymbolicExpr>& expr) {
     LMCAS::ComputationContext context;
     auto solved = LMCAS::solve_equation(
         expr, "x", context, LMCAS::SolveOptions{});
@@ -32,22 +25,16 @@ int main() {
     }
 
     auto polynomial = LMCAS::symbolic_to_poly<Rational>(expr, "x");
-    if (polynomial.coeffs.size() != 2 ||
-        polynomial.coeffs[0] != Rational(1) ||
-        polynomial.coeffs[1] != Rational(1)) {
+    if (!polynomial || polynomial.value().coeffs.size() != 2 ||
+        polynomial.value().coeffs[0] != Rational(1) ||
+        polynomial.value().coeffs[1] != Rational(1)) {
         std::cerr << "failed to convert expression to polynomial\n";
         return 3;
     }
+    return 0;
+}
 
-    auto interval = LMCAS::Interval::point(SymbolicExpr::number(0));
-    LMCAS::ComputationContext interval_context;
-    auto interval_union = LMCAS::IntervalUnion::from_intervals_checked(
-        {interval}, interval_context);
-    if (!interval_union || interval_union.value().intervals().size() != 1) {
-        std::cerr << "failed to construct interval union\n";
-        return 4;
-    }
-
+static int check_property_store(const LMCAS::Interval& interval) {
     LMCAS::PropertyStore properties;
     LMCAS::ComputationContext property_context;
     auto declared = properties.declare_continuous_checked(
@@ -63,7 +50,10 @@ int main() {
         std::cerr << "failed to query property\n";
         return 6;
     }
+    return 0;
+}
 
+static int check_assumptions(const LMCAS::Interval& interval) {
     LMCAS::AssumptionContext assumptions;
     LMCAS::QueryInterface queries(assumptions);
     auto one = SymbolicExpr::number(1);
@@ -83,6 +73,35 @@ int main() {
     if (!context_continuous || context_continuous.value() != LMCAS::Tribool::True) {
         std::cerr << "failed to query assumption property\n";
         return 9;
+    }
+    return 0;
+}
+
+int main() {
+    auto x = SymbolicExpr::variable("x");
+    auto expr = SymbolicExpr::add(x, SymbolicExpr::number(1));
+    if (!expr) {
+        std::cerr << "failed to construct expression\n";
+        return 1;
+    }
+
+    if (const int status = check_equation_and_polynomial(expr); status != 0) {
+        return status;
+    }
+    auto interval = LMCAS::Interval::point(SymbolicExpr::number(0));
+    LMCAS::ComputationContext interval_context;
+    auto interval_union = LMCAS::IntervalUnion::from_intervals_checked(
+        {interval}, interval_context);
+    if (!interval_union || interval_union.value().intervals().size() != 1) {
+        std::cerr << "failed to construct interval union\n";
+        return 4;
+    }
+
+    if (const int status = check_property_store(interval); status != 0) {
+        return status;
+    }
+    if (const int status = check_assumptions(interval); status != 0) {
+        return status;
     }
     if (const int status = run_expr_consumer_checks(); status != 0) {
         return status;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "computation_context.hpp"
+#include "internal/exact_rational_matrix.hpp"
 #include "result.hpp"
 #include "symbolic.hpp"
 
@@ -59,22 +60,11 @@ Result<ExprPtr> determinant_exact(
     const ExactMatrixData& input,
     ComputationContext& context,
     const std::string& operation);
-Result<Rational> rational_determinant_exact(
-    std::size_t dimension,
-    std::vector<Rational> values,
-    ComputationContext& context,
-    const std::string& operation);
 
 
 Result<ExactMatrixData> rref_exact(
     ExactMatrixData input,
     std::size_t coefficient_columns,
-    ComputationContext& context,
-    const std::string& operation);
-Result<std::vector<Rational>> solve_rational_unique(
-    std::size_t rows,
-    std::size_t coefficient_columns,
-    std::vector<Rational> augmented_entries,
     ComputationContext& context,
     const std::string& operation);
 
@@ -118,4 +108,4 @@ Result<std::vector<std::vector<ExprPtr>>> nullspace_exact(
     ComputationContext& context,
     const std::string& operation);
 
-} // namespace LMCAS::detail
+}

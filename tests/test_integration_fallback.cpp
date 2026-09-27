@@ -1,22 +1,14 @@
 #include "test_common.hpp"
-#include <iostream>
 #include <string>
 
 using namespace LMCAS;
 
-int main() {
+TEST(LmcasIntegrationFallback, IndependentVariablePrimitive) {
     auto y = SymbolicExpr::variable("y");
     auto res = y->integrate("x");
     std::string s = res->to_string();
-    std::cout << "Integration result: " << s << std::endl;
-
-    bool has_xy = (s.find("y*x") != std::string::npos)
-                || (s.find("x*y") != std::string::npos);
-    bool has_unevaluated = (s.find("integral(") != std::string::npos)
-                        || (s.find("Integral(") != std::string::npos);
-
-    EXPECT_TRUE(has_xy, "Integration of y w.r.t x should produce a product of x and y");
-    EXPECT_TRUE(!has_unevaluated, "Result should not be an unevaluated integral");
-
-    return TEST_REPORT();
+    bool has_xy = (s.find("y*x") != std::string::npos) || (s.find("x*y") != std::string::npos);
+    bool has_unevaluated = (s.find("integral(") != std::string::npos) || (s.find("Integral(") != std::string::npos);
+    EXPECT_TRUE((has_xy)) << ("Integration of y w.r.t x should produce a product of x and y");
+    EXPECT_TRUE((!has_unevaluated)) << ("Result should not be an unevaluated integral");
 }

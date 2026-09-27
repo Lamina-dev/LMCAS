@@ -1,228 +1,190 @@
 
 #include "test_common.hpp"
-#include "rapidcheck/rapidcheck.h"
 #include "assumption_context.hpp"
-#include "symbolic.hpp"
-#include "symbolic_ast.hpp"
 #include <stdexcept>
-#include <vector>
-#include <string>
 
 using namespace LMCAS;
 
-
-/// Generate a random Domain from the valid set.
-static Domain random_domain() {
-    std::vector<Domain> domains = {
-        Domain::Real, Domain::Integer, Domain::Rational,
-        Domain::Natural, Domain::PositiveInt
-    };
-    return rc::gen::elementOf(domains);
+static void declare_parent_fact(AssumptionContext &ctx) {
+    ASSERT_TRUE(ctx.assume_sign("parent", Sign::Negative));
 }
 
-/// Generate a random Sign from the valid set.
-static Sign random_sign() {
-    std::vector<Sign> signs = {
-        Sign::Positive, Sign::Negative, Sign::NonNegative,
-        Sign::NonPositive, Sign::NonZero
-    };
-    return rc::gen::elementOf(signs);
+static void expect_parent_restored(const AssumptionContext &ctx) {
+    EXPECT_EQ(ctx.depth(), 1);
+    EXPECT_TRUE(ctx.has_sign("parent", Sign::Negative));
+    EXPECT_FALSE(ctx.has_sign("temporary", Sign::Positive));
+    EXPECT_FALSE(ctx.has_sign("nested", Sign::NonZero));
 }
 
-/// Generate a random variable name.
-static std::string random_var_name() {
-    return "var_" + std::to_string(rc::gen::inRange(0, 999));
+static void expect_payload(const CasError &error) {
+    EXPECT_EQ(error.code, CasErrc::DomainError);
+    EXPECT_EQ(error.message, "callable domain payload");
+    EXPECT_EQ(error.operation, "test.callable");
 }
 
-/// Generate a random set of AssumptionDecl (domain and sign only, to avoid
-/// complex expression construction).
-static std::vector<AssumptionDecl> random_decls() {
-    int count = rc::gen::inRange(0, 4);
-    std::vector<AssumptionDecl> decls;
-    for (int i = 0; i < count; ++i) {
-        std::string var = "d_" + std::to_string(i) + "_" + std::to_string(rc::gen::inRange(0, 99));
-        if (rc::gen::boolean()) {
-            decls.push_back(AssumptionDecl::make_domain(var, random_domain()));
-        } else {
-            decls.push_back(AssumptionDecl::make_sign(var, random_sign()));
-        }
+TEST(LmcasAssumptionWithSyntax, CasErrorPayloadAndScopeCleanup) {
+    AssumptionContext value_context;
+    declare_parent_fact(value_context);
+    auto value_result = with_assumptions(
+        value_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        [&]() -> int {
+            EXPECT_EQ(value_context.depth(), 2);
+            EXPECT_TRUE(value_context.has_sign("temporary", Sign::Positive));
+            throw CasError{CasErrc::DomainError, "callable domain payload",
+                           "test.callable"};
+        });
+    ASSERT_FALSE(value_result);
+    expect_payload(value_result.error());
+    expect_parent_restored(value_context);
+
+    AssumptionContext void_context;
+    declare_parent_fact(void_context);
+    auto void_result = with_assumptions(
+        void_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        [&]() {
+            EXPECT_EQ(void_context.depth(), 2);
+            EXPECT_TRUE(void_context.has_sign("temporary", Sign::Positive));
+            throw CasError{CasErrc::DomainError, "callable domain payload",
+                           "test.callable"};
+        });
+    ASSERT_FALSE(void_result);
+    expect_payload(void_result.error());
+    expect_parent_restored(void_context);
+}
+
+TEST(LmcasAssumptionWithSyntax, StandardExceptionPayloadAndScopeCleanup) {
+    AssumptionContext value_context;
+    declare_parent_fact(value_context);
+    auto value_result = with_assumptions(
+        value_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        []() -> int { throw std::runtime_error("value callable failure"); });
+    ASSERT_FALSE(value_result);
+    EXPECT_EQ(value_result.error().code, CasErrc::InternalInvariant);
+    EXPECT_EQ(value_result.error().message, "value callable failure");
+    EXPECT_EQ(value_result.error().operation, "with_assumptions");
+    expect_parent_restored(value_context);
+
+    AssumptionContext void_context;
+    declare_parent_fact(void_context);
+    auto void_result = with_assumptions(
+        void_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        []() { throw std::logic_error("void callable failure"); });
+    ASSERT_FALSE(void_result);
+    EXPECT_EQ(void_result.error().code, CasErrc::InternalInvariant);
+    EXPECT_EQ(void_result.error().message, "void callable failure");
+    EXPECT_EQ(void_result.error().operation, "with_assumptions");
+    expect_parent_restored(void_context);
+}
+
+TEST(LmcasAssumptionWithSyntax, NonstandardExceptionRethrowsAfterScopeCleanup) {
+    AssumptionContext value_context;
+    declare_parent_fact(value_context);
+    try {
+        (void)with_assumptions(
+            value_context,
+            {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+            []() -> int { throw 17; });
+        FAIL() << "value callable must rethrow its nonstandard exception";
+    } catch (int payload) {
+        EXPECT_EQ(payload, 17);
+    } catch (...) {
+        FAIL() << "value callable changed the nonstandard exception type";
     }
-    return decls;
+    expect_parent_restored(value_context);
+
+    AssumptionContext void_context;
+    declare_parent_fact(void_context);
+    try {
+        (void)with_assumptions(
+            void_context,
+            {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+            []() { throw 23; });
+        FAIL() << "void callable must rethrow its nonstandard exception";
+    } catch (int payload) {
+        EXPECT_EQ(payload, 23);
+    } catch (...) {
+        FAIL() << "void callable changed the nonstandard exception type";
+    }
+    expect_parent_restored(void_context);
 }
 
-
-static void test_with_assumptions_preserves_depth_normal() {
-    TEST_CASE("with_assumptions preserves depth on normal return");
-
-    rc::check("with_assumptions preserves context depth on normal callable return", []() {
-        AssumptionContext ctx;
-
-        // Randomly push some scopes to start at a non-trivial depth
-        int initial_pushes = rc::gen::inRange(0, 5);
-        for (int i = 0; i < initial_pushes; ++i) {
-            ctx.push();
-        }
-        int depth_before = ctx.depth();
-
-        // Generate random declarations
-        auto decls = random_decls();
-
-        // Call with_assumptions with a normal callable
-        auto result = with_assumptions(ctx, decls, [&]() -> int {
-            RC_ASSERT(ctx.depth() == depth_before + 1);
+TEST(LmcasAssumptionWithSyntax, NormalReturnRestoresParentScope) {
+    AssumptionContext value_context;
+    declare_parent_fact(value_context);
+    auto value_result = with_assumptions(
+        value_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        [&]() -> int {
+            EXPECT_TRUE(value_context.has_sign("parent", Sign::Negative));
+            EXPECT_TRUE(value_context.has_sign("temporary", Sign::Positive));
             return 42;
         });
+    ASSERT_TRUE(value_result);
+    EXPECT_EQ(value_result.value(), 42);
+    expect_parent_restored(value_context);
 
-        RC_ASSERT(ctx.depth() == depth_before);
-        RC_ASSERT(result.has_value());
-        RC_ASSERT(result.value() == 42);
-    });
-}
-
-static void test_with_assumptions_preserves_depth_exception() {
-    TEST_CASE("with_assumptions preserves depth on exception");
-
-    rc::check("with_assumptions preserves context depth even when callable throws", []() {
-        AssumptionContext ctx;
-
-        // Randomly push some scopes
-        int initial_pushes = rc::gen::inRange(0, 5);
-        for (int i = 0; i < initial_pushes; ++i) {
-            ctx.push();
-        }
-        int depth_before = ctx.depth();
-
-        // Generate random declarations
-        auto decls = random_decls();
-
-        auto result = with_assumptions(ctx, decls, [&]() -> int {
-            RC_ASSERT(ctx.depth() == depth_before + 1);
-            throw std::runtime_error("test exception");
-            return 0;
+    AssumptionContext void_context;
+    declare_parent_fact(void_context);
+    bool called = false;
+    auto void_result = with_assumptions(
+        void_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        [&]() {
+            called = true;
+            EXPECT_TRUE(void_context.has_sign("parent", Sign::Negative));
+            EXPECT_TRUE(void_context.has_sign("temporary", Sign::Positive));
         });
-
-        RC_ASSERT(!result.has_value());
-        RC_ASSERT(result.error().code == CasErrc::InternalInvariant);
-        RC_ASSERT(result.error().message == "test exception");
-        RC_ASSERT(ctx.depth() == depth_before);
-    });
+    ASSERT_TRUE(void_result);
+    EXPECT_TRUE(called);
+    expect_parent_restored(void_context);
 }
 
-/// Test: with_assumptions preserves depth with void callable on normal return
-static void test_with_assumptions_void_preserves_depth_normal() {
-    TEST_CASE("void with_assumptions preserves depth on normal return");
-
-    rc::check("void with_assumptions preserves context depth on normal return", []() {
-        AssumptionContext ctx;
-
-        int initial_pushes = rc::gen::inRange(0, 5);
-        for (int i = 0; i < initial_pushes; ++i) {
-            ctx.push();
-        }
-        int depth_before = ctx.depth();
-
-        auto decls = random_decls();
-
-        auto result = with_assumptions(ctx, decls, [&]() {
-            RC_ASSERT(ctx.depth() == depth_before + 1);
+TEST(LmcasAssumptionWithSyntax, NestedScopesRestoreEachParent) {
+    AssumptionContext value_context;
+    declare_parent_fact(value_context);
+    auto outer_value = with_assumptions(
+        value_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        [&]() -> int {
+            auto inner = with_assumptions(
+                value_context,
+                {AssumptionDecl::make_sign("nested", Sign::NonZero)},
+                [&]() -> int {
+                    EXPECT_EQ(value_context.depth(), 3);
+                    EXPECT_TRUE(value_context.has_sign("temporary", Sign::Positive));
+                    throw CasError{CasErrc::DomainError,
+                                   "callable domain payload", "test.callable"};
+                });
+            if (inner) {
+                ADD_FAILURE() << "nested value callable must preserve its CasError";
+                return -1;
+            }
+            expect_payload(inner.error());
+            EXPECT_EQ(value_context.depth(), 2);
+            EXPECT_TRUE(value_context.has_sign("temporary", Sign::Positive));
+            EXPECT_FALSE(value_context.has_sign("nested", Sign::NonZero));
+            return 7;
         });
+    ASSERT_TRUE(outer_value);
+    EXPECT_EQ(outer_value.value(), 7);
+    expect_parent_restored(value_context);
 
-        RC_ASSERT(result.has_value());
-        RC_ASSERT(ctx.depth() == depth_before);
-    });
-}
-
-/// Test: with_assumptions preserves depth with void callable on exception
-static void test_with_assumptions_void_preserves_depth_exception() {
-    TEST_CASE("void with_assumptions preserves depth on exception");
-
-    rc::check("void with_assumptions preserves context depth when void callable throws", []() {
-        AssumptionContext ctx;
-
-        int initial_pushes = rc::gen::inRange(0, 5);
-        for (int i = 0; i < initial_pushes; ++i) {
-            ctx.push();
-        }
-        int depth_before = ctx.depth();
-
-        auto decls = random_decls();
-
-        auto result = with_assumptions(ctx, decls, [&]() {
-            RC_ASSERT(ctx.depth() == depth_before + 1);
-            throw std::logic_error("void exception");
+    AssumptionContext void_context;
+    declare_parent_fact(void_context);
+    auto outer_void = with_assumptions(
+        void_context, {AssumptionDecl::make_sign("temporary", Sign::Positive)},
+        [&]() {
+            auto inner = with_assumptions(
+                void_context,
+                {AssumptionDecl::make_sign("nested", Sign::NonZero)},
+                [&]() {
+                    EXPECT_EQ(void_context.depth(), 3);
+                    throw CasError{CasErrc::DomainError,
+                                   "callable domain payload", "test.callable"};
+                });
+            ASSERT_FALSE(inner);
+            expect_payload(inner.error());
+            EXPECT_EQ(void_context.depth(), 2);
+            EXPECT_TRUE(void_context.has_sign("temporary", Sign::Positive));
+            EXPECT_FALSE(void_context.has_sign("nested", Sign::NonZero));
         });
-
-        RC_ASSERT(!result.has_value());
-        RC_ASSERT(result.error().code == CasErrc::InternalInvariant);
-        RC_ASSERT(result.error().message == "void exception");
-        RC_ASSERT(ctx.depth() == depth_before);
-    });
-}
-
-/// Test: with_assumptions with vector overload preserves depth
-static void test_with_assumptions_vector_preserves_depth() {
-    TEST_CASE("vector overload preserves depth");
-
-    rc::check("with_assumptions (vector overload) preserves context depth on normal and exception paths", []() {
-        AssumptionContext ctx;
-
-        int initial_pushes = rc::gen::inRange(0, 3);
-        for (int i = 0; i < initial_pushes; ++i) {
-            ctx.push();
-        }
-        int depth_before = ctx.depth();
-
-        // Build a vector of declarations
-        std::vector<AssumptionDecl> decls = random_decls();
-
-        // Normal path
-        auto result = with_assumptions(ctx, decls, [&]() -> int {
-            RC_ASSERT(ctx.depth() == depth_before + 1);
-            return 99;
-        });
-        RC_ASSERT(ctx.depth() == depth_before);
-        RC_ASSERT(result.has_value());
-        RC_ASSERT(result.value() == 99);
-
-        auto failed = with_assumptions(ctx, decls, [&]() -> int {
-            throw std::runtime_error("vec exception");
-            return 0;
-        });
-        RC_ASSERT(!failed.has_value());
-        RC_ASSERT(failed.error().code == CasErrc::InternalInvariant);
-        RC_ASSERT(ctx.depth() == depth_before);
-    });
-}
-
-/// Test: assumptions applied inside with_assumptions are visible during callable
-static void test_with_assumptions_applies_declarations() {
-    TEST_CASE("declarations are applied inside scope");
-
-    rc::check("with_assumptions applies declarations that are visible inside the callable", []() {
-        AssumptionContext ctx;
-        std::string var = random_var_name();
-        Domain dom = random_domain();
-
-        int depth_before = ctx.depth();
-
-        auto result = with_assumptions(
-            ctx, {AssumptionDecl::make_domain(var, dom)}, [&]() {
-                RC_ASSERT(ctx.has_domain(var, dom));
-            });
-
-        RC_ASSERT(result.has_value());
-        RC_ASSERT(ctx.depth() == depth_before);
-    });
-}
-
-
-int main() {
-    test_with_assumptions_preserves_depth_normal();
-    test_with_assumptions_preserves_depth_exception();
-    test_with_assumptions_void_preserves_depth_normal();
-    test_with_assumptions_void_preserves_depth_exception();
-    test_with_assumptions_vector_preserves_depth();
-    test_with_assumptions_applies_declarations();
-
-    return TEST_REPORT();
+    ASSERT_TRUE(outer_void);
+    expect_parent_restored(void_context);
 }

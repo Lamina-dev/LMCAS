@@ -7,7 +7,7 @@
 #include "lmcas_export.hpp"
 #include "bigint.hpp"
 #include "conditional_result.hpp"
-#include "limit_result.hpp"
+#include "limit_value.hpp"
 #include "rational.hpp"
 #include <memory>
 #include <string>
@@ -18,6 +18,7 @@
 #include <map>
 #include <functional>
 #include <stdexcept>
+#include <type_traits>
 
 namespace LMCAS {
 
@@ -42,9 +43,6 @@ enum class RelationOp {
 namespace detail {
 struct SymbolicExprAccess;
 } // namespace detail
-} namespace LMCAS {
-
-// namespace LMCAS
 
 /**
  * @brief 符号表达式主类,封装 AST 根节点并提供运算,化简,求解等接口.
@@ -70,37 +68,8 @@ private:
 
 public:
 
-    /** @brief 表达式类型枚举(已废弃,保留用于兼容) */
-    enum class Type {
-        Number,      ///< 数值
-        Sqrt,        ///< 平方根
-        Root,        ///< n 次根
-        Power,       ///< 幂运算
-        Multiply,    ///< 乘法
-        Add,         ///< 加法
-        Subtract,    ///< 减法
-        Infinity,    ///< 无穷大
-        Variable,    ///< 变量
-
-        Sin, Cos, Tan, Cot, Sec, Csc, ///< 三角函数
-
-        ArcSin, ArcCos, ArcTan, Atan2, ///< 反三角函数
-
-        Sinh, Cosh, Tanh, ///< 双曲函数
-
-        Ln, Log, ///< 对数函数
-
-        Abs, Fac, ///< 绝对值,阶乘
-
-        Diff, Integral, Limit, ///< 微分,积分,极限
-
-        Matrix, ///< 矩阵
-        Vector, ///< 向量
-
-    };
 
     SymbolicExpr() = delete;
-    SymbolicExpr(Type) = delete;
 
     /**
      * @brief 与另一个表达式进行全序比较.
@@ -228,17 +197,6 @@ public:
      */
     std::shared_ptr<SymbolicExpr> cancel() const;
 
-    [[deprecated("Inspect expressions through public predicates and operations")]]
-    Type get_type() const;
-
-    [[deprecated("Construct and transform expressions through public operations")]]
-    std::vector<std::shared_ptr<SymbolicExpr>> get_operands() const;
-
-    [[deprecated("Use numeric evaluation or public numeric predicates")]]
-    std::variant<int, ::LMCAS::BigInt, ::LMCAS::Rational> get_number_value() const;
-
-    [[deprecated("Use expression substitution and public symbol predicates")]]
-    std::string get_identifier() const;
 
     /**
      * @brief 创建整数数值表达式.
@@ -247,12 +205,11 @@ public:
      */
     static std::shared_ptr<SymbolicExpr> number(int n);
 
-    /**
-     * @brief 创建 long long 数值表达式.
-     * @param n 整数值
-     * @return 数值表达式
-     */
-    static std::shared_ptr<SymbolicExpr> number(long long n);
+    /** @brief 较宽的整数值须显式转为 BigInt。 */
+    template <typename Integer,
+              std::enable_if_t<std::is_integral_v<Integer> &&
+                               !std::is_same_v<Integer, int>, int> = 0>
+    static std::shared_ptr<SymbolicExpr> number(Integer) = delete;
 
     /**
      * @brief 创建浮点数值表达式.

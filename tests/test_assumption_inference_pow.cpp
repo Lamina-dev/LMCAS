@@ -2,7 +2,7 @@
 #include "test_common.hpp"
 #include "inference_engine.hpp"
 #include "assumption_context.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -10,11 +10,7 @@
 
 using namespace LMCAS;
 
-
 /// Create a VariableNode
-static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return LMCAS::detail::make_node<VariableNode>(name);
-}
 
 /// Create a NumberNode from an integer
 static std::shared_ptr<const SymbolicNode> make_num(int v) {
@@ -33,109 +29,91 @@ static SymbolicExpr make_power_expr(std::shared_ptr<const SymbolicNode> base,
     return expr;
 }
 
-
-void test_positive_base_real_exponent() {
-    TEST_CASE("Positive base + Real exponent -> Positive");
-
+TEST(AssumptionInferencePow, PositiveBaseRealExponent) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
-    ctx.assume_domain("y", Domain::Real);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
+    ASSERT_TRUE(ctx.assume_domain("y", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
     // x^y where x is Positive, y is Real
-    auto expr = make_power_expr(make_var("x"), make_var("y"));
+    auto expr = make_power_expr(test_variable_node("x"), test_variable_node("y"));
 
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-                "x^y is Positive when x>0 and y is Real");
-    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
-                "x^y is NonNegative when x>0 and y is Real");
-    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
-                "x^y is NonZero when x>0 and y is Real");
-    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False,
-                "x^y is not Negative when x>0 and y is Real");
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "x^y is Positive when x>0 and y is Real";
+    EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::True)) << "x^y is NonNegative when x>0 and y is Real";
+    EXPECT_TRUE((engine.query_nonzero_checked(expr).value() == Tribool::True)) << "x^y is NonZero when x>0 and y is Real";
+    EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::False)) << "x^y is not Negative when x>0 and y is Real";
 }
 
-void test_positive_base_integer_exponent() {
-    TEST_CASE("Positive base + integer exponent -> Positive");
-
+TEST(AssumptionInferencePow, PositiveBaseIntegerExponent) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
     InferenceEngine engine(ctx);
 
     // Test with multiple integer exponents (integers are Real)
     std::vector<int> exponents = {1, 2, 3, 5, 10, -1, -2, -3};
     for (int exp : exponents) {
-        auto expr = make_power_expr(make_var("x"), make_num(exp));
+        auto expr = make_power_expr(test_variable_node("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is Positive when x>0";
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, msg);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << msg;
     }
 }
 
-void test_positive_base_real_number_exponent() {
-    TEST_CASE("Positive base + real number exponent -> Positive");
-
+TEST(AssumptionInferencePow, PositiveBaseRealNumberExponent) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
     InferenceEngine engine(ctx);
 
     // Real number exponents (non-integer)
     std::vector<double> exponents = {0.5, 1.5, 2.7, -0.5, -1.5, 3.14};
     for (double exp : exponents) {
-        auto expr = make_power_expr(make_var("x"), make_num_d(exp));
+        auto expr = make_power_expr(test_variable_node("x"), make_num_d(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is Positive when x>0";
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, msg);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << msg;
     }
 }
 
-void test_numeric_positive_base() {
-    TEST_CASE("Numeric positive base + variable Real exponent");
-
+TEST(AssumptionInferencePow, NumericPositiveBase) {
     AssumptionContext ctx;
-    ctx.assume_domain("y", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("y", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
     // 2^y, 5^y, 100^y where y is Real
     std::vector<int> bases = {1, 2, 5, 10, 100};
     for (int b : bases) {
-        auto expr = make_power_expr(make_num(b), make_var("y"));
+        auto expr = make_power_expr(make_num(b), test_variable_node("y"));
         std::string msg = std::to_string(b) + "^y is Positive when y is Real";
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True, msg);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << msg;
     }
 }
 
-
-void test_real_base_even_exponent() {
-    TEST_CASE("Real base + even integer exponent -> NonNegative");
-
+TEST(AssumptionInferencePow, RealBaseEvenExponent) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
     // Test with multiple even exponents
     std::vector<int> even_exponents = {2, 4, 6, 8, 10, 20, 100};
     for (int exp : even_exponents) {
-        auto expr = make_power_expr(make_var("x"), make_num(exp));
+        auto expr = make_power_expr(test_variable_node("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is NonNegative when x is Real (even exponent)";
-        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True, msg);
+        EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::True)) << msg;
         std::string msg2 = "x^" + std::to_string(exp) +
                            " is not Negative when x is Real (even exponent)";
-        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False, msg2);
+        EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::False)) << msg2;
     }
 }
 
-void test_real_base_odd_exponent_not_nonneg() {
-    TEST_CASE("Real base + odd exponent -> NOT necessarily NonNegative");
-
+TEST(AssumptionInferencePow, RealBaseOddExponentNotNonneg) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
@@ -143,351 +121,283 @@ void test_real_base_odd_exponent_not_nonneg() {
     // so NonNegative should be Unknown (not True)
     std::vector<int> odd_exponents = {1, 3, 5, 7};
     for (int exp : odd_exponents) {
-        auto expr = make_power_expr(make_var("x"), make_num(exp));
+        auto expr = make_power_expr(test_variable_node("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is Unknown for NonNegative when x is Real (odd exponent)";
-        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown, msg);
+        EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::Unknown)) << msg;
     }
 }
 
-void test_randomized_even_exponents() {
-    TEST_CASE("Randomized even exponents (100 iterations)");
-
+TEST(AssumptionInferencePow, RandomizedEvenExponents) {
     std::mt19937 rng(42);
     std::uniform_int_distribution<int> dist(1, 50);
-    int pass_count = 0;
     const int NUM_ITERATIONS = 100;
 
     for (int i = 0; i < NUM_ITERATIONS; ++i) {
         int half = dist(rng);
-        int even_exp = half * 2;  // Always even
+        int even_exp = half * 2; // Always even
+        SCOPED_TRACE(::testing::Message() << "iteration=" << i << " exponent=" << even_exp);
 
         AssumptionContext ctx;
         std::string var_name = "x" + std::to_string(i);
-        ctx.assume_domain(var_name, Domain::Real);
+        EXPECT_TRUE(ctx.assume_domain(var_name, Domain::Real).has_value());
 
         InferenceEngine engine(ctx);
-        auto expr = make_power_expr(make_var(var_name), make_num(even_exp));
+        auto expr = make_power_expr(test_variable_node(var_name), make_num(even_exp));
 
-        if (engine.query_nonnegative_checked(expr).value() == Tribool::True) {
-            pass_count++;
-        }
+        EXPECT_EQ(engine.query_nonnegative_checked(expr).value(), Tribool::True)
+            << "random even exponents yield NonNegative";
     }
-
-    std::string msg = std::to_string(pass_count) +
-                      "/" + std::to_string(NUM_ITERATIONS) +
-                      " random even exponents yield NonNegative";
-    EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-
-void test_nonneg_base_positive_int_exponent() {
-    TEST_CASE("NonNegative base + positive integer exponent -> NonNegative");
-
+TEST(AssumptionInferencePow, NonnegBasePositiveIntExponent) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::NonNegative);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::NonNegative).has_value());
 
     InferenceEngine engine(ctx);
 
     // Test with multiple positive integer exponents
     std::vector<int> pos_exponents = {1, 2, 3, 4, 5, 10, 50};
     for (int exp : pos_exponents) {
-        auto expr = make_power_expr(make_var("x"), make_num(exp));
+        auto expr = make_power_expr(test_variable_node("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is NonNegative when x>=0 (positive int exponent)";
-        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True, msg);
+        EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::True)) << msg;
         std::string msg2 = "x^" + std::to_string(exp) +
                            " is not Negative when x>=0";
-        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::False, msg2);
+        EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::False)) << msg2;
     }
 }
 
-void test_randomized_positive_exponents() {
-    TEST_CASE("Randomized positive exponents (100 iterations)");
-
+TEST(AssumptionInferencePow, RandomizedPositiveExponents) {
     std::mt19937 rng(123);
     std::uniform_int_distribution<int> dist(1, 100);
-    int pass_count = 0;
     const int NUM_ITERATIONS = 100;
 
     for (int i = 0; i < NUM_ITERATIONS; ++i) {
-        int pos_exp = dist(rng);  // Always positive
+        int pos_exp = dist(rng); // Always positive
+        SCOPED_TRACE(::testing::Message() << "iteration=" << i << " exponent=" << pos_exp);
 
         AssumptionContext ctx;
         std::string var_name = "v" + std::to_string(i);
-        ctx.assume_sign(var_name, Sign::NonNegative);
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::NonNegative).has_value());
 
         InferenceEngine engine(ctx);
-        auto expr = make_power_expr(make_var(var_name), make_num(pos_exp));
+        auto expr = make_power_expr(test_variable_node(var_name), make_num(pos_exp));
 
-        if (engine.query_nonnegative_checked(expr).value() == Tribool::True) {
-            pass_count++;
-        }
+        EXPECT_EQ(engine.query_nonnegative_checked(expr).value(), Tribool::True)
+            << "random positive exponents yield NonNegative";
     }
-
-    std::string msg = std::to_string(pass_count) +
-                      "/" + std::to_string(NUM_ITERATIONS) +
-                      " random positive exponents yield NonNegative";
-    EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-
-void test_nonzero_base_integer_exponent() {
-    TEST_CASE("NonZero base + integer exponent -> NonZero");
-
+TEST(AssumptionInferencePow, NonzeroBaseIntegerExponent) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::NonZero);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::NonZero).has_value());
 
     InferenceEngine engine(ctx);
 
     // Test with various integer exponents (positive, negative, even, odd)
     std::vector<int> exponents = {1, 2, 3, -1, -2, -3, 5, 10, -10};
     for (int exp : exponents) {
-        auto expr = make_power_expr(make_var("x"), make_num(exp));
+        auto expr = make_power_expr(test_variable_node("x"), make_num(exp));
         std::string msg = "x^" + std::to_string(exp) +
                           " is NonZero when x!=0 (integer exponent)";
-        EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True, msg);
+        EXPECT_TRUE((engine.query_nonzero_checked(expr).value() == Tribool::True)) << msg;
     }
 }
 
-void test_nonzero_randomized_integer_exponents() {
-    TEST_CASE("Randomized integer exponents (100 iterations)");
-
+TEST(AssumptionInferencePow, NonzeroRandomizedIntegerExponents) {
     std::mt19937 rng(456);
     std::uniform_int_distribution<int> dist(-50, 50);
-    int pass_count = 0;
     const int NUM_ITERATIONS = 100;
 
     for (int i = 0; i < NUM_ITERATIONS; ++i) {
         int exp = dist(rng);
+        SCOPED_TRACE(::testing::Message() << "iteration=" << i << " exponent=" << exp);
 
         AssumptionContext ctx;
         std::string var_name = "z" + std::to_string(i);
-        ctx.assume_sign(var_name, Sign::NonZero);
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::NonZero).has_value());
 
         InferenceEngine engine(ctx);
-        auto expr = make_power_expr(make_var(var_name), make_num(exp));
+        auto expr = make_power_expr(test_variable_node(var_name), make_num(exp));
 
-        if (engine.query_nonzero_checked(expr).value() == Tribool::True) {
-            pass_count++;
-        }
+        EXPECT_EQ(engine.query_nonzero_checked(expr).value(), Tribool::True)
+            << "random integer exponents yield NonZero";
     }
-
-    std::string msg = std::to_string(pass_count) +
-                      "/" + std::to_string(NUM_ITERATIONS) +
-                      " random integer exponents yield NonZero";
-    EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-
-void test_positive_base_even_exponent_is_positive() {
-    TEST_CASE("Positive base + even exponent -> Positive (via 16a)");
-
+TEST(AssumptionInferencePow, PositiveBaseEvenExponentIsPositive) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
     // x^2 where x is Positive and Real -> Positive (rule 16a fires)
-    auto expr = make_power_expr(make_var("x"), make_num(2));
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-                "x^2 is Positive when x>0 (rule 16a)");
-    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
-                "x^2 is NonNegative when x>0");
+    auto expr = make_power_expr(test_variable_node("x"), make_num(2));
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "x^2 is Positive when x>0 (rule 16a)";
+    EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::True)) << "x^2 is NonNegative when x>0";
 }
 
-void test_numeric_base_and_exponent() {
-    TEST_CASE("Numeric positive base + integer exponent");
-
+TEST(AssumptionInferencePow, NumericBaseAndExponent) {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
     // 2^3 - NumberNode base (positive), NumberNode exponent (integer)
     auto expr = make_power_expr(make_num(2), make_num(3));
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-                "2^3 is Positive");
-    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::True,
-                "2^3 is NonZero");
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "2^3 is Positive";
+    EXPECT_TRUE((engine.query_nonzero_checked(expr).value() == Tribool::True)) << "2^3 is NonZero";
 
     // 3^(-2) - positive base, integer exponent
     auto expr2 = make_power_expr(make_num(3), make_num(-2));
-    EXPECT_TRUE(engine.query_positive_checked(expr2).value() == Tribool::True,
-                "3^(-2) is Positive");
+    EXPECT_TRUE((engine.query_positive_checked(expr2).value() == Tribool::True)) << "3^(-2) is Positive";
 }
 
-void test_no_rule_matches() {
-    TEST_CASE("No rule matches -> Unknown");
-
+TEST(AssumptionInferencePow, NoRuleMatches) {
     AssumptionContext ctx;
     // No assumptions about x or y
     InferenceEngine engine(ctx);
 
-    auto expr = make_power_expr(make_var("x"), make_var("y"));
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
-                "x^y is Unknown when no assumptions");
-    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
-                "x^y is Unknown for Negative when no assumptions");
-    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
-                "x^y is Unknown for NonNegative when no assumptions");
-    EXPECT_TRUE(engine.query_nonzero_checked(expr).value() == Tribool::Unknown,
-                "x^y is Unknown for NonZero when no assumptions");
+    auto expr = make_power_expr(test_variable_node("x"), test_variable_node("y"));
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::Unknown)) << "x^y is Unknown when no assumptions";
+    EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::Unknown)) << "x^y is Unknown for Negative when no assumptions";
+    EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::Unknown)) << "x^y is Unknown for NonNegative when no assumptions";
+    EXPECT_TRUE((engine.query_nonzero_checked(expr).value() == Tribool::Unknown)) << "x^y is Unknown for NonZero when no assumptions";
 }
 
-void test_negative_base_non_integer_exponent() {
-    TEST_CASE("Negative base + non-integer exponent -> Unknown");
-
+TEST(AssumptionInferencePow, NegativeBaseNonIntegerExponent) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Negative);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Negative).has_value());
 
     InferenceEngine engine(ctx);
 
-    // x^(1.5) where x is Negative - could be complex, no rule matches
-    auto expr = make_power_expr(make_var("x"), make_num_d(1.5));
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
-                "(-x)^1.5 is Unknown for Positive");
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
-                "(-x)^1.5 is Unknown for Real");
+    auto expr = make_power_expr(test_variable_node("x"), make_num_d(1.5));
+    auto positive = engine.query_positive_checked(expr);
+    auto real = engine.query_real_checked(expr);
+    EXPECT_TRUE((!positive && positive.error().code == CasErrc::DomainError)) << "invalid real power sign";
+    EXPECT_TRUE((!real && real.error().code == CasErrc::DomainError)) << "invalid real power domain";
 }
 
-
-void test_real_base_integer_exponent_domain() {
-    TEST_CASE("Real base + integer exponent -> Real domain");
-
+TEST(AssumptionInferencePow, RealBaseIntegerExponentDomain) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
     // Test with multiple integer exponents
     std::vector<int> exponents = {0, 1, 2, 3, -1, -2, -3, 5, 10, -10};
     for (int exp : exponents) {
-        auto expr = make_power_expr(make_var("x"), make_num(exp));
-        std::string msg = "x^" + std::to_string(exp) +
-                          " is Real when x is Real (integer exponent)";
-        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, msg);
+        auto expr = make_power_expr(test_variable_node("x"), make_num(exp));
+        auto result = engine.query_real_checked(expr);
+        EXPECT_TRUE((result && result.value() == (exp > 0 ? Tribool::True : Tribool::Unknown))) << "zero and negative exponents need a nonzero base";
     }
 }
 
-void test_domain_randomized_integer_exponents() {
-    TEST_CASE("Randomized integer exponents (100 iterations)");
-
+TEST(AssumptionInferencePow, DomainRandomizedIntegerExponents) {
     std::mt19937 rng(789);
     std::uniform_int_distribution<int> dist(-50, 50);
-    int pass_count = 0;
     const int NUM_ITERATIONS = 100;
 
     for (int i = 0; i < NUM_ITERATIONS; ++i) {
         int exp = dist(rng);
+        SCOPED_TRACE(::testing::Message() << "iteration=" << i << " exponent=" << exp);
 
         AssumptionContext ctx;
         std::string var_name = "r" + std::to_string(i);
-        ctx.assume_domain(var_name, Domain::Real);
+        EXPECT_TRUE(ctx.assume_domain(var_name, Domain::Real).has_value());
 
         InferenceEngine engine(ctx);
-        auto expr = make_power_expr(make_var(var_name), make_num(exp));
+        auto expr = make_power_expr(test_variable_node(var_name), make_num(exp));
 
-        if (engine.query_real_checked(expr).value() == Tribool::True) {
-            pass_count++;
-        }
+        auto result = engine.query_real_checked(expr);
+        EXPECT_TRUE(result && result.value() == (exp > 0 ? Tribool::True : Tribool::Unknown))
+            << "integer exponent domains respect possible zero bases";
     }
-
-    std::string msg = std::to_string(pass_count) +
-                      "/" + std::to_string(NUM_ITERATIONS) +
-                      " random integer exponents yield Real domain";
-    EXPECT_TRUE(pass_count == NUM_ITERATIONS, msg);
 }
 
-void test_integer_base_integer_exponent() {
-    TEST_CASE("Integer base + integer exponent -> Real (Integer implies Real)");
-
+TEST(AssumptionInferencePow, IntegerBaseIntegerExponent) {
     AssumptionContext ctx;
-    ctx.assume_domain("n", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value());
 
     InferenceEngine engine(ctx);
 
     // Integer is a subset of Real, so this should also yield Real
     std::vector<int> exponents = {1, 2, 3, -1, 5};
     for (int exp : exponents) {
-        auto expr = make_power_expr(make_var("n"), make_num(exp));
-        std::string msg = "n^" + std::to_string(exp) +
-                          " is Real when n is Integer (Integer implies Real)";
-        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, msg);
+        auto expr = make_power_expr(test_variable_node("n"), make_num(exp));
+        auto result = engine.query_real_checked(expr);
+        EXPECT_TRUE((result && result.value() == (exp > 0 ? Tribool::True : Tribool::Unknown))) << "Integer alone does not exclude a zero base";
     }
 }
 
-void test_numeric_base_integer_exponent() {
-    TEST_CASE("Numeric base + integer exponent -> Real");
-
+TEST(AssumptionInferencePow, NumericBaseIntegerExponent) {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
     // Numeric bases are Real, integer exponents are integers
     auto expr1 = make_power_expr(make_num(2), make_num(3));
-    EXPECT_TRUE(engine.query_real_checked(expr1).value() == Tribool::True,
-                "2^3 is Real");
+    EXPECT_TRUE((engine.query_real_checked(expr1).value() == Tribool::True)) << "2^3 is Real";
 
     auto expr2 = make_power_expr(make_num(-3), make_num(2));
-    EXPECT_TRUE(engine.query_real_checked(expr2).value() == Tribool::True,
-                "(-3)^2 is Real");
+    EXPECT_TRUE((engine.query_real_checked(expr2).value() == Tribool::True)) << "(-3)^2 is Real";
 
     auto expr3 = make_power_expr(make_num(5), make_num(-1));
-    EXPECT_TRUE(engine.query_real_checked(expr3).value() == Tribool::True,
-                "5^(-1) is Real");
+    EXPECT_TRUE((engine.query_real_checked(expr3).value() == Tribool::True)) << "5^(-1) is Real";
 }
 
-void test_real_base_non_integer_exponent_unknown() {
-    TEST_CASE("Real base + non-integer exponent -> Unknown for Real");
-
+TEST(AssumptionInferencePow, RealBaseNonIntegerExponentUnknown) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
     // x^(1.5) where x is Real - non-integer exponent, rule doesn't apply
     // (could be complex if x < 0)
-    auto expr = make_power_expr(make_var("x"), make_num_d(1.5));
+    auto expr = make_power_expr(test_variable_node("x"), make_num_d(1.5));
     /// 该域推导规则要求整数指数;仅有 Real 基底时结果域保持 Unknown.
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
-                "x^1.5 is Unknown for Real when x is only Real (non-integer exponent)");
+    EXPECT_TRUE((engine.query_real_checked(expr).value() == Tribool::Unknown)) << "x^1.5 is Unknown for Real when x is only Real (non-integer exponent)";
 }
 
-void test_no_domain_yields_unknown() {
-    TEST_CASE("No domain assumption -> Unknown for Real");
-
+TEST(AssumptionInferencePow, NoDomainYieldsUnknown) {
     AssumptionContext ctx;
     // No assumptions about x
     InferenceEngine engine(ctx);
 
-    auto expr = make_power_expr(make_var("x"), make_num(2));
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
-                "x^2 is Unknown for Real when x has no domain assumption");
+    auto expr = make_power_expr(test_variable_node("x"), make_num(2));
+    EXPECT_TRUE((engine.query_real_checked(expr).value() == Tribool::Unknown)) << "x^2 is Unknown for Real when x has no domain assumption";
 }
 
-
-int main() {
-    test_positive_base_real_exponent();
-    test_positive_base_integer_exponent();
-    test_positive_base_real_number_exponent();
-    test_numeric_positive_base();
-    test_real_base_even_exponent();
-    test_real_base_odd_exponent_not_nonneg();
-    test_randomized_even_exponents();
-    test_nonneg_base_positive_int_exponent();
-    test_randomized_positive_exponents();
-    test_nonzero_base_integer_exponent();
-    test_nonzero_randomized_integer_exponents();
-    test_positive_base_even_exponent_is_positive();
-    test_numeric_base_and_exponent();
-    test_no_rule_matches();
-    test_negative_base_non_integer_exponent();
-
-    test_real_base_integer_exponent_domain();
-    test_domain_randomized_integer_exponents();
-    test_integer_base_integer_exponent();
-    test_numeric_base_integer_exponent();
-    test_real_base_non_integer_exponent_unknown();
-    test_no_domain_yields_unknown();
-
-    return TEST_REPORT();
+TEST(AssumptionInferencePow, PowerDomainBoundaries) {
+    for (Sign sign : {Sign::Zero, Sign::NonNegative, Sign::Negative}) {
+        AssumptionContext ctx;
+        EXPECT_TRUE(ctx.assume_sign("x", sign).has_value()) << "base sign";
+        InferenceEngine engine(ctx);
+        for (int exponent : {0, -2, 2}) {
+            auto expression = make_power_expr(test_variable_node("x"), make_num(exponent));
+            auto result = engine.query_nonnegative_checked(expression);
+            if (sign == Sign::Zero && exponent <= 0) {
+                EXPECT_TRUE((!result && result.error().code == CasErrc::DomainError)) << "zero base with zero/negative exponent is undefined";
+            } else {
+                const auto expected = sign == Sign::NonNegative && exponent <= 0 ? Tribool::Unknown : Tribool::True;
+                EXPECT_TRUE((result && result.value() == expected)) << "nonzero obligation precedes even-power nonnegativity";
+            }
+        }
+    }
+    AssumptionContext ctx;
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value()) << "positive logarithm argument";
+    InferenceEngine engine(ctx);
+    auto logarithm = detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln,
+                                                     std::vector<std::shared_ptr<const SymbolicNode>>{test_variable_node("x")});
+    auto square = make_power_expr(logarithm, make_num(2));
+    auto good = engine.query_nonnegative_checked(square);
+    EXPECT_TRUE((good && good.value() == Tribool::True)) << "defined real logarithm squared is nonnegative";
+    auto invalid_log = detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln,
+                                                       std::vector<std::shared_ptr<const SymbolicNode>>{make_num(-1)});
+    for (auto expression : {make_power_expr(invalid_log, make_num(2)),
+                            make_power_expr(make_num(2), invalid_log),
+                            make_power_expr(invalid_log, make_num(0))}) {
+        auto result = engine.query_positive_checked(expression);
+        EXPECT_TRUE((!result && result.error().code == CasErrc::DomainError)) << "undefined base or exponent is never a positive-power proof";
+    }
 }

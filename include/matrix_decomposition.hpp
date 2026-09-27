@@ -113,9 +113,9 @@ LMCAS_API SVDDecompositionResult svd_decomposition_checked(
 
 
 /**
- * @brief 计算矩阵指数 e^A
+ * @brief 计算矩阵指数 e^A。
  * @param A 输入矩阵
- * @return 指数矩阵的符号表达式
+ * @return 已认证可对角化时返回指数矩阵；否则保留未求值 exp(A)。
  */
 LMCAS_API std::shared_ptr<SymbolicExpr> matrix_exp(
     const std::shared_ptr<SymbolicExpr>& A
@@ -145,7 +145,7 @@ LMCAS_API std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
 /**
  * @brief 计算矩阵自然对数 log(A)（通过特征分解）。
  * @param A 输入方阵
- * @return log(A) 的符号表达式；不可对角化或含非正特征值时返回 nullptr
+ * @return log(A) 的符号表达式；未证明完整对角化或严格正实谱时返回 nullptr。
  */
 LMCAS_API std::shared_ptr<SymbolicExpr> matrix_log(
     const std::shared_ptr<SymbolicExpr>& A
@@ -166,29 +166,22 @@ LMCAS_API std::shared_ptr<SymbolicExpr> kronecker(
  * @brief 计算矩阵范数。
  * @param A 输入矩阵
  * @param type 范数类型："frobenius"、"1"（最大列和）、"inf"（最大行和）
- * @return 范数的符号表达式；类型无效返回 nullptr
+ * @return 范数的符号表达式；1/inf 范数以精确 max 表达式保留全部符号行列和候选。
+ *         类型无效时返回 nullptr。
  */
 LMCAS_API std::shared_ptr<SymbolicExpr> matrix_norm(
     const std::shared_ptr<SymbolicExpr>& A,
     const std::string& type = "frobenius"
 );
 
-/**
- * @brief 从二次型表达式提取对称矩阵 A，使得 expr = xᵀAx。
- * @param expr 二次齐次表达式
- * @param vars 变量名列表
- * @return 对称矩阵；提取失败返回 nullptr
- */
-LMCAS_API std::shared_ptr<SymbolicExpr> quadratic_form_matrix(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::vector<std::string>& vars
-);
 
 /**
  * @brief 对二次型对称矩阵进行定性分类。
  * @param A 对称矩阵
  * @return 分类字符串："positive_definite"、"negative_definite"、
  *         "positive_semidefinite"、"negative_semidefinite"、"indefinite"、"unknown"
+ *         零型同时半正定与半负定，此接口固定选择 positive_semidefinite。
+ *         以精确谱符号分类；符号未证明时返回 unknown。
  */
 LMCAS_API std::string classify_quadratic_form(
     const std::shared_ptr<SymbolicExpr>& A
@@ -197,9 +190,9 @@ LMCAS_API std::string classify_quadratic_form(
 /**
  * @brief 计算方阵的 Jordan 标准型 J 及变换矩阵 P（A = P·J·P⁻¹）。
  * @param A 输入方阵
- * @param J 输出 Jordan 标准型
- * @param P 输出变换矩阵
- * @return 成功返回 true（可对角化或可求 Jordan 块时）
+ * @return Result 成功包含 J/P，已证明 P 满秩及 AP=PJ；非平凡块超对角为 1。
+ *         支持可对角化矩阵及有理 2x2 上三角缺陷块。未构造完整广义链时
+ *         返回 Inconclusive；资源与取消错误原样传播。
  */
 LMCAS_API JordanDecompositionResult jordan_form_checked(
     const std::shared_ptr<SymbolicExpr>& A,

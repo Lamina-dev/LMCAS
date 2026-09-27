@@ -1,7 +1,9 @@
 #pragma once
 
 #ifndef LMCAS_API
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(LMCAS_STATIC_DEFINE)
+#define LMCAS_API
+#elif defined(_WIN32) || defined(__CYGWIN__)
 #if defined(LMCAS_EXPORTS)
 #define LMCAS_API __declspec(dllexport)
 #else

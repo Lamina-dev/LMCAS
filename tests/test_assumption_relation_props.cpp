@@ -4,15 +4,14 @@
 #include "property_store.hpp"
 #include "assumption.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <string>
 #include <vector>
 
 using namespace LMCAS;
 
-
 /// Create a SymbolicExpr wrapping a VariableNode.
-static SymbolicExpr make_var(const std::string& name) {
+static SymbolicExpr make_var(const std::string &name) {
     return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>(name));
 }
 
@@ -21,10 +20,7 @@ static SymbolicExpr make_zero() {
     return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 }
 
-
-static void test_transitive_gt_gt_chain() {
-    TEST_CASE("GT + GT chain deduces GT (x > y, y > z => x > z)");
-
+TEST(AssumptionRelationProps, TransitiveGtGtChain) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -33,17 +29,14 @@ static void test_transitive_gt_gt_chain() {
     SymbolicExpr z = make_var("z");
 
     // Add x > y
-    rs.add_relation(x, y, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
     // Add y > z — should trigger transitive closure: x > z
-    rs.add_relation(y, z, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(y, z, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GT),
-        "x > y, y > z => x > z (GT+GT => GT)");
+    EXPECT_TRUE((rs.has_relation(x, z, RelationalNode::Op::GT))) << "x > y, y > z => x > z (GT+GT => GT)";
 }
 
-static void test_transitive_geq_gt_chain() {
-    TEST_CASE("GEQ + GT chain deduces GT (x >= y, y > z => x > z)");
-
+TEST(AssumptionRelationProps, TransitiveGeqGtChain) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -52,17 +45,14 @@ static void test_transitive_geq_gt_chain() {
     SymbolicExpr z = make_var("z");
 
     // Add x >= y
-    rs.add_relation(x, y, RelationalNode::Op::GEQ, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::GEQ, ps).has_value())) << "relation insertion succeeds";
     // Add y > z — should trigger: x > z (GEQ+GT => GT)
-    rs.add_relation(y, z, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(y, z, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GT),
-        "x >= y, y > z => x > z (GEQ+GT => GT)");
+    EXPECT_TRUE((rs.has_relation(x, z, RelationalNode::Op::GT))) << "x >= y, y > z => x > z (GEQ+GT => GT)";
 }
 
-static void test_transitive_gt_geq_chain() {
-    TEST_CASE("GT + GEQ chain deduces GT (x > y, y >= z => x > z)");
-
+TEST(AssumptionRelationProps, TransitiveGtGeqChain) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -71,17 +61,14 @@ static void test_transitive_gt_geq_chain() {
     SymbolicExpr z = make_var("z");
 
     // Add x > y
-    rs.add_relation(x, y, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
     // Add y >= z — should trigger: x > z (GT+GEQ => GT)
-    rs.add_relation(y, z, RelationalNode::Op::GEQ, ps);
+    EXPECT_TRUE((rs.add_relation(y, z, RelationalNode::Op::GEQ, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GT),
-        "x > y, y >= z => x > z (GT+GEQ => GT)");
+    EXPECT_TRUE((rs.has_relation(x, z, RelationalNode::Op::GT))) << "x > y, y >= z => x > z (GT+GEQ => GT)";
 }
 
-static void test_transitive_geq_geq_chain() {
-    TEST_CASE("GEQ + GEQ chain deduces GEQ (x >= y, y >= z => x >= z)");
-
+TEST(AssumptionRelationProps, TransitiveGeqGeqChain) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -90,17 +77,14 @@ static void test_transitive_geq_geq_chain() {
     SymbolicExpr z = make_var("z");
 
     // Add x >= y
-    rs.add_relation(x, y, RelationalNode::Op::GEQ, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::GEQ, ps).has_value())) << "relation insertion succeeds";
     // Add y >= z — should trigger: x >= z (GEQ+GEQ => GEQ)
-    rs.add_relation(y, z, RelationalNode::Op::GEQ, ps);
+    EXPECT_TRUE((rs.add_relation(y, z, RelationalNode::Op::GEQ, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GEQ),
-        "x >= y, y >= z => x >= z (GEQ+GEQ => GEQ)");
+    EXPECT_TRUE((rs.has_relation(x, z, RelationalNode::Op::GEQ))) << "x >= y, y >= z => x >= z (GEQ+GEQ => GEQ)";
 }
 
-static void test_transitive_longer_chain() {
-    TEST_CASE("Longer chain a > b > c > d deduces a > d");
-
+TEST(AssumptionRelationProps, TransitiveLongerChain) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -109,24 +93,19 @@ static void test_transitive_longer_chain() {
     SymbolicExpr c = make_var("c");
     SymbolicExpr d = make_var("d");
 
-    rs.add_relation(a, b, RelationalNode::Op::GT, ps);
-    rs.add_relation(b, c, RelationalNode::Op::GT, ps);
-    rs.add_relation(c, d, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(a, b, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(b, c, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(c, d, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
     // After adding a>b, b>c: a>c should be deduced
-    EXPECT_TRUE(rs.has_relation(a, c, RelationalNode::Op::GT),
-        "a > b, b > c => a > c");
+    EXPECT_TRUE((rs.has_relation(a, c, RelationalNode::Op::GT))) << "a > b, b > c => a > c";
 
     // After adding c>d: a>d, b>d should be deduced
-    EXPECT_TRUE(rs.has_relation(a, d, RelationalNode::Op::GT),
-        "a > b > c > d => a > d");
-    EXPECT_TRUE(rs.has_relation(b, d, RelationalNode::Op::GT),
-        "b > c > d => b > d");
+    EXPECT_TRUE((rs.has_relation(a, d, RelationalNode::Op::GT))) << "a > b > c > d => a > d";
+    EXPECT_TRUE((rs.has_relation(b, d, RelationalNode::Op::GT))) << "b > c > d => b > d";
 }
 
-static void test_transitive_mixed_chain() {
-    TEST_CASE("Mixed chain a > b >= c > d deduces a > d");
-
+TEST(AssumptionRelationProps, TransitiveMixedChain) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -135,18 +114,15 @@ static void test_transitive_mixed_chain() {
     SymbolicExpr c = make_var("c");
     SymbolicExpr d = make_var("d");
 
-    rs.add_relation(a, b, RelationalNode::Op::GT, ps);
-    rs.add_relation(b, c, RelationalNode::Op::GEQ, ps);
-    rs.add_relation(c, d, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(a, b, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(b, c, RelationalNode::Op::GEQ, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(c, d, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
     // a > b >= c > d => a > d (GT+GEQ => GT, then GT+GT => GT)
-    EXPECT_TRUE(rs.has_relation(a, d, RelationalNode::Op::GT),
-        "a > b >= c > d => a > d");
+    EXPECT_TRUE((rs.has_relation(a, d, RelationalNode::Op::GT))) << "a > b >= c > d => a > d";
 }
 
-static void test_transitive_backward_chaining() {
-    TEST_CASE("Backward chaining — adding earlier link deduces relation");
-
+TEST(AssumptionRelationProps, TransitiveBackwardChaining) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -155,17 +131,14 @@ static void test_transitive_backward_chaining() {
     SymbolicExpr z = make_var("z");
 
     // Add y > z first
-    rs.add_relation(y, z, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(y, z, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
     // Then add x > y — should trigger backward chain: x > z
-    rs.add_relation(x, y, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(rs.has_relation(x, z, RelationalNode::Op::GT),
-        "y > z then x > y => x > z (backward chaining)");
+    EXPECT_TRUE((rs.has_relation(x, z, RelationalNode::Op::GT))) << "y > z then x > y => x > z (backward chaining)";
 }
 
-static void test_transitive_no_duplicate_deduction() {
-    TEST_CASE("Transitive closure does not add duplicate relations");
-
+TEST(AssumptionRelationProps, TransitiveNoDuplicateDeduction) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -173,28 +146,29 @@ static void test_transitive_no_duplicate_deduction() {
     SymbolicExpr y = make_var("y");
     SymbolicExpr z = make_var("z");
 
-    rs.add_relation(x, y, RelationalNode::Op::GT, ps);
-    rs.add_relation(y, z, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(y, z, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
     // x > z should be deduced once
     size_t count = 0;
-    for (const auto& rel : rs.get_relations()) {
-        if (LMCAS::detail::node(rel.lhs) && LMCAS::detail::node(rel.rhs)) {
-            auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.lhs));
-            auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.rhs));
-            if (lhs_var && rhs_var &&
-                lhs_var->name() == "x" && rhs_var->name() == "z" &&
-                rel.op == RelationalNode::Op::GT) {
-                ++count;
-            }
+    for (const auto &rel : rs.get_relations()) {
+        if (!LMCAS::detail::node(rel.lhs) || !LMCAS::detail::node(rel.rhs)) {
+            continue;
+        }
+        auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.lhs));
+        auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.rhs));
+        if (!lhs_var || !rhs_var) {
+            continue;
+        }
+        if (lhs_var->name() == "x" && rhs_var->name() == "z" &&
+            rel.op == RelationalNode::Op::GT) {
+            ++count;
         }
     }
-    EXPECT_TRUE(count == 1, "x > z should appear exactly once (no duplicates)");
+    EXPECT_TRUE((count == 1)) << "x > z should appear exactly once (no duplicates)";
 }
 
-static void test_transitive_lt_leq_not_transitive() {
-    TEST_CASE("LT and LEQ do NOT participate in transitive closure");
-
+TEST(AssumptionRelationProps, TransitiveLtLeqNotTransitive) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -203,17 +177,14 @@ static void test_transitive_lt_leq_not_transitive() {
     SymbolicExpr z = make_var("z");
 
     // LT relations should be stored but not trigger transitive closure
-    rs.add_relation(x, y, RelationalNode::Op::LT, ps);
-    rs.add_relation(y, z, RelationalNode::Op::LT, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::LT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(y, z, RelationalNode::Op::LT, ps).has_value())) << "relation insertion succeeds";
 
     // x < z should NOT be deduced (only GT/GEQ participate)
-    EXPECT_FALSE(rs.has_relation(x, z, RelationalNode::Op::LT),
-        "LT does not participate in transitive closure");
+    EXPECT_FALSE((rs.has_relation(x, z, RelationalNode::Op::LT))) << "LT does not participate in transitive closure";
 }
 
-static void test_transitive_cap_at_64() {
-    TEST_CASE("Transitive closure capped at 64 new relations per add_relation");
-
+TEST(AssumptionRelationProps, TransitiveCapAt64) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -231,7 +202,7 @@ static void test_transitive_cap_at_64() {
 
     // Add the first 69 links one by one (this builds up the chain)
     for (int i = 0; i < 69; ++i) {
-        rs.add_relation(vars[i], vars[i + 1], RelationalNode::Op::GT, ps);
+        EXPECT_TRUE((rs.add_relation(vars[i], vars[i + 1], RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
     }
 
     // Count relations before adding the 70th variable link
@@ -239,21 +210,18 @@ static void test_transitive_cap_at_64() {
 
     // Now add v_all > v0 which would try to chain through all 69 existing links
     SymbolicExpr v_new = make_var("v_new");
-    rs.add_relation(v_new, vars[0], RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(v_new, vars[0], RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
     size_t after_count = rs.get_relations().size();
     // The new relations added should be at most 64 + 1 (the original relation itself)
     size_t new_relations = after_count - before_count;
 
     // The directly added relation is 1, plus at most 64 deduced
-    EXPECT_TRUE(new_relations <= 65,
-        "At most 64 new deduced relations + 1 original per add_relation call (got " +
-        std::to_string(new_relations) + ")");
+    EXPECT_TRUE((new_relations <= 65)) << "At most 64 new deduced relations + 1 original per add_relation call (got " +
+                                              std::to_string(new_relations) + ")";
 }
 
-static void test_transitive_sign_derivation_from_chain() {
-    TEST_CASE("Transitive closure derives sign when chain reaches zero");
-
+TEST(AssumptionRelationProps, TransitiveSignDerivationFromChain) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -262,24 +230,18 @@ static void test_transitive_sign_derivation_from_chain() {
     SymbolicExpr zero = make_zero();
 
     // x > y, y > 0 => x > 0 => x is Positive
-    rs.add_relation(x, y, RelationalNode::Op::GT, ps);
-    rs.add_relation(y, zero, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(x, y, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(y, zero, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
     // y > 0 directly derives Positive for y
-    EXPECT_TRUE(ps.has_sign("y", Sign::Positive),
-        "y > 0 derives Positive for y");
+    EXPECT_TRUE((ps.has_sign("y", Sign::Positive))) << "y > 0 derives Positive for y";
 
     // x > 0 should be deduced transitively, deriving Positive for x
-    EXPECT_TRUE(rs.has_relation(x, zero, RelationalNode::Op::GT),
-        "x > y > 0 => x > 0 deduced");
-    EXPECT_TRUE(ps.has_sign("x", Sign::Positive),
-        "x > y > 0 => x is Positive (sign derived from transitive closure)");
+    EXPECT_TRUE((rs.has_relation(x, zero, RelationalNode::Op::GT))) << "x > y > 0 => x > 0 deduced";
+    EXPECT_TRUE((ps.has_sign("x", Sign::Positive))) << "x > y > 0 => x is Positive (sign derived from transitive closure)";
 }
 
-
-static void test_reversed_0_lt_var_positive() {
-    TEST_CASE("0 LT var => var is Positive");
-
+TEST(AssumptionRelationProps, Reversed0LtVarPositive) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -287,19 +249,14 @@ static void test_reversed_0_lt_var_positive() {
     SymbolicExpr x = make_var("x");
 
     // 0 < x means x > 0, so x is Positive
-    rs.add_relation(zero, x, RelationalNode::Op::LT, ps);
+    EXPECT_TRUE((rs.add_relation(zero, x, RelationalNode::Op::LT, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(ps.has_sign("x", Sign::Positive),
-        "0 < x => x is Positive");
-    EXPECT_TRUE(ps.has_sign("x", Sign::NonNegative),
-        "0 < x => x is NonNegative (implied)");
-    EXPECT_TRUE(ps.has_sign("x", Sign::NonZero),
-        "0 < x => x is NonZero (implied)");
+    EXPECT_TRUE((ps.has_sign("x", Sign::Positive))) << "0 < x => x is Positive";
+    EXPECT_TRUE((ps.has_sign("x", Sign::NonNegative))) << "0 < x => x is NonNegative (implied)";
+    EXPECT_TRUE((ps.has_sign("x", Sign::NonZero))) << "0 < x => x is NonZero (implied)";
 }
 
-static void test_reversed_0_gt_var_negative() {
-    TEST_CASE("0 GT var => var is Negative");
-
+TEST(AssumptionRelationProps, Reversed0GtVarNegative) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -307,19 +264,14 @@ static void test_reversed_0_gt_var_negative() {
     SymbolicExpr y = make_var("y");
 
     // 0 > y means y < 0, so y is Negative
-    rs.add_relation(zero, y, RelationalNode::Op::GT, ps);
+    EXPECT_TRUE((rs.add_relation(zero, y, RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(ps.has_sign("y", Sign::Negative),
-        "0 > y => y is Negative");
-    EXPECT_TRUE(ps.has_sign("y", Sign::NonPositive),
-        "0 > y => y is NonPositive (implied)");
-    EXPECT_TRUE(ps.has_sign("y", Sign::NonZero),
-        "0 > y => y is NonZero (implied)");
+    EXPECT_TRUE((ps.has_sign("y", Sign::Negative))) << "0 > y => y is Negative";
+    EXPECT_TRUE((ps.has_sign("y", Sign::NonPositive))) << "0 > y => y is NonPositive (implied)";
+    EXPECT_TRUE((ps.has_sign("y", Sign::NonZero))) << "0 > y => y is NonZero (implied)";
 }
 
-static void test_reversed_0_geq_var_nonpositive() {
-    TEST_CASE("0 GEQ var => var is NonPositive");
-
+TEST(AssumptionRelationProps, Reversed0GeqVarNonpositive) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -327,15 +279,12 @@ static void test_reversed_0_geq_var_nonpositive() {
     SymbolicExpr z = make_var("z");
 
     // 0 >= z means z <= 0, so z is NonPositive
-    rs.add_relation(zero, z, RelationalNode::Op::GEQ, ps);
+    EXPECT_TRUE((rs.add_relation(zero, z, RelationalNode::Op::GEQ, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(ps.has_sign("z", Sign::NonPositive),
-        "0 >= z => z is NonPositive");
+    EXPECT_TRUE((ps.has_sign("z", Sign::NonPositive))) << "0 >= z => z is NonPositive";
 }
 
-static void test_reversed_0_leq_var_nonnegative() {
-    TEST_CASE("0 LEQ var => var is NonNegative");
-
+TEST(AssumptionRelationProps, Reversed0LeqVarNonnegative) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -343,15 +292,12 @@ static void test_reversed_0_leq_var_nonnegative() {
     SymbolicExpr w = make_var("w");
 
     // 0 <= w means w >= 0, so w is NonNegative
-    rs.add_relation(zero, w, RelationalNode::Op::LEQ, ps);
+    EXPECT_TRUE((rs.add_relation(zero, w, RelationalNode::Op::LEQ, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(ps.has_sign("w", Sign::NonNegative),
-        "0 <= w => w is NonNegative");
+    EXPECT_TRUE((ps.has_sign("w", Sign::NonNegative))) << "0 <= w => w is NonNegative";
 }
 
-static void test_reversed_0_neq_var_nonzero() {
-    TEST_CASE("0 NEQ var => var is NonZero");
-
+TEST(AssumptionRelationProps, Reversed0NeqVarNonzero) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -359,15 +305,12 @@ static void test_reversed_0_neq_var_nonzero() {
     SymbolicExpr v = make_var("v");
 
     // 0 != v means v != 0, so v is NonZero
-    rs.add_relation(zero, v, RelationalNode::Op::NEQ, ps);
+    EXPECT_TRUE((rs.add_relation(zero, v, RelationalNode::Op::NEQ, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(ps.has_sign("v", Sign::NonZero),
-        "0 != v => v is NonZero");
+    EXPECT_TRUE((ps.has_sign("v", Sign::NonZero))) << "0 != v => v is NonZero";
 }
 
-static void test_reversed_all_operators_comprehensive() {
-    TEST_CASE("All reversed operators mapped correctly");
-
+TEST(AssumptionRelationProps, ReversedAllOperatorsComprehensive) {
     struct TestCase {
         RelationalNode::Op op;
         Sign expected_sign;
@@ -375,51 +318,47 @@ static void test_reversed_all_operators_comprehensive() {
     };
 
     std::vector<TestCase> cases = {
-        {RelationalNode::Op::LT,  Sign::Positive,    "0 LT var => Positive"},
-        {RelationalNode::Op::GT,  Sign::Negative,    "0 GT var => Negative"},
-        {RelationalNode::Op::GEQ, Sign::NonPositive,  "0 GEQ var => NonPositive"},
+        {RelationalNode::Op::LT, Sign::Positive, "0 LT var => Positive"},
+        {RelationalNode::Op::GT, Sign::Negative, "0 GT var => Negative"},
+        {RelationalNode::Op::GEQ, Sign::NonPositive, "0 GEQ var => NonPositive"},
         {RelationalNode::Op::LEQ, Sign::NonNegative, "0 LEQ var => NonNegative"},
-        {RelationalNode::Op::NEQ, Sign::NonZero,     "0 NEQ var => NonZero"},
+        {RelationalNode::Op::NEQ, Sign::NonZero, "0 NEQ var => NonZero"},
     };
 
-    for (const auto& tc : cases) {
+    for (const auto &tc : cases) {
         RelationStore rs;
         PropertyStore ps;
 
         SymbolicExpr zero = make_zero();
         SymbolicExpr var = make_var("t");
 
-        rs.add_relation(zero, var, tc.op, ps);
+        EXPECT_TRUE((rs.add_relation(zero, var, tc.op, ps).has_value())) << "relation insertion succeeds";
 
-        EXPECT_TRUE(ps.has_sign("t", tc.expected_sign), tc.desc);
+        EXPECT_TRUE((ps.has_sign("t", tc.expected_sign))) << tc.desc;
     }
 }
 
-static void test_reversed_multiple_variables() {
-    TEST_CASE("Reversed pattern works for multiple variables");
-
+TEST(AssumptionRelationProps, ReversedMultipleVariables) {
     RelationStore rs;
     PropertyStore ps;
 
     SymbolicExpr zero = make_zero();
 
     // 0 < a, 0 > b, 0 >= c, 0 <= d, 0 != e
-    rs.add_relation(zero, make_var("a"), RelationalNode::Op::LT, ps);
-    rs.add_relation(zero, make_var("b"), RelationalNode::Op::GT, ps);
-    rs.add_relation(zero, make_var("c"), RelationalNode::Op::GEQ, ps);
-    rs.add_relation(zero, make_var("d"), RelationalNode::Op::LEQ, ps);
-    rs.add_relation(zero, make_var("e"), RelationalNode::Op::NEQ, ps);
+    EXPECT_TRUE((rs.add_relation(zero, make_var("a"), RelationalNode::Op::LT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(zero, make_var("b"), RelationalNode::Op::GT, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(zero, make_var("c"), RelationalNode::Op::GEQ, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(zero, make_var("d"), RelationalNode::Op::LEQ, ps).has_value())) << "relation insertion succeeds";
+    EXPECT_TRUE((rs.add_relation(zero, make_var("e"), RelationalNode::Op::NEQ, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(ps.has_sign("a", Sign::Positive), "a is Positive");
-    EXPECT_TRUE(ps.has_sign("b", Sign::Negative), "b is Negative");
-    EXPECT_TRUE(ps.has_sign("c", Sign::NonPositive), "c is NonPositive");
-    EXPECT_TRUE(ps.has_sign("d", Sign::NonNegative), "d is NonNegative");
-    EXPECT_TRUE(ps.has_sign("e", Sign::NonZero), "e is NonZero");
+    EXPECT_TRUE((ps.has_sign("a", Sign::Positive))) << "a is Positive";
+    EXPECT_TRUE((ps.has_sign("b", Sign::Negative))) << "b is Negative";
+    EXPECT_TRUE((ps.has_sign("c", Sign::NonPositive))) << "c is NonPositive";
+    EXPECT_TRUE((ps.has_sign("d", Sign::NonNegative))) << "d is NonNegative";
+    EXPECT_TRUE((ps.has_sign("e", Sign::NonZero))) << "e is NonZero";
 }
 
-static void test_reversed_non_variable_rhs_no_derivation() {
-    TEST_CASE("0 op composite_expr does NOT derive sign");
-
+TEST(AssumptionRelationProps, ReversedNonVariableRhsNoDerivation) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -431,22 +370,17 @@ static void test_reversed_non_variable_rhs_no_derivation() {
     auto add_node = LMCAS::detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{x_node, y_node});
     auto composite = LMCAS::detail::expression_from_node(add_node);
-    rs.add_relation(zero, composite, RelationalNode::Op::LT, ps);
+    EXPECT_TRUE((rs.add_relation(zero, composite, RelationalNode::Op::LT, ps).has_value())) << "relation insertion succeeds";
 
     // Neither x nor y should have sign derived
-    EXPECT_FALSE(ps.has_sign("x", Sign::Positive),
-        "0 < (x+y) should not derive sign for x");
-    EXPECT_FALSE(ps.has_sign("y", Sign::Positive),
-        "0 < (x+y) should not derive sign for y");
+    EXPECT_FALSE((ps.has_sign("x", Sign::Positive))) << "0 < (x+y) should not derive sign for x";
+    EXPECT_FALSE((ps.has_sign("y", Sign::Positive))) << "0 < (x+y) should not derive sign for y";
 
     // But the relation should still be stored
-    EXPECT_TRUE(rs.has_relation(zero, composite, RelationalNode::Op::LT),
-        "Relation with composite RHS should still be stored");
+    EXPECT_TRUE((rs.has_relation(zero, composite, RelationalNode::Op::LT))) << "Relation with composite RHS should still be stored";
 }
 
-static void test_reversed_non_zero_lhs_no_derivation() {
-    TEST_CASE("Non-zero LHS does NOT trigger reversed pattern");
-
+TEST(AssumptionRelationProps, ReversedNonZeroLhsNoDerivation) {
     RelationStore rs;
     PropertyStore ps;
 
@@ -454,70 +388,35 @@ static void test_reversed_non_zero_lhs_no_derivation() {
     auto five = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(5)));
     SymbolicExpr x = make_var("x");
 
-    rs.add_relation(five, x, RelationalNode::Op::LT, ps);
+    EXPECT_TRUE((rs.add_relation(five, x, RelationalNode::Op::LT, ps).has_value())) << "relation insertion succeeds";
 
     // x should NOT have Positive derived (only 0 op var triggers)
-    EXPECT_FALSE(ps.has_sign("x", Sign::Positive),
-        "5 < x should not trigger reversed pattern (non-zero LHS)");
+    EXPECT_FALSE((ps.has_sign("x", Sign::Positive))) << "5 < x should not trigger reversed pattern (non-zero LHS)";
 }
 
-static void test_reversed_relation_stored() {
-    TEST_CASE("Reversed relations are stored in the RelationStore");
-
+TEST(AssumptionRelationProps, ReversedRelationStored) {
     RelationStore rs;
     PropertyStore ps;
 
     SymbolicExpr zero = make_zero();
     SymbolicExpr x = make_var("x");
 
-    rs.add_relation(zero, x, RelationalNode::Op::LT, ps);
+    EXPECT_TRUE((rs.add_relation(zero, x, RelationalNode::Op::LT, ps).has_value())) << "relation insertion succeeds";
 
-    EXPECT_TRUE(rs.has_relation(zero, x, RelationalNode::Op::LT),
-        "0 < x relation should be stored");
+    EXPECT_TRUE((rs.has_relation(zero, x, RelationalNode::Op::LT))) << "0 < x relation should be stored";
 }
 
-static void test_reversed_eq_no_sign_derivation() {
-    TEST_CASE("0 EQ var does NOT derive sign (EQ not mapped)");
-
+TEST(AssumptionRelationProps, ReversedEqNoSignDerivation) {
     RelationStore rs;
     PropertyStore ps;
 
     SymbolicExpr zero = make_zero();
     SymbolicExpr x = make_var("x");
 
-    rs.add_relation(zero, x, RelationalNode::Op::EQ, ps);
+    EXPECT_TRUE((rs.add_relation(zero, x, RelationalNode::Op::EQ, ps).has_value())) << "relation insertion succeeds";
 
     // EQ is not mapped to any sign in the reversed pattern
-    EXPECT_FALSE(ps.has_sign("x", Sign::Positive), "0 == x does not derive Positive");
-    EXPECT_FALSE(ps.has_sign("x", Sign::Negative), "0 == x does not derive Negative");
-    EXPECT_FALSE(ps.has_sign("x", Sign::NonZero), "0 == x does not derive NonZero");
-}
-
-
-int main() {
-    test_transitive_gt_gt_chain();
-    test_transitive_geq_gt_chain();
-    test_transitive_gt_geq_chain();
-    test_transitive_geq_geq_chain();
-    test_transitive_longer_chain();
-    test_transitive_mixed_chain();
-    test_transitive_backward_chaining();
-    test_transitive_no_duplicate_deduction();
-    test_transitive_lt_leq_not_transitive();
-    test_transitive_cap_at_64();
-    test_transitive_sign_derivation_from_chain();
-
-    test_reversed_0_lt_var_positive();
-    test_reversed_0_gt_var_negative();
-    test_reversed_0_geq_var_nonpositive();
-    test_reversed_0_leq_var_nonnegative();
-    test_reversed_0_neq_var_nonzero();
-    test_reversed_all_operators_comprehensive();
-    test_reversed_multiple_variables();
-    test_reversed_non_variable_rhs_no_derivation();
-    test_reversed_non_zero_lhs_no_derivation();
-    test_reversed_relation_stored();
-    test_reversed_eq_no_sign_derivation();
-
-    return TEST_REPORT();
+    EXPECT_FALSE((ps.has_sign("x", Sign::Positive))) << "0 == x does not derive Positive";
+    EXPECT_FALSE((ps.has_sign("x", Sign::Negative))) << "0 == x does not derive Negative";
+    EXPECT_FALSE((ps.has_sign("x", Sign::NonZero))) << "0 == x does not derive NonZero";
 }

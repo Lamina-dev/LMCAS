@@ -13,4 +13,6 @@ UnivariateFactorResult factor_univariate_bridge_checked(
     const Polynomial<Rational>& polynomial,
     ComputationContext& context);
 
+Polynomial<BigInt> factor_integer_polynomial(const Polynomial<Rational>& polynomial);
+
 } // namespace LMCAS

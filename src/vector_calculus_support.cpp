@@ -1,9 +1,8 @@
 #include "internal/vector_calculus_support.hpp"
-#include "integration.hpp"
 #include "numeric_evaluation.hpp"
 #include "internal/numeric_probe.hpp"
 #include "solver.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 #include <cmath>
 #include <exception>
@@ -27,11 +26,6 @@ bool vector_calculus_checked_finite_numeric(
     return true;
 }
 
-bool vector_calculus_contains_unevaluated_integral(
-    const std::shared_ptr<const SymbolicNode>& node,
-    std::size_t) {
-    return LMCAS::detail::contains_node_type<IntegralNode>(node);
-}
 
 Result<void> vector_calculus_validate_expr_vars(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -215,6 +209,23 @@ Result<void> vector_calculus_validate_curve_vector_inputs(
         parametrization, t, a, b, context, operation);
 }
 
+static Result<void> vector_calculus_validate_surface_bounds(
+    const std::shared_ptr<SymbolicExpr>& u_lower,
+    const std::shared_ptr<SymbolicExpr>& u_upper,
+    const std::shared_ptr<SymbolicExpr>& v_lower,
+    const std::shared_ptr<SymbolicExpr>& v_upper,
+    const std::string& operation)
+{
+    for (const auto* bound : {&u_lower, &u_upper, &v_lower, &v_upper}) {
+        if (!*bound || !LMCAS::detail::node(*bound)) {
+            return Result<void>::failure(CasErrc::InvalidArgument,
+                                         "surface integral bounds cannot be null",
+                                         operation);
+        }
+    }
+    return Result<void>::success();
+}
+
 Result<void> vector_calculus_validate_surface_parametrization(
     const VectorField& parametrization,
     const std::string& u,
@@ -227,7 +238,9 @@ Result<void> vector_calculus_validate_surface_parametrization(
     const std::string& operation)
 {
     auto step = context.consume_steps(1, operation);
-    if (!step) return step;
+    if (!step) {
+        return step;
+    }
     if (parametrization.size() != 3) {
         return Result<void>::failure(CasErrc::InvalidArgument,
                                      "surface parametrization must be three-dimensional",
@@ -243,11 +256,10 @@ Result<void> vector_calculus_validate_surface_parametrization(
                                      "surface parameter variables must be distinct",
                                      operation);
     }
-    if (!u_lower || !LMCAS::detail::node(u_lower) || !u_upper || !LMCAS::detail::node(u_upper) ||
-        !v_lower || !LMCAS::detail::node(v_lower) || !v_upper || !LMCAS::detail::node(v_upper)) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "surface integral bounds cannot be null",
-                                     operation);
+    auto bounds = vector_calculus_validate_surface_bounds(
+        u_lower, u_upper, v_lower, v_upper, operation);
+    if (!bounds) {
+        return bounds;
     }
     for (const auto& component : parametrization) {
         if (!component || !LMCAS::detail::node(component)) {
@@ -363,16 +375,26 @@ bool vector_calculus_expr_zero_after_substitution(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::map<std::string, std::shared_ptr<SymbolicExpr>>& point)
 {
-    if (!expr || !LMCAS::detail::node(expr)) return false;
+    if (!expr || !LMCAS::detail::node(expr)) {
+        return false;
+    }
     auto substituted = expr;
     for (const auto& [var, value] : point) {
-        if (!value || !LMCAS::detail::node(value)) return false;
+        if (!value || !LMCAS::detail::node(value)) {
+            return false;
+        }
         substituted = substituted->substitute(var, value);
-        if (!substituted || !LMCAS::detail::node(substituted)) return false;
+        if (!substituted || !LMCAS::detail::node(substituted)) {
+            return false;
+        }
     }
     substituted = substituted->simplify();
-    if (!substituted || !LMCAS::detail::node(substituted)) return false;
-    if (substituted->is_zero()) return true;
+    if (!substituted || !LMCAS::detail::node(substituted)) {
+        return false;
+    }
+    if (substituted->is_zero()) {
+        return true;
+    }
     double value = 0.0;
     return vector_calculus_checked_finite_numeric(substituted, value) &&
            std::abs(value) < 1e-8;
@@ -419,4 +441,4 @@ VectorCalculusFieldResult vector_calculus_wrap_field(
     return VectorCalculusFieldResult::success(std::move(field));
 }
 
-} // namespace LMCAS::vector_calculus_detail
+}

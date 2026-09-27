@@ -1,8 +1,8 @@
 #pragma once
 
 #include "internal/exact_root_id.hpp"
-#include "exact_algebraic.hpp"
-#include "numeric_evaluation.hpp"
+#include "internal/exact_algebraic.hpp"
+#include "numeric_value.hpp"
 #include "result.hpp"
 
 #include <variant>
@@ -63,4 +63,4 @@ Result<ApproxComplex> evaluate_root_complex(
     const NumericEvaluationOptions& options,
     ComputationContext& context);
 
-} // namespace LMCAS::detail
+}

@@ -3,45 +3,43 @@
 #include <string>
 #include "integration.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "test_common.hpp"
+#include "test_expression_equivalence.hpp"
 
 using namespace LMCAS;
 
-bool test_cyclic_ibp() {
-    std::cout << "Test Case: Cyclic IBP (e^x * sin(x))" << std::endl;
-
+TEST(CyclicIntegration, DifferentiatesBackToIntegrand) {
     auto x = *(SymbolicExpr::variable("x"));
     auto ex = *(SymbolicExpr::exp(LMCAS::detail::make_expression_ptr(x)));
     auto sinx = *(SymbolicExpr::sin(LMCAS::detail::make_expression_ptr(x)));
     auto expr = *(SymbolicExpr::multiply(LMCAS::detail::make_expression_ptr(ex), LMCAS::detail::make_expression_ptr(sinx)));
 
-    std::cout << "Integration of: " << expr.to_string() << std::endl;
+    SCOPED_TRACE(expr.to_string());
     Integrator integrator;
     auto result = integrator.integrate(expr, "x");
-    if (!result) {
-        std::cout << "[FAIL] Integration failed: " << result.error().message << std::endl;
-        return false;
-    }
-    std::cout << "Result: " << result.value().to_string() << std::endl;
+    ASSERT_TRUE(result) << result.error().message;
 
     auto diff = result.value().differentiate("x")->simplify();
-    std::cout << "Derivative of result: " << diff->to_string() << std::endl;
+    ASSERT_NE(diff, nullptr);
 
     auto diff_check = test_normalized_delta(diff, LMCAS::detail::make_expression_ptr(expr));
 
-    if (diff_check && diff_check->is_zero()) {
-        std::cout << "[PASS]" << std::endl;
-        return true;
-    } else {
-        std::cout << "[FAIL] Derivative check failed: "
-                  << (diff_check ? diff_check->to_string() : "null") << std::endl;
-        return false;
-    }
+    ASSERT_NE(diff_check, nullptr);
+    EXPECT_TRUE(diff_check->is_zero()) << diff_check->to_string();
 }
 
-int main() {
-    EXPECT_TRUE(test_cyclic_ibp(), "cyclic IBP result differentiates back to the integrand");
-
-    return TEST_REPORT();
+TEST(CyclicIntegration, IntegerExponentialProduct) {
+    auto x = SymbolicExpr::variable("x");
+    auto reciprocal = SymbolicExpr::power(
+        SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(-2), x)),
+        SymbolicExpr::number(-1));
+    auto integrand = SymbolicExpr::multiply(reciprocal,
+                                            SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(-1), x)));
+    Integrator integrator;
+    auto primitive = integrator.integrate(*integrand, "x");
+    ASSERT_TRUE((primitive.has_value())) << "exponential collection terminates without a coefficient";
+    if (primitive) {
+        EXPECT_TRUE(test_proved_equivalent(primitive.value().differentiate("x"), SymbolicExpr::exp(x))) << "integer exponential product primitive differentiates to exp(x)";
+    }
 }

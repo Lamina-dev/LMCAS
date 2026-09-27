@@ -3,9 +3,10 @@
 #include "assumption_context.hpp"
 #include "solver.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "bigint.hpp"
 #include "rational.hpp"
+#include "numeric_evaluation.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,12 +15,15 @@
 
 using namespace LMCAS;
 
-
 /// Try to extract a numeric double value from a solution expression.
-static bool try_numeric(const std::shared_ptr<SymbolicExpr>& expr, double& out) {
-    if (!expr || !LMCAS::detail::node(expr)) return false;
+static bool try_numeric(const std::shared_ptr<SymbolicExpr> &expr, double &out) {
+    if (!expr || !LMCAS::detail::node(expr)) {
+        return false;
+    }
     auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr));
-    if (!num) return false;
+    if (!num) {
+        return false;
+    }
 
     if (std::holds_alternative<BigInt>(num->value())) {
         out = std::get<BigInt>(num->value()).to_double();
@@ -38,57 +42,23 @@ static bool try_numeric(const std::shared_ptr<SymbolicExpr>& expr, double& out) 
 
 /// Check if a solution set contains a numeric value (within tolerance).
 static bool solutions_contain_value(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& solutions,
-    double target, double tol = 1e-9)
-{
-    for (const auto& sol : solutions) {
+    const std::vector<std::shared_ptr<SymbolicExpr>> &solutions,
+    double target, double tol = 1e-9) {
+    for (const auto &sol : solutions) {
         double v = 0.0;
         if (try_numeric(sol, v)) {
-            if (std::abs(v - target) < tol) return true;
+            if (std::abs(v - target) < tol) {
+                return true;
+            }
         }
     }
     return false;
 }
 
 /// Check if any solution contains imaginary components (sqrt of negative).
-static bool any_solution_contains_imaginary(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& solutions)
-{
-    for (const auto& sol : solutions) {
-        if (!sol || !LMCAS::detail::node(sol)) continue;
-        // Check for FunctionNode(Sqrt, negative number)
-        auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(sol));
-        if (func && func->type() == FunctionNode::FuncType::Sqrt && func->arguments().size() == 1) {
-            auto num = std::dynamic_pointer_cast<const NumberNode>(func->arguments()[0]);
-            if (num) {
-                if (std::holds_alternative<BigInt>(num->value()) &&
-                    std::get<BigInt>(num->value()).IsNegative()) return true;
-                if (std::holds_alternative<Rational>(num->value()) &&
-                    std::get<Rational>(num->value()) < Rational(0)) return true;
-                if (std::holds_alternative<lmmc_real_t>(num->value()) &&
-                    std::get<lmmc_real_t>(num->value()) < 0.0) return true;
-            }
-        }
-        // Also check MultiplyNode containing sqrt(-1)
-        auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(sol));
-        if (mul) {
-            for (const auto& op : mul->operands()) {
-                auto f = std::dynamic_pointer_cast<const FunctionNode>(op);
-                if (f && f->type() == FunctionNode::FuncType::Sqrt && f->arguments().size() == 1) {
-                    auto n = std::dynamic_pointer_cast<const NumberNode>(f->arguments()[0]);
-                    if (n) {
-                        if (std::holds_alternative<BigInt>(n->value()) &&
-                            std::get<BigInt>(n->value()).IsNegative()) return true;
-                    }
-                }
-            }
-        }
-    }
-    return false;
-}
 
 /// Build equation x^2 - c = 0 as a SymbolicExpr (x^2 + (-c))
-static std::shared_ptr<SymbolicExpr> make_x_squared_minus(const std::string& var, int c) {
+static std::shared_ptr<SymbolicExpr> make_x_squared_minus(const std::string &var, int c) {
     auto x = SymbolicExpr::variable(var);
     auto x_sq = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto eq = SymbolicExpr::add(x_sq, SymbolicExpr::number(-c));
@@ -96,21 +66,18 @@ static std::shared_ptr<SymbolicExpr> make_x_squared_minus(const std::string& var
 }
 
 /// Build equation x^2 + c = 0 as a SymbolicExpr (x^2 + c)
-static std::shared_ptr<SymbolicExpr> make_x_squared_plus(const std::string& var, int c) {
+static std::shared_ptr<SymbolicExpr> make_x_squared_plus(const std::string &var, int c) {
     auto x = SymbolicExpr::variable(var);
     auto x_sq = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto eq = SymbolicExpr::add(x_sq, SymbolicExpr::number(c));
     return eq;
 }
 
-
-void test_x_squared_minus_4_real_domain() {
-    TEST_CASE("x²-4=0 with Real domain → both x=2 and x=-2 returned");
-
+TEST(LmcasAssumptionSolver, XSquaredMinus4RealDomain) {
     auto eq = make_x_squared_minus("x", 4);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
@@ -118,37 +85,29 @@ void test_x_squared_minus_4_real_domain() {
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
 
-    EXPECT_TRUE(has_2, "x²-4=0 Real domain: contains x=2");
-    EXPECT_TRUE(has_neg2, "x²-4=0 Real domain: contains x=-2");
-    EXPECT_TRUE(solutions.size() >= 2, "x²-4=0 Real domain: at least 2 solutions");
+    EXPECT_TRUE((has_2)) << "x²-4=0 Real domain: contains x=2";
+    EXPECT_TRUE((has_neg2)) << "x²-4=0 Real domain: contains x=-2";
+    EXPECT_TRUE((solutions.size() >= 2)) << "x²-4=0 Real domain: at least 2 solutions";
 }
 
-void test_x_squared_minus_4_positive_int() {
-    TEST_CASE("x²-4=0 with PositiveInt domain → only x=2");
-
+TEST(LmcasAssumptionSolver, XSquaredMinus4PositiveInt) {
     auto eq = make_x_squared_minus("x", 4);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::PositiveInt);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::PositiveInt).has_value());
 
-    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
-
-    // Only x=2 is a positive integer; x=-2 should be excluded
-    bool has_2 = solutions_contain_value(solutions, 2.0);
-    bool has_neg2 = solutions_contain_value(solutions, -2.0);
-
-    EXPECT_TRUE(has_2, "x²-4=0 PositiveInt: contains x=2");
-    EXPECT_FALSE(has_neg2, "x²-4=0 PositiveInt: does NOT contain x=-2");
+    auto result = solve_with_assumptions_checked(eq, "x", &ctx);
+    EXPECT_TRUE((result && result.value().size() == 1 &&
+                 solutions_contain_value(result.value(), 2.0)))
+        << "x²-4=0 PositiveInt: exactly x=2";
 }
 
-void test_x_squared_minus_4_nonnegative_sign() {
-    TEST_CASE("x²-4=0 with NonNegative sign → only x=2");
-
+TEST(LmcasAssumptionSolver, XSquaredMinus4NonnegativeSign) {
     auto eq = make_x_squared_minus("x", 4);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_sign("x", Sign::NonNegative);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::NonNegative).has_value());
 
     auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
@@ -156,80 +115,63 @@ void test_x_squared_minus_4_nonnegative_sign() {
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
 
-    EXPECT_TRUE(has_2, "x²-4=0 NonNegative sign: contains x=2");
-    EXPECT_FALSE(has_neg2, "x²-4=0 NonNegative sign: does NOT contain x=-2");
+    EXPECT_TRUE((has_2)) << "x²-4=0 NonNegative sign: contains x=2";
+    EXPECT_FALSE((has_neg2)) << "x²-4=0 NonNegative sign: does NOT contain x=-2";
 }
 
-
-void test_x_squared_plus_1_real_domain() {
-    TEST_CASE("x²+1=0 with Real domain → empty set (imaginary excluded)");
-
+TEST(LmcasAssumptionSolver, XSquaredPlus1RealDomain) {
     auto eq = make_x_squared_plus("x", 1);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
-    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
-
-    // x=i and x=-i are imaginary, so with Real domain both should be excluded
-    EXPECT_TRUE(solutions.empty(),
-                "x²+1=0 Real domain: empty set (all imaginary solutions excluded)");
+    auto result = solve_with_assumptions_checked(eq, "x", &ctx);
+    EXPECT_TRUE((result && result.value().empty())) << "x²+1=0 Real domain: successful empty set";
 }
 
-void test_x_squared_plus_1_no_context() {
-    TEST_CASE("x²+1=0 without context → all solutions returned");
-
+TEST(LmcasAssumptionSolver, XSquaredPlus1NoContext) {
     auto eq = make_x_squared_plus("x", 1);
 
     // No context (nullptr) - all solutions returned unfiltered
     auto solutions = solve_with_assumptions_checked(eq, "x", nullptr).value();
 
     /// 默认求解路径返回复数域中的虚数解.
-    EXPECT_TRUE(solutions.size() >= 1,
-                "x²+1=0 no context: at least 1 solution returned (imaginary)");
+    EXPECT_TRUE((solutions.size() >= 1)) << "x²+1=0 no context: at least 1 solution returned (imaginary)";
 }
 
-
-void test_x_squared_minus_1_positive_sign() {
-    TEST_CASE("x²-1=0 with Positive sign → only x=1");
-
+TEST(LmcasAssumptionSolver, XSquaredMinus1PositiveSign) {
     auto eq = make_x_squared_minus("x", 1);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_sign("x", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
     auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);
 
-    EXPECT_TRUE(has_1, "x²-1=0 Positive sign: contains x=1");
-    EXPECT_FALSE(has_neg1, "x²-1=0 Positive sign: does NOT contain x=-1");
+    EXPECT_TRUE((has_1)) << "x²-1=0 Positive sign: contains x=1";
+    EXPECT_FALSE((has_neg1)) << "x²-1=0 Positive sign: does NOT contain x=-1";
 }
 
-void test_x_squared_minus_1_negative_sign() {
-    TEST_CASE("x²-1=0 with Negative sign → only x=-1");
-
+TEST(LmcasAssumptionSolver, XSquaredMinus1NegativeSign) {
     auto eq = make_x_squared_minus("x", 1);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_sign("x", Sign::Negative);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Negative).has_value());
 
     auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);
 
-    EXPECT_FALSE(has_1, "x²-1=0 Negative sign: does NOT contain x=1");
-    EXPECT_TRUE(has_neg1, "x²-1=0 Negative sign: contains x=-1");
+    EXPECT_FALSE((has_1)) << "x²-1=0 Negative sign: does NOT contain x=1";
+    EXPECT_TRUE((has_neg1)) << "x²-1=0 Negative sign: contains x=-1";
 }
 
-
-void test_no_context_all_solutions_returned() {
-    TEST_CASE("No context (nullptr) → all solutions returned unfiltered");
-
+TEST(LmcasAssumptionSolver, NoContextAllSolutionsReturned) {
     // x^2 - 4 = 0 -> x=2, x=-2
     auto eq = make_x_squared_minus("x", 4);
 
@@ -238,14 +180,12 @@ void test_no_context_all_solutions_returned() {
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
 
-    EXPECT_TRUE(has_2, "x²-4=0 no context: contains x=2");
-    EXPECT_TRUE(has_neg2, "x²-4=0 no context: contains x=-2");
-    EXPECT_TRUE(solutions.size() >= 2, "x²-4=0 no context: at least 2 solutions");
+    EXPECT_TRUE((has_2)) << "x²-4=0 no context: contains x=2";
+    EXPECT_TRUE((has_neg2)) << "x²-4=0 no context: contains x=-2";
+    EXPECT_TRUE((solutions.size() >= 2)) << "x²-4=0 no context: at least 2 solutions";
 }
 
-void test_no_context_x_squared_minus_1() {
-    TEST_CASE("x²-1=0 no context → both x=1 and x=-1 returned");
-
+TEST(LmcasAssumptionSolver, NoContextXSquaredMinus1) {
     auto eq = make_x_squared_minus("x", 1);
 
     auto solutions = solve_with_assumptions_checked(eq, "x", nullptr).value();
@@ -253,66 +193,25 @@ void test_no_context_x_squared_minus_1() {
     bool has_1 = solutions_contain_value(solutions, 1.0);
     bool has_neg1 = solutions_contain_value(solutions, -1.0);
 
-    EXPECT_TRUE(has_1, "x²-1=0 no context: contains x=1");
-    EXPECT_TRUE(has_neg1, "x²-1=0 no context: contains x=-1");
+    EXPECT_TRUE((has_1)) << "x²-1=0 no context: contains x=1";
+    EXPECT_TRUE((has_neg1)) << "x²-1=0 no context: contains x=-1";
 }
 
-
-void test_all_solutions_filtered_empty_result() {
-    TEST_CASE("All solutions filtered → empty result set");
-
-    // x^2 - 4 = 0 -> x=2, x=-2
-    // With Negative sign: x=2 excluded (positive), x=-2 excluded? No, -2 is negative.
-    // Let's use a case where all solutions are excluded:
-    // x^2 + 1 = 0 with Real domain -> both imaginary -> empty set
-    auto eq = make_x_squared_plus("x", 1);
-
-    AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
-
-    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
-
-    EXPECT_TRUE(solutions.empty(),
-                "All imaginary solutions filtered with Real domain → empty set");
-}
-
-void test_all_solutions_filtered_positive_int() {
-    TEST_CASE("x²-4=0 with PositiveInt and x>2 constraint → may filter all");
-
-    // x^2 - 2 = 0 -> x=sqrt(2), x=-sqrt(2)
-    // With PositiveInt domain: sqrt(2) is not an integer -> excluded
-    //                          -sqrt(2) is negative -> excluded
-    // Result: empty set
+TEST(LmcasAssumptionSolver, AllSolutionsFilteredPositiveInt) {
     auto eq = make_x_squared_minus("x", 2);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::PositiveInt);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::PositiveInt).has_value());
 
-    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
-
-    // sqrt(2) is irrational, not an integer. The solver may return it as a
-    // symbolic expression. If it's not a pure NumberNode, the integer filter
-    // may not catch it. Check that at minimum no negative values are present.
-    for (const auto& sol : solutions) {
-        double v = 0.0;
-        if (try_numeric(sol, v)) {
-            EXPECT_TRUE(v > 0.0, "PositiveInt: no non-positive numeric solutions");
-            // Check it's an integer
-            double rounded = std::round(v);
-            EXPECT_TRUE(std::abs(v - rounded) < 1e-9,
-                        "PositiveInt: numeric solutions are integers");
-        }
-    }
+    auto result = solve_with_assumptions_checked(eq, "x", &ctx);
+    EXPECT_TRUE((result && result.value().empty())) << "x²−2=0 PositiveInt: successful empty set";
 }
 
-
-void test_natural_domain_excludes_negative() {
-    TEST_CASE("x²-4=0 with Natural domain → only x=2 (non-negative integer)");
-
+TEST(LmcasAssumptionSolver, NaturalDomainExcludesNegative) {
     auto eq = make_x_squared_minus("x", 4);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Natural);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Natural).has_value());
 
     auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
@@ -320,107 +219,90 @@ void test_natural_domain_excludes_negative() {
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
 
-    EXPECT_TRUE(has_2, "x²-4=0 Natural domain: contains x=2");
-    EXPECT_FALSE(has_neg2, "x²-4=0 Natural domain: does NOT contain x=-2");
+    EXPECT_TRUE((has_2)) << "x²-4=0 Natural domain: contains x=2";
+    EXPECT_FALSE((has_neg2)) << "x²-4=0 Natural domain: does NOT contain x=-2";
 }
 
-void test_integer_domain_both_returned() {
-    TEST_CASE("x²-4=0 with Integer domain → both x=2 and x=-2 (both integers)");
-
+TEST(LmcasAssumptionSolver, IntegerDomainBothReturned) {
     auto eq = make_x_squared_minus("x", 4);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Integer).has_value());
 
-    auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
-
-    // Both 2 and -2 are integers
-    bool has_2 = solutions_contain_value(solutions, 2.0);
-    bool has_neg2 = solutions_contain_value(solutions, -2.0);
-
-    EXPECT_TRUE(has_2, "x²-4=0 Integer domain: contains x=2");
-    EXPECT_TRUE(has_neg2, "x²-4=0 Integer domain: contains x=-2");
+    auto result = solve_with_assumptions_checked(eq, "x", &ctx);
+    EXPECT_TRUE((result && result.value().size() == 2 &&
+                 solutions_contain_value(result.value(), 2.0) &&
+                 solutions_contain_value(result.value(), -2.0)))
+        << "x²-4=0 Integer: exactly x=2 and x=-2";
 }
 
-void test_complex_domain_no_filtering() {
-    TEST_CASE("Complex domain (default) → no filtering applied");
-
+TEST(LmcasAssumptionSolver, ComplexDomainNoFiltering) {
     // x^2 + 1 = 0 with Complex domain -> imaginary solutions should be kept
     auto eq = make_x_squared_plus("x", 1);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Complex);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Complex).has_value());
 
     auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     // Complex is the default/least restrictive - no filtering
-    EXPECT_TRUE(solutions.size() >= 1,
-                "x²+1=0 Complex domain: solutions returned (no filtering)");
+    EXPECT_TRUE((solutions.size() >= 1)) << "x²+1=0 Complex domain: solutions returned (no filtering)";
 }
 
-void test_nonpositive_sign_filtering() {
-    TEST_CASE("x²-4=0 with NonPositive sign → only x=-2");
-
+TEST(LmcasAssumptionSolver, NonpositiveSignFiltering) {
     auto eq = make_x_squared_minus("x", 4);
 
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_sign("x", Sign::NonPositive);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::NonPositive).has_value());
 
     auto solutions = solve_with_assumptions_checked(eq, "x", &ctx).value();
 
     bool has_2 = solutions_contain_value(solutions, 2.0);
     bool has_neg2 = solutions_contain_value(solutions, -2.0);
 
-    EXPECT_FALSE(has_2, "x²-4=0 NonPositive sign: does NOT contain x=2");
-    EXPECT_TRUE(has_neg2, "x²-4=0 NonPositive sign: contains x=-2");
+    EXPECT_FALSE((has_2)) << "x²-4=0 NonPositive sign: does NOT contain x=2";
+    EXPECT_TRUE((has_neg2)) << "x²-4=0 NonPositive sign: contains x=-2";
 }
 
+TEST(LmcasAssumptionSolver, CubicExactRootDomains) {
+    auto x = SymbolicExpr::variable("x");
+    auto equation = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(3)),
+        SymbolicExpr::number(-2));
 
-int main() {
-    // Test Case 1: x^2-4=0 with various domain/sign constraints
-    test_x_squared_minus_4_real_domain();
-    test_x_squared_minus_4_positive_int();
-    test_x_squared_minus_4_nonnegative_sign();
-
-    // Test Case 2: x^2+1=0 (imaginary solutions)
-    test_x_squared_plus_1_real_domain();
-    test_x_squared_plus_1_no_context();
-
-    // Test Case 3: x^2-1=0 with sign constraints
-    test_x_squared_minus_1_positive_sign();
-    test_x_squared_minus_1_negative_sign();
-
-    // Test Case 4: No context (nullptr)
-    test_no_context_all_solutions_returned();
-    test_no_context_x_squared_minus_1();
-
-    // Test Case 5: All solutions filtered -> empty result
-    test_all_solutions_filtered_empty_result();
-    test_all_solutions_filtered_positive_int();
-
-    // Additional property tests
-    test_natural_domain_excludes_negative();
-    test_integer_domain_both_returned();
-    test_complex_domain_no_filtering();
-    test_nonpositive_sign_filtering();
-
-    TEST_CASE("Checked Assumption Solver Contract");
-    {
-        auto invalid = solve_with_assumptions_checked(nullptr, "x");
-        EXPECT_TRUE(!invalid &&
-                        invalid.error().code == CasErrc::InvalidArgument,
-                    "null assumption-aware equation is invalid");
-
-        ResourceLimits limits;
-        limits.max_steps = 0;
-        ComputationContext context(limits);
-        auto limited = solve_with_assumptions_checked(
-            make_x_squared_minus("x", 1), "x", nullptr, context);
-        EXPECT_TRUE(!limited &&
-                        limited.error().code == CasErrc::ResourceLimit,
-                    "assumption-aware solve preserves exhausted budget");
+    AssumptionContext real;
+    EXPECT_TRUE((real.assume_domain("x", Domain::Real).has_value())) << "real domain assumption succeeds";
+    auto real_roots = solve_with_assumptions_checked(equation, "x", &real);
+    EXPECT_TRUE((real_roots && real_roots.value().size() == 1)) << "x^3-2 has exactly one real solution";
+    if (real_roots && real_roots.value().size() == 1) {
+        auto value = evaluate_numeric(*real_roots.value().front());
+        EXPECT_TRUE((value && std::isfinite(value.value().value) &&
+                     std::abs(value.value().value - std::cbrt(2.0)) < 1e-10))
+            << "the retained real solution is cube-root two";
     }
 
-    return TEST_REPORT();
+    AssumptionContext complex;
+    EXPECT_TRUE((complex.assume_domain("x", Domain::Complex).has_value())) << "complex domain assumption succeeds";
+    auto complex_roots = solve_with_assumptions_checked(equation, "x", &complex);
+    EXPECT_TRUE((complex_roots && complex_roots.value().size() == 3)) << "complex domain retains all three cubic solutions";
+
+    auto unrestricted = solve_with_assumptions_checked(equation, "x", nullptr);
+    EXPECT_TRUE((unrestricted && unrestricted.value().size() == 3)) << "absent assumptions retain all three cubic solutions";
+}
+
+TEST(LmcasAssumptionSolver, CheckedAssumptionSolverContract) {
+    auto invalid = solve_with_assumptions_checked(nullptr, "x");
+    EXPECT_TRUE((!invalid &&
+                 invalid.error().code == CasErrc::InvalidArgument))
+        << "null assumption-aware equation is invalid";
+
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext context(limits);
+    auto limited = solve_with_assumptions_checked(
+        make_x_squared_minus("x", 1), "x", nullptr, context);
+    EXPECT_TRUE((!limited &&
+                 limited.error().code == CasErrc::ResourceLimit))
+        << "assumption-aware solve preserves exhausted budget";
 }

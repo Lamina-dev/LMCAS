@@ -18,8 +18,8 @@ struct SolveOptions {
     bool allow_numeric = false;           ///< 是否允许数值求解
     int max_newton_iterations = 100;      ///< Newton 迭代最大次数
     lmmc_real_t tolerance = 1e-12;        ///< 收敛容差
-    int max_roots = -1;                   ///< 最大返回根数,-1 表示不限制
-    bool return_rootof = true;            ///< 无闭式解时是否返回 RootOf 表达式
+    int max_roots = -1;                   /**< 数值候选数量预算；精确解集和整数解族保持完整。 */
+    bool return_rootof = true;            /**< 为 false 时，任何不可表示的根使整个求解返回 Inconclusive。 */
     lmmc_real_t initial_guess = 0.0;      ///< 数值迭代初始猜测值
     bool has_initial_guess = false;       ///< 是否指定了初始猜测值
 
@@ -48,11 +48,17 @@ enum class SolveStrategy {
 
 
 /**
- * @brief Solves an equation within the verified support domain.
- *
- * Exact rational polynomials produce exact RootOf solutions. Approximate
- * `allow_numeric` 启用时生成数值候选,并通过受检数值求值验证.
- * 符号支持域之外的输入返回 Inconclusive SolutionSet,保留解集完备性信息.
+ * @brief 在已验证支持域内求方程的完整解集。
+ * 精确有理多项式保留全部复根及重数，以精确根式或 RootOf 表示，保持系数精确。
+ * 实超越反演保留原操作数定义域、整数参数和未决条件；系数退化未知时，
+ * 返回完整的 ConditionalSolutions，并以条件限定通用根。
+ * 数值搜索可辅助求解；候选残差全部通过仍不足以证明完备性。
+ * 完备性未证或完整定义域无法表示时返回 CasErrc::Inconclusive。
+ * 成功表示在上下文假设及所有返回条件下，得到操作定义域内的完整解集。
+ * UniversalSolutions 仅在该域内普遍成立，原式极点始终排除。
+ * 候选残差恒等式仅证明公共定义域上的正确性；可定义性、根的互异性及覆盖性须另证。
+ * 未决逐点条件须保留为条件或 Inconclusive，形式非恒等式不足以消除这些条件。
+ * 资源耗尽与取消仍作为外层错误返回。
  */
 LMCAS_API SolveResult solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -72,6 +78,10 @@ LMCAS_API SolveResult solve_equation(
 using FiniteSolveResult =
     Result<std::vector<std::shared_ptr<SymbolicExpr>>>;
 
+/**
+ * @brief 投影完整、无条件的有限解集，并保留重数。
+ * 空集投影为空向量；无限解集或条件解集返回 Inconclusive。
+ */
 LMCAS_API FiniteSolveResult solve_finite_checked(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable,

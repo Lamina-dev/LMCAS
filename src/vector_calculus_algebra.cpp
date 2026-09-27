@@ -1,17 +1,7 @@
 #include "internal/vector_calculus_support.hpp"
-#include "integration.hpp"
-#include "numeric_evaluation.hpp"
-#include "solver.hpp"
-#include "symbolic_ast.hpp"
+#include "vector_calculus_vectors.hpp"
+#include "internal/symbolic_ast.hpp"
 
-#include <cmath>
-#include <exception>
-#include <map>
-#include <memory>
-#include <set>
-#include <stdexcept>
-#include <string>
-#include <vector>
 
 namespace LMCAS {
 
@@ -33,22 +23,33 @@ VectorCalculusExprResult dot_product(const VectorField& a, const VectorField& b)
     return VectorCalculusExprResult::success(sum->simplify());
 }
 
-VectorCalculusFieldResult cross_product(const VectorField& a, const VectorField& b)
-{
+std::shared_ptr<SymbolicExpr>
+vector_calculus_detail::vector_calculus_cross_component(
+    const VectorField& left, const VectorField& right, std::size_t index) {
+    static constexpr std::size_t first[] = {1, 2, 0};
+    static constexpr std::size_t second[] = {2, 0, 1};
+    return SymbolicExpr::add(
+        SymbolicExpr::multiply(left[first[index]], right[second[index]]),
+        SymbolicExpr::multiply(
+            SymbolicExpr::number(-1),
+            SymbolicExpr::multiply(
+                left[second[index]], right[first[index]])));
+}
+
+VectorCalculusFieldResult cross_product(
+    const VectorField& a, const VectorField& b) {
     if (a.size() != 3 || b.size() != 3) {
         return VectorCalculusFieldResult::failure(
             CasErrc::DimensionMismatch,
             "vectors must be three-dimensional",
             "cross_product");
     }
-    auto sub = [](const std::shared_ptr<SymbolicExpr>& p,
-                  const std::shared_ptr<SymbolicExpr>& q) {
-        return SymbolicExpr::add(p, SymbolicExpr::multiply(SymbolicExpr::number(-1), q));
-    };
-    VectorField result(3);
-    result[0] = sub(SymbolicExpr::multiply(a[1], b[2]), SymbolicExpr::multiply(a[2], b[1]))->simplify();
-    result[1] = sub(SymbolicExpr::multiply(a[2], b[0]), SymbolicExpr::multiply(a[0], b[2]))->simplify();
-    result[2] = sub(SymbolicExpr::multiply(a[0], b[1]), SymbolicExpr::multiply(a[1], b[0]))->simplify();
+    VectorField result;
+    result.reserve(3);
+    for (std::size_t index = 0; index < 3; ++index) {
+        result.push_back(
+            vector_calculus_cross_component(a, b, index)->simplify());
+    }
     return VectorCalculusFieldResult::success(std::move(result));
 }
 
@@ -96,9 +97,13 @@ VectorCalculusExprResult scalar_project(const VectorField& a, const VectorField&
 VectorCalculusExprResult vector_angle_symbolic(const VectorField& a, const VectorField& b)
 {
     auto aa_result = dot_product(a, a);
-    if (!aa_result) return aa_result;
+    if (!aa_result) {
+        return aa_result;
+    }
     auto bb_result = dot_product(b, b);
-    if (!bb_result) return bb_result;
+    if (!bb_result) {
+        return bb_result;
+    }
     auto aa = aa_result.value();
     auto bb = bb_result.value();
     if ((LMCAS::detail::node(aa) && LMCAS::detail::node(aa)->is_zero()) ||
@@ -106,7 +111,9 @@ VectorCalculusExprResult vector_angle_symbolic(const VectorField& a, const Vecto
         return VectorCalculusExprResult::success(nullptr);
     }
     auto ab_result = dot_product(a, b);
-    if (!ab_result) return ab_result;
+    if (!ab_result) {
+        return ab_result;
+    }
     auto denom = SymbolicExpr::multiply(SymbolicExpr::sqrt(aa), SymbolicExpr::sqrt(bb));
     auto cos_theta = SymbolicExpr::divide(ab_result.value(), denom);
     auto arccos_node = LMCAS::detail::make_node<FunctionNode>(
@@ -124,5 +131,4 @@ VectorCalculusExprResult mixed_product(
     return dot_product(a, cross.value());
 }
 
-
-} // namespace LMCAS
+}

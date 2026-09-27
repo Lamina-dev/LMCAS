@@ -43,6 +43,10 @@ T gcd_coeff_impl(const T& a, const T& b) {
  * @tparam CoeffType 系数类型(支持 BigInt,Rational,int 等)
  *
  * 系数按升幂存储:coeffs[i] 对应 x^i 的系数.
+ * 非零操作数必须属于同一命名变量环（包括显式常数），否则算术、
+ * 带余除法、伪除法和 GCD 抛出 std::invalid_argument，判等返回 false。
+ * 加减乘中的零元素嵌入非零侧变量环；双方为零时保留左侧变量环。
+ * 零被除数的商和余数采用除数变量环；零除数始终非法。
  */
 template <typename CoeffType>
 class Polynomial {
@@ -113,20 +117,9 @@ public:
      * @return 和多项式
      */
     Polynomial operator+(const Polynomial& other) const {
-        std::string result_var = variable_name;
-        if (variable_name != other.variable_name) {
-            /// 两个有效多项式共享变量名;零多项式沿用另一侧变量域.
-            if (!is_zero() && !other.is_zero()) {
-                throw std::invalid_argument(
-                    "Polynomial::operator+: variable name mismatch ('" +
-                    variable_name + "' vs '" + other.variable_name + "')");
-            }
-            /// 单侧为零时沿用非零侧变量名,保持结果变量域稳定.
-            if (is_zero() && !other.is_zero()) {
-                result_var = other.variable_name;
-            }
-        }
-
+        require_compatible_variables(other, "Polynomial::operator+");
+        const auto& result_var = is_zero() && !other.is_zero()
+            ? other.variable_name : variable_name;
         Polynomial res(result_var);
         size_t n = std::max(coeffs.size(), other.coeffs.size());
         res.coeffs.resize(n);
@@ -146,18 +139,9 @@ public:
      * @return 差多项式
      */
     Polynomial operator-(const Polynomial& other) const {
-         std::string result_var = variable_name;
-         if (variable_name != other.variable_name) {
-             if (!is_zero() && !other.is_zero()) {
-                 throw std::invalid_argument(
-                     "Polynomial::operator-: variable name mismatch ('" +
-                     variable_name + "' vs '" + other.variable_name + "')");
-             }
-             if (is_zero() && !other.is_zero()) {
-                 result_var = other.variable_name;
-             }
-         }
-
+         require_compatible_variables(other, "Polynomial::operator-");
+         const auto& result_var = is_zero() && !other.is_zero()
+             ? other.variable_name : variable_name;
          Polynomial res(result_var);
          size_t n = std::max(coeffs.size(), other.coeffs.size());
          res.coeffs.resize(n);
@@ -177,9 +161,11 @@ public:
      * @return 积多项式
      */
     Polynomial operator*(const Polynomial& other) const {
-        if (is_zero() || other.is_zero()) return Polynomial(variable_name);
-
-        Polynomial res(variable_name);
+        require_compatible_variables(other, "Polynomial::operator*");
+        const auto& result_var = is_zero() && !other.is_zero()
+            ? other.variable_name : variable_name;
+        Polynomial res(result_var);
+        if (is_zero() || other.is_zero()) { return res; }
         res.coeffs.resize(coeffs.size() + other.coeffs.size() - 1, CoeffType(0));
 
         for (size_t i = 0; i < coeffs.size(); ++i) {
@@ -194,13 +180,19 @@ public:
     /**
      * @brief 多项式判等
      * @param other 比较对象
-     * @return 系数完全相同返回 true
+     * @return 同一命名变量环内系数完全相同返回 true；所有零多项式相等
      */
     bool operator==(const Polynomial& other) const {
-         if (degree() != other.degree()) return false;
-         if (variable_name != other.variable_name && !is_zero() && !other.is_zero()) return false;
+         if (degree() != other.degree()) {
+             return false;
+         }
+         if (!variables_compatible(other)) {
+             return false;
+         }
          for (size_t i = 0; i < coeffs.size(); ++i) {
-             if (coeffs[i] != other.coeffs[i]) return false;
+             if (coeffs[i] != other.coeffs[i]) {
+                 return false;
+             }
          }
          return true;
     }
@@ -210,9 +202,14 @@ public:
      * @param other 除数多项式
      * @return pair(商, 余数)
      * @throw std::runtime_error 除数为零多项式时抛出
+     * @throw std::invalid_argument 两个非零操作数的变量名不同时抛出
      */
     std::pair<Polynomial, Polynomial> div_mod(const Polynomial& other) const {
         if (other.is_zero()) throw std::runtime_error("Division by zero polynomial");
+        require_compatible_variables(other, "Polynomial::div_mod");
+        if (is_zero()) {
+            return {Polynomial(other.variable_name), Polynomial(other.variable_name)};
+        }
 
         Polynomial quotient(variable_name);
         Polynomial remainder = *this;
@@ -272,100 +269,22 @@ public:
      * @brief 计算多项式的容度(所有系数的 GCD)
      * @return 容度值
      */
-    CoeffType content() const {
-        if (is_zero()) return CoeffType(0);
-        CoeffType g = coeffs[0];
-
-        if constexpr (std::is_same_v<CoeffType, Rational>) {
-             return CoeffType(1);
-        } else {
-
-            for (size_t i = 1; i < coeffs.size(); ++i) {
-                g = gcd_coeff(g, coeffs[i]);
-                if (g == CoeffType(1)) break;
-            }
-            return g;
-        }
-    }
+    CoeffType content() const;
 
     /**
      * @brief 计算多项式的本原部分(除以容度)
      * @return 本原多项式
      */
-    Polynomial primitive_part() const {
-        if (is_zero()) return *this;
-        CoeffType c = content();
-        if (c == CoeffType(0) || c == CoeffType(1)) return *this;
-
-        Polynomial res(variable_name);
-        res.coeffs.reserve(coeffs.size());
-        for (const auto& val : coeffs) {
-
-            res.coeffs.push_back(val / c);
-        }
-
-        if (res.lead_coeff() < CoeffType(0)) {
-
-             for (auto& val : res.coeffs) {
-
-                 val = CoeffType(0) - val;
-             }
-        }
-        return res;
-    }
+    Polynomial primitive_part() const;
 
     /**
      * @brief 通过系数缩放执行伪除法,运算保持在原系数环
      * @param other 除数多项式
      * @return pair(伪商, 伪余数)
      * @throw std::runtime_error 除数为零多项式时抛出
+     * @throw std::invalid_argument 两个非零操作数的变量名不同时抛出
      */
-    std::pair<Polynomial, Polynomial> pseudo_div_mod(const Polynomial& other) const {
-        if (other.is_zero()) throw std::runtime_error("Division by zero polynomial");
-
-        int deg_rem = degree();
-        int deg_div = other.degree();
-
-        if (deg_rem < deg_div) {
-             return {Polynomial(variable_name), *this};
-        }
-
-        Polynomial remainder = *this;
-        Polynomial quotient(variable_name);
-        CoeffType lc_div = other.lead_coeff();
-
-        int delta = deg_rem - deg_div;
-        quotient.coeffs.resize(delta + 1, CoeffType(0));
-
-        while (deg_rem >= deg_div && !remainder.is_zero()) {
-             int current_diff = deg_rem - deg_div;
-             CoeffType lc_rem = remainder.lead_coeff();
-
-             for (auto& c : quotient.coeffs) c = c * lc_div;
-
-             quotient.coeffs[current_diff] = quotient.coeffs[current_diff] + lc_rem;
-
-             Polynomial term(variable_name);
-             term.coeffs.resize(current_diff + 1, CoeffType(0));
-             term.coeffs[current_diff] = lc_rem;
-
-             for(auto& c : remainder.coeffs) c = c * lc_div;
-
-             for (size_t i = 0; i < other.coeffs.size(); ++i) {
-                 size_t target_idx = i + current_diff;
-
-                 if (target_idx < remainder.coeffs.size()) {
-                    remainder.coeffs[target_idx] = remainder.coeffs[target_idx] - other.coeffs[i] * lc_rem;
-                 }
-
-             }
-
-             remainder.trim();
-             deg_rem = remainder.degree();
-        }
-
-        return {quotient, remainder};
-    }
+    std::pair<Polynomial, Polynomial> pseudo_div_mod(const Polynomial& other) const;
 
     /**
      * @brief 对多项式求值(Horner 法)
@@ -420,121 +339,81 @@ public:
      * @param other 除数多项式
      * @return 伪余数
      */
-    Polynomial pseudo_div_mod_rem(const Polynomial& other) const {
-
-        return pseudo_div_mod(other).second;
-    }
+    Polynomial pseudo_div_mod_rem(const Polynomial& other) const;
 
     /**
      * @brief 计算两个多项式的最大公因式
      * @param a 第一个多项式
      * @param b 第二个多项式
      * @return gcd(a, b)
+     * @throw std::invalid_argument 两个非零操作数的变量名不同时抛出
      */
-    static Polynomial gcd(Polynomial a, Polynomial b) {
-        if (a.is_zero()) return b;
-        if (b.is_zero()) return a;
-
-        if constexpr (std::is_same_v<CoeffType, Rational>) {
-
-            while (!b.is_zero()) {
-                auto [q, r] = a.div_mod(b);
-                a = b;
-                b = r;
-            }
-
-            return a.make_monic();
-        } else {
-
-            CoeffType cA = a.content();
-            CoeffType cB = b.content();
-            CoeffType c  = gcd_coeff_impl(cA, cB);
-
-            a = a.primitive_part();
-            b = b.primitive_part();
-
-            while (!b.is_zero()) {
-
-                Polynomial r = a.pseudo_div_mod_rem(b);
-
-                if (r.is_zero()) {
-                    a = b;
-                    b = r;
-                } else {
-
-                    a = b;
-                    b = r.primitive_part();
-                }
-            }
-
-            if (c == CoeffType(1)) return a;
-
-            for (auto& val : a.coeffs) val = val * c;
-            return a;
-        }
-    }
+    static Polynomial gcd(Polynomial a, Polynomial b);
 
     /**
      * @brief 计算无平方因子部分
      * @return 去除重因子后的多项式
      */
-    Polynomial square_free_part() const {
-
-        if (degree() <= 0) return *this;
-
-        Polynomial deriv = differentiate();
-        Polynomial g = gcd(*this, deriv);
-
-        auto [q, r] = div_mod(g);
-
-        if constexpr (std::is_same_v<CoeffType, Rational>) {
-            return q.make_monic();
-        }
-        return q;
-    }
+    Polynomial square_free_part() const;
 
     /**
      * @brief 转换为字符串表示
      * @return 多项式的字符串形式
      */
     std::string to_string() const {
-        if (is_zero()) return "0";
+        if (is_zero()) {
+            return "0";
+        }
         std::string s;
         for (int i = degree(); i >= 0; --i) {
-            CoeffType c = coeffs[i];
-            if (c == CoeffType(0)) continue;
-
-            bool positive = !(c < CoeffType(0));
-            if (!s.empty()) {
-                s += (positive ? " + " : " - ");
-                if (!positive) c = c * CoeffType(-1);
-            } else {
-                if (!positive) {
-                    s += "-";
-                    c = c * CoeffType(-1);
-                }
+            if (coeffs[i] == CoeffType(0)) {
+                continue;
             }
-
-            bool is_one = (c == CoeffType(1));
-            bool print_coeff = !is_one || (i == 0);
-
-            if (print_coeff) {
-                if constexpr (std::is_same_v<CoeffType, BigInt>) {
-                    s += c.to_string();
-                } else if constexpr (std::is_same_v<CoeffType, Rational>) {
-                    s += c.to_string();
-                } else {
-                    s += std::to_string(c);
-                }
-                if (i > 0) s += "*";
-            }
-
-            if (i > 0) {
-                s += variable_name;
-                if (i > 1) s += "^" + std::to_string(i);
-            }
+            append_string_term(s, coeffs[i], i);
         }
         return s.empty() ? "0" : s;
+    }
+
+private:
+    bool variables_compatible(const Polynomial& other) const {
+        return variable_name == other.variable_name || is_zero() || other.is_zero();
+    }
+
+    void require_compatible_variables(const Polynomial& other, const char* operation) const {
+        if (!variables_compatible(other)) {
+            throw std::invalid_argument(
+                std::string(operation) + ": variable name mismatch ('" +
+                variable_name + "' vs '" + other.variable_name + "')");
+        }
+    }
+
+    void append_string_term(std::string& text, CoeffType coefficient, int power) const {
+        const bool positive = !(coefficient < CoeffType(0));
+        if (!text.empty()) {
+            text += positive ? " + " : " - ";
+        } else if (!positive) {
+            text += "-";
+        }
+        if (!positive) {
+            coefficient = coefficient * CoeffType(-1);
+        }
+        if (!(coefficient == CoeffType(1)) || power == 0) {
+            if constexpr (std::is_same_v<CoeffType, BigInt> ||
+                          std::is_same_v<CoeffType, Rational>) {
+                text += coefficient.to_string();
+            } else {
+                text += std::to_string(coefficient);
+            }
+            if (power > 0) {
+                text += "*";
+            }
+        }
+        if (power > 0) {
+            text += variable_name;
+        }
+        if (power > 1) {
+            text += "^" + std::to_string(power);
+        }
     }
 };
 
@@ -547,25 +426,40 @@ public:
  */
 template<typename T>
 std::ostream& operator<<(std::ostream& os, const Polynomial<T>& p) {
-    if (p.is_zero()) return os << "0";
+    if (p.is_zero()) {
+        return os << "0";
+    }
     for (int i = p.degree(); i >= 0; --i) {
         T c = p.coeffs[i];
-        if (c == T(0)) continue;
+        if (c == T(0)) {
+            continue;
+        }
 
         if (i < p.degree()) {
-            if (c > T(0)) os << " + ";
-            else os << " - ";
-        } else {
-            if (c < T(0)) os << "-";
+            if (c > T(0)) {
+                os << " + ";
+            } else {
+                os << " - ";
+            }
+        } else if (c < T(0)) {
+            os << "-";
         }
 
         T abs_c = (c < T(0)) ? (c * T(-1)) : c;
-        if (abs_c != T(1) || i == 0) os << abs_c;
+        if (abs_c != T(1) || i == 0) {
+            os << abs_c;
+        }
 
-        if (i > 0) os << p.variable_name;
-        if (i > 1) os << "^" << i;
+        if (i > 0) {
+            os << p.variable_name;
+        }
+        if (i > 1) {
+            os << "^" << i;
+        }
     }
     return os;
 }
 
 }
+
+#include "polynomial_division.hpp"

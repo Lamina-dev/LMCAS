@@ -16,25 +16,21 @@ struct QuadRadical {
     double a_sq = 0;       // a²
 };
 
-bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
-                           const std::string& var,
-                           ComputationContext& context,
-                           QuadRadical& out) {
-    auto pw = std::dynamic_pointer_cast<const PowerNode>(node);
-    if (!pw) return false;
-    auto en = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
-    if (!en) return false;
-    double e;
-    if (std::holds_alternative<lmmc_real_t>(en->value())) e = std::get<lmmc_real_t>(en->value());
-    else if (std::holds_alternative<Rational>(en->value())) e = std::get<Rational>(en->value()).to_double();
-    else if (std::holds_alternative<BigInt>(en->value())) e = std::get<BigInt>(en->value()).to_double();
+bool trigsub_half_exponent(const NumberNode& en, double& e) {
+    if (std::holds_alternative<lmmc_real_t>(en.value())) e = std::get<lmmc_real_t>(en.value());
+    else if (std::holds_alternative<Rational>(en.value())) e = std::get<Rational>(en.value()).to_double();
+    else if (std::holds_alternative<BigInt>(en.value())) e = std::get<BigInt>(en.value()).to_double();
     else return false;
-    if (std::abs(e - 0.5) > 1e-9 && std::abs(e + 0.5) > 1e-9) return false;
+    if (std::abs(e - 0.5) > 1e-9 && std::abs(e + 0.5) > 1e-9) { return false; }
+    return true;
+}
 
+bool trigsub_quadratic_coefficients(const PowerNode& pw, const std::string& var,
+    ComputationContext& context, double& c0, double& c2) {
     /// base 必须是 c0 + c2*x²（关于 var 的二次、无一次项）
-    auto base = LMCAS::detail::expression_from_node(pw->base());
+    auto base = LMCAS::detail::expression_from_node(pw.base());
     auto b = base.expand();
-    if (!b) b = LMCAS::detail::make_expression_ptr(pw->base());
+    if (!b) b = LMCAS::detail::make_expression_ptr(pw.base());
     /// 提取关于 var 的系数：c0（常数）、c1（一次）、c2（二次）
     /// 用求导法：c2 = (1/2) d²/dx² ; c1 = d/dx |_{x=0} ; c0 = base|_{x=0}
     auto d1 = b->differentiate(var);
@@ -44,19 +40,33 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
     auto c1e = d1->substitute(var, zero)->simplify();
     auto c2e = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1,2)), d2)->simplify();
     /// 必须 c1=0，且 c2 为非零常数，c0 常数，且 d2 不依赖 var（纯二次）
-    if (!LMCAS::detail::node(c1e) || !LMCAS::detail::node(c1e)->is_zero()) return false;
-    if (expression_depends_on_variable(LMCAS::detail::node(c2e), var)) return false;
-    if (expression_depends_on_variable(LMCAS::detail::node(c0e), var)) return false;
-    if (!LMCAS::detail::node(c2e)->is_number() || !LMCAS::detail::node(c0e)->is_number()) return false;
+    if (!LMCAS::detail::node(c1e) || !LMCAS::detail::node(c1e)->is_zero()) { return false; }
+    if (expression_depends_on_variable(LMCAS::detail::node(c2e), var)) { return false; }
+    if (expression_depends_on_variable(LMCAS::detail::node(c0e), var)) { return false; }
+    if (!LMCAS::detail::node(c2e)->is_number() || !LMCAS::detail::node(c0e)->is_number()) { return false; }
     auto c0_checked = try_checked_numeric_constant(*c0e, context);
     auto c2_checked = try_checked_numeric_constant(*c2e, context);
-    if (!c0_checked || !c2_checked) return false;
-    double c0 = *c0_checked;
-    double c2 = *c2_checked;
-    if (std::abs(c2) < 1e-12) return false;
+    if (!c0_checked || !c2_checked) { return false; }
+    c0 = *c0_checked;
+    c2 = *c2_checked;
+    if (std::abs(c2) < 1e-12) { return false; }
     /// 仅支持 c2 = ±1（标准型 a²±x² / x²-a²）
-    if (std::abs(std::abs(c2) - 1.0) > 1e-9) return false;
+    if (std::abs(std::abs(c2) - 1.0) > 1e-9) { return false; }
+    return true;
+}
 
+bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
+                           const std::string& var,
+                           ComputationContext& context,
+                           QuadRadical& out) {
+    auto pw = std::dynamic_pointer_cast<const PowerNode>(node);
+    if (!pw) { return false; }
+    auto en = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
+    if (!en) { return false; }
+    double e;
+    if (!trigsub_half_exponent(*en, e)) { return false; }
+    double c0, c2;
+    if (!trigsub_quadratic_coefficients(*pw, var, context, c0, c2)) { return false; }
     out.exponent = e;
     if (c2 < 0 && c0 > 0) { out.pattern = 1; out.a_sq = c0; }          // a² - x²
     else if (c2 > 0 && c0 > 0) { out.pattern = 2; out.a_sq = c0; }     // a² + x²
@@ -70,7 +80,7 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
 Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
     ComputationContext& context, int) {
-    if (!LMCAS::detail::node(expr)) return nullptr;
+    if (!LMCAS::detail::node(expr)) { return nullptr; }
 
     auto x = SymbolicExpr::variable(var);
 
@@ -150,4 +160,4 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
     }
 }
 
-} // namespace LMCAS
+}

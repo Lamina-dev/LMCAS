@@ -1,210 +1,113 @@
-/**
- * @file test_indeterminate_limits.cpp
- * @brief 不定式极限测试：验证 LimitVisitor 对 0×∞, ∞−∞, 1^∞, 0⁰, ∞⁰ 的处理。
- *
- * 覆盖需求: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6
- */
+#include "expr.hpp"
+#include "limit_result.hpp"
+#include "numeric_evaluation.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "test_common.hpp"
-#include "visitors/limit_visitor.hpp"
 
 using namespace LMCAS;
 
-int main() {
-    auto x = SymbolicExpr::variable("x");
+static void expect_finite_limit(
+    const char* source, const ExprPtr& point,
+    LimitDirection direction, double expected)
+{
+    auto expression = parse_expr(source);
+    ASSERT_TRUE(expression.has_value()) << source;
+    auto result =
+        limit_checked(expression.value(), "x", point, direction);
+    ASSERT_TRUE(result.has_value()) << source;
+    auto finite = std::get_if<FiniteLimit>(&result.value().value);
+    ASSERT_TRUE(finite != nullptr) << source;
+    auto value = evaluate_numeric(*finite->value);
+    ASSERT_TRUE(value.has_value()) << source;
+    EXPECT_TRUE(std::isfinite(value.value().value)) << source;
+    EXPECT_NEAR(value.value().value, expected, 1e-6) << source;
+}
+
+TEST(LmcasIndeterminateLimits, RealDefinednessProtection) {
+    using Node = std::shared_ptr<const SymbolicNode>;
+    auto zero = detail::node(SymbolicExpr::number(0));
+    auto negative = detail::node(SymbolicExpr::number(-1));
+    auto half = detail::node(SymbolicExpr::number(Rational(1, 2)));
+    const std::vector<Node> invalid_values{
+        detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln, std::vector<Node>{negative}),
+        detail::make_node<PowerNode>(negative, half),
+        detail::make_node<PowerNode>(zero, zero)};
+    for (const auto &value : invalid_values) {
+        auto result = limit_checked(detail::make_expression_ptr(value), "x", SymbolicExpr::number(1));
+        EXPECT_TRUE((!result && result.error().code == CasErrc::Inconclusive)) << ("default real limits reject undefined constants without complex continuation");
+        auto endpoint = limit_checked(SymbolicExpr::variable("x"), "x", detail::make_expression_ptr(value));
+        EXPECT_TRUE((!endpoint && endpoint.error().code == CasErrc::Inconclusive)) << ("default real limits reject undefined endpoints");
+    }
+    auto invalid_neighborhood = parse_expr("sqrt(-x)");
+    ASSERT_TRUE(invalid_neighborhood.has_value())
+        << "invalid real neighborhood fixture parses";
+    auto result = limit_checked(
+        invalid_neighborhood.value(), "x", SymbolicExpr::number(1));
+    EXPECT_TRUE(
+        !result && result.error().code == CasErrc::Inconclusive)
+        << "real neighborhood obligations remain required";
+}
+
+TEST(LmcasIndeterminateLimits, ZeroTimesLogarithm) {
     auto zero = SymbolicExpr::number(0);
-    auto one = SymbolicExpr::number(1);
-    auto two = SymbolicExpr::number(2);
-    auto three = SymbolicExpr::number(3);
-    auto neg_one = SymbolicExpr::number(-1);
-    auto inf = SymbolicExpr::infinity(1);
+    expect_finite_limit("x*ln(x)", zero, LimitDirection::FromAbove, 0.0);
+}
 
+TEST(LmcasIndeterminateLimits, ExponentialDecay) {
+    auto infinity = SymbolicExpr::infinity();
+    expect_finite_limit("x*exp(-x)", infinity, LimitDirection::Both, 0.0);
+}
 
-    // --- Test 1: lim(x→0+) x·ln(x) = 0 ---
-    // This is 0×(-∞), rewrite as ln(x)/(1/x) and apply L'Hôpital
-    TEST_CASE("0*inf: lim(x->0+) x*ln(x) = 0");
-    {
-        auto ln_x = SymbolicExpr::ln(x);
-        auto expr = SymbolicExpr::multiply(x, ln_x);
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero, LimitDirection::FromAbove).value();
-        EXPECT_TRUE(lim != nullptr, "limit(x*ln(x), x->0+) is not null");
-        if (lim) EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*ln(x), x->0+) = 0");
-    }
+TEST(LmcasIndeterminateLimits, ReciprocalDifference) {
+    auto zero = SymbolicExpr::number(0);
+    expect_finite_limit("1/x-1/sin(x)", zero, LimitDirection::Both, 0.0);
+}
 
-    // --- Test 2: lim(x→∞) x·e^(-x) = 0 ---
-    // This is ∞×0, rewrite as x/e^x and apply L'Hôpital
-    TEST_CASE("0*inf: lim(x->inf) x*e^(-x) = 0");
-    {
-        auto neg_x = SymbolicExpr::multiply(neg_one, x);
-        auto exp_neg_x = SymbolicExpr::exp(neg_x);
-        auto expr = SymbolicExpr::multiply(x, exp_neg_x);
-        auto lim = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_TRUE(lim != nullptr, "limit(x*e^(-x), x->inf) is not null");
-        if (lim) EXPECT_EQ_EXPR_STR(lim, "0", "limit(x*e^(-x), x->inf) = 0");
-    }
+TEST(LmcasIndeterminateLimits, RadicalDifferenceAtInfinity) {
+    auto infinity = SymbolicExpr::infinity();
+    expect_finite_limit("x-sqrt(x^2+x)", infinity, LimitDirection::Both, -0.5);
+}
 
+TEST(LmcasIndeterminateLimits, ExponentialPower) {
+    auto infinity = SymbolicExpr::infinity();
+    expect_finite_limit("(1+1/x)^x", infinity, LimitDirection::Both, std::exp(1.0));
+}
 
-    // --- Test 3: lim(x→0) (1/x - 1/sin(x)) ---
-    // This is ∞−∞, combine into (sin(x) - x)/(x·sin(x))
-    TEST_CASE("inf-inf: lim(x->0) 1/x - 1/sin(x) = 0");
-    {
-        auto inv_x = SymbolicExpr::power(x, neg_one);
-        auto sin_x = SymbolicExpr::sin(x);
-        auto inv_sin_x = SymbolicExpr::power(sin_x, neg_one);
-        auto neg_inv_sin_x = SymbolicExpr::multiply(inv_sin_x, neg_one);
-        auto expr = SymbolicExpr::add(inv_x, neg_inv_sin_x);
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit(1/x - 1/sin(x), x->0) is not null");
-        if (lim) EXPECT_EQ_EXPR_STR(lim, "0", "limit(1/x - 1/sin(x), x->0) = 0");
-    }
+TEST(LmcasIndeterminateLimits, ZeroToZeroPower) {
+    auto zero = SymbolicExpr::number(0);
+    expect_finite_limit("x^x", zero, LimitDirection::FromAbove, 1.0);
+}
 
-    // --- Test 4: lim(x→∞) (x - sqrt(x^2 + x)) ---
-    // This is ∞−∞, rationalize to get -1/2
-    TEST_CASE("inf-inf: lim(x->inf) x - sqrt(x^2+x) = -1/2");
-    {
-        auto x_sq = SymbolicExpr::power(x, two);
-        auto x_sq_plus_x = SymbolicExpr::add(x_sq, x);
-        auto half = SymbolicExpr::number(0.5);
-        auto sqrt_expr = SymbolicExpr::power(x_sq_plus_x, half);
-        auto neg_sqrt = SymbolicExpr::multiply(sqrt_expr, neg_one);
-        auto expr = SymbolicExpr::add(x, neg_sqrt);
-        auto lim = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_TRUE(lim != nullptr, "limit(x - sqrt(x^2+x), x->inf) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, -0.5, 1e-6, "limit(x - sqrt(x^2+x), x->inf) = -1/2");
-            } else {
-                // Accept symbolic form like -1/2
-                std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(lim->to_string().find("-") != std::string::npos &&
-                                (lim->to_string().find("1/2") != std::string::npos ||
-                                 lim->to_string().find("0.5") != std::string::npos),
-                            "limit(x - sqrt(x^2+x), x->inf) computed symbolically as -1/2");
-            }
-        }
-    }
+TEST(LmcasIndeterminateLimits, PowerAtOne) {
+    expect_finite_limit("x^x", SymbolicExpr::number(1), LimitDirection::Both, 1.0);
+}
 
+TEST(LmcasIndeterminateLimits, InfiniteToZeroPower) {
+    auto infinity = SymbolicExpr::infinity();
+    expect_finite_limit("x^(1/x)", infinity, LimitDirection::Both, 1.0);
+}
 
-    // --- Test 5: lim(x→∞) (1 + 1/x)^x = e ---
-    // Classic 1^∞ form, result is e
-    TEST_CASE("1^inf: lim(x->inf) (1+1/x)^x = e");
-    {
-        auto inv_x = SymbolicExpr::power(x, neg_one);
-        auto base = SymbolicExpr::add(one, inv_x);
-        auto expr = SymbolicExpr::power(base, x);
-        auto lim = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_TRUE(lim != nullptr, "limit((1+1/x)^x, x->inf) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, std::exp(1.0), 1e-6, "limit((1+1/x)^x, x->inf) = e");
-            } else {
-                // Could be exp(1) or e symbolically
-                auto str = lim->to_string();
-                std::cout << "[INFO] Result: " << str << std::endl;
-                bool is_e = (str.find("exp") != std::string::npos || str.find("e") != std::string::npos);
-                EXPECT_TRUE(is_e, "limit((1+1/x)^x, x->inf) = e (symbolic)");
-            }
-        }
-    }
+TEST(LmcasIndeterminateLimits, CubicSineResidual) {
+    auto zero = SymbolicExpr::number(0);
+    expect_finite_limit("(sin(x)-x)/x^3", zero, LimitDirection::Both, -1.0 / 6.0);
+}
 
+TEST(LmcasIndeterminateLimits, SineRatio) {
+    auto zero = SymbolicExpr::number(0);
+    expect_finite_limit("sin(x)/x", zero, LimitDirection::Both, 1.0);
+}
 
-    // --- Test 6: lim(x→0+) x^x = 1 ---
-    // 0⁰ form, use exp(x·ln(x)) → exp(0) = 1
-    TEST_CASE("0^0: lim(x->0+) x^x = 1");
-    {
-        auto expr = SymbolicExpr::power(x, x);
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero, LimitDirection::FromAbove).value();
-        EXPECT_TRUE(lim != nullptr, "limit(x^x, x->0+) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 1.0, 1e-6, "limit(x^x, x->0+) = 1");
-            } else {
-                EXPECT_EQ_EXPR_STR(lim, "1", "limit(x^x, x->0+) = 1");
-            }
-        }
-    }
+TEST(LmcasIndeterminateLimits, ExponentialRatio) {
+    auto zero = SymbolicExpr::number(0);
+    expect_finite_limit("(exp(x)-1)/x", zero, LimitDirection::Both, 1.0);
+}
 
+TEST(LmcasIndeterminateLimits, ScaledRadicalDifference) {
+    auto infinity = SymbolicExpr::infinity();
+    expect_finite_limit("sqrt(4*x^2+3*x)-2*x", infinity, LimitDirection::Both, 0.75);
+}
 
-    // --- Test 7: lim(x→∞) x^(1/x) = 1 ---
-    // ∞⁰ form, use exp((1/x)·ln(x)) → exp(0) = 1
-    TEST_CASE("inf^0: lim(x->inf) x^(1/x) = 1");
-    {
-        auto inv_x = SymbolicExpr::power(x, neg_one);
-        auto expr = SymbolicExpr::power(x, inv_x);
-        auto lim = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_TRUE(lim != nullptr, "limit(x^(1/x), x->inf) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 1.0, 1e-6, "limit(x^(1/x), x->inf) = 1");
-            } else {
-                EXPECT_EQ_EXPR_STR(lim, "1", "limit(x^(1/x), x->inf) = 1");
-            }
-        }
-    }
-
-
-    // --- Test 8: lim(x→0) (sin(x) - x) / x^3 = -1/6 ---
-    // Requires multiple L'Hôpital applications or Taylor fallback
-    TEST_CASE("Taylor fallback: lim(x->0) (sin(x)-x)/x^3 = -1/6");
-    {
-        auto sin_x = SymbolicExpr::sin(x);
-        auto neg_x = SymbolicExpr::multiply(x, neg_one);
-        auto num = SymbolicExpr::add(sin_x, neg_x);
-        auto den = SymbolicExpr::power(x, three);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit((sin(x)-x)/x^3, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, -1.0/6.0, 1e-6, "limit((sin(x)-x)/x^3, x->0) = -1/6");
-            } else {
-                std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(lim->to_string().find("-") != std::string::npos &&
-                                lim->to_string().find("6") != std::string::npos,
-                            "limit((sin(x)-x)/x^3, x->0) computed symbolically as -1/6");
-            }
-        }
-    }
-
-    // --- Test 9: Standard 0/0 L'Hôpital: lim(x→0) sin(x)/x = 1 ---
-    TEST_CASE("L'Hopital 0/0: lim(x->0) sin(x)/x = 1");
-    {
-        auto sin_x = SymbolicExpr::sin(x);
-        auto expr = SymbolicExpr::multiply(sin_x, SymbolicExpr::power(x, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit(sin(x)/x, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 1.0, 1e-6, "limit(sin(x)/x, x->0) = 1");
-            } else {
-                EXPECT_EQ_EXPR_STR(lim, "1", "limit(sin(x)/x, x->0) = 1");
-            }
-        }
-    }
-
-    // --- Test 10: lim(x→0) (e^x - 1)/x = 1 ---
-    TEST_CASE("L'Hopital 0/0: lim(x->0) (e^x - 1)/x = 1");
-    {
-        auto exp_x = SymbolicExpr::exp(x);
-        auto neg_1 = SymbolicExpr::multiply(one, neg_one);
-        auto num = SymbolicExpr::add(exp_x, neg_1);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(x, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit((e^x-1)/x, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 1.0, 1e-6, "limit((e^x-1)/x, x->0) = 1");
-            } else {
-                EXPECT_EQ_EXPR_STR(lim, "1", "limit((e^x-1)/x, x->0) = 1");
-            }
-        }
-    }
-
-    return TEST_REPORT();
+TEST(LmcasIndeterminateLimits, TwoRadicalDifference) {
+    auto infinity = SymbolicExpr::infinity();
+    expect_finite_limit("sqrt(x^2+3*x)-sqrt(x^2+x)", infinity, LimitDirection::Both, 1.0);
 }

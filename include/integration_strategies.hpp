@@ -118,8 +118,9 @@ public:
      * @param a_out 输出参数:线性系数(关于 var 为常数且非零)
      * @param b_out 输出参数:常数项(关于 var 为常数)
      * @return 解析成功返回 true;若 arg 不依赖 var,依赖关系为非线性,或 a 为零则返回 false
+     *         不支持的转换返回 false;资源限制及其他转换错误原样传播,失败时不提交输出.
      */
-    bool extract_linear_arg(const SymbolicExpr& arg,
+    Result<bool> extract_linear_arg(const SymbolicExpr& arg,
                             const std::string& var,
                             std::shared_ptr<SymbolicExpr>& a_out,
                             std::shared_ptr<SymbolicExpr>& b_out);
@@ -189,7 +190,7 @@ private:
      *              顶层调用使用 scale=1,半角恒等式递归时变为 2,4,8.
      */
     std::shared_ptr<SymbolicExpr> integrate_sin_m_cos_n(
-        int m, int n, long long scale,
+        int m, int n, const BigInt& scale,
         const std::string& var, Integrator& ctx, int depth);
 
     /**
@@ -197,7 +198,7 @@ private:
      *        与 u=cos(c*x) 或 u=sin(c*x) 换元,展开成 u 的多项式后逐项积分.
      */
     std::shared_ptr<SymbolicExpr> integrate_odd_case(
-        int m, int n, long long scale,
+        int m, int n, const BigInt& scale,
         const std::string& var, Integrator& ctx, int depth);
 
     /**
@@ -207,7 +208,7 @@ private:
      *        integrate_sin_m_cos_n(0, k, 2*scale, ...).每次递归总度数减半.
      */
     std::shared_ptr<SymbolicExpr> integrate_even_case(
-        int m, int n, long long scale,
+        int m, int n, const BigInt& scale,
         const std::string& var, Integrator& ctx, int depth);
 
     /**
@@ -227,26 +228,18 @@ private:
 };
 
 /**
- * @brief 高次有理函数部分分式积分策略:处理分母次数 >= 3 的有理函数 P(x)/Q(x).
+ * @brief 对分母次数 >= 3 的有理函数 P(x)/Q(x) 执行部分分式积分。
  *
- * 工作流程:
- *   1. extract_rational:将被积表达式分解为 P(x)/Q(x),要求 P,Q 均为关于积分变量
- *      的多项式,系数为有理数;非有理形式时返回 false.
- *   2. poly_divide:当 deg(P) >= deg(Q) 时进行多项式长除法,得到商和余式;商部分用幂律
- *      逐项积分,剩余的真分式进入部分分式分解.
- *   3. factor_denominator:用 square_free_factorization 加上有理根定理,把 Q 分解为
- *      线性因子和有理域上的二次整体因子;高次整体因子使分解阶段返回 false.
- *   4. solve_coefficients:对每个因子按重数引入待定系数(线性因子贡献 A_l/(x-r)^l,
- *      二次因子贡献 (B_l*x + C_l)/q(x)^l),通过比较多项式系数列出线性方程组,使用
- *      gaussian_eliminate 求解.
- *   5. integrate_term:逐项积分:
- *      - A/(x-r)^l:l=1 生成 ln|x-r|,l>1 生成幂函数;
- *      - (Bx+C)/q(x):分裂为 ln 和 arctan 两部分(完全平方);
- *      - q^l(l>=2)映射为保留原语义的未求值积分节点.
+ * P、Q 须为积分变量的有理系数多项式；非有理形式提取失败。
+ * 当 deg(P) >= deg(Q) 时先长除，商逐项按幂律积分，余下真分式进行分解。
+ * 分母通过 square_free_factorization 与有理根定理分解为线性和有理域二次整体因子；
+ * 高次整体因子使分解失败。各因子按重数引入 A_l/(x-r)^l 或 (B_l*x+C_l)/q(x)^l，
+ * 比较系数后使用共享 ComputationContext 的精确有理矩阵内核求唯一解。
  *
- * 支持域映射:
- *   - 零分母,因式分解未决与线性系统未决映射为未求值积分节点;
- *   - 其他表达式返回 nullptr,由策略链继续匹配.
+ * A/(x-r)^l 在 l=1 时生成 ln|x-r|，l>1 时生成幂函数；
+ * (Bx+C)/q(x) 通过配方拆为 ln 与 arctan；分母 q^l（l>=2）保留为未求值积分。
+ * 零分母、因式分解未决或线性系统未决保留为未求值积分；
+ * 其他表达式返回 nullptr，由策略链继续匹配。
  */
 class LMCAS_API RationalDecompositionStrategy : public BuiltInIntegrationStrategy {
 public:
@@ -262,9 +255,9 @@ public:
      * @param P_out 输出参数:分子多项式
      * @param Q_out 输出参数:分母多项式
      * @return 成功识别为有理函数返回 true;表达式含 sin/exp/log/非整数指数等
-     *         非多项式部分时返回 false
+     *         非多项式部分时返回 false;资源限制及其他转换错误原样传播,失败时不提交输出.
      */
-    bool extract_rational(const SymbolicExpr& expr, const std::string& var,
+    Result<bool> extract_rational(const SymbolicExpr& expr, const std::string& var,
                           Polynomial<Rational>& P_out,
                           Polynomial<Rational>& Q_out);
 
@@ -293,7 +286,7 @@ public:
      *
      * 对线性因子 (x-r) 重数 m,引入 m 个常数系数 A_1..A_m;对不可约二次因子 q(x)
      * 重数 m,引入 m 对线性系数 (B_l, C_l).通过比较多项式系数构造方阵并用
-     * gaussian_eliminate 求解.
+     * 共享 ComputationContext 的精确有理矩阵内核求唯一解.
      *
      * @param P 部分分式分解的目标多项式(真分式的分子,deg(P) < deg(Q))
      * @param Q 部分分式分解的目标分母

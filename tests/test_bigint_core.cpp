@@ -4,42 +4,36 @@
 
 using namespace LMCAS;
 
-void test_bigint_strings() {
-    TEST_CASE("BigInt to_string");
-
+TEST(BigintCore, BigintStrings) {
     BigInt two(2);
-    EXPECT_EQ_STR(two.to_string(), "2", "BigInt(2)");
+    EXPECT_EQ((two.to_string()), ("2")) << "BigInt(2)";
 
     BigInt x("123");
-    EXPECT_EQ_STR(x.to_string(), "123", "BigInt(\"123\")");
+    EXPECT_EQ((x.to_string()), ("123")) << "BigInt(\"123\")";
 }
 
-void test_bigint_ops() {
-    TEST_CASE("BigInt Operations");
-
+TEST(BigintCore, BigintOps) {
     BigInt a(2), b(3);
     BigInt c = a * b;
-    EXPECT_EQ_STR(c.to_string(), "6", "2 * 3 = 6");
+    EXPECT_TRUE(c == BigInt(6)) << "2 * 3 = 6";
 
     std::string large = "123456789123456789";
     BigInt lx(large);
-    EXPECT_EQ_STR(lx.to_string(), large, "Large BigInt String check");
+    EXPECT_EQ((lx.to_string()), (large)) << "Large BigInt String check";
 
     BigInt y = lx * lx;
 
     BigInt one(1);
     BigInt zero = y % one;
-    EXPECT_EQ_STR(zero.to_string(), "0", "y % 1 == 0");
+    EXPECT_TRUE(zero == BigInt(0)) << "y % 1 == 0";
 
     BigInt n1("123456789");
     BigInt n2("987654321");
     BigInt rem = n2 % n1;
-    EXPECT_EQ_STR(rem.to_string(), "9", "987654321 % 123456789 = 9");
+    EXPECT_TRUE(rem == BigInt(9)) << "987654321 % 123456789 = 9";
 }
 
-void test_rational_large_multiplication() {
-    TEST_CASE("Rational large multiplication");
-
+TEST(BigintCore, RationalLargeMultiplication) {
     BigInt n1("123456789");
     BigInt n2("987654321");
 
@@ -48,41 +42,26 @@ void test_rational_large_multiplication() {
 
     Rational r3 = r1 * r2;
 
-    EXPECT_EQ_STR(r3.to_string(), "121932631112635269", "Rational Mult Large");
+    EXPECT_TRUE(r3 == Rational(BigInt("121932631112635269")))
+        << "Rational Mult Large";
 }
 
-void test_gcd_logic() {
-    TEST_CASE("BigInt GCD Logic");
-
+TEST(BigintCore, GcdLogic) {
     BigInt two(2);
     BigInt three(3);
     BigInt twelve(12);
     BigInt eighteen(18);
 
-    EXPECT_EQ_STR(BigInt::gcd(twelve, eighteen).to_string(), "6", "gcd(12, 18)");
+    EXPECT_TRUE(BigInt::gcd(twelve, eighteen) == BigInt(6))
+        << "gcd(12, 18)";
 
     BigInt c(101);
     BigInt d(103);
-    EXPECT_EQ_STR(BigInt::gcd(c, d).to_string(), "1", "gcd(101, 103) - Coprime");
+    EXPECT_TRUE(BigInt::gcd(c, d) == BigInt(1))
+        << "gcd(101, 103) - Coprime";
 
     BigInt zero(0);
-    EXPECT_EQ_STR(BigInt::gcd(zero, twelve).to_string(), "12", "gcd(0, 12)");
-    EXPECT_EQ_STR(BigInt::gcd(twelve, zero).to_string(), "12", "gcd(12, 0)");
-    EXPECT_EQ_STR(BigInt::gcd(zero, zero).to_string(), "0", "gcd(0, 0)");
-}
-
-int main() {
-    try {
-        test_gcd_logic();
-        test_bigint_strings();
-        test_bigint_ops();
-        test_rational_large_multiplication();
-    } catch (const std::exception& e) {
-        std::cout << "[FAIL] Exception: " << e.what() << std::endl;
-        g_failures++;
-    } catch (...) {
-        std::cout << "[FAIL] Unknown Exception" << std::endl;
-        g_failures++;
-    }
-    return TEST_REPORT();
+    EXPECT_TRUE(BigInt::gcd(zero, twelve) == BigInt(12));
+    EXPECT_TRUE(BigInt::gcd(twelve, zero) == BigInt(12));
+    EXPECT_TRUE(BigInt::gcd(zero, zero) == BigInt(0));
 }

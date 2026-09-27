@@ -1,45 +1,12 @@
 /**
  * @file poly_utils.hpp
- * @brief Symbolic expression and univariate polynomial conversion utilities.
+ * @brief 多项式转换与精确符号多项式代数。
  */
 #pragma once
 
-#include "computation_context.hpp"
-#include "polynomial.hpp"
-#include "symbolic.hpp"
-
-#include <memory>
-#include <optional>
-#include <string>
-#include <utility>
-#include <vector>
+#include "polynomial_conversion.hpp"
 
 namespace LMCAS {
-
-/**
- * @brief Convert a symbolic expression to a univariate polynomial.
- *
- * The stable API supports BigInt, Rational, and SymbolicPolyCoeff
- * coefficients. Expressions outside the supported conversion domain produce the
- * zero polynomial; callers that require proof must use
- * recognize_rational_polynomial().
- */
-template <typename T>
-LMCAS_API Polynomial<T> symbolic_to_poly(
-    const std::shared_ptr<SymbolicExpr>& expression,
-    const std::string& variable);
-
-/**
- * @brief Convert a supported univariate polynomial to a symbolic expression.
- *
- * The stable API supports BigInt, Rational, and SymbolicPolyCoeff
- * coefficients.
- */
-template <typename T>
-LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
-    const Polynomial<T>& polynomial);
-
-using OptionalRationalPolynomial = std::optional<Polynomial<Rational>>;
 
 using SymbolicGcdResult = Result<std::shared_ptr<SymbolicExpr>>;
 
@@ -60,97 +27,5 @@ LMCAS_API SymbolicGcdResult symbolic_polynomial_gcd(
 LMCAS_API Result<Rational> symbolic_polynomial_content(
     const SymbolicExpr& expression,
     ComputationContext& context);
-
-/**
- * @brief Prove that an expression is an exact univariate rational polynomial.
- *
- * 成功且 optional 为空表示表达式位于当前结构支持域之外.
- * 精确系数仅来源于精确数值节点;遍历与展开计入所提供的上下文预算.
- */
-LMCAS_API Result<OptionalRationalPolynomial> recognize_rational_polynomial(
-    const SymbolicExpr& expression,
-    const std::string& variable,
-    ComputationContext& context);
-
-/** @brief Symbolic expression coefficient for symbolic polynomial algorithms. */
-struct SymbolicPolyCoeff {
-    std::shared_ptr<SymbolicExpr> val;
-
-    SymbolicPolyCoeff() : val(SymbolicExpr::number(0)) {}
-    explicit SymbolicPolyCoeff(int value) : val(SymbolicExpr::number(value)) {}
-    SymbolicPolyCoeff(std::shared_ptr<SymbolicExpr> value) : val(std::move(value)) {}
-
-    bool operator==(const SymbolicPolyCoeff& other) const {
-        if (!val || !other.val) return false;
-        if (val == other.val) return true;
-        auto difference = SymbolicExpr::add(
-            val,
-            SymbolicExpr::multiply(other.val, SymbolicExpr::number(-1)));
-        return difference->simplify()->is_zero();
-    }
-
-    bool operator!=(const SymbolicPolyCoeff& other) const {
-        return !(*this == other);
-    }
-
-    SymbolicPolyCoeff operator+(const SymbolicPolyCoeff& other) const {
-        return SymbolicPolyCoeff(SymbolicExpr::add(val, other.val));
-    }
-
-    SymbolicPolyCoeff operator-(const SymbolicPolyCoeff& other) const {
-        return SymbolicPolyCoeff(SymbolicExpr::add(
-            val,
-            SymbolicExpr::multiply(other.val, SymbolicExpr::number(-1))));
-    }
-
-    SymbolicPolyCoeff operator*(const SymbolicPolyCoeff& other) const {
-        return SymbolicPolyCoeff(SymbolicExpr::multiply(val, other.val));
-    }
-
-    SymbolicPolyCoeff operator/(const SymbolicPolyCoeff& other) const {
-        return SymbolicPolyCoeff(SymbolicExpr::divide(val, other.val));
-    }
-
-    SymbolicPolyCoeff operator-() const {
-        return SymbolicPolyCoeff(
-            SymbolicExpr::multiply(val, SymbolicExpr::number(-1)));
-    }
-
-    std::string ToString() const {
-        return val ? val->to_string() : "0";
-    }
-
-    friend SymbolicPolyCoeff abs(const SymbolicPolyCoeff& value) {
-        return value;
-    }
-
-    bool operator<(const SymbolicPolyCoeff&) const {
-        return false;
-    }
-};
-
-/** @brief Extract a supported coefficient from a symbolic expression. */
-template <typename T>
-T extract_coeff_value(const std::shared_ptr<SymbolicExpr>& coefficient);
-
-template <>
-inline SymbolicPolyCoeff extract_coeff_value<SymbolicPolyCoeff>(
-    const std::shared_ptr<SymbolicExpr>& coefficient) {
-    return SymbolicPolyCoeff(coefficient);
-}
-
-template <>
-LMCAS_API BigInt extract_coeff_value<BigInt>(
-    const std::shared_ptr<SymbolicExpr>& coefficient);
-
-template <>
-LMCAS_API Rational extract_coeff_value<Rational>(
-    const std::shared_ptr<SymbolicExpr>& coefficient);
-
-/** @brief Return whether an expression contains a free occurrence of variable. */
-LMCAS_API bool contains(
-    const SymbolicExpr& expression,
-    const std::string& variable);
-
 
 } // namespace LMCAS

@@ -8,14 +8,27 @@ namespace {
 
 constexpr const char* kUnitOperation = "unit";
 
+bool valid_unit_character(char character) {
+    if (character >= 'a' && character <= 'z') {
+        return true;
+    }
+    if (character >= 'A' && character <= 'Z') {
+        return true;
+    }
+    if (character >= '0' && character <= '9') {
+        return true;
+    }
+    return character == '_';
+}
+
 bool valid_unit_name(const std::string& name) {
-    if (name.empty()) return false;
+    if (name.empty()) {
+        return false;
+    }
     for (char character : name) {
-        const bool valid =
-            (character >= 'a' && character <= 'z') ||
-            (character >= 'A' && character <= 'Z') ||
-            (character >= '0' && character <= '9') || character == '_';
-        if (!valid) return false;
+        if (!valid_unit_character(character)) {
+            return false;
+        }
     }
     return true;
 }

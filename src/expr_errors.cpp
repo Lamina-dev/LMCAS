@@ -2,52 +2,89 @@
 
 #include <string>
 
-#include "expr_internal.hpp"
-
+#include "internal/expr_internal.hpp"
+#include "internal/expr_common.hpp"
 namespace LMCAS {
 namespace {
 
-constexpr const char* kSymOperation = "LMCAS.sym";
-constexpr const char* kComplexOperation = "LMCAS.complex";
+using namespace expr_detail::expr_common;
 
-} // namespace
+const char* unit_set_error_name(CasErrc code) noexcept {
+    switch (code) {
+    case CasErrc::DimensionMismatch: {
+        return "DimensionMismatch";
+    }
+    case CasErrc::UnitInvalid: {
+        return "UnitInvalid";
+    }
+    case CasErrc::UnitStripTypeMismatch: {
+        return "UnitStripTypeMismatch";
+    }
+    case CasErrc::SetElementTypeMismatch: {
+        return "SetElementTypeMismatch";
+    }
+    case CasErrc::SetOperandTypeMismatch: {
+        return "SetOperandTypeMismatch";
+    }
+    case CasErrc::SetElementNotHashable: {
+        return "SetElementNotHashable";
+    }
+    default: {
+        return "InternalInvariant";
+    }
+    }
+}
+
+const char* equivalence_error_name(const CasError& error) noexcept {
+    if (error.operation == kEquivalentOperation &&
+        error.code == CasErrc::ResourceLimit) {
+        return "EqvBudgetExceeded";
+    }
+    if (error.operation == kEquivalentProfileOperation &&
+        error.code == CasErrc::UnsupportedExpression) {
+        return "EqvRuleDisabled";
+    }
+    return error_name(error.code);
+}
+
+}
 
 const char* error_name(CasErrc code) noexcept {
     switch (code) {
-    case CasErrc::InvalidArgument:
+    case CasErrc::InvalidArgument: {
         return "InvalidArgument";
-    case CasErrc::ParseError:
-        return "ParseError";
-    case CasErrc::UnboundSymbol:
-        return "UnboundSymbol";
-    case CasErrc::DomainError:
-        return "DomainError";
-    case CasErrc::UnsupportedExpression:
-        return "UnsupportedExpression";
-    case CasErrc::Inconclusive:
-        return "Inconclusive";
-    case CasErrc::ResourceLimit:
-        return "ResourceLimit";
-    case CasErrc::Cancelled:
-        return "Cancelled";
-    case CasErrc::NumericFailure:
-        return "NumericFailure";
-    case CasErrc::InternalInvariant:
-        return "InternalInvariant";
-    case CasErrc::DimensionMismatch:
-        return "DimensionMismatch";
-    case CasErrc::UnitInvalid:
-        return "UnitInvalid";
-    case CasErrc::UnitStripTypeMismatch:
-        return "UnitStripTypeMismatch";
-    case CasErrc::SetElementTypeMismatch:
-        return "SetElementTypeMismatch";
-    case CasErrc::SetOperandTypeMismatch:
-        return "SetOperandTypeMismatch";
-    case CasErrc::SetElementNotHashable:
-        return "SetElementNotHashable";
     }
-    return "InternalInvariant";
+    case CasErrc::ParseError: {
+        return "ParseError";
+    }
+    case CasErrc::UnboundSymbol: {
+        return "UnboundSymbol";
+    }
+    case CasErrc::DomainError: {
+        return "DomainError";
+    }
+    case CasErrc::UnsupportedExpression: {
+        return "UnsupportedExpression";
+    }
+    case CasErrc::Inconclusive: {
+        return "Inconclusive";
+    }
+    case CasErrc::ResourceLimit: {
+        return "ResourceLimit";
+    }
+    case CasErrc::Cancelled: {
+        return "Cancelled";
+    }
+    case CasErrc::NumericFailure: {
+        return "NumericFailure";
+    }
+    case CasErrc::InternalInvariant: {
+        return "InternalInvariant";
+    }
+    default: {
+        return unit_set_error_name(code);
+    }
+    }
 }
 
 const char* error_name(const CasError& error) noexcept {
@@ -72,15 +109,7 @@ const char* error_name(const CasError& error) noexcept {
         error.code == CasErrc::Inconclusive) {
         return "SetResultInconclusive";
     }
-    if (error.operation == kEquivalentOperation &&
-        error.code == CasErrc::ResourceLimit) {
-        return "EqvBudgetExceeded";
-    }
-    if (error.operation == kEquivalentProfileOperation &&
-        error.code == CasErrc::UnsupportedExpression) {
-        return "EqvRuleDisabled";
-    }
-    return error_name(error.code);
+    return equivalence_error_name(error);
 }
 
-} // namespace LMCAS
+}

@@ -2,10 +2,10 @@
  * @file ode_linear.cpp
  * @brief 常系数高阶与 Euler ODE 的解表达式构造和受检 API。
  */
-#include "../include/symbolic_ode_engine.hpp"
-#include "symbolic_ast.hpp"
-#include "../include/symbolic.hpp"
-#include "../include/poly_utils.hpp"
+#include "symbolic_ode_engine.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "symbolic.hpp"
+#include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
@@ -39,16 +39,24 @@ using namespace ode_root_detail;
  *
  * 若值接近整数或简单分数,使用精确表示.
  */
+static bool is_representable_small_integer(double value) {
+    return std::isfinite(value) &&
+        value >= static_cast<double>(std::numeric_limits<int>::min()) &&
+        value <= static_cast<double>(std::numeric_limits<int>::max());
+}
+
+static bool rounding_preserves_nonzero(double rounded, double value) {
+    return rounded != 0.0 || value == 0.0;
+}
+
 static std::shared_ptr<SymbolicExpr> clean_number(double val) {
     /// 只在转换可表示时提升为精确小整数，避免浮点到整数的越界转换。
     double rounded = std::round(val);
     int eq = 0;
-    if (std::isfinite(rounded) &&
-        rounded >= static_cast<double>(std::numeric_limits<int>::min()) &&
-        rounded <= static_cast<double>(std::numeric_limits<int>::max())) {
+    if (is_representable_small_integer(rounded)) {
         lmmc_double_nearly_equal_tol(
             val, rounded, 1e-10, 1e-10, &eq);
-        if (eq && (rounded != 0.0 || val == 0.0)) {
+        if (eq && rounding_preserves_nonzero(rounded, val)) {
             return SymbolicExpr::number(static_cast<int>(rounded));
         }
     }
@@ -57,16 +65,12 @@ static std::shared_ptr<SymbolicExpr> clean_number(double val) {
     for (int q = 2; q <= 12; ++q) {
         double p = val * q;
         double p_rounded = std::round(p);
-        if (!std::isfinite(p_rounded) ||
-            p_rounded < static_cast<double>(
-                std::numeric_limits<int>::min()) ||
-            p_rounded > static_cast<double>(
-                std::numeric_limits<int>::max())) {
+        if (!is_representable_small_integer(p_rounded)) {
             continue;
         }
         lmmc_double_nearly_equal_tol(
             p, p_rounded, 1e-10, 1e-10, &eq);
-        if (eq && (p_rounded != 0.0 || p == 0.0)) {
+        if (eq && rounding_preserves_nonzero(p_rounded, p)) {
             return SymbolicExpr::divide(
                 SymbolicExpr::number(static_cast<int>(p_rounded)),
                 SymbolicExpr::number(q));
@@ -87,7 +91,7 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
  * - 实根 r(重数 m):C_k * x^k * e^(rx),k = 0, ..., m-1
  * - 复根 alpha+/-betai(重数 m):x^k * e^(alphax) * (C_a*cos(betax) + C_b*sin(betax))
  */
-[[maybe_unused]] static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
+static std::shared_ptr<SymbolicExpr> build_homogeneous_solution(
     const std::vector<CharRoot>& roots,
     const std::string& x,
     std::vector<std::string>& constants)
@@ -153,14 +157,22 @@ static bool has_nonzero_forcing(const std::shared_ptr<SymbolicExpr>& forcing) {
 
                 /// 构造 cos 项: Ca * x^k * e^(alphax) * cos(betax)
                 auto term_cos = Ca;
-                if (x_pow_factor) term_cos = SymbolicExpr::multiply(term_cos, x_pow_factor);
-                if (exp_factor) term_cos = SymbolicExpr::multiply(term_cos, exp_factor);
+                if (x_pow_factor) {
+                    term_cos = SymbolicExpr::multiply(term_cos, x_pow_factor);
+                }
+                if (exp_factor) {
+                    term_cos = SymbolicExpr::multiply(term_cos, exp_factor);
+                }
                 term_cos = SymbolicExpr::multiply(term_cos, cos_term);
 
                 /// 构造 sin 项: Cb * x^k * e^(alphax) * sin(betax)
                 auto term_sin = Cb;
-                if (x_pow_factor) term_sin = SymbolicExpr::multiply(term_sin, x_pow_factor);
-                if (exp_factor) term_sin = SymbolicExpr::multiply(term_sin, exp_factor);
+                if (x_pow_factor) {
+                    term_sin = SymbolicExpr::multiply(term_sin, x_pow_factor);
+                }
+                if (exp_factor) {
+                    term_sin = SymbolicExpr::multiply(term_sin, exp_factor);
+                }
                 term_sin = SymbolicExpr::multiply(term_sin, sin_term);
 
                 solution = solution ? SymbolicExpr::add(solution, term_cos) : term_cos;
@@ -239,10 +251,14 @@ ODESolutionResult solve_higher_order_ode_checked(
 {
     const std::string operation = "solve_higher_order_ode";
     auto variables = validate_ode_variables(x, y, context, operation);
-    if (!variables) return ODESolutionResult::failure(variables.error());
+    if (!variables) {
+        return ODESolutionResult::failure(variables.error());
+    }
 
     auto coeff_check = validate_numeric_ode_coefficients(coeffs, 2, 7, operation);
-    if (!coeff_check) return ODESolutionResult::failure(coeff_check.error());
+    if (!coeff_check) {
+        return ODESolutionResult::failure(coeff_check.error());
+    }
     for (double coefficient : coeffs) {
         if (!std::isfinite(coefficient / coeffs.front())) {
             return ODESolutionResult::failure(
@@ -253,7 +269,9 @@ ODESolutionResult solve_higher_order_ode_checked(
     }
 
     auto budget = context.consume_steps(coeffs.size() * 20 + 20, operation);
-    if (!budget) return ODESolutionResult::failure(budget.error());
+    if (!budget) {
+        return ODESolutionResult::failure(budget.error());
+    }
 
     const bool nonzero_forcing = has_nonzero_forcing(forcing);
     if (nonzero_forcing &&
@@ -267,8 +285,9 @@ ODESolutionResult solve_higher_order_ode_checked(
     try {
         auto solution_result = solve_higher_order_ode_impl(
             coeffs, nullptr, x, y);
-        if (!solution_result)
+        if (!solution_result) {
             return ODESolutionResult::failure(solution_result.error());
+        }
         auto solution = std::move(solution_result.value());
         if (nonzero_forcing && solution.general_solution) {
             auto particular = SymbolicExpr::divide(
@@ -321,13 +340,21 @@ static Result<ODESolution> solve_higher_order_ode_impl(
     }
 
     auto roots = find_characteristic_roots(coeffs, operation);
-    if (!roots) return Result<ODESolution>::failure(roots.error());
+    if (!roots) {
+        return Result<ODESolution>::failure(roots.error());
+    }
     result.general_solution =
         build_homogeneous_solution(roots.value(), x, result.constants);
     if (result.general_solution) {
         result.general_solution = result.general_solution->simplify();
     }
     return Result<ODESolution>::success(std::move(result));
+}
+
+static bool unsupported_euler_forcing(
+    const std::shared_ptr<SymbolicExpr>& forcing,
+    const std::vector<double>& coefficients) {
+    return !forcing->is_number() || coefficients.back() == 0.0;
 }
 
 ODESolutionResult solve_euler_ode_checked(
@@ -339,17 +366,22 @@ ODESolutionResult solve_euler_ode_checked(
 {
     const std::string operation = "solve_euler_ode";
     auto variables = validate_ode_variables(x, y, context, operation);
-    if (!variables) return ODESolutionResult::failure(variables.error());
+    if (!variables) {
+        return ODESolutionResult::failure(variables.error());
+    }
 
     auto coeff_check = validate_numeric_ode_coefficients(euler_coeffs, 3, 4, operation);
-    if (!coeff_check) return ODESolutionResult::failure(coeff_check.error());
+    if (!coeff_check) {
+        return ODESolutionResult::failure(coeff_check.error());
+    }
 
     auto budget = context.consume_steps(euler_coeffs.size() * 20 + 20, operation);
-    if (!budget) return ODESolutionResult::failure(budget.error());
+    if (!budget) {
+        return ODESolutionResult::failure(budget.error());
+    }
 
     const bool nonzero_forcing = has_nonzero_forcing(forcing);
-    if (nonzero_forcing &&
-        (!forcing->is_number() || euler_coeffs.back() == 0.0)) {
+    if (nonzero_forcing && unsupported_euler_forcing(forcing, euler_coeffs)) {
         return ODESolutionResult::failure(
             CasErrc::Inconclusive,
             "non-homogeneous Euler ODE currently requires a constant forcing and nonzero y coefficient",
@@ -359,8 +391,9 @@ ODESolutionResult solve_euler_ode_checked(
     try {
         auto solution_result = solve_euler_ode_impl(
             euler_coeffs, nullptr, x, y);
-        if (!solution_result)
+        if (!solution_result) {
             return ODESolutionResult::failure(solution_result.error());
+        }
         auto solution = std::move(solution_result.value());
         if (nonzero_forcing && solution.general_solution) {
             auto particular = SymbolicExpr::divide(
@@ -429,7 +462,9 @@ static Result<ODESolution> solve_euler_ode_impl(
     }
 
     auto roots = find_characteristic_roots(characteristic, operation);
-    if (!roots) return Result<ODESolution>::failure(roots.error());
+    if (!roots) {
+        return Result<ODESolution>::failure(roots.error());
+    }
     result.general_solution =
         build_euler_solution(roots.value(), x, result.constants);
     if (result.general_solution) {

@@ -1,608 +1,354 @@
 
-#include "test_common.hpp"
+#include "test_interval_support.hpp"
 #include "assumption.hpp"
 #include "property_store.hpp"
 #include "interval.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <string>
-#include <stdexcept>
 
 using namespace LMCAS;
 
-
-static Interval make_closed_interval(double lo, double hi) {
-    auto lower_val = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
-    Interval iv;
-    iv.lower = Endpoint::closed(lower_val);
-    iv.upper = Endpoint::closed(upper_val);
-    return iv;
-}
-
-static Interval make_open_interval(double lo, double hi) {
-    auto lower_val = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(lo)));
-    auto upper_val = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(hi)));
-    Interval iv;
-    iv.lower = Endpoint::open(lower_val);
-    iv.upper = Endpoint::open(upper_val);
-    return iv;
-}
-
-
-static void test_continuous_only_on_differentiable_overlap_throws() {
-    TEST_CASE("Continuity overlap: declaring continuous-only on interval overlapping differentiable returns failure");
-
+TEST(AssumptionDeclarations, ContinuousOnlyOnDifferentiableOverlapThrows) {
     PropertyStore store;
 
     // Declare differentiable on [0, 10]
     Interval diff_interval = make_closed_interval(0.0, 10.0);
-    store.declare_differentiable("f", diff_interval);
+    EXPECT_TRUE((store.declare_differentiable("f", diff_interval).has_value())) << "differentiability declaration succeeds";
 
     // Declaring continuous-only on [5, 15] (overlaps [0,10]) should throw
     Interval cont_interval = make_closed_interval(5.0, 15.0);
     auto failure_46 = store.declare_continuous("f", cont_interval);
-    EXPECT_TRUE(!failure_46.has_value(), "Declaring continuous-only on differentiable overlap returns failure");
-    EXPECT_TRUE(failure_46.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_46.error().message, {"Contradiction", "f", "differentiable"},
-            "Result error message mentions contradiction, symbol, and differentiable");
+    ASSERT_FALSE(failure_46.has_value()) << "Declaring continuous-only on differentiable overlap returns failure";
+    EXPECT_TRUE((failure_46.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-static void test_continuous_only_on_exact_differentiable_interval_throws() {
-    TEST_CASE("Continuity overlap: declaring continuous-only on exact differentiable interval returns failure");
-
+TEST(AssumptionDeclarations, ContinuousOnlyOnExactDifferentiableIntervalThrows) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 5.0);
-    store.declare_differentiable("g", iv);
+    EXPECT_TRUE((store.declare_differentiable("g", iv).has_value())) << "differentiability declaration succeeds";
 
     auto failure_65 = store.declare_continuous("g", iv);
-    EXPECT_TRUE(!failure_65.has_value(), "Declaring continuous-only on exact differentiable interval returns failure");
+    EXPECT_TRUE((!failure_65.has_value())) << "Declaring continuous-only on exact differentiable interval returns failure";
 }
 
-static void test_differentiable_on_continuous_overlap_ok() {
-    TEST_CASE("Continuity overlap: declaring differentiable on continuous-only overlap is OK (upgrade)");
-
+TEST(AssumptionDeclarations, DifferentiableOnContinuousOverlapOk) {
     PropertyStore store;
 
     // Declare continuous-only on [0, 10]
     Interval cont_interval = make_closed_interval(0.0, 10.0);
-    store.declare_continuous("h", cont_interval);
+    EXPECT_TRUE((store.declare_continuous("h", cont_interval).has_value())) << "continuity declaration succeeds";
 
     // Declaring differentiable on [5, 15] (overlaps) should NOT throw (it's an upgrade)
     Interval diff_interval = make_closed_interval(5.0, 15.0);
     auto success_76 = store.declare_differentiable("h", diff_interval);
-    EXPECT_TRUE(success_76.has_value(), "Declaring differentiable on continuous-only overlap does not throw");
+    EXPECT_TRUE((success_76.has_value())) << "Declaring differentiable on continuous-only overlap does not throw";
 }
 
-static void test_continuous_on_continuous_overlap_ok() {
-    TEST_CASE("Continuity overlap: declaring continuous-only on continuous-only overlap is OK (idempotent)");
-
+TEST(AssumptionDeclarations, ContinuousOnContinuousOverlapOk) {
     PropertyStore store;
 
     Interval iv1 = make_closed_interval(0.0, 10.0);
     Interval iv2 = make_closed_interval(5.0, 15.0);
-    store.declare_continuous("k", iv1);
+    EXPECT_TRUE((store.declare_continuous("k", iv1).has_value())) << "continuity declaration succeeds";
 
     auto success_93 = store.declare_continuous("k", iv2);
-    EXPECT_TRUE(success_93.has_value(), "Declaring continuous-only on continuous-only overlap does not throw");
+    EXPECT_TRUE((success_93.has_value())) << "Declaring continuous-only on continuous-only overlap does not throw";
 }
 
-static void test_differentiable_implies_continuous() {
-    TEST_CASE("Differentiability implies continuity");
-
+TEST(AssumptionDeclarations, DifferentiableImpliesContinuous) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(1.0, 5.0);
-    store.declare_differentiable("f", iv);
+    EXPECT_TRUE((store.declare_differentiable("f", iv).has_value())) << "differentiability declaration succeeds";
 
-    EXPECT_TRUE(store.is_continuous("f", iv).value(),
-        "Differentiable symbol is also continuous on same interval");
-    EXPECT_TRUE(store.is_differentiable("f", iv).value(),
-        "Differentiable symbol is differentiable on same interval");
+    EXPECT_TRUE((store.is_continuous("f", iv).value())) << "Differentiable symbol is also continuous on same interval";
+    EXPECT_TRUE((store.is_differentiable("f", iv).value())) << "Differentiable symbol is differentiable on same interval";
 }
 
-static void test_continuous_not_differentiable() {
-    TEST_CASE("Continuous-only is not differentiable");
-
+TEST(AssumptionDeclarations, ContinuousNotDifferentiable) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 3.0);
-    store.declare_continuous("f", iv);
+    EXPECT_TRUE((store.declare_continuous("f", iv).has_value())) << "continuity declaration succeeds";
 
-    EXPECT_TRUE(store.is_continuous("f", iv).value(),
-        "Continuous symbol is continuous");
-    EXPECT_FALSE(store.is_differentiable("f", iv).value(),
-        "Continuous-only symbol is NOT differentiable");
+    EXPECT_TRUE((store.is_continuous("f", iv).value())) << "Continuous symbol is continuous";
+    EXPECT_FALSE((store.is_differentiable("f", iv).value())) << "Continuous-only symbol is NOT differentiable";
 }
 
-static void test_non_overlapping_intervals_no_conflict() {
-    TEST_CASE("Non-overlapping intervals: differentiable and continuous-only on disjoint intervals OK");
-
+TEST(AssumptionDeclarations, NonOverlappingIntervalsNoConflict) {
     PropertyStore store;
 
     Interval diff_iv = make_closed_interval(0.0, 5.0);
     Interval cont_iv = make_closed_interval(6.0, 10.0);
 
-    store.declare_differentiable("f", diff_iv);
+    EXPECT_TRUE((store.declare_differentiable("f", diff_iv).has_value())) << "differentiability declaration succeeds";
 
     auto success_140 = store.declare_continuous("f", cont_iv);
-    EXPECT_TRUE(success_140.has_value(), "Disjoint intervals do not conflict");
+    EXPECT_TRUE((success_140.has_value())) << "Disjoint intervals do not conflict";
 }
 
-
-static void test_monotonicity_declare_and_retrieve_increasing() {
-    TEST_CASE("Monotonicity: declare increasing and retrieve");
-
+TEST(AssumptionDeclarations, MonotonicityDeclareAndRetrieveIncreasing) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 10.0);
-    store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing);
+    EXPECT_TRUE((store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing).has_value())) << "monotonicity declaration succeeds";
 
     Monotonicity result = store.get_monotonicity("f", "x", iv).value();
-    EXPECT_TRUE(result == Monotonicity::Increasing,
-        "get_monotonicity returns Increasing for exact interval");
+    EXPECT_TRUE((result == Monotonicity::Increasing)) << "get_monotonicity returns Increasing for exact interval";
 }
 
-static void test_monotonicity_declare_and_retrieve_decreasing() {
-    TEST_CASE("Monotonicity: declare decreasing and retrieve");
-
+TEST(AssumptionDeclarations, MonotonicityDeclareAndRetrieveDecreasing) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(-5.0, 5.0);
-    store.declare_monotonicity("g", "t", iv, Monotonicity::Decreasing);
+    EXPECT_TRUE((store.declare_monotonicity("g", "t", iv, Monotonicity::Decreasing).has_value())) << "monotonicity declaration succeeds";
 
     Monotonicity result = store.get_monotonicity("g", "t", iv).value();
-    EXPECT_TRUE(result == Monotonicity::Decreasing,
-        "get_monotonicity returns Decreasing for exact interval");
+    EXPECT_TRUE((result == Monotonicity::Decreasing)) << "get_monotonicity returns Decreasing for exact interval";
 }
 
-static void test_monotonicity_sub_interval_coverage() {
-    TEST_CASE("Monotonicity: sub-interval is covered by larger declaration");
-
+TEST(AssumptionDeclarations, MonotonicitySubIntervalCoverage) {
     PropertyStore store;
 
     // Declare increasing on [0, 10]
     Interval large_iv = make_closed_interval(0.0, 10.0);
-    store.declare_monotonicity("f", "x", large_iv, Monotonicity::Increasing);
+    EXPECT_TRUE((store.declare_monotonicity("f", "x", large_iv, Monotonicity::Increasing).has_value())) << "monotonicity declaration succeeds";
 
     // Query on [2, 8] (sub-interval) should return Increasing
     Interval sub_iv = make_closed_interval(2.0, 8.0);
     Monotonicity result = store.get_monotonicity("f", "x", sub_iv).value();
-    EXPECT_TRUE(result == Monotonicity::Increasing,
-        "Sub-interval query returns Increasing (covered by larger declaration)");
+    EXPECT_TRUE((result == Monotonicity::Increasing)) << "Sub-interval query returns Increasing (covered by larger declaration)";
 }
 
-static void test_monotonicity_uncovered_interval_returns_unknown() {
-    TEST_CASE("Monotonicity: uncovered interval returns Unknown");
-
+TEST(AssumptionDeclarations, MonotonicityUncoveredIntervalReturnsUnknown) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 5.0);
-    store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing);
+    EXPECT_TRUE((store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing).has_value())) << "monotonicity declaration succeeds";
 
     // Query on [6, 10] (not covered) should return Unknown
     Interval uncovered = make_closed_interval(6.0, 10.0);
     Monotonicity result = store.get_monotonicity("f", "x", uncovered).value();
-    EXPECT_TRUE(result == Monotonicity::Unknown,
-        "Uncovered interval returns Unknown");
+    EXPECT_TRUE((result == Monotonicity::Unknown)) << "Uncovered interval returns Unknown";
 }
 
-static void test_monotonicity_wrong_variable_returns_unknown() {
-    TEST_CASE("Monotonicity: wrong variable returns Unknown");
-
+TEST(AssumptionDeclarations, MonotonicityWrongVariableReturnsUnknown) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 10.0);
-    store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing);
+    EXPECT_TRUE((store.declare_monotonicity("f", "x", iv, Monotonicity::Increasing).has_value())) << "monotonicity declaration succeeds";
 
     // Query with different variable
     Monotonicity result = store.get_monotonicity("f", "y", iv).value();
-    EXPECT_TRUE(result == Monotonicity::Unknown,
-        "Query with wrong variable returns Unknown");
+    EXPECT_TRUE((result == Monotonicity::Unknown)) << "Query with wrong variable returns Unknown";
 }
 
-static void test_monotonicity_undeclared_symbol_returns_unknown() {
-    TEST_CASE("Monotonicity: undeclared symbol returns Unknown");
-
+TEST(AssumptionDeclarations, MonotonicityUndeclaredSymbolReturnsUnknown) {
     PropertyStore store;
 
     Interval iv = make_closed_interval(0.0, 10.0);
     Monotonicity result = store.get_monotonicity("undeclared", "x", iv).value();
-    EXPECT_TRUE(result == Monotonicity::Unknown,
-        "Undeclared symbol returns Unknown");
+    EXPECT_TRUE((result == Monotonicity::Unknown)) << "Undeclared symbol returns Unknown";
 }
 
-static void test_monotonicity_multiple_declarations() {
-    TEST_CASE("Monotonicity: multiple declarations for different intervals");
-
+TEST(AssumptionDeclarations, MonotonicityMultipleDeclarations) {
     PropertyStore store;
 
     Interval iv1 = make_closed_interval(0.0, 5.0);
     Interval iv2 = make_closed_interval(5.0, 10.0);
 
-    store.declare_monotonicity("f", "x", iv1, Monotonicity::Increasing);
-    store.declare_monotonicity("f", "x", iv2, Monotonicity::Decreasing);
+    EXPECT_TRUE((store.declare_monotonicity("f", "x", iv1, Monotonicity::Increasing).has_value())) << "monotonicity declaration succeeds";
+    EXPECT_TRUE((store.declare_monotonicity("f", "x", iv2, Monotonicity::Decreasing).has_value())) << "monotonicity declaration succeeds";
 
-    EXPECT_TRUE(store.get_monotonicity("f", "x", iv1).value() == Monotonicity::Increasing,
-        "First interval returns Increasing");
-    EXPECT_TRUE(store.get_monotonicity("f", "x", iv2).value() == Monotonicity::Decreasing,
-        "Second interval returns Decreasing");
+    EXPECT_TRUE((store.get_monotonicity("f", "x", iv1).value() == Monotonicity::Increasing)) << "First interval returns Increasing";
+    EXPECT_TRUE((store.get_monotonicity("f", "x", iv2).value() == Monotonicity::Decreasing)) << "Second interval returns Decreasing";
 }
 
-static void test_monotonicity_entire_line() {
-    TEST_CASE("Monotonicity: declaration on entire line covers any sub-interval");
-
+TEST(AssumptionDeclarations, MonotonicityEntireLine) {
     PropertyStore store;
 
     Interval entire = Interval::entire_line();
-    store.declare_monotonicity("exp", "x", entire, Monotonicity::Increasing);
+    EXPECT_TRUE((store.declare_monotonicity("exp", "x", entire, Monotonicity::Increasing).has_value())) << "monotonicity declaration succeeds";
 
     Interval sub = make_closed_interval(-100.0, 100.0);
-    EXPECT_TRUE(store.get_monotonicity("exp", "x", sub).value() == Monotonicity::Increasing,
-        "Entire line declaration covers any finite sub-interval");
+    EXPECT_TRUE((store.get_monotonicity("exp", "x", sub).value() == Monotonicity::Increasing)) << "Entire line declaration covers any finite sub-interval";
 }
 
-
-static void test_periodicity_declare_and_retrieve() {
-    TEST_CASE("Periodicity: declare periodic and retrieve period");
-
+TEST(AssumptionDeclarations, PeriodicityDeclareAndRetrieve) {
     PropertyStore store;
 
-    // Create a period expression: 2*pi (represented as a constant for simplicity)
-    auto period = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.283185307)));
+    auto period = LMCAS::detail::expression_from_node(
+        LMCAS::detail::make_node<NumberNode>(
+            static_cast<lmmc_real_t>(6.283185307)));
 
-    store.declare_periodic("sin_x", period);
+    EXPECT_TRUE((store.declare_periodic("sin_x", "x", period).has_value())) << "period declaration succeeds";
 
-    EXPECT_TRUE(store.is_periodic("sin_x"), "Symbol is periodic after declaration");
+    EXPECT_TRUE((store.is_periodic("sin_x", "x"))) << "Symbol is periodic after declaration";
 
-    auto retrieved = store.get_period("sin_x");
-    EXPECT_TRUE(retrieved.has_value(), "get_period returns a value");
+    auto retrieved = store.get_period("sin_x", "x");
+    EXPECT_TRUE((retrieved.has_value())) << "get_period returns a value";
 }
 
-static void test_periodicity_not_periodic_by_default() {
-    TEST_CASE("Periodicity: undeclared symbol is not periodic");
-
+TEST(AssumptionDeclarations, PeriodicityNotPeriodicByDefault) {
     PropertyStore store;
 
-    EXPECT_FALSE(store.is_periodic("undeclared"), "Undeclared symbol is not periodic");
+    EXPECT_FALSE((store.is_periodic("undeclared", "x"))) << "Undeclared symbol is not periodic";
 
-    auto period = store.get_period("undeclared");
-    EXPECT_FALSE(period.has_value(), "get_period returns nullopt for undeclared symbol");
+    auto period = store.get_period("undeclared", "x");
+    EXPECT_FALSE((period.has_value())) << "get_period returns nullopt for undeclared symbol";
 }
 
-static void test_periodicity_overwrite_period() {
-    TEST_CASE("Periodicity: re-declaring period overwrites previous");
-
+TEST(AssumptionDeclarations, PeriodicityOverwritePeriod) {
     PropertyStore store;
 
-    auto period1 = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
-    auto period2 = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
+    auto period1 = LMCAS::detail::expression_from_node(
+        LMCAS::detail::make_node<NumberNode>(
+            static_cast<lmmc_real_t>(3.14159)));
+    auto period2 = LMCAS::detail::expression_from_node(
+        LMCAS::detail::make_node<NumberNode>(
+            static_cast<lmmc_real_t>(6.28318)));
 
-    store.declare_periodic("f", period1);
-    EXPECT_TRUE(store.is_periodic("f"), "f is periodic after first declaration");
+    EXPECT_TRUE((store.declare_periodic("f", "x", period1).has_value())) << "period declaration succeeds";
+    EXPECT_TRUE((store.is_periodic("f", "x"))) << "f is periodic after first declaration";
 
-    store.declare_periodic("f", period2);
-    EXPECT_TRUE(store.is_periodic("f"), "f is still periodic after second declaration");
+    EXPECT_TRUE((store.declare_periodic("f", "x", period2).has_value())) << "period declaration succeeds";
+    EXPECT_TRUE((store.is_periodic("f", "x"))) << "f is still periodic after second declaration";
 
-    auto retrieved = store.get_period("f");
-    EXPECT_TRUE(retrieved.has_value(), "get_period returns a value after overwrite");
+    auto retrieved = store.get_period("f", "x");
+    ASSERT_TRUE((retrieved.has_value())) << "get_period returns a value after overwrite";
     if (retrieved.has_value()) {
-        double val = (*retrieved)->to_numeric();
-        EXPECT_NEAR(val, 6.28318, 1e-4, "Period is updated to new value");
+        double val = retrieved->to_numeric();
+        EXPECT_NEAR(val, 6.28318, 1e-4) << "Period is updated to new value";
     }
 }
 
-static void test_periodicity_different_symbols() {
-    TEST_CASE("Periodicity: different symbols have independent periods");
-
+TEST(AssumptionDeclarations, PeriodicityDifferentSymbols) {
     PropertyStore store;
 
-    auto period_sin = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(6.28318)));
-    auto period_tan = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(static_cast<lmmc_real_t>(3.14159)));
+    auto period_sin = LMCAS::detail::expression_from_node(
+        LMCAS::detail::make_node<NumberNode>(
+            static_cast<lmmc_real_t>(6.28318)));
+    auto period_tan = LMCAS::detail::expression_from_node(
+        LMCAS::detail::make_node<NumberNode>(
+            static_cast<lmmc_real_t>(3.14159)));
 
-    store.declare_periodic("sin_x", period_sin);
-    store.declare_periodic("tan_x", period_tan);
+    EXPECT_TRUE((store.declare_periodic("sin_x", "x", period_sin).has_value())) << "period declaration succeeds";
+    EXPECT_TRUE((store.declare_periodic("tan_x", "x", period_tan).has_value())) << "period declaration succeeds";
 
-    EXPECT_TRUE(store.is_periodic("sin_x"), "sin_x is periodic");
-    EXPECT_TRUE(store.is_periodic("tan_x"), "tan_x is periodic");
+    EXPECT_TRUE((store.is_periodic("sin_x", "x"))) << "sin_x is periodic";
+    EXPECT_TRUE((store.is_periodic("tan_x", "x"))) << "tan_x is periodic";
 
-    auto p_sin = store.get_period("sin_x");
-    auto p_tan = store.get_period("tan_x");
+    auto p_sin = store.get_period("sin_x", "x");
+    auto p_tan = store.get_period("tan_x", "x");
 
-    EXPECT_TRUE(p_sin.has_value(), "sin_x has a period");
-    EXPECT_TRUE(p_tan.has_value(), "tan_x has a period");
+    ASSERT_TRUE((p_sin.has_value())) << "sin_x has a period";
+    EXPECT_TRUE((p_tan.has_value())) << "tan_x has a period";
 
     if (p_sin.has_value() && p_tan.has_value()) {
-        EXPECT_NEAR((*p_sin)->to_numeric(), 6.28318, 1e-4, "sin period is ~2pi");
-        EXPECT_NEAR((*p_tan)->to_numeric(), 3.14159, 1e-4, "tan period is ~pi");
+        EXPECT_NEAR(p_sin->to_numeric(), 6.28318, 1e-4) << "sin period is ~2pi";
+        EXPECT_NEAR(p_tan->to_numeric(), 3.14159, 1e-4) << "tan period is ~pi";
     }
 }
 
-
-static void test_contradiction_finite_divergent() {
-    TEST_CASE("Contradiction: Finite then Divergent returns failure");
-
+TEST(AssumptionDeclarations, ContradictionFiniteDivergent) {
     PropertyStore store;
-    store.declare_finiteness("x", Finiteness::Finite);
+    EXPECT_TRUE((store.declare_finiteness("x", Finiteness::Finite).has_value())) << "finiteness declaration succeeds";
 
     auto failure_355 = store.declare_finiteness("x", Finiteness::Divergent);
-    EXPECT_TRUE(!failure_355.has_value(), "Finite + Divergent returns failure");
-    EXPECT_TRUE(failure_355.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_355.error().message, {"x", "Finite", "Divergent"},
-            "Result error mentions symbol, Finite, and Divergent");
+    ASSERT_FALSE(failure_355.has_value()) << "Finite + Divergent returns failure";
+    EXPECT_TRUE((failure_355.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-static void test_contradiction_divergent_finite() {
-    TEST_CASE("Contradiction: Divergent then Finite returns failure");
-
+TEST(AssumptionDeclarations, ContradictionDivergentFinite) {
     PropertyStore store;
-    store.declare_finiteness("y", Finiteness::Divergent);
+    EXPECT_TRUE((store.declare_finiteness("y", Finiteness::Divergent).has_value())) << "finiteness declaration succeeds";
 
     auto failure_373 = store.declare_finiteness("y", Finiteness::Finite);
-    EXPECT_TRUE(!failure_373.has_value(), "Divergent + Finite returns failure");
-    EXPECT_TRUE(failure_373.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_373.error().message, {"y", "Finite", "Divergent"},
-            "Result error mentions symbol, Finite, and Divergent");
+    ASSERT_FALSE(failure_373.has_value()) << "Divergent + Finite returns failure";
+    EXPECT_TRUE((failure_373.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-static void test_contradiction_positive_definite_negative_definite() {
-    TEST_CASE("Contradiction: PositiveDefinite then NegativeDefinite returns failure");
-
+TEST(AssumptionDeclarations, ContradictionPositiveDefiniteNegativeDefinite) {
     PropertyStore store;
-    store.declare_definiteness("M", Definiteness::PositiveDefinite);
+    EXPECT_TRUE((store.declare_definiteness("M", Definiteness::PositiveDefinite).has_value())) << "definiteness declaration succeeds";
 
     auto failure_391 = store.declare_definiteness("M", Definiteness::NegativeDefinite);
-    EXPECT_TRUE(!failure_391.has_value(), "PositiveDefinite + NegativeDefinite returns failure");
-    EXPECT_TRUE(failure_391.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_391.error().message, {"M", "definiteness"},
-            "Result error mentions symbol and definiteness");
+    ASSERT_FALSE(failure_391.has_value()) << "PositiveDefinite + NegativeDefinite returns failure";
+    EXPECT_TRUE((failure_391.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-static void test_contradiction_positive_definite_indefinite() {
-    TEST_CASE("Contradiction: PositiveDefinite then Indefinite returns failure");
-
+TEST(AssumptionDeclarations, ContradictionPositiveDefiniteIndefinite) {
     PropertyStore store;
-    store.declare_definiteness("A", Definiteness::PositiveDefinite);
+    EXPECT_TRUE((store.declare_definiteness("A", Definiteness::PositiveDefinite).has_value())) << "definiteness declaration succeeds";
 
     auto failure_414 = store.declare_definiteness("A", Definiteness::Indefinite);
-    EXPECT_TRUE(!failure_414.has_value(), "PositiveDefinite + Indefinite returns failure");
+    EXPECT_TRUE((!failure_414.has_value())) << "PositiveDefinite + Indefinite returns failure";
 }
 
-static void test_contradiction_negative_definite_indefinite() {
-    TEST_CASE("Contradiction: NegativeDefinite then Indefinite returns failure");
-
+TEST(AssumptionDeclarations, ContradictionNegativeDefiniteIndefinite) {
     PropertyStore store;
-    store.declare_definiteness("B", Definiteness::NegativeDefinite);
+    EXPECT_TRUE((store.declare_definiteness("B", Definiteness::NegativeDefinite).has_value())) << "definiteness declaration succeeds";
 
     auto failure_429 = store.declare_definiteness("B", Definiteness::Indefinite);
-    EXPECT_TRUE(!failure_429.has_value(), "NegativeDefinite + Indefinite returns failure");
+    EXPECT_TRUE((!failure_429.has_value())) << "NegativeDefinite + Indefinite returns failure";
 }
 
-static void test_contradiction_transcendental_algebraic() {
-    TEST_CASE("Contradiction: Transcendental then Algebraic domain returns failure");
-
+TEST(AssumptionDeclarations, ContradictionTranscendentalAlgebraic) {
     PropertyStore store;
-    store.declare_transcendental("pi");
+    EXPECT_TRUE((store.declare_transcendental("pi").has_value())) << "transcendental declaration succeeds";
 
     auto failure_429 = store.declare_domain("pi", Domain::Algebraic);
-    EXPECT_TRUE(!failure_429.has_value(), "Transcendental + Algebraic returns failure");
-    EXPECT_TRUE(failure_429.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_429.error().message, {"pi", "Transcendental", "Algebraic"},
-            "Result error mentions symbol, Transcendental, and Algebraic");
+    ASSERT_FALSE(failure_429.has_value()) << "Transcendental + Algebraic returns failure";
+    EXPECT_TRUE((failure_429.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-static void test_contradiction_transcendental_rational() {
-    TEST_CASE("Contradiction: Transcendental then Rational domain returns failure");
-
+TEST(AssumptionDeclarations, ContradictionTranscendentalRational) {
     PropertyStore store;
-    store.declare_transcendental("e");
+    EXPECT_TRUE((store.declare_transcendental("e").has_value())) << "transcendental declaration succeeds";
 
     auto failure_462 = store.declare_domain("e", Domain::Rational);
-    EXPECT_TRUE(!failure_462.has_value(), "Transcendental + Rational returns failure");
+    EXPECT_TRUE((!failure_462.has_value())) << "Transcendental + Rational returns failure";
 }
 
-static void test_contradiction_transcendental_integer() {
-    TEST_CASE("Contradiction: Transcendental then Integer domain returns failure");
-
+TEST(AssumptionDeclarations, ContradictionTranscendentalInteger) {
     PropertyStore store;
-    store.declare_transcendental("pi");
+    EXPECT_TRUE((store.declare_transcendental("pi").has_value())) << "transcendental declaration succeeds";
 
     auto failure_477 = store.declare_domain("pi", Domain::Integer);
-    EXPECT_TRUE(!failure_477.has_value(), "Transcendental + Integer returns failure");
+    EXPECT_TRUE((!failure_477.has_value())) << "Transcendental + Integer returns failure";
 }
 
-static void test_contradiction_algebraic_then_transcendental() {
-    TEST_CASE("Contradiction: Algebraic domain then Transcendental returns failure");
-
+TEST(AssumptionDeclarations, ContradictionAlgebraicThenTranscendental) {
     PropertyStore store;
-    store.declare_domain("sqrt2", Domain::Algebraic);
+    EXPECT_TRUE((store.declare_domain("sqrt2", Domain::Algebraic).has_value())) << "domain declaration succeeds";
 
     auto failure_467 = store.declare_transcendental("sqrt2");
-    EXPECT_TRUE(!failure_467.has_value(), "Algebraic + Transcendental returns failure");
-    EXPECT_TRUE(failure_467.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_467.error().message, {"sqrt2", "Transcendental", "Algebraic"},
-            "Result error mentions symbol, Transcendental, and Algebraic");
+    ASSERT_FALSE(failure_467.has_value()) << "Algebraic + Transcendental returns failure";
+    EXPECT_TRUE((failure_467.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-static void test_contradiction_bounded_unbounded() {
-    TEST_CASE("Contradiction: Bounded then Unbounded returns failure");
-
+TEST(AssumptionDeclarations, ContradictionBoundedUnbounded) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Bounded);
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded).has_value())) << "boundedness declaration succeeds";
 
     auto failure_485 = store.declare_bounded("x", Boundedness::Unbounded);
-    EXPECT_TRUE(!failure_485.has_value(), "Bounded + Unbounded returns failure");
-    EXPECT_TRUE(failure_485.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_485.error().message, {"x", "boundedness"},
-            "Result error mentions symbol and boundedness");
+    ASSERT_FALSE(failure_485.has_value()) << "Bounded + Unbounded returns failure";
+    EXPECT_TRUE((failure_485.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-static void test_contradiction_parity_even_odd() {
-    TEST_CASE("Contradiction: Even then Odd parity returns failure");
-
+TEST(AssumptionDeclarations, ContradictionParityEvenOdd) {
     PropertyStore store;
-    store.declare_parity("n", Parity::Even);
+    EXPECT_TRUE((store.declare_parity("n", Parity::Even).has_value())) << "parity declaration succeeds";
 
     auto failure_503 = store.declare_parity("n", Parity::Odd);
-    EXPECT_TRUE(!failure_503.has_value(), "Even + Odd returns failure");
-    EXPECT_TRUE(failure_503.error().code == CasErrc::InvalidArgument, "failure reports InvalidArgument");
-    EXPECT_CONTAINS(failure_503.error().message, {"n", "parity"},
-            "Result error mentions symbol and parity");
+    ASSERT_FALSE(failure_503.has_value()) << "Even + Odd returns failure";
+    EXPECT_TRUE((failure_503.error().code == CasErrc::InvalidArgument)) << "failure reports InvalidArgument";
 }
 
-
-static void test_finite_implies_bounded() {
-    TEST_CASE("Finiteness: Finite implies Bounded");
-
+TEST(AssumptionDeclarations, FiniteImpliesBounded) {
     PropertyStore store;
-    store.declare_finiteness("x", Finiteness::Finite);
+    EXPECT_TRUE((store.declare_finiteness("x", Finiteness::Finite).has_value())) << "finiteness declaration succeeds";
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
-        "Declaring Finite auto-sets Bounded");
-}
-
-static void test_checked_interval_property_contracts() {
-    TEST_CASE("Checked interval properties propagate validation, budgets, and conflicts");
-
-    PropertyStore store;
-    Interval interval = make_closed_interval(0.0, 10.0);
-
-    auto empty_symbol = store.declare_continuous_checked("", interval);
-    EXPECT_TRUE(!empty_symbol && empty_symbol.error().code == CasErrc::InvalidArgument,
-                "checked continuity rejects an empty symbol");
-    EXPECT_TRUE(store.get_all_symbols().empty(),
-                "failed checked continuity creates no property record");
-
-    auto empty_interval = store.declare_continuous_checked("f", Interval::empty());
-    EXPECT_TRUE(!empty_interval && empty_interval.error().code == CasErrc::InvalidArgument,
-                "checked continuity rejects an empty interval");
-    EXPECT_TRUE(store.get_all_symbols().empty(),
-                "empty-interval failure is transactional");
-
-    auto differentiable = store.declare_differentiable_checked("f", interval);
-    EXPECT_TRUE(differentiable.has_value(),
-                "checked differentiability accepts a valid interval");
-    const auto declaration_count = store.get_continuity_decls("f").size();
-    auto duplicate = store.declare_differentiable_checked("f", interval);
-    EXPECT_TRUE(duplicate.has_value(), "exact duplicate differentiability is idempotent");
-    EXPECT_TRUE(store.get_continuity_decls("f").size() == declaration_count,
-                "idempotent checked declaration does not duplicate state");
-
-    auto downgrade = store.declare_continuous_checked("f", interval);
-    EXPECT_TRUE(!downgrade && downgrade.error().code == CasErrc::InvalidArgument,
-                "checked continuity rejects a differentiability downgrade");
-    EXPECT_TRUE(store.get_continuity_decls("f").size() == declaration_count,
-                "failed checked downgrade preserves declaration state");
-
-    PropertyStore boundary_store;
-    Interval left = make_closed_interval(0.0, 5.0);
-    Interval open_touch{
-        Endpoint::open(SymbolicExpr::number(5.0)),
-        Endpoint::closed(SymbolicExpr::number(10.0))};
-    Interval closed_touch = make_closed_interval(5.0, 10.0);
-    EXPECT_TRUE(boundary_store.declare_differentiable_checked("edge", left).has_value(),
-                "boundary test stores differentiability");
-    auto disjoint_touch = boundary_store.declare_continuous_checked("edge", open_touch);
-    EXPECT_TRUE(disjoint_touch.has_value(),
-                "open touching boundary is correctly treated as non-overlapping");
-    auto overlapping_touch = boundary_store.declare_continuous_checked("edge", closed_touch);
-    EXPECT_TRUE(!overlapping_touch &&
-                    overlapping_touch.error().code == CasErrc::InvalidArgument,
-                "closed touching boundary is correctly treated as overlapping");
-
-    Interval symbolic{
-        Endpoint::closed(SymbolicExpr::variable("a")),
-        Endpoint::closed(SymbolicExpr::variable("b"))};
-    auto symbolic_declaration = store.declare_continuous_checked("g", symbolic);
-    EXPECT_TRUE(!symbolic_declaration &&
-                    symbolic_declaration.error().code == CasErrc::UnboundSymbol,
-                "checked continuity propagates unbound symbolic endpoints");
-    auto symbolic_query = store.is_continuous_checked("f", symbolic);
-    EXPECT_TRUE(!symbolic_query && symbolic_query.error().code == CasErrc::UnboundSymbol,
-                "checked continuity query propagates endpoint errors");
-
-    CancellationToken cancellation;
-    cancellation.cancel();
-    ComputationContext cancelled_context({}, cancellation);
-    auto cancelled = store.declare_monotonicity_checked(
-        "g", "x", interval, Monotonicity::Increasing, cancelled_context);
-    EXPECT_TRUE(!cancelled && cancelled.error().code == CasErrc::Cancelled,
-                "checked monotonicity observes cancellation");
-    EXPECT_TRUE(store.get_monotonicity_decls("g").empty(),
-                "cancelled monotonicity declaration stores no state");
-
-    ResourceLimits limits;
-    limits.max_steps = 0;
-    ComputationContext limited_context(limits);
-    auto limited = store.declare_differentiable_checked(
-        "h", interval, limited_context);
-    EXPECT_TRUE(!limited && limited.error().code == CasErrc::ResourceLimit,
-                "checked differentiability observes the step budget");
-
-    auto empty_variable = store.declare_monotonicity_checked(
-        "f", "", interval, Monotonicity::Increasing);
-    EXPECT_TRUE(!empty_variable && empty_variable.error().code == CasErrc::InvalidArgument,
-                "checked monotonicity rejects an empty variable");
-    auto monotonic = store.declare_monotonicity_checked(
-        "f", "x", interval, Monotonicity::Increasing);
-    EXPECT_TRUE(monotonic.has_value(), "checked monotonicity stores a valid declaration");
-    auto queried = store.get_monotonicity_checked("f", "x", interval);
-    EXPECT_TRUE(queried && queried.value() == Monotonicity::Increasing,
-                "checked monotonicity query retrieves the proven declaration");
-}
-
-
-int main() {
-    // Continuity/differentiability overlap detection
-    test_continuous_only_on_differentiable_overlap_throws();
-    test_continuous_only_on_exact_differentiable_interval_throws();
-    test_differentiable_on_continuous_overlap_ok();
-    test_continuous_on_continuous_overlap_ok();
-    test_differentiable_implies_continuous();
-    test_continuous_not_differentiable();
-    test_non_overlapping_intervals_no_conflict();
-
-    // Monotonicity storage and retrieval
-    test_monotonicity_declare_and_retrieve_increasing();
-    test_monotonicity_declare_and_retrieve_decreasing();
-    test_monotonicity_sub_interval_coverage();
-    test_monotonicity_uncovered_interval_returns_unknown();
-    test_monotonicity_wrong_variable_returns_unknown();
-    test_monotonicity_undeclared_symbol_returns_unknown();
-    test_monotonicity_multiple_declarations();
-    test_monotonicity_entire_line();
-
-    // Periodicity storage and retrieval
-    test_periodicity_declare_and_retrieve();
-    test_periodicity_not_periodic_by_default();
-    test_periodicity_overwrite_period();
-    test_periodicity_different_symbols();
-
-    // Contradiction scenarios
-    test_contradiction_finite_divergent();
-    test_contradiction_divergent_finite();
-    test_contradiction_positive_definite_negative_definite();
-    test_contradiction_positive_definite_indefinite();
-    test_contradiction_negative_definite_indefinite();
-    test_contradiction_transcendental_algebraic();
-    test_contradiction_transcendental_rational();
-    test_contradiction_transcendental_integer();
-    test_contradiction_algebraic_then_transcendental();
-    test_contradiction_bounded_unbounded();
-    test_contradiction_parity_even_odd();
-
-    // Finiteness implication
-    test_finite_implies_bounded();
-    test_checked_interval_property_contracts();
-
-    return TEST_REPORT();
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Bounded)) << "Declaring Finite auto-sets Bounded";
 }

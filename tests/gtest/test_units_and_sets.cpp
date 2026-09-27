@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "expr.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 using namespace LMCAS;
 
@@ -10,7 +10,7 @@ namespace {
 
 using namespace LMCAS;
 
-ExprPtr exact(long long value) {
+ExprPtr exact(const BigInt& value) {
     auto result = integer(value);
     EXPECT_TRUE(result);
     return result.value();

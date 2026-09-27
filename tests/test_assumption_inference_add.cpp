@@ -3,17 +3,13 @@
 #include "inference_engine.hpp"
 #include "assumption_context.hpp"
 #include "property_store.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <vector>
 #include <string>
 
 using namespace LMCAS;
 
-
 /// Create a VariableNode wrapped in a shared_ptr<SymbolicNode>
-static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return LMCAS::detail::make_node<VariableNode>(name);
-}
 
 /// Create a NumberNode from a BigInt value
 static std::shared_ptr<const SymbolicNode> make_num(int val) {
@@ -26,462 +22,353 @@ static std::shared_ptr<const AddNode> make_add(std::vector<std::shared_ptr<const
 }
 
 /// Wrap an AddNode into a SymbolicExpr for querying
-static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = LMCAS::detail::expression_from_node(std::move(node));
-    return expr;
-}
 
-
-void test_all_positive_operands() {
-    TEST_CASE("All Positive operands → sum is Positive");
-
+TEST(AssumptionInferenceAdd, AllPositiveOperands) {
     AssumptionContext ctx;
-    ctx.assume_sign("a", Sign::Positive);
-    ctx.assume_sign("b", Sign::Positive);
-    ctx.assume_sign("c", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("a", Sign::Positive).has_value());
+    ASSERT_TRUE(ctx.assume_sign("b", Sign::Positive).has_value());
+    ASSERT_TRUE(ctx.assume_sign("c", Sign::Positive).has_value());
 
     InferenceEngine engine(ctx);
 
     // Two positive operands
     {
-        auto add = make_add({make_var("a"), make_var("b")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-            "a + b is Positive when a, b are Positive");
+        auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "a + b is Positive when a, b are Positive";
     }
 
     // Three positive operands
     {
-        auto add = make_add({make_var("a"), make_var("b"), make_var("c")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-            "a + b + c is Positive when a, b, c are Positive");
+        auto add = make_add({test_variable_node("a"), test_variable_node("b"), test_variable_node("c")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "a + b + c is Positive when a, b, c are Positive";
     }
 }
 
-void test_all_negative_operands() {
-    TEST_CASE("All Negative operands → sum is Negative");
-
+TEST(AssumptionInferenceAdd, AllNegativeOperands) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Negative);
-    ctx.assume_sign("y", Sign::Negative);
-    ctx.assume_sign("z", Sign::Negative);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Negative).has_value());
+    ASSERT_TRUE(ctx.assume_sign("y", Sign::Negative).has_value());
+    ASSERT_TRUE(ctx.assume_sign("z", Sign::Negative).has_value());
 
     InferenceEngine engine(ctx);
 
     // Two negative operands
     {
-        auto add = make_add({make_var("x"), make_var("y")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
-            "x + y is Negative when x, y are Negative");
+        auto add = make_add({test_variable_node("x"), test_variable_node("y")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::True)) << "x + y is Negative when x, y are Negative";
     }
 
     // Three negative operands
     {
-        auto add = make_add({make_var("x"), make_var("y"), make_var("z")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
-            "x + y + z is Negative when x, y, z are Negative");
+        auto add = make_add({test_variable_node("x"), test_variable_node("y"), test_variable_node("z")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::True)) << "x + y + z is Negative when x, y, z are Negative";
     }
 }
 
-void test_all_nonnegative_operands() {
-    TEST_CASE("All NonNegative operands → sum is NonNegative");
-
+TEST(AssumptionInferenceAdd, AllNonnegativeOperands) {
     AssumptionContext ctx;
-    ctx.assume_sign("a", Sign::NonNegative);
-    ctx.assume_sign("b", Sign::NonNegative);
-    ctx.assume_sign("c", Sign::NonNegative);
+    ASSERT_TRUE(ctx.assume_sign("a", Sign::NonNegative).has_value());
+    ASSERT_TRUE(ctx.assume_sign("b", Sign::NonNegative).has_value());
+    ASSERT_TRUE(ctx.assume_sign("c", Sign::NonNegative).has_value());
 
     InferenceEngine engine(ctx);
 
     // Two nonnegative operands
     {
-        auto add = make_add({make_var("a"), make_var("b")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
-            "a + b is NonNegative when a, b are NonNegative");
+        auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::True)) << "a + b is NonNegative when a, b are NonNegative";
     }
 
     // Three nonnegative operands
     {
-        auto add = make_add({make_var("a"), make_var("b"), make_var("c")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
-            "a + b + c is NonNegative when a, b, c are NonNegative");
+        auto add = make_add({test_variable_node("a"), test_variable_node("b"), test_variable_node("c")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::True)) << "a + b + c is NonNegative when a, b, c are NonNegative";
     }
 }
 
-void test_all_nonpositive_operands() {
-    TEST_CASE("All NonPositive operands → sum is NonPositive");
-
+TEST(AssumptionInferenceAdd, AllNonpositiveOperands) {
     AssumptionContext ctx;
-    ctx.assume_sign("a", Sign::NonPositive);
-    ctx.assume_sign("b", Sign::NonPositive);
+    ASSERT_TRUE(ctx.assume_sign("a", Sign::NonPositive).has_value());
+    ASSERT_TRUE(ctx.assume_sign("b", Sign::NonPositive).has_value());
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("a"), make_var("b")});
-    auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::True,
-        "a + b is NonPositive when a, b are NonPositive");
+    auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+    auto expr = test_expression_from_node(add);
+    EXPECT_TRUE((engine.query_nonpositive_checked(expr).value() == Tribool::True)) << "a + b is NonPositive when a, b are NonPositive";
 }
 
-void test_positive_implies_nonnegative_for_sum() {
-    TEST_CASE("All Positive operands → sum is also NonNegative");
-
+TEST(AssumptionInferenceAdd, PositiveImpliesNonnegativeForSum) {
     AssumptionContext ctx;
-    ctx.assume_sign("a", Sign::Positive);
-    ctx.assume_sign("b", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("a", Sign::Positive).has_value());
+    ASSERT_TRUE(ctx.assume_sign("b", Sign::Positive).has_value());
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("a"), make_var("b")});
-    auto expr = wrap_expr(add);
+    auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+    auto expr = test_expression_from_node(add);
 
     // Positive implies NonNegative, so the sum should also be NonNegative
-    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::True,
-        "a + b is NonNegative when a, b are Positive (Positive implies NonNegative)");
+    EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::True)) << "a + b is NonNegative when a, b are Positive (Positive implies NonNegative)";
 }
 
-void test_unknown_operand_yields_unknown() {
-    TEST_CASE("Any Unknown operand → result is Unknown");
-
+TEST(AssumptionInferenceAdd, UnknownOperandYieldsUnknown) {
     AssumptionContext ctx;
-    ctx.assume_sign("a", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("a", Sign::Positive).has_value());
     // "b" has no sign declared -> Unknown
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("a"), make_var("b")});
-    auto expr = wrap_expr(add);
+    auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+    auto expr = test_expression_from_node(add);
 
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
-        "a + b is Unknown for Positive when b has Unknown sign");
-    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
-        "a + b is Unknown for Negative when b has Unknown sign");
-    EXPECT_TRUE(engine.query_nonnegative_checked(expr).value() == Tribool::Unknown,
-        "a + b is Unknown for NonNegative when b has Unknown sign");
-    EXPECT_TRUE(engine.query_nonpositive_checked(expr).value() == Tribool::Unknown,
-        "a + b is Unknown for NonPositive when b has Unknown sign");
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::Unknown)) << "a + b is Unknown for Positive when b has Unknown sign";
+    EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::Unknown)) << "a + b is Unknown for Negative when b has Unknown sign";
+    EXPECT_TRUE((engine.query_nonnegative_checked(expr).value() == Tribool::Unknown)) << "a + b is Unknown for NonNegative when b has Unknown sign";
+    EXPECT_TRUE((engine.query_nonpositive_checked(expr).value() == Tribool::Unknown)) << "a + b is Unknown for NonPositive when b has Unknown sign";
 }
 
-void test_mixed_signs_yield_unknown() {
-    TEST_CASE("Mixed definite signs → result is Unknown");
-
+TEST(AssumptionInferenceAdd, MixedSignsYieldUnknown) {
     AssumptionContext ctx;
-    ctx.assume_sign("pos", Sign::Positive);
-    ctx.assume_sign("neg", Sign::Negative);
+    ASSERT_TRUE(ctx.assume_sign("pos", Sign::Positive).has_value());
+    ASSERT_TRUE(ctx.assume_sign("neg", Sign::Negative).has_value());
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("pos"), make_var("neg")});
-    auto expr = wrap_expr(add);
+    auto add = make_add({test_variable_node("pos"), test_variable_node("neg")});
+    auto expr = test_expression_from_node(add);
 
     /// 正数与负数之和的符号由幅值决定,因此保持 Unknown.
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
-        "pos + neg is Unknown for Positive (mixed signs)");
-    EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::Unknown,
-        "pos + neg is Unknown for Negative (mixed signs)");
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::Unknown)) << "pos + neg is Unknown for Positive (mixed signs)";
+    EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::Unknown)) << "pos + neg is Unknown for Negative (mixed signs)";
 }
 
-void test_single_operand() {
-    TEST_CASE("Single operand AddNode preserves sign");
-
+TEST(AssumptionInferenceAdd, SingleOperand) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("x")});
-    auto expr = wrap_expr(add);
+    auto add = make_add({test_variable_node("x")});
+    auto expr = test_expression_from_node(add);
 
     // Note: AddNode with single operand may be simplified by the factory,
     // but we construct it directly here
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-        "Single-operand add(x) is Positive when x is Positive");
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "Single-operand add(x) is Positive when x is Positive";
 }
 
-void test_sign_with_number_operands() {
-    TEST_CASE("Addition with positive number operands");
-
+TEST(AssumptionInferenceAdd, SignWithNumberOperands) {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
     // Add two positive numbers: 3 + 5
     {
         auto add = make_add({make_num(3), make_num(5)});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-            "3 + 5 is Positive");
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "3 + 5 is Positive";
     }
 
     // Add two negative numbers: (-3) + (-5)
     {
         auto add = make_add({make_num(-3), make_num(-5)});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_negative_checked(expr).value() == Tribool::True,
-            "(-3) + (-5) is Negative");
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_negative_checked(expr).value() == Tribool::True)) << "(-3) + (-5) is Negative";
     }
 
     // Mixed: 3 + (-5) -> Unknown
     {
         auto add = make_add({make_num(3), make_num(-5)});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
-            "3 + (-5) is Unknown for Positive (mixed signs)");
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::Unknown)) << "3 + (-5) is Unknown for Positive (mixed signs)";
     }
 }
 
-void test_with_variables_and_numbers_mixed() {
-    TEST_CASE("Addition with variables and numbers");
-
+TEST(AssumptionInferenceAdd, WithVariablesAndNumbersMixed) {
     AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
     InferenceEngine engine(ctx);
 
     // x + 5 where x is Positive -> sum is Positive
     {
-        auto add = make_add({make_var("x"), make_num(5)});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-            "x + 5 is Positive when x is Positive");
+        auto add = make_add({test_variable_node("x"), make_num(5)});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "x + 5 is Positive when x is Positive";
     }
 
     // x + (-3) where x is Positive -> Unknown (mixed)
     {
-        auto add = make_add({make_var("x"), make_num(-3)});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::Unknown,
-            "x + (-3) is Unknown for Positive (mixed signs)");
+        auto add = make_add({test_variable_node("x"), make_num(-3)});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::Unknown)) << "x + (-3) is Unknown for Positive (mixed signs)";
     }
 }
 
-void test_many_operands_uniform_sign() {
-    TEST_CASE("Many operands with uniform sign");
-
+TEST(AssumptionInferenceAdd, ManyOperandsUniformSign) {
     AssumptionContext ctx;
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     for (int i = 0; i < 10; ++i) {
         std::string name = "v" + std::to_string(i);
-        ctx.assume_sign(name, Sign::Positive);
-        ops.push_back(make_var(name));
+        EXPECT_TRUE(ctx.assume_sign(name, Sign::Positive).has_value());
+        ops.push_back(test_variable_node(name));
     }
 
     InferenceEngine engine(ctx);
 
     auto add = make_add(ops);
-    auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_positive_checked(expr).value() == Tribool::True,
-        "Sum of 10 Positive variables is Positive");
+    auto expr = test_expression_from_node(add);
+    EXPECT_TRUE((engine.query_positive_checked(expr).value() == Tribool::True)) << "Sum of 10 Positive variables is Positive";
 }
 
-void test_empty_add_returns_unknown() {
-    TEST_CASE("Empty AddNode is rejected");
-
+TEST(AssumptionInferenceAdd, EmptyAddReturnsUnknown) {
     bool rejected = false;
     try {
         (void)LMCAS::detail::make_node<AddNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{});
-    } catch (const std::invalid_argument&) {
+    } catch (const std::invalid_argument &) {
         rejected = true;
     }
-    EXPECT_TRUE(rejected, "Empty AddNode violates the AST invariant");
+    EXPECT_TRUE((rejected)) << "Empty AddNode violates the AST invariant";
 }
 
-
-void test_all_integer_operands() {
-    TEST_CASE("All Integer operands → sum is Integer");
-
+TEST(AssumptionInferenceAdd, AllIntegerOperands) {
     AssumptionContext ctx;
-    ctx.assume_domain("a", Domain::Integer);
-    ctx.assume_domain("b", Domain::Integer);
-    ctx.assume_domain("c", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("a", Domain::Integer).has_value());
+    ASSERT_TRUE(ctx.assume_domain("b", Domain::Integer).has_value());
+    ASSERT_TRUE(ctx.assume_domain("c", Domain::Integer).has_value());
 
     InferenceEngine engine(ctx);
 
     // Two integer operands
     {
-        auto add = make_add({make_var("a"), make_var("b")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
-            "a + b is Integer when a, b are Integer");
+        auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_integer_checked(expr).value() == Tribool::True)) << "a + b is Integer when a, b are Integer";
     }
 
     // Three integer operands
     {
-        auto add = make_add({make_var("a"), make_var("b"), make_var("c")});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
-            "a + b + c is Integer when a, b, c are Integer");
+        auto add = make_add({test_variable_node("a"), test_variable_node("b"), test_variable_node("c")});
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_integer_checked(expr).value() == Tribool::True)) << "a + b + c is Integer when a, b, c are Integer";
     }
 }
 
-void test_all_real_operands() {
-    TEST_CASE("All Real operands → sum is Real");
-
+TEST(AssumptionInferenceAdd, AllRealOperands) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_domain("y", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
+    ASSERT_TRUE(ctx.assume_domain("y", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("x"), make_var("y")});
-    auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
-        "x + y is Real when x, y are Real");
+    auto add = make_add({test_variable_node("x"), test_variable_node("y")});
+    auto expr = test_expression_from_node(add);
+    EXPECT_TRUE((engine.query_real_checked(expr).value() == Tribool::True)) << "x + y is Real when x, y are Real";
 }
 
-void test_integer_implies_real_for_sum() {
-    TEST_CASE("All Integer operands → sum is also Real (Integer ⊂ Real)");
-
+TEST(AssumptionInferenceAdd, IntegerImpliesRealForSum) {
     AssumptionContext ctx;
-    ctx.assume_domain("a", Domain::Integer);
-    ctx.assume_domain("b", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("a", Domain::Integer).has_value());
+    ASSERT_TRUE(ctx.assume_domain("b", Domain::Integer).has_value());
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("a"), make_var("b")});
-    auto expr = wrap_expr(add);
+    auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+    auto expr = test_expression_from_node(add);
 
     // Integer implies Real, so sum of integers should also be Real
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
-        "a + b is Real when a, b are Integer (Integer implies Real)");
+    EXPECT_TRUE((engine.query_real_checked(expr).value() == Tribool::True)) << "a + b is Real when a, b are Integer (Integer implies Real)";
 }
 
-void test_mixed_integer_and_real() {
-    TEST_CASE("Mixed Integer and Real → sum is Real but not necessarily Integer");
-
+TEST(AssumptionInferenceAdd, MixedIntegerAndReal) {
     AssumptionContext ctx;
-    ctx.assume_domain("a", Domain::Integer);
-    ctx.assume_domain("b", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("a", Domain::Integer).has_value());
+    ASSERT_TRUE(ctx.assume_domain("b", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("a"), make_var("b")});
-    auto expr = wrap_expr(add);
+    auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+    auto expr = test_expression_from_node(add);
 
     // Integer + Real -> Real (Integer is subset of Real)
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
-        "a + b is Real when a is Integer and b is Real");
+    EXPECT_TRUE((engine.query_real_checked(expr).value() == Tribool::True)) << "a + b is Real when a is Integer and b is Real";
 
     // But not necessarily Integer (b might not be Integer)
-    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
-        "a + b is Unknown for Integer when b is only Real");
+    EXPECT_TRUE((engine.query_integer_checked(expr).value() == Tribool::Unknown)) << "a + b is Unknown for Integer when b is only Real";
 }
 
-void test_unknown_domain_yields_unknown() {
-    TEST_CASE("Unknown domain operand → result is Unknown");
-
+TEST(AssumptionInferenceAdd, UnknownDomainYieldsUnknown) {
     AssumptionContext ctx;
-    ctx.assume_domain("a", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("a", Domain::Integer).has_value());
     // "b" has no domain declared (defaults to Complex)
 
     InferenceEngine engine(ctx);
 
-    auto add = make_add({make_var("a"), make_var("b")});
-    auto expr = wrap_expr(add);
+    auto add = make_add({test_variable_node("a"), test_variable_node("b")});
+    auto expr = test_expression_from_node(add);
 
-    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
-        "a + b is Unknown for Integer when b has no Integer domain");
+    EXPECT_TRUE((engine.query_integer_checked(expr).value() == Tribool::Unknown)) << "a + b is Unknown for Integer when b has no Integer domain";
 }
 
-void test_domain_with_number_operands() {
-    TEST_CASE("Addition with integer number operands");
-
+TEST(AssumptionInferenceAdd, DomainWithNumberOperands) {
     AssumptionContext ctx;
     InferenceEngine engine(ctx);
 
     // 3 + 5 (both BigInt -> Integer)
     {
         auto add = make_add({make_num(3), make_num(5)});
-        auto expr = wrap_expr(add);
-        EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
-            "3 + 5 is Integer");
-        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
-            "3 + 5 is Real");
+        auto expr = test_expression_from_node(add);
+        EXPECT_TRUE((engine.query_integer_checked(expr).value() == Tribool::True)) << "3 + 5 is Integer";
+        EXPECT_TRUE((engine.query_real_checked(expr).value() == Tribool::True)) << "3 + 5 is Real";
     }
 }
 
-void test_many_integer_operands() {
-    TEST_CASE("Many Integer operands → sum is Integer");
-
+TEST(AssumptionInferenceAdd, ManyIntegerOperands) {
     AssumptionContext ctx;
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     for (int i = 0; i < 8; ++i) {
         std::string name = "n" + std::to_string(i);
-        ctx.assume_domain(name, Domain::Integer);
-        ops.push_back(make_var(name));
+        EXPECT_TRUE(ctx.assume_domain(name, Domain::Integer).has_value());
+        ops.push_back(test_variable_node(name));
     }
 
     InferenceEngine engine(ctx);
 
     auto add = make_add(ops);
-    auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
-        "Sum of 8 Integer variables is Integer");
+    auto expr = test_expression_from_node(add);
+    EXPECT_TRUE((engine.query_integer_checked(expr).value() == Tribool::True)) << "Sum of 8 Integer variables is Integer";
 }
 
-void test_real_with_numbers() {
-    TEST_CASE("Real variable + integer number → Real");
-
+TEST(AssumptionInferenceAdd, RealWithNumbers) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     InferenceEngine engine(ctx);
 
     // x + 3 where x is Real -> sum is Real (3 is Integer which implies Real)
-    auto add = make_add({make_var("x"), make_num(3)});
-    auto expr = wrap_expr(add);
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True,
-        "x + 3 is Real when x is Real");
+    auto add = make_add({test_variable_node("x"), make_num(3)});
+    auto expr = test_expression_from_node(add);
+    EXPECT_TRUE((engine.query_real_checked(expr).value() == Tribool::True)) << "x + 3 is Real when x is Real";
 }
 
-void test_nested_addition_domain() {
-    TEST_CASE("Nested addition preserves Integer domain");
-
+TEST(AssumptionInferenceAdd, NestedAdditionDomain) {
     AssumptionContext ctx;
-    ctx.assume_domain("a", Domain::Integer);
-    ctx.assume_domain("b", Domain::Integer);
-    ctx.assume_domain("c", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("a", Domain::Integer).has_value());
+    ASSERT_TRUE(ctx.assume_domain("b", Domain::Integer).has_value());
+    ASSERT_TRUE(ctx.assume_domain("c", Domain::Integer).has_value());
 
     InferenceEngine engine(ctx);
 
     // (a + b) + c - the inner add should be Integer, so the outer should too
-    auto inner_add = make_add({make_var("a"), make_var("b")});
-    auto outer_add = make_add({inner_add, make_var("c")});
-    auto expr = wrap_expr(outer_add);
+    auto inner_add = make_add({test_variable_node("a"), test_variable_node("b")});
+    auto outer_add = make_add({inner_add, test_variable_node("c")});
+    auto expr = test_expression_from_node(outer_add);
 
-    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::True,
-        "(a + b) + c is Integer when a, b, c are Integer");
-}
-
-
-int main() {
-    test_all_positive_operands();
-    test_all_negative_operands();
-    test_all_nonnegative_operands();
-    test_all_nonpositive_operands();
-    test_positive_implies_nonnegative_for_sum();
-    test_unknown_operand_yields_unknown();
-    test_mixed_signs_yield_unknown();
-    test_single_operand();
-    test_sign_with_number_operands();
-    test_with_variables_and_numbers_mixed();
-    test_many_operands_uniform_sign();
-    test_empty_add_returns_unknown();
-
-    test_all_integer_operands();
-    test_all_real_operands();
-    test_integer_implies_real_for_sum();
-    test_mixed_integer_and_real();
-    test_unknown_domain_yields_unknown();
-    test_domain_with_number_operands();
-    test_many_integer_operands();
-    test_real_with_numbers();
-    test_nested_addition_domain();
-
-    return TEST_REPORT();
+    EXPECT_TRUE((engine.query_integer_checked(expr).value() == Tribool::True)) << "(a + b) + c is Integer when a, b, c are Integer";
 }

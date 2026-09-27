@@ -2,74 +2,48 @@
 #include "polynomial.hpp"
 #include "symbolic.hpp"
 #include "test_common.hpp"
-#include <iostream>
 
 using namespace LMCAS;
 
-void test_bridge() {
-    std::cout << "Testing Symbolic <-> Polynomial Bridge..." << std::endl;
-
+TEST(LmcasPolyBridge, Bridge) {
     auto x = SymbolicExpr::variable("x");
-    auto two = SymbolicExpr::number(2);
-    auto one = SymbolicExpr::number(1);
-
-    auto expr = SymbolicExpr::add(
-        SymbolicExpr::power(x, two),
+    auto expression = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
         SymbolicExpr::add(
-            SymbolicExpr::multiply(two, x),
-            one
-        )
-    );
+            SymbolicExpr::multiply(SymbolicExpr::number(2), x),
+            SymbolicExpr::number(1)));
 
-    std::cout << "Symbolic Expr: " << expr->to_string() << std::endl;
+    auto converted = symbolic_to_poly<BigInt>(expression, "x");
 
-    Polynomial<BigInt> poly = symbolic_to_poly<BigInt>(expr, "x");
+    ASSERT_TRUE(converted) << converted.error().message;
+    const auto &polynomial = converted.value();
+    EXPECT_EQ(
+        polynomial.coeffs,
+        (std::vector<BigInt>{BigInt(1), BigInt(2), BigInt(1)}));
+    auto roundtrip = poly_to_symbolic(polynomial);
+    EXPECT_TRUE(test_proved_equivalent(roundtrip, expression));
 
-    std::cout << "Polynomial coeffs: ";
-    for (const auto& c : poly.coeffs) std::cout << c.ToString() << " ";
-    std::cout << std::endl;
+    Polynomial<BigInt> x_plus_one(
+        {BigInt(1), BigInt(1)}, "x");
+    auto gcd = Polynomial<BigInt>::gcd(polynomial, x_plus_one);
+    EXPECT_TRUE(gcd == x_plus_one);
 
-    EXPECT_TRUE(poly.degree() == 2, "symbolic_to_poly preserves degree");
-    EXPECT_TRUE(poly.coeffs.size() >= 3, "symbolic_to_poly returns three coefficients");
-    if (poly.coeffs.size() >= 3) {
-        EXPECT_TRUE(poly.coeffs[0] == BigInt(1), "constant coefficient is 1");
-        EXPECT_TRUE(poly.coeffs[1] == BigInt(2), "linear coefficient is 2");
-        EXPECT_TRUE(poly.coeffs[2] == BigInt(1), "quadratic coefficient is 1");
-    }
+    auto polynomial_division = polynomial.div_mod(gcd);
+    auto factor_division = x_plus_one.div_mod(gcd);
+    EXPECT_TRUE(polynomial_division.second.is_zero());
+    EXPECT_TRUE(factor_division.second.is_zero());
+    EXPECT_TRUE(polynomial_division.first * gcd == polynomial);
+    EXPECT_TRUE(factor_division.first * gcd == x_plus_one);
 
-    Polynomial<BigInt> poly2({BigInt(1), BigInt(1)}, "x");
+    auto gcd_expression = poly_to_symbolic(gcd);
+    EXPECT_TRUE(test_proved_equivalent(
+        gcd_expression, SymbolicExpr::add(
+                            x, SymbolicExpr::number(1))));
 
-    auto gcd = Polynomial<BigInt>::gcd(poly, poly2);
-    std::cout << "GCD(P, x+1): ";
-    for (const auto& c : gcd.coeffs) std::cout << c.ToString() << " ";
-    std::cout << std::endl;
-
-    EXPECT_TRUE(gcd.degree() == 1, "Polynomial::gcd finds shared linear factor");
-
-    auto res_expr = poly_to_symbolic(gcd);
-    std::cout << "Result Symbolic: " << res_expr->to_string() << std::endl;
-
-    std::cout << "\nTesting integrated SymbolicExpr::poly_gcd..." << std::endl;
-    auto sp2 = SymbolicExpr::variable("x");
-    sp2 = SymbolicExpr::add(sp2, SymbolicExpr::number(1));
-
-    ComputationContext gcd_context;
-    auto sgcd = symbolic_polynomial_gcd(
-        *expr, *sp2, gcd_context).value();
-
-    std::cout << "SymbolicExpr::poly_gcd result: " << sgcd->to_string() << std::endl;
-
-    EXPECT_TRUE(!(sgcd->is_one() && !expr->is_one() && !sp2->is_one()),
-                "SymbolicExpr::poly_gcd does not silently return 1 for expressions sharing x+1");
-
-    std::cout << "Bridge Test Passed." << std::endl;
-}
-
-int main() {
-    try {
-        test_bridge();
-    } catch (const std::exception& e) {
-        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
-    }
-    return TEST_REPORT();
+    ComputationContext context;
+    auto symbolic_gcd = symbolic_polynomial_gcd(
+        *expression, *gcd_expression, context);
+    ASSERT_TRUE(symbolic_gcd) << symbolic_gcd.error().message;
+    EXPECT_TRUE(test_proved_equivalent(
+        symbolic_gcd.value(), gcd_expression));
 }

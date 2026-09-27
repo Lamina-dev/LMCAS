@@ -7,7 +7,8 @@ Checks: >-
   bugprone-sizeof-expression,
   bugprone-suspicious-memory-comparison,
   bugprone-use-after-move,
-  performance-move-const-arg
+  performance-move-const-arg,
+  readability-identifier-naming
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*[\\/]LMCAS[\\/](include|src)[\\/].*'
 FormatStyle: none
@@ -16,3 +17,9 @@ ExtraArgs:
   - '-analyzer-config'
   - '-Xclang'
   - 'c++-stdlib-inlining=false'
+CheckOptions:
+  readability-identifier-naming.FunctionCase: lower_case
+  readability-identifier-naming.MethodCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase

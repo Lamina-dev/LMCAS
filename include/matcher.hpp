@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <utility>
 
 namespace LMCAS {
 
@@ -53,17 +54,22 @@ struct LMCAS_API Rule {
 
     std::function<bool(const MatchMap&)> condition; ///< 附加匹配条件（可选）
 
-    /// Assumption-aware condition: receives bindings and the assumption context.
-    /// If set, this is preferred over `condition` when a context is available.
+    /**
+     * @brief 使用匹配绑定与假设上下文检查附加条件。
+     *
+     * 两个条件均存在时须同时成立；缺少上下文时跳过规则并保留回调未调用的状态。
+     */
     std::function<bool(const MatchMap&, const AssumptionContext*)> assumption_condition;
 
     Rule(SymbolicExpr p, SymbolicExpr r, std::unordered_set<std::string> w,
          std::function<bool(const MatchMap&)> c = nullptr)
-        : pattern(p), replacement(r), wildcards(w), condition(c) {}
+        : pattern(std::move(p)), replacement(std::move(r)),
+          wildcards(std::move(w)), condition(std::move(c)) {}
 
     Rule(SymbolicExpr p, SymbolicExpr r, std::unordered_set<std::string> w,
          std::function<bool(const MatchMap&, const AssumptionContext*)> ac)
-        : pattern(p), replacement(r), wildcards(w), assumption_condition(ac) {}
+        : pattern(std::move(p)), replacement(std::move(r)),
+          wildcards(std::move(w)), assumption_condition(std::move(ac)) {}
 };
 
 /** @brief 基于规则的表达式重写引擎 */

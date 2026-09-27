@@ -3,7 +3,7 @@
 #include "solver.hpp"
 #include "solve_strategies.hpp"
 #include "poly_utils.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <algorithm>
 #include <set>
 
@@ -22,13 +22,6 @@ static std::shared_ptr<SymbolicExpr> extract_constant_term(
     const std::vector<std::string>& unknowns)
 {
 
-    auto result = expr;
-    for (const auto& var : unknowns) {
-        auto coeff = extract_coefficient(expr, var);
-        if (!coeff->is_zero()) {
-
-        }
-    }
 
     auto constant = expr;
     for (const auto& var : unknowns) {
@@ -51,7 +44,9 @@ bool ParametricSolver::is_linear_in_unknowns(
             }
 
             for (const auto& other_var : unknowns) {
-                if (other_var == var) continue;
+                if (other_var == var) {
+                    continue;
+                }
                 auto mixed = first_deriv->differentiate(other_var)->simplify();
                 if (!mixed->is_zero()) {
                     return false;
@@ -62,11 +57,92 @@ bool ParametricSolver::is_linear_in_unknowns(
     return true;
 }
 
+using ParametricMatrix = std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>;
+using ParametricVector = std::vector<std::shared_ptr<SymbolicExpr>>;
+
+static size_t find_parametric_pivot(ParametricMatrix& matrix, size_t row, size_t column) {
+    while (row < matrix.size()) {
+        auto simplified = matrix[row][column]->simplify();
+        matrix[row][column] = simplified;
+        if (!simplified->is_zero()) {
+            break;
+        }
+        ++row;
+    }
+    return row;
+}
+
+static void eliminate_parametric_column(ParametricMatrix& A, ParametricVector& b,
+                                        size_t current_row, size_t col, size_t n) {
+    size_t m = A.size();
+    auto pivot = A[current_row][col];
+
+    for (size_t r = 0; r < m; ++r) {
+        if (r == current_row) {
+            continue;
+        }
+        auto entry = A[r][col]->simplify();
+        if (entry->is_zero()) {
+            continue;
+        }
+
+        auto factor = SymbolicExpr::divide(entry, pivot)->simplify();
+
+        for (size_t k = col; k < n; ++k) {
+            auto term = SymbolicExpr::multiply(factor, A[current_row][k]);
+            A[r][k] = SymbolicExpr::add(A[r][k], SymbolicExpr::multiply(term, SymbolicExpr::number(-1)))->simplify();
+        }
+
+        auto b_term = SymbolicExpr::multiply(factor, b[current_row]);
+        b[r] = SymbolicExpr::add(b[r], SymbolicExpr::multiply(b_term, SymbolicExpr::number(-1)))->simplify();
+    }
+}
+
+static std::map<std::string, std::shared_ptr<SymbolicExpr>> parametric_linear_solution(
+    const ParametricMatrix& A, const ParametricVector& b,
+    const std::vector<size_t>& pivot_cols, const std::vector<size_t>& pivot_rows,
+    const std::vector<std::string>& unknowns) {
+    size_t n = unknowns.size();
+    std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
+
+    std::set<size_t> pivot_col_set(pivot_cols.begin(), pivot_cols.end());
+    for (size_t col = 0; col < n; ++col) {
+        if (pivot_col_set.find(col) == pivot_col_set.end()) {
+
+            solution[unknowns[col]] = SymbolicExpr::variable(unknowns[col]);
+        }
+    }
+
+    for (size_t k = 0; k < pivot_cols.size(); ++k) {
+        size_t col = pivot_cols[k];
+        size_t row = pivot_rows[k];
+
+        auto value = b[row];
+
+        for (size_t j = col + 1; j < n; ++j) {
+            if (pivot_col_set.find(j) != pivot_col_set.end()) {
+                continue;
+            }
+            auto coeff = A[row][j]->simplify();
+            if (!coeff->is_zero()) {
+
+                auto term = SymbolicExpr::multiply(coeff, SymbolicExpr::variable(unknowns[j]));
+                value = SymbolicExpr::add(value, SymbolicExpr::multiply(term, SymbolicExpr::number(-1)));
+            }
+        }
+
+        auto pivot_val = A[row][col];
+        value = SymbolicExpr::divide(value, pivot_val)->simplify();
+
+        solution[unknowns[col]] = value;
+    }
+    return solution;
+}
+
 std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
 ParametricSolver::solve_linear_parametric(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
-    const std::vector<std::string>& unknowns,
-    const std::vector<std::string>&)
+    const std::vector<std::string>& unknowns)
 {
     size_t m = equations.size();
     size_t n = unknowns.size();
@@ -98,20 +174,8 @@ ParametricSolver::solve_linear_parametric(
 
     for (size_t col = 0; col < n && current_row < m; ++col) {
 
-        size_t pivot_row = current_row;
-        bool found_pivot = false;
-        while (pivot_row < m) {
-            auto simplified = A[pivot_row][col]->simplify();
-            A[pivot_row][col] = simplified;
-            if (!simplified->is_zero()) {
-                found_pivot = true;
-                break;
-            }
-            pivot_row++;
-        }
-
-        if (!found_pivot) {
-
+        size_t pivot_row = find_parametric_pivot(A, current_row, col);
+        if (pivot_row == m) {
             continue;
         }
 
@@ -120,23 +184,7 @@ ParametricSolver::solve_linear_parametric(
             std::swap(b[pivot_row], b[current_row]);
         }
 
-        auto pivot = A[current_row][col];
-
-        for (size_t r = 0; r < m; ++r) {
-            if (r == current_row) continue;
-            auto entry = A[r][col]->simplify();
-            if (entry->is_zero()) continue;
-
-            auto factor = SymbolicExpr::divide(entry, pivot)->simplify();
-
-            for (size_t k = col; k < n; ++k) {
-                auto term = SymbolicExpr::multiply(factor, A[current_row][k]);
-                A[r][k] = SymbolicExpr::add(A[r][k], SymbolicExpr::multiply(term, SymbolicExpr::number(-1)))->simplify();
-            }
-
-            auto b_term = SymbolicExpr::multiply(factor, b[current_row]);
-            b[r] = SymbolicExpr::add(b[r], SymbolicExpr::multiply(b_term, SymbolicExpr::number(-1)))->simplify();
-        }
+        eliminate_parametric_column(A, b, current_row, col, n);
 
         pivot_cols.push_back(col);
         pivot_rows.push_back(current_row);
@@ -151,237 +199,15 @@ ParametricSolver::solve_linear_parametric(
         }
     }
 
-    std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
-
-    std::set<size_t> pivot_col_set(pivot_cols.begin(), pivot_cols.end());
-    for (size_t col = 0; col < n; ++col) {
-        if (pivot_col_set.find(col) == pivot_col_set.end()) {
-
-            solution[unknowns[col]] = SymbolicExpr::variable(unknowns[col]);
-        }
-    }
-
-    for (size_t k = 0; k < pivot_cols.size(); ++k) {
-        size_t col = pivot_cols[k];
-        size_t row = pivot_rows[k];
-
-        auto value = b[row];
-
-        for (size_t j = col + 1; j < n; ++j) {
-            if (pivot_col_set.find(j) != pivot_col_set.end()) continue;
-            auto coeff = A[row][j]->simplify();
-            if (!coeff->is_zero()) {
-
-                auto term = SymbolicExpr::multiply(coeff, SymbolicExpr::variable(unknowns[j]));
-                value = SymbolicExpr::add(value, SymbolicExpr::multiply(term, SymbolicExpr::number(-1)));
-            }
-        }
-
-        auto pivot_val = A[row][col];
-        value = SymbolicExpr::divide(value, pivot_val)->simplify();
-
-        solution[unknowns[col]] = value;
-    }
-
-    return { solution };
+    return {parametric_linear_solution(A, b, pivot_cols, pivot_rows, unknowns)};
 }
 
-ParametricSolutionsResult ParametricSolver::solve_polynomial_parametric_impl(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
-    const std::vector<std::string>& unknowns,
-    const std::vector<std::string>&,
-    ComputationContext& context)
-{
-    if (equations.empty() || unknowns.empty()) {
-
-        std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
-        for (const auto& var : unknowns) {
-            solution[var] = SymbolicExpr::variable(var);
-        }
-        return ParametricSolutionList{std::move(solution)};
-    }
-
-    std::vector<SymbolicExpr> input_polys;
-    input_polys.reserve(equations.size());
-    for (const auto& eq : equations) {
-        if (eq && LMCAS::detail::node(eq)) {
-            auto simplified = eq->simplify();
-            if (simplified && !simplified->is_zero()) {
-                input_polys.push_back(*simplified);
-            }
-        }
-    }
-
-    if (input_polys.empty()) {
-
-        std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
-        for (const auto& var : unknowns) {
-            solution[var] = SymbolicExpr::variable(var);
-        }
-        return ParametricSolutionList{std::move(solution)};
-    }
-
-    auto G_basis = Solver::groebner_basis(input_polys, unknowns);
-
-    std::vector<std::shared_ptr<SymbolicExpr>> basis;
-    basis.reserve(G_basis.size());
-    for (const auto& g : G_basis) {
-        auto g_ptr = LMCAS::detail::make_expression_ptr(g);
-        auto simp = g_ptr->simplify();
-        if (simp && !simp->is_zero()) {
-            basis.push_back(simp);
-        }
-    }
-
-    if (unknowns.empty()) {
-        for (const auto& p : basis) {
-            if (p->is_number() && !p->is_zero()) {
-                return ParametricSolutionList{};
-            }
-        }
-        return ParametricSolutionList{
-            std::map<std::string, std::shared_ptr<SymbolicExpr>>{}};
-    }
-
-    for (const auto& p : basis) {
-        bool depends_on_unknown = false;
-        for (const auto& var : unknowns) {
-            if (contains(*p, var)) {
-                depends_on_unknown = true;
-                break;
-            }
-        }
-        if (!depends_on_unknown) {
-
-            if (!p->is_zero()) {
-                return ParametricSolutionList{};
-            }
-        }
-    }
-
-    auto substitute_all = [&](const std::shared_ptr<SymbolicExpr>& expr,
-                              const std::map<std::string, std::shared_ptr<SymbolicExpr>>& subs)
-        -> std::shared_ptr<SymbolicExpr> {
-        auto res = expr;
-        for (const auto& [name, val] : subs) {
-            res = res->substitute(name, val);
-            if (!res) return nullptr;
-        }
-        return res->simplify();
-    };
-
-    auto solve_rec = [&](auto&& self, int var_pos,
-                         const std::map<std::string,
-                                        std::shared_ptr<SymbolicExpr>>& partial)
-        -> ParametricSolutionsResult {
-
-        std::vector<std::shared_ptr<SymbolicExpr>> reduced;
-        reduced.reserve(basis.size());
-
-        for (const auto& p : basis) {
-            auto r = substitute_all(p, partial);
-            if (!r) continue;
-            if (r->is_zero()) continue;
-
-            bool depends = false;
-            for (int i = 0; i <= var_pos && i < (int)unknowns.size(); ++i) {
-                if (contains(*r, unknowns[i])) {
-                    depends = true;
-                    break;
-                }
-            }
-
-            if (!depends) {
-
-                if (r->is_number() && !r->is_zero()) {
-                    return ParametricSolutionList{};
-                }
-
-                continue;
-            }
-
-            reduced.push_back(r);
-        }
-
-        if (var_pos < 0) {
-            return ParametricSolutionList{partial};
-        }
-
-        const auto& curr_var = unknowns[var_pos];
-        bool curr_var_appears = false;
-        std::shared_ptr<SymbolicExpr> target = nullptr;
-        int best_deg = std::numeric_limits<int>::max();
-
-        for (const auto& r : reduced) {
-            if (!contains(*r, curr_var)) continue;
-            curr_var_appears = true;
-
-            bool has_other = false;
-            for (int i = 0; i < var_pos; ++i) {
-                if (contains(*r, unknowns[i])) {
-                    has_other = true;
-                    break;
-                }
-            }
-            if (has_other) continue;
-
-            auto poly = symbolic_to_poly<SymbolicPolyCoeff>(r, curr_var);
-            int deg = poly.degree();
-            if (deg >= 1 && deg < best_deg) {
-                best_deg = deg;
-                target = r;
-            }
-        }
-
-        if (!curr_var_appears) {
-            auto next_partial = partial;
-            next_partial[curr_var] = SymbolicExpr::variable(curr_var);
-            return self(self, var_pos - 1, next_partial);
-        }
-
-        if (!target) {
-            auto next_partial = partial;
-            next_partial[curr_var] = SymbolicExpr::variable(curr_var);
-            return self(self, var_pos - 1, next_partial);
-        }
-
-        auto solved = solve_finite_checked(target, curr_var, context);
-        if (!solved) {
-            return ParametricSolutionsResult::failure(solved.error());
-        }
-        auto roots = std::move(solved.value());
-        if (roots.empty()) {
-
-            auto next_partial = partial;
-            next_partial[curr_var] = SymbolicExpr::variable(curr_var);
-            return self(self, var_pos - 1, next_partial);
-        }
-
-        std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> results;
-        for (const auto& r : roots) {
-            auto next_partial = partial;
-            next_partial[curr_var] = r;
-            auto sub_res = self(self, var_pos - 1, next_partial);
-            if (!sub_res) return sub_res;
-            auto& values = sub_res.value();
-            results.insert(
-                results.end(),
-                std::make_move_iterator(values.begin()),
-                std::make_move_iterator(values.end()));
-        }
-        return results;
-    };
-
-    std::map<std::string, std::shared_ptr<SymbolicExpr>> empty;
-    return solve_rec(
-        solve_rec, static_cast<int>(unknowns.size()) - 1, empty);
-}
 
 ParametricSolutionsResult
 ParametricSolver::solve_polynomial_parametric_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
-    const std::vector<std::string>& parameters,
+    const std::vector<std::string>&,
     ComputationContext& context)
 {
     constexpr const char* operation = "solve_polynomial_parametric";
@@ -393,10 +219,12 @@ ParametricSolver::solve_polynomial_parametric_checked(
     }
     auto budget = context.consume_steps(
         equations.size() * unknowns.size() + 1, operation);
-    if (!budget) return ParametricSolutionsResult::failure(budget.error());
+    if (!budget) {
+        return ParametricSolutionsResult::failure(budget.error());
+    }
     try {
         return solve_polynomial_parametric_impl(
-            equations, unknowns, parameters, context);
+            equations, unknowns, context);
     } catch (const std::bad_alloc&) {
         return ParametricSolutionsResult::failure(
             CasErrc::ResourceLimit,
@@ -423,27 +251,20 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
 ParametricSolver::solve_system(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
-    const std::vector<std::string>& parameters)
+    const std::vector<std::string>&)
 {
     if (equations.empty() || unknowns.empty()) {
         return {};
     }
 
-    std::vector<std::string> effective_params;
-    std::set<std::string> unknown_set(unknowns.begin(), unknowns.end());
-    for (const auto& p : parameters) {
-        if (unknown_set.find(p) == unknown_set.end()) {
-            effective_params.push_back(p);
-        }
-    }
 
     if (is_linear_in_unknowns(equations, unknowns)) {
-        return solve_linear_parametric(equations, unknowns, effective_params);
+        return solve_linear_parametric(equations, unknowns);
     }
 
     ComputationContext context;
     auto solved = solve_polynomial_parametric_impl(
-        equations, unknowns, effective_params, context);
+        equations, unknowns, context);
     return solved ? std::move(solved.value()) : ParametricSolutionList{};
 }
 
@@ -451,13 +272,19 @@ static std::shared_ptr<SymbolicExpr> compute_determinant(
     const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& matrix,
     size_t dimension)
 {
-    if (dimension == 0 || matrix.size() != dimension) return nullptr;
+    if (dimension == 0 || matrix.size() != dimension) {
+        return nullptr;
+    }
     detail::ExactMatrixData exact{dimension, dimension, {}};
     exact.entries.reserve(dimension * dimension);
     for (const auto& row : matrix) {
-        if (row.size() != dimension) return nullptr;
+        if (row.size() != dimension) {
+            return nullptr;
+        }
         for (const auto& entry : row) {
-            if (!entry) return nullptr;
+            if (!entry) {
+                return nullptr;
+            }
             exact.entries.push_back(entry);
         }
     }
@@ -471,7 +298,9 @@ static bool depends_on_parameters(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::vector<std::string>& parameters)
 {
-    if (!expr) return false;
+    if (!expr) {
+        return false;
+    }
     for (const auto& p : parameters) {
         if (contains(*expr, p)) {
             return true;

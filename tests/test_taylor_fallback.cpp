@@ -1,3 +1,4 @@
+#include "limit_result.hpp"
 /**
  * @file test_taylor_fallback.cpp
  * @brief Taylor 展开回退策略测试.
@@ -11,185 +12,165 @@
 
 using namespace LMCAS;
 
-int main() {
+TEST(TaylorFallback, CubicSineRemainder) {
+    auto x = SymbolicExpr::variable("x");
+    auto zero = SymbolicExpr::number(0);
+    auto three = SymbolicExpr::number(3);
+    auto neg_one = SymbolicExpr::number(-1);
+
+    auto sin_x = SymbolicExpr::sin(x);
+    auto neg_x = SymbolicExpr::multiply(x, neg_one);
+    auto num = SymbolicExpr::add(sin_x, neg_x);
+    auto den = SymbolicExpr::power(x, three);
+    auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
+    auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
+    EXPECT_TRUE((lim != nullptr)) << "limit((sin(x)-x)/x^3, x->0) is not null";
+    if (lim) {
+        auto val = test_numeric_eval(lim);
+        if (val) {
+            {
+                const double actual_value = (*val);
+                const double expected_value = (-1.0 / 6.0);
+                const double tolerance = (1e-6);
+                EXPECT_TRUE(std::isfinite(actual_value));
+                EXPECT_NEAR(actual_value, expected_value, tolerance);
+            }
+        } else {
+            ADD_FAILURE() << "limit((sin(x)-x)/x^3, x->0) should be numeric -1/6; actual: "
+                          << lim->to_string();
+        }
+    }
+}
+
+TEST(TaylorFallback, QuadraticCosineRemainder) {
     auto x = SymbolicExpr::variable("x");
     auto zero = SymbolicExpr::number(0);
     auto one = SymbolicExpr::number(1);
+    auto two = SymbolicExpr::number(2);
+    auto neg_one = SymbolicExpr::number(-1);
+
+    auto cos_x = SymbolicExpr::cos(x);
+    auto neg_cos = SymbolicExpr::multiply(cos_x, neg_one);
+    auto num = SymbolicExpr::add(one, neg_cos);
+    auto den = SymbolicExpr::power(x, two);
+    auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
+    auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
+    EXPECT_TRUE((lim != nullptr)) << "limit((1-cos(x))/x^2, x->0) is not null";
+    if (lim) {
+        auto val = test_numeric_eval(lim);
+        if (val) {
+            EXPECT_NEAR(*val, 0.5, 1e-6) << "limit((1-cos(x))/x^2, x->0) = 1/2";
+        } else {
+            ADD_FAILURE() << "limit((1-cos(x))/x^2, x->0) should be numeric 1/2; actual: "
+                          << lim->to_string();
+        }
+    }
+}
+
+TEST(TaylorFallback, QuadraticExponentialRemainder) {
+    auto x = SymbolicExpr::variable("x");
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+    auto two = SymbolicExpr::number(2);
+    auto neg_one = SymbolicExpr::number(-1);
+
+    auto exp_x = SymbolicExpr::exp(x);
+    auto neg_1 = SymbolicExpr::multiply(one, neg_one);
+    auto neg_x = SymbolicExpr::multiply(x, neg_one);
+    auto num = SymbolicExpr::add(SymbolicExpr::add(exp_x, neg_1), neg_x);
+    auto den = SymbolicExpr::power(x, two);
+    auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
+    auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
+    EXPECT_TRUE((lim != nullptr)) << "limit((e^x-1-x)/x^2, x->0) is not null";
+    if (lim) {
+        auto val = test_numeric_eval(lim);
+        if (val) {
+            EXPECT_NEAR(*val, 0.5, 1e-6) << "limit((e^x-1-x)/x^2, x->0) = 1/2";
+        } else {
+            ADD_FAILURE() << "limit((e^x-1-x)/x^2, x->0) should be numeric 1/2; actual: "
+                          << lim->to_string();
+        }
+    }
+}
+
+TEST(TaylorFallback, SineLinearTerm) {
+    auto x = SymbolicExpr::variable("x");
+    auto zero = SymbolicExpr::number(0);
+    auto neg_one = SymbolicExpr::number(-1);
+
+    auto sin_x = SymbolicExpr::sin(x);
+    auto expr = SymbolicExpr::multiply(sin_x, SymbolicExpr::power(x, neg_one));
+    auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
+    EXPECT_TRUE((lim != nullptr)) << "limit(sin(x)/x, x->0) is not null";
+    if (lim) {
+        auto val = test_numeric_eval(lim);
+        if (val) {
+            EXPECT_NEAR(*val, 1.0, 1e-6) << "limit(sin(x)/x, x->0) = 1";
+        } else {
+            EXPECT_TRUE(test_expression_text((lim), ("1"))) << "limit(sin(x)/x, x->0) = 1";
+        }
+    }
+}
+
+TEST(TaylorFallback, TangentLinearTerm) {
+    auto x = SymbolicExpr::variable("x");
+    auto zero = SymbolicExpr::number(0);
+    auto neg_one = SymbolicExpr::number(-1);
+
+    auto tan_x = SymbolicExpr::tan(x);
+    auto expr = SymbolicExpr::multiply(tan_x, SymbolicExpr::power(x, neg_one));
+    auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
+    EXPECT_TRUE((lim != nullptr)) << "limit(tan(x)/x, x->0) is not null";
+    if (lim) {
+        auto val = test_numeric_eval(lim);
+        if (val) {
+            EXPECT_NEAR(*val, 1.0, 1e-6) << "limit(tan(x)/x, x->0) = 1";
+        } else {
+            EXPECT_TRUE(test_expression_text((lim), ("1"))) << "limit(tan(x)/x, x->0) = 1";
+        }
+    }
+}
+
+TEST(TaylorFallback, ReciprocalSineAtInfinity) {
+    auto x = SymbolicExpr::variable("x");
+    auto neg_one = SymbolicExpr::number(-1);
+    auto inf = SymbolicExpr::infinity(1);
+
+    auto inv_x = SymbolicExpr::power(x, neg_one);
+    auto sin_inv_x = SymbolicExpr::sin(inv_x);
+    auto expr = SymbolicExpr::multiply(sin_inv_x, SymbolicExpr::power(inv_x, neg_one));
+    auto result = LMCAS::limit_expression_checked(expr, "x", inf);
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+
+    auto lim = result.value();
+    ASSERT_TRUE(lim) << "limit(sin(1/x)/(1/x), x->inf) is not null";
+    auto value = test_numeric_eval(lim);
+    ASSERT_TRUE(value.has_value()) << "limit should be numeric; actual: " << lim->to_string();
+    EXPECT_NEAR(*value, 1.0, 1e-6);
+}
+
+TEST(TaylorFallback, RationalLeadingTerms) {
+    auto x = SymbolicExpr::variable("x");
     auto two = SymbolicExpr::number(2);
     auto three = SymbolicExpr::number(3);
     auto neg_one = SymbolicExpr::number(-1);
     auto inf = SymbolicExpr::infinity(1);
 
-
-    // --- Test 1: lim(x->0) (sin(x) - x) / x^3 = -1/6 ---
-    // Requires 3 L'Hôpital applications (0/0 each time) or Taylor fallback
-    TEST_CASE("Taylor fallback: lim(x->0) (sin(x)-x)/x^3 = -1/6");
-    {
-        auto sin_x = SymbolicExpr::sin(x);
-        auto neg_x = SymbolicExpr::multiply(x, neg_one);
-        auto num = SymbolicExpr::add(sin_x, neg_x);
-        auto den = SymbolicExpr::power(x, three);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit((sin(x)-x)/x^3, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, -1.0/6.0, 1e-6, "limit((sin(x)-x)/x^3, x->0) = -1/6");
-            } else {
-                std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(false, "limit((sin(x)-x)/x^3, x->0) should be numeric -1/6");
-            }
+    auto x_sq = SymbolicExpr::power(x, two);
+    auto num = SymbolicExpr::add(x_sq, x);
+    auto den = SymbolicExpr::add(
+        SymbolicExpr::multiply(two, x_sq),
+        three);
+    auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
+    auto lim = LMCAS::limit_expression_checked(expr, "x", inf).value();
+    EXPECT_TRUE((lim != nullptr)) << "limit((x^2+x)/(2x^2+3), x->inf) is not null";
+    if (lim) {
+        auto val = test_numeric_eval(lim);
+        if (val) {
+            EXPECT_NEAR(*val, 0.5, 1e-6) << "limit((x^2+x)/(2x^2+3), x->inf) = 1/2";
+        } else {
+            ADD_FAILURE() << "limit((x^2+x)/(2x^2+3), x->inf) should be numeric 1/2; actual: "
+                          << lim->to_string();
         }
     }
-
-
-    // --- Test 2: lim(x->0) (1 - cos(x)) / x^2 = 1/2 ---
-    // Classic Taylor expansion: cos(x) = 1 - x^2/2 + x^4/24 - ...
-    // (1 - cos(x)) / x^2 = (x^2/2 - x^4/24 + ...) / x^2 = 1/2 - x^2/24 + ...
-    TEST_CASE("Taylor fallback: lim(x->0) (1-cos(x))/x^2 = 1/2");
-    {
-        auto cos_x = SymbolicExpr::cos(x);
-        auto neg_cos = SymbolicExpr::multiply(cos_x, neg_one);
-        auto num = SymbolicExpr::add(one, neg_cos);
-        auto den = SymbolicExpr::power(x, two);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit((1-cos(x))/x^2, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 0.5, 1e-6, "limit((1-cos(x))/x^2, x->0) = 1/2");
-            } else {
-                std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(false, "limit((1-cos(x))/x^2, x->0) should be numeric 1/2");
-            }
-        }
-    }
-
-    // --- Test 3: lim(x->0) (e^x - 1 - x) / x^2 = 1/2 ---
-    // e^x = 1 + x + x^2/2 + ..., so (e^x - 1 - x) / x^2 = 1/2 + x/6 + ...
-    TEST_CASE("Taylor fallback: lim(x->0) (e^x-1-x)/x^2 = 1/2");
-    {
-        auto exp_x = SymbolicExpr::exp(x);
-        auto neg_1 = SymbolicExpr::multiply(one, neg_one);
-        auto neg_x = SymbolicExpr::multiply(x, neg_one);
-        auto num = SymbolicExpr::add(SymbolicExpr::add(exp_x, neg_1), neg_x);
-        auto den = SymbolicExpr::power(x, two);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit((e^x-1-x)/x^2, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 0.5, 1e-6, "limit((e^x-1-x)/x^2, x->0) = 1/2");
-            } else {
-                std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(false, "limit((e^x-1-x)/x^2, x->0) should be numeric 1/2");
-            }
-        }
-    }
-
-
-    // --- Test 4: lim(x->0) sin(x)/x = 1 ---
-    // sin(x) = x - x^3/6 + ..., leading term is x; denominator leading term is x
-    // Ratio = 1
-    TEST_CASE("Taylor/L'Hopital: lim(x->0) sin(x)/x = 1");
-    {
-        auto sin_x = SymbolicExpr::sin(x);
-        auto expr = SymbolicExpr::multiply(sin_x, SymbolicExpr::power(x, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit(sin(x)/x, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 1.0, 1e-6, "limit(sin(x)/x, x->0) = 1");
-            } else {
-                EXPECT_EQ_EXPR_STR(lim, "1", "limit(sin(x)/x, x->0) = 1");
-            }
-        }
-    }
-
-    // --- Test 5: lim(x->0) tan(x)/x = 1 ---
-    // tan(x) = x + x^3/3 + ..., leading term is x
-    TEST_CASE("Taylor/L'Hopital: lim(x->0) tan(x)/x = 1");
-    {
-        auto tan_x = SymbolicExpr::tan(x);
-        auto expr = SymbolicExpr::multiply(tan_x, SymbolicExpr::power(x, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", zero).value();
-        EXPECT_TRUE(lim != nullptr, "limit(tan(x)/x, x->0) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 1.0, 1e-6, "limit(tan(x)/x, x->0) = 1");
-            } else {
-                EXPECT_EQ_EXPR_STR(lim, "1", "limit(tan(x)/x, x->0) = 1");
-            }
-        }
-    }
-
-
-    // --- Test 6: lim(x->infinity) sin(1/x) / (1/x) = 1 ---
-    // Expressed as a direct quotient so L'Hôpital/Taylor path is triggered.
-    // Substitute x = 1/t: sin(t)/t as t->0 = 1
-    // NOTE: This test exercises the infinity substitution path. The current
-    // indeterminate form resolution (task 3.1) may handle this before reaching
-    // the Taylor fallback. We accept the computed result.
-    TEST_CASE("Taylor at infinity: lim(x->inf) sin(1/x)/(1/x) = 1");
-    {
-        auto inv_x = SymbolicExpr::power(x, neg_one);
-        auto sin_inv_x = SymbolicExpr::sin(inv_x);
-        // Express as sin(1/x) / (1/x) directly as a fraction
-        auto expr = SymbolicExpr::multiply(sin_inv_x, SymbolicExpr::power(inv_x, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_TRUE(lim != nullptr, "limit(sin(1/x)/(1/x), x->inf) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                // Ideally should be 1.0, but the 0*inf resolution path may
-                // intercept before Taylor fallback is invoked at infinity.
-                // The Taylor fallback itself (x=1/t substitution) is correct;
-                // the issue is in the dispatch path (task 3.1).
-                bool correct = std::abs(*val - 1.0) < 1e-6;
-                if (!correct) {
-                    std::cout << "[INFO] Got " << *val << " (expected 1.0; "
-                              << "indeterminate form dispatch intercepts before Taylor fallback)" << std::endl;
-                }
-                EXPECT_TRUE(std::isfinite(*val),
-                            "limit(sin(1/x)/(1/x), x->inf) produced a finite numeric result");
-            } else {
-                auto str = lim->to_string();
-                std::cout << "[INFO] Result: " << str << std::endl;
-                EXPECT_TRUE(!str.empty() && str != "null",
-                            "limit(sin(1/x)/(1/x), x->inf) produced a symbolic result");
-            }
-        }
-    }
-
-    // --- Test 7: Direct Taylor fallback at infinity via quotient form ---
-    // lim(x->infinity) (x^2 + x) / (2*x^2 + 3) = 1/2
-    // This is infinity/infinity form, resolved by degree comparison (not Taylor), but verifies
-    // the infinity path doesn't break.
-    TEST_CASE("Limit at infinity: lim(x->inf) (x^2+x)/(2x^2+3) = 1/2");
-    {
-        auto x_sq = SymbolicExpr::power(x, two);
-        auto num = SymbolicExpr::add(x_sq, x);
-        auto den = SymbolicExpr::add(
-            SymbolicExpr::multiply(two, x_sq),
-            three);
-        auto expr = SymbolicExpr::multiply(num, SymbolicExpr::power(den, neg_one));
-        auto lim = LMCAS::limit_expression_checked(expr, "x", inf).value();
-        EXPECT_TRUE(lim != nullptr, "limit((x^2+x)/(2x^2+3), x->inf) is not null");
-        if (lim) {
-            auto val = test_numeric_eval(lim);
-            if (val) {
-                EXPECT_NEAR(*val, 0.5, 1e-6, "limit((x^2+x)/(2x^2+3), x->inf) = 1/2");
-            } else {
-                std::cout << "[INFO] Result: " << lim->to_string() << std::endl;
-                EXPECT_TRUE(false, "limit((x^2+x)/(2x^2+3), x->inf) should be numeric 1/2");
-            }
-        }
-    }
-
-    return TEST_REPORT();
 }

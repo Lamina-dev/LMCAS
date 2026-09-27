@@ -3,121 +3,85 @@
 #include "poly_utils.hpp"
 #include "symbolic.hpp"
 #include "test_common.hpp"
-#include <iostream>
 #include <vector>
 
 using namespace LMCAS;
 
-void test_gcd_primitive() {
-    std::cout << "Testing Polynomial GCD with BigInt..." << std::endl;
+namespace {
 
-    std::vector<BigInt> c1 = {BigInt("-2"), BigInt("1"), BigInt("1")};
-    std::vector<BigInt> c2 = {BigInt("-3"), BigInt("2"), BigInt("1")};
-
-    Polynomial<BigInt> p1(c1, "x");
-    Polynomial<BigInt> p2(c2, "x");
-
-    Polynomial<BigInt> g = Polynomial<BigInt>::gcd(p1, p2);
-
-    std::cout << "GCD((x-1)(x+2), (x-1)(x+3)) coefficients: ";
-    for (const auto& c : g.coeffs) std::cout << c.ToString() << " ";
-    std::cout << std::endl;
-
-    std::vector<BigInt> ca = {BigInt("10"), BigInt("21"), BigInt("12"), BigInt("1")};
-    std::vector<BigInt> cb = {BigInt("20"), BigInt("41"), BigInt("22"), BigInt("1")};
-
-    Polynomial<BigInt> pa(ca, "x");
-    Polynomial<BigInt> pb(cb, "x");
-
-    Polynomial<BigInt> gab = Polynomial<BigInt>::gcd(pa, pb);
-
-    std::cout << "GCD coefficients (Expected 1 2 1): ";
-    for (const auto& c : gab.coeffs) std::cout << c.ToString() << " ";
-    std::cout << std::endl;
-
-    std::vector<BigInt> c3 = {BigInt("-2"), BigInt("2")};
-    std::vector<BigInt> c4 = {BigInt("-6"), BigInt("6")};
-
-    Polynomial<BigInt> p3(c3, "x");
-    Polynomial<BigInt> p4(c4, "x");
-
-    Polynomial<BigInt> g34 = Polynomial<BigInt>::gcd(p3, p4);
-
-    std::cout << "GCD(2(x-1), 6(x-1)) coefficients (Expected -2 2): ";
-    for (const auto& c : g34.coeffs) std::cout << c.ToString() << " ";
-    std::cout << std::endl;
-
-    std::cout << "\nTesting Polynomial GCD with Rational..." << std::endl;
-
-    std::vector<Rational> r1 = {Rational(-1), Rational(0), Rational(1)};
-    std::vector<Rational> r2 = {Rational(1), Rational(2), Rational(1)};
-
-    Polynomial<Rational> pr1(r1, "x");
-    Polynomial<Rational> pr2(r2, "x");
-
-    Polynomial<Rational> gr = Polynomial<Rational>::gcd(pr1, pr2);
-
-    std::cout << "GCD(x^2-1, x^2+2x+1) coefficients (Expected 1 1): ";
-    for (const auto& c : gr.coeffs) std::cout << c.to_string() << " ";
-    std::cout << std::endl;
-
-    if (gr.degree() == 1 && gr.coeffs[0].to_double() == 1.0 && gr.coeffs[1].to_double() == 1.0) {
-        std::cout << "Rational GCD Test Passed." << std::endl;
-    } else {
-        std::cout << "Rational GCD Test Failed." << std::endl;
-    }
-    EXPECT_TRUE(g.degree() == 1, "BigInt GCD has degree 1 for shared x-1 factor");
-    EXPECT_TRUE(gab.degree() == 2, "BigInt GCD has degree 2 for shared quadratic factor");
-    EXPECT_TRUE(g34.degree() == 1, "BigInt GCD preserves shared linear primitive factor");
-    EXPECT_TRUE(gr.degree() == 1 &&
-                    gr.coeffs.size() >= 2 &&
-                    gr.coeffs[0].to_string() == "1" &&
-                    gr.coeffs[1].to_string() == "1",
-                "Rational GCD finds x + 1");
-
+template <class Coefficient>
+void expect_exact_divisor(
+    const Polynomial<Coefficient> &dividend,
+    const Polynomial<Coefficient> &divisor) {
+    auto division = dividend.div_mod(divisor);
+    EXPECT_TRUE(division.second.is_zero());
+    EXPECT_TRUE(division.first * divisor == dividend);
 }
 
-void test_symbolic_polynomial_gcd() {
-    auto x = SymbolicExpr::variable("x");
-    auto y = SymbolicExpr::variable("y");
-    auto one = SymbolicExpr::number(1);
-    auto common = SymbolicExpr::add(x, y);
-    auto lhs = SymbolicExpr::multiply(
-        common, SymbolicExpr::add(x, one))->expand();
-    auto rhs = SymbolicExpr::multiply(
-        common, SymbolicExpr::add(y, one))->expand();
+} // namespace
 
-    ComputationContext context;
-    auto result = symbolic_polynomial_gcd(*lhs, *rhs, context);
-    EXPECT_TRUE(result.has_value(),
-                "symbolic GCD accepts exact multivariate polynomials");
-    if (result) {
-        auto difference = SymbolicExpr::add(
-            result.value(), SymbolicExpr::multiply(common, SymbolicExpr::number(-1)));
-        EXPECT_TRUE(difference->expand()->simplify()->is_zero(),
-                    "multivariate symbolic GCD recovers x + y");
-    }
+TEST(PolynomialGcd, GcdPrimitive) {
+    Polynomial<BigInt> p1(
+        {BigInt(-2), BigInt(1), BigInt(1)}, "x");
+    Polynomial<BigInt> p2(
+        {BigInt(-3), BigInt(2), BigInt(1)}, "x");
+    auto gcd = Polynomial<BigInt>::gcd(p1, p2);
+    EXPECT_TRUE(gcd == Polynomial<BigInt>(
+        {BigInt(-1), BigInt(1)}, "x"));
+    expect_exact_divisor(p1, gcd);
+    expect_exact_divisor(p2, gcd);
 
+    Polynomial<BigInt> pa(
+        {BigInt(10), BigInt(21), BigInt(12), BigInt(1)}, "x");
+    Polynomial<BigInt> pb(
+        {BigInt(20), BigInt(41), BigInt(22), BigInt(1)}, "x");
+    auto quadratic_gcd = Polynomial<BigInt>::gcd(pa, pb);
+    EXPECT_TRUE(quadratic_gcd == Polynomial<BigInt>(
+        {BigInt(1), BigInt(2), BigInt(1)}, "x"));
+    expect_exact_divisor(pa, quadratic_gcd);
+    expect_exact_divisor(pb, quadratic_gcd);
+
+    Polynomial<BigInt> p3(
+        {BigInt(-2), BigInt(2)}, "x");
+    Polynomial<BigInt> p4(
+        {BigInt(-6), BigInt(6)}, "x");
+    auto primitive_gcd = Polynomial<BigInt>::gcd(p3, p4);
+    EXPECT_TRUE(primitive_gcd.primitive_part() == Polynomial<BigInt>(
+        {BigInt(-1), BigInt(1)}, "x"));
+    expect_exact_divisor(p3, primitive_gcd);
+    expect_exact_divisor(p4, primitive_gcd);
+
+    Polynomial<Rational> rational_lhs(
+        {Rational(-1), Rational(0), Rational(1)}, "x");
+    Polynomial<Rational> rational_rhs(
+        {Rational(1), Rational(2), Rational(1)}, "x");
+    auto rational_gcd =
+        Polynomial<Rational>::gcd(rational_lhs, rational_rhs);
+    EXPECT_TRUE(rational_gcd == Polynomial<Rational>(
+        {Rational(1), Rational(1)}, "x"));
+    expect_exact_divisor(rational_lhs, rational_gcd);
+    expect_exact_divisor(rational_rhs, rational_gcd);
+}
+
+static void test_non_linear_and_rational_gcd(
+    const std::shared_ptr<SymbolicExpr> &x,
+    const std::shared_ptr<SymbolicExpr> &y) {
     auto quadratic_common = SymbolicExpr::add(
         SymbolicExpr::power(x, SymbolicExpr::number(2)),
         SymbolicExpr::add(SymbolicExpr::multiply(x, y),
                           SymbolicExpr::power(y, SymbolicExpr::number(2))));
     auto harder_lhs = SymbolicExpr::multiply(
-        quadratic_common, SymbolicExpr::add(x, SymbolicExpr::number(2)))->expand();
+                          quadratic_common, SymbolicExpr::add(x, SymbolicExpr::number(2)))
+                          ->expand();
     auto harder_rhs = SymbolicExpr::multiply(
-        quadratic_common, SymbolicExpr::add(y, SymbolicExpr::number(3)))->expand();
+                          quadratic_common, SymbolicExpr::add(y, SymbolicExpr::number(3)))
+                          ->expand();
     ComputationContext harder_context;
     auto harder_result = symbolic_polynomial_gcd(
         *harder_lhs, *harder_rhs, harder_context);
-    EXPECT_TRUE(harder_result.has_value(),
-                "symbolic GCD recovers a non-linear multivariate factor");
-    if (harder_result) {
-        auto difference = SymbolicExpr::add(
-            harder_result.value(),
-            SymbolicExpr::multiply(quadratic_common, SymbolicExpr::number(-1)));
-        EXPECT_TRUE(difference->expand()->simplify()->is_zero(),
-                    "non-linear multivariate symbolic GCD is maximal");
-    }
+    ASSERT_TRUE(harder_result) << harder_result.error().message;
+    EXPECT_TRUE(test_proved_equivalent(
+        harder_result.value(), quadratic_common));
 
     auto half = SymbolicExpr::number(Rational(1, 2));
     auto rational_common = SymbolicExpr::add(x, half);
@@ -128,47 +92,173 @@ void test_symbolic_polynomial_gcd() {
     ComputationContext rational_context;
     auto rational_result = symbolic_polynomial_gcd(
         *rational_lhs, *rational_rhs, rational_context);
-    EXPECT_TRUE(rational_result.has_value(),
-                "symbolic GCD accepts exact rational coefficients");
-    if (rational_result) {
-        auto difference = SymbolicExpr::add(
-            rational_result.value(),
-            SymbolicExpr::multiply(rational_common, SymbolicExpr::number(-1)));
-        EXPECT_TRUE(difference->expand()->simplify()->is_zero(),
-                    "rational symbolic GCD is monic");
-    }
+    ASSERT_TRUE(rational_result) << rational_result.error().message;
+    EXPECT_TRUE(test_proved_equivalent(
+        rational_result.value(), rational_common));
+}
+
+TEST(PolynomialGcd, SymbolicPolynomialGcd) {
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto one = SymbolicExpr::number(1);
+    auto common = SymbolicExpr::add(x, y);
+    auto lhs = SymbolicExpr::multiply(
+                   common, SymbolicExpr::add(x, one))
+                   ->expand();
+    auto rhs = SymbolicExpr::multiply(
+                   common, SymbolicExpr::add(y, one))
+                   ->expand();
+
+    ComputationContext context;
+    auto result = symbolic_polynomial_gcd(*lhs, *rhs, context);
+    ASSERT_TRUE(result) << result.error().message;
+    EXPECT_TRUE(test_proved_equivalent(result.value(), common));
+
+    test_non_linear_and_rational_gcd(x, y);
 
     auto sine = SymbolicExpr::sin(x);
     ComputationContext unsupported_context;
-    auto unsupported = symbolic_polynomial_gcd(*sine, *lhs, unsupported_context);
-    EXPECT_TRUE(!unsupported &&
-                    unsupported.error().code == CasErrc::UnsupportedExpression,
-                "symbolic GCD rejects non-polynomial expressions");
+    auto unsupported =
+        symbolic_polynomial_gcd(*sine, *lhs, unsupported_context);
+    ASSERT_FALSE(unsupported);
+    EXPECT_EQ(
+        unsupported.error().code, CasErrc::UnsupportedExpression);
 
     auto approximate = SymbolicExpr::add(
         x, SymbolicExpr::number(static_cast<lmmc_real_t>(0.5)));
     ComputationContext approximate_context;
     auto approximate_result = symbolic_polynomial_gcd(
         *approximate, *lhs, approximate_context);
-    EXPECT_TRUE(!approximate_result &&
-                    approximate_result.error().code ==
-                        CasErrc::UnsupportedExpression,
-                "symbolic GCD rejects approximate coefficients");
+    ASSERT_FALSE(approximate_result);
+    EXPECT_EQ(
+        approximate_result.error().code,
+        CasErrc::UnsupportedExpression);
 
     ResourceLimits limits;
     limits.max_steps = 0;
     ComputationContext limited_context(limits);
-    auto limited = symbolic_polynomial_gcd(*lhs, *rhs, limited_context);
-    EXPECT_TRUE(!limited && limited.error().code == CasErrc::ResourceLimit,
-                "symbolic GCD observes the computation step budget");
+    auto limited =
+        symbolic_polynomial_gcd(*lhs, *rhs, limited_context);
+    ASSERT_FALSE(limited);
+    EXPECT_EQ(limited.error().code, CasErrc::ResourceLimit);
 }
 
-int main() {
+namespace {
+
+template <class Operation>
+void expect_variable_mismatch(Operation operation, const char *message) {
+    bool rejected = false;
     try {
-        test_gcd_primitive();
-        test_symbolic_polynomial_gcd();
-    } catch (const std::exception& e) {
-        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
+        operation();
+    } catch (const std::invalid_argument &) {
+        rejected = true;
     }
-    return TEST_REPORT();
+    EXPECT_TRUE((rejected)) << message;
+}
+
+template <class Coefficient>
+void test_named_polynomial_rings(const char *coefficient_name) {
+    SCOPED_TRACE(std::string("Polynomial: named variable rings for ") + coefficient_name);
+    using Poly = Polynomial<Coefficient>;
+    const Poly x(std::vector<Coefficient>{Coefficient(0), Coefficient(1)}, "x");
+    const Poly y(std::vector<Coefficient>{Coefficient(0), Coefficient(1)}, "y");
+    const Poly one_x(Coefficient(1), "x");
+    const Poly one_y(Coefficient(1), "y");
+    for (const auto &operands : {std::pair{x, y}, std::pair{one_x, one_y}}) {
+        const auto &lhs = operands.first;
+        const auto &rhs = operands.second;
+        EXPECT_FALSE((lhs == rhs)) << "nonzero polynomials in different named rings are unequal";
+        expect_variable_mismatch([&] { (void)(lhs + rhs); }, "addition rejects different rings");
+        expect_variable_mismatch([&] { (void)(lhs - rhs); }, "subtraction rejects different rings");
+        expect_variable_mismatch([&] { (void)(lhs * rhs); }, "multiplication rejects different rings");
+        expect_variable_mismatch([&] { (void)lhs.div_mod(rhs); }, "division rejects different rings");
+        expect_variable_mismatch([&] { (void)lhs.pseudo_div_mod(rhs); },
+                                 "pseudo-division rejects different rings");
+        expect_variable_mismatch([&] { (void)lhs.pseudo_div_mod_rem(rhs); },
+                                 "pseudo-remainder rejects different rings");
+        expect_variable_mismatch([&] { (void)Poly::gcd(lhs, rhs); }, "GCD rejects different rings");
+    }
+    const Poly y_squared(std::vector<Coefficient>{Coefficient(0), Coefficient(0), Coefficient(1)}, "y");
+    expect_variable_mismatch([&] { (void)x.div_mod(y_squared); },
+                             "low-degree division checks the ring before returning a remainder");
+    expect_variable_mismatch([&] { (void)x.pseudo_div_mod(y_squared); },
+                             "low-degree pseudo-division checks the ring before returning a remainder");
+}
+
+template <class Coefficient>
+void expect_zero_polynomial_arithmetic(const Polynomial<Coefficient> &zero,
+                                       const Polynomial<Coefficient> &p,
+                                       const Polynomial<Coefficient> &negative_p) {
+    for (const auto &result : {zero + p, p + zero, p - zero}) {
+        EXPECT_TRUE((result == p && result.variable_name == "y")) << "additive zero preserves the nonzero polynomial and its ring";
+    }
+    const auto difference = zero - p;
+    EXPECT_TRUE((difference == negative_p && difference.variable_name == "y")) << "zero-p is the negated polynomial in p's ring";
+    for (const auto &product : {zero * p, p * zero}) {
+        EXPECT_TRUE((product.is_zero() && product.variable_name == "y")) << "zero products retain the nonzero operand's ring";
+    }
+}
+
+template <class Coefficient>
+void expect_zero_polynomial_division_and_gcd(const Polynomial<Coefficient> &zero,
+                                             const Polynomial<Coefficient> &p) {
+    using Poly = Polynomial<Coefficient>;
+    for (const auto &division : {zero.div_mod(p), zero.pseudo_div_mod(p)}) {
+        EXPECT_TRUE((division.first.is_zero() && division.second.is_zero() &&
+                     division.first.variable_name == "y" &&
+                     division.second.variable_name == "y"))
+            << "zero dividend yields zero quotient and remainder in the divisor ring";
+    }
+    EXPECT_TRUE((Poly::gcd(zero, p) == p && Poly::gcd(p, zero) == p)) << "GCD with zero retains the nonzero operand";
+}
+
+template <class Coefficient>
+void test_polynomial_zero_rings(const char *coefficient_name) {
+    SCOPED_TRACE(std::string("Polynomial: zero ring embedding for ") + coefficient_name);
+    using Poly = Polynomial<Coefficient>;
+    const Poly zero;
+    const Poly named_zero("z");
+    const Poly p(std::vector<Coefficient>{Coefficient(2), Coefficient(4)}, "y");
+    const Poly negative_p(std::vector<Coefficient>{Coefficient(-2), Coefficient(-4)}, "y");
+    for (const auto *z : {&zero, &named_zero}) {
+        expect_zero_polynomial_arithmetic(*z, p, negative_p);
+        expect_zero_polynomial_division_and_gcd(*z, p);
+    }
+    EXPECT_TRUE((zero == named_zero)) << "zero polynomials compare equal across variable rings";
+    for (const auto &result : {named_zero + zero, named_zero - zero, named_zero * zero,
+                               Poly::gcd(named_zero, zero)}) {
+        EXPECT_TRUE((result.is_zero() && result.variable_name == "z")) << "two zero operands retain the left ring";
+    }
+    bool division_rejected = false;
+    try {
+        (void)p.div_mod(zero);
+    } catch (const std::runtime_error &) {
+        division_rejected = true;
+    }
+    EXPECT_TRUE((division_rejected)) << "zero divisor remains runtime_error before ring checks";
+    bool pseudo_division_rejected = false;
+    try {
+        (void)p.pseudo_div_mod(zero);
+    } catch (const std::runtime_error &) {
+        pseudo_division_rejected = true;
+    }
+    EXPECT_TRUE((pseudo_division_rejected)) << "zero pseudo-divisor remains runtime_error before ring checks";
+}
+
+} // namespace
+
+TEST(PolynomialGcd, NamedPolynomialRingsRational) {
+    test_named_polynomial_rings<Rational>("Rational");
+}
+
+TEST(PolynomialGcd, NamedPolynomialRingsBigint) {
+    test_named_polynomial_rings<BigInt>("BigInt");
+}
+
+TEST(PolynomialGcd, PolynomialZeroRingsRational) {
+    test_polynomial_zero_rings<Rational>("Rational");
+}
+
+TEST(PolynomialGcd, PolynomialZeroRingsBigint) {
+    test_polynomial_zero_rings<BigInt>("BigInt");
 }

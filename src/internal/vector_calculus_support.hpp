@@ -1,11 +1,15 @@
 #pragma once
 
-#include "vector_calculus.hpp"
-#include "symbolic_ast.hpp"
+#include "vector_calculus_types.hpp"
+#include "internal/symbolic_ast.hpp"
 
 namespace LMCAS::vector_calculus_detail {
 
 std::vector<std::string> vector_calculus_coord_vars(std::size_t dimension);
+
+VectorField vector_calculus_cross_product_partials(
+    const VectorField& parametrization,
+    const std::string& u, const std::string& v);
 
 std::shared_ptr<SymbolicExpr> vector_calculus_integrate_with_fallback(
     const std::shared_ptr<SymbolicExpr>& integrand,
@@ -105,9 +109,6 @@ bool vector_calculus_checked_finite_numeric(
     double& value,
     ComputationContext* context = nullptr);
 
-bool vector_calculus_contains_unevaluated_integral(
-    const std::shared_ptr<const SymbolicNode>& node,
-    std::size_t depth = 0);
 
 Result<void> vector_calculus_validate_expr_vars(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -216,9 +217,8 @@ VectorCalculusFieldResult vector_calculus_wrap_field(
     VectorField field,
     const std::string& operation);
 
-} // namespace LMCAS::vector_calculus_detail
-
-namespace LMCAS {
+std::shared_ptr<SymbolicExpr> vector_calculus_cross_component(
+    const VectorField& left, const VectorField& right, std::size_t index);
 
 VectorCalculusExprResult vector_calculus_simplify_strict(
     const std::shared_ptr<SymbolicExpr>& expr,
@@ -230,4 +230,4 @@ VectorCalculusExprResult vector_calculus_differentiate_strict(
     const std::string& variable,
     const std::string& operation);
 
-} // namespace LMCAS
+} // namespace LMCAS::vector_calculus_detail

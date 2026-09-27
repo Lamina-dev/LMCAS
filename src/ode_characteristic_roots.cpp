@@ -8,57 +8,13 @@
 #include <utility>
 
 namespace LMCAS::ode_root_detail {
-/**
- * @internal
- * @brief 使用数值方法求解特征多项式的所有根.
- *
- * 对于一、二次多项式使用解析公式；对于三至六次多项式使用
- * Durand-Kerner 迭代。迭代前通过多项式与其导数的近似 GCD 提取重根，
- * 避免把一个重根的数值扰动误分类为多个复根。
- */
-Result<std::vector<CharRoot>>
-find_characteristic_roots(
-    const std::vector<double>& coeffs, const std::string& operation)
-{
-    int n = static_cast<int>(coeffs.size()) - 1;
-    const double root_verification_tolerance = 1e-8;
-    const double roundoff_tolerance =
-        256.0 * std::numeric_limits<double>::epsilon() *
-        static_cast<double>(std::max(n, 1));
-    if (n <= 0) {
-        return Result<std::vector<CharRoot>>::failure(
-            CasErrc::NumericFailure,
-            "characteristic polynomial has no roots", operation);
-    }
 
+namespace {
+constexpr double root_verification_tolerance = 1e-8;
+
+Result<std::vector<CharRoot>> quadratic_characteristic_roots(
+    const RealPolynomial& norm_coeffs, const std::string& operation) {
     std::vector<CharRoot> roots;
-    double leading = coeffs[0];
-    if (leading == 0.0) {
-        return Result<std::vector<CharRoot>>::failure(
-            CasErrc::NumericFailure,
-            "characteristic polynomial has no usable leading coefficient",
-            operation);
-    }
-    std::vector<double> norm_coeffs(coeffs.size());
-    for (size_t i = 0; i < coeffs.size(); ++i) {
-        norm_coeffs[i] = coeffs[i] / leading;
-        if (!std::isfinite(norm_coeffs[i])) {
-            return Result<std::vector<CharRoot>>::failure(
-                CasErrc::NumericFailure,
-                "characteristic polynomial normalization is non-finite",
-                operation);
-        }
-    }
-
-    /// 对于低阶多项式,使用解析公式
-    if (n == 1) {
-        /// r + norm_coeffs[1] = 0
-        double r = -norm_coeffs[1];
-        roots.push_back({r, 0.0, 1, false});
-        return Result<std::vector<CharRoot>>::success(std::move(roots));
-    }
-
-    if (n == 2) {
         const double b = norm_coeffs[1];
         const double c = norm_coeffs[2];
         const double scale = std::max(std::abs(b), std::sqrt(std::abs(c)));
@@ -95,7 +51,12 @@ find_characteristic_roots(
             }
         }
         return Result<std::vector<CharRoot>>::success(std::move(roots));
-    }
+
+}
+
+Result<double> characteristic_root_scale(
+    const RealPolynomial& norm_coeffs, const std::string& operation) {
+    const int n = static_cast<int>(norm_coeffs.size()) - 1;
     double root_scale_estimate = 1.0;
     for (int i = 1; i <= n; ++i) {
         const double magnitude = std::abs(norm_coeffs[i]);
@@ -106,7 +67,7 @@ find_characteristic_roots(
         }
     }
     if (!std::isfinite(root_scale_estimate)) {
-        return Result<std::vector<CharRoot>>::failure(
+        return Result<double>::failure(
             CasErrc::NumericFailure,
             "characteristic-root variable scaling is non-finite",
             operation);
@@ -118,18 +79,12 @@ find_characteristic_roots(
         root_scale *= 2.0;
     }
 
-    // For p(r)=r^n+c1*r^(n-1)+...+cn, r=root_scale*z gives
-    // z^n+(c1/root_scale)z^(n-1)+...+cn/root_scale^n.
-    std::vector<double> solver_coeffs = norm_coeffs;
-    for (int i = 1; i <= n; ++i) {
-        for (int power = 0; power < i; ++power) {
-            solver_coeffs[i] /= root_scale;
-        }
-    }
+    return root_scale;
+}
 
-    auto restore_root_scale =
-        [&](std::vector<CharRoot> scaled_roots)
-            -> Result<std::vector<CharRoot>> {
+Result<std::vector<CharRoot>> restore_root_scale(
+    std::vector<CharRoot> scaled_roots, double root_scale,
+    const std::string& operation) {
         for (auto& root : scaled_roots) {
             root.real_part *= root_scale;
             root.imag_part *= root_scale;
@@ -143,23 +98,11 @@ find_characteristic_roots(
         }
         return Result<std::vector<CharRoot>>::success(
             std::move(scaled_roots));
-    };
 
-    RealPolynomial repeated_factor = approximate_polynomial_gcd(
-        solver_coeffs, polynomial_derivative(solver_coeffs));
-    if (repeated_factor.size() > 1 &&
-        repeated_factor.size() < solver_coeffs.size()) {
-        auto square_free_division =
-            divide_polynomials(solver_coeffs, repeated_factor);
-        if (polynomial_remainder_is_small(
-                square_free_division.second, solver_coeffs)) {
-            auto distinct_result = find_characteristic_roots(
-                square_free_division.first, operation);
-            if (!distinct_result) {
-                return Result<std::vector<CharRoot>>::failure(
-                    distinct_result.error());
-            }
-            auto distinct_roots = std::move(distinct_result.value());
+}
+
+bool recover_root_multiplicities(
+    std::vector<CharRoot>& distinct_roots, const RealPolynomial& solver_coeffs) {
             RealPolynomial remaining = solver_coeffs;
             int recovered_degree = 0;
             bool recovered_all = !distinct_roots.empty();
@@ -197,13 +140,40 @@ find_characteristic_roots(
                 recovered_degree +=
                     multiplicity * (root.is_complex ? 2 : 1);
             }
-            if (recovered_all && recovered_degree == n) {
-                return restore_root_scale(std::move(distinct_roots));
+
+    return recovered_all && recovered_degree ==
+        static_cast<int>(solver_coeffs.size()) - 1;
+}
+
+Result<std::vector<CharRoot>> repeated_characteristic_roots(
+    const RealPolynomial& solver_coeffs, const std::string& operation) {
+    RealPolynomial repeated_factor = approximate_polynomial_gcd(
+        solver_coeffs, polynomial_derivative(solver_coeffs));
+    if (repeated_factor.size() > 1 &&
+        repeated_factor.size() < solver_coeffs.size()) {
+        auto square_free_division =
+            divide_polynomials(solver_coeffs, repeated_factor);
+        if (polynomial_remainder_is_small(
+                square_free_division.second, solver_coeffs)) {
+            auto distinct_result = find_characteristic_roots(
+                square_free_division.first, operation);
+            if (!distinct_result) {
+                return Result<std::vector<CharRoot>>::failure(
+                    distinct_result.error());
+            }
+            auto distinct_roots = std::move(distinct_result.value());
+
+            if (recover_root_multiplicities(distinct_roots, solver_coeffs)) {
+                return distinct_roots;
             }
         }
     }
+    return std::vector<CharRoot>{};
+}
 
-
+Result<std::vector<Complex>> iterate_characteristic_roots(
+    const RealPolynomial& solver_coeffs, const std::string& operation) {
+    const int n = static_cast<int>(solver_coeffs.size()) - 1;
     std::vector<Complex> z(n);
     /// 初始猜测采用不同半径,提供非对称起点以区分各根.
     for (int i = 0; i < n; ++i) {
@@ -229,18 +199,22 @@ find_characteristic_roots(
             Complex num = eval_poly(z[i]);
             Complex denom = {1.0, 0.0};
             for (int j = 0; j < n; ++j) {
-                if (j != i) denom = denom * (z[i] - z[j]);
+                if (j != i) {
+                    denom = denom * (z[i] - z[j]);
+                }
             }
             Complex delta = num / denom;
             double change = delta.magnitude();
             if (!std::isfinite(change)) {
-                return Result<std::vector<CharRoot>>::failure(
+                return Result<std::vector<Complex>>::failure(
                     CasErrc::NumericFailure,
                     "characteristic-root iteration became non-finite",
                     operation);
             }
             z[i] = z[i] - delta;
-            if (change > max_change) max_change = change;
+            if (change > max_change) {
+                max_change = change;
+            }
         }
         if (max_change < 1e-12) {
             converged = true;
@@ -248,39 +222,26 @@ find_characteristic_roots(
         }
     }
     if (!converged) {
-        return Result<std::vector<CharRoot>>::failure(
+        return Result<std::vector<Complex>>::failure(
             CasErrc::NumericFailure,
             "characteristic-root iteration did not converge", operation);
     }
     for (const auto& candidate : z) {
         if (polynomial_root_backward_error(solver_coeffs, candidate) >
             root_verification_tolerance) {
-            return Result<std::vector<CharRoot>>::failure(
+            return Result<std::vector<Complex>>::failure(
                 CasErrc::NumericFailure,
                 "characteristic root failed backward-error verification",
                 operation);
         }
     }
 
-    /// 使用原多项式验证实轴投影；固定虚部容差会吞掉尺度较小的复根。
-    /// 重数只由前面的多项式 GCD/因子恢复确定，不能按根间距离猜测。
-    std::vector<bool> used(n, false);
-    for (int i = 0; i < n; ++i) {
-        if (used[i]) continue;
+    return z;
+}
 
-        const Complex real_projection{z[i].re, 0.0};
-        const double candidate_error =
-            polynomial_root_backward_error(solver_coeffs, z[i]);
-        const double projection_error =
-            polynomial_root_backward_error(solver_coeffs, real_projection);
-        const double projection_tolerance =
-            std::max(roundoff_tolerance, 16.0 * candidate_error);
-        if (projection_error <= projection_tolerance) {
-            used[i] = true;
-            roots.push_back({z[i].re, 0.0, 1, false});
-            continue;
-        }
-
+int conjugate_root_index(const std::vector<Complex>& z,
+                         const std::vector<bool>& used, int i) {
+    const int n = static_cast<int>(z.size());
         int conjugate_index = -1;
         double best_distance = std::numeric_limits<double>::infinity();
         for (int j = i + 1; j < n; ++j) {
@@ -297,6 +258,41 @@ find_characteristic_roots(
                 conjugate_index = j;
             }
         }
+
+    return conjugate_index;
+}
+
+Result<std::vector<CharRoot>> classify_characteristic_roots(
+    const RealPolynomial& solver_coeffs, const std::vector<Complex>& z,
+    const std::string& operation) {
+    const int n = static_cast<int>(z.size());
+    const double roundoff_tolerance =
+        256.0 * std::numeric_limits<double>::epsilon() *
+        static_cast<double>(std::max(n, 1));
+    std::vector<CharRoot> roots;
+    /// 使用原多项式验证实轴投影；固定虚部容差会吞掉尺度较小的复根。
+    /// 重数只由前面的多项式 GCD/因子恢复确定，不能按根间距离猜测。
+    std::vector<bool> used(n, false);
+    for (int i = 0; i < n; ++i) {
+        if (used[i]) {
+            continue;
+        }
+
+        const Complex real_projection{z[i].re, 0.0};
+        const double candidate_error =
+            polynomial_root_backward_error(solver_coeffs, z[i]);
+        const double projection_error =
+            polynomial_root_backward_error(solver_coeffs, real_projection);
+        const double projection_tolerance =
+            std::max(roundoff_tolerance, 16.0 * candidate_error);
+        if (projection_error <= projection_tolerance) {
+            used[i] = true;
+            roots.push_back({z[i].re, 0.0, 1, false});
+            continue;
+        }
+
+
+        const int conjugate_index = conjugate_root_index(z, used, i);
         if (conjugate_index < 0) {
             return Result<std::vector<CharRoot>>::failure(
                 CasErrc::NumericFailure,
@@ -329,7 +325,84 @@ find_characteristic_roots(
             CasErrc::NumericFailure,
             "characteristic-root classification lost roots", operation);
     }
-    return restore_root_scale(std::move(roots));
+
+    return roots;
+}
 }
 
-} // namespace LMCAS::ode_root_detail
+/**
+ * @internal
+ * @brief 使用数值方法求解特征多项式的所有根.
+ *
+ * 对于一、二次多项式使用解析公式；对于三至六次多项式使用
+ * Durand-Kerner 迭代。迭代前通过多项式与其导数的近似 GCD 识别并提取重根。
+ */
+Result<std::vector<CharRoot>>
+find_characteristic_roots(
+    const std::vector<double>& coeffs, const std::string& operation)
+{
+    int n = static_cast<int>(coeffs.size()) - 1;
+    if (n <= 0) {
+        return Result<std::vector<CharRoot>>::failure(
+            CasErrc::NumericFailure,
+            "characteristic polynomial has no roots", operation);
+    }
+
+    std::vector<CharRoot> roots;
+    double leading = coeffs[0];
+    if (leading == 0.0) {
+        return Result<std::vector<CharRoot>>::failure(
+            CasErrc::NumericFailure,
+            "characteristic polynomial has no usable leading coefficient",
+            operation);
+    }
+    std::vector<double> norm_coeffs(coeffs.size());
+    for (size_t i = 0; i < coeffs.size(); ++i) {
+        norm_coeffs[i] = coeffs[i] / leading;
+        if (!std::isfinite(norm_coeffs[i])) {
+            return Result<std::vector<CharRoot>>::failure(
+                CasErrc::NumericFailure,
+                "characteristic polynomial normalization is non-finite",
+                operation);
+        }
+    }
+
+    if (n == 1) {
+        roots.push_back({-norm_coeffs[1], 0.0, 1, false});
+        return roots;
+    }
+    if (n == 2) {
+        return quadratic_characteristic_roots(norm_coeffs, operation);
+    }
+    auto scale_result = characteristic_root_scale(norm_coeffs, operation);
+    if (!scale_result) {
+        return Result<std::vector<CharRoot>>::failure(scale_result.error());
+    }
+    const double root_scale = scale_result.value();
+    std::vector<double> solver_coeffs = norm_coeffs;
+    for (int i = 1; i <= n; ++i) {
+        for (int power = 0; power < i; ++power) {
+            solver_coeffs[i] /= root_scale;
+        }
+    }
+
+    auto repeated = repeated_characteristic_roots(solver_coeffs, operation);
+    if (!repeated) {
+        return repeated;
+    }
+    if (!repeated.value().empty()) {
+        return restore_root_scale(std::move(repeated.value()), root_scale, operation);
+    }
+    auto candidates = iterate_characteristic_roots(solver_coeffs, operation);
+    if (!candidates) {
+        return Result<std::vector<CharRoot>>::failure(candidates.error());
+    }
+    auto classified = classify_characteristic_roots(
+        solver_coeffs, candidates.value(), operation);
+    if (!classified) {
+        return classified;
+    }
+    return restore_root_scale(std::move(classified.value()), root_scale, operation);
+}
+
+}

@@ -10,3 +10,5 @@ CLAUDE.md
 AGENTS.md
 .vs/
 /review-install/
+__pycache__/
+*.pyc

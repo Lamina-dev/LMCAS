@@ -1,539 +1,215 @@
-#include "visitors/normalization_visitor.hpp"
+#include "internal/visitors/normalization_visitor.hpp"
 #include "internal/normalization_utils.hpp"
 
 namespace LMCAS {
+namespace {
+bool sum_term_less(const std::shared_ptr<const SymbolicNode>& left,
+                   const std::shared_ptr<const SymbolicNode>& right) {
+    const BigInt a = get_node_degree_helper(left);
+    const BigInt b = get_node_degree_helper(right);
+    if (a != b) {
+        return a > b;
+    }
+    const bool left_number = std::dynamic_pointer_cast<const NumberNode>(left) != nullptr;
+    const bool right_number = std::dynamic_pointer_cast<const NumberNode>(right) != nullptr;
+    if (left_number != right_number) {
+        return right_number;
+    }
+    return left->compare(*right) < 0;
+}
+
+std::shared_ptr<const SymbolicNode> weighted_term(
+    const std::shared_ptr<const SymbolicNode>& term,
+    const std::shared_ptr<const NumberNode>& coefficient, detail::RewriteBudget* budget) {
+    if (coefficient->is_one()) {
+        return term;
+    }
+    std::vector<std::shared_ptr<const SymbolicNode>> operands;
+    std::size_t nodes = 0;
+    normalization_append(budget, nodes, operands, coefficient);
+    if (const auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(term)) {
+        for (const auto& child : multiply->operands()) {
+            normalization_append(budget, nodes, operands, child);
+        }
+    } else {
+        normalization_append(budget, nodes, operands, term);
+    }
+    return make_normalized_multiply_node(operands, budget);
+}
+}
 
 std::shared_ptr<const SymbolicNode> NormalizationVisitor::get_result() const {
-        return result;
+    return result;
+}
+
+void NormalizationVisitor::set_result(std::shared_ptr<const SymbolicNode> candidate) {
+    if (auto* budget = rewrite_budget()) {
+        budget->measure(candidate);
     }
+    result.swap(candidate);
+}
 
-std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_product(const std::shared_ptr<const SymbolicNode>& lhs, const std::shared_ptr<const SymbolicNode>& rhs) {
-
-        auto add_lhs = std::dynamic_pointer_cast<const AddNode>(lhs);
-        auto add_rhs = std::dynamic_pointer_cast<const AddNode>(rhs);
-
-        auto c_lhs = std::dynamic_pointer_cast<const ComplexNode>(lhs);
-        auto c_rhs = std::dynamic_pointer_cast<const ComplexNode>(rhs);
-
-        if (c_lhs && c_rhs) {
-            auto ac = expand_product(c_lhs->real(), c_rhs->real());
-            auto bd = expand_product(c_lhs->imag(), c_rhs->imag());
-            auto ad = expand_product(c_lhs->real(), c_rhs->imag());
-            auto bc = expand_product(c_lhs->imag(), c_rhs->real());
-            auto neg_one = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
-            auto neg_bd = expand_product(neg_one, bd);
-            auto real_part = SymbolicFactory::create_add({ac, neg_bd});
-            auto imag_part = SymbolicFactory::create_add({ad, bc});
-            NormalizationVisitor norm(assumptions_);
-            real_part->accept(norm); auto norm_r = norm.get_result();
-            imag_part->accept(norm); auto norm_i = norm.get_result();
-            return SymbolicFactory::create_complex(norm_r, norm_i);
-        } else if (c_lhs) {
-            auto nr = expand_product(c_lhs->real(), rhs);
-            auto ni = expand_product(c_lhs->imag(), rhs);
-            NormalizationVisitor norm(assumptions_);
-            nr->accept(norm); auto norm_r = norm.get_result();
-            ni->accept(norm); auto norm_i = norm.get_result();
-            return SymbolicFactory::create_complex(norm_r, norm_i);
-        } else if (c_rhs) {
-            auto nr = expand_product(lhs, c_rhs->real());
-            auto ni = expand_product(lhs, c_rhs->imag());
-            NormalizationVisitor norm(assumptions_);
-            nr->accept(norm); auto norm_r = norm.get_result();
-            ni->accept(norm); auto norm_i = norm.get_result();
-            return SymbolicFactory::create_complex(norm_r, norm_i);
-        }
-
-        if (add_lhs && add_rhs) {
-
-            std::vector<std::shared_ptr<const SymbolicNode>> new_terms;
-            for (const auto& op1 : add_lhs->operands()) {
-                for (const auto& op2 : add_rhs->operands()) {
-                    auto prod = expand_product(op1, op2);
-                    new_terms.push_back(prod);
-                }
-            }
-
-            return LMCAS::detail::make_node<AddNode>(new_terms);
-        } else if (add_lhs) {
-
-            std::vector<std::shared_ptr<const SymbolicNode>> new_terms;
-            for (const auto& op : add_lhs->operands()) {
-                 auto prod = expand_product(op, rhs);
-                 new_terms.push_back(prod);
-            }
-            return LMCAS::detail::make_node<AddNode>(new_terms);
-        } else if (add_rhs) {
-
-            std::vector<std::shared_ptr<const SymbolicNode>> new_terms;
-            for (const auto& op : add_rhs->operands()) {
-                 auto prod = expand_product(lhs, op);
-                 new_terms.push_back(prod);
-            }
-            return LMCAS::detail::make_node<AddNode>(new_terms);
-        }
-
-        std::shared_ptr<const NumberNode> const_acc = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-        struct FactorAccum {
-            std::shared_ptr<const NumberNode> exponent;
-            std::vector<std::shared_ptr<const SymbolicNode>> originals;
-        };
-        std::map<std::shared_ptr<const SymbolicNode>, FactorAccum, NodeCompare> bases;
-
-        auto process_factor = [&](const std::shared_ptr<const SymbolicNode>& factor) {
-             if (auto num = std::dynamic_pointer_cast<const NumberNode>(factor)) {
-                 if (num->is_zero()) return false;
-                 const_acc = multiply_numbers(const_acc, num);
-             } else {
-                 std::shared_ptr<const SymbolicNode> base = factor;
-                 std::shared_ptr<const NumberNode> exp = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-
-                 if (auto pow = std::dynamic_pointer_cast<const PowerNode>(factor)) {
-                     if (auto e_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
-                         if (is_positive_integer_number(e_num)) {
-                             base = pow->base();
-                             exp = e_num;
-                         }
-                     }
-                 }
-
-                 auto it = bases.find(base);
-                 if (it == bases.end()) {
-                     bases.emplace(base, FactorAccum{exp, {factor}});
-                 } else {
-                     it->second.exponent = add_numbers(it->second.exponent, exp);
-                     it->second.originals.push_back(factor);
-                 }
-             }
-             return true;
-        };
-
-        auto flatten_and_process = [&](const std::shared_ptr<const SymbolicNode>& node) {
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-                for(const auto& op : mul->operands()) {
-                    if (!process_factor(op)) return false;
-                }
-            } else {
-                if (!process_factor(node)) return false;
-            }
-            return true;
-        };
-
-        if (!flatten_and_process(lhs)) return LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        if (!flatten_and_process(rhs)) return LMCAS::detail::make_node<NumberNode>(BigInt(0));
-
-        std::vector<std::shared_ptr<const SymbolicNode>> final_ops;
-        if (!const_acc->is_one()) {
-             final_ops.push_back(const_acc);
-        }
-
-        std::vector<std::shared_ptr<const SymbolicNode>> var_ops;
-        for (auto const& [base, acc] : bases) {
-            const auto& exp = acc.exponent;
-            if (exp->is_zero()) {
-                var_ops.insert(var_ops.end(), acc.originals.begin(), acc.originals.end());
-            } else if (exp->is_one()) {
-                var_ops.push_back(base);
-            } else {
-                var_ops.push_back(LMCAS::detail::make_node<PowerNode>(base, exp));
-            }
-        }
-
-        std::sort(var_ops.begin(), var_ops.end(), [](const std::shared_ptr<const SymbolicNode>& l, const std::shared_ptr<const SymbolicNode>& r) {
-            int d1 = get_node_degree_helper(l);
-            int d2 = get_node_degree_helper(r);
-            if (d1 != d2) return d1 > d2;
-            return l->compare(*r) < 0;
-        });
-
-        final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
-
-        if (final_ops.empty()) return LMCAS::detail::make_node<NumberNode>(BigInt(1));
-        if (final_ops.size() == 1) return final_ops[0];
-
-        if (final_ops.size() > 1 && std::dynamic_pointer_cast<const NumberNode>(final_ops.back())) {
-             std::rotate(final_ops.begin(), final_ops.end() - 1, final_ops.end());
-        }
-        return make_normalized_multiply_node(final_ops);
-    }
 void NormalizationVisitor::visit(const NumberNode& node) {
-        result = node.clone();
-    }
+    if (rewrite_budget()) { rewrite_budget()->require_nodes(1); }
+    set_result(node.clone());
+}
+
 void NormalizationVisitor::visit(const VariableNode& node) {
-        result = node.clone();
-    }
-void NormalizationVisitor::visit(const AddNode& node) {
-        std::vector<std::shared_ptr<const SymbolicNode>> simplified_ops;
+    if (rewrite_budget()) { rewrite_budget()->require_nodes(1); }
+    set_result(node.clone());
+}
 
-        for (const auto& op : node.operands()) {
-            op->accept(*this);
-            if (auto add = std::dynamic_pointer_cast<const AddNode>(result)) {
-                simplified_ops.insert(simplified_ops.end(), add->operands().begin(), add->operands().end());
-            } else {
-                simplified_ops.push_back(result);
-            }
-        }
-
-        /// Merge ComplexNodes and NumberNodes
-        std::vector<std::shared_ptr<const SymbolicNode>> real_parts;
-        std::vector<std::shared_ptr<const SymbolicNode>> imag_parts;
-        std::vector<std::shared_ptr<const SymbolicNode>> non_complex_ops;
-        bool has_complex = false;
-
-        for (const auto& op : simplified_ops) {
-            if (auto c = std::dynamic_pointer_cast<const ComplexNode>(op)) {
-                has_complex = true;
-                real_parts.push_back(c->real());
-                imag_parts.push_back(c->imag());
-            } else if (std::dynamic_pointer_cast<const NumberNode>(op)) {
-                real_parts.push_back(op);
-                imag_parts.push_back(SymbolicFactory::create_number(BigInt(0)));
-            } else {
-                non_complex_ops.push_back(op);
-            }
-        }
-
-        if (has_complex) {
-            auto real_sum = SymbolicFactory::create_add(real_parts);
-            auto imag_sum = SymbolicFactory::create_add(imag_parts);
-            NormalizationVisitor sub_norm(assumptions_);
-            real_sum->accept(sub_norm); auto norm_real = sub_norm.get_result();
-            imag_sum->accept(sub_norm); auto norm_imag = sub_norm.get_result();
-            auto merged_complex = SymbolicFactory::create_complex(norm_real, norm_imag);
-            if (!merged_complex->is_zero()) {
-                non_complex_ops.push_back(merged_complex);
-            }
-            simplified_ops = non_complex_ops;
-        }
-
-        if (!simplified_ops.empty() && std::dynamic_pointer_cast<const MatrixNode>(simplified_ops[0])) {
-            auto first_mat = std::dynamic_pointer_cast<const MatrixNode>(simplified_ops[0]);
-            size_t rows = first_mat->rows();
-            size_t cols = first_mat->cols();
-            bool all_matrices = true;
-            for (const auto& op : simplified_ops) {
-                 auto m = std::dynamic_pointer_cast<const MatrixNode>(op);
-                 if (!m || m->rows() != rows || m->cols() != cols) {
-                     all_matrices = false; break;
-                 }
-            }
-
-            if (all_matrices) {
-                 std::vector<std::shared_ptr<const SymbolicNode>> new_elements;
-                 new_elements.reserve(rows * cols);
-
-                 for (size_t i = 0; i < rows * cols; ++i) {
-                     std::vector<std::shared_ptr<const SymbolicNode>> elem_ops;
-                     for (const auto& op : simplified_ops) {
-                         auto m = std::dynamic_pointer_cast<const MatrixNode>(op);
-                         std::shared_ptr<const SymbolicNode> val;
-                         if (std::holds_alternative<MatrixNode::DenseStorage>(m->storage())) {
-                             const auto& dense = std::get<MatrixNode::DenseStorage>(m->storage());
-                             if (i < dense.size()) val = dense[i];
-                             else val = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-                         } else {
-                             const auto& sparse = std::get<MatrixNode::SparseStorage>(m->storage());
-                             auto it = sparse.find(i);
-                             if (it != sparse.end()) val = it->second;
-                             else val = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-                         }
-                         if (!val) val = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-                         elem_ops.push_back(val);
-                     }
-
-                     auto elem_add = LMCAS::detail::make_node<AddNode>(elem_ops);
-                     elem_add->accept(*this);
-                     new_elements.push_back(result);
-                 }
-
-                 result = LMCAS::detail::make_node<MatrixNode>(rows, cols, new_elements);
-                 return;
-            }
-        }
-
-        std::shared_ptr<const NumberNode> constant_acc = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        std::map<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const NumberNode>, NodeCompare> terms;
-
-        for (const auto& op : simplified_ops) {
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
-                constant_acc = add_numbers(constant_acc, num);
-            } else {
-                std::shared_ptr<const SymbolicNode> term_part = op;
-                std::shared_ptr<const NumberNode> coeff_part = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-
-                if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(op)) {
-
-                    std::shared_ptr<const NumberNode> coeff = nullptr;
-                    int coeff_idx = -1;
-
-                    if (!mul->operands().empty()) {
-                        if (auto n_first = std::dynamic_pointer_cast<const NumberNode>(mul->operands().front())) {
-                            coeff = n_first;
-                            coeff_idx = 0;
-                        } else if (auto n_last = std::dynamic_pointer_cast<const NumberNode>(mul->operands().back())) {
-                            coeff = n_last;
-                            coeff_idx = (int)mul->operands().size() - 1;
-                        }
-                    }
-
-                    if (coeff) {
-                         coeff_part = coeff;
-                         if (mul->operands().size() == 2) {
-                             term_part = mul->operands()[coeff_idx == 0 ? 1 : 0];
-                         } else {
-                             std::vector<std::shared_ptr<const SymbolicNode>> rest;
-                             rest.reserve(mul->operands().size() - 1);
-                             for(int k=0; k<(int)mul->operands().size(); ++k) {
-                                 if (k != coeff_idx) rest.push_back(mul->operands()[k]);
-                             }
-
-                             auto rest_mul = make_normalized_multiply_node(rest);
-                             NormalizationVisitor rest_norm(assumptions_);
-                             rest_mul->accept(rest_norm);
-                             term_part = rest_norm.get_result();
-                         }
-                    }
-                }
-
-                auto it = terms.end();
-                for (auto scan = terms.begin(); scan != terms.end(); ++scan) {
-                    if (term_part->compare(*scan->first) == 0) {
-                        it = scan;
-                        break;
-                    }
-                }
-                if (it == terms.end()) {
-                    terms[term_part] = coeff_part;
-                } else {
-                    it->second = add_numbers(it->second, coeff_part);
-                }
-            }
-        }
-
-        std::vector<std::shared_ptr<const SymbolicNode>> final_ops;
-
-        if (!constant_acc->is_zero()) {
-            final_ops.push_back(constant_acc);
-        }
-
-        for (auto const& [term, coeff] : terms) {
-            if (coeff->is_zero()) continue;
-
-            if (coeff->is_one()) {
-                final_ops.push_back(term);
-            } else {
-                std::vector<std::shared_ptr<const SymbolicNode>> m_ops;
-                m_ops.push_back(coeff);
-                if (auto m = std::dynamic_pointer_cast<const MultiplyNode>(term)) {
-                     m_ops.insert(m_ops.end(), m->operands().begin(), m->operands().end());
-                } else {
-                     m_ops.push_back(term);
-                }
-                final_ops.push_back(make_normalized_multiply_node(m_ops));
-            }
-        }
-
-        if (final_ops.empty()) {
-            result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        } else if (final_ops.size() == 1) {
-            result = final_ops[0];
-        } else {
-
-            std::sort(final_ops.begin(), final_ops.end(), [](const std::shared_ptr<const SymbolicNode>& l, const std::shared_ptr<const SymbolicNode>& r) {
-                int d1 = get_node_degree_helper(l);
-                int d2 = get_node_degree_helper(r);
-                if (d1 != d2) return d1 > d2;
-
-                bool isNum1 = std::dynamic_pointer_cast<const NumberNode>(l) != nullptr;
-                bool isNum2 = std::dynamic_pointer_cast<const NumberNode>(r) != nullptr;
-                if (isNum1 != isNum2) return isNum2;
-
-                return l->compare(*r) < 0;
-            });
-            result = LMCAS::detail::make_node<AddNode>(final_ops);
-        }
-    }
 void NormalizationVisitor::visit(const ComplexNode& node) {
-        node.real()->accept(*this);
-        auto norm_r = result;
-        node.imag()->accept(*this);
-        auto norm_i = result;
-        result = SymbolicFactory::create_complex(norm_r, norm_i);
+    node.real()->accept(*this);
+    auto real = result;
+    node.imag()->accept(*this);
+    normalization_check_children(rewrite_budget(), 1, real, result);
+    set_result(SymbolicFactory::create_complex(real, result));
+}
+
+void NormalizationVisitor::merge_complex_terms(
+    std::vector<std::shared_ptr<const SymbolicNode>>& operands) {
+    std::vector<std::shared_ptr<const SymbolicNode>> real;
+    std::vector<std::shared_ptr<const SymbolicNode>> imag;
+    std::vector<std::shared_ptr<const SymbolicNode>> remaining;
+    std::size_t real_nodes = 0, imag_nodes = 0, remaining_nodes = 0;
+    bool has_complex = false;
+    for (const auto& operand : operands) {
+        if (const auto complex = std::dynamic_pointer_cast<const ComplexNode>(operand)) {
+            has_complex = true;
+            normalization_append(rewrite_budget(), real_nodes, real, complex->real());
+            normalization_append(rewrite_budget(), imag_nodes, imag, complex->imag());
+        } else if (std::dynamic_pointer_cast<const NumberNode>(operand)) {
+            normalization_append(rewrite_budget(), real_nodes, real, operand);
+            normalization_append(rewrite_budget(), imag_nodes, imag,
+                                 SymbolicFactory::create_number(BigInt(0)));
+        } else {
+            normalization_append(rewrite_budget(), remaining_nodes, remaining, operand);
+        }
     }
-void NormalizationVisitor::visit(const MultiplyNode& node) {
-
-        std::vector<std::shared_ptr<const SymbolicNode>> sc;
-
-        for (const auto& op : node.operands()) {
-            op->accept(*this);
-            auto res = result;
-            if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(res)) {
-
-                sc.insert(sc.end(), mul->operands().begin(), mul->operands().end());
-            } else {
-                sc.push_back(res);
-            }
-        }
-
-        // `simplify()` must not apply distributivity. Expansion changes the
-        // expression shape, can trigger term explosion, and may hide domain
-        // conditions introduced by later cancellation. Explicit `expand()` is
-        // the only path that may call expand_product().
-
-        bool has_matrix = false;
-        for(const auto& op : sc) {
-            if (std::dynamic_pointer_cast<const MatrixNode>(op)) { has_matrix = true; break; }
-            if (auto p = std::dynamic_pointer_cast<const PowerNode>(op)) {
-                if (std::dynamic_pointer_cast<const MatrixNode>(p->base())) { has_matrix = true; break; }
-            }
-        }
-
-        if (has_matrix) {
-            std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
-            std::shared_ptr<const NumberNode> scalar_part = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-
-            for(const auto& op : sc) {
-                if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
-                    scalar_part = multiply_numbers(scalar_part, num);
-                } else {
-                    new_ops.push_back(op);
-                }
-            }
-
-            std::vector<std::shared_ptr<const SymbolicNode>> fused_ops;
-            if (!new_ops.empty()) fused_ops.push_back(new_ops[0]);
-
-            for(size_t i=1; i<new_ops.size(); ++i) {
-                auto left = fused_ops.back();
-                auto right = new_ops[i];
-
-                auto m_left = std::dynamic_pointer_cast<const MatrixNode>(left);
-                auto m_right = std::dynamic_pointer_cast<const MatrixNode>(right);
-
-                if (m_left && m_right) {
-
-                    if (m_left->cols() == m_right->rows()) {
-
-                         if (std::holds_alternative<MatrixNode::DenseStorage>(m_left->storage()) &&
-                             std::holds_alternative<MatrixNode::DenseStorage>(m_right->storage())) {
-
-                             const auto& d_l = std::get<MatrixNode::DenseStorage>(m_left->storage());
-                             const auto& d_r = std::get<MatrixNode::DenseStorage>(m_right->storage());
-
-                             size_t R = m_left->rows();
-                             size_t C = m_right->cols();
-                             size_t K = m_left->cols();
-
-                             MatrixNode::DenseStorage res_data;
-                             res_data.reserve(R*C);
-
-                             for(size_t r=0; r<R; ++r) {
-                                 for(size_t c=0; c<C; ++c) {
-
-                                     std::vector<std::shared_ptr<const SymbolicNode>> sum_ops;
-                                     for(size_t k=0; k<K; ++k) {
-                                         std::vector<std::shared_ptr<const SymbolicNode>> prod_ops = {
-                                             d_l[r*K + k], d_r[k*C + c]
-                                         };
-                                         sum_ops.push_back(make_normalized_multiply_node(prod_ops));
-                                     }
-
-                                     NormalizationVisitor elem_vis(assumptions_);
-                                     auto elem_node = LMCAS::detail::make_node<AddNode>(sum_ops);
-                                     elem_node->accept(elem_vis);
-
-                                     res_data.push_back(elem_vis.get_result());
-                                 }
-                             }
-
-                             fused_ops.pop_back();
-                             fused_ops.push_back(LMCAS::detail::make_node<MatrixNode>(R, C, res_data));
-                             continue;
-                         }
-                    }
-                }
-                fused_ops.push_back(right);
-            }
-
-            if (!scalar_part->is_one()) {
-                fused_ops.insert(fused_ops.begin(), scalar_part);
-            }
-
-            if (fused_ops.empty()) result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-            else if (fused_ops.size() == 1) result = fused_ops[0];
-            else result = make_normalized_multiply_node(fused_ops);
-
-            return;
-        }
-
-        std::shared_ptr<const NumberNode> const_acc = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-        struct FactorAccum {
-            std::shared_ptr<const NumberNode> exponent;
-            std::vector<std::shared_ptr<const SymbolicNode>> originals;
-        };
-        std::map<std::shared_ptr<const SymbolicNode>, FactorAccum, NodeCompare> bases;
-
-        for (const auto& op : sc) {
-             if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
-                 if (num->is_zero()) {
-                     result = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-                     return;
-                 }
-                 const_acc = multiply_numbers(const_acc, num);
-             } else {
-                 std::shared_ptr<const SymbolicNode> base = op;
-                 std::shared_ptr<const NumberNode> exp = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-
-                 // Numeric powers are normalized with the operands above.
-                 // Positive integral powers participate in base accumulation.
-                 if (auto power = std::dynamic_pointer_cast<const PowerNode>(op)) {
-                     auto exponent = std::dynamic_pointer_cast<const NumberNode>(
-                         power->exponent());
-                     if (is_positive_integer_number(exponent)) {
-                         base = power->base();
-                         exp = exponent;
-                     }
-                 }
-
-                 auto it = bases.find(base);
-                 if (it == bases.end()) {
-                     bases.emplace(base, FactorAccum{exp, {op}});
-                 } else {
-                     it->second.exponent = add_numbers(it->second.exponent, exp);
-                     it->second.originals.push_back(op);
-                 }
-             }
-        }
-
-        std::vector<std::shared_ptr<const SymbolicNode>> final_ops;
-        if (!const_acc->is_one()) {
-             final_ops.push_back(const_acc);
-        }
-
-        std::vector<std::shared_ptr<const SymbolicNode>> var_ops;
-        for (auto const& [base, acc] : bases) {
-            const auto& exp = acc.exponent;
-            if (exp->is_zero()) {
-                var_ops.insert(var_ops.end(), acc.originals.begin(), acc.originals.end());
-            } else if (exp->is_one()) {
-                var_ops.push_back(base);
-            } else {
-                var_ops.push_back(LMCAS::detail::make_node<PowerNode>(base, exp));
-            }
-        }
-
-        std::sort(var_ops.begin(), var_ops.end(), [](const std::shared_ptr<const SymbolicNode>& l, const std::shared_ptr<const SymbolicNode>& r) {
-            int d1 = get_node_degree_helper(l);
-            int d2 = get_node_degree_helper(r);
-            if (d1 != d2) return d1 > d2;
-            return l->compare(*r) < 0;
-        });
-
-        final_ops.insert(final_ops.end(), var_ops.begin(), var_ops.end());
-
-        if (final_ops.empty()) result = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-        else if (final_ops.size() == 1) result = final_ops[0];
-        else result = make_normalized_multiply_node(final_ops);
+    if (!has_complex) {
+        return;
     }
+    auto real_sum = SymbolicFactory::create_add(real, rewrite_budget());
+    auto imag_sum = SymbolicFactory::create_add(imag, rewrite_budget());
+    NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+    real_sum->accept(visitor);
+    auto normalized_real = visitor.get_result();
+    imag_sum->accept(visitor);
+    normalization_check_children(rewrite_budget(), 1, normalized_real, visitor.get_result());
+    auto merged = SymbolicFactory::create_complex(normalized_real, visitor.get_result());
+    if (!merged->is_zero()) {
+        normalization_append(rewrite_budget(), remaining_nodes, remaining, merged);
+    }
+    operands = std::move(remaining);
+}
 
-} // namespace LMCAS
+std::shared_ptr<const NumberNode> NormalizationVisitor::extract_term_coefficient(
+    std::shared_ptr<const SymbolicNode>& term) {
+    auto coefficient = detail::make_node<NumberNode>(BigInt(1));
+    const auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(term);
+    if (!multiply || multiply->operands().empty()) {
+        return coefficient;
+    }
+    const auto& operands = multiply->operands();
+    auto number = std::dynamic_pointer_cast<const NumberNode>(operands.front());
+    std::size_t index = 0;
+    if (!number) {
+        number = std::dynamic_pointer_cast<const NumberNode>(operands.back());
+        index = operands.size() - 1;
+    }
+    if (!number) {
+        return coefficient;
+    }
+    coefficient = number;
+    if (operands.size() == 2) {
+        term = operands[index == 0 ? 1 : 0];
+        return coefficient;
+    }
+    std::vector<std::shared_ptr<const SymbolicNode>> rest;
+    std::size_t nodes = 0;
+    normalization_check_count(rewrite_budget(), operands.size() - 1, 1, false);
+    rest.reserve(operands.size() - 1);
+    for (std::size_t k = 0; k < operands.size(); ++k) {
+        if (k != index) {
+            normalization_append(rewrite_budget(), nodes, rest, operands[k]);
+        }
+    }
+    auto rest_product = make_normalized_multiply_node(rest, rewrite_budget());
+    NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+    rest_product->accept(visitor);
+    term = visitor.get_result();
+    return coefficient;
+}
+
+std::shared_ptr<const SymbolicNode> NormalizationVisitor::collect_sum(
+    const std::vector<std::shared_ptr<const SymbolicNode>>& operands) {
+    auto constant = detail::make_node<NumberNode>(BigInt(0));
+    struct TermAccum {
+        std::shared_ptr<const NumberNode> coefficient;
+        std::vector<std::shared_ptr<const SymbolicNode>> originals;
+        std::size_t nodes;
+    };
+    std::map<std::shared_ptr<const SymbolicNode>, TermAccum, NodeCompare> terms;
+    for (const auto& operand : operands) {
+        if (const auto number = std::dynamic_pointer_cast<const NumberNode>(operand)) {
+            constant = add_numbers(constant, number);
+            continue;
+        }
+        auto term = operand;
+        auto coefficient = extract_term_coefficient(term);
+        auto found = terms.find(term);
+        if (found == terms.end()) {
+            const auto nodes = rewrite_budget() ? rewrite_budget()->measure(operand) : 0;
+            terms.emplace(term, TermAccum{coefficient, {operand}, nodes});
+        } else {
+            found->second.coefficient = add_numbers(found->second.coefficient, coefficient);
+            normalization_append(rewrite_budget(), found->second.nodes, found->second.originals, operand);
+        }
+    }
+    std::vector<std::shared_ptr<const SymbolicNode>> collected;
+    std::size_t nodes = 0;
+    if (!constant->is_zero()) {
+        normalization_append(rewrite_budget(), nodes, collected, constant);
+    }
+    for (const auto& [term, accumulated] : terms) {
+        if (!accumulated.coefficient->is_zero()) {
+            normalization_append(rewrite_budget(), nodes, collected,
+                                 weighted_term(term, accumulated.coefficient, rewrite_budget()));
+        } else if (!normalization_can_discard(term, facts_, domain_, context_)) {
+            for (const auto& original : accumulated.originals) {
+                normalization_append(rewrite_budget(), nodes, collected, original);
+            }
+        }
+    }
+    if (collected.empty()) {
+        return detail::make_node<NumberNode>(BigInt(0));
+    }
+    if (collected.size() == 1) {
+        return collected.front();
+    }
+    normalization_check_arithmetic<AddNode>(rewrite_budget(), collected, nodes);
+    std::sort(collected.begin(), collected.end(), sum_term_less);
+    return detail::make_node<AddNode>(collected);
+}
+
+void NormalizationVisitor::visit(const AddNode& node) {
+    std::vector<std::shared_ptr<const SymbolicNode>> operands;
+    std::size_t nodes = 0;
+    for (const auto& operand : node.operands()) {
+        operand->accept(*this);
+        if (const auto add = std::dynamic_pointer_cast<const AddNode>(result)) {
+            for (const auto& child : add->operands()) {
+                normalization_append(rewrite_budget(), nodes, operands, child);
+            }
+        } else {
+            normalization_append(rewrite_budget(), nodes, operands, result);
+        }
+    }
+    merge_complex_terms(operands);
+    if (normalize_matrix_sum(operands)) {
+        return;
+    }
+    set_result(collect_sum(operands));
+}
+}

@@ -2,169 +2,156 @@
 #include "test_common.hpp"
 #include "property_store.hpp"
 #include "interval.hpp"
-#include <stdexcept>
+#include "computation_context.hpp"
 #include <string>
 
 using namespace LMCAS;
 
-
-void test_declare_parity_even() {
-    TEST_CASE("Declare parity Even stores Even");
-    PropertyStore store;
-    store.declare_parity("x", Parity::Even);
-
-    EXPECT_TRUE(store.get_parity("x") == Parity::Even, "x has Even parity");
+static Interval exact_closed_interval(int lower, int upper) {
+    return Interval{Endpoint::closed(SymbolicExpr::number(lower)),
+                    Endpoint::closed(SymbolicExpr::number(upper))};
 }
 
-void test_declare_parity_odd() {
-    TEST_CASE("Declare parity Odd stores Odd");
-    PropertyStore store;
-    store.declare_parity("x", Parity::Odd);
-
-    EXPECT_TRUE(store.get_parity("x") == Parity::Odd, "x has Odd parity");
+static void expect_exact_bounds(const PropertyStore &store,
+                                const std::string &symbol,
+                                int lower, int upper) {
+    const auto bounds = store.get_bounds(symbol);
+    ASSERT_TRUE(bounds);
+    ASSERT_TRUE(bounds->lower.value);
+    ASSERT_TRUE(bounds->upper.value);
+    EXPECT_FALSE(bounds->lower.is_open);
+    EXPECT_FALSE(bounds->upper.is_open);
+    EXPECT_DOUBLE_EQ(bounds->lower.value->to_numeric(),
+                     static_cast<double>(lower));
+    EXPECT_DOUBLE_EQ(bounds->upper.value->to_numeric(),
+                     static_cast<double>(upper));
 }
 
-void test_parity_default_unknown() {
-    TEST_CASE("Default parity is Unknown for undeclared symbol");
+TEST(PropertyStoreParityBounded, DeclareParityEven) {
     PropertyStore store;
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_parity("undeclared") == Parity::Unknown,
-                "Undeclared symbol has Unknown parity");
+    EXPECT_TRUE((store.get_parity("x") == Parity::Even)) << "x has Even parity";
 }
 
-void test_parity_auto_promotes_to_integer_from_complex() {
-    TEST_CASE("Even parity auto-promotes domain from Complex to Integer");
+TEST(PropertyStoreParityBounded, DeclareParityOdd) {
+    PropertyStore store;
+    EXPECT_TRUE((store.declare_parity("x", Parity::Odd).has_value())) << "parity declaration succeeds";
+
+    EXPECT_TRUE((store.get_parity("x") == Parity::Odd)) << "x has Odd parity";
+}
+
+TEST(PropertyStoreParityBounded, ParityDefaultUnknown) {
+    PropertyStore store;
+
+    EXPECT_TRUE((store.get_parity("undeclared") == Parity::Unknown)) << "Undeclared symbol has Unknown parity";
+}
+
+TEST(PropertyStoreParityBounded, ParityAutoPromotesToIntegerFromComplex) {
     PropertyStore store;
     // Default domain is Complex
-    EXPECT_TRUE(store.get_domain("x") == Domain::Complex, "x starts with Complex domain");
+    EXPECT_TRUE((store.get_domain("x") == Domain::Complex)) << "x starts with Complex domain";
 
-    store.declare_parity("x", Parity::Even);
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_domain("x") == Domain::Integer,
-                "x domain promoted to Integer after Even parity declaration");
+    EXPECT_TRUE((store.get_domain("x") == Domain::Integer)) << "x domain promoted to Integer after Even parity declaration";
 }
 
-void test_parity_odd_auto_promotes_to_integer() {
-    TEST_CASE("Odd parity auto-promotes domain from Complex to Integer");
+TEST(PropertyStoreParityBounded, ParityOddAutoPromotesToInteger) {
     PropertyStore store;
-    store.declare_parity("x", Parity::Odd);
+    EXPECT_TRUE((store.declare_parity("x", Parity::Odd).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_domain("x") == Domain::Integer,
-                "x domain promoted to Integer after Odd parity declaration");
+    EXPECT_TRUE((store.get_domain("x") == Domain::Integer)) << "x domain promoted to Integer after Odd parity declaration";
 }
 
-void test_parity_auto_promotes_from_real() {
-    TEST_CASE("Even parity auto-promotes domain from Real to Integer");
+TEST(PropertyStoreParityBounded, ParityAutoPromotesFromReal) {
     PropertyStore store;
-    store.declare_domain("x", Domain::Real);
-    store.declare_parity("x", Parity::Even);
+    EXPECT_TRUE((store.declare_domain("x", Domain::Real).has_value())) << "domain declaration succeeds";
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_domain("x") == Domain::Integer,
-                "x domain promoted from Real to Integer after Even parity");
+    EXPECT_TRUE((store.get_domain("x") == Domain::Integer)) << "x domain promoted from Real to Integer after Even parity";
 }
 
-void test_parity_does_not_demote_more_specific_domain() {
-    TEST_CASE("Even parity does not demote Natural domain to Integer");
+TEST(PropertyStoreParityBounded, ParityDoesNotDemoteMoreSpecificDomain) {
     PropertyStore store;
-    store.declare_domain("x", Domain::Natural);
-    store.declare_parity("x", Parity::Even);
+    EXPECT_TRUE((store.declare_domain("x", Domain::Natural).has_value())) << "domain declaration succeeds";
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
 
     // Natural is more specific than Integer, so domain should remain Natural
-    EXPECT_TRUE(store.get_domain("x") == Domain::Natural,
-                "x domain remains Natural (more specific than Integer)");
+    EXPECT_TRUE((store.get_domain("x") == Domain::Natural)) << "x domain remains Natural (more specific than Integer)";
 }
 
-void test_parity_does_not_demote_positiveint() {
-    TEST_CASE("Odd parity does not demote PositiveInt domain to Integer");
+TEST(PropertyStoreParityBounded, ParityDoesNotDemotePositiveint) {
     PropertyStore store;
-    store.declare_domain("x", Domain::PositiveInt);
-    store.declare_parity("x", Parity::Odd);
+    EXPECT_TRUE((store.declare_domain("x", Domain::PositiveInt).has_value())) << "domain declaration succeeds";
+    EXPECT_TRUE((store.declare_parity("x", Parity::Odd).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_domain("x") == Domain::PositiveInt,
-                "x domain remains PositiveInt (more specific than Integer)");
+    EXPECT_TRUE((store.get_domain("x") == Domain::PositiveInt)) << "x domain remains PositiveInt (more specific than Integer)";
 }
 
-void test_parity_idempotent_even() {
-    TEST_CASE("Idempotent re-declaration of Even parity");
+TEST(PropertyStoreParityBounded, ParityIdempotentEven) {
     PropertyStore store;
-    store.declare_parity("x", Parity::Even);
-    store.declare_parity("x", Parity::Even);  // Should be no-op
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_parity("x") == Parity::Even,
-                "x still has Even parity after re-declaration");
+    EXPECT_TRUE((store.get_parity("x") == Parity::Even)) << "x still has Even parity after re-declaration";
 }
 
-void test_parity_idempotent_odd() {
-    TEST_CASE("Idempotent re-declaration of Odd parity");
+TEST(PropertyStoreParityBounded, ParityIdempotentOdd) {
     PropertyStore store;
-    store.declare_parity("x", Parity::Odd);
-    store.declare_parity("x", Parity::Odd);  // Should be no-op
+    EXPECT_TRUE((store.declare_parity("x", Parity::Odd).has_value())) << "parity declaration succeeds";
+    EXPECT_TRUE((store.declare_parity("x", Parity::Odd).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_parity("x") == Parity::Odd,
-                "x still has Odd parity after re-declaration");
+    EXPECT_TRUE((store.get_parity("x") == Parity::Odd)) << "x still has Odd parity after re-declaration";
 }
 
-void test_parity_contradiction_even_then_odd() {
-    TEST_CASE("Contradiction: Even then Odd returns failure");
+TEST(PropertyStoreParityBounded, ParityContradictionEvenThenOdd) {
     PropertyStore store;
-    store.declare_parity("x", Parity::Even);
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
 
     auto failure_110 = store.declare_parity("x", Parity::Odd);
-    EXPECT_TRUE(!failure_110.has_value(), "Declaring Odd after Even returns InvalidArgument");
-    EXPECT_TRUE(store.get_parity("x") == Parity::Even,
-                "x parity remains Even after failed Odd declaration");
+    EXPECT_TRUE((!failure_110.has_value())) << "Declaring Odd after Even returns InvalidArgument";
+    EXPECT_TRUE((store.get_parity("x") == Parity::Even)) << "x parity remains Even after failed Odd declaration";
 }
 
-void test_parity_contradiction_odd_then_even() {
-    TEST_CASE("Contradiction: Odd then Even returns failure");
+TEST(PropertyStoreParityBounded, ParityContradictionOddThenEven) {
     PropertyStore store;
-    store.declare_parity("x", Parity::Odd);
+    EXPECT_TRUE((store.declare_parity("x", Parity::Odd).has_value())) << "parity declaration succeeds";
 
     auto failure_126 = store.declare_parity("x", Parity::Even);
-    EXPECT_TRUE(!failure_126.has_value(), "Declaring Even after Odd returns InvalidArgument");
-    EXPECT_TRUE(store.get_parity("x") == Parity::Odd,
-                "x parity remains Odd after failed Even declaration");
+    EXPECT_TRUE((!failure_126.has_value())) << "Declaring Even after Odd returns InvalidArgument";
+    EXPECT_TRUE((store.get_parity("x") == Parity::Odd)) << "x parity remains Odd after failed Even declaration";
 }
 
-void test_parity_unknown_can_be_set() {
-    TEST_CASE("Setting parity to Unknown is allowed");
+TEST(PropertyStoreParityBounded, ParityUnknownCanBeSet) {
     PropertyStore store;
-    store.declare_parity("x", Parity::Even);
-    store.declare_parity("x", Parity::Unknown);
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
+    EXPECT_TRUE((store.declare_parity("x", Parity::Unknown).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_parity("x") == Parity::Unknown,
-                "x parity set to Unknown");
+    EXPECT_TRUE((store.get_parity("x") == Parity::Unknown)) << "x parity set to Unknown";
 }
 
-
-void test_declare_bounded() {
-    TEST_CASE("Declare Bounded stores Bounded");
+TEST(PropertyStoreParityBounded, DeclareBounded) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Bounded);
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded).has_value())) << "boundedness declaration succeeds";
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
-                "x has Bounded");
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Bounded)) << "x has Bounded";
 }
 
-void test_declare_unbounded() {
-    TEST_CASE("Declare Unbounded stores Unbounded");
+TEST(PropertyStoreParityBounded, DeclareUnbounded) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Unbounded);
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Unbounded).has_value())) << "boundedness declaration succeeds";
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Unbounded,
-                "x has Unbounded");
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Unbounded)) << "x has Unbounded";
 }
 
-void test_boundedness_default_unknown() {
-    TEST_CASE("Default boundedness is Unknown for undeclared symbol");
+TEST(PropertyStoreParityBounded, BoundednessDefaultUnknown) {
     PropertyStore store;
 
-    EXPECT_TRUE(store.get_boundedness("undeclared") == Boundedness::Unknown,
-                "Undeclared symbol has Unknown boundedness");
+    EXPECT_TRUE((store.get_boundedness("undeclared") == Boundedness::Unknown)) << "Undeclared symbol has Unknown boundedness";
 }
 
-void test_declare_bounded_with_interval() {
-    TEST_CASE("Declare Bounded with Interval stores bounds");
+TEST(PropertyStoreParityBounded, DeclareBoundedWithInterval) {
     PropertyStore store;
 
     auto lower_val = LMCAS::detail::make_expression_ptr(
@@ -176,69 +163,132 @@ void test_declare_bounded_with_interval() {
     bounds.lower = Endpoint::closed(lower_val);
     bounds.upper = Endpoint::closed(upper_val);
 
-    store.declare_bounded("x", Boundedness::Bounded, bounds);
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded, bounds).has_value())) << "boundedness declaration succeeds";
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
-                "x has Bounded");
-    EXPECT_TRUE(store.get_bounds("x").has_value(),
-                "x has bounds stored");
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Bounded)) << "x has Bounded";
+    EXPECT_TRUE((store.get_bounds("x").has_value())) << "x has bounds stored";
 }
 
-void test_declare_bounded_without_interval() {
-    TEST_CASE("Declare Bounded without Interval stores no bounds");
+TEST(PropertyStoreParityBounded, DeclareBoundedWithoutInterval) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Bounded);
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded).has_value())) << "boundedness declaration succeeds";
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
-                "x has Bounded");
-    EXPECT_FALSE(store.get_bounds("x").has_value(),
-                 "x has no bounds stored (none provided)");
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Bounded)) << "x has Bounded";
+    EXPECT_FALSE((store.get_bounds("x").has_value())) << "x has no bounds stored (none provided)";
 }
 
-void test_boundedness_idempotent_bounded() {
-    TEST_CASE("Idempotent re-declaration of Bounded");
+TEST(PropertyStoreParityBounded, RepeatedBoundsIntersectTransactionally) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Bounded);
-    store.declare_bounded("x", Boundedness::Bounded);  // Should be no-op
+    const auto initial_revision = store.revision();
+    ASSERT_TRUE(store.declare_bounded("x", Boundedness::Bounded));
+    EXPECT_EQ(store.revision(), initial_revision + 1);
+    EXPECT_FALSE(store.get_bounds("x"));
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
-                "x still has Bounded after re-declaration");
+    auto outer = exact_closed_interval(0, 10);
+    const auto outer_revision = store.revision();
+    ASSERT_TRUE(store.declare_bounded_checked(
+        "x", Boundedness::Bounded, outer));
+    EXPECT_EQ(store.revision(), outer_revision + 1);
+    expect_exact_bounds(store, "x", 0, 10);
+
+    auto inner = exact_closed_interval(2, 8);
+    const auto inner_revision = store.revision();
+    ASSERT_TRUE(store.declare_bounded_checked(
+        "x", Boundedness::Bounded, inner));
+    EXPECT_EQ(store.revision(), inner_revision + 1);
+    expect_exact_bounds(store, "x", 2, 8);
+
+    auto disjoint = exact_closed_interval(20, 30);
+    const auto rejected_revision = store.revision();
+    auto rejected = store.declare_bounded_checked(
+        "x", Boundedness::Bounded, disjoint);
+    ASSERT_FALSE(rejected);
+    EXPECT_EQ(rejected.error().code, CasErrc::InvalidArgument);
+    EXPECT_EQ(store.revision(), rejected_revision);
+    EXPECT_EQ(store.get_boundedness("x"), Boundedness::Bounded);
+    expect_exact_bounds(store, "x", 2, 8);
 }
 
-void test_boundedness_idempotent_unbounded() {
-    TEST_CASE("Idempotent re-declaration of Unbounded");
+TEST(PropertyStoreParityBounded, FiniteClassificationAcceptsLaterBounds) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Unbounded);
-    store.declare_bounded("x", Boundedness::Unbounded);  // Should be no-op
+    ASSERT_TRUE(store.declare_finiteness("x", Finiteness::Finite));
+    ASSERT_EQ(store.get_boundedness("x"), Boundedness::Bounded);
+    ASSERT_FALSE(store.get_bounds("x"));
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Unbounded,
-                "x still has Unbounded after re-declaration");
+    auto bounds = exact_closed_interval(-3, 4);
+    const auto revision = store.revision();
+    ASSERT_TRUE(store.declare_bounded_checked(
+        "x", Boundedness::Bounded, bounds));
+    EXPECT_EQ(store.revision(), revision + 1);
+    EXPECT_EQ(store.get_finiteness("x"), Finiteness::Finite);
+    expect_exact_bounds(store, "x", -3, 4);
 }
 
-void test_boundedness_contradiction_bounded_then_unbounded() {
-    TEST_CASE("Contradiction: Bounded then Unbounded returns failure");
+TEST(PropertyStoreParityBounded, CheckedIntersectionFailureRollsBackState) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Bounded);
+    auto original = exact_closed_interval(2, 8);
+    ASSERT_TRUE(store.declare_bounded_checked(
+        "x", Boundedness::Bounded, original));
+
+    auto narrower = exact_closed_interval(3, 7);
+    CancellationToken token;
+    token.cancel();
+    ComputationContext cancelled_context({}, token);
+    const auto cancelled_revision = store.revision();
+    auto cancelled = store.declare_bounded_checked(
+        "x", Boundedness::Bounded, narrower, cancelled_context);
+    ASSERT_FALSE(cancelled);
+    EXPECT_EQ(cancelled.error().code, CasErrc::Cancelled);
+    EXPECT_EQ(store.revision(), cancelled_revision);
+    expect_exact_bounds(store, "x", 2, 8);
+
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext exhausted_context(limits);
+    const auto exhausted_revision = store.revision();
+    auto exhausted = store.declare_bounded_checked(
+        "x", Boundedness::Bounded, narrower, exhausted_context);
+    ASSERT_FALSE(exhausted);
+    EXPECT_EQ(exhausted.error().code, CasErrc::ResourceLimit);
+    EXPECT_EQ(store.revision(), exhausted_revision);
+    expect_exact_bounds(store, "x", 2, 8);
+}
+
+TEST(PropertyStoreParityBounded, BoundednessIdempotentBounded) {
+    PropertyStore store;
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded).has_value())) << "boundedness declaration succeeds";
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded).has_value())) << "boundedness declaration succeeds";
+
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Bounded)) << "x still has Bounded after re-declaration";
+}
+
+TEST(PropertyStoreParityBounded, BoundednessIdempotentUnbounded) {
+    PropertyStore store;
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Unbounded).has_value())) << "boundedness declaration succeeds";
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Unbounded).has_value())) << "boundedness declaration succeeds";
+
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Unbounded)) << "x still has Unbounded after re-declaration";
+}
+
+TEST(PropertyStoreParityBounded, BoundednessContradictionBoundedThenUnbounded) {
+    PropertyStore store;
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded).has_value())) << "boundedness declaration succeeds";
 
     auto failure_231 = store.declare_bounded("x", Boundedness::Unbounded);
-    EXPECT_TRUE(!failure_231.has_value(), "Declaring Unbounded after Bounded returns InvalidArgument");
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Bounded,
-                "x boundedness remains Bounded after failed Unbounded declaration");
+    EXPECT_TRUE((!failure_231.has_value())) << "Declaring Unbounded after Bounded returns InvalidArgument";
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Bounded)) << "x boundedness remains Bounded after failed Unbounded declaration";
 }
 
-void test_boundedness_contradiction_unbounded_then_bounded() {
-    TEST_CASE("Contradiction: Unbounded then Bounded returns failure");
+TEST(PropertyStoreParityBounded, BoundednessContradictionUnboundedThenBounded) {
     PropertyStore store;
-    store.declare_bounded("x", Boundedness::Unbounded);
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Unbounded).has_value())) << "boundedness declaration succeeds";
 
     auto failure_247 = store.declare_bounded("x", Boundedness::Bounded);
-    EXPECT_TRUE(!failure_247.has_value(), "Declaring Bounded after Unbounded returns InvalidArgument");
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Unbounded,
-                "x boundedness remains Unbounded after failed Bounded declaration");
+    EXPECT_TRUE((!failure_247.has_value())) << "Declaring Bounded after Unbounded returns InvalidArgument";
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Unbounded)) << "x boundedness remains Unbounded after failed Bounded declaration";
 }
 
-void test_boundedness_unknown_can_be_set() {
-    TEST_CASE("Setting boundedness to Unknown is allowed and clears bounds");
+TEST(PropertyStoreParityBounded, BoundednessUnknownCanBeSet) {
     PropertyStore store;
 
     auto lower_val = LMCAS::detail::make_expression_ptr(
@@ -250,97 +300,48 @@ void test_boundedness_unknown_can_be_set() {
     bounds.lower = Endpoint::closed(lower_val);
     bounds.upper = Endpoint::closed(upper_val);
 
-    store.declare_bounded("x", Boundedness::Bounded, bounds);
-    store.declare_bounded("x", Boundedness::Unknown);
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Bounded, bounds).has_value())) << "boundedness declaration succeeds";
+    EXPECT_TRUE((store.declare_bounded("x", Boundedness::Unknown).has_value())) << "boundedness declaration succeeds";
 
-    EXPECT_TRUE(store.get_boundedness("x") == Boundedness::Unknown,
-                "x boundedness set to Unknown");
-    EXPECT_FALSE(store.get_bounds("x").has_value(),
-                 "x bounds cleared when set to Unknown");
+    EXPECT_TRUE((store.get_boundedness("x") == Boundedness::Unknown)) << "x boundedness set to Unknown";
+    EXPECT_FALSE((store.get_bounds("x").has_value())) << "x bounds cleared when set to Unknown";
 }
 
-void test_undeclared_symbol_has_no_bounds() {
-    TEST_CASE("Undeclared symbol has no bounds");
+TEST(PropertyStoreParityBounded, UndeclaredSymbolHasNoBounds) {
     PropertyStore store;
 
-    EXPECT_FALSE(store.get_bounds("undeclared").has_value(),
-                 "Undeclared symbol has no bounds");
+    EXPECT_FALSE((store.get_bounds("undeclared").has_value())) << "Undeclared symbol has no bounds";
 }
 
-void test_interval_queries_preserve_exact_large_endpoints() {
-    TEST_CASE("PropertyStore interval queries preserve exact large endpoints");
+TEST(PropertyStoreParityBounded, IntervalQueriesPreserveExactLargeEndpoints) {
     PropertyStore store;
     const BigInt two_to_53("9007199254740992");
     const BigInt next_integer = two_to_53 + BigInt(1);
 
     Interval first_point = Interval::point(SymbolicExpr::number(two_to_53));
     Interval second_point = Interval::point(SymbolicExpr::number(next_integer));
-    store.declare_differentiable("f", first_point);
+    EXPECT_TRUE((store.declare_differentiable("f", first_point).has_value())) << "differentiability declaration succeeds";
     auto success_278 = store.declare_continuous("f", second_point);
-    EXPECT_TRUE(success_278.has_value(), "adjacent large integer points do not falsely overlap after exact comparison");
+    EXPECT_TRUE((success_278.has_value())) << "adjacent large integer points do not falsely overlap after exact comparison";
 
     Interval closed_span{
         Endpoint::closed(SymbolicExpr::number(two_to_53)),
-        Endpoint::closed(SymbolicExpr::number(next_integer))
-    };
-    store.declare_continuous("g", closed_span);
-    EXPECT_TRUE(store.is_continuous("g", second_point).value(),
-                "closed span covers its exact large upper endpoint");
+        Endpoint::closed(SymbolicExpr::number(next_integer))};
+    EXPECT_TRUE((store.declare_continuous("g", closed_span).has_value())) << "continuity declaration succeeds";
+    EXPECT_TRUE((store.is_continuous("g", second_point).value())) << "closed span covers its exact large upper endpoint";
 
     Interval open_upper_span{
         Endpoint::closed(SymbolicExpr::number(two_to_53)),
-        Endpoint::open(SymbolicExpr::number(next_integer))
-    };
-    store.declare_continuous("h", open_upper_span);
-    EXPECT_TRUE(!store.is_continuous("h", second_point).value(),
-                "open upper endpoint does not cover the exact large boundary point");
+        Endpoint::open(SymbolicExpr::number(next_integer))};
+    EXPECT_TRUE((store.declare_continuous("h", open_upper_span).has_value())) << "continuity declaration succeeds";
+    EXPECT_TRUE((!store.is_continuous("h", second_point).value())) << "open upper endpoint does not cover the exact large boundary point";
 }
 
-
-void test_parity_even_with_integer_domain_already_set() {
-    TEST_CASE("Even parity with Integer domain already set is fine");
+TEST(PropertyStoreParityBounded, ParityEvenWithIntegerDomainAlreadySet) {
     PropertyStore store;
-    store.declare_domain("x", Domain::Integer);
-    store.declare_parity("x", Parity::Even);
+    EXPECT_TRUE((store.declare_domain("x", Domain::Integer).has_value())) << "domain declaration succeeds";
+    EXPECT_TRUE((store.declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
 
-    EXPECT_TRUE(store.get_domain("x") == Domain::Integer,
-                "x domain remains Integer");
-    EXPECT_TRUE(store.get_parity("x") == Parity::Even,
-                "x has Even parity");
-}
-
-int main() {
-    // Parity tests
-    test_declare_parity_even();
-    test_declare_parity_odd();
-    test_parity_default_unknown();
-    test_parity_auto_promotes_to_integer_from_complex();
-    test_parity_odd_auto_promotes_to_integer();
-    test_parity_auto_promotes_from_real();
-    test_parity_does_not_demote_more_specific_domain();
-    test_parity_does_not_demote_positiveint();
-    test_parity_idempotent_even();
-    test_parity_idempotent_odd();
-    test_parity_contradiction_even_then_odd();
-    test_parity_contradiction_odd_then_even();
-    test_parity_unknown_can_be_set();
-
-    // Boundedness tests
-    test_declare_bounded();
-    test_declare_unbounded();
-    test_boundedness_default_unknown();
-    test_declare_bounded_with_interval();
-    test_declare_bounded_without_interval();
-    test_boundedness_idempotent_bounded();
-    test_boundedness_idempotent_unbounded();
-    test_boundedness_contradiction_bounded_then_unbounded();
-    test_boundedness_contradiction_unbounded_then_bounded();
-    test_boundedness_unknown_can_be_set();
-    test_undeclared_symbol_has_no_bounds();
-    test_interval_queries_preserve_exact_large_endpoints();
-
-    // Combined tests
-    test_parity_even_with_integer_domain_already_set();
-
-    return TEST_REPORT();
+    EXPECT_TRUE((store.get_domain("x") == Domain::Integer)) << "x domain remains Integer";
+    EXPECT_TRUE((store.get_parity("x") == Parity::Even)) << "x has Even parity";
 }

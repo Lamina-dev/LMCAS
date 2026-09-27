@@ -1,75 +1,40 @@
 
 #include "test_common.hpp"
-#include "rapidcheck/rapidcheck.h"
+#include <rapidcheck.h>
 #include "assumption_context.hpp"
 #include "query_interface.hpp"
 #include "inference_engine.hpp"
 #include "property_store.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <vector>
 #include <string>
 #include <memory>
 
 using namespace LMCAS;
 
-
-static std::shared_ptr<const SymbolicNode> make_var_node(const std::string& name) {
+static std::shared_ptr<const SymbolicNode> make_var_node(const std::string &name) {
     return LMCAS::detail::make_node<VariableNode>(name);
 }
 
-static SymbolicExpr make_var_expr(const std::string& name) {
+static SymbolicExpr make_var_expr(const std::string &name) {
     auto expr = LMCAS::detail::expression_from_node(make_var_node(name));
-    return expr;
-}
-
-static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
-}
-
-/// Build a division expression: numerator_var / denominator_var
-static SymbolicExpr make_division(const std::string& num_var, const std::string& den_var) {
-    auto num = make_var_node(num_var);
-    auto den = make_var_node(den_var);
-    auto den_inv = LMCAS::detail::make_node<PowerNode>(den, make_number(-1));
-    auto mul = LMCAS::detail::make_node<MultiplyNode>(
-        std::vector<std::shared_ptr<const SymbolicNode>>{num, den_inv});
-    auto expr = LMCAS::detail::expression_from_node(mul);
-    return expr;
-}
-
-/// Build an AddNode expression from variable names
-static SymbolicExpr make_add_expr(const std::vector<std::string>& var_names) {
-    std::vector<std::shared_ptr<const SymbolicNode>> operands;
-    for (const auto& name : var_names) {
-        operands.push_back(make_var_node(name));
-    }
-    auto expr = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<AddNode>(std::move(operands)));
     return expr;
 }
 
 /// Generate a random Sign from a subset of useful signs
 static Sign random_sign() {
     std::vector<Sign> signs = {Sign::Positive, Sign::Negative, Sign::NonNegative, Sign::NonPositive};
-    return rc::gen::elementOf(signs);
+    return *rc::gen::elementOf(signs);
 }
-
-/// Generate a random Domain
-static Domain random_domain() {
-    std::vector<Domain> domains = {Domain::Real, Domain::Integer, Domain::Rational, Domain::Natural};
-    return rc::gen::elementOf(domains);
-}
-
 
 // --- Test: invalidate_cache() clears the cache ---
 
-static void test_invalidate_cache_clears_cache() {
-    TEST_CASE("invalidate_cache() clears the cache");
-
-    rc::check("After invalidate_cache(), queries recompute and return correct results", []() {
-        std::string var_name = "x_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, InvalidateCacheClearsCache) {
+    EXPECT_TRUE(rc::check("After invalidate_cache(), queries recompute and return correct results", []() {
+        std::string var_name = "x_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
-        ctx.assume_sign(var_name, Sign::Positive);
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Positive).has_value());
 
         QueryInterface qi(ctx);
         SymbolicExpr expr = make_var_expr(var_name);
@@ -87,20 +52,18 @@ static void test_invalidate_cache_clears_cache() {
 
         // Results must be consistent
         RC_ASSERT(result1 == result2);
-    });
+    }));
 }
 
 // --- Test: Cache stores results (same query returns same result) ---
 
-static void test_cache_stores_results() {
-    TEST_CASE("Cache stores results — repeated queries return same result");
-
-    rc::check("Repeated queries on the same expression return the same cached result", []() {
-        std::string var_name = "v_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, CacheStoresResults) {
+    EXPECT_TRUE(rc::check("Repeated queries on the same expression return the same cached result", []() {
+        std::string var_name = "v_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
         Sign sign = random_sign();
 
         AssumptionContext ctx;
-        ctx.assume_sign(var_name, sign);
+        EXPECT_TRUE(ctx.assume_sign(var_name, sign).has_value());
 
         QueryInterface qi(ctx);
         SymbolicExpr expr = make_var_expr(var_name);
@@ -121,16 +84,12 @@ static void test_cache_stores_results() {
         Tribool nn1 = qi.query_nonnegative(expr).value();
         Tribool nn2 = qi.query_nonnegative(expr).value();
         RC_ASSERT(nn1 == nn2);
-    });
+    }));
 }
 
-// --- Test: After invalidation, queries that would return different results do so ---
-
-static void test_invalidation_allows_new_results() {
-    TEST_CASE("After invalidation, new assumptions produce new results");
-
-    rc::check("After invalidate_cache() and new assumptions, queries return updated results", []() {
-        std::string var_name = "z_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, InvalidationAllowsNewResults) {
+    EXPECT_TRUE(rc::check("New assumptions are observed without manual invalidation", []() {
+        std::string var_name = "z_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         // Create a context where the variable initially has no sign
         AssumptionContext ctx;
@@ -142,27 +101,20 @@ static void test_invalidation_allows_new_results() {
         RC_ASSERT(result_before == Tribool::Unknown);
 
         // Now declare the variable as Positive in the context
-        ctx.assume_sign(var_name, Sign::Positive);
-
-        // Invalidate cache manually (since hooks aren't wired yet)
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Positive).has_value());
 
         // After invalidation, the query should recompute with new assumptions
         Tribool result_after = qi.query_positive(expr).value();
         RC_ASSERT(result_after == Tribool::True);
-    });
+    }));
 }
 
-// --- Test: invalidate_cache on scope push (manual invalidation) ---
-
-static void test_invalidation_on_scope_push() {
-    TEST_CASE("Cache invalidation on scope push");
-
-    rc::check("After push_scope and invalidate_cache(), queries recompute with new scope", []() {
-        std::string var_name = "p_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, InvalidationOnScopePush) {
+    EXPECT_TRUE(rc::check("Scope push and shadowing are observed automatically", []() {
+        std::string var_name = "p_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
-        ctx.assume_sign(var_name, Sign::Positive);
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Positive).has_value());
 
         QueryInterface qi(ctx);
         SymbolicExpr expr = make_var_expr(var_name);
@@ -173,10 +125,7 @@ static void test_invalidation_on_scope_push() {
 
         // Push a new scope and declare the variable as Negative (shadows parent)
         ctx.push();
-        ctx.assume_sign(var_name, Sign::Negative);
-
-        // Manually invalidate cache (simulating what task 8.5 will wire)
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Negative).has_value());
 
         // Query should now reflect the new scope's declaration
         Tribool result_pushed = qi.query_positive(expr).value();
@@ -184,19 +133,15 @@ static void test_invalidation_on_scope_push() {
 
         Tribool result_neg = qi.query_negative(expr).value();
         RC_ASSERT(result_neg == Tribool::True);
-    });
+    }));
 }
 
-// --- Test: invalidate_cache on scope pop (manual invalidation) ---
-
-static void test_invalidation_on_scope_pop() {
-    TEST_CASE("Cache invalidation on scope pop");
-
-    rc::check("After pop_scope and invalidate_cache(), queries revert to parent scope results", []() {
-        std::string var_name = "q_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, InvalidationOnScopePop) {
+    EXPECT_TRUE(rc::check("Scope pop restores cached parent facts automatically", []() {
+        std::string var_name = "q_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
-        ctx.assume_sign(var_name, Sign::Positive);
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Positive).has_value());
 
         QueryInterface qi(ctx);
         SymbolicExpr expr = make_var_expr(var_name);
@@ -207,28 +152,22 @@ static void test_invalidation_on_scope_pop() {
 
         // Push scope, declare Negative
         ctx.push();
-        ctx.assume_sign(var_name, Sign::Negative);
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Negative).has_value());
 
         Tribool result_child = qi.query_positive(expr).value();
         RC_ASSERT(result_child == Tribool::False);
 
         // Pop scope — should revert to parent's Positive
-        ctx.pop();
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.pop().has_value()) << "scope pop succeeds";
 
         Tribool result_popped = qi.query_positive(expr).value();
         RC_ASSERT(result_popped == Tribool::True);
-    });
+    }));
 }
 
-// --- Test: invalidate_cache on assume_domain (manual invalidation) ---
-
-static void test_invalidation_on_assume_domain() {
-    TEST_CASE("Cache invalidation on assume_domain");
-
-    rc::check("After assume_domain and invalidate_cache(), domain queries return updated results", []() {
-        std::string var_name = "d_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, InvalidationOnAssumeDomain) {
+    EXPECT_TRUE(rc::check("Domain transactions update cached results automatically", []() {
+        std::string var_name = "d_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
         QueryInterface qi(ctx);
@@ -239,22 +178,19 @@ static void test_invalidation_on_assume_domain() {
         RC_ASSERT(result_before == Tribool::Unknown);
 
         // Declare Integer domain
-        ctx.assume_domain(var_name, Domain::Integer);
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.assume_domain(var_name, Domain::Integer).has_value());
 
         // After invalidation, query should reflect new domain
         Tribool result_after = qi.query_integer(expr).value();
         RC_ASSERT(result_after == Tribool::True);
-    });
+    }));
 }
 
 // --- Test: invalidate_cache on assume (add_relation) ---
 
-static void test_invalidation_on_assume_relation() {
-    TEST_CASE("Cache invalidation on assume (add_relation)");
-
-    rc::check("After assume(relation) and invalidate_cache(), sign queries return updated results", []() {
-        std::string var_name = "r_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, InvalidationOnAssumeRelation) {
+    EXPECT_TRUE(rc::check("Relation transactions update cached sign results automatically", []() {
+        std::string var_name = "r_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
         QueryInterface qi(ctx);
@@ -270,23 +206,19 @@ static void test_invalidation_on_assume_relation() {
         auto rel_node = LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::GT);
         auto rel_expr = LMCAS::detail::expression_from_node(rel_node);
-        ctx.assume(rel_expr);
-
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.assume(rel_expr).has_value()) << "relation assumption succeeds";
 
         // After invalidation, query should reflect the new relation
         Tribool result_after = qi.query_positive(expr).value();
         RC_ASSERT(result_after == Tribool::True);
-    });
+    }));
 }
 
 // --- Test: Multiple invalidations maintain correctness ---
 
-static void test_multiple_invalidations_correct() {
-    TEST_CASE("Multiple invalidations maintain correctness");
-
-    rc::check("Multiple cycles of assume + invalidate produce correct results each time", []() {
-        std::string var_name = "m_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, MultipleInvalidationsCorrect) {
+    EXPECT_TRUE(rc::check("Successive transactions and scopes update the same query interface", []() {
+        std::string var_name = "m_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
         QueryInterface qi(ctx);
@@ -297,37 +229,32 @@ static void test_multiple_invalidations_correct() {
         RC_ASSERT(r1 == Tribool::Unknown);
 
         // Round 2: Declare Positive
-        ctx.assume_sign(var_name, Sign::Positive);
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Positive).has_value());
         Tribool r2 = qi.query_positive(expr).value();
         RC_ASSERT(r2 == Tribool::True);
 
         // Round 3: Push scope, declare Negative
         ctx.push();
-        ctx.assume_sign(var_name, Sign::Negative);
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Negative).has_value());
         Tribool r3 = qi.query_positive(expr).value();
         RC_ASSERT(r3 == Tribool::False);
 
         // Round 4: Pop scope, revert to Positive
-        ctx.pop();
-        qi.invalidate_cache();
+        EXPECT_TRUE(ctx.pop().has_value()) << "scope pop succeeds";
         Tribool r4 = qi.query_positive(expr).value();
         RC_ASSERT(r4 == Tribool::True);
-    });
+    }));
 }
 
 // --- Test: Cache works across different property types independently ---
 
-static void test_cache_different_property_types() {
-    TEST_CASE("Cache works across different property types");
-
-    rc::check("Different property queries on the same expression are cached independently", []() {
-        std::string var_name = "t_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionCache, CacheDifferentPropertyTypes) {
+    EXPECT_TRUE(rc::check("Different property queries on the same expression are cached independently", []() {
+        std::string var_name = "t_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
-        ctx.assume_sign(var_name, Sign::Positive);
-        ctx.assume_domain(var_name, Domain::Integer);
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::Positive).has_value());
+        EXPECT_TRUE(ctx.assume_domain(var_name, Domain::Integer).has_value());
 
         QueryInterface qi(ctx);
         SymbolicExpr expr = make_var_expr(var_name);
@@ -360,19 +287,17 @@ static void test_cache_different_property_types() {
         RC_ASSERT(qi.query_nonnegative(expr).value() == Tribool::True);
         RC_ASSERT(qi.query_integer(expr).value() == Tribool::True);
         RC_ASSERT(qi.query_real(expr).value() == Tribool::True);
-    });
+    }));
 }
 
 // --- Test: invalidate_cache clears ALL entries (not just one property type) ---
 
-static void test_invalidate_clears_all_entries() {
-    TEST_CASE("invalidate_cache clears all entries");
-
-    rc::check("invalidate_cache() clears cache for all expressions and property types", []() {
+TEST(LmcasAssumptionCache, InvalidateClearsAllEntries) {
+    EXPECT_TRUE(rc::check("invalidate_cache() clears cache for all expressions and property types", []() {
         AssumptionContext ctx;
-        ctx.assume_sign("a", Sign::Positive);
-        ctx.assume_sign("b", Sign::Negative);
-        ctx.assume_domain("a", Domain::Integer);
+        EXPECT_TRUE(ctx.assume_sign("a", Sign::Positive).has_value());
+        EXPECT_TRUE(ctx.assume_sign("b", Sign::Negative).has_value());
+        EXPECT_TRUE(ctx.assume_domain("a", Domain::Integer).has_value());
 
         QueryInterface qi(ctx);
         SymbolicExpr expr_a = make_var_expr("a");
@@ -394,21 +319,99 @@ static void test_invalidate_clears_all_entries() {
         RC_ASSERT(qi.query_positive(expr_a).value() == Tribool::True);
         RC_ASSERT(qi.query_negative(expr_b).value() == Tribool::True);
         RC_ASSERT(qi.query_integer(expr_a).value() == Tribool::True);
-    });
+    }));
 }
 
+TEST(LmcasAssumptionCache, RetainedStoreTransactions) {
+    AssumptionContext ctx;
+    QueryInterface query(ctx);
+    const auto x = make_var_expr("x");
+    auto &store = ctx.current_properties();
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::Unknown) << "initial sign is unknown";
+    EXPECT_TRUE(store.declare_sign("x", Sign::NonNegative).has_value()) << "weak sign commits";
+    EXPECT_TRUE(query.query_nonnegative(x).value() == Tribool::True) << "retained reference update visible";
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::Unknown) << "weak sign is not strict";
+    EXPECT_TRUE(store.declare_sign("x", Sign::Positive).has_value()) << "second commit succeeds";
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::True) << "second retained-reference update visible";
+    auto rejected = store.declare_sign("x", Sign::Negative);
+    EXPECT_TRUE(!rejected && rejected.error().code == CasErrc::InvalidArgument) << "contradiction rejected";
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::True) << "failed transaction retains facts";
+    PropertyStore replacement;
+    EXPECT_TRUE(replacement.declare_sign("x", Sign::Negative).has_value()) << "replacement is valid";
+    store = replacement;
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::False) << "copy assignment invalidates target cache";
+    store = PropertyStore{};
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::Unknown) << "move assignment invalidates target cache";
+}
 
-int main() {
-    test_invalidate_cache_clears_cache();
-    test_cache_stores_results();
-    test_invalidation_allows_new_results();
-    test_invalidation_on_scope_push();
-    test_invalidation_on_scope_pop();
-    test_invalidation_on_assume_domain();
-    test_invalidation_on_assume_relation();
-    test_multiple_invalidations_correct();
-    test_cache_different_property_types();
-    test_invalidate_clears_all_entries();
+TEST(LmcasAssumptionCache, RetainedRelationTransactions) {
+    AssumptionContext ctx;
+    QueryInterface query(ctx);
+    const auto x = detail::expression_from_node(detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{make_var_node("x"), make_var_node("y")}));
+    const auto one = detail::expression_from_node(detail::make_node<NumberNode>(BigInt(1)));
+    auto &relations = ctx.current_relations();
+    auto &properties = ctx.current_properties();
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::Unknown) << "initial relation absent";
+    EXPECT_TRUE(relations.add_relation(x, one, RelationOp::GT, properties).has_value()) << "relation commits";
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::True) << "nonzero-right relation proves positivity";
+    relations.clear();
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::Unknown) << "clear removes cached proof";
+    RelationStore replacement;
+    EXPECT_TRUE(replacement.add_relation(x, one, RelationOp::GT, properties).has_value()) << "replacement relation commits";
+    relations = replacement;
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::True) << "relation copy assignment observed";
+    relations = RelationStore{};
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::Unknown) << "relation move assignment observed";
+    const auto p = make_var_expr("p");
+    const auto zero = detail::expression_from_node(detail::make_node<NumberNode>(BigInt(0)));
+    EXPECT_TRUE(relations.add_relation(p, zero, RelationOp::GT, properties).has_value()) << "derived sign commits";
+    EXPECT_TRUE(query.query_positive(p).value() == Tribool::True) << "derived sign cached";
+    auto failed = relations.add_relation(p, zero, RelationOp::LT, properties);
+    EXPECT_TRUE(!failed && failed.error().code == CasErrc::InvalidArgument) << "contradictory relation rejected";
+    EXPECT_TRUE(relations.has_relation(p, zero, RelationOp::GT) &&
+                !relations.has_relation(p, zero, RelationOp::LT))
+        << "failed relation leaves relation store intact";
+    EXPECT_TRUE(query.query_positive(p).value() == Tribool::True) << "failed relation leaves property proof intact";
+}
 
-    return TEST_REPORT();
+TEST(LmcasAssumptionCache, ContextAssignmentAndCopyIsolation) {
+    const auto x = make_var_expr("x");
+    AssumptionContext ctx;
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value()) << "positive context";
+    QueryInterface query(ctx);
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::True) << "cached positive";
+    AssumptionContext other;
+    EXPECT_TRUE(other.assume_sign("x", Sign::Negative).has_value()) << "negative context";
+    ctx = other;
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::False) << "copy assignment cannot reuse generation";
+    AssumptionContext copy(ctx);
+    QueryInterface copy_query(copy);
+    copy.current_properties() = PropertyStore{};
+    EXPECT_TRUE(copy_query.query_positive(x).value() == Tribool::Unknown) << "copy changes independently";
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::False) << "source unchanged by copy mutation";
+    ctx = std::move(copy);
+    EXPECT_TRUE(copy_query.query_positive(x).value() == copy.is_positive_checked(x).value()) << "move source cached query agrees with its current facts";
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::Unknown) << "move assignment invalidates destination";
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value()) << "source fact before move construction";
+    EXPECT_TRUE(query.query_positive(x).value() == Tribool::True) << "source proof cached";
+    AssumptionContext moved(std::move(ctx));
+    EXPECT_TRUE(moved.is_positive_checked(x).value() == Tribool::True) << "move constructor retains destination facts";
+    EXPECT_TRUE(query.query_positive(x).value() == ctx.is_positive_checked(x).value()) << "move constructor invalidates source cached proof";
+}
+
+TEST(LmcasAssumptionCache, DepthPolicyInvalidatesUnknown) {
+    AssumptionContext ctx;
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Real).has_value()) << "real variable declared";
+    auto node = make_var_node("x");
+    for (int i = 0; i < 8; ++i) {
+        node = detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::Exp, std::vector<std::shared_ptr<const SymbolicNode>>{node});
+    }
+    const auto expression = detail::expression_from_node(node);
+    ctx.set_max_query_depth(1);
+    QueryInterface query(ctx);
+    EXPECT_TRUE(query.query_positive(expression).value() == Tribool::Unknown) << "shallow query remains unknown";
+    ctx.set_max_query_depth(32);
+    EXPECT_TRUE(query.query_positive(expression).value() == Tribool::True) << "deeper policy recomputes proof";
 }

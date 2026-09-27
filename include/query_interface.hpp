@@ -48,28 +48,30 @@ enum class PropType {
 };
 
 /**
- * @brief Cache key combining an expression's structural hash with the property type.
- *
- * Uses the expression structural hash - two structurally identical
- * expressions will produce the same hash regardless of pointer identity.
+ * @brief 由表达式结构哈希、属性和自变量组成缓存键。
+ * @note 结构相同的表达式具有相同哈希，与指针身份无关。
  */
 struct CacheKey {
     std::size_t expression_hash;
     PropType property;
+    std::string variable{};
 
     bool operator==(const CacheKey& other) const {
-        return expression_hash == other.expression_hash && property == other.property;
+        return expression_hash == other.expression_hash && property == other.property &&
+            variable == other.variable;
     }
 };
 
-/**
- * @brief Hash function for CacheKey, combining expression hash and property type.
- */
+/** @brief 缓存键哈希，计入周期查询的自变量。 */
 struct CacheKeyHash {
     std::size_t operator()(const CacheKey& key) const {
         std::size_t seed = key.expression_hash;
         seed ^= static_cast<std::size_t>(key.property) + 0x9e3779b9U
             + (seed << 6U) + (seed >> 2U);
+        if (!key.variable.empty()) {
+            seed ^= std::hash<std::string>{}(key.variable) + 0x9e3779b9U
+                + (seed << 6U) + (seed >> 2U);
+        }
         return seed;
     }
 };
@@ -156,19 +158,22 @@ public:
 
     QueryTriboolResult query_divergent_checked(const SymbolicExpr& expr) const;
 
-    /// Query whether the expression is periodic.
-    QueryTriboolResult query_periodic(const SymbolicExpr& expr) const;
+    /** @brief 查询相对于指定自变量的周期性，自变量名须非空。 */
+    QueryTriboolResult query_periodic(
+        const SymbolicExpr& expr, const std::string& variable) const;
 
-    QueryTriboolResult query_periodic_checked(const SymbolicExpr& expr) const;
+    QueryTriboolResult query_periodic_checked(
+        const SymbolicExpr& expr, const std::string& variable) const;
 
     /**
-     * @brief Get the period of an expression, if known.
-     * @param expr The expression to query
-     * @return The period as a SymbolicExpr, or std::nullopt if not periodic or unknown
+     * @brief 获取相对于指定自变量的认证正周期。
+     * @return 精确周期；常数或周期性未获证明时返回 nullopt。
      */
-    QueryPeriodResult get_period(const SymbolicExpr& expr) const;
+    QueryPeriodResult get_period(
+        const SymbolicExpr& expr, const std::string& variable) const;
 
-    QueryPeriodResult get_period_checked(const SymbolicExpr& expr) const;
+    QueryPeriodResult get_period_checked(
+        const SymbolicExpr& expr, const std::string& variable) const;
 
     /// Query whether the expression (matrix symbol) is positive definite.
     QueryTriboolResult query_positive_definite(const SymbolicExpr& expr) const;
@@ -259,21 +264,13 @@ private:
     /// Returns +1 for positive infinity, -1 for negative infinity, 0 if indeterminate.
     int get_infinity_sign(const SymbolicExpr& expression) const;
 
-    /**
-     * @brief Look up a cached result or compute, cache, and return it.
-     * @param expr The expression to query
-     * @param prop The property type being queried
-     * @param compute Function that performs the actual computation
-     * @return Cached or freshly computed Tribool result
-     */
-    Tribool cached_query(const SymbolicExpr& expr, PropType prop,
-                         const std::function<Tribool()>& compute) const;
 
     QueryTriboolResult cached_query_checked(
         const SymbolicExpr& expr,
         PropType prop,
         const std::string& operation,
-        const std::function<QueryTriboolResult()>& compute) const;
+        const std::function<QueryTriboolResult()>& compute,
+        const std::string& variable = {}) const;
 
     std::vector<ConditionSet> query_conditions_impl(
         const SymbolicExpr& expr,

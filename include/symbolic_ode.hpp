@@ -18,10 +18,19 @@ class AssumptionContext;
  * @param rhs 方程右端表达式
  * @param x 自变量名
  * @param y 因变量名
- * @param ctx Optional assumption context. When provided and the dependent
- *            variable y is known Positive, the solver prefers positive solution
- *            branches. When nullptr, behavior is identical to the unparameterized call.
- * @return 通解的符号表达式
+ * @param ctx Optional assumption context. When y is known Positive, preserves
+ *            the positive-branch marker by returning abs(F). nullptr and the
+ *            default argument have identical behavior.
+ * @return For rhs = f(x)*g(y), returns the first integral
+ *         F(x,y) = integral(1/g(y), y) - integral(f(x), x), with implicit
+ *         solutions F = C, not an explicit y(x). This describes regular regions
+ *         of the original ODE where g is finite and nonzero and the selected
+ *         primitives are differentiable (logarithms use their chosen branch).
+ *         Equilibria at zeros of g and singular points are not enumerated.
+ *         For a y-independent rhs, g = 1; in particular rhs = 0 returns y.
+ *         The abs(F) marker is differentiable only away from F = 0.
+ *         Unsupported primitives may remain as symbolic integrals. Returns
+ *         nullptr for invalid input or a rhs not recognized by is_separable.
  */
 LMCAS_API std::shared_ptr<SymbolicExpr> solve_separable_ode(
     std::shared_ptr<SymbolicExpr> rhs,

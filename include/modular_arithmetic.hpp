@@ -42,35 +42,53 @@ inline bool checked_positive_product(int64_t a, int64_t b, int64_t& out) {
 } // namespace modular_detail
 
 /**
- * @brief 扩展欧几里得算法，求 gcd(a, b) 及 Bezout 系数
- * @param a 第一个整数
- * @param b 第二个整数
+ * @brief 用扩展欧几里得算法求 gcd(a,b) 及 Bezout 系数。
+ * @param a 第一个有符号机器整数
+ * @param b 第二个有符号机器整数
  * @param s 输出 Bezout 系数 s，满足 a*s + b*t = gcd(a,b)
  * @param t 输出 Bezout 系数 t
- * @return gcd(a, b)
+ * @return 非负的 gcd(a, b)
+ * @throws std::overflow_error 任一输入为 INT64_MIN，其绝对值无法由返回类型表示
+ *
+ * 输出参数仅在计算成功后写入。
  */
 inline int64_t extended_gcd(int64_t a, int64_t b, int64_t& s, int64_t& t) {
-    int64_t old_r = a, r = b;
-    int64_t old_s = 1, ss = 0;
-    int64_t old_t = 0, tt = 1;
-
-    while (r != 0) {
-        int64_t q = old_r / r;
-        int64_t tmp = r;
-        r = old_r - q * r;
-        old_r = tmp;
-
-        tmp = ss;
-        ss = old_s - q * ss;
-        old_s = tmp;
-
-        tmp = tt;
-        tt = old_t - q * tt;
-        old_t = tmp;
+    const uint64_t magnitude_a = modular_detail::abs_to_u64(a);
+    const uint64_t magnitude_b = modular_detail::abs_to_u64(b);
+    const auto maximum =
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+    if (magnitude_a > maximum || magnitude_b > maximum) {
+        throw std::overflow_error(
+            "modular extended_gcd does not support INT64_MIN");
     }
 
-    s = old_s;
-    t = old_t;
+    /** @brief 余数及交替 Bezout 系数以 max(|a|,|b|) 为界，包括余数归零的最后一步。 */
+    int64_t old_r = static_cast<int64_t>(magnitude_a);
+    int64_t r = static_cast<int64_t>(magnitude_b);
+    int64_t old_s = 1;
+    int64_t next_s = 0;
+    int64_t old_t = 0;
+    int64_t next_t = 1;
+
+    while (r != 0) {
+        const int64_t quotient = old_r / r;
+        int64_t temporary = r;
+        r = old_r - quotient * r;
+        old_r = temporary;
+
+        temporary = next_s;
+        next_s = old_s - quotient * next_s;
+        old_s = temporary;
+
+        temporary = next_t;
+        next_t = old_t - quotient * next_t;
+        old_t = temporary;
+    }
+
+    const int64_t result_s = a < 0 ? -old_s : old_s;
+    const int64_t result_t = b < 0 ? -old_t : old_t;
+    s = result_s;
+    t = result_t;
     return old_r;
 }
 
@@ -109,6 +127,12 @@ class ModInt {
     int64_t val_;
     int64_t mod_;
 
+    void require_same_modulus(const ModInt& other) const {
+        if (mod_ != other.mod_) {
+            throw std::domain_error("modular operands must have the same modulus");
+        }
+    }
+
 public:
     /** @brief 默认构造，值为 0，模为 2 */
     ModInt() : val_(0), mod_(2) {}
@@ -119,6 +143,9 @@ public:
      * @param p 模数
      */
     ModInt(int64_t v, int64_t p) : mod_(p) {
+        if (p <= 0) {
+            throw std::domain_error("modulus must be positive");
+        }
         val_ = v % p;
         if (val_ < 0) val_ += p;
     }
@@ -131,16 +158,21 @@ public:
 
     /** @brief 模加法 */
     ModInt operator+(const ModInt& other) const {
-        return ModInt(val_ + other.val_, mod_);
+        require_same_modulus(other);
+        const int64_t distance = mod_ - other.val_;
+        return ModInt(val_ >= distance ? val_ - distance : val_ + other.val_, mod_);
     }
 
     /** @brief 模减法 */
     ModInt operator-(const ModInt& other) const {
-        return ModInt(val_ - other.val_ + mod_, mod_);
+        require_same_modulus(other);
+        return ModInt(val_ >= other.val_ ? val_ - other.val_
+                                        : mod_ - (other.val_ - val_), mod_);
     }
 
     /** @brief 模乘法 */
     ModInt operator*(const ModInt& other) const {
+        require_same_modulus(other);
 
         uint64_t q;
         uint64_t result = lmmp_mulmod_ulong_(
@@ -226,48 +258,6 @@ public:
     }
 };
 
-/**
- * @brief 中国剩余定理（两模数）
- * @param r1 第一个余数
- * @param m1 第一个模数
- * @param r2 第二个余数
- * @param m2 第二个模数
- * @return pair(合并余数, 合并模数 m1*m2)
- * @throw std::domain_error 若模数不互素
- */
-inline std::pair<int64_t, int64_t> crt(int64_t r1, int64_t m1,
-                                        int64_t r2, int64_t m2) {
-    int64_t s, t;
-    int64_t g = extended_gcd(m1, m2, s, t);
-    if (g != 1) {
-        throw std::domain_error("crt(): moduli must be coprime");
-    }
-
-    int64_t diff = ((r2 - r1) % m2 + m2) % m2;
-
-    int64_t s_mod = ((s % m2) + m2) % m2;
-
-    uint64_t q_unused;
-    uint64_t factor = lmmp_mulmod_ulong_(
-        static_cast<uint64_t>(s_mod),
-        static_cast<uint64_t>(diff),
-        static_cast<uint64_t>(m2), &q_unused);
-
-#if defined(__GNUC__) || defined(__clang__)
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wpedantic"
-    __int128 x = static_cast<__int128>(r1) + static_cast<__int128>(m1) * factor;
-    __int128 bigM = static_cast<__int128>(m1) * m2;
-    x = ((x % bigM) + bigM) % bigM;
-    #pragma GCC diagnostic pop
-    return {static_cast<int64_t>(x), static_cast<int64_t>(bigM)};
-#else
-    int64_t M = m1 * m2;
-    int64_t x = r1 + m1 * static_cast<int64_t>(factor);
-    x = ((x % M) + M) % M;
-    return {x, M};
-#endif
-}
 
 /**
  * @brief Checked Chinese remainder theorem for two positive coprime moduli.
@@ -292,40 +282,36 @@ inline CrtResult crt_checked(int64_t r1, int64_t m1,
     int64_t s = 0;
     int64_t t = 0;
     int64_t g = extended_gcd(m1, m2, s, t);
-    if (g < 0) g = -g;
     if (g != 1) {
         return CrtResult::failure(CasErrc::InvalidArgument,
                                   "CRT moduli must be coprime", operation);
     }
 
-#if defined(__GNUC__) || defined(__clang__)
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wpedantic"
-    const __int128 big_m2 = static_cast<__int128>(m2);
-    const __int128 diff = ((static_cast<__int128>(r2) - r1) % big_m2 + big_m2) % big_m2;
-    const __int128 s_mod = ((static_cast<__int128>(s) % big_m2) + big_m2) % big_m2;
-    __int128 factor = (s_mod * diff) % big_m2;
-    __int128 x = static_cast<__int128>(r1) + static_cast<__int128>(m1) * factor;
-    const __int128 big_product = static_cast<__int128>(product);
-    x = ((x % big_product) + big_product) % big_product;
-    #pragma GCC diagnostic pop
-    return CrtResult::success({static_cast<int64_t>(x), product});
-#else
-    try {
-        return CrtResult::success(crt(r1, m1, r2, m2));
-    } catch (const std::bad_alloc&) {
-        return CrtResult::failure(CasErrc::ResourceLimit,
-                                  "CRT allocation failed", operation);
-    } catch (const std::exception& ex) {
-        return CrtResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
-    }
-#endif
+    const auto factor = ((ModInt(r2, m2) - ModInt(r1, m2)) * ModInt(s, m2)).value();
+    /** @brief factor < m2 且 m1*m2 <= INT64_MAX，保证 m1*factor 在机器整数范围内。 */
+    const auto merged = ModInt(r1, product) + ModInt(m1 * factor, product);
+    return CrtResult::success({merged.value(), product});
 }
 
 inline CrtResult crt_checked(int64_t r1, int64_t m1, int64_t r2, int64_t m2) {
     ComputationContext context;
     return crt_checked(r1, m1, r2, m2, context);
 }
+/**
+ * @brief 中国剩余定理（两模数），返回规范余数与模数乘积。
+ * @throw std::domain_error 模数非正或不互素。
+ * @throw std::overflow_error 合并模数超出机器内核范围。
+ */
+inline std::pair<int64_t, int64_t> crt(
+    int64_t r1, int64_t m1, int64_t r2, int64_t m2) {
+    auto merged = crt_checked(r1, m1, r2, m2);
+    if (merged) return merged.value();
+    if (merged.error().code == CasErrc::ResourceLimit) {
+        throw std::overflow_error(merged.error().message);
+    }
+    throw std::domain_error(merged.error().message);
+}
+
 
 /**
  * @brief 多模数中国剩余定理
@@ -340,8 +326,8 @@ inline std::pair<int64_t, int64_t> multi_crt(const std::vector<int64_t>& residue
         throw std::invalid_argument("multi_crt(): residues and primes must be non-empty and same size");
     }
 
-    int64_t combined = residues[0];
     int64_t modulus = primes[0];
+    int64_t combined = ModInt(residues[0], modulus).value();
 
     for (size_t i = 1; i < residues.size(); ++i) {
         auto [x, m] = crt(combined, modulus, residues[i], primes[i]);
@@ -374,8 +360,8 @@ inline CrtResult multi_crt_checked(const std::vector<int64_t>& residues,
         }
     }
 
-    int64_t combined = residues[0];
     int64_t modulus = primes[0];
+    int64_t combined = ModInt(residues[0], modulus).value();
     for (size_t i = 1; i < residues.size(); ++i) {
         auto merged = crt_checked(combined, modulus, residues[i], primes[i], context);
         if (!merged) return merged;
@@ -403,7 +389,9 @@ inline RationalReconstructionResult rational_reconstruction_checked(
     ComputationContext& context) {
     constexpr const char* operation = "rational_reconstruction";
     auto step = context.consume_steps(1, operation);
-    if (!step) return RationalReconstructionResult::failure(step.error());
+    if (!step) {
+        return RationalReconstructionResult::failure(step.error());
+    }
     if (m <= 0) {
         return RationalReconstructionResult::failure(
             CasErrc::InvalidArgument,
@@ -411,17 +399,24 @@ inline RationalReconstructionResult rational_reconstruction_checked(
             operation);
     }
 
-    x = ((x % m) + m) % m;
+    x %= m;
+    if (x < 0) {
+        x += m;
+    }
     int64_t bound = static_cast<int64_t>(
         std::floor(std::sqrt(static_cast<double>(m) / 2.0)));
-    if (bound == 0) bound = 1;
+    if (bound == 0) {
+        bound = 1;
+    }
     int64_t r0 = m;
     int64_t r1 = x;
     int64_t s0 = 0;
     int64_t s1 = 1;
     while (r1 > bound) {
         step = context.consume_steps(1, operation);
-        if (!step) return RationalReconstructionResult::failure(step.error());
+        if (!step) {
+            return RationalReconstructionResult::failure(step.error());
+        }
         const int64_t quotient = r0 / r1;
         const int64_t next_r = r0 - quotient * r1;
         const int64_t next_s = s0 - quotient * s1;
@@ -461,10 +456,10 @@ inline RationalReconstructionResult rational_reconstruction_checked(int64_t x, i
 
 /** @brief 预定义的大素数表，用于模运算多素数方案 */
 constexpr int64_t MODULAR_PRIMES[] = {
-    1000000007LL, 1000000009LL, 1000000021LL, 1000000033LL,
-    1000000087LL, 1000000093LL, 1000000097LL, 1000000103LL,
-    1000000123LL, 1000000181LL, 1000000207LL, 1000000223LL,
-    1000000231LL, 1000000271LL, 1000000289LL, 1000000297LL
+    1000000007, 1000000009, 1000000021, 1000000033,
+    1000000087, 1000000093, 1000000097, 1000000103,
+    1000000123, 1000000181, 1000000207, 1000000223,
+    1000000231, 1000000271, 1000000289, 1000000297
 };
 /** @brief 预定义素数表的长度 */
 constexpr size_t NUM_MODULAR_PRIMES = sizeof(MODULAR_PRIMES) / sizeof(MODULAR_PRIMES[0]);
@@ -475,9 +470,15 @@ constexpr size_t NUM_MODULAR_PRIMES = sizeof(MODULAR_PRIMES) / sizeof(MODULAR_PR
  * @param leading_coeffs 首项系数列表
  * @return 若 p 不整除任何系数则返回 true
  */
-inline bool is_good_prime(int64_t p, const std::vector<int64_t>& leading_coeffs) {
+inline bool is_good_prime(int64_t p, const std::vector<BigInt>& leading_coeffs) {
+    if (p < 2) {
+        throw std::domain_error("prime modulus must be at least two");
+    }
+    const BigInt modulus(p);
     return std::none_of(leading_coeffs.begin(), leading_coeffs.end(),
-        [p](int64_t c) { return (c % p) == 0; });
+        [&modulus](const BigInt& coefficient) {
+            return (coefficient % modulus).is_zero();
+        });
 }
 
 /**
@@ -487,16 +488,29 @@ inline bool is_good_prime(int64_t p, const std::vector<int64_t>& leading_coeffs)
  * @param start_from 搜索起始值
  * @return 好素数列表
  */
-inline std::vector<int64_t> generate_good_primes(int count,
-                                                  const std::vector<int64_t>& leading_coeffs,
-                                                  uint64_t start_from = 1000000000ULL) {
+inline std::vector<int64_t> generate_good_primes(
+    int count, const std::vector<BigInt>& leading_coeffs,
+    uint64_t start_from = UINT64_C(1000000000)) {
+    if (count < 0) {
+        throw std::invalid_argument("prime count must be nonnegative");
+    }
+    const auto requested = static_cast<std::size_t>(count);
+    const auto maximum = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
     std::vector<int64_t> result;
-    result.reserve(count);
+    result.reserve(requested);
     uint64_t candidate = start_from;
-    while ((int)result.size() < count) {
-        candidate = lmmp_next_prime_ulong_(candidate);
-        if (is_good_prime(static_cast<int64_t>(candidate), leading_coeffs)) {
-            result.push_back(static_cast<int64_t>(candidate));
+    while (result.size() < requested) {
+        if (candidate >= maximum) {
+            throw std::overflow_error("prime search exceeds the signed residue range");
+        }
+        const uint64_t next = lmmp_next_prime_ulong_(candidate);
+        if (next <= candidate || next > maximum) {
+            throw std::overflow_error("prime search exhausted the signed residue range");
+        }
+        candidate = next;
+        const auto prime = static_cast<int64_t>(candidate);
+        if (is_good_prime(prime, leading_coeffs)) {
+            result.push_back(prime);
         }
     }
     return result;

@@ -1,6 +1,7 @@
-#include "../include/symbolic_geometry.hpp"
-#include "symbolic_ast.hpp"
-#include "../include/symbolic.hpp"
+#include "symbolic_geometry.hpp"
+#include "internal/integration_support.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "symbolic.hpp"
 #include <cmath>
 #include <exception>
 
@@ -29,11 +30,6 @@ Result<void> validate_geometry_inputs(const std::shared_ptr<SymbolicExpr>& funct
     return Result<void>::success();
 }
 
-bool contains_unevaluated_integral(
-    const std::shared_ptr<const SymbolicNode>& node,
-    std::size_t = 0) {
-    return LMCAS::detail::contains_node_type<IntegralNode>(node);
-}
 
 ExpressionResult simplify_geometry_checked(std::shared_ptr<SymbolicExpr> expr,
                                              const std::string& operation,

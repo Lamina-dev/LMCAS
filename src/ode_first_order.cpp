@@ -2,10 +2,10 @@
  * @file symbolic_ode_engine.cpp
  * @brief 统一 ODE 求解引擎实现:类型检测与分类.
  */
-#include "../include/symbolic_ode_engine.hpp"
-#include "symbolic_ast.hpp"
-#include "../include/symbolic.hpp"
-#include "../include/poly_utils.hpp"
+#include "symbolic_ode_engine.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "symbolic.hpp"
+#include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
@@ -28,6 +28,42 @@ static ODESolution solve_exact_ode_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&, const std::string&);
 
+static std::shared_ptr<SymbolicExpr> integrating_factor_from_antiderivative(
+    const std::shared_ptr<SymbolicExpr>& antiderivative,
+    const std::string& variable)
+{
+    const auto logarithm_of_variable =
+        [&variable](const std::shared_ptr<const SymbolicNode>& node) {
+            const auto function =
+                std::dynamic_pointer_cast<const FunctionNode>(node);
+            if (!function ||
+                function->type() != FunctionNode::FuncType::Ln ||
+                function->arguments().size() != 1) {
+                return false;
+            }
+            const auto argument = std::dynamic_pointer_cast<const VariableNode>(
+                function->arguments().front());
+            return argument && argument->name() == variable;
+        };
+
+    const auto& root = detail::node(antiderivative);
+    if (logarithm_of_variable(root)) {
+        return SymbolicExpr::variable(variable);
+    }
+    const auto product = std::dynamic_pointer_cast<const MultiplyNode>(root);
+    if (product && product->operands().size() == 2) {
+        for (std::size_t index = 0; index < 2; ++index) {
+            if (logarithm_of_variable(product->operands()[index])) {
+                auto exponent = detail::make_expression_ptr(
+                    product->operands()[1 - index]);
+                return SymbolicExpr::power(
+                    SymbolicExpr::variable(variable), exponent)->simplify();
+            }
+        }
+    }
+    return SymbolicExpr::exp(antiderivative)->simplify();
+}
+
 
 ODESolutionResult solve_homogeneous_ode_checked(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -37,9 +73,13 @@ ODESolutionResult solve_homogeneous_ode_checked(
 {
     const std::string operation = "solve_homogeneous_ode";
     auto valid = validate_ode_expr_var_pair(rhs, x, y, context, operation);
-    if (!valid) return ODESolutionResult::failure(valid.error());
+    if (!valid) {
+        return ODESolutionResult::failure(valid.error());
+    }
     auto step = context.consume_steps(12, operation);
-    if (!step) return ODESolutionResult::failure(step.error());
+    if (!step) {
+        return ODESolutionResult::failure(step.error());
+    }
 
     try {
         return wrap_ode_solution(solve_homogeneous_ode_impl(rhs, x, y),
@@ -95,11 +135,29 @@ static ODESolution solve_homogeneous_ode_impl(
     /// 分离变量方程: dv/(f(v) - v) = dx/x
     /// 积分: integral dv/(f(v) - v) = integral dx/x = ln|x| + C
     auto f_minus_v = SymbolicExpr::add(f_v,
-        SymbolicExpr::multiply(SymbolicExpr::number(-1), v_var));
-    f_minus_v = f_minus_v->simplify();
+        SymbolicExpr::multiply(SymbolicExpr::number(-1), v_var))
+        ->expand()
+        ->cancel()
+        ->simplify();
 
-    /// 计算 integral 1/(f(v) - v) dv
-    auto integrand = SymbolicExpr::divide(SymbolicExpr::number(1), f_minus_v);
+    auto v_replacement = SymbolicExpr::divide(
+        SymbolicExpr::variable(y), x_var)->simplify();
+    if (f_minus_v->is_zero()) {
+        result.general_solution = v_replacement;
+        return result;
+    }
+
+    std::shared_ptr<SymbolicExpr> integrand;
+    const auto reciprocal =
+        std::dynamic_pointer_cast<const PowerNode>(detail::node(f_minus_v));
+    const auto minus_one = SymbolicExpr::number(-1);
+    if (reciprocal &&
+        reciprocal->exponent()->compare(*detail::node(minus_one)) == 0) {
+        integrand = detail::make_expression_ptr(reciprocal->base());
+    } else {
+        integrand = SymbolicExpr::divide(
+            SymbolicExpr::number(1), f_minus_v)->simplify();
+    }
     auto lhs_integral = integrand->integrate(v_name);
 
     /// 右端: ln(x)
@@ -108,8 +166,6 @@ static ODESolution solve_homogeneous_ode_impl(
     /// 解为: lhs_integral = ln(x) + C
     /// 即: lhs_integral - ln(x) = C
     /// 回代 v = y/x
-    auto v_replacement = SymbolicExpr::divide(
-        SymbolicExpr::variable(y), x_var);
 
     auto solution = lhs_integral->substitute(v_name, v_replacement);
     solution = SymbolicExpr::add(solution,
@@ -132,14 +188,18 @@ ODESolutionResult solve_bernoulli_ode_checked(
 {
     const std::string operation = "solve_bernoulli_ode";
     auto valid = validate_ode_pair_var_pair(P, Q, x, y, context, operation);
-    if (!valid) return ODESolutionResult::failure(valid.error());
+    if (!valid) {
+        return ODESolutionResult::failure(valid.error());
+    }
     if (n == 0 || n == 1) {
         return ODESolutionResult::failure(CasErrc::InvalidArgument,
                                           "Bernoulli exponent must not be 0 or 1",
                                           operation);
     }
     auto step = context.consume_steps(14, operation);
-    if (!step) return ODESolutionResult::failure(step.error());
+    if (!step) {
+        return ODESolutionResult::failure(step.error());
+    }
 
     try {
         return wrap_ode_solution(solve_bernoulli_ode_impl(P, Q, n, x, y),
@@ -191,16 +251,14 @@ static ODESolution solve_bernoulli_ode_impl(
     auto coeff = SymbolicExpr::number(one_minus_n);
 
     /// 线性 ODE 的系数: P_linear = (1-n)*P(x), Q_linear = (1-n)*Q(x)
-    auto P_linear = SymbolicExpr::multiply(coeff, P)->simplify();
-    auto Q_linear = SymbolicExpr::multiply(coeff, Q)->simplify();
+    auto P_linear = SymbolicExpr::multiply(coeff, P)->cancel()->simplify();
+    auto Q_linear = SymbolicExpr::multiply(coeff, Q)->cancel()->simplify();
 
     /// 用积分因子法求解线性 ODE: v' + P_linear*v = Q_linear
     /// 积分因子 mu = exp(integralP_linear dx)
-    auto intP = P_linear->integrate(x);
-    auto mu = SymbolicExpr::exp(intP);
-
-    /// v = (1/mu) * (integral Q_linear * mu dx + C)
-    auto Q_mu = SymbolicExpr::multiply(Q_linear, mu)->simplify();
+    auto intP = P_linear->integrate(x)->simplify();
+    auto mu = integrating_factor_from_antiderivative(intP, x);
+    auto Q_mu = SymbolicExpr::multiply(Q_linear, mu)->cancel()->simplify();
     auto int_Q_mu = Q_mu->integrate(x);
 
     auto C_const = SymbolicExpr::variable("C");
@@ -220,18 +278,34 @@ static ODESolution solve_bernoulli_ode_impl(
 }
 
 
+static std::shared_ptr<SymbolicExpr> integrating_factor_from_ratio(
+    const std::shared_ptr<SymbolicExpr>& ratio,
+    const std::string& variable,
+    const std::string& excluded_variable) {
+    if (expression_depends_on_variable(
+            LMCAS::detail::node(ratio), excluded_variable)) {
+        return nullptr;
+    }
+    auto integral = ratio->integrate(variable);
+    return SymbolicExpr::exp(integral);
+}
+
 std::shared_ptr<SymbolicExpr> find_integrating_factor(
     const std::shared_ptr<SymbolicExpr>& M,
     const std::shared_ptr<SymbolicExpr>& N,
     const std::string& x,
     const std::string& y)
 {
-    if (!M || !N) return nullptr;
+    if (!M || !N) {
+        return nullptr;
+    }
 
     /// 计算 partialM/partialy - partialN/partialx
     auto dM_dy = M->differentiate(y);
     auto dN_dx = N->differentiate(x);
-    if (!dM_dy || !dN_dx) return nullptr;
+    if (!dM_dy || !dN_dx) {
+        return nullptr;
+    }
 
     auto diff = SymbolicExpr::add(dM_dy,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dN_dx));
@@ -245,10 +319,9 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     /// 尝试 mu = mu(x): (partialM/partialy - partialN/partialx) / N 仅依赖 x
     if (N && !N->is_zero()) {
         auto ratio_x = SymbolicExpr::divide(diff, N)->simplify();
-        if (!expression_depends_on_variable(LMCAS::detail::node(ratio_x), y)) {
-            /// mu(x) = exp(integral ratio_x dx)
-            auto int_ratio = ratio_x->integrate(x);
-            return SymbolicExpr::exp(int_ratio);
+        auto factor = integrating_factor_from_ratio(ratio_x, x, y);
+        if (factor) {
+            return factor;
         }
     }
 
@@ -256,10 +329,9 @@ std::shared_ptr<SymbolicExpr> find_integrating_factor(
     if (M && !M->is_zero()) {
         auto neg_diff = SymbolicExpr::multiply(SymbolicExpr::number(-1), diff)->simplify();
         auto ratio_y = SymbolicExpr::divide(neg_diff, M)->simplify();
-        if (!expression_depends_on_variable(LMCAS::detail::node(ratio_y), x)) {
-            /// mu(y) = exp(integral ratio_y dy)
-            auto int_ratio = ratio_y->integrate(y);
-            return SymbolicExpr::exp(int_ratio);
+        auto factor = integrating_factor_from_ratio(ratio_y, y, x);
+        if (factor) {
+            return factor;
         }
     }
 
@@ -276,9 +348,13 @@ ODESolutionResult solve_exact_ode_checked(
 {
     const std::string operation = "solve_exact_ode";
     auto valid = validate_ode_pair_var_pair(M, N, x, y, context, operation);
-    if (!valid) return ODESolutionResult::failure(valid.error());
+    if (!valid) {
+        return ODESolutionResult::failure(valid.error());
+    }
     auto step = context.consume_steps(18, operation);
-    if (!step) return ODESolutionResult::failure(step.error());
+    if (!step) {
+        return ODESolutionResult::failure(step.error());
+    }
 
     try {
         return wrap_ode_solution(solve_exact_ode_impl(M, N, x, y),

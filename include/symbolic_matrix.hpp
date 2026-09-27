@@ -23,6 +23,7 @@ using MatrixEigenvectorResult =
  * 归一化后的近似元素保留浮点计算值，精确元素保持精确算术。
  * 误差容限用于显式数值比较，不参与矩阵元素的归一化。
  * 矩阵因子按输入顺序相乘，结果形状为左矩阵行数乘以右矩阵列数。
+ * 成功返回已归一化的显式矩阵；稀疏存储及全零乘积不会丢失结果维度。
  *
  * @param A 左矩阵
  * @param B 右矩阵
@@ -120,9 +121,9 @@ LMCAS_API MatrixLinearSolveResult matrix_solve_linear_checked(
 
 /**
  * @brief 生成旋转矩阵
- * @param theta 旋转角度（弧度）
+ * @param theta 有限的旋转角度（弧度）
  * @param dim 矩阵维度，默认为 2
- * @return 旋转矩阵的符号表达式
+ * @return 二维旋转矩阵；上下文错误优先，其次维度错误，非有限角度返回 InvalidArgument。
  */
 LMCAS_API ExpressionResult matrix_rotation_checked(
     double theta,
@@ -156,10 +157,10 @@ LMCAS_API ExpressionResult matrix_reflection_checked(
 
 /**
  * @brief 生成缩放矩阵
- * @param sx x 方向缩放因子
- * @param sy y 方向缩放因子
+ * @param sx 有限的 x 方向缩放因子
+ * @param sy 有限的 y 方向缩放因子
  * @param dim 矩阵维度，默认为 2
- * @return 缩放矩阵的符号表达式
+ * @return 二维缩放矩阵；上下文错误优先，其次维度错误，非有限因子返回 InvalidArgument。
  */
 LMCAS_API ExpressionResult matrix_scaling_checked(
     double sx,
@@ -199,9 +200,11 @@ LMCAS_API MatrixEigenvalueResult matrix_eigenvalues_checked(
 
 
 /**
- * @brief 计算符号矩阵的特征向量
- * @param A 输入矩阵
- * @return 特征向量列表，每个特征向量为一组分量
+ * @brief 计算符号矩阵的普通特征向量。
+ * @param A 输入矩阵。
+ * @return 各不同特征值的完整普通特征空间基，按组展平；向量数为各空间维数之和，可能少于 n，
+ *         与特征值列表不作逐项配对。任一空间未证完整时返回 Inconclusive，
+ *         资源与取消错误原样传播；结果限于普通特征向量，不含广义 Jordan 链。
  */
 LMCAS_API MatrixEigenvectorResult matrix_eigenvectors_checked(
     const std::shared_ptr<SymbolicExpr>& A,

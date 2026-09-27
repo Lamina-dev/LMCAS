@@ -1,8 +1,43 @@
-#include "../include/visitors/print_visitor.hpp"
+#include "internal/visitors/print_visitor.hpp"
 #include <cmath>
-#include <iomanip>
+#include <charconv>
+#include <limits>
+#include <stdexcept>
+#include <array>
 
 namespace LMCAS {
+
+PrintVisitor::Precedence PrintVisitor::precedence(const SymbolicNode& node) {
+    if (dynamic_cast<const AddNode*>(&node)) { return Precedence::Add; }
+    if (dynamic_cast<const MultiplyNode*>(&node)) { return Precedence::Multiply; }
+    if (dynamic_cast<const PowerNode*>(&node)) { return Precedence::Power; }
+    if (dynamic_cast<const MembershipNode*>(&node)) { return Precedence::Membership; }
+    if (const auto* relation = dynamic_cast<const RelationalNode*>(&node)) {
+        return relation->op() == RelationOp::EQ || relation->op() == RelationOp::NEQ
+            ? Precedence::Equality : Precedence::Relation;
+    }
+    if (const auto* number = dynamic_cast<const NumberNode*>(&node)) {
+        if (const auto* rational = std::get_if<Rational>(&number->value())) {
+            if (!rational->is_integer()) { return Precedence::Multiply; }
+            if (*rational < Rational(0)) { return Precedence::Unary; }
+        }
+        if (const auto* integer = std::get_if<BigInt>(&number->value())) {
+            if (integer->is_negative()) { return Precedence::Unary; }
+        }
+    }
+    return Precedence::Atom;
+}
+
+void PrintVisitor::print_operand(const SymbolicNode& node, Precedence parent,
+                                bool parenthesize_equal) {
+    const auto child = precedence(node);
+    const bool parentheses = child < parent ||
+        (parenthesize_equal && child == parent) ||
+        (parent == Precedence::Power && parenthesize_equal && child == Precedence::Unary);
+    if (parentheses) { buffer << "("; }
+    node.accept(*this);
+    if (parentheses) { buffer << ")"; }
+}
 
 void PrintVisitor::visit(const NumberNode& node) {
     if (std::holds_alternative<BigInt>(node.value())) {
@@ -10,7 +45,21 @@ void PrintVisitor::visit(const NumberNode& node) {
     } else if (std::holds_alternative<Rational>(node.value())) {
         buffer << std::get<Rational>(node.value()).to_string();
     } else {
-        buffer << std::get<double>(node.value());
+        const double value = std::get<double>(node.value());
+        if (!std::isfinite(value)) {
+            buffer << value;
+            return;
+        }
+        char token[64];
+        const auto result = std::to_chars(token, token + sizeof(token), value,
+            std::chars_format::general, std::numeric_limits<double>::max_digits10);
+        if (result.ec != std::errc{}) {
+            throw std::logic_error("finite double formatting failed");
+        }
+        buffer << "approx(";
+        if (value == 0 && std::signbit(value)) buffer << "-0";
+        else buffer.write(token, result.ptr - token);
+        buffer << ")";
     }
 }
 
@@ -24,19 +73,8 @@ void PrintVisitor::visit(const AddNode& node) {
         return;
     }
     for (size_t i = 0; i < node.operands().size(); ++i) {
-        if (i > 0) {
-            std::ostringstream sub;
-            PrintVisitor sub_v;
-            node.operands()[i]->accept(sub_v);
-            std::string s = sub_v.get_result();
-            if (!s.empty() && s[0] == '-') {
-                buffer << " - " << s.substr(1);
-            } else {
-                buffer << " + " << s;
-            }
-        } else {
-            node.operands()[i]->accept(*this);
-        }
+        if (i > 0) buffer << " + ";
+        print_operand(*node.operands()[i], Precedence::Add, true);
     }
 }
 
@@ -48,49 +86,64 @@ void PrintVisitor::visit(const MultiplyNode& node) {
     for (size_t i = 0; i < node.operands().size(); ++i) {
         if (i > 0) buffer << "*";
 
-        bool needs_parens = std::dynamic_pointer_cast<const AddNode>(node.operands()[i]) != nullptr ||
-                           std::dynamic_pointer_cast<const PowerNode>(node.operands()[i]) != nullptr;
-
-        if (!needs_parens) {
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(node.operands()[i])) {
-                if (std::holds_alternative<Rational>(num->value())) {
-                    needs_parens = true;
-                }
-            }
-        }
-
-        if (needs_parens) buffer << "(";
-        node.operands()[i]->accept(*this);
-        if (needs_parens) buffer << ")";
+        print_operand(*node.operands()[i], Precedence::Multiply, true);
     }
 }
 
+namespace {
+
+const char* function_name(FunctionNode::FuncType type) {
+    using Type = FunctionNode::FuncType;
+    static constexpr auto names = [] {
+        std::array<const char*, static_cast<std::size_t>(Type::ComplexArg) + 1> values{};
+        values[static_cast<std::size_t>(Type::Sin)] = "sin";
+        values[static_cast<std::size_t>(Type::Cos)] = "cos";
+        values[static_cast<std::size_t>(Type::Tan)] = "tan";
+        values[static_cast<std::size_t>(Type::Cot)] = "cot";
+        values[static_cast<std::size_t>(Type::Sec)] = "sec";
+        values[static_cast<std::size_t>(Type::Csc)] = "csc";
+        values[static_cast<std::size_t>(Type::ArcSin)] = "asin";
+        values[static_cast<std::size_t>(Type::ArcCos)] = "acos";
+        values[static_cast<std::size_t>(Type::ArcTan)] = "atan";
+        values[static_cast<std::size_t>(Type::Atan2)] = "atan2";
+        values[static_cast<std::size_t>(Type::Sinh)] = "sinh";
+        values[static_cast<std::size_t>(Type::Cosh)] = "cosh";
+        values[static_cast<std::size_t>(Type::Tanh)] = "tanh";
+        values[static_cast<std::size_t>(Type::Ln)] = "ln";
+        values[static_cast<std::size_t>(Type::Log)] = "log";
+        values[static_cast<std::size_t>(Type::Abs)] = "abs";
+        values[static_cast<std::size_t>(Type::Sqrt)] = "sqrt";
+        values[static_cast<std::size_t>(Type::Exp)] = "exp";
+        values[static_cast<std::size_t>(Type::LambertW)] = "lambertw";
+        values[static_cast<std::size_t>(Type::Infinity)] = "inf";
+        values[static_cast<std::size_t>(Type::Erf)] = "erf";
+        values[static_cast<std::size_t>(Type::Ei)] = "Ei";
+        values[static_cast<std::size_t>(Type::Si)] = "Si";
+        values[static_cast<std::size_t>(Type::Ci)] = "Ci";
+        values[static_cast<std::size_t>(Type::Li)] = "Li";
+        values[static_cast<std::size_t>(Type::Max)] = "max";
+        values[static_cast<std::size_t>(Type::Min)] = "min";
+        values[static_cast<std::size_t>(Type::Sgn)] = "sgn";
+        values[static_cast<std::size_t>(Type::Floor)] = "floor";
+        values[static_cast<std::size_t>(Type::Ceil)] = "ceil";
+        values[static_cast<std::size_t>(Type::Round)] = "round";
+        values[static_cast<std::size_t>(Type::RealPart)] = "re";
+        values[static_cast<std::size_t>(Type::ImagPart)] = "im";
+        values[static_cast<std::size_t>(Type::Conjugate)] = "conj";
+        values[static_cast<std::size_t>(Type::ComplexAbs)] = "cabs";
+        values[static_cast<std::size_t>(Type::ComplexArg)] = "carg";
+        return values;
+    }();
+    const auto index = static_cast<std::size_t>(type);
+    return index < names.size() && names[index] ? names[index] : "";
+}
+
+}
+
 void PrintVisitor::visit(const PowerNode& node) {
-    bool base_parens = dynamic_cast<const AddNode*>(node.base().get()) ||
-                       dynamic_cast<const MultiplyNode*>(node.base().get()) ||
-                       dynamic_cast<const PowerNode*>(node.base().get());
-    if (const auto* number = dynamic_cast<const NumberNode*>(node.base().get())) {
-        const auto& value = number->value();
-        base_parens = std::holds_alternative<Rational>(value) ||
-                      (std::holds_alternative<BigInt>(value) &&
-                       std::get<BigInt>(value).IsNegative()) ||
-                      (std::holds_alternative<double>(value) &&
-                       std::signbit(std::get<double>(value)));
-    }
-    if (base_parens) buffer << "(";
-    node.base()->accept(*this);
-    if (base_parens) buffer << ")";
+    print_operand(*node.base(), Precedence::Power, true);
     buffer << "^";
-    bool exp_parens = dynamic_cast<const AddNode*>(node.exponent().get()) ||
-                      dynamic_cast<const MultiplyNode*>(node.exponent().get()) ||
-                      dynamic_cast<const PowerNode*>(node.exponent().get());
-    if (const auto* number = dynamic_cast<const NumberNode*>(node.exponent().get())) {
-        const auto* rational = std::get_if<Rational>(&number->value());
-        exp_parens = rational && !rational->is_integer();
-    }
-    if (exp_parens) buffer << "(";
-    node.exponent()->accept(*this);
-    if (exp_parens) buffer << ")";
+    print_operand(*node.exponent(), Precedence::Power);
 }
 
 void PrintVisitor::visit(const FunctionNode& node) {
@@ -99,44 +152,7 @@ void PrintVisitor::visit(const FunctionNode& node) {
         return;
     }
 
-    switch (node.type()) {
-        case FunctionNode::FuncType::Sin: buffer << "sin"; break;
-        case FunctionNode::FuncType::Cos: buffer << "cos"; break;
-        case FunctionNode::FuncType::Tan: buffer << "tan"; break;
-        case FunctionNode::FuncType::Cot: buffer << "cot"; break;
-        case FunctionNode::FuncType::Sec: buffer << "sec"; break;
-        case FunctionNode::FuncType::Csc: buffer << "csc"; break;
-        case FunctionNode::FuncType::ArcSin: buffer << "asin"; break;
-        case FunctionNode::FuncType::ArcCos: buffer << "acos"; break;
-        case FunctionNode::FuncType::ArcTan: buffer << "atan"; break;
-        case FunctionNode::FuncType::Atan2: buffer << "atan2"; break;
-        case FunctionNode::FuncType::Sinh: buffer << "sinh"; break;
-        case FunctionNode::FuncType::Cosh: buffer << "cosh"; break;
-        case FunctionNode::FuncType::Tanh: buffer << "tanh"; break;
-        case FunctionNode::FuncType::Ln: buffer << "ln"; break;
-        case FunctionNode::FuncType::Log: buffer << "log"; break;
-        case FunctionNode::FuncType::Abs: buffer << "abs"; break;
-        case FunctionNode::FuncType::Sqrt: buffer << "sqrt"; break;
-        case FunctionNode::FuncType::Exp: buffer << "exp"; break;
-        case FunctionNode::FuncType::LambertW: buffer << "lambertw"; break;
-        case FunctionNode::FuncType::Infinity: buffer << "inf"; break;
-        case FunctionNode::FuncType::Erf: buffer << "erf"; break;
-        case FunctionNode::FuncType::Ei: buffer << "Ei"; break;
-        case FunctionNode::FuncType::Si: buffer << "Si"; break;
-        case FunctionNode::FuncType::Ci: buffer << "Ci"; break;
-        case FunctionNode::FuncType::Li: buffer << "Li"; break;
-        case FunctionNode::FuncType::Max: buffer << "max"; break;
-        case FunctionNode::FuncType::Min: buffer << "min"; break;
-        case FunctionNode::FuncType::Sgn: buffer << "sgn"; break;
-        case FunctionNode::FuncType::Floor: buffer << "floor"; break;
-        case FunctionNode::FuncType::Ceil: buffer << "ceil"; break;
-        case FunctionNode::FuncType::Round: buffer << "round"; break;
-        case FunctionNode::FuncType::RealPart: buffer << "re"; break;
-        case FunctionNode::FuncType::ImagPart: buffer << "im"; break;
-        case FunctionNode::FuncType::Conjugate: buffer << "conj"; break;
-        case FunctionNode::FuncType::ComplexAbs: buffer << "cabs"; break;
-        case FunctionNode::FuncType::ComplexArg: buffer << "carg"; break;
-    }
+    buffer << function_name(node.type());
     buffer << "(";
     for (size_t i = 0; i < node.arguments().size(); ++i) {
         node.arguments()[i]->accept(*this);
@@ -180,15 +196,16 @@ void PrintVisitor::visit(const MatrixNode& node) {
 }
 
 void PrintVisitor::visit(const RelationalNode& node) {
-    node.left()->accept(*this);
-    buffer << " " << RelationalNode::op_to_string(node.op()) << " ";
-    node.right()->accept(*this);
+    print_operand(*node.left(), precedence(node), true);
+    buffer << " " << (node.op() == RelationOp::EQ ? "==" :
+        RelationalNode::op_to_string(node.op())) << " ";
+    print_operand(*node.right(), precedence(node), true);
 }
 
 void PrintVisitor::visit(const LogicalNode& node) {
     if (node.op() == LogicalNode::Op::Not) {
         buffer << "(not ";
-        node.left()->accept(*this);
+        print_operand(*node.left(), Precedence::Not, true);
         buffer << ")";
     } else if (node.op() == LogicalNode::Op::Implies) {
         buffer << "(";
@@ -198,9 +215,11 @@ void PrintVisitor::visit(const LogicalNode& node) {
         buffer << ")";
     } else {
         buffer << "(";
-        node.left()->accept(*this);
+        print_operand(*node.left(), node.op() == LogicalNode::Op::And
+            ? Precedence::And : Precedence::Or, true);
         buffer << " " << (node.op() == LogicalNode::Op::And ? "and" : "or") << " ";
-        node.right()->accept(*this);
+        print_operand(*node.right(), node.op() == LogicalNode::Op::And
+            ? Precedence::And : Precedence::Or, true);
         buffer << ")";
     }
 }
@@ -318,9 +337,9 @@ void PrintVisitor::visit(const IntervalNode& node) {
 }
 
 void PrintVisitor::visit(const MembershipNode& node) {
-    node.element()->accept(*this);
+    print_operand(*node.element(), Precedence::Membership, true);
     buffer << " in ";
-    node.set()->accept(*this);
+    print_operand(*node.set(), Precedence::Membership, true);
 }
 
 void PrintVisitor::visit(const QuantityNode& node) {
@@ -334,9 +353,9 @@ void PrintVisitor::visit(const QuantityNode& node) {
 
 void PrintVisitor::visit(const ComplexNode& node) {
     buffer << "(";
-    node.real()->accept(*this);
+    print_operand(*node.real(), Precedence::Add, true);
     buffer << " + ";
-    node.imag()->accept(*this);
+    print_operand(*node.imag(), Precedence::Multiply, true);
     buffer << "*I)";
 }
 

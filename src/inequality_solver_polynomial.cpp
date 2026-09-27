@@ -1,5 +1,5 @@
 #include "inequality_solver.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "poly_utils.hpp"
 #include "solve_polynomial.hpp"
 #include "solve_strategies.hpp"
@@ -21,7 +21,7 @@ namespace {
 constexpr const char* kCheckedInequalityOperation = "solve_inequality_checked";
 
 bool rational_is_negative(const Rational& value) {
-    return value.get_numerator().IsNegative();
+    return value.get_numerator().is_negative();
 }
 
 bool constant_satisfies(const Rational& value, InequalityType type) {
@@ -48,7 +48,9 @@ Result<void> verify_quadratic_boundary(
     const Rational& radicand,
     ComputationContext& context) {
     auto steps = context.consume_steps(2, kCheckedInequalityOperation);
-    if (!steps) return steps;
+    if (!steps) {
+        return steps;
+    }
 
     if (!boundary || !LMCAS::detail::node(boundary) || polynomial.coeffs.size() < 3) {
         return Result<void>::failure(
@@ -77,7 +79,71 @@ Result<void> verify_quadratic_boundary(
     return Result<void>::success();
 }
 
-} // namespace
+}
+
+static Result<std::vector<Interval>> double_root_inequality_intervals(
+    const Polynomial<Rational>& polynomial, const Rational& rational_part,
+    bool wants_positive, bool leading_positive, bool strict,
+    ComputationContext& context) {
+    auto root = SymbolicExpr::number(rational_part);
+    auto verified = verify_quadratic_boundary(
+        polynomial, root, rational_part, Rational(0), Rational(0), context);
+    if (!verified) {
+        return Result<std::vector<Interval>>::failure(verified.error());
+    }
+
+    if (wants_positive == leading_positive) {
+        if (!strict) {
+            return Result<std::vector<Interval>>::success({Interval::entire_line()});
+        }
+        std::vector<Interval> rays{
+            Interval{Endpoint::neg_inf(), Endpoint::open(root)},
+            Interval{Endpoint::open(root), Endpoint::pos_inf()}
+        };
+        return Result<std::vector<Interval>>::success(std::move(rays));
+    }
+    if (strict) {
+        return Result<std::vector<Interval>>::success({});
+    }
+    return Result<std::vector<Interval>>::success({Interval::point(root)});
+}
+
+struct QuadraticBoundaries {
+    std::shared_ptr<SymbolicExpr> first;
+    std::shared_ptr<SymbolicExpr> second;
+};
+
+static Result<QuadraticBoundaries> verified_quadratic_boundaries(
+    const Polynomial<Rational>& polynomial, const Rational& rational_part,
+    const Rational& denominator, const Rational& discriminant,
+    ComputationContext& context) {
+    auto sqrt_discriminant = SymbolicExpr::sqrt(
+        SymbolicExpr::number(discriminant))->simplify();
+    const Rational first_radical_coefficient = Rational(-1) / denominator;
+    const Rational second_radical_coefficient = Rational(1) / denominator;
+    auto first_formula = SymbolicExpr::add(
+        SymbolicExpr::number(rational_part),
+        SymbolicExpr::multiply(SymbolicExpr::number(first_radical_coefficient),
+                               sqrt_discriminant))->simplify();
+    auto second_formula = SymbolicExpr::add(
+        SymbolicExpr::number(rational_part),
+        SymbolicExpr::multiply(SymbolicExpr::number(second_radical_coefficient),
+                               sqrt_discriminant))->simplify();
+    auto first_verified = verify_quadratic_boundary(
+        polynomial, first_formula, rational_part,
+        first_radical_coefficient, discriminant, context);
+    if (!first_verified) {
+        return Result<QuadraticBoundaries>::failure(first_verified.error());
+    }
+    auto second_verified = verify_quadratic_boundary(
+        polynomial, second_formula, rational_part,
+        second_radical_coefficient, discriminant, context);
+    if (!second_verified) {
+        return Result<QuadraticBoundaries>::failure(second_verified.error());
+    }
+    return Result<QuadraticBoundaries>::success(
+        {std::move(first_formula), std::move(second_formula)});
+}
 
 Result<IntervalUnion> InequalitySolver::solve_exact_quadratic_inequality(
     const Polynomial<Rational>& polynomial,
@@ -94,7 +160,9 @@ Result<IntervalUnion> InequalitySolver::solve_exact_quadratic_inequality(
     }
 
     auto steps = context.consume_steps(3, kCheckedInequalityOperation);
-    if (!steps) return Result<IntervalUnion>::failure(steps.error());
+    if (!steps) {
+        return Result<IntervalUnion>::failure(steps.error());
+    }
     const Rational discriminant = linear * linear - Rational(4) * quadratic * constant;
     const bool leading_positive = !rational_is_negative(quadratic);
     const bool wants_positive = type == InequalityType::GreaterThan ||
@@ -112,50 +180,26 @@ Result<IntervalUnion> InequalitySolver::solve_exact_quadratic_inequality(
     const Rational neg_linear = Rational(0) - linear;
     const Rational rational_part = neg_linear / denominator;
     if (discriminant == Rational(0)) {
-        auto root = SymbolicExpr::number(rational_part);
-        auto verified = verify_quadratic_boundary(
-            polynomial, root, rational_part, Rational(0), Rational(0), context);
-        if (!verified) return Result<IntervalUnion>::failure(verified.error());
-
-        if (wants_positive == leading_positive) {
-            if (!strict) return Result<IntervalUnion>::success(IntervalUnion::entire_line());
-            std::vector<Interval> rays{
-                Interval{Endpoint::neg_inf(), Endpoint::open(root)},
-                Interval{Endpoint::open(root), Endpoint::pos_inf()}
-            };
-            return Result<IntervalUnion>::success(
-                IntervalUnion::from_checked_normalized(std::move(rays)));
+        auto intervals = double_root_inequality_intervals(polynomial, rational_part,
+            wants_positive, leading_positive, strict, context);
+        if (!intervals) {
+            return Result<IntervalUnion>::failure(intervals.error());
         }
-        if (strict) return Result<IntervalUnion>::success(IntervalUnion::empty());
         return Result<IntervalUnion>::success(
-            IntervalUnion::from_checked_normalized({Interval::point(root)}));
+            IntervalUnion::from_checked_normalized(std::move(intervals.value())));
     }
 
     auto nodes = context.reserve_nodes(20, kCheckedInequalityOperation);
-    if (!nodes) return Result<IntervalUnion>::failure(nodes.error());
-    auto sqrt_discriminant = SymbolicExpr::sqrt(
-        SymbolicExpr::number(discriminant))->simplify();
-    const Rational first_radical_coefficient = Rational(-1) / denominator;
-    const Rational second_radical_coefficient = Rational(1) / denominator;
-    auto first_formula = SymbolicExpr::add(
-        SymbolicExpr::number(rational_part),
-        SymbolicExpr::multiply(SymbolicExpr::number(first_radical_coefficient),
-                               sqrt_discriminant))->simplify();
-    auto second_formula = SymbolicExpr::add(
-        SymbolicExpr::number(rational_part),
-        SymbolicExpr::multiply(SymbolicExpr::number(second_radical_coefficient),
-                               sqrt_discriminant))->simplify();
-    auto lower = leading_positive ? first_formula : second_formula;
-    auto upper = leading_positive ? second_formula : first_formula;
-
-    auto first_verified = verify_quadratic_boundary(
-        polynomial, first_formula, rational_part,
-        first_radical_coefficient, discriminant, context);
-    if (!first_verified) return Result<IntervalUnion>::failure(first_verified.error());
-    auto second_verified = verify_quadratic_boundary(
-        polynomial, second_formula, rational_part,
-        second_radical_coefficient, discriminant, context);
-    if (!second_verified) return Result<IntervalUnion>::failure(second_verified.error());
+    if (!nodes) {
+        return Result<IntervalUnion>::failure(nodes.error());
+    }
+    auto boundaries = verified_quadratic_boundaries(
+        polynomial, rational_part, denominator, discriminant, context);
+    if (!boundaries) {
+        return Result<IntervalUnion>::failure(boundaries.error());
+    }
+    auto lower = leading_positive ? boundaries.value().first : boundaries.value().second;
+    auto upper = leading_positive ? boundaries.value().second : boundaries.value().first;
 
     const bool outside = wants_positive == leading_positive;
     if (outside) {
@@ -177,7 +221,9 @@ Result<IntervalUnion> solve_exact_affine_inequality_impl(
     InequalityType type,
     ComputationContext& context) {
     auto step = context.consume_steps(1, kCheckedInequalityOperation);
-    if (!step) return Result<IntervalUnion>::failure(step.error());
+    if (!step) {
+        return Result<IntervalUnion>::failure(step.error());
+    }
 
     if (polynomial.degree() <= 0) {
         const Rational value = polynomial.is_zero()
@@ -208,7 +254,9 @@ Result<IntervalUnion> solve_exact_affine_inequality_impl(
     const Rational boundary = (Rational(0) - intercept) / slope;
     auto boundary_expr = SymbolicExpr::number(boundary);
     auto nodes = context.reserve_nodes(1, kCheckedInequalityOperation);
-    if (!nodes) return Result<IntervalUnion>::failure(nodes.error());
+    if (!nodes) {
+        return Result<IntervalUnion>::failure(nodes.error());
+    }
 
     const bool wants_greater = type == InequalityType::GreaterThan ||
                                type == InequalityType::GreaterEqual;
@@ -236,7 +284,9 @@ std::shared_ptr<SymbolicExpr> rational_polynomial_expression(
     auto variable = SymbolicExpr::variable(polynomial.variable_name);
     std::shared_ptr<SymbolicExpr> sum = SymbolicExpr::number(0);
     for (int degree = 0; degree <= polynomial.degree(); ++degree) {
-        if (polynomial.coeffs[degree] == Rational(0)) continue;
+        if (polynomial.coeffs[degree] == Rational(0)) {
+            continue;
+        }
         auto term = SymbolicExpr::number(polynomial.coeffs[degree]);
         if (degree > 0) {
             auto power = degree == 1
@@ -249,50 +299,56 @@ std::shared_ptr<SymbolicExpr> rational_polynomial_expression(
     return sum->simplify();
 }
 
-Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
-    const Polynomial<Rational>& polynomial,
-    InequalityType type,
-    ComputationContext& context) {
-    auto factors = square_free_factorization(polynomial);
-    std::vector<ExactInequalityRoot> roots;
-    try {
-        for (const auto& [factor, multiplicity] : factors) {
-            if (factor.degree() < 1) continue;
-            auto isolated = isolate_real_roots_checked(factor, context);
-            if (!isolated) {
-                return Result<IntervalUnion>::failure(isolated.error());
-            }
-            const auto& intervals = isolated.value();
-            auto factor_expression = rational_polynomial_expression(factor);
-            for (std::size_t index = 0; index < intervals.size(); ++index) {
-                auto algebraic = LMCAS::detail::make_exact_real_algebraic(
-                    factor, index, static_cast<std::size_t>(multiplicity), context);
-                if (!algebraic) {
-                    return Result<IntervalUnion>::failure(algebraic.error());
-                }
-                roots.push_back(ExactInequalityRoot{
-                    SymbolicExpr::root_of(
-                        factor_expression, polynomial.variable_name,
-                        static_cast<int>(index)),
-                    std::move(algebraic.value()),
-                    multiplicity});
-            }
-        }
-        std::sort(roots.begin(), roots.end(),
-            [](const ExactInequalityRoot& lhs, const ExactInequalityRoot& rhs) {
-                return lhs.algebraic.lower < rhs.algebraic.lower;
-            });
-    } catch (const std::bad_alloc&) {
-        return Result<IntervalUnion>::failure(
-            CasErrc::ResourceLimit,
-            "polynomial inequality root allocation failed",
-            kCheckedInequalityOperation);
-    } catch (const std::exception& error) {
-        return Result<IntervalUnion>::failure(
-            CasErrc::InternalInvariant, error.what(),
-            kCheckedInequalityOperation);
+Result<void> append_exact_factor_roots(
+    std::vector<ExactInequalityRoot>& roots, const Polynomial<Rational>& factor,
+    int multiplicity, const std::string& variable, ComputationContext& context) {
+    auto isolated = isolate_real_roots_checked(factor, context);
+    if (!isolated) {
+        return Result<void>::failure(isolated.error());
     }
+    const auto& intervals = isolated.value();
+    auto factor_expression = rational_polynomial_expression(factor);
+    for (std::size_t index = 0; index < intervals.size(); ++index) {
+        auto algebraic = LMCAS::detail::make_exact_real_algebraic(
+            factor, index, static_cast<std::size_t>(multiplicity), context);
+        if (!algebraic) {
+            return Result<void>::failure(algebraic.error());
+        }
+        roots.push_back(ExactInequalityRoot{
+            SymbolicExpr::root_of(
+                factor_expression, variable,
+                static_cast<int>(index)),
+            std::move(algebraic.value()),
+            multiplicity});
+    }
+    return Result<void>::success();
+}
 
+Result<void> sort_exact_inequality_roots(
+    std::vector<ExactInequalityRoot>& roots, ComputationContext& context) {
+    for (std::size_t i = 1; i < roots.size(); ++i) {
+        auto root = std::move(roots[i]);
+        std::size_t position = i;
+        while (position > 0) {
+            auto order = LMCAS::detail::compare_exact_real_algebraic(
+                roots[position - 1].algebraic, root.algebraic, context);
+            if (!order) {
+                return Result<void>::failure(order.error());
+            }
+            if (order.value() <= 0) {
+                break;
+            }
+            roots[position] = std::move(roots[position - 1]);
+            --position;
+        }
+        roots[position] = std::move(root);
+    }
+    return Result<void>::success();
+}
+
+std::vector<Interval> exact_polynomial_sign_intervals(
+    const Polynomial<Rational>& polynomial,
+    const std::vector<ExactInequalityRoot>& roots, InequalityType type) {
     const bool wants_positive =
         type == InequalityType::GreaterThan ||
         type == InequalityType::GreaterEqual;
@@ -304,7 +360,9 @@ Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
     };
 
     int sign_value = rational_is_negative(polynomial.lead_coeff()) ? -1 : 1;
-    if ((polynomial.degree() & 1) != 0) sign_value = -sign_value;
+    if ((polynomial.degree() & 1) != 0) {
+        sign_value = -sign_value;
+    }
 
     std::vector<Interval> intervals;
     Endpoint lower = Endpoint::neg_inf();
@@ -317,15 +375,52 @@ Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
             intervals.push_back(Interval::point(root.expression));
         }
         lower = Endpoint::open(root.expression);
-        if ((root.multiplicity & 1) != 0) sign_value = -sign_value;
+        if ((root.multiplicity & 1) != 0) {
+            sign_value = -sign_value;
+        }
     }
     if (sign_satisfies(sign_value)) {
         intervals.push_back(Interval{lower, Endpoint::pos_inf()});
     }
-    return IntervalUnion::from_intervals_checked(
-        std::move(intervals), context);
+    return intervals;
 }
-} // namespace
+
+Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
+    const Polynomial<Rational>& polynomial,
+    InequalityType type,
+    ComputationContext& context) {
+    auto factors = square_free_factorization(polynomial);
+    std::vector<ExactInequalityRoot> roots;
+    try {
+        for (const auto& [factor, multiplicity] : factors) {
+            if (factor.degree() < 1) {
+                continue;
+            }
+            auto appended = append_exact_factor_roots(
+                roots, factor, multiplicity, polynomial.variable_name, context);
+            if (!appended) {
+                return Result<IntervalUnion>::failure(appended.error());
+            }
+        }
+        auto sorted = sort_exact_inequality_roots(roots, context);
+        if (!sorted) {
+            return Result<IntervalUnion>::failure(sorted.error());
+        }
+    } catch (const std::bad_alloc&) {
+        return Result<IntervalUnion>::failure(
+            CasErrc::ResourceLimit,
+            "polynomial inequality root allocation failed",
+            kCheckedInequalityOperation);
+    } catch (const std::exception& error) {
+        return Result<IntervalUnion>::failure(
+            CasErrc::InternalInvariant, error.what(),
+            kCheckedInequalityOperation);
+    }
+
+    return IntervalUnion::from_intervals_checked(
+        exact_polynomial_sign_intervals(polynomial, roots, type), context);
+}
+}
 
 namespace detail::inequality_support {
 
@@ -343,204 +438,6 @@ Result<IntervalUnion> solve_exact_polynomial_inequality(
     return solve_exact_polynomial_inequality_impl(polynomial, type, context);
 }
 
-} // namespace detail::inequality_support
-
-using detail::inequality_support::determine_leading_sign;
-using detail::inequality_support::find_roots_with_multiplicity;
-using detail::inequality_support::root_less_than;
-using detail::inequality_support::roots_equal;
-
-std::vector<SignChartEntry> InequalitySolver::build_sign_chart(
-    const std::shared_ptr<SymbolicExpr>& poly,
-    const std::string& variable,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
-    const std::vector<int>& multiplicities) {
-
-    std::vector<SignChartEntry> chart;
-
-    if (roots.empty()) {
-
-        auto p = symbolic_to_poly<SymbolicPolyCoeff>(poly, variable);
-        int sign = determine_leading_sign(p);
-        chart.push_back({Interval::entire_line(), sign});
-        return chart;
-    }
-
-    auto p = symbolic_to_poly<SymbolicPolyCoeff>(poly, variable);
-    int leading_sign = determine_leading_sign(p);
-
-    size_t n = roots.size();
-    std::vector<int> interval_signs(n + 1);
-
-    interval_signs[n] = leading_sign;
-
-    for (int i = (int)n - 1; i >= 0; --i) {
-        interval_signs[i] = interval_signs[i + 1];
-        if (multiplicities[i] % 2 != 0) {
-            interval_signs[i] = -interval_signs[i];
-        }
-    }
-
-    {
-        Interval iv;
-        iv.lower = Endpoint::neg_inf();
-        iv.upper = Endpoint::open(roots[0]);
-        chart.push_back({iv, interval_signs[0]});
-    }
-
-    for (size_t i = 0; i + 1 < n; ++i) {
-        Interval iv;
-        iv.lower = Endpoint::open(roots[i]);
-        iv.upper = Endpoint::open(roots[i + 1]);
-        chart.push_back({iv, interval_signs[i + 1]});
-    }
-
-    {
-        Interval iv;
-        iv.lower = Endpoint::open(roots[n - 1]);
-        iv.upper = Endpoint::pos_inf();
-        chart.push_back({iv, interval_signs[n]});
-    }
-
-    return chart;
 }
 
-IntervalUnion InequalitySolver::select_intervals(
-    const std::vector<SignChartEntry>& chart,
-    InequalityType type,
-    const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
-    const std::vector<int>&) {
-
-    std::vector<Interval> result_intervals;
-
-    bool want_positive = (type == InequalityType::GreaterThan || type == InequalityType::GreaterEqual);
-    bool is_strict = (type == InequalityType::GreaterThan || type == InequalityType::LessThan);
-    int target_sign = want_positive ? 1 : -1;
-
-    for (const auto& entry : chart) {
-        if (entry.sign == target_sign) {
-            result_intervals.push_back(entry.interval);
-        }
-    }
-
-    if (!is_strict) {
-
-        for (size_t i = 0; i < roots.size(); ++i) {
-
-            bool merged = false;
-            for (auto& iv : result_intervals) {
-
-                if (!iv.upper.is_pos_infinity && iv.upper.value) {
-                    if (roots_equal(iv.upper.value, roots[i])) {
-                        iv.upper.is_open = false;
-                        merged = true;
-                    }
-                }
-
-                if (!iv.lower.is_neg_infinity && iv.lower.value) {
-                    if (roots_equal(iv.lower.value, roots[i])) {
-                        iv.lower.is_open = false;
-                        merged = true;
-                    }
-                }
-            }
-
-            if (!merged) {
-                result_intervals.push_back(Interval::point(roots[i]));
-            }
-        }
-    }
-
-    return IntervalUnion(result_intervals);
 }
-IntervalUnion InequalitySolver::build_parametric_solution(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& symbolic_roots,
-    const std::vector<int>& multiplicities,
-    int leading_sign,
-    InequalityType type) {
-
-    if (symbolic_roots.empty()) {
-
-        bool want_positive = (type == InequalityType::GreaterThan || type == InequalityType::GreaterEqual);
-        int target_sign = want_positive ? 1 : -1;
-        if (leading_sign == target_sign) {
-            return IntervalUnion::entire_line();
-        }
-        return IntervalUnion::empty();
-    }
-
-    size_t n = symbolic_roots.size();
-    std::vector<int> interval_signs(n + 1);
-
-    interval_signs[n] = leading_sign;
-
-    for (int i = (int)n - 1; i >= 0; --i) {
-        interval_signs[i] = interval_signs[i + 1];
-        if (multiplicities[i] % 2 != 0) {
-            interval_signs[i] = -interval_signs[i];
-        }
-    }
-
-    bool want_positive = (type == InequalityType::GreaterThan || type == InequalityType::GreaterEqual);
-    bool is_strict = (type == InequalityType::GreaterThan || type == InequalityType::LessThan);
-    int target_sign = want_positive ? 1 : -1;
-
-    std::vector<Interval> result_intervals;
-
-    if (interval_signs[0] == target_sign) {
-        Interval iv;
-        iv.lower = Endpoint::neg_inf();
-        iv.upper = Endpoint::open(symbolic_roots[0]);
-        result_intervals.push_back(iv);
-    }
-
-    for (size_t i = 0; i + 1 < n; ++i) {
-        if (interval_signs[i + 1] == target_sign) {
-            Interval iv;
-            iv.lower = Endpoint::open(symbolic_roots[i]);
-            iv.upper = Endpoint::open(symbolic_roots[i + 1]);
-            result_intervals.push_back(iv);
-        }
-    }
-
-    if (interval_signs[n] == target_sign) {
-        Interval iv;
-        iv.lower = Endpoint::open(symbolic_roots[n - 1]);
-        iv.upper = Endpoint::pos_inf();
-        result_intervals.push_back(iv);
-    }
-
-    if (!is_strict) {
-        for (size_t i = 0; i < symbolic_roots.size(); ++i) {
-            bool merged = false;
-            for (auto& iv : result_intervals) {
-
-                if (!iv.upper.is_pos_infinity && iv.upper.value) {
-
-                    auto diff = SymbolicExpr::add(iv.upper.value,
-                        SymbolicExpr::multiply(symbolic_roots[i], SymbolicExpr::number(-1)));
-                    if (diff->simplify()->is_zero()) {
-                        iv.upper.is_open = false;
-                        merged = true;
-                    }
-                }
-
-                if (!iv.lower.is_neg_infinity && iv.lower.value) {
-                    auto diff = SymbolicExpr::add(iv.lower.value,
-                        SymbolicExpr::multiply(symbolic_roots[i], SymbolicExpr::number(-1)));
-                    if (diff->simplify()->is_zero()) {
-                        iv.lower.is_open = false;
-                        merged = true;
-                    }
-                }
-            }
-
-            if (!merged) {
-                result_intervals.push_back(Interval::point(symbolic_roots[i]));
-            }
-        }
-    }
-
-    return IntervalUnion(result_intervals);
-}
-} // namespace LMCAS

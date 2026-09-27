@@ -3,8 +3,7 @@
 
 using namespace LMCAS;
 
-void test_implicit_diff_circle() {
-    TEST_CASE("Implicit Diff: Circle x^2 + y^2 - r^2 = 0 => dy/dx = -x/y");
+TEST(SymbolicImplicitDiff, ImplicitDiffCircle) {
     {
         // F(x,y) = x^2 + y^2 - r^2
         auto x = SymbolicExpr::variable("x");
@@ -17,15 +16,13 @@ void test_implicit_diff_circle() {
         auto F = SymbolicExpr::add(SymbolicExpr::add(x2, y2), neg_r2);
 
         auto result = LMCAS::implicit_diff(F, "x", "y");
-        std::string s = result ? result->to_string() : "null";
-        // dy/dx = -F_x / F_y = -(2x) / (2y) = -x/y
-        // The result should contain x and y, and represent -x/y (possibly unsimplified as (-1*2*x)/(2*y))
-        EXPECT_CONTAINS(s, {"x", "y"}, "circle dy/dx contains x and y");
+        auto expected = SymbolicExpr::divide(
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), x), y);
+        EXPECT_TRUE(test_proved_equivalent(result, expected));
     }
 }
 
-void test_implicit_diff_ellipse() {
-    TEST_CASE("Implicit Diff: Ellipse x^2/a^2 + y^2/b^2 - 1 = 0");
+TEST(SymbolicImplicitDiff, ImplicitDiffEllipse) {
     {
         // F(x,y) = x^2/a^2 + y^2/b^2 - 1
         // dy/dx = -F_x / F_y = -(2x/a^2) / (2y/b^2) = -(b^2 * x) / (a^2 * y)
@@ -43,15 +40,15 @@ void test_implicit_diff_ellipse() {
         auto F = SymbolicExpr::add(SymbolicExpr::add(term1, term2), neg_one);
 
         auto result = LMCAS::implicit_diff(F, "x", "y");
-        std::string s = result ? result->to_string() : "null";
-        // Result should contain x, y, a, b representing -(b^2*x)/(a^2*y)
-        EXPECT_CONTAINS(s, {"x", "y"}, "ellipse dy/dx contains x and y");
-        EXPECT_CONTAINS(s, {"a", "b"}, "ellipse dy/dx contains a and b");
+        auto expected = SymbolicExpr::divide(
+            SymbolicExpr::multiply(
+                SymbolicExpr::number(-1), SymbolicExpr::multiply(b2, x)),
+            SymbolicExpr::multiply(a2, y));
+        EXPECT_TRUE(test_proved_equivalent(result, expected));
     }
 }
 
-void test_implicit_diff_polynomial() {
-    TEST_CASE("Implicit Diff: Polynomial x^3 + y^3 - 3xy = 0");
+TEST(SymbolicImplicitDiff, ImplicitDiffPolynomial) {
     {
         // F(x,y) = x^3 + y^3 - 3xy
         // F_x = 3x^2 - 3y
@@ -68,14 +65,20 @@ void test_implicit_diff_polynomial() {
         auto F = SymbolicExpr::add(SymbolicExpr::add(x3, y3), neg_three_xy);
 
         auto result = LMCAS::implicit_diff(F, "x", "y");
-        std::string s = result ? result->to_string() : "null";
-        // Result should contain x and y terms
-        EXPECT_CONTAINS(s, {"x", "y"}, "polynomial dy/dx contains x and y");
+        auto numerator = SymbolicExpr::add(
+            SymbolicExpr::power(x, SymbolicExpr::number(2)),
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
+        auto denominator = SymbolicExpr::add(
+            SymbolicExpr::power(y, SymbolicExpr::number(2)),
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), x));
+        auto expected = SymbolicExpr::divide(
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), numerator),
+            denominator);
+        EXPECT_TRUE(test_proved_equivalent(result, expected));
     }
 }
 
-void test_implicit_diff_transcendental() {
-    TEST_CASE("Implicit Diff: Transcendental sin(x) + y^2 = 0");
+TEST(SymbolicImplicitDiff, ImplicitDiffTranscendental) {
     {
         // F(x,y) = sin(x) + y^2
         // F_x = cos(x)
@@ -88,24 +91,9 @@ void test_implicit_diff_transcendental() {
         auto F = SymbolicExpr::add(sin_x, y2);
 
         auto result = LMCAS::implicit_diff(F, "x", "y");
-        std::string s = result ? result->to_string() : "null";
-        // Result should contain cos (from derivative of sin(x)) and y
-        EXPECT_CONTAINS(s, {"cos", "y"}, "transcendental dy/dx contains cos and y");
+        auto expected = SymbolicExpr::divide(
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::cos(x)),
+            SymbolicExpr::multiply(SymbolicExpr::number(2), y));
+        EXPECT_TRUE(test_proved_equivalent(result, expected));
     }
-}
-
-int main() {
-    try {
-        test_implicit_diff_circle();
-        test_implicit_diff_ellipse();
-        test_implicit_diff_polynomial();
-        test_implicit_diff_transcendental();
-    } catch (const std::exception& e) {
-        std::cout << "[FAIL] Exception: " << e.what() << std::endl;
-        g_failures++;
-    } catch (...) {
-        std::cout << "[FAIL] Unknown Exception!" << std::endl;
-        g_failures++;
-    }
-    return TEST_REPORT();
 }

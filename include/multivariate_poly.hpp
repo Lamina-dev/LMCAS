@@ -20,11 +20,15 @@
 namespace LMCAS {
 
 /**
- * @brief 多元多项式类，稀疏表示
+ * @brief 稀疏多元多项式。
  *
  * 以 (Monomial, Rational) 对的有序列表表示多元多项式。
- * 单项式按指定的 MonomialOrder 排序，系数为有理数。
- * 支持加减乘、求值、度数查询、一元转换等完整环运算接口。
+ * 单项式按指定的 MonomialOrder 排序。
+ * 支持加减乘、求值、度数查询和一元转换。
+ * 非零操作数必须具有按名称和排列完全相同的变量表，否则加减乘和整除
+ * 抛出 std::invalid_argument；不自动合并变量或重排变量坐标。
+ * 加减乘结果使用左侧单项式序；一侧为零时使用非零侧的变量表和序，
+ * 双方为零时保留左侧表示。不同单项式序不改变同一变量环中的数学值。
  */
 class LMCAS_API MultiPoly {
 public:
@@ -64,7 +68,10 @@ public:
     /** @brief 一元取负 */
     MultiPoly operator-() const;
 
-    /** @brief 判等 */
+    /**
+     * @brief 同一变量表内按系数和单项式判等，不受单项式序影响
+     * @return 两个零多项式始终相等；非零对象的变量表不同时返回 false
+     */
     bool operator==(const MultiPoly& other) const;
 
     /** @brief 判不等 */
@@ -81,7 +88,10 @@ public:
      * @brief 精确除法（假设整除）
      * @param[in] divisor 除数多项式
      * @return 商多项式
+     * 同一变量表允许不同单项式序；结果使用被除数的序。
+     * 零被除数的商使用除数的变量表和序。
      * @throw std::runtime_error 除数为零或不整除时抛出
+     * @throw std::invalid_argument 两个非零操作数的变量表或排列不同时抛出
      */
     MultiPoly exact_div(const MultiPoly& divisor) const;
 
@@ -202,6 +212,8 @@ private:
     std::vector<Term> terms_;           ///< 有序项列表（按 order_ 降序）
     std::vector<std::string> vars_;     ///< 变量名列表
     MonomialOrderType order_;           ///< 单项式序类型
+
+    void require_compatible_variables(const MultiPoly& other) const;
 
     /**
      * @internal

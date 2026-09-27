@@ -4,150 +4,151 @@
 #include "property_store.hpp"
 #include "relation_store.hpp"
 #include "interval.hpp"
+#include "query_interface.hpp"
+#include "inference_engine.hpp"
 #include <stdexcept>
 #include <vector>
 #include <string>
 
 using namespace LMCAS;
 
-
 static const std::vector<Domain> ALL_DOMAINS = {
     Domain::Complex, Domain::Real, Domain::Algebraic, Domain::Rational,
-    Domain::Integer, Domain::Natural, Domain::PositiveInt
-};
+    Domain::Integer, Domain::Natural, Domain::PositiveInt};
 
 static const std::vector<Sign> ALL_SIGNS = {
     Sign::Positive, Sign::Negative, Sign::NonNegative,
-    Sign::NonPositive, Sign::Zero, Sign::NonZero
-};
+    Sign::NonPositive, Sign::Zero, Sign::NonZero};
 
 static const std::vector<std::string> TEST_SYMBOLS = {
-    "x", "y", "alpha", "longVar123", "a_b"
-};
+    "x", "y", "alpha", "longVar123", "a_b"};
 
 static std::string domain_name(Domain d) {
     switch (d) {
-        case Domain::Complex:     return "Complex";
-        case Domain::Real:        return "Real";
-        case Domain::Algebraic:   return "Algebraic";
-        case Domain::Rational:    return "Rational";
-        case Domain::Integer:     return "Integer";
-        case Domain::Natural:     return "Natural";
-        case Domain::PositiveInt: return "PositiveInt";
+    case Domain::Complex: {
+        return "Complex";
+    }
+    case Domain::Real: {
+        return "Real";
+    }
+    case Domain::Algebraic: {
+        return "Algebraic";
+    }
+    case Domain::Rational: {
+        return "Rational";
+    }
+    case Domain::Integer: {
+        return "Integer";
+    }
+    case Domain::Natural: {
+        return "Natural";
+    }
+    case Domain::PositiveInt: {
+        return "PositiveInt";
+    }
     }
     return "?";
 }
 
 static std::string sign_name(Sign s) {
     switch (s) {
-        case Sign::Positive:    return "Positive";
-        case Sign::Negative:    return "Negative";
-        case Sign::NonNegative: return "NonNegative";
-        case Sign::NonPositive: return "NonPositive";
-        case Sign::Zero:        return "Zero";
-        case Sign::NonZero:     return "NonZero";
+    case Sign::Positive:
+        return "Positive";
+    case Sign::Negative:
+        return "Negative";
+    case Sign::NonNegative:
+        return "NonNegative";
+    case Sign::NonPositive:
+        return "NonPositive";
+    case Sign::Zero:
+        return "Zero";
+    case Sign::NonZero:
+        return "NonZero";
     }
     return "?";
 }
 
-
-void test_domain_roundtrip() {
-    TEST_CASE("Domain declarations in child scope not visible after pop");
+TEST(AssumptionScope, DomainRoundtrip) {
     // For each domain, declare in child scope, verify visible in child,
     // then pop and verify not visible (reverts to default Complex).
-    for (const auto& sym : TEST_SYMBOLS) {
+    for (const auto &sym : TEST_SYMBOLS) {
         for (Domain d : ALL_DOMAINS) {
-            if (d == Domain::Complex) continue; // Complex is default, skip
+            if (d == Domain::Complex)
+                continue; // Complex is default, skip
 
             AssumptionContext ctx;
             // Before push: domain should be Complex (default)
             Domain before = ctx.get_domain(sym);
-            EXPECT_TRUE(before == Domain::Complex,
-                sym + " domain is Complex before push");
+            EXPECT_TRUE((before == Domain::Complex)) << sym + " domain is Complex before push";
 
             ctx.push();
-            ctx.assume_domain(sym, d);
+            EXPECT_TRUE(ctx.assume_domain(sym, d).has_value());
 
             // In child scope: domain should be at least d
-            EXPECT_TRUE(ctx.has_domain(sym, d),
-                sym + " has " + domain_name(d) + " in child scope");
+            EXPECT_TRUE((ctx.has_domain(sym, d))) << sym + " has " + domain_name(d) + " in child scope";
 
-            ctx.pop();
+            EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
 
             // After pop: domain should be back to Complex
             Domain after = ctx.get_domain(sym);
-            EXPECT_TRUE(after == before,
-                sym + " domain restored to Complex after pop (was " +
-                domain_name(d) + " in child)");
+            EXPECT_TRUE((after == before)) << sym + " domain restored to Complex after pop (was " +
+                                                  domain_name(d) + " in child)";
         }
     }
 }
 
-void test_sign_roundtrip() {
-    TEST_CASE("Sign declarations in child scope not visible after pop");
-    for (const auto& sym : TEST_SYMBOLS) {
+TEST(AssumptionScope, SignRoundtrip) {
+    for (const auto &sym : TEST_SYMBOLS) {
         for (Sign s : ALL_SIGNS) {
             AssumptionContext ctx;
             // Before push: no signs
             auto signs_before = ctx.get_signs(sym);
-            EXPECT_TRUE(signs_before.empty(),
-                sym + " has no signs before push");
+            EXPECT_TRUE((signs_before.empty())) << sym + " has no signs before push";
 
             ctx.push();
-            ctx.assume_sign(sym, s);
+            EXPECT_TRUE(ctx.assume_sign(sym, s).has_value());
 
             // In child scope: sign should be present
-            EXPECT_TRUE(ctx.has_sign(sym, s),
-                sym + " has " + sign_name(s) + " in child scope");
+            EXPECT_TRUE((ctx.has_sign(sym, s))) << sym + " has " + sign_name(s) + " in child scope";
 
-            ctx.pop();
+            EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
 
             // After pop: signs should be empty again
             auto signs_after = ctx.get_signs(sym);
-            EXPECT_TRUE(signs_after.empty(),
-                sym + " signs empty after pop (was " +
-                sign_name(s) + " in child)");
+            EXPECT_TRUE((signs_after.empty())) << sym + " signs empty after pop (was " +
+                                                      sign_name(s) + " in child)";
         }
     }
 }
 
-void test_parity_roundtrip() {
-    TEST_CASE("Parity declarations in child scope not visible after pop");
+TEST(AssumptionScope, ParityRoundtrip) {
     AssumptionContext ctx;
 
     // Before push: parity is Unknown
-    EXPECT_TRUE(ctx.get_parity("x") == Parity::Unknown,
-        "x parity Unknown before push");
+    EXPECT_TRUE((ctx.get_parity("x") == Parity::Unknown)) << "x parity Unknown before push";
 
     ctx.push();
-    ctx.current_properties().declare_parity("x", Parity::Even);
-    EXPECT_TRUE(ctx.get_parity("x") == Parity::Even,
-        "x parity Even in child scope");
+    EXPECT_TRUE((ctx.current_properties().declare_parity("x", Parity::Even).has_value())) << "parity declaration succeeds";
+    EXPECT_TRUE((ctx.get_parity("x") == Parity::Even)) << "x parity Even in child scope";
 
-    ctx.pop();
-    EXPECT_TRUE(ctx.get_parity("x") == Parity::Unknown,
-        "x parity restored to Unknown after pop");
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
+    EXPECT_TRUE((ctx.get_parity("x") == Parity::Unknown)) << "x parity restored to Unknown after pop";
 }
 
-void test_boundedness_roundtrip() {
-    TEST_CASE("Boundedness declarations in child scope not visible after pop");
+TEST(AssumptionScope, BoundednessRoundtrip) {
     AssumptionContext ctx;
 
-    EXPECT_TRUE(ctx.get_boundedness("x") == Boundedness::Unknown,
-        "x boundedness Unknown before push");
+    EXPECT_TRUE((ctx.get_boundedness("x") == Boundedness::Unknown)) << "x boundedness Unknown before push";
 
     ctx.push();
-    ctx.current_properties().declare_bounded("x", Boundedness::Bounded);
-    EXPECT_TRUE(ctx.get_boundedness("x") == Boundedness::Bounded,
-        "x boundedness Bounded in child scope");
+    EXPECT_TRUE((ctx.current_properties().declare_bounded("x", Boundedness::Bounded).has_value())) << "boundedness declaration succeeds";
+    EXPECT_TRUE((ctx.get_boundedness("x") == Boundedness::Bounded)) << "x boundedness Bounded in child scope";
 
-    ctx.pop();
-    EXPECT_TRUE(ctx.get_boundedness("x") == Boundedness::Unknown,
-        "x boundedness restored to Unknown after pop");
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
+    EXPECT_TRUE((ctx.get_boundedness("x") == Boundedness::Unknown)) << "x boundedness restored to Unknown after pop";
 }
 
-void test_relation_roundtrip() {
-    TEST_CASE("Relations in child scope not visible after pop");
+TEST(AssumptionScope, RelationRoundtrip) {
     AssumptionContext ctx;
 
     // Create a simple relation: x > 0
@@ -157,35 +158,31 @@ void test_relation_roundtrip() {
         LMCAS::detail::make_node<NumberNode>(BigInt(0)));
 
     // Before push: no relations, no sign for x
-    EXPECT_TRUE(ctx.current_relations().get_relations().empty(),
-        "No relations before push");
-    EXPECT_FALSE(ctx.has_sign("x", Sign::Positive),
-        "x not Positive before push");
+    EXPECT_TRUE((ctx.current_relations().get_relations().empty())) << "No relations before push";
+    EXPECT_FALSE((ctx.has_sign("x", Sign::Positive))) << "x not Positive before push";
 
     ctx.push();
-    ctx.current_relations().add_relation(*var_x, *zero,
-        RelationalNode::Op::GT, ctx.current_properties());
+    EXPECT_TRUE((ctx.current_relations().add_relation(*var_x, *zero,
+                                                      RelationalNode::Op::GT, ctx.current_properties())
+                     .has_value()))
+        << "relation insertion succeeds";
 
     // In child scope: relation present, x is Positive
-    EXPECT_TRUE(ctx.has_sign("x", Sign::Positive),
-        "x is Positive in child scope (from relation x > 0)");
+    EXPECT_TRUE((ctx.has_sign("x", Sign::Positive))) << "x is Positive in child scope (from relation x > 0)";
 
-    ctx.pop();
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
 
     // After pop: sign should be gone
-    EXPECT_FALSE(ctx.has_sign("x", Sign::Positive),
-        "x not Positive after pop");
-    EXPECT_TRUE(ctx.current_relations().get_relations().empty(),
-        "No relations after pop");
+    EXPECT_FALSE((ctx.has_sign("x", Sign::Positive))) << "x not Positive after pop";
+    EXPECT_TRUE((ctx.current_relations().get_relations().empty())) << "No relations after pop";
 }
 
-void test_multiple_declarations_roundtrip() {
-    TEST_CASE("Multiple declarations in child scope all reverted on pop");
+TEST(AssumptionScope, MultipleDeclarationsRoundtrip) {
     AssumptionContext ctx;
 
     // Set up parent state
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_sign("y", Sign::Positive);
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
+    EXPECT_TRUE(ctx.assume_sign("y", Sign::Positive).has_value());
 
     // Record parent state
     Domain x_domain_before = ctx.get_domain("x");
@@ -196,411 +193,160 @@ void test_multiple_declarations_roundtrip() {
     ctx.push();
 
     // Make multiple declarations in child
-    ctx.assume_domain("x", Domain::Integer);
-    ctx.assume_sign("z", Sign::Negative);
-    ctx.current_properties().declare_parity("z", Parity::Odd);
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Integer).has_value());
+    EXPECT_TRUE(ctx.assume_sign("z", Sign::Negative).has_value());
+    EXPECT_TRUE((ctx.current_properties().declare_parity("z", Parity::Odd).has_value())) << "parity declaration succeeds";
 
     // Verify child state
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x is Integer in child");
-    EXPECT_TRUE(ctx.has_sign("z", Sign::Negative),
-        "z is Negative in child");
-    EXPECT_TRUE(ctx.get_parity("z") == Parity::Odd,
-        "z is Odd in child");
+    EXPECT_TRUE((ctx.get_domain("x") == Domain::Integer)) << "x is Integer in child";
+    EXPECT_TRUE((ctx.has_sign("z", Sign::Negative))) << "z is Negative in child";
+    EXPECT_TRUE((ctx.get_parity("z") == Parity::Odd)) << "z is Odd in child";
 
-    ctx.pop();
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
 
     // Verify all restored
-    EXPECT_TRUE(ctx.get_domain("x") == x_domain_before,
-        "x domain restored after pop");
-    EXPECT_TRUE(ctx.get_signs("y") == y_signs_before,
-        "y signs unchanged after pop");
-    EXPECT_TRUE(ctx.get_signs("z") == z_signs_before,
-        "z signs restored (empty) after pop");
-    EXPECT_TRUE(ctx.get_parity("z") == z_parity_before,
-        "z parity restored (Unknown) after pop");
+    EXPECT_TRUE((ctx.get_domain("x") == x_domain_before)) << "x domain restored after pop";
+    EXPECT_TRUE((ctx.get_signs("y") == y_signs_before)) << "y signs unchanged after pop";
+    EXPECT_TRUE((ctx.get_signs("z") == z_signs_before)) << "z signs restored (empty) after pop";
+    EXPECT_TRUE((ctx.get_parity("z") == z_parity_before)) << "z parity restored (Unknown) after pop";
 }
 
-void test_parent_declarations_survive_pop() {
-    TEST_CASE("Parent scope declarations survive child push/pop");
+TEST(AssumptionScope, ParentDeclarationsSurvivePop) {
     AssumptionContext ctx;
 
     // Declare in root scope
-    ctx.assume_domain("x", Domain::Integer);
-    ctx.assume_sign("x", Sign::Positive);
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Integer).has_value());
+    EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
     ctx.push();
     // Child scope doesn't touch x
-    ctx.assume_sign("y", Sign::Negative);
-    ctx.pop();
+    EXPECT_TRUE(ctx.assume_sign("y", Sign::Negative).has_value());
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
 
     // x should still have its root declarations
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x domain Integer survives child push/pop");
-    EXPECT_TRUE(ctx.has_sign("x", Sign::Positive),
-        "x sign Positive survives child push/pop");
+    EXPECT_TRUE((ctx.get_domain("x") == Domain::Integer)) << "x domain Integer survives child push/pop";
+    EXPECT_TRUE((ctx.has_sign("x", Sign::Positive))) << "x sign Positive survives child push/pop";
 }
 
-void test_nested_push_pop_roundtrip() {
-    TEST_CASE("Nested push/pop restores correctly at each level");
+TEST(AssumptionScope, NestedPushPopRoundtrip) {
     AssumptionContext ctx;
 
     // Root: x is Real
-    ctx.assume_domain("x", Domain::Real);
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
 
     ctx.push(); // depth 2
-    ctx.assume_domain("x", Domain::Integer);
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x is Integer at depth 2");
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::Integer).has_value());
+    EXPECT_TRUE((ctx.get_domain("x") == Domain::Integer)) << "x is Integer at depth 2";
 
     ctx.push(); // depth 3
-    ctx.assume_domain("x", Domain::PositiveInt);
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::PositiveInt,
-        "x is PositiveInt at depth 3");
+    EXPECT_TRUE(ctx.assume_domain("x", Domain::PositiveInt).has_value());
+    EXPECT_TRUE((ctx.get_domain("x") == Domain::PositiveInt)) << "x is PositiveInt at depth 3";
 
-    ctx.pop(); // back to depth 2
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x is Integer after popping depth 3");
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds"; /**< 返回深度 2。 */
+    EXPECT_TRUE((ctx.get_domain("x") == Domain::Integer)) << "x is Integer after popping depth 3";
 
-    ctx.pop(); // back to depth 1 (root)
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Real,
-        "x is Real after popping depth 2");
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds"; /**< 返回深度 1 的根作用域。 */
+    EXPECT_TRUE((ctx.get_domain("x") == Domain::Real)) << "x is Real after popping depth 2";
 }
 
-void test_depth_changes() {
-    TEST_CASE("Depth increases on push and decreases on pop");
+TEST(AssumptionScope, DepthChanges) {
     AssumptionContext ctx;
-    EXPECT_TRUE(ctx.depth() == 1, "Initial depth is 1");
+    EXPECT_TRUE((ctx.depth() == 1)) << "Initial depth is 1";
 
     ctx.push();
-    EXPECT_TRUE(ctx.depth() == 2, "Depth is 2 after push");
+    EXPECT_TRUE((ctx.depth() == 2)) << "Depth is 2 after push";
 
     ctx.push();
-    EXPECT_TRUE(ctx.depth() == 3, "Depth is 3 after second push");
+    EXPECT_TRUE((ctx.depth() == 3)) << "Depth is 3 after second push";
 
-    ctx.pop();
-    EXPECT_TRUE(ctx.depth() == 2, "Depth is 2 after pop");
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
+    EXPECT_TRUE((ctx.depth() == 2)) << "Depth is 2 after pop";
 
-    ctx.pop();
-    EXPECT_TRUE(ctx.depth() == 1, "Depth is 1 after second pop");
+    EXPECT_TRUE((ctx.pop().has_value())) << "scope pop succeeds";
+    EXPECT_TRUE((ctx.depth() == 1)) << "Depth is 1 after second pop";
 }
 
+static void expect_scalar_property_readthrough(
+    AssumptionContext &ctx, QueryInterface &query, const ExprPtr &n, const ExprPtr &t) {
+    EXPECT_TRUE((query.query_positive(*n).value() == Tribool::True)) << "positive survives empty push";
+    EXPECT_TRUE((query.query_real(*n).value() == Tribool::True)) << "real survives empty push";
+    EXPECT_TRUE((query.query_integer(*n).value() == Tribool::True)) << "integer survives empty push";
+    EXPECT_TRUE((ctx.has_domain("n", Domain::Rational))) << "rational survives empty push";
+    EXPECT_TRUE((ctx.has_domain("n", Domain::Natural))) << "natural survives empty push";
+    EXPECT_TRUE((query.query_algebraic(*n).value() == Tribool::True)) << "algebraic survives empty push";
+    EXPECT_TRUE((query.query_transcendental(*t).value() == Tribool::True)) << "transcendence survives empty push";
+}
 
-void test_domain_shadowing() {
-    TEST_CASE("Child scope domain shadows parent domain");
-    // For each pair of domains where child is more specific than parent,
-    // the child's domain should shadow the parent's.
-    for (const auto& sym : TEST_SYMBOLS) {
-        // Parent declares Real, child declares Integer (more specific)
-        AssumptionContext ctx;
-        ctx.assume_domain(sym, Domain::Real);
+static void expect_extended_property_shadowing(
+    AssumptionContext &ctx, QueryInterface &query, const ExprPtr &matrix,
+    const ExprPtr &f, const SymbolicExpr &period, const Interval &interval) {
+    EXPECT_TRUE((ctx.current_properties().declare_definiteness("A", Definiteness::NegativeDefinite).has_value())) << "child definiteness overrides";
+    EXPECT_TRUE((ctx.current_properties().declare_finiteness("f", Finiteness::Divergent).has_value())) << "child finiteness overrides";
+    EXPECT_TRUE((query.query_positive_definite(*matrix).value() == Tribool::False)) << "child definiteness is visible";
+    EXPECT_TRUE((query.query_finite(*f).value() == Tribool::False)) << "child finiteness is visible";
+    auto child_period = detail::expression_from_node(
+        detail::make_node<NumberNode>(BigInt(7)));
+    EXPECT_TRUE((ctx.current_properties().declare_periodic("f", "x", child_period).has_value())) << "child period overrides";
+    EXPECT_TRUE((ctx.current_properties().declare_monotonicity("f", "x", interval, Monotonicity::Decreasing).has_value())) << "child monotonicity overrides";
+    auto overridden_period = query.get_period(*f, "x");
+    EXPECT_TRUE((overridden_period && overridden_period.value() &&
+                 detail::node(*overridden_period.value())->equals(*detail::node(child_period))))
+        << "child period visible";
+    EXPECT_TRUE((ctx.get_monotonicity_checked("f", "x", interval).value() == Monotonicity::Decreasing)) << "child interval declaration wins";
+    EXPECT_TRUE((ctx.pop().has_value())) << "child scope popped";
+    EXPECT_TRUE((query.query_positive_definite(*matrix).value() == Tribool::True)) << "parent definiteness restored";
+    EXPECT_TRUE((query.query_finite(*f).value() == Tribool::True)) << "parent finiteness restored";
+    auto restored_period = query.get_period(*f, "x");
+    EXPECT_TRUE((restored_period && restored_period.value() &&
+                 detail::node(*restored_period.value())->equals(*detail::node(period))))
+        << "parent period restored";
+    EXPECT_TRUE((ctx.get_monotonicity_checked("f", "x", interval).value() == Monotonicity::Increasing)) << "parent monotonicity restored";
+}
 
-        Domain parent_domain = ctx.get_domain(sym);
-        EXPECT_TRUE(parent_domain == Domain::Real,
-            sym + " is Real in parent");
-
-        ctx.push();
-        ctx.assume_domain(sym, Domain::Integer);
-
-        // Child scope: should see Integer
-        EXPECT_TRUE(ctx.get_domain(sym) == Domain::Integer,
-            sym + " is Integer in child (shadows Real)");
-
-        ctx.pop();
-
-        // After pop: should see Real again
-        EXPECT_TRUE(ctx.get_domain(sym) == Domain::Real,
-            sym + " is Real again after pop");
+TEST(AssumptionScope, ExtendedPropertyReadthrough) {
+    AssumptionContext ctx;
+    auto n = detail::make_expression_ptr(detail::make_node<VariableNode>("n"));
+    auto t = detail::make_expression_ptr(detail::make_node<VariableNode>("t"));
+    auto f = detail::make_expression_ptr(detail::make_node<VariableNode>("f"));
+    auto matrix = detail::make_expression_ptr(detail::make_node<VariableNode>("A"));
+    auto period = detail::expression_from_node(
+        detail::make_node<NumberNode>(BigInt(5)));
+    auto lower = detail::make_expression_ptr(detail::make_node<NumberNode>(BigInt(1)));
+    auto upper = detail::make_expression_ptr(detail::make_node<NumberNode>(BigInt(3)));
+    Interval interval;
+    interval.lower = Endpoint::closed(lower);
+    interval.upper = Endpoint::closed(upper);
+    auto &properties = ctx.current_properties();
+    EXPECT_TRUE((properties.declare_domain("n", Domain::Natural).has_value())) << "natural domain declared";
+    EXPECT_TRUE((properties.declare_sign("n", Sign::Positive).has_value())) << "positive declared";
+    EXPECT_TRUE((properties.declare_transcendental("t").has_value())) << "transcendence declared";
+    EXPECT_TRUE((properties.declare_finiteness("f", Finiteness::Finite).has_value())) << "finiteness declared";
+    EXPECT_TRUE((properties.declare_definiteness("A", Definiteness::PositiveDefinite).has_value())) << "definiteness declared";
+    EXPECT_TRUE((properties.declare_periodic("f", "x", period).has_value())) << "period declared";
+    EXPECT_TRUE((properties.declare_bounded("n", Boundedness::Bounded, interval).has_value())) << "bounds declared";
+    EXPECT_TRUE((properties.declare_monotonicity("f", "x", interval, Monotonicity::Increasing).has_value())) << "monotonicity declared";
+    QueryInterface query(ctx);
+    for (int level = 0; level < 3; ++level) {
+        if (level != 0) {
+            ctx.push();
+        }
+        expect_scalar_property_readthrough(ctx, query, n, t);
+        EXPECT_TRUE((query.query_finite(*f).value() == Tribool::True)) << "finite survives empty push";
+        EXPECT_TRUE((query.query_positive_definite(*matrix).value() == Tribool::True)) << "definiteness survives empty push";
+        EXPECT_TRUE((query.query_positive_semidefinite(*matrix).value() == Tribool::True)) << "semidefiniteness survives empty push";
+        EXPECT_TRUE((query.query_periodic(*f, "x").value() == Tribool::True)) << "periodicity survives empty push";
+        auto inherited_period = query.get_period(*f, "x");
+        EXPECT_TRUE((inherited_period && inherited_period.value() &&
+                     detail::node(*inherited_period.value())->equals(*detail::node(period))))
+            << "exact period survives empty push";
+        auto bounds = ctx.get_bounds("n");
+        EXPECT_TRUE((bounds && detail::node(*bounds->lower.value)->equals(*detail::node(*lower)) &&
+                     detail::node(*bounds->upper.value)->equals(*detail::node(*upper))))
+            << "bounds survive empty push";
+        InferenceEngine engine(ctx);
+        EXPECT_TRUE((engine.infer_monotonicity(*f, "x", interval) == Monotonicity::Increasing)) << "monotonicity reader inherits parent interval";
     }
-}
-
-void test_sign_shadowing() {
-    TEST_CASE("Child scope sign shadows parent sign");
-    // Parent: x is NonNegative; Child: x is Positive (compatible, more specific)
-    AssumptionContext ctx;
-    ctx.assume_sign("x", Sign::NonNegative);
-
-    EXPECT_TRUE(ctx.has_sign("x", Sign::NonNegative),
-        "x is NonNegative in parent");
-    EXPECT_FALSE(ctx.has_sign("x", Sign::Positive),
-        "x is NOT Positive in parent (only NonNegative)");
-
-    ctx.push();
-    ctx.assume_sign("x", Sign::Positive);
-
-    // Child scope: should see Positive (and its implications)
-    EXPECT_TRUE(ctx.has_sign("x", Sign::Positive),
-        "x is Positive in child (shadows parent)");
-    EXPECT_TRUE(ctx.has_sign("x", Sign::NonNegative),
-        "x is NonNegative in child (implied by Positive)");
-    EXPECT_TRUE(ctx.has_sign("x", Sign::NonZero),
-        "x is NonZero in child (implied by Positive)");
-
-    ctx.pop();
-
-    // After pop: should see only NonNegative again
-    EXPECT_TRUE(ctx.has_sign("x", Sign::NonNegative),
-        "x is NonNegative after pop (parent value)");
-    EXPECT_FALSE(ctx.has_sign("x", Sign::Positive),
-        "x is NOT Positive after pop");
-    EXPECT_FALSE(ctx.has_sign("x", Sign::NonZero),
-        "x is NOT NonZero after pop (was only NonNegative in parent)");
-}
-
-void test_parity_shadowing() {
-    TEST_CASE("Child scope parity shadows parent parity");
-    AssumptionContext ctx;
-
-    // Parent: x is Even
-    ctx.current_properties().declare_parity("x", Parity::Even);
-    EXPECT_TRUE(ctx.get_parity("x") == Parity::Even,
-        "x is Even in parent");
-
-    ctx.push();
-    // Child: x is Odd (different parity — this is a new scope, no contradiction
-    // because child has its own PropertyStore)
-    ctx.current_properties().declare_parity("x", Parity::Odd);
-
-    EXPECT_TRUE(ctx.get_parity("x") == Parity::Odd,
-        "x is Odd in child (shadows Even)");
-
-    ctx.pop();
-
-    EXPECT_TRUE(ctx.get_parity("x") == Parity::Even,
-        "x is Even after pop (parent value restored)");
-}
-
-void test_boundedness_shadowing() {
-    TEST_CASE("Child scope boundedness shadows parent boundedness");
-    AssumptionContext ctx;
-
-    // Parent: x is Unbounded
-    ctx.current_properties().declare_bounded("x", Boundedness::Unbounded);
-    EXPECT_TRUE(ctx.get_boundedness("x") == Boundedness::Unbounded,
-        "x is Unbounded in parent");
-
-    ctx.push();
-    // Child: x is Bounded (different — new scope, no contradiction)
-    ctx.current_properties().declare_bounded("x", Boundedness::Bounded);
-
-    EXPECT_TRUE(ctx.get_boundedness("x") == Boundedness::Bounded,
-        "x is Bounded in child (shadows Unbounded)");
-
-    ctx.pop();
-
-    EXPECT_TRUE(ctx.get_boundedness("x") == Boundedness::Unbounded,
-        "x is Unbounded after pop (parent value restored)");
-}
-
-void test_domain_shadowing_all_pairs() {
-    TEST_CASE("Domain shadowing for various parent/child domain pairs");
-    // Test multiple domain pairs where child is different from parent
-    struct DomainPair {
-        Domain parent;
-        Domain child;
-    };
-    std::vector<DomainPair> pairs = {
-        {Domain::Real, Domain::Integer},
-        {Domain::Real, Domain::Natural},
-        {Domain::Rational, Domain::PositiveInt},
-        {Domain::Integer, Domain::PositiveInt},
-        {Domain::Real, Domain::PositiveInt},
-    };
-
-    for (const auto& p : pairs) {
-        AssumptionContext ctx;
-        ctx.assume_domain("x", p.parent);
-
-        ctx.push();
-        ctx.assume_domain("x", p.child);
-
-        EXPECT_TRUE(ctx.get_domain("x") == p.child,
-            "x is " + domain_name(p.child) + " in child (parent was " +
-            domain_name(p.parent) + ")");
-
-        ctx.pop();
-
-        EXPECT_TRUE(ctx.get_domain("x") == p.parent,
-            "x is " + domain_name(p.parent) + " after pop");
-    }
-}
-
-void test_sign_shadowing_various() {
-    TEST_CASE("Sign shadowing for various parent/child sign pairs");
-    // Test sign pairs where child is different but non-contradictory within
-    // its own scope (each scope has independent PropertyStore)
-    struct SignPair {
-        Sign parent;
-        Sign child;
-    };
-    std::vector<SignPair> pairs = {
-        {Sign::NonNegative, Sign::Positive},
-        {Sign::NonPositive, Sign::Negative},
-        {Sign::NonZero, Sign::Positive},
-        {Sign::NonZero, Sign::Negative},
-        {Sign::NonNegative, Sign::Zero},
-    };
-
-    for (const auto& p : pairs) {
-        AssumptionContext ctx;
-        ctx.assume_sign("x", p.parent);
-
-        ctx.push();
-        ctx.assume_sign("x", p.child);
-
-        // Child should see child's sign
-        EXPECT_TRUE(ctx.has_sign("x", p.child),
-            "x has " + sign_name(p.child) + " in child (parent was " +
-            sign_name(p.parent) + ")");
-
-        ctx.pop();
-
-        // Parent's sign should be restored
-        EXPECT_TRUE(ctx.has_sign("x", p.parent),
-            "x has " + sign_name(p.parent) + " after pop");
-    }
-}
-
-void test_child_does_not_modify_parent() {
-    TEST_CASE("Child scope declarations do not modify parent scope");
-    AssumptionContext ctx;
-
-    // Parent: x is Real, y is Positive
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_sign("y", Sign::Positive);
-
-    ctx.push();
-
-    // Child: override x to Integer, override y to Negative
-    ctx.assume_domain("x", Domain::Integer);
-    ctx.assume_sign("y", Sign::Negative);
-
-    // Verify child sees child values
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x is Integer in child");
-    EXPECT_TRUE(ctx.has_sign("y", Sign::Negative),
-        "y is Negative in child");
-
-    ctx.pop();
-
-    // Parent values should be completely unchanged
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Real,
-        "x is still Real in parent (not modified by child)");
-    EXPECT_TRUE(ctx.has_sign("y", Sign::Positive),
-        "y is still Positive in parent (not modified by child)");
-    EXPECT_FALSE(ctx.has_sign("y", Sign::Negative),
-        "y is NOT Negative in parent");
-}
-
-void test_read_through_undeclared_in_child() {
-    TEST_CASE("Child scope reads through to parent for undeclared symbols");
-    AssumptionContext ctx;
-
-    // Parent: x is Integer, y is Positive
-    ctx.assume_domain("x", Domain::Integer);
-    ctx.assume_sign("y", Sign::Positive);
-
-    ctx.push();
-
-    // Child doesn't declare x or y — should read through to parent
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x reads through to Integer from parent");
-    EXPECT_TRUE(ctx.has_sign("y", Sign::Positive),
-        "y reads through to Positive from parent");
-
-    // Child declares z — only z is new
-    ctx.assume_sign("z", Sign::NonNegative);
-    EXPECT_TRUE(ctx.has_sign("z", Sign::NonNegative),
-        "z is NonNegative in child");
-
-    ctx.pop();
-
-    // z should not be visible after pop
-    EXPECT_FALSE(ctx.has_sign("z", Sign::NonNegative),
-        "z not visible after pop");
-    // x and y still visible from root
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x still Integer in root");
-    EXPECT_TRUE(ctx.has_sign("y", Sign::Positive),
-        "y still Positive in root");
-}
-
-void test_multi_level_shadowing() {
-    TEST_CASE("Multi-level shadowing (grandchild shadows child shadows parent)");
-    AssumptionContext ctx;
-
-    // Root: x is Real
-    ctx.assume_domain("x", Domain::Real);
-
-    ctx.push(); // Level 2
-    // Level 2: x is Integer (shadows Real)
-    ctx.assume_domain("x", Domain::Integer);
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x is Integer at level 2");
-
-    ctx.push(); // Level 3
-    // Level 3: x is PositiveInt (shadows Integer)
-    ctx.assume_domain("x", Domain::PositiveInt);
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::PositiveInt,
-        "x is PositiveInt at level 3");
-
-    ctx.pop(); // Back to level 2
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Integer,
-        "x is Integer at level 2 after popping level 3");
-
-    ctx.pop(); // Back to root
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Real,
-        "x is Real at root after popping level 2");
-}
-
-void test_different_symbols_independent() {
-    TEST_CASE("Shadowing is per-symbol — different symbols are independent");
-    AssumptionContext ctx;
-
-    // Root: x is Real, y is Integer
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_domain("y", Domain::Integer);
-
-    ctx.push();
-    // Child: only shadow x
-    ctx.assume_domain("x", Domain::Natural);
-
-    // x is shadowed, y reads through
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Natural,
-        "x is Natural in child (shadowed)");
-    EXPECT_TRUE(ctx.get_domain("y") == Domain::Integer,
-        "y is Integer in child (read-through, not shadowed)");
-
-    ctx.pop();
-
-    EXPECT_TRUE(ctx.get_domain("x") == Domain::Real,
-        "x is Real after pop");
-    EXPECT_TRUE(ctx.get_domain("y") == Domain::Integer,
-        "y is Integer after pop (unchanged)");
-}
-
-
-int main() {
-    test_domain_roundtrip();
-    test_sign_roundtrip();
-    test_parity_roundtrip();
-    test_boundedness_roundtrip();
-    test_relation_roundtrip();
-    test_multiple_declarations_roundtrip();
-    test_parent_declarations_survive_pop();
-    test_nested_push_pop_roundtrip();
-    test_depth_changes();
-
-    test_domain_shadowing();
-    test_sign_shadowing();
-    test_parity_shadowing();
-    test_boundedness_shadowing();
-    test_domain_shadowing_all_pairs();
-    test_sign_shadowing_various();
-    test_child_does_not_modify_parent();
-    test_read_through_undeclared_in_child();
-    test_multi_level_shadowing();
-    test_different_symbols_independent();
-
-    return TEST_REPORT();
+    expect_extended_property_shadowing(ctx, query, matrix, f, period, interval);
+    EXPECT_TRUE((ctx.pop().has_value())) << "empty scope popped";
+    EXPECT_TRUE((query.query_integer(*n).value() == Tribool::True)) << "root facts remain intact";
 }

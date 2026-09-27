@@ -1,12 +1,12 @@
 /**
- * @file symbolic_ode_engine.cpp
- * @brief 统一 ODE 求解引擎实现：类型检测与分类。
+ * @file ode_classification.cpp
+ * @brief ODE 方程类型检测与分类。
  */
-#include "../include/symbolic_ode_engine.hpp"
-#include "symbolic_ast.hpp"
-#include "../include/symbolic.hpp"
-#include "../include/poly_utils.hpp"
-#include "../include/residual_verification.hpp"
+#include "symbolic_ode_engine.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "symbolic.hpp"
+#include "poly_utils.hpp"
+#include "residual_verification.hpp"
 #include "internal/expression_analysis.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
@@ -22,216 +22,6 @@
 
 namespace LMCAS {
 
-
-/**
- * @internal
- * @brief 尝试将表达式求值为 double。
- * @return 若表达式为纯数值返回其值，否则返回 NaN。
- */
-double try_eval_double(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !LMCAS::detail::node(expr)) return std::numeric_limits<double>::quiet_NaN();
-    if (expr->is_number()) {
-        auto node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr));
-        if (!node) return std::numeric_limits<double>::quiet_NaN();
-        if (std::holds_alternative<BigInt>(node->value()))
-            return std::get<BigInt>(node->value()).to_double();
-        if (std::holds_alternative<Rational>(node->value()))
-            return std::get<Rational>(node->value()).to_double();
-        return static_cast<double>(std::get<lmmc_real_t>(node->value()));
-    }
-    return std::numeric_limits<double>::quiet_NaN();
-}
-
-Result<void> validate_ode_expr_var_pair(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& x,
-    const std::string& y,
-    ComputationContext& context,
-    const std::string& operation)
-{
-    auto step = context.consume_steps(1, operation);
-    if (!step) return step;
-    if (!expr || !LMCAS::detail::node(expr)) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE expression cannot be null",
-                                     operation);
-    }
-    if (x.empty() || y.empty()) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE variable names cannot be empty",
-                                     operation);
-    }
-    if (x == y) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE independent and dependent variables must be distinct",
-                                     operation);
-    }
-    return Result<void>::success();
-}
-
-Result<void> validate_ode_pair_var_pair(
-    const std::shared_ptr<SymbolicExpr>& first,
-    const std::shared_ptr<SymbolicExpr>& second,
-    const std::string& x,
-    const std::string& y,
-    ComputationContext& context,
-    const std::string& operation)
-{
-    auto step = context.consume_steps(1, operation);
-    if (!step) return step;
-    if (!first || !LMCAS::detail::node(first) || !second || !LMCAS::detail::node(second)) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE expressions cannot be null",
-                                     operation);
-    }
-    if (x.empty() || y.empty()) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE variable names cannot be empty",
-                                     operation);
-    }
-    if (x == y) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE independent and dependent variables must be distinct",
-                                     operation);
-    }
-    return Result<void>::success();
-}
-
-ODESolutionResult wrap_ode_solution(ODESolution solution,
-                                           ODEType expected_method,
-                                           const std::string& operation)
-{
-    if (!solution.general_solution || !LMCAS::detail::node(solution.general_solution)) {
-        return ODESolutionResult::failure(
-            CasErrc::Inconclusive,
-            "ODE solver produced no solution in the supported domain",
-            operation);
-    }
-    if (solution.method_used != expected_method) {
-        return ODESolutionResult::failure(
-            CasErrc::InternalInvariant,
-            "ODE solver reported an unexpected method",
-            operation);
-    }
-    return ODESolutionResult::success(std::move(solution));
-}
-
-Result<void> validate_ode_variables(
-    const std::string& x,
-    const std::string& y,
-    ComputationContext& context,
-    const std::string& operation)
-{
-    auto step = context.consume_steps(1, operation);
-    if (!step) return step;
-    if (x.empty() || y.empty()) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE variable names cannot be empty",
-                                     operation);
-    }
-    if (x == y) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE independent and dependent variables must be distinct",
-                                     operation);
-    }
-    return Result<void>::success();
-}
-
-Result<void> validate_numeric_ode_coefficients(
-    const std::vector<double>& coeffs,
-    std::size_t min_size,
-    std::size_t max_size,
-    const std::string& operation)
-{
-    if (coeffs.size() < min_size || coeffs.size() > max_size) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE coefficient list has unsupported size",
-                                     operation);
-    }
-    if (!std::isfinite(coeffs.front()) || coeffs.front() == 0.0) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE leading coefficient must be finite and nonzero",
-                                     operation);
-    }
-    for (double coeff : coeffs) {
-        if (!std::isfinite(coeff)) {
-            return Result<void>::failure(CasErrc::InvalidArgument,
-                                         "ODE coefficients must be finite",
-                                         operation);
-        }
-    }
-    return Result<void>::success();
-}
-
-Result<void> validate_ode_three_expr_one_var(
-    const std::shared_ptr<SymbolicExpr>& first,
-    const std::shared_ptr<SymbolicExpr>& second,
-    const std::shared_ptr<SymbolicExpr>& third,
-    const std::string& x,
-    ComputationContext& context,
-    const std::string& operation)
-{
-    auto step = context.consume_steps(1, operation);
-    if (!step) return step;
-    if (!first || !LMCAS::detail::node(first) || !second || !LMCAS::detail::node(second) ||
-        !third || !LMCAS::detail::node(third)) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE expressions cannot be null",
-                                     operation);
-    }
-    if (x.empty()) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE variable name cannot be empty",
-                                     operation);
-    }
-    return Result<void>::success();
-}
-
-Result<void> validate_ode_two_expr_point(
-    const std::shared_ptr<SymbolicExpr>& p,
-    const std::shared_ptr<SymbolicExpr>& q,
-    const std::shared_ptr<SymbolicExpr>& x0,
-    const std::string& x,
-    ComputationContext& context,
-    const std::string& operation)
-{
-    auto step = context.consume_steps(1, operation);
-    if (!step) return step;
-    if (!p || !LMCAS::detail::node(p) || !q || !LMCAS::detail::node(q) || !x0 || !LMCAS::detail::node(x0)) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "Frobenius inputs cannot be null",
-                                     operation);
-    }
-    if (x.empty()) {
-        return Result<void>::failure(CasErrc::InvalidArgument,
-                                     "ODE variable name cannot be empty",
-                                     operation);
-    }
-    return Result<void>::success();
-}
-
-/**
- * @internal
- * @brief 检查表达式是否为纯数值常量（不依赖任何变量）。
- */
-[[maybe_unused]] static bool is_constant_expr(const std::shared_ptr<SymbolicExpr>& expr,
-                                              const std::string& x,
-                                              const std::string& y) {
-    if (!expr || !LMCAS::detail::node(expr)) return true;
-    return !expression_depends_on_variable(LMCAS::detail::node(expr), x) && !expression_depends_on_variable(LMCAS::detail::node(expr), y);
-}
-
-/**
- * @internal
- * @brief 检查表达式是否仅依赖指定变量（不依赖另一个变量）。
- */
-[[maybe_unused]] static bool depends_only_on(const std::shared_ptr<SymbolicExpr>& expr,
-                                             const std::string&,
-                                             const std::string& other_var) {
-    if (!expr || !LMCAS::detail::node(expr)) return true;
-    return !expression_depends_on_variable(LMCAS::detail::node(expr), other_var);
-}
-
 static bool valid_classifier_variables(
     const std::string& x,
     const std::string& y)
@@ -240,56 +30,63 @@ static bool valid_classifier_variables(
 }
 
 
+static bool separable_product(
+    const MultiplyNode& product, const std::string& x, const std::string& y) {
+    for (const auto& factor : product.operands()) {
+        bool fx = expression_depends_on_variable(factor, x);
+        bool fy = expression_depends_on_variable(factor, y);
+        if (fx && fy) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool separable_reciprocal(
+    const PowerNode& power, const std::string& x, const std::string& y) {
+    auto exponent = std::dynamic_pointer_cast<const NumberNode>(power.exponent());
+    if (!exponent) {
+        return false;
+    }
+    double value = try_eval_double(LMCAS::detail::make_expression_ptr(power.exponent()));
+    int equal;
+    lmmc_double_nearly_equal_tol(value, -1.0, 1e-12, 1e-12, &equal);
+    if (!equal) {
+        return false;
+    }
+    bool base_x = expression_depends_on_variable(power.base(), x);
+    bool base_y = expression_depends_on_variable(power.base(), y);
+    return (base_x && !base_y) || (!base_x && base_y);
+}
+
 bool is_separable(
     const std::shared_ptr<SymbolicExpr>& rhs,
     const std::string& x,
     const std::string& y)
 {
-    if (!rhs || !LMCAS::detail::node(rhs)) return false;
-    if (!valid_classifier_variables(x, y)) return false;
+    if (!rhs || !LMCAS::detail::node(rhs)) {
+        return false;
+    }
+    if (!valid_classifier_variables(x, y)) {
+        return false;
+    }
 
     bool has_x = expression_depends_on_variable(LMCAS::detail::node(rhs), x);
     bool has_y = expression_depends_on_variable(LMCAS::detail::node(rhs), y);
 
     /// 若只依赖一个变量或都不依赖，则可分离
-    if (!has_x || !has_y) return true;
+    if (!has_x || !has_y) {
+        return true;
+    }
 
     /// 检查乘法形式 f(x)*g(y)
     auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(rhs));
-    if (mul) {
-        /// 将因子分为仅含 x 的和仅含 y 的
-        bool all_separable = true;
-        for (const auto& factor : mul->operands()) {
-            bool fx = expression_depends_on_variable(factor, x);
-            bool fy = expression_depends_on_variable(factor, y);
-            if (fx && fy) {
-                all_separable = false;
-                break;
-            }
-        }
-        if (all_separable) return true;
+    if (mul && separable_product(*mul, x, y)) {
+        return true;
     }
-
-    /// 检查除法形式 f(x)/g(y) 或 g(y)/f(x)
-    auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(rhs));
-    if (pow) {
-        auto exp_node = std::dynamic_pointer_cast<const NumberNode>(pow->exponent());
-        if (exp_node) {
-            double exp_val = try_eval_double(LMCAS::detail::make_expression_ptr(pow->exponent()));
-            int eq;
-            lmmc_double_nearly_equal_tol(exp_val, -1.0, 1e-12, 1e-12, &eq);
-            if (eq) {
-                /// rhs = base^(-1) = 1/base; 若 base 仅含一个变量则可分离
-                bool base_x = expression_depends_on_variable(pow->base(), x);
-                bool base_y = expression_depends_on_variable(pow->base(), y);
-                if ((base_x && !base_y) || (!base_x && base_y)) return true;
-            }
-        }
-    }
-
-    return false;
+    auto power = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(rhs));
+    return power && separable_reciprocal(*power, x, y);
 }
-
 
 bool is_linear_first_order(
     const std::shared_ptr<SymbolicExpr>& rhs,
@@ -325,10 +122,14 @@ bool is_linear_first_order(
     /// rhs = A(x) + B(x)*y，其中 B(x) = ∂rhs/∂y
     /// 计算 A(x) = rhs|_{y=0}
     auto A = rhs->substitute(y, SymbolicExpr::number(0));
-    if (!A) return false;
+    if (!A) {
+        return false;
+    }
 
     /// 验证 A 不依赖 y
-    if (expression_depends_on_variable(LMCAS::detail::node(A), y)) return false;
+    if (expression_depends_on_variable(LMCAS::detail::node(A), y)) {
+        return false;
+    }
 
     /// B(x) = drhs_dy（已验证不依赖 y）
     /// 线性形式: y' = A(x) + B(x)*y  →  y' - B(x)*y = A(x)  →  y' + (-B(x))*y = A(x)
@@ -344,8 +145,12 @@ bool is_homogeneous_ode(
     const std::string& x,
     const std::string& y)
 {
-    if (!rhs || !LMCAS::detail::node(rhs)) return false;
-    if (!valid_classifier_variables(x, y)) return false;
+    if (!rhs || !LMCAS::detail::node(rhs)) {
+        return false;
+    }
+    if (!valid_classifier_variables(x, y)) {
+        return false;
+    }
 
     /// 齐次方程: f(tx, ty) = f(x, y) 对所有 t 成立
     /// 用 t=2 进行数值测试：f(2x, 2y) 应等于 f(x, y)
@@ -362,7 +167,9 @@ bool is_homogeneous_ode(
         SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs));
     diff = diff->simplify();
 
-    if (diff->is_zero()) return true;
+    if (diff->is_zero()) {
+        return true;
+    }
 
     ComputationContext context;
     auto verified = check_zero_residual(diff, context);
@@ -378,8 +185,10 @@ static std::optional<int> bernoulli_integer_exponent(const NumberNode& number)
         value = std::get<BigInt>(number.value()).try_to_int64();
     } else if (std::holds_alternative<Rational>(number.value())) {
         const auto& rational = std::get<Rational>(number.value());
-        if (!rational.is_integer()) return std::nullopt;
-        value = rational.to_BigInt().try_to_int64();
+        if (!rational.is_integer()) {
+            return std::nullopt;
+        }
+        value = rational.to_bigint().try_to_int64();
     } else {
         const lmmc_real_t approximate =
             std::get<lmmc_real_t>(number.value());
@@ -398,6 +207,51 @@ static std::optional<int> bernoulli_integer_exponent(const NumberNode& number)
     return static_cast<int>(*value);
 }
 
+static bool accumulate_bernoulli_exponent(int value, int& exponent) {
+    if (value > 0 && exponent > std::numeric_limits<int>::max() - value) {
+        return false;
+    }
+    if (value < 0 && exponent < std::numeric_limits<int>::min() - value) {
+        return false;
+    }
+    exponent += value;
+    return true;
+}
+
+static bool extract_bernoulli_factor(
+    const std::shared_ptr<const SymbolicNode>& factor, const std::string& y,
+    int& exponent, std::shared_ptr<SymbolicExpr>& coefficient) {
+        if (auto variable =
+                std::dynamic_pointer_cast<const VariableNode>(factor);
+            variable && variable->name() == y) {
+            if (exponent == std::numeric_limits<int>::max()) {
+                return false;
+            }
+            ++exponent;
+            return true;
+        }
+
+        if (auto power = std::dynamic_pointer_cast<const PowerNode>(factor)) {
+            auto base =
+                std::dynamic_pointer_cast<const VariableNode>(power->base());
+            auto power_value =
+                std::dynamic_pointer_cast<const NumberNode>(power->exponent());
+            if (base && base->name() == y && power_value) {
+                auto value = bernoulli_integer_exponent(*power_value);
+                if (!value) {
+                    return false;
+                }
+                return accumulate_bernoulli_exponent(*value, exponent);
+            }
+        }
+        if (expression_depends_on_variable(factor, y)) {
+            return false;
+        }
+        coefficient = SymbolicExpr::multiply(
+            coefficient, LMCAS::detail::make_expression_ptr(factor))->simplify();
+    return true;
+}
+
 static bool extract_bernoulli_monomial(
     const std::shared_ptr<const SymbolicNode>& term,
     const std::string& y,
@@ -414,36 +268,28 @@ static bool extract_bernoulli_monomial(
     }
 
     for (const auto& factor : factors) {
-        if (auto variable =
-                std::dynamic_pointer_cast<const VariableNode>(factor);
-            variable && variable->name() == y) {
-            if (exponent == std::numeric_limits<int>::max()) return false;
-            ++exponent;
-            continue;
+        if (!extract_bernoulli_factor(factor, y, exponent, coefficient)) {
+            return false;
         }
+    }
+    return true;
+}
 
-        if (auto power = std::dynamic_pointer_cast<const PowerNode>(factor)) {
-            auto base =
-                std::dynamic_pointer_cast<const VariableNode>(power->base());
-            auto power_value =
-                std::dynamic_pointer_cast<const NumberNode>(power->exponent());
-            if (base && base->name() == y && power_value) {
-                auto value = bernoulli_integer_exponent(*power_value);
-                if (!value ||
-                    (*value > 0 &&
-                     exponent > std::numeric_limits<int>::max() - *value) ||
-                    (*value < 0 &&
-                     exponent < std::numeric_limits<int>::min() - *value)) {
-                    return false;
-                }
-                exponent += *value;
-                continue;
-            }
+static bool collect_bernoulli_coefficients(
+    const std::vector<std::shared_ptr<const SymbolicNode>>& terms,
+    const std::string& y,
+    std::map<int, std::shared_ptr<SymbolicExpr>>& coefficients) {
+    for (const auto& term : terms) {
+        int exponent = 0;
+        std::shared_ptr<SymbolicExpr> coefficient;
+        if (!extract_bernoulli_monomial(
+                term, y, exponent, coefficient)) {
+            return false;
         }
-
-        if (expression_depends_on_variable(factor, y)) return false;
-        coefficient = SymbolicExpr::multiply(
-            coefficient, LMCAS::detail::make_expression_ptr(factor))->simplify();
+        auto& combined = coefficients[exponent];
+        combined = combined
+            ? SymbolicExpr::add(combined, coefficient)->simplify()
+            : coefficient->simplify();
     }
     return true;
 }
@@ -460,7 +306,9 @@ bool is_bernoulli_ode(
     Q.reset();
     n = 0;
     if (!rhs || !LMCAS::detail::node(rhs) ||
-        !valid_classifier_variables(x, y)) return false;
+        !valid_classifier_variables(x, y)) {
+        return false;
+    }
     if (!expression_depends_on_variable(LMCAS::detail::node(rhs), y)) {
         return false;
     }
@@ -474,30 +322,24 @@ bool is_bernoulli_ode(
     }
 
     std::map<int, std::shared_ptr<SymbolicExpr>> coefficients;
-    for (const auto& term : terms) {
-        int exponent = 0;
-        std::shared_ptr<SymbolicExpr> coefficient;
-        if (!extract_bernoulli_monomial(
-                term, y, exponent, coefficient)) {
-            return false;
-        }
-        auto& combined = coefficients[exponent];
-        combined = combined
-            ? SymbolicExpr::add(combined, coefficient)->simplify()
-            : coefficient->simplify();
+    if (!collect_bernoulli_coefficients(terms, y, coefficients)) {
+        return false;
     }
-
     auto linear_coefficient = SymbolicExpr::number(0);
     std::shared_ptr<SymbolicExpr> nonlinear_coefficient;
     int nonlinear_exponent = 0;
     for (auto& [exponent, coefficient] : coefficients) {
         coefficient = coefficient->simplify();
-        if (coefficient->is_zero()) continue;
+        if (coefficient->is_zero()) {
+            continue;
+        }
         if (exponent == 1) {
             linear_coefficient = coefficient;
             continue;
         }
-        if (exponent == 0 || nonlinear_coefficient) return false;
+        if (exponent == 0 || nonlinear_coefficient) {
+            return false;
+        }
         nonlinear_exponent = exponent;
         nonlinear_coefficient = coefficient;
     }
@@ -523,24 +365,32 @@ bool is_exact_ode(
 {
     if (!M || !LMCAS::detail::node(M) ||
         !N || !LMCAS::detail::node(N) ||
-        !valid_classifier_variables(x, y)) return false;
+        !valid_classifier_variables(x, y)) {
+        return false;
+    }
 
     /// 恰当条件: ∂M/∂y = ∂N/∂x
     auto dM_dy = M->differentiate(y);
     auto dN_dx = N->differentiate(x);
 
-    if (!dM_dy || !dN_dx) return false;
+    if (!dM_dy || !dN_dx) {
+        return false;
+    }
 
     dM_dy = dM_dy->simplify();
     dN_dx = dN_dx->simplify();
-    if (dM_dy->compare(dN_dx) == 0) return true;
+    if (dM_dy->compare(dN_dx) == 0) {
+        return true;
+    }
 
     /// 计算差值并化简
     auto diff = SymbolicExpr::add(dM_dy,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dN_dx));
     diff = diff->simplify();
 
-    if (diff->is_zero()) return true;
+    if (diff->is_zero()) {
+        return true;
+    }
 
     ComputationContext context;
     auto verified = check_zero_residual(diff, context);
@@ -554,10 +404,16 @@ bool is_constant_coefficient(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
     const std::string& x)
 {
-    if (coeffs.empty() || x.empty()) return false;
+    if (coeffs.empty() || x.empty()) {
+        return false;
+    }
     for (const auto& c : coeffs) {
-        if (!c || !LMCAS::detail::node(c)) return false;
-        if (expression_depends_on_variable(LMCAS::detail::node(c), x)) return false;
+        if (!c || !LMCAS::detail::node(c)) {
+            return false;
+        }
+        if (expression_depends_on_variable(LMCAS::detail::node(c), x)) {
+            return false;
+        }
     }
     return true;
 }
@@ -569,7 +425,9 @@ bool is_euler_equation(
     std::vector<double>& euler_consts)
 {
     euler_consts.clear();
-    if (coeffs.empty() || x.empty()) return false;
+    if (coeffs.empty() || x.empty()) {
+        return false;
+    }
     if (!coeffs.front() || !LMCAS::detail::node(coeffs.front()) ||
         coeffs.front()->is_zero()) {
         return false;
@@ -582,7 +440,9 @@ bool is_euler_equation(
         if (!coeffs[index] || !LMCAS::detail::node(coeffs[index])) {
             return false;
         }
-        if (coeffs[index]->is_zero()) continue;
+        if (coeffs[index]->is_zero()) {
+            continue;
+        }
 
         std::shared_ptr<SymbolicExpr> ratio;
         if (derivative_order == 0) {
@@ -594,7 +454,9 @@ bool is_euler_equation(
             ratio = SymbolicExpr::divide(
                 coeffs[index], x_power)->simplify();
         }
-        if (!ratio || !LMCAS::detail::node(ratio)) return false;
+        if (!ratio || !LMCAS::detail::node(ratio)) {
+            return false;
+        }
 
         if (expression_depends_on_variable(
                 LMCAS::detail::node(ratio), x)) {
@@ -602,7 +464,9 @@ bool is_euler_equation(
         }
 
         const double value = try_eval_double(ratio);
-        if (!std::isfinite(value)) return false;
+        if (!std::isfinite(value)) {
+            return false;
+        }
         extracted[index] = value;
     }
 

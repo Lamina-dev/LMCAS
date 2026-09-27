@@ -233,7 +233,7 @@ public:
     /**
      * @brief 转换为符号表达式
      * @param var 变量名
-     * @return 表示该区间并集的符号表达式
+     * @return 表示该区间并集的符号表达式；空集为有限空集，全实数域为恒真关系
      */
     std::shared_ptr<SymbolicExpr> to_expr(const std::string& var) const;
 

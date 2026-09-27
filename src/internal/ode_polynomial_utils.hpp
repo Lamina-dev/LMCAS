@@ -35,8 +35,9 @@ struct Complex {
     Complex operator/(const Complex& other) const {
         const double denominator =
             other.re * other.re + other.im * other.im;
-        if (denominator < 1e-300)
+        if (denominator < 1e-300) {
             return {INFINITY, INFINITY};
+        }
         return {(re * other.re + im * other.im) / denominator,
                 (im * other.re - re * other.im) / denominator};
     }
@@ -44,6 +45,11 @@ struct Complex {
         return std::hypot(re, im);
     }
 };
+
+inline bool is_exact_zero_polynomial_root(
+    const RealPolynomial& coefficients, const Complex& root) {
+    return root.re == 0.0 && root.im == 0.0 && coefficients.back() == 0.0;
+}
 
 inline double polynomial_root_backward_error(
     const RealPolynomial& coefficients, const Complex& root) {
@@ -55,16 +61,15 @@ inline double polynomial_root_backward_error(
         scale = scale * root_magnitude + std::abs(coefficients[i]);
     }
     if (!std::isfinite(value.re) || !std::isfinite(value.im) ||
-        !std::isfinite(scale))
+        !std::isfinite(scale)) {
         return INFINITY;
+    }
     if (scale == 0.0) {
         // At an exact zero root with zero constant term, both the residual
         // and its coefficientwise bound vanish: no perturbation is needed.
         // A nonzero root can instead underflow the bound, which is not proof.
-        return root.re == 0.0 && root.im == 0.0 &&
-                       coefficients.back() == 0.0
-                   ? 0.0
-                   : INFINITY;
+        return is_exact_zero_polynomial_root(coefficients, root)
+                   ? 0.0 : INFINITY;
     }
     return value.magnitude() / scale;
 }
@@ -85,7 +90,9 @@ inline void trim_polynomial(RealPolynomial& polynomial) {
         ++first;
     }
     polynomial.erase(polynomial.begin(), first);
-    if (polynomial.empty()) polynomial.push_back(0.0);
+    if (polynomial.empty()) {
+        polynomial.push_back(0.0);
+    }
 }
 
 inline std::pair<RealPolynomial, RealPolynomial> divide_polynomials(
@@ -107,7 +114,9 @@ inline std::pair<RealPolynomial, RealPolynomial> divide_polynomials(
     }
     remainder.erase(
         remainder.begin(), remainder.begin() + quotient.size());
-    if (remainder.empty()) remainder.push_back(0.0);
+    if (remainder.empty()) {
+        remainder.push_back(0.0);
+    }
     trim_polynomial(quotient);
     trim_polynomial(remainder);
     return {std::move(quotient), std::move(remainder)};
@@ -115,7 +124,9 @@ inline std::pair<RealPolynomial, RealPolynomial> divide_polynomials(
 
 inline RealPolynomial monic_polynomial(RealPolynomial polynomial) {
     trim_polynomial(polynomial);
-    if (polynomial.empty() || polynomial.front() == 0.0) return {0.0};
+    if (polynomial.empty() || polynomial.front() == 0.0) {
+        return {0.0};
+    }
     const double leading = polynomial.front();
     for (double& coefficient : polynomial) coefficient /= leading;
     return polynomial;
@@ -123,7 +134,9 @@ inline RealPolynomial monic_polynomial(RealPolynomial polynomial) {
 
 inline RealPolynomial polynomial_derivative(
     const RealPolynomial& polynomial) {
-    if (polynomial.size() <= 1) return {0.0};
+    if (polynomial.size() <= 1) {
+        return {0.0};
+    }
     RealPolynomial derivative;
     derivative.reserve(polynomial.size() - 1);
     const size_t degree = polynomial.size() - 1;
@@ -156,4 +169,4 @@ inline bool polynomial_remainder_is_small(
            std::max(1.0, polynomial_scale(dividend)) * 1e-7;
 }
 
-} // namespace LMCAS::ode_root_detail
+}

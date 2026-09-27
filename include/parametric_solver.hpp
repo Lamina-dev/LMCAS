@@ -71,14 +71,12 @@ private:
     static std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
     solve_linear_parametric(
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
-        const std::vector<std::string>& unknowns,
-        const std::vector<std::string>& parameters);
+        const std::vector<std::string>& unknowns);
 
     /** @brief 求解关于未知数为多项式的含参方程组 */
     static ParametricSolutionsResult solve_polynomial_parametric_impl(
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
         const std::vector<std::string>& unknowns,
-        const std::vector<std::string>& parameters,
         ComputationContext& context);
 
     /**

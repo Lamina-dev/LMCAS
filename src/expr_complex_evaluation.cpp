@@ -6,8 +6,9 @@
 #include <limits>
 #include <utility>
 
-#include "expr_internal.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/expr_internal.hpp"
+#include "internal/expr_common.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "lmmc/complex.h"
 
 namespace LMCAS {
@@ -65,7 +66,7 @@ Result<ApproxComplex> add_complex(const ApproxComplex& lhs,
     auto result = checked_complex(lhs.real.value + rhs.real.value,
                                   lhs.imag.value + rhs.imag.value,
                                   kEvalComplexOperation);
-    if (!result) return result;
+    if (!result) { return result; }
     result.value().real.absolute_error +=
         lhs.real.absolute_error + rhs.real.absolute_error;
     result.value().imag.absolute_error +=
@@ -88,7 +89,7 @@ Result<ApproxComplex> multiply_complex(const ApproxComplex& lhs,
                                kEvalComplexOperation);
     }
     auto result = checked_complex(product.real, product.imag, kEvalComplexOperation);
-    if (!result) return result;
+    if (!result) { return result; }
     result.value().real.absolute_error +=
         std::abs(c) * lhs.real.absolute_error +
         std::abs(a) * rhs.real.absolute_error +
@@ -131,9 +132,142 @@ bool is_integer_double(double value) {
 Result<ApproxComplex> evaluate_complex_node(
     const std::shared_ptr<const SymbolicNode>& node,
     const NumericBindings& bindings,
+    ComputationContext& context);
+
+Result<ApproxComplex> evaluate_complex_components(
+    const ComplexNode& node, const NumericBindings& bindings,
+    ComputationContext& context) {
+    auto real = evaluate_numeric(
+        *detail::make_expression_ptr(node.real()), bindings, context);
+    if (!real) {
+        return eval_complex_failure(real.error());
+    }
+    auto imag = evaluate_numeric(
+        *detail::make_expression_ptr(node.imag()), bindings, context);
+    if (!imag) {
+        return eval_complex_failure(imag.error());
+    }
+    if (!real.value().is_finite() || !imag.value().is_finite()) {
+        return complex_failure(CasErrc::NumericFailure,
+                               "complex components must be finite",
+                               kEvalComplexOperation);
+    }
+    return Result<ApproxComplex>::success(
+        ApproxComplex{real.value(), imag.value()});
+}
+
+template <typename Combine>
+Result<ApproxComplex> evaluate_complex_operands(
+    const std::vector<std::shared_ptr<const SymbolicNode>>& operands,
+    ApproxComplex identity, Combine combine, const NumericBindings& bindings,
+    ComputationContext& context) {
+    auto result = Result<ApproxComplex>::success(identity);
+    for (const auto& operand : operands) {
+        auto value = evaluate_complex_node(operand, bindings, context);
+        if (!value) {
+            return value;
+        }
+        result = combine(result.value(), value.value());
+        if (!result) {
+            return result;
+        }
+    }
+    return result;
+}
+
+Result<int> evaluate_complex_exponent(
+    const std::shared_ptr<const SymbolicNode>& node,
+    const NumericBindings& bindings, ComputationContext& context) {
+    auto expression = simplify(detail::make_expression_ptr(node), context);
+    if (!expression) {
+        return Result<int>::failure(
+            expression.error().code, std::move(expression.error().message),
+            kEvalComplexOperation);
+    }
+    /**
+     * @brief 精确有理指数在规范化及数值幂内核转换中保持整数域分类。
+     * @see David Goldberg, "What Every Computer Scientist Should Know About
+     * Floating-Point Arithmetic" (1991), Floating-point Formats.
+     * https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html
+     */
+    if (auto number = std::dynamic_pointer_cast<const NumberNode>(
+            detail::node(expression.value()))) {
+        if (const auto* rational = std::get_if<Rational>(&number->value());
+            rational && rational->get_denominator() != BigInt(1)) {
+            return Result<int>::failure(
+                CasErrc::UnsupportedExpression,
+                "complex evaluation requires an integer exponent",
+                kEvalComplexOperation);
+        }
+    }
+    auto exponent = evaluate_numeric(*expression.value(), bindings, context);
+    if (!exponent) {
+        return Result<int>::failure(
+            exponent.error().code, std::move(exponent.error().message),
+            kEvalComplexOperation);
+    }
+    if (!exponent.value().is_finite() ||
+        !std::isfinite(exponent.value().value)) {
+        return Result<int>::failure(CasErrc::NumericFailure,
+                                   "complex power exponent must be finite",
+                                   kEvalComplexOperation);
+    }
+    const double value = exponent.value().value;
+    if (!is_integer_double(value) || std::abs(value) > 64.0) {
+        return Result<int>::failure(
+            CasErrc::UnsupportedExpression,
+            "complex evaluation only supports integer powers with |n| <= 64",
+            kEvalComplexOperation);
+    }
+    return Result<int>::success(static_cast<int>(value));
+}
+
+Result<ApproxComplex> evaluate_complex_power(
+    const PowerNode& power, const NumericBindings& bindings,
+    ComputationContext& context) {
+    auto base = evaluate_complex_node(power.base(), bindings, context);
+    if (!base) {
+        return base;
+    }
+    auto exponent = evaluate_complex_exponent(power.exponent(), bindings, context);
+    if (!exponent) {
+        return Result<ApproxComplex>::failure(std::move(exponent.error()));
+    }
+    unsigned magnitude = static_cast<unsigned>(std::abs(exponent.value()));
+    auto factor = base;
+    if (exponent.value() < 0) {
+        factor = divide_complex(approx_complex(1.0, 0.0), base.value());
+        if (!factor) {
+            return factor;
+        }
+    }
+    auto result = Result<ApproxComplex>::success(approx_complex(1.0, 0.0));
+    while (magnitude != 0U) {
+        if ((magnitude & 1U) != 0U) {
+            result = multiply_complex(result.value(), factor.value());
+            if (!result) {
+                return result;
+            }
+        }
+        magnitude >>= 1U;
+        if (magnitude != 0U) {
+            factor = multiply_complex(factor.value(), factor.value());
+            if (!factor) {
+                return factor;
+            }
+        }
+    }
+    return result;
+}
+
+Result<ApproxComplex> evaluate_complex_node(
+    const std::shared_ptr<const SymbolicNode>& node,
+    const NumericBindings& bindings,
     ComputationContext& context) {
     auto entered = context.enter_recursion(kEvalComplexOperation);
-    if (!entered) return Result<ApproxComplex>::failure(entered.error());
+    if (!entered) {
+        return Result<ApproxComplex>::failure(entered.error());
+    }
     struct RecursionExit {
         ComputationContext& context;
         ~RecursionExit() { context.leave_recursion(); }
@@ -145,114 +279,24 @@ Result<ApproxComplex> evaluate_complex_node(
     }
 
     if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        auto real = evaluate_numeric(
-            *LMCAS::detail::make_expression_ptr(complex_node->real()),
-            bindings, context);
-        if (!real) return eval_complex_failure(real.error());
-        auto imag = evaluate_numeric(
-            *LMCAS::detail::make_expression_ptr(complex_node->imag()),
-            bindings, context);
-        if (!imag) return eval_complex_failure(imag.error());
-        if (!real.value().is_finite() || !imag.value().is_finite()) {
-            return complex_failure(CasErrc::NumericFailure,
-                                   "complex components must be finite",
-                                   kEvalComplexOperation);
-        }
-        return Result<ApproxComplex>::success(
-            ApproxComplex{real.value(), imag.value()});
+        return evaluate_complex_components(*complex_node, bindings, context);
     }
-
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (is_imaginary_unit_name(variable->name())) {
+        if (detail::is_imaginary_unit_name(variable->name())) {
             return Result<ApproxComplex>::success(approx_complex(0.0, 1.0));
         }
     }
-
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        auto sum = Result<ApproxComplex>::success(approx_complex(0.0, 0.0));
-        for (const auto& operand : add->operands()) {
-            auto term = evaluate_complex_node(operand, bindings, context);
-            if (!term) return term;
-            sum = add_complex(sum.value(), term.value());
-            if (!sum) return sum;
-        }
-        return sum;
+        return evaluate_complex_operands(
+            add->operands(), approx_complex(0.0, 0.0), add_complex, bindings, context);
     }
-
     if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        auto product = Result<ApproxComplex>::success(approx_complex(1.0, 0.0));
-        for (const auto& operand : multiply->operands()) {
-            auto factor = evaluate_complex_node(operand, bindings, context);
-            if (!factor) return factor;
-            product = multiply_complex(product.value(), factor.value());
-            if (!product) return product;
-        }
-        return product;
+        return evaluate_complex_operands(
+            multiply->operands(), approx_complex(1.0, 0.0), multiply_complex,
+            bindings, context);
     }
-
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        auto base = evaluate_complex_node(power->base(), bindings, context);
-        if (!base) return base;
-        auto exponent_expression = simplify(
-            LMCAS::detail::make_expression_ptr(power->exponent()), context);
-        if (!exponent_expression) {
-            return eval_complex_failure(exponent_expression.error());
-        }
-        /**
-         * Exact rational exponents retain their integer-domain classification
-         * through normalization and conversion to the numeric power kernel.
-         * @see David Goldberg, "What Every Computer Scientist Should Know About
-         * Floating-Point Arithmetic" (1991), Floating-point Formats.
-         * https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html
-         */
-        if (auto number = std::dynamic_pointer_cast<const NumberNode>(
-                LMCAS::detail::node(exponent_expression.value()))) {
-            if (const auto* rational = std::get_if<Rational>(&number->value());
-                rational && rational->get_denominator() != BigInt(1)) {
-                return complex_failure(
-                    CasErrc::UnsupportedExpression,
-                    "complex evaluation requires an integer exponent",
-                    kEvalComplexOperation);
-            }
-        }
-        auto exponent = evaluate_numeric(
-            *exponent_expression.value(), bindings, context);
-        if (!exponent) return eval_complex_failure(exponent.error());
-        if (!exponent.value().is_finite() ||
-            !std::isfinite(exponent.value().value)) {
-            return complex_failure(CasErrc::NumericFailure,
-                                   "complex power exponent must be finite",
-                                   kEvalComplexOperation);
-        }
-        const double exponent_value = exponent.value().value;
-        if (!is_integer_double(exponent_value) ||
-            std::abs(exponent_value) > 64.0) {
-            return complex_failure(CasErrc::UnsupportedExpression,
-                                   "complex evaluation only supports integer powers with |n| <= 64",
-                                   kEvalComplexOperation);
-        }
-        const int exponent_int = static_cast<int>(exponent_value);
-        unsigned exponent_magnitude =
-            static_cast<unsigned>(std::abs(exponent_int));
-        auto factor = base;
-        if (exponent_int < 0) {
-            factor = divide_complex(approx_complex(1.0, 0.0), base.value());
-            if (!factor) return factor;
-        }
-        auto result =
-            Result<ApproxComplex>::success(approx_complex(1.0, 0.0));
-        while (exponent_magnitude != 0U) {
-            if ((exponent_magnitude & 1U) != 0U) {
-                result = multiply_complex(result.value(), factor.value());
-                if (!result) return result;
-            }
-            exponent_magnitude >>= 1U;
-            if (exponent_magnitude != 0U) {
-                factor = multiply_complex(factor.value(), factor.value());
-                if (!factor) return factor;
-            }
-        }
-        return result;
+        return evaluate_complex_power(*power, bindings, context);
     }
 
     return real_to_complex(
@@ -260,13 +304,13 @@ Result<ApproxComplex> evaluate_complex_node(
                          bindings, context));
 }
 
-} // namespace
+}
 
 Result<ApproxReal> evalf(const SymbolicExpr& expression,
                          const NumericBindings& bindings,
                          ComputationContext& context) {
     auto evaluated = evaluate_numeric(expression, bindings, context);
-    if (!evaluated) return evaluated;
+    if (!evaluated) { return evaluated; }
     if (!evaluated.value().is_finite() ||
         !std::isfinite(evaluated.value().value)) {
         return Result<ApproxReal>::failure(
@@ -310,4 +354,4 @@ Result<ApproxComplex> eval_complex(const SymbolicExpr& expression,
     return eval_complex(expression, bindings, context);
 }
 
-} // namespace LMCAS
+}

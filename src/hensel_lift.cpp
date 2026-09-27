@@ -13,7 +13,8 @@
  *      Journal of Number Theory, 1(3), 1969.
  */
 
-#include "transcendental_factor.hpp"
+#include "exact_factorization.hpp"
+#include "internal/exact_factorization_support.hpp"
 
 #include <vector>
 #include <cstdint>
@@ -129,14 +130,14 @@ static int hl_compute_lift_height(const Polynomial<BigInt>& poly, int64_t prime)
     if (poly.is_zero() || poly.degree() <= 0) return 1;
 
     BigInt B = hl_mignotte_bound(poly);
-    BigInt lc = poly.lead_coeff().Abs();
+    BigInt lc = poly.lead_coeff().abs();
 
     /// 阈值 threshold = 2 * B * |lc(f)|
     BigInt threshold = BigInt(2) * B * lc;
 
     /// 计算最小 k 使得 p^k > threshold
     BigInt p_power(1);
-    BigInt big_p(static_cast<long long>(prime));
+    BigInt big_p(static_cast<std::int64_t>(prime));
     int k = 0;
 
     while (p_power <= threshold) {
@@ -150,33 +151,6 @@ static int hl_compute_lift_height(const Polynomial<BigInt>& poly, int64_t prime)
     return k;
 }
 
-/**
- * @brief 将 BigInt 系数归约到对称表示 [-m/2, m/2).
- *
- * 对给定系数 c 和模数 m,计算 c mod m 并映射到 [-m/2, m/2) 区间.
- * 这确保提升后的系数保持最小绝对值表示.
- *
- * @param[in] c 待归约的系数
- * @param[in] m 模数(正整数)
- * @return 对称表示下的归约值
- * @internal
- */
-static BigInt hl_symmetric_mod(const BigInt& c, const BigInt& m) {
-    if (m.is_zero()) return c;
-
-    BigInt r = c % m;
-    /// 确保 r 在 [0, m) 范围内
-    if (r.IsNegative()) {
-        r = r + m;
-    }
-
-    /// 映射到 [-m/2, m/2)
-    BigInt half_m = m / BigInt(2);
-    if (r > half_m) {
-        r = r - m;
-    }
-    return r;
-}
 
 /**
  * @brief 对多项式系数向量执行模归约(对称表示).
@@ -189,7 +163,7 @@ static BigInt hl_symmetric_mod(const BigInt& c, const BigInt& m) {
  */
 static void hl_reduce_coeffs(std::vector<BigInt>& poly, const BigInt& m) {
     for (auto& c : poly) {
-        c = hl_symmetric_mod(c, m);
+        c = detail::symmetric_remainder(c, m);
     }
     /// 去除高次零系数
     while (!poly.empty() && poly.back().is_zero()) {
@@ -293,7 +267,7 @@ static std::vector<BigInt> hl_poly_add_mod(const std::vector<BigInt>& a,
 static BigInt hl_mod_inverse(const BigInt& a, const BigInt& m) {
     /// 扩展欧几里得:求 s 使得 a*s == 1 (mod m)
     BigInt r0 = m, r1 = a % m;
-    if (r1.IsNegative()) r1 = r1 + m;
+    if (r1.is_negative()) r1 = r1 + m;
 
     BigInt s0(0), s1(1);
 
@@ -314,12 +288,12 @@ static BigInt hl_mod_inverse(const BigInt& a, const BigInt& m) {
     }
 
     /// 若 gcd 为 -1,调整符号
-    if (r0.IsNegative()) {
+    if (r0.is_negative()) {
         s0 = s0.negate();
     }
 
     BigInt result = s0 % m;
-    if (result.IsNegative()) result = result + m;
+    if (result.is_negative()) result = result + m;
     return result;
 }
 
@@ -360,15 +334,16 @@ hl_poly_divmod(const std::vector<BigInt>& a,
     std::vector<BigInt> quotient(deg_a - deg_b + 1, BigInt(0));
 
     for (int i = deg_a; i >= deg_b; --i) {
-        BigInt coeff = hl_symmetric_mod(remainder[i], m);
+        BigInt coeff = detail::symmetric_remainder(remainder[i], m);
         if (coeff.is_zero()) continue;
 
-        BigInt factor = hl_symmetric_mod(coeff * lc_inv, m);
+        BigInt factor = detail::symmetric_remainder(coeff * lc_inv, m);
         quotient[i - deg_b] = factor;
 
         for (int j = 0; j <= deg_b; ++j) {
             remainder[i - deg_b + j] = remainder[i - deg_b + j] - factor * b[j];
-            remainder[i - deg_b + j] = hl_symmetric_mod(remainder[i - deg_b + j], m);
+            remainder[i - deg_b + j] =
+                detail::symmetric_remainder(remainder[i - deg_b + j], m);
         }
     }
 
@@ -427,7 +402,7 @@ static Result<void> hl_validate_lift_inputs(
         }
     }
 
-    const BigInt modulus(static_cast<long long>(prime));
+    const BigInt modulus(static_cast<std::int64_t>(prime));
     std::vector<BigInt> product{BigInt(1)};
     for (const auto& factor : factor_vecs) {
         product = hl_poly_mul_mod(product, factor, modulus);
@@ -442,7 +417,6 @@ static Result<void> hl_validate_lift_inputs(
     return Result<void>::success();
 }
 
-/// HenselLiftPair 结构体已在 transcendental_factor.hpp 中声明
 
 /**
  * @brief 执行一步二次 Hensel 提升:mod m -> mod m^2.
@@ -582,10 +556,10 @@ hl_extended_gcd_poly(const std::vector<BigInt>& g,
     if (!r0.empty() && r0[0] != BigInt(1)) {
         BigInt inv = hl_mod_inverse(r0[0], m);
         for (auto& c : s0) {
-            c = hl_symmetric_mod(c * inv, m);
+            c = detail::symmetric_remainder(c * inv, m);
         }
         for (auto& c : t0) {
-            c = hl_symmetric_mod(c * inv, m);
+            c = detail::symmetric_remainder(c * inv, m);
         }
     }
 
@@ -630,7 +604,7 @@ static std::vector<std::vector<BigInt>> hl_multi_factor_lift(
     if (factors.size() == 1) {
         /// 单因子:直接归约到目标模数
         BigInt target_mod(1);
-        BigInt big_p(static_cast<long long>(prime));
+        BigInt big_p(static_cast<std::int64_t>(prime));
         for (int i = 0; i < target_k; ++i) {
             target_mod = target_mod * big_p;
         }
@@ -639,8 +613,8 @@ static std::vector<std::vector<BigInt>> hl_multi_factor_lift(
         return {result};
     }
 
-    BigInt big_p(static_cast<long long>(prime));
-    BigInt initial_mod(static_cast<long long>(prime));
+    BigInt big_p(static_cast<std::int64_t>(prime));
+    BigInt initial_mod(static_cast<std::int64_t>(prime));
 
     /// 计算目标模数 p^target_k
     BigInt target_mod(1);
@@ -735,7 +709,7 @@ HenselLiftResult hensel_lift_checked(
         std::vector<BigInt> fv;
         fv.reserve(mf.coeffs.size());
         for (const auto& c : mf.coeffs) {
-            fv.push_back(BigInt(static_cast<long long>(c.value())));
+            fv.push_back(BigInt(static_cast<std::int64_t>(c.value())));
         }
         factor_vecs.push_back(std::move(fv));
     }

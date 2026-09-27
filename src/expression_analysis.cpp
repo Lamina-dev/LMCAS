@@ -8,49 +8,20 @@ namespace {
 
 class FreeVariableCollector final : public detail::RecursiveSymbolicVisitor {
 public:
+    using RecursiveSymbolicVisitor::RecursiveSymbolicVisitor;
     std::set<std::string> variables;
 
     void visit(const VariableNode& node) override {
         if (!is_bound(node.name())) variables.insert(node.name());
     }
 
-    void visit(const SummationNode& node) override {
-        visit_child(node.lower_bound());
-        visit_child(node.upper_bound());
-        visit_scoped(node.index_var(), node.body());
-    }
-
-    void visit(const ProductNode& node) override {
-        visit_child(node.lower_bound());
-        visit_child(node.upper_bound());
-        visit_scoped(node.index_var(), node.body());
-    }
-
-    void visit(const IntegralNode& node) override {
-        visit_child(node.lower());
-        visit_child(node.upper());
-        visit_scoped(node.variable(), node.body());
-    }
-
-    void visit(const TransformNode& node) override {
-        visit_child(node.target());
-        visit_scoped(node.source_var(), node.body());
-    }
-
-    void visit(const QuantifierNode& node) override {
-        visit_child(node.domain());
-        visit_scoped(node.bound_var(), node.predicate());
-    }
-
-    void visit(const SetBuilderNode& node) override {
-        visit_child(node.domain());
-        visit_scoped(node.element_var(), node.predicate());
-    }
-
-    void visit(const LimitNode& node) override {
-        visit_child(node.point());
-        visit_scoped(node.variable(), node.body());
-    }
+    void visit(const SummationNode& node) override { visit_binder(node); }
+    void visit(const ProductNode& node) override { visit_binder(node); }
+    void visit(const IntegralNode& node) override { visit_binder(node); }
+    void visit(const TransformNode& node) override { visit_binder(node); }
+    void visit(const QuantifierNode& node) override { visit_binder(node); }
+    void visit(const SetBuilderNode& node) override { visit_binder(node); }
+    void visit(const LimitNode& node) override { visit_binder(node); }
 
     void visit(const RootOfNode&) override {}
 
@@ -60,18 +31,46 @@ private:
         return found != bound_.end() && found->second != 0;
     }
 
-    void visit_scoped(const std::string& name, const detail::SymbolicNodePtr& body) {
-        ++bound_[name];
-        visit_child(body);
-        auto found = bound_.find(name);
+    void visit_binder(const SymbolicNode& node) {
+        const auto binder = detail::binder_view(node);
+        visit_children(binder->outside_scope);
+        ++bound_[binder->bound_name];
+        visit_child(binder->scoped_body);
+        auto found = bound_.find(binder->bound_name);
         if (--found->second == 0) bound_.erase(found);
     }
 
-    std::unordered_map<std::string, std::size_t> bound_;
+    std::unordered_map<std::string_view, std::size_t> bound_;
+};
+class FreeVariableFinder final : public detail::RecursiveSymbolicVisitor {
+public:
+    explicit FreeVariableFinder(std::string_view name, detail::RewriteBudget* budget = nullptr)
+        : RecursiveSymbolicVisitor(budget), name_(name) {}
+    bool found = false;
+
+    void visit(const VariableNode& node) override { found = found || node.name() == name_; }
+    void visit(const SummationNode& node) override { visit_binder(node); }
+    void visit(const ProductNode& node) override { visit_binder(node); }
+    void visit(const IntegralNode& node) override { visit_binder(node); }
+    void visit(const TransformNode& node) override { visit_binder(node); }
+    void visit(const QuantifierNode& node) override { visit_binder(node); }
+    void visit(const SetBuilderNode& node) override { visit_binder(node); }
+    void visit(const LimitNode& node) override { visit_binder(node); }
+
+private:
+    void visit_binder(const SymbolicNode& node) {
+        if (found) return;
+        const auto binder = detail::binder_view(node);
+        visit_children(binder->outside_scope);
+        if (!found && binder->bound_name != name_) visit_child(binder->scoped_body);
+    }
+
+    const std::string_view name_;
 };
 
 class AllNameCollector final : public detail::RecursiveSymbolicVisitor {
 public:
+    using RecursiveSymbolicVisitor::RecursiveSymbolicVisitor;
     std::set<std::string> names;
 
     void visit(const VariableNode& node) override { names.insert(node.name()); }
@@ -106,8 +105,9 @@ public:
     void visit(const RootOfNode&) override {}
 };
 
-std::set<std::string> all_names(const detail::SymbolicNodePtr& expression) {
-    AllNameCollector collector;
+std::set<std::string> all_names(const detail::SymbolicNodePtr& expression,
+                                detail::RewriteBudget* budget = nullptr) {
+    AllNameCollector collector(budget);
     if (expression) expression->accept(collector);
     return collector.names;
 }
@@ -123,8 +123,9 @@ class FreeSubstitution final : public detail::SymbolicRewriter {
 public:
     FreeSubstitution(std::string target, detail::SymbolicNodePtr replacement,
                      std::set<std::string> replacement_free,
-                     std::set<std::string> occupied)
-        : target_(std::move(target)), replacement_(std::move(replacement)),
+                     std::set<std::string> occupied, detail::RewriteBudget* budget)
+        : SymbolicRewriter(budget), target_(std::move(target)),
+          replacement_(std::move(replacement)),
           replacement_free_(std::move(replacement_free)),
           occupied_(std::move(occupied)) {}
 
@@ -211,11 +212,11 @@ private:
         if (binder == target_) return original_body;
 
         auto body = original_body;
-        if (expression_depends_on_variable(body, target_) &&
+        if (expression_depends_on_variable(body, target_, rewrite_budget()) &&
             replacement_free_.find(binder) != replacement_free_.end()) {
             const auto renamed = fresh_name(binder, occupied_);
             body = substitute_free(body, binder,
-                                   SymbolicFactory::create_variable(renamed));
+                                   SymbolicFactory::create_variable(renamed), rewrite_budget());
             binder = renamed;
             changed = true;
         }
@@ -229,38 +230,106 @@ private:
 };
 
 } // namespace
+std::optional<Rational> detail::exact_rational_value(
+    const NumberNode& number) {
+    if (const auto* integer = std::get_if<BigInt>(&number.value())) {
+        return Rational(*integer);
+    }
+    if (const auto* rational = std::get_if<Rational>(&number.value())) {
+        return *rational;
+    }
+    return std::nullopt;
+}
 
-std::set<std::string> free_variables(const detail::SymbolicNodePtr& expression) {
-    FreeVariableCollector collector;
+std::optional<Rational> detail::exact_rational_value(
+    const detail::SymbolicNodePtr& node) {
+    const auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    return number ? exact_rational_value(*number) : std::nullopt;
+}
+
+
+Result<std::optional<detail::AffineForm>> detail::recognize_affine(
+    const SymbolicExpr& expression, const std::string& variable,
+    ComputationContext& context) {
+    using AffineResult = Result<std::optional<AffineForm>>;
+    auto converted = symbolic_to_poly_checked(expression, variable, context);
+    if (!converted) {
+        if (converted.error().code == CasErrc::UnsupportedExpression) {
+            return std::optional<AffineForm>{};
+        }
+        return AffineResult::failure(converted.error());
+    }
+    const auto& polynomial = converted.value();
+    if (polynomial.degree() > 1) return std::optional<AffineForm>{};
+    return std::optional<AffineForm>{AffineForm{
+        polynomial.coeffs.size() > 1 ? polynomial.coeffs[1].val : SymbolicExpr::number(0),
+        polynomial.coeffs.empty() ? SymbolicExpr::number(0) : polynomial.coeffs[0].val}};
+}
+
+std::optional<int> exact_small_integer_node(
+    const detail::SymbolicNodePtr& node, int min_value, int max_value) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number) return std::nullopt;
+
+    BigInt value;
+    if (std::holds_alternative<BigInt>(number->value())) {
+        value = std::get<BigInt>(number->value());
+    } else if (std::holds_alternative<Rational>(number->value())) {
+        const Rational& rational = std::get<Rational>(number->value());
+        if (!rational.is_integer()) return std::nullopt;
+        value = rational.to_bigint();
+    } else {
+        return std::nullopt;
+    }
+
+    const auto exact = value.try_to_int64();
+    if (!exact || *exact < min_value || *exact > max_value) {
+        return std::nullopt;
+    }
+    return static_cast<int>(*exact);
+}
+
+bool detail::is_imaginary_unit_name(const std::string& name) {
+    return name == "I";
+}
+
+std::set<std::string> detail::all_variable_names(const detail::SymbolicNodePtr& expression) {
+    return all_names(expression);
+}
+
+std::set<std::string> free_variables(const detail::SymbolicNodePtr& expression,
+                                     detail::RewriteBudget* budget) {
+    FreeVariableCollector collector(budget);
     if (expression) expression->accept(collector);
     return collector.variables;
 }
 
 bool expression_depends_on_variable(
     const detail::SymbolicNodePtr& expression,
-    const std::string& variable) {
+    const std::string& variable, detail::RewriteBudget* budget) {
     if (!expression || variable.empty()) return false;
-    const auto variables = free_variables(expression);
-    return variables.find(variable) != variables.end();
+    FreeVariableFinder finder(variable, budget);
+    expression->accept(finder);
+    return finder.found;
 }
 
 detail::SymbolicNodePtr substitute_free(
     const detail::SymbolicNodePtr& expression,
     const std::string& variable,
-    const detail::SymbolicNodePtr& replacement) {
+    const detail::SymbolicNodePtr& replacement, detail::RewriteBudget* budget) {
     if (!expression) return nullptr;
     if (variable.empty()) throw std::invalid_argument("substitution variable cannot be empty");
     if (!replacement) throw std::invalid_argument("substitution replacement cannot be null");
 
-    auto replacement_free = free_variables(replacement);
-    auto occupied = all_names(expression);
-    auto replacement_names = all_names(replacement);
+    auto replacement_free = free_variables(replacement, budget);
+    auto occupied = all_names(expression, budget);
+    auto replacement_names = all_names(replacement, budget);
     occupied.insert(replacement_names.begin(), replacement_names.end());
     occupied.insert(variable);
 
     FreeSubstitution substitution(variable, replacement,
                                   std::move(replacement_free),
-                                  std::move(occupied));
+                                  std::move(occupied), budget);
     return substitution.rewrite(expression);
 }
 

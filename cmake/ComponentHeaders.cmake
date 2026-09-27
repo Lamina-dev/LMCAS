@@ -1,0 +1,192 @@
+## @brief 显式记录头文件归属，将包含关系映射为组件依赖。
+target_sources(lmcas_exact_numeric PRIVATE
+    include/bigint.hpp
+    include/rational.hpp
+    include/irrational.hpp
+    include/result.hpp
+    include/computation_context.hpp
+    include/assumption.hpp
+    include/unit.hpp
+    include/polynomial.hpp
+    include/polynomial_division.hpp
+    include/modular_arithmetic.hpp
+    include/rational_polynomial.hpp
+    include/exact_factorization.hpp
+    include/numeric_value.hpp
+    include/lmcas_export.hpp
+    src/internal/lmmc_lifecycle.hpp
+    src/internal/exact_sturm.hpp
+    src/internal/exact_constant_bounds.hpp
+    src/internal/exact_algebraic.hpp
+    src/internal/exact_root.hpp
+    src/internal/exact_root_id.hpp
+    src/internal/complex_root_isolation.hpp
+    src/internal/multivariate_factor_support.hpp
+    src/internal/berlekamp_support.hpp
+    src/internal/exact_rational_matrix.hpp
+    src/internal/exact_factorization_support.hpp
+)
+
+target_sources(lmcas_core PRIVATE
+    include/symbolic.hpp
+    include/matcher.hpp
+    include/numeric_evaluation.hpp
+    include/polynomial_conversion.hpp
+    include/root_of_identity.hpp
+    include/interval.hpp
+    include/quantity.hpp
+    include/symbolic_set.hpp
+    include/limit_direction.hpp
+    include/limit_value.hpp
+    include/proof_outcome.hpp
+    include/conditional_result.hpp
+    src/internal/symbolic_ast.hpp
+    src/internal/symbolic_ast/base.hpp
+    src/internal/symbolic_ast/numbers.hpp
+    src/internal/symbolic_ast/arithmetic.hpp
+    src/internal/symbolic_ast/functions.hpp
+    src/internal/symbolic_ast/relations.hpp
+    src/internal/symbolic_ast/constructs.hpp
+    src/internal/symbolic_ast/integral.hpp
+    src/internal/symbolic_ast/special_forms.hpp
+    src/internal/symbolic_ast/traversal.hpp
+    src/internal/visitors/normalization_visitor.hpp
+    src/internal/visitors/print_visitor.hpp
+    src/internal/visitors/expand_visitor.hpp
+    src/internal/visitors/differentiation_visitor.hpp
+    src/internal/facts_query.hpp
+    src/internal/squared_norm.hpp
+    src/internal/expression_analysis.hpp
+    src/internal/rewrite_budget.hpp
+    src/internal/normalization_utils.hpp
+    src/internal/numeric_literal.hpp
+    src/internal/expression_transform.hpp
+    src/internal/expression_construction.hpp
+    src/internal/numeric_probe.hpp
+    src/internal/interval_endpoint.hpp
+    src/internal/symbolic_ast/bindings.hpp
+    src/internal/symbolic_ast/sets.hpp
+    src/internal/symbolic_ast/matrix.hpp
+    src/internal/numeric_evaluation_support.hpp
+)
+
+target_sources(lmcas_assumptions PRIVATE
+    include/assumption_context.hpp
+    include/property_store.hpp
+    include/relation_store.hpp
+    include/inference_engine.hpp
+    include/query_interface.hpp
+    src/internal/inference_engine_impl.hpp
+    src/internal/assumption_facts.hpp
+    src/internal/assumption_simplification.hpp
+    src/internal/property_store_support.hpp
+    src/internal/query_support.hpp
+)
+
+target_sources(lmcas_matrix_kernel PRIVATE
+    src/internal/exact_matrix.hpp
+    src/internal/exact_matrix_support.hpp
+)
+
+target_sources(lmcas_algebra PRIVATE
+    include/fglm.hpp
+    include/monomial_order.hpp
+    include/multivariate_poly.hpp
+    include/multivariate_factor.hpp
+    include/poly_utils.hpp
+    include/root_of_utils.hpp
+    include/solver.hpp
+    include/solve_strategies.hpp
+    include/solve_polynomial.hpp
+    include/solve_transcendental.hpp
+    include/solve_mixed_transcendental.hpp
+    include/inequality_solver.hpp
+    include/parametric_solver.hpp
+    include/newton_raphson.hpp
+    include/transcendental_factor.hpp
+    include/equivalence_options.hpp
+    include/residual_verification.hpp
+    src/internal/pointwise_comparison.hpp
+    src/internal/inequality_solver_support.hpp
+    src/internal/solver_support.hpp
+    src/internal/polynomial_solver_support.hpp
+    src/internal/multivariate_factor_checked_support.hpp
+    src/internal/multivariate_conversion.hpp
+    src/internal/transcendental_support.hpp
+    src/internal/complex_quadratic.hpp
+    src/internal/equivalence_engine.hpp
+    src/internal/equivalence_support.hpp
+    src/internal/fglm_internal.hpp
+    src/internal/solver_groebner_internal.hpp
+    src/internal/solver_groebner_builder.hpp
+    src/internal/mixed_transcendental_support.hpp
+    src/internal/transcendental_solver_support.hpp
+)
+
+target_sources(lmcas_calculus PRIVATE
+    include/integration.hpp
+    include/integrator.hpp
+    include/integration_strategies.hpp
+    include/integration_table.hpp
+    include/multiple_integral.hpp
+    include/numerical_integration.hpp
+    include/calculus_utils.hpp
+    include/limit_result.hpp
+    src/internal/visitors/limit_visitor.hpp
+    src/internal/integration_support.hpp
+    src/internal/calculus_utils_support.hpp
+    src/internal/integration_rational_support.hpp
+    src/internal/integration_definite_support.hpp
+    src/internal/integration_table_rules.hpp
+)
+
+target_sources(lmcas_linear_algebra PRIVATE
+    include/symbolic_matrix.hpp
+    include/matrix_decomposition.hpp
+    src/internal/symbolic_matrix_support.hpp
+    src/internal/matrix_decomposition_support.hpp
+)
+
+target_sources(lmcas_analysis PRIVATE
+    include/symbolic_geometry.hpp
+    include/symbolic_vector_geometry.hpp
+    include/symbolic_complex.hpp
+    include/series_engine.hpp
+    include/transform_engine.hpp
+    include/symbolic_ode.hpp
+    include/symbolic_ode_engine.hpp
+    include/vector_calculus.hpp
+    include/complex_analysis.hpp
+    include/differential_geometry.hpp
+    include/symbolic_implicit_diff.hpp
+    include/matrix_quadratic_form.hpp
+    src/internal/ode_characteristic_roots.hpp
+    src/internal/ode_polynomial_utils.hpp
+    src/internal/ode_support.hpp
+    src/internal/series_support.hpp
+    src/internal/transform_support.hpp
+    src/internal/vector_calculus_support.hpp
+    src/internal/symbolic_quadric_classification.hpp
+    include/symbolic_geometry_vector.hpp
+    include/symbolic_geometry_line_plane.hpp
+    include/symbolic_geometry_quadric.hpp
+    include/symbolic_geometry_surface.hpp
+    src/internal/symbolic_geometry_support.hpp
+    include/vector_calculus_types.hpp
+    include/vector_calculus_differential.hpp
+    include/vector_calculus_matrices.hpp
+    include/vector_calculus_curves.hpp
+    include/vector_calculus_surfaces.hpp
+    include/vector_calculus_theorems.hpp
+    include/vector_calculus_extrema.hpp
+    include/vector_calculus_vectors.hpp
+)
+
+target_sources(lmcas_facade PRIVATE
+    include/expr.hpp
+    include/value.hpp
+    src/internal/expr_common.hpp
+    src/internal/expr_internal.hpp
+    src/internal/expr_parser.hpp
+    src/internal/assumption_parser.hpp
+)

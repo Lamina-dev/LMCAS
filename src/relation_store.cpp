@@ -1,14 +1,45 @@
-/**
- * @file relation_store.cpp
- * @brief Implementation of RelationStore for storing relational constraints.
- */
-
 #include "relation_store.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "internal/expression_analysis.hpp"
 #include "property_store.hpp"
+#include <algorithm>
 #include <queue>
 
 namespace LMCAS {
+
+RelationStore::RelationStore(RelationStore&& other) noexcept
+    : relations_(std::move(other.relations_)), proofs_(std::move(other.proofs_)),
+      declaration_order_(std::move(other.declaration_order_)) {
+    other.relations_.clear();
+    other.proofs_.clear();
+    other.declaration_order_.clear();
+    ++other.revision_;
+}
+
+RelationStore& RelationStore::operator=(const RelationStore& other) {
+    if (this != &other) {
+        RelationStore candidate(other);
+        relations_.swap(candidate.relations_);
+        proofs_.swap(candidate.proofs_);
+        declaration_order_.swap(candidate.declaration_order_);
+        ++revision_;
+    }
+    return *this;
+}
+
+RelationStore& RelationStore::operator=(RelationStore&& other) noexcept {
+    if (this != &other) {
+        relations_ = std::move(other.relations_);
+        proofs_ = std::move(other.proofs_);
+        declaration_order_ = std::move(other.declaration_order_);
+        other.relations_.clear();
+        other.proofs_.clear();
+        other.declaration_order_.clear();
+        ++revision_;
+        ++other.revision_;
+    }
+    return *this;
+}
 
 namespace {
 
@@ -40,68 +71,77 @@ bool expr_equals(const SymbolicExpr& a, const SymbolicExpr& b) {
     return LMCAS::detail::node(a)->equals(*LMCAS::detail::node(b));
 }
 
-RelationStoreResult require_sign_declaration(
-    PropertyStore& store,
-    const std::string& symbol,
-    Sign sign) {
-    return store.declare_sign(symbol, sign);
+RelationStoreResult declare_comparison_sign(const std::string& symbol,
+                                          RelationOp op, PropertyStore& store) {
+    struct SignRule {
+        RelationOp op;
+        Sign sign;
+    };
+    static constexpr SignRule rules[] = {
+        {RelationOp::GT, Sign::Positive},
+        {RelationOp::GEQ, Sign::NonNegative},
+        {RelationOp::LT, Sign::Negative},
+        {RelationOp::LEQ, Sign::NonPositive},
+        {RelationOp::NEQ, Sign::NonZero}
+    };
+    for (const auto& rule : rules) {
+        if (rule.op == op) return store.declare_sign(symbol, rule.sign);
+    }
+    return RelationStoreResult::success();
 }
 
-} // anonymous namespace
+
+RelationStoreResult derive_comparison_sign(const SymbolicExpr& lhs,
+                                         const SymbolicExpr& rhs,
+                                         RelationOp op, PropertyStore& store) {
+    const auto variable = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(lhs));
+    const auto number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(rhs));
+    if (variable && number && number->is_zero()) {
+        return declare_comparison_sign(variable->name(), op, store);
+    }
+    const auto zero = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(lhs));
+    const auto reversed_variable = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rhs));
+    if (zero && zero->is_zero() && reversed_variable) {
+        return declare_comparison_sign(
+            reversed_variable->name(), detail::reversed_relation(op), store);
+    }
+    return RelationStoreResult::success();
+}
+
+}
 
 RelationStoreResult RelationStore::add_relation_unchecked(
     const SymbolicExpr& lhs,
     const SymbolicExpr& rhs,
     RelationOp op,
     PropertyStore& prop_store) {
-    // Store the relation regardless of pattern
-    relations_.push_back(Relation{lhs, rhs, op});
+    auto index = find_relation(lhs, rhs, op);
+    if (!index) {
+        index = relations_.size();
+        relations_.push_back(Relation{lhs, rhs, op});
+        proofs_.push_back(RelationProofs{});
+    }
+    const bool already_declared = proofs_[*index].declared;
+    if (!already_declared) {
+        proofs_[*index].declared = true;
+        declaration_order_.push_back(*index);
+    }
 
     if (!LMCAS::detail::node(lhs) || !LMCAS::detail::node(rhs)) {
         return RelationStoreResult::success();
     }
 
-    // Detect simple "variable op 0" pattern for sign property derivation.
-    // LHS must be a single VariableNode and RHS must be a NumberNode with value 0.
-    auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(lhs));
-    auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(rhs));
-
-    if (var_node && num_node && num_node->is_zero()) {
-        // Map operator to sign property
-        switch (op) {
-            case RelationOp::GT:
-                if (auto result = require_sign_declaration(
-                        prop_store, var_node->name(), Sign::Positive); !result) return result;
-                break;
-            case RelationOp::GEQ:
-                if (auto result = require_sign_declaration(
-                        prop_store, var_node->name(), Sign::NonNegative); !result) return result;
-                break;
-            case RelationOp::LT:
-                if (auto result = require_sign_declaration(
-                        prop_store, var_node->name(), Sign::Negative); !result) return result;
-                break;
-            case RelationOp::LEQ:
-                if (auto result = require_sign_declaration(
-                        prop_store, var_node->name(), Sign::NonPositive); !result) return result;
-                break;
-            case RelationOp::NEQ:
-                if (auto result = require_sign_declaration(
-                        prop_store, var_node->name(), Sign::NonZero); !result) return result;
-                break;
-            case RelationOp::EQ:
-                break;
-        }
-    } else {
-        // Detect reversed "0 op variable" pattern
-        auto reversed = detect_reversed_pattern(lhs, rhs, op, prop_store);
-        if (!reversed) return reversed;
-    }
+    auto derived = derive_comparison_sign(lhs, rhs, op, prop_store);
+    if (!derived) return derived;
 
     // Compute transitive closure for GT/GEQ relations
     if (is_transitive_op(op)) {
-        auto closure = compute_transitive_closure(relations_.back(), prop_store);
-        if (!closure) return closure;
+        auto closure = compute_transitive_closure(*index, prop_store);
+        if (!closure) return RelationStoreResult::failure(closure.error());
+        if (already_declared && closure.value()) {
+            // 重复声明可以推进受限闭包，序列化需重放这次操作。
+            declaration_order_.push_back(*index);
+        }
     }
     return RelationStoreResult::success();
 }
@@ -148,207 +188,103 @@ RelationStoreResult RelationStore::add_relation_checked(
 
     return RelationStoreResult::success();
 }
-
-RelationStoreResult RelationStore::compute_transitive_closure(
-    const Relation& new_rel, PropertyStore& prop_store) {
-    // BFS queue: each entry is a deduced relation to explore further
-    struct QueueEntry {
-        SymbolicExpr lhs;
-        SymbolicExpr rhs;
-        RelationOp op;
-    };
-
-    std::queue<QueueEntry> bfs_queue;
-    bfs_queue.push({new_rel.lhs, new_rel.rhs, new_rel.op});
-
+struct RelationStore::TransitiveWork {
+    std::queue<std::size_t> queue;
     int deductions = 0;
+    bool changed = false;
+};
 
-    while (!bfs_queue.empty() && deductions < MAX_TRANSITIVE_DEDUCTIONS) {
-        auto current = bfs_queue.front();
-        bfs_queue.pop();
-
-        // Snapshot the current relation count to avoid iterating over newly added relations.
-        // We copy relevant relations to avoid invalidation from vector reallocation.
-        const size_t relation_count = relations_.size();
-
-        // Forward chaining: current is (A op B), find existing (B op2 C) → deduce (A combined_op C)
-        for (size_t i = 0; i < relation_count && deductions < MAX_TRANSITIVE_DEDUCTIONS; ++i) {
-            // Access by index each iteration since vector may have grown
-            if (!is_transitive_op(relations_[i].op)) continue;
-
-            // Check if current.rhs matches existing.lhs (forward chain)
-            if (expr_equals(current.rhs, relations_[i].lhs)) {
-                RelationOp combined = combine_ops(current.op, relations_[i].op);
-                SymbolicExpr deduced_lhs = current.lhs;
-                SymbolicExpr deduced_rhs = relations_[i].rhs;
-
-                // Only add if not already stored
-                if (!has_relation(deduced_lhs, deduced_rhs, combined)) {
-                    relations_.push_back(Relation{deduced_lhs, deduced_rhs, combined});
-                    ++deductions;
-
-                    // Derive sign properties for the new deduced relation
-                    if (LMCAS::detail::node(deduced_lhs) && LMCAS::detail::node(deduced_rhs)) {
-                        auto reversed = detect_reversed_pattern(
-                            deduced_lhs, deduced_rhs, combined, prop_store);
-                        if (!reversed) return reversed;
-                        // Also check "variable op 0" pattern
-                        auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(deduced_lhs));
-                        auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(deduced_rhs));
-                        if (var_node && num_node && num_node->is_zero()) {
-                            switch (combined) {
-                                case RelationOp::GT: {
-                                    auto result = require_sign_declaration(
-                                        prop_store, var_node->name(), Sign::Positive);
-                                    if (!result) return result;
-                                    break;
-                                }
-                                case RelationOp::GEQ: {
-                                    auto result = require_sign_declaration(
-                                        prop_store, var_node->name(), Sign::NonNegative);
-                                    if (!result) return result;
-                                    break;
-                                }
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-
-                    // Enqueue for further BFS exploration
-                    bfs_queue.push({deduced_lhs, deduced_rhs, combined});
-                }
-            }
+RelationStoreResult RelationStore::enqueue_transitive_deduction(
+    const Relation& deduced, Premises premises,
+    PropertyStore& prop_store, TransitiveWork& work) {
+    if (premises[1] < premises[0]) std::swap(premises[0], premises[1]);
+    if (const auto index = find_relation(deduced.lhs, deduced.rhs, deduced.op)) {
+        if (premises[0] == *index || premises[1] == *index) {
+            return RelationStoreResult::success();
         }
-
-        // Backward chaining: current is (A op B), find existing (C op2 A) → deduce (C combined_op B)
-        for (size_t i = 0; i < relation_count && deductions < MAX_TRANSITIVE_DEDUCTIONS; ++i) {
-            if (!is_transitive_op(relations_[i].op)) continue;
-
-            // Check if existing.rhs matches current.lhs (backward chain)
-            if (expr_equals(relations_[i].rhs, current.lhs)) {
-                RelationOp combined = combine_ops(relations_[i].op, current.op);
-                SymbolicExpr deduced_lhs = relations_[i].lhs;
-                SymbolicExpr deduced_rhs = current.rhs;
-
-                // Only add if not already stored
-                if (!has_relation(deduced_lhs, deduced_rhs, combined)) {
-                    relations_.push_back(Relation{deduced_lhs, deduced_rhs, combined});
-                    ++deductions;
-
-                    // Derive sign properties for the new deduced relation
-                    if (LMCAS::detail::node(deduced_lhs) && LMCAS::detail::node(deduced_rhs)) {
-                        auto reversed = detect_reversed_pattern(
-                            deduced_lhs, deduced_rhs, combined, prop_store);
-                        if (!reversed) return reversed;
-                        // Also check "variable op 0" pattern
-                        auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(deduced_lhs));
-                        auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(deduced_rhs));
-                        if (var_node && num_node && num_node->is_zero()) {
-                            switch (combined) {
-                                case RelationOp::GT: {
-                                    auto result = require_sign_declaration(
-                                        prop_store, var_node->name(), Sign::Positive);
-                                    if (!result) return result;
-                                    break;
-                                }
-                                case RelationOp::GEQ: {
-                                    auto result = require_sign_declaration(
-                                        prop_store, var_node->name(), Sign::NonNegative);
-                                    if (!result) return result;
-                                    break;
-                                }
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-
-                    // Enqueue for further BFS exploration
-                    bfs_queue.push({deduced_lhs, deduced_rhs, combined});
-                }
-            }
+        auto& alternatives = proofs_[*index].alternatives;
+        if (std::find(alternatives.begin(), alternatives.end(), premises) ==
+            alternatives.end()) {
+            alternatives.push_back(premises);
+            work.changed = true;
         }
+        return RelationStoreResult::success();
     }
+    if (work.deductions == MAX_TRANSITIVE_DEDUCTIONS) {
+        return RelationStoreResult::success();
+    }
+    relations_.push_back(deduced);
+    proofs_.push_back(RelationProofs{false, {premises}});
+    ++work.deductions;
+    work.changed = true;
+    auto derived = derive_comparison_sign(
+        deduced.lhs, deduced.rhs, deduced.op, prop_store);
+    if (!derived) return derived;
+    work.queue.push(relations_.size() - 1);
     return RelationStoreResult::success();
 }
 
-RelationStoreResult RelationStore::detect_reversed_pattern(
-    const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-    RelationOp op, PropertyStore& prop_store) {
-    // LHS must be a NumberNode with value 0
-    auto num_node = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(lhs));
-    if (!num_node || !num_node->is_zero()) {
-        return RelationStoreResult::success();
+Result<bool> RelationStore::compute_transitive_closure(
+    std::size_t new_relation, PropertyStore& prop_store) {
+    TransitiveWork work;
+    work.queue.push(new_relation);
+    while (!work.queue.empty()) {
+        const auto current_index = work.queue.front();
+        const auto current = relations_[current_index];
+        work.queue.pop();
+        /**
+         * @brief 双向推导共用同一快照，先正向后反向。
+         * @note 插入可能使向量引用失效，跨插入仅保留索引或副本。
+         */
+        const std::size_t relation_count = relations_.size();
+        for (std::size_t i = 0; i < relation_count; ++i) {
+            if (!is_transitive_op(relations_[i].op)) continue;
+            if (!expr_equals(current.rhs, relations_[i].lhs)) continue;
+            auto result = enqueue_transitive_deduction(
+                {current.lhs, relations_[i].rhs, combine_ops(current.op, relations_[i].op)},
+                {current_index, i}, prop_store, work);
+            if (!result) return Result<bool>::failure(result.error());
+        }
+        for (std::size_t i = 0; i < relation_count; ++i) {
+            if (!is_transitive_op(relations_[i].op)) continue;
+            if (!expr_equals(relations_[i].rhs, current.lhs)) continue;
+            auto result = enqueue_transitive_deduction(
+                {relations_[i].lhs, current.rhs, combine_ops(relations_[i].op, current.op)},
+                {i, current_index}, prop_store, work);
+            if (!result) return Result<bool>::failure(result.error());
+        }
     }
-
-    // RHS must be a single VariableNode
-    auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rhs));
-    if (!var_node) {
-        return RelationStoreResult::success();
-    }
-
-    // Reversed semantics:
-    //   0 LT  var → 0 < var → var > 0 → Positive
-    //   0 GT  var → 0 > var → var < 0 → Negative
-    //   0 GEQ var → 0 >= var → var <= 0 → NonPositive
-    //   0 LEQ var → 0 <= var → var >= 0 → NonNegative
-    //   0 NEQ var → 0 != var → NonZero
-    RelationStoreResult result = RelationStoreResult::success();
-    switch (op) {
-        case RelationOp::LT:
-            result = require_sign_declaration(prop_store, var_node->name(), Sign::Positive);
-            break;
-        case RelationOp::GT:
-            result = require_sign_declaration(prop_store, var_node->name(), Sign::Negative);
-            break;
-        case RelationOp::GEQ:
-            result = require_sign_declaration(prop_store, var_node->name(), Sign::NonPositive);
-            break;
-        case RelationOp::LEQ:
-            result = require_sign_declaration(prop_store, var_node->name(), Sign::NonNegative);
-            break;
-        case RelationOp::NEQ:
-            result = require_sign_declaration(prop_store, var_node->name(), Sign::NonZero);
-            break;
-        case RelationOp::EQ:
-            break;
-    }
-    return result;
+    return Result<bool>::success(work.changed);
 }
 
 const std::vector<Relation>& RelationStore::get_relations() const {
     return relations_;
 }
 
-bool RelationStore::has_relation(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
-                                 RelationOp op) const {
-    for (const auto& rel : relations_) {
-        if (rel.op != op) {
-            continue;
-        }
-        // Compare LHS structurally
-        if (!LMCAS::detail::node(rel.lhs) && !LMCAS::detail::node(lhs)) {
-            // Both null — match on LHS
-        } else if (!LMCAS::detail::node(rel.lhs) || !LMCAS::detail::node(lhs)) {
-            continue;  // One null, one not — no match
-        } else if (!LMCAS::detail::node(rel.lhs)->equals(*LMCAS::detail::node(lhs))) {
-            continue;
-        }
-        // Compare RHS structurally
-        if (!LMCAS::detail::node(rel.rhs) && !LMCAS::detail::node(rhs)) {
-            return true;  // Both null — full match
-        } else if (!LMCAS::detail::node(rel.rhs) || !LMCAS::detail::node(rhs)) {
-            continue;  // One null, one not — no match
-        } else if (LMCAS::detail::node(rel.rhs)->equals(*LMCAS::detail::node(rhs))) {
-            return true;
+std::optional<std::size_t> RelationStore::find_relation(
+    const SymbolicExpr& lhs, const SymbolicExpr& rhs, RelationOp op) const {
+    for (std::size_t i = 0; i < relations_.size(); ++i) {
+        const auto& relation = relations_[i];
+        if (relation.op == op && expr_equals(relation.lhs, lhs) &&
+            expr_equals(relation.rhs, rhs)) {
+            return i;
         }
     }
-    return false;
+    return std::nullopt;
+}
+
+bool RelationStore::has_relation(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+                                 RelationOp op) const {
+    return find_relation(lhs, rhs, op).has_value();
 }
 
 void RelationStore::clear() {
-    relations_.clear();
+    if (!relations_.empty()) {
+        relations_.clear();
+        proofs_.clear();
+        declaration_order_.clear();
+        ++revision_;
+    }
 }
 
-} // namespace LMCAS
+}

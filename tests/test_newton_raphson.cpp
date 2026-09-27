@@ -1,892 +1,328 @@
-#include "test_common.hpp"
-#include "newton_raphson.hpp"
-#include "solve_polynomial.hpp"
-#include "poly_utils.hpp"
-#include <algorithm>
-#include <cmath>
-#include "poly_utils.hpp"
-#include <limits>
-#include <random>
-#include <set>
-#include <sstream>
+#include "test_newton_raphson_support.hpp"
 
-using namespace LMCAS;
+static void test_numeric_solver_binding_and_budgets(
+    const std::shared_ptr<SymbolicExpr> &x,
+    const std::shared_ptr<SymbolicExpr> &f, const LMCAS::SolveOptions &opts,
+    LMCAS::CancellationToken &cancellation) {
+    LMCAS::ComputationContext solve_unbound_context;
+    auto solve_unbound = LMCAS::solve_numeric_checked(
+        f, "x", solve_unbound_context, opts);
+    EXPECT_TRUE((!solve_unbound &&
+                 solve_unbound.error().code == LMCAS::CasErrc::UnboundSymbol))
+        << "checked solve preserves coefficient binding failures";
 
-static std::shared_ptr<SymbolicExpr> num_expr(int n) { return SymbolicExpr::number(n); }
+    auto default_context_unbound = LMCAS::solve_numeric_checked(f, "x", opts);
+    EXPECT_TRUE((!default_context_unbound &&
+                 default_context_unbound.error().code == LMCAS::CasErrc::UnboundSymbol))
+        << "default-context checked solve preserves coefficient binding failures";
 
-static double eval_numeric_expr(const std::shared_ptr<SymbolicExpr>& expr) {
-    if (!expr || !LMCAS::detail::node(expr)) return 0.0;
+    LMCAS::ComputationContext solve_cancelled_context({}, cancellation);
+    auto solve_cancelled = LMCAS::solve_numeric_checked(
+        x, "x", solve_cancelled_context, opts);
+    EXPECT_TRUE((!solve_cancelled &&
+                 solve_cancelled.error().code == LMCAS::CasErrc::Cancelled))
+        << "checked solve observes cancellation before isolation";
 
-    if (auto n = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
-        if (std::holds_alternative<lmmc_real_t>(n->value())) return std::get<lmmc_real_t>(n->value());
-        if (std::holds_alternative<BigInt>(n->value())) return std::get<BigInt>(n->value()).to_double();
-        if (std::holds_alternative<Rational>(n->value())) return std::get<Rational>(n->value()).to_double();
-    }
+    LMCAS::ResourceLimits solve_limits;
+    solve_limits.max_steps = 1;
+    LMCAS::ComputationContext solve_limited_context(solve_limits);
+    auto solve_limited = LMCAS::solve_numeric_checked(
+        x, "x", solve_limited_context, opts);
+    EXPECT_TRUE((!solve_limited &&
+                 solve_limited.error().code == LMCAS::CasErrc::ResourceLimit))
+        << "checked solve accounts for interval refinement steps";
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(expr))) {
-        double result = 0.0;
-        for (auto& op : add->operands()) {
-            result += eval_numeric_expr(LMCAS::detail::make_expression_ptr(op));
-        }
-        return result;
-    }
-
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
-        double result = 1.0;
-        for (auto& op : mul->operands()) {
-            result *= eval_numeric_expr(LMCAS::detail::make_expression_ptr(op));
-        }
-        return result;
-    }
-
-    if (auto pow_node = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
-        double base = eval_numeric_expr(LMCAS::detail::make_expression_ptr(pow_node->base()));
-        double exp = eval_numeric_expr(LMCAS::detail::make_expression_ptr(pow_node->exponent()));
-        if (base < 0.0 && std::abs(exp - std::round(exp)) > 1e-15) {
-            double denom = std::round(1.0 / exp);
-            if (std::abs(exp * denom - 1.0) < 1e-12 && ((int)denom % 2 == 1)) {
-                return -std::pow(-base, exp);
-            }
-            return std::nan("");
-        }
-        return std::pow(base, exp);
-    }
-
-    if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(expr))) {
-        if (func->arguments().size() == 1) {
-            double arg = eval_numeric_expr(LMCAS::detail::make_expression_ptr(func->arguments()[0]));
-            switch (func->type()) {
-                case FunctionNode::FuncType::Sin: return std::sin(arg);
-                case FunctionNode::FuncType::Cos: return std::cos(arg);
-                case FunctionNode::FuncType::Tan: return std::tan(arg);
-                case FunctionNode::FuncType::Exp: return std::exp(arg);
-                case FunctionNode::FuncType::Ln: return std::log(arg);
-                case FunctionNode::FuncType::Sqrt:
-                    if (arg < 0.0) return std::nan("");
-                    return std::sqrt(arg);
-                case FunctionNode::FuncType::Abs: return std::abs(arg);
-                case FunctionNode::FuncType::ArcCos: return std::acos(arg);
-                case FunctionNode::FuncType::ArcSin: return std::asin(arg);
-                case FunctionNode::FuncType::ArcTan: return std::atan(arg);
-                default: break;
-            }
-        }
-    }
-
-    if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
-        return std::nan("");
-    }
-
-    return std::nan("");
+    LMCAS::SolveOptions no_roots_opts = opts;
+    no_roots_opts.max_roots = 0;
+    LMCAS::ComputationContext no_roots_context;
+    auto no_roots = LMCAS::solve_numeric_checked(
+        x, "x", no_roots_context, no_roots_opts);
+    EXPECT_TRUE((no_roots && no_roots.value().empty())) << "zero root limit returns no candidates";
 }
 
-static LMCAS::Polynomial<Rational> poly_from_roots(const std::vector<int>& roots) {
-    LMCAS::Polynomial<Rational> result({Rational(1)}, "x");
-    for (int r : roots) {
+static void test_numeric_polynomial_recognition_limits(
+    const std::shared_ptr<SymbolicExpr> &x, const LMCAS::SolveOptions &opts) {
+    LMCAS::ResourceLimits expansion_limits;
+    expansion_limits.max_expansion_terms = 1;
+    LMCAS::ComputationContext exact_expansion_context(expansion_limits);
+    auto exact_linear = SymbolicExpr::add(x, SymbolicExpr::number(1));
+    auto exact_expansion = LMCAS::solve_numeric_checked(
+        exact_linear, "x", exact_expansion_context, opts);
+    EXPECT_TRUE((!exact_expansion &&
+                 exact_expansion.error().code == LMCAS::CasErrc::ResourceLimit))
+        << "exact polynomial recognition enforces expansion limits";
 
-        LMCAS::Polynomial<Rational> factor({Rational(-r), Rational(1)}, "x");
-        result = result * factor;
+    auto approximate_linear = SymbolicExpr::add(
+        SymbolicExpr::multiply(SymbolicExpr::number(0.5), x),
+        SymbolicExpr::number(-1));
+    LMCAS::ComputationContext approximate_context(expansion_limits);
+    auto approximate = LMCAS::solve_numeric_checked(
+        approximate_linear, "x", approximate_context, opts);
+    EXPECT_TRUE((approximate && approximate.value().size() == 1)) << "ApproxReal coefficients stay on the explicit numeric path";
+    if (approximate && approximate.value().size() == 1) {
+        EXPECT_TRUE((std::abs(approximate.value()[0].value - 2.0) < opts.tolerance)) << "approximate linear root is numerically verified";
     }
-    return result;
+
+    LMCAS::ResourceLimits exponent_limits;
+    exponent_limits.max_expansion_terms = 10;
+    LMCAS::ComputationContext exponent_context(exponent_limits);
+    auto large_power = SymbolicExpr::power(x, SymbolicExpr::number(BigInt(1000)));
+    auto exponent_limited = LMCAS::solve_numeric_checked(
+        large_power, "x", exponent_context, opts);
+    EXPECT_TRUE((!exponent_limited &&
+                 exponent_limited.error().code == LMCAS::CasErrc::ResourceLimit))
+        << "large exact powers fail before polynomial expansion";
 }
 
-static double eval_poly_at_double(const LMCAS::Polynomial<Rational>& poly, double x) {
-    double result = 0.0;
-    double x_pow = 1.0;
-    for (size_t i = 0; i < poly.coeffs.size(); ++i) {
-        result += poly.coeffs[i].to_double() * x_pow;
-        x_pow *= x;
-    }
-    return result;
+static bool numeric_root_has_error(
+    const LMCAS::NumericRootResult &result, LMCAS::CasErrc code) {
+    return !result && result.error().code == code;
 }
 
-int main() {
-    TEST_CASE("Checked numeric root errors are preserved");
-    {
-        auto x = SymbolicExpr::variable("x");
-        auto y = SymbolicExpr::variable("y");
-        auto f = SymbolicExpr::add(x, y);
-        auto df = SymbolicExpr::number(1);
+TEST(NewtonRaphson, CheckedNumericRootErrorsArePreserved) {
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto f = SymbolicExpr::add(x, y);
+    auto df = SymbolicExpr::number(1);
 
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 10;
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 10;
 
-        LMCAS::ComputationContext unbound_context;
-        auto unbound = LMCAS::newton_raphson_checked(
-            f, df, "x", 0.0, unbound_context, opts);
-        EXPECT_TRUE(!unbound && unbound.error().code == LMCAS::CasErrc::UnboundSymbol,
-                    "unbound symbols return UnboundSymbol");
+    LMCAS::ComputationContext unbound_context;
+    auto unbound = LMCAS::newton_raphson_checked(
+        f, df, "x", 0.0, unbound_context, opts);
+    EXPECT_TRUE((numeric_root_has_error(unbound, LMCAS::CasErrc::UnboundSymbol))) << "unbound symbols return UnboundSymbol";
 
-        auto log_f = SymbolicExpr::ln(x);
-        auto log_df = SymbolicExpr::divide(SymbolicExpr::number(1), x);
-        LMCAS::ComputationContext domain_context;
-        auto domain = LMCAS::newton_raphson_checked(
-            log_f, log_df, "x", -1.0, domain_context, opts);
-        EXPECT_TRUE(!domain && domain.error().code == LMCAS::CasErrc::DomainError,
-                    "domain failures return DomainError");
+    auto log_f = SymbolicExpr::ln(x);
+    auto log_df = SymbolicExpr::divide(SymbolicExpr::number(1), x);
+    LMCAS::ComputationContext domain_context;
+    auto domain = LMCAS::newton_raphson_checked(
+        log_f, log_df, "x", -1.0, domain_context, opts);
+    EXPECT_TRUE((numeric_root_has_error(domain, LMCAS::CasErrc::DomainError))) << "domain failures return DomainError";
 
-        LMCAS::CancellationToken cancellation;
-        cancellation.cancel();
-        LMCAS::ComputationContext cancelled_context({}, cancellation);
-        auto cancelled = LMCAS::newton_raphson_checked(
-            x, df, "x", 1.0, cancelled_context, opts);
-        EXPECT_TRUE(!cancelled && cancelled.error().code == LMCAS::CasErrc::Cancelled,
-                    "cancelled computations return Cancelled");
+    LMCAS::CancellationToken cancellation;
+    cancellation.cancel();
+    LMCAS::ComputationContext cancelled_context({}, cancellation);
+    auto cancelled = LMCAS::newton_raphson_checked(
+        x, df, "x", 1.0, cancelled_context, opts);
+    EXPECT_TRUE((numeric_root_has_error(cancelled, LMCAS::CasErrc::Cancelled))) << "cancelled computations return Cancelled";
 
-        LMCAS::ResourceLimits limits;
-        limits.max_steps = 1;
-        LMCAS::ComputationContext limited_context(limits);
-        auto limited = LMCAS::newton_raphson_checked(
-            x, df, "x", 1.0, limited_context, opts);
-        EXPECT_TRUE(!limited && limited.error().code == LMCAS::CasErrc::ResourceLimit,
-                    "step exhaustion returns ResourceLimit");
+    LMCAS::ResourceLimits limits;
+    limits.max_steps = 1;
+    LMCAS::ComputationContext limited_context(limits);
+    auto limited = LMCAS::newton_raphson_checked(
+        x, df, "x", 1.0, limited_context, opts);
+    EXPECT_TRUE((numeric_root_has_error(limited, LMCAS::CasErrc::ResourceLimit))) << "step exhaustion returns ResourceLimit";
 
-        LMCAS::ComputationContext invalid_context;
-        auto invalid = LMCAS::bisection_checked(
-            x, "x", 2.0, 1.0, invalid_context, opts);
-        EXPECT_TRUE(!invalid && invalid.error().code == LMCAS::CasErrc::InvalidArgument,
-                    "invalid brackets return InvalidArgument");
+    LMCAS::ComputationContext invalid_context;
+    auto invalid = LMCAS::bisection_checked(
+        x, "x", 2.0, 1.0, invalid_context, opts);
+    EXPECT_TRUE((numeric_root_has_error(invalid, LMCAS::CasErrc::InvalidArgument))) << "invalid brackets return InvalidArgument";
 
-        auto default_domain = LMCAS::newton_raphson_checked(
-            log_f, log_df, "x", -1.0, opts);
-        EXPECT_TRUE(!default_domain &&
-                        default_domain.error().code == LMCAS::CasErrc::DomainError,
-                    "default-context Newton preserves DomainError");
+    auto default_domain = LMCAS::newton_raphson_checked(
+        log_f, log_df, "x", -1.0, opts);
+    EXPECT_TRUE((numeric_root_has_error(default_domain, LMCAS::CasErrc::DomainError))) << "default-context Newton preserves DomainError";
 
-        auto default_invalid = LMCAS::bisection_checked(
-            x, "x", 2.0, 1.0, opts);
-        EXPECT_TRUE(!default_invalid &&
-                        default_invalid.error().code == LMCAS::CasErrc::InvalidArgument,
-                    "default-context bisection preserves InvalidArgument");
+    auto default_invalid = LMCAS::bisection_checked(
+        x, "x", 2.0, 1.0, opts);
+    EXPECT_TRUE((numeric_root_has_error(default_invalid, LMCAS::CasErrc::InvalidArgument))) << "default-context bisection preserves InvalidArgument";
 
-        auto default_bracket_domain = LMCAS::newton_raphson_checked(
-            log_f, log_df, "x", -1.0, -2.0, 2.0, opts);
-        EXPECT_TRUE(!default_bracket_domain &&
-                        default_bracket_domain.error().code == LMCAS::CasErrc::DomainError,
-                    "default-context bracketed Newton preserves DomainError");
+    auto default_bracket_domain = LMCAS::newton_raphson_checked(
+        log_f, log_df, "x", -1.0, -2.0, 2.0, opts);
+    EXPECT_TRUE((numeric_root_has_error(default_bracket_domain, LMCAS::CasErrc::DomainError))) << "default-context bracketed Newton preserves DomainError";
 
+    test_numeric_solver_binding_and_budgets(x, f, opts, cancellation);
 
-        LMCAS::ComputationContext solve_unbound_context;
-        auto solve_unbound = LMCAS::solve_numeric_checked(
-            f, "x", solve_unbound_context, opts);
-        EXPECT_TRUE(!solve_unbound &&
-                        solve_unbound.error().code == LMCAS::CasErrc::UnboundSymbol,
-                    "checked solve preserves coefficient binding failures");
+    test_numeric_polynomial_recognition_limits(x, opts);
+}
 
-        auto default_context_unbound = LMCAS::solve_numeric_checked(f, "x", opts);
-        EXPECT_TRUE(!default_context_unbound &&
-                        default_context_unbound.error().code == LMCAS::CasErrc::UnboundSymbol,
-                    "default-context checked solve preserves coefficient binding failures");
+TEST(NewtonRaphson, NewtonRaphsonBasicConvergenceX22) {
+    auto x = SymbolicExpr::variable("x");
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::number(-2));
+    auto df = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
 
+    LMCAS::SolveOptions opts;
+    opts.allow_numeric = true;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-        LMCAS::ComputationContext solve_cancelled_context({}, cancellation);
-        auto solve_cancelled = LMCAS::solve_numeric_checked(
-            x, "x", solve_cancelled_context, opts);
-        EXPECT_TRUE(!solve_cancelled &&
-                        solve_cancelled.error().code == LMCAS::CasErrc::Cancelled,
-                    "checked solve observes cancellation before isolation");
-
-        LMCAS::ResourceLimits solve_limits;
-        solve_limits.max_steps = 1;
-        LMCAS::ComputationContext solve_limited_context(solve_limits);
-        auto solve_limited = LMCAS::solve_numeric_checked(
-            x, "x", solve_limited_context, opts);
-        EXPECT_TRUE(!solve_limited &&
-                        solve_limited.error().code == LMCAS::CasErrc::ResourceLimit,
-                    "checked solve accounts for interval refinement steps");
-
-        LMCAS::SolveOptions no_roots_opts = opts;
-        no_roots_opts.max_roots = 0;
-        LMCAS::ComputationContext no_roots_context;
-        auto no_roots = LMCAS::solve_numeric_checked(
-            x, "x", no_roots_context, no_roots_opts);
-        EXPECT_TRUE(no_roots && no_roots.value().empty(),
-                    "zero root limit returns no candidates");
-
-        LMCAS::ResourceLimits expansion_limits;
-        expansion_limits.max_expansion_terms = 1;
-        LMCAS::ComputationContext exact_expansion_context(expansion_limits);
-        auto exact_linear = SymbolicExpr::add(x, SymbolicExpr::number(1));
-        auto exact_expansion = LMCAS::solve_numeric_checked(
-            exact_linear, "x", exact_expansion_context, opts);
-        EXPECT_TRUE(!exact_expansion &&
-                        exact_expansion.error().code == LMCAS::CasErrc::ResourceLimit,
-                    "exact polynomial recognition enforces expansion limits");
-
-        auto approximate_linear = SymbolicExpr::add(
-            SymbolicExpr::multiply(SymbolicExpr::number(0.5), x),
-            SymbolicExpr::number(-1));
-        LMCAS::ComputationContext approximate_context(expansion_limits);
-        auto approximate = LMCAS::solve_numeric_checked(
-            approximate_linear, "x", approximate_context, opts);
-        EXPECT_TRUE(approximate && approximate.value().size() == 1,
-                    "ApproxReal coefficients stay on the explicit numeric path");
-        if (approximate && approximate.value().size() == 1) {
-            EXPECT_TRUE(std::abs(approximate.value()[0].value - 2.0) < opts.tolerance,
-                        "approximate linear root is numerically verified");
-        }
-
-        LMCAS::ResourceLimits exponent_limits;
-        exponent_limits.max_expansion_terms = 10;
-        LMCAS::ComputationContext exponent_context(exponent_limits);
-        auto large_power = SymbolicExpr::power(x, SymbolicExpr::number(BigInt(1000)));
-        auto exponent_limited = LMCAS::solve_numeric_checked(
-            large_power, "x", exponent_context, opts);
-        EXPECT_TRUE(!exponent_limited &&
-                        exponent_limited.error().code == LMCAS::CasErrc::ResourceLimit,
-                    "large exact powers fail before polynomial expansion");
+    auto result = LMCAS::newton_raphson_checked(f, df, "x", 1.5, opts).value();
+    ASSERT_TRUE((result.has_value())) << "Newton-Raphson should converge for x^2-2 near 1.5";
+    if (result.has_value()) {
+        EXPECT_TRUE((std::abs(result->value - std::sqrt(2.0)) < 1e-10)) << "Root should be close to sqrt(2)";
+        EXPECT_TRUE((result->residual < opts.tolerance)) << "Residual should be below tolerance";
     }
+}
 
-    TEST_CASE("Newton-Raphson - Basic convergence (x^2 - 2)");
-    {
+TEST(NewtonRaphson, NewtonRaphsonConvergenceWithBracketX22) {
+    auto x = SymbolicExpr::variable("x");
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::number(-2));
+    auto df = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
 
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::power(x, SymbolicExpr::number(2)),
-            SymbolicExpr::number(-2)
-        );
-        auto df = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-        LMCAS::SolveOptions opts;
-        opts.allow_numeric = true;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::newton_raphson_checked(f, df, "x", 1.5, opts).value();
-        EXPECT_TRUE(result.has_value(), "Newton-Raphson should converge for x^2-2 near 1.5");
-        if (result.has_value()) {
-            EXPECT_TRUE(std::abs(result->value - std::sqrt(2.0)) < 1e-10,
-                "Root should be close to sqrt(2)");
-            EXPECT_TRUE(result->residual < opts.tolerance,
-                "Residual should be below tolerance");
-        }
+    auto result = LMCAS::newton_raphson_checked(f, df, "x", 1.5, 1.0, 2.0, opts).value();
+    ASSERT_TRUE((result.has_value())) << "Newton-Raphson with bracket should converge for x^2-2";
+    if (result.has_value()) {
+        EXPECT_TRUE((std::abs(result->value - std::sqrt(2.0)) < 1e-10)) << "Root should be close to sqrt(2)";
+        EXPECT_TRUE((result->residual < opts.tolerance)) << "Residual should be below tolerance";
     }
+}
 
-    TEST_CASE("Newton-Raphson - Convergence with bracket (x^2 - 2)");
-    {
+TEST(NewtonRaphson, NewtonRaphsonBisectionFallbackWhenDerivativeNearZero) {
+    auto x = SymbolicExpr::variable("x");
+    auto f = SymbolicExpr::power(x, SymbolicExpr::number(3));
+    auto df = SymbolicExpr::multiply(
+        SymbolicExpr::number(3),
+        SymbolicExpr::power(x, SymbolicExpr::number(2)));
 
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::power(x, SymbolicExpr::number(2)),
-            SymbolicExpr::number(-2)
-        );
-        auto df = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::newton_raphson_checked(f, df, "x", 1.5, 1.0, 2.0, opts).value();
-        EXPECT_TRUE(result.has_value(), "Newton-Raphson with bracket should converge for x^2-2");
-        if (result.has_value()) {
-            EXPECT_TRUE(std::abs(result->value - std::sqrt(2.0)) < 1e-10,
-                "Root should be close to sqrt(2)");
-            EXPECT_TRUE(result->residual < opts.tolerance,
-                "Residual should be below tolerance");
-        }
+    auto result = LMCAS::newton_raphson_checked(f, df, "x", 1e-8, -1.0, 1.0, opts).value();
+    ASSERT_TRUE((result.has_value())) << "Should converge via bisection fallback for x^3 near zero";
+    if (result.has_value()) {
+        EXPECT_TRUE((std::abs(result->value) < 1e-4)) << "Root should be close to 0";
     }
+}
 
-    TEST_CASE("Newton-Raphson - Bisection fallback when derivative near zero");
-    {
+TEST(NewtonRaphson, NewtonRaphsonAcceptsAConstantDerivativeAtLargeX) {
+    const double target = std::numeric_limits<double>::max() * 0.5;
+    auto x = SymbolicExpr::variable("x");
+    auto f = SymbolicExpr::add(x, SymbolicExpr::number(-target));
+    auto df = SymbolicExpr::number(1.0);
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 10;
 
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::power(x, SymbolicExpr::number(3));
-        auto df = SymbolicExpr::multiply(
-            SymbolicExpr::number(3),
-            SymbolicExpr::power(x, SymbolicExpr::number(2))
-        );
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::newton_raphson_checked(f, df, "x", 1e-8, -1.0, 1.0, opts).value();
-        EXPECT_TRUE(result.has_value(), "Should converge via bisection fallback for x^3 near zero");
-        if (result.has_value()) {
-            EXPECT_TRUE(std::abs(result->value) < 1e-4,
-                "Root should be close to 0");
-        }
-    }
-    TEST_CASE("Newton-Raphson accepts a constant derivative at large x");
-    {
-        const double target = std::numeric_limits<double>::max() * 0.5;
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::add(x, SymbolicExpr::number(-target));
-        auto df = SymbolicExpr::number(1.0);
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 10;
-
-        auto result = LMCAS::newton_raphson_checked(
-            f, df, "x", std::numeric_limits<double>::max(), opts);
-        EXPECT_TRUE(result && result.value().has_value(),
-                    "Newton does not classify df/dx=1 as zero at large x");
-        if (result && result.value()) {
-            EXPECT_NEAR(result.value()->value, target, 0.0,
-                        "large-scale linear equation reaches its exact root");
-        }
-    }
-
-
-    TEST_CASE("Newton-Raphson - No bracket, derivative near zero returns nullopt");
-    {
-
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::power(x, SymbolicExpr::number(3));
-        auto df = SymbolicExpr::multiply(
-            SymbolicExpr::number(3),
-            SymbolicExpr::power(x, SymbolicExpr::number(2))
-        );
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::newton_raphson_checked(f, df, "x", 1e-8, opts).value();
-
-        EXPECT_TRUE(result.has_value(), "f(1e-8) = 1e-24 < tolerance, should converge immediately");
-    }
-
-    TEST_CASE("Newton-Raphson - Non-convergence returns nullopt");
-    {
-
-        auto x = SymbolicExpr::variable("x");
-
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::add(
-                SymbolicExpr::power(x, SymbolicExpr::number(5)),
-                SymbolicExpr::multiply(SymbolicExpr::number(-1), x)
-            ),
-            SymbolicExpr::number(-1)
-        );
-
-        auto df = SymbolicExpr::add(
-            SymbolicExpr::multiply(
-                SymbolicExpr::number(5),
-                SymbolicExpr::power(x, SymbolicExpr::number(4))
-            ),
-            SymbolicExpr::number(-1)
-        );
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 2;
-
-        auto result = LMCAS::newton_raphson_checked(f, df, "x", 10.0, opts).value();
-        EXPECT_TRUE(!result.has_value(), "Should not converge in 2 iterations from x=10");
-    }
-
-    TEST_CASE("Newton-Raphson - Damping engages on overshoot");
-    {
-
-        auto x = SymbolicExpr::variable("x");
-
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::power(x, SymbolicExpr::number(2)),
-            SymbolicExpr::number(-4)
-        );
-        auto df = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::newton_raphson_checked(f, df, "x", 0.01, opts).value();
-        EXPECT_TRUE(result.has_value(), "Should converge for x^2-4 even from x0=0.01 (large first step)");
-        if (result.has_value()) {
-            EXPECT_TRUE(std::abs(result->value - 2.0) < 1e-10 || std::abs(result->value + 2.0) < 1e-10,
-                "Root should be ±2");
-        }
-
-        auto result2 = LMCAS::newton_raphson_checked(f, df, "x", 0.01, 0.0, 3.0, opts).value();
-        EXPECT_TRUE(result2.has_value(), "Should converge with bracket for x^2-4 from x0=0.01");
-        if (result2.has_value()) {
-            EXPECT_TRUE(std::abs(result2->value - 2.0) < 1e-10,
-                "Root should be 2 within bracket [0, 3]");
-        }
-    }
-
-    TEST_CASE("Bisection - Basic convergence (x^2 - 2)");
-    {
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::power(x, SymbolicExpr::number(2)),
-            SymbolicExpr::number(-2)
-        );
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::bisection_checked(f, "x", 1.0, 2.0, opts).value();
-        EXPECT_TRUE(result.has_value(), "Bisection should converge for x^2-2 on [1,2]");
-        if (result.has_value()) {
-            EXPECT_TRUE(std::abs(result->value - std::sqrt(2.0)) < 1e-10,
-                "Root should be close to sqrt(2)");
-        }
-    }
-    TEST_CASE("Bisection accepts a full finite symmetric bracket");
-    {
-        auto x = SymbolicExpr::variable("x");
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::bisection_checked(
-            x, "x", -std::numeric_limits<double>::max(),
-            std::numeric_limits<double>::max(), opts);
-        EXPECT_TRUE(result && result.value().has_value(),
-                    "bisection does not overflow a finite full-range bracket");
-        if (result && result.value()) {
-            EXPECT_NEAR(result.value()->value, 0.0, 0.0,
-                        "full-range bisection finds the midpoint root");
-        }
-    }
-
-
-    TEST_CASE("Bisection - No sign change returns nullopt");
-    {
-
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::power(x, SymbolicExpr::number(2)),
-            SymbolicExpr::number(1)
-        );
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 100;
-
-        auto result = LMCAS::bisection_checked(f, "x", -1.0, 1.0, opts).value();
-        EXPECT_TRUE(!result.has_value(), "Bisection should return nullopt when no sign change");
-    }
-
-    TEST_CASE("Sturm isolation - x^2 - 2 has 2 real roots (early)");
-    {
-
-        LMCAS::Polynomial<Rational> poly("x");
-        poly.coeffs = {Rational(-2), Rational(0), Rational(1)};
-
-        auto intervals = LMCAS::isolate_real_roots_checked(poly).value();
-        EXPECT_TRUE(intervals.size() == 2, "x^2-2 should have 2 isolated real roots");
-    }
-
-    TEST_CASE("Sturm sequence root count accuracy");
-    {
-        const int NUM_TRIALS = 60;
-        int pass_count = 0;
-
-        std::mt19937 rng(314159);
-        std::uniform_int_distribution<int> degree_dist(2, 5);
-        std::uniform_int_distribution<int> root_dist(-4, 4);
-
-        for (int trial = 0; trial < NUM_TRIALS; ++trial) {
-            int deg = degree_dist(rng);
-
-            std::vector<int> all_roots;
-            for (int i = 0; i < deg; ++i) {
-                all_roots.push_back(root_dist(rng));
-            }
-
-            std::set<int> distinct_roots_set(all_roots.begin(), all_roots.end());
-            int expected_distinct_real_roots = (int)distinct_roots_set.size();
-
-            LMCAS::Polynomial<Rational> poly = poly_from_roots(all_roots);
-
-            auto intervals = LMCAS::isolate_real_roots_checked(poly).value();
-            int sturm_count = (int)intervals.size();
-
-            bool count_matches = (sturm_count == expected_distinct_real_roots);
-
-            if (!count_matches) {
-                std::ostringstream msg;
-                msg << "Trial " << trial << ": Sturm found "
-                    << sturm_count << " roots, expected " << expected_distinct_real_roots
-                    << " distinct real roots (degree " << deg << ", roots: [";
-                for (size_t k = 0; k < all_roots.size(); ++k) {
-                    if (k > 0) msg << ",";
-                    msg << all_roots[k];
-                }
-                msg << "])";
-                EXPECT_TRUE(false, msg.str());
-                continue;
-            }
-
-            bool intervals_valid = true;
-            for (const auto& interval : intervals) {
-                double lo = interval.first.to_double();
-                double hi = interval.second.to_double();
-
-                bool contains_known_root = false;
-                for (int r : distinct_roots_set) {
-                    double rd = (double)r;
-                    if (rd >= lo - 1e-10 && rd <= hi + 1e-10) {
-                        contains_known_root = true;
-                        break;
-                    }
-                }
-
-                if (!contains_known_root) {
-                    intervals_valid = false;
-                    std::ostringstream msg;
-                    msg << "Trial " << trial
-                        << ": interval [" << lo << "," << hi
-                        << "] does not contain any known root. Known roots: [";
-                    bool first = true;
-                    for (int r : distinct_roots_set) {
-                        if (!first) msg << ",";
-                        msg << r;
-                        first = false;
-                    }
-                    msg << "]";
-                    EXPECT_TRUE(false, msg.str());
-                    break;
-                }
-            }
-
-            if (deg <= 4 && intervals_valid) {
-
-                std::vector<std::shared_ptr<SymbolicExpr>> symbolic_roots;
-                if (deg == 2) {
-                    symbolic_roots = LMCAS::solve_cubic(
-                        num_expr(0),
-                        SymbolicExpr::number(poly.coeffs[2].to_double()),
-                        SymbolicExpr::number(poly.coeffs[1].to_double()),
-                        SymbolicExpr::number(poly.coeffs[0].to_double()),
-                        "x");
-
-                } else if (deg == 3) {
-                    symbolic_roots = LMCAS::solve_cubic(
-                        SymbolicExpr::number(poly.coeffs[3].to_double()),
-                        SymbolicExpr::number(poly.coeffs[2].to_double()),
-                        SymbolicExpr::number(poly.coeffs[1].to_double()),
-                        SymbolicExpr::number(poly.coeffs[0].to_double()),
-                        "x");
-                } else if (deg == 4) {
-                    symbolic_roots = LMCAS::solve_quartic(
-                        SymbolicExpr::number(poly.coeffs[4].to_double()),
-                        SymbolicExpr::number(poly.coeffs[3].to_double()),
-                        SymbolicExpr::number(poly.coeffs[2].to_double()),
-                        SymbolicExpr::number(poly.coeffs[1].to_double()),
-                        SymbolicExpr::number(poly.coeffs[0].to_double()),
-                        "x");
-                }
-
-                std::set<double> closed_form_real_roots;
-                for (const auto& root : symbolic_roots) {
-                    double val = eval_numeric_expr(root);
-                    if (!std::isnan(val) && !std::isinf(val)) {
-
-                        double rounded = std::round(val * 1e6) / 1e6;
-                        closed_form_real_roots.insert(rounded);
-                    }
-                }
-
-                int closed_form_count = (int)closed_form_real_roots.size();
-
-                if (closed_form_count > sturm_count) {
-                    std::ostringstream msg;
-                    msg << "Trial " << trial
-                        << ": closed-form found " << closed_form_count
-                        << " real roots but Sturm only found " << sturm_count
-                        << " (degree " << deg << ")";
-                    EXPECT_TRUE(false, msg.str());
-                    intervals_valid = false;
-                }
-            }
-
-            if (intervals_valid && count_matches) {
-                pass_count++;
-            }
-        }
-
+    auto result = LMCAS::newton_raphson_checked(
+        f, df, "x", std::numeric_limits<double>::max(), opts);
+    EXPECT_TRUE((result && result.value().has_value())) << "Newton does not classify df/dx=1 as zero at large x";
+    if (result && result.value()) {
         {
-            std::ostringstream msg;
-            msg << "Sturm root count accuracy: " << pass_count
-                << "/" << NUM_TRIALS << " trials passed";
-            EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
+            const double actual_value = (result.value()->value);
+            const double expected_value = (target);
+            const double tolerance = (0.0);
+            EXPECT_TRUE(std::isfinite(actual_value));
+            EXPECT_NEAR(actual_value, expected_value, tolerance);
         }
     }
+}
 
-    TEST_CASE("Newton-Raphson residual bound");
-    {
-        const int NUM_TRIALS = 35;
-        const lmmc_real_t TOLERANCE = 1e-12;
-        int pass_count = 0;
-        int total_roots_checked = 0;
+TEST(NewtonRaphson, NewtonRaphsonNoBracketDerivativeNearZeroReturnsNullopt) {
+    auto x = SymbolicExpr::variable("x");
+    auto f = SymbolicExpr::power(x, SymbolicExpr::number(3));
+    auto df = SymbolicExpr::multiply(
+        SymbolicExpr::number(3),
+        SymbolicExpr::power(x, SymbolicExpr::number(2)));
 
-        std::mt19937 rng(777);
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-        std::uniform_int_distribution<int> degree_dist(2, 4);
-        std::uniform_int_distribution<int> root_dist(-8, 8);
+    auto result = LMCAS::newton_raphson_checked(f, df, "x", 1e-8, opts).value();
 
-        for (int trial = 0; trial < NUM_TRIALS; ++trial) {
-            int deg = degree_dist(rng);
+    EXPECT_TRUE((result.has_value())) << "f(1e-8) = 1e-24 < tolerance, should converge immediately";
+}
 
-            std::set<int> root_set;
-            while ((int)root_set.size() < deg) {
-                root_set.insert(root_dist(rng));
-            }
-            std::vector<int> known_roots(root_set.begin(), root_set.end());
-            LMCAS::Polynomial<Rational> poly = poly_from_roots(known_roots);
+TEST(NewtonRaphson, NewtonRaphsonNonConvergenceReturnsNullopt) {
+    auto x = SymbolicExpr::variable("x");
 
-            LMCAS::Polynomial<Rational> dpoly = poly.differentiate();
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::add(
+            SymbolicExpr::power(x, SymbolicExpr::number(5)),
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), x)),
+        SymbolicExpr::number(-1));
 
-            auto expr = LMCAS::poly_to_symbolic(poly);
-            auto df_expr = LMCAS::poly_to_symbolic(dpoly);
+    auto df = SymbolicExpr::add(
+        SymbolicExpr::multiply(
+            SymbolicExpr::number(5),
+            SymbolicExpr::power(x, SymbolicExpr::number(4))),
+        SymbolicExpr::number(-1));
 
-            auto intervals = LMCAS::isolate_real_roots_checked(poly).value();
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 2;
 
-            bool trial_ok = true;
-            for (const auto& [lo_rat, hi_rat] : intervals) {
-                lmmc_real_t lo = lo_rat.to_double();
-                lmmc_real_t hi = hi_rat.to_double();
-                lmmc_real_t x0 = (lo + hi) * 0.5;
+    auto result = LMCAS::newton_raphson_checked(f, df, "x", 10.0, opts).value();
+    EXPECT_TRUE((!result.has_value())) << "Should not converge in 2 iterations from x=10";
+}
 
-                LMCAS::SolveOptions opts;
-                opts.tolerance = TOLERANCE;
-                opts.max_newton_iterations = 100;
+TEST(NewtonRaphson, NewtonRaphsonDampingEngagesOnOvershoot) {
+    auto x = SymbolicExpr::variable("x");
 
-                auto result = LMCAS::newton_raphson_checked(expr, df_expr, "x", x0, lo, hi, opts).value();
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::number(-4));
+    auto df = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
 
-                if (result.has_value()) {
-                    total_roots_checked++;
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-                    lmmc_real_t residual = std::abs(
-                        eval_poly_at_double(poly, result->value));
-
-                    if (residual >= TOLERANCE * 100) {
-                        trial_ok = false;
-                        std::ostringstream msg;
-                        msg << "Trial " << trial << ": root=" << result->value
-                            << " residual=" << residual << " >= " << (TOLERANCE * 100)
-                            << " (degree " << deg << ", roots: [";
-                        for (size_t k = 0; k < known_roots.size(); ++k) {
-                            if (k > 0) msg << ",";
-                            msg << known_roots[k];
-                        }
-                        msg << "])";
-                        EXPECT_TRUE(false, msg.str());
-                    }
-                }
-            }
-
-            if (trial_ok) {
-                pass_count++;
-            }
-        }
-
-        {
-            std::ostringstream msg;
-            msg << "Newton residual bound: " << pass_count
-                << "/" << NUM_TRIALS << " trials passed ("
-                << total_roots_checked << " roots checked, tolerance=" << TOLERANCE << ")";
-            EXPECT_TRUE(pass_count == NUM_TRIALS, msg.str());
-        }
+    auto result = LMCAS::newton_raphson_checked(f, df, "x", 0.01, opts).value();
+    ASSERT_TRUE((result.has_value())) << "Should converge for x^2-4 even from x0=0.01 (large first step)";
+    if (result.has_value()) {
+        EXPECT_TRUE((std::abs(result->value - 2.0) < 1e-10 || std::abs(result->value + 2.0) < 1e-10)) << "Root should be ±2";
     }
 
-    TEST_CASE("Newton-Raphson - Deflation correctly continues to remaining roots");
-    {
-
-        LMCAS::Polynomial<Rational> poly("x");
-        poly.coeffs = {Rational(2), Rational(-3), Rational(1)};
-
-        auto intervals = LMCAS::isolate_real_roots_checked(poly).value();
-        EXPECT_TRUE(intervals.size() == 2, "Sturm should isolate 2 roots for (x-1)(x-2)");
-
-        auto expr = LMCAS::poly_to_symbolic(poly);
-        auto df_expr = expr->differentiate("x");
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-10;
-        opts.max_newton_iterations = 100;
-
-        int roots_found = 0;
-        for (const auto& [lo_rat, hi_rat] : intervals) {
-            double lo = lo_rat.to_double();
-            double hi = hi_rat.to_double();
-            double x0 = (lo + hi) * 0.5;
-
-            auto result = LMCAS::newton_raphson_checked(expr, df_expr, "x", x0, lo, hi, opts).value();
-            EXPECT_TRUE(result.has_value(),
-                "Newton should find root in interval [" + std::to_string(lo) + ", " + std::to_string(hi) + "]");
-            if (result.has_value()) {
-                roots_found++;
-
-                double r = result->value;
-                double residual = std::abs(r*r - 3*r + 2);
-                EXPECT_TRUE(residual < 1e-6,
-                    "Root " + std::to_string(r) + " should satisfy x^2-3x+2=0");
-            }
-        }
-        EXPECT_TRUE(roots_found == 2, "Should find a root in each isolated interval");
+    auto result2 = LMCAS::newton_raphson_checked(f, df, "x", 0.01, 0.0, 3.0, opts).value();
+    ASSERT_TRUE((result2.has_value())) << "Should converge with bracket for x^2-4 from x0=0.01";
+    if (result2.has_value()) {
+        EXPECT_TRUE((std::abs(result2->value - 2.0) < 1e-10)) << "Root should be 2 within bracket [0, 3]";
     }
+}
 
-    TEST_CASE("Newton-Raphson - Deflation with cubic polynomial");
-    {
+TEST(NewtonRaphson, BisectionBasicConvergenceX22) {
+    auto x = SymbolicExpr::variable("x");
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::number(-2));
 
-        LMCAS::Polynomial<Rational> poly("x");
-        poly.coeffs = {Rational(-6), Rational(11), Rational(-6), Rational(1)};
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-        auto intervals = LMCAS::isolate_real_roots_checked(poly).value();
-        EXPECT_TRUE(intervals.size() == 3, "Sturm should isolate 3 roots for (x-1)(x-2)(x-3)");
-
-        auto expr = LMCAS::poly_to_symbolic(poly);
-        auto df_expr = expr->differentiate("x");
-
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-10;
-        opts.max_newton_iterations = 100;
-
-        int roots_found = 0;
-        for (const auto& [lo_rat, hi_rat] : intervals) {
-            double lo = lo_rat.to_double();
-            double hi = hi_rat.to_double();
-            double x0 = (lo + hi) * 0.5;
-
-            auto result = LMCAS::newton_raphson_checked(expr, df_expr, "x", x0, lo, hi, opts).value();
-            EXPECT_TRUE(result.has_value(),
-                "Newton should find root in interval [" + std::to_string(lo) + ", " + std::to_string(hi) + "]");
-            if (result.has_value()) {
-                roots_found++;
-
-                double r = result->value;
-                double residual = std::abs((r-1.0)*(r-2.0)*(r-3.0));
-                EXPECT_TRUE(residual < 1e-6,
-                    "Root " + std::to_string(r) + " should satisfy (x-1)(x-2)(x-3)=0");
-            }
-        }
-
-        EXPECT_TRUE(roots_found == 3, "Should find all 3 roots via Newton on isolated intervals");
+    auto result = LMCAS::bisection_checked(f, "x", 1.0, 2.0, opts).value();
+    ASSERT_TRUE((result.has_value())) << "Bisection should converge for x^2-2 on [1,2]";
+    if (result.has_value()) {
+        EXPECT_TRUE((std::abs(result->value - std::sqrt(2.0)) < 1e-10)) << "Root should be close to sqrt(2)";
     }
+}
 
-    TEST_CASE("Newton-Raphson - Non-polynomial input requires x0 (initial guess)");
-    {
+TEST(NewtonRaphson, BisectionAcceptsAFullFiniteSymmetricBracket) {
+    auto x = SymbolicExpr::variable("x");
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-        auto x = SymbolicExpr::variable("x");
-
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::sin(x),
-            SymbolicExpr::number(-0.5)
-        );
-
-        {
-            LMCAS::SolveOptions opts;
-            opts.allow_numeric = true;
-            opts.tolerance = 1e-10;
-            opts.max_newton_iterations = 100;
-            opts.has_initial_guess = true;
-            opts.initial_guess = 0.5;
-
-            auto roots = LMCAS::solve_numeric_checked(f, "x", opts).value();
-            EXPECT_TRUE(roots.size() <= 1,
-                "Non-polynomial solve_numeric should return at most 1 root");
-        }
-
-        {
-            LMCAS::SolveOptions opts;
-            opts.allow_numeric = true;
-            opts.tolerance = 1e-10;
-            opts.max_newton_iterations = 100;
-            opts.has_initial_guess = true;
-            opts.initial_guess = 2.5;
-
-            auto roots = LMCAS::solve_numeric_checked(f, "x", opts).value();
-            EXPECT_TRUE(roots.size() <= 1,
-                "Non-polynomial with different x0 should still return at most 1 root");
-        }
-
-        {
-            LMCAS::SolveOptions opts;
-            opts.allow_numeric = true;
-            opts.tolerance = 1e-10;
-            opts.max_newton_iterations = 100;
-            opts.has_initial_guess = false;
-
-            auto roots = LMCAS::solve_numeric_checked(f, "x", opts).value();
-            EXPECT_TRUE(roots.size() <= 1,
-                "Non-polynomial without explicit x0 should return at most 1 root");
-        }
-
-        {
-
-            auto poly_f = SymbolicExpr::add(
-                SymbolicExpr::power(x, SymbolicExpr::number(2)),
-                SymbolicExpr::number(-4)
-            );
-
-            LMCAS::SolveOptions opts;
-            opts.allow_numeric = true;
-            opts.tolerance = 1e-10;
-            opts.max_newton_iterations = 100;
-
-            auto roots = LMCAS::solve_numeric_checked(poly_f, "x", opts).value();
-
-            EXPECT_TRUE(roots.size() == 2,
-                "Polynomial x^2-4 should find 2 roots via Sturm path");
-            for (const auto& root : roots) {
-                EXPECT_TRUE(root.residual <= opts.tolerance * 100.0,
-                    "Every solve_numeric polynomial candidate is residual-verified");
-            }
-        }
-
-        {
-            LMCAS::SolveOptions opts;
-            opts.allow_numeric = true;
-            opts.tolerance = 1e-10;
-            opts.max_newton_iterations = 100;
-            const BigInt largest_finite_integer =
-                (BigInt(1) << 1024) - (BigInt(1) << 971);
-            LMCAS::Polynomial<Rational> endpoint_linear(
-                {Rational(-largest_finite_integer), Rational(1)}, "x");
-            auto endpoint_roots = LMCAS::solve_numeric_checked(
-                LMCAS::poly_to_symbolic(endpoint_linear), "x", opts);
-            EXPECT_TRUE(
-                endpoint_roots && endpoint_roots.value().size() == 1 &&
-                    endpoint_roots.value()[0].value ==
-                        std::numeric_limits<double>::max(),
-                "numeric polynomial solve preserves a finite endpoint root");
-        }
+    auto result = LMCAS::bisection_checked(
+        x, "x", -std::numeric_limits<double>::max(),
+        std::numeric_limits<double>::max(), opts);
+    EXPECT_TRUE((result && result.value().has_value())) << "bisection does not overflow a finite full-range bracket";
+    if (result && result.value()) {
+        EXPECT_NEAR(result.value()->value, 0.0, 0.0) << "full-range bisection finds the midpoint root";
     }
+}
 
-    TEST_CASE("Newton-Raphson - Non-convergence with limited iterations returns empty");
-    {
+TEST(NewtonRaphson, BisectionNoSignChangeReturnsNullopt) {
+    auto x = SymbolicExpr::variable("x");
+    auto f = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        SymbolicExpr::number(1));
 
-        auto x = SymbolicExpr::variable("x");
-        auto f = SymbolicExpr::add(
-            SymbolicExpr::add(
-                SymbolicExpr::power(x, SymbolicExpr::number(3)),
-                SymbolicExpr::multiply(SymbolicExpr::number(-2), x)
-            ),
-            SymbolicExpr::number(2)
-        );
-        auto df = SymbolicExpr::add(
-            SymbolicExpr::multiply(
-                SymbolicExpr::number(3),
-                SymbolicExpr::power(x, SymbolicExpr::number(2))
-            ),
-            SymbolicExpr::number(-2)
-        );
+    LMCAS::SolveOptions opts;
+    opts.tolerance = 1e-12;
+    opts.max_newton_iterations = 100;
 
-        LMCAS::SolveOptions opts;
-        opts.tolerance = 1e-12;
-        opts.max_newton_iterations = 1;
-
-        auto result = LMCAS::newton_raphson_checked(f, df, "x", 5.0, opts).value();
-        EXPECT_TRUE(!result.has_value(),
-            "Should not converge in 1 iteration from x=5 for x^3-2x+2");
-    }
-
-    TEST_CASE("Sturm isolation - x^2 - 2 has 2 real roots");
-    {
-
-        LMCAS::Polynomial<Rational> poly("x");
-        poly.coeffs = {Rational(-2), Rational(0), Rational(1)};
-
-        auto intervals = LMCAS::isolate_real_roots_checked(poly).value();
-        EXPECT_TRUE(intervals.size() == 2, "x^2-2 should have 2 isolated real roots");
-    }
-
-    return TEST_REPORT();
+    auto result = LMCAS::bisection_checked(f, "x", -1.0, 1.0, opts).value();
+    EXPECT_TRUE((!result.has_value())) << "Bisection should return nullopt when no sign change";
 }

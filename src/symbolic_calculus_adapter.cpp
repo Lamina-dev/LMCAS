@@ -1,7 +1,7 @@
 #include "assumption_context.hpp"
 #include "integration.hpp"
-#include "symbolic_ast.hpp"
-#include "visitors/limit_visitor.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "internal/visitors/limit_visitor.hpp"
 
 namespace LMCAS {
 
@@ -38,7 +38,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
     std::vector<std::shared_ptr<const SymbolicNode>> terms;
     auto derivative = LMCAS::detail::make_expression_ptr(impl_->root->clone());
 
-    for (int n = 0; n <= order; ++n) {
+    for (int n = 0;; ++n) {
         if (n > 0) {
             derivative = derivative->differentiate(variable);
             if (!derivative) return nullptr;
@@ -56,12 +56,13 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
                 SymbolicExpr::power(delta, SymbolicExpr::number(n)));
         }
         if (n > 1) {
-            auto factorial = BigInt::factorial(static_cast<unsigned int>(n));
+            auto factorial = BigInt::factorial(BigInt(n));
             term = SymbolicExpr::multiply(
                 term,
                 SymbolicExpr::number(Rational(BigInt(1), factorial)));
         }
         terms.push_back(LMCAS::detail::node(term));
+        if (n == order) break;
     }
 
     if (terms.empty()) return SymbolicExpr::number(0);

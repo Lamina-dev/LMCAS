@@ -1,7 +1,10 @@
 #include "expr.hpp"
 #include "matcher.hpp"
-#include "symbolic_ast.hpp"
+#include "assumption_context.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "internal/expr_common.hpp"
+#include "internal/assumption_simplification.hpp"
+#include "internal/expression_transform.hpp"
 #include <exception>
 #include <memory>
 #include <string>
@@ -13,9 +16,7 @@ namespace LMCAS {
 using namespace expr_detail::expr_common;
 
 ExprResult simplify(const ExprPtr& expression, ComputationContext& context) {
-    return checked_transform_expr(
-        expression, context, kSimplifyOperation, "simplify",
-        [](const SymbolicExpr& value) { return value.simplify(); });
+    return detail::simplify_expression(expression, context);
 }
 
 ExprResult simplify(const ExprPtr& expression) {
@@ -24,9 +25,13 @@ ExprResult simplify(const ExprPtr& expression) {
 }
 
 ExprResult expand(const ExprPtr& expression, ComputationContext& context) {
-    return checked_transform_expr(
+    return detail::checked_transform_expr(
         expression, context, kExpandOperation, "expand",
-        [](const SymbolicExpr& value) { return value.expand(); });
+        [&context](const SymbolicExpr& value) {
+            auto expanded = value.expand();
+            const auto& assumptions = context.assumptions();
+            return assumptions ? assumptions->simplify(*expanded) : expanded;
+        });
 }
 
 ExprResult expand(const ExprPtr& expression) {
@@ -42,7 +47,7 @@ ExprResult differentiate(const ExprPtr& expression,
                                   "differentiate variable cannot be empty",
                                   kDifferentiateOperation);
     }
-    return checked_transform_expr(
+    return detail::checked_transform_expr(
         expression, context, kDifferentiateOperation, "differentiate",
         [&variable](const SymbolicExpr& value) {
             return value.differentiate(variable);
@@ -89,7 +94,7 @@ ExprResult substitute(const ExprPtr& expression,
                                   "substitution allocation failed",
                                   kSubstituteOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
+        return expression_failure(CasErrc::InternalInvariant, error.what(),
                                   kSubstituteOperation);
     }
 }
@@ -240,4 +245,4 @@ ExprMatchResult expr_match(const ExprPtr& pattern,
     ComputationContext context;
     return expr_match(pattern, target, wildcards, context);
 }
-} // namespace LMCAS
+}

@@ -1,11 +1,15 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
+#include <type_traits>
 
 #include "bigint.hpp"
 #include "conditional_result.hpp"
+#include "equivalence_options.hpp"
 #include "numeric_evaluation.hpp"
 #include "rational.hpp"
 #include "solve_strategies.hpp"
@@ -20,6 +24,7 @@ class ComputationContext;
 namespace LMCAS {
 
 using Expr = SymbolicExpr;
+using ConstExprPtr = std::shared_ptr<const SymbolicExpr>;
 using ExprResult = Result<ExprPtr>;
 
 struct Binding {
@@ -42,41 +47,20 @@ struct ExprMatch {
 using ExprMatchResult = Result<ExprMatch>;
 
 
-enum class EqvProfile {
-    Core,
-    TrigBasic,
-    ExpLogBasic
-};
-
-struct EqvBudget {
-    std::size_t max_rewrite_steps = 256;
-    std::size_t max_rewrite_depth = 64;
-    std::size_t max_node_growth_factor = 4;
-};
-
-struct EqvOptions {
-    EqvProfile profile = EqvProfile::Core;
-    EqvBudget budget = {};
-};
-
-LMCAS_API Result<EqvProfile> eqv_profile_from_name(const std::string& name);
-LMCAS_API Result<void> set_eqv_profile(EqvOptions& options,
-                                        const std::string& name);
-LMCAS_API Result<void> set_eqv_budget(EqvOptions& options,
-                                       std::size_t steps,
-                                       std::size_t depth,
-                                       std::size_t growth);
 
 class LMCAS_API ExprSet {
 public:
-    ExprSet() = default;
+    /** @brief 构造具有非空表达式的规范空有限集。 */
+    ExprSet();
 
+    /** @brief 快照输入包装对象，后续赋值保持集合成员不变。 */
     static Result<ExprSet> make(std::vector<ExprPtr> elements);
 
     bool empty() const noexcept { return elements_.empty(); }
     std::size_t size() const noexcept { return elements_.size(); }
-    const std::vector<ExprPtr>& elements() const noexcept { return elements_; }
-    const ExprPtr& expression() const noexcept { return expression_; }
+    /** @brief 返回由规范有限集表达式派生的只读包装视图。 */
+    const std::vector<ConstExprPtr>& elements() const noexcept { return elements_; }
+    const ConstExprPtr& expression() const noexcept { return expression_; }
 
     bool contains(const SymbolicExpr& expression) const;
     bool subset_of(const ExprSet& other) const;
@@ -87,10 +71,18 @@ public:
     ExprSet symmetric_difference(const ExprSet& other) const;
 
 private:
-    ExprSet(std::vector<ExprPtr> elements, ExprPtr expression);
+    explicit ExprSet(ConstExprPtr expression);
+    friend Result<ExprSet> expr_set_union(
+        const ExprSet&, const ExprSet&);
+    friend Result<ExprSet> expr_set_intersection(
+        const ExprSet&, const ExprSet&);
+    friend Result<ExprSet> expr_set_difference(
+        const ExprSet&, const ExprSet&);
+    friend Result<ExprSet> expr_set_symmetric_difference(
+        const ExprSet&, const ExprSet&);
 
-    std::vector<ExprPtr> elements_;
-    ExprPtr expression_;
+    std::vector<ConstExprPtr> elements_;
+    ConstExprPtr expression_;
 };
 
 using ExprSetResult = Result<ExprSet>;
@@ -111,18 +103,34 @@ public:
     const char* name() const noexcept;
     bool subset_of(const NumberDomainSet& other) const noexcept;
 
-    Result<bool> contains(const ExprPtr& element) const;
+    Result<bool> contains(const ConstExprPtr& element) const;
 
 private:
     NumberDomain domain_;
 };
 
+/**
+ * @brief 借用单个符号的名称。
+ * @return 空表达式或非符号表达式返回 nullopt。
+ * @note 借用名称仅在原表达式存活且未被重新赋值时有效。
+ */
+LMCAS_API std::optional<std::string_view> symbol_name(
+    const ExprPtr& expression) noexcept;
+
+/** @brief 查看关系运算符；空表达式或非关系表达式返回 nullopt。 */
+LMCAS_API std::optional<RelationOp> relation_op(
+    const ExprPtr& expression) noexcept;
+
 LMCAS_API ExprResult sym(const std::string& name);
 LMCAS_API ExprResult parse_expr(const std::string& source);
 LMCAS_API ExprResult parse_expr(const std::string& source,
                                 ComputationContext& context);
-LMCAS_API ExprResult integer(long long value);
+LMCAS_API ExprResult integer(int value);
 LMCAS_API ExprResult integer(const BigInt& value);
+template <typename Integer,
+          std::enable_if_t<std::is_integral_v<Integer> &&
+                           !std::is_same_v<Integer, int>, int> = 0>
+ExprResult integer(Integer) = delete;
 LMCAS_API ExprResult rational(const Rational& value);
 LMCAS_API ExprResult approx_real(double value);
 
@@ -130,7 +138,6 @@ LMCAS_API ExprResult pi();
 LMCAS_API ExprResult e();
 LMCAS_API ExprResult phi();
 
-LMCAS_API ExprResult I();
 LMCAS_API ExprResult imaginary_unit();
 LMCAS_API ExprResult complex(ExprPtr real, ExprPtr imag);
 LMCAS_API ExprResult function(const std::string& name,

@@ -6,7 +6,7 @@
 #include <vector>
 #include "complex_analysis.hpp"
 #include "matcher.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "internal/expr_common.hpp"
 namespace LMCAS {
 namespace expr_detail::expr_common {
@@ -47,7 +47,7 @@ ExprResult make_unary_math_expr(const ExprPtr& expression,
                                       " expression allocation failed",
                                   kMathOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
+        return expression_failure(CasErrc::InternalInvariant, error.what(),
                                   kMathOperation);
     }
 }
@@ -77,7 +77,7 @@ ExprResult make_unary_function_expr(const ExprPtr& expression,
                                       " expression allocation failed",
                                   kMathOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
+        return expression_failure(CasErrc::InternalInvariant, error.what(),
                                   kMathOperation);
     }
 }
@@ -101,9 +101,6 @@ bool is_reserved_symbol_name(const std::string& name) {
            name == "e" || name == "phi";
 }
 
-bool is_imaginary_unit_name(const std::string& name) {
-    return name == "I";
-}
 
 ExprResult require_dimensionless(const ExprPtr& expression,
                                  const char* function_name) {
@@ -158,7 +155,7 @@ ExprResult function(const std::string& name, std::vector<ExprPtr> arguments) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "function allocation failed", operation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument,
+        return expression_failure(CasErrc::InternalInvariant,
                                   error.what(), operation);
     }
 }
@@ -188,7 +185,7 @@ ExprResult relation(const ExprPtr& lhs, const ExprPtr& rhs, RelationOp op) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "relation allocation failed", operation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument,
+        return expression_failure(CasErrc::InternalInvariant,
                                   error.what(), operation);
     }
 }
@@ -230,7 +227,7 @@ ExprResult logical_expression(const ExprPtr& lhs, const ExprPtr& rhs,
                                   "logical expression allocation failed",
                                   operation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument,
+        return expression_failure(CasErrc::InternalInvariant,
                                   error.what(), operation);
     }
 }

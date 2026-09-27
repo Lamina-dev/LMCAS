@@ -15,6 +15,199 @@
 namespace LMCAS {
 static MultiPoly truncate_mod_var(const MultiPoly& poly, const std::string& var,
                                   int degree_bound);
+static MultiPoly embed_hensel_terms(const MultiPoly& polynomial,
+    const std::vector<std::string>& variables) {
+    if (polynomial.variables() == variables) { return polynomial; }
+    if (polynomial.is_constant()) {
+        return MultiPoly(
+            polynomial.is_zero() ? Rational(0) : polynomial.terms().front().second,
+            variables);
+    }
+    std::vector<size_t> coordinates;
+    coordinates.reserve(polynomial.variables().size());
+    for (const auto& variable : polynomial.variables()) {
+        auto position = std::find(variables.begin(), variables.end(), variable);
+        if (position == variables.end()) {
+            throw std::invalid_argument("Hensel embedding: variable is absent from target ring");
+        }
+        coordinates.push_back(static_cast<size_t>(position - variables.begin()));
+    }
+    std::vector<MultiPoly::Term> terms;
+    terms.reserve(polynomial.terms().size());
+    for (const auto& term : polynomial.terms()) {
+        Monomial monomial(variables.size(), 0);
+        for (size_t i = 0; i < term.first.size(); ++i) {
+            monomial[coordinates[i]] = term.first[i];
+        }
+        terms.emplace_back(std::move(monomial), term.second);
+    }
+    return MultiPoly(std::move(terms), variables);
+}
+
+
+static std::vector<MultiPoly> embed_without_lifting(
+    const std::vector<Polynomial<Rational>>& univariate_factors,
+    const std::vector<std::string>& vars) {
+    std::vector<MultiPoly> result;
+    result.reserve(univariate_factors.size());
+    for (const auto& uf : univariate_factors) {
+        result.push_back(embed_hensel_terms(
+            MultiPoly::from_univariate(uf, uf.variable_name), vars));
+    }
+    return result;
+}
+
+
+static std::vector<MultiPoly> lifting_shift_powers(
+    const std::vector<std::string>& vars, int lift_var_idx,
+    const Rational& eval_point, int degree_bound) {
+    std::vector<MultiPoly> shift_powers;
+    shift_powers.reserve(degree_bound + 1);
+    shift_powers.push_back(MultiPoly(Rational(1), vars)); /**< 零次幂 (lift_var - eval_point)^0 = 1。 */
+    if (lift_var_idx >= 0) {
+        Monomial var_mono(vars.size(), 0);
+        var_mono[lift_var_idx] = 1;
+        std::vector<MultiPoly::Term> lin_terms;
+        lin_terms.emplace_back(var_mono, Rational(1));
+        if (!eval_point.is_zero()) {
+            Monomial const_mono(vars.size(), 0);
+            lin_terms.emplace_back(const_mono, -eval_point);
+        }
+        MultiPoly shift_lin(std::move(lin_terms), vars);
+        shift_powers.push_back(shift_lin);
+        for (int k = 2; k <= degree_bound; ++k) {
+            shift_powers.push_back(shift_powers[k - 1] * shift_lin);
+        }
+    } else {
+        for (int k = 1; k <= degree_bound; ++k) {
+            shift_powers.push_back(MultiPoly(Rational(1), vars));
+        }
+    }
+    return shift_powers;
+}
+
+static MultiPoly lifting_error_coefficient(const MultiPoly& error,
+    const std::string& lift_var, int lift_var_idx, const Rational& eval_point,
+    int k, const std::vector<MultiPoly>& shift_powers,
+    const std::vector<std::string>& vars) {
+    MultiPoly error_k;
+    if (eval_point.is_zero()) {
+        std::vector<MultiPoly::Term> error_k_terms;
+        for (const auto& term : error.terms()) {
+            const Monomial& mono = term.first;
+            int exp = (lift_var_idx >= 0 && static_cast<size_t>(lift_var_idx) < mono.size())
+                      ? mono[lift_var_idx] : 0;
+            if (exp == k) {
+                Monomial reduced = mono;
+                reduced[lift_var_idx] = 0;
+                error_k_terms.emplace_back(std::move(reduced), term.second);
+            }
+        }
+        if (error_k_terms.empty()) { return MultiPoly(Rational(0), vars); }
+        error_k = MultiPoly(std::move(error_k_terms), vars);
+    } else {
+        /**
+         * @brief 逐次除以 (lift_var - eval_point)，再在 eval_point 处求值。
+         * 得到 error / (lift_var - eval_point)^k 的值，
+         * 等价于 error 的 k 阶导数在该点的值除以 k!。
+         */
+        MultiPoly remainder = error;
+        for (int j = 0; j < k; ++j) {
+            MultiPoly eval_check = remainder.eval(lift_var, eval_point);
+            if (!eval_check.is_zero()) {
+                remainder = MultiPoly(Rational(0), vars);
+                break;
+            }
+            try {
+                remainder = remainder.exact_div(shift_powers[1]);
+            } catch (const std::runtime_error&) {
+                remainder = MultiPoly(Rational(0), vars);
+                break;
+            }
+        }
+        error_k = embed_hensel_terms(remainder.eval(lift_var, eval_point), vars);
+        if (error_k.is_zero()) { return error_k; }
+    }
+    return error_k;
+}
+
+static std::vector<MultiPoly> evaluated_lifting_cofactors(
+    const std::vector<MultiPoly>& factors, const std::string& lift_var,
+    const Rational& eval_point, const std::vector<std::string>& vars) {
+    const int r = static_cast<int>(factors.size());
+    std::vector<MultiPoly> cofactors;
+    cofactors.reserve(r);
+    for (int i = 0; i < r; ++i) {
+        MultiPoly cof(Rational(1), vars);
+        for (int j = 0; j < r; ++j) {
+            if (j == i) { continue; }
+            MultiPoly fj_eval = embed_hensel_terms(
+                factors[j].eval(lift_var, eval_point), vars);
+            cof = cof * fj_eval;
+        }
+        cofactors.push_back(cof);
+    }
+    return cofactors;
+}
+
+static bool lifting_residual_is_zero(const MultiPoly& verify_error,
+                                     int lift_var_idx, int k) {
+    if (verify_error.is_zero()) { return true; }
+    bool residual_ok = true;
+    for (const auto& term : verify_error.terms()) {
+        const Monomial& mono = term.first;
+        int exp = (lift_var_idx >= 0 &&
+                   static_cast<size_t>(lift_var_idx) < mono.size())
+                  ? mono[lift_var_idx] : 0;
+        if (exp <= k) {
+            residual_ok = false;
+            break;
+        }
+    }
+    return residual_ok;
+}
+
+static MultiPoly truncated_factor_product(const std::vector<MultiPoly>& factors,
+    const std::string& variable, int degree_bound) {
+    MultiPoly product = factors[0];
+    for (size_t i = 1; i < factors.size(); ++i) {
+        product = product * factors[i];
+        product = truncate_mod_var(product, variable, degree_bound);
+    }
+    return product;
+}
+
+static bool apply_hensel_lift_steps(const MultiPoly& poly,
+    std::vector<MultiPoly>& factors, const std::string& lift_var, int lift_var_idx,
+    const Rational& eval_point, int degree_bound, int factor_count) {
+    const auto& vars = poly.variables();
+    auto shift_powers = lifting_shift_powers(vars, lift_var_idx,
+                                             eval_point, degree_bound);
+    for (int k = 1; k <= degree_bound; ++k) {
+        MultiPoly product = truncated_factor_product(factors, lift_var, k + 1);
+        MultiPoly poly_trunc = truncate_mod_var(poly, lift_var, k + 1);
+        MultiPoly error = poly_trunc - product;
+        if (error.is_zero()) { continue; }
+        auto error_k = lifting_error_coefficient(error, lift_var, lift_var_idx,
+                                                  eval_point, k, shift_powers, vars);
+        if (error_k.is_zero()) { continue; }
+        auto cofactors = evaluated_lifting_cofactors(factors, lift_var,
+                                                       eval_point, vars);
+        std::vector<MultiPoly> corrections = multivariate_diophantine(
+            cofactors, error_k, lift_var, eval_point, k + 1);
+        if (corrections.size() != static_cast<size_t>(factor_count)) { return false; }
+        for (int i = 0; i < factor_count; ++i) {
+            if (corrections[i].is_zero()) { continue; }
+            MultiPoly correction_poly = corrections[i] * shift_powers[k];
+            factors[i] = factors[i] + correction_poly;
+        }
+        MultiPoly verify_product = truncated_factor_product(factors, lift_var, k + 1);
+        MultiPoly verify_error = poly_trunc - verify_product;
+        if (!lifting_residual_is_zero(verify_error, lift_var_idx, k)) { break; }
+    }
+    return true;
+}
+
 /**
  * @brief 多元 Hensel 提升(单变量步)
  *
@@ -49,211 +242,44 @@ std::vector<MultiPoly> multivariate_hensel_lift(
     int degree_bound)
 {
     int r = static_cast<int>(univariate_factors.size());
-    if (r == 0) return {};
+    if (r == 0) { return {}; }
     if (r == 1) {
         return {poly};
     }
     if (degree_bound <= 0) {
-        /// 无需提升:将一元因子嵌入完整变量集返回
-        const auto& vars = poly.variables();
-        std::vector<MultiPoly> result;
-        result.reserve(r);
-        for (const auto& uf : univariate_factors) {
-            MultiPoly mp = MultiPoly::from_univariate(uf, uf.variable_name);
-            if (mp.variables() != vars && !vars.empty()) {
-                std::string uni_var = uf.variable_name;
-                int uni_idx = -1;
-                for (size_t i = 0; i < vars.size(); ++i) {
-                    if (vars[i] == uni_var) { uni_idx = static_cast<int>(i); break; }
-                }
-                if (uni_idx >= 0) {
-                    std::vector<MultiPoly::Term> new_terms;
-                    for (const auto& term : mp.terms()) {
-                        Monomial full_mono(vars.size(), 0);
-                        if (!term.first.empty()) full_mono[uni_idx] = term.first[0];
-                        new_terms.emplace_back(std::move(full_mono), term.second);
-                    }
-                    mp = MultiPoly(std::move(new_terms), vars);
-                }
-            }
-            result.push_back(std::move(mp));
-        }
-        return result;
+        return embed_without_lifting(univariate_factors, poly.variables());
     }
 
     const auto& vars = poly.variables();
 
     /// 确定主变量(一元因子的变量)和提升变量在完整变量集中的位置
     std::string main_var = univariate_factors[0].variable_name;
-    int main_var_idx = -1;
     int lift_var_idx = -1;
     for (size_t i = 0; i < vars.size(); ++i) {
-        if (vars[i] == main_var) main_var_idx = static_cast<int>(i);
-        if (vars[i] == lift_var) lift_var_idx = static_cast<int>(i);
+        if (vars[i] == lift_var) { lift_var_idx = static_cast<int>(i); }
     }
 
-    /// 将一元因子嵌入到完整变量集中
-    std::vector<MultiPoly> factors;
-    factors.reserve(r);
-    for (const auto& uf : univariate_factors) {
-        MultiPoly mp = MultiPoly::from_univariate(uf, main_var);
-        if (mp.variables().size() != vars.size() && !vars.empty()) {
-            std::vector<MultiPoly::Term> new_terms;
-            for (const auto& term : mp.terms()) {
-                Monomial full_mono(vars.size(), 0);
-                if (main_var_idx >= 0 && !term.first.empty()) {
-                    full_mono[main_var_idx] = term.first[0];
-                }
-                new_terms.emplace_back(std::move(full_mono), term.second);
-            }
-            mp = MultiPoly(std::move(new_terms), vars);
+    for (const auto& factor : univariate_factors) {
+        if (factor.variable_name != main_var) {
+            throw std::invalid_argument("Hensel lifting: univariate factor ring mismatch");
         }
-        factors.push_back(std::move(mp));
     }
+    auto factors = embed_without_lifting(univariate_factors, vars);
 
     /// lift_var 位于变量域之外时,返回嵌入后的原因子.
     if (lift_var_idx < 0) {
         return factors;
     }
 
-    /// 迭代提升:对 k = 1, ..., degree_bound
-    /// 当 eval_point != 0 时,需要在 (lift_var - eval_point) 的幂次展开中工作
-    /// 预计算 (lift_var - eval_point) 的幂次用于修正项构造
-    std::vector<MultiPoly> shift_powers;
-    shift_powers.reserve(degree_bound + 1);
-    shift_powers.push_back(MultiPoly(Rational(1), vars)); // (lift_var - eval_point)^0 = 1
-    if (lift_var_idx >= 0) {
-        Monomial var_mono(vars.size(), 0);
-        var_mono[lift_var_idx] = 1;
-        std::vector<MultiPoly::Term> lin_terms;
-        lin_terms.emplace_back(var_mono, Rational(1));
-        if (!eval_point.is_zero()) {
-            Monomial const_mono(vars.size(), 0);
-            lin_terms.emplace_back(const_mono, -eval_point);
-        }
-        MultiPoly shift_lin(std::move(lin_terms), vars);
-        shift_powers.push_back(shift_lin);
-        for (int k = 2; k <= degree_bound; ++k) {
-            shift_powers.push_back(shift_powers[k - 1] * shift_lin);
-        }
-    } else {
-        for (int k = 1; k <= degree_bound; ++k) {
-            shift_powers.push_back(MultiPoly(Rational(1), vars));
-        }
+    MultiPoly base_product(Rational(1), vars);
+    for (const auto& factor : factors) { base_product = base_product * factor; }
+    if (base_product.eval(lift_var, eval_point) != poly.eval(lift_var, eval_point)) {
+        return {};
     }
 
-    for (int k = 1; k <= degree_bound; ++k) {
-        /// 计算当前因子乘积,截断到 lift_var 次数 <= k
-        MultiPoly product = factors[0];
-        for (int i = 1; i < r; ++i) {
-            product = product * factors[i];
-            product = truncate_mod_var(product, lift_var, k + 1);
-        }
-
-        /// 计算误差 E = poly_trunc - product(仅比较 lift_var 次数 <= k 的部分)
-        MultiPoly poly_trunc = truncate_mod_var(poly, lift_var, k + 1);
-        MultiPoly error = poly_trunc - product;
-
-        if (error.is_zero()) continue;
-
-        /// 提取误差的 k 阶 Taylor 系数(关于 lift_var - eval_point)
-        /// 方法:将 error 除以 (lift_var - eval_point)^k,然后在 lift_var = eval_point 处求值
-        /// 对于 eval_point = 0,这等价于提取 lift_var^k 的系数
-        MultiPoly error_k;
-        if (eval_point.is_zero()) {
-            /// 简化路径:直接提取 lift_var 指数恰为 k 的项
-            std::vector<MultiPoly::Term> error_k_terms;
-            for (const auto& term : error.terms()) {
-                const Monomial& mono = term.first;
-                int exp = (lift_var_idx >= 0 && static_cast<size_t>(lift_var_idx) < mono.size())
-                          ? mono[lift_var_idx] : 0;
-                if (exp == k) {
-                    Monomial reduced = mono;
-                    reduced[lift_var_idx] = 0;
-                    error_k_terms.emplace_back(std::move(reduced), term.second);
-                }
-            }
-            if (error_k_terms.empty()) continue;
-            error_k = MultiPoly(std::move(error_k_terms), vars);
-        } else {
-            /// 非零求值点:计算 error / (lift_var - eval_point)^k 在 lift_var = eval_point 处的值
-            /// 等价于对 error 关于 lift_var 求 k 次导数后除以 k! 再在 eval_point 处求值
-            /// 实现:逐次除以 (lift_var - eval_point) 并求值
-            MultiPoly remainder = error;
-            for (int j = 0; j < k; ++j) {
-                /// 除以 (lift_var - eval_point):先在 eval_point 处求值确认余数为零
-                /// 然后执行多项式除法
-                MultiPoly eval_check = remainder.eval(lift_var, eval_point);
-                if (!eval_check.is_zero()) {
-                    /// 低阶误差残留时终止本轮提升,并将余式重置为零.
-                    remainder = MultiPoly(Rational(0), vars);
-                    break;
-                }
-                /// 执行除法:remainder / (lift_var - eval_point)
-                try {
-                    remainder = remainder.exact_div(shift_powers[1]);
-                } catch (const std::runtime_error&) {
-                    remainder = MultiPoly(Rational(0), vars);
-                    break;
-                }
-            }
-            /// 在 eval_point 处求值得到 error_k
-            error_k = remainder.eval(lift_var, eval_point);
-            if (error_k.is_zero()) continue;
-        }
-
-        /// 求解丢番图方程:找到修正项 delta_1, ..., deltaᵣ
-        /// 使得 Σ deltaᵢ * cofactor_i == error_k,其中 cofactor_i = prod_{j!=i} fⱼ
-        /// 因子在 lift_var = eval_point 处求值得到一元形式
-        std::vector<MultiPoly> cofactors;
-        cofactors.reserve(r);
-        for (int i = 0; i < r; ++i) {
-            MultiPoly cof(Rational(1), vars);
-            for (int j = 0; j < r; ++j) {
-                if (j == i) continue;
-                MultiPoly fj_eval = factors[j].eval(lift_var, eval_point);
-                cof = cof * fj_eval;
-            }
-            cofactors.push_back(cof);
-        }
-
-        std::vector<MultiPoly> corrections = multivariate_diophantine(
-            cofactors, error_k, lift_var, eval_point, k + 1);
-
-        if (corrections.size() != static_cast<size_t>(r)) continue;
-
-        /// 更新因子:fᵢ = fᵢ + deltaᵢ * (lift_var - eval_point)^k
-        for (int i = 0; i < r; ++i) {
-            if (corrections[i].is_zero()) continue;
-
-            /// 构造 deltaᵢ * (lift_var - eval_point)^k
-            MultiPoly correction_poly = corrections[i] * shift_powers[k];
-            factors[i] = factors[i] + correction_poly;
-        }
-
-        /// 验证:product of lifted factors == poly mod (lift_var - eval_point)^(k+1)
-        MultiPoly verify_product = factors[0];
-        for (int i = 1; i < r; ++i) {
-            verify_product = verify_product * factors[i];
-            verify_product = truncate_mod_var(verify_product, lift_var, k + 1);
-        }
-        MultiPoly verify_error = poly_trunc - verify_product;
-        if (!verify_error.is_zero()) {
-            bool residual_ok = true;
-            for (const auto& term : verify_error.terms()) {
-                const Monomial& mono = term.first;
-                int exp = (lift_var_idx >= 0 &&
-                           static_cast<size_t>(lift_var_idx) < mono.size())
-                          ? mono[lift_var_idx] : 0;
-                if (exp <= k) {
-                    residual_ok = false;
-                    break;
-                }
-            }
-            if (!residual_ok) {
-                break;
-            }
-        }
+    if (!apply_hensel_lift_steps(
+            poly, factors, lift_var, lift_var_idx, eval_point, degree_bound, r)) {
+        return {};
     }
 
     return factors;
@@ -328,7 +354,7 @@ static Polynomial<Rational> extended_gcd_poly(
 static MultiPoly truncate_mod_var(const MultiPoly& poly, const std::string& var,
                                   int degree_bound)
 {
-    if (poly.is_zero()) return poly;
+    if (poly.is_zero()) { return poly; }
 
     const auto& vars = poly.variables();
     int var_idx = -1;
@@ -336,7 +362,7 @@ static MultiPoly truncate_mod_var(const MultiPoly& poly, const std::string& var,
         if (vars[i] == var) { var_idx = static_cast<int>(i); break; }
     }
     /// 若变量不在列表中,多项式不含该变量,无需截断
-    if (var_idx < 0) return poly;
+    if (var_idx < 0) { return poly; }
 
     std::vector<MultiPoly::Term> result_terms;
     for (const auto& term : poly.terms()) {
@@ -347,10 +373,138 @@ static MultiPoly truncate_mod_var(const MultiPoly& poly, const std::string& var,
         }
     }
 
-    if (result_terms.empty()) return MultiPoly(Rational(0), vars);
+    if (result_terms.empty()) { return MultiPoly(Rational(0), vars); }
     return MultiPoly(std::move(result_terms), vars);
 }
 
+static bool diophantine_univariate_factors(
+    const std::vector<MultiPoly>& factors, const std::string& var,
+    const Rational& eval_point, Polynomial<Rational>& f1_uni,
+    Polynomial<Rational>& f2_uni) {
+    bool converted = false;
+
+    try {
+        f1_uni = factors[0].to_univariate();
+        f2_uni = factors[1].to_univariate();
+        converted = true;
+    } catch (const std::invalid_argument&) {
+        try {
+            MultiPoly f1_eval = factors[0].eval(var, eval_point);
+            MultiPoly f2_eval = factors[1].eval(var, eval_point);
+            f1_uni = f1_eval.to_univariate();
+            f2_uni = f2_eval.to_univariate();
+            converted = true;
+        } catch (const std::invalid_argument&) {
+            converted = false;
+        }
+    }
+    if (converted && f1_uni.variable_name != f2_uni.variable_name) {
+        /**
+         * @brief 常数转换的默认变量名不代表其系数环。
+         * 仅常数可嵌入另一变量环；不同活跃变量须保持区分。
+         */
+        if (f1_uni.degree() <= 0) {
+            f1_uni = Polynomial<Rational>(f1_uni.coeffs, f2_uni.variable_name);
+        } else if (f2_uni.degree() <= 0) {
+            f2_uni = Polynomial<Rational>(f2_uni.coeffs, f1_uni.variable_name);
+        } else {
+            return false;
+        }
+    }
+    return converted;
+}
+
+static bool diophantine_target(const MultiPoly& target,
+    const std::string& var, const Rational& eval_point,
+    const std::string& main_var, Polynomial<Rational>& target_uni) {
+    try {
+        target_uni = target.to_univariate();
+        /**
+         * @brief 同一一元变量域内可直接转换。
+         * 仅含提升变量的目标须先在提升点求值。
+         */
+        if (target_uni.degree() > 0 &&
+            target_uni.variable_name != main_var) {
+            throw std::logic_error("target uses the lift variable");
+        }
+    } catch (const std::logic_error&) {
+        try {
+            MultiPoly target_eval = target.eval(var, eval_point);
+            target_uni = target_eval.to_univariate();
+        } catch (const std::invalid_argument&) {
+            if (target.is_constant()) {
+                Rational c = target.is_zero() ? Rational(0) : target.terms()[0].second;
+                target_uni = Polynomial<Rational>({c}, main_var);
+            } else {
+                return false;
+            }
+        }
+    }
+    if (target_uni.degree() <= 0) {
+        target_uni.variable_name = main_var;
+    } else if (target_uni.variable_name != main_var) {
+        return false;
+    }
+    return true;
+}
+
+static std::vector<MultiPoly> solve_diophantine_pair(
+    const std::vector<MultiPoly>& factors, const MultiPoly& target,
+    const std::string& var, const Rational& eval_point, int degree_bound) {
+    const auto& vars = factors[0].variables();
+    Polynomial<Rational> f1_uni, f2_uni;
+    if (!diophantine_univariate_factors(factors, var, eval_point,
+                                       f1_uni, f2_uni)) {
+        return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
+    }
+    Polynomial<Rational> s_coeff, t_coeff;
+    Polynomial<Rational> g = extended_gcd_poly(f1_uni, f2_uni, s_coeff, t_coeff);
+
+    Polynomial<Rational> target_uni;
+    if (!diophantine_target(target, var, eval_point,
+                            f1_uni.variable_name, target_uni)) {
+        return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
+    }
+
+
+    /**
+     * @brief 用 target/gcd 缩放 Bézout 系数，兼容 gcd 非 1 的情形。
+     * 互素因子的 gcd 为 1；s_1 = s*(target/gcd)，s_2 = t*(target/gcd)。
+     */
+    Polynomial<Rational> scale;
+    if (g.is_zero() || g.degree() < 0) {
+        return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
+    }
+
+    auto [quotient, remainder] = target_uni.div_mod(g);
+    if (!remainder.is_zero()) {
+        return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
+    }
+
+    Polynomial<Rational> s1_uni = s_coeff * quotient;
+    Polynomial<Rational> s2_uni = t_coeff * quotient;
+
+    /**
+     * @brief 按 f_2、f_1 约化系数并保持 s_1*f_1 + s_2*f_2 = target。
+     * 次数约束为 deg(s_1) < deg(f_2)、deg(s_2) < deg(f_1)。
+     */
+    if (!f2_uni.is_zero() && s1_uni.degree() >= f2_uni.degree()) {
+        auto [q1, r1] = s1_uni.div_mod(f2_uni);
+        s1_uni = r1;
+        s2_uni = s2_uni + q1 * f1_uni;
+    }
+    if (!(s1_uni * f1_uni + s2_uni * f2_uni == target_uni)) { return {}; }
+
+    std::string uni_var = f1_uni.variable_name;
+    MultiPoly s1_mp = embed_hensel_terms(
+        MultiPoly::from_univariate(s1_uni, uni_var), vars);
+    MultiPoly s2_mp = embed_hensel_terms(
+        MultiPoly::from_univariate(s2_uni, uni_var), vars);
+    s1_mp = truncate_mod_var(s1_mp, var, degree_bound);
+    s2_mp = truncate_mod_var(s2_mp, var, degree_bound);
+
+    return {s1_mp, s2_mp};
+}
 /**
  * @brief 多元丢番图方程求解器
  *
@@ -380,7 +534,7 @@ std::vector<MultiPoly> multivariate_diophantine(
     int degree_bound)
 {
     int r = static_cast<int>(factors.size());
-    if (r == 0) return {};
+    if (r == 0) { return {}; }
     if (r == 1) {
         /// 单因子情形:s_1 = target / f_1(精确除法后截断)
         try {
@@ -388,148 +542,15 @@ std::vector<MultiPoly> multivariate_diophantine(
             s1 = truncate_mod_var(s1, var, degree_bound);
             return {s1};
         } catch (const std::runtime_error&) {
-            /// 若不整除,返回 target 本身(退化情形)
-            return {truncate_mod_var(target, var, degree_bound)};
+            return {};
         }
     }
 
     const auto& vars = factors[0].variables();
 
     if (r == 2) {
-        /// 二因子情形:使用扩展 GCD
-        /// 将 MultiPoly 因子转换为一元 Polynomial<Rational> 进行 GCD 计算
-        /// 因为在 Hensel 提升过程中,因子在求值点处本质为一元多项式
-
-        /// 先对因子在 eval_point 处求值(去除 var 维度),得到一元多项式
-        /// 但实际上 factors 可能已经是关于某个主变量的一元多项式
-        /// 策略:尝试直接转换为一元多项式;若失败则在 var 处求值后转换
-
-        Polynomial<Rational> f1_uni, f2_uni;
-        bool converted = false;
-
-        /// 尝试直接转换
-        try {
-            f1_uni = factors[0].to_univariate();
-            f2_uni = factors[1].to_univariate();
-            converted = true;
-        } catch (const std::invalid_argument&) {
-            /// 多元输入先在 var 处求值,再转换为一元多项式.
-            try {
-                MultiPoly f1_eval = factors[0].eval(var, eval_point);
-                MultiPoly f2_eval = factors[1].eval(var, eval_point);
-                f1_uni = f1_eval.to_univariate();
-                f2_uni = f2_eval.to_univariate();
-                converted = true;
-            } catch (const std::invalid_argument&) {
-                converted = false;
-            }
-        }
-
-        if (!converted) {
-            /// 一元转换未决时返回零解,表示退化提升结果.
-            return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
-        }
-
-        /// 计算扩展 GCD:s*f1 + t*f2 = gcd(f1, f2)
-        Polynomial<Rational> s_coeff, t_coeff;
-        Polynomial<Rational> g = extended_gcd_poly(f1_uni, f2_uni, s_coeff, t_coeff);
-
-        /// 将 target 也转换为一元多项式
-        Polynomial<Rational> target_uni;
-        try {
-            target_uni = target.to_univariate();
-            /// 直接转换只有在目标与因子位于同一一元变量域时有效。
-            /// 若目标仅含提升变量，必须先在提升点求值。
-            if (target_uni.degree() > 0 &&
-                target_uni.variable_name != f1_uni.variable_name) {
-                throw std::logic_error("target uses the lift variable");
-            }
-        } catch (const std::logic_error&) {
-            try {
-                MultiPoly target_eval = target.eval(var, eval_point);
-                target_uni = target_eval.to_univariate();
-            } catch (const std::invalid_argument&) {
-                /// target 为常数
-                if (target.is_constant()) {
-                    Rational c = target.is_zero() ? Rational(0) : target.terms()[0].second;
-                    target_uni = Polynomial<Rational>({c}, f1_uni.variable_name);
-                } else {
-                    return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
-                }
-            }
-        }
-        /// 常数多项式没有固有变量域；to_univariate() 会为其选择默认
-        /// 变量名。后续一元除法必须使用因子所在的变量域。
-        if (target_uni.degree() <= 0) {
-            target_uni.variable_name = f1_uni.variable_name;
-        } else if (target_uni.variable_name != f1_uni.variable_name) {
-            return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
-        }
-
-
-        /// gcd 应为 1(因子互素),但处理一般情形
-        /// s_1 = s * (target / gcd), s_2 = t * (target / gcd)
-        Polynomial<Rational> scale;
-        if (g.is_zero() || g.degree() < 0) {
-            /// 退化情形
-            return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
-        }
-
-        auto [quotient, remainder] = target_uni.div_mod(g);
-        if (!remainder.is_zero()) {
-            /// 互素前提失效时返回零解,表示 Bézout 提升退化.
-            return {MultiPoly(Rational(0), vars), MultiPoly(Rational(0), vars)};
-        }
-
-        /// s_1 = s * quotient, s_2 = t * quotient
-        Polynomial<Rational> s1_uni = s_coeff * quotient;
-        Polynomial<Rational> s2_uni = t_coeff * quotient;
-
-        /// 对 s_1 取模 f_2,对 s_2 取模 f_1,确保次数约束
-        /// s_1*f_1 + s_2*f_2 = target,且 deg(s_1) < deg(f_2), deg(s_2) < deg(f_1)
-        if (!f2_uni.is_zero() && s1_uni.degree() >= f2_uni.degree()) {
-            auto [q1, r1] = s1_uni.div_mod(f2_uni);
-            s1_uni = r1;
-            /// 调整 s_2:s_2 = s_2 + q1 * f_1
-            s2_uni = s2_uni + q1 * f1_uni;
-        }
-
-        /// 确定用于 from_univariate 的变量名
-        std::string uni_var = f1_uni.variable_name;
-
-        /// 转换回 MultiPoly
-        MultiPoly s1_mp = MultiPoly::from_univariate(s1_uni, uni_var);
-        MultiPoly s2_mp = MultiPoly::from_univariate(s2_uni, uni_var);
-
-        /// 若变量集不匹配,嵌入到完整变量集
-        if (s1_mp.variables() != vars && !vars.empty()) {
-            /// 找到 uni_var 在 vars 中的位置
-            int uni_idx = -1;
-            for (size_t i = 0; i < vars.size(); ++i) {
-                if (vars[i] == uni_var) { uni_idx = static_cast<int>(i); break; }
-            }
-            if (uni_idx >= 0) {
-                std::vector<MultiPoly::Term> new_terms1, new_terms2;
-                for (const auto& term : s1_mp.terms()) {
-                    Monomial full_mono(vars.size(), 0);
-                    if (!term.first.empty()) full_mono[uni_idx] = term.first[0];
-                    new_terms1.emplace_back(std::move(full_mono), term.second);
-                }
-                for (const auto& term : s2_mp.terms()) {
-                    Monomial full_mono(vars.size(), 0);
-                    if (!term.first.empty()) full_mono[uni_idx] = term.first[0];
-                    new_terms2.emplace_back(std::move(full_mono), term.second);
-                }
-                s1_mp = MultiPoly(std::move(new_terms1), vars);
-                s2_mp = MultiPoly(std::move(new_terms2), vars);
-            }
-        }
-
-        /// 截断为 degree < degree_bound
-        s1_mp = truncate_mod_var(s1_mp, var, degree_bound);
-        s2_mp = truncate_mod_var(s2_mp, var, degree_bound);
-
-        return {s1_mp, s2_mp};
+        return solve_diophantine_pair(factors, target, var, eval_point,
+                                      degree_bound);
     }
 
     /// 一般情形(r > 2):递归归约

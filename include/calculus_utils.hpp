@@ -28,9 +28,9 @@ enum class ContinuityType {
 using ContinuityResult = Result<ContinuityType>;
 
 /**
- * @brief 判断函数在指定点的连续性类型.
- *
- * 通过计算左极限,右极限和函数值来确定连续性分类.
+ * @brief 根据左右极限与函数值，在给定上下文假设下证明实数域中的连续性分类。
+ * 跳跃与可去间断的比较需证明逐点不等，相等性需保证各值有定义；形式非恒等不足以证明二者。
+ * 参数值或有定义性未确定时返回 Inconclusive；资源、取消和底层证明错误原样传播，不作为分类。
  */
 LMCAS_API ContinuityResult continuity_at_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,

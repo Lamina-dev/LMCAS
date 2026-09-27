@@ -1,5 +1,5 @@
 #include "numerical_integration.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "test_common.hpp"
 #include <cmath>
 #include <limits>
@@ -8,321 +8,311 @@ using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
-static bool close(const std::shared_ptr<SymbolicExpr>& e, double expected, double tol = 1e-6) {
-    if (!e) return false;
-    auto s = e->simplify();
-    if (s->is_number()) return std::abs(s->to_numeric() - expected) < tol;
-    // Fall back to recursive numeric evaluation (handles sqrt, etc.).
-    auto v = test_numeric_eval(s);
-    if (v.has_value()) return std::abs(*v - expected) < tol;
-    return false;
-}
-
-static bool close(const ApproxReal& value, double expected,
+static bool close(const ApproxReal &value, double expected,
                   double tolerance = 1e-6) {
     return value.status == NumericStatus::Finite &&
            std::abs(value.value - expected) < tolerance;
 }
 
-int main() {
+TEST(LmcasNumericalIntegration, SimpsonLinear) {
     auto x = SymbolicExpr::variable("x");
-
     // ∫₀¹ x dx = 1/2 (Simpson exact for linear)
-    {
-        auto r = quadrature_simpson_numeric(
-            x, "x", num(0), num(1), 10).value();
-        EXPECT_TRUE(close(r, 0.5), "Simpson ∫₀¹ x dx = 0.5");
-    }
+    auto r = quadrature_simpson_numeric(
+                 x, "x", num(0), num(1), 10)
+                 .value();
+    EXPECT_TRUE((close(r, 0.5))) << ("Simpson ∫₀¹ x dx = 0.5");
+}
 
+TEST(LmcasNumericalIntegration, SimpsonQuadratic) {
+    auto x = SymbolicExpr::variable("x");
     // ∫₀¹ x^2 dx = 1/3 (Simpson exact for quadratic)
-    {
-        auto f = SymbolicExpr::multiply(x, x);
-        auto r = quadrature_simpson_numeric(
-            f, "x", num(0), num(1), 10).value();
-        EXPECT_TRUE(close(r, 1.0/3.0), "Simpson ∫₀¹ x² dx = 1/3");
-    }
+    auto f = SymbolicExpr::multiply(x, x);
+    auto r = quadrature_simpson_numeric(
+                 f, "x", num(0), num(1), 10)
+                 .value();
+    EXPECT_TRUE((close(r, 1.0 / 3.0))) << ("Simpson ∫₀¹ x² dx = 1/3");
+}
 
+TEST(LmcasNumericalIntegration, SimpsonErrorEstimate) {
+    auto x = SymbolicExpr::variable("x");
     // Fixed Simpson derives its error estimate from an actual refinement.
-    {
-        auto f = SymbolicExpr::power(x, num(4));
-        auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 10);
-        const double observed_error =
-            r ? std::abs(r.value().value - 0.2) : 0.0;
-        EXPECT_TRUE(r && observed_error < 2e-5,
-                    "checked fixed Simpson integrates x^4 accurately");
-        EXPECT_TRUE(r && r.value().status == NumericStatus::Finite &&
-                        r.value().absolute_error > 1e-8 &&
-                        observed_error <= r.value().absolute_error + 1e-14,
-                    "fixed Simpson reports its step-doubling error estimate");
-    }
+    auto f = SymbolicExpr::power(x, num(4));
+    auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 10);
+    const double observed_error =
+        r ? std::abs(r.value().value - 0.2) : 0.0;
+    EXPECT_TRUE((r && observed_error < 2e-5)) << ("checked fixed Simpson integrates x^4 accurately");
+    EXPECT_TRUE((r && r.value().status == NumericStatus::Finite &&
+                 r.value().absolute_error > 1e-8 &&
+                 observed_error <= r.value().absolute_error + 1e-14))
+        << ("fixed Simpson reports its step-doubling error estimate");
+}
+
+TEST(LmcasNumericalIntegration, SimpsonRichardson) {
+    auto x = SymbolicExpr::variable("x");
     // Step doubling should return the Richardson-extrapolated value, not
     // discard the finer evaluation and return the coarse rule.
-    {
-        auto f = SymbolicExpr::power(x, num(4));
-        auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 2);
-        EXPECT_TRUE(r && std::abs(r.value().value - 0.2) < 1e-15,
-                    "fixed Simpson returns its Richardson-extrapolated quartic value");
-        EXPECT_TRUE(r && r.value().absolute_error < 1e-3,
-                    "fixed Simpson reports the fine-grid Richardson error scale");
-    }
+    auto f = SymbolicExpr::power(x, num(4));
+    auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 2);
+    EXPECT_TRUE((r && std::abs(r.value().value - 0.2) < 1e-15)) << ("fixed Simpson returns its Richardson-extrapolated quartic value");
+    EXPECT_TRUE((r && r.value().absolute_error < 1e-3)) << ("fixed Simpson reports the fine-grid Richardson error scale");
+}
+
+TEST(LmcasNumericalIntegration, SimpsonExtremeBounds) {
     // The finite endpoint span may exceed DBL_MAX even when the integral does not.
-    {
-        const double largest = std::numeric_limits<double>::max();
-        auto tiny_constant = SymbolicExpr::number(1.0 / largest);
-        auto r = quadrature_simpson_numeric(
-            tiny_constant, "x", SymbolicExpr::number(-largest),
-            SymbolicExpr::number(largest), 10);
-        EXPECT_TRUE(r && std::abs(r.value().value - 2.0) < 1e-12,
-                    "fixed Simpson maps a full finite interval without width overflow");
-    }
+    const double largest = std::numeric_limits<double>::max();
+    auto tiny_constant = SymbolicExpr::number(1.0 / largest);
+    auto r = quadrature_simpson_numeric(
+        tiny_constant, "x", SymbolicExpr::number(-largest),
+        SymbolicExpr::number(largest), 10);
+    EXPECT_TRUE((r && std::abs(r.value().value - 2.0) < 1e-12)) << ("fixed Simpson maps a full finite interval without width overflow");
+}
 
+TEST(LmcasNumericalIntegration, ZeroMeasureBudget) {
+    auto x = SymbolicExpr::variable("x");
     // A zero-measure interval does not spend an integrand sampling budget.
-    {
-        ResourceLimits limits;
-        limits.max_steps = 2;
-        ComputationContext simpson_context(limits);
-        auto simpson = quadrature_simpson_numeric(
-            x, "x", num(1), num(1), simpson_context, 100);
-        EXPECT_TRUE(simpson && simpson.value().value == 0.0,
-                    "zero-width Simpson returns zero before sample reservation");
+    ResourceLimits limits;
+    limits.max_steps = 2;
+    ComputationContext simpson_context(limits);
+    auto simpson = quadrature_simpson_numeric(
+        x, "x", num(1), num(1), simpson_context, 100);
+    EXPECT_TRUE((simpson && simpson.value().value == 0.0)) << ("zero-width Simpson returns zero before sample reservation");
 
-        ComputationContext gaussian_context(limits);
-        auto gaussian = quadrature_gaussian_numeric(
-            x, "x", num(1), num(1), gaussian_context, 20);
-        EXPECT_TRUE(gaussian && gaussian.value().value == 0.0,
-                    "zero-width Gaussian returns zero before sample reservation");
-    }
+    ComputationContext gaussian_context(limits);
+    auto gaussian = quadrature_gaussian_numeric(
+        x, "x", num(1), num(1), gaussian_context, 20);
+    EXPECT_TRUE((gaussian && gaussian.value().value == 0.0)) << ("zero-width Gaussian returns zero before sample reservation");
+}
 
-
-
+TEST(LmcasNumericalIntegration, GaussianCubic) {
+    auto x = SymbolicExpr::variable("x");
     // ∫₀¹ x^3 dx = 1/4 via Gauss-Legendre (n=2 exact up to degree 3)
-    {
-        auto f = SymbolicExpr::power(x, num(3));
-        auto r = quadrature_gaussian_numeric(
-            f, "x", num(0), num(1), 2).value();
-        EXPECT_TRUE(close(r, 0.25, 1e-6), "Gauss ∫₀¹ x³ dx = 1/4");
-    }
+    auto f = SymbolicExpr::power(x, num(3));
+    auto r = quadrature_gaussian_numeric(
+                 f, "x", num(0), num(1), 2)
+                 .value();
+    EXPECT_TRUE((close(r, 0.25, 1e-6))) << ("Gauss ∫₀¹ x³ dx = 1/4");
+}
 
+TEST(LmcasNumericalIntegration, GaussianCheckedCubic) {
+    auto x = SymbolicExpr::variable("x");
     // checked Gauss-Legendre reports the same value through Result<ApproxReal>
-    {
-        auto f = SymbolicExpr::power(x, num(3));
-        auto r = quadrature_gaussian_numeric(f, "x", num(0), num(1), 2);
-        EXPECT_TRUE(r && std::abs(r.value().value - 0.25) < 1e-12,
-                    "checked Gauss ∫₀¹ x³ dx = 1/4");
-    }
+    auto f = SymbolicExpr::power(x, num(3));
+    auto r = quadrature_gaussian_numeric(f, "x", num(0), num(1), 2);
+    EXPECT_TRUE((r && std::abs(r.value().value - 0.25) < 1e-12)) << ("checked Gauss ∫₀¹ x³ dx = 1/4");
+}
 
+static bool gaussian_integrates_eighth_power(const LMCAS::Result<LMCAS::ApproxReal> &result) {
+    return result && std::abs(result.value().value - 1.0 / 9.0) < 1e-13;
+}
+
+TEST(LmcasNumericalIntegration, GaussianOrderAccuracy) {
+    auto x = SymbolicExpr::variable("x");
     // Orders above three must use LMMC Gauss-Legendre, not a Simpson fallback.
-    {
-        auto eighth_power = SymbolicExpr::power(x, num(8));
-        auto order_five = quadrature_gaussian_numeric(
-            eighth_power, "x", num(0), num(1), 5);
-        EXPECT_TRUE(order_five &&
-                        std::abs(order_five.value().value - 1.0 / 9.0) < 1e-13,
-                    "five-point Gauss integrates degree-eight polynomials exactly");
+    auto eighth_power = SymbolicExpr::power(x, num(8));
+    auto order_five = quadrature_gaussian_numeric(
+        eighth_power, "x", num(0), num(1), 5);
+    EXPECT_TRUE((gaussian_integrates_eighth_power(order_five))) << ("five-point Gauss integrates degree-eight polynomials exactly");
 
-        auto order_four = quadrature_gaussian_numeric(
-            eighth_power, "x", num(0), num(1), 4);
-        const double observed_error = order_four
-            ? std::abs(order_four.value().value - 1.0 / 9.0)
-            : 0.0;
-        EXPECT_TRUE(order_four && order_four.value().absolute_error > 1e-8 &&
-                        observed_error <= order_four.value().absolute_error + 1e-14,
-                    "Gaussian error metadata comes from an adjacent-order rule");
+    auto order_four = quadrature_gaussian_numeric(
+        eighth_power, "x", num(0), num(1), 4);
+    const double observed_error = order_four
+                                      ? std::abs(order_four.value().value - 1.0 / 9.0)
+                                      : 0.0;
+    EXPECT_TRUE((order_four && order_four.value().absolute_error > 1e-8 &&
+                 observed_error <= order_four.value().absolute_error + 1e-14))
+        << ("Gaussian error metadata comes from an adjacent-order rule");
 
-        auto order_twenty = quadrature_gaussian_numeric(
-            eighth_power, "x", num(0), num(1), 20);
-        EXPECT_TRUE(order_twenty &&
-                        std::abs(order_twenty.value().value - 1.0 / 9.0) < 1e-13,
-                    "twenty-point Gauss is accepted and evaluated directly");
+    auto order_twenty = quadrature_gaussian_numeric(
+        eighth_power, "x", num(0), num(1), 20);
+    EXPECT_TRUE((gaussian_integrates_eighth_power(order_twenty))) << ("twenty-point Gauss is accepted and evaluated directly");
 
-        auto unsupported = quadrature_gaussian_numeric(
-            eighth_power, "x", num(0), num(1), 21);
-        EXPECT_TRUE(!unsupported &&
-                        unsupported.error().code == CasErrc::InvalidArgument,
-                    "Gaussian orders above twenty are rejected explicitly");
-    }
-    {
-        const double largest = std::numeric_limits<double>::max();
-        auto tiny_constant = SymbolicExpr::number(1.0 / largest);
-        auto r = quadrature_gaussian_numeric(
-            tiny_constant, "x", SymbolicExpr::number(-largest),
-            SymbolicExpr::number(largest), 2);
-        EXPECT_TRUE(r && std::abs(r.value().value - 2.0) < 1e-12,
-                    "Gauss maps a full finite interval without width overflow");
-    }
+    auto unsupported = quadrature_gaussian_numeric(
+        eighth_power, "x", num(0), num(1), 21);
+    EXPECT_TRUE((!unsupported &&
+                 unsupported.error().code == CasErrc::InvalidArgument))
+        << ("Gaussian orders above twenty are rejected explicitly");
+}
 
+TEST(LmcasNumericalIntegration, GaussianExtremeBounds) {
+    const double largest = std::numeric_limits<double>::max();
+    auto tiny_constant = SymbolicExpr::number(1.0 / largest);
+    auto r = quadrature_gaussian_numeric(
+        tiny_constant, "x", SymbolicExpr::number(-largest),
+        SymbolicExpr::number(largest), 2);
+    EXPECT_TRUE((r && std::abs(r.value().value - 2.0) < 1e-12)) << ("Gauss maps a full finite interval without width overflow");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveQuadratic) {
+    auto x = SymbolicExpr::variable("x");
     // adaptive_simpson on ∫₀¹ x^2 dx = 1/3
-    {
-        auto f = SymbolicExpr::multiply(x, x);
-        auto r = adaptive_simpson_numeric(
-            f, "x", num(0), num(1), 1e-10).value();
-        EXPECT_TRUE(close(r, 1.0/3.0, 1e-8), "adaptive Simpson ∫₀¹ x² dx = 1/3");
-    }
+    auto f = SymbolicExpr::multiply(x, x);
+    auto r = adaptive_simpson_numeric(
+                 f, "x", num(0), num(1), 1e-10)
+                 .value();
+    EXPECT_TRUE((close(r, 1.0 / 3.0, 1e-8))) << ("adaptive Simpson ∫₀¹ x² dx = 1/3");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveErrorBound) {
+    auto x = SymbolicExpr::variable("x");
     // checked adaptive_simpson reports success with explicit error metadata
-    {
-        auto f = SymbolicExpr::multiply(x, x);
-        auto r = adaptive_simpson_numeric(f, "x", num(0), num(1), 1e-10);
-        EXPECT_TRUE(r.has_value(), "checked adaptive Simpson returns Result success");
-        EXPECT_TRUE(r.has_value() && std::abs(r.value().value - 1.0/3.0) < 1e-8,
-                    "checked adaptive Simpson ∫₀¹ x² dx = 1/3");
-        EXPECT_TRUE(r.has_value() && r.value().absolute_error >= 0.0 &&
-                        std::abs(r.value().value - 1.0/3.0) <= r.value().absolute_error,
-                    "reported Simpson error bounds the observed quadratic error");
-    }
+    auto f = SymbolicExpr::multiply(x, x);
+    auto r = adaptive_simpson_numeric(f, "x", num(0), num(1), 1e-10);
+    EXPECT_TRUE((r.has_value())) << ("checked adaptive Simpson returns Result success");
+    EXPECT_TRUE((r.has_value() && std::abs(r.value().value - 1.0 / 3.0) < 1e-8)) << ("checked adaptive Simpson ∫₀¹ x² dx = 1/3");
+    EXPECT_TRUE((r.has_value() && r.value().absolute_error >= 0.0 &&
+                 std::abs(r.value().value - 1.0 / 3.0) <= r.value().absolute_error))
+        << ("reported Simpson error bounds the observed quadratic error");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveSingularity) {
+    auto x = SymbolicExpr::variable("x");
     // Crossing a singularity is a domain failure, not a principal-value success.
-    {
-        auto reciprocal = SymbolicExpr::divide(num(1), x);
-        auto r = adaptive_simpson_numeric(
-            reciprocal, "x", num(-1), num(1), 1e-10);
-        EXPECT_TRUE(!r && r.error().code == CasErrc::DomainError,
-                    "adaptive Simpson rejects an interior pole");
-    }
+    auto reciprocal = SymbolicExpr::divide(num(1), x);
+    auto r = adaptive_simpson_numeric(
+        reciprocal, "x", num(-1), num(1), 1e-10);
+    EXPECT_TRUE((!r && r.error().code == CasErrc::DomainError)) << ("adaptive Simpson rejects an interior pole");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveDepthLimit) {
+    auto x = SymbolicExpr::variable("x");
     // A caller-imposed recursion limit must not return an unverified estimate.
-    {
-        auto absolute = LMCAS::detail::make_expression_ptr(
-            LMCAS::detail::make_node<FunctionNode>(
-                FunctionNode::FuncType::Abs,
-                std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(x)}));
-        ComputationContext context;
-        auto r = adaptive_simpson_numeric(
-            absolute, "x", num(-1), num(1), context, 1e-14, 0);
-        EXPECT_TRUE(!r && r.error().code == CasErrc::ResourceLimit,
-                    "insufficient refinement depth returns ResourceLimit");
-    }
+    auto absolute = LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::Abs,
+            std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(x)}));
+    ComputationContext context;
+    auto r = adaptive_simpson_numeric(
+        absolute, "x", num(-1), num(1), context, 1e-14, 0);
+    EXPECT_TRUE((!r && r.error().code == CasErrc::ResourceLimit)) << ("insufficient refinement depth returns ResourceLimit");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveCancellation) {
+    auto x = SymbolicExpr::variable("x");
     // Cancellation is checked through the shared evaluation context.
-    {
-        CancellationToken cancellation;
-        cancellation.cancel();
-        ComputationContext context({}, cancellation);
-        auto r = adaptive_simpson_numeric(x, "x", num(0), num(1), context, 1e-10);
-        EXPECT_TRUE(!r && r.error().code == CasErrc::Cancelled,
-                    "adaptive Simpson propagates cancellation");
-    }
+    CancellationToken cancellation;
+    cancellation.cancel();
+    ComputationContext context({}, cancellation);
+    auto r = adaptive_simpson_numeric(x, "x", num(0), num(1), context, 1e-10);
+    EXPECT_TRUE((!r && r.error().code == CasErrc::Cancelled)) << ("adaptive Simpson propagates cancellation");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveExtremeBounds) {
     // Finite extreme endpoints remain usable when the transformed integral is finite.
-    {
-        const double largest = std::numeric_limits<double>::max();
-        auto scaled_constant = SymbolicExpr::number(1.0 / largest);
-        auto r = adaptive_simpson_numeric(
-            scaled_constant, "x", SymbolicExpr::number(-largest),
-            SymbolicExpr::number(largest), 1e-10);
-        EXPECT_TRUE(r && std::abs(r.value().value - 2.0) < 1e-12,
-                    "adaptive Simpson maps a full finite interval safely");
-    }
+    const double largest = std::numeric_limits<double>::max();
+    auto scaled_constant = SymbolicExpr::number(1.0 / largest);
+    auto r = adaptive_simpson_numeric(
+        scaled_constant, "x", SymbolicExpr::number(-largest),
+        SymbolicExpr::number(largest), 1e-10);
+    EXPECT_TRUE((r && std::abs(r.value().value - 2.0) < 1e-12)) << ("adaptive Simpson maps a full finite interval safely");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveOrientation) {
+    auto x = SymbolicExpr::variable("x");
     // Reversed limits preserve orientation.
-    {
-        auto square = SymbolicExpr::multiply(x, x);
-        auto r = adaptive_simpson_numeric(square, "x", num(1), num(0), 1e-10);
-        EXPECT_TRUE(r && std::abs(r.value().value + 1.0/3.0) <=
-                            r.value().absolute_error + 1e-15,
-                    "reversed limits negate the integral");
-    }
+    auto square = SymbolicExpr::multiply(x, x);
+    auto r = adaptive_simpson_numeric(square, "x", num(1), num(0), 1e-10);
+    EXPECT_TRUE((r && std::abs(r.value().value + 1.0 / 3.0) <=
+                          r.value().absolute_error + 1e-15))
+        << ("reversed limits negate the integral");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveUnboundIntegrand) {
+    auto x = SymbolicExpr::variable("x");
     // checked path must not hide missing variables as zero/null.
-    {
-        auto y = SymbolicExpr::variable("y");
-        auto f = SymbolicExpr::add(x, y);
-        auto r = adaptive_simpson_numeric(f, "x", num(0), num(1), 1e-10);
-        EXPECT_TRUE(!r.has_value(), "checked adaptive Simpson rejects unbound variables");
-        EXPECT_TRUE(!r.has_value() && r.error().code == CasErrc::UnboundSymbol,
-                    "checked adaptive Simpson reports UnboundSymbol");
-    }
+    auto y = SymbolicExpr::variable("y");
+    auto f = SymbolicExpr::add(x, y);
+    auto r = adaptive_simpson_numeric(f, "x", num(0), num(1), 1e-10);
+    EXPECT_TRUE((!r.has_value())) << ("checked adaptive Simpson rejects unbound variables");
+    EXPECT_TRUE((!r.has_value() && r.error().code == CasErrc::UnboundSymbol)) << ("checked adaptive Simpson reports UnboundSymbol");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveUnboundEndpoint) {
+    auto x = SymbolicExpr::variable("x");
     // checked endpoint evaluation must also use explicit numeric errors.
-    {
-        auto r = adaptive_simpson_numeric(x, "x", SymbolicExpr::variable("a"), num(1), 1e-10);
-        EXPECT_TRUE(!r.has_value(), "checked adaptive Simpson rejects symbolic bounds");
-        EXPECT_TRUE(!r.has_value() && r.error().code == CasErrc::UnboundSymbol,
-                    "checked adaptive Simpson reports symbolic bound as UnboundSymbol");
-    }
+    auto r = adaptive_simpson_numeric(x, "x", SymbolicExpr::variable("a"), num(1), 1e-10);
+    EXPECT_TRUE((!r.has_value())) << ("checked adaptive Simpson rejects symbolic bounds");
+    EXPECT_TRUE((!r.has_value() && r.error().code == CasErrc::UnboundSymbol)) << ("checked adaptive Simpson reports symbolic bound as UnboundSymbol");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveStepBudget) {
+    auto x = SymbolicExpr::variable("x");
     // Resource budgets must be honored before deep recursion starts.
-    {
-        ResourceLimits limits;
-        limits.max_steps = 0;
-        ComputationContext context(limits);
-        auto r = adaptive_simpson_numeric(x, "x", num(0), num(1), context, 1e-10);
-        EXPECT_TRUE(!r.has_value(), "checked adaptive Simpson honors exhausted step budget");
-        EXPECT_TRUE(!r.has_value() && r.error().code == CasErrc::ResourceLimit,
-                    "checked adaptive Simpson reports ResourceLimit");
-    }
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext context(limits);
+    auto r = adaptive_simpson_numeric(x, "x", num(0), num(1), context, 1e-10);
+    EXPECT_TRUE((!r.has_value())) << ("checked adaptive Simpson honors exhausted step budget");
+    EXPECT_TRUE((!r.has_value() && r.error().code == CasErrc::ResourceLimit)) << ("checked adaptive Simpson reports ResourceLimit");
+}
 
+TEST(LmcasNumericalIntegration, SimpsonUnboundIntegrand) {
+    auto x = SymbolicExpr::variable("x");
     // checked fixed Simpson propagates unbound variables.
-    {
-        auto y = SymbolicExpr::variable("y");
-        auto f = SymbolicExpr::add(x, y);
-        auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 10);
-        EXPECT_TRUE(!r && r.error().code == CasErrc::UnboundSymbol,
-                    "checked fixed Simpson reports UnboundSymbol");
-    }
+    auto y = SymbolicExpr::variable("y");
+    auto f = SymbolicExpr::add(x, y);
+    auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 10);
+    EXPECT_TRUE((!r && r.error().code == CasErrc::UnboundSymbol)) << ("checked fixed Simpson reports UnboundSymbol");
+}
 
+TEST(LmcasNumericalIntegration, SimpsonSampleDomain) {
+    auto x = SymbolicExpr::variable("x");
     // checked fixed Simpson rejects domain errors at samples.
-    {
-        auto f = SymbolicExpr::ln(x);
-        auto r = quadrature_simpson_numeric(f, "x", num(-1), num(1), 10);
-        EXPECT_TRUE(!r && r.error().code == CasErrc::DomainError,
-                    "checked fixed Simpson reports sample DomainError");
-    }
+    auto f = SymbolicExpr::ln(x);
+    auto r = quadrature_simpson_numeric(f, "x", num(-1), num(1), 10);
+    EXPECT_TRUE((!r && r.error().code == CasErrc::DomainError)) << ("checked fixed Simpson reports sample DomainError");
+}
 
+TEST(LmcasNumericalIntegration, FixedInvalidAndCancelled) {
+    auto x = SymbolicExpr::variable("x");
     // checked fixed quadrature validates arguments and observes cancellation.
-    {
-        auto invalid_n = quadrature_simpson_numeric(x, "x", num(0), num(1), 0);
-        EXPECT_TRUE(!invalid_n && invalid_n.error().code == CasErrc::InvalidArgument,
-                    "checked fixed Simpson rejects non-positive sample counts");
+    auto invalid_n = quadrature_simpson_numeric(x, "x", num(0), num(1), 0);
+    EXPECT_TRUE((!invalid_n && invalid_n.error().code == CasErrc::InvalidArgument)) << ("checked fixed Simpson rejects non-positive sample counts");
 
-        auto odd_n = quadrature_simpson_numeric(x, "x", num(0), num(1), 9);
-        EXPECT_TRUE(!odd_n && odd_n.error().code == CasErrc::InvalidArgument,
-                    "checked fixed Simpson rejects odd subinterval counts");
+    auto odd_n = quadrature_simpson_numeric(x, "x", num(0), num(1), 9);
+    EXPECT_TRUE((!odd_n && odd_n.error().code == CasErrc::InvalidArgument)) << ("checked fixed Simpson rejects odd subinterval counts");
 
-        CancellationToken cancellation;
-        cancellation.cancel();
-        ComputationContext context({}, cancellation);
-        auto cancelled = quadrature_gaussian_numeric(x, "x", num(0), num(1), context, 2);
-        EXPECT_TRUE(!cancelled && cancelled.error().code == CasErrc::Cancelled,
-                    "checked Gaussian observes cancellation");
-    }
+    CancellationToken cancellation;
+    cancellation.cancel();
+    ComputationContext context({}, cancellation);
+    auto cancelled = quadrature_gaussian_numeric(x, "x", num(0), num(1), context, 2);
+    EXPECT_TRUE((!cancelled && cancelled.error().code == CasErrc::Cancelled)) << ("checked Gaussian observes cancellation");
+}
 
-
+TEST(LmcasNumericalIntegration, SimpsonStepBudget) {
+    auto x = SymbolicExpr::variable("x");
     // checked fixed quadrature consumes the shared step budget.
-    {
-        ResourceLimits limits;
-        limits.max_steps = 1;
-        ComputationContext context(limits);
-        auto r = quadrature_simpson_numeric(x, "x", num(0), num(1), context, 10);
-        EXPECT_TRUE(!r && r.error().code == CasErrc::ResourceLimit,
-                    "checked fixed Simpson reports ResourceLimit");
-    }
+    ResourceLimits limits;
+    limits.max_steps = 1;
+    ComputationContext context(limits);
+    auto r = quadrature_simpson_numeric(x, "x", num(0), num(1), context, 10);
+    EXPECT_TRUE((!r && r.error().code == CasErrc::ResourceLimit)) << ("checked fixed Simpson reports ResourceLimit");
+}
 
+TEST(LmcasNumericalIntegration, AdaptiveTranscendental) {
+    auto x = SymbolicExpr::variable("x");
     // adaptive_simpson on a transcendental: ∫₀^π sin(x) dx = 2
-    {
-        auto f = SymbolicExpr::sin(x);
-        auto pi = SymbolicExpr::number(LMMC_CONST_PI);
-        auto r = adaptive_simpson_numeric(
-            f, "x", num(0), pi, 1e-10).value();
-        EXPECT_TRUE(close(r, 2.0, 1e-6), "adaptive Simpson ∫₀^π sin x dx = 2");
-    }
+    auto f = SymbolicExpr::sin(x);
+    auto pi = SymbolicExpr::number(LMMC_CONST_PI);
+    auto r = adaptive_simpson_numeric(
+                 f, "x", num(0), pi, 1e-10)
+                 .value();
+    EXPECT_TRUE((close(r, 2.0, 1e-6))) << ("adaptive Simpson ∫₀^π sin x dx = 2");
+}
 
+TEST(LmcasNumericalIntegration, NumericalQuadratic) {
+    auto x = SymbolicExpr::variable("x");
     // numerical_integrate wrapper
-    {
-        auto f = SymbolicExpr::multiply(x, x);
-        auto r = numerical_integrate_numeric(
-            f, "x", num(0), num(1), 100).value();
-        EXPECT_TRUE(close(r, 1.0/3.0, 1e-6), "numerical_integrate ∫₀¹ x² dx = 1/3");
-    }
+    auto f = SymbolicExpr::multiply(x, x);
+    auto r = numerical_integrate_numeric(
+                 f, "x", num(0), num(1), 100)
+                 .value();
+    EXPECT_TRUE((close(r, 1.0 / 3.0, 1e-6))) << ("numerical_integrate ∫₀¹ x² dx = 1/3");
+}
 
+TEST(LmcasNumericalIntegration, NumericalCheckedQuadratic) {
+    auto x = SymbolicExpr::variable("x");
     // checked numerical_integrate wrapper uses the explicit fixed Simpson contract.
-    {
-        auto f = SymbolicExpr::multiply(x, x);
-        auto r = numerical_integrate_numeric(f, "x", num(0), num(1), 100);
-        EXPECT_TRUE(r && std::abs(r.value().value - 1.0 / 3.0) < 1e-10,
-                    "checked numerical_integrate ∫₀¹ x² dx = 1/3");
-    }
-
-    return TEST_REPORT();
+    auto f = SymbolicExpr::multiply(x, x);
+    auto r = numerical_integrate_numeric(f, "x", num(0), num(1), 100);
+    EXPECT_TRUE((r && std::abs(r.value().value - 1.0 / 3.0) < 1e-10)) << ("checked numerical_integrate ∫₀¹ x² dx = 1/3");
 }

@@ -6,15 +6,22 @@
 #include <iomanip>
 
 #include "symbolic.hpp"
+#include "symbolic_matrix.hpp"
 
 using namespace LMCAS;
 
 class Timer {
     std::string name;
     std::chrono::high_resolution_clock::time_point start;
+    bool skipped = false;
 public:
     Timer(const std::string& n) : name(n), start(std::chrono::high_resolution_clock::now()) {}
+    void skip_with_error(const std::string& error) {
+        skipped = true;
+        std::cerr << "[BENCHMARK SKIPPED] " << name << ": " << error << '\n';
+    }
     ~Timer() {
+        if (skipped) return;
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed = end - start;
         std::cout << "[BENCHMARK] " << std::left << std::setw(40) << name
@@ -37,7 +44,7 @@ void bench_polynomial_expand() {
 
 }
 
-void bench_matrix_determinant(int n) {
+bool bench_matrix_determinant(int n, ComputationContext& context) {
     std::string name = "Matrix Determinant " + std::to_string(n) + "x" + std::to_string(n);
     Timer t(name);
 
@@ -50,20 +57,25 @@ void bench_matrix_determinant(int n) {
         }
     }
     auto mat = SymbolicExpr::matrix(mat_data);
-    auto det = SymbolicExpr::determinant(mat);
+    auto det = matrix_determinant_checked(mat, context);
+    if (!det) {
+        t.skip_with_error(det.error().message);
+        return false;
+    }
 
-    det = det->expand();
+    auto expanded = det.value()->expand();
+    return true;
 }
 
 void bench_bigint_factorial() {
     Timer t("BigInt Factorial 1000!");
-    BigInt res = BigInt::factorial(1000);
+    BigInt res = BigInt::factorial(BigInt(1000));
 }
 
 void bench_bigint_combinatorics() {
     {
-        Timer t("BigInt nCr(5000, 2500)");
-        BigInt res = BigInt::nCr(5000, 2500);
+        Timer t("BigInt ncr(5000, 2500)");
+        BigInt res = BigInt::ncr(BigInt(5000), BigInt(2500));
     }
     {
         Timer t("BigInt Multinomial(1000, {250, 250, 250, 250})");
@@ -148,8 +160,10 @@ int main() {
     bench_linear_system();
     bench_polynomial_expand();
 
-    bench_matrix_determinant(3);
-    bench_matrix_determinant(4);
+    for (int n = 3; n <= 4; ++n) {
+        ComputationContext context;
+        if (!bench_matrix_determinant(n, context)) return 1;
+    }
 
     std::cout << "========================================" << std::endl;
     std::cout << "Benchmarks completed." << std::endl;

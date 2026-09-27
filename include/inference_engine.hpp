@@ -31,34 +31,30 @@ namespace LMCAS {
 
 // Forward declaration - AssumptionContext is implemented in a later task
 class AssumptionContext;
+class ComputationContext;
 
 using InferenceTriboolResult = Result<Tribool>;
 using InferencePeriodResult = Result<std::optional<SymbolicExpr>>;
 
 /**
- * @brief Derives properties of composite expressions by recursively analyzing sub-expressions.
+ * @brief 递归分析子表达式，推导复合表达式的符号、定义域和有界性。
  *
- * The InferenceEngine implements arithmetic inference rules for addition, multiplication,
- * power, and function expressions. It determines sign, domain, and boundedness properties
- * based on the properties of operands/arguments.
+ * 符号规则：
+ * - 加法：各项同号时和同号；混合符号或未知符号返回 Unknown。
+ * - 乘法：所有因子均有定义且为实数时，合并可能符号集合。
+ * - 幂：先满足原定义域；零次幂和负整数次幂要求底数非零。
+ * - 函数：exp 的参数有定义且为实数时，结果为正。
  *
- * Sign inference rules:
- *   - Addition: uniform sign -> same sign on sum; mixed/unknown -> Unknown
- *   - Multiplication: zero -> Zero; parity of negatives determines sign; unknown -> Unknown
- *   - Power: positive base + real exponent -> Positive; even exponent -> NonNegative; etc.
- *   - Functions: exp -> Positive; abs -> NonNegative; sin/cos -> Bounded[-1,1]; etc.
+ * 定义域规则：
+ * - 加法：全为 Integer 时得 Integer，全为 Real 时得 Real。
+ * - 乘法：全为 Integer 时得 Integer，混合 Real/Integer 时得 Real。
+ * - 整数幂：要求底数有定义，零次幂和负次幂还要求底数非零。
+ * - 对数：参数有定义且为正时可证明 Real，仅有 Integer 属性不足。
+ * - 无定义的实表达式返回 DomainError，前提未证实时保留 Unknown。
  *
- * Domain inference rules:
- *   - Addition: all Integer -> Integer; all Real -> Real
- *   - Multiplication: all Integer -> Integer; all Real/Integer -> Real
- *   - Power: Real base + integer exponent -> Real
- *   - Functions: exp/sin/cos/abs/sqrt/ln/tan with Real argument -> Real
- *
- * @par Thread safety
- * An instance is thread-confined. Concurrent calls on the same instance are
- * unsupported because recursion guards and active-query state are mutable.
- * Separate instances bound to immutable contexts may be used concurrently.
- * A quiescent instance may be moved to another thread before its next call.
+ * @par 线程安全
+ * 递归保护和活动查询状态可变，同一实例限单线程调用。
+ * 绑定不可变上下文的独立实例可并发使用；空闲实例可在下次调用前迁移线程。
  */
 class LMCAS_API InferenceEngine {
 public:
@@ -77,16 +73,25 @@ public:
     /// @name Public query methods
     /// These query sign/domain properties for arbitrary expressions by dispatching
     /// to the appropriate inference method based on the expression's root node type.
+    /// Context overloads share cancellation and resource limits with recursive queries;
+    /// proof-depth exhaustion still returns Unknown, independently of resource errors.
     /// @{
 
 
     InferenceTriboolResult query_positive_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_positive_checked(const SymbolicExpr& expr, ComputationContext& context) const;
     InferenceTriboolResult query_negative_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_negative_checked(const SymbolicExpr& expr, ComputationContext& context) const;
     InferenceTriboolResult query_nonnegative_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_nonnegative_checked(const SymbolicExpr& expr, ComputationContext& context) const;
     InferenceTriboolResult query_nonpositive_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_nonpositive_checked(const SymbolicExpr& expr, ComputationContext& context) const;
     InferenceTriboolResult query_real_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_real_checked(const SymbolicExpr& expr, ComputationContext& context) const;
     InferenceTriboolResult query_integer_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_integer_checked(const SymbolicExpr& expr, ComputationContext& context) const;
     InferenceTriboolResult query_nonzero_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_nonzero_checked(const SymbolicExpr& expr, ComputationContext& context) const;
 
     /**
      * @brief Query whether an expression is algebraic.
@@ -101,6 +106,7 @@ public:
      */
 
     InferenceTriboolResult query_algebraic_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_algebraic_checked(const SymbolicExpr& expr, ComputationContext& context) const;
 
     /**
      * @brief Query whether an expression is transcendental.
@@ -113,6 +119,7 @@ public:
      */
 
     InferenceTriboolResult query_transcendental_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_transcendental_checked(const SymbolicExpr& expr, ComputationContext& context) const;
 
     /**
      * @brief Query whether an expression has a finite value/limit.
@@ -125,6 +132,7 @@ public:
      */
 
     InferenceTriboolResult query_finite_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_finite_checked(const SymbolicExpr& expr, ComputationContext& context) const;
 
     /**
      * @brief Query whether an expression diverges.
@@ -137,6 +145,7 @@ public:
      */
 
     InferenceTriboolResult query_divergent_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_divergent_checked(const SymbolicExpr& expr, ComputationContext& context) const;
 
     /// @}
 
@@ -158,28 +167,36 @@ public:
     /// @}
 
     /**
-     * @brief Query whether an expression is periodic.
+     * @brief 查询表达式相对于指定自变量的周期性。
      *
-     * Returns True for known periodic functions (sin, cos, tan) and symbols
-     * declared periodic in the PropertyStore.
+     * sin/cos/tan 的实仿射参数要求系数有定义且斜率非零；
+     * 非线性参数或前提未证实时返回 Unknown。
      *
-     * @param expr The expression to query
-     * @return Tribool::True if periodic, False if known non-periodic, Unknown otherwise
+     * @param expr 待查询表达式
+     * @param variable 非空自变量名
+     * @return 周期为 Tribool::True，已知非周期为 False，其余为 Unknown
      */
 
-    InferenceTriboolResult query_periodic_checked(const SymbolicExpr& expr) const;
+    InferenceTriboolResult query_periodic_checked(
+        const SymbolicExpr& expr, const std::string& variable) const;
+    InferenceTriboolResult query_periodic_checked(
+        const SymbolicExpr& expr, const std::string& variable, ComputationContext& context) const;
 
     /**
-     * @brief Infer the period of an expression.
+     * @brief 推导表达式相对于指定自变量的已证实正周期。
      *
-     * For known periodic functions: sin/cos -> 2pi, tan -> pi.
-     * For symbols declared periodic, returns the stored period.
+     * 仿射斜率按精确符号 pi 缩放周期，周期声明按变量索引。
+     * 已证实的常量具有周期性，但无最小正周期。
      *
-     * @param expr The expression to query
-     * @return The period as a SymbolicExpr, or std::nullopt if not periodic or unknown
+     * @param expr 待查询表达式
+     * @param variable 非空自变量名
+     * @return 已证实的周期；常量或周期性未知时返回 nullopt
      */
 
-    InferencePeriodResult infer_period_checked(const SymbolicExpr& expr) const;
+    InferencePeriodResult infer_period_checked(
+        const SymbolicExpr& expr, const std::string& variable) const;
+    InferencePeriodResult infer_period_checked(
+        const SymbolicExpr& expr, const std::string& variable, ComputationContext& context) const;
 
     /**
      * @brief Infer the monotonicity of an expression with respect to a variable on an interval.
@@ -200,9 +217,13 @@ public:
                                     const Interval& interval) const;
 
     /**
-     * @brief Propagate interval bounds through an expression tree.
+     * @brief 沿表达式树传播区间界。
+     *
+     * 保留精确 Number 点和声明的端点开闭性。
+     * 算术运算返回有理数向外包络，实超越运算也使用已证实包络；结果未必最紧。
+     *
      * @param expr 用于传播边界的表达式
-     * @return 推导出的区间;std::nullopt 表示当前事实保持边界未知
+     * @return 推导区间；事实不足或资源失败时返回 std::nullopt，不返回部分区间
      */
     std::optional<Interval> propagate_bounds(const SymbolicExpr& expr) const;
 
@@ -241,10 +262,10 @@ private:
 
     /// @name Sign inference for specific node types
     /// @{
-    InferenceTriboolResult infer_add_sign_checked(const AddNode& node, Sign target) const;
-    InferenceTriboolResult infer_multiply_sign_checked(const MultiplyNode& node, Sign target) const;
-    InferenceTriboolResult infer_power_property_checked(const PowerNode& node, Sign target) const;
-    InferenceTriboolResult infer_function_property_checked(const FunctionNode& node, Sign target) const;
+    InferenceTriboolResult infer_add_sign_checked(const AddNode& node, Sign target, ComputationContext& context) const;
+    InferenceTriboolResult infer_multiply_sign_checked(const MultiplyNode& node, Sign target, ComputationContext& context) const;
+    InferenceTriboolResult infer_power_property_checked(const PowerNode& node, Sign target, ComputationContext& context) const;
+    InferenceTriboolResult infer_function_property_checked(const FunctionNode& node, Sign target, ComputationContext& context) const;
     /// @}
 
     /**
@@ -260,7 +281,7 @@ private:
      * @param target The sign property being queried
      * @return True if the target sign can be inferred from relations, Unknown otherwise
      */
-    InferenceTriboolResult infer_sign_from_relations_checked(const SymbolicExpr& expr, Sign target) const;
+    InferenceTriboolResult infer_sign_from_relations_checked(const SymbolicExpr& expr, Sign target, ComputationContext& context) const;
 
     /// @name Division and subtraction sign inference
     /// @{
@@ -273,7 +294,7 @@ private:
      *   positive / negative -> negative, negative / positive -> negative.
      * Returns Unknown when denominator sign is unknown or zero.
     */
-    InferenceTriboolResult infer_division_sign_checked(const MultiplyNode& node, Sign target) const;
+    InferenceTriboolResult infer_division_sign_checked(const MultiplyNode& node, Sign target, ComputationContext& context) const;
 
     /**
      * @brief Infer the sign of an internally represented subtraction expression.
@@ -281,22 +302,22 @@ private:
      * Detects a negated subtrahend and applies subtraction sign rules, such as
      * positive minus negative producing a positive result.
      */
-    InferenceTriboolResult infer_subtraction_sign_checked(const AddNode& node, Sign target) const;
+    InferenceTriboolResult infer_subtraction_sign_checked(const AddNode& node, Sign target, ComputationContext& context) const;
 
     /// @}
 
     /// @name Domain inference for specific node types
     /// @{
-    InferenceTriboolResult infer_add_domain_checked(const AddNode& node, Domain target) const;
-    InferenceTriboolResult infer_multiply_domain_checked(const MultiplyNode& node, Domain target) const;
-    InferenceTriboolResult infer_power_domain_checked(const PowerNode& node, Domain target) const;
-    InferenceTriboolResult infer_function_domain_checked(const FunctionNode& node, Domain target) const;
+    InferenceTriboolResult infer_add_domain_checked(const AddNode& node, Domain target, ComputationContext& context) const;
+    InferenceTriboolResult infer_multiply_domain_checked(const MultiplyNode& node, Domain target, ComputationContext& context) const;
+    InferenceTriboolResult infer_power_domain_checked(const PowerNode& node, Domain target, ComputationContext& context) const;
+    InferenceTriboolResult infer_function_domain_checked(const FunctionNode& node, Domain target, ComputationContext& context) const;
     /// @}
 
     /// @name Helper methods for querying sub-expression properties
     /// @{
-    InferenceTriboolResult query_sign_of_checked(const SymbolicExpr& expr, Sign sign) const;
-    InferenceTriboolResult query_domain_of_checked(const SymbolicExpr& expr, Domain domain) const;
+    InferenceTriboolResult query_sign_of_checked(const SymbolicExpr& expr, Sign sign, ComputationContext& context) const;
+    InferenceTriboolResult query_domain_of_checked(const SymbolicExpr& expr, Domain domain, ComputationContext& context) const;
     /// @}
 };
 

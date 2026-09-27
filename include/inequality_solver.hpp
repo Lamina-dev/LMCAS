@@ -60,11 +60,8 @@ class LMCAS_API InequalitySolver {
 public:
 
     /**
-     * @brief Solve an inequality in the checked exact support domain.
-     *
-     * The current complete support domain is an exact rational polynomial of
-     * degree at most two in @p variable. Approximate coefficients, parameters,
-     * and higher-degree expressions return CasErrc::Inconclusive.
+     * @brief 在计算上下文预算内求解精确有理系数的单变量多项式不等式。
+     * @note 近似系数或符号参数返回 CasErrc::Inconclusive。
      */
     static Result<IntervalUnion> solve_inequality_checked(
         const std::shared_ptr<SymbolicExpr>& expr,

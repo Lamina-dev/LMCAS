@@ -1,7 +1,8 @@
 #define _USE_MATH_DEFINES
-#include "../include/symbolic_complex.hpp"
-#include "../include/symbolic.hpp"
-#include "../include/visitors/normalization_visitor.hpp"
+#include "symbolic_complex.hpp"
+#include "symbolic.hpp"
+#include "internal/visitors/normalization_visitor.hpp"
+#include "internal/complex_quadratic.hpp"
 #include <cmath>
 #include <complex>
 #include <stdexcept>
@@ -297,42 +298,13 @@ ComplexRootsResult solve_complex_nth_root_checked(std::shared_ptr<SymbolicExpr> 
 ComplexRootsResult solve_complex_quadratic_checked(
     std::shared_ptr<SymbolicExpr> a, std::shared_ptr<SymbolicExpr> b,
     std::shared_ptr<SymbolicExpr> c, ComputationContext& context) {
-    auto va = validate_expr(a, "a", context, kComplexQuadraticOperation);
-    if (!va) return ComplexRootsResult::failure(va.error());
-    auto vb = validate_expr(b, "b", context, kComplexQuadraticOperation);
-    if (!vb) return ComplexRootsResult::failure(vb.error());
-    auto vc = validate_expr(c, "c", context, kComplexQuadraticOperation);
-    if (!vc) return ComplexRootsResult::failure(vc.error());
+    auto roots = detail::real_quadratic_roots_checked(a, b, c, context);
+    if (!roots) return ComplexRootsResult::failure(roots.error());
     return checked_construct<std::vector<ComplexSymbolic>>(
         [&]() -> ComplexRootsResult {
-            auto four_ac = SymbolicExpr::multiply(
-                SymbolicExpr::number(4), SymbolicExpr::multiply(a, c));
-            auto delta = SymbolicExpr::add(
-                SymbolicExpr::power(b, SymbolicExpr::number(2)),
-                SymbolicExpr::multiply(SymbolicExpr::number(-1), four_ac));
-            auto sqrt_delta = SymbolicExpr::sqrt(delta);
-            auto denominator =
-                SymbolicExpr::multiply(SymbolicExpr::number(2), a);
-            auto real_denominator =
-                make_complex(denominator, SymbolicExpr::number(0));
-            auto first_numerator = make_complex(
-                SymbolicExpr::add(
-                    SymbolicExpr::multiply(SymbolicExpr::number(-1), b),
-                    sqrt_delta),
-                SymbolicExpr::number(0));
-            auto second_numerator = make_complex(
-                SymbolicExpr::add(
-                    SymbolicExpr::multiply(SymbolicExpr::number(-1), b),
-                    SymbolicExpr::multiply(SymbolicExpr::number(-1), sqrt_delta)),
-                SymbolicExpr::number(0));
-            auto first =
-                complex_div_checked(first_numerator, real_denominator, context);
-            if (!first) return ComplexRootsResult::failure(first.error());
-            auto second =
-                complex_div_checked(second_numerator, real_denominator, context);
-            if (!second) return ComplexRootsResult::failure(second.error());
             return std::vector<ComplexSymbolic>{
-                std::move(first.value()), std::move(second.value())};
+                {std::move(roots.value()[0].real), std::move(roots.value()[0].imag)},
+                {std::move(roots.value()[1].real), std::move(roots.value()[1].imag)}};
         }, kComplexQuadraticOperation);
 }
 

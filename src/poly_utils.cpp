@@ -1,6 +1,9 @@
-#include "poly_utils.hpp"
+#include "polynomial_conversion.hpp"
 #include "internal/expression_analysis.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/facts_query.hpp"
+#include "internal/normalization_utils.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "internal/visitors/normalization_visitor.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -10,169 +13,24 @@
 #include <utility>
 
 namespace LMCAS {
-namespace {
 
-constexpr const char* kOperation = "recognize_rational_polynomial";
-
-class RecursionScope {
-public:
-    explicit RecursionScope(ComputationContext& context) : context_(context) {}
-    ~RecursionScope() { context_.leave_recursion(); }
-
-private:
-    ComputationContext& context_;
-};
-
-Result<OptionalRationalPolynomial> recognize_node(
-    const std::shared_ptr<const SymbolicNode>& node,
-    const std::string& variable,
-    ComputationContext& context) {
-    auto entered = context.enter_recursion(kOperation);
-    if (!entered) return Result<OptionalRationalPolynomial>::failure(entered.error());
-    RecursionScope scope(context);
-
-    if (!node) {
-        return Result<OptionalRationalPolynomial>::failure(
-            CasErrc::InternalInvariant,
-            "polynomial recognition encountered a null AST node",
-            kOperation);
+template <>
+Result<SymbolicPolyCoeff> extract_coeff_value<SymbolicPolyCoeff>(
+    const std::shared_ptr<SymbolicExpr>& coefficient) {
+    if (!coefficient || !detail::node(coefficient)) {
+        return Result<SymbolicPolyCoeff>::failure(CasErrc::InvalidArgument,
+            "Coefficient must have an expression", "polynomial.coefficient");
     }
-
-    if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        if (std::holds_alternative<BigInt>(number->value())) {
-            return Result<OptionalRationalPolynomial>::success(Polynomial<Rational>(
-                Rational(std::get<BigInt>(number->value())), variable));
-        }
-        if (std::holds_alternative<Rational>(number->value())) {
-            return Result<OptionalRationalPolynomial>::success(Polynomial<Rational>(
-                std::get<Rational>(number->value()), variable));
-        }
-        return Result<OptionalRationalPolynomial>::success(std::nullopt);
-    }
-
-    if (auto symbol = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (symbol->name() != variable) {
-            return Result<OptionalRationalPolynomial>::success(std::nullopt);
-        }
-        return Result<OptionalRationalPolynomial>::success(
-            Polynomial<Rational>({Rational(0), Rational(1)}, variable));
-    }
-
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        Polynomial<Rational> result(variable);
-        for (const auto& operand : add->operands()) {
-            auto child = recognize_node(operand, variable, context);
-            if (!child) return child;
-            if (!child.value()) {
-                return Result<OptionalRationalPolynomial>::success(std::nullopt);
-            }
-            result = result + *child.value();
-            if (result.coeffs.size() > context.limits().max_expansion_terms) {
-                return Result<OptionalRationalPolynomial>::failure(
-                    CasErrc::ResourceLimit, "polynomial term budget exhausted", kOperation);
-            }
-        }
-        return Result<OptionalRationalPolynomial>::success(std::move(result));
-    }
-
-    if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        Polynomial<Rational> result({Rational(1)}, variable);
-        for (const auto& operand : multiply->operands()) {
-            auto child = recognize_node(operand, variable, context);
-            if (!child) return child;
-            if (!child.value()) {
-                return Result<OptionalRationalPolynomial>::success(std::nullopt);
-            }
-            const std::size_t projected_terms = result.is_zero() || child.value()->is_zero()
-                ? 0
-                : result.coeffs.size() + child.value()->coeffs.size() - 1;
-            if (projected_terms > context.limits().max_expansion_terms) {
-                return Result<OptionalRationalPolynomial>::failure(
-                    CasErrc::ResourceLimit,
-                    "polynomial expansion term budget exhausted",
-                    kOperation);
-            }
-            result = result * *child.value();
-        }
-        return Result<OptionalRationalPolynomial>::success(std::move(result));
-    }
-
-    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        auto exponent_node = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
-        if (!exponent_node || std::holds_alternative<lmmc_real_t>(exponent_node->value())) {
-            return Result<OptionalRationalPolynomial>::success(std::nullopt);
-        }
-
-        BigInt exponent;
-        if (std::holds_alternative<BigInt>(exponent_node->value())) {
-            exponent = std::get<BigInt>(exponent_node->value());
-        } else {
-            const Rational& rational = std::get<Rational>(exponent_node->value());
-            if (!rational.is_integer()) {
-                return Result<OptionalRationalPolynomial>::success(std::nullopt);
-            }
-            exponent = rational.to_BigInt();
-        }
-
-        auto exponent_value = exponent.try_to_int64();
-        if (!exponent_value || *exponent_value <= 0) {
-            return Result<OptionalRationalPolynomial>::success(std::nullopt);
-        }
-        if (static_cast<std::uint64_t>(*exponent_value) >=
-            context.limits().max_expansion_terms) {
-            return Result<OptionalRationalPolynomial>::failure(
-                CasErrc::ResourceLimit,
-                "polynomial exponent exceeds the expansion term budget",
-                kOperation);
-        }
-
-        auto base = recognize_node(power->base(), variable, context);
-        if (!base) return base;
-        if (!base.value()) {
-            return Result<OptionalRationalPolynomial>::success(std::nullopt);
-        }
-
-        Polynomial<Rational> result({Rational(1)}, variable);
-        for (std::int64_t i = 0; i < *exponent_value; ++i) {
-            auto step = context.consume_steps(1, kOperation);
-            if (!step) return Result<OptionalRationalPolynomial>::failure(step.error());
-            const std::size_t projected_terms = result.is_zero() || base.value()->is_zero()
-                ? 0
-                : result.coeffs.size() + base.value()->coeffs.size() - 1;
-            if (projected_terms > context.limits().max_expansion_terms) {
-                return Result<OptionalRationalPolynomial>::failure(
-                    CasErrc::ResourceLimit,
-                    "polynomial expansion term budget exhausted",
-                    kOperation);
-            }
-            result = result * *base.value();
-        }
-        return Result<OptionalRationalPolynomial>::success(std::move(result));
-    }
-
-    return Result<OptionalRationalPolynomial>::success(std::nullopt);
-}
-
-} // namespace
-
-Result<OptionalRationalPolynomial> recognize_rational_polynomial(
-    const SymbolicExpr& expression,
-    const std::string& variable,
-    ComputationContext& context) {
-    if (!LMCAS::detail::node(expression)) {
-        return Result<OptionalRationalPolynomial>::failure(
-            CasErrc::InvalidArgument, "expression cannot be null", kOperation);
-    }
-    if (variable.empty()) {
-        return Result<OptionalRationalPolynomial>::failure(
-            CasErrc::InvalidArgument, "polynomial variable cannot be empty", kOperation);
-    }
-    return recognize_node(LMCAS::detail::node(expression), variable, context);
+    return SymbolicPolyCoeff(coefficient);
 }
 
 template <>
-BigInt extract_coeff_value<BigInt>(
+Result<BigInt> extract_coeff_value<BigInt>(
     const std::shared_ptr<SymbolicExpr>& coefficient) {
+    if (!coefficient || !detail::node(coefficient)) {
+        return Result<BigInt>::failure(CasErrc::InvalidArgument,
+            "Coefficient must have an expression", "polynomial.coefficient");
+    }
     auto simplified = coefficient->simplify();
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(
             LMCAS::detail::node(simplified))) {
@@ -181,24 +39,26 @@ BigInt extract_coeff_value<BigInt>(
         }
         if (std::holds_alternative<Rational>(number->value())) {
             const Rational& value = std::get<Rational>(number->value());
-            return value.is_integer() ? value.to_BigInt() : BigInt(0);
+            if (value.is_integer()) return value.to_bigint();
         }
-        const lmmc_real_t value = std::get<lmmc_real_t>(number->value());
-        if (std::isfinite(value) && value == std::floor(value) &&
-            value >= static_cast<lmmc_real_t>(
-                std::numeric_limits<long long>::min()) &&
-            value <= static_cast<lmmc_real_t>(
-                std::numeric_limits<long long>::max())) {
-            return BigInt(static_cast<long long>(value));
+        if (std::holds_alternative<lmmc_real_t>(number->value())) {
+            const lmmc_real_t value = std::get<lmmc_real_t>(number->value());
+            if (std::isfinite(value) && value == std::floor(value)) {
+                return Rational::from_double(value).to_bigint();
+            }
         }
     }
-    if (simplified->is_one()) return BigInt(1);
-    return BigInt(0);
+    return Result<BigInt>::failure(CasErrc::UnsupportedExpression,
+        "Coefficient is not an integer", "polynomial.coefficient");
 }
 
 template <>
-Rational extract_coeff_value<Rational>(
+Result<Rational> extract_coeff_value<Rational>(
     const std::shared_ptr<SymbolicExpr>& coefficient) {
+    if (!coefficient || !detail::node(coefficient)) {
+        return Result<Rational>::failure(CasErrc::InvalidArgument,
+            "Coefficient must have an expression", "polynomial.coefficient");
+    }
     auto simplified = coefficient->simplify();
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(
             LMCAS::detail::node(simplified))) {
@@ -208,10 +68,14 @@ Rational extract_coeff_value<Rational>(
         if (std::holds_alternative<BigInt>(number->value())) {
             return Rational(std::get<BigInt>(number->value()));
         }
-        return Rational::from_double(std::get<lmmc_real_t>(number->value()));
+        if (std::holds_alternative<lmmc_real_t>(number->value())) {
+            const auto value = std::get<lmmc_real_t>(number->value());
+            if (std::isfinite(value)) return Rational::from_double(value);
+        }
     }
     if (simplified->is_one()) return Rational(1);
-    return Rational(0);
+    return Result<Rational>::failure(CasErrc::UnsupportedExpression,
+        "Coefficient is not representable as a rational", "polynomial.coefficient");
 }
 
 bool contains(const SymbolicExpr& expression, const std::string& variable) {
@@ -220,91 +84,376 @@ bool contains(const SymbolicExpr& expression, const std::string& variable) {
 }
 
 template <typename T>
-Polynomial<T> symbolic_to_poly_recursive(
-    const std::shared_ptr<const SymbolicNode>& node,
-    const std::string& variable) {
-    if (!node) return Polynomial<T>(variable);
+bool polynomial_product_fits(const Polynomial<T>& left, const Polynomial<T>& right) {
+    if (left.is_zero() || right.is_zero()) return true;
+    const auto max_terms = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    return left.coeffs.size() <= max_terms &&
+        right.coeffs.size() - 1 <= max_terms - left.coeffs.size();
+}
 
-    if (!expression_depends_on_variable(node, variable)) {
-        return Polynomial<T>({extract_coeff_value<T>(
-            LMCAS::detail::make_expression_ptr(node))}, variable);
+namespace {
+
+void checked_coefficient_count(std::size_t count, detail::RewriteBudget& budget) {
+    if (count > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        throw CasError{CasErrc::ResourceLimit,
+            "Polynomial coefficient storage limit exceeded", "polynomial.convert"};
+    }
+    auto terms = budget.context().require_expansion_terms(count, "polynomial.convert");
+    if (!terms) { throw terms.error(); }
+    budget.require_nodes(count);
+}
+
+std::size_t checked_product_count(std::size_t left, std::size_t right,
+                                 detail::RewriteBudget& budget) {
+    if (left == 0 || right == 0) return 0;
+    const auto maximum = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    if (left > maximum || right - 1 > maximum - left) {
+        throw CasError{CasErrc::ResourceLimit,
+            "Polynomial coefficient storage limit exceeded", "polynomial.convert"};
+    }
+    const auto count = left + right - 1;
+    checked_coefficient_count(count, budget);
+    return count;
+}
+
+detail::SymbolicNodePtr normalize_coefficient(
+    const detail::SymbolicNodePtr& node, detail::RewriteBudget& budget) {
+    auto step = budget.context().consume_steps(1, "polynomial.coefficient");
+    if (!step) { throw step.error(); }
+    NormalizationVisitor visitor(budget.context(), detail::no_facts(), Domain::Real, &budget);
+    node->accept(visitor);
+    return visitor.get_result();
+}
+
+template <typename Node>
+detail::SymbolicNodePtr coefficient_arithmetic(
+    const detail::SymbolicNodePtr& left, const detail::SymbolicNodePtr& right,
+    detail::RewriteBudget& budget) {
+    normalization_check_arithmetic<Node>(&budget, 0, left, right);
+    return normalize_coefficient(detail::make_node<Node>(
+        std::vector<detail::SymbolicNodePtr>{left, right}), budget);
+}
+
+void trim_checked_coefficients(Polynomial<SymbolicPolyCoeff>& polynomial,
+                               detail::RewriteBudget& budget) {
+    while (!polynomial.coeffs.empty()) {
+        auto step = budget.context().consume_steps(1, "polynomial.coefficient");
+        if (!step) { throw step.error(); }
+        if (!detail::node(polynomial.coeffs.back().val)->is_zero()) break;
+        polynomial.coeffs.pop_back();
+    }
+}
+
+Polynomial<SymbolicPolyCoeff> add_checked_coefficients(
+    const Polynomial<SymbolicPolyCoeff>& left, const Polynomial<SymbolicPolyCoeff>& right,
+    detail::RewriteBudget& budget) {
+    const auto count = std::max(left.coeffs.size(), right.coeffs.size());
+    checked_coefficient_count(count, budget);
+    Polynomial<SymbolicPolyCoeff> result(left.variable_name);
+    result.coeffs.reserve(count);
+    std::size_t nodes = 0;
+    for (std::size_t index = 0; index < count; ++index) {
+        detail::SymbolicNodePtr coefficient;
+        if (index < left.coeffs.size() && index < right.coeffs.size()) {
+            coefficient = coefficient_arithmetic<AddNode>(
+                detail::node(left.coeffs[index].val), detail::node(right.coeffs[index].val), budget);
+        } else {
+            const auto& source = index < left.coeffs.size() ? left : right;
+            coefficient = detail::node(source.coeffs[index].val);
+        }
+        nodes = budget.append_size(nodes, budget.measure(coefficient));
+        result.coeffs.emplace_back(detail::make_expression_ptr(std::move(coefficient)));
+    }
+    trim_checked_coefficients(result, budget);
+    return result;
+}
+
+Polynomial<SymbolicPolyCoeff> multiply_checked_coefficients(
+    const Polynomial<SymbolicPolyCoeff>& left, const Polynomial<SymbolicPolyCoeff>& right,
+    detail::RewriteBudget& budget) {
+    const auto count = checked_product_count(left.coeffs.size(), right.coeffs.size(), budget);
+    Polynomial<SymbolicPolyCoeff> result(left.variable_name);
+    result.coeffs.reserve(count);
+    std::size_t nodes = 0;
+    for (std::size_t degree = 0; degree < count; ++degree) {
+        detail::SymbolicNodePtr coefficient;
+        std::size_t coefficient_nodes = 0;
+        const auto first = degree < right.coeffs.size() ? 0 : degree - right.coeffs.size() + 1;
+        const auto last = std::min(degree, left.coeffs.size() - 1);
+        for (std::size_t index = first; index <= last; ++index) {
+            auto product = coefficient_arithmetic<MultiplyNode>(
+                detail::node(left.coeffs[index].val),
+                detail::node(right.coeffs[degree - index].val), budget);
+            coefficient = coefficient
+                ? coefficient_arithmetic<AddNode>(coefficient, product, budget)
+                : std::move(product);
+            coefficient_nodes = budget.measure(coefficient);
+            budget.append_size(nodes, coefficient_nodes);
+        }
+        nodes = budget.append_size(nodes, coefficient_nodes);
+        result.coeffs.emplace_back(detail::make_expression_ptr(std::move(coefficient)));
+    }
+    trim_checked_coefficients(result, budget);
+    return result;
+}
+
+Result<void> check_zero_power_base(
+    const detail::SymbolicNodePtr& base, ComputationContext& context) {
+    const auto& facts = detail::no_facts();
+    auto real_defined = detail::query_definedness(base, facts, Domain::Real, context);
+    if (!real_defined) { return Result<void>::failure(real_defined.error()); }
+    auto complex_defined = detail::query_definedness(base, facts, Domain::Complex, context);
+    if (!complex_defined) { return Result<void>::failure(complex_defined.error()); }
+    auto nonzero = detail::query_nonzero_value(base, facts, Domain::Real, context);
+    if (!nonzero) { return Result<void>::failure(nonzero.error()); }
+    if (real_defined.value() != Tribool::True ||
+        complex_defined.value() != Tribool::True || nonzero.value() != Tribool::True) {
+        return Result<void>::failure(CasErrc::UnsupportedExpression,
+            "Zero power requires a defined nonzero base", "polynomial.convert");
+    }
+    return Result<void>::success();
+}
+
+Result<void> check_power_coefficient_count(
+    std::size_t base_count, int exponent, detail::RewriteBudget* budget) {
+    if (!budget || base_count == 0) { return Result<void>::success(); }
+    const auto degree = base_count - 1;
+    const auto maximum = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    const auto count = static_cast<std::size_t>(exponent);
+    if (degree > (maximum - 1) / count) {
+        return Result<void>::failure(CasErrc::ResourceLimit,
+            "Polynomial coefficient storage limit exceeded", "polynomial.convert");
+    }
+    checked_coefficient_count(degree * count + 1, *budget);
+    return Result<void>::success();
+}
+
+template <typename T>
+Result<Polynomial<T>> constant_to_poly(
+    const detail::SymbolicNodePtr& node, const std::string& variable,
+    detail::RewriteBudget* budget) {
+    if constexpr (std::is_same_v<T, SymbolicPolyCoeff>) {
+        if (budget) {
+            checked_coefficient_count(1, *budget);
+            auto coefficient = normalize_coefficient(node, *budget);
+            budget->append_size(0, budget->measure(coefficient));
+            Polynomial<T> result(variable);
+            result.coeffs.emplace_back(detail::make_expression_ptr(std::move(coefficient)));
+            trim_checked_coefficients(result, *budget);
+            return result;
+        }
+    }
+    auto coefficient = extract_coeff_value<T>(detail::make_expression_ptr(node));
+    if (!coefficient) { return Result<Polynomial<T>>::failure(coefficient.error()); }
+    return Polynomial<T>({std::move(coefficient.value())}, variable);
+}
+
+} // namespace
+
+template <typename T>
+Result<Polynomial<T>> symbolic_to_poly_recursive(
+    const std::shared_ptr<const SymbolicNode>& node,
+    const std::string& variable, ComputationContext* context, detail::RewriteBudget* budget);
+
+template <typename T>
+Result<Polynomial<T>> symbolic_power_to_poly(
+    const PowerNode& power, const std::string& variable,
+    ComputationContext* context, detail::RewriteBudget* budget) {
+    detail::RewriteScope scope(budget);
+    BigInt exponent;
+    if (!try_get_integer_value(
+            std::dynamic_pointer_cast<const NumberNode>(power.exponent()), exponent) ||
+        exponent.is_negative()) {
+        return Result<Polynomial<T>>::failure(CasErrc::UnsupportedExpression,
+            "Polynomial powers require nonnegative integer exponents", "polynomial.convert");
+    }
+    const auto bounded_exponent = exponent.try_to_int64();
+    if (!bounded_exponent || *bounded_exponent >= 1000) {
+        return Result<Polynomial<T>>::failure(CasErrc::ResourceLimit,
+            "Polynomial power expansion limit exceeded", "polynomial.convert");
+    }
+    const int exponent_value = static_cast<int>(*bounded_exponent);
+
+    Polynomial<T> result(variable);
+    if (budget) {
+        checked_coefficient_count(1, *budget);
+        normalization_check_children(budget, 1);
+    }
+    result.coeffs.emplace_back(1);
+    if (exponent_value == 0) {
+        auto defined = check_zero_power_base(power.base(), *context);
+        if (!defined) { return Result<Polynomial<T>>::failure(defined.error()); }
+        return result;
+    }
+    const auto base = symbolic_to_poly_recursive<T>(power.base(), variable, context, budget);
+    if (!base) { return Result<Polynomial<T>>::failure(base.error()); }
+    auto count = check_power_coefficient_count(base.value().coeffs.size(), exponent_value, budget);
+    if (!count) { return Result<Polynomial<T>>::failure(count.error()); }
+    for (int index = 0; index < exponent_value; ++index) {
+        if constexpr (std::is_same_v<T, SymbolicPolyCoeff>) {
+            if (budget) {
+                result = multiply_checked_coefficients(result, base.value(), *budget);
+                continue;
+            }
+        }
+        if (!polynomial_product_fits(result, base.value())) {
+            return Result<Polynomial<T>>::failure(CasErrc::ResourceLimit,
+                "Polynomial coefficient storage limit exceeded", "polynomial.convert");
+        }
+        result = result * base.value();
+    }
+    return result;
+}
+
+template <typename T>
+Result<Polynomial<T>> symbolic_sum_to_poly(
+    const AddNode& add, const std::string& variable,
+    ComputationContext* context, detail::RewriteBudget* budget) {
+    detail::RewriteScope scope(budget);
+    Polynomial<T> result(variable);
+    for (const auto& operand : add.operands()) {
+        auto child = symbolic_to_poly_recursive<T>(operand, variable, context, budget);
+        if (!child) { return Result<Polynomial<T>>::failure(child.error()); }
+        if constexpr (std::is_same_v<T, SymbolicPolyCoeff>) {
+            if (budget) {
+                result = add_checked_coefficients(result, child.value(), *budget);
+                continue;
+            }
+        }
+        result = result + child.value();
+    }
+    return result;
+}
+
+template <typename T>
+Result<Polynomial<T>> symbolic_product_to_poly(
+    const MultiplyNode& multiply, const std::string& variable,
+    ComputationContext* context, detail::RewriteBudget* budget) {
+    detail::RewriteScope scope(budget);
+    Polynomial<T> result(variable);
+    if (budget) {
+        checked_coefficient_count(1, *budget);
+        normalization_check_children(budget, 1);
+    }
+    result.coeffs.emplace_back(1);
+    for (const auto& operand : multiply.operands()) {
+        auto child = symbolic_to_poly_recursive<T>(operand, variable, context, budget);
+        if (!child) { return Result<Polynomial<T>>::failure(child.error()); }
+        if constexpr (std::is_same_v<T, SymbolicPolyCoeff>) {
+            if (budget) {
+                result = multiply_checked_coefficients(result, child.value(), *budget);
+                continue;
+            }
+        }
+        if (!polynomial_product_fits(result, child.value())) {
+            return Result<Polynomial<T>>::failure(CasErrc::ResourceLimit,
+                "Polynomial coefficient storage limit exceeded", "polynomial.convert");
+        }
+        result = result * child.value();
+    }
+    return result;
+}
+
+template <typename T>
+Result<Polynomial<T>> symbolic_to_poly_recursive(
+    const std::shared_ptr<const SymbolicNode>& node,
+    const std::string& variable, ComputationContext* context, detail::RewriteBudget* budget) {
+    detail::RewriteScope scope(budget);
+    if (!node) {
+        return Result<Polynomial<T>>::failure(CasErrc::InvalidArgument,
+            "Expression node must not be null", "polynomial.convert");
+    }
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
+        BigInt exponent;
+        if (try_get_integer_value(
+                std::dynamic_pointer_cast<const NumberNode>(power->exponent()), exponent) &&
+            exponent.is_zero()) {
+            return symbolic_power_to_poly<T>(*power, variable, context, budget);
+        }
+    }
+    if (!expression_depends_on_variable(node, variable, budget)) {
+        return constant_to_poly<T>(node, variable, budget);
     }
 
     if (auto symbol = std::dynamic_pointer_cast<const VariableNode>(node)) {
         if (symbol->name() == variable) {
+            if constexpr (std::is_same_v<T, SymbolicPolyCoeff>) {
+                if (budget) {
+                    checked_coefficient_count(2, *budget);
+                    normalization_check_children(budget, 2);
+                    Polynomial<T> result(variable);
+                    result.coeffs.reserve(2);
+                    result.coeffs.emplace_back(0);
+                    result.coeffs.emplace_back(1);
+                    return result;
+                }
+            }
             return Polynomial<T>({T(0), T(1)}, variable);
         }
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        Polynomial<T> result(variable);
-        for (const auto& operand : add->operands()) {
-            result = result + symbolic_to_poly_recursive<T>(operand, variable);
-        }
-        return result;
+        return symbolic_sum_to_poly<T>(*add, variable, context, budget);
     }
 
     if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        Polynomial<T> result({T(1)}, variable);
-        for (const auto& operand : multiply->operands()) {
-            result = result * symbolic_to_poly_recursive<T>(operand, variable);
-        }
-        return result;
+        return symbolic_product_to_poly<T>(*multiply, variable, context, budget);
     }
 
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
-        bool is_nonnegative_integer = false;
-        int exponent_value = 0;
-        if (exponent && std::holds_alternative<BigInt>(exponent->value())) {
-            const auto& value = std::get<BigInt>(exponent->value());
-            const auto converted = value.try_to_int64();
-            if (converted && *converted >= 0 && *converted < 1000) {
-                is_nonnegative_integer = true;
-                exponent_value = static_cast<int>(*converted);
-            }
-        } else if (exponent &&
-                   std::holds_alternative<Rational>(exponent->value())) {
-            const auto& value = std::get<Rational>(exponent->value());
-            const auto converted = value.is_integer()
-                ? value.to_BigInt().try_to_int64()
-                : std::optional<std::int64_t>{};
-            if (converted && *converted >= 0 && *converted < 1000) {
-                is_nonnegative_integer = true;
-                exponent_value = static_cast<int>(*converted);
-            }
-        } else if (exponent) {
-            const lmmc_real_t value = std::get<lmmc_real_t>(exponent->value());
-            if (std::isfinite(value) && value >= 0.0 && value < 1000.0 &&
-                value == std::floor(value)) {
-                is_nonnegative_integer = true;
-                exponent_value = static_cast<int>(value);
-            }
-        }
-
-        if (is_nonnegative_integer) {
-            Polynomial<T> result({T(1)}, variable);
-            if (exponent_value == 0) return result;
-            const auto base = symbolic_to_poly_recursive<T>(power->base(), variable);
-            for (int index = 0; index < exponent_value; ++index) {
-                result = result * base;
-            }
-            return result;
-        }
+        return symbolic_power_to_poly<T>(*power, variable, context, budget);
     }
 
-    return Polynomial<T>(variable);
+    return Result<Polynomial<T>>::failure(CasErrc::UnsupportedExpression,
+        "Expression is not a polynomial in the requested variable", "polynomial.convert");
 }
 
 template <typename T>
-LMCAS_API Polynomial<T> symbolic_to_poly(
+LMCAS_API Result<Polynomial<T>> symbolic_to_poly(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable) {
-    if (!expression || !LMCAS::detail::node(expression)) {
-        return Polynomial<T>(variable);
+    if (!expression || !LMCAS::detail::node(expression) || variable.empty()) {
+        return Result<Polynomial<T>>::failure(CasErrc::InvalidArgument,
+            "Expression and variable must not be empty", "polynomial.convert");
     }
-    return symbolic_to_poly_recursive<T>(
-        LMCAS::detail::node(expression), variable);
+    try {
+        ComputationContext context;
+        return symbolic_to_poly_recursive<T>(LMCAS::detail::node(expression), variable, &context, nullptr);
+    } catch (const CasError& error) {
+        return Result<Polynomial<T>>::failure(error);
+    } catch (const std::bad_alloc&) {
+        return Result<Polynomial<T>>::failure(CasErrc::ResourceLimit,
+            "Polynomial allocation failed", "polynomial.convert");
+    } catch (const std::length_error& error) {
+        return Result<Polynomial<T>>::failure(CasErrc::ResourceLimit,
+            error.what(), "polynomial.convert");
+    }
+}
+
+Result<Polynomial<SymbolicPolyCoeff>> detail::symbolic_to_poly_checked(
+    const SymbolicExpr& expression, const std::string& variable, ComputationContext& context) {
+    using ConversionResult = Result<Polynomial<SymbolicPolyCoeff>>;
+    if (!detail::node(expression) || variable.empty()) {
+        return ConversionResult::failure(CasErrc::InvalidArgument,
+            "Expression and variable must not be empty", "polynomial.convert");
+    }
+    try {
+        auto step = context.consume_steps(1, "polynomial.convert");
+        if (!step) return ConversionResult::failure(step.error());
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+            context.limits().max_ast_nodes, "polynomial.convert");
+        budget.measure(detail::node(expression));
+        return symbolic_to_poly_recursive<SymbolicPolyCoeff>(
+            detail::node(expression), variable, &context, &budget);
+    } catch (const CasError& error) {
+        return ConversionResult::failure(error);
+    } catch (const std::bad_alloc&) {
+        return ConversionResult::failure(CasErrc::ResourceLimit,
+            "Polynomial allocation failed", "polynomial.convert");
+    } catch (const std::length_error& error) {
+        return ConversionResult::failure(CasErrc::ResourceLimit,
+            error.what(), "polynomial.convert");
+    }
 }
 
 template <typename T>
@@ -334,7 +483,7 @@ LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
         auto variable_part = degree == 1
             ? variable
             : SymbolicExpr::power(
-                variable, SymbolicExpr::number(static_cast<int>(degree)));
+                variable, SymbolicExpr::number(BigInt(static_cast<std::uint64_t>(degree))));
         if (polynomial.coeffs[degree] == T(1)) {
             terms.push_back(variable_part);
         } else if (polynomial.coeffs[degree] == T(-1)) {
@@ -354,11 +503,11 @@ LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic(
     return result;
 }
 
-template LMCAS_API Polynomial<BigInt> symbolic_to_poly<BigInt>(
+template LMCAS_API Result<Polynomial<BigInt>> symbolic_to_poly<BigInt>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
-template LMCAS_API Polynomial<Rational> symbolic_to_poly<Rational>(
+template LMCAS_API Result<Polynomial<Rational>> symbolic_to_poly<Rational>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
-template LMCAS_API Polynomial<SymbolicPolyCoeff> symbolic_to_poly<SymbolicPolyCoeff>(
+template LMCAS_API Result<Polynomial<SymbolicPolyCoeff>> symbolic_to_poly<SymbolicPolyCoeff>(
     const std::shared_ptr<SymbolicExpr>&, const std::string&);
 
 template LMCAS_API std::shared_ptr<SymbolicExpr> poly_to_symbolic<BigInt>(

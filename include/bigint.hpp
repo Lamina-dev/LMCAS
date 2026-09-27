@@ -4,9 +4,6 @@
  */
 #pragma once
 
-#ifndef _STATIC_ASSERT
-#define _STATIC_ASSERT(x) static_assert(x, #x)
-#endif
 
 #include <lmmp.h>
 #include <lmmpn.h>
@@ -23,10 +20,14 @@
 #include <stdexcept>
 #include <limits>
 #include <optional>
+#include <type_traits>
+#include "result.hpp"
 #include "lmmc/config.h"
 #include "lmcas_export.hpp"
 
 namespace LMCAS {
+
+class ComputationContext;
 
 class LMCAS_API BigInt {
 public:
@@ -38,16 +39,19 @@ public:
     };
 
 private:
-    mp_ptr _data = nullptr;
-    mp_size_t _size = 0;
-    mp_size_t _alloc = 0;
-    int _sign = ZERO;
+    mp_ptr data_ = nullptr;
+    mp_size_t size_ = 0;
+    mp_size_t capacity_ = 0;
+    int sign_ = ZERO;
 
     void realloc_to(mp_size_t new_alloc);
 
     void normalize();
 
     void zero();
+
+    void import_unsigned(std::uint64_t magnitude);
+    std::optional<std::uint64_t> magnitude_uint64() const noexcept;
 
 public:
     /** @brief 默认构造，值为 0 */
@@ -67,25 +71,23 @@ public:
     /** @brief 移动赋值 */
     BigInt& operator=(BigInt&& other) noexcept;
 
-    /**
-     * @brief 从 long long 构造
-     * @param val 整数值
-     */
-    BigInt(long long val);
-    /** @brief 从 long 构造，兼容 LP64 平台的 int64_t */
-    BigInt(long val);
-    /** @brief 从 int 构造 */
-    BigInt(int val);
+    /** @brief 精确导入有符号机器整数，包括其最小值。 */
+    BigInt(std::int64_t value);
+    /** @brief 精确导入无符号机器整数，保留各数位的完整宽度。 */
+    BigInt(std::uint64_t value);
+    BigInt(int value);
+    BigInt(unsigned int value);
 
-    /**
-     * @brief 从 unsigned long long 构造
-     * @param val 无符号整数值
-     */
-    BigInt(unsigned long long val);
-    /** @brief 从 unsigned int 构造 */
-    BigInt(unsigned int val);
-    /** @brief 从 unsigned long 构造 */
-    BigInt(unsigned long val);
+    template <typename Integer,
+              std::enable_if_t<std::is_integral_v<Integer> &&
+                  sizeof(Integer) <= sizeof(std::uint64_t) &&
+                  !std::is_same_v<Integer, int> &&
+                  !std::is_same_v<Integer, unsigned int> &&
+                  !std::is_same_v<Integer, std::int64_t> &&
+                  !std::is_same_v<Integer, std::uint64_t>, int> = 0>
+    BigInt(Integer value)
+        : BigInt(static_cast<std::conditional_t<std::is_signed_v<Integer>,
+                           std::int64_t, std::uint64_t>>(value)) {}
 
     /**
      * @brief 从十进制字符串构造
@@ -98,9 +100,6 @@ public:
      * @brief 转换为十进制字符串
      * @return 十进制表示的字符串
      */
-    std::string ToString() const;
-
-    /** @brief 转换为十进制字符串（同 ToString） */
     std::string to_string() const;
 
     /**
@@ -111,6 +110,11 @@ public:
 
     /** @brief 精确转换为 int64_t；超出范围时返回空。 */
     std::optional<std::int64_t> try_to_int64() const noexcept;
+
+    /** @brief 精确转换非负值，负值或超出范围时失败。 */
+    std::optional<std::uint64_t> try_to_uint64() const noexcept;
+    /** @brief 返回绝对值的二进制位数，零的位数为 0。 */
+    std::size_t bit_length() const noexcept;
 
     /**
      * @brief 转换为浮点数
@@ -154,10 +158,10 @@ public:
      * @brief 取绝对值
      * @return |*this|
      */
-    BigInt Abs() const;
+    BigInt abs() const;
 
     /** @brief 判断是否为负数 */
-    bool IsNegative() const;
+    bool is_negative() const;
 
     /**
      * @brief 取相反数
@@ -274,7 +278,9 @@ public:
      * @param n 非负整数
      * @return n!
      */
-    static BigInt factorial(unsigned int n);
+    static BigInt factorial(const BigInt& n);
+    static Result<BigInt> factorial_checked(const BigInt& n, ComputationContext& context);
+    static Result<BigInt> factorial_checked(const BigInt& n);
 
     /**
      * @brief 计算排列数 P(n, r)
@@ -282,7 +288,10 @@ public:
      * @param r 选取数
      * @return n! / (n-r)!
      */
-    static BigInt nPr(unsigned int n, unsigned int r);
+    static BigInt npr(const BigInt& n, const BigInt& r);
+    static Result<BigInt> npr_checked(const BigInt& n, const BigInt& r,
+                                     ComputationContext& context);
+    static Result<BigInt> npr_checked(const BigInt& n, const BigInt& r);
 
     /**
      * @brief 计算组合数 C(n, r)
@@ -290,7 +299,10 @@ public:
      * @param r 选取数
      * @return n! / (r! * (n-r)!)
      */
-    static BigInt nCr(unsigned int n, unsigned int r);
+    static BigInt ncr(const BigInt& n, const BigInt& r);
+    static Result<BigInt> ncr_checked(const BigInt& n, const BigInt& r,
+                                     ComputationContext& context);
+    static Result<BigInt> ncr_checked(const BigInt& n, const BigInt& r);
 
     /**
      * @brief 计算多项式系数（多重组合数）

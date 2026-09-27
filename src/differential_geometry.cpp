@@ -5,7 +5,7 @@
 #include "differential_geometry.hpp"
 #include "symbolic_matrix.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 #include <algorithm>
 #include <map>
@@ -182,6 +182,128 @@ std::vector<std::vector<std::size_t>> index_combinations(std::size_t n,
     return combinations;
 }
 
+DifferentialGeometryExprResult checked_geometry_expression(
+    std::shared_ptr<SymbolicExpr>&& result,
+    CasErrc error,
+    const char* message,
+    const std::string& operation)
+{
+    if (!result || !LMCAS::detail::node(result)) {
+        return DifferentialGeometryExprResult::failure(error, message, operation);
+    }
+    return DifferentialGeometryExprResult::success(std::move(result));
+}
+
+Result<void> validate_form_coordinates(const std::vector<std::string>& vars,
+                                       const std::string& operation)
+{
+    if (vars.empty()) {
+        return Result<void>::failure(CasErrc::InvalidArgument,
+                                     "variable list cannot be empty", operation);
+    }
+    for (std::size_t i = 0; i < vars.size(); ++i) {
+        if (vars[i].empty()) {
+            return Result<void>::failure(CasErrc::InvalidArgument,
+                                         "variable names cannot be empty", operation);
+        }
+        const auto current = vars.begin() + static_cast<std::ptrdiff_t>(i);
+        if (std::find(vars.begin(), current, vars[i]) != current) {
+            return Result<void>::failure(CasErrc::InvalidArgument,
+                                         "coordinate variables must be unique", operation);
+        }
+    }
+    return Result<void>::success();
+}
+
+Result<std::size_t> validate_form_coefficients(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& form_coeffs,
+    int degree,
+    const std::vector<std::string>& vars,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto coordinates = validate_form_coordinates(vars, operation);
+    if (!coordinates) return Result<std::size_t>::failure(coordinates.error());
+    if (degree < 0 || static_cast<std::size_t>(degree) > vars.size()) {
+        return Result<std::size_t>::failure(
+            CasErrc::InvalidArgument,
+            "form degree must be between zero and the coordinate dimension", operation);
+    }
+    const auto input_count = bounded_binomial(vars.size(),
+                                              static_cast<std::size_t>(degree),
+                                              context.limits().max_expansion_terms,
+                                              operation);
+    if (!input_count) return input_count;
+    if (form_coeffs.size() != input_count.value()) {
+        return Result<std::size_t>::failure(
+            CasErrc::InvalidArgument,
+            "form coefficient count does not match degree and dimension", operation);
+    }
+    for (const auto& coeff : form_coeffs) {
+        if (!coeff || !LMCAS::detail::node(coeff)) {
+            return Result<std::size_t>::failure(CasErrc::InvalidArgument,
+                                                "form coefficients cannot be null", operation);
+        }
+    }
+    return input_count;
+}
+
+DifferentialGeometryExprResult exterior_derivative_term(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& form_coeffs,
+    const std::vector<std::string>& vars,
+    const std::map<std::vector<std::size_t>, std::size_t>& coefficient_index,
+    const std::vector<std::size_t>& output_index,
+    std::size_t removed,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto term_budget = context.consume_steps(4, operation);
+    if (!term_budget) return DifferentialGeometryExprResult::failure(term_budget.error());
+    auto node_budget = context.reserve_nodes(4, operation);
+    if (!node_budget) return DifferentialGeometryExprResult::failure(node_budget.error());
+
+    auto source_index = output_index;
+    const std::size_t derivative_variable = source_index[removed];
+    source_index.erase(source_index.begin() + static_cast<std::ptrdiff_t>(removed));
+    const auto source = coefficient_index.find(source_index);
+    if (source == coefficient_index.end()) {
+        return DifferentialGeometryExprResult::failure(
+            CasErrc::InternalInvariant,
+            "exterior derivative could not locate an input coefficient", operation);
+    }
+    auto partial = form_coeffs[source->second]->differentiate(vars[derivative_variable]);
+    if (!partial || !LMCAS::detail::node(partial)) {
+        return DifferentialGeometryExprResult::failure(
+            CasErrc::InternalInvariant,
+            "exterior derivative produced a null partial derivative", operation);
+    }
+    if (removed % 2 != 0) {
+        partial = SymbolicExpr::multiply(SymbolicExpr::number(-1), partial);
+    }
+    return DifferentialGeometryExprResult::success(std::move(partial));
+}
+
+DifferentialGeometryExprResult exterior_derivative_component(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& form_coeffs,
+    const std::vector<std::string>& vars,
+    const std::map<std::vector<std::size_t>, std::size_t>& coefficient_index,
+    const std::vector<std::size_t>& output_index,
+    ComputationContext& context,
+    const std::string& operation)
+{
+    auto component = SymbolicExpr::number(0);
+    for (std::size_t removed = 0; removed < output_index.size(); ++removed) {
+        auto partial = exterior_derivative_term(
+            form_coeffs, vars, coefficient_index, output_index, removed, context, operation);
+        if (!partial) return partial;
+        component = SymbolicExpr::add(component, partial.value());
+    }
+    component = component->simplify();
+    return checked_geometry_expression(std::move(component), CasErrc::InternalInvariant,
+                                       "exterior derivative produced a null component",
+                                       operation);
+}
+
 } // namespace
 
 static std::shared_ptr<SymbolicExpr> christoffel_first_kind_impl(
@@ -238,25 +360,31 @@ DifferentialGeometryExprResult christoffel_first_kind_checked(
 {
     const std::string operation = "christoffel_first_kind";
     auto metric = validate_metric_matrix(g_ij, &coords, context, operation);
-    if (!metric) return DifferentialGeometryExprResult::failure(metric.error());
+    if (!metric) {
+        return DifferentialGeometryExprResult::failure(metric.error());
+    }
     const std::size_t dim = metric.value()->rows();
     auto k_check = validate_index(k, dim, "k", operation);
-    if (!k_check) return DifferentialGeometryExprResult::failure(k_check.error());
+    if (!k_check) {
+        return DifferentialGeometryExprResult::failure(k_check.error());
+    }
     auto i_check = validate_index(i, dim, "i", operation);
-    if (!i_check) return DifferentialGeometryExprResult::failure(i_check.error());
+    if (!i_check) {
+        return DifferentialGeometryExprResult::failure(i_check.error());
+    }
     auto j_check = validate_index(j, dim, "j", operation);
-    if (!j_check) return DifferentialGeometryExprResult::failure(j_check.error());
+    if (!j_check) {
+        return DifferentialGeometryExprResult::failure(j_check.error());
+    }
     auto budget = context.consume_steps(16, operation);
-    if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
+    if (!budget) {
+        return DifferentialGeometryExprResult::failure(budget.error());
+    }
     try {
         auto result = christoffel_first_kind_impl(g_ij, coords, k, i, j);
-        if (!result || !LMCAS::detail::node(result)) {
-            return DifferentialGeometryExprResult::failure(
-                CasErrc::Inconclusive,
-                "Christoffel symbol could not be constructed",
-                operation);
-        }
-        return DifferentialGeometryExprResult::success(result);
+        return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
+                                           "Christoffel symbol could not be constructed",
+                                           operation);
     } catch (const std::bad_alloc&) {
         return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit,
                                                        "allocation failed while calculating Christoffel symbol",
@@ -310,27 +438,35 @@ DifferentialGeometryExprResult christoffel_second_kind_checked(
 {
     const std::string operation = "christoffel_second_kind";
     auto metric = validate_metric_matrix(g_ij, &coords, context, operation);
-    if (!metric) return DifferentialGeometryExprResult::failure(metric.error());
+    if (!metric) {
+        return DifferentialGeometryExprResult::failure(metric.error());
+    }
     auto inverse_metric = validate_metric_matrix(g_up_ij, &coords, context, operation);
-    if (!inverse_metric) return DifferentialGeometryExprResult::failure(inverse_metric.error());
+    if (!inverse_metric) {
+        return DifferentialGeometryExprResult::failure(inverse_metric.error());
+    }
     const std::size_t dim = metric.value()->rows();
     auto k_check = validate_index(k, dim, "k", operation);
-    if (!k_check) return DifferentialGeometryExprResult::failure(k_check.error());
+    if (!k_check) {
+        return DifferentialGeometryExprResult::failure(k_check.error());
+    }
     auto i_check = validate_index(i, dim, "i", operation);
-    if (!i_check) return DifferentialGeometryExprResult::failure(i_check.error());
+    if (!i_check) {
+        return DifferentialGeometryExprResult::failure(i_check.error());
+    }
     auto j_check = validate_index(j, dim, "j", operation);
-    if (!j_check) return DifferentialGeometryExprResult::failure(j_check.error());
+    if (!j_check) {
+        return DifferentialGeometryExprResult::failure(j_check.error());
+    }
     auto budget = context.consume_steps(dim * 20 + 12, operation);
-    if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
+    if (!budget) {
+        return DifferentialGeometryExprResult::failure(budget.error());
+    }
     try {
         auto result = christoffel_second_kind_impl(g_ij, g_up_ij, coords, k, i, j);
-        if (!result || !LMCAS::detail::node(result)) {
-            return DifferentialGeometryExprResult::failure(
-                CasErrc::Inconclusive,
-                "Christoffel symbol could not be constructed",
-                operation);
-        }
-        return DifferentialGeometryExprResult::success(result);
+        return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
+                                           "Christoffel symbol could not be constructed",
+                                           operation);
     } catch (const std::bad_alloc&) {
         return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit,
                                                        "allocation failed while calculating Christoffel symbol",
@@ -419,18 +555,30 @@ DifferentialGeometryExprResult riemann_curvature_tensor_checked(
 {
     const std::string operation = "riemann_curvature_tensor";
     auto metric = validate_metric_matrix(g_ij, &coords, context, operation);
-    if (!metric) return DifferentialGeometryExprResult::failure(metric.error());
+    if (!metric) {
+        return DifferentialGeometryExprResult::failure(metric.error());
+    }
     const std::size_t dim = metric.value()->rows();
     auto rho_check = validate_index(rho, dim, "rho", operation);
-    if (!rho_check) return DifferentialGeometryExprResult::failure(rho_check.error());
+    if (!rho_check) {
+        return DifferentialGeometryExprResult::failure(rho_check.error());
+    }
     auto sigma_check = validate_index(sigma, dim, "sigma", operation);
-    if (!sigma_check) return DifferentialGeometryExprResult::failure(sigma_check.error());
+    if (!sigma_check) {
+        return DifferentialGeometryExprResult::failure(sigma_check.error());
+    }
     auto mu_check = validate_index(mu, dim, "mu", operation);
-    if (!mu_check) return DifferentialGeometryExprResult::failure(mu_check.error());
+    if (!mu_check) {
+        return DifferentialGeometryExprResult::failure(mu_check.error());
+    }
     auto nu_check = validate_index(nu, dim, "nu", operation);
-    if (!nu_check) return DifferentialGeometryExprResult::failure(nu_check.error());
+    if (!nu_check) {
+        return DifferentialGeometryExprResult::failure(nu_check.error());
+    }
     auto budget = context.consume_steps(dim * 80 + 40, operation);
-    if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
+    if (!budget) {
+        return DifferentialGeometryExprResult::failure(budget.error());
+    }
     try {
         auto inverse_metric = metric_inverse_checked(g_ij, context);
         if (!inverse_metric) {
@@ -438,13 +586,9 @@ DifferentialGeometryExprResult riemann_curvature_tensor_checked(
         }
         auto result = riemann_curvature_tensor_with_inverse(
             g_ij, inverse_metric.value(), coords, rho, sigma, mu, nu);
-        if (!result || !LMCAS::detail::node(result)) {
-            return DifferentialGeometryExprResult::failure(
-                CasErrc::Inconclusive,
-                "Riemann curvature component could not be constructed",
-                operation);
-        }
-        return DifferentialGeometryExprResult::success(result);
+        return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
+                                           "Riemann curvature component could not be constructed",
+                                           operation);
     } catch (const std::bad_alloc&) {
         return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit,
                                                        "allocation failed while calculating Riemann curvature",
@@ -493,13 +637,9 @@ DifferentialGeometryExprResult lie_derivative_checked(
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
         auto result = lie_derivative_impl(f, X, vars, order);
-        if (!result || !LMCAS::detail::node(result)) {
-            return DifferentialGeometryExprResult::failure(
-                CasErrc::Inconclusive,
-                "Lie derivative could not be constructed",
-                operation);
-        }
-        return DifferentialGeometryExprResult::success(result);
+        return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
+                                           "Lie derivative could not be constructed",
+                                           operation);
     } catch (const std::bad_alloc&) {
         return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit,
                                                        "allocation failed while calculating Lie derivative",
@@ -548,48 +688,9 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
     const std::string operation = "exterior_derivative";
     auto step = context.consume_steps(1, operation);
     if (!step) return DifferentialGeometryVectorResult::failure(step.error());
-    if (vars.empty()) {
-        return DifferentialGeometryVectorResult::failure(CasErrc::InvalidArgument,
-                                                         "variable list cannot be empty",
-                                                         operation);
-    }
-    for (std::size_t i = 0; i < vars.size(); ++i) {
-        if (vars[i].empty()) {
-            return DifferentialGeometryVectorResult::failure(CasErrc::InvalidArgument,
-                                                             "variable names cannot be empty",
-                                                             operation);
-        }
-        for (std::size_t j = 0; j < i; ++j) {
-            if (vars[i] == vars[j]) {
-                return DifferentialGeometryVectorResult::failure(
-                    CasErrc::InvalidArgument,
-                    "coordinate variables must be unique",
-                    operation);
-            }
-        }
-    }
-    if (degree < 0 || static_cast<std::size_t>(degree) > vars.size()) {
-        return DifferentialGeometryVectorResult::failure(CasErrc::InvalidArgument,
-                                                         "form degree must be between zero and the coordinate dimension",
-                                                         operation);
-    }
-    const auto input_count = bounded_binomial(vars.size(),
-                                              static_cast<std::size_t>(degree),
-                                              context.limits().max_expansion_terms,
-                                              operation);
+    const auto input_count =
+        validate_form_coefficients(form_coeffs, degree, vars, context, operation);
     if (!input_count) return DifferentialGeometryVectorResult::failure(input_count.error());
-    if (form_coeffs.size() != input_count.value()) {
-        return DifferentialGeometryVectorResult::failure(CasErrc::InvalidArgument,
-                                                         "form coefficient count does not match degree and dimension",
-                                                         operation);
-    }
-    for (const auto& coeff : form_coeffs) {
-        if (!coeff || !LMCAS::detail::node(coeff)) {
-            return DifferentialGeometryVectorResult::failure(CasErrc::InvalidArgument,
-                                                             "form coefficients cannot be null",
-                                                             operation);
-        }
-    }
     const auto output_count = bounded_binomial(vars.size(),
                                                static_cast<std::size_t>(degree) + 1,
                                                context.limits().max_expansion_terms,
@@ -610,48 +711,10 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
         std::vector<std::shared_ptr<SymbolicExpr>> result;
         result.reserve(output_count.value());
         for (const auto& output_index : output_indices) {
-            auto component = SymbolicExpr::number(0);
-            for (std::size_t removed = 0; removed < output_index.size(); ++removed) {
-                auto term_budget = context.consume_steps(4, operation);
-                if (!term_budget) {
-                    return DifferentialGeometryVectorResult::failure(term_budget.error());
-                }
-                auto node_budget = context.reserve_nodes(4, operation);
-                if (!node_budget) {
-                    return DifferentialGeometryVectorResult::failure(node_budget.error());
-                }
-
-                auto source_index = output_index;
-                const std::size_t derivative_variable = source_index[removed];
-                source_index.erase(source_index.begin() + static_cast<std::ptrdiff_t>(removed));
-                const auto source = coefficient_index.find(source_index);
-                if (source == coefficient_index.end()) {
-                    return DifferentialGeometryVectorResult::failure(
-                        CasErrc::InternalInvariant,
-                        "exterior derivative could not locate an input coefficient",
-                        operation);
-                }
-                auto partial = form_coeffs[source->second]->differentiate(
-                    vars[derivative_variable]);
-                if (!partial || !LMCAS::detail::node(partial)) {
-                    return DifferentialGeometryVectorResult::failure(
-                        CasErrc::InternalInvariant,
-                        "exterior derivative produced a null partial derivative",
-                        operation);
-                }
-                if (removed % 2 != 0) {
-                    partial = SymbolicExpr::multiply(SymbolicExpr::number(-1), partial);
-                }
-                component = SymbolicExpr::add(component, partial);
-            }
-            component = component->simplify();
-            if (!component || !LMCAS::detail::node(component)) {
-                return DifferentialGeometryVectorResult::failure(
-                    CasErrc::InternalInvariant,
-                    "exterior derivative produced a null component",
-                    operation);
-            }
-            result.push_back(std::move(component));
+            auto component = exterior_derivative_component(
+                form_coeffs, vars, coefficient_index, output_index, context, operation);
+            if (!component) return DifferentialGeometryVectorResult::failure(component.error());
+            result.push_back(std::move(component.value()));
         }
         return DifferentialGeometryVectorResult::success(std::move(result));
     } catch (const std::bad_alloc&) {

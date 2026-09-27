@@ -1,25 +1,47 @@
 #include "test_common.hpp"
 #include "poly_utils.hpp"
+#include "internal/expression_analysis.hpp"
+#include <cmath>
 
 using namespace LMCAS;
 
-void test_symbolic_to_poly() {
-    TEST_CASE("symbolic_to_poly: linear 2x+1");
+TEST(PolyUtils, IntegerCoefficientsRequireExactValues) {
+    for (double value : {std::nextafter(1.0, 2.0), std::nextafter(1.0, 0.0)}) {
+        auto expression = SymbolicExpr::number(value);
+        auto integer = extract_coeff_value<BigInt>(expression);
+        ASSERT_FALSE(integer);
+        EXPECT_EQ(
+            integer.error().code, CasErrc::UnsupportedExpression);
+        auto polynomial = symbolic_to_poly<BigInt>(expression, "x");
+        ASSERT_FALSE(polynomial);
+        EXPECT_EQ(
+            polynomial.error().code,
+            CasErrc::UnsupportedExpression);
+        auto rational = extract_coeff_value<Rational>(expression);
+        ASSERT_TRUE(rational);
+        EXPECT_EQ(rational.value(), Rational::from_double(value));
+    }
+    auto one = extract_coeff_value<BigInt>(SymbolicExpr::number(1.0));
+    ASSERT_TRUE(one);
+    EXPECT_EQ(one.value(), BigInt(1));
+}
+
+TEST(PolyUtils, SymbolicToPoly) {
     {
         auto x = SymbolicExpr::variable("x");
         auto expr = SymbolicExpr::add(
             SymbolicExpr::multiply(SymbolicExpr::number(2), x),
-            SymbolicExpr::number(1)
-        );
-        auto poly = LMCAS::symbolic_to_poly<BigInt>(expr, "x");
-        // coeffs[0] = 1, coeffs[1] = 2
-        EXPECT_TRUE(poly.degree() == 1, "2x+1 degree is 1");
-        EXPECT_TRUE(poly.coeffs.size() == 2, "2x+1 has 2 coefficients");
-        EXPECT_TRUE(poly.coeffs[0] == BigInt(1), "2x+1 constant term is 1");
-        EXPECT_TRUE(poly.coeffs[1] == BigInt(2), "2x+1 linear term is 2");
+            SymbolicExpr::number(1));
+        auto converted = LMCAS::symbolic_to_poly<BigInt>(expr, "x");
+        ASSERT_TRUE(converted) << converted.error().message;
+        const auto &poly = converted.value();
+        EXPECT_EQ(
+            poly.coeffs,
+            (std::vector<BigInt>{BigInt(1), BigInt(2)}));
+        EXPECT_TRUE(test_proved_equivalent(
+            poly_to_symbolic(poly), expr));
     }
 
-    TEST_CASE("symbolic_to_poly: quadratic x^2-3x+2");
     {
         auto x = SymbolicExpr::variable("x");
         // x^2 - 3x + 2
@@ -27,115 +49,336 @@ void test_symbolic_to_poly() {
         auto neg3x = SymbolicExpr::multiply(SymbolicExpr::number(-3), SymbolicExpr::variable("x"));
         auto two = SymbolicExpr::number(2);
         auto expr = SymbolicExpr::add(SymbolicExpr::add(x2, neg3x), two);
-        auto poly = LMCAS::symbolic_to_poly<BigInt>(expr, "x");
-        // coeffs[0] = 2, coeffs[1] = -3, coeffs[2] = 1
-        EXPECT_TRUE(poly.degree() == 2, "x^2-3x+2 degree is 2");
-        EXPECT_TRUE(poly.coeffs[0] == BigInt(2), "x^2-3x+2 constant term is 2");
-        EXPECT_TRUE(poly.coeffs[1] == BigInt(-3), "x^2-3x+2 linear term is -3");
-        EXPECT_TRUE(poly.coeffs[2] == BigInt(1), "x^2-3x+2 quadratic term is 1");
+        auto converted = LMCAS::symbolic_to_poly<BigInt>(expr, "x");
+        ASSERT_TRUE(converted) << converted.error().message;
+        const auto &poly = converted.value();
+        EXPECT_EQ(
+            poly.coeffs,
+            (std::vector<BigInt>{
+                BigInt(2), BigInt(-3), BigInt(1)}));
+        EXPECT_TRUE(test_proved_equivalent(
+            poly_to_symbolic(poly), expr));
     }
 
-    TEST_CASE("symbolic_to_poly: cubic x^3+x");
     {
         auto x = SymbolicExpr::variable("x");
         // x^3 + x
         auto x3 = SymbolicExpr::power(x, SymbolicExpr::number(3));
         auto expr = SymbolicExpr::add(x3, SymbolicExpr::variable("x"));
-        auto poly = LMCAS::symbolic_to_poly<BigInt>(expr, "x");
-        // coeffs[0] = 0, coeffs[1] = 1, coeffs[2] = 0, coeffs[3] = 1
-        EXPECT_TRUE(poly.degree() == 3, "x^3+x degree is 3");
-        EXPECT_TRUE(poly.coeffs[0] == BigInt(0), "x^3+x constant term is 0");
-        EXPECT_TRUE(poly.coeffs[1] == BigInt(1), "x^3+x linear term is 1");
-        EXPECT_TRUE(poly.coeffs[2] == BigInt(0), "x^3+x quadratic term is 0");
-        EXPECT_TRUE(poly.coeffs[3] == BigInt(1), "x^3+x cubic term is 1");
+        auto converted = LMCAS::symbolic_to_poly<BigInt>(expr, "x");
+        ASSERT_TRUE(converted) << converted.error().message;
+        const auto &poly = converted.value();
+        EXPECT_EQ(
+            poly.coeffs,
+            (std::vector<BigInt>{
+                BigInt(0), BigInt(1), BigInt(0), BigInt(1)}));
+        EXPECT_TRUE(test_proved_equivalent(
+            poly_to_symbolic(poly), expr));
     }
 }
 
-void test_poly_to_symbolic() {
-    TEST_CASE("poly_to_symbolic: linear polynomial");
+TEST(PolyUtils, PolyToSymbolic) {
     {
-        // 2x + 1 => coeffs = {1, 2}
-        LMCAS::Polynomial<BigInt> poly({BigInt(1), BigInt(2)}, "x");
+        LMCAS::Polynomial<BigInt> poly(
+            {BigInt(1), BigInt(2)}, "x");
         auto expr = LMCAS::poly_to_symbolic<BigInt>(poly);
-        std::string s = expr ? expr->to_string() : "null";
-        // Should contain "2" and "x"
-        EXPECT_CONTAINS(s, {"2", "x"}, "poly_to_symbolic linear contains 2 and x");
+        auto expected = SymbolicExpr::add(
+            SymbolicExpr::multiply(
+                SymbolicExpr::number(2),
+                SymbolicExpr::variable("x")),
+            SymbolicExpr::number(1));
+        ASSERT_NE(expr, nullptr);
+        EXPECT_TRUE(test_proved_equivalent(expr, expected));
     }
 
-    TEST_CASE("poly_to_symbolic: quadratic polynomial");
     {
-        // x^2 - 3x + 2 => coeffs = {2, -3, 1}
-        LMCAS::Polynomial<BigInt> poly({BigInt(2), BigInt(-3), BigInt(1)}, "x");
+        LMCAS::Polynomial<BigInt> poly(
+            {BigInt(2), BigInt(-3), BigInt(1)}, "x");
         auto expr = LMCAS::poly_to_symbolic<BigInt>(poly);
-        std::string s = expr ? expr->to_string() : "null";
-        // Should contain x^2 or x and structural elements
-        EXPECT_CONTAINS(s, {"x", "2"}, "poly_to_symbolic quadratic contains x and 2");
+        auto x = SymbolicExpr::variable("x");
+        auto expected = SymbolicExpr::add(
+            SymbolicExpr::power(x, SymbolicExpr::number(2)),
+            SymbolicExpr::add(
+                SymbolicExpr::multiply(
+                    SymbolicExpr::number(-3), x),
+                SymbolicExpr::number(2)));
+        ASSERT_NE(expr, nullptr);
+        EXPECT_TRUE(test_proved_equivalent(expr, expected));
     }
 
-    TEST_CASE("poly_to_symbolic: constant polynomial");
     {
-        // 5 => coeffs = {5}
         LMCAS::Polynomial<BigInt> poly({BigInt(5)}, "x");
         auto expr = LMCAS::poly_to_symbolic<BigInt>(poly);
-        std::string s = expr ? expr->to_string() : "null";
-        EXPECT_EQ_STR(s, "5", "poly_to_symbolic constant is 5");
+        ASSERT_NE(expr, nullptr);
+        EXPECT_TRUE(test_proved_equivalent(
+            expr, SymbolicExpr::number(5)));
     }
 }
 
-void test_depends_on_var() {
-    TEST_CASE("depends_on_var: expression containing variable");
+TEST(PolyUtils, DependsOnVar) {
     {
         auto x = SymbolicExpr::variable("x");
         auto expr = SymbolicExpr::add(
             SymbolicExpr::multiply(SymbolicExpr::number(3), x),
-            SymbolicExpr::number(1)
-        );
+            SymbolicExpr::number(1));
         bool result = LMCAS::contains(*expr, "x");
-        EXPECT_TRUE(result, "3x+1 depends on x");
+        EXPECT_TRUE((result)) << "3x+1 depends on x";
     }
 
-    TEST_CASE("depends_on_var: expression not containing variable");
     {
         auto y = SymbolicExpr::variable("y");
         auto expr = SymbolicExpr::add(
             SymbolicExpr::multiply(SymbolicExpr::number(2), y),
-            SymbolicExpr::number(5)
-        );
+            SymbolicExpr::number(5));
         bool result = LMCAS::contains(*expr, "x");
-        EXPECT_TRUE(!result, "2y+5 does not depend on x");
+        EXPECT_TRUE((!result)) << "2y+5 does not depend on x";
     }
 
-    TEST_CASE("depends_on_var: constant expression");
     {
         auto expr = SymbolicExpr::number(42);
         bool result = LMCAS::contains(*expr, "x");
-        EXPECT_TRUE(!result, "constant 42 does not depend on x");
+        EXPECT_TRUE((!result)) << "constant 42 does not depend on x";
     }
 
-    TEST_CASE("depends_on_var: nested expression containing variable");
     {
         auto x = SymbolicExpr::variable("x");
         auto expr = SymbolicExpr::power(
             SymbolicExpr::add(x, SymbolicExpr::number(1)),
-            SymbolicExpr::number(2)
-        );
+            SymbolicExpr::number(2));
         bool result = LMCAS::contains(*expr, "x");
-        EXPECT_TRUE(result, "(x+1)^2 depends on x");
+        EXPECT_TRUE((result)) << "(x+1)^2 depends on x";
     }
 }
 
+TEST(PolyUtils, UnsupportedSubtreesAreAtomic) {
+    auto x = SymbolicExpr::variable("x");
+    const auto remainder = SymbolicExpr::add(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)), SymbolicExpr::number(-1));
+    const auto huge = SymbolicExpr::power(
+        x, SymbolicExpr::number(BigInt("18446744073709551616")));
+    const auto fractional = SymbolicExpr::power(x, SymbolicExpr::number(Rational(3, 2)));
+    auto oversized = symbolic_to_poly<Rational>(SymbolicExpr::add(huge, remainder), "x");
+    EXPECT_TRUE((!oversized && oversized.error().code == CasErrc::ResourceLimit)) << "oversized power rejects the whole sum as a resource limit";
+    auto unsupported = symbolic_to_poly<Rational>(
+        SymbolicExpr::multiply(SymbolicExpr::add(fractional, x), remainder), "x");
+    EXPECT_TRUE((!unsupported && unsupported.error().code == CasErrc::UnsupportedExpression)) << "fractional nested factor rejects the whole product explicitly";
+    const auto supported = symbolic_to_poly<Rational>(
+        SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(Rational(3))), remainder),
+        "x");
+    EXPECT_TRUE((supported && supported.value().degree() == 3 &&
+                 supported.value().eval(Rational(2)) == Rational(11)))
+        << "supported integer powers still convert with all sibling terms";
+}
 
-int main() {
-    try {
-        test_symbolic_to_poly();
-        test_poly_to_symbolic();
-        test_depends_on_var();
-    } catch (const std::exception& e) {
-        std::cout << "[FAIL] Exception: " << e.what() << std::endl;
-        g_failures++;
-    } catch (...) {
-        std::cout << "[FAIL] Unknown Exception!" << std::endl;
-        g_failures++;
+static void check_unsupported_polynomial_forms(const ExprPtr &x, const ExprPtr &a) {
+    for (const auto &unsupported : {
+             SymbolicExpr::sin(x), SymbolicExpr::power(x, SymbolicExpr::number(-1)),
+             SymbolicExpr::power(x, SymbolicExpr::number(Rational(1, 2))),
+             SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), a)}) {
+        auto converted = symbolic_to_poly<Rational>(unsupported, "x");
+        ASSERT_FALSE(converted);
+        EXPECT_EQ(
+            converted.error().code,
+            CasErrc::UnsupportedExpression);
+}
+}
+
+static void check_symbolic_coefficient_conversion(const ExprPtr &x, const ExprPtr &a) {
+    auto parameter_poly = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)), a);
+    auto symbolic =
+        symbolic_to_poly<SymbolicPolyCoeff>(parameter_poly, "x");
+    ASSERT_TRUE(symbolic) << symbolic.error().message;
+    EXPECT_EQ(symbolic.value().degree(), 2);
+    const auto reconstructed = poly_to_symbolic(symbolic.value());
+    const auto evaluated = test_numeric_eval(
+        reconstructed->substitute("a", SymbolicExpr::number(7))
+            ->substitute("x", SymbolicExpr::number(3)));
+    ASSERT_TRUE(evaluated.has_value());
+    EXPECT_TRUE(std::isfinite(*evaluated));
+    EXPECT_EQ(*evaluated, 16.0);
+}
+
+static void check_unsupported_rational_coefficients(const ExprPtr &a) {
+    for (const auto &coefficient : {a, SymbolicExpr::sin(a),
+                                    SymbolicExpr::power(SymbolicExpr::number(2), SymbolicExpr::number(Rational(1, 2)))}) {
+        auto value = extract_coeff_value<Rational>(coefficient);
+        ASSERT_FALSE(value);
+        EXPECT_EQ(
+            value.error().code, CasErrc::UnsupportedExpression);
     }
-    return TEST_REPORT();
+}
+
+static void check_exact_coefficient_and_power_conversion(const ExprPtr &x) {
+    auto binary =
+        extract_coeff_value<Rational>(SymbolicExpr::number(0.1));
+    ASSERT_TRUE(binary) << binary.error().message;
+    EXPECT_EQ(binary.value(), Rational::from_double(0.1));
+    EXPECT_NE(binary.value(), Rational(1, 10));
+    auto accepted = symbolic_to_poly<Rational>(
+        SymbolicExpr::power(x, SymbolicExpr::number(999)), "x");
+    ASSERT_TRUE(accepted) << accepted.error().message;
+    EXPECT_EQ(accepted.value().degree(), 999);
+    EXPECT_EQ(accepted.value().eval(Rational(1)), Rational(1));
+}
+
+static void check_conversion_failures_and_zero_powers(const ExprPtr &x) {
+    auto rejected = symbolic_to_poly<Rational>(
+        SymbolicExpr::power(x, SymbolicExpr::number(1000)), "x");
+    ASSERT_FALSE(rejected);
+    EXPECT_EQ(rejected.error().code, CasErrc::ResourceLimit);
+    auto null_input = symbolic_to_poly<Rational>(nullptr, "x");
+    auto empty_variable = symbolic_to_poly<Rational>(x, "");
+    ASSERT_FALSE(null_input);
+    EXPECT_EQ(null_input.error().code, CasErrc::InvalidArgument);
+    ASSERT_FALSE(empty_variable);
+    EXPECT_EQ(
+        empty_variable.error().code, CasErrc::InvalidArgument);
+    auto unknown_zero_power = symbolic_to_poly<Rational>(
+        SymbolicExpr::power(x, SymbolicExpr::number(0)), "x");
+    auto defined_zero_power = symbolic_to_poly<Rational>(
+        SymbolicExpr::power(
+            SymbolicExpr::number(2), SymbolicExpr::number(0)),
+        "x");
+    auto undefined_zero_power = symbolic_to_poly<Rational>(
+        SymbolicExpr::power(
+            SymbolicExpr::number(0), SymbolicExpr::number(0)),
+        "x");
+    EXPECT_FALSE(unknown_zero_power);
+    EXPECT_FALSE(undefined_zero_power);
+    ASSERT_TRUE(defined_zero_power)
+        << defined_zero_power.error().message;
+    EXPECT_EQ(
+        defined_zero_power.value().eval(Rational(0)), Rational(1));
+}
+
+TEST(PolyUtils, ConversionResultContract) {
+    auto x = SymbolicExpr::variable("x");
+    auto a = SymbolicExpr::variable("a");
+    auto zero = symbolic_to_poly<Rational>(
+        SymbolicExpr::number(0), "x");
+    ASSERT_TRUE(zero) << zero.error().message;
+    EXPECT_TRUE(zero.value().is_zero());
+    check_unsupported_polynomial_forms(x, a);
+    check_symbolic_coefficient_conversion(x, a);
+    check_unsupported_rational_coefficients(a);
+    check_exact_coefficient_and_power_conversion(x);
+    check_conversion_failures_and_zero_powers(x);
+}
+
+TEST(PolyUtils, AffineRecognition) {
+    auto x = SymbolicExpr::variable("x");
+    auto a = SymbolicExpr::variable("a");
+    auto b = SymbolicExpr::variable("b");
+    struct Case {
+        ExprPtr expression;
+        ExprPtr slope;
+        ExprPtr offset;
+    };
+    for (const auto &sample : std::vector<Case>{
+             {SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), x),
+                                SymbolicExpr::number(3)),
+              SymbolicExpr::number(2), SymbolicExpr::number(3)},
+             {SymbolicExpr::add(SymbolicExpr::divide(x, SymbolicExpr::number(2)), b),
+              SymbolicExpr::number(Rational(1, 2)), b},
+             {SymbolicExpr::add(SymbolicExpr::multiply(a, x), b), a, b},
+             {SymbolicExpr::add(
+                  SymbolicExpr::power(SymbolicExpr::add(x, SymbolicExpr::number(1)),
+                                      SymbolicExpr::number(2)),
+                  SymbolicExpr::multiply(SymbolicExpr::number(-1),
+                      SymbolicExpr::power(x, SymbolicExpr::number(2)))),
+              SymbolicExpr::number(2), SymbolicExpr::number(1)},
+             {SymbolicExpr::number(0), SymbolicExpr::number(0), SymbolicExpr::number(0)},
+             {b, SymbolicExpr::number(0), b}}) {
+        ComputationContext context;
+        auto affine = detail::recognize_affine(*sample.expression, "x", context);
+        EXPECT_TRUE((affine && affine.value())) << "affine expression matches";
+        if (affine && affine.value()) {
+            EXPECT_TRUE((detail::node(affine.value()->slope->simplify())->equals(*detail::node(sample.slope)))) << "affine slope is preserved";
+            EXPECT_TRUE((detail::node(affine.value()->offset->simplify())->equals(*detail::node(sample.offset)))) << "affine offset is preserved";
+        }
+    }
+    for (const auto &expression : {SymbolicExpr::multiply(x, x), SymbolicExpr::sin(x)}) {
+        ComputationContext context;
+        auto affine = detail::recognize_affine(*expression, "x", context);
+        EXPECT_TRUE((affine && !affine.value())) << "non-affine expression is a successful non-match";
+    }
+    ComputationContext context;
+    auto invalid = detail::recognize_affine(*x, "", context);
+    EXPECT_TRUE((!invalid && invalid.error().code == CasErrc::InvalidArgument)) << "empty variable is invalid";
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext exhausted_context(limits);
+    auto exhausted = detail::recognize_affine(*x, "x", exhausted_context);
+    EXPECT_TRUE((!exhausted && exhausted.error().code == CasErrc::ResourceLimit)) << "affine recognition preserves the caller's exhausted budget";
+}
+
+TEST(PolyUtils, AffineRecognitionSharesConversionLimits) {
+    auto x = SymbolicExpr::variable("x");
+    auto power = SymbolicExpr::power(
+        SymbolicExpr::add(x, SymbolicExpr::number(1)), SymbolicExpr::number(8));
+    ComputationContext ordinary_context;
+    auto ordinary = detail::recognize_affine(*power, "x", ordinary_context);
+    ASSERT_TRUE(ordinary);
+    EXPECT_FALSE(ordinary.value());
+
+    struct LimitCase {
+        const char* name;
+        std::size_t ResourceLimits::* limit;
+        std::size_t value;
+    };
+    for (const auto& sample : {
+             LimitCase{"steps", &ResourceLimits::max_steps, 1},
+             LimitCase{"nodes", &ResourceLimits::max_ast_nodes, 0},
+             LimitCase{"depth", &ResourceLimits::max_recursion_depth, 0},
+             LimitCase{"terms", &ResourceLimits::max_expansion_terms, 0},
+             LimitCase{"expanded nodes", &ResourceLimits::max_ast_nodes, 8},
+             LimitCase{"expanded terms", &ResourceLimits::max_expansion_terms, 8}}) {
+        SCOPED_TRACE(sample.name);
+        ResourceLimits limits;
+        limits.*sample.limit = sample.value;
+        ComputationContext context(limits);
+        auto result = detail::recognize_affine(*power, "x", context);
+        ASSERT_FALSE(result);
+        EXPECT_EQ(result.error().code, CasErrc::ResourceLimit);
+    }
+
+    CancellationToken cancellation;
+    cancellation.cancel();
+    ComputationContext cancelled_context({}, cancellation);
+    auto cancelled = detail::recognize_affine(*power, "x", cancelled_context);
+    ASSERT_FALSE(cancelled);
+    EXPECT_EQ(cancelled.error().code, CasErrc::Cancelled);
+}
+
+TEST(PolyUtils, NestedPolynomialPowerChecksFinalCoefficientCount) {
+    auto x = SymbolicExpr::variable("x");
+    auto base = SymbolicExpr::add(x, SymbolicExpr::number(1));
+    auto inner = detail::make_node<PowerNode>(
+        detail::node(base), detail::node(SymbolicExpr::number(20)));
+    auto nested = detail::make_expression_ptr(detail::make_node<PowerNode>(
+        inner, detail::node(SymbolicExpr::number(20))));
+    ResourceLimits limits;
+    limits.max_expansion_terms = 100;
+    ComputationContext context(limits);
+    auto result = detail::recognize_affine(*nested, "x", context);
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, CasErrc::ResourceLimit);
+}
+
+TEST(PolyUtils, PolynomialCoefficientsShareAggregateNodeLimit) {
+    auto expression = SymbolicExpr::power(
+        SymbolicExpr::add(SymbolicExpr::variable("a"),
+            SymbolicExpr::multiply(SymbolicExpr::variable("b"), SymbolicExpr::variable("x"))),
+        SymbolicExpr::number(2));
+    ResourceLimits limits;
+    limits.max_ast_nodes = 9;
+    ComputationContext context(limits);
+    auto result = detail::symbolic_to_poly_checked(*expression, "x", context);
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, CasErrc::ResourceLimit);
+
+    ComputationContext ordinary_context;
+    auto ordinary = detail::symbolic_to_poly_checked(*expression, "x", ordinary_context);
+    ASSERT_TRUE(ordinary);
+    EXPECT_TRUE(test_proved_equivalent(poly_to_symbolic(ordinary.value()), expression));
 }

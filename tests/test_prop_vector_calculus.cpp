@@ -1,9 +1,9 @@
 
 #include "test_common.hpp"
-#include "rapidcheck/rapidcheck.h"
+#include <rapidcheck.h>
 #include "vector_calculus.hpp"
 #include "symbolic_matrix.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 #include <cmath>
 #include <algorithm>
@@ -12,34 +12,34 @@ using namespace LMCAS;
 using SE = SymbolicExpr;
 
 static auto num(int n) { return SE::number(n); }
-static auto var(const std::string& name) { return SE::variable(name); }
-
+static auto var(const std::string &name) { return SE::variable(name); }
 
 static std::shared_ptr<SymbolicExpr> get_mat_entry(
-    const std::shared_ptr<SymbolicExpr>& mat, size_t r, size_t c)
-{
-    if (!mat || !LMCAS::detail::node(mat)) return nullptr;
+    const std::shared_ptr<SymbolicExpr> &mat, size_t r, size_t c) {
+    if (!mat || !LMCAS::detail::node(mat))
+        return nullptr;
     auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
-    if (!mn) return nullptr;
+    if (!mn)
+        return nullptr;
     auto node = mn->get(r, c);
-    if (!node) return SE::number(0);
+    if (!node)
+        return SE::number(0);
     return LMCAS::detail::make_expression_ptr(node);
 }
 
-static size_t get_mat_rows(const std::shared_ptr<SymbolicExpr>& mat)
-{
-    if (!mat || !LMCAS::detail::node(mat)) return 0;
+static size_t get_mat_rows(const std::shared_ptr<SymbolicExpr> &mat) {
+    if (!mat || !LMCAS::detail::node(mat))
+        return 0;
     auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     return mn ? mn->rows() : 0;
 }
 
-static size_t get_mat_cols(const std::shared_ptr<SymbolicExpr>& mat)
-{
-    if (!mat || !LMCAS::detail::node(mat)) return 0;
+static size_t get_mat_cols(const std::shared_ptr<SymbolicExpr> &mat) {
+    if (!mat || !LMCAS::detail::node(mat))
+        return 0;
     auto mn = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(mat));
     return mn ? mn->cols() : 0;
 }
-
 
 namespace {
 
@@ -55,15 +55,16 @@ std::shared_ptr<SymbolicExpr> gen_poly_3d(int max_degree = 3) {
     auto z = var("z");
 
     std::shared_ptr<SymbolicExpr> result = nullptr;
-    int num_terms = rc::gen::inRange(2, 5);
+    int num_terms = *rc::gen::inRange(2, (5) + 1);
 
     for (int t = 0; t < num_terms; ++t) {
-        int coeff = rc::gen::inRange(-3, 3);
-        if (coeff == 0) coeff = 1;
+        int coeff = *rc::gen::inRange(-3, (3) + 1);
+        if (coeff == 0)
+            coeff = 1;
 
-        int ix = rc::gen::inRange(0, max_degree);
-        int iy = rc::gen::inRange(0, max_degree - ix);
-        int iz = rc::gen::inRange(0, max_degree - ix - iy);
+        int ix = *rc::gen::inRange(0, (max_degree) + 1);
+        int iy = *rc::gen::inRange(0, (max_degree - ix) + 1);
+        int iz = *rc::gen::inRange(0, (max_degree - ix - iy) + 1);
 
         std::shared_ptr<SymbolicExpr> term = num(coeff);
 
@@ -102,9 +103,9 @@ VectorField gen_vector_field_3d(int max_degree = 2) {
  *        Guarantees at least one non-zero component.
  */
 VectorField gen_direction_3d() {
-    int d0 = rc::gen::inRange(-3, 3);
-    int d1 = rc::gen::inRange(-3, 3);
-    int d2 = rc::gen::inRange(-3, 3);
+    int d0 = *rc::gen::inRange(-3, (3) + 1);
+    int d1 = *rc::gen::inRange(-3, (3) + 1);
+    int d2 = *rc::gen::inRange(-3, (3) + 1);
 
     // Ensure not all zero
     if (d0 == 0 && d1 == 0 && d2 == 0) {
@@ -118,10 +119,10 @@ VectorField gen_direction_3d() {
  * @brief Evaluate a symbolic expression at a specific 3D point (x, y, z).
  *        Returns std::nullopt if evaluation fails.
  */
-std::optional<double> eval_at_point(const std::shared_ptr<SymbolicExpr>& expr,
-                                     double px, double py, double pz)
-{
-    if (!expr) return std::nullopt;
+std::optional<double> eval_at_point(const std::shared_ptr<SymbolicExpr> &expr,
+                                    double px, double py, double pz) {
+    if (!expr)
+        return std::nullopt;
     auto e = expr->substitute("x", SE::number(px));
     e = e->substitute("y", SE::number(py));
     e = e->substitute("z", SE::number(pz));
@@ -131,11 +132,8 @@ std::optional<double> eval_at_point(const std::shared_ptr<SymbolicExpr>& expr,
 
 } // anonymous namespace
 
-
-static void test_directional_derivative() {
-    TEST_CASE("Directional derivative equals gradient dot unit direction");
-
-    rc::check("D_u(f) == grad(f) . unit(u) for random polynomials", []() {
+TEST(LmcasPropVectorCalculus, DirectionalDerivative) {
+    EXPECT_TRUE(rc::check("D_u(f) == grad(f) . unit(u) for random polynomials", []() {
         auto f = gen_poly_3d(2);
         auto dir = gen_direction_3d();
         std::vector<std::string> vars = {"x", "y", "z"};
@@ -152,15 +150,17 @@ static void test_directional_derivative() {
         auto v1 = test_numeric_eval(dir[1]);
         auto v2 = test_numeric_eval(dir[2]);
         RC_ASSERT(v0.has_value() && v1.has_value() && v2.has_value());
-        d0 = *v0; d1 = *v1; d2 = *v2;
+        d0 = *v0;
+        d1 = *v1;
+        d2 = *v2;
         double mag = std::sqrt(d0 * d0 + d1 * d1 + d2 * d2);
         RC_ASSERT(mag > 1e-10);
         double u0 = d0 / mag, u1 = d1 / mag, u2 = d2 / mag;
 
         // Evaluate at a random point
-        double px = 1.0 + rc::gen::inRange(0, 3);
-        double py = 1.0 + rc::gen::inRange(0, 3);
-        double pz = 1.0 + rc::gen::inRange(0, 3);
+        double px = 1.0 + *rc::gen::inRange(0, (3) + 1);
+        double py = 1.0 + *rc::gen::inRange(0, (3) + 1);
+        double pz = 1.0 + *rc::gen::inRange(0, (3) + 1);
 
         auto dd_val = eval_at_point(dd, px, py, pz);
         auto g0_val = eval_at_point(grad_f[0], px, py, pz);
@@ -175,14 +175,11 @@ static void test_directional_derivative() {
                 RC_ASSERT(diff / scale < 1e-4);
             }
         }
-    });
+    }));
 }
 
-
-static void test_gradient_components() {
-    TEST_CASE("Gradient components equal partial derivatives");
-
-    rc::check("grad(f)[i] == df/dxi for random polynomials", []() {
+TEST(LmcasPropVectorCalculus, GradientComponents) {
+    EXPECT_TRUE(rc::check("grad(f)[i] == df/dxi for random polynomials", []() {
         auto f = gen_poly_3d(3);
         std::vector<std::string> vars = {"x", "y", "z"};
 
@@ -190,9 +187,9 @@ static void test_gradient_components() {
         RC_ASSERT(grad_f.size() == 3);
 
         // Evaluate at a random point
-        double px = 1.0 + rc::gen::inRange(0, 4);
-        double py = 1.0 + rc::gen::inRange(0, 4);
-        double pz = 1.0 + rc::gen::inRange(0, 4);
+        double px = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double py = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double pz = 1.0 + *rc::gen::inRange(0, (4) + 1);
 
         for (int i = 0; i < 3; ++i) {
             auto partial = f->differentiate(vars[i]);
@@ -209,18 +206,15 @@ static void test_gradient_components() {
                 }
             }
         }
-    });
+    }));
 }
 
-
-static void test_jacobian_entries() {
-    TEST_CASE("Jacobian entry correctness");
-
-    rc::check("J[i][j] == d(fi)/d(xj) for random polynomial vector functions", []() {
+TEST(LmcasPropVectorCalculus, JacobianEntries) {
+    EXPECT_TRUE(rc::check("J[i][j] == d(fi)/d(xj) for random polynomial vector functions", []() {
         std::vector<std::string> vars = {"x", "y", "z"};
 
         // Generate 2-3 random polynomial functions
-        int m = rc::gen::inRange(2, 3);
+        int m = *rc::gen::inRange(2, (3) + 1);
         std::vector<std::shared_ptr<SymbolicExpr>> funcs;
         for (int i = 0; i < m; ++i) {
             funcs.push_back(gen_poly_3d(2));
@@ -232,9 +226,9 @@ static void test_jacobian_entries() {
         RC_ASSERT(get_mat_cols(J) == 3);
 
         // Evaluate at a random point
-        double px = 1.0 + rc::gen::inRange(0, 3);
-        double py = 1.0 + rc::gen::inRange(0, 3);
-        double pz = 1.0 + rc::gen::inRange(0, 3);
+        double px = 1.0 + *rc::gen::inRange(0, (3) + 1);
+        double py = 1.0 + *rc::gen::inRange(0, (3) + 1);
+        double pz = 1.0 + *rc::gen::inRange(0, (3) + 1);
 
         for (int i = 0; i < m; ++i) {
             for (int j = 0; j < 3; ++j) {
@@ -253,14 +247,11 @@ static void test_jacobian_entries() {
                 }
             }
         }
-    });
+    }));
 }
 
-
-static void test_hessian_symmetry() {
-    TEST_CASE("Hessian symmetry and correctness");
-
-    rc::check("H[i][j] == H[j][i] and H[i][j] == d2f/(dxi dxj) for random polynomials", []() {
+TEST(LmcasPropVectorCalculus, HessianSymmetry) {
+    EXPECT_TRUE(rc::check("H[i][j] == H[j][i] and H[i][j] == d2f/(dxi dxj) for random polynomials", []() {
         auto f = gen_poly_3d(3);
         std::vector<std::string> vars = {"x", "y", "z"};
 
@@ -270,9 +261,9 @@ static void test_hessian_symmetry() {
         RC_ASSERT(get_mat_cols(H) == 3);
 
         // Evaluate at a random point
-        double px = 1.0 + rc::gen::inRange(0, 3);
-        double py = 1.0 + rc::gen::inRange(0, 3);
-        double pz = 1.0 + rc::gen::inRange(0, 3);
+        double px = 1.0 + *rc::gen::inRange(0, (3) + 1);
+        double py = 1.0 + *rc::gen::inRange(0, (3) + 1);
+        double pz = 1.0 + *rc::gen::inRange(0, (3) + 1);
 
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
@@ -306,14 +297,11 @@ static void test_hessian_symmetry() {
                 }
             }
         }
-    });
+    }));
 }
 
-
-static void test_curl_grad_zero() {
-    TEST_CASE("curl(grad(f)) = 0");
-
-    rc::check("curl(grad(f)) == 0 for random polynomial scalar fields", []() {
+TEST(LmcasPropVectorCalculus, CurlGradZero) {
+    EXPECT_TRUE(rc::check("curl(grad(f)) == 0 for random polynomial scalar fields", []() {
         auto f = gen_poly_3d(3);
         std::vector<std::string> vars = {"x", "y", "z"};
 
@@ -324,9 +312,9 @@ static void test_curl_grad_zero() {
         RC_ASSERT(curl_grad.size() == 3);
 
         // Evaluate each component at a random point — should be zero
-        double px = 1.0 + rc::gen::inRange(0, 4);
-        double py = 1.0 + rc::gen::inRange(0, 4);
-        double pz = 1.0 + rc::gen::inRange(0, 4);
+        double px = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double py = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double pz = 1.0 + *rc::gen::inRange(0, (4) + 1);
 
         for (int i = 0; i < 3; ++i) {
             auto val = eval_at_point(curl_grad[i], px, py, pz);
@@ -334,14 +322,11 @@ static void test_curl_grad_zero() {
                 RC_ASSERT(std::abs(*val) < 1e-6);
             }
         }
-    });
+    }));
 }
 
-
-static void test_div_curl_zero() {
-    TEST_CASE("div(curl(F)) = 0");
-
-    rc::check("div(curl(F)) == 0 for random polynomial vector fields", []() {
+TEST(LmcasPropVectorCalculus, DivCurlZero) {
+    EXPECT_TRUE(rc::check("div(curl(F)) == 0 for random polynomial vector fields", []() {
         auto F = gen_vector_field_3d(2);
         std::vector<std::string> vars = {"x", "y", "z"};
 
@@ -352,22 +337,19 @@ static void test_div_curl_zero() {
         RC_ASSERT(div_curl != nullptr);
 
         // Evaluate at a random point — should be zero
-        double px = 1.0 + rc::gen::inRange(0, 4);
-        double py = 1.0 + rc::gen::inRange(0, 4);
-        double pz = 1.0 + rc::gen::inRange(0, 4);
+        double px = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double py = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double pz = 1.0 + *rc::gen::inRange(0, (4) + 1);
 
         auto val = eval_at_point(div_curl, px, py, pz);
         if (val) {
             RC_ASSERT(std::abs(*val) < 1e-6);
         }
-    });
+    }));
 }
 
-
-static void test_laplacian_div_grad() {
-    TEST_CASE("Laplacian equals divergence of gradient");
-
-    rc::check("laplacian(f) == div(grad(f)) for random polynomial scalar fields", []() {
+TEST(LmcasPropVectorCalculus, LaplacianDivGrad) {
+    EXPECT_TRUE(rc::check("laplacian(f) == div(grad(f)) for random polynomial scalar fields", []() {
         auto f = gen_poly_3d(3);
         std::vector<std::string> vars = {"x", "y", "z"};
 
@@ -381,9 +363,9 @@ static void test_laplacian_div_grad() {
         RC_ASSERT(div_grad != nullptr);
 
         // Evaluate both at a random point — should be equal
-        double px = 1.0 + rc::gen::inRange(0, 4);
-        double py = 1.0 + rc::gen::inRange(0, 4);
-        double pz = 1.0 + rc::gen::inRange(0, 4);
+        double px = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double py = 1.0 + *rc::gen::inRange(0, (4) + 1);
+        double pz = 1.0 + *rc::gen::inRange(0, (4) + 1);
 
         auto lap_val = eval_at_point(lap, px, py, pz);
         auto dg_val = eval_at_point(div_grad, px, py, pz);
@@ -395,28 +377,24 @@ static void test_laplacian_div_grad() {
                 RC_ASSERT(diff / scale < 1e-6);
             }
         }
-    });
+    }));
 }
 
-
-static void test_projection_perpendicular() {
-    TEST_CASE("Vector projection perpendicularity");
-
-    rc::check("dot(a - proj(a, b), b) == 0 for random vectors", []() {
+TEST(LmcasPropVectorCalculus, ProjectionPerpendicular) {
+    EXPECT_TRUE(rc::check("dot(a - proj(a, b), b) == 0 for random vectors", []() {
         auto a = gen_vector_field_3d(0);
         auto b = gen_direction_3d();
         std::vector<std::string> vars = {"x", "y", "z"};
 
         auto proj_result = vector_project(a, b);
         RC_ASSERT(proj_result.has_value());
-        const auto& proj = proj_result.value();
+        const auto &proj = proj_result.value();
         RC_ASSERT(proj.size() == 3);
 
         VectorField diff = {
             SE::add(a[0], SE::multiply(num(-1), proj[0])),
             SE::add(a[1], SE::multiply(num(-1), proj[1])),
-            SE::add(a[2], SE::multiply(num(-1), proj[2]))
-        };
+            SE::add(a[2], SE::multiply(num(-1), proj[2]))};
 
         auto d = dot_product(diff, b);
         RC_ASSERT(d.has_value());
@@ -424,14 +402,11 @@ static void test_projection_perpendicular() {
         if (d_val) {
             RC_ASSERT(std::abs(*d_val) < 1e-6);
         }
-    });
+    }));
 }
 
-
-static void test_mixed_product_det() {
-    TEST_CASE("Mixed product equals determinant");
-
-    rc::check("dot(a, cross(b, c)) == det([a, b, c]) for random vectors", []() {
+TEST(LmcasPropVectorCalculus, MixedProductDet) {
+    EXPECT_TRUE(rc::check("dot(a, cross(b, c)) == det([a, b, c]) for random vectors", []() {
         auto a = gen_direction_3d();
         auto b = gen_direction_3d();
         auto c = gen_direction_3d();
@@ -444,8 +419,7 @@ static void test_mixed_product_det() {
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> mat_elems = {
             {a[0], a[1], a[2]},
             {b[0], b[1], b[2]},
-            {c[0], c[1], c[2]}
-        };
+            {c[0], c[1], c[2]}};
         auto mat = SE::matrix(mat_elems);
         auto d = LMCAS::matrix_determinant_checked(mat).value();
 
@@ -455,20 +429,5 @@ static void test_mixed_product_det() {
         if (dp_val && d_val) {
             RC_ASSERT(std::abs(*dp_val - *d_val) < 1e-6);
         }
-    });
-}
-
-
-int main() {
-    test_directional_derivative();
-    test_gradient_components();
-    test_jacobian_entries();
-    test_hessian_symmetry();
-    test_projection_perpendicular();
-    test_mixed_product_det();
-    test_curl_grad_zero();
-    test_div_curl_zero();
-    test_laplacian_div_grad();
-
-    return TEST_REPORT();
+    }));
 }

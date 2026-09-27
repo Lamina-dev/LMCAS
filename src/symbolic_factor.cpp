@@ -3,14 +3,16 @@
 #include <string>
 #include <algorithm>
 #include <set>
-#include "../include/symbolic.hpp"
-#include "../include/symbolic_ast.hpp"
-#include "../include/poly_utils.hpp"
+#include <optional>
+#include "symbolic.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
-#include "../include/transcendental_factor.hpp"
-#include "../include/solve_polynomial.hpp"
-#include "../include/solve_strategies.hpp"
-#include "../include/multivariate_factor.hpp"
+#include "internal/multivariate_conversion.hpp"
+#include "transcendental_factor.hpp"
+#include "solve_polynomial.hpp"
+#include "solve_strategies.hpp"
+#include "multivariate_factor.hpp"
 
 namespace LMCAS {
 
@@ -19,85 +21,71 @@ namespace {
 
 /// 多元因式分解辅助函数
 
-/**
- * @internal
- * @brief 判断符号节点是否为多项式表达式(不含超越函数,负指数等)
- */
+static std::optional<int> polynomial_exponent(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number) { return std::nullopt; }
+    BigInt exponent;
+    if (std::holds_alternative<BigInt>(number->value())) {
+        exponent = std::get<BigInt>(number->value());
+    } else if (std::holds_alternative<Rational>(number->value())) {
+        const auto& rational = std::get<Rational>(number->value());
+        if (!rational.is_integer()) { return std::nullopt; }
+        exponent = rational.to_bigint();
+    } else {
+        const auto value = std::get<lmmc_real_t>(number->value());
+        if (!std::isfinite(value) || value != std::floor(value)) { return std::nullopt; }
+        exponent = Rational::from_double(value).to_bigint();
+    }
+    if (exponent.is_negative() || exponent > BigInt(100)) { return std::nullopt; }
+    return static_cast<int>(exponent.try_to_int64().value());
+}
+
 static bool is_poly_expr_node(const std::shared_ptr<const SymbolicNode>& node) {
-    if (!node) return false;
-    if (std::dynamic_pointer_cast<const NumberNode>(node)) return true;
-    if (std::dynamic_pointer_cast<const VariableNode>(node)) return true;
+    if (!node) { return false; }
+    if (std::dynamic_pointer_cast<const NumberNode>(node)) { return true; }
+    if (std::dynamic_pointer_cast<const VariableNode>(node)) { return true; }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         for (const auto& op : add->operands()) {
-            if (!is_poly_expr_node(op)) return false;
+            if (!is_poly_expr_node(op)) { return false; }
         }
         return true;
     }
 
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         for (const auto& op : mul->operands()) {
-            if (!is_poly_expr_node(op)) return false;
+            if (!is_poly_expr_node(op)) { return false; }
         }
         return true;
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
-            long long exp_val = 0;
-            if (std::holds_alternative<BigInt>(exp_num->value())) {
-                auto bi = std::get<BigInt>(exp_num->value());
-                if (bi.IsNegative()) return false;
-                exp_val = bi.to_int();
-            } else if (std::holds_alternative<Rational>(exp_num->value())) {
-                auto r = std::get<Rational>(exp_num->value());
-                if (!r.is_integer()) return false;
-                auto bi = r.to_BigInt();
-                if (bi.IsNegative()) return false;
-                exp_val = bi.to_int();
-            } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-                lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value());
-                if (!std::isfinite(d) || d < 0 || d != std::floor(d)) return false;
-                exp_val = static_cast<long long>(d);
-            } else {
-                return false;
-            }
-            if (exp_val < 0 || exp_val > 100) return false;
-            return is_poly_expr_node(pow->base());
-        }
-        return false;
+        return polynomial_exponent(pow->exponent()).has_value() &&
+            is_poly_expr_node(pow->base());
     }
 
     return false;
 }
 
-} // namespace
+}
 
-/**
- * @internal
- * @brief 递归将符号节点转换为 MultiPoly
- *
- * 假设节点已通过 is_poly_expr_node 验证为多项式.
- * @param[in] node 符号节点
- * @param[in] vars 变量名列表(确定单项式各分量的含义)
- * @return 对应的 MultiPoly
- */
+static Rational factor_number_coefficient(const NumberNode& number) {
+    if (const auto exact = detail::exact_rational_value(number)) {
+        return *exact;
+    }
+    return Rational::from_double(std::get<lmmc_real_t>(number.value()));
+}
+
+
 static LMCAS::MultiPoly symbolic_node_to_multipoly(
     const std::shared_ptr<const SymbolicNode>& node,
     const std::vector<std::string>& vars)
 {
-    if (!node) return LMCAS::MultiPoly(Rational(0), vars);
+    if (!node) { return LMCAS::MultiPoly(Rational(0), vars); }
 
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        Rational coeff(0);
-        if (std::holds_alternative<BigInt>(num->value())) {
-            coeff = Rational(std::get<BigInt>(num->value()));
-        } else if (std::holds_alternative<Rational>(num->value())) {
-            coeff = std::get<Rational>(num->value());
-        } else if (std::holds_alternative<lmmc_real_t>(num->value())) {
-            coeff = Rational::from_double(std::get<lmmc_real_t>(num->value()));
-        }
-        return LMCAS::MultiPoly(coeff, vars);
+        return LMCAS::MultiPoly(factor_number_coefficient(*num), vars);
     }
 
     if (auto var_node = std::dynamic_pointer_cast<const VariableNode>(node)) {
@@ -131,17 +119,8 @@ static LMCAS::MultiPoly symbolic_node_to_multipoly(
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto base_poly = symbolic_node_to_multipoly(pow->base(), vars);
-        int exp_val = 0;
-        if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
-            if (std::holds_alternative<BigInt>(exp_num->value())) {
-                exp_val = std::get<BigInt>(exp_num->value()).to_int();
-            } else if (std::holds_alternative<Rational>(exp_num->value())) {
-                exp_val = std::get<Rational>(exp_num->value()).to_BigInt().to_int();
-            } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-                exp_val = static_cast<int>(std::get<lmmc_real_t>(exp_num->value()));
-            }
-        }
-        if (exp_val == 0) return LMCAS::MultiPoly(Rational(1), vars);
+        const int exp_val = polynomial_exponent(pow->exponent()).value();
+        if (exp_val == 0) { return LMCAS::MultiPoly(Rational(1), vars); }
         LMCAS::MultiPoly result(Rational(1), vars);
         for (int i = 0; i < exp_val; ++i) {
             result = result * base_poly;
@@ -152,14 +131,8 @@ static LMCAS::MultiPoly symbolic_node_to_multipoly(
     return LMCAS::MultiPoly(Rational(0), vars);
 }
 
-/**
- * @internal
- * @brief 将 MultiPoly 转换为符号表达式
- * @param[in] poly 多元多项式
- * @return 对应的符号表达式
- */
 static std::shared_ptr<SymbolicExpr> multipoly_to_symbolic(const LMCAS::MultiPoly& poly) {
-    if (poly.is_zero()) return SymbolicExpr::number(0);
+    if (poly.is_zero()) { return SymbolicExpr::number(0); }
 
     const auto& vars = poly.variables();
     const auto& terms = poly.terms();
@@ -168,47 +141,12 @@ static std::shared_ptr<SymbolicExpr> multipoly_to_symbolic(const LMCAS::MultiPol
     term_exprs.reserve(terms.size());
 
     for (const auto& [mono, coeff] : terms) {
-        std::vector<std::shared_ptr<SymbolicExpr>> factors;
-
-        /// 系数部分
-        if (!(coeff == Rational(1)) || LMCAS::total_degree(mono) == 0) {
-            if (coeff == Rational(-1) && LMCAS::total_degree(mono) > 0) {
-                factors.push_back(SymbolicExpr::number(-1));
-            } else {
-                factors.push_back(SymbolicExpr::number(coeff));
-            }
-        }
-
-        /// 变量部分
-        for (size_t i = 0; i < vars.size() && i < mono.size(); ++i) {
-            if (mono[i] == 0) continue;
-            auto var_expr = LMCAS::detail::make_expression_ptr(
-                LMCAS::detail::make_node<VariableNode>(vars[i]));
-            if (mono[i] == 1) {
-                factors.push_back(var_expr);
-            } else {
-                factors.push_back(SymbolicExpr::power(var_expr,
-                    SymbolicExpr::number(mono[i])));
-            }
-        }
-
-        std::shared_ptr<SymbolicExpr> term_expr;
-        if (factors.empty()) {
-            term_expr = SymbolicExpr::number(1);
-        } else if (factors.size() == 1) {
-            term_expr = factors[0];
-        } else {
-            auto result = factors[0];
-            for (size_t i = 1; i < factors.size(); ++i) {
-                result = SymbolicExpr::multiply(result, factors[i]);
-            }
-            term_expr = result;
-        }
-        term_exprs.push_back(term_expr);
+        term_exprs.push_back(
+            detail::multipoly_term_to_expression(mono, coeff, vars));
     }
 
-    if (term_exprs.empty()) return SymbolicExpr::number(0);
-    if (term_exprs.size() == 1) return term_exprs[0]->simplify();
+    if (term_exprs.empty()) { return SymbolicExpr::number(0); }
+    if (term_exprs.size() == 1) { return term_exprs[0]->simplify(); }
 
     auto result = term_exprs[0];
     for (size_t i = 1; i < term_exprs.size(); ++i) {
@@ -217,355 +155,401 @@ static std::shared_ptr<SymbolicExpr> multipoly_to_symbolic(const LMCAS::MultiPol
     return result->simplify();
 }
 
+static std::optional<ExpressionResult> factor_numeric_content(
+    const std::shared_ptr<SymbolicExpr>& simp,
+    const std::shared_ptr<const AddNode>& add_node, ComputationContext& context) {
+    auto content_result =
+        LMCAS::symbolic_polynomial_content(*simp, context);
+    if (!content_result) {
+        if (content_result.error().code == CasErrc::UnsupportedExpression) {
+            return std::nullopt;
+        }
+        return LMCAS::ExpressionResult::failure(
+            content_result.error());
+    }
+    const Rational content_value = content_result.value();
+    if (content_value != Rational(0) && content_value != Rational(1)) {
+        auto content = content_value.is_integer()
+            ? SymbolicExpr::number(content_value.to_bigint())
+            : SymbolicExpr::number(content_value);
+        const Rational inverse_value = Rational(1) / content_value;
+        auto inverse_content = inverse_value.is_integer()
+            ? SymbolicExpr::number(inverse_value.to_bigint())
+            : SymbolicExpr::number(inverse_value);
+        std::vector<std::shared_ptr<const SymbolicNode>> primitive_terms;
+        primitive_terms.reserve(add_node->operands().size());
+        for (const auto& operand : add_node->operands()) {
+            auto term = LMCAS::detail::make_expression_ptr(operand);
+            auto primitive_term = SymbolicExpr::multiply(term, inverse_content)->simplify();
+            primitive_terms.push_back(LMCAS::detail::node(primitive_term));
+        }
+        auto primitive_sum = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<AddNode>(primitive_terms));
+        auto factored_primitive =
+            primitive_sum->factor_checked(context);
+        if (!factored_primitive) { return factored_primitive; }
+        return SymbolicExpr::multiply(
+            content, factored_primitive.value())->simplify();
+    }
+    return std::nullopt;
+}
+
+static std::optional<ExpressionResult> factor_common_polynomial(
+    const std::shared_ptr<const AddNode>& add_node, ComputationContext& context) {
+    std::shared_ptr<SymbolicExpr> common = nullptr;
+    for (const auto& op : add_node->operands()) {
+         auto expr_op = LMCAS::detail::make_expression_ptr(op);
+         if (!common) {
+             common = expr_op;
+         } else {
+             auto gcd = LMCAS::symbolic_polynomial_gcd(*common, *expr_op, context);
+             if (!gcd) {
+                 if (gcd.error().code == CasErrc::UnsupportedExpression) {
+                     return std::nullopt;
+                 }
+                 return gcd;
+             }
+             common = std::move(gcd.value());
+         }
+    }
+
+    if (common && !common->is_one() && !common->is_zero()) {
+         std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
+         for (const auto& op : add_node->operands()) {
+              auto term = LMCAS::detail::make_expression_ptr(op);
+
+              auto inv_common = SymbolicExpr::power(common, SymbolicExpr::number(-1));
+              auto quot = SymbolicExpr::multiply(term, inv_common);
+              quot = quot->simplify();
+              new_ops.push_back(LMCAS::detail::node(quot));
+         }
+         auto new_sum = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(new_ops));
+
+         auto factored_sum = new_sum->factor_checked(context);
+         if (!factored_sum) { return factored_sum; }
+
+         std::vector<std::shared_ptr<const SymbolicNode>> final_ops = {
+             LMCAS::detail::node(common),
+             LMCAS::detail::node(factored_sum.value())};
+         return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(final_ops));
+    }
+    return std::nullopt;
+}
+
+static std::vector<std::shared_ptr<const SymbolicNode>> rational_root_factors(
+    const std::vector<Rational>& roots, const Rational& leading,
+    const std::shared_ptr<SymbolicExpr>& x_node) {
+    std::vector<std::shared_ptr<const SymbolicNode>> factors;
+
+    if (!(leading == Rational(1))) {
+        factors.push_back(LMCAS::detail::node(SymbolicExpr::number(leading)));
+    }
+
+    for (const auto& r : roots) {
+        std::shared_ptr<SymbolicExpr> linear_factor;
+        if (r == Rational(0)) {
+            linear_factor = x_node;
+        } else {
+            auto neg_r = SymbolicExpr::number(Rational(0) - r);
+            linear_factor = SymbolicExpr::add(x_node, neg_r)->simplify();
+        }
+        factors.push_back(LMCAS::detail::node(linear_factor));
+    }
+    return factors;
+}
+
+static Polynomial<Rational> rational_root_product(
+    const std::vector<Rational>& roots, const Rational& leading,
+    const std::string& var) {
+    LMCAS::Polynomial<Rational> factored_product({leading}, var);
+    for (const auto& r : roots) {
+        LMCAS::Polynomial<Rational> lin({Rational(0) - r, Rational(1)}, var);
+        factored_product = factored_product * lin;
+    }
+    return factored_product;
+}
+
+struct RationalRootReconstruction {
+    std::vector<std::shared_ptr<const SymbolicNode>> factors;
+    Polynomial<Rational> quotient;
+    Polynomial<Rational> remainder;
+};
+
+static RationalRootReconstruction reconstruct_rational_roots(
+    const Polynomial<Rational>& polynomial,
+    const std::vector<Rational>& roots, const std::string& variable) {
+    auto symbol =
+        detail::make_expression_ptr(detail::make_node<VariableNode>(variable));
+    const auto leading = polynomial.lead_coeff();
+    auto factors = rational_root_factors(roots, leading, symbol);
+    auto product = rational_root_product(roots, leading, variable);
+    auto [quotient, remainder] = polynomial.div_mod(product);
+    return {
+        std::move(factors), std::move(quotient), std::move(remainder)};
+}
+
+static std::optional<ExpressionResult> factor_rational_univariate(
+    const std::shared_ptr<SymbolicExpr>& simp, const std::string& var,
+    ComputationContext& context) {
+    try {
+        auto converted = symbolic_to_poly<Rational>(simp, var);
+        if (!converted) {
+            if (converted.error().code == CasErrc::UnsupportedExpression) return std::nullopt;
+            return ExpressionResult::failure(converted.error());
+        }
+        const auto& poly = converted.value();
+        if (poly.degree() < 2) { return std::nullopt; }
+        auto roots = find_rational_roots(poly);
+        if (roots.empty()) { return std::nullopt; }
+        auto reconstruction =
+            reconstruct_rational_roots(poly, roots, var);
+        if (!reconstruction.remainder.is_zero()) return std::nullopt;
+        auto& factors = reconstruction.factors;
+        auto& quotient = reconstruction.quotient;
+        if (quotient.degree() >= 1) {
+            auto q_expr = poly_to_symbolic(quotient)->simplify();
+            if (quotient.degree() >= 2) {
+                auto q_factored = q_expr->factor_checked(context);
+                if (!q_factored) { return q_factored; }
+                factors.push_back(detail::node(q_factored.value()));
+            } else {
+                factors.push_back(detail::node(q_expr));
+            }
+        }
+        if (factors.size() > 1) {
+            return detail::make_expression_ptr(detail::make_node<MultiplyNode>(factors));
+        }
+        if (factors.size() == 1) { return detail::make_expression_ptr(factors[0]); }
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+static std::optional<ExpressionResult> factor_symbolic_quadratic(
+    const std::shared_ptr<SymbolicExpr>& simp, const std::string& var,
+    ComputationContext& context) {
+    try {
+        auto converted = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(simp, var);
+        if (!converted) {
+            if (converted.error().code == CasErrc::UnsupportedExpression) return std::nullopt;
+            return ExpressionResult::failure(converted.error());
+        }
+        const auto& poly = converted.value();
+        if (poly.degree() == 2) {
+              auto solved =
+                 LMCAS::solve_finite_checked(simp, var, context);
+             if (!solved) {
+                 return LMCAS::ExpressionResult::failure(
+                     solved.error());
+             }
+             auto solutions = std::move(solved.value());
+             if (solutions.size() == 2) {
+                  auto leading = poly.coeffs[2].val;
+                  if (!leading) { leading = SymbolicExpr::number(1); }
+                  leading = leading->simplify();
+
+                  auto x_node = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<VariableNode>(var));
+
+                  auto t1 = SymbolicExpr::add(x_node, SymbolicExpr::multiply(solutions[0], SymbolicExpr::number(-1)))->simplify();
+                  auto t2 = SymbolicExpr::add(x_node, SymbolicExpr::multiply(solutions[1], SymbolicExpr::number(-1)))->simplify();
+
+                  std::vector<std::shared_ptr<const SymbolicNode>> factors;
+                  if (!leading->is_one()) { factors.push_back(LMCAS::detail::node(leading)); }
+                  factors.push_back(LMCAS::detail::node(t1));
+                  factors.push_back(LMCAS::detail::node(t2));
+
+                  return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(factors));
+             }
+        }
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+static std::shared_ptr<SymbolicExpr> multivariate_factor_expression(
+    const MultiFactorResult& result) {
+    std::vector<std::shared_ptr<const SymbolicNode>> factor_nodes;
+
+    if (!(result.constant == Rational(1))) {
+        factor_nodes.push_back(
+            LMCAS::detail::node(SymbolicExpr::number(result.constant)));
+    }
+
+    for (size_t i = 0; i < result.factors.size(); ++i) {
+        auto factor_expr = multipoly_to_symbolic(result.factors[i]);
+        if (!factor_expr || factor_expr->is_zero()) { continue; }
+
+        int mult = (i < result.multiplicities.size())
+            ? result.multiplicities[i] : 1;
+
+        if (mult == 1) {
+            factor_nodes.push_back(LMCAS::detail::node(factor_expr));
+        } else {
+            auto pow_expr = SymbolicExpr::power(
+                factor_expr, SymbolicExpr::number(mult));
+            factor_nodes.push_back(LMCAS::detail::node(pow_expr));
+        }
+    }
+
+    if (factor_nodes.size() > 1) {
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<MultiplyNode>(std::move(factor_nodes)));
+    } else if (factor_nodes.size() == 1) {
+        return LMCAS::detail::make_expression_ptr(factor_nodes[0]);
+    }
+    return nullptr;
+}
+
+static std::optional<ExpressionResult> factor_multivariate_expression(
+    const std::shared_ptr<SymbolicExpr>& simp,
+    const std::set<std::string>& factor_variables, ComputationContext& context) {
+    if (!is_poly_expr_node(detail::node(simp))) { return std::nullopt; }
+    try {
+        std::vector<std::string> var_list(
+            factor_variables.begin(), factor_variables.end());
+        auto mpoly = symbolic_node_to_multipoly(LMCAS::detail::node(simp), var_list);
+
+        if (!mpoly.is_zero() && !mpoly.is_constant()) {
+            auto factorization =
+                LMCAS::factor_multivariate_checked(
+                    mpoly, context);
+            if (!factorization) {
+                return LMCAS::ExpressionResult::failure(
+                    factorization.error());
+            }
+            const auto& checked = factorization.value();
+            if (checked.completeness !=
+                LMCAS::Completeness::Complete) {
+                return simp;
+            }
+            const auto& result = checked.value;
+
+            if (!result.factors.empty()) {
+                auto expression = multivariate_factor_expression(result);
+                if (expression) { return expression; }
+            }
+        }
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+static std::optional<ExpressionResult> reconstruct_rational_root_factors(
+    const Polynomial<Rational>& polynomial, const std::vector<Rational>& roots,
+    const std::string& var) {
+    auto reconstruction =
+        reconstruct_rational_roots(polynomial, roots, var);
+    auto& factors = reconstruction.factors;
+    auto& quotient = reconstruction.quotient;
+    const auto& remainder = reconstruction.remainder;
+    if (remainder.is_zero() && quotient.degree() >= 1) {
+        auto q_expr = LMCAS::poly_to_symbolic(quotient)->simplify();
+        factors.push_back(LMCAS::detail::node(q_expr));
+    } else if (remainder.is_zero() && !quotient.is_zero() && quotient.degree() == 0) {
+        if (!(quotient.coeffs[0] == Rational(1))) {
+            factors.push_back(
+                LMCAS::detail::node(SymbolicExpr::number(quotient.coeffs[0])));
+        }
+    }
+    if (factors.size() > 1) {
+        return LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<MultiplyNode>(factors));
+    }
+    return std::nullopt;
+}
+
+static std::optional<ExpressionResult> factor_variable_rational_roots(
+    const std::shared_ptr<SymbolicExpr>& simp, const std::string& var) {
+    try {
+        auto poly = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(simp, var);
+        if (!poly) {
+            if (poly.error().code == CasErrc::UnsupportedExpression) { return std::nullopt; }
+            return ExpressionResult::failure(poly.error());
+        }
+        if (poly.value().degree() >= 2) {
+            auto converted = LMCAS::symbolic_to_poly<Rational>(simp, var);
+            if (!converted) {
+                if (converted.error().code == CasErrc::UnsupportedExpression) { return std::nullopt; }
+                return ExpressionResult::failure(converted.error());
+            }
+            const auto& poly_r = converted.value();
+            auto roots = LMCAS::find_rational_roots(poly_r);
+            if (!roots.empty()) {
+                return reconstruct_rational_root_factors(poly_r, roots, var);
+            }
+        }
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+static ExpressionResult factor_transcendental_expression(
+    const std::shared_ptr<SymbolicExpr>& simp,
+    ComputationContext& context) {
+    const auto transform_variables = LMCAS::free_variables(LMCAS::detail::node(simp));
+    if (transform_variables.empty()) { return simp; }
+
+    auto converted = LMCAS::factor_transcendental(
+        simp, *transform_variables.begin(), context);
+    if (!converted) { return ExpressionResult::failure(converted.error()); }
+    const auto& trans_factors = converted.value();
+    if (trans_factors.size() > 1) {
+        std::vector<std::shared_ptr<const SymbolicNode>> factor_nodes;
+        factor_nodes.reserve(trans_factors.size());
+        for (const auto& factor : trans_factors) {
+            if (factor && LMCAS::detail::node(factor)) {
+                factor_nodes.push_back(LMCAS::detail::node(factor));
+            }
+        }
+        if (factor_nodes.size() > 1) {
+            return LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<MultiplyNode>(std::move(factor_nodes)));
+        }
+    }
+    return simp;
+}
+
 LMCAS::ExpressionResult SymbolicExpr::factor_impl(
     LMCAS::ComputationContext& context) const {
     auto simp = simplify();
-    if (!simp || !LMCAS::detail::node(simp)) return simp;
+    if (!simp || !detail::node(simp)) { return simp; }
+    auto add_node = std::dynamic_pointer_cast<const AddNode>(detail::node(simp));
+    if (!add_node) { return factor_transcendental_expression(simp, context); }
 
-    if (auto add_node = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(simp))) {
+    auto content = factor_numeric_content(simp, add_node, context);
+    if (content) { return std::move(*content); }
+    auto common = factor_common_polynomial(add_node, context);
+    if (common) { return std::move(*common); }
 
-        auto content_result =
-            LMCAS::symbolic_polynomial_content(*simp, context);
-        if (!content_result) {
-            return LMCAS::ExpressionResult::failure(
-                content_result.error());
-        }
-        const Rational content_value = content_result.value();
-        if (content_value != Rational(0) && content_value != Rational(1)) {
-            auto content = content_value.is_integer()
-                ? number(content_value.to_BigInt())
-                : number(content_value);
-            const Rational inverse_value = Rational(1) / content_value;
-            auto inverse_content = inverse_value.is_integer()
-                ? number(inverse_value.to_BigInt())
-                : number(inverse_value);
-            std::vector<std::shared_ptr<const SymbolicNode>> primitive_terms;
-            primitive_terms.reserve(add_node->operands().size());
-            for (const auto& operand : add_node->operands()) {
-                auto term = LMCAS::detail::make_expression_ptr(operand);
-                auto primitive_term = multiply(term, inverse_content)->simplify();
-                primitive_terms.push_back(LMCAS::detail::node(primitive_term));
-            }
-            auto primitive_sum = LMCAS::detail::make_expression_ptr(
-                LMCAS::detail::make_node<AddNode>(primitive_terms));
-            auto factored_primitive =
-                primitive_sum->factor_checked(context);
-            if (!factored_primitive) return factored_primitive;
-            return multiply(
-                content, factored_primitive.value())->simplify();
-        }
-
-        /// 步骤 1:提取各项的公因式(GCD)
-        std::shared_ptr<SymbolicExpr> common = nullptr;
-        for (const auto& op : add_node->operands()) {
-             auto expr_op = LMCAS::detail::make_expression_ptr(op);
-             if (!common) common = expr_op;
-             else {
-                 auto gcd = LMCAS::symbolic_polynomial_gcd(
-                     *common, *expr_op, context);
-                 if (!gcd) return gcd;
-                 common = std::move(gcd.value());
-             }
-        }
-
-        if (common && !common->is_one() && !common->is_zero()) {
-             std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
-             for (const auto& op : add_node->operands()) {
-                  auto term = LMCAS::detail::make_expression_ptr(op);
-
-                  auto inv_common = power(common, number(-1));
-                  auto quot = multiply(term, inv_common);
-                  quot = quot->simplify();
-                  new_ops.push_back(LMCAS::detail::node(quot));
-             }
-             auto new_sum = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(new_ops));
-
-             /// 递归分解余下的和式
-             auto factored_sum = new_sum->factor_checked(context);
-             if (!factored_sum) return factored_sum;
-
-             std::vector<std::shared_ptr<const SymbolicNode>> final_ops = {
-                 LMCAS::detail::node(common),
-                 LMCAS::detail::node(factored_sum.value())};
-             return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(final_ops));
-        }
-
-        /// 步骤 2:一元多项式分解(支持任意次数)
-        auto factor_variables = LMCAS::free_variables(LMCAS::detail::node(simp));
-        if (factor_variables.size() == 1) {
-             std::string var = *factor_variables.begin();
-             try {
-                 auto poly = LMCAS::symbolic_to_poly<Rational>(simp, var);
-                 int deg = poly.degree();
-
-                 if (deg >= 2) {
-                      /// 使用有理根定理逐步分解
-                      auto roots = LMCAS::find_rational_roots(poly);
-
-                      if (!roots.empty()) {
-                           auto x_node = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<VariableNode>(var));
-                           auto leading = poly.lead_coeff();
-
-                           std::vector<std::shared_ptr<const SymbolicNode>> factors;
-
-                           /// 首项系数
-                           if (!(leading == Rational(1))) {
-                               factors.push_back(LMCAS::detail::node(number(leading)));
-                           }
-
-                           /// 从根构建线性因子 (x - r)
-                           for (const auto& r : roots) {
-                               std::shared_ptr<SymbolicExpr> linear_factor;
-                               if (r == Rational(0)) {
-                                   linear_factor = x_node;
-                               } else {
-                                   auto neg_r = number(Rational(0) - r);
-                                   linear_factor = SymbolicExpr::add(x_node, neg_r)->simplify();
-                               }
-                               factors.push_back(LMCAS::detail::node(linear_factor));
-                           }
-
-                           /// 计算余下的不可约因子:原多项式 / 已分解因子的乘积
-                           LMCAS::Polynomial<Rational> factored_product({leading}, var);
-                           for (const auto& r : roots) {
-                               LMCAS::Polynomial<Rational> lin({Rational(0) - r, Rational(1)}, var);
-                               factored_product = factored_product * lin;
-                           }
-
-                           auto [quotient, remainder] = poly.div_mod(factored_product);
-
-                           if (remainder.is_zero() && quotient.degree() >= 1) {
-                               /// 余下的不可约因子
-                               if (quotient.degree() == 1 && quotient.lead_coeff() == Rational(1)) {
-                                   /// 一次因子直接加入
-                                   auto q_expr = LMCAS::poly_to_symbolic(quotient)->simplify();
-                                   factors.push_back(LMCAS::detail::node(q_expr));
-                               } else if (quotient.degree() >= 2) {
-                                   /// 尝试递归分解余下部分
-                                   auto q_expr = LMCAS::poly_to_symbolic(quotient)->simplify();
-                                   auto q_factored =
-                                       q_expr->factor_checked(context);
-                                   if (!q_factored) return q_factored;
-                                   factors.push_back(LMCAS::detail::node(
-                                       q_factored.value()));
-                               } else {
-                                   auto q_expr = LMCAS::poly_to_symbolic(quotient)->simplify();
-                                   factors.push_back(LMCAS::detail::node(q_expr));
-                               }
-                           } else if (!remainder.is_zero()) {
-                               /// 除法有余数 -> 回退到原始方法
-                               goto try_solve_quadratic;
-                           }
-
-                           if (factors.size() > 1) {
-                               return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(factors));
-                           } else if (factors.size() == 1) {
-                               return LMCAS::detail::make_expression_ptr(factors[0]);
-                           }
-                      }
-                 }
-             } catch (const std::invalid_argument&) {
-             } catch (const std::out_of_range&) {
-             }
-
-             try_solve_quadratic:
-             /// 后备:二次多项式通过求解方程分解
-             try {
-                 auto poly = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(
-                     simp, *factor_variables.begin());
-                 if (poly.degree() == 2) {
-                      std::string var = *factor_variables.begin();
-                      auto solved =
-                          LMCAS::solve_finite_checked(simp, var, context);
-                      if (!solved) {
-                          return LMCAS::ExpressionResult::failure(
-                              solved.error());
-                      }
-                      auto solutions = std::move(solved.value());
-                      if (solutions.size() == 2) {
-                           auto leading = poly.coeffs[2].val;
-                           if (!leading) leading = number(1);
-                           leading = leading->simplify();
-
-                           auto x_node = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<VariableNode>(var));
-
-                           auto t1 = SymbolicExpr::add(x_node, multiply(solutions[0], number(-1)))->simplify();
-                           auto t2 = SymbolicExpr::add(x_node, multiply(solutions[1], number(-1)))->simplify();
-
-                           std::vector<std::shared_ptr<const SymbolicNode>> factors;
-                           if (!leading->is_one()) factors.push_back(LMCAS::detail::node(leading));
-                           factors.push_back(LMCAS::detail::node(t1));
-                           factors.push_back(LMCAS::detail::node(t2));
-
-                           return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(factors));
-                      }
-                 }
-             } catch (const std::invalid_argument&) {
-             } catch (const std::out_of_range&) {
-             }
-        }
-
-        /// 步骤 3:多元多项式 - 先尝试 factor_multivariate,再回退逐变量分解
-        if (factor_variables.size() > 1) {
-            /// 3a: 检测是否为多项式表达式,若是则使用 MultiPoly 路径
-            if (is_poly_expr_node(LMCAS::detail::node(simp))) {
-                try {
-                    std::vector<std::string> var_list(
-                        factor_variables.begin(), factor_variables.end());
-                    auto mpoly = symbolic_node_to_multipoly(LMCAS::detail::node(simp), var_list);
-
-                    if (!mpoly.is_zero() && !mpoly.is_constant()) {
-                        auto factorization =
-                            LMCAS::factor_multivariate_checked(
-                                mpoly, context);
-                        if (!factorization) {
-                            return LMCAS::ExpressionResult::failure(
-                                factorization.error());
-                        }
-                        const auto& checked = factorization.value();
-                        if (checked.completeness !=
-                            LMCAS::Completeness::Complete) {
-                            return simp;
-                        }
-                        const auto& result = checked.value;
-
-                        /// 检查分解是否产生了多个因子
-                        if (!result.factors.empty()) {
-                            std::vector<std::shared_ptr<const SymbolicNode>> factor_nodes;
-
-                            /// 常数因子
-                            if (!(result.constant == Rational(1))) {
-                                factor_nodes.push_back(
-                                    LMCAS::detail::node(SymbolicExpr::number(result.constant)));
-                            }
-
-                            /// 各不可约因子
-                            for (size_t i = 0; i < result.factors.size(); ++i) {
-                                auto factor_expr = multipoly_to_symbolic(result.factors[i]);
-                                if (!factor_expr || factor_expr->is_zero()) continue;
-
-                                int mult = (i < result.multiplicities.size())
-                                    ? result.multiplicities[i] : 1;
-
-                                if (mult == 1) {
-                                    factor_nodes.push_back(LMCAS::detail::node(factor_expr));
-                                } else {
-                                    auto pow_expr = SymbolicExpr::power(
-                                        factor_expr, SymbolicExpr::number(mult));
-                                    factor_nodes.push_back(LMCAS::detail::node(pow_expr));
-                                }
-                            }
-
-                            if (factor_nodes.size() > 1) {
-                                return LMCAS::detail::make_expression_ptr(
-                                    LMCAS::detail::make_node<MultiplyNode>(std::move(factor_nodes)));
-                            } else if (factor_nodes.size() == 1) {
-                                return LMCAS::detail::make_expression_ptr(factor_nodes[0]);
-                            }
-                        }
-                    }
-                } catch (const std::invalid_argument&) {
-                    /// MultiPoly conversion failed; use the variable fallback.
-                } catch (const std::out_of_range&) {
-                    /// MultiPoly conversion failed; use the variable fallback.
-                }
-            }
-
-            /// 3b: 回退 - 逐变量尝试有理根分解
-            for (const auto& var : factor_variables) {
-                try {
-                    auto poly = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(simp, var);
-                    if (poly.degree() >= 2) {
-                        /// 尝试用 Rational 系数做分解
-                        auto poly_r = LMCAS::symbolic_to_poly<Rational>(simp, var);
-                        auto roots = LMCAS::find_rational_roots(poly_r);
-                        if (!roots.empty()) {
-                            auto x_node = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<VariableNode>(var));
-                            std::vector<std::shared_ptr<const SymbolicNode>> factors;
-
-                            auto leading = poly_r.lead_coeff();
-                            if (!(leading == Rational(1))) {
-                                factors.push_back(LMCAS::detail::node(number(leading)));
-                            }
-
-                            for (const auto& r : roots) {
-                                std::shared_ptr<SymbolicExpr> linear_factor;
-                                if (r == Rational(0)) {
-                                    linear_factor = x_node;
-                                } else {
-                                    auto neg_r = number(Rational(0) - r);
-                                    linear_factor = SymbolicExpr::add(x_node, neg_r)->simplify();
-                                }
-                                factors.push_back(LMCAS::detail::node(linear_factor));
-                            }
-
-                            /// 计算余下因子
-                            LMCAS::Polynomial<Rational> factored_product({leading}, var);
-                            for (const auto& r : roots) {
-                                LMCAS::Polynomial<Rational> lin({Rational(0) - r, Rational(1)}, var);
-                                factored_product = factored_product * lin;
-                            }
-                            auto [quotient, remainder] = poly_r.div_mod(factored_product);
-                            if (remainder.is_zero() && quotient.degree() >= 1) {
-                                auto q_expr = LMCAS::poly_to_symbolic(quotient)->simplify();
-                                factors.push_back(LMCAS::detail::node(q_expr));
-                            } else if (remainder.is_zero() && !quotient.is_zero() && quotient.degree() == 0) {
-                                /// 常数商 -> 已完全分解
-                                if (!(quotient.coeffs[0] == Rational(1))) {
-                                    factors.push_back(
-                                        LMCAS::detail::node(number(quotient.coeffs[0])));
-                                }
-                            }
-
-                            if (factors.size() > 1) {
-                                return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(factors));
-                            }
-                        }
-                    }
-                } catch (const std::invalid_argument&) {
-                    continue;
-                } catch (const std::out_of_range&) {
-                    continue;
-                }
-            }
+    auto variables = free_variables(detail::node(simp));
+    if (variables.size() == 1) {
+        const auto& variable = *variables.begin();
+        auto rational = factor_rational_univariate(simp, variable, context);
+        if (rational) { return std::move(*rational); }
+        auto quadratic = factor_symbolic_quadratic(simp, variable, context);
+        if (quadratic) { return std::move(*quadratic); }
+    }
+    if (variables.size() > 1) {
+        auto multivariate = factor_multivariate_expression(simp, variables, context);
+        if (multivariate) { return std::move(*multivariate); }
+        for (const auto& variable : variables) {
+            auto factored = factor_variable_rational_roots(simp, variable);
+            if (factored) { return std::move(*factored); }
         }
     }
-
-    /// 标准多项式分解未匹配时,后备路径检测超越函数并尝试超越因式分解.
-    {
-        const auto transform_variables =
-            LMCAS::free_variables(LMCAS::detail::node(simp));
-        std::string target_var;
-        if (!transform_variables.empty()) {
-            target_var = *transform_variables.begin();
-        }
-
-        if (!target_var.empty()) {
-            try {
-                auto trans_factors = LMCAS::factor_transcendental(simp, target_var);
-                if (trans_factors.size() > 1) {
-                    /// 超越分解成功:组装乘积表达式
-                    std::vector<std::shared_ptr<const SymbolicNode>> factor_nodes;
-                    factor_nodes.reserve(trans_factors.size());
-                    for (const auto& f : trans_factors) {
-                        if (f && LMCAS::detail::node(f)) {
-                            factor_nodes.push_back(LMCAS::detail::node(f));
-                        }
-                    }
-                    if (factor_nodes.size() > 1) {
-                        return LMCAS::detail::make_expression_ptr(
-                            LMCAS::detail::make_node<MultiplyNode>(std::move(factor_nodes)));
-                    }
-                }
-            } catch (const std::invalid_argument&) {
-                /// Transcendental conversion did not apply.
-            } catch (const std::out_of_range&) {
-                /// Transcendental conversion did not apply.
-            }
-        }
-    }
-
-    return simp;
+    return factor_transcendental_expression(simp, context);
 }
 
 LMCAS::ExpressionResult SymbolicExpr::factor_checked(
@@ -573,7 +557,7 @@ LMCAS::ExpressionResult SymbolicExpr::factor_checked(
 {
     constexpr const char* operation = "factor";
     auto budget = context.consume_steps(1, operation);
-    if (!budget) return LMCAS::ExpressionResult::failure(budget.error());
+    if (!budget) { return LMCAS::ExpressionResult::failure(budget.error()); }
     try {
         return factor_impl(context);
     } catch (const std::bad_alloc&) {
@@ -592,324 +576,5 @@ LMCAS::ExpressionResult SymbolicExpr::factor_checked() const
     return factor_checked(context);
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
-    auto simp = simplify();
-    if (!simp || !LMCAS::detail::node(simp)) return simp;
 
-    /// 辅助 lambda:从乘积节点中分离分子因子和分母因子.
-    /// 分母因子 = 含负指数的 PowerNode.
-    auto separate_num_den = [](const std::shared_ptr<const SymbolicNode>& node,
-                               std::vector<std::shared_ptr<const SymbolicNode>>& num_out,
-                               std::vector<std::shared_ptr<const SymbolicNode>>& den_out) {
-        auto classify = [&](const std::shared_ptr<const SymbolicNode>& factor) {
-            if (auto pow = std::dynamic_pointer_cast<const PowerNode>(factor)) {
-                if (auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pow->exponent())) {
-                    bool is_negative = false;
-                    if (std::holds_alternative<BigInt>(exp_num->value())) {
-                        is_negative = std::get<BigInt>(exp_num->value()).IsNegative();
-                    } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-                        is_negative = std::get<lmmc_real_t>(exp_num->value()) < 0;
-                    } else if (std::holds_alternative<Rational>(exp_num->value())) {
-                        is_negative = std::get<Rational>(exp_num->value()).get_numerator().IsNegative();
-                    }
-                    if (is_negative) {
-                        /// 取绝对值指数
-                        std::shared_ptr<const SymbolicNode> pos_exp;
-                        if (std::holds_alternative<BigInt>(exp_num->value())) {
-                            pos_exp = LMCAS::detail::make_node<NumberNode>(BigInt(0) - std::get<BigInt>(exp_num->value()));
-                        } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-                            pos_exp = LMCAS::detail::make_node<NumberNode>(-std::get<lmmc_real_t>(exp_num->value()));
-                        } else {
-                            auto r = std::get<Rational>(exp_num->value());
-                            pos_exp = LMCAS::detail::make_node<NumberNode>(Rational(BigInt(0) - r.get_numerator(), r.get_denominator()));
-                        }
-                        auto pos_exp_num = std::dynamic_pointer_cast<const NumberNode>(pos_exp);
-                        if (pos_exp_num && pos_exp_num->is_one()) {
-                            den_out.push_back(pow->base());
-                        } else {
-                            den_out.push_back(LMCAS::detail::make_node<PowerNode>(pow->base(), pos_exp));
-                        }
-                        return;
-                    }
-                }
-            }
-            num_out.push_back(factor);
-        };
-
-        if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-            for (const auto& op : mul->operands()) {
-                classify(op);
-            }
-        } else {
-            classify(node);
-        }
-    };
-
-    /// 辅助 lambda:从因子列表构建乘积表达式
-    auto build_product = [](const std::vector<std::shared_ptr<const SymbolicNode>>& factors) -> std::shared_ptr<SymbolicExpr> {
-        if (factors.empty()) return SymbolicExpr::number(1);
-        if (factors.size() == 1) return LMCAS::detail::make_expression_ptr(factors[0]);
-        return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(factors));
-    };
-
-    /// 策略 1:表达式是 AddNode,各项可能含公共分母因子.
-    /// 例如 simplify 后 (x^2-1)/(x-1) 变为 -1*(x-1)^-1 + x^2*(x-1)^-1
-    /// 需要提取公共分母,重组为 (分子之和)/分母 再做 GCD 约分.
-    if (auto add_node = std::dynamic_pointer_cast<const AddNode>(LMCAS::detail::node(simp))) {
-        /// 对每个加法项分离分子/分母
-        struct TermInfo {
-            std::shared_ptr<SymbolicExpr> numerator;
-            std::shared_ptr<SymbolicExpr> denominator;
-        };
-        std::vector<TermInfo> terms;
-        bool has_denominator = false;
-
-        for (const auto& term : add_node->operands()) {
-            std::vector<std::shared_ptr<const SymbolicNode>> t_num, t_den;
-            separate_num_den(term, t_num, t_den);
-            auto num_expr = build_product(t_num)->simplify();
-            auto den_expr = build_product(t_den)->simplify();
-            if (!den_expr->is_one()) has_denominator = true;
-            terms.push_back({num_expr, den_expr});
-        }
-
-        if (has_denominator) {
-            /// 计算公共分母(所有项分母的 LCM,简化处理:乘积)
-            /// 对于常见情况(所有项分母相同),直接提取.
-            /// 检查是否所有分母相同
-            bool all_same_den = true;
-            auto first_den_str = terms[0].denominator->to_string();
-            for (size_t i = 1; i < terms.size(); ++i) {
-                if (terms[i].denominator->to_string() != first_den_str) {
-                    all_same_den = false;
-                    break;
-                }
-            }
-
-            std::shared_ptr<SymbolicExpr> combined_num;
-            std::shared_ptr<SymbolicExpr> combined_den;
-
-            if (all_same_den) {
-                /// 所有项分母相同:分子直接相加
-                combined_den = terms[0].denominator;
-                std::vector<std::shared_ptr<const SymbolicNode>> num_ops;
-                for (const auto& t : terms) {
-                    if (t.numerator && LMCAS::detail::node(t.numerator)) {
-                        num_ops.push_back(LMCAS::detail::node(t.numerator));
-                    }
-                }
-                if (num_ops.empty()) return SymbolicExpr::number(0);
-                if (num_ops.size() == 1) combined_num = LMCAS::detail::make_expression_ptr(num_ops[0]);
-                else combined_num = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(num_ops));
-                combined_num = combined_num->simplify();
-            } else {
-                /// 分母不同:通分(乘以其他项的分母)
-                /// 计算总分母 = 所有不同分母的乘积
-                std::shared_ptr<SymbolicExpr> total_den = SymbolicExpr::number(1);
-                /// 收集不同的分母
-                std::vector<std::shared_ptr<SymbolicExpr>> unique_dens;
-                for (const auto& t : terms) {
-                    if (!t.denominator->is_one()) {
-                        bool found = false;
-                        for (const auto& ud : unique_dens) {
-                            if (ud->to_string() == t.denominator->to_string()) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            unique_dens.push_back(t.denominator);
-                        }
-                    }
-                }
-                for (const auto& ud : unique_dens) {
-                    total_den = SymbolicExpr::multiply(total_den, ud)->simplify();
-                }
-                combined_den = total_den;
-
-                /// 每项分子乘以 (总分母 / 该项分母)
-                std::vector<std::shared_ptr<const SymbolicNode>> num_ops;
-                for (const auto& t : terms) {
-                    auto factor = divide(total_den, t.denominator)->simplify();
-                    auto adjusted_num = SymbolicExpr::multiply(t.numerator, factor)->simplify();
-                    if (adjusted_num && LMCAS::detail::node(adjusted_num)) {
-                        num_ops.push_back(LMCAS::detail::node(adjusted_num));
-                    }
-                }
-                if (num_ops.empty()) return SymbolicExpr::number(0);
-                if (num_ops.size() == 1) combined_num = LMCAS::detail::make_expression_ptr(num_ops[0]);
-                else combined_num = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(num_ops));
-                combined_num = combined_num->expand()->simplify();
-            }
-
-            /// 对 combined_num / combined_den 做多项式 GCD 约分
-            combined_den = combined_den->expand()->simplify();
-
-            auto rational_variables =
-                LMCAS::free_variables(LMCAS::detail::node(combined_num));
-            const auto denominator_variables =
-                LMCAS::free_variables(LMCAS::detail::node(combined_den));
-            rational_variables.insert(denominator_variables.begin(),
-                                      denominator_variables.end());
-
-            auto cur_num = combined_num;
-            auto cur_den = combined_den;
-
-            for (const auto& var : rational_variables) {
-                try {
-                    auto num_expanded = cur_num->expand()->simplify();
-                    auto den_expanded = cur_den->expand()->simplify();
-
-                    /// 使用 SymbolicPolyCoeff 保留其他变量作为符号系数
-                    auto poly_num = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(num_expanded, var);
-                    auto poly_den = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(den_expanded, var);
-
-                    if (poly_num.is_zero()) return SymbolicExpr::number(0);
-                    if (poly_den.is_zero()) return simp;
-
-                    /// 尝试用 Rational 系数做 GCD(纯数值系数时更可靠)
-                    auto poly_num_r = LMCAS::symbolic_to_poly<Rational>(num_expanded, var);
-                    auto poly_den_r = LMCAS::symbolic_to_poly<Rational>(den_expanded, var);
-
-                    /// 检查 Rational 转换是否丢失了信息(多元情况)
-                    bool rational_ok = true;
-                    auto reconstructed_num = LMCAS::poly_to_symbolic(poly_num_r)->expand()->simplify();
-                    auto reconstructed_den = LMCAS::poly_to_symbolic(poly_den_r)->expand()->simplify();
-                    auto diff_num = SymbolicExpr::add(num_expanded, SymbolicExpr::multiply(SymbolicExpr::number(-1), reconstructed_num))->simplify();
-                    auto diff_den = SymbolicExpr::add(den_expanded, SymbolicExpr::multiply(SymbolicExpr::number(-1), reconstructed_den))->simplify();
-                    if (!diff_num->is_zero() || !diff_den->is_zero()) {
-                        rational_ok = false;
-                    }
-
-                    if (rational_ok) {
-                        auto g = LMCAS::Polynomial<Rational>::gcd(poly_num_r, poly_den_r);
-                        if (g.degree() >= 1) {
-                            auto [q_num, r_num] = poly_num_r.div_mod(g);
-                            auto [q_den, r_den] = poly_den_r.div_mod(g);
-                            cur_num = LMCAS::poly_to_symbolic(q_num)->simplify();
-                            cur_den = LMCAS::poly_to_symbolic(q_den)->simplify();
-                        }
-                    } else {
-                        /// 多元情况:使用 SymbolicPolyCoeff 做 GCD
-                        auto g = LMCAS::Polynomial<LMCAS::SymbolicPolyCoeff>::gcd(poly_num, poly_den);
-                        if (g.degree() >= 1) {
-                            auto [q_num, r_num] = poly_num.div_mod(g);
-                            auto [q_den, r_den] = poly_den.div_mod(g);
-                            cur_num = LMCAS::poly_to_symbolic(q_num)->simplify();
-                            cur_den = LMCAS::poly_to_symbolic(q_den)->simplify();
-                        }
-                    }
-                } catch (const std::invalid_argument&) {
-                    continue;
-                } catch (const std::out_of_range&) {
-                    continue;
-                } catch (const std::runtime_error&) {
-                    continue;
-                }
-            }
-
-            if (cur_den->is_one()) return cur_num;
-
-            /// 分母为 -1 时取负
-            if (LMCAS::detail::node(cur_den)) {
-                auto diff = SymbolicExpr::add(LMCAS::detail::make_expression_ptr(LMCAS::detail::node(cur_den)), SymbolicExpr::number(-1))->simplify();
-                if (diff->is_zero()) {
-                    return SymbolicExpr::multiply(SymbolicExpr::number(-1), cur_num)->simplify();
-                }
-            }
-
-            return divide(cur_num, cur_den)->simplify();
-        }
-    }
-
-    /// 策略 2:表达式是 MultiplyNode,直接分离分子/分母.
-    std::vector<std::shared_ptr<const SymbolicNode>> num_factors;
-    std::vector<std::shared_ptr<const SymbolicNode>> den_factors;
-    separate_num_den(LMCAS::detail::node(simp), num_factors, den_factors);
-
-    if (den_factors.empty()) return simp;
-
-    auto numerator = build_product(num_factors)->simplify();
-    auto denominator = build_product(den_factors)->simplify();
-
-    if (denominator->is_one()) return numerator;
-
-    auto rational_variables = LMCAS::free_variables(LMCAS::detail::node(numerator));
-    const auto denominator_variables =
-        LMCAS::free_variables(LMCAS::detail::node(denominator));
-    rational_variables.insert(denominator_variables.begin(),
-                              denominator_variables.end());
-
-    if (rational_variables.empty()) {
-        return divide(numerator, denominator)->simplify();
-    }
-
-    auto cur_num = numerator;
-    auto cur_den = denominator;
-
-    for (const auto& var : rational_variables) {
-        try {
-            auto num_expanded = cur_num->expand()->simplify();
-            auto den_expanded = cur_den->expand()->simplify();
-
-            auto poly_num_r = LMCAS::symbolic_to_poly<Rational>(num_expanded, var);
-            auto poly_den_r = LMCAS::symbolic_to_poly<Rational>(den_expanded, var);
-
-            /// 检查 Rational 转换是否丢失了信息
-            bool rational_ok = true;
-            auto reconstructed_num = LMCAS::poly_to_symbolic(poly_num_r)->expand()->simplify();
-            auto reconstructed_den = LMCAS::poly_to_symbolic(poly_den_r)->expand()->simplify();
-            auto diff_num = SymbolicExpr::add(num_expanded, SymbolicExpr::multiply(SymbolicExpr::number(-1), reconstructed_num))->simplify();
-            auto diff_den = SymbolicExpr::add(den_expanded, SymbolicExpr::multiply(SymbolicExpr::number(-1), reconstructed_den))->simplify();
-            if (!diff_num->is_zero() || !diff_den->is_zero()) {
-                rational_ok = false;
-            }
-
-            if (rational_ok) {
-                if (poly_num_r.is_zero()) return SymbolicExpr::number(0);
-                if (poly_den_r.is_zero()) return simp;
-
-                auto g = LMCAS::Polynomial<Rational>::gcd(poly_num_r, poly_den_r);
-                if (g.degree() >= 1) {
-                    auto [q_num, r_num] = poly_num_r.div_mod(g);
-                    auto [q_den, r_den] = poly_den_r.div_mod(g);
-                    cur_num = LMCAS::poly_to_symbolic(q_num)->simplify();
-                    cur_den = LMCAS::poly_to_symbolic(q_den)->simplify();
-                }
-            } else {
-                auto poly_num = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(num_expanded, var);
-                auto poly_den = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(den_expanded, var);
-
-                if (poly_num.is_zero()) return SymbolicExpr::number(0);
-                if (poly_den.is_zero()) return simp;
-
-                auto g = LMCAS::Polynomial<LMCAS::SymbolicPolyCoeff>::gcd(poly_num, poly_den);
-                if (g.degree() >= 1) {
-                    auto [q_num, r_num] = poly_num.div_mod(g);
-                    auto [q_den, r_den] = poly_den.div_mod(g);
-                    cur_num = LMCAS::poly_to_symbolic(q_num)->simplify();
-                    cur_den = LMCAS::poly_to_symbolic(q_den)->simplify();
-                }
-            }
-        } catch (const std::invalid_argument&) {
-            continue;
-        } catch (const std::out_of_range&) {
-            continue;
-        } catch (const std::runtime_error&) {
-            continue;
-        }
-    }
-
-    if (cur_den->is_one()) return cur_num;
-
-    if (LMCAS::detail::node(cur_den)) {
-        auto diff = SymbolicExpr::add(LMCAS::detail::make_expression_ptr(LMCAS::detail::node(cur_den)), SymbolicExpr::number(-1))->simplify();
-        if (diff->is_zero()) {
-            return SymbolicExpr::multiply(SymbolicExpr::number(-1), cur_num)->simplify();
-        }
-    }
-
-    return divide(cur_num, cur_den)->simplify();
 }
-
-} // namespace LMCAS

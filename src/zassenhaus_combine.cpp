@@ -1,48 +1,20 @@
-/**
- * @file transcendental_factor.cpp
- * @brief 混合超越方程不可约因式分解:换元检测与主入口实现.
- *
- * 本文件实现 Phase 1(换元检测)的核心逻辑:遍历表达式 AST,
- * 收集依赖目标变量的超越子表达式,去重后分配代数不定元.
+/** @file zassenhaus_combine.cpp
+ * @brief 在计算预算内对提升因子进行精确有理重构。
  */
-
-#include "transcendental_factor.hpp"
-#include "symbolic_ast.hpp"
-#include "poly_utils.hpp"
-#include "internal/expression_analysis.hpp"
+#include "exact_factorization.hpp"
+#include "internal/exact_factorization_support.hpp"
 
 #include <string>
 #include <vector>
 #include <unordered_set>
 #include <cmath>
 #include <limits>
+#include <cstdint>
 
 
 namespace LMCAS {
 
 
-/**
- * @brief 将 BigInt 系数归约到对称表示 [-m/2, m/2).
- *
- * @param[in] c 待归约的系数
- * @param[in] m 模数(正整数)
- * @return 对称表示下的归约值
- * @internal
- */
-static BigInt zc_symmetric_mod(const BigInt& c, const BigInt& m) {
-    if (m.is_zero()) return c;
-
-    BigInt r = c % m;
-    if (r.IsNegative()) {
-        r = r + m;
-    }
-
-    BigInt half_m = m / BigInt(2);
-    if (r > half_m) {
-        r = r - m;
-    }
-    return r;
-}
 
 /**
  * 在模 m 下乘以按字典序枚举的提升因子子集.
@@ -76,7 +48,7 @@ static Result<std::vector<BigInt>> zc_subset_product(
             }
         }
         for (auto& coefficient : next) {
-            coefficient = zc_symmetric_mod(coefficient, mod);
+            coefficient = detail::symmetric_remainder(coefficient, mod);
         }
         while (!next.empty() && next.back().is_zero()) next.pop_back();
         product = std::move(next);
@@ -129,7 +101,7 @@ static bool zc_rational_reconstruction(
     BigInt& num,
     BigInt& den) {
 
-    if (m.is_zero() || m.IsNegative()) return false;
+    if (m.is_zero() || m.is_negative()) return false;
 
     /// 对于可精确表示的小模数,委托给 int64_t 版本
     const auto a_small = a.try_to_int64();
@@ -142,15 +114,15 @@ static bool zc_rational_reconstruction(
             LMCAS::rational_reconstruction_checked(a_val, m_val);
         if (!reconstructed) return false;
         const auto [p, q] = reconstructed.value();
-        num = BigInt(static_cast<long long>(p));
-        den = BigInt(static_cast<long long>(q));
+        num = BigInt(static_cast<std::int64_t>(p));
+        den = BigInt(static_cast<std::int64_t>(q));
         return true;
     }
 
     /// BigInt 版本的有理重构
     /// 将 a 归约到 [0, m)
     BigInt a_mod = a % m;
-    if (a_mod.IsNegative()) {
+    if (a_mod.is_negative()) {
         a_mod = a_mod + m;
     }
 
@@ -178,18 +150,18 @@ static bool zc_rational_reconstruction(
     BigInt q_val = s1;
 
     /// 确保分母为正
-    if (q_val.IsNegative()) {
+    if (q_val.is_negative()) {
         p = -p;
         q_val = -q_val;
     }
 
     /// 验证界约束
-    if (p.Abs() > bound || q_val.is_zero() || q_val > bound) {
+    if (p.abs() > bound || q_val.is_zero() || q_val > bound) {
         return false;
     }
 
     /// 验证 gcd(|p|, q) == 1
-    BigInt g = BigInt::gcd(p.Abs(), q_val);
+    BigInt g = BigInt::gcd(p.abs(), q_val);
     if (g != BigInt(1)) {
         return false;
     }
@@ -297,13 +269,19 @@ static Result<void> zc_validate_lifted_product(
     const std::vector<Polynomial<BigInt>>& lifted_factors,
     const BigInt& modulus,
     ComputationContext& context) {
-    if (lifted_factors.empty()) return Result<void>::success();
+    if (lifted_factors.empty()) {
+        return Result<void>::success();
+    }
 
     std::vector<size_t> all_indices(lifted_factors.size());
-    for (size_t i = 0; i < all_indices.size(); ++i) all_indices[i] = i;
+    for (size_t i = 0; i < all_indices.size(); ++i) {
+        all_indices[i] = i;
+    }
     auto product_result =
         zc_subset_product(lifted_factors, all_indices, modulus, context);
-    if (!product_result) return Result<void>::failure(product_result.error());
+    if (!product_result) {
+        return Result<void>::failure(product_result.error());
+    }
     auto product = std::move(product_result.value());
 
     BigInt denominator_lcm(1);
@@ -317,10 +295,15 @@ static Result<void> zc_validate_lifted_product(
         BigInt integer_coefficient =
             coefficient.get_numerator() *
             (denominator_lcm / coefficient.get_denominator());
-        expected.push_back(zc_symmetric_mod(integer_coefficient, modulus));
+        expected.push_back(
+            detail::symmetric_remainder(integer_coefficient, modulus));
     }
-    while (!expected.empty() && expected.back().is_zero()) expected.pop_back();
-    while (!product.empty() && product.back().is_zero()) product.pop_back();
+    while (!expected.empty() && expected.back().is_zero()) {
+        expected.pop_back();
+    }
+    while (!product.empty() && product.back().is_zero()) {
+        product.pop_back();
+    }
     if (!(product == expected)) {
         return Result<void>::failure(
             CasErrc::InvalidArgument,
@@ -361,13 +344,96 @@ static ZassenhausResult zc_finalize(
             std::move(factors), completeness, std::move(reason)});
 }
 
+struct ZcFactorSearch {
+    const std::vector<Polynomial<BigInt>>& lifted;
+    const BigInt& modulus;
+    ComputationContext& context;
+    Polynomial<Rational> remaining;
+    std::vector<Polynomial<Rational>> factors;
+    std::vector<size_t> active;
+    const char* exhausted_reason = "";
+};
+
+static Result<bool> zc_try_candidate(
+    ZcFactorSearch& search, const std::vector<size_t>& positions) {
+    auto step = search.context.consume_steps(1, "zassenhaus_combine");
+    if (!step) {
+        search.exhausted_reason =
+            "budget exhausted during bounded combination enumeration";
+        return Result<bool>::failure(step.error());
+    }
+    auto indices = zc_select_indices(search.active, positions);
+    auto product = zc_subset_product(
+        search.lifted, indices, search.modulus, search.context);
+    if (!product) {
+        search.exhausted_reason = "budget exhausted during candidate multiplication";
+        return Result<bool>::failure(product.error());
+    }
+    if (product.value().empty()) return Result<bool>::success(false);
+    auto candidate = zc_make_primitive(zc_reconstruct_candidate(
+        product.value(), search.modulus, search.remaining.variable_name));
+    if (candidate.is_zero() || candidate.degree() <= 0 ||
+        candidate.degree() >= search.remaining.degree() ||
+        !zc_divides_exactly(search.remaining, candidate)) {
+        return Result<bool>::success(false);
+    }
+    auto [quotient, remainder] = search.remaining.div_mod(candidate);
+    if (!remainder.is_zero()) {
+        return Result<bool>::failure(
+            CasErrc::InternalInvariant, "exact divisor produced a nonzero remainder",
+            "zassenhaus_combine");
+    }
+    search.factors.push_back(candidate);
+    search.remaining = std::move(quotient);
+    for (size_t cursor = positions.size(); cursor > 0; --cursor) {
+        search.active.erase(search.active.begin() +
+            static_cast<std::ptrdiff_t>(positions[cursor - 1]));
+    }
+    return Result<bool>::success(true);
+}
+
+static Result<bool> zc_find_factor(ZcFactorSearch& search) {
+    for (size_t width = 1; width <= search.active.size() / 2; ++width) {
+        std::vector<size_t> positions(width);
+        for (size_t i = 0; i < width; ++i) positions[i] = i;
+        do {
+            auto candidate = zc_try_candidate(search, positions);
+            if (!candidate || candidate.value()) return candidate;
+        } while (zc_next_combination(positions, search.active.size()));
+    }
+    return Result<bool>::success(false);
+}
+
+static ZassenhausResult zc_enumerate(
+    const Polynomial<Rational>& poly,
+    const std::vector<Polynomial<BigInt>>& lifted_factors,
+    const BigInt& modulus, ComputationContext& context) {
+    ZcFactorSearch search{lifted_factors, modulus, context, poly.make_monic(),
+                         {}, std::vector<size_t>(lifted_factors.size())};
+    for (size_t i = 0; i < search.active.size(); ++i) search.active[i] = i;
+    while (search.active.size() > 1 && search.remaining.degree() > 1) {
+        auto found = zc_find_factor(search);
+        if (!found) {
+            if (found.error().code == CasErrc::ResourceLimit) {
+                return zc_finalize(poly, std::move(search.factors),
+                    std::move(search.remaining), Completeness::Inconclusive,
+                    search.exhausted_reason);
+            }
+            return ZassenhausResult::failure(found.error());
+        }
+        if (!found.value()) break;
+    }
+    return zc_finalize(poly, std::move(search.factors), std::move(search.remaining),
+                       Completeness::Complete, {});
+}
+
 static ZassenhausResult zassenhaus_combine_impl(
     const Polynomial<Rational>& poly,
     const std::vector<Polynomial<BigInt>>& lifted_factors,
     const BigInt& reconstruction_modulus,
     ComputationContext& context) {
     if (reconstruction_modulus.is_zero() ||
-        reconstruction_modulus.IsNegative()) {
+        reconstruction_modulus.is_negative()) {
         return ZassenhausResult::failure(
             CasErrc::InvalidArgument,
             "reconstruction modulus must be positive",
@@ -401,80 +467,7 @@ static ZassenhausResult zassenhaus_combine_impl(
         return ZassenhausResult::failure(validation.error());
     }
 
-    std::vector<Polynomial<Rational>> true_factors;
-    std::vector<size_t> active(lifted_factors.size());
-    for (size_t i = 0; i < active.size(); ++i) active[i] = i;
-    Polynomial<Rational> remaining = poly.make_monic();
-
-    for (;;) {
-        bool found = false;
-        if (active.size() <= 1 || remaining.degree() <= 1) break;
-
-        for (size_t subset_size = 1;
-             subset_size <= active.size() / 2 && !found;
-             ++subset_size) {
-            std::vector<size_t> positions(subset_size);
-            for (size_t i = 0; i < subset_size; ++i) positions[i] = i;
-            do {
-                auto candidate_step =
-                    context.consume_steps(1, "zassenhaus_combine");
-                if (!candidate_step) {
-                    if (candidate_step.error().code == CasErrc::ResourceLimit) {
-                        return zc_finalize(
-                            poly, std::move(true_factors), std::move(remaining),
-                            Completeness::Inconclusive,
-                            "budget exhausted during bounded combination enumeration");
-                    }
-                    return ZassenhausResult::failure(candidate_step.error());
-                }
-
-                std::vector<size_t> indices =
-                    zc_select_indices(active, positions);
-                auto product_result = zc_subset_product(
-                    lifted_factors, indices, reconstruction_modulus, context);
-                if (!product_result) {
-                    if (product_result.error().code == CasErrc::ResourceLimit) {
-                        return zc_finalize(
-                            poly, std::move(true_factors), std::move(remaining),
-                            Completeness::Inconclusive,
-                            "budget exhausted during candidate multiplication");
-                    }
-                    return ZassenhausResult::failure(product_result.error());
-                }
-                if (product_result.value().empty()) continue;
-
-                Polynomial<Rational> candidate = zc_make_primitive(
-                    zc_reconstruct_candidate(product_result.value(),
-                                             reconstruction_modulus,
-                                             poly.variable_name));
-                if (candidate.is_zero() || candidate.degree() <= 0 ||
-                    candidate.degree() >= remaining.degree() ||
-                    !zc_divides_exactly(remaining, candidate)) {
-                    continue;
-                }
-
-                auto [quotient, remainder] = remaining.div_mod(candidate);
-                if (!remainder.is_zero()) {
-                    return ZassenhausResult::failure(
-                        CasErrc::InternalInvariant,
-                        "exact divisor produced a nonzero remainder",
-                        "zassenhaus_combine");
-                }
-                true_factors.push_back(candidate);
-                remaining = std::move(quotient);
-                for (size_t cursor = positions.size(); cursor > 0; --cursor) {
-                    active.erase(active.begin() +
-                                 static_cast<std::ptrdiff_t>(positions[cursor - 1]));
-                }
-                found = true;
-                break;
-            } while (zc_next_combination(positions, active.size()));
-        }
-        if (!found) break;
-    }
-
-    return zc_finalize(poly, std::move(true_factors), std::move(remaining),
-                       Completeness::Complete, {});
+    return zc_enumerate(poly, lifted_factors, reconstruction_modulus, context);
 }
 
 ZassenhausResult zassenhaus_combine_checked(

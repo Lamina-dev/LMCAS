@@ -1,5 +1,5 @@
 #include "solver.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/exact_matrix.hpp"
@@ -26,25 +26,29 @@ std::shared_ptr<SymbolicExpr> solver_detail::to_ptr(const SymbolicExpr& expr) {
     return LMCAS::detail::make_expression_ptr(expr);
 }
 
-static bool get_integer_value(const std::shared_ptr<const SymbolicNode>& node, long long& value) {
+static bool get_integer_value(const std::shared_ptr<const SymbolicNode>& node, BigInt& value) {
     auto num = std::dynamic_pointer_cast<const NumberNode>(node);
-    if (!num) return false;
+    if (!num) {
+        return false;
+    }
     if (std::holds_alternative<BigInt>(num->value())) {
-        value = std::get<BigInt>(num->value()).to_int();
+        value = std::get<BigInt>(num->value());
         return true;
     }
     if (std::holds_alternative<Rational>(num->value())) {
         const auto& r = std::get<Rational>(num->value());
-        if (!r.is_integer()) return false;
-        value = r.to_BigInt().to_int();
+        if (!r.is_integer()) {
+            return false;
+        }
+        value = r.to_bigint();
         return true;
     }
     if (std::holds_alternative<lmmc_real_t>(num->value())) {
         lmmc_real_t d = std::get<lmmc_real_t>(num->value());
-        int eq;
-        lmmc_double_nearly_equal_tol(d, std::round(d), 1e-12, 1e-12, &eq);
-        if (!eq) return false;
-        value = static_cast<long long>(std::llround(d));
+        if (!std::isfinite(d) || d != std::floor(d)) {
+            return false;
+        }
+        value = Rational::from_double(d).to_bigint();
         return true;
     }
     return false;
@@ -53,8 +57,12 @@ static bool get_integer_value(const std::shared_ptr<const SymbolicNode>& node, l
 static std::shared_ptr<const NumberNode> add_number_nodes(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
     if (std::holds_alternative<lmmc_real_t>(a->value()) || std::holds_alternative<lmmc_real_t>(b->value())) {
         auto to_real = [](const auto& v) {
-            if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
-            if (std::holds_alternative<Rational>(v)) return (lmmc_real_t)std::get<Rational>(v).to_double();
+            if (std::holds_alternative<lmmc_real_t>(v)) {
+                return std::get<lmmc_real_t>(v);
+            }
+            if (std::holds_alternative<Rational>(v)) {
+                return (lmmc_real_t)std::get<Rational>(v).to_double();
+            }
             return (lmmc_real_t)std::get<BigInt>(v).to_double();
         };
         lmmc_real_t r1 = to_real(a->value());
@@ -74,8 +82,12 @@ static std::shared_ptr<const NumberNode> add_number_nodes(const std::shared_ptr<
 static std::shared_ptr<const NumberNode> multiply_number_nodes(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
     if (std::holds_alternative<lmmc_real_t>(a->value()) || std::holds_alternative<lmmc_real_t>(b->value())) {
         auto to_real = [](const auto& v) {
-            if (std::holds_alternative<lmmc_real_t>(v)) return std::get<lmmc_real_t>(v);
-            if (std::holds_alternative<Rational>(v)) return (lmmc_real_t)std::get<Rational>(v).to_double();
+            if (std::holds_alternative<lmmc_real_t>(v)) {
+                return std::get<lmmc_real_t>(v);
+            }
+            if (std::holds_alternative<Rational>(v)) {
+                return (lmmc_real_t)std::get<Rational>(v).to_double();
+            }
             return (lmmc_real_t)std::get<BigInt>(v).to_double();
         };
         lmmc_real_t r1 = to_real(a->value());
@@ -94,7 +106,9 @@ static std::shared_ptr<const NumberNode> multiply_number_nodes(const std::shared
 
 struct NodeLess {
     bool operator()(const std::shared_ptr<const SymbolicNode>& a, const std::shared_ptr<const SymbolicNode>& b) const {
-        if (!a || !b) return a < b;
+        if (!a || !b) {
+            return a < b;
+        }
         return a->compare(*b) < 0;
     }
 };
@@ -116,7 +130,9 @@ std::shared_ptr<SymbolicExpr> solver_detail::multiply_no_expand(
     std::map<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const NumberNode>, NodeLess> bases;
 
     for (const auto& op : factors) {
-        if (!op) continue;
+        if (!op) {
+            continue;
+        }
         if (auto num = std::dynamic_pointer_cast<const NumberNode>(op)) {
             const_acc = multiply_number_nodes(const_acc, num);
             continue;
@@ -143,39 +159,59 @@ std::shared_ptr<SymbolicExpr> solver_detail::multiply_no_expand(
     if (!const_acc->is_one()) final_ops.push_back(const_acc);
 
     for (const auto& [base, exp] : bases) {
-        if (exp->is_zero()) continue;
+        if (exp->is_zero()) {
+            continue;
+        }
         if (exp->is_one()) final_ops.push_back(base);
         else final_ops.push_back(LMCAS::detail::make_node<PowerNode>(base, exp));
     }
 
-    if (final_ops.empty()) return SymbolicExpr::number(1);
-    if (final_ops.size() == 1) return LMCAS::detail::make_expression_ptr(final_ops[0]);
+    if (final_ops.empty()) {
+        return SymbolicExpr::number(1);
+    }
+    if (final_ops.size() == 1) {
+        return LMCAS::detail::make_expression_ptr(final_ops[0]);
+    }
     return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(final_ops));
 }
 
 bool solver_detail::is_polynomial_node(const std::shared_ptr<const SymbolicNode>& node) {
-    if (!node) return false;
-    if (std::dynamic_pointer_cast<const NumberNode>(node)) return true;
-    if (std::dynamic_pointer_cast<const VariableNode>(node)) return true;
+    if (!node) {
+        return false;
+    }
+    if (std::dynamic_pointer_cast<const NumberNode>(node)) {
+        return true;
+    }
+    if (std::dynamic_pointer_cast<const VariableNode>(node)) {
+        return true;
+    }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         for (const auto& op : add->operands()) {
-            if (!is_polynomial_node(op)) return false;
+            if (!is_polynomial_node(op)) {
+                return false;
+            }
         }
         return true;
     }
 
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
         for (const auto& op : mul->operands()) {
-            if (!is_polynomial_node(op)) return false;
+            if (!is_polynomial_node(op)) {
+                return false;
+            }
         }
         return true;
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        long long exp = 0;
-        if (!get_integer_value(pow->exponent(), exp)) return false;
-        if (exp < 0) return false;
+        BigInt exp(0);
+        if (!get_integer_value(pow->exponent(), exp)) {
+            return false;
+        }
+        if (exp < 0) {
+            return false;
+        }
         return is_polynomial_node(pow->base());
     }
 
@@ -183,7 +219,9 @@ bool solver_detail::is_polynomial_node(const std::shared_ptr<const SymbolicNode>
 }
 
 std::shared_ptr<SymbolicExpr> solver_detail::multiply_factors(const std::vector<std::shared_ptr<const SymbolicNode>>& factors) {
-    if (factors.empty()) return SymbolicExpr::number(1);
+    if (factors.empty()) {
+        return SymbolicExpr::number(1);
+    }
     auto res = LMCAS::detail::make_expression_ptr(factors[0]);
     for (size_t i = 1; i < factors.size(); ++i) {
         res = SymbolicExpr::multiply(res, LMCAS::detail::make_expression_ptr(factors[i]));
@@ -191,56 +229,74 @@ std::shared_ptr<SymbolicExpr> solver_detail::multiply_factors(const std::vector<
     return res->simplify();
 }
 
+static bool collect_operand_denominators(
+    const std::vector<std::shared_ptr<const SymbolicNode>>& operands,
+    std::vector<std::shared_ptr<const SymbolicNode>>& den_factors,
+    std::vector<std::shared_ptr<SymbolicExpr>>& den_constraints) {
+    for (const auto& operand : operands) {
+        if (!collect_denominator_factors(operand, den_factors, den_constraints)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool collect_power_denominators(
+    const PowerNode& power,
+    std::vector<std::shared_ptr<const SymbolicNode>>& den_factors,
+    std::vector<std::shared_ptr<SymbolicExpr>>& den_constraints) {
+    BigInt exp(0);
+    if (!get_integer_value(power.exponent(), exp)) {
+        return false;
+    }
+
+    if (exp < 0) {
+        if (!is_polynomial_node(power.base())) {
+            return false;
+        }
+        BigInt k = -exp;
+        if (k == 1) {
+            den_factors.push_back(power.base());
+        } else {
+            den_factors.push_back(SymbolicFactory::create_power(power.base(), SymbolicFactory::create_number(k)));
+        }
+        den_constraints.push_back(LMCAS::detail::make_expression_ptr(power.base()));
+        return true;
+    }
+
+    if (!collect_denominator_factors(power.base(), den_factors, den_constraints)) {
+        return false;
+    }
+    return true;
+}
+
 bool solver_detail::collect_denominator_factors(
     const std::shared_ptr<const SymbolicNode>& node,
     std::vector<std::shared_ptr<const SymbolicNode>>& den_factors,
     std::vector<std::shared_ptr<SymbolicExpr>>& den_constraints
 ) {
-    if (!node) return false;
+    if (!node) {
+        return false;
+    }
 
     if (std::dynamic_pointer_cast<const NumberNode>(node) || std::dynamic_pointer_cast<const VariableNode>(node)) {
         return true;
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : add->operands()) {
-            if (!collect_denominator_factors(op, den_factors, den_constraints)) return false;
-        }
-        return true;
+        return collect_operand_denominators(add->operands(), den_factors, den_constraints);
     }
 
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mul->operands()) {
-            if (!collect_denominator_factors(op, den_factors, den_constraints)) return false;
-        }
-        return true;
+        return collect_operand_denominators(mul->operands(), den_factors, den_constraints);
     }
 
     if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        long long exp = 0;
-        if (!get_integer_value(pow->exponent(), exp)) return false;
-
-        if (exp < 0) {
-            if (!is_polynomial_node(pow->base())) return false;
-            long long k = -exp;
-            if (k == 1) {
-                den_factors.push_back(pow->base());
-            } else {
-                den_factors.push_back(SymbolicFactory::create_power(pow->base(), SymbolicFactory::create_number(BigInt(k))));
-            }
-            den_constraints.push_back(LMCAS::detail::make_expression_ptr(pow->base()));
-            return true;
-        }
-
-        if (!collect_denominator_factors(pow->base(), den_factors, den_constraints)) return false;
-        return true;
+        return collect_power_denominators(*pow, den_factors, den_constraints);
     }
 
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        for (const auto& arg : func->arguments()) {
-            if (!collect_denominator_factors(arg, den_factors, den_constraints)) return false;
-        }
-        return true;
+        return collect_operand_denominators(func->arguments(), den_factors, den_constraints);
     }
 
     return false;

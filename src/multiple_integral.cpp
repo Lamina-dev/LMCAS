@@ -33,10 +33,16 @@ Result<SymbolicExpr> integrate_multiple_checked(
             CasErrc::InvalidArgument, "invalid multiple integration steps",
             "integrate.multiple");
     }
+    auto access = context.consume_steps(0, "integrate.multiple");
+    if (!access) return Result<SymbolicExpr>::failure(access.error());
 
     auto current = LMCAS::detail::make_expression_ptr(integrand);
 
     for (const auto& step : steps) {
+        auto step_access = context.consume_steps(1, "integrate.multiple");
+        if (!step_access) {
+            return Result<SymbolicExpr>::failure(step_access.error());
+        }
         if (!current) {
             return Result<SymbolicExpr>::failure(
                 CasErrc::InternalInvariant, "multiple integration lost its expression",
@@ -51,21 +57,16 @@ Result<SymbolicExpr> integrate_multiple_checked(
             if (!result) return result;
             current = LMCAS::detail::make_expression_ptr(result.value());
         } else {
-            if (!Integrator::depends_on(*current, step.variable)) {
-                auto diff = sym_sub(*step.upper, *step.lower);
-                auto product = SymbolicExpr::multiply(current, diff);
-                auto simp = product->simplify();
-                current = simp ? simp : product;
-            } else {
-                auto result = integrator.integrate_def_checked(
-                    *current, step.variable, *step.lower, *step.upper, context);
-                if (!result) return result;
-                auto res_ptr = LMCAS::detail::make_expression_ptr(result.value());
-                auto simp = res_ptr->simplify();
-                current = simp ? simp : res_ptr;
-            }
+            auto result = integrator.integrate_def_checked(
+                *current, step.variable, *step.lower, *step.upper, context);
+            if (!result) return result;
+            auto res_ptr = LMCAS::detail::make_expression_ptr(result.value());
+            auto simp = res_ptr->simplify();
+            current = simp ? simp : res_ptr;
         }
     }
+    auto final_access = context.consume_steps(0, "integrate.multiple");
+    if (!final_access) return Result<SymbolicExpr>::failure(final_access.error());
 
     return Result<SymbolicExpr>::success(*current);
 }

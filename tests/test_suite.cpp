@@ -1,51 +1,35 @@
+#include "expr.hpp"
 #include <iostream>
 #include <memory>
 #include <vector>
 #include <string>
-#include <cassert>
 #include <cmath>
 
-#include "../include/symbolic_ast.hpp"
-#include "../include/visitors/print_visitor.hpp"
-#include "../include/visitors/differentiation_visitor.hpp"
-#include "../include/visitors/normalization_visitor.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "internal/visitors/differentiation_visitor.hpp"
+#include "internal/visitors/normalization_visitor.hpp"
 #include "test_common.hpp"
 
 using namespace LMCAS;
 
-void check(const std::string& name, const std::shared_ptr<const SymbolicNode>& node, const std::string& expected = "") {
-    if (!node) {
-        EXPECT_TRUE(false, name + ": node is not null");
-        return;
-    }
-
-    PrintVisitor pv;
-    node->accept(pv);
-    std::string result = pv.get_result();
-
-    if (!expected.empty() && result != expected) {
-        EXPECT_EQ_STR(result, expected, name);
-    } else {
-        std::cout << "[PASS] " << name << ": " << result << std::endl;
-        g_passes++;
-    }
+void check(const std::string &name, const std::shared_ptr<const SymbolicNode> &node,
+           const std::string &expected) {
+    EXPECT_TRUE(test_proved_equivalent(node ? detail::make_expression_ptr(node) : nullptr, parse_expr(expected).value())) << (name);
 }
 
-std::shared_ptr<const SymbolicNode> diff(const std::shared_ptr<const SymbolicNode>& node, const std::string& var) {
+std::shared_ptr<const SymbolicNode> diff(const std::shared_ptr<const SymbolicNode> &node, const std::string &var) {
     DifferentiationVisitor dv(var);
     node->accept(dv);
     return dv.get_result();
 }
 
-std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const SymbolicNode>& node) {
+std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const SymbolicNode> &node) {
     NormalizationVisitor nv;
     node->accept(nv);
     return nv.get_result();
 }
 
-void test_basic_arithmetic() {
-    std::cout << "\n--- Testing Basic Arithmetic Nodes ---" << std::endl;
-
+TEST(LmcasSuite, BasicArithmetic) {
     auto n1 = LMCAS::detail::make_node<NumberNode>(1.0);
     auto n2 = LMCAS::detail::make_node<NumberNode>(2.0);
     std::vector<std::shared_ptr<const SymbolicNode>> add_ops = {n1, n2};
@@ -61,9 +45,7 @@ void test_basic_arithmetic() {
     check("x * y", mul, "x*y");
 }
 
-void test_differentiation() {
-    std::cout << "\n--- Testing Differentiation ---" << std::endl;
-
+TEST(LmcasSuite, Differentiation) {
     auto x = LMCAS::detail::make_node<VariableNode>("x");
 
     check("d/dx(x)", diff(x, "x"), "1");
@@ -78,16 +60,14 @@ void test_differentiation() {
     auto n2 = LMCAS::detail::make_node<NumberNode>(2.0);
     auto pow = LMCAS::detail::make_node<PowerNode>(x, n2);
 
-    check("d/dx(x^2)", diff(pow, "x"));
+    check("d/dx(x^2)", diff(pow, "x"), "2*x");
 
     std::vector<std::shared_ptr<const SymbolicNode>> sin_args = {x};
     auto sin_x = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, sin_args);
-    check("d/dx(sin(x))", diff(sin_x, "x"));
+    check("d/dx(sin(x))", diff(sin_x, "x"), "cos(x)");
 }
 
-void test_normalization_expansion() {
-    std::cout << "\n--- Testing Normalization (Expansion) ---" << std::endl;
-
+TEST(LmcasSuite, NormalizationExpansion) {
     auto a = LMCAS::detail::make_node<VariableNode>("a");
     auto b = LMCAS::detail::make_node<VariableNode>("b");
     auto c = LMCAS::detail::make_node<VariableNode>("c");
@@ -102,16 +82,14 @@ void test_normalization_expansion() {
     std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {a_plus_b, c_plus_d};
     auto expr = LMCAS::detail::make_node<MultiplyNode>(std::move(mul_ops));
 
-    check("Original: (a+b)*(c+d)", expr);
+    check("Original: (a+b)*(c+d)", expr, "(a+b)*(c+d)");
 
     auto normalized = normalize(expr);
 
-    check("Normalized: ac+ad+bc+bd", normalized);
+    check("Normalization preserves the product value", normalized, "a*c+a*d+b*c+b*d");
 }
 
-void test_normalization_simplification() {
-    std::cout << "\n--- Testing Normalization (Simplification) ---" << std::endl;
-
+TEST(LmcasSuite, NormalizationSimplification) {
     auto x = LMCAS::detail::make_node<VariableNode>("x");
     auto zero = LMCAS::detail::make_node<NumberNode>(0.0);
     std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {x, zero};
@@ -125,18 +103,4 @@ void test_normalization_simplification() {
     auto add = LMCAS::detail::make_node<AddNode>(std::move(add_ops));
 
     check("2 + 3 + x", normalize(add), "x + 5");
-}
-
-int main() {
-    try {
-        test_basic_arithmetic();
-        test_differentiation();
-        test_normalization_expansion();
-        test_normalization_simplification();
-
-        std::cout << "\nAll Test Sections Completed." << std::endl;
-    } catch (const std::exception& e) {
-        EXPECT_TRUE(false, std::string("top level exception: ") + e.what());
-    }
-    return TEST_REPORT();
 }

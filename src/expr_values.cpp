@@ -1,6 +1,8 @@
 #include "expr.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "internal/expr_common.hpp"
+#include "internal/expression_analysis.hpp"
+#include "internal/expression_construction.hpp"
 #include <cmath>
 #include <exception>
 #include <memory>
@@ -11,13 +13,27 @@ namespace LMCAS {
 
 using namespace expr_detail::expr_common;
 
+std::optional<std::string_view> symbol_name(const ExprPtr& expression) noexcept {
+    const auto* variable =
+        dynamic_cast<const VariableNode*>(detail::node(expression).get());
+    if (!variable) return std::nullopt;
+    return variable->name();
+}
+
+std::optional<RelationOp> relation_op(const ExprPtr& expression) noexcept {
+    const auto* relation =
+        dynamic_cast<const RelationalNode*>(detail::node(expression).get());
+    if (!relation) return std::nullopt;
+    return relation->op();
+}
+
 ExprResult sym(const std::string& name) {
     if (name.empty()) {
         return expression_failure(CasErrc::InvalidArgument,
                                   "symbol name cannot be empty", kSymOperation);
     }
     if (is_reserved_symbol_name(name)) {
-        if (is_imaginary_unit_name(name)) {
+        if (detail::is_imaginary_unit_name(name)) {
             return expression_failure(CasErrc::InvalidArgument,
                                       "imaginary unit symbol is reserved",
                                       kSymOperation);
@@ -37,18 +53,18 @@ ExprResult sym(const std::string& name) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "symbol allocation failed", kSymOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kSymOperation);
+        return expression_failure(CasErrc::InternalInvariant, error.what(), kSymOperation);
     }
 }
 
-ExprResult integer(long long value) {
+ExprResult integer(int value) {
     try {
         return ExprResult::success(SymbolicExpr::number(value));
     } catch (const std::bad_alloc&) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "integer allocation failed", kIntegerOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kIntegerOperation);
+        return expression_failure(CasErrc::InternalInvariant, error.what(), kIntegerOperation);
     }
 }
 
@@ -59,7 +75,7 @@ ExprResult integer(const BigInt& value) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "integer allocation failed", kIntegerOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kIntegerOperation);
+        return expression_failure(CasErrc::InternalInvariant, error.what(), kIntegerOperation);
     }
 }
 
@@ -70,7 +86,7 @@ ExprResult rational(const Rational& value) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "rational allocation failed", kRationalOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kRationalOperation);
+        return expression_failure(CasErrc::InternalInvariant, error.what(), kRationalOperation);
     }
 }
 
@@ -85,43 +101,20 @@ ExprResult approx_real(double value) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "approximate real allocation failed", kApproxOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(), kApproxOperation);
-    }
-}
-
-ExprResult constant_symbol(const char* name) {
-    try {
-        auto expression = SymbolicExpr::variable(name);
-        if (!expression || !LMCAS::detail::node(expression)) {
-            return expression_failure(CasErrc::InternalInvariant,
-                                      "constant factory returned null",
-                                      kConstantOperation);
-        }
-        return ExprResult::success(std::move(expression));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "constant allocation failed",
-                                  kConstantOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
-                                  kConstantOperation);
+        return expression_failure(CasErrc::InternalInvariant, error.what(), kApproxOperation);
     }
 }
 
 ExprResult pi() {
-    return constant_symbol("pi");
+    return detail::constant_expression("pi");
 }
 
 ExprResult e() {
-    return constant_symbol("e");
+    return detail::constant_expression("e");
 }
 
 ExprResult phi() {
-    return constant_symbol("phi");
-}
-
-ExprResult I() {
-    return imaginary_unit();
+    return detail::constant_expression("phi");
 }
 
 ExprResult imaginary_unit() {
@@ -147,9 +140,9 @@ ExprResult complex(ExprPtr real, ExprPtr imag) {
                                   "complex expression allocation failed",
                                   kComplexOperation);
     } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InvalidArgument, error.what(),
+        return expression_failure(CasErrc::InternalInvariant, error.what(),
                                   kComplexOperation);
     }
 }
 
-} // namespace LMCAS
+}

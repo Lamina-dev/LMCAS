@@ -133,14 +133,108 @@ Result<std::size_t> count_open_roots(
     return Result<std::size_t>::success(static_cast<std::size_t>(count));
 }
 
-Rational strict_cauchy_bound(const Polynomial<Rational>& polynomial) {
-    Rational maximum(0);
-    const Rational leading = polynomial.lead_coeff().abs();
-    for (int degree = 0; degree < polynomial.degree(); ++degree) {
-        const Rational ratio = polynomial.coeffs[degree].abs() / leading;
-        if (maximum < ratio) maximum = ratio;
+
+struct PendingInterval {
+    Rational lower;
+    Rational upper;
+    std::size_t count;
+};
+
+Result<void> clear_isolation_endpoints(
+    const Polynomial<Rational>& square_free, const SturmSequence& sequence,
+    PendingInterval& interval, ComputationContext& context,
+    const std::string& operation) {
+    while (polynomial_sign_at(square_free, interval.lower) == 0 ||
+           polynomial_sign_at(square_free, interval.upper) == 0) {
+        const Rational midpoint = (interval.lower + interval.upper) / Rational(2);
+        if (polynomial_sign_at(square_free, midpoint) == 0) {
+            interval.lower = midpoint;
+            interval.upper = midpoint;
+            break;
+        }
+        const bool lower_is_root = polynomial_sign_at(square_free, interval.lower) == 0;
+        auto half = lower_is_root
+            ? count_open_roots(square_free, sequence, midpoint, interval.upper,
+                               context, operation)
+            : count_open_roots(square_free, sequence, interval.lower, midpoint,
+                               context, operation);
+        if (!half) return Result<void>::failure(half.error());
+        if (lower_is_root == (half.value() == 1)) {
+            interval.lower = midpoint;
+        } else {
+            interval.upper = midpoint;
+        }
     }
-    return Rational(2) + maximum;
+    return Result<void>::success();
+}
+
+Result<void> subdivide_isolation(
+    const Polynomial<Rational>& square_free, const SturmSequence& sequence,
+    const PendingInterval& current, std::vector<PendingInterval>& pending,
+    std::vector<RationalInterval>& isolated, ComputationContext& context,
+    const std::string& operation) {
+    const Rational midpoint = (current.lower + current.upper) / Rational(2);
+    const bool midpoint_is_root = polynomial_sign_at(square_free, midpoint) == 0;
+    auto left = count_open_roots(
+        square_free, sequence, current.lower, midpoint, context, operation);
+    if (!left) return Result<void>::failure(left.error());
+    auto right = count_open_roots(
+        square_free, sequence, midpoint, current.upper, context, operation);
+    if (!right) return Result<void>::failure(right.error());
+    const std::size_t accounted = left.value() + right.value() +
+        (midpoint_is_root ? 1U : 0U);
+    if (accounted != current.count) {
+        return Result<void>::failure(
+            CasErrc::InternalInvariant,
+            "Sturm subdivision did not preserve the root count", operation);
+    }
+    if (right.value() != 0) {
+        pending.push_back({midpoint, current.upper, right.value()});
+    }
+    if (midpoint_is_root) isolated.emplace_back(midpoint, midpoint);
+    if (left.value() != 0) {
+        pending.push_back({current.lower, midpoint, left.value()});
+    }
+    return Result<void>::success();
+}
+
+Result<std::vector<RationalInterval>> isolate_sturm_sequence(
+    const Polynomial<Rational>& square_free, const SturmSequence& sequence,
+    ComputationContext& context, const std::string& operation) {
+    const Rational bound = strict_cauchy_root_bound(square_free);
+    auto total = count_open_roots(square_free, sequence, -bound, bound, context, operation);
+    if (!total) return Result<std::vector<RationalInterval>>::failure(total.error());
+    std::vector<PendingInterval> pending;
+    std::vector<RationalInterval> isolated;
+    if (total.value() != 0) pending.push_back({-bound, bound, total.value()});
+    isolated.reserve(total.value());
+    while (!pending.empty()) {
+        auto step = context.consume_steps(1, operation);
+        if (!step) return Result<std::vector<RationalInterval>>::failure(step.error());
+        PendingInterval current = std::move(pending.back());
+        pending.pop_back();
+        if (current.count == 1) {
+            auto cleared = clear_isolation_endpoints(
+                square_free, sequence, current, context, operation);
+            if (!cleared) return Result<std::vector<RationalInterval>>::failure(cleared.error());
+            isolated.emplace_back(current.lower, current.upper);
+            continue;
+        }
+        auto subdivided = subdivide_isolation(
+            square_free, sequence, current, pending, isolated, context, operation);
+        if (!subdivided) return Result<std::vector<RationalInterval>>::failure(subdivided.error());
+    }
+    std::sort(isolated.begin(), isolated.end(),
+        [](const RationalInterval& left, const RationalInterval& right) {
+            if (left.first != right.first) return left.first < right.first;
+            return left.second < right.second;
+        });
+    if (isolated.size() != total.value()) {
+        return Result<std::vector<RationalInterval>>::failure(
+            CasErrc::InternalInvariant,
+            "Sturm isolation lost a distinct real root", operation);
+    }
+    return Result<std::vector<RationalInterval>>::success(std::move(isolated));
 }
 
 } // namespace
@@ -189,150 +283,28 @@ Result<std::size_t> count_real_roots_exact(
 }
 
 Result<std::vector<RationalInterval>> isolate_real_roots_exact(
-    const Polynomial<Rational>& polynomial,
-    ComputationContext& context,
+    const Polynomial<Rational>& polynomial, ComputationContext& context,
     const std::string& operation) {
     try {
         auto step = context.consume_steps(1, operation);
-        if (!step) {
-            return Result<std::vector<RationalInterval>>::failure(step.error());
-        }
+        if (!step) return Result<std::vector<RationalInterval>>::failure(step.error());
         if (polynomial.degree() <= 0) {
             return Result<std::vector<RationalInterval>>::success({});
         }
         if (polynomial.degree() == 1) {
-            const Rational root =
-                -polynomial.coeffs[0] / polynomial.coeffs[1];
-            return Result<std::vector<RationalInterval>>::success(
-                {{root, root}});
+            const Rational root = -polynomial.coeffs[0] / polynomial.coeffs[1];
+            return Result<std::vector<RationalInterval>>::success({{root, root}});
         }
         auto square_free = polynomial.square_free_part().make_monic();
         auto sequence = make_sturm_sequence(square_free, context, operation);
         if (!sequence) {
-            return Result<std::vector<RationalInterval>>::failure(
-                sequence.error());
+            return Result<std::vector<RationalInterval>>::failure(sequence.error());
         }
-
-        const Rational bound = strict_cauchy_bound(square_free);
-        struct Pending {
-            Rational lower;
-            Rational upper;
-            std::size_t count;
-        };
-        auto total = count_open_roots(
-            square_free, sequence.value(), -bound, bound, context, operation);
-        if (!total) {
-            return Result<std::vector<RationalInterval>>::failure(total.error());
-        }
-
-        std::vector<Pending> pending;
-        std::vector<RationalInterval> isolated;
-        if (total.value() != 0) pending.push_back({-bound, bound, total.value()});
-        isolated.reserve(total.value());
-
-        while (!pending.empty()) {
-            step = context.consume_steps(1, operation);
-            if (!step) {
-                return Result<std::vector<RationalInterval>>::failure(step.error());
-            }
-            Pending current = std::move(pending.back());
-            pending.pop_back();
-            if (current.count == 1) {
-                while (polynomial_sign_at(square_free, current.lower) == 0 ||
-                       polynomial_sign_at(square_free, current.upper) == 0) {
-                    const Rational midpoint =
-                        (current.lower + current.upper) / Rational(2);
-                    if (polynomial_sign_at(square_free, midpoint) == 0) {
-                        current.lower = midpoint;
-                        current.upper = midpoint;
-                        break;
-                    }
-                    if (polynomial_sign_at(square_free, current.lower) == 0) {
-                        auto right = count_open_roots(
-                            square_free, sequence.value(), midpoint,
-                            current.upper, context, operation);
-                        if (!right) {
-                            return Result<std::vector<RationalInterval>>::failure(
-                                right.error());
-                        }
-                        if (right.value() == 1) {
-                            current.lower = midpoint;
-                        } else {
-                            current.upper = midpoint;
-                        }
-                    } else {
-                        auto left = count_open_roots(
-                            square_free, sequence.value(), current.lower,
-                            midpoint, context, operation);
-                        if (!left) {
-                            return Result<std::vector<RationalInterval>>::failure(
-                                left.error());
-                        }
-                        if (left.value() == 1) {
-                            current.upper = midpoint;
-                        } else {
-                            current.lower = midpoint;
-                        }
-                    }
-                }
-                isolated.emplace_back(current.lower, current.upper);
-                continue;
-            }
-
-            const Rational midpoint =
-                (current.lower + current.upper) / Rational(2);
-            const bool midpoint_is_root =
-                polynomial_sign_at(square_free, midpoint) == 0;
-            auto left = count_open_roots(
-                square_free, sequence.value(), current.lower, midpoint,
-                context, operation);
-            if (!left) {
-                return Result<std::vector<RationalInterval>>::failure(left.error());
-            }
-            auto right = count_open_roots(
-                square_free, sequence.value(), midpoint, current.upper,
-                context, operation);
-            if (!right) {
-                return Result<std::vector<RationalInterval>>::failure(right.error());
-            }
-            const std::size_t accounted = left.value() + right.value() +
-                (midpoint_is_root ? 1U : 0U);
-            if (accounted != current.count) {
-                return Result<std::vector<RationalInterval>>::failure(
-                    CasErrc::InternalInvariant,
-                    "Sturm subdivision did not preserve the root count",
-                    operation);
-            }
-            if (right.value() != 0) {
-                pending.push_back({midpoint, current.upper, right.value()});
-            }
-            if (midpoint_is_root) isolated.emplace_back(midpoint, midpoint);
-            if (left.value() != 0) {
-                pending.push_back({current.lower, midpoint, left.value()});
-            }
-        }
-
-        std::sort(isolated.begin(), isolated.end(),
-                  [](const RationalInterval& left,
-                     const RationalInterval& right) {
-                      if (left.first != right.first) {
-                          return left.first < right.first;
-                      }
-                      return left.second < right.second;
-                  });
-        if (isolated.size() != total.value()) {
-            return Result<std::vector<RationalInterval>>::failure(
-                CasErrc::InternalInvariant,
-                "Sturm isolation lost a distinct real root",
-                operation);
-        }
-        return Result<std::vector<RationalInterval>>::success(
-            std::move(isolated));
+        return isolate_sturm_sequence(square_free, sequence.value(), context, operation);
     } catch (const std::bad_alloc&) {
         return Result<std::vector<RationalInterval>>::failure(
             CasErrc::ResourceLimit,
-            "Sturm root isolation allocation failed",
-            operation);
+            "Sturm root isolation allocation failed", operation);
     } catch (const std::exception& error) {
         return Result<std::vector<RationalInterval>>::failure(
             CasErrc::InternalInvariant, error.what(), operation);

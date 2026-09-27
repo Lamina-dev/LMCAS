@@ -1,21 +1,46 @@
 
 #include "test_common.hpp"
-#include "rapidcheck/rapidcheck.h"
+#include <rapidcheck.h>
 #include "calculus_utils.hpp"
 
 #include <cmath>
 #include <algorithm>
-#include <set>
+#include <vector>
+#include <iostream>
+#include <utility>
 
 using namespace LMCAS;
 
 using SE = SymbolicExpr;
 
 static auto num(int n) { return SE::number(n); }
-static auto var(const std::string& name) { return SE::variable(name); }
-
+static auto var(const std::string &name) { return SE::variable(name); }
 
 namespace {
+
+struct PolynomialSample {
+    std::shared_ptr<SymbolicExpr> expression;
+    std::vector<int> coefficients;
+};
+
+static ::testing::AssertionResult numeric_matches(const std::shared_ptr<SymbolicExpr> &actual,
+                                                  double expected, double tolerance) {
+    const auto value = test_numeric_eval(actual);
+    if (!value) {
+        return ::testing::AssertionFailure() << "Expression requires a numeric value";
+    }
+    if (!std::isfinite(*value) || !std::isfinite(expected) ||
+        !std::isfinite(tolerance) || tolerance < 0.0) {
+        return ::testing::AssertionFailure()
+            << "Invalid numeric comparison: actual=" << *value
+            << ", expected=" << expected << ", tolerance=" << tolerance;
+    }
+    if (std::abs(*value - expected) <= tolerance) {
+        return ::testing::AssertionSuccess();
+    }
+    return ::testing::AssertionFailure()
+        << "Actual: " << *value << ", expected: " << expected << ", tolerance: " << tolerance;
+}
 
 /**
  * @brief Generate a random polynomial expression in variable x with
@@ -23,16 +48,22 @@ namespace {
  *
  * Returns expressions like: 3*x^2 + (-2)*x + 1
  */
-std::shared_ptr<SymbolicExpr> gen_polynomial(const std::string& v, int min_deg = 1, int max_deg = 4) {
-    int degree = rc::gen::inRange(min_deg, max_deg);
+PolynomialSample gen_polynomial(const std::string &v, int min_deg = 1, int max_deg = 4) {
+    int degree = *rc::gen::inRange(min_deg, (max_deg) + 1);
     auto x = var(v);
     std::shared_ptr<SymbolicExpr> result = nullptr;
+    std::vector<int> coefficients(static_cast<std::size_t>(degree) + 1);
 
     for (int d = degree; d >= 0; --d) {
-        int coeff = rc::gen::inRange(-5, 5);
-        if (d == degree && coeff == 0) coeff = rc::gen::inRange(1, 5); // leading coeff nonzero
+        int coeff = *rc::gen::inRange(-5, (5) + 1);
+        if (d == degree && coeff == 0) {
+            coeff = *rc::gen::inRange(1, (5) + 1);
+        }
+        coefficients[static_cast<std::size_t>(d)] = coeff;
 
-        if (coeff == 0) continue;
+        if (coeff == 0) {
+            continue;
+        }
 
         std::shared_ptr<SymbolicExpr> term;
         if (d == 0) {
@@ -51,143 +82,85 @@ std::shared_ptr<SymbolicExpr> gen_polynomial(const std::string& v, int min_deg =
         }
     }
 
-    return result ? result : num(1);
-}
-
-/**
- * @brief Generate a random non-zero polynomial (guaranteed non-zero at most points).
- *        Uses degree >= 2 with positive leading coefficient to ensure non-zero
- *        at evaluation points.
- */
-std::shared_ptr<SymbolicExpr> gen_nonzero_polynomial(const std::string& v) {
-    // x^2 + c with c >= 1 is always positive
-    auto x = var(v);
-    int c = rc::gen::inRange(1, 5);
-    int lead = rc::gen::inRange(1, 3);
-    auto x2 = SE::power(x, num(2));
-    auto leading = SE::multiply(num(lead), x2);
-    return SE::add(leading, num(c));
-}
-
-/**
- * @brief Generate a rational function P(x)/Q(x) where Q has known integer roots.
- *        Returns the function and the set of denominator zeros.
- */
-struct RationalFuncData {
-    std::shared_ptr<SymbolicExpr> func;
-    std::vector<int> denom_zeros;
-    int num_degree;
-    int den_degree;
-    int leading_num_coeff;
-    int leading_den_coeff;
-};
-
-RationalFuncData gen_rational_function(const std::string& v) {
-    RationalFuncData data;
-    auto x = var(v);
-
-    // Generate denominator from linear factors: (x - r1)(x - r2)...
-    int num_roots = rc::gen::inRange(1, 3);
-    std::set<int> root_set;
-    while ((int)root_set.size() < num_roots) {
-        int r = rc::gen::inRange(-4, 4);
-        root_set.insert(r);
-    }
-    data.denom_zeros.assign(root_set.begin(), root_set.end());
-
-    // Build denominator as product of (x - ri)
-    std::shared_ptr<SymbolicExpr> denom = nullptr;
-    for (int r : data.denom_zeros) {
-        auto factor = (r == 0) ? x : SE::add(x, num(-r));
-        denom = denom ? SE::multiply(denom, factor) : factor;
-    }
-    data.den_degree = num_roots;
-
-    // Generate numerator as a polynomial with no common roots with denominator
-    data.num_degree = rc::gen::inRange(0, 3);
-    data.leading_num_coeff = rc::gen::inRange(1, 4);
-
-    std::shared_ptr<SymbolicExpr> numer = nullptr;
-    if (data.num_degree == 0) {
-        numer = num(data.leading_num_coeff);
-    } else {
-        // Build a polynomial that doesn't share roots with denominator
-        numer = SE::multiply(num(data.leading_num_coeff), SE::power(x, num(data.num_degree)));
-        // Add a constant to avoid sharing roots
-        int offset = rc::gen::inRange(1, 3);
-        numer = SE::add(numer, num(offset));
-    }
-
-    data.leading_den_coeff = 1; // product of (x-ri) has leading coeff 1
-    data.func = SE::divide(numer, denom);
-    return data;
+    return {result, std::move(coefficients)};
 }
 
 } // anonymous namespace
 
-
-static void test_log_differentiation_equivalence() {
-    TEST_CASE("Logarithmic differentiation equivalence");
-
-
-    rc::check("log_differentiate(f, x) == f->differentiate(x) for polynomials", []() {
-        auto f = gen_nonzero_polynomial("x");
+TEST(LmcasPropCalculusUtils, LogDifferentiationEquivalence) {
+    EXPECT_TRUE(rc::check("both derivatives of lead*x^2+c equal 2*lead*x", []() {
+        auto x = var("x");
+        int c = *rc::gen::inRange(1, (5) + 1);
+        int lead = *rc::gen::inRange(1, (3) + 1);
+        auto f = SE::add(SE::multiply(num(lead), SE::power(x, num(2))), num(c));
 
         auto log_diff = LMCAS::log_differentiate(f, "x");
         auto std_diff = f->differentiate("x");
-
         RC_ASSERT(log_diff != nullptr);
         RC_ASSERT(std_diff != nullptr);
 
-        // Verify numeric equivalence at several sample points
-        // Use positive points to avoid issues with ln of negative values
-        std::vector<double> sample_points = {0.5, 1.0, 1.5, 2.0, 3.0};
-
-        for (double pt : sample_points) {
+        for (double pt : {0.5, 1.0, 1.5, 2.0, 3.0}) {
             auto pt_expr = SE::number(pt);
-            auto log_val_expr = log_diff->substitute("x", pt_expr)->simplify();
-            auto std_val_expr = std_diff->substitute("x", pt_expr)->simplify();
-
-            auto log_val = test_numeric_eval(log_val_expr);
-            auto std_val = test_numeric_eval(std_val_expr);
-
-            if (log_val && std_val) {
-                // Both should be finite and equal
-                if (std::isfinite(*log_val) && std::isfinite(*std_val)) {
-                    double diff = std::abs(*log_val - *std_val);
-                    double scale = std::max(1.0, std::abs(*std_val));
-                    RC_ASSERT(diff / scale < 1e-6);
-                }
-            }
-            /// 任一表达式位于数值求值支持域之外时跳过当前采样点.
+            const double expected = 2.0 * lead * pt;
+            const double tolerance = 1e-6 * std::max(1.0, std::abs(expected));
+            RC_ASSERT(static_cast<bool>(numeric_matches(log_diff->substitute("x", pt_expr), expected, tolerance)));
+            RC_ASSERT(static_cast<bool>(numeric_matches(std_diff->substitute("x", pt_expr), expected, tolerance)));
         }
-    });
+    }));
 }
 
+static bool has_zero_horizontal_asymptote(
+    const std::vector<std::shared_ptr<SymbolicExpr>> &horizontal) {
+    bool has_zero_horiz = false;
+    for (const auto &ha : horizontal) {
+        if (!ha) {
+            continue;
+        }
+        auto simplified = ha->simplify();
+        if (!simplified) {
+            continue;
+        }
+        if (simplified->is_zero()) {
+            has_zero_horiz = true;
+            break;
+        }
+        auto val = test_numeric_eval(simplified);
+        if (val && std::isfinite(*val) && std::abs(*val) <= 1e-6) {
+            has_zero_horiz = true;
+            break;
+        }
+    }
+    return has_zero_horiz;
+}
 
-static void test_asymptotes_rational() {
-    TEST_CASE("Asymptotes of rational functions");
-
-
-    rc::check("vertical asymptotes are at denominator zeros", []() {
+TEST(LmcasPropCalculusUtils, VerticalAsymptotesRational) {
+    EXPECT_TRUE(rc::check("vertical asymptotes are at denominator zeros", []() {
         auto x = var("x");
 
         // Use a simple rational function with a single known denominator zero
         // to avoid issues with polynomial expansion and root-finding limitations.
         // f(x) = 1 / (x - r) where r is a random integer
-        int r = rc::gen::inRange(-5, 5);
+        int r = *rc::gen::inRange(-5, (5) + 1);
         auto denom = (r == 0) ? x : SE::add(x, num(-r));
         auto f = SE::divide(num(1), denom);
 
-        auto result = LMCAS::asymptotes_checked(f, "x").value();
+        auto checked = LMCAS::asymptotes_checked(f, "x");
+        RC_ASSERT(checked);
+        const auto &result = checked.value();
 
         // The vertical asymptote should be at x = r
         bool found = false;
-        for (const auto& va : result.vertical) {
+        for (const auto &va : result.vertical) {
+            if (!va) {
+                continue;
+            }
             auto simplified = va->simplify();
-            if (!simplified) continue;
+            if (!simplified) {
+                continue;
+            }
             auto val = test_numeric_eval(simplified);
-            if (val && std::abs(*val - (double)r) < 1e-6) {
+            if (val && std::isfinite(*val) &&
+                std::abs(*val - static_cast<double>(r)) <= 1e-6) {
                 found = true;
                 break;
             }
@@ -195,164 +168,165 @@ static void test_asymptotes_rational() {
         RC_ASSERT(found);
 
         // Horizontal asymptote should be y = 0 (deg(P) < deg(Q))
-        bool has_zero_horiz = false;
-        for (const auto& ha : result.horizontal) {
-            auto simplified = ha->simplify();
-            if (!simplified) continue;
-            if (simplified->is_zero()) {
-                has_zero_horiz = true;
-                break;
-            }
-            auto val = test_numeric_eval(simplified);
-            if (val && std::abs(*val) < 1e-6) {
-                has_zero_horiz = true;
-                break;
-            }
-        }
+        bool has_zero_horiz = has_zero_horizontal_asymptote(result.horizontal);
         RC_ASSERT(has_zero_horiz);
-    });
+    }));
+}
 
-    rc::check("horizontal asymptote matches degree rule", []() {
+TEST(LmcasPropCalculusUtils, HorizontalAsymptotesRational) {
+    EXPECT_TRUE(rc::check("horizontal asymptote matches degree rule", []() {
         auto x = var("x");
 
         // Generate f(x) = a / (x - r) for random a, r
         // This has horizontal asymptote y = 0 (deg(P) < deg(Q))
-        int a = rc::gen::inRange(1, 5);
-        int r = rc::gen::inRange(-5, 5);
+        int a = *rc::gen::inRange(1, (5) + 1);
+        int r = *rc::gen::inRange(-5, (5) + 1);
         auto denom = (r == 0) ? x : SE::add(x, num(-r));
         auto f = SE::divide(num(a), denom);
 
-        auto result = LMCAS::asymptotes_checked(f, "x").value();
+        auto checked = LMCAS::asymptotes_checked(f, "x");
+        RC_ASSERT(checked);
+        const auto &result = checked.value();
 
         // Horizontal asymptote should be y = 0
-        bool has_zero_horiz = false;
-        for (const auto& ha : result.horizontal) {
-            auto simplified = ha->simplify();
-            if (!simplified) continue;
-            if (simplified->is_zero()) {
-                has_zero_horiz = true;
-                break;
-            }
-            auto val = test_numeric_eval(simplified);
-            if (val && std::abs(*val) < 1e-6) {
-                has_zero_horiz = true;
-                break;
-            }
-        }
+        bool has_zero_horiz = has_zero_horizontal_asymptote(result.horizontal);
         RC_ASSERT(has_zero_horiz);
-    });
+    }));
 }
 
+static ::testing::AssertionResult circle_curvature_matches(int radius) {
+    auto t = var("t");
+    auto radius_expr = num(radius);
+    auto x_t = SE::multiply(radius_expr, SE::cos(t));
+    auto y_t = SE::multiply(radius_expr, SE::sin(t));
 
-static void test_curvature_formula() {
-    TEST_CASE("Curvature formula correctness");
-
-
-    rc::check("curvature of circle radius R is 1/R", []() {
-        // Generate a random radius R in [1, 10]
-        int R = rc::gen::inRange(1, 10);
-
-        auto t = var("t");
-        auto R_expr = num(R);
-
-        // Parametric circle: x(t) = R*cos(t), y(t) = R*sin(t)
-        auto x_t = SE::multiply(R_expr, SE::cos(t));
-        auto y_t = SE::multiply(R_expr, SE::sin(t));
-
-        auto kappa = LMCAS::curvature_parametric_checked(x_t, y_t, "t").value();
-        RC_ASSERT(kappa != nullptr);
-
-        // Evaluate at t = 0 (or any point on the circle)
-        auto at_zero = kappa->substitute("t", num(0))->simplify();
-        RC_ASSERT(at_zero != nullptr);
-
-        double num_val = at_zero->to_numeric();
-        double expected = 1.0 / (double)R;
-
-        // Allow for to_numeric() limitations with rational exponents
-        if (num_val != 0.0 && std::isfinite(num_val)) {
-            RC_ASSERT(std::abs(num_val - expected) < 1e-6);
-        } else {
-            // Try test_numeric_eval as fallback
-            auto eval_val = test_numeric_eval(at_zero);
-            if (eval_val && std::isfinite(*eval_val) && *eval_val != 0.0) {
-                RC_ASSERT(std::abs(*eval_val - expected) < 1e-6);
-            }
-            // If neither works, the symbolic expression is correct but
-            // numeric evaluation has limitations - skip this iteration
+    auto result = LMCAS::curvature_parametric_checked(x_t, y_t, "t");
+    if (!result) {
+        return ::testing::AssertionFailure() << result.error().message;
+    }
+    const auto &kappa = result.value();
+    if (!kappa) {
+        return ::testing::AssertionFailure() << "Curvature requires an expression";
+    }
+    for (double pt : {0.0, 0.5}) {
+        auto matches = numeric_matches(kappa->substitute("t", SE::number(pt)), 1.0 / radius, 1e-6);
+        if (!matches) {
+            return ::testing::AssertionFailure()
+                << "radius=" << radius << ", t=" << pt << ": " << matches.message();
         }
-    });
-
-    rc::check("curvature(f, x) matches |f''|/(1+f'^2)^(3/2) for polynomials", []() {
-        // Generate a random polynomial of degree 2-3
-        auto f = gen_polynomial("x", 2, 3);
-
-        auto kappa = LMCAS::curvature_checked(f, "x").value();
-        RC_ASSERT(kappa != nullptr);
-
-        // Compute manually: f' and f''
-        auto f_prime = f->differentiate("x");
-        auto f_double_prime = f_prime->differentiate("x");
-        RC_ASSERT(f_prime != nullptr);
-        RC_ASSERT(f_double_prime != nullptr);
-
-        // Evaluate at a sample point
-        double pt = 1.0;
-        auto pt_expr = SE::number(pt);
-
-        auto kappa_val_expr = kappa->substitute("x", pt_expr)->simplify();
-        auto fp_val_expr = f_prime->substitute("x", pt_expr)->simplify();
-        auto fpp_val_expr = f_double_prime->substitute("x", pt_expr)->simplify();
-
-        auto kappa_val = test_numeric_eval(kappa_val_expr);
-        auto fp_val = test_numeric_eval(fp_val_expr);
-        auto fpp_val = test_numeric_eval(fpp_val_expr);
-
-        if (kappa_val && fp_val && fpp_val) {
-            if (std::isfinite(*kappa_val) && std::isfinite(*fp_val) && std::isfinite(*fpp_val)) {
-                // Expected: |f''| / (1 + f'^2)^(3/2)
-                double expected = std::abs(*fpp_val) /
-                    std::pow(1.0 + (*fp_val) * (*fp_val), 1.5);
-
-                if (std::isfinite(expected)) {
-                    double diff = std::abs(*kappa_val - expected);
-                    double scale = std::max(1.0, std::abs(expected));
-                    RC_ASSERT(diff / scale < 1e-4);
-                }
-            }
-        }
-        // If numeric eval fails, skip (symbolic expression is still correct)
-    });
+    }
+    return ::testing::AssertionSuccess();
 }
 
-
-static void test_inflection_points() {
-    TEST_CASE("Inflection points");
-
-    rc::check("f''(x) == 0 at inflection points for polynomials", []() {
-        auto f = gen_polynomial("x", 3, 4);
-
-        auto f_prime = f->differentiate("x");
-        auto f_double_prime = f_prime->differentiate("x");
-
-        auto inflections = LMCAS::inflection_points_checked(f, "x").value();
-
-        for (const auto& pt : inflections) {
-            auto eval_expr = f_double_prime->substitute("x", pt)->simplify();
-            auto val = test_numeric_eval(eval_expr);
-            if (val) {
-                RC_ASSERT(std::abs(*val) < 1e-4);
-            }
-        }
-    });
+static void check_circle_curvature() {
+    RC_ASSERT(static_cast<bool>(circle_curvature_matches(*rc::gen::inRange(1, (10) + 1))));
 }
 
+static void check_polynomial_curvature() {
+    auto sample = gen_polynomial("x", 2, 3);
+    auto result = LMCAS::curvature_checked(sample.expression, "x");
+    RC_ASSERT(result);
+    const auto &kappa = result.value();
+    RC_ASSERT(kappa != nullptr);
 
-int main() {
-    test_log_differentiation_equivalence();
-    test_inflection_points();
-    test_asymptotes_rational();
-    test_curvature_formula();
+    const double pt = 1.0;
+    double first = 0.0;
+    double second = 0.0;
+    for (std::size_t k = 1; k < sample.coefficients.size(); ++k) {
+        first += static_cast<double>(k) * sample.coefficients[k] *
+                 std::pow(pt, static_cast<int>(k) - 1);
+        if (k >= 2) {
+            second += static_cast<double>(k * (k - 1)) * sample.coefficients[k] *
+                      std::pow(pt, static_cast<int>(k) - 2);
+        }
+    }
+    const double expected = std::abs(second) / std::pow(1.0 + first * first, 1.5);
+    RC_ASSERT(static_cast<bool>(numeric_matches(kappa->substitute("x", SE::number(pt)), expected,
+                                              1e-4 * std::max(1.0, std::abs(expected)))));
+}
 
-    return TEST_REPORT();
+TEST(LmcasPropCalculusUtils, CircleCurvatureRadiusEndpoints) {
+    ASSERT_TRUE(circle_curvature_matches(1));
+    ASSERT_TRUE(circle_curvature_matches(10));
+}
+
+TEST(LmcasPropCalculusUtils, PolynomialCurvatureZeroSecondDerivative) {
+    auto x = var("x");
+    auto polynomial = SE::add(SE::power(x, num(3)),
+                              SE::multiply(num(-3), SE::power(x, num(2))));
+    auto result = LMCAS::curvature_checked(polynomial, "x");
+    ASSERT_TRUE(result);
+    ASSERT_NE(result.value(), nullptr);
+    ASSERT_TRUE(numeric_matches(result.value()->substitute("x", num(1)), 0.0, 0.0));
+}
+
+TEST(LmcasPropCalculusUtils, CircleCurvature) {
+    EXPECT_TRUE(rc::check("curvature of circle radius R is 1/R", check_circle_curvature));
+}
+
+TEST(LmcasPropCalculusUtils, PolynomialCurvature) {
+    EXPECT_TRUE(rc::check("curvature(f, x) matches |f''|/(1+f'^2)^(3/2) for polynomials",
+                          check_polynomial_curvature));
+}
+
+TEST(LmcasPropCalculusUtils, InflectionPoints) {
+    /**
+     * @brief API 返回 f'' 的实零点，仅作为拐点的必要条件。
+     * 凹凸性变化尚未获证，因此保留 x^4 的候选点。
+     */
+    EXPECT_TRUE(rc::check("returned polynomial candidates satisfy coefficient-derived f''=0", []() {
+        auto sample = gen_polynomial("x", 3, 4);
+        auto result = LMCAS::inflection_points_checked(sample.expression, "x");
+        if (!result) {
+            std::cerr << "Inflection input: " << sample.expression->to_string()
+                      << "; " << result.error().operation << ": "
+                      << result.error().message << '\n';
+        }
+        RC_ASSERT(result);
+
+        for (const auto &pt : result.value()) {
+            RC_ASSERT(pt != nullptr);
+            auto value = test_numeric_eval(pt);
+            RC_ASSERT(value.has_value());
+            RC_ASSERT(std::isfinite(*value));
+            double second = 0.0;
+            for (std::size_t k = 2; k < sample.coefficients.size(); ++k) {
+                second += static_cast<double>(k * (k - 1)) * sample.coefficients[k] *
+                          std::pow(*value, static_cast<int>(k) - 2);
+            }
+            RC_ASSERT(std::isfinite(second));
+            RC_ASSERT(std::abs(second) <= 1e-4);
+        }
+    }));
+}
+
+TEST(LmcasPropCalculusUtils, QuarticInflectionCandidates) {
+    auto x = var("x");
+    auto fourth = SE::power(x, num(4));
+    auto square = SE::power(x, num(2));
+    auto complex_only = LMCAS::inflection_points_checked(
+        SE::add(fourth, square), "x");
+    ASSERT_TRUE(complex_only);
+    ASSERT_TRUE(complex_only.value().empty());
+
+    auto real_pair = LMCAS::inflection_points_checked(
+        SE::add(fourth, SE::multiply(num(-6), square)), "x");
+    ASSERT_TRUE(real_pair);
+    ASSERT_EQ(real_pair.value().size(), 2u);
+    std::vector<double> coordinates;
+    for (const auto &point : real_pair.value()) {
+        ASSERT_NE(point, nullptr);
+        auto value = test_numeric_eval(point);
+        ASSERT_TRUE(value.has_value());
+        ASSERT_TRUE(std::isfinite(*value));
+        coordinates.push_back(*value);
+    }
+    std::sort(coordinates.begin(), coordinates.end());
+    ASSERT_NEAR(coordinates[0], -1.0, 1e-12);
+    ASSERT_NEAR(coordinates[1], 1.0, 1e-12);
+
+    auto repeated = LMCAS::inflection_points_checked(fourth, "x");
+    ASSERT_TRUE(repeated);
+    ASSERT_EQ(repeated.value().size(), 1u);
+    ASSERT_TRUE(numeric_matches(repeated.value()[0], 0.0, 0.0));
 }

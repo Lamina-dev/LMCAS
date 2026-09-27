@@ -1,24 +1,15 @@
 
 #include "test_common.hpp"
-#include "rapidcheck/rapidcheck.h"
+#include <rapidcheck.h>
 #include "assumption_context.hpp"
 #include "inference_engine.hpp"
 #include "property_store.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <vector>
 #include <string>
 #include <memory>
 
 using namespace LMCAS;
-
-
-static std::shared_ptr<const SymbolicNode> make_var(const std::string& name) {
-    return LMCAS::detail::make_node<VariableNode>(name);
-}
-
-static std::shared_ptr<const SymbolicNode> make_number(int val) {
-    return LMCAS::detail::make_node<NumberNode>(BigInt(val));
-}
 
 static std::shared_ptr<const SymbolicNode> make_power(
     std::shared_ptr<const SymbolicNode> base,
@@ -33,296 +24,236 @@ static std::shared_ptr<const SymbolicNode> make_function(
         type, std::vector<std::shared_ptr<const SymbolicNode>>{std::move(arg)});
 }
 
-static SymbolicExpr wrap_expr(std::shared_ptr<const SymbolicNode> node) {
-    auto expr = LMCAS::detail::expression_from_node(std::move(node));
-    return expr;
-}
-
 /// Generate a random domain that is Integer or Real (for trig function arguments)
 static Domain random_integer_or_real() {
-    return rc::gen::boolean() ? Domain::Integer : Domain::Real;
+    return *rc::gen::arbitrary<bool>() ? Domain::Integer : Domain::Real;
 }
 
 /// Generate a random domain that is Rational or Real (for exp arguments)
 static Domain random_rational_or_real() {
-    int choice = rc::gen::inRange(0, 2);
+    int choice = *rc::gen::inRange(0, (2) + 1);
     switch (choice) {
-        case 0: return Domain::Rational;
-        case 1: return Domain::Real;
-        default: return Domain::Integer; // Integer implies Rational
+    case 0:
+        return Domain::Rational;
+    case 1:
+        return Domain::Real;
+    default:
+        return Domain::Integer; // Integer implies Rational
     }
 }
 
-/// Generate a random Natural or PositiveInt domain (for power exponents)
-static Domain random_natural_domain() {
-    return rc::gen::boolean() ? Domain::Natural : Domain::PositiveInt;
-}
-
-
-static void test_trig_integer_or_real_gives_real() {
-    TEST_CASE("sin/cos/tan(Integer|Real) → Real");
-
-    rc::check("For any trig function with Integer or Real argument, result is Real", []() {
+TEST(LmcasAssumptionDomainInference, TrigIntegerOrRealGivesReal) {
+    EXPECT_TRUE(rc::check("For any trig function with Integer or Real argument, result is Real", []() {
         // Pick a random trig function
         std::vector<FunctionNode::FuncType> trig_funcs = {
             FunctionNode::FuncType::Sin,
             FunctionNode::FuncType::Cos,
-            FunctionNode::FuncType::Tan
-        };
-        auto func_type = rc::gen::elementOf(trig_funcs);
+            FunctionNode::FuncType::Tan};
+        auto func_type = *rc::gen::elementOf(trig_funcs);
 
         // Pick a random domain for the argument
         Domain arg_domain = random_integer_or_real();
 
-        std::string var_name = "x_" + std::to_string(rc::gen::inRange(0, 999));
+        std::string var_name = "x_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
-        ctx.assume_domain(var_name, arg_domain);
+        EXPECT_TRUE(ctx.assume_domain(var_name, arg_domain).has_value());
         InferenceEngine engine(ctx);
 
-        auto func_node = make_function(func_type, make_var(var_name));
-        auto expr = wrap_expr(func_node);
+        auto func_node = make_function(func_type, test_variable_node(var_name));
+        auto expr = test_expression_from_node(func_node);
 
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
-    });
+    }));
 }
 
-
-static void test_exp_rational_or_real_gives_real() {
-    TEST_CASE("exp(Rational|Real) → Real");
-
-    rc::check("For exp with Rational or Real argument, result is Real", []() {
+TEST(LmcasAssumptionDomainInference, ExpRationalOrRealGivesReal) {
+    EXPECT_TRUE(rc::check("For exp with Rational or Real argument, result is Real", []() {
         Domain arg_domain = random_rational_or_real();
-        std::string var_name = "x_" + std::to_string(rc::gen::inRange(0, 999));
+        std::string var_name = "x_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
-        ctx.assume_domain(var_name, arg_domain);
+        EXPECT_TRUE(ctx.assume_domain(var_name, arg_domain).has_value());
         InferenceEngine engine(ctx);
 
-        auto func_node = make_function(FunctionNode::FuncType::Exp, make_var(var_name));
-        auto expr = wrap_expr(func_node);
+        auto func_node = make_function(FunctionNode::FuncType::Exp, test_variable_node(var_name));
+        auto expr = test_expression_from_node(func_node);
 
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
-    });
+    }));
 }
 
+TEST(LmcasAssumptionDomainInference, LnIntegerRequiresPositive) {
+    for (Domain domain : {Domain::Integer, Domain::PositiveInt}) {
+        AssumptionContext ctx;
+        EXPECT_TRUE(ctx.assume_domain("n", domain).has_value()) << "domain accepted";
+        InferenceEngine engine(ctx);
+        auto expression = test_expression_from_node(make_function(FunctionNode::FuncType::Ln, test_variable_node("n")));
+        auto result = engine.query_real_checked(expression);
+        EXPECT_TRUE(result && result.value() == (domain == Domain::PositiveInt ? Tribool::True : Tribool::Unknown)) << "ln requires strict positivity";
+    }
+    AssumptionContext ctx;
+    EXPECT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value()) << "integer accepted";
+    EXPECT_TRUE(ctx.assume_sign("n", Sign::Negative).has_value()) << "negative accepted";
+    InferenceEngine engine(ctx);
+    auto logarithm = make_function(FunctionNode::FuncType::Ln, test_variable_node("n"));
+    for (auto node : {logarithm,
+                      make_function(FunctionNode::FuncType::Exp, logarithm),
+                      make_power(logarithm, test_integer_node(2))}) {
+        auto expression = test_expression_from_node(node);
+        auto real = engine.query_real_checked(expression);
+        auto nonnegative = engine.query_nonnegative_checked(expression);
+        EXPECT_TRUE(!real && real.error().code == CasErrc::DomainError) << "undefined nested logarithm cannot establish realness";
+        EXPECT_TRUE(!nonnegative && nonnegative.error().code == CasErrc::DomainError) << "undefined nested logarithm cannot establish a sign";
+    }
+}
 
-static void test_ln_integer_gives_real() {
-    TEST_CASE("ln(Integer) → Real");
-
-    rc::check("For ln with Integer argument, result is Real", []() {
-        std::string var_name = "n_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionDomainInference, SqrtNonnegRealGivesReal) {
+    EXPECT_TRUE(rc::check("For sqrt with non-negative Real argument, result is Real", []() {
+        std::string var_name = "x_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         AssumptionContext ctx;
-        ctx.assume_domain(var_name, Domain::Integer);
+        EXPECT_TRUE(ctx.assume_domain(var_name, Domain::Real).has_value());
+        EXPECT_TRUE(ctx.assume_sign(var_name, Sign::NonNegative).has_value());
         InferenceEngine engine(ctx);
 
-        auto func_node = make_function(FunctionNode::FuncType::Ln, make_var(var_name));
-        auto expr = wrap_expr(func_node);
+        auto func_node = make_function(FunctionNode::FuncType::Sqrt, test_variable_node(var_name));
+        auto expr = test_expression_from_node(func_node);
 
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
-    });
+    }));
 }
 
-
-static void test_sqrt_nonneg_real_gives_real() {
-    TEST_CASE("sqrt(NonNeg Real) → Real");
-
-    rc::check("For sqrt with non-negative Real argument, result is Real", []() {
-        std::string var_name = "x_" + std::to_string(rc::gen::inRange(0, 999));
+TEST(LmcasAssumptionDomainInference, IntegerPowerNaturalGivesInteger) {
+    EXPECT_TRUE(rc::check("For Integer base raised to a positive integer exponent, result is Integer", []() {
+        std::string base_name = "b_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
+        int exponent = *rc::gen::inRange(1, (10) + 1); // Positive integer exponent
 
         AssumptionContext ctx;
-        ctx.assume_domain(var_name, Domain::Real);
-        ctx.assume_sign(var_name, Sign::NonNegative);
+        EXPECT_TRUE(ctx.assume_domain(base_name, Domain::Integer).has_value());
         InferenceEngine engine(ctx);
 
-        auto func_node = make_function(FunctionNode::FuncType::Sqrt, make_var(var_name));
-        auto expr = wrap_expr(func_node);
-
-        RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
-    });
-}
-
-
-static void test_integer_power_natural_gives_integer() {
-    TEST_CASE("Integer^Natural → Integer");
-
-    rc::check("For Integer base raised to a positive integer exponent, result is Integer", []() {
-        std::string base_name = "b_" + std::to_string(rc::gen::inRange(0, 999));
-        int exponent = rc::gen::inRange(1, 10); // Positive integer exponent
-
-        AssumptionContext ctx;
-        ctx.assume_domain(base_name, Domain::Integer);
-        InferenceEngine engine(ctx);
-
-        auto pow_node = make_power(make_var(base_name), make_number(exponent));
-        auto expr = wrap_expr(pow_node);
+        auto pow_node = make_power(test_variable_node(base_name), test_integer_node(exponent));
+        auto expr = test_expression_from_node(pow_node);
 
         RC_ASSERT(engine.query_integer_checked(expr).value() == Tribool::True);
-    });
+    }));
 }
 
-
-static void test_integer_power_zero_gives_integer() {
-    TEST_CASE("Integer^0 → Integer");
-
-    rc::check("For Integer base raised to 0, result is Integer (x^0 = 1)", []() {
-        std::string base_name = "b_" + std::to_string(rc::gen::inRange(0, 999));
-
-        AssumptionContext ctx;
-        ctx.assume_domain(base_name, Domain::Integer);
-        InferenceEngine engine(ctx);
-
-        auto pow_node = make_power(make_var(base_name), make_number(0));
-        auto expr = wrap_expr(pow_node);
-
-        RC_ASSERT(engine.query_integer_checked(expr).value() == Tribool::True);
-    });
+TEST(LmcasAssumptionDomainInference, IntegerPowerZeroRequiresNonzero) {
+    AssumptionContext ctx;
+    ASSERT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value()) << "integer accepted";
+    InferenceEngine engine(ctx);
+    const auto expression = test_expression_from_node(make_power(test_variable_node("n"), test_integer_node(0)));
+    auto unknown = engine.query_integer_checked(expression);
+    EXPECT_TRUE(unknown && unknown.value() == Tribool::Unknown) << "possibly zero remains unknown";
+    EXPECT_TRUE(ctx.assume_sign("n", Sign::NonZero).has_value()) << "nonzero accepted";
+    auto known = engine.query_integer_checked(expression);
+    EXPECT_TRUE(known && known.value() == Tribool::True) << "nonzero integer zero power is integer";
 }
 
-
-static void test_rational_power_integer_gives_real() {
-    TEST_CASE("Rational^Integer → Real");
-
-    rc::check("For Rational base raised to integer exponent, result is Real", []() {
-        std::string base_name = "r_" + std::to_string(rc::gen::inRange(0, 999));
-        int exponent = rc::gen::inRange(1, 10);
+TEST(LmcasAssumptionDomainInference, RationalPowerIntegerGivesReal) {
+    EXPECT_TRUE(rc::check("For Rational base raised to integer exponent, result is Real", []() {
+        std::string base_name = "r_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
+        int exponent = *rc::gen::inRange(1, (10) + 1);
 
         AssumptionContext ctx;
-        ctx.assume_domain(base_name, Domain::Rational);
+        EXPECT_TRUE(ctx.assume_domain(base_name, Domain::Rational).has_value());
         InferenceEngine engine(ctx);
 
-        auto pow_node = make_power(make_var(base_name), make_number(exponent));
-        auto expr = wrap_expr(pow_node);
+        auto pow_node = make_power(test_variable_node(base_name), test_integer_node(exponent));
+        auto expr = test_expression_from_node(pow_node);
 
         // Rational implies Real, and Real^Integer -> Real
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::True);
-    });
+    }));
 }
 
-
-static void test_unknown_domain_gives_unknown() {
-    TEST_CASE("Unknown domain argument → Unknown");
-
-    rc::check("For functions with unknown domain argument, result domain is Unknown", []() {
+TEST(LmcasAssumptionDomainInference, UnknownDomainGivesUnknown) {
+    EXPECT_TRUE(rc::check("For functions with unknown domain argument, result domain is Unknown", []() {
         std::vector<FunctionNode::FuncType> funcs = {
             FunctionNode::FuncType::Sin,
             FunctionNode::FuncType::Cos,
             FunctionNode::FuncType::Tan,
-            FunctionNode::FuncType::Exp
-        };
-        auto func_type = rc::gen::elementOf(funcs);
-        std::string var_name = "u_" + std::to_string(rc::gen::inRange(0, 999));
+            FunctionNode::FuncType::Exp};
+        auto func_type = *rc::gen::elementOf(funcs);
+        std::string var_name = "u_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         // No domain declared for variable (defaults to Complex)
         AssumptionContext ctx;
         InferenceEngine engine(ctx);
 
-        auto func_node = make_function(func_type, make_var(var_name));
-        auto expr = wrap_expr(func_node);
+        auto func_node = make_function(func_type, test_variable_node(var_name));
+        auto expr = test_expression_from_node(func_node);
 
         /// 参数域缺少 Real/Integer 证明时,函数值实数性保持 Unknown.
         RC_ASSERT(engine.query_real_checked(expr).value() == Tribool::Unknown);
-    });
+    }));
 }
 
-
-static void test_all_trig_with_integer() {
-    TEST_CASE("All trig(Integer) → Real");
-
+TEST(LmcasAssumptionDomainInference, AllTrigWithInteger) {
     // sin(Integer) -> Real
     {
         AssumptionContext ctx;
-        ctx.assume_domain("n", Domain::Integer);
+        EXPECT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value());
         InferenceEngine engine(ctx);
-        auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sin, make_var("n")));
-        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "sin(Integer) → Real");
+        auto expr = test_expression_from_node(make_function(FunctionNode::FuncType::Sin, test_variable_node("n")));
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True) << "sin(Integer) → Real";
     }
     // cos(Integer) -> Real
     {
         AssumptionContext ctx;
-        ctx.assume_domain("n", Domain::Integer);
+        EXPECT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value());
         InferenceEngine engine(ctx);
-        auto expr = wrap_expr(make_function(FunctionNode::FuncType::Cos, make_var("n")));
-        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "cos(Integer) → Real");
+        auto expr = test_expression_from_node(make_function(FunctionNode::FuncType::Cos, test_variable_node("n")));
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True) << "cos(Integer) → Real";
     }
     // tan(Integer) -> Real
     {
         AssumptionContext ctx;
-        ctx.assume_domain("n", Domain::Integer);
+        EXPECT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value());
         InferenceEngine engine(ctx);
-        auto expr = wrap_expr(make_function(FunctionNode::FuncType::Tan, make_var("n")));
-        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "tan(Integer) → Real");
+        auto expr = test_expression_from_node(make_function(FunctionNode::FuncType::Tan, test_variable_node("n")));
+        EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True) << "tan(Integer) → Real";
     }
 }
 
-static void test_exp_with_integer() {
-    TEST_CASE("exp(Integer) → Real");
-
+TEST(LmcasAssumptionDomainInference, ExpWithInteger) {
     AssumptionContext ctx;
-    ctx.assume_domain("n", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value());
     InferenceEngine engine(ctx);
-    auto expr = wrap_expr(make_function(FunctionNode::FuncType::Exp, make_var("n")));
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "exp(Integer) → Real");
+    auto expr = test_expression_from_node(make_function(FunctionNode::FuncType::Exp, test_variable_node("n")));
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True) << "exp(Integer) → Real";
 }
 
-static void test_ln_positive_gives_real() {
-    TEST_CASE("ln(Positive) → Real");
-
+TEST(LmcasAssumptionDomainInference, LnPositiveGivesReal) {
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
-    ctx.assume_sign("x", Sign::Positive);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
+    ASSERT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
     InferenceEngine engine(ctx);
-    auto expr = wrap_expr(make_function(FunctionNode::FuncType::Ln, make_var("x")));
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True, "ln(Positive Real) → Real");
+    auto expr = test_expression_from_node(make_function(FunctionNode::FuncType::Ln, test_variable_node("x")));
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::True) << "ln(Positive Real) → Real";
 }
 
-static void test_sqrt_without_nonneg_unknown() {
-    TEST_CASE("sqrt without NonNeg → Unknown");
-
+TEST(LmcasAssumptionDomainInference, SqrtWithoutNonnegUnknown) {
     /// sqrt 的实数性需要 Real 与 NonNegative 共同证明;当前仅声明 Real.
     AssumptionContext ctx;
-    ctx.assume_domain("x", Domain::Real);
+    ASSERT_TRUE(ctx.assume_domain("x", Domain::Real).has_value());
     /// 符号属性保持未声明状态.
     InferenceEngine engine(ctx);
-    auto expr = wrap_expr(make_function(FunctionNode::FuncType::Sqrt, make_var("x")));
-    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown,
-        "sqrt(Real without NonNeg) → Unknown");
+    auto expr = test_expression_from_node(make_function(FunctionNode::FuncType::Sqrt, test_variable_node("x")));
+    EXPECT_TRUE(engine.query_real_checked(expr).value() == Tribool::Unknown) << "sqrt(Real without NonNeg) → Unknown";
 }
 
-static void test_power_negative_exponent_not_integer() {
-    TEST_CASE("Integer^(-1) not necessarily Integer");
-
+TEST(LmcasAssumptionDomainInference, PowerNegativeExponentNotInteger) {
     AssumptionContext ctx;
-    ctx.assume_domain("n", Domain::Integer);
+    ASSERT_TRUE(ctx.assume_domain("n", Domain::Integer).has_value());
     InferenceEngine engine(ctx);
 
     // n^(-1) = 1/n - not necessarily integer
-    auto pow_node = make_power(make_var("n"), make_number(-1));
-    auto expr = wrap_expr(pow_node);
+    auto pow_node = make_power(test_variable_node("n"), test_integer_node(-1));
+    auto expr = test_expression_from_node(pow_node);
 
     // Should NOT be able to infer Integer (e.g., 2^(-1) = 0.5)
-    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown,
-        "Integer^(-1) → Integer is Unknown (not guaranteed)");
-}
-
-
-int main() {
-    test_trig_integer_or_real_gives_real();
-    test_exp_rational_or_real_gives_real();
-    test_ln_integer_gives_real();
-    test_sqrt_nonneg_real_gives_real();
-    test_integer_power_natural_gives_integer();
-    test_integer_power_zero_gives_integer();
-    test_rational_power_integer_gives_real();
-    test_unknown_domain_gives_unknown();
-
-    // Additional unit-style tests for completeness
-    test_all_trig_with_integer();
-    test_exp_with_integer();
-    test_ln_positive_gives_real();
-    test_sqrt_without_nonneg_unknown();
-    test_power_negative_exponent_not_integer();
-
-    return TEST_REPORT();
+    EXPECT_TRUE(engine.query_integer_checked(expr).value() == Tribool::Unknown) << "Integer^(-1) → Integer is Unknown (not guaranteed)";
 }

@@ -40,4 +40,10 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_symbolic_poly(
     const Polynomial<SymbolicPolyCoeff>& polynomial,
     const std::string& variable);
 
-} // namespace LMCAS::detail::inequality_support
+void include_numeric_root(std::vector<Interval>& intervals,
+                          const std::shared_ptr<SymbolicExpr>& root);
+IntervalUnion build_parametric_intervals(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
+    const std::vector<int>& multiplicities, int leading_sign, InequalityType type);
+
+}

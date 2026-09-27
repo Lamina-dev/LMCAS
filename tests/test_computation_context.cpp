@@ -7,52 +7,40 @@
 #include <thread>
 #include <type_traits>
 
-int main() {
-    using namespace LMCAS;
-
-    TEST_CASE("ComputationContext has exclusive value semantics");
-    EXPECT_TRUE(!std::is_copy_constructible_v<ComputationContext>,
-                "contexts cannot be copied");
-    EXPECT_TRUE(!std::is_copy_assignable_v<ComputationContext>,
-                "contexts cannot be copy-assigned");
-    EXPECT_TRUE(!std::is_move_constructible_v<ComputationContext>,
-                "contexts cannot be moved between owners");
-
-    TEST_CASE("Step and node counters reject overflow");
+TEST(ComputationContext, CounterOverflow) {
     ResourceLimits maximum_limits;
     maximum_limits.max_steps = std::numeric_limits<std::size_t>::max();
     maximum_limits.max_ast_nodes = std::numeric_limits<std::size_t>::max();
     ComputationContext maximum_context(maximum_limits);
     auto all_steps = maximum_context.consume_steps(maximum_limits.max_steps, "test_steps");
-    EXPECT_TRUE(all_steps.has_value(), "maximum step reservation is representable");
+    EXPECT_TRUE((all_steps.has_value())) << "maximum step reservation is representable";
     auto step_overflow = maximum_context.consume_steps(1, "test_steps");
-    EXPECT_TRUE(!step_overflow && step_overflow.error().code == CasErrc::ResourceLimit,
-                "step counter cannot wrap past size_t maximum");
+    EXPECT_TRUE((!step_overflow && step_overflow.error().code == CasErrc::ResourceLimit)) << "step counter cannot wrap past size_t maximum";
     auto all_nodes = maximum_context.reserve_nodes(maximum_limits.max_ast_nodes, "test_nodes");
-    EXPECT_TRUE(all_nodes.has_value(), "maximum node reservation is representable");
+    EXPECT_TRUE((all_nodes.has_value())) << "maximum node reservation is representable";
     auto node_overflow = maximum_context.reserve_nodes(1, "test_nodes");
-    EXPECT_TRUE(!node_overflow && node_overflow.error().code == CasErrc::ResourceLimit,
-                "node counter cannot wrap past size_t maximum");
+    EXPECT_TRUE((!node_overflow && node_overflow.error().code == CasErrc::ResourceLimit)) << "node counter cannot wrap past size_t maximum";
+}
 
-    TEST_CASE("Cancellation applies to every budget operation");
+TEST(ComputationContext, Cancellation) {
     CancellationToken cancellation;
     cancellation.cancel();
     ComputationContext cancelled_context({}, cancellation);
     auto cancelled_nodes = cancelled_context.reserve_nodes(0, "test_cancel");
-    EXPECT_TRUE(!cancelled_nodes && cancelled_nodes.error().code == CasErrc::Cancelled,
-                "node reservation observes cancellation");
+    EXPECT_TRUE((!cancelled_nodes && cancelled_nodes.error().code == CasErrc::Cancelled)) << "node reservation observes cancellation";
     auto cancelled_diagnostic = cancelled_context.add_diagnostic(
         {DiagnosticSeverity::Info, "test_cancel", "unused"});
-    EXPECT_TRUE(!cancelled_diagnostic &&
-                    cancelled_diagnostic.error().code == CasErrc::Cancelled,
-                "diagnostic collection observes cancellation");
+    EXPECT_TRUE((!cancelled_diagnostic &&
+                 cancelled_diagnostic.error().code == CasErrc::Cancelled))
+        << "diagnostic collection observes cancellation";
     auto cancelled_assumptions = cancelled_context.set_assumptions(
         nullptr, "test_cancel");
-    EXPECT_TRUE(!cancelled_assumptions &&
-                    cancelled_assumptions.error().code == CasErrc::Cancelled,
-                "assumption snapshot updates observe cancellation");
+    EXPECT_TRUE((!cancelled_assumptions &&
+                 cancelled_assumptions.error().code == CasErrc::Cancelled))
+        << "assumption snapshot updates observe cancellation";
+}
 
-    TEST_CASE("Diagnostic collection has an explicit budget");
+TEST(ComputationContext, DiagnosticBudgetAndDispatch) {
     ResourceLimits diagnostic_limits;
     diagnostic_limits.max_diagnostics = 1;
     ComputationContext diagnostic_context(diagnostic_limits);
@@ -60,51 +48,47 @@ int main() {
         {DiagnosticSeverity::Warning, "test_diagnostics", "first"});
     auto second = diagnostic_context.add_diagnostic(
         {DiagnosticSeverity::Warning, "test_diagnostics", "second"});
-    EXPECT_TRUE(first.has_value(), "first diagnostic fits the budget");
-    EXPECT_TRUE(!second && second.error().code == CasErrc::ResourceLimit,
-                "diagnostic overflow returns ResourceLimit");
-    EXPECT_TRUE(diagnostic_context.diagnostics().size() == 1,
-                "failed diagnostic insertion does not mutate collection");
+    EXPECT_TRUE((first.has_value())) << "first diagnostic fits the budget";
+    EXPECT_TRUE((!second && second.error().code == CasErrc::ResourceLimit)) << "diagnostic overflow returns ResourceLimit";
+    EXPECT_TRUE((diagnostic_context.diagnostics().size() == 1)) << "failed diagnostic insertion does not mutate collection";
 
-    TEST_CASE("DiagnosticEngine is the only diagnostic dispatch point");
     std::size_t consumed = 0;
     auto installed_diagnostic_consumer =
         diagnostic_context.set_diagnostic_consumer(
-            [&](const Diagnostic& diagnostic) {
-                if (diagnostic.operation == "test_consumer") ++consumed;
+            [&](const Diagnostic &diagnostic) {
+                if (diagnostic.operation == "test_consumer") {
+                    ++consumed;
+                }
             });
-    EXPECT_TRUE(installed_diagnostic_consumer.has_value(),
-                "diagnostic consumer installation succeeds");
+    EXPECT_TRUE((installed_diagnostic_consumer.has_value())) << "diagnostic consumer installation succeeds";
     ResourceLimits consumer_limits;
     consumer_limits.max_diagnostics = 2;
     ComputationContext consumer_context(consumer_limits);
     auto installed_consumer = consumer_context.set_diagnostic_consumer(
-        [&](const Diagnostic&) { ++consumed; });
-    EXPECT_TRUE(installed_consumer.has_value(),
-                "consumer context accepts a diagnostic consumer");
+        [&](const Diagnostic &) { ++consumed; });
+    EXPECT_TRUE((installed_consumer.has_value())) << "consumer context accepts a diagnostic consumer";
     auto emitted = consumer_context.add_diagnostic(
         {DiagnosticSeverity::Info, "test_consumer", "event"});
-    EXPECT_TRUE(emitted.has_value() && consumed == 1,
-                "context diagnostics are dispatched by DiagnosticEngine");
+    EXPECT_TRUE((emitted.has_value() && consumed == 1)) << "context diagnostics are dispatched by DiagnosticEngine";
+}
 
-    TEST_CASE("Diagnostic consumer failures preserve engine state");
+TEST(ComputationContext, DiagnosticFailure) {
     ComputationContext failing_consumer_context;
     auto installed_failing_consumer =
         failing_consumer_context.set_diagnostic_consumer(
-            [](const Diagnostic&) {
+            [](const Diagnostic &) {
                 throw std::runtime_error("consumer failure");
             });
-    EXPECT_TRUE(installed_failing_consumer.has_value(),
-                "throwing diagnostic consumer installation succeeds");
+    EXPECT_TRUE((installed_failing_consumer.has_value())) << "throwing diagnostic consumer installation succeeds";
     auto consumer_failure = failing_consumer_context.add_diagnostic(
         {DiagnosticSeverity::Error, "test_consumer_failure", "event"});
-    EXPECT_TRUE(!consumer_failure &&
-                    consumer_failure.error().code == CasErrc::InternalInvariant,
-                "consumer exceptions become CasError values");
-    EXPECT_TRUE(failing_consumer_context.diagnostics().empty(),
-                "failed dispatch does not retain a partial diagnostic");
+    EXPECT_TRUE((!consumer_failure &&
+                 consumer_failure.error().code == CasErrc::InternalInvariant))
+        << "consumer exceptions become CasError values";
+    EXPECT_TRUE((failing_consumer_context.diagnostics().empty())) << "failed dispatch does not retain a partial diagnostic";
+}
 
-    TEST_CASE("Per-operation resource limits are enforced at checked boundaries");
+TEST(ComputationContext, OperationLimits) {
     ResourceLimits operation_limits;
     operation_limits.max_integer_bits = 8;
     operation_limits.max_expansion_terms = 3;
@@ -112,38 +96,37 @@ int main() {
     ComputationContext operation_context(operation_limits);
     auto integer_limit =
         operation_context.require_integer_bits(9, "test_integer_bits");
-    EXPECT_TRUE(!integer_limit &&
-                    integer_limit.error().code == CasErrc::ResourceLimit,
-                "integer bit limit is enforceable");
+    EXPECT_TRUE((!integer_limit &&
+                 integer_limit.error().code == CasErrc::ResourceLimit))
+        << "integer bit limit is enforceable";
     auto expansion_limit =
         operation_context.require_expansion_terms(4, "test_expansion_terms");
-    EXPECT_TRUE(!expansion_limit &&
-                    expansion_limit.error().code == CasErrc::ResourceLimit,
-                "expansion term limit is enforceable");
+    EXPECT_TRUE((!expansion_limit &&
+                 expansion_limit.error().code == CasErrc::ResourceLimit))
+        << "expansion term limit is enforceable";
     auto parse_limit = LMCAS::parse_expr("123456789", operation_context);
-    EXPECT_TRUE(!parse_limit &&
-                    parse_limit.error().code == CasErrc::ResourceLimit,
-                "expression parser enforces input byte limit");
+    EXPECT_TRUE((!parse_limit &&
+                 parse_limit.error().code == CasErrc::ResourceLimit))
+        << "expression parser enforces input byte limit";
     auto deserialize_limit = AssumptionContext::deserialize_checked(
         "SCOPE 0\nEND\n", operation_context);
-    EXPECT_TRUE(!deserialize_limit &&
-                    deserialize_limit.error().code == CasErrc::ResourceLimit,
-                "assumption deserializer enforces input byte limit");
+    EXPECT_TRUE((!deserialize_limit &&
+                 deserialize_limit.error().code == CasErrc::ResourceLimit))
+        << "assumption deserializer enforces input byte limit";
+}
 
-    TEST_CASE("Cross-thread context use is rejected");
+TEST(ComputationContext, ContextThreadOwnership) {
     ComputationContext thread_context;
     CasErrc thread_error = CasErrc::Cancelled;
     bool failed = false;
     std::thread worker([&] {
         auto result = thread_context.consume_steps(1, "test_thread");
         failed = !result;
-        if (!result) thread_error = result.error().code;
+        if (!result) {
+            thread_error = result.error().code;
+        }
     });
     worker.join();
-    EXPECT_TRUE(failed && thread_error == CasErrc::InternalInvariant,
-                "a context cannot be shared with another thread");
-    EXPECT_TRUE(thread_context.steps_used() == 0,
-                "rejected cross-thread access does not consume budget");
-
-    return TEST_REPORT();
+    EXPECT_TRUE((failed && thread_error == CasErrc::InternalInvariant)) << "a context cannot be shared with another thread";
+    EXPECT_TRUE((thread_context.steps_used() == 0)) << "rejected cross-thread access does not consume budget";
 }

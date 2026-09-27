@@ -1,76 +1,58 @@
 #include "solver.hpp"
 #include "symbolic.hpp"
 #include "test_common.hpp"
-#include <iostream>
 
-int main() {
+TEST(LmcasGroebnerAdvanced, ReducedBasis) {
     using namespace LMCAS;
-
     auto x = SymbolicExpr::variable("x");
     auto y = SymbolicExpr::variable("y");
 
-    std::cout << "Test 1: Reduced Groebner Basis" << std::endl;
-    {
+    auto p1 = *SymbolicExpr::add(
+        SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
+                          SymbolicExpr::power(y, SymbolicExpr::number(2))),
+        SymbolicExpr::number(-1));
+    auto p2 = *SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
 
-        auto p1 = *SymbolicExpr::add(
-            SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
-                              SymbolicExpr::power(y, SymbolicExpr::number(2))),
-            SymbolicExpr::number(-1));
-        auto p2 = *SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
+    auto rgb = Solver::reduced_groebner_basis({p1, p2}, {"x", "y"});
+    ASSERT_FALSE(rgb.empty());
+    EXPECT_TRUE(Solver::ideal_membership(p1, rgb, {"x", "y"}));
+    EXPECT_TRUE(Solver::ideal_membership(p2, rgb, {"x", "y"}));
+}
 
-        auto rgb = Solver::reduced_groebner_basis({p1, p2}, {"x", "y"});
-        std::cout << "  Reduced basis size: " << rgb.size() << std::endl;
-        for (auto& g : rgb) {
-            std::cout << "  " << g.to_string() << std::endl;
-        }
-        EXPECT_TRUE(!rgb.empty(), "reduced Groebner basis is non-empty");
-        std::cout << "  [PASS]" << std::endl;
-    }
+TEST(LmcasGroebnerAdvanced, IdealMembership) {
+    using namespace LMCAS;
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
 
-    std::cout << "Test 2: Ideal Membership" << std::endl;
-    {
+    auto p1 = *SymbolicExpr::add(x, y);
+    auto p2 = *SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
 
-        auto p1 = *SymbolicExpr::add(x, y);
-        auto p2 = *SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
+    auto gb = Solver::groebner_basis({p1, p2}, {"x", "y"});
 
-        auto gb = Solver::groebner_basis({p1, p2}, {"x", "y"});
-        std::cout << "  Basis: ";
-        for (auto& g : gb) std::cout << g.to_string() << " ; ";
-        std::cout << std::endl;
+    ASSERT_FALSE(gb.empty());
+    EXPECT_TRUE(Solver::ideal_membership(p1, gb, {"x", "y"}));
+    EXPECT_TRUE(Solver::ideal_membership(p2, gb, {"x", "y"}));
 
-        bool member1 = Solver::ideal_membership(p1, gb, {"x", "y"});
-        std::cout << "  x+y in ideal: " << (member1 ? "true" : "false") << std::endl;
-        EXPECT_TRUE(member1, "original generator is in the ideal");
+    auto test_poly = *SymbolicExpr::add(x, SymbolicExpr::number(1));
+    EXPECT_FALSE(Solver::ideal_membership(
+        test_poly, gb, {"x", "y"}));
+}
 
-        auto test_poly = *SymbolicExpr::add(x, SymbolicExpr::number(1));
-        bool member2 = Solver::ideal_membership(test_poly, gb, {"x", "y"});
-        std::cout << "  x+1 in ideal: " << (member2 ? "true" : "false") << std::endl;
+TEST(LmcasGroebnerAdvanced, EliminationIdeal) {
+    using namespace LMCAS;
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
 
-        std::cout << "  [PASS]" << std::endl;
-    }
+    auto p1 = *SymbolicExpr::add(
+        SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
+                          SymbolicExpr::power(y, SymbolicExpr::number(2))),
+        SymbolicExpr::number(-1));
+    auto p2 = *SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
 
-    std::cout << "Test 3: Elimination Ideal" << std::endl;
-    {
+    auto gb = Solver::groebner_basis({p1, p2}, {"x", "y"});
+    auto elim = Solver::elimination_ideal(gb, {"x", "y"}, 1);
 
-        auto p1 = *SymbolicExpr::add(
-            SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
-                              SymbolicExpr::power(y, SymbolicExpr::number(2))),
-            SymbolicExpr::number(-1));
-        auto p2 = *SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), y));
-
-        auto gb = Solver::groebner_basis({p1, p2}, {"x", "y"});
-        auto elim = Solver::elimination_ideal(gb, {"x", "y"}, 1);
-
-        std::cout << "  Full basis size: " << gb.size() << std::endl;
-        std::cout << "  Elimination ideal (eliminate x): " << elim.size() << " elements" << std::endl;
-        for (auto& e : elim) {
-            std::cout << "    " << e.to_string() << std::endl;
-        }
-
-        EXPECT_TRUE(!elim.empty(), "elimination ideal is non-empty");
-        std::cout << "  [PASS]" << std::endl;
-    }
-
-    std::cout << "\nAll advanced Groebner tests passed!" << std::endl;
-    return TEST_REPORT();
+    ASSERT_FALSE(elim.empty());
+    const auto eliminated_relation = *SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), SymbolicExpr::power(y, SymbolicExpr::number(2))), SymbolicExpr::number(-1));
+    EXPECT_TRUE(Solver::ideal_membership(eliminated_relation, elim, {"x", "y"}));
 }

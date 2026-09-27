@@ -5,7 +5,7 @@
 
 using namespace LMCAS;
 
-SymbolicExpr var(const std::string& name) {
+SymbolicExpr var(const std::string &name) {
     return LMCAS::detail::expression_from_node(SymbolicFactory::create_variable(name));
 }
 
@@ -37,9 +37,7 @@ SymbolicExpr func(FunctionNode::FuncType type, SymbolicExpr arg) {
     return LMCAS::detail::expression_from_node(LMCAS::detail::make_node<FunctionNode>(type, args));
 }
 
-void test_basic_match() {
-    std::cout << "Testing basic match..." << std::endl;
-
+TEST(LmcasMatcher, BasicMatch) {
     auto x = var("x");
     auto one = num(1);
     auto p = add(x, one);
@@ -56,18 +54,15 @@ void test_basic_match() {
         std::cerr << "Pattern: x + 1" << std::endl;
         std::cerr << "Target: y + 1" << std::endl;
     }
-    EXPECT_TRUE(matched, "basic wildcard pattern matches target");
-    EXPECT_TRUE(bindings.count("x") == 1, "basic match binds wildcard x");
-    EXPECT_TRUE(bindings.count("x") == 1 &&
-                    LMCAS::detail::node(bindings.at("x"))->equals(*LMCAS::detail::node(y)),
-                "basic match binds x to y");
+    EXPECT_TRUE((matched)) << ("basic wildcard pattern matches target");
+    EXPECT_TRUE((bindings.count("x") == 1)) << ("basic match binds wildcard x");
+    EXPECT_TRUE((bindings.count("x") == 1 &&
+                 LMCAS::detail::node(bindings.at("x"))->equals(*LMCAS::detail::node(y))))
+        << ("basic match binds x to y");
 
-    std::cout << "Basic match passed." << std::endl;
 }
 
-void test_trig_identity() {
-    std::cout << "Testing trig identity sin(x)^2 + cos(x)^2 -> 1..." << std::endl;
-
+TEST(LmcasMatcher, TrigIdentity) {
     auto A = var("A");
     auto two = num(2);
     auto sinA = func(FunctionNode::FuncType::Sin, A);
@@ -88,22 +83,19 @@ void test_trig_identity() {
     if (!matched) {
         std::cerr << "Trig identity match failed!" << std::endl;
     }
-    EXPECT_TRUE(matched, "trig identity pattern matches target");
-    EXPECT_TRUE(bindings.count("A") == 1, "trig identity binds wildcard A");
-    EXPECT_TRUE(bindings.count("A") == 1 &&
-                    LMCAS::detail::node(bindings.at("A"))->equals(*LMCAS::detail::node(y)),
-                "trig identity binds A to y");
+    EXPECT_TRUE((matched)) << ("trig identity pattern matches target");
+    EXPECT_TRUE((bindings.count("A") == 1)) << ("trig identity binds wildcard A");
+    EXPECT_TRUE((bindings.count("A") == 1 &&
+                 LMCAS::detail::node(bindings.at("A"))->equals(*LMCAS::detail::node(y))))
+        << ("trig identity binds A to y");
 
     auto replacement = num(1);
     auto result = Matcher::replace(replacement, bindings);
-    EXPECT_TRUE(LMCAS::detail::node(result)->is_one(), "trig identity replacement returns one");
+    EXPECT_TRUE((LMCAS::detail::node(result)->is_one())) << ("trig identity replacement returns one");
 
-    std::cout << "Trig identity passed." << std::endl;
 }
 
-void test_rewrite_engine() {
-    std::cout << "Testing rewrite engine..." << std::endl;
-
+TEST(LmcasMatcher, RewriteEngine) {
     RewriteEngine engine;
 
     auto x = var("x");
@@ -119,25 +111,10 @@ void test_rewrite_engine() {
     auto target = add(inner, zero);
 
     auto result = engine.apply(target);
-    EXPECT_TRUE(result.has_value(), "rewrite engine application succeeds");
-    if (!result) return;
+    ASSERT_TRUE((result.has_value())) << ("rewrite engine application succeeds");
+    if (!result)
+        return;
 
-    EXPECT_TRUE(LMCAS::detail::node(result.value())->equals(
-                    *LMCAS::detail::node(inner)),
-                "rewrite engine removes additive zero");
+    EXPECT_TRUE((LMCAS::detail::node(result.value())->equals(*LMCAS::detail::node(inner)))) << ("rewrite engine removes additive zero");
 
-    std::cout << "Rewrite engine passed." << std::endl;
-}
-
-int main() {
-    try {
-        test_basic_match();
-        test_trig_identity();
-        test_rewrite_engine();
-    } catch (const std::exception& e) {
-        EXPECT_TRUE(false, std::string("unexpected exception: ") + e.what());
-    }
-
-    std::cout << "All tests passed!" << std::endl;
-    return TEST_REPORT();
 }

@@ -1,15 +1,14 @@
 
 #include "test_common.hpp"
-#include "rapidcheck/rapidcheck.h"
+#include <rapidcheck.h>
 #include "assumption_context.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <stdexcept>
 
 using namespace LMCAS;
 
-int main() {
-    TEST_CASE("assume_conditional_checked rejects non-relational inputs transactionally");
+TEST(LmcasAssumptionConditional, ConditionalCheckedRollback) {
     {
         AssumptionContext ctx;
         SymbolicExpr x = *SymbolicExpr::variable("x");
@@ -20,44 +19,18 @@ int main() {
         const auto generation = ctx.cache_generation();
 
         auto result = ctx.assume_conditional_checked(x, conclusion);
-        EXPECT_TRUE(!result.has_value(),
-                    "checked conditional rejects a non-relational condition");
-        EXPECT_TRUE(result.error().code == CasErrc::InvalidArgument,
-                    "checked conditional reports InvalidArgument");
-        EXPECT_TRUE(ctx.cache_generation() == generation,
-                    "failed checked conditional preserves cache generation");
-        EXPECT_TRUE(ctx.get_active_conditionals().empty(),
-                    "failed checked conditional stores no conditional");
+        EXPECT_TRUE(!result.has_value()) << "checked conditional rejects a non-relational condition";
+        EXPECT_TRUE(result.error().code == CasErrc::InvalidArgument) << "checked conditional reports InvalidArgument";
+        EXPECT_TRUE(ctx.cache_generation() == generation) << "failed checked conditional preserves cache generation";
+        EXPECT_TRUE(ctx.get_active_conditionals().empty()) << "failed checked conditional stores no conditional";
 
         auto failure_30 = ctx.assume_conditional(x, conclusion);
-        EXPECT_TRUE(!failure_30.has_value(), "canonical conditional maps checked validation failure to invalid_argument");
-        EXPECT_TRUE(ctx.get_active_conditionals().empty(),
-                    "canonical conditional failure remains transactional");
+        EXPECT_TRUE(!failure_30.has_value()) << "canonical conditional maps checked validation failure to invalid_argument";
+        EXPECT_TRUE(ctx.get_active_conditionals().empty()) << "canonical conditional failure remains transactional";
     }
+}
 
-    TEST_CASE("assume_conditional: stores conditional in current scope");
-    {
-        AssumptionContext ctx;
-        auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
-        auto one = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(1)));
-        auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
-
-        // condition: x > 1
-        auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
-            LMCAS::detail::node(x), LMCAS::detail::node(one), RelationalNode::Op::GT));
-        // conclusion: x > 0 (ln(x) > 0 would be more realistic but harder to construct)
-        auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
-            LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
-
-        ctx.assume_conditional(condition, conclusion);
-
-        auto conditionals = ctx.get_active_conditionals();
-        EXPECT_TRUE(conditionals.size() == 1, "One conditional stored");
-        EXPECT_TRUE(LMCAS::detail::node(conditionals[0].condition) != nullptr, "Condition is not null");
-        EXPECT_TRUE(LMCAS::detail::node(conditionals[0].conclusion) != nullptr, "Conclusion is not null");
-    }
-
-    TEST_CASE("Conditionals discarded on scope pop");
+TEST(LmcasAssumptionConditional, ConditionalScopePop) {
     {
         AssumptionContext ctx;
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
@@ -70,8 +43,8 @@ int main() {
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
 
         // Store conditional in root scope
-        ctx.assume_conditional(condition, conclusion);
-        EXPECT_TRUE(ctx.get_active_conditionals().size() == 1, "One conditional in root");
+        EXPECT_TRUE(ctx.assume_conditional(condition, conclusion).has_value()) << "conditional assumption succeeds";
+        EXPECT_TRUE(ctx.get_active_conditionals().size() == 1) << "One conditional in root";
 
         // Push and add another conditional
         ctx.push();
@@ -80,19 +53,20 @@ int main() {
             LMCAS::detail::node(y), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         auto concl2 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(y), LMCAS::detail::node(one), RelationalNode::Op::GT));
-        ctx.assume_conditional(cond2, concl2);
+        EXPECT_TRUE(ctx.assume_conditional(cond2, concl2).has_value()) << "conditional assumption succeeds";
 
-        EXPECT_TRUE(ctx.get_active_conditionals().size() == 2, "Two conditionals (child + parent)");
+        EXPECT_TRUE(ctx.get_active_conditionals().size() == 2) << "Two conditionals (child + parent)";
 
         // Pop child scope — child conditional discarded
-        ctx.pop();
-        EXPECT_TRUE(ctx.get_active_conditionals().size() == 1, "One conditional after pop (child discarded)");
+        EXPECT_TRUE(ctx.pop().has_value()) << "scope pop succeeds";
+        EXPECT_TRUE(ctx.get_active_conditionals().size() == 1) << "One conditional after pop (child discarded)";
     }
+}
 
-    TEST_CASE("evaluate_condition: condition satisfied by sign property");
+TEST(LmcasAssumptionConditional, ConditionalPositiveConditions) {
     {
         AssumptionContext ctx;
-        ctx.assume_sign("x", Sign::Positive);
+        EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
         auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
@@ -100,29 +74,26 @@ int main() {
         // x > 0 should be satisfied since x is Positive
         auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::True,
-                    "x > 0 satisfied when x is Positive");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::True) << "x > 0 satisfied when x is Positive";
 
         // x >= 0 should also be satisfied
         auto cond_geq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GEQ));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_geq) == Tribool::True,
-                    "x >= 0 satisfied when x is Positive");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_geq) == Tribool::True) << "x >= 0 satisfied when x is Positive";
 
         // x < 0 should be False
         auto cond_lt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::LT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::False,
-                    "x < 0 is False when x is Positive");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::False) << "x < 0 is False when x is Positive";
 
         // x != 0 should be True
         auto cond_neq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::NEQ));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True,
-                    "x != 0 satisfied when x is Positive");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True) << "x != 0 satisfied when x is Positive";
     }
+}
 
-    TEST_CASE("evaluate_condition: condition unverifiable returns Unknown");
+TEST(LmcasAssumptionConditional, ConditionalUnknownConditions) {
     {
         AssumptionContext ctx;
         // No assumptions about x
@@ -132,14 +103,14 @@ int main() {
 
         auto cond = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::Unknown,
-                    "x > 0 is Unknown when no assumptions about x");
+        EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::Unknown) << "x > 0 is Unknown when no assumptions about x";
     }
+}
 
-    TEST_CASE("evaluate_condition: reversed pattern (0 < x) satisfied");
+TEST(LmcasAssumptionConditional, ConditionalReversedConditions) {
     {
         AssumptionContext ctx;
-        ctx.assume_sign("x", Sign::Positive);
+        EXPECT_TRUE(ctx.assume_sign("x", Sign::Positive).has_value());
 
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
         auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
@@ -147,17 +118,16 @@ int main() {
         // 0 < x (reversed pattern)
         auto cond = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(zero), LMCAS::detail::node(x), RelationalNode::Op::LT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::True,
-                    "0 < x satisfied when x is Positive");
+        EXPECT_TRUE(ctx.evaluate_condition(cond) == Tribool::True) << "0 < x satisfied when x is Positive";
 
         // 0 > x should be False
         auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(zero), LMCAS::detail::node(x), RelationalNode::Op::GT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
-                    "0 > x is False when x is Positive");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False) << "0 > x is False when x is Positive";
     }
+}
 
-    TEST_CASE("evaluate_condition: condition satisfied by stored relation");
+TEST(LmcasAssumptionConditional, ConditionalStoredRelations) {
     {
         AssumptionContext ctx;
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
@@ -166,25 +136,25 @@ int main() {
         // Store relation x > y
         auto rel = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(y), RelationalNode::Op::GT));
-        ctx.assume(rel);
+        EXPECT_TRUE(ctx.assume(rel).has_value()) << "relation assumption succeeds";
 
         // Evaluate x > y — should be True (stored directly)
-        EXPECT_TRUE(ctx.evaluate_condition(rel) == Tribool::True,
-                    "x > y satisfied when relation x > y is stored");
+        EXPECT_TRUE(ctx.evaluate_condition(rel) == Tribool::True) << "x > y satisfied when relation x > y is stored";
     }
+}
 
-    TEST_CASE("evaluate_condition: non-relational expression returns Unknown");
+TEST(LmcasAssumptionConditional, ConditionalNonrelationalConditions) {
     {
         AssumptionContext ctx;
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
-        EXPECT_TRUE(ctx.evaluate_condition(x) == Tribool::Unknown,
-                    "non-relational expression evaluates to Unknown");
+        EXPECT_TRUE(ctx.evaluate_condition(x) == Tribool::Unknown) << "non-relational expression evaluates to Unknown";
     }
+}
 
-    TEST_CASE("evaluate_condition: Negative sign checks");
+TEST(LmcasAssumptionConditional, ConditionalNegativeConditions) {
     {
         AssumptionContext ctx;
-        ctx.assume_sign("x", Sign::Negative);
+        EXPECT_TRUE(ctx.assume_sign("x", Sign::Negative).has_value());
 
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
         auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
@@ -192,32 +162,29 @@ int main() {
         // x < 0 should be True
         auto cond_lt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::LT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::True,
-                    "x < 0 satisfied when x is Negative");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_lt) == Tribool::True) << "x < 0 satisfied when x is Negative";
 
         // x <= 0 should be True
         auto cond_leq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::LEQ));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_leq) == Tribool::True,
-                    "x <= 0 satisfied when x is Negative");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_leq) == Tribool::True) << "x <= 0 satisfied when x is Negative";
 
         // x > 0 should be False
         auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
-                    "x > 0 is False when x is Negative");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False) << "x > 0 is False when x is Negative";
 
         // x != 0 should be True
         auto cond_neq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::NEQ));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True,
-                    "x != 0 satisfied when x is Negative");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::True) << "x != 0 satisfied when x is Negative";
     }
+}
 
-    TEST_CASE("evaluate_condition: Zero sign checks");
+TEST(LmcasAssumptionConditional, ConditionalZeroConditions) {
     {
         AssumptionContext ctx;
-        ctx.assume_sign("x", Sign::Zero);
+        EXPECT_TRUE(ctx.assume_sign("x", Sign::Zero).has_value());
 
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
         auto zero = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<NumberNode>(BigInt(0)));
@@ -225,23 +192,21 @@ int main() {
         // x == 0 should be True
         auto cond_eq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::EQ));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_eq) == Tribool::True,
-                    "x == 0 satisfied when x is Zero");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_eq) == Tribool::True) << "x == 0 satisfied when x is Zero";
 
         // x > 0 should be False
         auto cond_gt = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False,
-                    "x > 0 is False when x is Zero");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_gt) == Tribool::False) << "x > 0 is False when x is Zero";
 
         // x != 0 should be False
         auto cond_neq = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::NEQ));
-        EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::False,
-                    "x != 0 is False when x is Zero");
+        EXPECT_TRUE(ctx.evaluate_condition(cond_neq) == Tribool::False) << "x != 0 is False when x is Zero";
     }
+}
 
-    TEST_CASE("get_active_conditionals: multi-scope ordering");
+TEST(LmcasAssumptionConditional, ConditionalScopeOrder) {
     {
         AssumptionContext ctx;
         auto x = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<VariableNode>("x"));
@@ -254,7 +219,7 @@ int main() {
             LMCAS::detail::node(x), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         auto concl1 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(y), LMCAS::detail::node(zero), RelationalNode::Op::GT));
-        ctx.assume_conditional(cond1, concl1);
+        EXPECT_TRUE(ctx.assume_conditional(cond1, concl1).has_value()) << "conditional assumption succeeds";
 
         // Push and add child conditional
         ctx.push();
@@ -262,37 +227,37 @@ int main() {
             LMCAS::detail::node(y), LMCAS::detail::node(zero), RelationalNode::Op::GT));
         auto concl2 = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             LMCAS::detail::node(z), LMCAS::detail::node(zero), RelationalNode::Op::GT));
-        ctx.assume_conditional(cond2, concl2);
+        EXPECT_TRUE(ctx.assume_conditional(cond2, concl2).has_value()) << "conditional assumption succeeds";
 
         auto all = ctx.get_active_conditionals();
-        EXPECT_TRUE(all.size() == 2, "Two conditionals across scopes");
+        EXPECT_TRUE(all.size() == 2) << "Two conditionals across scopes";
 
         // Most recent scope first
         // The child scope conditional should come first (top scope)
         auto child_cond_var = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(all[0].condition));
         auto child_lhs = std::dynamic_pointer_cast<const VariableNode>(child_cond_var->left());
-        EXPECT_TRUE(child_lhs->name() == "y", "Child scope conditional comes first (most recent)");
+        EXPECT_TRUE(child_lhs->name() == "y") << "Child scope conditional comes first (most recent)";
 
         auto parent_cond_var = std::dynamic_pointer_cast<const RelationalNode>(LMCAS::detail::node(all[1].condition));
         auto parent_lhs = std::dynamic_pointer_cast<const VariableNode>(parent_cond_var->left());
-        EXPECT_TRUE(parent_lhs->name() == "x", "Parent scope conditional comes second");
+        EXPECT_TRUE(parent_lhs->name() == "x") << "Parent scope conditional comes second";
 
-        ctx.pop();
+        EXPECT_TRUE(ctx.pop().has_value()) << "scope pop succeeds";
     }
+}
 
-
-    TEST_CASE("Conclusion active when condition satisfied");
-    rc::check("Conditional conclusion is active when condition is satisfied by current state", []() {
+TEST(LmcasAssumptionConditional, ConditionalSatisfiedProperty) {
+    EXPECT_TRUE(rc::check("Conditional conclusion is active when condition is satisfied by current state", []() {
         AssumptionContext ctx;
 
         // Generate a random variable name
-        std::string var = "cx_" + std::to_string(rc::gen::inRange(0, 999));
+        std::string var = "cx_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         // Push a scope for the conditional
         ctx.push();
 
         // Declare the variable as Positive in this scope (satisfies "var > 0")
-        ctx.assume_sign(var, Sign::Positive);
+        EXPECT_TRUE(ctx.assume_sign(var, Sign::Positive).has_value());
 
         // Create condition: var > 0
         auto var_node = LMCAS::detail::make_node<VariableNode>(var);
@@ -304,25 +269,22 @@ int main() {
         auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, zero_node, RelationalNode::Op::NEQ));
 
-        ctx.assume_conditional(condition, conclusion);
+        EXPECT_TRUE(ctx.assume_conditional(condition, conclusion).has_value()) << "conditional assumption succeeds";
 
         // Evaluate the condition — should be True since var is Positive
         Tribool cond_result = ctx.evaluate_condition(condition);
         RC_ASSERT(cond_result == Tribool::True);
 
-        // The conditional should be in the active list
-        auto conditionals = ctx.get_active_conditionals();
-        RC_ASSERT(conditionals.size() >= 1);
+        EXPECT_TRUE(ctx.pop().has_value()) << "scope pop succeeds";
+    }));
+}
 
-        ctx.pop();
-    });
-
-    TEST_CASE("Conclusion Unknown when condition unverifiable");
-    rc::check("Conditional conclusion is Unknown when condition cannot be verified", []() {
+TEST(LmcasAssumptionConditional, ConditionalUnknownProperty) {
+    EXPECT_TRUE(rc::check("Conditional conclusion is Unknown when condition cannot be verified", []() {
         AssumptionContext ctx;
 
         // Generate a random variable name — no assumptions about it
-        std::string var = "unk_" + std::to_string(rc::gen::inRange(0, 999));
+        std::string var = "unk_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         ctx.push();
 
@@ -337,17 +299,18 @@ int main() {
         auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
             var_node, one_node, RelationalNode::Op::GT));
 
-        ctx.assume_conditional(condition, conclusion);
+        EXPECT_TRUE(ctx.assume_conditional(condition, conclusion).has_value()) << "conditional assumption succeeds";
 
         // Evaluate the condition — should be Unknown
         Tribool cond_result = ctx.evaluate_condition(condition);
         RC_ASSERT(cond_result == Tribool::Unknown);
 
-        ctx.pop();
-    });
+        EXPECT_TRUE(ctx.pop().has_value()) << "scope pop succeeds";
+    }));
+}
 
-    TEST_CASE("Conditionals discarded after scope pop");
-    rc::check("Conditional assumptions are discarded when their scope is popped", []() {
+TEST(LmcasAssumptionConditional, ConditionalScopePopProperty) {
+    EXPECT_TRUE(rc::check("Conditional assumptions are discarded when their scope is popped", []() {
         AssumptionContext ctx;
 
         // Count conditionals in root scope
@@ -355,16 +318,16 @@ int main() {
 
         // Push a scope and add random number of conditionals
         ctx.push();
-        int num_conditionals = rc::gen::inRange(1, 5);
+        int num_conditionals = *rc::gen::inRange(1, (5) + 1);
         for (int i = 0; i < num_conditionals; ++i) {
-            std::string var = "pop_" + std::to_string(i) + "_" + std::to_string(rc::gen::inRange(0, 99));
+            std::string var = "pop_" + std::to_string(i) + "_" + std::to_string(*rc::gen::inRange(0, (99) + 1));
             auto var_node = LMCAS::detail::make_node<VariableNode>(var);
             auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
             auto condition = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GT));
             auto conclusion = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<RelationalNode>(
                 var_node, zero_node, RelationalNode::Op::GEQ));
-            ctx.assume_conditional(condition, conclusion);
+            EXPECT_TRUE(ctx.assume_conditional(condition, conclusion).has_value()) << "conditional assumption succeeds";
         }
 
         // Verify conditionals are present
@@ -372,22 +335,23 @@ int main() {
         RC_ASSERT(pushed_count == root_count + static_cast<size_t>(num_conditionals));
 
         // Pop the scope
-        ctx.pop();
+        EXPECT_TRUE(ctx.pop().has_value()) << "scope pop succeeds";
 
         // All conditionals from the popped scope should be gone
         size_t after_pop_count = ctx.get_active_conditionals().size();
         RC_ASSERT(after_pop_count == root_count);
-    });
+    }));
+}
 
-    TEST_CASE("Condition evaluation with various signs");
-    rc::check("Condition evaluation correctly reflects sign properties for various sign types", []() {
+TEST(LmcasAssumptionConditional, ConditionalSignProperty) {
+    EXPECT_TRUE(rc::check("Condition evaluation correctly reflects sign properties for various sign types", []() {
         AssumptionContext ctx;
-        std::string var = "sv_" + std::to_string(rc::gen::inRange(0, 999));
+        std::string var = "sv_" + std::to_string(*rc::gen::inRange(0, (999) + 1));
 
         // Pick a random sign to declare
         std::vector<Sign> signs = {Sign::Positive, Sign::Negative, Sign::NonNegative, Sign::NonPositive};
-        Sign chosen_sign = rc::gen::elementOf(signs);
-        ctx.assume_sign(var, chosen_sign);
+        Sign chosen_sign = *rc::gen::elementOf(signs);
+        EXPECT_TRUE(ctx.assume_sign(var, chosen_sign).has_value());
 
         auto var_node = LMCAS::detail::make_node<VariableNode>(var);
         auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
@@ -415,7 +379,23 @@ int main() {
         } else if (chosen_sign == Sign::Positive || chosen_sign == Sign::NonNegative) {
             RC_ASSERT(lt_result == Tribool::False);
         }
-    });
+    }));
+}
 
-    return TEST_REPORT();
+TEST(LmcasAssumptionConditional, ClosedNumericConditions) {
+    AssumptionContext context;
+    const BigInt denominator = BigInt(1) << 100;
+    auto precise = SymbolicExpr::number(Rational(denominator + BigInt(1), denominator));
+    auto approximate_one = SymbolicExpr::number(1.0);
+    auto greater = detail::expression_from_node(detail::make_node<RelationalNode>(
+        detail::node(precise), detail::node(approximate_one), RelationOp::GT));
+    EXPECT_TRUE(context.evaluate_condition(greater) == Tribool::True) << "an exact excess below binary64 resolution is not rounded away";
+    auto zero = SymbolicExpr::number(0);
+    auto satisfied = detail::expression_from_node(detail::make_node<RelationalNode>(
+        detail::node(zero), detail::node(zero), RelationOp::EQ));
+    auto impossible = detail::expression_from_node(detail::make_node<RelationalNode>(
+        detail::node(zero), detail::node(zero), RelationOp::NEQ));
+    auto rejected = context.assume_conditional_checked(satisfied, impossible);
+    EXPECT_TRUE(!rejected && rejected.error().code == CasErrc::InvalidArgument) << "a true closed premise cannot install a false closed conclusion";
+    EXPECT_TRUE(context.get_active_conditionals().empty()) << "rejected numeric contradiction leaves no conditional behind";
 }

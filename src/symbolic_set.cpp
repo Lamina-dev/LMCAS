@@ -2,9 +2,10 @@
 
 #include <algorithm>
 #include <exception>
+#include <optional>
 #include <utility>
 
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 namespace LMCAS {
 namespace {
@@ -48,6 +49,26 @@ SymbolicSetResult from_nodes(std::vector<std::shared_ptr<const SymbolicNode>> el
     }
 }
 
+std::optional<bool> exact_interval_membership(
+    const std::shared_ptr<const SymbolicNode>& element, const IntervalNode& interval) {
+    Rational value;
+    Rational lower;
+    Rational upper;
+    if (!exact_value(element, value)) {
+        return std::nullopt;
+    }
+    if (!exact_value(interval.lower(), lower) || !exact_value(interval.upper(), upper)) {
+        return std::nullopt;
+    }
+    if (value < lower || upper < value) {
+        return false;
+    }
+    if (value == lower && !interval.lower_closed()) {
+        return false;
+    }
+    return value != upper || interval.upper_closed();
+}
+
 } // namespace
 
 SymbolicSetResult make_finite_set(
@@ -74,7 +95,9 @@ SymbolicSetResult make_interval(
     bool upper_closed,
     ComputationContext& context) {
     auto step = consume(context);
-    if (!step) return SymbolicSetResult::failure(step.error());
+    if (!step) {
+        return SymbolicSetResult::failure(step.error());
+    }
     if (!lower || !upper || !detail::node(lower) || !detail::node(upper)) {
         return failure(CasErrc::InvalidArgument, "interval endpoints cannot be null");
     }
@@ -100,7 +123,9 @@ SymbolicSetResult make_membership(
     const std::shared_ptr<SymbolicExpr>& set,
     ComputationContext& context) {
     auto step = consume(context);
-    if (!step) return SymbolicSetResult::failure(step.error());
+    if (!step) {
+        return SymbolicSetResult::failure(step.error());
+    }
     if (!element || !set || !detail::node(element) || !detail::node(set)) {
         return failure(CasErrc::InvalidArgument, "membership operands cannot be null");
     }
@@ -109,14 +134,8 @@ SymbolicSetResult make_membership(
             finite->contains(*detail::node(element)) ? 1 : 0));
     }
     if (auto interval = std::dynamic_pointer_cast<const IntervalNode>(detail::node(set))) {
-        Rational value;
-        Rational lower;
-        Rational upper;
-        if (exact_value(detail::node(element), value) &&
-            exact_value(interval->lower(), lower) && exact_value(interval->upper(), upper)) {
-            const bool above = lower < value || (interval->lower_closed() && lower == value);
-            const bool below = value < upper || (interval->upper_closed() && value == upper);
-            return SymbolicSetResult::success(SymbolicExpr::number(above && below ? 1 : 0));
+        if (auto contained = exact_interval_membership(detail::node(element), *interval)) {
+            return SymbolicSetResult::success(SymbolicExpr::number(*contained ? 1 : 0));
         }
     }
     return SymbolicSetResult::success(detail::make_expression_ptr(

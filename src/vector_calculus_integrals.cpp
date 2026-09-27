@@ -1,8 +1,9 @@
 #include "internal/vector_calculus_support.hpp"
 #include "integration.hpp"
+#include "internal/integration_support.hpp"
 #include "numeric_evaluation.hpp"
 #include "solver.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 #include "residual_verification.hpp"
 
 #include <cmath>
@@ -25,10 +26,6 @@ std::vector<std::string> vector_calculus_detail::vector_calculus_coord_vars(
     return {"x", "y", "z"};
 }
 
-/**
- * @internal
- * @brief 尝试符号定积分，若结果仍含未求值积分节点则返回 nullptr。
- */
 static VectorCalculusExprResult vector_calculus_try_definite(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& var,
@@ -44,24 +41,18 @@ static VectorCalculusExprResult vector_calculus_try_definite(
     }
     SymbolicExpr result = std::move(integrated.value());
 
-    if (vector_calculus_contains_unevaluated_integral(
-            LMCAS::detail::node(result))) {
+    if (contains_unevaluated_integral(LMCAS::detail::node(result))) {
         return std::shared_ptr<SymbolicExpr>{};
     }
     auto res = LMCAS::detail::make_expression_ptr(result);
     auto simplified = res->simplify();
     if (simplified &&
-        vector_calculus_contains_unevaluated_integral(
-            LMCAS::detail::node(simplified))) {
+        contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
         return std::shared_ptr<SymbolicExpr>{};
     }
     return simplified ? simplified : res;
 }
 
-/**
- * @internal
- * @brief 数值定积分回退（复合 Simpson 法）。
- */
 static VectorCalculusExprResult vector_calculus_numerical_definite(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& var,
@@ -113,10 +104,6 @@ static VectorCalculusExprResult vector_calculus_numerical_definite(
     return SymbolicExpr::number(sum);
 }
 
-/**
- * @internal
- * @brief 符号积分优先，失败时回退到数值积分。
- */
 std::shared_ptr<SymbolicExpr>
 vector_calculus_detail::vector_calculus_integrate_with_fallback(
     const std::shared_ptr<SymbolicExpr>& integrand,
@@ -144,7 +131,7 @@ static VectorCalculusExprResult vector_calculus_inconclusive(
                                              message, operation);
 }
 
-VectorCalculusExprResult vector_calculus_simplify_strict(
+VectorCalculusExprResult vector_calculus_detail::vector_calculus_simplify_strict(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& operation,
     const std::string& message)
@@ -159,7 +146,7 @@ VectorCalculusExprResult vector_calculus_simplify_strict(
     return VectorCalculusExprResult::success(std::move(simplified));
 }
 
-VectorCalculusExprResult vector_calculus_differentiate_strict(
+VectorCalculusExprResult vector_calculus_detail::vector_calculus_differentiate_strict(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     const std::string& operation)
@@ -265,34 +252,20 @@ static Result<VectorField> vector_calculus_cross_product_partials_strict(
         r_v.push_back(std::move(dv.value()));
     }
 
-    auto cross_x = SymbolicExpr::add(
-        SymbolicExpr::multiply(r_u[1], r_v[2]),
-        SymbolicExpr::multiply(SymbolicExpr::number(-1),
-            SymbolicExpr::multiply(r_u[2], r_v[1])));
-    auto cross_x_checked = vector_calculus_simplify_strict(
-        cross_x, operation, "surface normal construction is outside the supported domain");
-    if (!cross_x_checked) return Result<VectorField>::failure(cross_x_checked.error());
-
-    auto cross_y = SymbolicExpr::add(
-        SymbolicExpr::multiply(r_u[2], r_v[0]),
-        SymbolicExpr::multiply(SymbolicExpr::number(-1),
-            SymbolicExpr::multiply(r_u[0], r_v[2])));
-    auto cross_y_checked = vector_calculus_simplify_strict(
-        cross_y, operation, "surface normal construction is outside the supported domain");
-    if (!cross_y_checked) return Result<VectorField>::failure(cross_y_checked.error());
-
-    auto cross_z = SymbolicExpr::add(
-        SymbolicExpr::multiply(r_u[0], r_v[1]),
-        SymbolicExpr::multiply(SymbolicExpr::number(-1),
-            SymbolicExpr::multiply(r_u[1], r_v[0])));
-    auto cross_z_checked = vector_calculus_simplify_strict(
-        cross_z, operation, "surface normal construction is outside the supported domain");
-    if (!cross_z_checked) return Result<VectorField>::failure(cross_z_checked.error());
-
-    return Result<VectorField>::success(
-        VectorField{std::move(cross_x_checked.value()),
-                    std::move(cross_y_checked.value()),
-                    std::move(cross_z_checked.value())});
+    VectorField cross;
+    cross.reserve(3);
+    for (std::size_t index = 0; index < 3; ++index) {
+        auto component = vector_calculus_cross_component(
+            r_u, r_v, index);
+        auto checked = vector_calculus_simplify_strict(
+            component, operation,
+            "surface normal construction is outside the supported domain");
+        if (!checked) {
+            return Result<VectorField>::failure(checked.error());
+        }
+        cross.push_back(std::move(checked.value()));
+    }
+    return Result<VectorField>::success(std::move(cross));
 }
 
 VectorCalculusExprResult
@@ -306,34 +279,46 @@ vector_calculus_detail::curve_integral_scalar_strict(
     const auto coord_vars = vector_calculus_coord_vars(parametrization.size());
     auto f_composed = vector_calculus_substitute_coords_strict(
         f, coord_vars, parametrization, operation);
-    if (!f_composed) return f_composed;
+    if (!f_composed) {
+        return f_composed;
+    }
 
     std::shared_ptr<SymbolicExpr> speed_sq;
     for (const auto& component : parametrization) {
         auto derivative = vector_calculus_differentiate_strict(
             component, t, operation);
-        if (!derivative) return derivative;
+        if (!derivative) {
+            return derivative;
+        }
         auto sq = SymbolicExpr::power(derivative.value(), SymbolicExpr::number(2));
         auto sq_checked = vector_calculus_simplify_strict(
             sq, operation, "curve speed construction is outside the supported domain");
-        if (!sq_checked) return sq_checked;
+        if (!sq_checked) {
+            return sq_checked;
+        }
         speed_sq = speed_sq ? SymbolicExpr::add(speed_sq, sq_checked.value())
                             : sq_checked.value();
         auto speed_sq_checked = vector_calculus_simplify_strict(
             speed_sq, operation, "curve speed construction is outside the supported domain");
-        if (!speed_sq_checked) return speed_sq_checked;
+        if (!speed_sq_checked) {
+            return speed_sq_checked;
+        }
         speed_sq = std::move(speed_sq_checked.value());
     }
 
     auto speed = SymbolicExpr::sqrt(speed_sq);
     auto speed_checked = vector_calculus_simplify_strict(
         speed, operation, "curve speed construction is outside the supported domain");
-    if (!speed_checked) return speed_checked;
+    if (!speed_checked) {
+        return speed_checked;
+    }
 
     auto integrand = SymbolicExpr::multiply(f_composed.value(), speed_checked.value());
     auto integrand_checked = vector_calculus_simplify_strict(
         integrand, operation, "curve integrand construction is outside the supported domain");
-    if (!integrand_checked) return integrand_checked;
+    if (!integrand_checked) {
+        return integrand_checked;
+    }
 
     return vector_calculus_definite_integral_strict(
         integrand_checked.value(), t, a, b, context, operation);
@@ -424,6 +409,40 @@ vector_calculus_detail::surface_integral_scalar_strict(
         integrand_checked.value(), steps, context, operation);
 }
 
+static VectorCalculusExprResult vector_calculus_surface_dot_strict(
+    const VectorField& field,
+    const std::vector<std::string>& coordinates,
+    const VectorField& parametrization,
+    const VectorField& normal,
+    const std::string& message,
+    const std::string& operation) {
+    std::shared_ptr<SymbolicExpr> dot_product;
+    for (std::size_t i = 0; i < 3; ++i) {
+        auto composed = vector_calculus_substitute_coords_strict(
+            field[i], coordinates, parametrization, operation);
+        if (!composed) {
+            return composed;
+        }
+        auto term = SymbolicExpr::multiply(
+            composed.value(), normal[i]);
+        auto term_checked = vector_calculus_simplify_strict(
+            term, operation, message);
+        if (!term_checked) {
+            return term_checked;
+        }
+        dot_product = dot_product
+            ? SymbolicExpr::add(dot_product, term_checked.value())
+            : term_checked.value();
+        auto dot_checked = vector_calculus_simplify_strict(
+            dot_product, operation, message);
+        if (!dot_checked) {
+            return dot_checked;
+        }
+        dot_product = std::move(dot_checked.value());
+    }
+    return VectorCalculusExprResult::success(std::move(dot_product));
+}
+
 VectorCalculusExprResult
 vector_calculus_detail::surface_integral_vector_strict(
     const VectorField& F, const VectorField& parametrization,
@@ -438,29 +457,17 @@ vector_calculus_detail::surface_integral_vector_strict(
         parametrization, u, v, operation);
     if (!cross) return VectorCalculusExprResult::failure(cross.error());
 
-    std::shared_ptr<SymbolicExpr> dot_product;
-    for (size_t i = 0; i < 3; ++i) {
-        auto Fi_composed = vector_calculus_substitute_coords_strict(
-            F[i], coord_vars, parametrization, operation);
-        if (!Fi_composed) return Fi_composed;
-
-        auto term = SymbolicExpr::multiply(Fi_composed.value(), cross.value()[i]);
-        auto term_checked = vector_calculus_simplify_strict(
-            term, operation, "surface integrand construction is outside the supported domain");
-        if (!term_checked) return term_checked;
-
-        dot_product = dot_product ? SymbolicExpr::add(dot_product, term_checked.value())
-                                  : term_checked.value();
-        auto dot_checked = vector_calculus_simplify_strict(
-            dot_product, operation, "surface integrand construction is outside the supported domain");
-        if (!dot_checked) return dot_checked;
-        dot_product = std::move(dot_checked.value());
-    }
+    auto dot_product = vector_calculus_surface_dot_strict(
+        F, coord_vars, parametrization, cross.value(),
+        "surface integrand construction is outside the supported domain",
+        operation);
+    if (!dot_product) return dot_product;
 
     std::vector<IntegrationStep> steps;
     steps.push_back({v, v_lower, v_upper});
     steps.push_back({u, u_lower, u_upper});
-    return vector_calculus_multiple_integral_strict(dot_product, steps, context, operation);
+    return vector_calculus_multiple_integral_strict(
+        dot_product.value(), steps, context, operation);
 }
 
 VectorCalculusExprResult vector_calculus_detail::greens_theorem_strict(
@@ -491,6 +498,31 @@ VectorCalculusExprResult vector_calculus_detail::greens_theorem_strict(
         integrand_checked.value(), steps, context, operation);
 }
 
+static VectorCalculusExprResult vector_calculus_constant_integrand(
+    const std::shared_ptr<SymbolicExpr>& integrand,
+    const std::string& variable,
+    ComputationContext& context) {
+    auto candidate = integrand->substitute(
+        variable, SymbolicExpr::number(0));
+    candidate = candidate ? candidate->simplify() : nullptr;
+    if (!candidate || Integrator::depends_on(*candidate, variable)) {
+        return VectorCalculusExprResult::success(integrand);
+    }
+
+    EqvOptions trig_options;
+    trig_options.profile = EqvProfile::TrigBasic;
+    auto identity = check_equivalent(
+        integrand, candidate, context, trig_options);
+    if (!identity) {
+        return VectorCalculusExprResult::failure(identity.error());
+    }
+    if (!std::holds_alternative<ProvedZeroResidual>(
+            identity.value())) {
+        return VectorCalculusExprResult::success(integrand);
+    }
+    return VectorCalculusExprResult::success(std::move(candidate));
+}
+
 VectorCalculusExprResult vector_calculus_detail::greens_theorem_area_strict(
     const VectorField& parametrization,
     const std::string& t,
@@ -514,17 +546,9 @@ VectorCalculusExprResult vector_calculus_detail::greens_theorem_area_strict(
     auto integrand_checked = vector_calculus_simplify_strict(
         integrand, operation, "Green's area integrand is outside the supported domain");
     if (!integrand_checked) return integrand_checked;
-    LMCAS::EqvOptions trig_options;
-    trig_options.profile = LMCAS::EqvProfile::TrigBasic;
-    auto unit_identity = check_equivalent(
-        integrand_checked.value(), SymbolicExpr::number(1),
-        context, trig_options);
-    if (unit_identity &&
-        std::holds_alternative<ProvedZeroResidual>(
-            unit_identity.value())) {
-        integrand_checked = VectorCalculusExprResult::success(
-            SymbolicExpr::number(1));
-    }
+    integrand_checked = vector_calculus_constant_integrand(
+        integrand_checked.value(), t, context);
+    if (!integrand_checked) return integrand_checked;
 
     auto integral = vector_calculus_definite_integral_strict(
         integrand_checked.value(), t, a, b, context, operation);
@@ -570,38 +594,56 @@ static Result<VectorField> vector_calculus_curl_strict(
     const std::string& operation)
 {
     auto dFz_dy = vector_calculus_differentiate_strict(F[2], vars[1], operation);
-    if (!dFz_dy) return Result<VectorField>::failure(dFz_dy.error());
+    if (!dFz_dy) {
+        return Result<VectorField>::failure(dFz_dy.error());
+    }
     auto dFy_dz = vector_calculus_differentiate_strict(F[1], vars[2], operation);
-    if (!dFy_dz) return Result<VectorField>::failure(dFy_dz.error());
+    if (!dFy_dz) {
+        return Result<VectorField>::failure(dFy_dz.error());
+    }
     auto dFx_dz = vector_calculus_differentiate_strict(F[0], vars[2], operation);
-    if (!dFx_dz) return Result<VectorField>::failure(dFx_dz.error());
+    if (!dFx_dz) {
+        return Result<VectorField>::failure(dFx_dz.error());
+    }
     auto dFz_dx = vector_calculus_differentiate_strict(F[2], vars[0], operation);
-    if (!dFz_dx) return Result<VectorField>::failure(dFz_dx.error());
+    if (!dFz_dx) {
+        return Result<VectorField>::failure(dFz_dx.error());
+    }
     auto dFy_dx = vector_calculus_differentiate_strict(F[1], vars[0], operation);
-    if (!dFy_dx) return Result<VectorField>::failure(dFy_dx.error());
+    if (!dFy_dx) {
+        return Result<VectorField>::failure(dFy_dx.error());
+    }
     auto dFx_dy = vector_calculus_differentiate_strict(F[0], vars[1], operation);
-    if (!dFx_dy) return Result<VectorField>::failure(dFx_dy.error());
+    if (!dFx_dy) {
+        return Result<VectorField>::failure(dFx_dy.error());
+    }
 
     auto cx = SymbolicExpr::add(
         dFz_dy.value(),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dFy_dz.value()));
     auto cx_checked = vector_calculus_simplify_strict(
         cx, operation, "curl construction is outside the supported domain");
-    if (!cx_checked) return Result<VectorField>::failure(cx_checked.error());
+    if (!cx_checked) {
+        return Result<VectorField>::failure(cx_checked.error());
+    }
 
     auto cy = SymbolicExpr::add(
         dFx_dz.value(),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dFz_dx.value()));
     auto cy_checked = vector_calculus_simplify_strict(
         cy, operation, "curl construction is outside the supported domain");
-    if (!cy_checked) return Result<VectorField>::failure(cy_checked.error());
+    if (!cy_checked) {
+        return Result<VectorField>::failure(cy_checked.error());
+    }
 
     auto cz = SymbolicExpr::add(
         dFy_dx.value(),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dFx_dy.value()));
     auto cz_checked = vector_calculus_simplify_strict(
         cz, operation, "curl construction is outside the supported domain");
-    if (!cz_checked) return Result<VectorField>::failure(cz_checked.error());
+    if (!cz_checked) {
+        return Result<VectorField>::failure(cz_checked.error());
+    }
 
     return Result<VectorField>::success(
         VectorField{std::move(cx_checked.value()),
@@ -627,31 +669,18 @@ VectorCalculusExprResult vector_calculus_detail::stokes_theorem_strict(
         parametrization, u, v, operation);
     if (!cross) return VectorCalculusExprResult::failure(cross.error());
 
-    const std::vector<std::string> coord_vars = {"x", "y", "z"};
-    std::shared_ptr<SymbolicExpr> dot_product;
-    for (size_t i = 0; i < 3; ++i) {
-        auto curl_i_composed = vector_calculus_substitute_coords_strict(
-            curl_F.value()[i], coord_vars, parametrization, operation);
-        if (!curl_i_composed) return curl_i_composed;
-
-        auto term = SymbolicExpr::multiply(curl_i_composed.value(), cross.value()[i]);
-        auto term_checked = vector_calculus_simplify_strict(
-            term, operation, "Stokes theorem integrand is outside the supported domain");
-        if (!term_checked) return term_checked;
-
-        dot_product = dot_product ? SymbolicExpr::add(dot_product, term_checked.value())
-                                  : term_checked.value();
-        auto dot_checked = vector_calculus_simplify_strict(
-            dot_product, operation, "Stokes theorem integrand is outside the supported domain");
-        if (!dot_checked) return dot_checked;
-        dot_product = std::move(dot_checked.value());
-    }
+    auto dot_product = vector_calculus_surface_dot_strict(
+        curl_F.value(), vars, parametrization, cross.value(),
+        "Stokes theorem integrand is outside the supported domain",
+        operation);
+    if (!dot_product) return dot_product;
 
     std::vector<IntegrationStep> steps;
     steps.push_back({v, v_bounds.first, v_bounds.second});
     steps.push_back({u, u_bounds.first, u_bounds.second});
-    return vector_calculus_multiple_integral_strict(dot_product, steps, context, operation);
+    return vector_calculus_multiple_integral_strict(
+        dot_product.value(), steps, context, operation);
 }
 
 
-} // namespace LMCAS
+}

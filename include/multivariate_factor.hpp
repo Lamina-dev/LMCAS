@@ -212,10 +212,13 @@ extract_common_monomial(const MultiPoly& poly);
  * 仅当多项式恰好含两个变量且为齐次时适用。
  *
  * @param[in] poly 输入多项式（须为齐次二元）
- * @return 若适用则返回分解结果，否则返回 nullopt
+ * @param[in,out] context 调用方的计算预算和取消状态
+ * @return 不适用时成功返回 nullopt；分解错误原样传播
  */
-LMCAS_API std::optional<MultiFactorResult>
-factor_homogeneous_bivariate(const MultiPoly& poly);
+LMCAS_API Result<std::optional<MultiFactorResult>>
+factor_homogeneous_bivariate(
+    const MultiPoly& poly,
+    ComputationContext& context);
 
 } // namespace detail
 

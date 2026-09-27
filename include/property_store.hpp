@@ -8,14 +8,17 @@
 #pragma once
 
 #include "assumption.hpp"
+#include "symbolic.hpp"
 #include "interval.hpp"
 #include "result.hpp"
 #include <string>
 #include <unordered_map>
+#include <map>
 #include <unordered_set>
 #include <optional>
 #include <vector>
 #include <stdexcept>
+#include <cstdint>
 
 namespace LMCAS {
 
@@ -36,6 +39,15 @@ struct SignHash {
  */
 class LMCAS_API PropertyStore {
 public:
+    PropertyStore() = default;
+    PropertyStore(const PropertyStore&) = default;
+    PropertyStore(PropertyStore&& other) noexcept;
+    PropertyStore& operator=(const PropertyStore& other);
+    PropertyStore& operator=(PropertyStore&& other) noexcept;
+
+    /** @brief 成功提交（含赋值）均更新此存储的修订号。 */
+    std::uint64_t revision() const noexcept { return revision_; }
+
     /// Declare domain for a symbol and report contradictions.
     PropertyStoreResult declare_domain(const std::string& symbol, Domain domain);
 
@@ -59,6 +71,11 @@ public:
                                         std::optional<Interval> bounds = std::nullopt);
 
     /** @brief Declares boundedness and reports contradictions. */
+    PropertyStoreResult declare_bounded_checked(
+        const std::string& symbol,
+        Boundedness bounded,
+        std::optional<Interval> bounds,
+        ComputationContext& context);
     PropertyStoreResult declare_bounded_checked(
         const std::string& symbol,
         Boundedness bounded,
@@ -223,31 +240,36 @@ public:
 
 
     /**
-     * @brief Declare a symbol as periodic with a given period expression.
-     * @param symbol Symbol name
-     * @param period The period as a symbolic expression (must be non-null)
+     * @brief 声明符号关于指定变量的候选周期。
+     *
+     * @param symbol 符号名
+     * @param variable 非空自变量名
+     * @param period 非空候选周期；已知非正值会被拒绝。
      */
     PropertyStoreResult declare_periodic(
-        const std::string& symbol, const std::shared_ptr<SymbolicExpr>& period);
+        const std::string& symbol, const std::string& variable,
+        const SymbolicExpr& period);
 
     /** @brief Declares periodicity and reports invalid periods. */
     PropertyStoreResult declare_periodic_checked(
         const std::string& symbol,
-        const std::shared_ptr<SymbolicExpr>& period);
+        const std::string& variable,
+        const SymbolicExpr& period);
 
     /**
-     * @brief Get the period expression for a symbol, if declared.
-     * @param symbol Symbol name
-     * @return The period expression, or std::nullopt if not periodic
+     * @brief 获取符号关于指定变量声明的候选周期。
+     *
+     * 使用者须证明符号周期为正实数，且相对于该自变量为常量。
      */
-    std::optional<std::shared_ptr<SymbolicExpr>> get_period(const std::string& symbol) const;
+    std::optional<SymbolicExpr> get_period(
+        const std::string& symbol, const std::string& variable) const;
 
-    /**
-     * @brief Query whether a symbol has been declared periodic.
-     * @param symbol Symbol name
-     * @return true if the symbol has a declared period
-     */
-    bool is_periodic(const std::string& symbol) const;
+    /** @brief 查询周期声明是否存在；符号周期的有效性需另行证明。 */
+    bool is_periodic(const std::string& symbol, const std::string& variable) const;
+
+    using PeriodDeclarations = std::map<std::string, SymbolicExpr>;
+    /** @brief 借用按变量索引的全部声明，用于确定性序列化。 */
+    const PeriodDeclarations& get_period_decls(const std::string& symbol) const;
 
     /**
      * @brief Get all symbol names that have any declared properties.
@@ -354,8 +376,8 @@ private:
         /// Matrix definiteness classification.
         Definiteness definiteness = Definiteness::Unknown;
 
-        /// Period expression for periodic symbols (nullopt if not periodic).
-        std::optional<std::shared_ptr<SymbolicExpr>> period;
+        /** @brief 按自变量索引的候选周期。 */
+        PeriodDeclarations periods;
 
         /// Continuity declaration over an interval.
         struct ContinuityDecl {
@@ -378,6 +400,16 @@ private:
     };
 
     std::unordered_map<std::string, SymbolProperties> properties_;
+    std::uint64_t revision_ = 0;
+
+    static Result<bool> check_continuous_declarations(
+        const std::vector<SymbolProperties::ContinuityDecl>& declarations,
+        const std::string& symbol,
+        const Interval& interval,
+        ComputationContext& context);
+    static bool has_differentiable_declaration(
+        const std::vector<SymbolProperties::ContinuityDecl>& declarations,
+        const Interval& interval);
 
     void declare_domain_unchecked(const std::string& symbol, Domain domain);
     void declare_sign_unchecked(const std::string& symbol, Sign sign);
@@ -389,7 +421,8 @@ private:
     void declare_finiteness_unchecked(const std::string& symbol, Finiteness f);
     void declare_definiteness_unchecked(const std::string& symbol, Definiteness d);
     void declare_periodic_unchecked(const std::string& symbol,
-                                    const std::shared_ptr<SymbolicExpr>& period);
+                                    const std::string& variable,
+                                    const SymbolicExpr& period);
 
     /// Check domain-sign cross-constraints. Throws on contradiction.
     void check_domain_sign_consistency(const std::string& symbol,
@@ -404,8 +437,6 @@ private:
     /// Get all signs implied by a given sign.
     std::unordered_set<Sign, SignHash> get_implied_signs(Sign sign) const;
 
-    /// Get ancestor domains (less specific) for a given domain.
-    std::vector<Domain> get_ancestor_domains(Domain domain) const;
 
     /// Get the specificity level of a domain (higher = more specific).
     int domain_specificity(Domain domain) const;

@@ -1,3 +1,4 @@
+#include "limit_result.hpp"
 /**
  * @file complex_analysis.cpp
  * @brief 复变函数分析实现。
@@ -6,7 +7,10 @@
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
+#include "internal/visitors/differentiation_visitor.hpp"
+#include <cmath>
+#include <optional>
 
 namespace LMCAS {
 
@@ -53,153 +57,131 @@ Result<void> validate_complex_expr_point_input(
     return Result<void>::success();
 }
 
-bool has_z_dependent_function(const std::shared_ptr<const SymbolicNode>& node,
-                              const std::string& z)
-{
+class FunctionDependencyFinder final : public detail::RecursiveSymbolicVisitor {
+public:
+    explicit FunctionDependencyFinder(const std::string& variable)
+        : variable_(variable) {}
+
+    bool found() const noexcept { return found_; }
+
+    void visit(const FunctionNode& node) override {
+        visit_function(node.arguments());
+    }
+
+    void visit(const UninterpretedFunctionNode& node) override {
+        visit_function(node.arguments());
+    }
+
+    void visit(const SummationNode& node) override { visit_binder(node); }
+    void visit(const ProductNode& node) override { visit_binder(node); }
+    void visit(const IntegralNode& node) override { visit_binder(node); }
+    void visit(const TransformNode& node) override { visit_binder(node); }
+    void visit(const QuantifierNode& node) override { visit_binder(node); }
+    void visit(const SetBuilderNode& node) override { visit_binder(node); }
+    void visit(const LimitNode& node) override { visit_binder(node); }
+
+protected:
+    void visit_child(const detail::SymbolicNodePtr& child) override {
+        if (!found_) RecursiveSymbolicVisitor::visit_child(child);
+    }
+
+private:
+    void visit_function(const std::vector<detail::SymbolicNodePtr>& arguments) {
+        if (!is_bound_) {
+            for (const auto& argument : arguments) {
+                if (expression_depends_on_variable(argument, variable_)) {
+                    found_ = true;
+                    return;
+                }
+            }
+        }
+        visit_children(arguments);
+    }
+
+    void visit_binder(const SymbolicNode& node) {
+        const auto binder = detail::binder_view(node);
+        visit_children(binder->outside_scope);
+        const bool previous = is_bound_;
+        is_bound_ = is_bound_ || binder->bound_name == variable_;
+        visit_child(binder->scoped_body);
+        is_bound_ = previous;
+    }
+
+    const std::string& variable_;
+    bool is_bound_ = false;
+    bool found_ = false;
+};
+
+class ExplicitComplexFinder final : public detail::RecursiveSymbolicVisitor {
+public:
+    bool found() const noexcept { return found_; }
+
+    void visit(const VariableNode& node) override {
+        found_ = found_ || detail::is_imaginary_unit_name(node.name());
+    }
+
+    void visit(const ComplexNode&) override { found_ = true; }
+
+protected:
+    void visit_child(const detail::SymbolicNodePtr& child) override {
+        if (!found_) RecursiveSymbolicVisitor::visit_child(child);
+    }
+
+private:
+    bool found_ = false;
+};
+
+bool contains_explicit_complex(const detail::SymbolicNodePtr& node) {
     if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        return expression_depends_on_variable(node, z);
-    }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : add->operands()) {
-            if (has_z_dependent_function(op, z)) return true;
-        }
-        return false;
-    }
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mul->operands()) {
-            if (has_z_dependent_function(op, z)) return true;
-        }
-        return false;
-    }
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return has_z_dependent_function(pow->base(), z) ||
-               has_z_dependent_function(pow->exponent(), z);
-    }
-    if (auto matrix = std::dynamic_pointer_cast<const MatrixNode>(node)) {
-        if (std::holds_alternative<MatrixNode::DenseStorage>(matrix->storage())) {
-            for (const auto& item : std::get<MatrixNode::DenseStorage>(matrix->storage())) {
-                if (has_z_dependent_function(item, z)) return true;
-            }
-        } else {
-            for (const auto& [idx, item] :
-                 std::get<MatrixNode::SparseStorage>(matrix->storage())) {
-                (void)idx;
-                if (has_z_dependent_function(item, z)) return true;
-            }
-        }
-        return false;
-    }
-    if (auto rel = std::dynamic_pointer_cast<const RelationalNode>(node)) {
-        return has_z_dependent_function(rel->left(), z) ||
-               has_z_dependent_function(rel->right(), z);
-    }
-    if (auto logic = std::dynamic_pointer_cast<const LogicalNode>(node)) {
-        return has_z_dependent_function(logic->left(), z) ||
-               has_z_dependent_function(logic->right(), z);
-    }
-    if (auto piecewise = std::dynamic_pointer_cast<const PiecewiseNode>(node)) {
-        for (const auto& branch : piecewise->branches()) {
-            if (has_z_dependent_function(branch.expression, z) ||
-                has_z_dependent_function(branch.condition, z)) {
-                return true;
-            }
-        }
-        return has_z_dependent_function(piecewise->default_expr(), z);
-    }
-    if (auto sum = std::dynamic_pointer_cast<const SummationNode>(node)) {
-        return has_z_dependent_function(sum->lower_bound(), z) ||
-               has_z_dependent_function(sum->upper_bound(), z) ||
-               (sum->index_var() != z && has_z_dependent_function(sum->body(), z));
-    }
-    if (auto product = std::dynamic_pointer_cast<const ProductNode>(node)) {
-        return has_z_dependent_function(product->lower_bound(), z) ||
-               has_z_dependent_function(product->upper_bound(), z) ||
-               (product->index_var() != z && has_z_dependent_function(product->body(), z));
-    }
-    if (auto transform = std::dynamic_pointer_cast<const TransformNode>(node)) {
-        return transform->source_var() != z &&
-               has_z_dependent_function(transform->body(), z);
-    }
-    if (auto quantifier = std::dynamic_pointer_cast<const QuantifierNode>(node)) {
-        return has_z_dependent_function(quantifier->domain(), z) ||
-               (quantifier->bound_var() != z &&
-                has_z_dependent_function(quantifier->predicate(), z));
-    }
-    if (auto set_builder = std::dynamic_pointer_cast<const SetBuilderNode>(node)) {
-        return has_z_dependent_function(set_builder->domain(), z) ||
-               (set_builder->element_var() != z &&
-                has_z_dependent_function(set_builder->predicate(), z));
-    }
-    if (auto complex = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        return has_z_dependent_function(complex->real(), z) ||
-               has_z_dependent_function(complex->imag(), z);
-    }
-    return false;
+    ExplicitComplexFinder finder;
+    node->accept(finder);
+    return finder.found();
 }
 
-bool contains_explicit_complex(const std::shared_ptr<const SymbolicNode>& node)
-{
-    if (!node) return false;
-    if (std::dynamic_pointer_cast<const ComplexNode>(node)) return true;
-    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        for (const auto& arg : fn->arguments()) {
-            if (contains_explicit_complex(arg)) return true;
-        }
-        return false;
-    }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : add->operands()) {
-            if (contains_explicit_complex(op)) return true;
-        }
-        return false;
-    }
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mul->operands()) {
-            if (contains_explicit_complex(op)) return true;
-        }
-        return false;
-    }
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return contains_explicit_complex(pow->base()) ||
-               contains_explicit_complex(pow->exponent());
-    }
-    return false;
-}
+class FunctionOfExplicitComplexFinder final : public detail::RecursiveSymbolicVisitor {
+public:
+    bool found() const noexcept { return found_; }
 
-bool has_function_of_explicit_complex(const std::shared_ptr<const SymbolicNode>& node)
-{
-    if (!node) return false;
-    if (auto fn = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        for (const auto& arg : fn->arguments()) {
-            if (contains_explicit_complex(arg) ||
-                has_function_of_explicit_complex(arg)) {
-                return true;
+    void visit(const FunctionNode& node) override {
+        visit_function(node.arguments());
+    }
+
+    void visit(const UninterpretedFunctionNode& node) override {
+        visit_function(node.arguments());
+    }
+
+protected:
+    void visit_child(const detail::SymbolicNodePtr& child) override {
+        if (!found_) RecursiveSymbolicVisitor::visit_child(child);
+    }
+
+private:
+    void visit_function(const std::vector<detail::SymbolicNodePtr>& arguments) {
+        for (const auto& argument : arguments) {
+            if (contains_explicit_complex(argument)) {
+                found_ = true;
+                return;
             }
         }
-        return false;
+        visit_children(arguments);
     }
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& op : add->operands()) {
-            if (has_function_of_explicit_complex(op)) return true;
-        }
-        return false;
-    }
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& op : mul->operands()) {
-            if (has_function_of_explicit_complex(op)) return true;
-        }
-        return false;
-    }
-    if (auto pow = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return has_function_of_explicit_complex(pow->base()) ||
-               has_function_of_explicit_complex(pow->exponent());
-    }
-    if (auto complex = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        return has_function_of_explicit_complex(complex->real()) ||
-               has_function_of_explicit_complex(complex->imag());
-    }
-    return false;
+
+    bool found_ = false;
+};
+
+bool has_z_dependent_function(const detail::SymbolicNodePtr& node,
+                              const std::string& z) {
+    if (!node) return false;
+    FunctionDependencyFinder finder(z);
+    node->accept(finder);
+    return finder.found();
+}
+
+bool has_function_of_explicit_complex(const detail::SymbolicNodePtr& node) {
+    if (!node) return false;
+    FunctionOfExplicitComplexFinder finder;
+    node->accept(finder);
+    return finder.found();
 }
 
 } // namespace
@@ -210,11 +192,11 @@ static ExpressionResult calculate_residue_impl(
     const std::shared_ptr<SymbolicExpr>&,
     int,
     ComputationContext&);
-static std::shared_ptr<SymbolicExpr> cauchy_integral_impl(
+static ExpressionResult cauchy_integral_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&,
     const std::shared_ptr<SymbolicExpr>&,
-    int);
+    int, ComputationContext&);
 static bool is_analytic_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&);
@@ -284,13 +266,13 @@ static ExpressionResult calculate_residue_impl(
         F = F->differentiate(z);
     }
     
-    int fact = 1;
-    for (int i = 2; i <= order - 1; i++) fact *= i;
-    
-    F = SymbolicExpr::divide(F, SymbolicExpr::number(fact));
+    auto fact = BigInt::factorial_checked(BigInt(order - 1), context);
+    if (!fact) return ExpressionResult::failure(fact.error());
+
+    F = SymbolicExpr::divide(F, SymbolicExpr::number(fact.value()));
     
     return limit_expression_checked(
-        F, z, z0, LimitDirection::Both, context);
+        F, z, z0, LimitDirection::Both, context, Domain::Complex);
 }
 
 ExpressionResult cauchy_integral_checked(
@@ -308,7 +290,9 @@ ExpressionResult cauchy_integral_checked(
     if (!budget) return ExpressionResult::failure(budget.error());
 
     try {
-        auto result = cauchy_integral_impl(f, z, z0, n);
+        auto calculated = cauchy_integral_impl(f, z, z0, n, context);
+        if (!calculated) return calculated;
+        auto result = std::move(calculated.value());
         if (!result || !LMCAS::detail::node(result)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -337,11 +321,11 @@ ExpressionResult cauchy_integral_checked(
     return cauchy_integral_checked(f, z, z0, n, context);
 }
 
-static std::shared_ptr<SymbolicExpr> cauchy_integral_impl(
+static ExpressionResult cauchy_integral_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
-    int n) {
+    int n, ComputationContext& context) {
     
     /// n is the power in the denominator: \oint f(z)/(z-z0)^n dz
     if (n < 1) return SymbolicExpr::number(0);
@@ -353,10 +337,10 @@ static std::shared_ptr<SymbolicExpr> cauchy_integral_impl(
     
     auto f_n_minus_1_z0 = deriv->substitute(z, z0);
     
-    int fact = 1;
-    for (int i = 2; i <= n - 1; i++) fact *= i;
-    
-    auto term = SymbolicExpr::divide(f_n_minus_1_z0, SymbolicExpr::number(fact));
+    auto fact = BigInt::factorial_checked(BigInt(n - 1), context);
+    if (!fact) return ExpressionResult::failure(fact.error());
+
+    auto term = SymbolicExpr::divide(f_n_minus_1_z0, SymbolicExpr::number(fact.value()));
     
     auto pi_node = LMCAS::detail::make_node<VariableNode>("pi");
     auto i_node = SymbolicFactory::create_complex(
@@ -383,6 +367,26 @@ std::shared_ptr<SymbolicExpr> analytic_continuation(
 
 namespace {
 
+std::optional<int> bounded_complex_power(
+    const std::shared_ptr<const SymbolicNode>& node) {
+    auto number = std::dynamic_pointer_cast<const NumberNode>(node);
+    if (!number) return std::nullopt;
+    BigInt exponent;
+    if (const auto* integer = std::get_if<BigInt>(&number->value())) {
+        exponent = *integer;
+    } else if (const auto* rational = std::get_if<Rational>(&number->value())) {
+        if (!rational->is_integer()) return std::nullopt;
+        exponent = rational->get_numerator();
+    } else {
+        const double value = std::get<lmmc_real_t>(number->value());
+        if (!std::isfinite(value) || value != std::floor(value) ||
+            value < 0 || value > 16) return std::nullopt;
+        return static_cast<int>(value);
+    }
+    if (exponent < BigInt(0) || exponent > BigInt(16)) return std::nullopt;
+    return static_cast<int>(*exponent.try_to_int64());
+}
+
 /// 递归地将表达式分解为 (实部, 虚部)，把 ComplexNode 视为 a+bi。
 /// 仅处理加法、乘法、数值与 ComplexNode 组合；其余子表达式视为实值。
 void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
@@ -391,6 +395,12 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
     re = SymbolicExpr::number(0);
     im = SymbolicExpr::number(0);
     if (!node) return;
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node);
+        variable && detail::is_imaginary_unit_name(variable->name())) {
+        im = SymbolicExpr::number(1);
+        return;
+    }
+
 
     if (auto cn = std::dynamic_pointer_cast<const ComplexNode>(node)) {
         re = LMCAS::detail::make_expression_ptr(cn->real());
@@ -428,26 +438,15 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
     }
     if (auto pw = std::dynamic_pointer_cast<const PowerNode>(node)) {
         /// 对整数次幂，展开为重复乘法以分离实/虚部。
-        auto exp_num = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
-        long long e = 0;
-        bool int_exp = false;
-        if (exp_num) {
-            if (std::holds_alternative<BigInt>(exp_num->value())) {
-                e = (long long)std::get<BigInt>(exp_num->value()).to_int();
-                int_exp = true;
-            } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-                double dv = std::get<lmmc_real_t>(exp_num->value());
-                if (dv == (long long)dv) { e = (long long)dv; int_exp = true; }
-            }
-        }
+        auto exponent = bounded_complex_power(pw->exponent());
         std::shared_ptr<SymbolicExpr> baseR, baseI;
         split_real_imag(pw->base(), baseR, baseI);
         bool base_real = LMCAS::detail::node(baseI) && LMCAS::detail::node(baseI)->is_zero();
-        if (int_exp && e >= 0 && e <= 16 && !base_real) {
+        if (exponent && !base_real) {
             /// (a+bi)^e via repeated complex multiplication
             std::shared_ptr<SymbolicExpr> accR = SymbolicExpr::number(1);
             std::shared_ptr<SymbolicExpr> accI = SymbolicExpr::number(0);
-            for (long long k = 0; k < e; ++k) {
+            for (int k = 0; k < *exponent; ++k) {
                 auto ac = SymbolicExpr::multiply(accR, baseR);
                 auto bd = SymbolicExpr::multiply(accI, baseI);
                 auto ad = SymbolicExpr::multiply(accR, baseI);
@@ -591,17 +590,20 @@ ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
                                           "complex variable name cannot be empty",
                                           operation);
     }
-    if (has_z_dependent_function(LMCAS::detail::node(f), z)) {
-        return ComplexBoolResult::failure(
-            CasErrc::Inconclusive,
-            "analyticity of functions depending on the complex variable is outside the current support domain",
-            operation);
-    }
-    auto budget = context.consume_steps(24, operation);
-    if (!budget) return ComplexBoolResult::failure(budget.error());
-
     try {
+        if (has_z_dependent_function(LMCAS::detail::node(f), z)) {
+            return ComplexBoolResult::failure(
+                CasErrc::Inconclusive,
+                "analyticity of functions depending on the complex variable is outside the current support domain",
+                operation);
+        }
+        auto budget = context.consume_steps(24, operation);
+        if (!budget) return ComplexBoolResult::failure(budget.error());
         return ComplexBoolResult::success(is_analytic_impl(f, z));
+    } catch (const detail::UnsupportedDifferentiation& ex) {
+        return ComplexBoolResult::failure(CasErrc::Inconclusive,
+                                          ex.what(),
+                                          operation);
     } catch (const std::bad_alloc&) {
         return ComplexBoolResult::failure(CasErrc::ResourceLimit,
                                           "allocation failed while checking analyticity",
@@ -617,6 +619,15 @@ ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
                                       const std::string& z) {
     ComputationContext context;
     return is_analytic_checked(f, z, context);
+}
+
+static std::shared_ptr<SymbolicExpr> differentiate_if_dependent(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable) {
+    if (!expression_depends_on_variable(detail::node(expression), variable)) {
+        return SymbolicExpr::number(0);
+    }
+    return expression->differentiate(variable);
 }
 
 static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::string& z) {
@@ -639,10 +650,10 @@ static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::
     std::shared_ptr<SymbolicExpr> u, v;
     split_real_imag(LMCAS::detail::node(fz), u, v);
 
-    auto ux = u->differentiate(xr);
-    auto uy = u->differentiate(xi);
-    auto vx = v->differentiate(xr);
-    auto vy = v->differentiate(xi);
+    auto ux = differentiate_if_dependent(u, xr);
+    auto uy = differentiate_if_dependent(u, xi);
+    auto vx = differentiate_if_dependent(v, xr);
+    auto vy = differentiate_if_dependent(v, xi);
 
     /// CR1: ux - vy == 0 ; CR2: uy + vx == 0
     auto cr1 = SymbolicExpr::add(ux, SymbolicExpr::multiply(SymbolicExpr::number(-1), vy))->simplify();

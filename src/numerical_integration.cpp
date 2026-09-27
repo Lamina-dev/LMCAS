@@ -7,7 +7,7 @@
 #include "internal/lmmc_lifecycle.hpp"
 #include "lmmc/quadrature.h"
 #include "symbolic.hpp"
-#include "symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -158,7 +158,7 @@ Result<ApproxReal> estimated_quadrature_result(
     return Result<ApproxReal>::success(result);
 }
 
-} // namespace
+}
 
 Result<ApproxReal> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& function,
@@ -410,4 +410,4 @@ Result<ApproxReal> numerical_integrate_numeric(
         function, variable, lower, upper, context, subdivisions);
 }
 
-} // namespace LMCAS
+}

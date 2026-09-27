@@ -1,377 +1,195 @@
-/**
- * @file test_piecewise_limit.cpp
- * @brief 测试 LimitVisitor 对 PiecewiseNode 的极限处理和方向感知符号求值.
- *
- * 覆盖:
- * - 单侧极限选择正确分支
- * - 双侧极限相等时返回该值
- * - 双侧极限差异映射为 nullptr,表示极限未定义
- * - 方向感知的 sgn(x) 极限
- * - 方向感知的 |x| 极限
- */
+#include "limit_result.hpp"
 #include "test_common.hpp"
-#include "../include/visitors/limit_visitor.hpp"
-#include "../include/symbolic_ast.hpp"
+#include "internal/symbolic_ast.hpp"
 
 using namespace LMCAS;
 
-int main() {
+namespace {
+
+std::shared_ptr<SymbolicExpr> make_piecewise(
+    const std::shared_ptr<SymbolicExpr> &left_expression,
+    RelationalNode::Op left_op,
+    const std::shared_ptr<SymbolicExpr> &right_expression,
+    RelationalNode::Op right_op,
+    const std::shared_ptr<SymbolicExpr> &point) {
+    auto x = detail::node(SymbolicExpr::variable("x"));
+    auto boundary = detail::node(point);
+    return detail::make_expression_ptr(detail::make_node<PiecewiseNode>(
+        std::vector<PiecewiseNode::Branch>{
+            {detail::node(left_expression),
+             detail::make_node<RelationalNode>(x, boundary, left_op)},
+            {detail::node(right_expression),
+             detail::make_node<RelationalNode>(x, boundary, right_op)}}));
+}
+
+std::shared_ptr<SymbolicExpr> make_unary(
+    FunctionNode::FuncType type,
+    const std::shared_ptr<SymbolicExpr> &argument) {
+    return detail::make_expression_ptr(detail::make_node<FunctionNode>(
+        type, std::vector<std::shared_ptr<const SymbolicNode>>{
+                  detail::node(argument)}));
+}
+
+void expect_finite_limit(const LimitResult &result,
+                         const std::shared_ptr<SymbolicExpr> &expected) {
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    const auto *finite = std::get_if<FiniteLimit>(&result.value().value);
+    ASSERT_NE(finite, nullptr);
+    EXPECT_TRUE(test_proved_equivalent(finite->value, expected));
+}
+
+} // namespace
+
+TEST(PiecewiseLimit, DirectionalBranchesUseCheckedOutcomes) {
     auto x = SymbolicExpr::variable("x");
     auto zero = SymbolicExpr::number(0);
+    auto piecewise = make_piecewise(
+        SymbolicExpr::add(x, SymbolicExpr::number(1)),
+        RelationalNode::Op::GT,
+        SymbolicExpr::add(x, SymbolicExpr::number(-1)),
+        RelationalNode::Op::LT,
+        zero);
+
+    expect_finite_limit(
+        limit_checked(piecewise, "x", zero, LimitDirection::FromAbove),
+        SymbolicExpr::number(1));
+    expect_finite_limit(
+        limit_checked(piecewise, "x", zero, LimitDirection::FromBelow),
+        SymbolicExpr::number(-1));
+
+    auto two_sided = limit_checked(
+        piecewise, "x", zero, LimitDirection::Both);
+    ASSERT_TRUE(two_sided.has_value()) << two_sided.error().message;
+    EXPECT_TRUE(std::holds_alternative<LimitDoesNotExist>(
+        two_sided.value().value));
+}
+
+TEST(PiecewiseLimit, EqualBranchesHaveFiniteTwoSidedLimit) {
+    auto x = SymbolicExpr::variable("x");
+    auto zero = SymbolicExpr::number(0);
+    auto square = SymbolicExpr::power(x, SymbolicExpr::number(2));
+    auto piecewise = make_piecewise(
+        square, RelationalNode::Op::GT,
+        square, RelationalNode::Op::LT, zero);
+
+    expect_finite_limit(
+        limit_checked(piecewise, "x", zero, LimitDirection::Both),
+        zero);
+}
+
+TEST(PiecewiseLimit, LargeFiniteBoundaryKeepsRelationOrientation) {
+    auto x = detail::node(SymbolicExpr::variable("x"));
+    auto point = detail::node(SymbolicExpr::number(1.0e308));
+    auto one = detail::node(SymbolicExpr::number(1));
+    auto negative_one = detail::node(SymbolicExpr::number(-1));
+    auto boundary = detail::make_expression_ptr(point);
+
+    auto variable_left = detail::make_expression_ptr(
+        detail::make_node<PiecewiseNode>(
+            std::vector<PiecewiseNode::Branch>{
+                {one, detail::make_node<RelationalNode>(
+                          x, point, RelationalNode::Op::GT)},
+                {negative_one, detail::make_node<RelationalNode>(
+                                   x, point, RelationalNode::Op::LEQ)}}));
+    expect_finite_limit(
+        limit_checked(variable_left, "x", boundary,
+                      LimitDirection::FromAbove),
+        SymbolicExpr::number(1));
+
+    auto variable_right = detail::make_expression_ptr(
+        detail::make_node<PiecewiseNode>(
+            std::vector<PiecewiseNode::Branch>{
+                {one, detail::make_node<RelationalNode>(
+                          point, x, RelationalNode::Op::LT)},
+                {negative_one, detail::make_node<RelationalNode>(
+                                   point, x, RelationalNode::Op::GEQ)}}));
+    expect_finite_limit(
+        limit_checked(variable_right, "x", boundary,
+                      LimitDirection::FromAbove),
+        SymbolicExpr::number(1));
+}
+
+TEST(PiecewiseLimit, SignAndAbsoluteDirectionalLimitsAreFinite) {
+    auto x = SymbolicExpr::variable("x");
+    auto zero = SymbolicExpr::number(0);
+    auto sign = make_unary(FunctionNode::FuncType::Sgn, x);
+    auto absolute = make_unary(FunctionNode::FuncType::Abs, x);
+
+    expect_finite_limit(
+        limit_checked(sign, "x", zero, LimitDirection::FromAbove),
+        SymbolicExpr::number(1));
+    expect_finite_limit(
+        limit_checked(sign, "x", zero, LimitDirection::FromBelow),
+        SymbolicExpr::number(-1));
+    expect_finite_limit(
+        limit_checked(absolute, "x", zero, LimitDirection::FromAbove),
+        zero);
+    expect_finite_limit(
+        limit_checked(absolute, "x", zero, LimitDirection::FromBelow),
+        zero);
+}
+
+TEST(PiecewiseLimit, PoleDirectionsUseTypedInfinityOutcomes) {
+    auto x = SymbolicExpr::variable("x");
+    auto zero = SymbolicExpr::number(0);
+    auto reciprocal = SymbolicExpr::power(x, SymbolicExpr::number(-1));
+    auto inverse_square = SymbolicExpr::power(x, SymbolicExpr::number(-2));
+
+    auto right = limit_checked(
+        reciprocal, "x", zero, LimitDirection::FromAbove);
+    ASSERT_TRUE(right.has_value()) << right.error().message;
+    EXPECT_TRUE(std::holds_alternative<PositiveInfinityLimit>(
+        right.value().value));
+
+    auto left = limit_checked(
+        reciprocal, "x", zero, LimitDirection::FromBelow);
+    ASSERT_TRUE(left.has_value()) << left.error().message;
+    EXPECT_TRUE(std::holds_alternative<NegativeInfinityLimit>(
+        left.value().value));
+
+    for (auto direction :
+         {LimitDirection::FromAbove, LimitDirection::FromBelow}) {
+        auto even = limit_checked(inverse_square, "x", zero, direction);
+        ASSERT_TRUE(even.has_value()) << even.error().message;
+        EXPECT_TRUE(std::holds_alternative<PositiveInfinityLimit>(
+            even.value().value));
+    }
+}
+
+TEST(PiecewiseLimit, NonstrictBoundaryHasMatchingDirectionalLimits) {
+    auto x = SymbolicExpr::variable("x");
     auto one = SymbolicExpr::number(1);
-    auto neg_one = SymbolicExpr::number(-1);
-    auto two = SymbolicExpr::number(2);
-    auto three = SymbolicExpr::number(3);
+    auto piecewise = make_piecewise(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)),
+        RelationalNode::Op::GEQ,
+        SymbolicExpr::add(
+            SymbolicExpr::multiply(SymbolicExpr::number(2), x),
+            SymbolicExpr::number(-1)),
+        RelationalNode::Op::LT,
+        one);
 
-
-    TEST_CASE("Piecewise: right limit selects x>0 branch");
-    {
-        // piecewise(x+1 if x>0, x-1 if x<0)
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-
-        // Condition: x > 0
-        auto cond_gt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::GT);
-        // Condition: x < 0
-        auto cond_lt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::LT);
-
-        // Branch expressions: x+1 and x-1
-        std::vector<std::shared_ptr<const SymbolicNode>> add1_ops = {x_node, LMCAS::detail::make_node<NumberNode>(BigInt(1))};
-        auto expr_plus = LMCAS::detail::make_node<AddNode>(add1_ops);
-        std::vector<std::shared_ptr<const SymbolicNode>> add2_ops = {x_node, LMCAS::detail::make_node<NumberNode>(BigInt(-1))};
-        auto expr_minus = LMCAS::detail::make_node<AddNode>(add2_ops);
-
-        std::vector<PiecewiseNode::Branch> branches;
-        branches.push_back({expr_plus, cond_gt});
-        branches.push_back({expr_minus, cond_lt});
-        auto pw = LMCAS::detail::make_node<PiecewiseNode>(branches);
-
-        // Right limit at x=0: should select x>0 branch, giving 0+1 = 1
-        LimitVisitor rv("x", zero_node, "+");
-        pw->accept(rv);
-        auto r = rv.get_result();
-        EXPECT_TRUE(r != nullptr, "Right limit of piecewise at 0 is not null");
-        if (r) {
-            NormalizationVisitor norm; r->accept(norm); r = norm.get_result();
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "1", "Right limit = 1");
-        }
+    for (auto direction : {LimitDirection::FromAbove,
+                           LimitDirection::FromBelow,
+                           LimitDirection::Both}) {
+        expect_finite_limit(
+            limit_checked(piecewise, "x", one, direction), one);
     }
+}
 
-    TEST_CASE("Piecewise right limit selects branch at a large finite point");
-    {
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto point_node = LMCAS::detail::make_node<NumberNode>(1.0e308);
-        auto one_node = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-        auto neg_one_node = LMCAS::detail::make_node<NumberNode>(BigInt(-1));
+TEST(PiecewiseLimit, ZeroLimitIsNotEventualEquality) {
+    auto reciprocal = SymbolicExpr::power(
+        SymbolicExpr::variable("x"), SymbolicExpr::number(-1));
+    auto condition = detail::make_node<RelationalNode>(
+        detail::node(reciprocal), detail::node(SymbolicExpr::number(0)),
+        RelationOp::EQ);
+    auto piecewise = detail::make_expression_ptr(
+        detail::make_node<PiecewiseNode>(
+            std::vector<PiecewiseNode::Branch>{
+                {detail::node(SymbolicExpr::number(1)), condition}},
+            detail::node(SymbolicExpr::number(2))));
 
-        auto x_gt_point = LMCAS::detail::make_node<RelationalNode>(
-            x_node, point_node, RelationalNode::Op::GT);
-        auto x_le_point = LMCAS::detail::make_node<RelationalNode>(
-            x_node, point_node, RelationalNode::Op::LEQ);
-        std::vector<PiecewiseNode::Branch> variable_left_branches{
-            {one_node, x_gt_point},
-            {neg_one_node, x_le_point}
-        };
-        auto variable_left =
-            LMCAS::detail::make_node<PiecewiseNode>(variable_left_branches);
-        LimitVisitor first("x", point_node, "+");
-        variable_left->accept(first);
-        auto first_result = first.get_result();
-        EXPECT_TRUE(first_result != nullptr,
-                    "large-point right limit with variable on the left exists");
-        if (first_result) {
-            EXPECT_EQ_STR(
-                LMCAS::detail::make_expression_ptr(first_result)->to_string(),
-                "1",
-                "x > point selects the right-hand branch without a fixed probe");
-        }
-
-        auto point_lt_x = LMCAS::detail::make_node<RelationalNode>(
-            point_node, x_node, RelationalNode::Op::LT);
-        auto point_ge_x = LMCAS::detail::make_node<RelationalNode>(
-            point_node, x_node, RelationalNode::Op::GEQ);
-        std::vector<PiecewiseNode::Branch> variable_right_branches{
-            {one_node, point_lt_x},
-            {neg_one_node, point_ge_x}
-        };
-        auto variable_right =
-            LMCAS::detail::make_node<PiecewiseNode>(variable_right_branches);
-        LimitVisitor second("x", point_node, "+");
-        variable_right->accept(second);
-        auto second_result = second.get_result();
-        EXPECT_TRUE(second_result != nullptr,
-                    "large-point right limit with variable on the right exists");
-        if (second_result) {
-            EXPECT_EQ_STR(
-                LMCAS::detail::make_expression_ptr(second_result)->to_string(),
-                "1",
-                "point < x selects the right-hand branch without a fixed probe");
-        }
-    }
-
-    TEST_CASE("Piecewise: left limit selects x<0 branch");
-    {
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        auto cond_gt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::GT);
-        auto cond_lt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::LT);
-        std::vector<std::shared_ptr<const SymbolicNode>> add1_ops = {x_node, LMCAS::detail::make_node<NumberNode>(BigInt(1))};
-        auto expr_plus = LMCAS::detail::make_node<AddNode>(add1_ops);
-        std::vector<std::shared_ptr<const SymbolicNode>> add2_ops = {x_node, LMCAS::detail::make_node<NumberNode>(BigInt(-1))};
-        auto expr_minus = LMCAS::detail::make_node<AddNode>(add2_ops);
-        std::vector<PiecewiseNode::Branch> branches;
-        branches.push_back({expr_plus, cond_gt});
-        branches.push_back({expr_minus, cond_lt});
-        auto pw = LMCAS::detail::make_node<PiecewiseNode>(branches);
-
-        // Left limit at x=0: should select x<0 branch, giving 0-1 = -1
-        LimitVisitor lv("x", zero_node, "-");
-        pw->accept(lv);
-        auto r = lv.get_result();
-        EXPECT_TRUE(r != nullptr, "Left limit of piecewise at 0 is not null");
-        if (r) {
-            NormalizationVisitor norm; r->accept(norm); r = norm.get_result();
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "-1", "Left limit = -1");
-        }
-    }
-
-    TEST_CASE("Piecewise: two-sided limit DNE when left != right");
-    {
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        auto cond_gt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::GT);
-        auto cond_lt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::LT);
-        std::vector<std::shared_ptr<const SymbolicNode>> add1_ops = {x_node, LMCAS::detail::make_node<NumberNode>(BigInt(1))};
-        auto expr_plus = LMCAS::detail::make_node<AddNode>(add1_ops);
-        std::vector<std::shared_ptr<const SymbolicNode>> add2_ops = {x_node, LMCAS::detail::make_node<NumberNode>(BigInt(-1))};
-        auto expr_minus = LMCAS::detail::make_node<AddNode>(add2_ops);
-        std::vector<PiecewiseNode::Branch> branches;
-        branches.push_back({expr_plus, cond_gt});
-        branches.push_back({expr_minus, cond_lt});
-        auto pw = LMCAS::detail::make_node<PiecewiseNode>(branches);
-
-        // Two-sided limit at x=0: left=-1, right=1, so DNE (nullptr)
-        LimitVisitor tv("x", zero_node, "");
-        pw->accept(tv);
-        auto r = tv.get_result();
-        EXPECT_TRUE(r == nullptr, "Two-sided limit DNE when left != right");
-    }
-
-    TEST_CASE("Piecewise: two-sided limit exists when left == right");
-    {
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        auto cond_gt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::GT);
-        auto cond_lt = LMCAS::detail::make_node<RelationalNode>(x_node, zero_node, RelationalNode::Op::LT);
-        // Both branches give x^2, so limit from both sides at 0 is 0
-        auto x_sq = LMCAS::detail::make_node<PowerNode>(x_node, LMCAS::detail::make_node<NumberNode>(BigInt(2)));
-        std::vector<PiecewiseNode::Branch> branches;
-        branches.push_back({x_sq, cond_gt});
-        branches.push_back({x_sq->clone(), cond_lt});
-        auto pw = LMCAS::detail::make_node<PiecewiseNode>(branches);
-
-        LimitVisitor tv("x", zero_node, "");
-        pw->accept(tv);
-        auto r = tv.get_result();
-        EXPECT_TRUE(r != nullptr, "Two-sided limit exists when branches agree");
-        if (r) {
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "0", "Two-sided limit = 0");
-        }
-    }
-
-
-    TEST_CASE("sgn(x) right limit at 0 = 1");
-    {
-        // sgn(x) as x->0+
-        auto lim = LMCAS::limit_expression_checked(x, "x", zero, LimitDirection::FromAbove).value();
-        // We need to construct sgn(x) directly
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        std::vector<std::shared_ptr<const SymbolicNode>> sgn_args = {x_node};
-        auto sgn_x = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sgn, sgn_args);
-
-        LimitVisitor rv("x", zero_node, "+");
-        sgn_x->accept(rv);
-        auto r = rv.get_result();
-        EXPECT_TRUE(r != nullptr, "sgn(x) right limit at 0 is not null");
-        if (r) {
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "1", "sgn(x) x->0+ = 1");
-        }
-    }
-
-    TEST_CASE("sgn(x) left limit at 0 = -1");
-    {
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        std::vector<std::shared_ptr<const SymbolicNode>> sgn_args = {x_node};
-        auto sgn_x = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sgn, sgn_args);
-
-        LimitVisitor lv("x", zero_node, "-");
-        sgn_x->accept(lv);
-        auto r = lv.get_result();
-        EXPECT_TRUE(r != nullptr, "sgn(x) left limit at 0 is not null");
-        if (r) {
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "-1", "sgn(x) x->0- = -1");
-        }
-    }
-
-
-    TEST_CASE("|x| limit at 0 = 0 (from either side)");
-    {
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        std::vector<std::shared_ptr<const SymbolicNode>> abs_args = {x_node};
-        auto abs_x = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Abs, abs_args);
-
-        LimitVisitor rv("x", zero_node, "+");
-        abs_x->accept(rv);
-        auto r = rv.get_result();
-        EXPECT_TRUE(r != nullptr, "|x| right limit at 0 is not null");
-        if (r) {
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "0", "|x| x->0+ = 0");
-        }
-
-        LimitVisitor lv("x", zero_node, "-");
-        abs_x->accept(lv);
-        r = lv.get_result();
-        EXPECT_TRUE(r != nullptr, "|x| left limit at 0 is not null");
-        if (r) {
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "0", "|x| x->0- = 0");
-        }
-    }
-
-
-    TEST_CASE("1/x right limit at 0 = +inf");
-    {
-        // x^(-1) as x->0+
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        auto inv_x = LMCAS::detail::make_node<PowerNode>(x_node, LMCAS::detail::make_node<NumberNode>(BigInt(-1)));
-
-        LimitVisitor rv("x", zero_node, "+");
-        inv_x->accept(rv);
-        auto r = rv.get_result();
-        EXPECT_TRUE(r != nullptr, "1/x right limit at 0 is not null");
-        if (r) {
-            auto func = std::dynamic_pointer_cast<const FunctionNode>(r);
-            EXPECT_TRUE(func != nullptr && func->type() == FunctionNode::FuncType::Infinity,
-                        "1/x x->0+ = +inf");
-        }
-    }
-
-    TEST_CASE("1/x left limit at 0 = -inf");
-    {
-        // x^(-1) as x->0-
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        auto inv_x = LMCAS::detail::make_node<PowerNode>(x_node, LMCAS::detail::make_node<NumberNode>(BigInt(-1)));
-
-        LimitVisitor lv("x", zero_node, "-");
-        inv_x->accept(lv);
-        auto r = lv.get_result();
-        EXPECT_TRUE(r != nullptr, "1/x left limit at 0 is not null");
-        if (r) {
-            // Should be -1*inf (negative infinity)
-            auto mul = std::dynamic_pointer_cast<const MultiplyNode>(r);
-            bool is_neg_inf = false;
-            if (mul) {
-                for (auto& op : mul->operands()) {
-                    if (auto f = std::dynamic_pointer_cast<const FunctionNode>(op)) {
-                        if (f->type() == FunctionNode::FuncType::Infinity) is_neg_inf = true;
-                    }
-                }
-            }
-            EXPECT_TRUE(is_neg_inf, "1/x x->0- = -inf");
-        }
-    }
-
-    TEST_CASE("1/x^2 right limit at 0 = +inf (even exponent)");
-    {
-        // x^(-2) as x->0+
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        auto inv_x2 = LMCAS::detail::make_node<PowerNode>(x_node, LMCAS::detail::make_node<NumberNode>(BigInt(-2)));
-
-        LimitVisitor rv("x", zero_node, "+");
-        inv_x2->accept(rv);
-        auto r = rv.get_result();
-        EXPECT_TRUE(r != nullptr, "1/x^2 right limit at 0 is not null");
-        if (r) {
-            auto func = std::dynamic_pointer_cast<const FunctionNode>(r);
-            EXPECT_TRUE(func != nullptr && func->type() == FunctionNode::FuncType::Infinity,
-                        "1/x^2 x->0+ = +inf");
-        }
-    }
-
-    TEST_CASE("1/x^2 left limit at 0 = +inf (even exponent, always positive)");
-    {
-        // x^(-2) as x->0-
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto zero_node = LMCAS::detail::make_node<NumberNode>(BigInt(0));
-        auto inv_x2 = LMCAS::detail::make_node<PowerNode>(x_node, LMCAS::detail::make_node<NumberNode>(BigInt(-2)));
-
-        LimitVisitor lv("x", zero_node, "-");
-        inv_x2->accept(lv);
-        auto r = lv.get_result();
-        EXPECT_TRUE(r != nullptr, "1/x^2 left limit at 0 is not null");
-        if (r) {
-            auto func = std::dynamic_pointer_cast<const FunctionNode>(r);
-            EXPECT_TRUE(func != nullptr && func->type() == FunctionNode::FuncType::Infinity,
-                        "1/x^2 x->0- = +inf (even exponent)");
-        }
-    }
-
-
-    TEST_CASE("Piecewise with GEQ/LEQ: right limit at boundary");
-    {
-        // piecewise(x^2 if x>=1, 2*x-1 if x<1)
-        // At x=1: right limit uses x>=1 branch -> 1^2 = 1
-        auto x_node = LMCAS::detail::make_node<VariableNode>("x");
-        auto one_node = LMCAS::detail::make_node<NumberNode>(BigInt(1));
-
-        auto cond_geq = LMCAS::detail::make_node<RelationalNode>(x_node, one_node, RelationalNode::Op::GEQ);
-        auto cond_lt = LMCAS::detail::make_node<RelationalNode>(x_node, one_node, RelationalNode::Op::LT);
-
-        auto x_sq = LMCAS::detail::make_node<PowerNode>(x_node, LMCAS::detail::make_node<NumberNode>(BigInt(2)));
-        std::vector<std::shared_ptr<const SymbolicNode>> lin_ops = {
-            LMCAS::detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
-                LMCAS::detail::make_node<NumberNode>(BigInt(2)), x_node}),
-            LMCAS::detail::make_node<NumberNode>(BigInt(-1))};
-        auto lin_expr = LMCAS::detail::make_node<AddNode>(lin_ops);
-
-        std::vector<PiecewiseNode::Branch> branches;
-        branches.push_back({x_sq, cond_geq});
-        branches.push_back({lin_expr, cond_lt});
-        auto pw = LMCAS::detail::make_node<PiecewiseNode>(branches);
-
-        // Right limit at x=1: x>=1 branch -> 1
-        LimitVisitor rv("x", one_node, "+");
-        pw->accept(rv);
-        auto r = rv.get_result();
-        EXPECT_TRUE(r != nullptr, "Piecewise GEQ right limit at 1 is not null");
-        if (r) {
-            NormalizationVisitor norm; r->accept(norm); r = norm.get_result();
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "1",
-                          "Right limit at x=1 (x>=1 branch) = 1");
-        }
-
-        // Left limit at x=1: x<1 branch -> 2(1)-1 = 1
-        LimitVisitor lv("x", one_node, "-");
-        pw->accept(lv);
-        r = lv.get_result();
-        EXPECT_TRUE(r != nullptr, "Piecewise LT left limit at 1 is not null");
-        if (r) {
-            NormalizationVisitor norm; r->accept(norm); r = norm.get_result();
-            EXPECT_EQ_STR(LMCAS::detail::make_expression_ptr(r)->to_string(), "1",
-                          "Left limit at x=1 (x<1 branch) = 1");
-        }
-
-        // Two-sided limit exists (both = 1)
-        LimitVisitor tv("x", one_node, "");
-        pw->accept(tv);
-        r = tv.get_result();
-        EXPECT_TRUE(r != nullptr, "Two-sided limit exists when both sides = 1");
-    }
-
-    return TEST_REPORT();
+    expect_finite_limit(
+        limit_checked(piecewise, "x", SymbolicExpr::infinity(),
+                      LimitDirection::Both),
+        SymbolicExpr::number(2));
 }
