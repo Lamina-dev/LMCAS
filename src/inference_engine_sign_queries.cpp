@@ -25,6 +25,7 @@ InferenceTriboolResult InferenceEngine::query_positive_checked(const SymbolicExp
                 return Impl::number_positive(*num);
             }
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::True;
                 const auto& props = impl_->ctx;
                 if (props.has_sign(var->name(), Sign::Positive)) {
                     return Tribool::True;
@@ -67,6 +68,7 @@ InferenceTriboolResult InferenceEngine::query_negative_checked(const SymbolicExp
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::False;
                 const auto& props = impl_->ctx;
                 if (props.has_sign(var->name(), Sign::Negative)) {
                     return Tribool::True;
@@ -106,6 +108,7 @@ InferenceTriboolResult InferenceEngine::query_nonnegative_checked(const Symbolic
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::True;
                 const auto& props = impl_->ctx;
                 if (props.has_sign(var->name(), Sign::NonNegative)) {
                     return Tribool::True;
@@ -138,6 +141,7 @@ InferenceTriboolResult InferenceEngine::query_nonpositive_checked(const Symbolic
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::False;
                 const auto& props = impl_->ctx;
                 if (props.has_sign(var->name(), Sign::NonPositive)) {
                     return Tribool::True;
@@ -173,6 +177,7 @@ InferenceTriboolResult InferenceEngine::query_nonzero_checked(const SymbolicExpr
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::True;
                 const auto& props = impl_->ctx;
                 if (props.has_sign(var->name(), Sign::NonZero)) {
                     return Tribool::True;

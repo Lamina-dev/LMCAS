@@ -1,5 +1,7 @@
 #include "solver.hpp"
 #include "solve_strategies.hpp"
+#include "fglm.hpp"
+#include "internal/solver_groebner_builder.hpp"
 #include "poly_utils.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "internal/solver_support.hpp"
@@ -24,7 +26,6 @@ std::shared_ptr<SymbolicExpr> clear_denominators(
     if (!collect_denominator_factors(detail::node(equation), factors, local_constraints)) {
         return nullptr;
     }
-    (void)multiply_factors(factors);
     auto cleared = to_ptr(equation);
     if (factors.empty()) {
         cleared = cleared->simplify();
@@ -92,14 +93,45 @@ PolynomialSystemResult solve_single_equation(const SymbolicExpr& equation,
     return solutions;
 }
 
-Expressions simplified_basis(const std::vector<SymbolicExpr>& equations,
-                              const std::vector<std::string>& variables) {
-    auto groebner = Solver::groebner_basis(equations, variables);
+Result<Expressions> simplified_basis(const std::vector<SymbolicExpr>& equations,
+                                     const std::vector<std::string>& variables,
+                                     ComputationContext& context) {
+    constexpr const char* operation = "solve_polynomial_system";
+    groebner_detail::PolyContext conversion(variables);
+    for (const auto& equation : equations) {
+        auto budget = context.consume_steps(1, operation);
+        if (!budget) return Result<Expressions>::failure(budget.error());
+        groebner_detail::PolyBuilder builder(variables, conversion, true);
+        detail::node(equation)->accept(builder);
+        if (builder.failed) return Result<Expressions>::failure(
+            CasErrc::Inconclusive, "equation is not an exact polynomial in the system variables", operation);
+    }
+    auto groebner = Solver::reduced_groebner_basis(equations, variables);
     Expressions basis;
+    std::vector<FGLMPoly> leading;
     basis.reserve(groebner.size());
+    leading.reserve(groebner.size());
     for (const auto& polynomial : groebner) {
+        auto budget = context.consume_steps(1, operation);
+        if (!budget) return Result<Expressions>::failure(budget.error());
         auto simplified = detail::make_expression_ptr(polynomial)->simplify();
-        if (simplified && !simplified->is_zero()) basis.push_back(simplified);
+        if (!simplified) return Result<Expressions>::failure(
+            CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
+        groebner_detail::PolyBuilder builder(variables, conversion, true);
+        detail::node(simplified)->accept(builder);
+        if (builder.failed) return Result<Expressions>::failure(
+            CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
+        auto converted = builder.get_result();
+        if (simplified->is_number() && !simplified->is_zero()) return Expressions{simplified};
+        if (converted.is_zero()) continue;
+        FGLMPoly term(variables.size());
+        term.add_term(converted.lead_monomial(), converted.lead_coeff());
+        leading.push_back(std::move(term));
+        basis.push_back(std::move(simplified));
+    }
+    if (!is_zero_dimensional(leading, variables.size())) {
+        return Result<Expressions>::failure(CasErrc::Inconclusive,
+            "polynomial system has no certified finite solution set", operation);
     }
     return basis;
 }
@@ -195,10 +227,8 @@ PolynomialSystemResult PolynomialSystemSearch::solve(
     auto target = select_equation(*reduced.value(), variable, appears);
     if (!target) return PolynomialSystemResult::failure(target.error());
     if (!appears) {
-        auto next = partial;
-        next.insert_or_assign(name, detail::expression_from_node(
-            SymbolicFactory::create_variable(name)));
-        return solve(variable - 1, next);
+        return PolynomialSystemResult::failure(CasErrc::Inconclusive,
+            "remaining variable is not constrained", "solve_polynomial_system");
     }
     if (!target.value()) {
         return PolynomialSystemResult::failure(CasErrc::Inconclusive,
@@ -236,14 +266,11 @@ PolynomialSystemResult solve_polynomial_system_impl(
         if (!solved) return solved;
         return filter_denominators(std::move(solved.value()), constraints, context);
     }
-    auto basis = simplified_basis(cleared_equations, variables);
-    if (variables.empty()) {
-        for (const auto& polynomial : basis) {
-            if (polynomial->is_number() && !polynomial->is_zero()) return PolynomialSolutions{};
-        }
-        return PolynomialSolutions{PolynomialSolution{}};
-    }
-    PolynomialSystemSearch search(basis, variables, context);
+    auto basis = simplified_basis(cleared_equations, variables, context);
+    if (!basis) return PolynomialSystemResult::failure(basis.error());
+    if (basis.value().size() == 1 && basis.value().front()->is_number() &&
+        !basis.value().front()->is_zero()) return PolynomialSolutions{};
+    PolynomialSystemSearch search(basis.value(), variables, context);
     auto solved = search.solve(static_cast<int>(variables.size()) - 1, PolynomialSolution{});
     if (!solved) return solved;
     return filter_denominators(std::move(solved.value()), constraints, context);

@@ -376,7 +376,7 @@ Result<Polynomial<T>> symbolic_to_poly_recursive(
     }
 
     if (auto symbol = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (symbol->name() == variable) {
+        if (!symbol->is_constant() && symbol->name() == variable) {
             if constexpr (std::is_same_v<T, SymbolicPolyCoeff>) {
                 if (budget) {
                     checked_coefficient_count(2, *budget);

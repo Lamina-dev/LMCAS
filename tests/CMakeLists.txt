@@ -173,6 +173,7 @@ lmcas_add_test_group(
     test_fraction.cpp
     test_rational_safety.cpp
     test_number_compare.cpp
+    test_expr_serialization.cpp
     test_value_compare.cpp
     test_numeric_evaluation.cpp
     test_computation_context.cpp

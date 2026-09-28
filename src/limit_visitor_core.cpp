@@ -42,7 +42,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::get_result() const { return re
 void LimitVisitor::visit(const NumberNode& node) { result = node.clone(); }
 
 void LimitVisitor::visit(const VariableNode& node) {
-    result = node.name() == var ? point->clone() : node.clone();
+    result = !node.is_constant() && node.name() == var ? point->clone() : node.clone();
 }
 
 void LimitVisitor::visit(const MatrixNode& node) {

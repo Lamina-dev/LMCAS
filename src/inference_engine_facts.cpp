@@ -183,6 +183,7 @@ InferenceTriboolResult InferenceEngine::Impl::query_rational(
             }
         }
         if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+            if (var->is_constant()) return InferenceTriboolResult::success(Tribool::False);
             const auto& props = ctx;
             if (props.has_domain(var->name(), Domain::Rational)) {
                 return InferenceTriboolResult::success(Tribool::True);
@@ -211,6 +212,7 @@ InferenceTriboolResult InferenceEngine::Impl::query_natural(const SymbolicExpr& 
                 return natural_number(*num);
             }
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::False;
                 const auto& props = ctx;
                 if (props.has_domain(var->name(), Domain::Natural)) {
                     return Tribool::True;
@@ -260,6 +262,7 @@ InferenceTriboolResult InferenceEngine::query_real_checked(const SymbolicExpr& e
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::True;
                 const auto& props = impl_->ctx;
                 if (props.has_domain(var->name(), Domain::Real)) {
                     return Tribool::True;
@@ -297,6 +300,7 @@ InferenceTriboolResult InferenceEngine::query_integer_checked(const SymbolicExpr
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::False;
                 const auto& props = impl_->ctx;
                 if (props.has_domain(var->name(), Domain::Integer)) {
                     return Tribool::True;
@@ -333,6 +337,7 @@ InferenceTriboolResult InferenceEngine::query_algebraic_checked(const SymbolicEx
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return var->name() == "phi" ? Tribool::True : Tribool::False;
                 const auto& props = impl_->ctx;
                 if (props.has_domain(var->name(), Domain::Algebraic)) {
                     return Tribool::True;
@@ -370,6 +375,7 @@ InferenceTriboolResult InferenceEngine::query_transcendental_checked(const Symbo
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return var->name() == "phi" ? Tribool::False : Tribool::True;
                 const auto& props = impl_->ctx;
                 if (props.is_transcendental(var->name())) {
                     return Tribool::True;
@@ -411,6 +417,7 @@ InferenceTriboolResult InferenceEngine::query_finite_checked(const SymbolicExpr&
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::True;
                 const auto& props = impl_->ctx;
                 Finiteness f = props.get_finiteness(var->name());
                 if (f == Finiteness::Finite) {
@@ -453,6 +460,7 @@ InferenceTriboolResult InferenceEngine::query_divergent_checked(const SymbolicEx
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+                if (var->is_constant()) return Tribool::False;
                 const auto& props = impl_->ctx;
                 Finiteness f = props.get_finiteness(var->name());
                 if (f == Finiteness::Divergent) {

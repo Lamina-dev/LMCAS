@@ -1,5 +1,6 @@
 #include "test_common.hpp"
 #include "symbolic.hpp"
+#include "expr.hpp"
 
 using namespace LMCAS;
 
@@ -30,7 +31,9 @@ TEST(Trig, Parity) {
 }
 
 TEST(Trig, PiValues) {
-    auto pi = SymbolicExpr::variable("pi");
+    auto pi_constant = LMCAS::pi();
+    ASSERT_TRUE(pi_constant);
+    auto pi = pi_constant.value();
     {
 
         EXPECT_EQ(SymbolicExpr::sin(pi)->simplify()->to_string(), "0") << "sin(pi)";

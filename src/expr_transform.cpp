@@ -117,8 +117,9 @@ BindingResult binding(ExprPtr symbol, ExprPtr value) {
             CasErrc::InvalidArgument, "binding value cannot be null",
             kSubstituteOperation);
     }
-    if (!std::dynamic_pointer_cast<const VariableNode>(
-            LMCAS::detail::node(symbol))) {
+    const auto variable = std::dynamic_pointer_cast<const VariableNode>(
+        LMCAS::detail::node(symbol));
+    if (!variable || variable->is_constant()) {
         return BindingResult::failure(
             CasErrc::InvalidArgument,
             "binding left-hand side must be a symbol",

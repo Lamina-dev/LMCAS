@@ -23,10 +23,7 @@ Result<std::vector<CharRoot>> quadratic_characteristic_roots(
             scale == 0.0 ? 0.0 : (c / scale) / scale;
         const double discriminant =
             std::fma(scaled_b, scaled_b, -4.0 * scaled_c);
-        const double discriminant_tolerance =
-            32.0 * std::numeric_limits<double>::epsilon() *
-            (scaled_b * scaled_b + 4.0 * std::abs(scaled_c));
-        if (std::abs(discriminant) <= discriminant_tolerance) {
+        if (discriminant == 0.0) {
             roots.push_back({-b / 2.0, 0.0, 2, false});
         } else if (discriminant > 0.0) {
             const double sqrt_discriminant =

@@ -10,8 +10,20 @@ InferenceTriboolResult InferenceEngine::Impl::real_definedness(
     const detail::AssumptionFacts facts(engine);
     const std::shared_ptr<const SymbolicNode> borrowed(
         std::shared_ptr<const SymbolicNode>{}, &node);
-    auto defined = detail::query_definedness(borrowed, facts, Domain::Real, context);
+    bool violated_real_restriction = false;
+    auto defined = detail::query_definedness(
+        borrowed, facts, Domain::Real, context, &violated_real_restriction);
     if (defined && defined.value() == Tribool::False) {
+        if (!violated_real_restriction) {
+            auto complex_defined =
+                detail::query_definedness(borrowed, facts, Domain::Complex, context);
+            if (!complex_defined) return InferenceTriboolResult::failure(complex_defined.error());
+            if (complex_defined.value() != Tribool::False) {
+                auto real_value = detail::query_real_value(borrowed, facts, context);
+                if (!real_value) return InferenceTriboolResult::failure(real_value.error());
+                if (real_value.value() == Tribool::Unknown) return Tribool::Unknown;
+            }
+        }
         return InferenceTriboolResult::failure(
             CasErrc::DomainError, "expression is undefined in the real domain",
             "inference.definedness");

@@ -218,17 +218,6 @@ bool solver_detail::is_polynomial_node(const std::shared_ptr<const SymbolicNode>
     return false;
 }
 
-std::shared_ptr<SymbolicExpr> solver_detail::multiply_factors(const std::vector<std::shared_ptr<const SymbolicNode>>& factors) {
-    if (factors.empty()) {
-        return SymbolicExpr::number(1);
-    }
-    auto res = LMCAS::detail::make_expression_ptr(factors[0]);
-    for (size_t i = 1; i < factors.size(); ++i) {
-        res = SymbolicExpr::multiply(res, LMCAS::detail::make_expression_ptr(factors[i]));
-    }
-    return res->simplify();
-}
-
 static bool collect_operand_denominators(
     const std::vector<std::shared_ptr<const SymbolicNode>>& operands,
     std::vector<std::shared_ptr<const SymbolicNode>>& den_factors,

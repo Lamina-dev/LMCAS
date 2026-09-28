@@ -47,7 +47,7 @@ int tf_degree_in(const std::shared_ptr<const SymbolicNode>& node, const std::str
     if (!expression_depends_on_variable(node, var)) return 0;
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        return (v->name() == var) ? 1 : 0;
+        return (!v->is_constant() && v->name() == var) ? 1 : 0;
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {

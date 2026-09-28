@@ -6,6 +6,7 @@
 #include "internal/expression_analysis.hpp"
 #include "internal/series_support.hpp"
 #include "internal/assumption_facts.hpp"
+#include "polynomial_conversion.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -75,6 +76,65 @@ Result<void> validate_laurent_orders(int order_neg,
     }
     return Result<void>::success();
 }
+
+static std::optional<int> essential_exponent(
+    const std::shared_ptr<SymbolicExpr>& f,
+    const std::shared_ptr<SymbolicExpr>& shift) {
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(detail::node(f));
+    if (!fn || fn->type() != FunctionNode::FuncType::Exp ||
+        fn->arguments().size() != 1) {
+        return std::nullopt;
+    }
+    auto argument = detail::make_expression_ptr(fn->arguments()[0])->simplify();
+    auto power = std::dynamic_pointer_cast<const PowerNode>(detail::node(argument));
+    if (!power) {
+        return std::nullopt;
+    }
+    auto exponent = exact_small_integer_node(
+        power->exponent(), -std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
+    if (!exponent) {
+        return std::nullopt;
+    }
+    auto base = detail::make_expression_ptr(power->base())->simplify();
+    auto delta = shift->simplify();
+    if (base->compare(delta) == 0 && *exponent < 0) {
+        return -*exponent;
+    }
+    auto nested = std::dynamic_pointer_cast<const PowerNode>(detail::node(base));
+    if (nested && *exponent == -1) {
+        auto m = exact_small_integer_node(
+            nested->exponent(), 1, std::numeric_limits<int>::max());
+        auto nested_base = detail::make_expression_ptr(nested->base())->simplify();
+        if (m && nested_base->compare(delta) == 0) {
+            return m;
+        }
+    }
+    return std::nullopt;
+}
+
+static LaurentSeriesResult essential_laurent(
+    const std::shared_ptr<SymbolicExpr>& shift, int m, int order_neg,
+    ComputationContext& context) {
+    constexpr const char* operation = "laurent_series_full";
+    auto series = SymbolicExpr::number(1);
+    BigInt factorial(1);
+    for (int k = 1; k <= order_neg / m; ++k) {
+        auto step = context.consume_steps(1, operation);
+        if (!step) {
+            return LaurentSeriesResult::failure(step.error());
+        }
+        factorial *= BigInt(k);
+        auto term = SymbolicExpr::divide(
+            SymbolicExpr::number(1),
+            SymbolicExpr::multiply(
+                SymbolicExpr::number(factorial),
+                SymbolicExpr::power(shift, SymbolicExpr::number(m * k))));
+        series = SymbolicExpr::add(series, term);
+    }
+    return LaurentResult{
+        series->simplify(), SingularityType::Essential, 0,
+        SymbolicExpr::number(m == 1 ? 1 : 0)};
+}
 static LaurentSeriesResult laurent_series_full_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&,
@@ -140,7 +200,7 @@ static Result<FourierPeriod> prepare_fourier_period(
             "Fourier period must be a proved positive constant", "fourier_series");
     }
     auto pi = LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<VariableNode>("pi"));
+        LMCAS::detail::make_node<VariableNode>("pi", true));
     auto two = SymbolicExpr::number(2);
     auto L = SymbolicExpr::divide(T, two);
     auto half_lo = SymbolicExpr::multiply(SymbolicExpr::number(-1), L);
@@ -324,16 +384,16 @@ LaurentSeriesResult laurent_series_full_checked(
     if (!budget) {
         return LaurentSeriesResult::failure(budget.error());
     }
-    auto simplified_input = f->simplify();
-    if (!simplified_input || !LMCAS::detail::node(simplified_input)) {
-        return LaurentSeriesResult::failure(
-            CasErrc::Inconclusive,
-            "checked Laurent input could not be simplified in the supported domain",
-            operation);
-    }
-    auto supported_power = supported_laurent_integer_power(
-        LMCAS::detail::node(simplified_input), var);
     try {
+        auto simplified_input = f->simplify();
+        if (!simplified_input || !LMCAS::detail::node(simplified_input)) {
+            return LaurentSeriesResult::failure(
+                CasErrc::Inconclusive,
+                "checked Laurent input could not be simplified in the supported domain",
+                operation);
+        }
+        auto supported_power = supported_laurent_integer_power(
+            LMCAS::detail::node(simplified_input), var);
         auto built = laurent_series_full_impl(
             f, var, center, order_neg, order_pos, context);
         if (!built) {
@@ -345,6 +405,8 @@ LaurentSeriesResult laurent_series_full_checked(
             return LaurentSeriesResult::failure(valid.error());
         }
         return LaurentSeriesResult::success(std::move(result));
+    } catch (const CasError& error) {
+        return LaurentSeriesResult::failure(error);
     } catch (const std::bad_alloc&) {
         return LaurentSeriesResult::failure(CasErrc::ResourceLimit,
                                             "allocation failed while calculating Laurent series",
@@ -367,38 +429,65 @@ LaurentSeriesResult laurent_series_full_checked(
     return laurent_series_full_checked(f, var, center, order_neg, order_pos, context);
 }
 
-static int extract_laurent_regular_part(
+static Result<int> extract_laurent_regular_part(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
-    const std::shared_ptr<SymbolicExpr>& shift, int order_neg,
-    std::shared_ptr<SymbolicExpr>& regular) {
-    int pole_order = 0;
-        const int MAX_M = (order_neg > 0 ? order_neg : 5);
-        /// 先判断 f 在 center 是否已解析
-        auto f_at = f->substitute(var, center);
-        if (f_at) {
-            f_at = f_at->simplify();
-        }
-        bool finite = f_at && f_at->is_number();
-        if (!finite) {
-            for (int m = 1; m <= MAX_M; ++m) {
-                auto powm = SymbolicExpr::power(shift, SymbolicExpr::number(m));
-                /**
-                 * @brief Laurent 系数描述去心邻域，先约去亚纯乘积的极点，再求解析延拓在中心的值。
-                 * 全局简化保留原函数的极点。
-                 */
-                auto g = SymbolicExpr::multiply(powm, f)->cancel()->simplify();
-                auto g_at = g->substitute(var, center);
-                if (g_at) {
-                    g_at = g_at->simplify();
-                }
-                if (g_at && g_at->is_number()) {
-                    pole_order = m;
-                    regular = g;       // (x-c)^m f(x),在 c 处解析
-                    break;
-                }
+    const std::shared_ptr<SymbolicExpr>& shift,
+    std::shared_ptr<SymbolicExpr>& regular, ComputationContext& context) {
+    constexpr const char* operation = "laurent_series_full";
+    auto center_number = std::dynamic_pointer_cast<const NumberNode>(detail::node(center));
+    if (!center_number || std::holds_alternative<lmmc_real_t>(center_number->value())) {
+        return Result<int>::failure(CasErrc::Inconclusive,
+                                    "Laurent center must be an exact number", operation);
+    }
+    Rational point = std::holds_alternative<BigInt>(center_number->value())
+        ? Rational(std::get<BigInt>(center_number->value()))
+        : std::get<Rational>(center_number->value());
+    RationalDecompositionStrategy rational;
+    Polynomial<Rational> numerator(var), denominator(var);
+    auto recognized = rational.extract_rational(*f, var, numerator, denominator);
+    if (!recognized) {
+        return Result<int>::failure(recognized.error());
+    }
+    if (!recognized.value()) {
+        auto fn = std::dynamic_pointer_cast<const FunctionNode>(detail::node(f));
+        if (fn && fn->arguments().size() == 1 &&
+            (fn->type() == FunctionNode::FuncType::Sin ||
+             fn->type() == FunctionNode::FuncType::Cos ||
+             fn->type() == FunctionNode::FuncType::Exp)) {
+            auto argument = detail::make_expression_ptr(fn->arguments()[0]);
+            auto polynomial = recognize_rational_polynomial(*argument, var, context);
+            if (!polynomial) {
+                return Result<int>::failure(polynomial.error());
+            }
+            if (polynomial.value()) {
+                return 0;
             }
         }
+        return Result<int>::failure(CasErrc::Inconclusive,
+                                    "Laurent singularity could not be proved", operation);
+    }
+    if (numerator.is_zero()) {
+        return 0;
+    }
+    const Polynomial<Rational> factor({Rational(0) - point, Rational(1)}, var);
+    int pole_order = 0;
+    while (denominator.eval(point) == Rational(0)) {
+        auto step = context.consume_steps(1, operation);
+        if (!step) {
+            return Result<int>::failure(step.error());
+        }
+        if (pole_order >= 64) {
+            return Result<int>::failure(CasErrc::Inconclusive,
+                                        "Laurent pole order exceeds supported range", operation);
+        }
+        denominator = denominator.div_mod(factor).first;
+        ++pole_order;
+    }
+    if (pole_order > 0) {
+        regular = SymbolicExpr::multiply(
+            SymbolicExpr::power(shift, SymbolicExpr::number(pole_order)), f)->cancel()->simplify();
+    }
     return pole_order;
 }
 
@@ -413,10 +502,19 @@ static LaurentSeriesResult laurent_series_full_impl(
 
     auto x = SymbolicExpr::variable(var);
     auto shift = SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), center));
+    if (!expression_depends_on_variable(detail::node(center), var)) {
+        if (auto m = essential_exponent(f, shift)) {
+            return essential_laurent(shift, *m, order_neg, context);
+        }
+    }
 
     std::shared_ptr<SymbolicExpr> regular = f;
-    const int pole_order = extract_laurent_regular_part(
-        f, var, center, shift, order_neg, regular);
+    auto extracted = extract_laurent_regular_part(
+        f, var, center, shift, regular, context);
+    if (!extracted) {
+        return LaurentSeriesResult::failure(extracted.error());
+    }
+    const int pole_order = extracted.value();
 
     /// 对 regular(解析部分)做 Taylor 展开
     int taylor_order = order_pos + pole_order + 1;

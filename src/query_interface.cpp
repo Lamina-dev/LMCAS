@@ -372,6 +372,7 @@ QueryTriboolResult QueryInterface::query_positive_definite_checked(const Symboli
                 [&]() -> QueryTriboolResult {
                     if (auto var = std::dynamic_pointer_cast<const VariableNode>(
                             LMCAS::detail::node(expr))) {
+                        if (var->is_constant()) return Tribool::Unknown;
                         const auto& props = ctx_;
                         Definiteness d = props.get_definiteness(var->name());
                         if (d == Definiteness::PositiveDefinite) return Tribool::True;
@@ -401,6 +402,7 @@ QueryTriboolResult QueryInterface::query_positive_semidefinite_checked(const Sym
                 [&]() -> QueryTriboolResult {
                     if (auto var = std::dynamic_pointer_cast<const VariableNode>(
                             LMCAS::detail::node(expr))) {
+                        if (var->is_constant()) return Tribool::Unknown;
                         const auto& props = ctx_;
                         Definiteness d = props.get_definiteness(var->name());
                         if (d == Definiteness::PositiveDefinite ||

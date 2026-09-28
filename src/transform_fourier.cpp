@@ -24,7 +24,7 @@ static bool te_is_abs_variable(const std::shared_ptr<const SymbolicNode>& node,
     if (!function || function->type() != FunctionNode::FuncType::Abs ||
         function->arguments().size() != 1) return false;
     auto argument = std::dynamic_pointer_cast<const VariableNode>(function->arguments()[0]);
-    return argument && argument->name() == variable;
+    return argument && !argument->is_constant() && argument->name() == variable;
 }
 static std::shared_ptr<SymbolicExpr> te_abs_decay(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t) {
@@ -232,6 +232,17 @@ static std::shared_ptr<SymbolicExpr> inverse_fourier_transform_core(
         return result;
     }
 
+    if (!contains_inexact_number(detail::node(F))) {
+        auto canonical = te_abs_fourier(SymbolicExpr::number(1), omega);
+        if (detail::node(F->simplify())->equals(*detail::node(canonical))) {
+            auto abs_t = detail::make_expression_ptr(detail::make_node<FunctionNode>(
+                FunctionNode::FuncType::Abs,
+                std::vector<std::shared_ptr<const SymbolicNode>>{detail::node(tv)}));
+            return SymbolicExpr::exp(SymbolicExpr::multiply(
+                SymbolicExpr::number(-1), abs_t));
+        }
+    }
+
     if (const auto rate = te_match_pure_gaussian(F, omega)) {
         const double coefficient =
             1.0 / std::sqrt(4.0 * 3.14159265358979323846 * *rate);
@@ -276,7 +287,7 @@ TransformEngineResult inverse_fourier_transform_checked(
         std::vector<std::shared_ptr<SymbolicExpr>> conditions;
         auto round_trip = fourier_transform_core(
             expression, t, omega, context, assumptions, conditions);
-        if (!round_trip ||
+        if (!round_trip || !conditions.empty() ||
             te_contains_transform(LMCAS::detail::node(round_trip))) {
             return TransformEngineResult::failure(
                 CasErrc::Inconclusive,

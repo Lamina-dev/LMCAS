@@ -1,6 +1,5 @@
 #include "internal/numeric_evaluation_support.hpp"
 #include "internal/squared_norm.hpp"
-#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -27,20 +26,11 @@ Result<ApproxReal> numeric_failure(CasErrc code, std::string message) {
 }
 
 Result<ApproxReal> numeric_approximation(double value) {
-    if (std::isnan(value)) {
-        return numeric_failure(CasErrc::NumericFailure, "numeric evaluation produced NaN");
+    if (!std::isfinite(value)) {
+        return numeric_failure(CasErrc::NumericFailure, "numeric evaluation produced a nonfinite result");
     }
-    ApproxReal result;
-    result.value = value;
-    if (std::isinf(value)) {
-        result.status = value > 0 ? NumericStatus::PositiveInfinity : NumericStatus::NegativeInfinity;
-        result.absolute_error = 0.0;
-    } else {
-        result.status = NumericStatus::Finite;
-        result.absolute_error = std::numeric_limits<double>::epsilon() *
-                                std::max(1.0, std::abs(value)) * 4.0;
-    }
-    return Result<ApproxReal>::success(result);
+    return Result<ApproxReal>::success(
+        ApproxReal{value, std::numeric_limits<double>::infinity(), NumericStatus::Finite});
 }
 
 Result<ApproxReal> NumericEvaluator::evaluate(const std::shared_ptr<const SymbolicNode>& node) {
@@ -83,7 +73,8 @@ Result<ApproxReal> NumericEvaluator::evaluate(const std::shared_ptr<const Symbol
 
 Result<ApproxReal> NumericEvaluator::function(const FunctionNode& node) {
     if (node.type() == FunctionNode::FuncType::Infinity && node.arguments().empty()) {
-        return numeric_approximation(std::numeric_limits<double>::infinity());
+        return Result<ApproxReal>::success(ApproxReal{
+            std::numeric_limits<double>::infinity(), 0.0, NumericStatus::PositiveInfinity});
     }
     if (node.type() == FunctionNode::FuncType::Atan2) {
         return atan2(node);

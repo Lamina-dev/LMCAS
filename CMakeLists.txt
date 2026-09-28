@@ -41,7 +41,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
-    message(FATAL_ERROR "LMCAS supports GCC, Clang, and MinGW; MSVC is not supported")
+    message(FATAL_ERROR "MSVC ABI compilers (including clang-cl) are unsupported; use Windows MinGW or GNU-driver Clang")
 endif()
 
 if(WIN32)

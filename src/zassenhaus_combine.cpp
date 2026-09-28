@@ -351,22 +351,18 @@ struct ZcFactorSearch {
     Polynomial<Rational> remaining;
     std::vector<Polynomial<Rational>> factors;
     std::vector<size_t> active;
-    const char* exhausted_reason = "";
 };
 
 static Result<bool> zc_try_candidate(
     ZcFactorSearch& search, const std::vector<size_t>& positions) {
     auto step = search.context.consume_steps(1, "zassenhaus_combine");
     if (!step) {
-        search.exhausted_reason =
-            "budget exhausted during bounded combination enumeration";
         return Result<bool>::failure(step.error());
     }
     auto indices = zc_select_indices(search.active, positions);
     auto product = zc_subset_product(
         search.lifted, indices, search.modulus, search.context);
     if (!product) {
-        search.exhausted_reason = "budget exhausted during candidate multiplication";
         return Result<bool>::failure(product.error());
     }
     if (product.value().empty()) return Result<bool>::success(false);
@@ -413,14 +409,7 @@ static ZassenhausResult zc_enumerate(
     for (size_t i = 0; i < search.active.size(); ++i) search.active[i] = i;
     while (search.active.size() > 1 && search.remaining.degree() > 1) {
         auto found = zc_find_factor(search);
-        if (!found) {
-            if (found.error().code == CasErrc::ResourceLimit) {
-                return zc_finalize(poly, std::move(search.factors),
-                    std::move(search.remaining), Completeness::Inconclusive,
-                    search.exhausted_reason);
-            }
-            return ZassenhausResult::failure(found.error());
-        }
+        if (!found) return ZassenhausResult::failure(found.error());
         if (!found.value()) break;
     }
     return zc_finalize(poly, std::move(search.factors), std::move(search.remaining),
@@ -458,14 +447,7 @@ static ZassenhausResult zassenhaus_combine_impl(
 
     auto validation = zc_validate_lifted_product(
         poly, lifted_factors, reconstruction_modulus, context);
-    if (!validation) {
-        if (validation.error().code == CasErrc::ResourceLimit) {
-            return zc_finalize(poly, {}, poly.make_monic(),
-                               Completeness::Inconclusive,
-                               "budget exhausted while validating lifted factors");
-        }
-        return ZassenhausResult::failure(validation.error());
-    }
+    if (!validation) return ZassenhausResult::failure(validation.error());
 
     return zc_enumerate(poly, lifted_factors, reconstruction_modulus, context);
 }

@@ -28,11 +28,11 @@ namespace LMCAS {
  * @brief 多元因式分解结果
  *
  * 满足不变量：constant * ∏(factors[i] ^ multiplicities[i]) == 原多项式。
- * 每个 factors[i] 为本原不可约多项式，首项系数为正。
+ * Complete 结果的终端因子已证明不可约；Inconclusive 结果保留精确乘积。
  */
 struct MultiFactorResult {
     Rational constant;               ///< 数值常数因子
-    std::vector<MultiPoly> factors;  ///< 不可约因子列表（各因子本原）
+    std::vector<MultiPoly> factors;  ///< 精确因子列表（各因子本原）
     std::vector<int> multiplicities; ///< 各因子的重数
 };
 

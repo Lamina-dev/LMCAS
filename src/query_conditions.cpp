@@ -26,7 +26,8 @@ ConditionSets difference_conditions(
     const std::shared_ptr<const SymbolicNode>& neg_operand, Sign target) {
     const auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(pos_operand);
     const auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(neg_operand);
-    if (!lhs_var || !rhs_var) return {};
+    if (!lhs_var || lhs_var->is_constant() ||
+        !rhs_var || rhs_var->is_constant()) return {};
     if (target == Sign::Positive) {
         ConditionSet cs1;
         cs1.sign_conditions.emplace_back(lhs_var->name(), Sign::Positive);
@@ -73,7 +74,7 @@ ConditionSets variable_operand_conditions(
     ConditionSet cs;
     for (const auto& operand : operands) {
         const auto variable = std::dynamic_pointer_cast<const VariableNode>(operand);
-        if (!variable) return {};
+        if (!variable || variable->is_constant()) return {};
         cs.sign_conditions.emplace_back(variable->name(), target);
     }
     if (cs.sign_conditions.empty()) return {};
@@ -101,7 +102,8 @@ ConditionSets quotient_conditions(
     const std::shared_ptr<const SymbolicNode>& denominator, Sign target) {
     const auto num_var = std::dynamic_pointer_cast<const VariableNode>(numerator);
     const auto den_var = std::dynamic_pointer_cast<const VariableNode>(denominator);
-    if (!num_var || !den_var) return {};
+    if (!num_var || num_var->is_constant() ||
+        !den_var || den_var->is_constant()) return {};
     if (target == Sign::Positive) {
         ConditionSet cs1;
         cs1.sign_conditions.emplace_back(num_var->name(), Sign::Positive);
@@ -158,6 +160,7 @@ std::vector<QueryInterface::ConditionSet> QueryInterface::query_conditions_impl(
         return {};
     }
     if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+        if (var->is_constant()) return {};
         ConditionSet cs;
         cs.sign_conditions.emplace_back(var->name(), target);
         return {cs};

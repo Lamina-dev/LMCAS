@@ -95,7 +95,8 @@ ExpressionResult convergence_radius_checked(
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto exponent_variable = std::dynamic_pointer_cast<const VariableNode>(
             power->exponent());
-        if (exponent_variable && exponent_variable->name() == index_var &&
+        if (exponent_variable && !exponent_variable->is_constant() &&
+            exponent_variable->name() == index_var &&
             !expression_depends_on_variable(power->base(), index_var)) {
             auto absolute = LMCAS::detail::make_expression_ptr(
                 LMCAS::detail::make_node<FunctionNode>(
@@ -107,7 +108,8 @@ ExpressionResult convergence_radius_checked(
         }
         auto base_variable = std::dynamic_pointer_cast<const VariableNode>(
             power->base());
-        if (base_variable && base_variable->name() == index_var &&
+        if (base_variable && !base_variable->is_constant() &&
+            base_variable->name() == index_var &&
             !expression_depends_on_variable(power->exponent(), index_var)) {
             return ExpressionResult::success(SymbolicExpr::number(1));
         }
@@ -219,6 +221,8 @@ ConvergenceInfoResult convergence_test_checked(
                 operation);
         }
         return info;
+    } catch (const CasError& error) {
+        return ConvergenceInfoResult::failure(error);
     } catch (const std::bad_alloc&) {
         return ConvergenceInfoResult::failure(CasErrc::ResourceLimit,
                                               "allocation failed while testing convergence",
@@ -247,7 +251,7 @@ static std::optional<ConvergenceInfo> geometric_term_convergence(
     }
     auto exponent = std::dynamic_pointer_cast<const VariableNode>(power->exponent());
     auto base = std::dynamic_pointer_cast<const NumberNode>(power->base());
-    if (!exponent || exponent->name() != index_var || !base) {
+    if (!exponent || exponent->is_constant() || exponent->name() != index_var || !base) {
         return std::nullopt;
     }
 
@@ -278,7 +282,7 @@ static std::optional<ConvergenceInfo> power_term_convergence(
     }
     auto base_var = std::dynamic_pointer_cast<const VariableNode>(power->base());
     auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
-    if (!base_var || base_var->name() != index_var || !exponent) {
+    if (!base_var || base_var->is_constant() || base_var->name() != index_var || !exponent) {
         return std::nullopt;
     }
 
@@ -310,28 +314,32 @@ static std::optional<ConvergenceInfo> power_term_convergence(
 
 static ConvergenceInfo classify_ratio_limit(
     const std::shared_ptr<SymbolicExpr>& lim) {
-    if (lim) {
-                auto ls = lim->simplify();
-                if (ls && series_is_number(ls)) {
-                    double v = series_get_double(ls);
-                    if (v < 1.0 - 1e-12) {
-                        return ConvergenceInfo{
-                            ConvergenceResult::Convergent, "ratio"};
-                    }
-                    if (v > 1.0 + 1e-12) {
-                        return ConvergenceInfo{
-                            ConvergenceResult::Divergent, "ratio"};
-                    }
-                }
-                if (ls && ls->is_zero()) {
-                    return ConvergenceInfo{
-                        ConvergenceResult::Convergent, "ratio"};
-                }
-                if (series_is_infinity(ls)) {
-                    return ConvergenceInfo{
-                        ConvergenceResult::Divergent, "ratio"};
-                }
-            }
+    if (!lim) {
+        return {ConvergenceResult::Inconclusive, ""};
+    }
+    auto ls = lim->simplify();
+    auto infinity = ls
+        ? std::dynamic_pointer_cast<const FunctionNode>(detail::node(ls))
+        : nullptr;
+    if (infinity && infinity->type() == FunctionNode::FuncType::Infinity) {
+        return {ConvergenceResult::Divergent, "ratio"};
+    }
+    auto number = ls
+        ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(ls))
+        : nullptr;
+    if (!number) {
+        return {ConvergenceResult::Inconclusive, ""};
+    }
+    if (const auto* integer = std::get_if<BigInt>(&number->value())) {
+        return {*integer < BigInt(1) ? ConvergenceResult::Convergent
+                                     : *integer > BigInt(1) ? ConvergenceResult::Divergent
+                                                            : ConvergenceResult::Inconclusive, "ratio"};
+    }
+    if (const auto* rational = std::get_if<Rational>(&number->value())) {
+        return {*rational < Rational(1) ? ConvergenceResult::Convergent
+                                        : *rational > Rational(1) ? ConvergenceResult::Divergent
+                                                                  : ConvergenceResult::Inconclusive, "ratio"};
+    }
     return {ConvergenceResult::Inconclusive, ""};
 }
 

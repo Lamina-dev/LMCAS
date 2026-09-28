@@ -56,6 +56,11 @@ Result<void> collect_polynomial_variables(
         return Result<void>::success();
     }
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (variable->is_constant()) {
+            return Result<void>::failure(CasErrc::UnsupportedExpression,
+                "mathematical constants are not rational polynomial variables",
+                kOperation);
+        }
         variables.insert(variable->name());
         return Result<void>::success();
     }

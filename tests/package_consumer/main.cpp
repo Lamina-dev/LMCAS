@@ -1,4 +1,6 @@
 #include "assumption_context.hpp"
+#include "expr.hpp"
+#include "inequality_solver.hpp"
 #include "poly_utils.hpp"
 #include "property_store.hpp"
 #include "query_interface.hpp"
@@ -30,6 +32,48 @@ static int check_equation_and_polynomial(const std::shared_ptr<SymbolicExpr>& ex
         polynomial.value().coeffs[1] != Rational(1)) {
         std::cerr << "failed to convert expression to polynomial\n";
         return 3;
+    }
+    return 0;
+}
+
+static int check_installed_expression_contracts(const ExprPtr& expr) {
+    auto solved = solve_set(expr, "x");
+    const auto* finite = solved ? std::get_if<FiniteSolutions>(&solved.value()) : nullptr;
+    if (!finite || finite->values.size() != 1 ||
+        finite->values[0].value->to_string() != "-1") {
+        std::cerr << "installed solve_set lost the root of x+1\n";
+        return 12;
+    }
+    ComputationContext context;
+    auto distinct = equivalent(*expr, *SymbolicExpr::number(0), context);
+    if (!distinct || distinct.value()) {
+        std::cerr << "installed equivalent failed to prove x+1 differs from zero\n";
+        return 12;
+    }
+    auto encoded = serialize_expr(expr);
+    if (!encoded) {
+        std::cerr << "installed expression encoding failed\n";
+        return 12;
+    }
+    auto decoded = parse_serialized_expr(encoded.value());
+    if (!decoded) {
+        std::cerr << "installed expression decoding failed\n";
+        return 12;
+    }
+    auto restored = serialize_expr(decoded.value());
+    if (!restored || restored.value() != encoded.value()) {
+        std::cerr << "installed expression encoding failed its round trip\n";
+        return 12;
+    }
+    auto a = SymbolicExpr::variable("a");
+    auto linear = SymbolicExpr::add(SymbolicExpr::variable("x"), a);
+    auto positive = InequalitySolver::solve_parametric_inequality_checked(
+        linear, InequalityType::GreaterThan, "x", {"a"});
+    if (!positive || positive.value().cases.size() != 1 ||
+        positive.value().cases[0].solution.intervals().size() != 1 ||
+        !positive.value().cases[0].solution.intervals()[0].upper.is_pos_infinity) {
+        std::cerr << "installed parametric inequality lost x+a>0\n";
+        return 12;
     }
     return 0;
 }
@@ -86,6 +130,9 @@ int main() {
     }
 
     if (const int status = check_equation_and_polynomial(expr); status != 0) {
+        return status;
+    }
+    if (const int status = check_installed_expression_contracts(expr); status != 0) {
         return status;
     }
     auto interval = LMCAS::Interval::point(SymbolicExpr::number(0));

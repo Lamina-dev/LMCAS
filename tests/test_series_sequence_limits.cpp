@@ -5,15 +5,15 @@
 
 #include "test_common.hpp"
 #include "series_engine.hpp"
+#include "expr.hpp"
 
 using namespace LMCAS;
 
-using Expr = std::shared_ptr<SymbolicExpr>;
-using Coeffs = std::vector<Expr>;
+using Coeffs = std::vector<ExprPtr>;
 
-static Expr num(int n) { return SymbolicExpr::number(n); }
-static Expr var(const std::string &name) { return SymbolicExpr::variable(name); }
-static Expr checked_sequence_limit(LMCAS::ExpressionResult result) {
+static ExprPtr num(int n) { return SymbolicExpr::number(n); }
+static ExprPtr var(const std::string &name) { return SymbolicExpr::variable(name); }
+static ExprPtr checked_sequence_limit(LMCAS::ExpressionResult result) {
     EXPECT_TRUE((result.has_value())) << "checked sequence limit succeeds";
     return result ? std::move(result.value()) : nullptr;
 }
@@ -86,8 +86,10 @@ TEST(SeriesSequenceLimits, NearNegativeOneIsNotAlternating) {
 
 TEST(SeriesSequenceLimits, ContinuousTrigPhasesAreInconclusive) {
     auto n = var("n");
+    auto pi_constant = LMCAS::pi();
+    ASSERT_TRUE(pi_constant);
     auto phase = SymbolicExpr::multiply(
-        SymbolicExpr::multiply(num(2), SymbolicExpr::variable("pi")), n);
+        SymbolicExpr::multiply(num(2), pi_constant.value()), n);
     for (const auto &sequence :
          {SymbolicExpr::sin(phase), SymbolicExpr::cos(phase)}) {
         expect_inconclusive_sequence_limit(lim_sup_checked(sequence, "n"));

@@ -137,14 +137,17 @@ public:
         const std::string& variable);
 
     /**
-     * @brief 求解含参数的不等式,返回分段结果
-     * @param expr 不等式左端表达式
-     * @param type 不等式类型
-     * @param variable 求解变量名
-     * @param parameters 参数名列表
-     * @return 分段解集
+     * @brief 在计算上下文预算内求解可证明的参数多项式不等式。
+     * @note 无法证明完整参数分支时返回 CasErrc::Inconclusive。
      */
-    static PiecewiseIntervalResult solve_parametric_inequality(
+    static Result<PiecewiseIntervalResult> solve_parametric_inequality_checked(
+        const std::shared_ptr<SymbolicExpr>& expr,
+        InequalityType type,
+        const std::string& variable,
+        const std::vector<std::string>& parameters,
+        ComputationContext& context);
+
+    static Result<PiecewiseIntervalResult> solve_parametric_inequality_checked(
         const std::shared_ptr<SymbolicExpr>& expr,
         InequalityType type,
         const std::string& variable,

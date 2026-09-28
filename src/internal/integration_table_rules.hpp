@@ -9,7 +9,7 @@ inline auto u_is_var(const std::string& wc) {
             auto it = m.find(wc);
             if (it == m.end()) { return false; }
             auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it->second));
-            return v && v->name() == var;
+            return v && !v->is_constant() && v->name() == var;
         };
 }
 inline auto u_is_var_a_indep(const std::string& u_wc, const std::string& a_wc) {
@@ -17,7 +17,7 @@ inline auto u_is_var_a_indep(const std::string& u_wc, const std::string& a_wc) {
             auto it_u = m.find(u_wc);
             if (it_u == m.end()) { return false; }
             auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it_u->second));
-            if (!v || v->name() != var) { return false; }
+            if (!v || v->is_constant() || v->name() != var) { return false; }
             auto it_a = m.find(a_wc);
             if (it_a == m.end()) { return false; }
             return !expression_depends_on_variable(LMCAS::detail::node(it_a->second), var);

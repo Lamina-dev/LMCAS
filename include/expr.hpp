@@ -111,7 +111,7 @@ private:
 
 /**
  * @brief 借用单个符号的名称。
- * @return 空表达式或非符号表达式返回 nullopt。
+ * @return 空表达式、非符号表达式或数学常量返回 nullopt。
  * @note 借用名称仅在原表达式存活且未被重新赋值时有效。
  */
 LMCAS_API std::optional<std::string_view> symbol_name(
@@ -125,6 +125,13 @@ LMCAS_API ExprResult sym(const std::string& name);
 LMCAS_API ExprResult parse_expr(const std::string& source);
 LMCAS_API ExprResult parse_expr(const std::string& source,
                                 ComputationContext& context);
+/** Versioned, lossless semantic expression encoding (independent of to_string). */
+LMCAS_API Result<std::string> serialize_expr(const ExprPtr& expression,
+                                              ComputationContext& context);
+LMCAS_API Result<std::string> serialize_expr(const ExprPtr& expression);
+LMCAS_API ExprResult parse_serialized_expr(const std::string& source,
+                                           ComputationContext& context);
+LMCAS_API ExprResult parse_serialized_expr(const std::string& source);
 LMCAS_API ExprResult integer(int value);
 LMCAS_API ExprResult integer(const BigInt& value);
 template <typename Integer,

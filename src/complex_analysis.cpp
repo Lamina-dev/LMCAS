@@ -116,9 +116,6 @@ class ExplicitComplexFinder final : public detail::RecursiveSymbolicVisitor {
 public:
     bool found() const noexcept { return found_; }
 
-    void visit(const VariableNode& node) override {
-        found_ = found_ || detail::is_imaginary_unit_name(node.name());
-    }
 
     void visit(const ComplexNode&) override { found_ = true; }
 
@@ -342,7 +339,7 @@ static ExpressionResult cauchy_integral_impl(
 
     auto term = SymbolicExpr::divide(f_n_minus_1_z0, SymbolicExpr::number(fact.value()));
     
-    auto pi_node = LMCAS::detail::make_node<VariableNode>("pi");
+    auto pi_node = LMCAS::detail::make_node<VariableNode>("pi", true);
     auto i_node = SymbolicFactory::create_complex(
         LMCAS::detail::node(SymbolicExpr::number(0)),
         LMCAS::detail::node(SymbolicExpr::number(1)));
@@ -395,11 +392,6 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
     re = SymbolicExpr::number(0);
     im = SymbolicExpr::number(0);
     if (!node) return;
-    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node);
-        variable && detail::is_imaginary_unit_name(variable->name())) {
-        im = SymbolicExpr::number(1);
-        return;
-    }
 
 
     if (auto cn = std::dynamic_pointer_cast<const ComplexNode>(node)) {

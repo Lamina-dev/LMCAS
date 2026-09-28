@@ -75,7 +75,7 @@ ExprResult ExprParser::apply_atan2(const std::vector<ExprPtr>& arguments) {
 ExprResult ExprParser::apply_integral(const std::vector<ExprPtr>& arguments) {
     auto variable = std::dynamic_pointer_cast<const VariableNode>(
         LMCAS::detail::node(arguments[1]));
-    if (!variable) {
+    if (!variable || variable->is_constant()) {
         return fail("Integral variable must be a symbol");
     }
     try {
@@ -103,7 +103,8 @@ ExprResult ExprParser::apply_limit(const std::vector<ExprPtr>& arguments) {
         LMCAS::detail::node(arguments[1]));
     auto direction = std::dynamic_pointer_cast<const VariableNode>(
         LMCAS::detail::node(arguments[3]));
-    if (!variable || !direction) {
+    if (!variable || variable->is_constant() ||
+        !direction || direction->is_constant()) {
         return fail("limit variable and direction must be symbols");
     }
     LimitDirection parsed_direction;
@@ -131,7 +132,7 @@ ExprResult ExprParser::apply_rootof(const std::vector<ExprPtr>& arguments) {
         LMCAS::detail::node(arguments[1]));
     auto index = std::dynamic_pointer_cast<const NumberNode>(
         LMCAS::detail::node(arguments[2]));
-    if (!variable || !index ||
+    if (!variable || variable->is_constant() || !index ||
         std::holds_alternative<lmmc_real_t>(index->value())) {
         return fail("RootOf variable and index are invalid");
     }

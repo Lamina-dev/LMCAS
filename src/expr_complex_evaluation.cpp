@@ -1,6 +1,5 @@
 #include "expr.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <limits>
@@ -25,11 +24,10 @@ Result<ApproxComplex> eval_complex_failure(const CasError& error) {
     return complex_failure(error.code, error.message, kEvalComplexOperation);
 }
 
-ApproxReal approx_part(double value) {
+ApproxReal approx_part(double value, double error = 0.0) {
     ApproxReal part;
     part.value = value;
-    part.absolute_error = std::numeric_limits<double>::epsilon() *
-                          std::max(1.0, std::abs(value)) * 4.0;
+    part.absolute_error = error;
     part.status = NumericStatus::Finite;
     return part;
 }
@@ -45,14 +43,16 @@ Result<ApproxComplex> checked_complex(double real, double imag,
                                "complex evaluation produced a non-finite component",
                                operation);
     }
-    return Result<ApproxComplex>::success(approx_complex(real, imag));
+    const double unknown = std::numeric_limits<double>::infinity();
+    return Result<ApproxComplex>::success(
+        ApproxComplex{approx_part(real, unknown), approx_part(imag, unknown)});
 }
 
 Result<ApproxComplex> real_to_complex(const Result<ApproxReal>& real) {
     if (!real) {
         return eval_complex_failure(real.error());
     }
-    if (!real.value().is_finite()) {
+    if (!real.value().is_finite() || !std::isfinite(real.value().value)) {
         return complex_failure(CasErrc::NumericFailure,
                                "complex evaluation requires finite real components",
                                kEvalComplexOperation);
@@ -63,15 +63,9 @@ Result<ApproxComplex> real_to_complex(const Result<ApproxReal>& real) {
 
 Result<ApproxComplex> add_complex(const ApproxComplex& lhs,
                                   const ApproxComplex& rhs) {
-    auto result = checked_complex(lhs.real.value + rhs.real.value,
-                                  lhs.imag.value + rhs.imag.value,
-                                  kEvalComplexOperation);
-    if (!result) { return result; }
-    result.value().real.absolute_error +=
-        lhs.real.absolute_error + rhs.real.absolute_error;
-    result.value().imag.absolute_error +=
-        lhs.imag.absolute_error + rhs.imag.absolute_error;
-    return result;
+    return checked_complex(lhs.real.value + rhs.real.value,
+                           lhs.imag.value + rhs.imag.value,
+                           kEvalComplexOperation);
 }
 
 Result<ApproxComplex> multiply_complex(const ApproxComplex& lhs,
@@ -88,19 +82,7 @@ Result<ApproxComplex> multiply_complex(const ApproxComplex& lhs,
                                "complex multiplication requires finite components and result",
                                kEvalComplexOperation);
     }
-    auto result = checked_complex(product.real, product.imag, kEvalComplexOperation);
-    if (!result) { return result; }
-    result.value().real.absolute_error +=
-        std::abs(c) * lhs.real.absolute_error +
-        std::abs(a) * rhs.real.absolute_error +
-        std::abs(d) * lhs.imag.absolute_error +
-        std::abs(b) * rhs.imag.absolute_error;
-    result.value().imag.absolute_error +=
-        std::abs(d) * lhs.real.absolute_error +
-        std::abs(a) * rhs.imag.absolute_error +
-        std::abs(c) * lhs.imag.absolute_error +
-        std::abs(b) * rhs.real.absolute_error;
-    return result;
+    return checked_complex(product.real, product.imag, kEvalComplexOperation);
 }
 
 Result<ApproxComplex> divide_complex(const ApproxComplex& lhs,
@@ -147,7 +129,9 @@ Result<ApproxComplex> evaluate_complex_components(
     if (!imag) {
         return eval_complex_failure(imag.error());
     }
-    if (!real.value().is_finite() || !imag.value().is_finite()) {
+    if (!real.value().is_finite() || !imag.value().is_finite() ||
+        !std::isfinite(real.value().value) ||
+        !std::isfinite(imag.value().value)) {
         return complex_failure(CasErrc::NumericFailure,
                                "complex components must be finite",
                                kEvalComplexOperation);
@@ -242,6 +226,9 @@ Result<ApproxComplex> evaluate_complex_power(
         }
     }
     auto result = Result<ApproxComplex>::success(approx_complex(1.0, 0.0));
+    if (magnitude == 0U) {
+        return checked_complex(1.0, 0.0, kEvalComplexOperation);
+    }
     while (magnitude != 0U) {
         if ((magnitude & 1U) != 0U) {
             result = multiply_complex(result.value(), factor.value());
@@ -280,11 +267,6 @@ Result<ApproxComplex> evaluate_complex_node(
 
     if (auto complex_node = std::dynamic_pointer_cast<const ComplexNode>(node)) {
         return evaluate_complex_components(*complex_node, bindings, context);
-    }
-    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (detail::is_imaginary_unit_name(variable->name())) {
-            return Result<ApproxComplex>::success(approx_complex(0.0, 1.0));
-        }
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         return evaluate_complex_operands(

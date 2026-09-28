@@ -39,7 +39,8 @@ public:
         } leave_proof{depth_};
 
         if (const auto* symbol = dynamic_cast<const VariableNode*>(node.get())) {
-            if (assumptions_.has_period_declarations(symbol->name())) {
+            if (!symbol->is_constant() &&
+                assumptions_.has_period_declarations(symbol->name())) {
                 return declared_period(node, *symbol);
             }
         }
@@ -84,7 +85,7 @@ private:
 
     Result<PeriodEvidence> arctangent_period(const Node& argument) {
         const auto* symbol = dynamic_cast<const VariableNode*>(argument.get());
-        if (symbol && symbol->name() == variable_ &&
+        if (symbol && !symbol->is_constant() && symbol->name() == variable_ &&
             !assumptions_.has_period_declarations(symbol->name())) {
             return PeriodEvidence{Tribool::False, std::nullopt, true};
         }

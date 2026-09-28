@@ -61,7 +61,7 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
             if (std::isfinite(expected)) {
                 EXPECT_TRUE((value && value.value().value == expected)) << "normalization preserves the directly evaluated power";
             } else {
-                EXPECT_TRUE((value && value.value().status == LMCAS::NumericStatus::PositiveInfinity)) << "true overflow remains an explicit numeric result";
+                EXPECT_TRUE((!value && value.error().code == LMCAS::CasErrc::NumericFailure)) << "finite mathematical powers overflowing binary64 report NumericFailure";
             }
         }
     }

@@ -303,7 +303,7 @@ TEST(TranscendentalFactorZassenhaus, ZassenhausBoundedEnumerationProduct) {
     }
 }
 
-TEST(TranscendentalFactorZassenhaus, ZassenhausTinyBudgetIsInconclusive) {
+TEST(TranscendentalFactorZassenhaus, ZassenhausTinyBudgetReportsResourceLimit) {
     Polynomial<Rational> poly({Rational(1)}, "x");
     std::vector<Polynomial<BigInt>> lifted;
     for (int i = 1; i <= 4; ++i) {
@@ -318,11 +318,6 @@ TEST(TranscendentalFactorZassenhaus, ZassenhausTinyBudgetIsInconclusive) {
     auto result = zassenhaus_combine_checked(
         poly, lifted, BigInt(1000000007), context);
 
-    ASSERT_TRUE((result.has_value())) << "预算耗尽应返回精确部分结果";
-    if (result) {
-        EXPECT_TRUE((result.value().completeness == Completeness::Inconclusive)) << "预算耗尽应标记为 Inconclusive";
-        EXPECT_TRUE((result.value().value.size() == 1 &&
-                     result.value().value[0] == poly.make_monic()))
-            << "未决结果仍应精确重构输入";
-    }
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, CasErrc::ResourceLimit);
 }

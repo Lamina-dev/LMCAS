@@ -138,7 +138,8 @@ LimitResult classify_infinite_function(const FunctionNode& function, const std::
         }
         case FunctionNode::FuncType::ArcTan: {
             return outcome(FiniteLimit{SymbolicExpr::multiply(SymbolicExpr::number(Rational(sign,2)),
-                SymbolicExpr::variable("pi"))});
+                LMCAS::detail::make_expression_ptr(
+                    LMCAS::detail::make_node<VariableNode>("pi", true)))});
         }
         default: { return unknown(); }
     }

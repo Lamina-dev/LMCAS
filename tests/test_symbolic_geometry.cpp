@@ -1,5 +1,6 @@
 #include "test_common.hpp"
 #include "symbolic_geometry.hpp"
+#include "expr.hpp"
 
 using namespace LMCAS;
 
@@ -7,6 +8,8 @@ TEST(SymbolicGeometry, VolumeRevolutionX) {
     {
         // Cone: V = pi * integral(x^2, 0, h) = pi * h^3/3
         auto x = SymbolicExpr::variable("x");
+        auto pi_constant = LMCAS::pi();
+        ASSERT_TRUE(pi_constant);
         auto h = SymbolicExpr::variable("h");
         auto zero = SymbolicExpr::number(0);
         auto result = LMCAS::volume_of_revolution_x_checked(x, zero, h);
@@ -14,7 +17,7 @@ TEST(SymbolicGeometry, VolumeRevolutionX) {
         ASSERT_NE(result.value(), nullptr);
         auto expected = SymbolicExpr::divide(
             SymbolicExpr::multiply(
-                SymbolicExpr::variable("pi"),
+                pi_constant.value(),
                 SymbolicExpr::power(h, SymbolicExpr::number(3))),
             SymbolicExpr::number(3));
         EXPECT_TRUE(test_proved_equivalent(result.value(), expected));
@@ -25,6 +28,8 @@ TEST(SymbolicGeometry, VolumeRevolutionX) {
     {
         // Sphere: V = pi * integral(r^2 - x^2, -r, r) = 4*pi*r^3/3
         auto x = SymbolicExpr::variable("x");
+        auto pi_constant = LMCAS::pi();
+        ASSERT_TRUE(pi_constant);
         auto r = SymbolicExpr::variable("r");
         auto neg_r = SymbolicExpr::multiply(SymbolicExpr::number(-1), r);
         // f(x) = sqrt(r^2 - x^2)
@@ -38,7 +43,7 @@ TEST(SymbolicGeometry, VolumeRevolutionX) {
         auto expected = SymbolicExpr::divide(
             SymbolicExpr::multiply(
                 SymbolicExpr::multiply(
-                    SymbolicExpr::number(4), SymbolicExpr::variable("pi")),
+                    SymbolicExpr::number(4), pi_constant.value()),
                 SymbolicExpr::power(r, SymbolicExpr::number(3))),
             SymbolicExpr::number(3));
         EXPECT_TRUE(test_proved_equivalent(result.value(), expected));
@@ -72,6 +77,8 @@ TEST(SymbolicGeometry, VolumeRevolutionY) {
     {
         // Cone about y-axis: V = pi * integral(y^2, 0, h) = pi * h^3/3
         auto y = SymbolicExpr::variable("y");
+        auto pi_constant = LMCAS::pi();
+        ASSERT_TRUE(pi_constant);
         auto h = SymbolicExpr::variable("h");
         auto zero = SymbolicExpr::number(0);
         auto result = LMCAS::volume_of_revolution_y_checked(y, zero, h);
@@ -79,7 +86,7 @@ TEST(SymbolicGeometry, VolumeRevolutionY) {
         ASSERT_NE(result.value(), nullptr);
         auto expected = SymbolicExpr::divide(
             SymbolicExpr::multiply(
-                SymbolicExpr::variable("pi"),
+                pi_constant.value(),
                 SymbolicExpr::power(h, SymbolicExpr::number(3))),
             SymbolicExpr::number(3));
         EXPECT_TRUE(test_proved_equivalent(result.value(), expected));

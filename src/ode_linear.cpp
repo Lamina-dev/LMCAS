@@ -7,8 +7,6 @@
 #include "symbolic.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
-#include "lmmc/config.h"
-#include "lmmc/numeric.h"
 #include "internal/ode_support.hpp"
 #include "internal/ode_characteristic_roots.hpp"
 #include <algorithm>
@@ -37,7 +35,7 @@ using namespace ode_root_detail;
  * @internal
  * @brief 将 double 值转为"干净"的数值表达式.
  *
- * 若值接近整数或简单分数,使用精确表示.
+ * 仅在精确保持 double 值时使用小整数或简单分数表示.
  */
 static bool is_representable_small_integer(double value) {
     return std::isfinite(value) &&
@@ -45,32 +43,20 @@ static bool is_representable_small_integer(double value) {
         value <= static_cast<double>(std::numeric_limits<int>::max());
 }
 
-static bool rounding_preserves_nonzero(double rounded, double value) {
-    return rounded != 0.0 || value == 0.0;
-}
 
 static std::shared_ptr<SymbolicExpr> clean_number(double val) {
     /// 只在转换可表示时提升为精确小整数，避免浮点到整数的越界转换。
     double rounded = std::round(val);
-    int eq = 0;
-    if (is_representable_small_integer(rounded)) {
-        lmmc_double_nearly_equal_tol(
-            val, rounded, 1e-10, 1e-10, &eq);
-        if (eq && rounding_preserves_nonzero(rounded, val)) {
-            return SymbolicExpr::number(static_cast<int>(rounded));
-        }
+    if (is_representable_small_integer(rounded) && val == rounded) {
+        return SymbolicExpr::number(static_cast<int>(rounded));
     }
 
-    /// 检查是否接近简单分数 p/q (q <= 12)。
+    /// 检查可由简单分数 p/q (q <= 12) 精确表示的 double 值。
     for (int q = 2; q <= 12; ++q) {
         double p = val * q;
         double p_rounded = std::round(p);
-        if (!is_representable_small_integer(p_rounded)) {
-            continue;
-        }
-        lmmc_double_nearly_equal_tol(
-            p, p_rounded, 1e-10, 1e-10, &eq);
-        if (eq && rounding_preserves_nonzero(p_rounded, p)) {
+        if (is_representable_small_integer(p_rounded) &&
+            val == p_rounded / q) {
             return SymbolicExpr::divide(
                 SymbolicExpr::number(static_cast<int>(p_rounded)),
                 SymbolicExpr::number(q));

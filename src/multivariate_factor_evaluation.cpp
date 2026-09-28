@@ -169,9 +169,12 @@ static std::optional<MultiFactorCheckedResult> factor_linear_hensel(
         lifted_product = lifted_product * factor;
     }
     if (lifted.size() > 1 && lifted_product == primitive) {
+        const bool all_linear = std::all_of(lifted.begin(), lifted.end(),
+            [](const MultiPoly& factor) { return factor.total_degree() == 1; });
         return assemble_checked_factorization(
             poly, lifted, std::vector<int>(lifted.size(), 1),
-            base_value.completeness, std::move(base_value.reason));
+            all_linear ? Completeness::Complete : Completeness::Inconclusive,
+            all_linear ? std::string{} : "提升因子的不可约性尚未证明");
     }
     return std::nullopt;
 }

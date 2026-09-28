@@ -15,7 +15,7 @@ static bool zt_is_exp_seq(const std::shared_ptr<SymbolicExpr>& f, const std::str
         return false;
     }
     auto exponent = std::dynamic_pointer_cast<const VariableNode>(power->exponent());
-    if (!exponent || exponent->name() != n) {
+    if (!exponent || exponent->is_constant() || exponent->name() != n) {
         return false;
     }
     auto base = detail::make_expression_ptr(power->base());
@@ -36,19 +36,20 @@ static bool zt_is_weighted_exp(const std::shared_ptr<SymbolicExpr>& f,
     for (std::size_t i = 0; i < 2; ++i) {
         auto variable = std::dynamic_pointer_cast<const VariableNode>(product->operands()[i]);
         auto other = detail::make_expression_ptr(product->operands()[1 - i]);
-        if (variable && variable->name() == n && zt_is_exp_seq(other, n, base)) {
+        if (variable && !variable->is_constant() && variable->name() == n &&
+            zt_is_exp_seq(other, n, base)) {
             return true;
         }
     }
     return false;
 }
 
-enum class ZPolynomialPattern { None, Linear, Quadratic };
+enum class ZPolynomialPattern { None, Linear, Quadratic, Cubic };
 
 static ZPolynomialPattern zt_polynomial_pattern(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& n) {
     auto variable = std::dynamic_pointer_cast<const VariableNode>(detail::node(f));
-    if (variable && variable->name() == n) {
+    if (variable && !variable->is_constant() && variable->name() == n) {
         return ZPolynomialPattern::Linear;
     }
     auto power = std::dynamic_pointer_cast<const PowerNode>(detail::node(f));
@@ -58,9 +59,10 @@ static ZPolynomialPattern zt_polynomial_pattern(
     variable = std::dynamic_pointer_cast<const VariableNode>(power->base());
     auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
     BigInt integer;
-    if (variable && variable->name() == n && exponent &&
-        try_get_integer_value(exponent, integer) && integer == BigInt(2)) {
-        return ZPolynomialPattern::Quadratic;
+    if (variable && !variable->is_constant() && variable->name() == n && exponent &&
+        try_get_integer_value(exponent, integer)) {
+        if (integer == BigInt(2)) return ZPolynomialPattern::Quadratic;
+        if (integer == BigInt(3)) return ZPolynomialPattern::Cubic;
     }
     return ZPolynomialPattern::None;
 }
@@ -120,9 +122,16 @@ static std::vector<std::shared_ptr<SymbolicExpr>> zt_roc(
 
 static std::shared_ptr<SymbolicExpr> zt_polynomial(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& n,
-    const std::shared_ptr<SymbolicExpr>& z) {
+    const std::shared_ptr<SymbolicExpr>& z, const std::string& z_var) {
     auto pattern = zt_polynomial_pattern(f, n);
     if (pattern == ZPolynomialPattern::None) return nullptr;
+    if (pattern == ZPolynomialPattern::Cubic) {
+        auto square = SymbolicExpr::power(SymbolicExpr::variable(n), SymbolicExpr::number(2));
+        auto quadratic = zt_polynomial(square, n, z, z_var);
+        return SymbolicExpr::multiply(
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), z),
+            quadratic->differentiate(z_var))->simplify();
+    }
     auto denominator = SymbolicExpr::power(SymbolicExpr::add(z, SymbolicExpr::number(-1)),
         SymbolicExpr::number(pattern == ZPolynomialPattern::Linear ? 2 : 3));
     auto numerator = pattern == ZPolynomialPattern::Linear ? z : SymbolicExpr::multiply(z,
@@ -206,7 +215,7 @@ static std::shared_ptr<SymbolicExpr> z_transform_core(
         auto denominator = SymbolicExpr::add(zv, SymbolicExpr::number(-1));
         return SymbolicExpr::multiply(f, SymbolicExpr::divide(zv, denominator))->simplify();
     }
-    auto polynomial = zt_polynomial(f, n, zv);
+    auto polynomial = zt_polynomial(f, n, zv, z);
     if (polynomial) {
         return polynomial;
     }

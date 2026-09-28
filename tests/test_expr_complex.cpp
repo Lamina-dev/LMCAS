@@ -80,9 +80,9 @@ TEST(ExprComplex, OrdinaryIRemainsSymbolic) {
     auto legacy_i_add_equivalent = LMCAS::equivalent_core(
         *legacy_i_plus_one, *one_plus_canonical_i,
         legacy_i_add_context);
-    EXPECT_TRUE((legacy_i_add_equivalent &&
-                 !legacy_i_add_equivalent.value()))
-        << "ordinary variable(\"i\") remains distinct inside additive equivalence";
+    EXPECT_TRUE((!legacy_i_add_equivalent &&
+                 legacy_i_add_equivalent.error().code == CasErrc::Inconclusive))
+        << "the current proof cannot decide addition of an unbound i and the imaginary unit";
 }
 
 TEST(ExprComplex, ComplexParts) {

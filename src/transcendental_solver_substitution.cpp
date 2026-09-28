@@ -103,7 +103,7 @@ static BigInt product_exp_multiplier(const MultiplyNode& product, const std::str
                 has_other = true;
             }
         } else if (auto variable = std::dynamic_pointer_cast<const VariableNode>(operand)) {
-            if (variable->name() == var) {
+            if (!variable->is_constant() && variable->name() == var) {
                 has_variable = true;
             } else {
                 has_other = true;
@@ -129,7 +129,7 @@ static BigInt extract_exp_multiplier(const std::shared_ptr<const SymbolicNode>& 
     auto arg = func->arguments()[0];
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(arg)) {
-        if (v->name() == var) {
+        if (!v->is_constant() && v->name() == var) {
             return 1;
         }
     }
@@ -288,7 +288,7 @@ static Result<bool> redundant_variable_candidate(
     const std::shared_ptr<SymbolicExpr>& candidate,
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
     auto variable = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(candidate));
-    if (!variable || variable->name() != var) {
+    if (!variable || variable->is_constant() || variable->name() != var) {
         return false;
     }
     auto polynomial = symbolic_to_poly<SymbolicPolyCoeff>(expr, var);

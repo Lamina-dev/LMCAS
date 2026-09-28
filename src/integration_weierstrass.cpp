@@ -17,7 +17,7 @@ bool weier_trig_function(const FunctionNode& fn) {
 bool weier_rational_function(const FunctionNode& fn, const std::string& var) {
     if (weier_trig_function(fn)) {
         auto variable = std::dynamic_pointer_cast<const VariableNode>(fn.arguments()[0]);
-        if (variable && variable->name() == var) { return true; }
+        if (variable && !variable->is_constant() && variable->name() == var) { return true; }
         return !expression_depends_on_variable(fn.arguments()[0], var);
     }
     for (const auto& argument : fn.arguments()) {
@@ -32,7 +32,7 @@ bool weier_is_rational_trig(const std::shared_ptr<const SymbolicNode>& node, con
     if (!node) { return true; }
     if (auto vn = std::dynamic_pointer_cast<const VariableNode>(node)) {
         /// 裸 var 表示输入超出 sin/cos 有理函数域.
-        return vn->name() != var;
+        return vn->is_constant() || vn->name() != var;
     }
     if (std::dynamic_pointer_cast<const NumberNode>(node)) { return true; }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
@@ -60,7 +60,7 @@ bool weier_trig_of_variable(const FunctionNode& function, const std::string& var
         return false;
     }
     auto argument = std::dynamic_pointer_cast<const VariableNode>(function.arguments()[0]);
-    return argument && argument->name() == var;
+    return argument && !argument->is_constant() && argument->name() == var;
 }
 
 /// 是否至少包含一个 sin(var)/cos(var)/tan(var)... 形式(确保确实是三角有理函数)
@@ -94,7 +94,7 @@ std::shared_ptr<const SymbolicNode> weier_replace_function(
         return nullptr;
     }
     auto av = std::dynamic_pointer_cast<const VariableNode>(fn.arguments()[0]);
-    if (!av || av->name() != var) {
+    if (!av || av->is_constant() || av->name() != var) {
         return nullptr;
     }
     auto t = SymbolicExpr::variable(tvar);

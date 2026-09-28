@@ -2,6 +2,7 @@
 #include "limit_result.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "test_common.hpp"
+#include "expr.hpp"
 
 using namespace LMCAS;
 
@@ -340,8 +341,10 @@ TEST(LmcasComplexAnalysis, NestedContainersExposeComplexFunctionArguments) {
     EXPECT_EQ(conjugate.error().operation, "conjugate");
 }
 
-TEST(LmcasComplexAnalysis, RawImaginaryUnitHasCanonicalPartsAndConjugate) {
-    auto imaginary = SymbolicExpr::variable("I");
+TEST(LmcasComplexAnalysis, ImaginaryUnitHasCanonicalPartsAndConjugate) {
+    auto constructed = LMCAS::imaginary_unit();
+    ASSERT_TRUE(constructed);
+    auto imaginary = constructed.value();
     auto real = real_part_checked(imaginary);
     auto imag = imag_part_checked(imaginary);
     auto conjugate = conjugate_checked(imaginary);
@@ -359,17 +362,19 @@ TEST(LmcasComplexAnalysis, RawImaginaryUnitHasCanonicalPartsAndConjugate) {
     EXPECT_TRUE(test_same_expression(conjugate_imag.value(), num(-1)));
 }
 
-TEST(LmcasComplexAnalysis, LowercaseIIsAnOrdinaryRealSymbol) {
-    auto symbol = SymbolicExpr::variable("i");
-    auto real = real_part_checked(symbol);
-    auto imag = imag_part_checked(symbol);
-    auto conjugate = conjugate_checked(symbol);
-    ASSERT_TRUE(real);
-    ASSERT_TRUE(imag);
-    ASSERT_TRUE(conjugate);
-    EXPECT_TRUE(test_same_expression(real.value(), symbol));
-    EXPECT_TRUE(test_same_expression(imag.value(), num(0)));
-    EXPECT_TRUE(test_same_expression(conjugate.value(), symbol));
+TEST(LmcasComplexAnalysis, NamedIIsAnOrdinaryRealSymbol) {
+    for (const char *name : {"i", "I"}) {
+        auto symbol = SymbolicExpr::variable(name);
+        auto real = real_part_checked(symbol);
+        auto imag = imag_part_checked(symbol);
+        auto conjugate = conjugate_checked(symbol);
+        ASSERT_TRUE(real);
+        ASSERT_TRUE(imag);
+        ASSERT_TRUE(conjugate);
+        EXPECT_TRUE(test_same_expression(real.value(), symbol));
+        EXPECT_TRUE(test_same_expression(imag.value(), num(0)));
+        EXPECT_TRUE(test_same_expression(conjugate.value(), symbol));
+    }
 }
 
 TEST(LmcasComplexAnalysis, ImaginarySquare) {

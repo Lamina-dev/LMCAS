@@ -7,7 +7,7 @@ void DifferentiationVisitor::visit(const NumberNode&) {
 }
 
 void DifferentiationVisitor::visit(const VariableNode& node) {
-    if (node.name() == var) {
+    if (!node.is_constant() && node.name() == var) {
         result = SymbolicFactory::create_number(BigInt(1));
     } else {
         result = SymbolicFactory::create_number(BigInt(0));

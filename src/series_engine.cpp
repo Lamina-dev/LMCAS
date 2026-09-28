@@ -85,7 +85,7 @@ static std::optional<int> laurent_power_of_power(
         return std::nullopt;
     }
     auto base = std::dynamic_pointer_cast<const VariableNode>(power.base());
-    if (base && base->name() == var) {
+    if (base && !base->is_constant() && base->name() == var) {
         return *exponent;
     }
     auto nested = supported_laurent_integer_power(power.base(), var);
@@ -111,7 +111,8 @@ std::optional<int> supported_laurent_integer_power(
         return 0;
     }
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        return variable->name() == var ? std::optional<int>(1) : std::nullopt;
+        return !variable->is_constant() && variable->name() == var
+            ? std::optional<int>(1) : std::nullopt;
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
         return laurent_power_of_power(*power, var);

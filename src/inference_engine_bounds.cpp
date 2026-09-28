@@ -62,6 +62,7 @@ public:
 
 private:
     Result<Interval> variable_bounds(const VariableNode& variable) {
+        if (variable.is_constant()) { return unknown_bounds(); }
         auto interval = assumptions_.get_bounds(variable.name());
         if (!interval) { return unknown_bounds(); }
         auto lower = detail::comparable_endpoint(interval->lower, context_, bounds_operation);

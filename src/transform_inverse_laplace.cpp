@@ -19,7 +19,7 @@ static std::shared_ptr<SymbolicExpr> te_inverse_pole(
     if (!addition || addition->operands().size() != 2) return nullptr;
     for (std::size_t i = 0; i < 2; ++i) {
         auto symbol = std::dynamic_pointer_cast<const VariableNode>(addition->operands()[i]);
-        if (symbol && symbol->name() == variable) {
+        if (symbol && !symbol->is_constant() && symbol->name() == variable) {
             return detail::make_expression_ptr(SymbolicFactory::create_multiply({
                 SymbolicFactory::create_number(BigInt(-1)), addition->operands()[1 - i]}));
         }
@@ -51,7 +51,7 @@ static std::shared_ptr<SymbolicExpr> te_inv_power(
             std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(arg)}));
     };
     auto bv = std::dynamic_pointer_cast<const VariableNode>(pw->base());
-    if (bv && bv->name() == s) {
+    if (bv && !bv->is_constant() && bv->name() == s) {
         if (n == BigInt(1)) {
             return SymbolicExpr::number(1);
         }

@@ -105,6 +105,16 @@ void* operator new[](std::size_t size) {
     return allocate_with_probe(size);
 }
 
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+    try { return allocate_with_probe(size); }
+    catch (const std::bad_alloc&) { return nullptr; }
+}
+
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+    try { return allocate_with_probe(size); }
+    catch (const std::bad_alloc&) { return nullptr; }
+}
+
 void operator delete(void* memory) noexcept {
     std::free(memory);
 }
@@ -121,9 +131,18 @@ void operator delete[](void* memory, std::size_t) noexcept {
     std::free(memory);
 }
 
+void operator delete(void* memory, const std::nothrow_t&) noexcept {
+    std::free(memory);
+}
+
+void operator delete[](void* memory, const std::nothrow_t&) noexcept {
+    std::free(memory);
+}
+
 TEST(EquivalenceComplexAllocation, ImaginaryUnitFailuresSurface) {
-    const auto imaginary = LMCAS::SymbolicExpr::variable("I");
-    expect_allocation_failures_surface(imaginary, imaginary);
+    const auto imaginary = LMCAS::imaginary_unit();
+    ASSERT_TRUE(imaginary);
+    expect_allocation_failures_surface(imaginary.value(), imaginary.value());
 }
 
 TEST(EquivalenceComplexAllocation, ExplicitComplexFailuresSurface) {

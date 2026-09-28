@@ -52,7 +52,7 @@ Result<std::shared_ptr<SymbolicExpr>> PowerRuleStrategy::try_integrate_raw(
     ComputationContext&, int) {
 
     if (auto v_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
-        if (v_node->name() == var) {
+        if (!v_node->is_constant() && v_node->name() == var) {
             return SymbolicExpr::multiply(
                 SymbolicExpr::power(detail::make_expression_ptr(expr), SymbolicExpr::number(2)),
                 sym_rational(1, 2));
@@ -63,7 +63,8 @@ Result<std::shared_ptr<SymbolicExpr>> PowerRuleStrategy::try_integrate_raw(
         auto base = LMCAS::detail::expression_from_node(p_node->base());
         auto exp_expr = LMCAS::detail::expression_from_node(p_node->exponent());
         if (auto b_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(base))) {
-            if (b_var->name() == var && !depends_on_integration_variable(exp_expr, var)) {
+            if (!b_var->is_constant() && b_var->name() == var &&
+                !depends_on_integration_variable(exp_expr, var)) {
                 auto n_plus_1 = SymbolicExpr::add(detail::make_expression_ptr(exp_expr), SymbolicExpr::number(1))->simplify();
                 if (n_plus_1->is_zero()) {
 

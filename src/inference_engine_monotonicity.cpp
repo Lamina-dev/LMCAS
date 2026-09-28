@@ -28,7 +28,7 @@ Monotonicity InferenceEngine::Impl::function_monotonicity(
         return Monotonicity::Unknown;
     }
     auto arg_var = std::dynamic_pointer_cast<const VariableNode>(func.arguments()[0]);
-    if (!arg_var || arg_var->name() != var) {
+    if (!arg_var || arg_var->is_constant() || arg_var->name() != var) {
         return Monotonicity::Unknown;
     }
 
@@ -73,7 +73,7 @@ void InferenceEngine::Impl::collect_node_exponent(
     }
 
     auto base_var = std::dynamic_pointer_cast<const VariableNode>(pow_node->base());
-    if (!base_var) {
+    if (!base_var || base_var->is_constant()) {
         return;
     }
     if (base_var->name() != lhs_name && base_var->name() != rhs_name) {
@@ -213,6 +213,7 @@ Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
 
     // VariableNode: check PropertyStore for declared monotonicity
     if (auto var_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
+        if (var_node->is_constant()) return Monotonicity::Unknown;
         const auto& props = impl_->ctx;
         auto monotonicity =
             props.get_monotonicity_checked(var_node->name(), var, interval);
@@ -245,7 +246,8 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
     // Extract LHS and RHS — both must be single VariableNodes
     auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.lhs));
     auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.rhs));
-    if (!lhs_var || !rhs_var) {
+    if (!lhs_var || lhs_var->is_constant() ||
+        !rhs_var || rhs_var->is_constant()) {
         return Result<void>::success();
     }
 

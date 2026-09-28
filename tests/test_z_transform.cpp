@@ -1,5 +1,6 @@
 #include "test_common.hpp"
 #include "transform_engine.hpp"
+#include "residual_verification.hpp"
 #include <limits>
 
 using namespace LMCAS;
@@ -32,6 +33,40 @@ TEST(ZTransform, PolynomialSequences) {
     auto n = SymbolicExpr::variable("n");
     EXPECT_NEAR(z_value(n, 3), 0.75, 1e-12) << "Z{n}(3)=3/4";
     EXPECT_NEAR(z_value(SymbolicExpr::power(n, SymbolicExpr::number(2)), 3), 1.5, 1e-12) << "Z{n^2}(3)=3*(3+1)/(3-1)^3";
+}
+
+TEST(ZTransform, CubicSequence) {
+    auto n = SymbolicExpr::variable("n");
+    auto cubic = SymbolicExpr::power(n, SymbolicExpr::number(3));
+    auto result = z_transform_checked(cubic, "n", "z");
+    ASSERT_TRUE(result);
+    auto value = result.value().value.expression;
+    auto z = SymbolicExpr::variable("z");
+    auto numerator = SymbolicExpr::multiply(z, SymbolicExpr::add(
+        SymbolicExpr::add(SymbolicExpr::power(z, SymbolicExpr::number(2)),
+                          SymbolicExpr::multiply(SymbolicExpr::number(4), z)),
+        SymbolicExpr::number(1)));
+    auto denominator = SymbolicExpr::power(
+        SymbolicExpr::add(z, SymbolicExpr::number(-1)), SymbolicExpr::number(4));
+    ComputationContext context;
+    auto formula = check_equivalent(value, SymbolicExpr::divide(numerator, denominator), context);
+    ASSERT_TRUE(formula);
+    EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(formula.value()));
+    EXPECT_NEAR(value->substitute("z", SymbolicExpr::number(2))->simplify()->to_numeric(),
+                26.0, 1e-12) << "Z{n^3}(2)=26";
+    EXPECT_NEAR(value->substitute("z", SymbolicExpr::number(-2))->simplify()->to_numeric(),
+                2.0 / 27.0, 1e-12);
+
+    const auto& roc = result.value().value.roc;
+    ASSERT_EQ(roc.size(), 1u);
+    auto boundary = std::dynamic_pointer_cast<const RelationalNode>(detail::node(roc[0]));
+    ASSERT_TRUE(boundary);
+    EXPECT_EQ(boundary->op(), RelationalNode::Op::GT);
+    auto lhs = detail::make_expression_ptr(boundary->left());
+    auto rhs = detail::make_expression_ptr(boundary->right());
+    EXPECT_NEAR(lhs->substitute("z", SymbolicExpr::number(-2))->simplify()->to_numeric(),
+                2.0, 1e-12);
+    EXPECT_NEAR(rhs->simplify()->to_numeric(), 1.0, 1e-12);
 }
 
 TEST(ZTransform, PolynomialExponentMustBeExactIntegerTwo) {

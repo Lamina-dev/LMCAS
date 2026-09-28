@@ -28,7 +28,7 @@ SolveResult solve_inner_equation(
     const std::string& var, ComputationContext& context,
     const SolveOptions& options, int depth) {
     auto variable = std::dynamic_pointer_cast<const VariableNode>(detail::node(inner));
-    if (variable && variable->name() == var) {
+    if (variable && !variable->is_constant() && variable->name() == var) {
         return SolutionSet{FiniteSolutions{{FiniteSolution{value, 1, {}}}}};
     }
     const auto product =
@@ -41,7 +41,8 @@ SolveResult solve_inner_equation(
         const auto product_variable =
             std::dynamic_pointer_cast<const VariableNode>(second);
         if (coefficient && coefficient->is_negative_one() &&
-            product_variable && product_variable->name() == var) {
+            product_variable && !product_variable->is_constant() &&
+            product_variable->name() == var) {
             auto inverted = SymbolicExpr::multiply(
                 SymbolicExpr::number(-1), value)->simplify();
             return SolutionSet{FiniteSolutions{{

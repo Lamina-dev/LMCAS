@@ -340,10 +340,11 @@ public:
     static BigInt pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod);
 
     /**
-     * @brief 素性测试（Miller-Rabin）
-     * @return 是素数返回 true
+     * @brief 判断整数的素性并保留无法证明的结论。
+     * 单个机器字使用确定性判定；较大整数发现合数证据时返回 false，
+     * 尚无法证明素性时返回 CasErrc::Inconclusive。
      */
-    bool is_prime() const;
+    Result<bool> is_prime_checked() const;
 
     /**
      * @brief 判断是否为完全平方数

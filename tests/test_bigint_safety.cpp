@@ -143,6 +143,37 @@ TEST(BigintSafety, ModularPowerDomain) {
     EXPECT_TRUE((nonpositive_modulus_rejected)) << "nonpositive modular moduli are rejected";
 }
 
+TEST(BigintSafety, CheckedPrimalityWordBoundaries) {
+    for (const char* composite : {"-1", "0", "1", "4", "18446744073709551615"}) {
+        auto result = BigInt(composite).is_prime_checked();
+        ASSERT_TRUE(result.has_value()) << composite;
+        EXPECT_FALSE(result.value()) << composite;
+    }
+    for (const char* prime : {"2", "3", "18446744073709551557"}) {
+        auto result = BigInt(prime).is_prime_checked();
+        ASSERT_TRUE(result.has_value()) << prime;
+        EXPECT_TRUE(result.value()) << prime;
+    }
+}
+
+TEST(BigintSafety, CheckedPrimalityBeyondWord) {
+    auto even = BigInt("18446744073709551616").is_prime_checked();
+    ASSERT_TRUE(even.has_value());
+    EXPECT_FALSE(even.value());
+
+    auto divisible = (BigInt("18446744073709551617") * BigInt(3)).is_prime_checked();
+    ASSERT_TRUE(divisible.has_value());
+    EXPECT_FALSE(divisible.value());
+
+    auto pseudoprime = BigInt("318665857834031151167461").is_prime_checked();
+    ASSERT_FALSE(pseudoprime.has_value());
+    EXPECT_EQ(pseudoprime.error().code, CasErrc::Inconclusive);
+
+    auto mersenne_prime = BigInt("170141183460469231731687303715884105727").is_prime_checked();
+    ASSERT_FALSE(mersenne_prime.has_value());
+    EXPECT_EQ(mersenne_prime.error().code, CasErrc::Inconclusive);
+}
+
 TEST(BigintSafety, MovedValueReuse) {
     BigInt source("18446744073709551616");
     BigInt destination;

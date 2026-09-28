@@ -26,7 +26,8 @@ LMCAS/
 
 - CMake 3.26+
 - Ninja
-- 支持 C++17 和 C11 的 GCC、Clang、AppleClang 或 MinGW 工具链
+- 支持 C++17 和 C11 的 GCC、Clang、AppleClang 或 MinGW 工具链；Windows 使用
+  MinGW 或 GNU-driver Clang，MSVC ABI 前端（包括 clang-cl）不受支持
 - 初始化后的 `LMMC/LMMP` 子模块
 - 支持的平台：Windows、Linux 与 macOS
 

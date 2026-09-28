@@ -132,7 +132,7 @@ void load_polynomial_rules(IntegrationTable& table) {
                 auto it_u = m.find("_u");
                 if (it_u == m.end()) { return false; }
                 auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it_u->second));
-                if (!v || v->name() != var) { return false; }
+                if (!v || v->is_constant() || v->name() != var) { return false; }
                 auto it_n = m.find("_n");
                 if (it_n == m.end()) { return false; }
                 if (expression_depends_on_variable(LMCAS::detail::node(it_n->second), var)) { return false; }

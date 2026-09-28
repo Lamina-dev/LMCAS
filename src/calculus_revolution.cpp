@@ -82,7 +82,8 @@ ExpressionResult surface_area_revolution_x_checked(
         }
 
         auto two_pi = SymbolicExpr::multiply(
-            SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
+            SymbolicExpr::number(2), LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<VariableNode>("pi", true)));
         auto result = SymbolicExpr::multiply(
             two_pi, std::move(integral.value()));
         auto simplified = result->simplify();
@@ -157,7 +158,8 @@ ExpressionResult surface_area_revolution_y_checked(
         }
 
         auto two_pi = SymbolicExpr::multiply(
-            SymbolicExpr::number(2), SymbolicExpr::variable("pi"));
+            SymbolicExpr::number(2), LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<VariableNode>("pi", true)));
         auto result = SymbolicExpr::multiply(
             two_pi, std::move(integral.value()));
         auto simplified = result->simplify();

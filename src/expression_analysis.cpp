@@ -12,7 +12,7 @@ public:
     std::set<std::string> variables;
 
     void visit(const VariableNode& node) override {
-        if (!is_bound(node.name())) variables.insert(node.name());
+        if (!node.is_constant() && !is_bound(node.name())) variables.insert(node.name());
     }
 
     void visit(const SummationNode& node) override { visit_binder(node); }
@@ -48,7 +48,9 @@ public:
         : RecursiveSymbolicVisitor(budget), name_(name) {}
     bool found = false;
 
-    void visit(const VariableNode& node) override { found = found || node.name() == name_; }
+    void visit(const VariableNode& node) override {
+        found = found || (!node.is_constant() && node.name() == name_);
+    }
     void visit(const SummationNode& node) override { visit_binder(node); }
     void visit(const ProductNode& node) override { visit_binder(node); }
     void visit(const IntegralNode& node) override { visit_binder(node); }
@@ -73,7 +75,9 @@ public:
     using RecursiveSymbolicVisitor::RecursiveSymbolicVisitor;
     std::set<std::string> names;
 
-    void visit(const VariableNode& node) override { names.insert(node.name()); }
+    void visit(const VariableNode& node) override {
+        if (!node.is_constant()) names.insert(node.name());
+    }
     void visit(const SummationNode& node) override {
         names.insert(node.index_var());
         detail::RecursiveSymbolicVisitor::visit(node);
@@ -130,7 +134,7 @@ public:
           occupied_(std::move(occupied)) {}
 
     void visit(const VariableNode& node) override {
-        set_result(node.name() == target_ ? replacement_ : current());
+        set_result(!node.is_constant() && node.name() == target_ ? replacement_ : current());
     }
 
     void visit(const SummationNode& node) override {

@@ -223,7 +223,7 @@ static bool extract_bernoulli_factor(
     int& exponent, std::shared_ptr<SymbolicExpr>& coefficient) {
         if (auto variable =
                 std::dynamic_pointer_cast<const VariableNode>(factor);
-            variable && variable->name() == y) {
+            variable && !variable->is_constant() && variable->name() == y) {
             if (exponent == std::numeric_limits<int>::max()) {
                 return false;
             }
@@ -236,7 +236,7 @@ static bool extract_bernoulli_factor(
                 std::dynamic_pointer_cast<const VariableNode>(power->base());
             auto power_value =
                 std::dynamic_pointer_cast<const NumberNode>(power->exponent());
-            if (base && base->name() == y && power_value) {
+            if (base && !base->is_constant() && base->name() == y && power_value) {
                 auto value = bernoulli_integer_exponent(*power_value);
                 if (!value) {
                     return false;

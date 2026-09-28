@@ -210,7 +210,8 @@ ExprPtr trigonometric_principal_value(FunctionNode::FuncType type,
 std::vector<ExprPtr> trigonometric_periodic_values(FunctionNode::FuncType type,
     const ExprPtr& rhs, const std::string& parameter) {
     using Type = FunctionNode::FuncType;
-    auto pi = SymbolicExpr::variable("pi");
+    auto pi = detail::make_expression_ptr(
+        detail::make_node<VariableNode>("pi", true));
     auto integer_pi = SymbolicExpr::multiply(SymbolicExpr::variable(parameter), pi);
     auto twice_integer_pi = SymbolicExpr::multiply(SymbolicExpr::number(2), integer_pi);
     auto half_pi = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), pi);

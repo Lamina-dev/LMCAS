@@ -13,6 +13,7 @@ bool collect_polynomial_variable_names(
     if (!node) { return true; }
     detail::RewriteScope scope(&budget);
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        if (variable->is_constant()) return false;
         variables.insert(variable->name());
         return true;
     }

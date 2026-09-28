@@ -149,7 +149,7 @@ TEST(IntervalTest, HonorsOpenAndClosedEndpoints) {
 
     auto reversed = interval(exact(2), exact(1), true, true, context);
     ASSERT_FALSE(reversed);
-    EXPECT_EQ(reversed.error().code, CasErrc::DomainError);
+    EXPECT_EQ(reversed.error().code, CasErrc::InvalidArgument);
 }
 
 } // namespace

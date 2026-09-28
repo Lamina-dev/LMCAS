@@ -238,7 +238,7 @@ bool bk_is_suitable_prime(
     if (poly.is_zero() || poly.degree() < 1 ||
         prime < 2 ||
         prime > std::numeric_limits<std::int64_t>::max() / prime ||
-        !BigInt(static_cast<std::int64_t>(prime)).is_prime()) {
+        !lmmp_is_prime_ulong_(static_cast<ulong>(prime))) {
         return false;
     }
 

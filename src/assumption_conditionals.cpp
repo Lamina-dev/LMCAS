@@ -46,12 +46,12 @@ Tribool evaluate_zero_comparison(const AssumptionContext& ctx,
                                 const RelationalNode& relation) {
     const auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(relation.left());
     const auto rhs_num = std::dynamic_pointer_cast<const NumberNode>(relation.right());
-    if (lhs_var && rhs_num && rhs_num->is_zero()) {
+    if (lhs_var && !lhs_var->is_constant() && rhs_num && rhs_num->is_zero()) {
         return evaluate_symbol_sign(ctx, lhs_var->name(), relation.op());
     }
     const auto lhs_num = std::dynamic_pointer_cast<const NumberNode>(relation.left());
     const auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(relation.right());
-    if (lhs_num && lhs_num->is_zero() && rhs_var) {
+    if (lhs_num && lhs_num->is_zero() && rhs_var && !rhs_var->is_constant()) {
         return evaluate_symbol_sign(
             ctx, rhs_var->name(), detail::reversed_relation(relation.op()));
     }

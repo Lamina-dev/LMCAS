@@ -1,4 +1,5 @@
 #include "test_multivariate_factor_support.hpp"
+#include <algorithm>
 
 TEST(MultivariateFactorComplete, CompleteFactorizationX2Y2XYXY) {
     std::vector<std::string> vars = {"x", "y"};
@@ -103,32 +104,46 @@ TEST(MultivariateFactorComplete, CompleteFactorizationZeroConstant0Factors) {
 }
 
 TEST(MultivariateFactorComplete, CheckedFactorizationX2Y21) {
-    std::vector<std::string> vars = {"x", "y"};
-    std::vector<MultiPoly::Term> terms = {
-        make_term({2, 0}, Rational(1)), /**< 单项式 x^2。 */
-        make_term({0, 2}, Rational(1)), /**< 单项式 y^2。 */
-        make_term({0, 0}, Rational(1))  /**< 常数项 1。 */
-    };
-    MultiPoly poly(terms, vars);
+    const std::vector<std::string> vars = {"x", "y"};
+    MultiPoly poly({make_term({2, 0}, Rational(1)),
+                    make_term({0, 2}, Rational(1)),
+                    make_term({0, 0}, Rational(1))}, vars);
 
-    MultiFactorResult result = checked_factor_multivariate(poly);
-
-    EXPECT_TRUE((result.factors.size() == 1)) << "x^2+y^2+1: single irreducible factor";
-    EXPECT_TRUE((result.constant == Rational(1))) << "x^2+y^2+1: constant is 1";
-    EXPECT_TRUE((result.multiplicities[0] == 1)) << "x^2+y^2+1: multiplicity is 1";
-
-    MultiPoly product(Rational(result.constant), vars);
-    for (size_t i = 0; i < result.factors.size(); ++i) {
-        for (int m = 0; m < result.multiplicities[i]; ++m) {
-            product = product * result.factors[i];
-        }
-    }
-    EXPECT_TRUE((product == poly)) << "x^2+y^2+1: product equals original";
     auto checked = factor_multivariate_checked(poly);
-    ASSERT_TRUE((checked.has_value())) << "未覆盖模式应返回精确候选";
-    if (checked) {
-        EXPECT_TRUE((checked.value().completeness == Completeness::Inconclusive)) << "未证明不可约时不得标记 Complete";
-    }
+    ASSERT_TRUE((checked.has_value()));
+    EXPECT_TRUE((checked.value().completeness == Completeness::Inconclusive));
+    ASSERT_TRUE((checked.value().value.factors.size() == 1));
+    EXPECT_TRUE((checked.value().value.factors[0] == poly));
+    EXPECT_TRUE((checked.value().value.multiplicities[0] == 1));
+    EXPECT_TRUE((checked.value().value.constant == Rational(1)));
+}
+
+TEST(MultivariateFactorComplete, CheckedEmbeddedUnivariateFactor) {
+    const std::vector<std::string> vars = {"x", "y"};
+    const MultiPoly poly({make_term({2, 0}, Rational(1)),
+                          make_term({0, 0}, Rational(1))}, vars);
+    auto checked = factor_multivariate_checked(poly);
+    ASSERT_TRUE((checked.has_value()));
+    EXPECT_TRUE((checked.value().completeness == Completeness::Complete));
+    ASSERT_TRUE((checked.value().value.factors.size() == 1));
+    EXPECT_TRUE((checked.value().value.factors[0] == poly));
+}
+
+TEST(MultivariateFactorComplete, InconclusiveFactorizationPreservesOriginal) {
+    const std::vector<std::string> vars = {"x", "y"};
+    const MultiPoly residual({make_term({2, 0}, Rational(1)),
+                              make_term({0, 2}, Rational(1)),
+                              make_term({0, 0}, Rational(1))}, vars);
+    const MultiPoly x({make_term({1, 0}, Rational(1))}, vars);
+    const MultiPoly poly = x * residual;
+
+    auto checked = factor_multivariate_checked(poly);
+    ASSERT_TRUE(checked.has_value());
+    EXPECT_EQ(checked.value().completeness, Completeness::Inconclusive);
+    const auto& result = checked.value().value;
+    ASSERT_EQ(result.factors.size(), 1u);
+    EXPECT_TRUE(result.factors[0] * result.constant == poly);
+    EXPECT_EQ(result.multiplicities[0], 1);
 }
 
 TEST(MultivariateFactorComplete, CheckedFactorization) {
@@ -138,9 +153,16 @@ TEST(MultivariateFactorComplete, CheckedFactorization) {
                          vars);
     auto complete = factor_multivariate_checked(difference);
     ASSERT_TRUE((complete.has_value())) << "平方差分解应成功";
-    if (complete) {
-        EXPECT_TRUE((complete.value().completeness == Completeness::Complete)) << "平方差递归到线性因子后应为 Complete";
+    EXPECT_TRUE((complete.value().completeness == Completeness::Complete));
+    const auto& factors = complete.value().value;
+    ASSERT_TRUE((factors.factors.size() == 2));
+    MultiPoly product(factors.constant, vars);
+    for (size_t i = 0; i < factors.factors.size(); ++i) {
+        for (int m = 0; m < factors.multiplicities[i]; ++m) {
+            product = product * factors.factors[i];
+        }
     }
+    EXPECT_TRUE((product == difference));
 
     ResourceLimits limits;
     limits.max_steps = 0;

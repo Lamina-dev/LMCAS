@@ -174,6 +174,14 @@ TEST(SeriesConvergence, ConvergenceTestPSeries) {
         << "the p-series with exponent -2 converges";
 }
 
+TEST(SeriesConvergence, RatioWithoutProvedLimitIsInconclusive) {
+    auto result = convergence_test_checked(SymbolicExpr::sin(var("n")), "n");
+    EXPECT_FALSE(result);
+    if (!result) {
+        EXPECT_EQ(result.error().code, CasErrc::Inconclusive);
+    }
+}
+
 TEST(SeriesConvergence, ExactPSeriesExponentBoundary) {
     auto n = var("n");
     const BigInt denominator("1" + std::string(400, '0'));

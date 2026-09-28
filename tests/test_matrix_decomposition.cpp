@@ -457,6 +457,9 @@ TEST(LmcasMatrixDecomposition, JordanDomain) {
 
     auto symbolic_jordan = jordan_form_checked(symbolic_spd);
     EXPECT_TRUE((!symbolic_jordan && symbolic_jordan.error().code == CasErrc::Inconclusive)) << ("checked Jordan requires exact rational entries or proved chains");
+    auto rotation = jordan_form_checked(mat2(0, -1, 1, 0));
+    ASSERT_FALSE(rotation);
+    EXPECT_EQ(rotation.error().code, CasErrc::Inconclusive);
 }
 
 TEST(LmcasMatrixDecomposition, SvdDomain) {
@@ -466,6 +469,9 @@ TEST(LmcasMatrixDecomposition, SvdDomain) {
     EXPECT_TRUE((!non_diagonal_svd &&
                  non_diagonal_svd.error().code == CasErrc::Inconclusive))
         << ("checked SVD remains explicit when a complete singular basis is unproved");
+    auto rank_one = svd_decomposition_checked(mat2(3, 4, 0, 0));
+    ASSERT_FALSE(rank_one);
+    EXPECT_EQ(rank_one.error().code, CasErrc::Inconclusive);
 
     auto negative_diagonal_svd = svd_decomposition_checked(mat2(-1, 0, 0, 1));
     EXPECT_TRUE((negative_diagonal_svd.has_value())) << ("checked SVD absorbs diagonal signs into singular vectors");

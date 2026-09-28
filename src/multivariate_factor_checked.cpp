@@ -311,7 +311,13 @@ MultiFactorCheckedResult factor_multivariate_checked(
     ComputationContext& context)
 {
     try {
-        return factor_multivariate_impl(poly, context);
+        auto factored = factor_multivariate_impl(poly, context);
+        if (factored && factored.value().completeness == Completeness::Inconclusive) {
+            return multivariate_checked_detail::assemble_checked_factorization(
+                poly, {poly}, {1}, Completeness::Inconclusive,
+                std::move(factored.value().reason));
+        }
+        return factored;
     } catch (const std::bad_alloc&) {
         return MultiFactorCheckedResult::failure(
             CasErrc::ResourceLimit, "多元分解分配失败",

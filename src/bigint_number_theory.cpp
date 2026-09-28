@@ -103,23 +103,23 @@ BigInt BigInt::pow_mod(const BigInt& base, const BigInt& exp, const BigInt& mod)
         return binary_modular_power(base, exp, mod);
     }
 
-bool BigInt::is_prime() const {
+Result<bool> BigInt::is_prime_checked() const {
         LMCAS::detail::ensure_lmmc_lifecycle();
         if (sign_ == NEGATIVE) return false;
 
         if (size_ <= 1) {
-             return lmmp_is_prime_ulong_(size_ == 0 ? 0 : data_[0]);
+            return lmmp_is_prime_ulong_(size_ == 0 ? 0 : data_[0]);
         }
-
-        static const uint64_t mr_bases[] = {2, 3, 5, 7, 11, 13, 17};
+        if (is_even()) return false;
 
         static const uint64_t small_primes[] = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
         for (auto p : small_primes) {
             if ((*this % p).is_zero()) return false;
         }
 
-        BigInt n = *this;
-        BigInt d = n - 1;
+        const BigInt& n = *this;
+        const BigInt n_minus_one = n - 1;
+        BigInt d = n_minus_one;
         BigInt two(2);
         int s = 0;
         while (d.is_even()) {
@@ -127,25 +127,24 @@ bool BigInt::is_prime() const {
             s++;
         }
 
-        const int num_bases = sizeof(mr_bases) / sizeof(mr_bases[0]);
-        for (int i = 0; i < num_bases; ++i) {
-            BigInt a(mr_bases[i]);
-            if (a >= n) continue;
-
-            BigInt x = BigInt::pow_mod(a, d, n);
-            if (x == 1 || x == n - 1) continue;
+        static const uint64_t mr_bases[] = {2, 3, 5, 7, 11, 13, 17};
+        for (auto base : mr_bases) {
+            BigInt x = BigInt::pow_mod(BigInt(base), d, n);
+            if (x == 1 || x == n_minus_one) continue;
 
             bool composite = true;
             for (int r = 1; r < s; ++r) {
                 x = BigInt::pow_mod(x, two, n);
-                if (x == n - 1) {
+                if (x == n_minus_one) {
                     composite = false;
                     break;
                 }
             }
             if (composite) return false;
         }
-        return true;
+        return Result<bool>::failure(
+            CasErrc::Inconclusive, "primality is unproved beyond the LMMP word range",
+            "BigInt::is_prime_checked");
     }
 
 bool BigInt::is_perfect_square() const {

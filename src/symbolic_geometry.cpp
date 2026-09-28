@@ -137,7 +137,8 @@ ExpressionResult volume_of_revolution_checked_impl(
     if (!step) return ExpressionResult::failure(step.error());
 
     try {
-        auto pi = SymbolicExpr::variable("pi");
+        auto pi = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<VariableNode>("pi", true));
         auto integrand = SymbolicExpr::multiply(pi, squared_profile(f))->simplify();
         return definite_integral_geometry_checked(
             integrand, variable, a, b, operation);

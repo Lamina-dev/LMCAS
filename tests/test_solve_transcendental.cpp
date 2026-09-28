@@ -13,6 +13,8 @@ namespace {
 void expect_periodic_family_values(const ParametricSolution &family,
                                    const std::vector<Rational> &offsets,
                                    const Rational &period, std::vector<bool> &matched) {
+    auto pi_constant = LMCAS::pi();
+    ASSERT_TRUE(pi_constant);
     bool found = false;
     for (std::size_t index = 0; index < offsets.size(); ++index) {
         if (matched[index]) {
@@ -22,7 +24,7 @@ void expect_periodic_family_values(const ParametricSolution &family,
         for (int k : {-2, 0, 1}) {
             auto actual = family.value->substitute(
                 family.integer_parameters.front(), SymbolicExpr::number(k));
-            auto expected = SymbolicExpr::multiply(SymbolicExpr::variable("pi"),
+            auto expected = SymbolicExpr::multiply(pi_constant.value(),
                                                    SymbolicExpr::add(SymbolicExpr::number(offsets[index]),
                                                                      SymbolicExpr::multiply(SymbolicExpr::number(period), SymbolicExpr::number(k))));
             equal = equal && test_expr_equivalent(actual, expected);
@@ -70,11 +72,11 @@ void expect_periodic(const SolveResult &solved, const std::vector<Rational> &off
 }
 
 void expect_preimage(const ExprPtr &expression) {
+    SCOPED_TRACE(expression->to_string());
     auto solved = solve_transcendental(expression, "x");
-    if (!solved)
-        std::cerr << "CasError [" << solved.error().operation << "]: "
-                  << solved.error().message << '\n';
-    EXPECT_TRUE(solved && std::holds_alternative<ConditionalSolutions>(solved.value())) << "unresolved inverse retains a complete conditional preimage";
+    ASSERT_TRUE(solved) << solved.error().message;
+    EXPECT_TRUE(std::holds_alternative<ConditionalSolutions>(solved.value()))
+        << "unresolved inverse retains a complete conditional preimage";
     if (solved && std::holds_alternative<ConditionalSolutions>(solved.value())) {
         const auto &set = std::get<ConditionalSolutions>(solved.value()).value;
         EXPECT_TRUE(set.variable == "x") << "preimage binds the requested variable";
@@ -185,15 +187,19 @@ void test_unresolved_preimages(const ExprPtr &x, const ExprPtr &a) {
     expect_preimage(SymbolicExpr::add(SymbolicExpr::multiply(a, SymbolicExpr::sin(x)),
                                       SymbolicExpr::number(-1)));
     expect_preimage(SymbolicExpr::sin(SymbolicExpr::add(x, a)));
+    auto pi_constant = LMCAS::pi();
+    auto imaginary = LMCAS::imaginary_unit();
+    ASSERT_TRUE(pi_constant);
+    ASSERT_TRUE(imaginary);
     auto complex_offset = SymbolicExpr::add(
-        SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), SymbolicExpr::variable("pi")),
-        SymbolicExpr::multiply(SymbolicExpr::variable("I"), x));
-    auto nonreal_preimage = solve_transcendental(SymbolicExpr::add(
-                                                     SymbolicExpr::sin(complex_offset), SymbolicExpr::number(-2)),
-                                                 "x");
-    EXPECT_TRUE(nonreal_preimage &&
-                std::holds_alternative<EmptySolutions>(nonreal_preimage.value()))
-        << "explicit I is outside the strict real evaluated-child domain";
+        SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), pi_constant.value()),
+        SymbolicExpr::multiply(imaginary.value(), x));
+    auto nonreal_expression = SymbolicExpr::add(
+        SymbolicExpr::sin(complex_offset), SymbolicExpr::number(-2));
+    auto nonreal_preimage = solve_transcendental(nonreal_expression, "x");
+    EXPECT_TRUE((!nonreal_preimage &&
+                 nonreal_preimage.error().code == CasErrc::Inconclusive))
+        << "real-valuedness of a sine with a complex argument needs proof";
     auto complex_nonzero = std::make_shared<AssumptionContext>();
     EXPECT_TRUE(complex_nonzero->assume_domain("a", Domain::Complex).has_value()) << "complex coefficients are permitted inputs";
     EXPECT_TRUE(complex_nonzero->assume_sign("a", Sign::NonZero).has_value()) << "nonzero alone need not mean real";
@@ -218,8 +224,10 @@ void test_assumption_proved_slope(const ExprPtr &x, const ExprPtr &a) {
     const auto &family = families.front();
     ASSERT_EQ(family.integer_parameters.size(), 1u);
     auto point = family.value->substitute("a", SymbolicExpr::number(2))->substitute(family.integer_parameters.front(), SymbolicExpr::number(1));
+    auto pi_constant = LMCAS::pi();
+    ASSERT_TRUE(pi_constant);
     EXPECT_TRUE(test_expr_equivalent(point, SymbolicExpr::multiply(
-                                                SymbolicExpr::number(Rational(1, 2)), SymbolicExpr::variable("pi"))))
+                                                SymbolicExpr::number(Rational(1, 2)), pi_constant.value())))
         << "nonzero slope rescales the period";
     auto zero_assumptions = std::make_shared<AssumptionContext>();
     EXPECT_TRUE(zero_assumptions->assume_sign("a", Sign::Zero).has_value()) << "zero slope assumption is accepted";

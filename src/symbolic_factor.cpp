@@ -44,7 +44,9 @@ static std::optional<int> polynomial_exponent(
 static bool is_poly_expr_node(const std::shared_ptr<const SymbolicNode>& node) {
     if (!node) { return false; }
     if (std::dynamic_pointer_cast<const NumberNode>(node)) { return true; }
-    if (std::dynamic_pointer_cast<const VariableNode>(node)) { return true; }
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+        return !variable->is_constant();
+    }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         for (const auto& op : add->operands()) {

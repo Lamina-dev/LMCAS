@@ -1,5 +1,6 @@
 #include "expr.hpp"
 #include <gtest/gtest.h>
+#include <cmath>
 #include <limits>
 
 using namespace LMCAS;
@@ -19,11 +20,17 @@ TEST(ExprComplexEvaluation, ImaginaryIdentifierEvaluation) {
     auto upper_i_complex =
         LMCAS::eval_complex(*SymbolicExpr::variable("I"));
     EXPECT_TRUE((!lowercase_i_complex &&
-                 lowercase_i_complex.error().code == LMCAS::CasErrc::UnboundSymbol &&
-                 upper_i_complex &&
-                 upper_i_complex.value().is_finite()))
-        << "eval_complex treats lowercase i as a symbol and uppercase I as the imaginary unit";
-    EXPECT_NEAR(upper_i_complex.value().imag.value, 1.0, 0.0) << "I is the imaginary unit during complex evaluation";
+                 lowercase_i_complex.error().code == LMCAS::CasErrc::UnboundSymbol));
+    EXPECT_TRUE((!upper_i_complex &&
+                 upper_i_complex.error().code == LMCAS::CasErrc::UnboundSymbol));
+
+    auto imaginary = LMCAS::imaginary_unit();
+    ASSERT_TRUE(imaginary);
+    auto evaluated = LMCAS::eval_complex(*imaginary.value());
+    ASSERT_TRUE(evaluated);
+    EXPECT_TRUE(evaluated.value().is_finite());
+    EXPECT_NEAR(evaluated.value().imag.value, 1.0, 0.0)
+        << "the explicit imaginary unit has imaginary component one";
 }
 
 TEST(ExprComplexEvaluation, ComplexSum) {
@@ -35,6 +42,94 @@ TEST(ExprComplexEvaluation, ComplexSum) {
     EXPECT_TRUE((lowered_complex && lowered_complex.value().is_finite())) << "eval_complex lowers 3 + 4I";
     EXPECT_NEAR(lowered_complex.value().real.value, 3.0, 0.0) << "eval_complex computes real part of 3 + 4I";
     EXPECT_NEAR(lowered_complex.value().imag.value, 4.0, 0.0) << "eval_complex computes imaginary part of 3 + 4I";
+}
+
+TEST(ExprComplexEvaluation, CertifiedComplexComponents) {
+    auto atom = LMCAS::complex(SymbolicExpr::number(1.5),
+                               SymbolicExpr::number(-0.5));
+    ASSERT_TRUE(atom);
+    auto evaluated = LMCAS::eval_complex(*atom.value());
+    ASSERT_TRUE(evaluated);
+    EXPECT_TRUE(evaluated.value().is_finite());
+    EXPECT_DOUBLE_EQ(evaluated.value().real.value, 1.5);
+    EXPECT_DOUBLE_EQ(evaluated.value().imag.value, -0.5);
+    EXPECT_DOUBLE_EQ(evaluated.value().real.absolute_error, 0.0);
+    EXPECT_DOUBLE_EQ(evaluated.value().imag.absolute_error, 0.0);
+
+    auto mixed = LMCAS::complex(
+        SymbolicExpr::number(Rational(1, 3)),
+        SymbolicExpr::number(-0.5));
+    ASSERT_TRUE(mixed);
+    auto mixed_value = LMCAS::eval_complex(*mixed.value());
+    ASSERT_TRUE(mixed_value);
+    EXPECT_TRUE(mixed_value.value().is_finite());
+    EXPECT_EQ(mixed_value.value().real.absolute_error,
+              std::numeric_limits<double>::infinity());
+    EXPECT_DOUBLE_EQ(mixed_value.value().imag.absolute_error, 0.0);
+}
+
+TEST(ExprComplexEvaluation, ComputedComplexErrorUnknown) {
+    auto lhs = LMCAS::complex(SymbolicExpr::number(1.5),
+                              SymbolicExpr::number(2.5));
+    auto rhs = LMCAS::complex(SymbolicExpr::number(0.5),
+                              SymbolicExpr::number(-0.5));
+    ASSERT_TRUE(lhs);
+    ASSERT_TRUE(rhs);
+
+    auto sum = LMCAS::eval_complex(*SymbolicExpr::add(lhs.value(), rhs.value()));
+    ASSERT_TRUE(sum);
+    EXPECT_TRUE(sum.value().is_finite());
+    EXPECT_DOUBLE_EQ(sum.value().real.value, 2.0);
+    EXPECT_DOUBLE_EQ(sum.value().imag.value, 2.0);
+    EXPECT_EQ(sum.value().real.absolute_error,
+              std::numeric_limits<double>::infinity());
+    EXPECT_EQ(sum.value().imag.absolute_error,
+              std::numeric_limits<double>::infinity());
+
+    auto product = LMCAS::eval_complex(
+        *SymbolicExpr::multiply(lhs.value(), rhs.value()));
+    ASSERT_TRUE(product);
+    EXPECT_TRUE(product.value().is_finite());
+    EXPECT_DOUBLE_EQ(product.value().real.value, 2.0);
+    EXPECT_DOUBLE_EQ(product.value().imag.value, 0.5);
+    EXPECT_EQ(product.value().real.absolute_error,
+              std::numeric_limits<double>::infinity());
+    EXPECT_EQ(product.value().imag.absolute_error,
+              std::numeric_limits<double>::infinity());
+
+    auto quotient = LMCAS::eval_complex(
+        *SymbolicExpr::multiply(
+            lhs.value(),
+            SymbolicExpr::power(rhs.value(), SymbolicExpr::number(-1))));
+    ASSERT_TRUE(quotient);
+    EXPECT_TRUE(quotient.value().is_finite());
+    EXPECT_DOUBLE_EQ(quotient.value().real.value, -1.0);
+    EXPECT_DOUBLE_EQ(quotient.value().imag.value, 4.0);
+    EXPECT_EQ(quotient.value().real.absolute_error,
+              std::numeric_limits<double>::infinity());
+    EXPECT_EQ(quotient.value().imag.absolute_error,
+              std::numeric_limits<double>::infinity());
+
+    auto zero_power = LMCAS::eval_complex(
+        *SymbolicExpr::power(lhs.value(), SymbolicExpr::number(0)));
+    ASSERT_TRUE(zero_power);
+    EXPECT_DOUBLE_EQ(zero_power.value().real.value, 1.0);
+    EXPECT_DOUBLE_EQ(zero_power.value().imag.value, 0.0);
+    EXPECT_EQ(zero_power.value().real.absolute_error,
+              std::numeric_limits<double>::infinity());
+    EXPECT_EQ(zero_power.value().imag.absolute_error,
+              std::numeric_limits<double>::infinity());
+}
+
+TEST(ExprComplexEvaluation, ComplexArithmeticOverflow) {
+    auto large = LMCAS::complex(
+        SymbolicExpr::number(std::numeric_limits<double>::max()),
+        SymbolicExpr::number(0.0));
+    ASSERT_TRUE(large);
+    auto sum = LMCAS::eval_complex(
+        *SymbolicExpr::add(large.value(), large.value()));
+    ASSERT_FALSE(sum);
+    EXPECT_EQ(sum.error().code, CasErrc::NumericFailure);
 }
 
 TEST(ExprComplexEvaluation, OrdinaryComplexArithmetic) {
@@ -255,7 +350,9 @@ TEST(ExprComplexEvaluation, RecursionBudgetRecovery) {
     LMCAS::ResourceLimits depth_limits;
     depth_limits.max_recursion_depth = 4;
     LMCAS::ComputationContext depth_context(depth_limits);
-    auto nested = SymbolicExpr::variable("I");
+    auto imaginary = LMCAS::imaginary_unit();
+    ASSERT_TRUE(imaginary);
+    auto nested = imaginary.value();
     for (int depth = 0; depth < 8; ++depth) {
         nested = SymbolicExpr::power(nested, SymbolicExpr::number(1));
     }

@@ -6,6 +6,7 @@ enum class NumericStatus { Finite, PositiveInfinity, NegativeInfinity };
 
 struct ApproxReal {
     double value = 0.0;
+    // Certified bound on the true value's distance from value; +infinity means unknown.
     double absolute_error = 0.0;
     NumericStatus status = NumericStatus::Finite;
 

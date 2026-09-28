@@ -18,7 +18,7 @@ static bool is_alternating_factor(
     }
     auto base = std::dynamic_pointer_cast<const NumberNode>(power->base());
     auto exponent = std::dynamic_pointer_cast<const VariableNode>(power->exponent());
-    if (!base || !exponent || exponent->name() != n) {
+    if (!base || !exponent || exponent->is_constant() || exponent->name() != n) {
         return false;
     }
     return base->is_negative_one();

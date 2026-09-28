@@ -22,17 +22,20 @@ Result<ApproxReal> NumericEvaluator::number(const NumberNode& node) {
         return numeric_failure(CasErrc::NumericFailure,
                        "exact number cannot be represented as a finite double");
     }
+    if (std::holds_alternative<lmmc_real_t>(node.value())) {
+        return Result<ApproxReal>::success(ApproxReal{value, 0.0, NumericStatus::Finite});
+    }
     return numeric_approximation(value);
 }
 
 Result<ApproxReal> NumericEvaluator::variable(const VariableNode& node) {
-    if (node.name() == "pi" || node.name() == "π") {
+    if (node.is_constant() && (node.name() == "pi" || node.name() == "π")) {
         return numeric_approximation(static_cast<double>(LMMC_CONST_PI));
     }
-    if (node.name() == "e") {
+    if (node.is_constant() && node.name() == "e") {
         return numeric_approximation(std::exp(1.0));
     }
-    if (node.name() == "phi") {
+    if (node.is_constant() && node.name() == "phi") {
         return numeric_approximation((1.0 + std::sqrt(5.0)) / 2.0);
     }
     auto it = bindings_.find(node.name());
@@ -40,25 +43,47 @@ Result<ApproxReal> NumericEvaluator::variable(const VariableNode& node) {
         return numeric_failure(CasErrc::UnboundSymbol,
                        "no numeric binding for symbol '" + node.name() + "'");
     }
-    return numeric_approximation(it->second);
+    if (!std::isfinite(it->second)) {
+        return numeric_failure(CasErrc::NumericFailure, "numeric binding is not finite");
+    }
+    return Result<ApproxReal>::success(
+        ApproxReal{it->second, 0.0, NumericStatus::Finite});
 }
 
 Result<ApproxReal> NumericEvaluator::sum(const AddNode& node) {
     double value = 0.0;
+    bool infinite = false;
     for (const auto& operand : node.operands()) {
         auto evaluated = evaluate(operand);
         if (!evaluated) return evaluated;
         value += evaluated.value().value;
+        infinite = infinite || !evaluated.value().is_finite();
+        if (std::isinf(value) && !infinite) {
+            return numeric_failure(CasErrc::NumericFailure, "numeric evaluation produced a nonfinite result");
+        }
+    }
+    if (std::isinf(value) && infinite) {
+        return Result<ApproxReal>::success(ApproxReal{
+            value, 0.0, value > 0 ? NumericStatus::PositiveInfinity : NumericStatus::NegativeInfinity});
     }
     return numeric_approximation(value);
 }
 
 Result<ApproxReal> NumericEvaluator::product(const MultiplyNode& node) {
     double value = 1.0;
+    bool infinite = false;
     for (const auto& operand : node.operands()) {
         auto evaluated = evaluate(operand);
         if (!evaluated) return evaluated;
         value *= evaluated.value().value;
+        infinite = infinite || !evaluated.value().is_finite();
+        if (std::isinf(value) && !infinite) {
+            return numeric_failure(CasErrc::NumericFailure, "numeric evaluation produced a nonfinite result");
+        }
+    }
+    if (std::isinf(value) && infinite) {
+        return Result<ApproxReal>::success(ApproxReal{
+            value, 0.0, value > 0 ? NumericStatus::PositiveInfinity : NumericStatus::NegativeInfinity});
     }
     return numeric_approximation(value);
 }

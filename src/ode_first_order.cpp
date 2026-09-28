@@ -43,7 +43,7 @@ static std::shared_ptr<SymbolicExpr> integrating_factor_from_antiderivative(
             }
             const auto argument = std::dynamic_pointer_cast<const VariableNode>(
                 function->arguments().front());
-            return argument && argument->name() == variable;
+            return argument && !argument->is_constant() && argument->name() == variable;
         };
 
     const auto& root = detail::node(antiderivative);

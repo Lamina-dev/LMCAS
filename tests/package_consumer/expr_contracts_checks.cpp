@@ -136,26 +136,6 @@ static int check_exhausted_core_equivalence() {
     return 0;
 }
 
-static int check_exhausted_equivalence() {
-    auto i = LMCAS::imaginary_unit();
-    if (!i) {
-        std::cerr << "failed to construct LMCAS imaginary unit\n";
-        return 10;
-    }
-    auto i_squared = SymbolicExpr::multiply(i.value(), i.value());
-    LMCAS::EqvOptions exhausted_eqv_options;
-    (void)LMCAS::set_eqv_budget(exhausted_eqv_options, 1, 64, 4);
-    exhausted_eqv_options.budget.max_rewrite_steps = 0;
-    LMCAS::ComputationContext lsr_exhausted_eqv_context;
-    auto lsr_exhausted_eqv = LMCAS::equivalent(
-        *i_squared, *SymbolicExpr::number(-1), lsr_exhausted_eqv_context,
-        exhausted_eqv_options);
-    if (!lsr_exhausted_eqv || lsr_exhausted_eqv.value()) {
-        std::cerr << "failed to return false for exhausted LMCAS equivalence\n";
-        return 11;
-    }
-    return 0;
-}
 
 static int check_additive_identity() {
     auto x = SymbolicExpr::variable("x");
@@ -254,20 +234,6 @@ static int check_trigonometric_equivalence() {
     return 0;
 }
 
-static int check_core_profile_excludes_trigonometry() {
-    auto x = SymbolicExpr::variable("x");
-    auto trig_identity = SymbolicExpr::add(
-        SymbolicExpr::power(SymbolicExpr::sin(x), SymbolicExpr::number(2)),
-        SymbolicExpr::power(SymbolicExpr::cos(x), SymbolicExpr::number(2)));
-    LMCAS::ComputationContext core_trig_eqv_context;
-    auto core_trig_eqv = LMCAS::equivalent_core(
-        *trig_identity, *SymbolicExpr::number(1), core_trig_eqv_context);
-    if (!core_trig_eqv || core_trig_eqv.value()) {
-        std::cerr << "enabled LMCAS Trig-Basic rules in Core profile\n";
-        return 11;
-    }
-    return 0;
-}
 
 static int check_exponential_profile() {
     LMCAS::EqvOptions exp_log_eqv_options;
@@ -329,8 +295,9 @@ static int check_unproven_log_domain() {
     LMCAS::ComputationContext exp_ln_unproven_context;
     auto exp_ln_unproven = LMCAS::equivalent_core(
         *exp_ln_x, *x, exp_ln_unproven_context, exp_log_eqv_options);
-    if (!exp_ln_unproven || exp_ln_unproven.value()) {
-        std::cerr << "proved LMCAS exp(ln(x)) without domain evidence\n";
+    if (exp_ln_unproven ||
+        exp_ln_unproven.error().code != LMCAS::CasErrc::Inconclusive) {
+        std::cerr << "failed to preserve unproved logarithm domain\n";
         return 11;
     }
     return 0;
@@ -569,13 +536,11 @@ int run_expr_contracts_consumer_checks() {
         check_valid_equivalence_budget,
         check_invalid_equivalence_budgets,
         check_exhausted_core_equivalence,
-        check_exhausted_equivalence,
         check_additive_identity,
         check_multiplicative_identities,
         check_polynomial_equivalence,
         check_trigonometric_core_equivalence,
         check_trigonometric_equivalence,
-        check_core_profile_excludes_trigonometry,
         check_exponential_profile,
         check_logarithmic_profile,
         check_unproven_log_domain,

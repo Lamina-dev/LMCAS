@@ -12,27 +12,39 @@ private:
     LMCAS_AST_NODE_FACTORY_FRIEND;
 
     const std::string name_;
+    const bool constant_;
 
-    explicit VariableNode(std::string n) : name_(std::move(n)) {}
+    explicit VariableNode(std::string n, bool constant = false)
+        : name_(std::move(n)), constant_(constant) {
+        if (constant_ && name_ != "pi" && name_ != "π" &&
+            name_ != "e" && name_ != "phi") {
+            throw std::invalid_argument("unknown mathematical constant");
+        }
+    }
 
 public:
     const std::string& name() const noexcept { return name_; }
+    bool is_constant() const noexcept { return constant_; }
 
     int type_priority() const override { return 10; }
 
 protected:
     std::size_t compute_hash() const override {
-        return std::hash<std::string>{}(name_);
+        std::size_t hash = std::hash<std::string>{}(name_);
+        hash_combine(hash, constant_);
+        return hash;
     }
 
     int compare_same_type(const SymbolicNode& other) const override {
         const auto& o = static_cast<const VariableNode&>(other);
-        return name_.compare(o.name_);
+        const int cmp = name_.compare(o.name_);
+        if (cmp != 0) return cmp;
+        return constant_ == o.constant_ ? 0 : (constant_ ? 1 : -1);
     }
 
 public:
     void accept(LMCAS::detail::SymbolicVisitor& visitor) const override { LMCAS::detail::SymbolicVisitor::DepthGuard guard(visitor); visitor.visit(*this); }
-    std::shared_ptr<const SymbolicNode> clone() const override { return LMCAS::detail::make_node<VariableNode>(name_); }
+    std::shared_ptr<const SymbolicNode> clone() const override { return LMCAS::detail::make_node<VariableNode>(name_, constant_); }
 };
 
 /**

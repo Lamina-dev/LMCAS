@@ -1,5 +1,6 @@
 #include "irrational.hpp"
 #include "symbolic.hpp"
+#include "internal/symbolic_ast.hpp"
 #include <utility>
 
 namespace LMCAS {
@@ -7,7 +8,8 @@ namespace {
 
 std::shared_ptr<SymbolicExpr> symbolic_named_power(const std::string& name,
                                                   const BigInt& exponent) {
-    auto base = SymbolicExpr::variable(name);
+    auto base = detail::make_expression_ptr(
+        detail::make_node<VariableNode>(name, true));
     return exponent == BigInt(1) ? base :
         SymbolicExpr::power(base, SymbolicExpr::number(exponent));
 }

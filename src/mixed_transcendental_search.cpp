@@ -36,7 +36,7 @@ static lmmc_real_t product_linear_coefficient(
         if (operand->is_number()) {
             number = operand;
         } else if (auto variable = std::dynamic_pointer_cast<const VariableNode>(operand)) {
-            if (variable->name() == var) {
+            if (!variable->is_constant() && variable->name() == var) {
                 has_variable = true;
             }
         }
@@ -56,7 +56,7 @@ static lmmc_real_t extract_linear_coefficient(
     }
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (v->name() == var) {
+        if (!v->is_constant() && v->name() == var) {
             return 1.0;
         }
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();

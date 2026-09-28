@@ -16,7 +16,7 @@ using namespace expr_detail::expr_common;
 std::optional<std::string_view> symbol_name(const ExprPtr& expression) noexcept {
     const auto* variable =
         dynamic_cast<const VariableNode*>(detail::node(expression).get());
-    if (!variable) return std::nullopt;
+    if (!variable || variable->is_constant()) return std::nullopt;
     return variable->name();
 }
 

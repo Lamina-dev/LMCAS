@@ -64,7 +64,8 @@ bool power_degrees_fit(const Poly& base, int exponent) {
         void PolyBuilder::visit(const VariableNode& node) {
             result = Poly(ext_vars.size());
 
-            auto it = std::find(ext_vars.begin(), ext_vars.end(), node.name());
+            auto it = node.is_constant() ? ext_vars.end() :
+                std::find(ext_vars.begin(), ext_vars.end(), node.name());
             if (it != ext_vars.end()) {
                 Monomial m(ext_vars.size(), 0);
                 m[std::distance(ext_vars.begin(), it)] = 1;
@@ -75,7 +76,7 @@ bool power_degrees_fit(const Poly& base, int exponent) {
                     failed = true;
                     return;
                 }
-                size_t idx = get_or_create_aux_var(LMCAS::detail::make_node<VariableNode>(node.name()));
+                size_t idx = get_or_create_aux_var(LMCAS::detail::make_node<VariableNode>(node.name(), node.is_constant()));
 
                 result = Poly(ext_vars.size());
                 Monomial m(ext_vars.size(), 0);

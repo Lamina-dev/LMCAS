@@ -251,7 +251,8 @@ bool outside_real_function_domain(const FunctionNode& function) {
 
 Result<ComparableEndpoint> unsupported_endpoint(
     const std::shared_ptr<const SymbolicNode>& node, const std::string& operation) {
-    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node);
+        variable && !variable->is_constant()) {
         return Result<ComparableEndpoint>::failure(
             CasErrc::UnboundSymbol,
             "interval endpoint contains unbound symbol '" + variable->name() + "'",

@@ -38,7 +38,9 @@ Result<BerlekampResult> bridge_reduction(
         auto step = context.consume_steps(1, bridge_operation);
         if (!step) return Result<BerlekampResult>::failure(step.error());
         auto reduction = berlekamp_factor(poly, prime);
-        if (reduction.prime > 0 && !reduction.factors.empty()) {
+        if (reduction.prime > 0 && !reduction.factors.empty() &&
+            (poly.degree() == 1 ||
+             static_cast<int>(reduction.factors.size()) == reduction.null_space_dim)) {
             return Result<BerlekampResult>::success(std::move(reduction));
         }
     }
@@ -48,11 +50,11 @@ Result<BerlekampResult> bridge_reduction(
 
 Result<int> bridge_lift_bound(const Polynomial<BigInt>& poly, int64_t prime,
                               BigInt& modulus, ComputationContext& context) {
-    BigInt max_coefficient(0);
+    BigInt coefficient_sum(0);
     for (const auto& coefficient : poly.coeffs) {
-        if (coefficient.abs() > max_coefficient) max_coefficient = coefficient.abs();
+        coefficient_sum = coefficient_sum + coefficient.abs();
     }
-    BigInt target = max_coefficient * BigInt(2);
+    BigInt target = coefficient_sum * BigInt(2);
     for (int i = 0; i < poly.degree(); ++i) target = target * BigInt(2);
     int bound = 1;
     modulus = BigInt(static_cast<std::int64_t>(prime));
@@ -61,6 +63,10 @@ Result<int> bridge_lift_bound(const Polynomial<BigInt>& poly, int64_t prime,
         if (!step) return Result<int>::failure(step.error());
         modulus = modulus * BigInt(static_cast<std::int64_t>(prime));
         ++bound;
+    }
+    if (modulus <= target) {
+        return Result<int>::failure(CasErrc::Inconclusive,
+            "提升次数上限不足以保证重构", bridge_operation);
     }
     return Result<int>::success(bound);
 }
@@ -75,7 +81,13 @@ UnivariateFactorResult bridge_lift_and_combine(
     auto integer_poly = factor_integer_polynomial(work);
     BigInt modulus;
     auto bound = bridge_lift_bound(integer_poly, reduction.prime, modulus, context);
-    if (!bound) return UnivariateFactorResult::failure(bound.error());
+    if (!bound) {
+        if (bound.error().code == CasErrc::Inconclusive) {
+            whole_input = true;
+            return bridge_inconclusive(original, bound.error().message.c_str());
+        }
+        return UnivariateFactorResult::failure(bound.error());
+    }
     const ModInt unit(
         (integer_poly.coeffs.back() % BigInt(reduction.prime)).to_int(),
         reduction.prime);

@@ -25,22 +25,6 @@ ExprPtr rewritten_complex(const ExprPtr& real, const ExprPtr& imag,
 
 namespace {
 
-ExprPtr canonicalize_variable(const VariableNode& variable,
-                               const detail::SymbolicNodePtr& original,
-                               detail::RewriteBudget& budget) {
-    if (!detail::is_imaginary_unit_name(variable.name())) {
-        return detail::make_expression_ptr(original);
-    }
-    budget.require_nodes(3);
-    try {
-        const auto zero = SymbolicExpr::number(0);
-        const auto one = SymbolicExpr::number(1);
-        return detail::make_expression_ptr(SymbolicFactory::create_complex(
-            detail::node(zero), detail::node(one)));
-    } catch (const std::invalid_argument&) {
-        return detail::make_expression_ptr(original);
-    }
-}
 
 ExprPtr canonicalize_sum(const AddNode& add,
                          const detail::SymbolicNodePtr& original,
@@ -174,10 +158,6 @@ ExprPtr canonicalize_complex_product(const SymbolicExpr& expression,
                                      detail::RewriteBudget& budget) {
     detail::RewriteScope scope(&budget);
     const auto& node = detail::node(expression);
-    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        budget.require_nodes(1);
-        return canonicalize_variable(*variable, node, budget);
-    }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         return canonicalize_sum(*add, node, budget);
     }

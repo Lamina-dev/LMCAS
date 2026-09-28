@@ -59,14 +59,35 @@ TEST(Calculus, Atan2PartialDerivatives) {
     }
 }
 
+TEST(Calculus, LogarithmDerivative) {
+    auto x = SymbolicExpr::variable("x");
+    for (const auto& base : {SymbolicExpr::number(10),
+                             SymbolicExpr::number(Rational(1, 2)),
+                             SymbolicExpr::number(2.5)}) {
+        auto derivative = LMCAS::differentiate(SymbolicExpr::log(x, base), "x");
+        ASSERT_TRUE(derivative) << "positive fixed base has a derivative";
+        auto value = evaluate_numeric(*derivative.value(), {{"x", 2.0}});
+        ASSERT_TRUE(value && value.value().is_finite());
+        auto base_value = evaluate_numeric(*base, {});
+        ASSERT_TRUE(base_value);
+        EXPECT_NEAR(value.value().value, 1.0 / (2.0 * std::log(base_value.value().value)), 1e-12);
+    }
+}
+
 TEST(Calculus, UnsupportedDerivatives) {
     auto x = SymbolicExpr::variable("x");
-
-    auto logarithm = SymbolicExpr::log(x, SymbolicExpr::number(10));
-    auto log_derivative = LMCAS::differentiate(logarithm, "x");
-    EXPECT_TRUE((!log_derivative &&
-                 log_derivative.error().code == CasErrc::UnsupportedExpression))
-        << "unsupported non-unary derivative does not become zero";
+    for (const auto& base : {SymbolicExpr::variable("b"), SymbolicExpr::number(1),
+                             SymbolicExpr::number(-2)}) {
+        auto derivative = LMCAS::differentiate(SymbolicExpr::log(x, base), "x");
+        EXPECT_TRUE((!derivative &&
+                     derivative.error().code == CasErrc::UnsupportedExpression))
+            << "unproved logarithm base is unsupported";
+    }
+    auto constant_argument = LMCAS::differentiate(
+        SymbolicExpr::log(SymbolicExpr::number(4), SymbolicExpr::variable("b")), "x");
+    EXPECT_TRUE((!constant_argument &&
+                 constant_argument.error().code == CasErrc::UnsupportedExpression))
+        << "an unknown base cannot be bypassed by a constant argument";
 
     auto floor_expression = LMCAS::floor(x);
     ASSERT_TRUE((floor_expression.has_value())) << "symbolic floor is constructible";

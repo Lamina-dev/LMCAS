@@ -15,7 +15,7 @@ static std::shared_ptr<const SymbolicNode> simplify_abs_function(
     const std::string& var) {
         if (fn.type() == FunctionNode::FuncType::Abs && fn.arguments().size() == 1) {
             if (auto vn = std::dynamic_pointer_cast<const VariableNode>(fn.arguments()[0])) {
-                if (vn->name() == var) {
+                if (!vn->is_constant() && vn->name() == var) {
                     return fn.arguments()[0];
                 }
             }

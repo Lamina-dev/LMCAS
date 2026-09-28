@@ -147,11 +147,11 @@ TEST(CalculusUtilsGeometry, SurfaceCheckedContracts) {
 
     auto exact = LMCAS::surface_area_revolution_x_checked(num(1), "x", zero, one);
     ASSERT_TRUE((exact.has_value())) << "checked x-axis surface area succeeds for constant radius";
-    if (exact) {
-        auto at_pi = exact.value()->substitute("pi", num(3))->simplify();
-        auto val = test_numeric_eval(at_pi);
-        EXPECT_TRUE((val.has_value() && std::abs(*val - 6.0) < 1e-9)) << "checked constant surface area is 2*pi";
-    }
+    auto evaluated = LMCAS::evalf(*exact.value());
+    ASSERT_TRUE(evaluated);
+    EXPECT_TRUE(evaluated.value().is_finite());
+    EXPECT_NEAR(evaluated.value().value, 2.0 * std::acos(-1.0), 1e-9)
+        << "checked constant surface area is 2*pi";
 
     auto null_result = LMCAS::surface_area_revolution_x_checked(
         nullptr, "x", zero, one);

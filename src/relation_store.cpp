@@ -96,12 +96,13 @@ RelationStoreResult derive_comparison_sign(const SymbolicExpr& lhs,
                                          RelationOp op, PropertyStore& store) {
     const auto variable = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(lhs));
     const auto number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(rhs));
-    if (variable && number && number->is_zero()) {
+    if (variable && !variable->is_constant() && number && number->is_zero()) {
         return declare_comparison_sign(variable->name(), op, store);
     }
     const auto zero = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(lhs));
     const auto reversed_variable = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rhs));
-    if (zero && zero->is_zero() && reversed_variable) {
+    if (zero && zero->is_zero() && reversed_variable &&
+        !reversed_variable->is_constant()) {
         return declare_comparison_sign(
             reversed_variable->name(), detail::reversed_relation(op), store);
     }

@@ -1,11 +1,10 @@
 #include "parametric_solver.hpp"
-#include "internal/exact_matrix.hpp"
-#include "solver.hpp"
-#include "solve_strategies.hpp"
-#include "poly_utils.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/assumption_facts.hpp"
+#include "residual_verification.hpp"
 #include <algorithm>
 #include <set>
+#include <optional>
 
 namespace LMCAS {
 
@@ -60,11 +59,29 @@ bool ParametricSolver::is_linear_in_unknowns(
 using ParametricMatrix = std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>;
 using ParametricVector = std::vector<std::shared_ptr<SymbolicExpr>>;
 
-static size_t find_parametric_pivot(ParametricMatrix& matrix, size_t row, size_t column) {
+static bool parametric_zero(const std::shared_ptr<SymbolicExpr>& expression,
+                            ComputationContext& context) {
+    if (expression->is_zero()) return true;
+    std::optional<detail::AssumptionFacts> assumptions;
+    if (context.assumptions()) assumptions.emplace(*context.assumptions());
+    const FactsQuery& facts = assumptions ? static_cast<const FactsQuery&>(*assumptions) : detail::no_facts();
+    auto nonzero = detail::query_nonzero_value(detail::node(expression), facts, Domain::Complex, context);
+    if (!nonzero) throw nonzero.error();
+    if (nonzero.value() == Tribool::True) return false;
+    if (nonzero.value() == Tribool::False) return true;
+    auto residual = check_zero_residual(expression, context);
+    if (!residual) throw residual.error();
+    if (std::holds_alternative<ProvedZeroResidual>(residual.value())) return true;
+    throw CasError{CasErrc::Inconclusive,
+        "parameter coefficient or constraint is undecided", "solve.parametric"};
+}
+
+static size_t find_parametric_pivot(ParametricMatrix& matrix, size_t row, size_t column,
+                                    ComputationContext& context) {
     while (row < matrix.size()) {
         auto simplified = matrix[row][column]->simplify();
         matrix[row][column] = simplified;
-        if (!simplified->is_zero()) {
+        if (!parametric_zero(simplified, context)) {
             break;
         }
         ++row;
@@ -101,7 +118,7 @@ static void eliminate_parametric_column(ParametricMatrix& A, ParametricVector& b
 static std::map<std::string, std::shared_ptr<SymbolicExpr>> parametric_linear_solution(
     const ParametricMatrix& A, const ParametricVector& b,
     const std::vector<size_t>& pivot_cols, const std::vector<size_t>& pivot_rows,
-    const std::vector<std::string>& unknowns) {
+    const std::vector<std::string>& unknowns, ComputationContext& context) {
     size_t n = unknowns.size();
     std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
 
@@ -124,7 +141,7 @@ static std::map<std::string, std::shared_ptr<SymbolicExpr>> parametric_linear_so
                 continue;
             }
             auto coeff = A[row][j]->simplify();
-            if (!coeff->is_zero()) {
+            if (!parametric_zero(coeff, context)) {
 
                 auto term = SymbolicExpr::multiply(coeff, SymbolicExpr::variable(unknowns[j]));
                 value = SymbolicExpr::add(value, SymbolicExpr::multiply(term, SymbolicExpr::number(-1)));
@@ -142,7 +159,8 @@ static std::map<std::string, std::shared_ptr<SymbolicExpr>> parametric_linear_so
 std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
 ParametricSolver::solve_linear_parametric(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
-    const std::vector<std::string>& unknowns)
+    const std::vector<std::string>& unknowns,
+    ComputationContext& context)
 {
     size_t m = equations.size();
     size_t n = unknowns.size();
@@ -174,7 +192,7 @@ ParametricSolver::solve_linear_parametric(
 
     for (size_t col = 0; col < n && current_row < m; ++col) {
 
-        size_t pivot_row = find_parametric_pivot(A, current_row, col);
+        size_t pivot_row = find_parametric_pivot(A, current_row, col, context);
         if (pivot_row == m) {
             continue;
         }
@@ -193,13 +211,13 @@ ParametricSolver::solve_linear_parametric(
 
     for (size_t r = current_row; r < m; ++r) {
         auto b_simplified = b[r]->simplify();
-        if (!b_simplified->is_zero()) {
+        if (!parametric_zero(b_simplified, context)) {
 
             return {};
         }
     }
 
-    return {parametric_linear_solution(A, b, pivot_cols, pivot_rows, unknowns)};
+    return {parametric_linear_solution(A, b, pivot_cols, pivot_rows, unknowns, context)};
 }
 
 
@@ -207,7 +225,7 @@ ParametricSolutionsResult
 ParametricSolver::solve_polynomial_parametric_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
-    const std::vector<std::string>&,
+    const std::vector<std::string>& parameters,
     ComputationContext& context)
 {
     constexpr const char* operation = "solve_polynomial_parametric";
@@ -223,8 +241,12 @@ ParametricSolver::solve_polynomial_parametric_checked(
         return ParametricSolutionsResult::failure(budget.error());
     }
     try {
+        if (is_linear_in_unknowns(equations, unknowns))
+            return solve_linear_parametric(equations, unknowns, context);
         return solve_polynomial_parametric_impl(
-            equations, unknowns, context);
+            equations, unknowns, parameters, context);
+    } catch (const CasError& error) {
+        return ParametricSolutionsResult::failure(error);
     } catch (const std::bad_alloc&) {
         return ParametricSolutionsResult::failure(
             CasErrc::ResourceLimit,
@@ -251,63 +273,23 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
 ParametricSolver::solve_system(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
-    const std::vector<std::string>&)
+    const std::vector<std::string>& parameters)
 {
     if (equations.empty() || unknowns.empty()) {
         return {};
     }
 
 
+    ComputationContext context;
     if (is_linear_in_unknowns(equations, unknowns)) {
-        return solve_linear_parametric(equations, unknowns);
+        return solve_linear_parametric(equations, unknowns, context);
     }
-
-    ComputationContext context;
-    auto solved = solve_polynomial_parametric_impl(
-        equations, unknowns, context);
-    return solved ? std::move(solved.value()) : ParametricSolutionList{};
+    auto solved = solve_polynomial_parametric_checked(
+        equations, unknowns, parameters, context);
+    if (!solved) throw solved.error();
+    return std::move(solved.value());
 }
 
-static std::shared_ptr<SymbolicExpr> compute_determinant(
-    const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& matrix,
-    size_t dimension)
-{
-    if (dimension == 0 || matrix.size() != dimension) {
-        return nullptr;
-    }
-    detail::ExactMatrixData exact{dimension, dimension, {}};
-    exact.entries.reserve(dimension * dimension);
-    for (const auto& row : matrix) {
-        if (row.size() != dimension) {
-            return nullptr;
-        }
-        for (const auto& entry : row) {
-            if (!entry) {
-                return nullptr;
-            }
-            exact.entries.push_back(entry);
-        }
-    }
-    ComputationContext context;
-    auto determinant = detail::determinant_exact(
-        exact, context, "parametric_determinant");
-    return determinant ? std::move(determinant.value()) : nullptr;
-}
-
-static bool depends_on_parameters(
-    const std::shared_ptr<SymbolicExpr>& expr,
-    const std::vector<std::string>& parameters)
-{
-    if (!expr) {
-        return false;
-    }
-    for (const auto& p : parameters) {
-        if (contains(*expr, p)) {
-            return true;
-        }
-    }
-    return false;
-}
 
 PiecewiseSolution ParametricSolver::solve_system_piecewise(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
@@ -315,93 +297,14 @@ PiecewiseSolution ParametricSolver::solve_system_piecewise(
     const std::vector<std::string>& parameters)
 {
     PiecewiseSolution result;
-    size_t m = equations.size();
-    size_t n = unknowns.size();
-
-    if (m == 0 || n == 0) {
-        return result;
+    if (equations.empty() || unknowns.empty()) return result;
+    auto solutions = solve_system(equations, unknowns, parameters);
+    if (!solutions.empty()) {
+        PiecewiseSolution::Case only_case;
+        only_case.condition = SymbolicExpr::number(1);
+        only_case.solutions = std::move(solutions);
+        result.cases.push_back(std::move(only_case));
     }
-
-    std::vector<std::string> effective_params;
-    std::set<std::string> unknown_set(unknowns.begin(), unknowns.end());
-    for (const auto& p : parameters) {
-        if (unknown_set.find(p) == unknown_set.end()) {
-            effective_params.push_back(p);
-        }
-    }
-
-    if (m != n) {
-        auto solutions = solve_system(equations, unknowns, parameters);
-        if (!solutions.empty()) {
-            PiecewiseSolution::Case generic_case;
-            generic_case.condition = SymbolicExpr::number(1);
-            generic_case.solutions = solutions;
-            result.cases.push_back(generic_case);
-        }
-        return result;
-    }
-
-    if (!is_linear_in_unknowns(equations, unknowns)) {
-        auto solutions = solve_system(equations, unknowns, parameters);
-        if (!solutions.empty()) {
-            PiecewiseSolution::Case generic_case;
-            generic_case.condition = SymbolicExpr::number(1);
-            generic_case.solutions = solutions;
-            result.cases.push_back(generic_case);
-        }
-        return result;
-    }
-
-    std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> A(n, std::vector<std::shared_ptr<SymbolicExpr>>(n));
-    for (size_t i = 0; i < n; ++i) {
-        for (size_t j = 0; j < n; ++j) {
-            A[i][j] = extract_coefficient(equations[i], unknowns[j]);
-        }
-    }
-
-    auto det = compute_determinant(A, n);
-    if (!det) {
-        auto solutions = solve_system(equations, unknowns, parameters);
-        if (!solutions.empty()) {
-            PiecewiseSolution::Case generic_case;
-            generic_case.condition = SymbolicExpr::number(1);
-            generic_case.solutions = std::move(solutions);
-            result.cases.push_back(std::move(generic_case));
-        }
-        return result;
-    }
-
-    if (det->is_zero()) {
-
-        auto solutions = solve_system(equations, unknowns, parameters);
-        PiecewiseSolution::Case degenerate_case;
-
-        degenerate_case.condition = SymbolicExpr::number(0);
-        degenerate_case.solutions = solutions;
-        result.cases.push_back(degenerate_case);
-    } else if (!depends_on_parameters(det, effective_params)) {
-
-        auto solutions = solve_system(equations, unknowns, parameters);
-        PiecewiseSolution::Case generic_case;
-
-        generic_case.condition = det;
-        generic_case.solutions = solutions;
-        result.cases.push_back(generic_case);
-    } else {
-
-        auto generic_solutions = solve_system(equations, unknowns, parameters);
-        PiecewiseSolution::Case generic_case;
-        generic_case.condition = det;
-        generic_case.solutions = generic_solutions;
-        result.cases.push_back(generic_case);
-
-        PiecewiseSolution::Case degenerate_case;
-        degenerate_case.condition = SymbolicExpr::number(0);
-
-        degenerate_case.solutions = generic_solutions;
-        result.cases.push_back(degenerate_case);
-    }
-
     return result;
 }
 

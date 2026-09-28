@@ -102,6 +102,7 @@ public:
 
     std::optional<CasError> error;
     bool expressible = true;
+    bool violated_real_restriction = false;
     std::vector<std::shared_ptr<SymbolicExpr>> conditions;
 
     ValueFacts walk(const Node& node, bool values = false) {
@@ -175,8 +176,11 @@ private:
     }
 
     template<class Predicate>
-    void require(ValueFacts& result, T truth, Predicate&& predicate) {
+    void require(ValueFacts& result, T truth, Predicate&& predicate,
+                 bool real_restriction = true) {
         result.defined = conjunction(result.defined, truth);
+        if (domain_ == Domain::Real && real_restriction && truth == T::False)
+            { violated_real_restriction = true; }
         if (project_ && truth == T::Unknown && !error) {
             auto condition = predicate();
             if (!error && condition) conditions.push_back(make_expression_ptr(std::move(condition)));
@@ -666,12 +670,10 @@ private:
     }
 
     ValueFacts variable_facts(const VariableNode& variable) {
-        if (variable.name() == "pi" || variable.name() == "π" ||
-            variable.name() == "e" || variable.name() == "phi")
+        if (variable.is_constant() &&
+            (variable.name() == "pi" || variable.name() == "π" ||
+             variable.name() == "e" || variable.name() == "phi"))
             { return {T::True, T::True, T::True, T::True, T::True}; }
-        if (is_imaginary_unit_name(variable.name()))
-            { return {domain_ == Domain::Real ? T::False : T::True,
-                    T::False, T::True, T::False, T::False}; }
         return {T::True};
     }
 
@@ -689,7 +691,7 @@ private:
                 imag.nonzero == T::True ? T::False : T::Unknown;
             require(result, zero, [&] {
                 return relation(complex.imag(), number(0), RelationOp::EQ);
-            });
+            }, false);
         }
         result.nonzero = disjunction(real.nonzero, imag.nonzero);
         result.real = imag.nonzero == T::False ? T::True :
@@ -727,7 +729,8 @@ private:
 };
 
 Result<Tribool> query_value(const Node& node, const FactsQuery& facts, Domain domain,
-                           T ValueFacts::*member, bool values, ComputationContext& context) {
+                           T ValueFacts::*member, bool values, ComputationContext& context,
+                           bool* violated_real_restriction = nullptr) {
     if (domain != Domain::Real && domain != Domain::Complex) {
         return Result<T>::failure(CasErrc::InvalidArgument,
             "value domain must be Real or Complex", "facts.domain");
@@ -736,6 +739,8 @@ Result<Tribool> query_value(const Node& node, const FactsQuery& facts, Domain do
         DomainTraversal traversal(facts, domain, context);
         auto result = traversal.walk(node, values);
         if (traversal.error) return Result<T>::failure(*traversal.error);
+        if (violated_real_restriction)
+            { *violated_real_restriction = traversal.violated_real_restriction; }
         return result.*member;
     } catch (const CasError& error) {
         return Result<T>::failure(error);
@@ -747,8 +752,10 @@ Result<Tribool> query_value(const Node& node, const FactsQuery& facts, Domain do
 
 }
 
-Result<Tribool> query_definedness(const Node& node, const FactsQuery& facts, Domain domain, ComputationContext& context) {
-    return query_value(node, facts, domain, &ValueFacts::defined, false, context);
+Result<Tribool> query_definedness(const Node& node, const FactsQuery& facts, Domain domain,
+                                  ComputationContext& context, bool* violated_real_restriction) {
+    return query_value(node, facts, domain, &ValueFacts::defined, false, context,
+                       violated_real_restriction);
 }
 Result<Tribool> query_nonzero_value(const Node& node, const FactsQuery& facts, Domain domain, ComputationContext& context) {
     return query_value(node, facts, domain, &ValueFacts::nonzero, true, context);
@@ -775,6 +782,15 @@ Result<std::optional<std::vector<std::shared_ptr<SymbolicExpr>>>> domain_constra
         auto result = traversal.walk(node);
         if (traversal.error) return Result<Output>::failure(*traversal.error);
         if (result.defined == T::False) {
+            if (domain == Domain::Real && !traversal.violated_real_restriction) {
+                auto complex_defined = query_definedness(node, facts, Domain::Complex, context);
+                if (!complex_defined) return Result<Output>::failure(complex_defined.error());
+                if (complex_defined.value() != T::False) {
+                    auto real_value = query_real_value(node, facts, context);
+                    if (!real_value) return Result<Output>::failure(real_value.error());
+                    if (real_value.value() == T::Unknown) return Output{};
+                }
+            }
             auto impossible = traversal.false_condition();
             if (traversal.error) return Result<Output>::failure(*traversal.error);
             traversal.conditions.clear();

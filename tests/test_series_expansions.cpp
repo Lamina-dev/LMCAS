@@ -147,6 +147,44 @@ TEST(SeriesExpansions, LaurentSeriesFull1OverZ) {
     }
 }
 
+TEST(SeriesExpansions, EssentialPoleIndependentOfTruncation) {
+    auto z = var("z");
+    auto f = SymbolicExpr::exp(SymbolicExpr::divide(num(1), z));
+    for (int order_neg : {0, 1, 3}) {
+        auto result = laurent_series_full_checked(f, "z", num(0), order_neg, 0);
+        ASSERT_TRUE(result);
+        EXPECT_EQ(result.value().singularity, SingularityType::Essential);
+        EXPECT_TRUE(test_expression_text(result.value().residue, num(1)));
+        if (order_neg == 3) {
+            auto expected = SymbolicExpr::add(
+                SymbolicExpr::add(num(1), SymbolicExpr::divide(num(1), z)),
+                SymbolicExpr::add(
+                    SymbolicExpr::divide(num(1), SymbolicExpr::multiply(num(2), SymbolicExpr::power(z, num(2)))),
+                    SymbolicExpr::divide(num(1), SymbolicExpr::multiply(num(6), SymbolicExpr::power(z, num(3))))));
+            EXPECT_TRUE(test_proved_equivalent(result.value().series, expected));
+        }
+    }
+    auto high_order = SymbolicExpr::exp(
+        SymbolicExpr::power(z, num(-65)));
+    auto classified = laurent_series_full_checked(high_order, "z", num(0), 0, 0);
+    ASSERT_TRUE(classified);
+    EXPECT_EQ(classified.value().singularity, SingularityType::Essential);
+}
+
+TEST(SeriesExpansions, ShiftedEssentialEvenPowers) {
+    auto z = var("z");
+    auto shift = SymbolicExpr::add(z, num(-1));
+    auto f = SymbolicExpr::exp(SymbolicExpr::divide(num(1), SymbolicExpr::power(shift, num(2))));
+    auto result = laurent_series_full_checked(f, "z", num(1), 4, 0);
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result.value().singularity, SingularityType::Essential);
+    EXPECT_TRUE(test_expression_text(result.value().residue, num(0)));
+    auto expected = SymbolicExpr::add(
+        SymbolicExpr::add(num(1), SymbolicExpr::divide(num(1), SymbolicExpr::power(shift, num(2)))),
+        SymbolicExpr::divide(num(1), SymbolicExpr::multiply(num(2), SymbolicExpr::power(shift, num(4)))));
+    EXPECT_TRUE(test_proved_equivalent(result.value().series, expected));
+}
+
 TEST(SeriesExpansions, LaurentSeries1OverSinZ) {
     /**
      * @brief f(z) = 1/(z(z+1)) 在 z=0 处为一阶极点，留数为 1。

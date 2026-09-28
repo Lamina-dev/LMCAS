@@ -105,7 +105,8 @@ static TransformEngineResult te_convolve_core(
     auto scale = SymbolicExpr::multiply(
         SymbolicExpr::multiply(left->coefficient, right->coefficient),
         SymbolicExpr::sqrt(SymbolicExpr::divide(
-            SymbolicExpr::variable("pi"),
+            LMCAS::detail::make_expression_ptr(
+                LMCAS::detail::make_node<VariableNode>("pi", true)),
             SymbolicExpr::number(rate_sum))));
     auto square = SymbolicExpr::power(
         SymbolicExpr::variable(variable), SymbolicExpr::number(2));

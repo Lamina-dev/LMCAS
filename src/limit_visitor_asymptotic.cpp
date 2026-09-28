@@ -238,7 +238,8 @@ LimitVisitor::GrowthClass LimitVisitor::classify_growth(const std::shared_ptr<co
     }
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        return (v->name() == var) ? GrowthClass::Polynomial : GrowthClass::Constant;
+        return (!v->is_constant() && v->name() == var)
+            ? GrowthClass::Polynomial : GrowthClass::Constant;
     }
 
     if (auto func = std::dynamic_pointer_cast<const FunctionNode>(node)) {
@@ -436,7 +437,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
     }
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (v->name() == var) {
+        if (!v->is_constant() && v->name() == var) {
             std::vector<std::shared_ptr<const SymbolicNode>> ops = {
                 LMCAS::detail::make_node<NumberNode>(BigInt(-1)),
                 LMCAS::detail::make_node<VariableNode>(t_var)

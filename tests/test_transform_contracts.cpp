@@ -43,6 +43,29 @@ TEST(TransformContracts, UnsupportedTransforms) {
     EXPECT_TRUE((unsupported_inverse.error().code == LMCAS::CasErrc::Inconclusive)) << "checked inverse Fourier reports Inconclusive for unsupported constants";
 }
 
+TEST(TransformContracts, InverseFourierExactDecayRoundTrip) {
+    auto omega = var("omega");
+    auto input = SymbolicExpr::divide(
+        num(2), SymbolicExpr::add(num(1), SymbolicExpr::power(omega, num(2))));
+    auto result = inverse_fourier_transform_checked(input, "omega", "t");
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(std::holds_alternative<ExactRoundTripProof>(result.value().certificate));
+    auto value = result.value().value.expression;
+    auto abs_t = detail::make_expression_ptr(detail::make_node<FunctionNode>(
+        FunctionNode::FuncType::Abs,
+        std::vector<std::shared_ptr<const SymbolicNode>>{detail::node(var("t"))}));
+    auto expected = SymbolicExpr::exp(SymbolicExpr::multiply(num(-1), abs_t));
+    EXPECT_TRUE(detail::node(value->simplify())->equals(*detail::node(expected->simplify())));
+    EXPECT_TRUE(result.value().value.conditions.empty());
+
+    auto unsupported = inverse_fourier_transform_checked(
+        SymbolicExpr::divide(num(3),
+            SymbolicExpr::add(num(1), SymbolicExpr::power(omega, num(2)))),
+        "omega", "t");
+    ASSERT_FALSE(unsupported);
+    EXPECT_EQ(unsupported.error().code, CasErrc::Inconclusive);
+}
+
 TEST(TransformContracts, InvalidTransformInputs) {
     auto t = var("t");
     auto s = var("s");

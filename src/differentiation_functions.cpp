@@ -180,7 +180,7 @@ std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
         break;
     case FunctionNode::FuncType::Erf:
         {
-            auto pi = LMCAS::detail::make_node<VariableNode>("pi");
+            auto pi = LMCAS::detail::make_node<VariableNode>("pi", true);
             auto sqrt_pi = LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Sqrt,
                 std::vector<std::shared_ptr<const SymbolicNode>>{pi});
@@ -259,6 +259,25 @@ void DifferentiationVisitor::differentiate_atan2(const FunctionNode& node) {
 void DifferentiationVisitor::visit(const FunctionNode& node) {
     if (node.type() == FunctionNode::FuncType::Atan2 && node.arguments().size() == 2) {
         differentiate_atan2(node);
+        return;
+    }
+    if (node.type() == FunctionNode::FuncType::Log && node.arguments().size() == 2) {
+        const auto& arg = node.arguments()[0];
+        const auto& base = node.arguments()[1];
+        auto number = std::dynamic_pointer_cast<const NumberNode>(base);
+        if (!number || !number->is_positive() || number->is_one()) {
+            unsupported("FunctionNode");
+        }
+        arg->accept(*this);
+        auto d_arg = result;
+        if (d_arg->is_zero()) return;
+        auto ln_base = LMCAS::detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::Ln,
+            std::vector<std::shared_ptr<const SymbolicNode>>{base});
+        auto inverse = LMCAS::detail::make_node<PowerNode>(
+            SymbolicFactory::create_multiply({arg, ln_base}),
+            SymbolicFactory::create_number(BigInt(-1)));
+        result = SymbolicFactory::create_multiply({std::move(d_arg), inverse});
         return;
     }
     if (node.arguments().size() != 1) unsupported("FunctionNode");

@@ -106,7 +106,7 @@ SymbolicSetResult make_interval(
     if (exact_value(detail::node(lower), lower_value) &&
         exact_value(detail::node(upper), upper_value) &&
         upper_value < lower_value) {
-        return failure(CasErrc::DomainError,
+        return failure(CasErrc::InvalidArgument,
                        "interval lower endpoint exceeds upper endpoint");
     }
     try {

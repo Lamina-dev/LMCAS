@@ -11,7 +11,8 @@ namespace LMCAS {
 ExpressionResult detail::constant_expression(const char* name) {
     constexpr const char* operation = "LMCAS.constant";
     try {
-        auto expression = SymbolicExpr::variable(name);
+        auto expression = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<VariableNode>(name, true));
         if (!expression || !LMCAS::detail::node(expression)) {
             return ExpressionResult::failure(CasErrc::InternalInvariant,
                                              "constant factory returned null",

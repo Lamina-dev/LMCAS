@@ -76,8 +76,10 @@ static int check_pi_constants() {
                                : LMCAS::Result<LMCAS::ApproxReal>::failure(
                                      LMCAS::CasErrc::InternalInvariant,
                                      "pi construction failed", "consumer");
-    auto lsr_unicode_pi_value = LMCAS::evalf(
-        *SymbolicExpr::variable("\xCF\x80"));
+    auto unicode_pi = LMCAS::parse_expr("\xCF\x80");
+    auto lsr_unicode_pi_value = unicode_pi
+        ? LMCAS::evalf(*unicode_pi.value())
+        : LMCAS::Result<LMCAS::ApproxReal>::failure(unicode_pi.error());
     if (!lsr_pi_value ||
         !lsr_unicode_pi_value ||
         std::abs(lsr_pi_value.value().value - 3.14159265358979323846) > 1e-15 ||

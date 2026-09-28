@@ -303,7 +303,13 @@ TEST(ParametricSystem, BackSubstitutionRoundTripForParametric2x2Systems) {
         std::vector<std::string> unknowns = {"x", "y"};
         std::vector<std::string> parameters = {"a"};
 
-        auto solutions = ParametricSolver::solve_system(equations, unknowns, parameters);
+        auto solved = ParametricSolver::solve_polynomial_parametric_checked(
+            equations, unknowns, parameters);
+        if (!solved) {
+            EXPECT_EQ(solved.error().code, CasErrc::Inconclusive);
+            continue;
+        }
+        const auto& solutions = solved.value();
 
         if (solutions.empty()) {
             continue;
@@ -403,12 +409,36 @@ TEST(ParametricSystem, CheckedParametricPolynomialContract) {
     auto generic_branch = ParametricSolver::solve_polynomial_parametric_checked(
         {zero_product.value()}, {"x"}, {"a"});
     EXPECT_TRUE((!generic_branch && generic_branch.error().code == CasErrc::Inconclusive)) << "univariate branching preserves a possibly-zero leading factor";
+    try {
+        (void)ParametricSolver::solve_system({zero_product.value()}, {"x"}, {"a"});
+        FAIL() << "unresolved parameter pivot must not yield a finite point";
+    } catch (const CasError& error) {
+        EXPECT_EQ(error.code, CasErrc::Inconclusive);
+    }
+    try {
+        (void)ParametricSolver::solve_system_piecewise(
+            {zero_product.value()}, {"x"}, {"a"});
+        FAIL() << "unresolved parameter pivot must not yield a piecewise result";
+    } catch (const CasError& error) {
+        EXPECT_EQ(error.code, CasErrc::Inconclusive);
+    }
+    auto parameter_only = ParametricSolver::solve_polynomial_parametric_checked(
+        {SymbolicExpr::variable("a")}, {"x"}, {"a"});
+    ASSERT_FALSE(parameter_only);
+    EXPECT_EQ(parameter_only.error().code, CasErrc::Inconclusive);
+    auto quadratic = parse_expr("a*x^2+x");
+    ASSERT_TRUE(quadratic);
+    auto quadratic_result = ParametricSolver::solve_polynomial_parametric_checked(
+        {quadratic.value()}, {"x"}, {"a"});
+    ASSERT_FALSE(quadratic_result);
+    EXPECT_EQ(quadratic_result.error().code, CasErrc::Inconclusive);
     auto inconsistent = ParametricSolver::solve_polynomial_parametric_checked(
         {SymbolicExpr::power(x, SymbolicExpr::number(2)),
          SymbolicExpr::add(x, SymbolicExpr::number(-1))},
         {"x"}, {});
     EXPECT_TRUE((inconsistent && inconsistent.value().empty())) << "a proved empty polynomial branch cannot become a free unknown";
 }
+
 
 TEST(ParametricSystem, ParameterOnlyConstantTermIsPreservedExactly) {
     auto equation = parse_expr("2*x+a^2+sin(a)");
@@ -430,4 +460,11 @@ TEST(ParametricSystem, ParameterOnlyConstantTermIsPreservedExactly) {
     EXPECT_TRUE(residual->is_zero() ||
                 test_proved_equivalent(
                     residual, SymbolicExpr::number(0)));
+    auto piecewise = ParametricSolver::solve_system_piecewise(
+        {equation.value()}, {"x"}, {"a"});
+    ASSERT_EQ(piecewise.cases.size(), 1U);
+    EXPECT_TRUE(piecewise.cases.front().condition->compare(SymbolicExpr::number(1)) == 0);
+    ASSERT_EQ(piecewise.cases.front().solutions.size(), 1U);
+    EXPECT_TRUE(test_proved_equivalent(piecewise.cases.front().solutions.front().at("x"),
+                                      expected.value()));
 }

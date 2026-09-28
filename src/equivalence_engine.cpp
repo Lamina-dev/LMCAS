@@ -52,6 +52,9 @@ namespace {
 Result<bool> equivalent_with_budget(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
                                     ComputationContext& context, const EqvOptions& options,
                                     detail::RewriteBudget* budget);
+Result<bool> prove_operands(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+                            ComputationContext& context,
+                            const EqvOptions& options, detail::RewriteBudget& budget);
 
 Result<std::pair<ExprPtr, ExprPtr>> prepare_operands(
     const SymbolicExpr& lhs, const SymbolicExpr& rhs,
@@ -78,7 +81,7 @@ Result<bool> apply_profile(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
                            const EqvOptions& options, detail::RewriteBudget& budget) {
     if (options.profile != EqvProfile::TrigBasic &&
         options.profile != EqvProfile::ExpLogBasic) {
-        return Result<bool>::success(false);
+        return prove_operands(lhs, rhs, context, options, budget);
     }
     const bool trig = options.profile == EqvProfile::TrigBasic;
     budget.consume();
@@ -130,7 +133,9 @@ Result<bool> prove_operands(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
         difference, context, options, budget);
     if (!polynomial) { return Result<bool>::failure(polynomial.error()); }
     if (polynomial.value()) { return Result<bool>::success(*polynomial.value()); }
-    return Result<bool>::success(false);
+    return Result<bool>::failure(CasErrc::Inconclusive,
+                                 "equivalence proof is inconclusive",
+                                 kEquivalentOperation);
 }
 
 Result<bool> equivalent_with_budget(const SymbolicExpr& lhs, const SymbolicExpr& rhs,

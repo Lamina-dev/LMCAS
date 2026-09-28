@@ -240,7 +240,7 @@ std::shared_ptr<const NumberNode> multiply_numbers(const std::shared_ptr<const N
 }
 bool get_pi_coeff(const std::shared_ptr<const SymbolicNode>& node, Rational& k) {
     if (const auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (variable->name() == "pi") {
+        if (variable->is_constant() && (variable->name() == "pi" || variable->name() == "π")) {
             k = Rational(1);
             return true;
         }
@@ -253,7 +253,8 @@ bool get_pi_coeff(const std::shared_ptr<const SymbolicNode>& node, Rational& k) 
     k = Rational(1);
     for (const auto& operand : multiply->operands()) {
         if (const auto variable = std::dynamic_pointer_cast<const VariableNode>(operand)) {
-            if (variable->name() != "pi" || has_pi) {
+            if (!variable->is_constant() ||
+                (variable->name() != "pi" && variable->name() != "π") || has_pi) {
                 return false;
             }
             has_pi = true;

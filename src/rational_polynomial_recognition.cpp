@@ -148,7 +148,7 @@ Result<OptionalRationalPolynomial> recognize_node(
         return recognize_number(*number, variable);
     }
     if (auto symbol = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (symbol->name() != variable) {
+        if (symbol->is_constant() || symbol->name() != variable) {
             return Result<OptionalRationalPolynomial>::success(std::nullopt);
         }
         return Result<OptionalRationalPolynomial>::success(

@@ -2,6 +2,8 @@
 #include "symbolic_ode_engine.hpp"
 #include "poly_utils.hpp"
 #include "numeric_evaluation.hpp"
+#include <algorithm>
+#include <cmath>
 #include <limits>
 
 using namespace LMCAS;
@@ -79,6 +81,98 @@ TEST(OdeEngineHigherOrder, RepeatedRoot) {
     EXPECT_EQ(
         repeated.value().constants,
         (std::vector<std::string>{"C1", "C2", "C3", "C4", "C5"}));
+}
+
+TEST(OdeEngineHigherOrder, NearIntegerRoot) {
+    const double root = 1.0 + 1.0e-11;
+    auto result = solve_higher_order_ode_checked(
+        {1.0, -root}, nullptr, "x", "y");
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(result.value().general_solution);
+    auto basis = result.value().general_solution->substitute(
+        "C1", SymbolicExpr::number(1));
+    auto value = evaluate_numeric(*basis, {{"x", 0.0}});
+    auto derivative = evaluate_numeric(
+        *basis->differentiate("x"), {{"x", 0.0}});
+    ASSERT_TRUE(value.has_value());
+    ASSERT_TRUE(derivative.has_value());
+    EXPECT_DOUBLE_EQ(value.value().value, 1.0);
+    EXPECT_EQ(derivative.value().value, root);
+    EXPECT_NEAR(
+        derivative.value().value - root * value.value().value,
+        0.0, 1.0e-14);
+}
+
+TEST(OdeEngineHigherOrder, CloseDistinctQuadraticRoots) {
+    const double delta = std::ldexp(1.0, -24);
+    const double constant = 1.0 - std::ldexp(1.0, -48);
+    auto result = solve_higher_order_ode_checked(
+        {1.0, -2.0, constant}, nullptr, "x", "y");
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(result.value().general_solution);
+    ASSERT_EQ(result.value().constants.size(), 2u);
+
+    std::vector<double> exponents;
+    for (const auto& selected : result.value().constants) {
+        auto basis = result.value().general_solution;
+        for (const auto& name : result.value().constants) {
+            basis = basis->substitute(
+                name, SymbolicExpr::number(name == selected ? 1 : 0));
+        }
+        auto value = evaluate_numeric(*basis, {{"x", 0.0}});
+        auto first = evaluate_numeric(
+            *basis->differentiate("x"), {{"x", 0.0}});
+        auto second = evaluate_numeric(
+            *basis->differentiate("x")->differentiate("x"),
+            {{"x", 0.0}});
+        ASSERT_TRUE(value.has_value());
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(second.has_value());
+        EXPECT_DOUBLE_EQ(value.value().value, 1.0);
+        EXPECT_NEAR(
+            second.value().value - 2.0 * first.value().value +
+                constant * value.value().value,
+            0.0, 1.0e-14);
+        exponents.push_back(first.value().value);
+    }
+    std::sort(exponents.begin(), exponents.end());
+    EXPECT_EQ(exponents[0], 1.0 - delta);
+    EXPECT_EQ(exponents[1], 1.0 + delta);
+}
+
+TEST(OdeEngineHigherOrder, ExactRepeatedQuadraticRoot) {
+    auto result = solve_higher_order_ode_checked(
+        {1.0, -2.0, 1.0}, nullptr, "x", "y");
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(result.value().general_solution);
+    ASSERT_EQ(result.value().constants.size(), 2u);
+
+    std::vector<double> values;
+    for (const auto& selected : result.value().constants) {
+        auto basis = result.value().general_solution;
+        for (const auto& name : result.value().constants) {
+            basis = basis->substitute(
+                name, SymbolicExpr::number(name == selected ? 1 : 0));
+        }
+        auto value = evaluate_numeric(*basis, {{"x", 0.0}});
+        auto first = evaluate_numeric(
+            *basis->differentiate("x"), {{"x", 0.0}});
+        auto second = evaluate_numeric(
+            *basis->differentiate("x")->differentiate("x"),
+            {{"x", 0.0}});
+        ASSERT_TRUE(value.has_value());
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(second.has_value());
+        EXPECT_DOUBLE_EQ(first.value().value, 1.0);
+        EXPECT_NEAR(
+            second.value().value - 2.0 * first.value().value +
+                value.value().value,
+            0.0, 1.0e-14);
+        values.push_back(value.value().value);
+    }
+    std::sort(values.begin(), values.end());
+    EXPECT_DOUBLE_EQ(values[0], 0.0);
+    EXPECT_DOUBLE_EQ(values[1], 1.0);
 }
 
 TEST(OdeEngineHigherOrder, EulerHomogeneous) {

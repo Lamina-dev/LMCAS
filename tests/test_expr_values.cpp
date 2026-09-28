@@ -59,13 +59,14 @@ TEST(ExprValues, GoldenRatioConstant) {
     EXPECT_NEAR(value.value().value, expected, 1e-15);
 }
 
-TEST(ExprValues, UnicodePiAlias) {
-    auto value = LMCAS::evalf(*SymbolicExpr::variable("\xCF\x80"));
-    ASSERT_TRUE(value.has_value());
-    EXPECT_TRUE(value.value().is_finite()) << "unicode pi compatibility alias explicitly evaluates through evalf";
-    EXPECT_TRUE(std::isfinite(value.value().value));
-    EXPECT_TRUE(std::isfinite(LMMC_CONST_PI));
-    EXPECT_NEAR(value.value().value, LMMC_CONST_PI, 1e-15);
+TEST(ExprValues, UnicodePiVariableIsNotConstant) {
+    auto symbol = SymbolicExpr::variable("\xCF\x80");
+    auto value = LMCAS::evalf(*symbol);
+    ASSERT_FALSE(value);
+    EXPECT_EQ(value.error().code, CasErrc::UnboundSymbol);
+    auto constant = LMCAS::pi();
+    ASSERT_TRUE(constant);
+    EXPECT_FALSE(LMCAS::structurally_equal(*symbol, *constant.value()));
 }
 
 TEST(ExprValues, ApproximateRealValues) {

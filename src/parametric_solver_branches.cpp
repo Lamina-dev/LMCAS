@@ -91,6 +91,7 @@ std::shared_ptr<SymbolicExpr> substitute_assignment(
 class ParametricBranchSolver {
     const ParametricBasis& basis_;
     const std::vector<std::string>& unknowns_;
+    const std::vector<std::string>& parameters_;
     ComputationContext& context_;
 
     Result<bool> reduce_basis(int position, const ParametricAssignment& partial,
@@ -123,6 +124,7 @@ class ParametricBranchSolver {
                                                        int position) const {
         const auto& variable = unknowns_[position];
         std::shared_ptr<SymbolicExpr> target;
+        ExprPtr leading;
         int best_degree = std::numeric_limits<int>::max();
         bool appears = false;
         for (const auto& expression : reduced) {
@@ -144,11 +146,23 @@ class ParametricBranchSolver {
             if (degree >= 1 && degree < best_degree) {
                 best_degree = degree;
                 target = expression;
+                leading = polynomial.value().coeffs.back().val;
             }
         }
         if (!target && appears) {
             return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::Inconclusive,
                 "No convertible polynomial target for remaining variable", "solve.parametric");
+        }
+        if (target) {
+            for (const auto& parameter : parameters_) {
+                if (!contains(*leading, parameter)) continue;
+                auto zero = parameter_constraint(leading, context_);
+                if (!zero) return Result<std::shared_ptr<SymbolicExpr>>::failure(zero.error());
+                if (zero.value() != Tribool::False)
+                    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::Inconclusive,
+                        "leading parameter coefficient is not proved nonzero", "solve.parametric");
+                break;
+            }
         }
         return target;
     }
@@ -164,8 +178,9 @@ class ParametricBranchSolver {
 public:
     ParametricBranchSolver(const ParametricBasis& basis,
                            const std::vector<std::string>& unknowns,
+                           const std::vector<std::string>& parameters,
                            ComputationContext& context)
-        : basis_(basis), unknowns_(unknowns), context_(context) {}
+        : basis_(basis), unknowns_(unknowns), parameters_(parameters), context_(context) {}
 
     ParametricSolutionsResult solve(int position, const ParametricAssignment& partial) const {
         ParametricBasis reduced;
@@ -212,6 +227,7 @@ public:
 ParametricSolutionsResult ParametricSolver::solve_polynomial_parametric_impl(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& unknowns,
+    const std::vector<std::string>& parameters,
     ComputationContext& context)
 {
     if (equations.empty() || unknowns.empty()) {
@@ -240,7 +256,7 @@ ParametricSolutionsResult ParametricSolver::solve_polynomial_parametric_impl(
                     "parameter-only constraint is not proved", "solve.parametric");
         }
     }
-    ParametricBranchSolver branches(basis, unknowns, context);
+    ParametricBranchSolver branches(basis, unknowns, parameters, context);
     ParametricAssignment empty;
     return branches.solve(static_cast<int>(unknowns.size()) - 1, empty);
 }

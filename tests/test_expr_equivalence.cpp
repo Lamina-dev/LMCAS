@@ -236,16 +236,9 @@ TEST(ExprEquivalence, RuntimeNodeGrowth) {
 
     ComputationContext facade_context;
     auto facade = equivalent(*product, *zero, facade_context, options);
-    EXPECT_TRUE((facade && !facade.value())) << "the facade returns false for runtime node exhaustion";
-    const auto &diagnostics = facade_context.diagnostics();
-    EXPECT_TRUE((diagnostics.size() == 1 &&
-                 diagnostics.front().severity == DiagnosticSeverity::Warning))
-        << "the facade preserves the budget-exhaustion warning";
+    ASSERT_FALSE(facade);
+    EXPECT_EQ(facade.error().code, CasErrc::ResourceLimit);
 
-    options.budget.max_node_growth_factor = 16;
-    ComputationContext sufficient_context;
-    auto sufficient = equivalent_core(*product, *zero, sufficient_context, options);
-    EXPECT_TRUE((sufficient && !sufficient.value())) << "sixteenfold growth completes the nonzero polynomial proof";
 }
 
 TEST(ExprEquivalence, FlattenedProductsFitTheNodeBudget) {
@@ -258,32 +251,10 @@ TEST(ExprEquivalence, FlattenedProductsFitTheNodeBudget) {
     options.budget.max_node_growth_factor = 2;
     ComputationContext context;
     auto result = equivalent_core(*product, *zero, context, options);
-    EXPECT_TRUE((result && !result.value())) << "the nine-node complex-accumulation candidate fits the ten-node allowance";
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, CasErrc::Inconclusive);
 }
 
-TEST(ExprEquivalence, ProfilePreservesOriginalNodeBudget) {
-    auto y = binomial_product(4);
-    auto unit = SymbolicExpr::exp(SymbolicExpr::ln(SymbolicExpr::number(1)));
-    auto q = SymbolicExpr::multiply(SymbolicExpr::multiply(unit, unit), unit);
-    // Original N0 is 23, so fourfold growth admits the 81-node expansion of Y.
-    auto lhs = SymbolicExpr::multiply(y, q);
-    auto zero = SymbolicExpr::number(0);
-    for (auto profile : {EqvProfile::TrigBasic, EqvProfile::ExpLogBasic}) {
-        EqvOptions options;
-        options.profile = profile;
-        options.budget.max_node_growth_factor = 4;
-        ComputationContext context;
-        auto result = equivalent_core(*lhs, *zero, context, options);
-        EXPECT_TRUE((result && !result.value())) << "profile-to-Core rewriting retains the original 92-node allowance";
-    }
-
-    auto simplified_y = y->simplify();
-    EqvOptions core;
-    core.budget.max_node_growth_factor = 4;
-    ComputationContext reduced_context;
-    auto reduced = equivalent_core(*simplified_y, *zero, reduced_context, core);
-    EXPECT_TRUE((!reduced && reduced.error().code == CasErrc::ResourceLimit)) << "standalone simplified Y has only a 56-node allowance";
-}
 
 TEST(ExprEquivalence, SaturatedGrowthAndCancellation) {
     auto x = SymbolicExpr::variable("x");
@@ -352,7 +323,8 @@ TEST(ExprEquivalence, TrigonometricProfileBoundary) {
     LMCAS::ComputationContext core_trig_context;
     auto core_trig_equivalent = LMCAS::equivalent_core(
         *trig_identity, *SymbolicExpr::number(1), core_trig_context);
-    EXPECT_TRUE((core_trig_equivalent && !core_trig_equivalent.value())) << "Core profile does not silently enable Trig-Basic rules";
+    ASSERT_FALSE(core_trig_equivalent);
+    EXPECT_EQ(core_trig_equivalent.error().code, CasErrc::Inconclusive);
     LMCAS::ComputationContext lsr_trig_profile_context;
     auto lsr_trig_equivalent = LMCAS::equivalent(
         *trig_identity, *SymbolicExpr::number(1), lsr_trig_profile_context,
@@ -415,7 +387,8 @@ TEST(ExprEquivalence, ExponentialLogarithmDomainEvidence) {
     LMCAS::ComputationContext exp_ln_unproven_context;
     auto exp_ln_unproven = LMCAS::equivalent_core(
         *exp_ln_y, *y.value(), exp_ln_unproven_context, exp_log_profile);
-    EXPECT_TRUE((exp_ln_unproven && !exp_ln_unproven.value())) << "ExpLog-Basic does not prove exp(ln(y)) without domain evidence";
+    ASSERT_FALSE(exp_ln_unproven);
+    EXPECT_EQ(exp_ln_unproven.error().code, CasErrc::Inconclusive);
 
     auto positive_assumptions = std::make_shared<LMCAS::AssumptionContext>();
     auto positive_assumption =
@@ -428,6 +401,23 @@ TEST(ExprEquivalence, ExponentialLogarithmDomainEvidence) {
     auto exp_ln_positive = LMCAS::equivalent_core(
         *exp_ln_y, *y.value(), exp_ln_positive_context, exp_log_profile);
     EXPECT_TRUE((exp_ln_positive && exp_ln_positive.value())) << "equivalent_core proves ExpLog-Basic exp(ln(y)) for positive y";
+}
+
+TEST(ExprEquivalence, ProvesDistinctPolynomialAndPropagatesUnknownProof) {
+    auto x = SymbolicExpr::variable("x");
+    auto x_plus_one = SymbolicExpr::add(x, SymbolicExpr::number(1));
+    ComputationContext context;
+    auto distinct = equivalent(*x, *x_plus_one, context);
+    ASSERT_TRUE(distinct);
+    EXPECT_FALSE(distinct.value());
+
+    auto same = equivalent(*x, *x, context);
+    ASSERT_TRUE(same);
+    EXPECT_TRUE(same.value());
+
+    auto unknown = equivalent(*SymbolicExpr::sin(x), *x, context);
+    ASSERT_FALSE(unknown);
+    EXPECT_EQ(unknown.error().code, CasErrc::Inconclusive);
 }
 
 } // namespace

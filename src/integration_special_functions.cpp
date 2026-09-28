@@ -7,7 +7,8 @@ namespace {
 
 // Build sqrt(pi).
 inline std::shared_ptr<SymbolicExpr> sf_sqrt_pi() {
-    return SymbolicExpr::sqrt(SymbolicExpr::variable("pi"));
+    return SymbolicExpr::sqrt(LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<VariableNode>("pi", true)));
 }
 
 // Test whether `node` is a single-argument FunctionNode of the given type
@@ -19,7 +20,7 @@ bool sf_is_fn_of_var(const std::shared_ptr<const SymbolicNode>& node,
     if (!fn || fn->type() != t) { return false; }
     if (fn->arguments().size() != 1) { return false; }
     auto v = std::dynamic_pointer_cast<const VariableNode>(fn->arguments()[0]);
-    return v && v->name() == var;
+    return v && !v->is_constant() && v->name() == var;
 }
 
 // Detect a 1/x factor: a PowerNode whose base is the integration variable and
@@ -29,7 +30,7 @@ bool sf_is_inv_var(const std::shared_ptr<const SymbolicNode>& node,
     auto pw = std::dynamic_pointer_cast<const PowerNode>(node);
     if (!pw) { return false; }
     auto b = std::dynamic_pointer_cast<const VariableNode>(pw->base());
-    if (!b || b->name() != var) { return false; }
+    if (!b || b->is_constant() || b->name() != var) { return false; }
     auto en = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
     if (!en) { return false; }
     if (std::holds_alternative<BigInt>(en->value())) {

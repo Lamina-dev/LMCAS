@@ -214,7 +214,7 @@ static BigInt degree_in_var(const std::shared_ptr<const SymbolicNode>& node, con
     }
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        return (v->name() == var) ? 1 : 0;
+        return (!v->is_constant() && v->name() == var) ? 1 : 0;
     }
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {

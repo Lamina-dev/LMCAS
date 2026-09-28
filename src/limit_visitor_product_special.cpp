@@ -4,7 +4,7 @@ namespace LMCAS {
 
 bool LimitVisitor::is_limit_variable(const std::shared_ptr<const SymbolicNode>& node) const {
     auto variable = std::dynamic_pointer_cast<const VariableNode>(node);
-    return variable && variable->name() == var;
+    return variable && !variable->is_constant() && variable->name() == var;
 }
 
 bool LimitVisitor::is_positive_variable_power(const std::shared_ptr<const SymbolicNode>& node) const {

@@ -191,7 +191,7 @@ bool LimitVisitor::infinite_function_limit(FunctionNode::FuncType type, bool neg
             result = LMCAS::detail::make_node<NumberNode>(Rational(negative ? -1 : 1, 2));
             result = LMCAS::detail::make_node<MultiplyNode>(
                 std::vector<std::shared_ptr<const SymbolicNode>>{
-                    result, LMCAS::detail::make_node<VariableNode>("pi")});
+                    result, LMCAS::detail::make_node<VariableNode>("pi", true)});
             return true;
         default:
             return false;

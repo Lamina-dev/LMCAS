@@ -301,11 +301,6 @@ Result<bool> domain_contains_node(
     if (domain == NumberDomain::Expressions) {
         return Result<bool>::success(true);
     }
-    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (detail::is_imaginary_unit_name(variable->name())) {
-            return Result<bool>::success(domain == NumberDomain::Complexes);
-        }
-    }
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
         return domain_contains_number(domain, *number);
     }

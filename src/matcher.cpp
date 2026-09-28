@@ -55,7 +55,7 @@ static bool is_wildcard(const std::shared_ptr<const SymbolicNode>& node,
     if (!node) return false;
 
     auto var = std::dynamic_pointer_cast<const VariableNode>(node);
-    if (var) {
+    if (var && !var->is_constant()) {
         if (wildcards.count(var->name())) {
             name_out = var->name();
             return true;

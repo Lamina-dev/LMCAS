@@ -155,7 +155,7 @@ TEST(ExprSetsDomains, ComplexDomainMembership) {
         domain_r, SymbolicExpr::variable("i"));
     auto c_contains_legacy_i = LMCAS::domain_contains(
         domain_c, SymbolicExpr::variable("i"));
-    auto c_contains_legacy_upper_i = LMCAS::domain_contains(
+    auto c_contains_upper_i = LMCAS::domain_contains(
         domain_c, SymbolicExpr::variable("I"));
     EXPECT_TRUE((r_contains_i && !r_contains_i.value())) << "R rejects explicit non-real complex values";
     EXPECT_TRUE((c_contains_i && c_contains_i.value())) << "C contains explicit complex values";
@@ -166,9 +166,10 @@ TEST(ExprSetsDomains, ComplexDomainMembership) {
     EXPECT_TRUE((!c_contains_legacy_i &&
                  c_contains_legacy_i.error().code ==
                      LMCAS::CasErrc::Inconclusive &&
-                 c_contains_legacy_upper_i &&
-                 c_contains_legacy_upper_i.value()))
-        << "ordinary i is undecidable while reserved I belongs to C";
+                 !c_contains_upper_i &&
+                 c_contains_upper_i.error().code ==
+                     LMCAS::CasErrc::Inconclusive))
+        << "ordinary i and I have undecidable complex membership without assumptions";
 }
 
 TEST(ExprSetsDomains, SymbolicArithmeticMembership) {

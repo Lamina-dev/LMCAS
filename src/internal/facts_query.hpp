@@ -49,7 +49,8 @@ private:
     const std::string bound_name_;
 };
 Result<Tribool> query_definedness(
-    const std::shared_ptr<const SymbolicNode>& node, const FactsQuery& facts, Domain domain, ComputationContext& context);
+    const std::shared_ptr<const SymbolicNode>& node, const FactsQuery& facts, Domain domain,
+    ComputationContext& context, bool* violated_real_restriction = nullptr);
 Result<Tribool> query_nonzero_value(
     const std::shared_ptr<const SymbolicNode>& node, const FactsQuery& facts, Domain domain, ComputationContext& context);
 Result<Tribool> query_real_value(

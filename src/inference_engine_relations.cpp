@@ -9,7 +9,9 @@ bool InferenceEngine::Impl::operand_sign(const std::shared_ptr<const SymbolicNod
     auto step = context.consume_steps(0, "inference.relations");
     if (!step) throw step.error();
     if (auto var = std::dynamic_pointer_cast<const VariableNode>(operand)) {
-        return ctx.has_sign(var->name(), target);
+        return var->is_constant()
+            ? (target == Sign::Positive || target == Sign::NonNegative)
+            : ctx.has_sign(var->name(), target);
     }
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(operand)) {
         if (target == Sign::Positive) {
@@ -132,7 +134,8 @@ Result<bool> InferenceEngine::Impl::relation_rhs_nonnegative(const Relation& rel
     }
 
     if (auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.rhs))) {
-        if (ctx.has_sign(rhs_var->name(), Sign::NonNegative)) {
+        if (rhs_var->is_constant() ||
+            ctx.has_sign(rhs_var->name(), Sign::NonNegative)) {
             return true;
         }
     }

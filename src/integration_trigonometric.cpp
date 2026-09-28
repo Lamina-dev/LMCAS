@@ -32,7 +32,7 @@ int trig_match_of_var(const std::shared_ptr<const SymbolicNode>& node, const std
     if (!fn) { return -1; }
     if (fn->arguments().size() != 1) { return -1; }
     auto v = std::dynamic_pointer_cast<const VariableNode>(fn->arguments()[0]);
-    if (!v || v->name() != var) { return -1; }
+    if (!v || v->is_constant() || v->name() != var) { return -1; }
     using FT = FunctionNode::FuncType;
     switch (fn->type()) {
         case FT::Sin: return 0;

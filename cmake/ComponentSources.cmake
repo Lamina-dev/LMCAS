@@ -40,6 +40,7 @@ set(LMCAS_CORE_SOURCES
     src/quantity.cpp
     src/symbolic_set.cpp
     src/symbolic_core.cpp
+    src/expr_serialization.cpp
     src/normalization_arithmetic.cpp
     src/normalization_functions.cpp
     src/normalization_structural.cpp

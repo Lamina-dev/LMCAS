@@ -16,13 +16,13 @@ static bool te_is_power_of_var(const std::shared_ptr<SymbolicExpr>& e, const std
         return false;
     }
     auto vn = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(e));
-    if (vn && vn->name() == v) { n = BigInt(1); return true; }
+    if (vn && !vn->is_constant() && vn->name() == v) { n = BigInt(1); return true; }
     auto pw = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(e));
     if (!pw) {
         return false;
     }
     auto bv = std::dynamic_pointer_cast<const VariableNode>(pw->base());
-    if (!bv || bv->name() != v) {
+    if (!bv || bv->is_constant() || bv->name() != v) {
         return false;
     }
     return try_get_integer_value(std::dynamic_pointer_cast<const NumberNode>(pw->exponent()), n) &&

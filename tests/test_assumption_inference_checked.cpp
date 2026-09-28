@@ -458,6 +458,20 @@ TEST(LmcasDomainPreservingSimplify, RawArithmeticExponentDomains) {
     EXPECT_TRUE((!exhausted && exhausted.error().code == CasErrc::ResourceLimit)) << "closed exponent arithmetic respects the caller's integer budget";
 }
 
+TEST(LmcasDomainPreservingSimplify, NestedInvalidRealFunctionProjectsToEmptyDomain) {
+    AssumptionContext assumptions;
+    detail::AssumptionFacts facts(assumptions);
+    ComputationContext context;
+    auto invalid = make_function(FunctionNode::FuncType::Exp,
+        make_function(FunctionNode::FuncType::Ln, test_integer_node(-1)));
+    auto projected = detail::domain_constraints(invalid, facts, Domain::Real, context);
+    ASSERT_TRUE(projected);
+    ASSERT_TRUE(projected.value());
+    ASSERT_EQ(projected.value()->size(), 1u);
+    EXPECT_EQ(assumptions.evaluate_condition(*projected.value()->front()),
+              Tribool::False);
+}
+
 TEST(LmcasDomainPreservingSimplify, SymbolicZeroExponentDomains) {
     AssumptionContext assumptions;
     ASSERT_TRUE(assumptions.assume_sign_checked("z", Sign::Zero));

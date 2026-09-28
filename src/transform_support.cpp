@@ -111,7 +111,7 @@ te_split_coeff(const std::shared_ptr<SymbolicExpr>& e, const std::string& v) {
 std::shared_ptr<SymbolicExpr> te_linear_coefficient(
     const std::shared_ptr<const SymbolicNode>& argument, const std::string& variable) {
     auto symbol = std::dynamic_pointer_cast<const VariableNode>(argument);
-    if (symbol && symbol->name() == variable) {
+    if (symbol && !symbol->is_constant() && symbol->name() == variable) {
         return detail::make_expression_ptr(SymbolicFactory::create_number(BigInt(1)));
     }
     auto product = std::dynamic_pointer_cast<const MultiplyNode>(argument);
@@ -121,7 +121,7 @@ std::shared_ptr<SymbolicExpr> te_linear_coefficient(
     for (std::size_t i = 0; i < 2; ++i) {
         symbol = std::dynamic_pointer_cast<const VariableNode>(product->operands()[i]);
         const auto& other = product->operands()[1 - i];
-        if (symbol && symbol->name() == variable &&
+        if (symbol && !symbol->is_constant() && symbol->name() == variable &&
             !expression_depends_on_variable(other, variable)) {
             return detail::make_expression_ptr(other);
         }
@@ -139,7 +139,7 @@ bool te_is_variable_square(
     if (!power) return false;
     const auto base =
         std::dynamic_pointer_cast<const VariableNode>(power->base());
-    return base && base->name() == variable &&
+    return base && !base->is_constant() && base->name() == variable &&
         exact_small_integer_node(power->exponent(), 2, 2).has_value();
 }
 

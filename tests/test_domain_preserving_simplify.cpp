@@ -64,8 +64,10 @@ static void expect_total_function_domains(const Node &x, const Node &minus_one, 
     expect_node_domain(raw_domain_function(FunctionNode::FuncType::ArcTan, minus_one), Domain::Complex, Tribool::True,
                        "a certified real arctangent argument avoids complex poles");
     ComputationContext context;
+    auto imaginary = LMCAS::imaginary_unit();
+    ASSERT_TRUE(imaginary);
     const auto complex_pole = detail::query_definedness(
-        raw_domain_function(FunctionNode::FuncType::ArcTan, detail::make_node<VariableNode>("I")),
+        raw_domain_function(FunctionNode::FuncType::ArcTan, detail::node(imaginary.value())),
         detail::no_facts(), Domain::Complex, context);
     EXPECT_TRUE((complex_pole && complex_pole.value() != Tribool::True)) << "real totality must not certify the complex arctangent pole";
     expect_node_domain(raw_domain_function(FunctionNode::FuncType::Sgn, x), Domain::Real, Tribool::True,
@@ -200,8 +202,12 @@ TEST(LmcasDomainPreservingSimplify, SharedDomainQueries) {
     expect_node_domain(x, Domain::Real, Tribool::True, "finite placeholders need no bindings");
     expect_node_domain(detail::make_node<VariableNode>("i"), Domain::Real, Tribool::True,
                        "lowercase i remains an ordinary finite variable");
-    expect_node_domain(detail::make_node<VariableNode>("I"), Domain::Real, Tribool::False,
-                       "only the existing uppercase imaginary-unit name is nonreal");
+    expect_node_domain(detail::make_node<VariableNode>("I"), Domain::Real, Tribool::True,
+                       "uppercase I remains an ordinary finite variable");
+    auto imaginary_unit_value = LMCAS::imaginary_unit();
+    ASSERT_TRUE(imaginary_unit_value);
+    expect_node_domain(detail::node(imaginary_unit_value.value()), Domain::Real, Tribool::False,
+                       "the explicit imaginary unit is nonreal");
     expect_node_domain(raw_domain_power(zero, zero), Domain::Real, Tribool::False, "real zero to zero is undefined");
     expect_node_domain(raw_domain_power(zero, zero), Domain::Complex, Tribool::True, "complex integer zero power retains its convention");
     expect_total_function_domains(x, minus_one, zero);

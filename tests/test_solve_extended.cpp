@@ -106,6 +106,66 @@ TEST(SolveExtended, SolveRationalSystemDenominatorFilter) {
     EXPECT_TRUE(test_same_expression(x_val, SymbolicExpr::number(2))) << "rational system x=2";
 }
 
+TEST(SolveExtended, PositiveDimensionalSystemIsInconclusive) {
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto product = SymbolicExpr::multiply(x, y);
+    auto result = Solver::solve_polynomial_system_checked({*product}, {"x", "y"});
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, CasErrc::Inconclusive);
+
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext limited(limits);
+    auto exhausted = Solver::solve_polynomial_system_checked(
+        {*product}, {"x", "y"}, limited);
+    ASSERT_FALSE(exhausted.has_value());
+    EXPECT_EQ(exhausted.error().code, CasErrc::ResourceLimit);
+
+    CancellationToken token;
+    token.cancel();
+    ComputationContext cancelled({}, token);
+    auto stopped = Solver::solve_polynomial_system_checked(
+        {*product}, {"x", "y"}, cancelled);
+    ASSERT_FALSE(stopped.has_value());
+    EXPECT_EQ(stopped.error().code, CasErrc::Cancelled);
+}
+
+TEST(SolveExtended, ZeroDimensionalSystemHasTwoPoints) {
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto square = SymbolicExpr::add(SymbolicExpr::power(x, SymbolicExpr::number(2)),
+                                    SymbolicExpr::number(-1));
+    auto equal = SymbolicExpr::add(y, SymbolicExpr::multiply(SymbolicExpr::number(-1), x));
+    auto result = Solver::solve_polynomial_system_checked({*square, *equal}, {"x", "y"});
+    ASSERT_TRUE(result.has_value()) << (result ? "" : result.error().message);
+    ASSERT_EQ(result.value().size(), 2u);
+    for (int root : {-1, 1}) {
+        bool found = false;
+        for (const auto& point : result.value()) {
+            if (point.size() != 2) continue;
+            auto x_value = detail::make_expression_ptr(point.at("x"));
+            auto y_value = detail::make_expression_ptr(point.at("y"));
+            if (test_same_expression(x_value, SymbolicExpr::number(root)) &&
+                test_same_expression(y_value, SymbolicExpr::number(root))) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found) << "missing point (" << root << ", " << root << ")";
+    }
+}
+
+TEST(SolveExtended, PolynomialSystemExcludesDenominatorPole) {
+    auto x = SymbolicExpr::variable("x");
+    auto y = SymbolicExpr::variable("y");
+    auto pole = SymbolicExpr::add(x, SymbolicExpr::number(-1));
+    auto quotient = SymbolicExpr::divide(pole, pole);
+    auto equal = SymbolicExpr::add(y, SymbolicExpr::multiply(SymbolicExpr::number(-1), x));
+    auto result = Solver::solve_polynomial_system_checked({*quotient, *equal}, {"x", "y"});
+    ASSERT_TRUE(result.has_value()) << (result ? "" : result.error().message);
+    EXPECT_TRUE(result.value().empty());
+}
+
 TEST(SolveExtended, DispatcherUnsupportedEquationIsInconclusive) {
     auto x = SymbolicExpr::variable("x");
 

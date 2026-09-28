@@ -100,7 +100,7 @@ Result<bool> rd_collect_rational(const std::shared_ptr<const SymbolicNode>& node
         return true;
     }
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (v->name() == var) {
+        if (!v->is_constant() && v->name() == var) {
             num.push_back(Polynomial<Rational>({Rational(0), Rational(1)}, var));
             return true;
         }
