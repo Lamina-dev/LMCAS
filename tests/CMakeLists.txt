@@ -2,11 +2,11 @@ include(FetchContent)
 set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
-find_package(GTest 1.15.2 CONFIG QUIET)
+find_package(GTest 1.18.0 CONFIG QUIET)
 if(NOT TARGET GTest::gtest_main)
     FetchContent_Declare(googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.15.2
+        GIT_TAG v1.18.0
         GIT_SHALLOW TRUE
         SOURCE_SUBDIR development-only)
     FetchContent_MakeAvailable(googletest)
@@ -20,7 +20,7 @@ find_package(rapidcheck CONFIG QUIET)
 if(NOT TARGET rapidcheck)
     FetchContent_Declare(rapidcheck
         GIT_REPOSITORY https://github.com/emil-e/rapidcheck.git
-        GIT_TAG 6e8dadfdafa3a74eabb52ead87f8787f72eccd0b
+        GIT_TAG 2c3c4365aca21ef4e612768fdc95b1ce8b39a651
         GIT_SUBMODULES ""
         SOURCE_SUBDIR development-only)
     FetchContent_MakeAvailable(rapidcheck)

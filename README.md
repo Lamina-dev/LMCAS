@@ -63,9 +63,9 @@ cmake -S . -B build/macos-quality -G Ninja \
 
 | 测试范围 | 开发框架 | 自动获取版本 |
 | --- | --- | --- |
-| LMMC C11 测试 | cmocka | `cmocka-1.1.7` |
-| LMCAS C++17 测试 | GoogleTest | `v1.15.2` |
-| LMCAS 性质测试 | 官方 RapidCheck | `6e8dadfdafa3a74eabb52ead87f8787f72eccd0b` |
+| LMMC C11 测试 | cmocka | `cmocka-2.0.2` |
+| LMCAS C++17 测试 | GoogleTest | `v1.18.0` |
+| LMCAS 性质测试 | 官方 RapidCheck | `2c3c4365aca21ef4e612768fdc95b1ce8b39a651` |
 
 CMake 优先查找已安装的框架包，缺失时获取上述固定版本。离线开发可设置
 `FETCHCONTENT_SOURCE_DIR_CMOCKA`、`FETCHCONTENT_SOURCE_DIR_GOOGLETEST`、
