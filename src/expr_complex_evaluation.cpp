@@ -107,10 +107,6 @@ Result<ApproxComplex> divide_complex(const ApproxComplex& lhs,
     return checked_complex(quotient.real, quotient.imag, kEvalComplexOperation);
 }
 
-bool is_integer_double(double value) {
-    return std::isfinite(value) && std::floor(value) == value;
-}
-
 Result<ApproxComplex> evaluate_complex_node(
     const std::shared_ptr<const SymbolicNode>& node,
     const NumericBindings& bindings,
@@ -159,51 +155,28 @@ Result<ApproxComplex> evaluate_complex_operands(
     return result;
 }
 
-Result<int> evaluate_complex_exponent(
+Result<ApproxComplex> evaluate_complex_exponent(
     const std::shared_ptr<const SymbolicNode>& node,
     const NumericBindings& bindings, ComputationContext& context) {
     auto expression = simplify(detail::make_expression_ptr(node), context);
     if (!expression) {
-        return Result<int>::failure(
-            expression.error().code, std::move(expression.error().message),
-            kEvalComplexOperation);
+        return complex_failure(expression.error().code,
+                               std::move(expression.error().message),
+                               kEvalComplexOperation);
     }
-    /**
-     * @brief 精确有理指数在规范化及数值幂内核转换中保持整数域分类。
-     * @see David Goldberg, "What Every Computer Scientist Should Know About
-     * Floating-Point Arithmetic" (1991), Floating-point Formats.
-     * https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html
-     */
-    if (auto number = std::dynamic_pointer_cast<const NumberNode>(
-            detail::node(expression.value()))) {
-        if (const auto* rational = std::get_if<Rational>(&number->value());
-            rational && rational->get_denominator() != BigInt(1)) {
-            return Result<int>::failure(
-                CasErrc::UnsupportedExpression,
-                "complex evaluation requires an integer exponent",
-                kEvalComplexOperation);
-        }
+    const auto* number = dynamic_cast<const NumberNode*>(
+        detail::node(expression.value()).get());
+    const auto* rational = number ? std::get_if<Rational>(&number->value()) : nullptr;
+    auto exponent = evaluate_complex_node(detail::node(expression.value()),
+                                          bindings, context);
+    if (!exponent) return exponent;
+    if (rational && rational->get_denominator() != BigInt(1) &&
+        std::trunc(exponent.value().real.value) == exponent.value().real.value) {
+        return complex_failure(CasErrc::UnsupportedExpression,
+                               "exact fractional exponent rounds to an integer",
+                               kEvalComplexOperation);
     }
-    auto exponent = evaluate_numeric(*expression.value(), bindings, context);
-    if (!exponent) {
-        return Result<int>::failure(
-            exponent.error().code, std::move(exponent.error().message),
-            kEvalComplexOperation);
-    }
-    if (!exponent.value().is_finite() ||
-        !std::isfinite(exponent.value().value)) {
-        return Result<int>::failure(CasErrc::NumericFailure,
-                                   "complex power exponent must be finite",
-                                   kEvalComplexOperation);
-    }
-    const double value = exponent.value().value;
-    if (!is_integer_double(value) || std::abs(value) > 64.0) {
-        return Result<int>::failure(
-            CasErrc::UnsupportedExpression,
-            "complex evaluation only supports integer powers with |n| <= 64",
-            kEvalComplexOperation);
-    }
-    return Result<int>::success(static_cast<int>(value));
+    return exponent;
 }
 
 Result<ApproxComplex> evaluate_complex_power(
@@ -217,9 +190,33 @@ Result<ApproxComplex> evaluate_complex_power(
     if (!exponent) {
         return Result<ApproxComplex>::failure(std::move(exponent.error()));
     }
-    unsigned magnitude = static_cast<unsigned>(std::abs(exponent.value()));
+    if (exponent.value().imag.value != 0.0 ||
+        std::trunc(exponent.value().real.value) != exponent.value().real.value) {
+        const lmmc_complex_t value{base.value().real.value, base.value().imag.value};
+        const lmmc_complex_t power{exponent.value().real.value,
+                                   exponent.value().imag.value};
+        lmmc_complex_t result;
+        const auto status = lmmc_complex_pow(&value, &power, &result);
+        if (status == LMMC_STATUS_OUT_OF_RANGE) {
+            return complex_failure(CasErrc::DomainError, "complex power of zero",
+                                   kEvalComplexOperation);
+        }
+        if (status != LMMC_STATUS_OK) {
+            return complex_failure(CasErrc::NumericFailure,
+                                   "complex power produced a non-finite result",
+                                   kEvalComplexOperation);
+        }
+        return checked_complex(result.real, result.imag, kEvalComplexOperation);
+    }
+    if (std::abs(exponent.value().real.value) > 64.0) {
+        return complex_failure(CasErrc::UnsupportedExpression,
+                               "complex evaluation only supports integer powers with |n| <= 64",
+                               kEvalComplexOperation);
+    }
+    const int integer = static_cast<int>(exponent.value().real.value);
+    unsigned magnitude = static_cast<unsigned>(std::abs(integer));
     auto factor = base;
-    if (exponent.value() < 0) {
+    if (integer < 0) {
         factor = divide_complex(approx_complex(1.0, 0.0), base.value());
         if (!factor) {
             return factor;

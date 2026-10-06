@@ -267,14 +267,58 @@ TEST(ExprComplexEvaluation, UnboundComplexSymbols) {
         << "eval_complex exposes the LMCAS complex unbound-symbol diagnostic";
 }
 
-TEST(ExprComplexEvaluation, FractionalComplexExponents) {
+TEST(ExprComplexEvaluation, PrincipalComplexPowers) {
     auto i = LMCAS::imaginary_unit();
-    auto fractional_power = SymbolicExpr::power(i.value(), SymbolicExpr::number(0.5));
-    auto unsupported_power = LMCAS::eval_complex(*fractional_power);
-    EXPECT_TRUE((!unsupported_power &&
-                 unsupported_power.error().code ==
-                     LMCAS::CasErrc::UnsupportedExpression))
-        << "eval_complex does not silently approximate unsupported complex powers";
+    ASSERT_TRUE(i);
+    auto square_root = LMCAS::eval_complex(
+        *SymbolicExpr::power(i.value(), SymbolicExpr::number(Rational(1, 2))));
+    ASSERT_TRUE(square_root);
+    EXPECT_NEAR(square_root.value().real.value, std::sqrt(0.5), 1e-14);
+    EXPECT_NEAR(square_root.value().imag.value, std::sqrt(0.5), 1e-14);
+
+    auto negative = LMCAS::complex(SymbolicExpr::number(-4), SymbolicExpr::number(0));
+    ASSERT_TRUE(negative);
+    auto branch_cut = LMCAS::eval_complex(
+        *SymbolicExpr::power(negative.value(), SymbolicExpr::number(0.5)));
+    ASSERT_TRUE(branch_cut);
+    EXPECT_NEAR(branch_cut.value().real.value, 0.0, 1e-14);
+    EXPECT_NEAR(branch_cut.value().imag.value, 2.0, 1e-14);
+
+    auto negative_eight = LMCAS::complex(SymbolicExpr::number(-8),
+                                         SymbolicExpr::number(0));
+    ASSERT_TRUE(negative_eight);
+    auto cube_root = LMCAS::eval_complex(
+        *SymbolicExpr::power(negative_eight.value(),
+                             SymbolicExpr::number(Rational(1, 3))));
+    ASSERT_TRUE(cube_root);
+    EXPECT_NEAR(cube_root.value().real.value, 1.0, 1e-14);
+    EXPECT_NEAR(cube_root.value().imag.value, std::sqrt(3.0), 1e-14);
+
+    auto imaginary_exponent = LMCAS::eval_complex(
+        *SymbolicExpr::power(i.value(), i.value()));
+    ASSERT_TRUE(imaginary_exponent);
+    EXPECT_NEAR(imaginary_exponent.value().real.value,
+                std::exp(-std::acos(-1.0) / 2.0), 1e-14);
+    EXPECT_NEAR(imaginary_exponent.value().imag.value, 0.0, 1e-14);
+}
+
+TEST(ExprComplexEvaluation, ZeroFractionalPowers) {
+    auto zero = LMCAS::complex(SymbolicExpr::number(0), SymbolicExpr::number(0));
+    ASSERT_TRUE(zero);
+    auto root = LMCAS::eval_complex(
+        *SymbolicExpr::power(zero.value(), SymbolicExpr::number(0.5)));
+    ASSERT_TRUE(root);
+    EXPECT_DOUBLE_EQ(root.value().real.value, 0.0);
+    EXPECT_DOUBLE_EQ(root.value().imag.value, 0.0);
+    auto inverse_root = LMCAS::eval_complex(
+        *SymbolicExpr::power(zero.value(), SymbolicExpr::number(-0.5)));
+    ASSERT_FALSE(inverse_root);
+    EXPECT_EQ(inverse_root.error().code, CasErrc::DomainError);
+}
+
+TEST(ExprComplexEvaluation, ExactFractionalExponentNearInteger) {
+    auto i = LMCAS::imaginary_unit();
+    ASSERT_TRUE(i);
 
     const BigInt exact_boundary(std::string("9007199254740992"));
     auto near_integer = SymbolicExpr::number(
