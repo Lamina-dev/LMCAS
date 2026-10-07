@@ -1,10 +1,16 @@
 #pragma once
 
 #include "result.hpp"
-#include <charconv>
 #include <cmath>
 #include <string_view>
+#ifdef __APPLE__
+#include <cstdlib>
+#include <locale.h>
+#include <string>
+#else
+#include <charconv>
 #include <system_error>
+#endif
 
 namespace LMCAS::detail {
 
@@ -56,10 +62,22 @@ inline Result<double> parse_finite_decimal(std::string_view token) {
     if (!is_signed_decimal_token(token)) { return invalid(); }
     if (token.front() == '+') { token.remove_prefix(1); }
     double value = 0;
+#ifdef __APPLE__
+    // Xcode 16 uses strtod_l with a fixed C locale for decimal conversion.
+    static const locale_t c_locale = newlocale(LC_NUMERIC_MASK, "C", nullptr);
+    if (!c_locale) { return invalid(); }
+    std::string text(token);
+    char* end = nullptr;
+    value = strtod_l(text.c_str(), &end, c_locale);
+    if (end != text.c_str() + text.size() || !std::isfinite(value)) {
+        return invalid();
+    }
+#else
     const auto parsed = std::from_chars(token.data(), token.data() + token.size(),
                                         value, std::chars_format::general);
     if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size() ||
         !std::isfinite(value)) { return invalid(); }
+#endif
     if (value == 0) {
         for (char c : token) {
             if (c == 'e' || c == 'E') { break; }
