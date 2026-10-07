@@ -171,7 +171,7 @@ void NormalizationVisitor::visit(const PiecewiseNode& node) {
             node.default_expr()->accept(*this);
             new_default = result;
             if (rewrite_budget()) {
-                nodes = rewrite_budget()->append_size(nodes, rewrite_budget()->measure(new_default));
+                (void)rewrite_budget()->append_size(nodes, rewrite_budget()->measure(new_default));
             }
         }
 
