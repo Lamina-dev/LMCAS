@@ -69,15 +69,14 @@ inline Result<double> parse_finite_decimal(std::string_view token) {
     std::string text(token);
     char* end = nullptr;
     value = strtod_l(text.c_str(), &end, c_locale);
-    if (end != text.c_str() + text.size() || !std::isfinite(value)) {
-        return invalid();
-    }
+    const bool converted = end == text.c_str() + text.size();
 #else
     const auto parsed = std::from_chars(token.data(), token.data() + token.size(),
                                         value, std::chars_format::general);
-    if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size() ||
-        !std::isfinite(value)) { return invalid(); }
+    const bool converted = parsed.ec == std::errc{} &&
+                           parsed.ptr == token.data() + token.size();
 #endif
+    if (!converted || !std::isfinite(value)) { return invalid(); }
     if (value == 0) {
         for (char c : token) {
             if (c == 'e' || c == 'E') { break; }
