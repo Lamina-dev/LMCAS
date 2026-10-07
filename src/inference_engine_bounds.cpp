@@ -103,7 +103,7 @@ private:
                       power->exponent())
                 : nullptr;
             const bool inverse = exponent && exponent->is_negative_one();
-            auto next = propagate(inverse ? power->base() : operand);
+            auto next = propagate(power && inverse ? power->base() : operand);
             if (!next) { return next; }
             auto& accumulated = inverse ? denominator : numerator;
             if (!accumulated) {
