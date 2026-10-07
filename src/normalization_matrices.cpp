@@ -164,7 +164,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::normalize_matrix_produ
         }
     }
     if (!scalar->is_one()) {
-        if (rewrite_budget()) { fused_nodes = rewrite_budget()->append_size(fused_nodes, 1); }
+        if (rewrite_budget()) { (void)rewrite_budget()->append_size(fused_nodes, 1); }
         fused.insert(fused.begin(), scalar);
     }
     return make_normalized_multiply_node(fused, rewrite_budget());
