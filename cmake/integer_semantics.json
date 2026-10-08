@@ -1073,13 +1073,6 @@
       "rationale": "Null-space basis vectors contain finite-field residues obtained from reduced Gaussian elimination entries. Berlekamp entry enforces p>=2 and p<=INT64_MAX/p (automatic primes are <=229). Canonical residues are in [0,p); a residue product plus one residue is at most p*(p-1)<p^2<=INT64_MAX."
     },
     {
-      "fingerprint": "0328b7a5a499cecd3f71f49262cd94453d0b45c89513c6f2d64d5ac48b727cad",
-      "path": "src/berlekamp_modular.cpp",
-      "normalized_line": "[\"!\",\"BigInt\",\"(\",\"static_cast\",\"<\",\"std\",\":\",\":\",\"int64_t\",\">\",\"(\",\"prime\",\")\",\")\",\".\",\"is_prime\",\"(\",\")\",\")\",\"{\"]",
-      "category": "bounded-kernel",
-      "rationale": "After the earlier short-circuit checks establish 2 <= prime and prime^2 <= INT64_MAX, this exact int64 candidate is imported into BigInt solely for primality testing; no arbitrary-precision result is narrowed back into the finite-field kernel."
-    },
-    {
       "fingerprint": "9ae324ce6991e2fc95ccd69cd443e7d4ac008a55f21d0253ad530bf779782421",
       "path": "src/berlekamp_modular.cpp",
       "normalized_line": "[\"BigInt\",\"big_p\",\"(\",\"static_cast\",\"<\",\"std\",\":\",\":\",\"int64_t\",\">\",\"(\",\"p\",\")\",\")\",\";\"]",
@@ -1554,6 +1547,27 @@
       "normalized_line": "[\"static\",\"const\",\"uint64_t\",\"small_primes\",\"[\",\"]\",\"=\",\"{\",\"3\",\",\",\"5\",\",\",\"7\",\",\",\"11\",\",\",\"13\",\",\",\"17\",\",\",\"19\",\",\",\"23\",\",\",\"29\",\",\",\"31\",\",\",\"37\",\"}\",\";\"]",
       "category": "bounded-kernel",
       "rationale": "Fixed trial-divisor table contains primes 3 through 37; each word is exactly imported into BigInt for remainder arithmetic on the arbitrary-size candidate."
+    },
+    {
+      "fingerprint": "b10782703f304d4c69f6b2b8ea3b7e638dc89566d4481c8a226bdae18ac5dc28",
+      "path": "src/expr_serialization.cpp",
+      "normalized_line": "[\"static_assert\",\"(\",\"sizeof\",\"(\",\"lmmc_real_t\",\")\",\"=\",\"=\",\"sizeof\",\"(\",\"std\",\":\",\":\",\"uint64_t\",\")\",\",\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The wire encoding requires a binary64 machine value with exactly 64 representation bits; this assertion compares storage widths and does not perform symbolic integer arithmetic."
+    },
+    {
+      "fingerprint": "0e1605c6790c108997679cde0af1271c4d8bd6eef80f6905ad6edf6afcb9f7fb",
+      "path": "src/expr_serialization.cpp",
+      "normalized_line": "[\"std\",\":\",\":\",\"uint64_t\",\"bits\",\";\"]",
+      "category": "machine",
+      "rationale": "The unsigned word holds the exact IEEE-754 representation copied from a binary64 value for hexadecimal wire encoding; it is not an algebraic integer."
+    },
+    {
+      "fingerprint": "11b0c9e2b9ec63acf6afcc8d3398d56b468bbfa92397badf51064089378ae8ac",
+      "path": "src/expr_serialization_reader.cpp",
+      "normalized_line": "[\"std\",\":\",\":\",\"uint64_t\",\"bits\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "The unsigned word accumulates exactly 16 hexadecimal digits of an IEEE-754 binary64 wire representation before memcpy into a double; it is not an algebraic integer."
     },
     {
       "fingerprint": "62aaf63f9c6062dbe6d5c9a16080b244e59d5641e25bf4f2f421557630d2f2da",

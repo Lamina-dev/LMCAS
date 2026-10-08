@@ -217,6 +217,12 @@ inline double test_numeric_function(FunctionNode::FuncType type, double argument
     }
 }
 
+inline bool test_numeric_algebra_unsupported(FunctionNode::FuncType type) {
+    using Type = FunctionNode::FuncType;
+    return type == Type::Sinh || type == Type::Cosh || type == Type::Tanh ||
+           type == Type::Sec || type == Type::Csc || type == Type::Cot;
+}
+
 inline std::optional<double> test_numeric_function_node(
     const FunctionNode &function, TestNumericMode mode) {
     if (function.arguments().size() != 1) {
@@ -228,18 +234,9 @@ inline std::optional<double> test_numeric_function_node(
     if (!argument) {
         return std::nullopt;
     }
-    if (mode == TestNumericMode::Algebra) {
-        switch (function.type()) {
-        case FunctionNode::FuncType::Sinh:
-        case FunctionNode::FuncType::Cosh:
-        case FunctionNode::FuncType::Tanh:
-        case FunctionNode::FuncType::Sec:
-        case FunctionNode::FuncType::Csc:
-        case FunctionNode::FuncType::Cot:
-            return std::nan("");
-        default:
-            break;
-        }
+    if (mode == TestNumericMode::Algebra &&
+        test_numeric_algebra_unsupported(function.type())) {
+        return std::nan("");
     }
     const double value = test_numeric_function(function.type(), *argument);
     if (mode == TestNumericMode::Finite && !std::isfinite(value)) {

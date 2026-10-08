@@ -59,21 +59,32 @@ bool ParametricSolver::is_linear_in_unknowns(
 using ParametricMatrix = std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>;
 using ParametricVector = std::vector<std::shared_ptr<SymbolicExpr>>;
 
-static bool parametric_zero(const std::shared_ptr<SymbolicExpr>& expression,
-                            ComputationContext& context) {
-    if (expression->is_zero()) return true;
-    std::optional<detail::AssumptionFacts> assumptions;
-    if (context.assumptions()) assumptions.emplace(*context.assumptions());
-    const FactsQuery& facts = assumptions ? static_cast<const FactsQuery&>(*assumptions) : detail::no_facts();
-    auto nonzero = detail::query_nonzero_value(detail::node(expression), facts, Domain::Complex, context);
-    if (!nonzero) throw nonzero.error();
-    if (nonzero.value() == Tribool::True) return false;
-    if (nonzero.value() == Tribool::False) return true;
+static bool parametric_residual_zero(const std::shared_ptr<SymbolicExpr>& expression,
+                                     ComputationContext& context) {
     auto residual = check_zero_residual(expression, context);
     if (!residual) throw residual.error();
     if (std::holds_alternative<ProvedZeroResidual>(residual.value())) return true;
     throw CasError{CasErrc::Inconclusive,
         "parameter coefficient or constraint is undecided", "solve.parametric"};
+}
+
+static Tribool parametric_nonzero_value(const std::shared_ptr<SymbolicExpr>& expression,
+                                        ComputationContext& context) {
+    std::optional<detail::AssumptionFacts> assumptions;
+    if (context.assumptions()) assumptions.emplace(*context.assumptions());
+    const FactsQuery& facts = assumptions ? static_cast<const FactsQuery&>(*assumptions) : detail::no_facts();
+    auto nonzero = detail::query_nonzero_value(detail::node(expression), facts, Domain::Complex, context);
+    if (!nonzero) throw nonzero.error();
+    return nonzero.value();
+}
+
+static bool parametric_zero(const std::shared_ptr<SymbolicExpr>& expression,
+                            ComputationContext& context) {
+    if (expression->is_zero()) return true;
+    const auto nonzero = parametric_nonzero_value(expression, context);
+    if (nonzero == Tribool::True) return false;
+    if (nonzero == Tribool::False) return true;
+    return parametric_residual_zero(expression, context);
 }
 
 static size_t find_parametric_pivot(ParametricMatrix& matrix, size_t row, size_t column,

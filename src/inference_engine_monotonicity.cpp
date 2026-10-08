@@ -186,6 +186,10 @@ static std::shared_ptr<const SymbolicNode> detect_negation(
     return nullptr;
 }
 
+static bool is_variable_operand(const std::shared_ptr<const VariableNode>& node) {
+    return node && !node->is_constant();
+}
+
 Monotonicity InferenceEngine::infer_monotonicity(const SymbolicExpr& expr,
                                                   const std::string& var,
                                                   const Interval& interval) const {
@@ -246,8 +250,7 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
     // Extract LHS and RHS — both must be single VariableNodes
     auto lhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.lhs));
     auto rhs_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(rel.rhs));
-    if (!lhs_var || lhs_var->is_constant() ||
-        !rhs_var || rhs_var->is_constant()) {
+    if (!is_variable_operand(lhs_var) || !is_variable_operand(rhs_var)) {
         return Result<void>::success();
     }
 
@@ -264,20 +267,12 @@ Result<void> InferenceEngine::apply_monotonicity_rules_checked(
                             impl_->ctx.has_sign(y_name, Sign::NonNegative);
 
     if (both_positive) {
-        auto deduced = impl_->deduce_function_relation(
-            *this, *lhs_var, *rhs_var, FunctionNode::FuncType::Ln,
-            store, prop_store, depth);
-        if (!deduced.has_value()) {
-            return deduced;
-        }
-    }
-
-    if (both_positive) {
-        auto deduced = impl_->deduce_function_relation(
-            *this, *lhs_var, *rhs_var, FunctionNode::FuncType::Sqrt,
-            store, prop_store, depth);
-        if (!deduced.has_value()) {
-            return deduced;
+        for (auto type : {FunctionNode::FuncType::Ln, FunctionNode::FuncType::Sqrt}) {
+            auto deduced = impl_->deduce_function_relation(
+                *this, *lhs_var, *rhs_var, type, store, prop_store, depth);
+            if (!deduced.has_value()) {
+                return deduced;
+            }
         }
     }
 

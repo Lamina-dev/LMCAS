@@ -123,6 +123,7 @@ LMCAS::SymbolicExpr 是 LMCAS 的核心类，表示一个不可变的符号表�
 *   **化简**: expr->simplify() - 调用化简引擎对表达式进行代数化简。
 *   **展开**: expr->expand() - 展开多项式或乘积。
 *   **代入**: expr->substitute("y", val) - 将变量 y 替换为表达式 val。
+*   **四次方程**: 封闭式根的候选式含近似数时，默认的 `SolveOptions::return_rootof` 使用精确 `RootOf` 表示保留全部根。
 
 ### 矩阵运算
 符号矩阵操作通过 `include/symbolic_matrix.hpp` 的 checked 自由函数提供：

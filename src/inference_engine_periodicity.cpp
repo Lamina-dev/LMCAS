@@ -49,6 +49,11 @@ public:
         if (constant_real.value() == Tribool::True && independent(node))
             { return PeriodEvidence{Tribool::True, std::nullopt, true}; }
 
+        return function_period(node);
+    }
+
+private:
+    Result<PeriodEvidence> function_period(const Node& node) {
         const auto* function = dynamic_cast<const FunctionNode*>(node.get());
         if (!function) { return PeriodEvidence{}; }
         if (function->type() == FunctionNode::FuncType::Infinity)
@@ -64,7 +69,6 @@ public:
         return affine_period(node, argument, type);
     }
 
-private:
     Result<PeriodEvidence> declared_period(const Node& node, const VariableNode& symbol) {
         auto period = assumptions_.get_period(symbol.name(), variable_);
         if (!period) { return PeriodEvidence{}; }

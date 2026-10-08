@@ -36,6 +36,21 @@ private:
 Result<void> collect_polynomial_variables(
     const std::shared_ptr<const SymbolicNode>& node,
     std::set<std::string>& variables,
+    ComputationContext& context);
+
+Result<void> collect_polynomial_operands(
+    const std::vector<std::shared_ptr<const SymbolicNode>>& operands,
+    std::set<std::string>& variables, ComputationContext& context) {
+    for (const auto& operand : operands) {
+        auto result = collect_polynomial_variables(operand, variables, context);
+        if (!result) { return result; }
+    }
+    return Result<void>::success();
+}
+
+Result<void> collect_polynomial_variables(
+    const std::shared_ptr<const SymbolicNode>& node,
+    std::set<std::string>& variables,
     ComputationContext& context) {
     auto entered = context.enter_recursion(kOperation);
     if (!entered) { return entered; }
@@ -65,18 +80,10 @@ Result<void> collect_polynomial_variables(
         return Result<void>::success();
     }
     if (auto addition = std::dynamic_pointer_cast<const AddNode>(node)) {
-        for (const auto& operand : addition->operands()) {
-            auto result = collect_polynomial_variables(operand, variables, context);
-            if (!result) { return result; }
-        }
-        return Result<void>::success();
+        return collect_polynomial_operands(addition->operands(), variables, context);
     }
     if (auto product = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        for (const auto& operand : product->operands()) {
-            auto result = collect_polynomial_variables(operand, variables, context);
-            if (!result) { return result; }
-        }
-        return Result<void>::success();
+        return collect_polynomial_operands(product->operands(), variables, context);
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());

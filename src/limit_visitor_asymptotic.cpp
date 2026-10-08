@@ -418,6 +418,18 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
     return sub_vis.get_result();
 }
 
+static std::shared_ptr<const SymbolicNode> substitute_negative_variable(
+    const VariableNode& node, const std::string& var, const std::string& t_var) {
+    if (!node.is_constant() && node.name() == var) {
+        std::vector<std::shared_ptr<const SymbolicNode>> ops = {
+            LMCAS::detail::make_node<NumberNode>(BigInt(-1)),
+            LMCAS::detail::make_node<VariableNode>(t_var)
+        };
+        return LMCAS::detail::make_node<MultiplyNode>(ops);
+    }
+    return node.clone();
+}
+
 /**
  * @brief 在表达式中将 var 替换为 -t_var.
  *
@@ -437,36 +449,24 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::substitute_neg_t(
     }
 
     if (auto v = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (!v->is_constant() && v->name() == var) {
-            std::vector<std::shared_ptr<const SymbolicNode>> ops = {
-                LMCAS::detail::make_node<NumberNode>(BigInt(-1)),
-                LMCAS::detail::make_node<VariableNode>(t_var)
-            };
-            return LMCAS::detail::make_node<MultiplyNode>(ops);
-        }
-        return node->clone();
+        return substitute_negative_variable(*v, var, t_var);
     }
 
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
+    auto add = std::dynamic_pointer_cast<const AddNode>(node);
+    auto mul = add ? std::shared_ptr<const MultiplyNode>{}
+                   : std::dynamic_pointer_cast<const MultiplyNode>(node);
+    if (add || mul) {
+        const auto& operands = add ? add->operands() : mul->operands();
         std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
-        for (auto& op : add->operands()) {
+        for (const auto& op : operands) {
             auto sub = substitute_neg_t(op, t_var);
             if (!sub) {
                 return nullptr;
             }
             new_ops.push_back(sub);
         }
-        return LMCAS::detail::make_node<AddNode>(new_ops);
-    }
-
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        std::vector<std::shared_ptr<const SymbolicNode>> new_ops;
-        for (auto& op : mul->operands()) {
-            auto sub = substitute_neg_t(op, t_var);
-            if (!sub) {
-                return nullptr;
-            }
-            new_ops.push_back(sub);
+        if (add) {
+            return LMCAS::detail::make_node<AddNode>(new_ops);
         }
         return LMCAS::detail::make_node<MultiplyNode>(new_ops);
     }

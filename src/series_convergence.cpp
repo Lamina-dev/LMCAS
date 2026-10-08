@@ -70,6 +70,33 @@ static ConvergenceInfoResult convergence_test_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::string&,
     ComputationContext&);
+static bool series_index_variable(const std::shared_ptr<const VariableNode>& variable,
+                                  const std::string& index_var) {
+    return variable && !variable->is_constant() && variable->name() == index_var;
+}
+
+static std::optional<std::shared_ptr<SymbolicExpr>> coefficient_power_radius(
+    const PowerNode& power, const std::string& index_var) {
+    auto exponent_variable = std::dynamic_pointer_cast<const VariableNode>(
+        power.exponent());
+    if (series_index_variable(exponent_variable, index_var) &&
+        !expression_depends_on_variable(power.base(), index_var)) {
+        auto absolute = LMCAS::detail::make_expression_ptr(
+            LMCAS::detail::make_node<FunctionNode>(
+                FunctionNode::FuncType::Abs,
+                std::vector<std::shared_ptr<const SymbolicNode>>{
+                    power.base()}));
+        return SymbolicExpr::divide(SymbolicExpr::number(1), absolute)->simplify();
+    }
+    auto base_variable = std::dynamic_pointer_cast<const VariableNode>(
+        power.base());
+    if (series_index_variable(base_variable, index_var) &&
+        !expression_depends_on_variable(power.exponent(), index_var)) {
+        return SymbolicExpr::number(1);
+    }
+    return std::nullopt;
+}
+
 ExpressionResult convergence_radius_checked(
     const std::shared_ptr<SymbolicExpr>& general_coefficient,
     const std::string& index_var,
@@ -93,25 +120,9 @@ ExpressionResult convergence_radius_checked(
                               : SymbolicExpr::number(1));
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        auto exponent_variable = std::dynamic_pointer_cast<const VariableNode>(
-            power->exponent());
-        if (exponent_variable && !exponent_variable->is_constant() &&
-            exponent_variable->name() == index_var &&
-            !expression_depends_on_variable(power->base(), index_var)) {
-            auto absolute = LMCAS::detail::make_expression_ptr(
-                LMCAS::detail::make_node<FunctionNode>(
-                    FunctionNode::FuncType::Abs,
-                    std::vector<std::shared_ptr<const SymbolicNode>>{
-                        power->base()}));
-            return ExpressionResult::success(
-                SymbolicExpr::divide(SymbolicExpr::number(1), absolute)->simplify());
-        }
-        auto base_variable = std::dynamic_pointer_cast<const VariableNode>(
-            power->base());
-        if (base_variable && !base_variable->is_constant() &&
-            base_variable->name() == index_var &&
-            !expression_depends_on_variable(power->exponent(), index_var)) {
-            return ExpressionResult::success(SymbolicExpr::number(1));
+        auto radius = coefficient_power_radius(*power, index_var);
+        if (radius) {
+            return ExpressionResult::success(std::move(*radius));
         }
     }
     return ExpressionResult::failure(

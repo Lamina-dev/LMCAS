@@ -57,13 +57,16 @@ static ZPolynomialPattern zt_polynomial_pattern(
         return ZPolynomialPattern::None;
     }
     variable = std::dynamic_pointer_cast<const VariableNode>(power->base());
+    if (!variable || variable->is_constant() || variable->name() != n) {
+        return ZPolynomialPattern::None;
+    }
     auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
     BigInt integer;
-    if (variable && !variable->is_constant() && variable->name() == n && exponent &&
-        try_get_integer_value(exponent, integer)) {
-        if (integer == BigInt(2)) return ZPolynomialPattern::Quadratic;
-        if (integer == BigInt(3)) return ZPolynomialPattern::Cubic;
+    if (!exponent || !try_get_integer_value(exponent, integer)) {
+        return ZPolynomialPattern::None;
     }
+    if (integer == BigInt(2)) return ZPolynomialPattern::Quadratic;
+    if (integer == BigInt(3)) return ZPolynomialPattern::Cubic;
     return ZPolynomialPattern::None;
 }
 

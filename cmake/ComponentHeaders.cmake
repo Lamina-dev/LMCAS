@@ -41,6 +41,7 @@ target_sources(lmcas_core PRIVATE
     include/proof_outcome.hpp
     include/conditional_result.hpp
     src/internal/symbolic_ast.hpp
+    src/internal/expr_serialization_common.hpp
     src/internal/symbolic_ast/base.hpp
     src/internal/symbolic_ast/numbers.hpp
     src/internal/symbolic_ast/arithmetic.hpp

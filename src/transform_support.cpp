@@ -121,10 +121,9 @@ std::shared_ptr<SymbolicExpr> te_linear_coefficient(
     for (std::size_t i = 0; i < 2; ++i) {
         symbol = std::dynamic_pointer_cast<const VariableNode>(product->operands()[i]);
         const auto& other = product->operands()[1 - i];
-        if (symbol && !symbol->is_constant() && symbol->name() == variable &&
-            !expression_depends_on_variable(other, variable)) {
-            return detail::make_expression_ptr(other);
-        }
+        if (!symbol || symbol->is_constant() || symbol->name() != variable) continue;
+        if (expression_depends_on_variable(other, variable)) continue;
+        return detail::make_expression_ptr(other);
     }
     return nullptr;
 }

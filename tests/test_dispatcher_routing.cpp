@@ -145,6 +145,16 @@ TEST(DispatcherRouting, QuarticDeg4ClosedformReturnsExactly4Roots) {
     }
 }
 
+TEST(DispatcherRouting, QuarticIrreducibleReturnsExactly4Roots) {
+    auto expr = build_poly_expr({-3, -4, -5, 0, -3}, "x");
+    auto results = solve_vector_for_test(expr, "x");
+
+    ASSERT_EQ(results.size(), 4u);
+    for (const auto &root : results) {
+        EXPECT_NE(root->to_string().find("rootof"), std::string::npos);
+    }
+}
+
 TEST(DispatcherRouting, Degree5PreprocessingRootof) {
     const int NUM_TRIALS = 5;
 

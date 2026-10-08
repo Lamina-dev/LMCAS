@@ -13,18 +13,21 @@ static std::shared_ptr<SymbolicExpr> te_unevaluated_inv_laplace(
         TransformNode::TransformType::InverseLaplace, LMCAS::detail::node(F)->clone(), s,
         SymbolicFactory::create_variable(t)));
 }
+static std::shared_ptr<SymbolicExpr> te_inverse_pole_term(
+    const AddNode& addition, std::size_t i, const std::string& variable) {
+    auto symbol = std::dynamic_pointer_cast<const VariableNode>(addition.operands()[i]);
+    if (!symbol || symbol->is_constant() || symbol->name() != variable) return nullptr;
+    return detail::make_expression_ptr(SymbolicFactory::create_multiply({
+        SymbolicFactory::create_number(BigInt(-1)), addition.operands()[1 - i]}));
+}
+
 static std::shared_ptr<SymbolicExpr> te_inverse_pole(
     const std::shared_ptr<const SymbolicNode>& base, const std::string& variable) {
     auto addition = std::dynamic_pointer_cast<const AddNode>(base);
     if (!addition || addition->operands().size() != 2) return nullptr;
-    for (std::size_t i = 0; i < 2; ++i) {
-        auto symbol = std::dynamic_pointer_cast<const VariableNode>(addition->operands()[i]);
-        if (symbol && !symbol->is_constant() && symbol->name() == variable) {
-            return detail::make_expression_ptr(SymbolicFactory::create_multiply({
-                SymbolicFactory::create_number(BigInt(-1)), addition->operands()[1 - i]}));
-        }
-    }
-    return nullptr;
+    auto pole = te_inverse_pole_term(*addition, 0, variable);
+    if (pole) return pole;
+    return te_inverse_pole_term(*addition, 1, variable);
 }
 
 static std::shared_ptr<SymbolicExpr> te_inv_power(

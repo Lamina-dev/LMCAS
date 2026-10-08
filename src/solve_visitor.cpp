@@ -360,6 +360,10 @@ static SolveVectorResult certified_quartic_roots(const Polynomial<Rational>& rem
         SymbolicExpr::number(remainder.coeffs[0]), var);
     bool certified = candidates.size() == 4;
     for (std::size_t i = 0; certified && i < candidates.size(); ++i) {
+        if (contains_inexact_number(detail::node(candidates[i]))) {
+            certified = false;
+            break;
+        }
         auto proof = check_zero_residual(substitute_raw(expression, var, candidates[i]), context);
         if (!proof) { return SolveVectorResult::failure(proof.error()); }
         certified = std::holds_alternative<ProvedZeroResidual>(proof.value());

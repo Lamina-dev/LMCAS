@@ -179,6 +179,37 @@ Result<ApproxComplex> evaluate_complex_exponent(
     return exponent;
 }
 
+Result<ApproxComplex> integer_complex_power(Result<ApproxComplex> base, int integer) {
+    unsigned magnitude = static_cast<unsigned>(std::abs(integer));
+    auto factor = base;
+    if (integer < 0) {
+        factor = divide_complex(approx_complex(1.0, 0.0), base.value());
+        if (!factor) {
+            return factor;
+        }
+    }
+    auto result = Result<ApproxComplex>::success(approx_complex(1.0, 0.0));
+    if (magnitude == 0U) {
+        return checked_complex(1.0, 0.0, kEvalComplexOperation);
+    }
+    while (magnitude != 0U) {
+        if ((magnitude & 1U) != 0U) {
+            result = multiply_complex(result.value(), factor.value());
+            if (!result) {
+                return result;
+            }
+        }
+        magnitude >>= 1U;
+        if (magnitude != 0U) {
+            factor = multiply_complex(factor.value(), factor.value());
+            if (!factor) {
+                return factor;
+            }
+        }
+    }
+    return result;
+}
+
 Result<ApproxComplex> evaluate_complex_power(
     const PowerNode& power, const NumericBindings& bindings,
     ComputationContext& context) {
@@ -213,35 +244,7 @@ Result<ApproxComplex> evaluate_complex_power(
                                "complex evaluation only supports integer powers with |n| <= 64",
                                kEvalComplexOperation);
     }
-    const int integer = static_cast<int>(exponent.value().real.value);
-    unsigned magnitude = static_cast<unsigned>(std::abs(integer));
-    auto factor = base;
-    if (integer < 0) {
-        factor = divide_complex(approx_complex(1.0, 0.0), base.value());
-        if (!factor) {
-            return factor;
-        }
-    }
-    auto result = Result<ApproxComplex>::success(approx_complex(1.0, 0.0));
-    if (magnitude == 0U) {
-        return checked_complex(1.0, 0.0, kEvalComplexOperation);
-    }
-    while (magnitude != 0U) {
-        if ((magnitude & 1U) != 0U) {
-            result = multiply_complex(result.value(), factor.value());
-            if (!result) {
-                return result;
-            }
-        }
-        magnitude >>= 1U;
-        if (magnitude != 0U) {
-            factor = multiply_complex(factor.value(), factor.value());
-            if (!factor) {
-                return factor;
-            }
-        }
-    }
-    return result;
+    return integer_complex_power(std::move(base), static_cast<int>(exponent.value().real.value));
 }
 
 Result<ApproxComplex> evaluate_complex_node(
