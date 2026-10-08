@@ -102,6 +102,8 @@ jobs:
             "-DLMCAS_LMMP_ASM=${{ matrix.asm }}"
             "-DLMCAS_ENABLE_QUALITY_GATES=${{ matrix.quality }}"
             -DCMAKE_INSTALL_LIBDIR=lib
+            "-DCMAKE_OTOOL=$(xcrun --find otool)"
+            "-DCMAKE_INSTALL_NAME_TOOL=$(xcrun --find install_name_tool)"
           )
           if [[ "${{ matrix.quality }}" == "ON" ]]; then
             args+=("-DCMAKE_NM=$LLVM_NM")
@@ -131,6 +133,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
             "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
             -DCMAKE_INSTALL_LIBDIR=lib
+            "-DCMAKE_OTOOL=$(xcrun --find otool)"
+            "-DCMAKE_INSTALL_NAME_TOOL=$(xcrun --find install_name_tool)"
           )
           if [[ "${{ matrix.quality }}" == "ON" ]]; then
             common+=("-DCMAKE_NM=$LLVM_NM")
