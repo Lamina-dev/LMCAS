@@ -67,7 +67,7 @@ public:
         collect_variables(facts, domain, budget, variables, variable_nodes, context);
         std::sort(variables.begin(), variables.end(), normalization_factor_less);
         if (budget) {
-            nodes = budget->append_size(nodes, variable_nodes);
+            (void)budget->append_size(nodes, variable_nodes);
         }
         operands.insert(operands.end(), variables.begin(), variables.end());
         if (expanding && operands.size() > 1 &&

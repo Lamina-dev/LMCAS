@@ -238,12 +238,16 @@ std::shared_ptr<const NumberNode> multiply_numbers(const std::shared_ptr<const N
      try_get_integer_value(b, i2);
      return LMCAS::detail::make_node<NumberNode>(i1 * i2);
 }
+static bool is_pi_variable(const VariableNode& variable) {
+    return variable.is_constant() &&
+        (variable.name() == "pi" || variable.name() == "π");
+}
+
 bool get_pi_coeff(const std::shared_ptr<const SymbolicNode>& node, Rational& k) {
-    if (const auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
-        if (variable->is_constant() && (variable->name() == "pi" || variable->name() == "π")) {
-            k = Rational(1);
-            return true;
-        }
+    const auto variable = std::dynamic_pointer_cast<const VariableNode>(node);
+    if (variable && is_pi_variable(*variable)) {
+        k = Rational(1);
+        return true;
     }
     const auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node);
     if (!multiply) {
@@ -253,10 +257,7 @@ bool get_pi_coeff(const std::shared_ptr<const SymbolicNode>& node, Rational& k) 
     k = Rational(1);
     for (const auto& operand : multiply->operands()) {
         if (const auto variable = std::dynamic_pointer_cast<const VariableNode>(operand)) {
-            if (!variable->is_constant() ||
-                (variable->name() != "pi" && variable->name() != "π") || has_pi) {
-                return false;
-            }
+            if (has_pi || !is_pi_variable(*variable)) return false;
             has_pi = true;
             continue;
         }

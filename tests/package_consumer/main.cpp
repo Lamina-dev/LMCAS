@@ -36,20 +36,7 @@ static int check_equation_and_polynomial(const std::shared_ptr<SymbolicExpr>& ex
     return 0;
 }
 
-static int check_installed_expression_contracts(const ExprPtr& expr) {
-    auto solved = solve_set(expr, "x");
-    const auto* finite = solved ? std::get_if<FiniteSolutions>(&solved.value()) : nullptr;
-    if (!finite || finite->values.size() != 1 ||
-        finite->values[0].value->to_string() != "-1") {
-        std::cerr << "installed solve_set lost the root of x+1\n";
-        return 12;
-    }
-    ComputationContext context;
-    auto distinct = equivalent(*expr, *SymbolicExpr::number(0), context);
-    if (!distinct || distinct.value()) {
-        std::cerr << "installed equivalent failed to prove x+1 differs from zero\n";
-        return 12;
-    }
+static int check_installed_encoding(const ExprPtr& expr) {
     auto encoded = serialize_expr(expr);
     if (!encoded) {
         std::cerr << "installed expression encoding failed\n";
@@ -64,6 +51,26 @@ static int check_installed_expression_contracts(const ExprPtr& expr) {
     if (!restored || restored.value() != encoded.value()) {
         std::cerr << "installed expression encoding failed its round trip\n";
         return 12;
+    }
+    return 0;
+}
+
+static int check_installed_expression_contracts(const ExprPtr& expr) {
+    auto solved = solve_set(expr, "x");
+    const auto* finite = solved ? std::get_if<FiniteSolutions>(&solved.value()) : nullptr;
+    if (!finite || finite->values.size() != 1 ||
+        finite->values[0].value->to_string() != "-1") {
+        std::cerr << "installed solve_set lost the root of x+1\n";
+        return 12;
+    }
+    ComputationContext context;
+    auto distinct = equivalent(*expr, *SymbolicExpr::number(0), context);
+    if (!distinct || distinct.value()) {
+        std::cerr << "installed equivalent failed to prove x+1 differs from zero\n";
+        return 12;
+    }
+    if (const int status = check_installed_encoding(expr); status != 0) {
+        return status;
     }
     auto a = SymbolicExpr::variable("a");
     auto linear = SymbolicExpr::add(SymbolicExpr::variable("x"), a);

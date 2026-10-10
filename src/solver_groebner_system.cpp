@@ -93,39 +93,59 @@ PolynomialSystemResult solve_single_equation(const SymbolicExpr& equation,
     return solutions;
 }
 
+Result<void> validate_basis_input(const std::vector<SymbolicExpr>& equations,
+                                  const std::vector<std::string>& variables,
+                                  groebner_detail::PolyContext& conversion,
+                                  ComputationContext& context) {
+    constexpr const char* operation = "solve_polynomial_system";
+    for (const auto& equation : equations) {
+        auto budget = context.consume_steps(1, operation);
+        if (!budget) return Result<void>::failure(budget.error());
+        groebner_detail::PolyBuilder builder(variables, conversion, true);
+        detail::node(equation)->accept(builder);
+        if (builder.failed) return Result<void>::failure(
+            CasErrc::Inconclusive, "equation is not an exact polynomial in the system variables", operation);
+    }
+    return Result<void>::success();
+}
+
+Result<groebner_detail::Poly> convert_basis_polynomial(
+    const SymbolicExpr& polynomial, const std::vector<std::string>& variables,
+    groebner_detail::PolyContext& conversion, ComputationContext& context,
+    std::shared_ptr<SymbolicExpr>& simplified) {
+    constexpr const char* operation = "solve_polynomial_system";
+    auto budget = context.consume_steps(1, operation);
+    if (!budget) return Result<groebner_detail::Poly>::failure(budget.error());
+    simplified = detail::make_expression_ptr(polynomial)->simplify();
+    if (!simplified) return Result<groebner_detail::Poly>::failure(
+        CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
+    groebner_detail::PolyBuilder builder(variables, conversion, true);
+    detail::node(simplified)->accept(builder);
+    if (builder.failed) return Result<groebner_detail::Poly>::failure(
+        CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
+    return builder.get_result();
+}
+
 Result<Expressions> simplified_basis(const std::vector<SymbolicExpr>& equations,
                                      const std::vector<std::string>& variables,
                                      ComputationContext& context) {
     constexpr const char* operation = "solve_polynomial_system";
     groebner_detail::PolyContext conversion(variables);
-    for (const auto& equation : equations) {
-        auto budget = context.consume_steps(1, operation);
-        if (!budget) return Result<Expressions>::failure(budget.error());
-        groebner_detail::PolyBuilder builder(variables, conversion, true);
-        detail::node(equation)->accept(builder);
-        if (builder.failed) return Result<Expressions>::failure(
-            CasErrc::Inconclusive, "equation is not an exact polynomial in the system variables", operation);
-    }
+    auto validated = validate_basis_input(equations, variables, conversion, context);
+    if (!validated) return Result<Expressions>::failure(validated.error());
     auto groebner = Solver::reduced_groebner_basis(equations, variables);
     Expressions basis;
     std::vector<FGLMPoly> leading;
     basis.reserve(groebner.size());
     leading.reserve(groebner.size());
     for (const auto& polynomial : groebner) {
-        auto budget = context.consume_steps(1, operation);
-        if (!budget) return Result<Expressions>::failure(budget.error());
-        auto simplified = detail::make_expression_ptr(polynomial)->simplify();
-        if (!simplified) return Result<Expressions>::failure(
-            CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
-        groebner_detail::PolyBuilder builder(variables, conversion, true);
-        detail::node(simplified)->accept(builder);
-        if (builder.failed) return Result<Expressions>::failure(
-            CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
-        auto converted = builder.get_result();
+        std::shared_ptr<SymbolicExpr> simplified;
+        auto converted = convert_basis_polynomial(polynomial, variables, conversion, context, simplified);
+        if (!converted) return Result<Expressions>::failure(converted.error());
         if (simplified->is_number() && !simplified->is_zero()) return Expressions{simplified};
-        if (converted.is_zero()) continue;
+        if (converted.value().is_zero()) continue;
         FGLMPoly term(variables.size());
-        term.add_term(converted.lead_monomial(), converted.lead_coeff());
+        term.add_term(converted.value().lead_monomial(), converted.value().lead_coeff());
         leading.push_back(std::move(term));
         basis.push_back(std::move(simplified));
     }

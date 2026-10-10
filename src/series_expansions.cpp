@@ -429,6 +429,31 @@ LaurentSeriesResult laurent_series_full_checked(
     return laurent_series_full_checked(f, var, center, order_neg, order_pos, context);
 }
 
+static bool regular_laurent_type(FunctionNode::FuncType type) {
+    return type == FunctionNode::FuncType::Sin ||
+           type == FunctionNode::FuncType::Cos ||
+           type == FunctionNode::FuncType::Exp;
+}
+
+static Result<int> recognize_regular_laurent(
+    const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
+    ComputationContext& context) {
+    constexpr const char* operation = "laurent_series_full";
+    auto fn = std::dynamic_pointer_cast<const FunctionNode>(detail::node(f));
+    if (fn && fn->arguments().size() == 1 && regular_laurent_type(fn->type())) {
+        auto argument = detail::make_expression_ptr(fn->arguments()[0]);
+        auto polynomial = recognize_rational_polynomial(*argument, var, context);
+        if (!polynomial) {
+            return Result<int>::failure(polynomial.error());
+        }
+        if (polynomial.value()) {
+            return 0;
+        }
+    }
+    return Result<int>::failure(CasErrc::Inconclusive,
+                                "Laurent singularity could not be proved", operation);
+}
+
 static Result<int> extract_laurent_regular_part(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
@@ -450,22 +475,7 @@ static Result<int> extract_laurent_regular_part(
         return Result<int>::failure(recognized.error());
     }
     if (!recognized.value()) {
-        auto fn = std::dynamic_pointer_cast<const FunctionNode>(detail::node(f));
-        if (fn && fn->arguments().size() == 1 &&
-            (fn->type() == FunctionNode::FuncType::Sin ||
-             fn->type() == FunctionNode::FuncType::Cos ||
-             fn->type() == FunctionNode::FuncType::Exp)) {
-            auto argument = detail::make_expression_ptr(fn->arguments()[0]);
-            auto polynomial = recognize_rational_polynomial(*argument, var, context);
-            if (!polynomial) {
-                return Result<int>::failure(polynomial.error());
-            }
-            if (polynomial.value()) {
-                return 0;
-            }
-        }
-        return Result<int>::failure(CasErrc::Inconclusive,
-                                    "Laurent singularity could not be proved", operation);
+        return recognize_regular_laurent(f, var, context);
     }
     if (numerator.is_zero()) {
         return 0;

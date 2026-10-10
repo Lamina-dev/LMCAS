@@ -41,10 +41,12 @@ set(LMCAS_CORE_SOURCES
     src/symbolic_set.cpp
     src/symbolic_core.cpp
     src/expr_serialization.cpp
+    src/expr_serialization_reader.cpp
     src/normalization_arithmetic.cpp
     src/normalization_functions.cpp
     src/normalization_structural.cpp
     src/facts_query.cpp
+    src/facts_query_rational.cpp
     src/facts_query_adapters.cpp
     src/expand_visitor.cpp
     src/numeric_evaluation.cpp

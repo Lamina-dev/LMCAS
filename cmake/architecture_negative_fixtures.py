@@ -86,7 +86,8 @@ class ArchitectureFixtureTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="lmcas_architecture_")
         self.addCleanup(temporary.cleanup)
-        self.directory = Path(temporary.name)
+        # macOS resolves /var to /private/var in compiler evidence.
+        self.directory = Path(temporary.name).resolve()
 
     def compile_fixture(self, case="valid"):
         root = self.directory / case

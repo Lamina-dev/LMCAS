@@ -184,9 +184,11 @@ Polynomial<SymbolicPolyCoeff> multiply_checked_coefficients(
             auto product = coefficient_arithmetic<MultiplyNode>(
                 detail::node(left.coeffs[index].val),
                 detail::node(right.coeffs[degree - index].val), budget);
-            coefficient = coefficient
-                ? coefficient_arithmetic<AddNode>(coefficient, product, budget)
-                : std::move(product);
+            if (coefficient) {
+                coefficient = coefficient_arithmetic<AddNode>(coefficient, product, budget);
+            } else {
+                coefficient.swap(product);
+            }
             coefficient_nodes = budget.measure(coefficient);
             budget.append_size(nodes, coefficient_nodes);
         }
