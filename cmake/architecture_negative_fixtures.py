@@ -10,10 +10,10 @@ import sys
 import tempfile
 import unittest
 
-from architecture_inputs import (check_compile_architecture, compile_objects, dependency_files,
-                                 make_dependency_words, nm_records, object_format_symbol,
-                                 read_json, run_command, symbol_location)
-from check_architecture import evaluate, is_first_party_symbol, load_owners
+from architecture_inputs import (check_compile_architecture, command_arguments, compile_objects,
+                                 dependency_files, make_dependency_words, nm_records,
+                                 object_format_symbol, read_json, run_command, symbol_location)
+from check_architecture import check_test_linkage, evaluate, is_first_party_symbol, load_owners
 
 
 def create_sources(root, case):
@@ -181,6 +181,52 @@ class ArchitectureFixtureTests(unittest.TestCase):
 
     def test_direct_process_output_rejected(self):
         self.check_dependency_rule("direct_process_output", {"source.direct_process_output"})
+
+    def test_local_tests_cannot_mix_executable_and_shared_state(self):
+        test = {"name": "allocation", "linkage": "local", "libraries": ["lmcas_test_local"]}
+        report = {"violations": []}
+        check_test_linkage({"tests": [test]}, report)
+        self.assertEqual(report["violations"], [])
+
+        test["libraries"].append("lmcas_test_internal")
+        check_test_linkage({"tests": [test]}, report)
+        self.assertEqual([item["code"] for item in report["violations"]],
+                         ["test.state_ownership"])
+
+    def test_test_only_compiles_do_not_hide_production_duplicates(self):
+        manifest = self.compile_fixture()
+        manifest["test_internal_target"] = "lmcas_test_internal"
+        owners, _ = load_owners(manifest, {"violations": []})
+        database = read_json(manifest["compile_commands"])
+        test_entries = []
+        for entry in database:
+            source = Path(entry["file"])
+            test_object = (Path(manifest["build"]) / "CMakeFiles" /
+                           "lmcas_test_internal.dir" / (source.name + ".o"))
+            test_object.parent.mkdir(parents=True, exist_ok=True)
+            test_object.touch()
+            test_entries.append({**entry, "output": str(test_object),
+                                 "arguments": [*command_arguments(entry),
+                                               "-DLMCAS_STATIC_DEFINE"]})
+        report = {"violations": []}
+        records = compile_objects(manifest, owners, database + test_entries, report)
+        self.assertEqual(len(records), 2)
+        self.assertEqual(report["violations"], [])
+
+        duplicate = {**test_entries[0], "output": str(
+            Path(manifest["build"]) / "CMakeFiles" / "unexpected.dir" / "low.cpp.o")}
+        report = {"violations": []}
+        compile_objects(manifest, owners, database + test_entries + [duplicate], report)
+        self.assertIn("compile.membership", {item["code"] for item in report["violations"]})
+
+        test_entries[0]["arguments"].remove("-DLMCAS_STATIC_DEFINE")
+        report = {"violations": []}
+        compile_objects(manifest, owners, database + test_entries, report)
+        self.assertIn("compile.test_definition", {item["code"] for item in report["violations"]})
+        report = {"violations": []}
+        compile_objects(manifest, owners, database + test_entries[1:], report)
+        self.assertIn("compile.test_membership", {item["code"] for item in report["violations"]})
+
 
     def test_shared_header_changes_are_observed(self):
         manifest = self.compile_fixture()

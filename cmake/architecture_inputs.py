@@ -116,6 +116,8 @@ def object_output(entry):
 def compile_objects(manifest, owners, database, report):
     root = canonical(manifest["root"])
     compiled = defaultdict(list)
+    test_compiled = defaultdict(list)
+    test_target = manifest.get("test_internal_target")
     for entry in database:
         source = canonical(entry["file"], entry["directory"])
         if not source.is_relative_to(root / "src"):
@@ -127,7 +129,13 @@ def compile_objects(manifest, owners, database, report):
             continue
         record = {"source": source, "path": object_output(entry),
                   "owner": owners[source], "directory": canonical(entry["directory"])}
-        compiled[source].append(record)
+        if test_target and f"{test_target}.dir" in record["path"].parts:
+            if not any("LMCAS_STATIC_DEFINE" in argument for argument in command_arguments(entry)):
+                violation(report, "compile.test_definition", source,
+                          "The test-only shared library must use its own declarations")
+            test_compiled[source].append(record)
+        else:
+            compiled[source].append(record)
     records = []
     for source, owner in owners.items():
         if source.suffix.lower() not in IMPLEMENTATIONS:
@@ -135,8 +143,19 @@ def compile_objects(manifest, owners, database, report):
         candidates = compiled.get(source, [])
         if len(candidates) != 1:
             violation(report, "compile.membership", source,
-                      "Each source must have exactly one compiler record", count=len(candidates))
+                      "Each production source needs exactly one component compiler record",
+                      count=len(candidates))
             continue
+        if test_target:
+            test_candidates = test_compiled.get(source, [])
+            if len(test_candidates) != 1:
+                violation(report, "compile.test_membership", source,
+                          "Test-only shared library needs exactly one compiler record",
+                          count=len(test_candidates))
+            elif not test_candidates[0]["path"].is_file():
+                violation(report, "compile.test_missing_object", source,
+                          "Build the test-only shared library before checking architecture",
+                          object=str(test_candidates[0]["path"]))
         record = candidates[0]
         if f"{owner}.dir" not in record["path"].parts:
             violation(report, "compile.owner", source,
