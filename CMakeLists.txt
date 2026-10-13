@@ -258,18 +258,41 @@ foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
 endforeach()
 
 if(LMCAS_BUILD_TESTS)
-    add_library(lmcas_test_internal STATIC)
-    foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
-        target_sources(lmcas_test_internal PRIVATE $<TARGET_OBJECTS:${component}>)
-    endforeach()
+    # Production components have hidden visibility; tests need separately
+    # compiled, exported symbols without changing the installed lmcas ABI.
+    add_library(lmcas_test_internal SHARED ${_lmcas_component_sources})
     target_compile_features(lmcas_test_internal PUBLIC cxx_std_17)
-    target_compile_definitions(lmcas_test_internal INTERFACE LMCAS_STATIC_DEFINE)
+    target_compile_definitions(lmcas_test_internal PUBLIC LMCAS_STATIC_DEFINE)
     target_include_directories(lmcas_test_internal PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_include_directories(lmcas_test_internal PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/LMMC/LMMP/include/lmmp")
     target_link_libraries(lmcas_test_internal PUBLIC lmmp lmmc)
     set_target_properties(lmcas_test_internal PROPERTIES
-        POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
+        CXX_EXTENSIONS OFF
+        CXX_VISIBILITY_PRESET default
+        VISIBILITY_INLINES_HIDDEN NO
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        LMMC_QUALITY_TEST_COPY TRUE)
+    if(WIN32)
+        # These tests observe executable-owned allocation and thread teardown.
+        add_library(lmcas_test_local STATIC)
+        set_target_properties(lmcas_test_local PROPERTIES LINKER_LANGUAGE CXX)
+        if(MINGW)
+            set_property(TARGET lmcas_test_local PROPERTY STATIC_LIBRARY_OPTIONS --thin)
+        endif()
+        foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
+            target_sources(lmcas_test_local PRIVATE $<TARGET_OBJECTS:${component}>)
+        endforeach()
+        target_compile_definitions(lmcas_test_local INTERFACE LMCAS_STATIC_DEFINE)
+        target_include_directories(lmcas_test_local INTERFACE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src")
+        target_link_libraries(lmcas_test_local PUBLIC lmmp lmmc)
+    endif()
 endif()
 
 target_compile_definitions(lmcas PRIVATE LMCAS_EXPORTS)
@@ -350,6 +373,13 @@ foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
     lmcas_apply_instrumentation(${component})
 endforeach()
 lmcas_apply_instrumentation(lmcas)
+if(LMCAS_BUILD_TESTS)
+    target_compile_options(lmcas_test_internal PRIVATE ${_lmcas_warning_options})
+    if(LMCAS_ENABLE_QUALITY_GATES)
+        target_compile_options(lmcas_test_internal PRIVATE -g)
+    endif()
+    lmcas_apply_instrumentation(lmcas_test_internal)
+endif()
 
 # ============================================================
 # Benchmarks

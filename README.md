@@ -70,8 +70,14 @@ cmake -S . -B build/macos-quality -G Ninja \
 CMake 优先查找已安装的框架包，缺失时获取上述固定版本。离线开发可设置
 `FETCHCONTENT_SOURCE_DIR_CMOCKA`、`FETCHCONTENT_SOURCE_DIR_GOOGLETEST`、
 `FETCHCONTENT_SOURCE_DIR_RAPIDCHECK`，指向对应的本地框架源码目录。
-Windows 测试目标会将共享 RapidCheck 的 DLL 复制到可执行文件目录。
-这些框架仅由测试可执行目标私有链接；产品安装、导出及客户消费依赖保持为
+内部测试共享测试专用库 `lmcas_test_internal`；公共 API 测试继续链接产品库
+`lmcas`。测试专用库单独编译源码来导出内部符号，产品库的符号可见性与安装内容
+保持不变。Windows 的分配失败和线程析构测试复用生产组件目标文件，在测试
+可执行文件内运行 LMCAS 代码，以观测本进程的分配和析构时序。自动获取的
+GoogleTest 和 RapidCheck 构建为共享库；已安装框架沿用其包提供的链接方式。
+MinGW 使用薄归档引用已有组件目标文件，减少调试信息的重复占用。
+Windows 测试目标将依赖的 DLL 复制到可执行文件目录。
+框架仅由测试可执行目标私有链接，产品安装、导出及客户消费依赖保持为
 LMCAS、LMMC、LMMP 与工具链标准运行库。
 
 CTest 自动发现 GoogleTest 用例，使用 `-L gtest` 筛选；LMMC 测试使用

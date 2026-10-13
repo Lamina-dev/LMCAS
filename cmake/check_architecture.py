@@ -109,12 +109,16 @@ def check_symbols(manifest, records, owners, layers, report):
 
 def check_test_linkage(manifest, report):
     for target in manifest.get("tests", []):
-        required, forbidden = (("lmcas", "lmcas_test_internal") if target["linkage"] == "public"
-                               else ("lmcas_test_internal", "lmcas"))
+        if target["linkage"] == "public":
+            required, forbidden = "lmcas", ("lmcas_test_internal", "lmcas_test_local")
+        elif target["linkage"] == "local":
+            required, forbidden = "lmcas_test_local", ("lmcas", "lmcas_test_internal")
+        else:
+            required, forbidden = "lmcas_test_internal", ("lmcas", "lmcas_test_local")
         libraries = target["libraries"]
-        if required not in libraries or forbidden in libraries:
+        if required not in libraries or any(library in libraries for library in forbidden):
             violation(report, "test.state_ownership", target["name"],
-                      "Public tests use shared state; internal tests use only the object archive",
+                      "Tests must link only their declared production, shared-test, or local-test state",
                       linkage=target["linkage"], libraries=libraries)
 
 

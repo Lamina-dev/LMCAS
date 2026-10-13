@@ -1,5 +1,5 @@
 include(FetchContent)
-set(BUILD_SHARED_LIBS OFF)
+set(BUILD_SHARED_LIBS ON)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
 find_package(GTest 1.18.0 CONFIG QUIET)
@@ -34,6 +34,9 @@ if(NOT TARGET rapidcheck)
     set(RC_ENABLE_BOOST_TEST OFF)
     set(RC_INSTALL_ALL_EXTRAS OFF)
     add_subdirectory("${rapidcheck_SOURCE_DIR}" "${rapidcheck_BINARY_DIR}" EXCLUDE_FROM_ALL SYSTEM)
+    if(WIN32)
+        set_target_properties(rapidcheck PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif()
 endif()
 include(GoogleTest)
 
@@ -55,6 +58,9 @@ function(lmcas_add_test TARGET_NAME SOURCE_FILE)
     if(_test_PUBLIC)
         target_link_libraries(${TARGET_NAME} PRIVATE lmcas)
         set_property(TARGET ${TARGET_NAME} PROPERTY LMCAS_TEST_LINKAGE public)
+    elseif(WIN32 AND TARGET_NAME STREQUAL "test_equivalence_complex_allocation")
+        target_link_libraries(${TARGET_NAME} PRIVATE lmcas_test_local)
+        set_property(TARGET ${TARGET_NAME} PROPERTY LMCAS_TEST_LINKAGE local)
     else()
         target_link_libraries(${TARGET_NAME} PRIVATE lmcas_test_internal)
         set_property(TARGET ${TARGET_NAME} PROPERTY LMCAS_TEST_LINKAGE internal)
@@ -64,13 +70,11 @@ function(lmcas_add_test TARGET_NAME SOURCE_FILE)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
     if(WIN32)
-        get_target_property(_rapidcheck_type rapidcheck TYPE)
-        if(_rapidcheck_type STREQUAL "SHARED_LIBRARY")
-            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$<TARGET_FILE:rapidcheck>" "$<TARGET_FILE_DIR:${TARGET_NAME}>"
-                VERBATIM)
-        endif()
+        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_RUNTIME_DLLS:${TARGET_NAME}>"
+                "$<TARGET_FILE_DIR:${TARGET_NAME}>"
+            COMMAND_EXPAND_LISTS VERBATIM)
     endif()
     set(_labels gtest)
     if(_test_LABEL)
@@ -119,8 +123,13 @@ endfunction()
 
 lmcas_register_test_source(test_lmmc_lifecycle_windows.cpp)
 add_executable(test_lmmc_lifecycle_windows test_lmmc_lifecycle_windows.cpp)
-target_link_libraries(test_lmmc_lifecycle_windows PRIVATE lmcas_test_internal)
-set_property(TARGET test_lmmc_lifecycle_windows PROPERTY LMCAS_TEST_LINKAGE internal)
+if(WIN32)
+    target_link_libraries(test_lmmc_lifecycle_windows PRIVATE lmcas_test_local)
+    set_property(TARGET test_lmmc_lifecycle_windows PROPERTY LMCAS_TEST_LINKAGE local)
+else()
+    target_link_libraries(test_lmmc_lifecycle_windows PRIVATE lmcas_test_internal)
+    set_property(TARGET test_lmmc_lifecycle_windows PROPERTY LMCAS_TEST_LINKAGE internal)
+endif()
 if(WIN32 AND MINGW)
     target_link_options(test_lmmc_lifecycle_windows PRIVATE -municode)
 endif()

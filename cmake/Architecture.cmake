@@ -87,6 +87,11 @@ function(lmcas_add_architecture_gate)
     list(JOIN _components ",\n" _components_json)
     list(JOIN _files ",\n" _files_json)
     list(JOIN _tests ",\n" _tests_json)
+    set(_test_internal_target "")
+    if(TARGET lmcas_test_internal)
+        set(_test_internal_target lmcas_test_internal)
+    endif()
+    _lmmc_quality_json_string("${_test_internal_target}" _test_internal_target_json)
     _lmcas_architecture_array("${CMAKE_OSX_ARCHITECTURES}" _osx_architectures_json)
     set(_properties "")
     foreach(_pair IN ITEMS
@@ -110,12 +115,13 @@ function(lmcas_add_architecture_gate)
     file(WRITE "${_manifest}" "{\n${_properties}"
         "\"osx_architectures\":${_osx_architectures_json},\n"
         "\"components\":[${_components_json}],\n"
+        "\"test_internal_target\":${_test_internal_target_json},\n"
         "\"files\":[${_files_json}],\n\"tests\":[${_tests_json}]\n}\n")
     set(_command "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/check_architecture.py"
         --manifest "${_manifest}")
     add_custom_target(lmcas_architecture
         COMMAND ${_command} --report "${CMAKE_CURRENT_BINARY_DIR}/lmcas_architecture.json"
-        DEPENDS ${LMCAS_COMPONENT_TARGETS} ${_public_tests}
+        DEPENDS ${LMCAS_COMPONENT_TARGETS} ${_public_tests} ${_test_internal_target}
         VERBATIM)
     if(BUILD_TESTING)
         add_test(NAME lmcas_architecture COMMAND ${_command})
