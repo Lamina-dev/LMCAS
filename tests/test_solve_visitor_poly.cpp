@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include <vector>
 #include <string>
 #include <memory>
@@ -127,16 +128,14 @@ TEST(LmcasSolveVisitorPoly, NonzeroSymbolicLeadingCoefficientKeepsDoubleRoot) {
 
 static ExprPtr specialize_discriminant_condition(
     const ExprPtr &condition, int b, int c) {
-    return condition->substitute("b", SymbolicExpr::number(b))
-        ->substitute("c", SymbolicExpr::number(c));
+    return LMCAS::substitute(LMCAS::substitute(condition, "b", SymbolicExpr::number(b)).value(), "c", SymbolicExpr::number(c)).value();
 }
 
 static void expect_repeated_discriminant_branch(
     const FiniteSolution &root, const RelationalNode &relation,
     AssumptionContext &condition_evaluator) {
     EXPECT_EQ(relation.op(), RelationOp::EQ);
-    auto specialized = specialize_discriminant_condition(root.value, 2, 1)
-                           ->simplify();
+    auto specialized = LMCAS::simplify(specialize_discriminant_condition(root.value, 2, 1)).value();
     EXPECT_TRUE(test_proved_equivalent(
         specialized, SymbolicExpr::number(-1)));
     auto active_condition =
@@ -154,8 +153,7 @@ static void expect_simple_discriminant_branch(
     AssumptionContext &condition_evaluator, bool &found_negative_one,
     bool &found_positive_one) {
     EXPECT_EQ(relation.op(), RelationOp::NEQ);
-    auto specialized = specialize_discriminant_condition(root.value, 0, -1)
-                           ->simplify();
+    auto specialized = LMCAS::simplify(specialize_discriminant_condition(root.value, 0, -1)).value();
     found_negative_one =
         found_negative_one ||
         test_proved_equivalent(specialized, SymbolicExpr::number(-1));

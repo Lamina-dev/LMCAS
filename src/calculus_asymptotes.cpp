@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 #include "poly_utils.hpp"
 #include "root_of_utils.hpp"
@@ -68,15 +70,18 @@ static std::shared_ptr<SymbolicExpr> calculus_utils_extract_denominator(
 }
 
 static std::shared_ptr<SymbolicExpr> calculus_utils_product(
-    const std::vector<std::shared_ptr<const SymbolicNode>>& factors)
+    const std::vector<std::shared_ptr<const SymbolicNode>>& factors, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (factors.empty()) {
         return SymbolicExpr::number(1);
     }
     if (factors.size() == 1) {
         return LMCAS::detail::make_expression_ptr(factors[0]);
     }
-    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<MultiplyNode>(factors))->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(LMCAS::detail::make_node<MultiplyNode>(factors), transform_budget));
 }
 
 static bool calculus_utils_is_minus_one(const std::shared_ptr<const NumberNode>& number)
@@ -96,7 +101,7 @@ static bool calculus_utils_is_minus_one(const std::shared_ptr<const NumberNode>&
 static bool calculus_utils_split_rational(
     const std::shared_ptr<SymbolicExpr>& expr,
     std::shared_ptr<SymbolicExpr>& numerator,
-    std::shared_ptr<SymbolicExpr>& denominator)
+    std::shared_ptr<SymbolicExpr>& denominator, ComputationContext& context)
 {
     if (!expr || !LMCAS::detail::node(expr)) {
         return false;
@@ -125,8 +130,8 @@ static bool calculus_utils_split_rational(
     if (den_factors.empty()) {
         return false;
     }
-    numerator = calculus_utils_product(num_factors);
-    denominator = calculus_utils_product(den_factors);
+    numerator = calculus_utils_product(num_factors, context);
+    denominator = calculus_utils_product(den_factors, context);
     return numerator && denominator;
 }
 
@@ -134,17 +139,20 @@ static bool calculus_utils_oblique_from_rational(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     std::shared_ptr<SymbolicExpr>& slope,
-    std::shared_ptr<SymbolicExpr>& intercept)
+    std::shared_ptr<SymbolicExpr>& intercept, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::shared_ptr<SymbolicExpr> numerator;
     std::shared_ptr<SymbolicExpr> denominator;
-    if (!calculus_utils_split_rational(f, numerator, denominator)) {
+    if (!calculus_utils_split_rational(f, numerator, denominator, context)) {
         return false;
     }
 
     try {
-        auto num_poly = symbolic_to_poly<Rational>(numerator->expand()->simplify(), var);
-        auto den_poly = symbolic_to_poly<Rational>(denominator->expand()->simplify(), var);
+        auto num_poly = symbolic_to_poly<Rational>(detail::make_expression_ptr(detail::expand_node(detail::node(numerator), transform_budget)), var);
+        auto den_poly = symbolic_to_poly<Rational>(detail::make_expression_ptr(detail::expand_node(detail::node(denominator), transform_budget)), var);
         if (!num_poly || !den_poly || den_poly.value().is_zero()) {
             return false;
         }
@@ -153,8 +161,8 @@ static bool calculus_utils_oblique_from_rational(
         if (quotient.degree() != 1 || quotient.coeffs.size() < 2) {
             return false;
         }
-        intercept = SymbolicExpr::number(quotient.coeffs[0])->simplify();
-        slope = SymbolicExpr::number(quotient.coeffs[1])->simplify();
+        intercept = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::number(quotient.coeffs[0])), transform_budget));
+        slope = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::number(quotient.coeffs[1])), transform_budget));
         return !slope->is_zero();
     } catch (const std::invalid_argument&) {
         return false;
@@ -273,7 +281,9 @@ static Result<void> collect_oblique_asymptote(
     const std::shared_ptr<SymbolicExpr>& x_expr,
     const std::shared_ptr<SymbolicExpr>& infinity, ComputationContext& context,
     AsymptoteResult& result)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto quotient = SymbolicExpr::multiply(f,
         SymbolicExpr::power(x_expr, SymbolicExpr::number(-1)));
     auto slope_result = limit_expression_checked(
@@ -282,7 +292,7 @@ static Result<void> collect_oblique_asymptote(
         return Result<void>::failure(slope_result.error());
     }
     auto slope = std::move(slope_result.value());
-    if (slope) slope = slope->simplify();
+    if (slope) slope = detail::make_expression_ptr(detail::normalize_node(detail::node(slope), transform_budget));
     if (!slope || calculus_utils_is_infinity(slope) || slope->is_zero()) {
         return Result<void>::success();
     }
@@ -295,19 +305,30 @@ static Result<void> collect_oblique_asymptote(
         return Result<void>::failure(intercept_result.error());
     }
     auto intercept = std::move(intercept_result.value());
-    if (intercept) intercept = intercept->simplify();
+    if (intercept) intercept = detail::make_expression_ptr(detail::normalize_node(detail::node(intercept), transform_budget));
     if (intercept && !calculus_utils_is_infinity(intercept)) {
         if (!has_oblique_asymptote(result, slope, intercept)) {
             result.oblique.emplace_back(slope, intercept);
         }
     }
     return Result<void>::success();
+} catch (const CasError& error) {
+    return Result<void>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<void>::failure(CasErrc::ResourceLimit, "allocation failed", "collect_oblique_asymptote");
+} catch (const std::length_error& error) {
+    return Result<void>::failure(CasErrc::ResourceLimit, error.what(), "collect_oblique_asymptote");
+} catch (const std::exception& error) {
+    return Result<void>::failure(CasErrc::InternalInvariant, error.what(), "collect_oblique_asymptote");
 }
 
-static bool simplify_finite_limit(std::shared_ptr<SymbolicExpr>& value)
+static bool simplify_finite_limit(std::shared_ptr<SymbolicExpr>& value, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (value) {
-        value = value->simplify();
+        value = detail::make_expression_ptr(detail::normalize_node(detail::node(value), transform_budget));
     }
     return value && !calculus_utils_is_infinity(value);
 }
@@ -328,8 +349,8 @@ static Result<void> collect_infinite_asymptotes(
     }
     auto lim_pos = std::move(positive.value());
     auto lim_neg = std::move(negative.value());
-    const bool horizontal_pos = simplify_finite_limit(lim_pos);
-    const bool horizontal_neg = simplify_finite_limit(lim_neg);
+    const bool horizontal_pos = simplify_finite_limit(lim_pos, context);
+    const bool horizontal_neg = simplify_finite_limit(lim_neg, context);
     if (horizontal_pos) result.horizontal.push_back(lim_pos);
     if (horizontal_neg) {
         if (!horizontal_pos || !calculus_utils_expr_equal(lim_pos, lim_neg)) {
@@ -340,7 +361,7 @@ static Result<void> collect_infinite_asymptotes(
     if (!horizontal_pos && !horizontal_neg) {
         std::shared_ptr<SymbolicExpr> slope;
         std::shared_ptr<SymbolicExpr> intercept;
-        if (calculus_utils_oblique_from_rational(f, var, slope, intercept)) {
+        if (calculus_utils_oblique_from_rational(f, var, slope, intercept, context)) {
             result.oblique.emplace_back(slope, intercept);
             return Result<void>::success();
         }

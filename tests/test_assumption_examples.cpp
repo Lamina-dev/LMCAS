@@ -1,3 +1,5 @@
+#include "internal/assumption_facts.hpp"
+#include "internal/expression_transform.hpp"
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
@@ -52,8 +54,11 @@ static std::shared_ptr<const SymbolicNode> make_power(
 static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
     const std::shared_ptr<const SymbolicNode> &node,
     const AssumptionContext &ctx) {
-    auto expression = LMCAS::detail::expression_from_node(node);
-    return LMCAS::detail::node(ctx.simplify(expression));
+    ComputationContext context;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "test.normalize");
+    detail::AssumptionFacts facts(ctx);
+    return detail::normalize_node(node, budget, facts);
 }
 
 /// Check if a node is a VariableNode with the given name.

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "limit_result.hpp"
 #include "test_common.hpp"
 #include "internal/visitors/limit_visitor.hpp"
@@ -87,9 +88,8 @@ static bool matches_rational_degree_limit(
     auto exact = p_coeffs.size() < q_coeffs.size()
                      ? SymbolicExpr::number(0)
                      : SymbolicExpr::number(Rational(p_coeffs.back(), q_coeffs.back()));
-    return SymbolicExpr::add(result, SymbolicExpr::multiply(
-                                         SymbolicExpr::number(-1), exact))
-        ->simplify()
+    return LMCAS::simplify(SymbolicExpr::add(result, SymbolicExpr::multiply(
+                                         SymbolicExpr::number(-1), exact))).value()
         ->is_zero();
 }
 

@@ -8,13 +8,8 @@ Result<bool> equivalent(const SymbolicExpr& lhs,
                         const SymbolicExpr& rhs,
                         ComputationContext& context,
                         const EqvOptions& options) {
-    return equivalent_core(lhs, rhs, context, options);
+    return detail::equivalent_impl(lhs, rhs, context, options);
 }
 
-Result<bool> equivalent(const SymbolicExpr& lhs,
-                        const SymbolicExpr& rhs,
-                        ComputationContext& context) {
-    return equivalent(lhs, rhs, context, EqvOptions{});
-}
 
 }

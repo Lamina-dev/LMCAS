@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/matrix_decomposition_support.hpp"
 #include "internal/exact_rational_matrix.hpp"
 
@@ -11,7 +12,7 @@ Result<void> prove_exact_full_column_rank_qr_support(
     const std::shared_ptr<const MatrixNode>& matrix,
     ComputationContext& context,
     const std::string& operation) {
-    auto values = exact_rational_matrix(matrix);
+    auto values = exact_rational_matrix(matrix, context);
     if (!values) {
         return Result<void>::failure(
             CasErrc::Inconclusive,
@@ -147,6 +148,9 @@ QRDecompositionResult qr_decomposition_checked(
 std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
     const std::vector<std::vector<std::shared_ptr<SymbolicExpr>>>& vectors,
     bool normalize) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> basis;
     for (const auto& v : vectors) {
         std::vector<std::shared_ptr<SymbolicExpr>> u = v;
@@ -160,14 +164,14 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
             if (LMCAS::detail::node(bb) && LMCAS::detail::node(bb)->is_zero()) continue;
             auto coeff = SymbolicExpr::divide(vb, bb);
             for (size_t k = 0; k < u.size(); ++k) {
-                u[k] = SymbolicExpr::add(u[k],
+                u[k] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(u[k],
                     SymbolicExpr::multiply(SymbolicExpr::number(-1),
-                        SymbolicExpr::multiply(coeff, b[k])))->simplify();
+                        SymbolicExpr::multiply(coeff, b[k])))), transform_budget));
             }
         }
         auto norm_sq = SymbolicExpr::number(0);
         for (auto& x : u) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(x, x));
-        norm_sq = norm_sq->simplify();
+        norm_sq = detail::make_expression_ptr(detail::normalize_node(detail::node(norm_sq), transform_budget));
         if (LMCAS::detail::node(norm_sq) && LMCAS::detail::node(norm_sq)->is_zero()) continue;
         basis.push_back(u);
     }
@@ -176,7 +180,7 @@ std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> gram_schmidt(
             auto norm_sq = SymbolicExpr::number(0);
             for (auto& x : u) norm_sq = SymbolicExpr::add(norm_sq, SymbolicExpr::multiply(x, x));
             auto norm = SymbolicExpr::sqrt(norm_sq);
-            for (auto& x : u) x = SymbolicExpr::divide(x, norm)->simplify();
+            for (auto& x : u) x = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(x, norm)), transform_budget));
         }
     }
     return basis;

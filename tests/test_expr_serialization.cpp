@@ -163,12 +163,12 @@ TEST(ExprSerialization, BoundNamesAndScopes) {
 
     auto decoded = round_trip(sum);
     ASSERT_NE(decoded, nullptr);
-    auto changed_free = decoded->substitute("x", SymbolicExpr::number(5));
-    auto expected = sum->substitute("x", SymbolicExpr::number(5));
+    auto changed_free = LMCAS::substitute(decoded, "x", SymbolicExpr::number(5)).value();
+    auto expected = LMCAS::substitute(sum, "x", SymbolicExpr::number(5)).value();
     ASSERT_NE(changed_free, nullptr);
     ASSERT_NE(expected, nullptr);
     EXPECT_TRUE(structurally_equal(*changed_free, *expected));
-    auto changed_bound = decoded->substitute("k", SymbolicExpr::number(5));
+    auto changed_bound = LMCAS::substitute(decoded, "k", SymbolicExpr::number(5)).value();
     ASSERT_NE(changed_bound, nullptr);
     EXPECT_TRUE(structurally_equal(*changed_bound, *decoded));
 
@@ -229,7 +229,7 @@ TEST(ExprSerialization, QuantitiesEncodePhysicalValueAndDimension) {
     EXPECT_EQ(dimension.value(), length);
     auto physical_value = strip_to_base_value(decoded.value(), context);
     ASSERT_TRUE(physical_value);
-    EXPECT_EQ(physical_value.value()->simplify()->convert_rational(), Rational(150));
+    EXPECT_EQ(LMCAS::simplify(physical_value.value()).value()->convert_rational(), Rational(150));
 
     auto different_dimension = with_unit_definition(
         SymbolicExpr::number(150), "base-time",
@@ -322,6 +322,26 @@ TEST(ExprSerialization, ContextErrorsOnEncodingAndDecoding) {
     auto decode_cancelled = parse_serialized_expr(encoded.value(), cancelled_decode);
     ASSERT_FALSE(decode_cancelled);
     EXPECT_EQ(decode_cancelled.error().code, CasErrc::Cancelled);
+}
+
+TEST(ExprSerialization, AstLimitAppliesToEachDecodedTree) {
+    auto source = SymbolicExpr::sin(SymbolicExpr::sin(SymbolicExpr::variable("x")));
+    auto encoded = serialize_expr(source);
+    ASSERT_TRUE(encoded);
+    ResourceLimits limits;
+    limits.max_ast_nodes = 3;
+    ComputationContext context(limits);
+    for (int i = 0; i < 2; ++i) {
+        auto decoded = parse_serialized_expr(encoded.value(), context);
+        ASSERT_TRUE(decoded);
+        EXPECT_TRUE(structurally_equal(*decoded.value(), *source));
+    }
+    limits.max_ast_nodes = 2;
+    ComputationContext too_small(limits);
+    auto rejected = parse_serialized_expr(encoded.value(), too_small);
+    ASSERT_FALSE(rejected);
+    EXPECT_EQ(rejected.error().code, CasErrc::ResourceLimit);
+    EXPECT_EQ(too_small.recursion_depth(), 0u);
 }
 
 } // namespace

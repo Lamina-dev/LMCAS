@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/integration_table_rules.hpp"
 
 namespace LMCAS::integration_table_detail {
@@ -136,12 +137,8 @@ void load_polynomial_rules(IntegrationTable& table) {
                 auto it_n = m.find("_n");
                 if (it_n == m.end()) { return false; }
                 if (expression_depends_on_variable(LMCAS::detail::node(it_n->second), var)) { return false; }
-                auto n_simp = it_n->second.simplify();
-                if (!n_simp) { return false; }
-                auto neg_one = SymbolicExpr::number(-1);
-                auto diff = SymbolicExpr::add(n_simp, neg_one)->simplify();
-                if (diff && diff->is_zero()) { return false; }
-                return true;
+                const auto exponent = detail::exact_rational_value(detail::node(it_n->second));
+                return exponent && *exponent + Rational(1) != Rational(0);
             }, 80));
     }
     {

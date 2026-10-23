@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "transform_engine.hpp"
 #include "assumption_context.hpp"
@@ -22,7 +23,7 @@ TEST(TransformExactDecay, ExactLaplaceFactorial) {
     ASSERT_TRUE((result.has_value())) << "exact polynomial Laplace succeeds";
     if (!result)
         return;
-    auto value = result.value().value.expression->substitute("s", SymbolicExpr::number(1))->simplify();
+    auto value = LMCAS::simplify(LMCAS::substitute(result.value().value.expression, "s", SymbolicExpr::number(1)).value()).value();
     auto number = std::dynamic_pointer_cast<const NumberNode>(detail::node(value));
     EXPECT_TRUE((number != nullptr)) << "Laplace value is an exact number";
     if (!number)
@@ -73,9 +74,7 @@ TEST(TransformExactDecay, SymbolicDecayCoefficientAndCondition) {
     auto equivalent = check_equivalent(expression, expected, context);
     EXPECT_TRUE((equivalent && std::holds_alternative<ProvedZeroResidual>(equivalent.value()))) << "Fourier result equals 12*a/(4*a^2+omega^2)";
     {
-        EXPECT_NEAR(expression->substitute("a", SymbolicExpr::number(1))
-                                         ->substitute("omega", SymbolicExpr::number(0))
-                                         ->simplify()
+        EXPECT_NEAR(LMCAS::simplify(LMCAS::substitute(LMCAS::substitute(expression, "a", SymbolicExpr::number(1)).value(), "omega", SymbolicExpr::number(0)).value()).value()
                                          ->to_numeric(), 3.0, 1e-12) << "a=1 and omega=0 gives 3, retaining both independent coefficients";
     }
     const auto &conditions = result.value().value.conditions;

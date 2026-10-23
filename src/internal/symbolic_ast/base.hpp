@@ -227,10 +227,11 @@ public:
     struct DepthGuard {
         SymbolicVisitor& visitor;
         DepthGuard(SymbolicVisitor& v) : visitor(v) {
-            if (visitor.current_depth >= MAX_DEPTH) {
+            if (visitor.rewrite_budget_) {
+                visitor.rewrite_budget_->enter();
+            } else if (visitor.current_depth >= MAX_DEPTH) {
                 throw std::runtime_error("AST traversal depth limit exceeded");
             }
-            if (visitor.rewrite_budget_) { visitor.rewrite_budget_->enter(); }
             ++visitor.current_depth;
         }
         ~DepthGuard() {

@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "transcendental_factor.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "poly_utils.hpp"
@@ -170,8 +172,18 @@ static Result<TfPolyBuildResult> tf_convert_main_variable(
 Result<TfPolyBuildResult> tf_build_polynomial(
     const std::shared_ptr<SymbolicExpr>& poly_expr,
     const std::vector<std::string>& indeterminates,
-    const std::string& original_var) try {
+    const std::string& original_var) {
+    ComputationContext context;
+    return tf_build_polynomial_impl(poly_expr, indeterminates, original_var, context);
+}
 
+Result<TfPolyBuildResult> tf_build_polynomial_impl(
+    const std::shared_ptr<SymbolicExpr>& poly_expr,
+    const std::vector<std::string>& indeterminates,
+    const std::string& original_var, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                            context.limits().max_ast_nodes,
+                                            "tf_build_polynomial");
     TfPolyBuildResult result;
     result.success = false;
 
@@ -182,7 +194,7 @@ Result<TfPolyBuildResult> tf_build_polynomial(
 
     auto before = tf_polynomial_variables(poly_expr, indeterminates, original_var);
     if (!before.empty() && !tf_validate_polynomial(poly_expr, before)) return result;
-    auto expanded = poly_expr->expand();
+    auto expanded = detail::make_expression_ptr(detail::expand_node(detail::node(poly_expr), transform_budget));
     if (!expanded || !LMCAS::detail::node(expanded)) {
         expanded = poly_expr;
     }
@@ -207,10 +219,10 @@ Result<TfPolyBuildResult> tf_build_polynomial(
     if (result.main_variable.empty() || max_degree < 0) return result;
     return tf_convert_main_variable(std::move(result), expanded, all_variables);
 }
-catch (const std::bad_alloc&) {
+catch (const CasError& error) { return Result<TfPolyBuildResult>::failure(error); } catch (const std::bad_alloc&) {
     return Result<TfPolyBuildResult>::failure(CasErrc::ResourceLimit,
         "allocation failed while constructing polynomial", "tf_build_polynomial");
-} catch (const std::exception& ex) {
+} catch (const std::length_error& error) { return Result<TfPolyBuildResult>::failure(CasErrc::ResourceLimit, error.what(), "tf_build_polynomial"); } catch (const std::exception& ex) {
     return Result<TfPolyBuildResult>::failure(CasErrc::InternalInvariant,
         ex.what(), "tf_build_polynomial");
 }

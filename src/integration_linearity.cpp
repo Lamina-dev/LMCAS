@@ -87,6 +87,9 @@ Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
 
     if (auto add = std::dynamic_pointer_cast<const AddNode>(
             LMCAS::detail::node(expr))) {
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                    context.limits().max_ast_nodes, "integrate.linearity");
+        std::size_t nodes = 1;
         std::vector<std::shared_ptr<const SymbolicNode>> results;
         for (auto& op : add->operands()) {
             auto term = LMCAS::detail::expression_from_node(op);
@@ -96,8 +99,10 @@ Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
                 return Result<std::shared_ptr<SymbolicExpr>>::failure(
                     int_term.error());
             }
+            nodes = budget.append_size(nodes, budget.measure(detail::node(int_term.value())));
             results.push_back(LMCAS::detail::node(int_term.value()));
         }
+        budget.require_nodes(nodes);
         return Result<std::shared_ptr<SymbolicExpr>>::success(
             LMCAS::detail::make_expression_ptr(
                 LMCAS::detail::make_node<AddNode>(results)));

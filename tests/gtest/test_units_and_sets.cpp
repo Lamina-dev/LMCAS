@@ -40,7 +40,7 @@ TEST(QuantityTest, ConvertsAndStripsWithoutApproximation) {
 
     auto stripped = strip_to_base_value(metres.value(), context);
     ASSERT_TRUE(stripped);
-    auto simplified = stripped.value()->simplify();
+    auto simplified = LMCAS::simplify(stripped.value()).value();
     ASSERT_TRUE(simplified);
     EXPECT_EQ(simplified->to_string(), "2000");
 
@@ -52,7 +52,7 @@ TEST(QuantityTest, ConvertsAndStripsWithoutApproximation) {
     auto hundred_centimetres = with_unit(exact(100), "cm", context);
     ASSERT_TRUE(one_metre);
     ASSERT_TRUE(hundred_centimetres);
-    auto same_length = equivalent_core(*one_metre.value(),
+    auto same_length = equivalent(*one_metre.value(),
                                        *hundred_centimetres.value(), context);
     ASSERT_TRUE(same_length);
     EXPECT_TRUE(same_length.value());
@@ -71,7 +71,7 @@ TEST(QuantityTest, AcceptsResolvedCustomUnits) {
 
     auto display = strip_to_display_value(converted.value(), context);
     ASSERT_TRUE(display);
-    auto simplified = display.value()->simplify();
+    auto simplified = LMCAS::simplify(display.value()).value();
     ASSERT_TRUE(simplified);
     EXPECT_EQ(simplified->to_string(), "300");
 

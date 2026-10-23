@@ -1,3 +1,4 @@
+#include "computation_context.hpp"
 #pragma once
 
 #include "symbolic_geometry_line_plane.hpp"
@@ -25,7 +26,7 @@ Result<void> validate_surface_point(
 ExpressionResult simplify_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& operation,
-    const std::string& message);
+    const std::string& message, ComputationContext& context);
 
 Result<double> numeric_vector_scale_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& expressions,

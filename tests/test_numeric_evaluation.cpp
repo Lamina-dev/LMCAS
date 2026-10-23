@@ -2,6 +2,9 @@
 #include "numeric_evaluation.hpp"
 #include "expr.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/numeric_probe.hpp"
+#include "solve_strategies.hpp"
+#include "solve_transcendental.hpp"
 #include <limits>
 
 TEST(NumericEvaluation, TestEvaluatorPolicies) {
@@ -245,4 +248,96 @@ TEST(NumericEvaluation, LambertNumericContract) {
     const auto infinite = evaluate_numeric(
         *expression, {{"x", std::numeric_limits<double>::infinity()}});
     EXPECT_TRUE((!infinite && infinite.error().code == CasErrc::NumericFailure)) << "nonfinite numerical input is not a real-domain error";
+}
+
+TEST(NumericEvaluation, ProbePreservesHardErrors) {
+    auto expression = SymbolicExpr::exp(SymbolicExpr::number(1000));
+    ComputationContext reference;
+    auto evaluated = evaluate_numeric(*expression, {}, reference);
+    ASSERT_FALSE(evaluated);
+    ASSERT_EQ(evaluated.error().code, CasErrc::NumericFailure);
+
+    ComputationContext context;
+    try {
+        (void)detail::try_finite_numeric(*expression, context);
+        FAIL() << "numeric overflow must not become an inapplicable probe";
+    } catch (const CasError& error) {
+        EXPECT_EQ(error.code, evaluated.error().code);
+        EXPECT_EQ(error.message, evaluated.error().message);
+        EXPECT_EQ(error.operation, evaluated.error().operation);
+    }
+
+    CancellationToken cancellation;
+    cancellation.cancel();
+    ComputationContext cancelled({}, cancellation);
+    auto stopped = evaluate_numeric(*SymbolicExpr::number(1), {}, cancelled);
+    ASSERT_FALSE(stopped);
+    try {
+        (void)detail::try_finite_numeric(*SymbolicExpr::number(1), cancelled);
+        FAIL() << "cancelled probes must propagate the original error";
+    } catch (const CasError& error) {
+        EXPECT_EQ(error.code, stopped.error().code);
+        EXPECT_EQ(error.message, stopped.error().message);
+        EXPECT_EQ(error.operation, stopped.error().operation);
+    }
+    EXPECT_EQ(cancelled.recursion_depth(), 0u);
+}
+
+TEST(NumericEvaluation, ProbeSharesRemainingSteps) {
+    ResourceLimits limits;
+    limits.max_steps = 1;
+    ComputationContext context(limits);
+    auto expression = SymbolicExpr::number(1);
+    ASSERT_EQ(detail::try_finite_numeric(*expression, context), 1.0);
+    EXPECT_EQ(context.steps_used(), 1u);
+    try {
+        (void)detail::try_finite_numeric(*expression, context);
+        FAIL() << "a second probe must use the remaining shared budget";
+    } catch (const CasError& error) {
+        EXPECT_EQ(error.code, CasErrc::ResourceLimit);
+        EXPECT_EQ(error.operation, "evaluate_numeric");
+        EXPECT_FALSE(error.message.empty());
+    }
+    EXPECT_EQ(context.recursion_depth(), 0u);
+}
+
+TEST(NumericEvaluation, ProbeSoftMisses) {
+    ComputationContext context;
+    EXPECT_FALSE(detail::try_finite_numeric(
+        *SymbolicExpr::variable("unbound"), context));
+    EXPECT_FALSE(detail::try_finite_numeric(
+        *SymbolicExpr::ln(SymbolicExpr::number(-1)), context));
+    EXPECT_FALSE(detail::try_finite_numeric(
+        *SymbolicExpr::matrix({{SymbolicExpr::number(1)}}), context));
+    EXPECT_FALSE(detail::try_finite_numeric(
+        *SymbolicExpr::infinity(1), context));
+    EXPECT_FALSE(detail::try_finite_numeric(
+        *SymbolicExpr::infinity(-1), context));
+    EXPECT_EQ(context.recursion_depth(), 0u);
+}
+
+TEST(NumericEvaluation, ProbeFailureSurvivesEquationBoundary) {
+    auto base = SymbolicExpr::exp(SymbolicExpr::number(1000));
+    auto equation = SymbolicExpr::add(
+        SymbolicExpr::power(base, SymbolicExpr::variable("x")),
+        SymbolicExpr::number(-2));
+    auto numeric = evaluate_numeric(*base);
+    ASSERT_FALSE(numeric);
+    ASSERT_EQ(numeric.error().code, CasErrc::NumericFailure);
+
+    ComputationContext context;
+    auto solved = solve_equation(equation, "x", context);
+    ASSERT_FALSE(solved);
+    EXPECT_EQ(solved.error().code, numeric.error().code);
+    EXPECT_EQ(solved.error().message, numeric.error().message);
+    EXPECT_EQ(solved.error().operation, numeric.error().operation);
+    EXPECT_EQ(context.recursion_depth(), 0u);
+
+    ComputationContext transcendental_context;
+    auto inverted = solve_transcendental(equation, "x", transcendental_context);
+    ASSERT_FALSE(inverted);
+    EXPECT_EQ(inverted.error().code, numeric.error().code);
+    EXPECT_EQ(inverted.error().message, numeric.error().message);
+    EXPECT_EQ(inverted.error().operation, numeric.error().operation);
+    EXPECT_EQ(transcendental_context.recursion_depth(), 0u);
 }

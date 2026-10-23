@@ -14,7 +14,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::normalize_bound_body(
         return result;
     }
     const detail::ScopedFacts scoped(facts_, binder->bound_name);
-    NormalizationVisitor inner(context_, scoped, domain_, rewrite_budget());
+    NormalizationVisitor inner(*rewrite_budget(), scoped, domain_);
     binder->scoped_body->accept(inner);
     return inner.get_result();
 }
@@ -208,7 +208,7 @@ void NormalizationVisitor::visit(const SummationNode& node) {
                     auto kval = LMCAS::detail::make_node<NumberNode>(index);
                     auto term = norm_subst_index(new_body, node.index_var(), kval, rewrite_budget());
                     normalization_check_children(rewrite_budget(), 0, term);
-                    NormalizationVisitor inner(context_, facts_, domain_, rewrite_budget());
+                    NormalizationVisitor inner(*rewrite_budget(), facts_, domain_);
                     term->accept(inner);
                     normalization_append(rewrite_budget(), nodes, terms, inner.get_result());
                 }
@@ -253,7 +253,7 @@ void NormalizationVisitor::visit(const ProductNode& node) {
                     auto kval = LMCAS::detail::make_node<NumberNode>(index);
                     auto term = norm_subst_index(new_body, node.index_var(), kval, rewrite_budget());
                     normalization_check_children(rewrite_budget(), 0, term);
-                    NormalizationVisitor inner(context_, facts_, domain_, rewrite_budget());
+                    NormalizationVisitor inner(*rewrite_budget(), facts_, domain_);
                     term->accept(inner);
                     normalization_append(rewrite_budget(), nodes, factors, inner.get_result());
                 }

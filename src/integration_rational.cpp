@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_rational_support.hpp"
 
 namespace LMCAS {
@@ -43,7 +45,10 @@ std::shared_ptr<SymbolicExpr> rd_add_fraction_primitives(
     RationalDecompositionStrategy& strategy, const SymbolicExpr& expr, const std::string& var,
     const std::vector<std::pair<Polynomial<Rational>, int>>& factors,
     const std::vector<Polynomial<Rational>>& numerators,
-    std::shared_ptr<SymbolicExpr> result) {
+    std::shared_ptr<SymbolicExpr> result, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
         if (!numerators.empty()) {
             size_t idx = 0;
             for (size_t i = 0; i < factors.size(); ++i) {
@@ -60,7 +65,7 @@ std::shared_ptr<SymbolicExpr> rd_add_fraction_primitives(
                 }
             }
         }
-        auto simplified = result->simplify();
+        auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
         if (simplified) {
             return simplified;
         }
@@ -107,13 +112,15 @@ Result<std::shared_ptr<SymbolicExpr>> rd_integrate_proper_fraction(
             }
         }
     auto result = rd_integrate_polynomial(quot, var);
-    return rd_add_fraction_primitives(strategy, expr, var, factors, numerators, result);
+    return rd_add_fraction_primitives(strategy, expr, var, factors, numerators, result, computation);
 }
 }
 
 Result<std::shared_ptr<SymbolicExpr>> RationalDecompositionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int depth) {
+    ComputationContext& computation, int depth) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
     (void)ctx;
     (void)depth;
 
@@ -136,11 +143,19 @@ Result<std::shared_ptr<SymbolicExpr>> RationalDecompositionStrategy::try_integra
         auto coefficient = SymbolicExpr::number(
             P.coeffs[0] / Q.coeffs[1]);
         auto logarithm = SymbolicExpr::ln(poly_to_symbolic(Q));
-        return SymbolicExpr::multiply(
-            coefficient, logarithm)->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+            coefficient, logarithm)), transform_budget));
     }
     if (Q.degree() < 2) { return nullptr; }
     return rd_integrate_proper_fraction(*this, expr, var, P, Q, computation);
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 }

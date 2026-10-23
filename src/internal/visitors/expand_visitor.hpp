@@ -13,14 +13,8 @@ class ExpandVisitor : public LMCAS::detail::SymbolicVisitor {
 public:
     std::shared_ptr<const SymbolicNode> result;  /**< 展开结果节点。 */
 
-    explicit ExpandVisitor(detail::RewriteBudget* budget = nullptr)
-        : SymbolicVisitor(budget), result(nullptr),
-          local_context_(budget ? std::nullopt
-              : std::optional<ComputationContext>(std::in_place)),
-          context_(budget ? budget->context() : *local_context_) {}
-    explicit ExpandVisitor(ComputationContext& context,
-                           detail::RewriteBudget* budget = nullptr)
-        : SymbolicVisitor(budget), result(nullptr), context_(context) {}
+    explicit ExpandVisitor(detail::RewriteBudget& budget)
+        : SymbolicVisitor(&budget), result(nullptr) {}
     std::shared_ptr<const SymbolicNode> get_result() const { return result; }
 
     void visit(const NumberNode& node) override {
@@ -47,7 +41,7 @@ public:
             return;
         }
 
-        NormalizationVisitor norm(context_, detail::no_facts(), Domain::Real, rewrite_budget());
+        NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
         set_result(expanded_ops[0]);
         for (size_t i = 1; i < expanded_ops.size(); ++i) {
             set_result(norm.expand_product(result, expanded_ops[i]));
@@ -84,7 +78,12 @@ public:
                 }
             }
         }
-        set_result(node.clone(), size);
+        if (const auto* dense = std::get_if<MatrixNode::DenseStorage>(&node.storage())) {
+            set_result(detail::make_node<MatrixNode>(node.rows(), node.cols(), *dense), size);
+        } else {
+            set_result(detail::make_node<MatrixNode>(node.rows(), node.cols(),
+                std::get<MatrixNode::SparseStorage>(node.storage())), size);
+        }
     }
     void visit(const IntegralNode& node) override {
         std::size_t size = 1;
@@ -227,8 +226,6 @@ public:
     }
 
 private:
-    std::optional<ComputationContext> local_context_;
-    ComputationContext& context_;
 
     void check_child_count(std::size_t count, std::size_t roots = 1) const {
         if (auto* budget = rewrite_budget()) {
@@ -270,8 +267,7 @@ private:
     }
 
     void set_result(std::shared_ptr<const SymbolicNode> candidate) {
-        std::size_t size = 0;
-        append_child(size, candidate);
+        const auto size = rewrite_budget()->measure_result(candidate);
         set_result(std::move(candidate), size);
     }
 };

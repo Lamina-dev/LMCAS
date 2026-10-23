@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "symbolic_geometry_surface.hpp"
 #include "internal/symbolic_geometry_support.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -17,34 +18,48 @@ namespace {
 ExpressionResult differentiate_surface_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
-    const std::string& operation)
-{
+    const std::string& operation, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     try {
-        auto derivative = expr->differentiate(var);
+        auto derivative = detail::make_expression_ptr(detail::differentiate_node(detail::node(expr), var, transform_budget));
         return simplify_checked(
             derivative, operation,
-            "surface derivative is outside the supported domain");
-    } catch (const std::exception&) {
+            "surface derivative is outside the supported domain", context);
+    } catch (const std::length_error& error) { return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), operation); } catch (const std::exception&) {
         return ExpressionResult::failure(
-            CasErrc::Inconclusive,
+            CasErrc::InternalInvariant,
             "surface derivative is outside the supported domain",
             operation);
     }
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 VectorExprListResult surface_gradient_at_point_checked(
     const SurfaceSymbolic& surf,
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
-    const std::string& operation)
-{
+    const std::string& operation, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<std::shared_ptr<SymbolicExpr>> gradient;
     gradient.reserve(surf.vars.size());
     for (size_t i = 0; i < surf.vars.size(); ++i) {
-        auto derivative = differentiate_surface_checked(surf.F, surf.vars[i], operation);
+        auto derivative = differentiate_surface_checked(surf.F, surf.vars[i], operation, context);
         if (!derivative) return VectorExprListResult::failure(derivative.error());
         auto substituted = derivative.value();
         for (size_t j = 0; j < surf.vars.size(); ++j) {
-            substituted = substituted->substitute(surf.vars[j], point[j]);
+            substituted = detail::make_expression_ptr(detail::substitute_node(detail::node(substituted), surf.vars[j], detail::node(point[j]), transform_budget));
             if (!substituted || !LMCAS::detail::node(substituted)) {
                 return VectorExprListResult::failure(
                     CasErrc::Inconclusive,
@@ -54,11 +69,19 @@ VectorExprListResult surface_gradient_at_point_checked(
         }
         auto simplified = simplify_checked(
             substituted, operation,
-            "surface derivative substitution is outside the supported domain");
+            "surface derivative substitution is outside the supported domain", context);
         if (!simplified) return VectorExprListResult::failure(simplified.error());
         gradient.push_back(std::move(simplified.value()));
     }
     return VectorExprListResult::success(std::move(gradient));
+} catch (const CasError& error) {
+    return VectorExprListResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return VectorExprListResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return VectorExprListResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return VectorExprListResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 Result<double> surface_gradient_scale_checked(
@@ -131,7 +154,7 @@ VectorExprListResult surface_normal_checked(
     auto step = context.consume_steps(surf.vars.size() * 4 + 4, operation);
     if (!step) return VectorExprListResult::failure(step.error());
 
-    auto gradient = surface_gradient_at_point_checked(surf, point, operation);
+    auto gradient = surface_gradient_at_point_checked(surf, point, operation, context);
     if (!gradient) return gradient;
     std::vector<double> gradient_values;
     auto scaled = surface_gradient_scale_checked(
@@ -177,7 +200,7 @@ PlaneSymbolicResult tangent_plane_checked(
         return PlaneSymbolicResult::failure(step.error());
     }
 
-    auto gradient = surface_gradient_at_point_checked(surf, point, operation);
+    auto gradient = surface_gradient_at_point_checked(surf, point, operation, context);
     if (!gradient) {
         return PlaneSymbolicResult::failure(gradient.error());
     }
@@ -213,7 +236,7 @@ PlaneSymbolicResult tangent_plane_checked(
     }
     auto d = simplify_checked(
         dot.value(), operation,
-        "tangent plane constant is outside the supported domain");
+        "tangent plane constant is outside the supported domain", context);
     if (!d) {
         return PlaneSymbolicResult::failure(d.error());
     }

@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "value.hpp"
 #include "numeric_evaluation.hpp"
 #include "lmmc/numeric.h"
@@ -105,6 +106,9 @@ LMCAS::Result<lmmc_real_t> exact_number_as_floating(const Exact& value) {
     }
 
     bool Value::is_numeric() const {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
         if (type == Type::Int || type == Type::Float ||
             type == Type::BigInt || type == Type::Rational ||
             type == Type::Irrational) {
@@ -114,7 +118,7 @@ LMCAS::Result<lmmc_real_t> exact_number_as_floating(const Exact& value) {
             const auto& sp = std::get<std::shared_ptr<SymbolicExpr>>(data);
             if (!sp) return false;
             try {
-                auto simp = sp->simplify();
+                auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(sp), transform_budget));
                 return simp && simp->is_number();
             } catch (const std::invalid_argument&) {
                 return false;

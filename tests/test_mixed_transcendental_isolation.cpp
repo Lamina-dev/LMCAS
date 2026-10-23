@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_mixed_transcendental_support.hpp"
 
 TEST(MixedTranscendentalIsolation, MaxRoots2SinX) {
@@ -212,7 +213,7 @@ TEST(MixedTranscendentalIsolation, XSquaredPlusOneAlwaysPositive) {
     auto expr = SymbolicExpr::add(
         SymbolicExpr::power(x, SymbolicExpr::number(2)),
         SymbolicExpr::number(1));
-    auto derivative = expr->differentiate("x");
+    auto derivative = LMCAS::differentiate(expr, "x").value();
 
     LMCAS::SearchInterval interval{-10.0, 10.0};
     LMCAS::SolveOptions opts;
@@ -229,7 +230,7 @@ TEST(MixedTranscendentalIsolation, ExpXPlusOneAlwaysPositive) {
     auto expr = SymbolicExpr::add(
         SymbolicExpr::exp(x),
         SymbolicExpr::number(1));
-    auto derivative = expr->differentiate("x");
+    auto derivative = LMCAS::differentiate(expr, "x").value();
 
     LMCAS::SearchInterval interval{-10.0, 10.0};
     LMCAS::SolveOptions opts;
@@ -248,7 +249,7 @@ TEST(MixedTranscendentalIsolation, NegXSquaredMinusOneAlwaysNegative) {
         SymbolicExpr::add(
             SymbolicExpr::power(x, SymbolicExpr::number(2)),
             SymbolicExpr::number(1)));
-    auto derivative = expr->differentiate("x");
+    auto derivative = LMCAS::differentiate(expr, "x").value();
 
     LMCAS::SearchInterval interval{-10.0, 10.0};
     LMCAS::SolveOptions opts;
@@ -265,7 +266,7 @@ TEST(MixedTranscendentalIsolation, SinXPlusFiveAlwaysPositive) {
     auto expr = SymbolicExpr::add(
         SymbolicExpr::sin(x),
         SymbolicExpr::number(5));
-    auto derivative = expr->differentiate("x");
+    auto derivative = LMCAS::differentiate(expr, "x").value();
 
     LMCAS::SearchInterval interval{-10.0, 10.0};
     LMCAS::SolveOptions opts;

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "limit_result.hpp"
 /**
  * @file test_exponential_limit.cpp
@@ -45,7 +46,7 @@ TEST(LmcasExponentialLimit, LogarithmicDerivative) {
     auto inv_x = SymbolicExpr::power(x, neg_one);
     auto base = SymbolicExpr::add(one, inv_x);
     auto ln_base = SymbolicExpr::ln(base);
-    auto deriv = ln_base->differentiate("x");
+    auto deriv = LMCAS::differentiate(ln_base, "x").value();
     EXPECT_TRUE((deriv != nullptr)) << "derivative exists";
 }
 
@@ -54,7 +55,7 @@ TEST(LmcasExponentialLimit, ReciprocalDerivative) {
     auto neg_one = SymbolicExpr::number(-1);
 
     auto inv_x = SymbolicExpr::power(x, neg_one);
-    auto deriv = inv_x->differentiate("x");
+    auto deriv = LMCAS::differentiate(inv_x, "x").value();
     EXPECT_TRUE((deriv != nullptr)) << "derivative exists";
 }
 

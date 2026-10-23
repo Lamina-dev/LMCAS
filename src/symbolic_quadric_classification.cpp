@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/symbolic_quadric_classification.hpp"
 
 #include "numeric_evaluation.hpp"
@@ -122,8 +124,10 @@ Result<double> finite_numeric_coeff(
     ComputationContext& context,
     const std::string& operation,
     const std::string& message)
-{
-    auto simplified = expression ? expression->simplify() : nullptr;
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto simplified = expression ? detail::make_expression_ptr(detail::normalize_node(detail::node(expression), transform_budget)) : nullptr;
     if (!simplified || !node(simplified)) {
         return Result<double>::failure(
             CasErrc::Inconclusive, message, operation);
@@ -144,6 +148,14 @@ Result<double> finite_numeric_coeff(
             CasErrc::Inconclusive, message, operation);
     }
     return Result<double>::success(evaluated.value().value);
+} catch (const CasError& error) {
+    return Result<double>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<double>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<double>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<double>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 Result<double> coefficient_of_square(
@@ -151,20 +163,30 @@ Result<double> coefficient_of_square(
     const std::string& variable,
     ComputationContext& context,
     const std::string& operation)
-{
-    auto derivative = expanded->differentiate(variable);
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto derivative = detail::make_expression_ptr(detail::differentiate_node(detail::node(expanded), variable, transform_budget));
     if (!derivative || !node(derivative)) {
         return Result<double>::failure(
             CasErrc::Inconclusive,
             "quadric second derivative is outside the supported domain",
             operation);
     }
-    derivative = derivative->differentiate(variable);
+    derivative = detail::make_expression_ptr(detail::differentiate_node(detail::node(derivative), variable, transform_budget));
     auto value = finite_numeric_coeff(
         derivative, context, operation,
         "quadric second derivative coefficient cannot be evaluated");
     if (!value) return value;
     return Result<double>::success(value.value() / 2.0);
+} catch (const CasError& error) {
+    return Result<double>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<double>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<double>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<double>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 Result<double> coefficient_of_linear(
@@ -173,8 +195,10 @@ Result<double> coefficient_of_linear(
     const std::vector<std::string>& vars,
     ComputationContext& context,
     const std::string& operation)
-{
-    auto derivative = expanded->differentiate(variable);
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto derivative = detail::make_expression_ptr(detail::differentiate_node(detail::node(expanded), variable, transform_budget));
     if (!derivative || !node(derivative)) {
         return Result<double>::failure(
             CasErrc::Inconclusive,
@@ -182,8 +206,7 @@ Result<double> coefficient_of_linear(
             operation);
     }
     for (const auto& coordinate : vars) {
-        derivative = derivative->substitute(
-            coordinate, SymbolicExpr::number(0));
+        derivative = detail::make_expression_ptr(detail::substitute_node(detail::node(derivative), coordinate, detail::node(SymbolicExpr::number(0)), transform_budget));
         if (!derivative || !node(derivative)) {
             return Result<double>::failure(
                 CasErrc::Inconclusive,
@@ -194,6 +217,14 @@ Result<double> coefficient_of_linear(
     return finite_numeric_coeff(
         derivative, context, operation,
         "quadric linear coefficient cannot be evaluated");
+} catch (const CasError& error) {
+    return Result<double>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<double>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<double>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<double>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 bool extract_axis_coefficients(
@@ -238,9 +269,11 @@ bool extract_mixed_coefficients(
     double quadratic_matrix[3][3],
     CasError& error)
 {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     for (size_t i = 0; i < 3; ++i) {
         for (size_t j = i + 1; j < 3; ++j) {
-            auto mixed = expanded->differentiate(vars[i]);
+            auto mixed = detail::make_expression_ptr(detail::differentiate_node(detail::node(expanded), vars[i], transform_budget));
             if (!mixed || !node(mixed)) {
                 error = {
                     CasErrc::Inconclusive,
@@ -248,7 +281,7 @@ bool extract_mixed_coefficients(
                     operation};
                 return false;
             }
-            mixed = mixed->differentiate(vars[j]);
+            mixed = detail::make_expression_ptr(detail::differentiate_node(detail::node(mixed), vars[j], transform_budget));
             auto mixed_value = finite_numeric_coeff(
                 mixed, context, operation,
                 "quadric mixed coefficient cannot be evaluated");
@@ -317,11 +350,12 @@ Result<double> coefficient_of_constant(
     const std::vector<std::string>& vars,
     ComputationContext& context,
     const std::string& operation)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto constant = expanded;
     for (const auto& coordinate : vars) {
-        constant = constant->substitute(
-            coordinate, SymbolicExpr::number(0));
+        constant = detail::make_expression_ptr(detail::substitute_node(detail::node(constant), coordinate, detail::node(SymbolicExpr::number(0)), transform_budget));
         if (!constant || !node(constant)) {
             return Result<double>::failure(
                 CasErrc::Inconclusive,
@@ -332,6 +366,14 @@ Result<double> coefficient_of_constant(
     return finite_numeric_coeff(
         constant, context, operation,
         "quadric constant term cannot be evaluated");
+} catch (const CasError& error) {
+    return Result<double>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<double>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<double>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<double>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 struct CenteredQuadric {
@@ -491,9 +533,11 @@ VectorStringResult classify_quadric_impl(
     const SurfaceSymbolic& surf,
     ComputationContext& context,
     const std::string& operation)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const auto& vars = surf.vars;
-    auto expanded = surf.F->expand();
+    auto expanded = detail::make_expression_ptr(detail::expand_node(detail::node(surf.F), transform_budget));
     if (!expanded || !node(expanded)) expanded = surf.F;
 
     double quadratic_matrix[3][3] = {};
@@ -551,6 +595,14 @@ VectorStringResult classify_quadric_impl(
     }
     return classify_translated_quadric(
         principal, rank, linear, expanded, vars, context, operation);
+} catch (const CasError& error) {
+    return VectorStringResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return VectorStringResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return VectorStringResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return VectorStringResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 }

@@ -189,8 +189,8 @@ static void expect_rich_relation(const AssumptionContext &context) {
     auto rhs = parse_expr("sqrt(z + 1)");
     ASSERT_TRUE(lhs);
     ASSERT_TRUE(rhs);
-    auto canonical_lhs = lhs.value()->simplify();
-    auto canonical_rhs = rhs.value()->simplify();
+    auto canonical_lhs = LMCAS::simplify(lhs.value()).value();
+    auto canonical_rhs = LMCAS::simplify(rhs.value()).value();
     ASSERT_TRUE(canonical_lhs);
     ASSERT_TRUE(canonical_rhs);
     EXPECT_TRUE(context.has_relation(
@@ -204,8 +204,8 @@ static void expect_rich_conditional(const AssumptionContext &context) {
     auto expected_conclusion = parse_expr("log(z, 10) < 2/3");
     ASSERT_TRUE(expected_condition);
     ASSERT_TRUE(expected_conclusion);
-    auto canonical_condition = expected_condition.value()->simplify();
-    auto canonical_conclusion = expected_conclusion.value()->simplify();
+    auto canonical_condition = LMCAS::simplify(expected_condition.value()).value();
+    auto canonical_conclusion = LMCAS::simplify(expected_conclusion.value()).value();
     ASSERT_TRUE(canonical_condition);
     ASSERT_TRUE(canonical_conclusion);
     EXPECT_TRUE(detail::node(conditionals.front().condition)

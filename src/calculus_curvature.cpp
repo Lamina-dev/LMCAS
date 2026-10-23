@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include "solve_strategies.hpp"
 #include "internal/calculus_utils_support.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -11,16 +12,31 @@ using namespace calculus_utils_detail;
 static ExpressionResult checked_derivative(
     const ExprPtr& expression, const std::string& variable,
     ComputationContext& context, const char* operation)
-{
+try {
     return detail::checked_transform_expr(
         expression, context, operation, "differentiate",
-        [&variable](const SymbolicExpr& value) { return value.differentiate(variable); });
+        [&variable, &context, operation](const SymbolicExpr& value) {
+            detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                         context.limits().max_ast_nodes, operation);
+            return detail::make_expression_ptr(
+                detail::differentiate_node(detail::node(value), variable, budget));
+        });
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 ExpressionResult curvature_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "curvature";
     auto input = calculus_utils_validate_expr(f, var, context, operation);
     if (!input) {
@@ -51,8 +67,16 @@ ExpressionResult curvature_checked(
     auto three_half = SymbolicExpr::number(Rational(3, 2));
     auto denom = SymbolicExpr::power(one_plus_fp_sq, three_half);
     auto result = SymbolicExpr::divide(abs_f_pp, denom);
-    auto simplified = result->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
     return ExpressionResult::success(simplified ? simplified : result);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "curvature");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "curvature");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "curvature");
 }
 
 ExpressionResult curvature_checked(
@@ -67,7 +91,9 @@ ExpressionResult curvature_parametric_checked(
     const std::shared_ptr<SymbolicExpr>& x_t,
     const std::shared_ptr<SymbolicExpr>& y_t, const std::string& t,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "curvature_parametric";
     auto input = calculus_utils_validate_two_exprs(x_t, y_t, t, context, operation);
     if (!input) {
@@ -122,8 +148,16 @@ ExpressionResult curvature_parametric_checked(
     auto three_half = SymbolicExpr::number(Rational(3, 2));
     auto denom = SymbolicExpr::power(sum_sq, three_half);
     auto result = SymbolicExpr::divide(abs_cross, denom);
-    auto simplified = result->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
     return ExpressionResult::success(simplified ? simplified : result);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "curvature_parametric");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "curvature_parametric");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "curvature_parametric");
 }
 
 ExpressionResult curvature_parametric_checked(
@@ -141,10 +175,12 @@ static Result<bool> inflection_curve_defined(
     const std::shared_ptr<SymbolicExpr>& f_prime,
     const std::shared_ptr<SymbolicExpr>& f_double_prime,
     const std::shared_ptr<SymbolicExpr>& point, const std::string& var,
-    const FactsQuery& facts, const std::string& operation, ComputationContext& context) {
-    auto value = f->substitute(var, point);
-    auto first = f_prime->substitute(var, point);
-    auto second = f_double_prime->substitute(var, point);
+    const FactsQuery& facts, const std::string& operation, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto value = detail::make_expression_ptr(detail::substitute_node(detail::node(f), var, detail::node(point), transform_budget));
+    auto first = detail::make_expression_ptr(detail::substitute_node(detail::node(f_prime), var, detail::node(point), transform_budget));
+    auto second = detail::make_expression_ptr(detail::substitute_node(detail::node(f_double_prime), var, detail::node(point), transform_budget));
     for (const auto& expression : {value, first, second}) {
         auto defined = detail::query_definedness(detail::node(expression), facts, Domain::Real, context);
         if (!defined) { return Result<bool>::failure(defined.error()); }
@@ -159,6 +195,14 @@ static Result<bool> inflection_curve_defined(
         }
     }
     return true;
+} catch (const CasError& error) {
+    return Result<bool>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<bool>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 static SymbolicExprVectorResult classify_inflection_candidates(
@@ -194,7 +238,9 @@ static SymbolicExprVectorResult classify_inflection_candidates(
 SymbolicExprVectorResult inflection_points_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "inflection_points";
     auto input = calculus_utils_validate_expr(f, var, context, operation);
     if (!input) {
@@ -213,7 +259,7 @@ SymbolicExprVectorResult inflection_points_checked(
     }
     const auto& f_double_prime = second.value();
 
-    auto equation = f_double_prime->simplify();
+    auto equation = detail::make_expression_ptr(detail::normalize_node(detail::node(f_double_prime), transform_budget));
     if (!equation || !LMCAS::detail::node(equation)) { equation = f_double_prime; }
 
     auto solved = solve_equation(equation, var, context, SolveOptions{});
@@ -239,6 +285,14 @@ SymbolicExprVectorResult inflection_points_checked(
         CasErrc::Inconclusive,
         "inflection equation is outside the finite exact support domain",
         operation);
+} catch (const CasError& error) {
+    return SymbolicExprVectorResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SymbolicExprVectorResult::failure(CasErrc::ResourceLimit, "allocation failed", "inflection_points");
+} catch (const std::length_error& error) {
+    return SymbolicExprVectorResult::failure(CasErrc::ResourceLimit, error.what(), "inflection_points");
+} catch (const std::exception& error) {
+    return SymbolicExprVectorResult::failure(CasErrc::InternalInvariant, error.what(), "inflection_points");
 }
 
 SymbolicExprVectorResult inflection_points_checked(

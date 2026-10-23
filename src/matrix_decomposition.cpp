@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/matrix_decomposition_support.hpp"
 
 #include <algorithm>
@@ -17,7 +18,10 @@ struct NormSum {
     std::optional<Rational> exact;
 };
 
-NormSum matrix_axis_sum(const MatrixNode& matrix, std::size_t axis, bool columns) {
+NormSum matrix_axis_sum(const MatrixNode& matrix, std::size_t axis, bool columns, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto sum = SymbolicExpr::number(0);
     std::optional<Rational> exact_sum = Rational(0);
     const auto count = columns ? matrix.rows() : matrix.cols();
@@ -26,7 +30,7 @@ NormSum matrix_axis_sum(const MatrixNode& matrix, std::size_t axis, bool columns
             ? matrix.get(index, axis) : matrix.get(axis, index));
         sum = SymbolicExpr::add(sum, abs_expression(entry));
         if (exact_sum) {
-            auto exact_entry = exact_rational_expr(entry);
+            auto exact_entry = exact_rational_expr(entry, context);
             if (exact_entry) {
                 *exact_sum = *exact_sum + ((*exact_entry < Rational(0))
                     ? (Rational(0) - *exact_entry) : *exact_entry);
@@ -35,16 +39,16 @@ NormSum matrix_axis_sum(const MatrixNode& matrix, std::size_t axis, bool columns
             }
         }
     }
-    sum = sum->simplify();
-    return {sum, exact_sum ? exact_sum : exact_rational_expr(sum)};
+    sum = detail::make_expression_ptr(detail::normalize_node(detail::node(sum), transform_budget));
+    return {sum, exact_sum ? exact_sum : exact_rational_expr(sum, context)};
 }
 
-std::shared_ptr<SymbolicExpr> maximum_axis_sum(const MatrixNode& matrix, bool columns) {
+std::shared_ptr<SymbolicExpr> maximum_axis_sum(const MatrixNode& matrix, bool columns, ComputationContext& context) {
     std::optional<Rational> maximum_exact;
     std::vector<std::shared_ptr<const SymbolicNode>> candidates;
     const auto count = columns ? matrix.cols() : matrix.rows();
     for (std::size_t axis = 0; axis < count; ++axis) {
-        auto candidate = matrix_axis_sum(matrix, axis, columns);
+        auto candidate = matrix_axis_sum(matrix, axis, columns, context);
         if (candidate.exact) {
             if (!maximum_exact || *candidate.exact > *maximum_exact)
                 maximum_exact = *candidate.exact;
@@ -62,6 +66,9 @@ std::shared_ptr<SymbolicExpr> maximum_axis_sum(const MatrixNode& matrix, bool co
 }
 
 std::shared_ptr<SymbolicExpr> matrix_trace(const std::shared_ptr<SymbolicExpr>& A) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat || mat->rows() != mat->cols()) {
         return nullptr;
@@ -70,10 +77,13 @@ std::shared_ptr<SymbolicExpr> matrix_trace(const std::shared_ptr<SymbolicExpr>& 
     for (size_t i = 0; i < mat->rows(); ++i) {
         sum = SymbolicExpr::add(sum, LMCAS::detail::make_expression_ptr(mat->get(i, i)));
     }
-    return sum->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(sum), transform_budget));
 }
 std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
     const std::shared_ptr<SymbolicExpr>& B) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto a = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     auto b = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(B));
     if (!a || !b) {
@@ -88,13 +98,16 @@ std::shared_ptr<SymbolicExpr> kronecker(const std::shared_ptr<SymbolicExpr>& A,
             for (size_t k = 0; k < p; ++k)
                 for (size_t l = 0; l < q; ++l) {
                     auto bkl = LMCAS::detail::make_expression_ptr(b->get(k, l));
-                    grid[i * p + k][j * q + l] = SymbolicExpr::multiply(aij, bkl)->simplify();
+                    grid[i * p + k][j * q + l] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(aij, bkl)), transform_budget));
                 }
         }
     return SymbolicExpr::matrix(grid);
 }
 std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A,
     const std::string& type) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(A));
     if (!mat) {
         return nullptr;
@@ -108,13 +121,13 @@ std::shared_ptr<SymbolicExpr> matrix_norm(const std::shared_ptr<SymbolicExpr>& A
                 auto e = LMCAS::detail::make_expression_ptr(mat->get(i, j));
                 sum = SymbolicExpr::add(sum, SymbolicExpr::multiply(e, e));
             }
-        return SymbolicExpr::sqrt(sum)->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::sqrt(sum)), transform_budget));
     }
     if (type == "1") {
-        return maximum_axis_sum(*mat, true);
+        return maximum_axis_sum(*mat, true, context);
     }
     if (type == "inf") {
-        return maximum_axis_sum(*mat, false);
+        return maximum_axis_sum(*mat, false, context);
     }
     return nullptr;
 }

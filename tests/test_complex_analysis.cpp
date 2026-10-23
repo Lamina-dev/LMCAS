@@ -22,7 +22,7 @@ TEST(LmcasComplexAnalysis, SimplePole) {
     auto res = residue_checked(f, "z", a, 1).value();
     ASSERT_TRUE((res != nullptr)) << ("residue not null");
     {
-        const auto actual_expr = res->simplify();
+        const auto actual_expr = LMCAS::simplify(res).value();
         const auto expected_expr = num(1);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("Res(1/(z-2), z=2) = 1");
     }
@@ -35,7 +35,7 @@ TEST(LmcasComplexAnalysis, ResidueAtNonrealPole) {
     auto result = residue_checked(SymbolicExpr::divide(num(1), shifted), "z", i, 1);
     ASSERT_TRUE(result.has_value()) << "residue at a nonreal pole succeeds";
     ASSERT_TRUE(result.value());
-    auto simplified = result.value()->simplify();
+    auto simplified = LMCAS::simplify(result.value()).value();
     ASSERT_TRUE(simplified);
     EXPECT_EQ(simplified->to_string(), num(1)->to_string()) << "Res(1/(z-i), i) = 1";
 }
@@ -46,7 +46,7 @@ TEST(LmcasComplexAnalysis, ImaginaryResidue) {
     auto result = residue_checked(SymbolicExpr::divide(i, z), "z", num(0), 1);
     ASSERT_TRUE(result.has_value()) << "nonreal residue succeeds";
     ASSERT_TRUE(result.value());
-    auto simplified = result.value()->simplify();
+    auto simplified = LMCAS::simplify(result.value()).value();
     ASSERT_TRUE(simplified);
     EXPECT_EQ(simplified->to_string(), i->to_string()) << "Res(i/z, 0) = i";
 }
@@ -58,8 +58,8 @@ TEST(LmcasComplexAnalysis, LogarithmicResidueAwayFromBranchCut) {
                                   "z", num(2), 1);
     ASSERT_TRUE(result.has_value()) << "logarithmic residue away from branch cut succeeds";
     ASSERT_TRUE(result.value());
-    auto simplified = result.value()->simplify();
-    auto expected = SymbolicExpr::ln(num(2))->simplify();
+    auto simplified = LMCAS::simplify(result.value()).value();
+    auto expected = LMCAS::simplify(SymbolicExpr::ln(num(2))).value();
     ASSERT_TRUE(simplified);
     ASSERT_TRUE(expected);
     EXPECT_EQ(simplified->to_string(), expected->to_string()) << "Res(ln(z)/(z-2), 2) = ln(2)";
@@ -72,7 +72,7 @@ TEST(LmcasComplexAnalysis, RadicalResidueAwayFromBranchCut) {
                                   "z", num(4), 1);
     ASSERT_TRUE(result.has_value()) << "radical residue away from branch cut succeeds";
     ASSERT_TRUE(result.value());
-    auto simplified = result.value()->simplify();
+    auto simplified = LMCAS::simplify(result.value()).value();
     ASSERT_TRUE(simplified);
     EXPECT_EQ(simplified->to_string(), num(2)->to_string()) << "Res(sqrt(z)/(z-4), 4) = 2";
 }
@@ -93,7 +93,7 @@ TEST(LmcasComplexAnalysis, ComplexVaryingLimit) {
     auto result = limit_expression_checked(product, "z", num(1), LimitDirection::Both, Domain::Complex);
     ASSERT_TRUE(result.has_value()) << "complex-valued varying limit succeeds";
     ASSERT_TRUE(result.value());
-    auto simplified = result.value()->simplify();
+    auto simplified = LMCAS::simplify(result.value()).value();
     ASSERT_TRUE(simplified);
     EXPECT_EQ(simplified->to_string(), i->to_string()) << "lim i*z at 1 = i";
 }
@@ -114,7 +114,7 @@ TEST(LmcasComplexAnalysis, ComplexRemovablePoleLimit) {
         "z", num(0), LimitDirection::Both, Domain::Complex);
     ASSERT_TRUE(result.has_value()) << "complex removable pole has a finite limit";
     ASSERT_TRUE(result.value());
-    auto simplified = result.value()->simplify();
+    auto simplified = LMCAS::simplify(result.value()).value();
     ASSERT_TRUE(simplified);
     EXPECT_EQ(simplified->to_string(), i->to_string()) << "lim (i*z)/z at 0 = i";
 }
@@ -220,7 +220,7 @@ TEST(LmcasComplexAnalysis, Conjugate) {
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("Re(conj(3+4i)) = 3");
     }
     {
-        const auto actual_expr = imag_part_checked(c).value()->simplify();
+        const auto actual_expr = LMCAS::simplify(imag_part_checked(c).value()).value();
         const auto expected_expr = num(-4);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("Im(conj(3+4i)) = -4");
     }
@@ -234,7 +234,7 @@ TEST(LmcasComplexAnalysis, Conjugate) {
             EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("checked Re(conj(3+4i)) = 3");
         }
         {
-            const auto actual_expr = imag_part_checked(checked.value()).value()->simplify();
+            const auto actual_expr = LMCAS::simplify(imag_part_checked(checked.value()).value()).value();
             const auto expected_expr = num(-4);
             EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("checked Im(conj(3+4i)) = -4");
         }
@@ -380,14 +380,14 @@ TEST(LmcasComplexAnalysis, NamedIIsAnOrdinaryRealSymbol) {
 TEST(LmcasComplexAnalysis, ImaginarySquare) {
     // ---- i^2 = -1 ----
     auto i = cmplx(0, 1);
-    auto i2 = SymbolicExpr::multiply(i, i)->simplify();
+    auto i2 = LMCAS::simplify(SymbolicExpr::multiply(i, i)).value();
     {
         const auto actual_expr = real_part_checked(i2).value();
         const auto expected_expr = num(-1);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("Re(i^2) = -1");
     }
     {
-        const auto actual_expr = imag_part_checked(i2).value()->simplify();
+        const auto actual_expr = LMCAS::simplify(imag_part_checked(i2).value()).value();
         const auto expected_expr = num(0);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("Im(i^2) = 0");
     }
@@ -427,7 +427,7 @@ TEST(LmcasComplexAnalysis, ResidueAndCauchyDomains) {
         << "checked residue succeeds for simple pole";
     ASSERT_TRUE(checked_residue.value());
     EXPECT_TRUE(test_expression_text(
-        checked_residue.value()->simplify(), num(1)))
+        LMCAS::simplify(checked_residue.value()).value(), num(1)))
         << "checked Res(1/(z-2), z=2) = 1";
 
     auto bad_order = residue_checked(f, "z", z0, 0);

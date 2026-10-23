@@ -1,55 +1,33 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
+#include "internal/assumption_facts.hpp"
 
 namespace LMCAS {
 
 Result<std::shared_ptr<SymbolicExpr>> TableLookupStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int) {
-    (void)computation;
-
-    auto all_entries = ctx.table().get_all_sorted();
-
-    for (const auto* entry : all_entries) {
-        MatchMap bindings;
-        if (Matcher::match(entry->pattern, expr, entry->wildcards, bindings)) {
-
-            // The matcher allows partial matches on commutative operations
-            // (Add/Multiply): unmatched operands are bound to __Add_REST__ /
-            // __Mul_REST__ for use by rewrite rules. For integration table
-            // lookup that behavior is wrong - a pattern like (1 + _u^2)^-1
-            // would otherwise match (1 + x^2 + x + x^3)^-1 with _u=x and the
-            // rest x + x^3 silently dropped, producing arctan(x) for an
-            // integrand that has nothing to do with arctan. Require an exact
-            // match (no leftover) so the result genuinely equals the
-            // integrand under this binding.
-            if (bindings.find("__Add_REST__") != bindings.end() ||
-                bindings.find("__Mul_REST__") != bindings.end()) {
-                continue;
-            }
-            const bool complete_binding = std::all_of(
-                entry->wildcards.begin(), entry->wildcards.end(),
-                [&](const std::string& wildcard_name) {
-                    return bindings.find(wildcard_name) != bindings.end();
-                });
-            if (!complete_binding) { continue; }
-
-            if (entry->condition && !entry->condition(bindings, var)) {
-                continue;
-            }
-
-            SymbolicExpr result = Matcher::replace(entry->result, bindings, false);
-            auto simplified = result.simplify();
-            if (simplified && !contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
-                return simplified;
-            }
-        }
-    }
-    return nullptr;
+    ComputationContext& computation, int) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
+    return lookup_integral(ctx.table(), expr, var, ctx.original_integrand(expr), var, transform_budget,
+        [](std::shared_ptr<SymbolicExpr> candidate) { return candidate; });
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 Result<std::shared_ptr<SymbolicExpr>> PowerRuleStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
-    ComputationContext&, int) {
+    ComputationContext& context, int) try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     if (auto v_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
         if (!v_node->is_constant() && v_node->name() == var) {
@@ -65,10 +43,27 @@ Result<std::shared_ptr<SymbolicExpr>> PowerRuleStrategy::try_integrate_raw(
         if (auto b_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(base))) {
             if (!b_var->is_constant() && b_var->name() == var &&
                 !depends_on_integration_variable(exp_expr, var)) {
-                auto n_plus_1 = SymbolicExpr::add(detail::make_expression_ptr(exp_expr), SymbolicExpr::number(1))->simplify();
-                if (n_plus_1->is_zero()) {
-
-                    return SymbolicExpr::ln(detail::make_expression_ptr(base));
+                if (contains_inexact_number(detail::node(exp_expr))) { return nullptr; }
+                auto exponent = detail::exact_rational_value(detail::node(exp_expr));
+                std::shared_ptr<SymbolicExpr> n_plus_1;
+                if (exponent) {
+                    const Rational next = *exponent + Rational(1);
+                    if (next == Rational(0)) {
+                        return SymbolicExpr::ln(detail::make_expression_ptr(base));
+                    }
+                    n_plus_1 = SymbolicExpr::number(next);
+                } else {
+                    n_plus_1 = detail::make_expression_ptr(detail::normalize_node(
+                        detail::node(SymbolicExpr::add(detail::make_expression_ptr(exp_expr),
+                            SymbolicExpr::number(1))), transform_budget));
+                    std::optional<detail::AssumptionFacts> facts;
+                    if (context.assumptions()) { facts.emplace(*context.assumptions()); }
+                    auto nonzero = detail::query_nonzero_value(detail::node(n_plus_1),
+                        facts ? static_cast<const FactsQuery&>(*facts) : detail::no_facts(), Domain::Real, context);
+                    if (!nonzero) {
+                        return Result<std::shared_ptr<SymbolicExpr>>::failure(nonzero.error());
+                    }
+                    if (nonzero.value() != Tribool::True) { return nullptr; }
                 }
                 return SymbolicExpr::divide(
                     SymbolicExpr::power(detail::make_expression_ptr(base), n_plus_1),
@@ -77,6 +72,14 @@ Result<std::shared_ptr<SymbolicExpr>> PowerRuleStrategy::try_integrate_raw(
         }
     }
     return nullptr;
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 }

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "assumption_context.hpp"
 #include "inequality_solver.hpp"
@@ -23,8 +24,7 @@ TEST(ParametricInequalityDegenerate, SignedLeadingCoefficientIncludesZeroBranch)
         unsigned active = 0;
         for (const auto& branch : cases) {
             ASSERT_TRUE(branch.condition);
-            auto condition = branch.condition->substitute(
-                "a", SymbolicExpr::number(sign));
+            auto condition = LMCAS::substitute(branch.condition, "a", SymbolicExpr::number(sign)).value();
             auto truth = facts.evaluate_condition(*condition);
             ASSERT_NE(truth, Tribool::Unknown) << condition->to_string();
             if (truth != Tribool::True) continue;

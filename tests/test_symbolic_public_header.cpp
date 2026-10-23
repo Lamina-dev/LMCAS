@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "symbolic.hpp"
 #include <gtest/gtest.h>
 
@@ -18,9 +19,9 @@ TEST(LmcasSymbolicPublicHeader, ConstructAndSubstitute) {
     ASSERT_NE(expression, nullptr);
     EXPECT_TRUE(one->is_number());
     EXPECT_EQ(one->get_int(), 1);
-    auto substituted = expression->substitute("x", SymbolicExpr::number(2));
+    auto substituted = LMCAS::substitute(expression, "x", SymbolicExpr::number(2)).value();
     ASSERT_NE(substituted, nullptr);
-    auto result = substituted->simplify();
+    auto result = LMCAS::simplify(substituted).value();
     ASSERT_NE(result, nullptr);
     ASSERT_TRUE(result->is_number());
     EXPECT_EQ(result->get_int(), 3);

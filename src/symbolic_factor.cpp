@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include <map>
 #include <vector>
 #include <string>
@@ -133,7 +134,10 @@ static LMCAS::MultiPoly symbolic_node_to_multipoly(
     return LMCAS::MultiPoly(Rational(0), vars);
 }
 
-static std::shared_ptr<SymbolicExpr> multipoly_to_symbolic(const LMCAS::MultiPoly& poly) {
+static std::shared_ptr<SymbolicExpr> multipoly_to_symbolic(const LMCAS::MultiPoly& poly, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (poly.is_zero()) { return SymbolicExpr::number(0); }
 
     const auto& vars = poly.variables();
@@ -148,18 +152,20 @@ static std::shared_ptr<SymbolicExpr> multipoly_to_symbolic(const LMCAS::MultiPol
     }
 
     if (term_exprs.empty()) { return SymbolicExpr::number(0); }
-    if (term_exprs.size() == 1) { return term_exprs[0]->simplify(); }
+    if (term_exprs.size() == 1) { return detail::make_expression_ptr(detail::normalize_node(detail::node(term_exprs[0]), transform_budget)); }
 
     auto result = term_exprs[0];
     for (size_t i = 1; i < term_exprs.size(); ++i) {
         result = SymbolicExpr::add(result, term_exprs[i]);
     }
-    return result->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
 }
 
 static std::optional<ExpressionResult> factor_numeric_content(
     const std::shared_ptr<SymbolicExpr>& simp,
     const std::shared_ptr<const AddNode>& add_node, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto content_result =
         LMCAS::symbolic_polynomial_content(*simp, context);
     if (!content_result) {
@@ -182,7 +188,7 @@ static std::optional<ExpressionResult> factor_numeric_content(
         primitive_terms.reserve(add_node->operands().size());
         for (const auto& operand : add_node->operands()) {
             auto term = LMCAS::detail::make_expression_ptr(operand);
-            auto primitive_term = SymbolicExpr::multiply(term, inverse_content)->simplify();
+            auto primitive_term = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(term, inverse_content)), transform_budget));
             primitive_terms.push_back(LMCAS::detail::node(primitive_term));
         }
         auto primitive_sum = LMCAS::detail::make_expression_ptr(
@@ -190,14 +196,16 @@ static std::optional<ExpressionResult> factor_numeric_content(
         auto factored_primitive =
             primitive_sum->factor_checked(context);
         if (!factored_primitive) { return factored_primitive; }
-        return SymbolicExpr::multiply(
-            content, factored_primitive.value())->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+            content, factored_primitive.value())), transform_budget));
     }
     return std::nullopt;
 }
 
 static std::optional<ExpressionResult> factor_common_polynomial(
     const std::shared_ptr<const AddNode>& add_node, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::shared_ptr<SymbolicExpr> common = nullptr;
     for (const auto& op : add_node->operands()) {
          auto expr_op = LMCAS::detail::make_expression_ptr(op);
@@ -222,7 +230,7 @@ static std::optional<ExpressionResult> factor_common_polynomial(
 
               auto inv_common = SymbolicExpr::power(common, SymbolicExpr::number(-1));
               auto quot = SymbolicExpr::multiply(term, inv_common);
-              quot = quot->simplify();
+              quot = detail::make_expression_ptr(detail::normalize_node(detail::node(quot), transform_budget));
               new_ops.push_back(LMCAS::detail::node(quot));
          }
          auto new_sum = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(new_ops));
@@ -240,7 +248,10 @@ static std::optional<ExpressionResult> factor_common_polynomial(
 
 static std::vector<std::shared_ptr<const SymbolicNode>> rational_root_factors(
     const std::vector<Rational>& roots, const Rational& leading,
-    const std::shared_ptr<SymbolicExpr>& x_node) {
+    const std::shared_ptr<SymbolicExpr>& x_node, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<std::shared_ptr<const SymbolicNode>> factors;
 
     if (!(leading == Rational(1))) {
@@ -253,7 +264,7 @@ static std::vector<std::shared_ptr<const SymbolicNode>> rational_root_factors(
             linear_factor = x_node;
         } else {
             auto neg_r = SymbolicExpr::number(Rational(0) - r);
-            linear_factor = SymbolicExpr::add(x_node, neg_r)->simplify();
+            linear_factor = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(x_node, neg_r)), transform_budget));
         }
         factors.push_back(LMCAS::detail::node(linear_factor));
     }
@@ -279,11 +290,11 @@ struct RationalRootReconstruction {
 
 static RationalRootReconstruction reconstruct_rational_roots(
     const Polynomial<Rational>& polynomial,
-    const std::vector<Rational>& roots, const std::string& variable) {
+    const std::vector<Rational>& roots, const std::string& variable, ComputationContext& context) {
     auto symbol =
         detail::make_expression_ptr(detail::make_node<VariableNode>(variable));
     const auto leading = polynomial.lead_coeff();
-    auto factors = rational_root_factors(roots, leading, symbol);
+    auto factors = rational_root_factors(roots, leading, symbol, context);
     auto product = rational_root_product(roots, leading, variable);
     auto [quotient, remainder] = polynomial.div_mod(product);
     return {
@@ -293,6 +304,8 @@ static RationalRootReconstruction reconstruct_rational_roots(
 static std::optional<ExpressionResult> factor_rational_univariate(
     const std::shared_ptr<SymbolicExpr>& simp, const std::string& var,
     ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     try {
         auto converted = symbolic_to_poly<Rational>(simp, var);
         if (!converted) {
@@ -304,12 +317,12 @@ static std::optional<ExpressionResult> factor_rational_univariate(
         auto roots = find_rational_roots(poly);
         if (roots.empty()) { return std::nullopt; }
         auto reconstruction =
-            reconstruct_rational_roots(poly, roots, var);
+            reconstruct_rational_roots(poly, roots, var, context);
         if (!reconstruction.remainder.is_zero()) return std::nullopt;
         auto& factors = reconstruction.factors;
         auto& quotient = reconstruction.quotient;
         if (quotient.degree() >= 1) {
-            auto q_expr = poly_to_symbolic(quotient)->simplify();
+            auto q_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(poly_to_symbolic(quotient)), transform_budget));
             if (quotient.degree() >= 2) {
                 auto q_factored = q_expr->factor_checked(context);
                 if (!q_factored) { return q_factored; }
@@ -333,6 +346,8 @@ static std::optional<ExpressionResult> factor_rational_univariate(
 static std::optional<ExpressionResult> factor_symbolic_quadratic(
     const std::shared_ptr<SymbolicExpr>& simp, const std::string& var,
     ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     try {
         auto converted = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(simp, var);
         if (!converted) {
@@ -351,12 +366,12 @@ static std::optional<ExpressionResult> factor_symbolic_quadratic(
              if (solutions.size() == 2) {
                   auto leading = poly.coeffs[2].val;
                   if (!leading) { leading = SymbolicExpr::number(1); }
-                  leading = leading->simplify();
+                  leading = detail::make_expression_ptr(detail::normalize_node(detail::node(leading), transform_budget));
 
                   auto x_node = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<VariableNode>(var));
 
-                  auto t1 = SymbolicExpr::add(x_node, SymbolicExpr::multiply(solutions[0], SymbolicExpr::number(-1)))->simplify();
-                  auto t2 = SymbolicExpr::add(x_node, SymbolicExpr::multiply(solutions[1], SymbolicExpr::number(-1)))->simplify();
+                  auto t1 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(x_node, SymbolicExpr::multiply(solutions[0], SymbolicExpr::number(-1)))), transform_budget));
+                  auto t2 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(x_node, SymbolicExpr::multiply(solutions[1], SymbolicExpr::number(-1)))), transform_budget));
 
                   std::vector<std::shared_ptr<const SymbolicNode>> factors;
                   if (!leading->is_one()) { factors.push_back(LMCAS::detail::node(leading)); }
@@ -375,7 +390,7 @@ static std::optional<ExpressionResult> factor_symbolic_quadratic(
 }
 
 static std::shared_ptr<SymbolicExpr> multivariate_factor_expression(
-    const MultiFactorResult& result) {
+    const MultiFactorResult& result, ComputationContext& context) {
     std::vector<std::shared_ptr<const SymbolicNode>> factor_nodes;
 
     if (!(result.constant == Rational(1))) {
@@ -384,7 +399,7 @@ static std::shared_ptr<SymbolicExpr> multivariate_factor_expression(
     }
 
     for (size_t i = 0; i < result.factors.size(); ++i) {
-        auto factor_expr = multipoly_to_symbolic(result.factors[i]);
+        auto factor_expr = multipoly_to_symbolic(result.factors[i], context);
         if (!factor_expr || factor_expr->is_zero()) { continue; }
 
         int mult = (i < result.multiplicities.size())
@@ -433,7 +448,7 @@ static std::optional<ExpressionResult> factor_multivariate_expression(
             const auto& result = checked.value;
 
             if (!result.factors.empty()) {
-                auto expression = multivariate_factor_expression(result);
+                auto expression = multivariate_factor_expression(result, context);
                 if (expression) { return expression; }
             }
         }
@@ -447,14 +462,17 @@ static std::optional<ExpressionResult> factor_multivariate_expression(
 
 static std::optional<ExpressionResult> reconstruct_rational_root_factors(
     const Polynomial<Rational>& polynomial, const std::vector<Rational>& roots,
-    const std::string& var) {
+    const std::string& var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto reconstruction =
-        reconstruct_rational_roots(polynomial, roots, var);
+        reconstruct_rational_roots(polynomial, roots, var, context);
     auto& factors = reconstruction.factors;
     auto& quotient = reconstruction.quotient;
     const auto& remainder = reconstruction.remainder;
     if (remainder.is_zero() && quotient.degree() >= 1) {
-        auto q_expr = LMCAS::poly_to_symbolic(quotient)->simplify();
+        auto q_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(LMCAS::poly_to_symbolic(quotient)), transform_budget));
         factors.push_back(LMCAS::detail::node(q_expr));
     } else if (remainder.is_zero() && !quotient.is_zero() && quotient.degree() == 0) {
         if (!(quotient.coeffs[0] == Rational(1))) {
@@ -470,7 +488,7 @@ static std::optional<ExpressionResult> reconstruct_rational_root_factors(
 }
 
 static std::optional<ExpressionResult> factor_variable_rational_roots(
-    const std::shared_ptr<SymbolicExpr>& simp, const std::string& var) {
+    const std::shared_ptr<SymbolicExpr>& simp, const std::string& var, ComputationContext& context) {
     try {
         auto poly = LMCAS::symbolic_to_poly<LMCAS::SymbolicPolyCoeff>(simp, var);
         if (!poly) {
@@ -486,7 +504,7 @@ static std::optional<ExpressionResult> factor_variable_rational_roots(
             const auto& poly_r = converted.value();
             auto roots = LMCAS::find_rational_roots(poly_r);
             if (!roots.empty()) {
-                return reconstruct_rational_root_factors(poly_r, roots, var);
+                return reconstruct_rational_root_factors(poly_r, roots, var, context);
             }
         }
     } catch (const std::invalid_argument&) {
@@ -525,8 +543,10 @@ static ExpressionResult factor_transcendental_expression(
 
 LMCAS::ExpressionResult SymbolicExpr::factor_impl(
     LMCAS::ComputationContext& context) const {
-    auto simp = simplify();
-    if (!simp || !detail::node(simp)) { return simp; }
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "factor");
+    auto simp = detail::make_expression_ptr(
+        detail::normalize_node(detail::node(*this), budget));
     auto add_node = std::dynamic_pointer_cast<const AddNode>(detail::node(simp));
     if (!add_node) { return factor_transcendental_expression(simp, context); }
 
@@ -547,7 +567,7 @@ LMCAS::ExpressionResult SymbolicExpr::factor_impl(
         auto multivariate = factor_multivariate_expression(simp, variables, context);
         if (multivariate) { return std::move(*multivariate); }
         for (const auto& variable : variables) {
-            auto factored = factor_variable_rational_roots(simp, variable);
+            auto factored = factor_variable_rational_roots(simp, variable, context);
             if (factored) { return std::move(*factored); }
         }
     }
@@ -562,10 +582,15 @@ LMCAS::ExpressionResult SymbolicExpr::factor_checked(
     if (!budget) { return LMCAS::ExpressionResult::failure(budget.error()); }
     try {
         return factor_impl(context);
+    } catch (const CasError& error) {
+        return LMCAS::ExpressionResult::failure(error);
     } catch (const std::bad_alloc&) {
         return LMCAS::ExpressionResult::failure(
             LMCAS::CasErrc::ResourceLimit,
             "allocation failed while factoring expression", operation);
+    } catch (const std::length_error& error) {
+        return LMCAS::ExpressionResult::failure(
+            LMCAS::CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& ex) {
         return LMCAS::ExpressionResult::failure(
             LMCAS::CasErrc::InternalInvariant, ex.what(), operation);

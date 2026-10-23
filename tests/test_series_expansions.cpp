@@ -1,3 +1,4 @@
+#include "expr.hpp"
 /**
  * @file test_series_expansions.cpp
  * @brief Fourier 与 Laurent 展开的行为约定。
@@ -9,11 +10,8 @@
 
 using namespace LMCAS;
 
-using Expr = std::shared_ptr<SymbolicExpr>;
-using Coeffs = std::vector<Expr>;
-
-static Expr num(int n) { return SymbolicExpr::number(n); }
-static Expr var(const std::string &name) { return SymbolicExpr::variable(name); }
+static ExprPtr num(int n) { return SymbolicExpr::number(n); }
+static ExprPtr var(const std::string &name) { return SymbolicExpr::variable(name); }
 
 TEST(SeriesExpansions, LaurentCheckedContracts) {
     auto z = var("z");
@@ -66,7 +64,7 @@ TEST(SeriesExpansions, FourierSeriesSquareWave) {
     auto result = LMCAS::fourier_series_checked(one, "x", period, 0);
     ASSERT_TRUE((result.has_value())) << "fourier_series returns a result";
     if (result) {
-        auto v = test_numeric_eval(result.value()->simplify());
+        auto v = test_numeric_eval(LMCAS::simplify(result.value()).value());
         EXPECT_TRUE((v.has_value() && std::abs(*v - 1.0) < 1e-6)) << "Fourier constant term (a0/2) of f=1 is 1";
     }
 }
@@ -78,8 +76,8 @@ TEST(SeriesExpansions, FourierSeriesOddFunction) {
     auto result = LMCAS::fourier_series_checked(x, "x", period, 2);
     ASSERT_TRUE((result.has_value())) << "fourier_series(x) returns a result";
     if (result) {
-        auto val = result.value()->substitute("x", num(0));
-        auto v = test_numeric_eval(val ? val->simplify() : nullptr);
+        auto val = LMCAS::substitute(result.value(), "x", num(0)).value();
+        auto v = test_numeric_eval(val ? LMCAS::simplify(val).value() : nullptr);
         EXPECT_TRUE((v.has_value() && std::abs(*v) < 1e-6)) << "Fourier series of odd f=x is 0 at x=0 (no constant term)";
         auto halfway = evaluate_numeric(*result.value(), {{"x", LMMC_CONST_PI / 2}});
         ASSERT_TRUE((halfway.has_value())) << "Fourier harmonics are finite, not unresolved coefficients times zero";
@@ -120,8 +118,8 @@ TEST(SeriesExpansions, LaurentSeries1OverZ) {
     if (result) {
         auto expected = SymbolicExpr::divide(num(1), z);
         {
-            const auto actual_expr = (result->simplify());
-            const auto expected_expr = (expected->simplify());
+            const auto actual_expr = (LMCAS::simplify(result).value());
+            const auto expected_expr = (LMCAS::simplify(expected).value());
             EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << "Laurent of 1/z is 1/z";
         }
     }
@@ -140,7 +138,7 @@ TEST(SeriesExpansions, LaurentSeriesFull1OverZ) {
     EXPECT_TRUE((result.pole_order == 1)) << "laurent_series_full: pole_order = 1 for 1/z";
     if (result.residue) {
         {
-            const auto actual_expr = (result.residue->simplify());
+            const auto actual_expr = (LMCAS::simplify(result.residue).value());
             const auto expected_expr = (num(1));
             EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << "residue of 1/z at 0 is 1";
         }
@@ -202,7 +200,7 @@ TEST(SeriesExpansions, LaurentSeries1OverSinZ) {
     EXPECT_TRUE((result.pole_order == 1)) << "1/(z(z+1)): pole_order = 1";
     if (result.residue) {
         {
-            const auto actual_expr = (result.residue->simplify());
+            const auto actual_expr = (LMCAS::simplify(result.residue).value());
             const auto expected_expr = (num(1));
             EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << "residue of 1/(z(z+1)) at 0 is 1";
         }

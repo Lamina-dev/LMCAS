@@ -4,7 +4,8 @@ namespace LMCAS {
 
 namespace {
 
-std::shared_ptr<const SymbolicNode> trigonometric_outer(const FunctionNode& node) {
+std::shared_ptr<const SymbolicNode> trigonometric_outer(
+    const FunctionNode& node, detail::RewriteBudget* budget) {
     std::shared_ptr<const SymbolicNode> d_outer;
     switch (node.type()) {
     case FunctionNode::FuncType::Sin:
@@ -14,7 +15,7 @@ std::shared_ptr<const SymbolicNode> trigonometric_outer(const FunctionNode& node
         d_outer = SymbolicFactory::create_multiply({
             SymbolicFactory::create_number(BigInt(-1)),
             LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sin, node.arguments())
-        });
+        }, budget);
         break;
     case FunctionNode::FuncType::Tan:
         {
@@ -29,14 +30,14 @@ std::shared_ptr<const SymbolicNode> trigonometric_outer(const FunctionNode& node
             d_outer = SymbolicFactory::create_multiply({
                 SymbolicFactory::create_number(BigInt(-1)),
                 csc_sq
-            });
+            }, budget);
         }
         break;
     case FunctionNode::FuncType::Sec:
         {
             auto sec = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Sec, node.arguments());
             auto tan = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Tan, node.arguments());
-            d_outer = SymbolicFactory::create_multiply({sec, tan});
+            d_outer = SymbolicFactory::create_multiply({sec, tan}, budget);
         }
         break;
     case FunctionNode::FuncType::Csc:
@@ -46,16 +47,18 @@ std::shared_ptr<const SymbolicNode> trigonometric_outer(const FunctionNode& node
             d_outer = SymbolicFactory::create_multiply({
                 SymbolicFactory::create_number(BigInt(-1)),
                 csc, cot
-            });
+            }, budget);
         }
         break;
     default:
         return nullptr;
     }
+    budget->measure(d_outer);
     return d_outer;
 }
 
-std::shared_ptr<const SymbolicNode> inverse_trigonometric_outer(const FunctionNode& node) {
+std::shared_ptr<const SymbolicNode> inverse_trigonometric_outer(
+    const FunctionNode& node, detail::RewriteBudget* budget) {
     const auto& arg = node.arguments()[0];
     std::shared_ptr<const SymbolicNode> d_outer;
     switch (node.type()) {
@@ -64,10 +67,10 @@ std::shared_ptr<const SymbolicNode> inverse_trigonometric_outer(const FunctionNo
             auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
             auto neg_arg_sq = SymbolicFactory::create_multiply({
                 SymbolicFactory::create_number(BigInt(-1)), arg_sq
-            });
+            }, budget);
             auto one_minus_sq = SymbolicFactory::create_add({
                 SymbolicFactory::create_number(BigInt(1)), neg_arg_sq
-            });
+            }, budget);
             d_outer = LMCAS::detail::make_node<PowerNode>(
                 one_minus_sq, SymbolicFactory::create_number(Rational(-1, 2)));
         }
@@ -77,15 +80,15 @@ std::shared_ptr<const SymbolicNode> inverse_trigonometric_outer(const FunctionNo
             auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
             auto neg_arg_sq = SymbolicFactory::create_multiply({
                 SymbolicFactory::create_number(BigInt(-1)), arg_sq
-            });
+            }, budget);
             auto one_minus_sq = SymbolicFactory::create_add({
                 SymbolicFactory::create_number(BigInt(1)), neg_arg_sq
-            });
+            }, budget);
             auto inv_sqrt = LMCAS::detail::make_node<PowerNode>(
                 one_minus_sq, SymbolicFactory::create_number(Rational(-1, 2)));
             d_outer = SymbolicFactory::create_multiply({
                 SymbolicFactory::create_number(BigInt(-1)), inv_sqrt
-            });
+            }, budget);
         }
         break;
     case FunctionNode::FuncType::ArcTan:
@@ -93,7 +96,7 @@ std::shared_ptr<const SymbolicNode> inverse_trigonometric_outer(const FunctionNo
             auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
             auto one_plus_sq = SymbolicFactory::create_add({
                 SymbolicFactory::create_number(BigInt(1)), arg_sq
-            });
+            }, budget);
             d_outer = LMCAS::detail::make_node<PowerNode>(
                 one_plus_sq, SymbolicFactory::create_number(BigInt(-1)));
         }
@@ -101,10 +104,12 @@ std::shared_ptr<const SymbolicNode> inverse_trigonometric_outer(const FunctionNo
     default:
         return nullptr;
     }
+    budget->measure(d_outer);
     return d_outer;
 }
 
-std::shared_ptr<const SymbolicNode> hyperbolic_outer(const FunctionNode& node) {
+std::shared_ptr<const SymbolicNode> hyperbolic_outer(
+    const FunctionNode& node, detail::RewriteBudget* budget) {
     std::shared_ptr<const SymbolicNode> d_outer;
     switch (node.type()) {
     case FunctionNode::FuncType::Sinh:
@@ -126,10 +131,12 @@ std::shared_ptr<const SymbolicNode> hyperbolic_outer(const FunctionNode& node) {
     default:
         return nullptr;
     }
+    budget->measure(d_outer);
     return d_outer;
 }
 
-std::shared_ptr<const SymbolicNode> elementary_outer(const FunctionNode& node) {
+std::shared_ptr<const SymbolicNode> elementary_outer(
+    const FunctionNode& node, detail::RewriteBudget* budget) {
     const auto& arg = node.arguments()[0];
     std::shared_ptr<const SymbolicNode> d_outer;
     switch (node.type()) {
@@ -143,23 +150,25 @@ std::shared_ptr<const SymbolicNode> elementary_outer(const FunctionNode& node) {
          d_outer = SymbolicFactory::create_multiply({
             SymbolicFactory::create_number(Rational(1, 2)),
             LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(Rational(-1, 2)))
-         });
+         }, budget);
          break;
     case FunctionNode::FuncType::Abs:
         {
             auto abs_arg = LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Abs, node.arguments());
             auto abs_inv = LMCAS::detail::make_node<PowerNode>(abs_arg, SymbolicFactory::create_number(BigInt(-1)));
-            d_outer = SymbolicFactory::create_multiply({arg, abs_inv});
+            d_outer = SymbolicFactory::create_multiply({arg, abs_inv}, budget);
         }
         break;
     default:
         return nullptr;
     }
+    budget->measure(d_outer);
     return d_outer;
 }
 
-std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
+std::shared_ptr<const SymbolicNode> special_outer(
+    const FunctionNode& node, detail::RewriteBudget* budget) {
     const auto& arg = node.arguments()[0];
     std::shared_ptr<const SymbolicNode> d_outer;
     switch (node.type()) {
@@ -167,15 +176,15 @@ std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
         {
             auto W = LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::LambertW, node.arguments());
             auto one = SymbolicFactory::create_number(BigInt(1));
-            auto one_plus_W = SymbolicFactory::create_add({one, W});
+            auto one_plus_W = SymbolicFactory::create_add({one, W}, budget);
             auto minus_W = SymbolicFactory::create_multiply({
-                SymbolicFactory::create_number(BigInt(-1)), W});
+                SymbolicFactory::create_number(BigInt(-1)), W}, budget);
             auto numerator = LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Exp,
                 std::vector<std::shared_ptr<const SymbolicNode>>{minus_W});
             auto denominator_inverse = LMCAS::detail::make_node<PowerNode>(
                 one_plus_W, SymbolicFactory::create_number(BigInt(-1)));
-            d_outer = SymbolicFactory::create_multiply({numerator, denominator_inverse});
+            d_outer = SymbolicFactory::create_multiply({numerator, denominator_inverse}, budget);
         }
         break;
     case FunctionNode::FuncType::Erf:
@@ -188,11 +197,11 @@ std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
             auto two = SymbolicFactory::create_number(BigInt(2));
             auto neg_one = SymbolicFactory::create_number(BigInt(-1));
             auto arg_sq = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(2)));
-            auto neg_arg_sq = SymbolicFactory::create_multiply({neg_one, arg_sq});
+            auto neg_arg_sq = SymbolicFactory::create_multiply({neg_one, arg_sq}, budget);
             auto exp_term = LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Exp,
                 std::vector<std::shared_ptr<const SymbolicNode>>{neg_arg_sq});
-            d_outer = SymbolicFactory::create_multiply({two, sqrt_pi_inv, exp_term});
+            d_outer = SymbolicFactory::create_multiply({two, sqrt_pi_inv, exp_term}, budget);
         }
         break;
     case FunctionNode::FuncType::Ei:
@@ -200,7 +209,7 @@ std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
             auto exp_arg = LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Exp, node.arguments());
             auto arg_inv = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
-            d_outer = SymbolicFactory::create_multiply({exp_arg, arg_inv});
+            d_outer = SymbolicFactory::create_multiply({exp_arg, arg_inv}, budget);
         }
         break;
     case FunctionNode::FuncType::Si:
@@ -208,7 +217,7 @@ std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
             auto sin_arg = LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Sin, node.arguments());
             auto arg_inv = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
-            d_outer = SymbolicFactory::create_multiply({sin_arg, arg_inv});
+            d_outer = SymbolicFactory::create_multiply({sin_arg, arg_inv}, budget);
         }
         break;
     case FunctionNode::FuncType::Ci:
@@ -216,7 +225,7 @@ std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
             auto cos_arg = LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Cos, node.arguments());
             auto arg_inv = LMCAS::detail::make_node<PowerNode>(arg, SymbolicFactory::create_number(BigInt(-1)));
-            d_outer = SymbolicFactory::create_multiply({cos_arg, arg_inv});
+            d_outer = SymbolicFactory::create_multiply({cos_arg, arg_inv}, budget);
         }
         break;
     case FunctionNode::FuncType::Li:
@@ -229,6 +238,7 @@ std::shared_ptr<const SymbolicNode> special_outer(const FunctionNode& node) {
     default:
         return nullptr;
     }
+    budget->measure(d_outer);
     return d_outer;
 }
 
@@ -237,20 +247,22 @@ bool valid_log_base(const std::shared_ptr<const SymbolicNode>& base) {
     return number && number->is_positive() && !number->is_one();
 }
 
-std::shared_ptr<const SymbolicNode> logarithmic_outer(const FunctionNode& node) {
+std::shared_ptr<const SymbolicNode> logarithmic_outer(
+    const FunctionNode& node, detail::RewriteBudget* budget) {
     const auto& arg = node.arguments()[0];
     const auto& base = node.arguments()[1];
     auto ln_base = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Ln,
         std::vector<std::shared_ptr<const SymbolicNode>>{base});
     return LMCAS::detail::make_node<PowerNode>(
-        SymbolicFactory::create_multiply({arg, ln_base}),
+        SymbolicFactory::create_multiply({arg, ln_base}, budget),
         SymbolicFactory::create_number(BigInt(-1)));
 }
 
 }
 
 void DifferentiationVisitor::differentiate_atan2(const FunctionNode& node) {
+    auto* budget = rewrite_budget();
     const auto& y = node.arguments()[0];
     const auto& x = node.arguments()[1];
     y->accept(*this);
@@ -258,21 +270,22 @@ void DifferentiationVisitor::differentiate_atan2(const FunctionNode& node) {
     x->accept(*this);
     auto dx = result;
     auto numerator = SymbolicFactory::create_add({
-        SymbolicFactory::create_multiply({x, dy}),
+        SymbolicFactory::create_multiply({x, dy}, budget),
         SymbolicFactory::create_multiply({
-            SymbolicFactory::create_number(BigInt(-1)), y, dx})
-    });
+            SymbolicFactory::create_number(BigInt(-1)), y, dx}, budget)
+    }, budget);
     auto two = SymbolicFactory::create_number(BigInt(2));
     auto denominator = SymbolicFactory::create_add({
         LMCAS::detail::make_node<PowerNode>(x, two),
         LMCAS::detail::make_node<PowerNode>(y, two)
-    });
+    }, budget);
     auto inverse = LMCAS::detail::make_node<PowerNode>(
         denominator, SymbolicFactory::create_number(BigInt(-1)));
-    result = SymbolicFactory::create_multiply({numerator, inverse});
+    set_result(SymbolicFactory::create_multiply({numerator, inverse}, budget));
 }
 
 void DifferentiationVisitor::visit(const FunctionNode& node) {
+    auto* budget = rewrite_budget();
     if (node.type() == FunctionNode::FuncType::Atan2 && node.arguments().size() == 2) {
         differentiate_atan2(node);
         return;
@@ -285,8 +298,8 @@ void DifferentiationVisitor::visit(const FunctionNode& node) {
         arg->accept(*this);
         auto d_arg = result;
         if (d_arg->is_zero()) return;
-        auto inverse = logarithmic_outer(node);
-        result = SymbolicFactory::create_multiply({std::move(d_arg), inverse});
+        auto inverse = logarithmic_outer(node, budget);
+        set_result(SymbolicFactory::create_multiply({std::move(d_arg), inverse}, budget));
         return;
     }
     if (node.arguments().size() != 1) unsupported("FunctionNode");
@@ -296,13 +309,13 @@ void DifferentiationVisitor::visit(const FunctionNode& node) {
         return;
     }
 
-    auto d_outer = trigonometric_outer(node);
-    if (!d_outer) d_outer = inverse_trigonometric_outer(node);
-    if (!d_outer) d_outer = hyperbolic_outer(node);
-    if (!d_outer) d_outer = elementary_outer(node);
-    if (!d_outer) d_outer = special_outer(node);
+    auto d_outer = trigonometric_outer(node, budget);
+    if (!d_outer) d_outer = inverse_trigonometric_outer(node, budget);
+    if (!d_outer) d_outer = hyperbolic_outer(node, budget);
+    if (!d_outer) d_outer = elementary_outer(node, budget);
+    if (!d_outer) d_outer = special_outer(node, budget);
     if (!d_outer) unsupported("FunctionNode");
-    result = SymbolicFactory::create_multiply({std::move(d_outer), std::move(d_arg)});
+    set_result(SymbolicFactory::create_multiply({std::move(d_outer), std::move(d_arg)}, budget));
 }
 
 }

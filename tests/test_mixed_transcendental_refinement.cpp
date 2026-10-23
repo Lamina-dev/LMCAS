@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_mixed_transcendental_support.hpp"
 
 TEST(MixedTranscendentalRefinement, RefineRootSinXNewtonRaphson) {
@@ -242,7 +243,7 @@ TEST(MixedTranscendentalRefinement, OutputValidityExpXMinusXMinus2) {
         ASSERT_TRUE(root.has_value());
         ASSERT_TRUE(std::isfinite(root->value));
         auto substituted =
-            expr->substitute("x", SymbolicExpr::number(root->value));
+            LMCAS::substitute(expr, "x", SymbolicExpr::number(root->value)).value();
         ASSERT_NE(substituted, nullptr);
         EXPECT_LT(std::abs(substituted->to_numeric()), opts.tolerance);
     }

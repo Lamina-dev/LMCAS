@@ -122,13 +122,23 @@ Result<ApproxReal> NumericEvaluator::function(const FunctionNode& node) {
 
 Result<ApproxReal> evaluate_numeric(const SymbolicExpr& expression,
                                     const NumericBindings& bindings,
-                                    ComputationContext& context) {
+                                    ComputationContext& context) try {
     if (!detail::node(expression)) {
         return Result<ApproxReal>::failure(CasErrc::InvalidArgument,
                                            "cannot evaluate an empty expression", kOperation);
     }
     detail::NumericEvaluator evaluator(bindings, context);
     return evaluator.evaluate(detail::node(expression));
+}
+catch (const CasError& error) {
+    return Result<ApproxReal>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<ApproxReal>::failure(
+        CasErrc::ResourceLimit, "numeric evaluation allocation failed", kOperation);
+} catch (const std::length_error& error) {
+    return Result<ApproxReal>::failure(CasErrc::ResourceLimit, error.what(), kOperation);
+} catch (const std::exception& error) {
+    return Result<ApproxReal>::failure(CasErrc::InternalInvariant, error.what(), kOperation);
 }
 
 }

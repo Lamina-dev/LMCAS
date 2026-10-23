@@ -48,8 +48,8 @@ ExpressionResult normalize(const Node& value, ComputationContext& context) {
     budget.measure(value);
     std::optional<AssumptionFacts> facts;
     if (context.assumptions()) facts.emplace(*context.assumptions());
-    NormalizationVisitor visitor(context, facts ? static_cast<const FactsQuery&>(*facts)
-                                       : no_facts(), Domain::Real, &budget);
+    NormalizationVisitor visitor(budget, facts ? static_cast<const FactsQuery&>(*facts)
+                                       : no_facts(), Domain::Real);
     value->accept(visitor);
     auto result = visitor.get_result();
     if (!result) {

@@ -1,5 +1,7 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "integration.hpp"
+#include "residual_verification.hpp"
 #include "rational.hpp"
 #include "bigint.hpp"
 
@@ -96,6 +98,10 @@ struct Poly {
 // document explicitly leaves as unevaluated integrals.
 const std::vector<Poly> &denominators() {
     static const std::vector<Poly> D = {
+        {{1, 0, 2}, "2x^2 + 1"},
+        {{-2, 0, 1}, "x^2 - 2"},
+        {{1, 2, 1}, "(x + 1)^2"},
+        {{-2, 0, 3}, "3x^2 - 2"},
         // x^3 - 1 = (x-1)(x^2 + x + 1)
         {{-1, 0, 0, 1}, "x^3 - 1"},
         // x^3 - x = x(x-1)(x+1)
@@ -165,8 +171,8 @@ static void compare_roundtrip_samples(ComboReport &rep,
                                       const std::vector<double> &sample_pts) {
     for (double xv : sample_pts) {
         auto x_val = SymbolicExpr::number(xv);
-        auto integrand_at = integrand_simp->substitute(kVarName, x_val);
-        auto deriv_at = deriv_simp->substitute(kVarName, x_val);
+        auto integrand_at = LMCAS::substitute(integrand_simp, kVarName, x_val).value();
+        auto deriv_at = LMCAS::substitute(deriv_simp, kVarName, x_val).value();
         if (!integrand_at || !deriv_at) {
             rep.failed = true;
             std::ostringstream oss;
@@ -175,8 +181,8 @@ static void compare_roundtrip_samples(ComboReport &rep,
             rep.detail = oss.str();
             return;
         }
-        integrand_at = integrand_at->simplify();
-        deriv_at = deriv_at->simplify();
+        integrand_at = LMCAS::simplify(integrand_at).value();
+        deriv_at = LMCAS::simplify(deriv_at).value();
 
         auto pv = test_numeric_eval(integrand_at);
         auto dv = test_numeric_eval(deriv_at);
@@ -226,7 +232,8 @@ ComboReport verify_combo(const Poly &P, const Poly &Q) {
 
     // Integrate.
     Integrator integ;
-    auto integrated = integ.integrate(*integrand, kVarName);
+    ComputationContext context;
+    auto integrated = integ.integrate_checked(*integrand, kVarName, context);
     if (!integrated) {
         rep.failed = true;
         rep.detail = std::string("integration failed: ") + integrated.error().message;
@@ -234,11 +241,6 @@ ComboReport verify_combo(const Poly &P, const Poly &Q) {
     }
     auto result = LMCAS::detail::make_expression_ptr(integrated.value());
 
-    // The design explicitly allows the strategy to return an unevaluated
-    // integral node when factoring fails or when the partial fraction term
-    // requires a higher power of an irreducible quadratic. Such cases fall
-    // outside the property's conditional scope ("Q has degree <= 5 with
-    // linear/irreducible quadratic factors"), but we still report them.
     if (LMCAS::detail::contains_node_type<IntegralNode>(
             LMCAS::detail::node(result))) {
         rep.unevaluated = true;
@@ -246,18 +248,24 @@ ComboReport verify_combo(const Poly &P, const Poly &Q) {
         return rep;
     }
 
-    auto deriv = result->differentiate(kVarName);
+    auto deriv = LMCAS::differentiate(result, kVarName).value();
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
         return rep;
     }
-    auto deriv_simp = deriv->simplify();
+    auto proof = check_equivalent(deriv, integrand, context);
+    if (!proof || !std::holds_alternative<ProvedZeroResidual>(proof.value())) {
+        rep.failed = true;
+        rep.detail = proof ? "derivative residual was not proved zero" : proof.error().message;
+        return rep;
+    }
+    auto deriv_simp = LMCAS::simplify(deriv).value();
     if (!deriv_simp) {
         deriv_simp = deriv;
     }
 
-    auto integrand_simp = integrand->simplify();
+    auto integrand_simp = LMCAS::simplify(integrand).value();
     if (!integrand_simp) {
         integrand_simp = integrand;
     }

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic.hpp"
 #include "symbolic_matrix.hpp"
@@ -18,7 +19,7 @@ std::shared_ptr<SymbolicExpr> var(const std::string &name) {
 TEST(Fraction, FractionArithmetic) {
     auto half = SymbolicExpr::divide(num(1), num(2));
     auto third = SymbolicExpr::divide(num(1), num(3));
-    auto sum = SymbolicExpr::add(half, third)->simplify();
+    auto sum = LMCAS::simplify(SymbolicExpr::add(half, third)).value();
 
     EXPECT_TRUE(test_proved_equivalent(
         sum, SymbolicExpr::number(Rational(5, 6))));
@@ -27,12 +28,12 @@ TEST(Fraction, FractionArithmetic) {
 TEST(Fraction, NegativePower) {
     auto base = num(2);
     auto exponent = num(-2);
-    auto res = SymbolicExpr::power(base, exponent)->simplify();
+    auto res = LMCAS::simplify(SymbolicExpr::power(base, exponent)).value();
 
     EXPECT_TRUE(test_proved_equivalent(
         res, SymbolicExpr::number(Rational(1, 4))));
 
-    auto res2 = SymbolicExpr::power(num(3), num(-1))->simplify();
+    auto res2 = LMCAS::simplify(SymbolicExpr::power(num(3), num(-1))).value();
     EXPECT_TRUE(test_proved_equivalent(
         res2, SymbolicExpr::number(Rational(1, 3))));
 }
@@ -44,7 +45,7 @@ TEST(Fraction, FractionMixedWithVar) {
 
     auto term1 = SymbolicExpr::multiply(half, x);
     auto term2 = SymbolicExpr::multiply(third, x);
-    auto res = SymbolicExpr::add(term1, term2)->simplify();
+    auto res = LMCAS::simplify(SymbolicExpr::add(term1, term2)).value();
 
     EXPECT_TRUE(test_proved_equivalent(
         res,
@@ -55,12 +56,12 @@ TEST(Fraction, FractionMixedWithVar) {
 TEST(Fraction, RationalSimplification) {
     auto six = num(6);
     auto twelve = num(12);
-    auto res = SymbolicExpr::divide(six, twelve)->simplify();
+    auto res = LMCAS::simplify(SymbolicExpr::divide(six, twelve)).value();
     EXPECT_TRUE(test_proved_equivalent(
         res, SymbolicExpr::number(Rational(1, 2))));
 
     auto half = SymbolicExpr::divide(num(1), num(2));
-    auto sq = SymbolicExpr::power(half, num(2))->simplify();
+    auto sq = LMCAS::simplify(SymbolicExpr::power(half, num(2))).value();
     EXPECT_TRUE(test_proved_equivalent(
         sq, SymbolicExpr::number(Rational(1, 4))));
 }
@@ -78,7 +79,7 @@ TEST(Fraction, FractionMatrix) {
 
     auto determinant = LMCAS::matrix_determinant_checked(mat);
     ASSERT_TRUE(determinant) << determinant.error().message;
-    auto det = determinant.value()->simplify();
+    auto det = LMCAS::simplify(determinant.value()).value();
     EXPECT_TRUE(test_proved_equivalent(
         det, SymbolicExpr::number(Rational(1, 60))));
 
@@ -87,7 +88,7 @@ TEST(Fraction, FractionMatrix) {
     auto mat_inv = SymbolicExpr::matrix(inv_elems);
     auto inverse = LMCAS::matrix_inverse_checked(mat_inv);
     ASSERT_TRUE(inverse) << inverse.error().message;
-    auto simplified = inverse.value()->simplify();
+    auto simplified = LMCAS::simplify(inverse.value()).value();
     ASSERT_NE(simplified, nullptr);
     auto matrix = std::dynamic_pointer_cast<const MatrixNode>(
         detail::node(simplified));

@@ -54,21 +54,21 @@ Result<void> append_symbolic_plane_edges(
     const std::vector<std::shared_ptr<SymbolicExpr>>& p3,
     std::vector<std::shared_ptr<SymbolicExpr>>& v1,
     std::vector<std::shared_ptr<SymbolicExpr>>& v2,
-    const std::string& operation) {
+    const std::string& operation, ComputationContext& context) {
     for (size_t i = 0; i < 3; ++i) {
         auto left = simplify_checked(
             SymbolicExpr::add(
                 p2[i],
                 SymbolicExpr::multiply(SymbolicExpr::number(-1), p1[i])),
             operation,
-            "plane edge vector is outside the supported domain");
+            "plane edge vector is outside the supported domain", context);
         if (!left) return Result<void>::failure(left.error());
         auto right = simplify_checked(
             SymbolicExpr::add(
                 p3[i],
                 SymbolicExpr::multiply(SymbolicExpr::number(-1), p1[i])),
             operation,
-            "plane edge vector is outside the supported domain");
+            "plane edge vector is outside the supported domain", context);
         if (!right) return Result<void>::failure(right.error());
         v1.push_back(std::move(left.value()));
         v2.push_back(std::move(right.value()));
@@ -120,7 +120,7 @@ Result<void> build_plane_edges(
             p1_values, p2_values, p3_values, point_scale, v1, v2);
         return Result<void>::success();
     }
-    return append_symbolic_plane_edges(p1, p2, p3, v1, v2, operation);
+    return append_symbolic_plane_edges(p1, p2, p3, v1, v2, operation, context);
 }
 
 Result<bool> scale_plane_edges_for_cross(
@@ -194,7 +194,7 @@ PlaneSymbolicResult assemble_plane(
     if (!d) return PlaneSymbolicResult::failure(d.error());
     auto d_simplified = simplify_checked(
         d.value(), operation,
-        "plane constant is outside the supported domain");
+        "plane constant is outside the supported domain", context);
     if (!d_simplified) return PlaneSymbolicResult::failure(d_simplified.error());
 
     PlaneSymbolic plane;
@@ -202,7 +202,7 @@ PlaneSymbolicResult assemble_plane(
     for (auto& component : plane.normal) {
         auto simplified = simplify_checked(
             component, operation,
-            "plane normal component is outside the supported domain");
+            "plane normal component is outside the supported domain", context);
         if (!simplified) return PlaneSymbolicResult::failure(simplified.error());
         component = std::move(simplified.value());
     }

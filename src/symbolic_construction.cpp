@@ -259,4 +259,13 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::divide(const std::shared_ptr<Symboli
     return SymbolicExpr::multiply(num, SymbolicExpr::power(den, SymbolicExpr::number(-1)));
 }
 
+std::shared_ptr<SymbolicExpr> SymbolicExpr::make_integral(
+    const std::shared_ptr<SymbolicExpr>& expression,
+    const std::string& variable) {
+    if (!expression) return nullptr;
+    return LMCAS::detail::make_expression_ptr(
+        LMCAS::detail::make_node<IntegralNode>(
+            LMCAS::detail::node(expression), variable));
+}
+
 }

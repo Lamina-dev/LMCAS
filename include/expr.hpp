@@ -27,11 +27,6 @@ using Expr = SymbolicExpr;
 using ConstExprPtr = std::shared_ptr<const SymbolicExpr>;
 using ExprResult = Result<ExprPtr>;
 
-struct Binding {
-    ExprPtr symbol;
-    ExprPtr value;
-};
-
 using BindingResult = Result<Binding>;
 
 struct ExprMatchBinding {
@@ -423,22 +418,9 @@ LMCAS_API const char* error_name(const CasError& error) noexcept;
 LMCAS_API bool structurally_equal(const SymbolicExpr& lhs,
                                    const SymbolicExpr& rhs);
 
-LMCAS_API Result<bool> equivalent_core(const SymbolicExpr& lhs,
-                                        const SymbolicExpr& rhs,
-                                        ComputationContext& context);
-
-LMCAS_API Result<bool> equivalent_core(const SymbolicExpr& lhs,
-                                        const SymbolicExpr& rhs,
-                                        ComputationContext& context,
-                                        const EqvOptions& options);
-
-LMCAS_API Result<bool> equivalent(const SymbolicExpr& lhs,
-                                   const SymbolicExpr& rhs,
-                                   ComputationContext& context);
-
 LMCAS_API Result<bool> equivalent(const SymbolicExpr& lhs,
                                    const SymbolicExpr& rhs,
                                    ComputationContext& context,
-                                   const EqvOptions& options);
+                                   const EqvOptions& options = {});
 
 } // namespace LMCAS

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "symbolic.hpp"
 #include "test_common.hpp"
 
@@ -16,10 +17,10 @@ TEST(LmcasTrigRewrite, SinSqAddCosSq) {
         FAIL() << "Scenario requirement failed";
     }
 
-    auto expected = SymbolicExpr::number(1)->simplify();
-    bool result = simplified->simplify()->compare(expected) == 0;
+    auto expected = LMCAS::simplify(SymbolicExpr::number(1)).value();
+    bool result = LMCAS::simplify(simplified).value()->compare(expected) == 0;
     for (double value : {0.0, 0.3, -0.7}) {
-        auto numeric = test_numeric_eval(simplified->substitute("x", SymbolicExpr::number(value)));
+        auto numeric = test_numeric_eval(LMCAS::substitute(simplified, "x", SymbolicExpr::number(value)).value());
         const double sine = std::sin(value);
         const double cosine = std::cos(value);
         ASSERT_TRUE(numeric.has_value());
@@ -39,12 +40,11 @@ TEST(LmcasTrigRewrite, Sin2x) {
         FAIL() << "Scenario requirement failed";
     }
 
-    auto expected = SymbolicExpr::multiply(SymbolicExpr::number(2),
-                                           SymbolicExpr::multiply(SymbolicExpr::sin(x), SymbolicExpr::cos(x)))
-                        ->simplify();
-    bool result = simplified->simplify()->compare(expected) == 0;
+    auto expected = LMCAS::simplify(SymbolicExpr::multiply(SymbolicExpr::number(2),
+                                           SymbolicExpr::multiply(SymbolicExpr::sin(x), SymbolicExpr::cos(x)))).value();
+    bool result = LMCAS::simplify(simplified).value()->compare(expected) == 0;
     for (double value : {0.0, 0.3, -0.7}) {
-        auto numeric = test_numeric_eval(simplified->substitute("x", SymbolicExpr::number(value)));
+        auto numeric = test_numeric_eval(LMCAS::substitute(simplified, "x", SymbolicExpr::number(value)).value());
         ASSERT_TRUE(numeric.has_value());
         ASSERT_TRUE(std::isfinite(*numeric));
         EXPECT_NEAR(*numeric, std::sin(2.0 * value), 1e-12);
@@ -63,14 +63,13 @@ TEST(LmcasTrigRewrite, Cos2x) {
     }
 
     auto two = SymbolicExpr::number(2);
-    auto expected = SymbolicExpr::add(
+    auto expected = LMCAS::simplify(SymbolicExpr::add(
                         SymbolicExpr::power(SymbolicExpr::cos(x), two),
                         SymbolicExpr::multiply(SymbolicExpr::number(-1),
-                                               SymbolicExpr::power(SymbolicExpr::sin(x), two)))
-                        ->simplify();
-    bool result = simplified->simplify()->compare(expected) == 0;
+                                               SymbolicExpr::power(SymbolicExpr::sin(x), two)))).value();
+    bool result = LMCAS::simplify(simplified).value()->compare(expected) == 0;
     for (double value : {0.0, 0.3, -0.7}) {
-        auto numeric = test_numeric_eval(simplified->substitute("x", SymbolicExpr::number(value)));
+        auto numeric = test_numeric_eval(LMCAS::substitute(simplified, "x", SymbolicExpr::number(value)).value());
         ASSERT_TRUE(numeric.has_value());
         ASSERT_TRUE(std::isfinite(*numeric));
         EXPECT_NEAR(*numeric, std::cos(2.0 * value), 1e-12);

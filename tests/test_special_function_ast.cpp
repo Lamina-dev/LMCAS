@@ -1,7 +1,10 @@
 
 #include "test_common.hpp"
+#include "expr.hpp"
 #include "integration.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/normalization_utils.hpp"
+#include "residual_verification.hpp"
 
 #include <memory>
 #include <string>
@@ -151,12 +154,21 @@ void verify_case(const Case &c) {
     }
 
     Integrator integ;
-    auto integrated = integ.integrate(*integrand, kVarName);
+    ComputationContext context;
+    auto integrated = integ.integrate_checked(*integrand, kVarName, context);
     if (!integrated) {
         ADD_FAILURE() << c.name + ": integration failed: " + integrated.error().message;
         return;
     }
-    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
+    auto result = std::make_shared<SymbolicExpr>(std::move(integrated.value()));
+    EXPECT_FALSE(detail::contains_node_type<IntegralNode>(detail::node(result)));
+    auto derivative = differentiate(result, kVarName, context);
+    ASSERT_TRUE(derivative) << c.name << ": " << derivative.error().message;
+    auto residual = SymbolicExpr::add(derivative.value(),
+        SymbolicExpr::multiply(SymbolicExpr::number(-1), integrand));
+    auto proof = check_zero_residual(residual, context);
+    ASSERT_TRUE(proof) << c.name << ": " << proof.error().message;
+    EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value())) << c.name;
 
     bool ok = ast_contains_functype(LMCAS::detail::node(result), c.expected);
     if (!ok) {
@@ -176,4 +188,17 @@ TEST(SpecialFunctionAst, IntegrationProducesExpectedFunctionNodes) {
         SCOPED_TRACE(c.name);
         verify_case(c);
     }
+}
+
+TEST(SpecialFunctionAst, ApproximateReciprocalRetainsObligation) {
+    auto x = SymbolicExpr::variable("x");
+    auto integrand = SymbolicExpr::multiply(SymbolicExpr::exp(x),
+        SymbolicExpr::power(x, SymbolicExpr::number(-1.0 + 1e-13)));
+    Integrator integrator;
+    ComputationContext context;
+    auto result = integrator.integrate_checked(*integrand, "x", context);
+    ASSERT_TRUE(result);
+    auto integral = std::dynamic_pointer_cast<const IntegralNode>(detail::node(result.value()));
+    ASSERT_NE(integral, nullptr);
+    EXPECT_TRUE(integral->body()->equals(*detail::node(integrand)));
 }

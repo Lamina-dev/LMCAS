@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "expr.hpp"
 #include "complex_analysis.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -123,7 +125,9 @@ ExprResult conj(const ExprPtr& expression) {
     return conj(expression, context);
 }
 
-ExprResult abs(const ExprPtr& expression, ComputationContext& context) {
+ExprResult abs(const ExprPtr& expression, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto step = context.consume_steps(1, kAbsOperation);
     if (!step) {
         return ExprResult::failure(step.error());
@@ -140,7 +144,7 @@ ExprResult abs(const ExprPtr& expression, ComputationContext& context) {
         auto re_squared = SymbolicExpr::power(re.value(), SymbolicExpr::number(2));
         auto im_squared = SymbolicExpr::power(im.value(), SymbolicExpr::number(2));
         auto sum = SymbolicExpr::add(re_squared, im_squared);
-        auto result = SymbolicExpr::sqrt(sum)->simplify();
+        auto result = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::sqrt(sum)), transform_budget));
         if (!result || !LMCAS::detail::node(result)) {
             return expression_failure(CasErrc::InternalInvariant,
                                       "complex absolute value construction failed",
@@ -151,10 +155,18 @@ ExprResult abs(const ExprPtr& expression, ComputationContext& context) {
         return expression_failure(CasErrc::ResourceLimit,
                                   "complex absolute value allocation failed",
                                   kAbsOperation);
-    } catch (const std::exception& error) {
+    } catch (const std::length_error& error) { return ExprResult::failure(CasErrc::ResourceLimit, error.what(), "abs"); } catch (const std::exception& error) {
         return expression_failure(CasErrc::InternalInvariant, error.what(),
                                   kAbsOperation);
     }
+} catch (const CasError& error) {
+    return ExprResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExprResult::failure(CasErrc::ResourceLimit, "allocation failed", "abs");
+} catch (const std::length_error& error) {
+    return ExprResult::failure(CasErrc::ResourceLimit, error.what(), "abs");
+} catch (const std::exception& error) {
+    return ExprResult::failure(CasErrc::InternalInvariant, error.what(), "abs");
 }
 
 ExprResult abs(const ExprPtr& expression) {

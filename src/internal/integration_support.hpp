@@ -2,9 +2,11 @@
 
 #include "assumption_context.hpp"
 #include "integration.hpp"
-#include "numeric_probe.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/normalization_utils.hpp"
+#include "residual_verification.hpp"
 #include "polynomial.hpp"
 #include "solve_polynomial.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -20,10 +22,6 @@
 #include <variant>
 
 namespace LMCAS {
-
-LMCAS_API Result<SymbolicExpr> apply_assumption_simplifications(
-    const SymbolicExpr& expr, const std::string& var,
-    const AssumptionContext* context);
 
 inline bool depends_on_integration_variable(
     const SymbolicExpr& expression,
@@ -69,11 +67,6 @@ inline std::optional<int> integration_bounded_exponent(
     return std::nullopt;
 }
 
-inline std::optional<double> try_checked_numeric_constant(
-    const SymbolicExpr& expr,
-    ComputationContext& context) {
-    return detail::try_finite_numeric(expr, &context);
-}
 
 inline std::shared_ptr<SymbolicExpr> make_unary_function(
     FunctionNode::FuncType type,
@@ -92,6 +85,62 @@ inline std::shared_ptr<SymbolicExpr> make_arctan(
 inline bool contains_unevaluated_integral(
     const std::shared_ptr<const SymbolicNode>& node) {
     return detail::contains_node_type<IntegralNode>(node);
+}
+
+inline bool certify_integral(
+    const SymbolicExpr& candidate, const SymbolicExpr& integrand,
+    const std::string& variable, detail::RewriteBudget& budget) {
+    budget.measure(detail::node(integrand));
+    budget.measure(detail::node(candidate));
+    if (contains_unevaluated_integral(detail::node(candidate)) ||
+        contains_inexact_number(detail::node(integrand)) ||
+        contains_inexact_number(detail::node(candidate))) {
+        return false;
+    }
+    try {
+        auto derivative = detail::make_expression_ptr(detail::differentiate_node(
+            detail::node(candidate), variable, budget));
+        auto residual = sym_sub(*derivative, integrand);
+        auto proof = check_zero_residual(residual, budget.context());
+        if (!proof) { throw proof.error(); }
+        return std::holds_alternative<ProvedZeroResidual>(proof.value());
+    } catch (const CasError& error) {
+        if (error.code == CasErrc::UnsupportedExpression) { return false; }
+        throw;
+    }
+}
+
+template <typename Transform>
+std::shared_ptr<SymbolicExpr> lookup_integral(
+    const IntegrationTable& table, const SymbolicExpr& matched,
+    const std::string& matched_variable, const SymbolicExpr& integrand,
+    const std::string& variable, detail::RewriteBudget& budget, Transform&& transform) {
+    for (const auto* entry : table.get_all_sorted()) {
+        budget.consume();
+        MatchMap bindings;
+        if (!Matcher::match(entry->pattern, matched, entry->wildcards, bindings)) { continue; }
+        // Rewrite-rule partial matches must not discard integration operands.
+        if (bindings.find("__Add_REST__") != bindings.end() ||
+            bindings.find("__Mul_REST__") != bindings.end()) {
+            continue;
+        }
+        const bool complete = std::all_of(entry->wildcards.begin(), entry->wildcards.end(),
+            [&](const std::string& name) { return bindings.find(name) != bindings.end(); });
+        if (!complete || (entry->condition && !entry->condition(bindings, matched_variable))) {
+            continue;
+        }
+        auto instantiated = detail::make_expression_ptr(
+            Matcher::replace(entry->result, bindings, false));
+        budget.measure(detail::node(instantiated));
+        if (contains_inexact_number(detail::node(instantiated)) ||
+            contains_unevaluated_integral(detail::node(instantiated))) {
+            continue;
+        }
+        auto candidate = transform(std::move(instantiated));
+        if (!candidate || !certify_integral(*candidate, integrand, variable, budget)) { continue; }
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(candidate), budget));
+    }
+    return nullptr;
 }
 
 } // namespace LMCAS

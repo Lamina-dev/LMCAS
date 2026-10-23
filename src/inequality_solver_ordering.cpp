@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/inequality_solver_support.hpp"
 #include "internal/symbolic_ast.hpp"
 #include <cmath>
@@ -28,16 +29,16 @@ int root_number_sign(const NumberNode& number) {
     return 0;
 }
 
-int root_power_sign(const PowerNode& power) {
+int root_power_sign(const PowerNode& power, ComputationContext& context) {
     auto exp_expr = LMCAS::detail::make_expression_ptr(power.exponent());
-    if (auto ev = try_checked_numeric_constant(*exp_expr)) {
+    if (auto ev = try_checked_numeric_constant(*exp_expr, context)) {
         if (*ev > 0 && *ev < 1.0) {
             return 1;
         }
     }
     auto base_expr = LMCAS::detail::make_expression_ptr(power.base());
-    auto bv_checked = try_checked_numeric_constant(*base_expr);
-    auto ev_checked = try_checked_numeric_constant(*exp_expr);
+    auto bv_checked = try_checked_numeric_constant(*base_expr, context);
+    auto ev_checked = try_checked_numeric_constant(*exp_expr, context);
     if (!bv_checked || !ev_checked) {
         return 0;
     }
@@ -56,7 +57,8 @@ int root_power_sign(const PowerNode& power) {
     return 0;
 }
 
-int root_node_sign(const std::shared_ptr<const SymbolicNode>& node) {
+int root_node_sign(const std::shared_ptr<const SymbolicNode>& node,
+                   ComputationContext& context) {
     if (!node) {
         return 0;
     }
@@ -69,16 +71,17 @@ int root_node_sign(const std::shared_ptr<const SymbolicNode>& node) {
         }
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return root_power_sign(*power);
+        return root_power_sign(*power, context);
     }
     return 0;
 }
 
-int root_expression_sign(const std::shared_ptr<SymbolicExpr>& expr) {
+int root_expression_sign(const std::shared_ptr<SymbolicExpr>& expr,
+                         ComputationContext& context) {
     if (!expr || !LMCAS::detail::node(expr)) {
         return 0;
     }
-    int direct = root_node_sign(LMCAS::detail::node(expr));
+    int direct = root_node_sign(LMCAS::detail::node(expr), context);
     if (direct != 0) {
         return direct;
     }
@@ -88,7 +91,7 @@ int root_expression_sign(const std::shared_ptr<SymbolicExpr>& expr) {
     }
     int sign = 1;
     for (const auto& operand : product->operands()) {
-        int factor_sign = root_node_sign(operand);
+        int factor_sign = root_node_sign(operand, context);
         if (factor_sign == 0) {
             return 0;
         }
@@ -100,36 +103,40 @@ int root_expression_sign(const std::shared_ptr<SymbolicExpr>& expr) {
 }
 
 bool root_less_than(const std::shared_ptr<SymbolicExpr>& a,
-                           const std::shared_ptr<SymbolicExpr>& b) {
+                    const std::shared_ptr<SymbolicExpr>& b, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!a || !b) {
         return false;
     }
-    auto va = try_checked_numeric_constant(*a);
-    auto vb = try_checked_numeric_constant(*b);
+    auto va = try_checked_numeric_constant(*a, context);
+    auto vb = try_checked_numeric_constant(*b, context);
     if (va && vb) {
         return *va < *vb;
     }
-    auto diff = SymbolicExpr::add(a, SymbolicExpr::multiply(b, SymbolicExpr::number(-1)))->simplify();
-    if (auto vd = try_checked_numeric_constant(*diff)) {
+    auto diff = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(a, SymbolicExpr::multiply(b, SymbolicExpr::number(-1)))), transform_budget));
+    if (auto vd = try_checked_numeric_constant(*diff, context)) {
         return *vd < 0;
     }
-    return root_expression_sign(diff) < 0;
+    return root_expression_sign(diff, context) < 0;
 }
 
 bool roots_equal(const std::shared_ptr<SymbolicExpr>& a,
-                 const std::shared_ptr<SymbolicExpr>& b) {
+                 const std::shared_ptr<SymbolicExpr>& b, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!a || !b) {
         return false;
     }
-    auto numeric_a = try_checked_numeric_constant(*a);
-    auto numeric_b = try_checked_numeric_constant(*b);
+    auto numeric_a = try_checked_numeric_constant(*a, context);
+    auto numeric_b = try_checked_numeric_constant(*b, context);
     if (numeric_a && numeric_b) {
         return *numeric_a == *numeric_b;
     }
     auto difference = SymbolicExpr::add(
         a,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), b));
-    auto simplified = difference ? difference->simplify() : nullptr;
+    auto simplified = difference ? detail::make_expression_ptr(detail::normalize_node(detail::node(difference), transform_budget)) : nullptr;
     return simplified && simplified->is_zero();
 }
 }

@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 #include "symbolic.hpp"
 #include "polynomial_conversion.hpp"
 #include "internal/normalization_utils.hpp"
@@ -36,7 +37,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::rational_leading_limit(
     if (degree_difference == 0) {
         auto ratio = detail::make_node<MultiplyNode>(std::vector<std::shared_ptr<const SymbolicNode>>{
             leading_numerator, detail::make_node<PowerNode>(leading_denominator, detail::make_node<NumberNode>(BigInt(-1)))});
-        NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+        NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
         ratio->accept(norm);
         return norm.get_result();
     }
@@ -402,7 +403,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::handle_neg_infinity_limit(
         return nullptr;
     }
 
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     substituted->accept(norm);
     substituted = norm.get_result();
     if (!substituted) {

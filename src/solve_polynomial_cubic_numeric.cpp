@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/polynomial_solver_support.hpp"
 #include <algorithm>
 #include <cmath>
@@ -69,19 +70,23 @@ static std::optional<NumericCubicDepression> depress_numeric_cubic(
 
 std::optional<NumericCubicDepression> numeric_cubic_depression(
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
-    const std::shared_ptr<SymbolicExpr>& c, const std::shared_ptr<SymbolicExpr>& d) {
+    const std::shared_ptr<SymbolicExpr>& c, const std::shared_ptr<SymbolicExpr>& d,
+    ComputationContext& context) {
     const bool all_numeric = is_purely_numeric(a) && is_purely_numeric(b) &&
                              is_purely_numeric(c) && is_purely_numeric(d);
-    auto av = finite_numeric_value(a);
-    auto bv = finite_numeric_value(b);
-    auto cv = finite_numeric_value(c);
-    auto dv = finite_numeric_value(d);
+    auto av = finite_numeric_value(a, context);
+    auto bv = finite_numeric_value(b, context);
+    auto cv = finite_numeric_value(c, context);
+    auto dv = finite_numeric_value(d, context);
     if (!all_numeric || !av || !bv || !cv || !dv || *av == 0.0) return std::nullopt;
     return depress_numeric_cubic(*av, *bv, *cv, *dv);
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> cubic_one_real_root(
-    double discriminant, double q_half, double root_scale, double shift_val) {
+    double discriminant, double q_half, double root_scale, double shift_val, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const double sqrt_discriminant = std::sqrt(discriminant);
     const double u = std::cbrt(-q_half + sqrt_discriminant);
     const double v = std::cbrt(-q_half - sqrt_discriminant);
@@ -93,14 +98,14 @@ static std::vector<std::shared_ptr<SymbolicExpr>> cubic_one_real_root(
 
     auto x1 = SymbolicExpr::number(x1_value);
     auto i_unit = SymbolicExpr::sqrt(num(-1));
-    auto x2 = SymbolicExpr::add(
+    auto x2 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
         SymbolicExpr::number(real_part),
         SymbolicExpr::multiply(
-            SymbolicExpr::number(imaginary_part), i_unit))->simplify();
-    auto x3 = sub(
+            SymbolicExpr::number(imaginary_part), i_unit))), transform_budget));
+    auto x3 = detail::make_expression_ptr(detail::normalize_node(detail::node(sub(
         SymbolicExpr::number(real_part),
         SymbolicExpr::multiply(
-            SymbolicExpr::number(imaginary_part), i_unit))->simplify();
+            SymbolicExpr::number(imaginary_part), i_unit))), transform_budget));
     return {x1, x2, x3};
 }
 
@@ -124,7 +129,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> cubic_three_real_roots(
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> numeric_cubic_roots(
-    const NumericCubicDepression& depression) {
+    const NumericCubicDepression& depression, ComputationContext& context) {
     const auto& [p_val, q_val, shift_val] = depression;
     const double root_scale = std::max(
         std::sqrt(std::abs(p_val)),
@@ -154,7 +159,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> numeric_cubic_roots(
         return {x1, x2, x2};
     }
     if (discriminant > 0.0) {
-        return cubic_one_real_root(discriminant, q_half, root_scale, shift_val);
+        return cubic_one_real_root(discriminant, q_half, root_scale, shift_val, context);
     }
     return cubic_three_real_roots(p_normalized, q_normalized, root_scale, shift_val);
 }

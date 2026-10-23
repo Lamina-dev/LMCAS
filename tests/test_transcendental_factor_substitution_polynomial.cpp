@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "transcendental_factor.hpp"
 #include "poly_utils.hpp"
@@ -301,13 +302,12 @@ TEST(TranscendentalFactorSubstitutionPolynomial, BuildPolyMultivariateRepresenta
     if (symbolic) {
         const auto restored = poly_to_symbolic(symbolic.value());
         const auto value = test_numeric_eval(
-            restored->substitute("u0", SymbolicExpr::number(3))
-                ->substitute("x", SymbolicExpr::number(7)));
+            LMCAS::substitute(LMCAS::substitute(restored, "u0", SymbolicExpr::number(3)).value(), "x", SymbolicExpr::number(7)).value());
         EXPECT_TRUE((value && *value == 16.0)) << "symbolic reconstruction retains both the square and parameter term";
     }
 
     const auto specialized = tf_build_polynomial(
-        expr->substitute("x", SymbolicExpr::number(7)), indeterminates, "x");
+        LMCAS::substitute(expr, "x", SymbolicExpr::number(7)).value(), indeterminates, "x");
     EXPECT_TRUE((specialized && specialized.value().success)) << "a rational specialization is supported";
     if (specialized && specialized.value().success) {
         EXPECT_TRUE((specialized.value().poly.eval(Rational(3)) == Rational(16))) << "rational specialization includes the former symbolic coefficient";

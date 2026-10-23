@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include <cmath>
 #include <map>
 #include "test_common.hpp"
@@ -94,7 +95,7 @@ TEST(VectorCalculusExtrema, FindExtremaSingleVar) {
 
         auto x_val = extrema[0].point.at("x");
         if (x_val) {
-            auto val = x_val->simplify();
+            auto val = LMCAS::simplify(x_val).value();
             auto num = test_numeric_eval(val);
             EXPECT_TRUE((num.has_value() && std::abs(*num - 1.0) < 1e-10)) << "critical point at x=1";
         }
@@ -219,8 +220,8 @@ TEST(VectorCalculusExtrema, LagrangeLinearConstraint) {
     EXPECT_TRUE((!solutions.empty())) << "found critical point";
 
     if (!solutions.empty()) {
-        auto x_val = solutions[0].at("x")->simplify();
-        auto y_val = solutions[0].at("y")->simplify();
+        auto x_val = LMCAS::simplify(solutions[0].at("x")).value();
+        auto y_val = LMCAS::simplify(solutions[0].at("y")).value();
         auto xn = test_numeric_eval(x_val);
         auto yn = test_numeric_eval(y_val);
         if (xn.has_value() && yn.has_value()) {
@@ -263,8 +264,8 @@ TEST(VectorCalculusExtrema, LagrangeCheckedCandidate) {
     ASSERT_TRUE((lagrange.has_value())) << "checked Lagrange succeeds for linear constraint";
     if (lagrange) {
         EXPECT_TRUE((!lagrange.value().empty())) << "checked Lagrange returns candidates";
-        auto x_val = lagrange.value()[0].at("x")->simplify();
-        auto y_val = lagrange.value()[0].at("y")->simplify();
+        auto x_val = LMCAS::simplify(lagrange.value()[0].at("x")).value();
+        auto y_val = LMCAS::simplify(lagrange.value()[0].at("y")).value();
         auto xn = test_numeric_eval(x_val);
         auto yn = test_numeric_eval(y_val);
         EXPECT_TRUE((xn.has_value() && yn.has_value())) << "checked Lagrange candidate is numeric";

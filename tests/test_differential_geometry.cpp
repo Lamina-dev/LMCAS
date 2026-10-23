@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "differential_geometry.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "test_common.hpp"
@@ -19,8 +20,8 @@ TEST(LmcasDifferentialGeometry, ConstantVectorLieDerivative) {
     auto L = derivative.value();
     auto expected = SymbolicExpr::multiply(num(2), x);
     {
-        const auto actual_expr = L->simplify();
-        const auto expected_expr = expected->simplify();
+        const auto actual_expr = LMCAS::simplify(L).value();
+        const auto expected_expr = LMCAS::simplify(expected).value();
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("L_(1,0,0)(x^2) = 2x");
     }
 }
@@ -37,8 +38,8 @@ TEST(LmcasDifferentialGeometry, VariableVectorLieDerivative) {
     auto L = derivative.value();
     auto expected = SymbolicExpr::add(SymbolicExpr::multiply(y, y), SymbolicExpr::multiply(x, x));
     {
-        const auto actual_expr = L->simplify();
-        const auto expected_expr = expected->simplify();
+        const auto actual_expr = LMCAS::simplify(L).value();
+        const auto expected_expr = LMCAS::simplify(expected).value();
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("L_(y,x,0)(xy) = y^2 + x^2");
     }
 }
@@ -56,18 +57,18 @@ TEST(LmcasDifferentialGeometry, ScalarExteriorDerivative) {
     auto d = derivative.value();
     ASSERT_EQ(d.size(), 3u) << ("d(0-form) has 3 components");
     {
-        const auto actual_expr = d[0]->simplify();
-        const auto expected_expr = SymbolicExpr::multiply(num(2), x)->simplify();
+        const auto actual_expr = LMCAS::simplify(d[0]).value();
+        const auto expected_expr = LMCAS::simplify(SymbolicExpr::multiply(num(2), x)).value();
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("d f / dx = 2x");
     }
     {
-        const auto actual_expr = d[1]->simplify();
-        const auto expected_expr = SymbolicExpr::multiply(num(2), y)->simplify();
+        const auto actual_expr = LMCAS::simplify(d[1]).value();
+        const auto expected_expr = LMCAS::simplify(SymbolicExpr::multiply(num(2), y)).value();
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("d f / dy = 2y");
     }
     {
-        const auto actual_expr = d[2]->simplify();
-        const auto expected_expr = SymbolicExpr::multiply(num(2), z)->simplify();
+        const auto actual_expr = LMCAS::simplify(d[2]).value();
+        const auto expected_expr = LMCAS::simplify(SymbolicExpr::multiply(num(2), z)).value();
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("d f / dz = 2z");
     }
 }
@@ -83,7 +84,7 @@ TEST(LmcasDifferentialGeometry, ScalarNilpotence) {
     ASSERT_TRUE(d2.has_value());
     ASSERT_EQ(d2.value().size(), 3u);
     for (const auto& coefficient : d2.value()) {
-        auto simplified = coefficient->simplify();
+        auto simplified = LMCAS::simplify(coefficient).value();
         ASSERT_TRUE(LMCAS::detail::node(simplified));
         EXPECT_TRUE(LMCAS::detail::node(simplified)->is_zero())
             << "d^2(f) = 0";
@@ -131,7 +132,7 @@ TEST(LmcasDifferentialGeometry, HigherDegreeExteriorDerivatives) {
         exterior_derivative_checked(d_alpha.value(), 2, vars);
     ASSERT_TRUE(d_squared.has_value()) << "d of a 2-form succeeds";
     ASSERT_EQ(d_squared.value().size(), 1u);
-    auto simplified = d_squared.value()[0]->simplify();
+    auto simplified = LMCAS::simplify(d_squared.value()[0]).value();
     ASSERT_TRUE(LMCAS::detail::node(simplified));
     EXPECT_TRUE(LMCAS::detail::node(simplified)->is_zero())
         << "d squared is zero for a nontrivial 1-form";
@@ -163,7 +164,7 @@ TEST(LmcasDifferentialGeometry, CheckedGeometrySuccess) {
     auto gamma1 = christoffel_first_kind_checked(g, coords2, 0, 0, 0);
     ASSERT_TRUE((gamma1.has_value())) << ("checked first-kind Christoffel succeeds");
     if (gamma1) {
-        auto simplified_gamma = gamma1.value()->simplify();
+        auto simplified_gamma = LMCAS::simplify(gamma1.value()).value();
         EXPECT_TRUE((LMCAS::detail::node(simplified_gamma) &&
                      LMCAS::detail::node(simplified_gamma)->is_zero()))
             << ("flat first-kind Christoffel is zero");
@@ -180,8 +181,8 @@ TEST(LmcasDifferentialGeometry, CheckedGeometrySuccess) {
     ASSERT_TRUE((lie.has_value())) << ("checked Lie derivative succeeds");
     if (lie) {
         {
-            const auto actual_expr = lie.value()->simplify();
-            const auto expected_expr = SymbolicExpr::multiply(num(2), x)->simplify();
+            const auto actual_expr = LMCAS::simplify(lie.value()).value();
+            const auto expected_expr = LMCAS::simplify(SymbolicExpr::multiply(num(2), x)).value();
             EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("checked Lie derivative computes 2x");
         }
     }

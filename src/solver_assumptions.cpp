@@ -282,14 +282,17 @@ AssumptionSolveResult solve_with_assumptions_checked(
     try {
         return solve_with_assumptions_impl(
             equation, variable, assumptions, context);
+    } catch (const CasError& error) {
+        return AssumptionSolveResult::failure(error);
     } catch (const std::bad_alloc&) {
         return AssumptionSolveResult::failure(
             CasErrc::ResourceLimit,
             "allocation failed while solving with assumptions",
             operation);
+    } catch (const std::length_error& error) {
+        return AssumptionSolveResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& ex) {
-        return AssumptionSolveResult::failure(
-            CasErrc::InternalInvariant, ex.what(), operation);
+        return AssumptionSolveResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
     }
 }
 

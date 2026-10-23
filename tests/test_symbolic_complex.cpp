@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include "test_common.hpp"
@@ -231,8 +232,12 @@ TEST(SymbolicComplex, CheckedComplexContracts) {
 
 void expect_complex_zero(const ComplexSymbolic &value,
                          const AssumptionContext *facts = nullptr) {
+    ComputationContext context;
+    if (facts) {
+        ASSERT_TRUE(context.set_assumptions(std::make_shared<AssumptionContext>(*facts)));
+    }
     for (const auto &component : {value.real, value.imag}) {
-        auto normalized = facts ? facts->simplify(*component) : component->simplify();
+        auto normalized = LMCAS::simplify(component, context).value();
         EXPECT_TRUE((normalized && normalized->is_zero())) << "Cartesian polynomial residual component is zero under its assumptions";
     }
 }
@@ -249,7 +254,7 @@ TEST(SymbolicComplex, ComplexQuadratic) {
         const auto &root = roots.value()[index];
         EXPECT_TRUE((root.real->is_zero())) << "root has exactly zero real component";
         auto expected_imag = SymbolicExpr::number(index == 0 ? -1 : 1);
-        EXPECT_TRUE((SymbolicExpr::add(root.imag, expected_imag)->simplify()->is_zero())) << "formula ordering yields +i followed by -i";
+        EXPECT_TRUE((LMCAS::simplify(SymbolicExpr::add(root.imag, expected_imag)).value()->is_zero())) << "formula ordering yields +i followed by -i";
         auto squared = complex_mul_checked(root, root);
         ASSERT_TRUE((squared.has_value())) << "root can be squared with complex arithmetic";
         if (!squared) {
@@ -260,7 +265,7 @@ TEST(SymbolicComplex, ComplexQuadratic) {
         if (residual)
             expect_complex_zero(residual.value());
         auto modulus = complex_abs_checked(root);
-        EXPECT_TRUE((modulus && modulus.value()->simplify()->is_one())) << "each root has exact modulus one";
+        EXPECT_TRUE((modulus && LMCAS::simplify(modulus.value()).value()->is_one())) << "each root has exact modulus one";
     }
     auto conjugate = complex_conj_checked(roots.value()[0]);
     ASSERT_TRUE((conjugate.has_value())) << "conjugation succeeds";
@@ -285,8 +290,7 @@ TEST(SymbolicComplex, ComplexQuadraticRealRoots) {
         return;
     }
     EXPECT_TRUE((roots.value()[0].imag->is_zero() && roots.value()[1].imag->is_zero())) << "nonnegative discriminant gives real roots";
-    EXPECT_TRUE((SymbolicExpr::add(roots.value()[0].real, SymbolicExpr::number(-2))
-                     ->simplify()
+    EXPECT_TRUE((LMCAS::simplify(SymbolicExpr::add(roots.value()[0].real, SymbolicExpr::number(-2))).value()
                      ->is_zero()))
         << "first real root is two";
     EXPECT_TRUE((roots.value()[1].real->is_one())) << "second real root is one";
@@ -317,8 +321,7 @@ TEST(SymbolicComplex, ComplexQuadraticNegativeLeadingCoefficient) {
         return;
     }
     EXPECT_TRUE((roots.value()[0].real->is_zero() && roots.value()[1].real->is_zero())) << "negative leading coefficient does not introduce a real component";
-    EXPECT_TRUE((SymbolicExpr::add(roots.value()[0].imag, SymbolicExpr::number(1))
-                     ->simplify()
+    EXPECT_TRUE((LMCAS::simplify(SymbolicExpr::add(roots.value()[0].imag, SymbolicExpr::number(1))).value()
                      ->is_zero()))
         << "first signed-formula root is -i";
     EXPECT_TRUE((roots.value()[1].imag->is_one())) << "second signed-formula root is +i";

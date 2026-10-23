@@ -254,12 +254,12 @@ TEST(AstInvariants, SummationBinding) {
     EXPECT_TRUE((node_depends_on(sum, "n"))) << "Summation bound free variable is detected";
 
     auto sum_expr = LMCAS::detail::make_expression_ptr(sum);
-    auto substituted_bound = sum_expr->substitute("k", SymbolicExpr::number(5));
+    auto substituted_bound = LMCAS::substitute(sum_expr, "k", SymbolicExpr::number(5)).value();
     auto substituted_sum = std::dynamic_pointer_cast<const SummationNode>(LMCAS::detail::node(substituted_bound));
     EXPECT_TRUE((substituted_sum != nullptr)) << "Substitution preserves SummationNode";
     EXPECT_TRUE((node_depends_on(substituted_sum->body(), "k"))) << "Substitution does not replace bound summation variable in body";
 
-    auto substituted_free = sum_expr->substitute("x", SymbolicExpr::number(5));
+    auto substituted_free = LMCAS::substitute(sum_expr, "x", SymbolicExpr::number(5)).value();
     auto substituted_free_sum = std::dynamic_pointer_cast<const SummationNode>(LMCAS::detail::node(substituted_free));
     EXPECT_TRUE((substituted_free_sum != nullptr)) << "Free substitution preserves SummationNode";
     EXPECT_TRUE((!node_depends_on(substituted_free_sum->body(), "x"))) << "Substitution replaces free variable inside summation body";
@@ -276,7 +276,7 @@ TEST(AstInvariants, PiecewiseExpansion) {
     auto positive_x = LMCAS::detail::make_node<RelationalNode>(x_node, zero, RelationalNode::Op::GT);
     auto piecewise = LMCAS::detail::make_node<PiecewiseNode>(
         std::vector<PiecewiseNode::Branch>{{product, positive_x}});
-    auto expanded = LMCAS::detail::make_expression_ptr(piecewise)->expand();
+    auto expanded = LMCAS::expand(LMCAS::detail::make_expression_ptr(piecewise)).value();
     auto expanded_piecewise = std::dynamic_pointer_cast<const PiecewiseNode>(LMCAS::detail::node(expanded));
     EXPECT_TRUE((expanded_piecewise != nullptr)) << "Expand preserves PiecewiseNode";
     EXPECT_TRUE((std::dynamic_pointer_cast<const AddNode>(expanded_piecewise->branches()[0].expression) != nullptr)) << "Expand traverses and expands PiecewiseNode branch expression";
@@ -290,11 +290,11 @@ TEST(AstInvariants, QuantifierBinding) {
     auto quantified = LMCAS::detail::make_node<QuantifierNode>(
         QuantifierNode::Type::ForAll, "x", domain, predicate);
     auto quantified_expr = LMCAS::detail::make_expression_ptr(quantified);
-    auto q_bound_sub = quantified_expr->substitute("x", SymbolicExpr::number(3));
+    auto q_bound_sub = LMCAS::substitute(quantified_expr, "x", SymbolicExpr::number(3)).value();
     auto q_bound = std::dynamic_pointer_cast<const QuantifierNode>(LMCAS::detail::node(q_bound_sub));
     EXPECT_TRUE((q_bound != nullptr)) << "Substitution preserves QuantifierNode";
     EXPECT_TRUE((node_depends_on(q_bound->predicate(), "x"))) << "Substitution does not replace bound quantifier variable";
-    auto q_free_sub = quantified_expr->substitute("y", SymbolicExpr::number(3));
+    auto q_free_sub = LMCAS::substitute(quantified_expr, "y", SymbolicExpr::number(3)).value();
     auto q_free = std::dynamic_pointer_cast<const QuantifierNode>(LMCAS::detail::node(q_free_sub));
     EXPECT_TRUE((q_free != nullptr)) << "Free substitution preserves QuantifierNode";
     EXPECT_TRUE((!node_depends_on(q_free->predicate(), "y"))) << "Substitution replaces free variable in quantifier predicate";

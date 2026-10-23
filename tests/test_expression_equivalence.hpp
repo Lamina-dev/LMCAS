@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #pragma once
 
 #include "symbolic.hpp"
@@ -119,17 +120,17 @@ inline std::shared_ptr<SymbolicExpr> test_simplified_zero(
     if (!expression) {
         return nullptr;
     }
-    auto simplified = expression->simplify();
+    auto simplified = LMCAS::simplify(expression).value();
     return simplified && simplified->is_zero() ? simplified : nullptr;
 }
 
 inline std::shared_ptr<SymbolicExpr> test_expanded_zero(
     const std::shared_ptr<SymbolicExpr> &expression) {
-    auto expanded = expression->expand();
+    auto expanded = LMCAS::expand(expression).value();
     if (!expanded) {
         return nullptr;
     }
-    auto simplified = expanded->simplify();
+    auto simplified = LMCAS::simplify(expanded).value();
     if (simplified && simplified->is_zero()) {
         return simplified;
     }
@@ -154,7 +155,7 @@ inline std::shared_ptr<SymbolicExpr> test_normalized_delta(
         return nullptr;
     }
 
-    auto simplified = delta->simplify();
+    auto simplified = LMCAS::simplify(delta).value();
     if (simplified && simplified->is_zero()) {
         return simplified;
     }

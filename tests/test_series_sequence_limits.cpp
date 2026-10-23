@@ -71,7 +71,7 @@ TEST(SeriesSequenceLimits, ExactAlternatingAmplitude) {
     EXPECT_EQ(upper.value()->compare(amplitude), 0)
         << "upper envelope retains all rational digits";
     EXPECT_EQ(lower.value()->compare(
-                  SymbolicExpr::multiply(num(-1), amplitude)->simplify()), 0)
+                  LMCAS::simplify(SymbolicExpr::multiply(num(-1), amplitude)).value()), 0)
         << "lower envelope retains all rational digits";
 }
 

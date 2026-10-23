@@ -85,7 +85,7 @@ ExpressionResult skew_distance_from_directions(
     }
     return simplify_checked(
         distance, operation,
-        "skew line distance is outside the supported domain");
+        "skew line distance is outside the supported domain", context);
 }
 
 }
@@ -219,7 +219,7 @@ LineSymbolicResult line_from_two_points_checked(
                 SymbolicExpr::multiply(SymbolicExpr::number(-1), p1[i]));
             auto simplified = simplify_checked(
                 component, operation,
-                "line direction component is outside the supported domain");
+                "line direction component is outside the supported domain", context);
             if (!simplified) return LineSymbolicResult::failure(simplified.error());
             line.direction.push_back(std::move(simplified.value()));
         }

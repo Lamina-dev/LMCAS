@@ -18,7 +18,7 @@ static int check_imaginary_product() {
     }
     auto i_squared = SymbolicExpr::multiply(i.value(), i.value());
     LMCAS::ComputationContext lsr_context;
-    auto i_rule = LMCAS::equivalent_core(
+    auto i_rule = LMCAS::equivalent(
         *i_squared, *SymbolicExpr::number(-1), lsr_context);
     if (!i_rule || !i_rule.value()) {
         std::cerr << "failed to prove LMCAS i*i == -1\n";
@@ -35,7 +35,7 @@ static int check_imaginary_power() {
     }
     auto i_power_two = SymbolicExpr::power(i.value(), SymbolicExpr::number(2));
     LMCAS::ComputationContext lsr_power_context;
-    auto i_power_rule = LMCAS::equivalent_core(
+    auto i_power_rule = LMCAS::equivalent(
         *i_power_two, *SymbolicExpr::number(-1), lsr_power_context);
     if (!i_power_rule || !i_power_rule.value()) {
         std::cerr << "failed to prove LMCAS i^2 == -1\n";
@@ -48,7 +48,7 @@ static int check_ordinary_i_identity() {
     auto legacy_i = SymbolicExpr::variable("i");
     auto legacy_i_squared = SymbolicExpr::multiply(legacy_i, legacy_i);
     LMCAS::ComputationContext legacy_i_context;
-    auto legacy_i_rule = LMCAS::equivalent_core(
+    auto legacy_i_rule = LMCAS::equivalent(
         *legacy_i_squared, *SymbolicExpr::number(-1), legacy_i_context);
     if (!legacy_i_rule || legacy_i_rule.value()) {
         std::cerr << "ordinary Expr i was treated as the imaginary unit\n";

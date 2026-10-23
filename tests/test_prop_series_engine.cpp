@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "series_engine.hpp"
 #include <random>
@@ -54,8 +55,8 @@ TEST(PropSeriesEngine, PowerSeriesAdditionComponentwise) {
         } else {
             for (int k = 0; k < len; ++k) {
                 // Compute expected: a[k] + b[k]
-                auto expected = SymbolicExpr::add(a[k], b[k])->simplify();
-                auto actual = result[k] ? result[k]->simplify() : num(0);
+                auto expected = LMCAS::simplify(SymbolicExpr::add(a[k], b[k])).value();
+                auto actual = result[k] ? LMCAS::simplify(result[k]).value() : num(0);
 
                 auto exp_val = test_numeric_eval(expected);
                 auto act_val = test_numeric_eval(actual);
@@ -218,11 +219,11 @@ static bool zero_parity_residual(const std::shared_ptr<SymbolicExpr> &residual) 
     if (residual && residual->is_zero()) {
         return true;
     }
-    auto at_one = residual ? residual->substitute("x", num(1)) : nullptr;
+    auto at_one = residual ? LMCAS::substitute(residual, "x", num(1)).value() : nullptr;
     if (!at_one) {
         return false;
     }
-    at_one = at_one->simplify();
+    at_one = LMCAS::simplify(at_one).value();
     auto value = test_numeric_eval(at_one);
     return value && std::abs(*value) < 1e-9;
 }
@@ -234,13 +235,12 @@ static bool matches_expression_parity(
 
     if (expected_parity == 1) {
         // Even: f(-x) - f(x) should be 0
-        auto diff = SymbolicExpr::add(f_neg,
-                                      SymbolicExpr::multiply(num(-1), f_s))
-                        ->simplify();
+        auto diff = LMCAS::simplify(SymbolicExpr::add(f_neg,
+                                      SymbolicExpr::multiply(num(-1), f_s))).value();
         property_holds = zero_parity_residual(diff);
     } else if (expected_parity == -1) {
         // Odd: f(-x) + f(x) should be 0
-        auto sum = SymbolicExpr::add(f_neg, f_s)->simplify();
+        auto sum = LMCAS::simplify(SymbolicExpr::add(f_neg, f_s)).value();
         property_holds = zero_parity_residual(sum);
     }
     return property_holds;
@@ -255,12 +255,12 @@ TEST(PropSeriesEngine, FourierSeriesSymmetry) {
         auto f = random_parity_expression(x, expected_parity);
 
         auto neg_x = SymbolicExpr::multiply(num(-1), x);
-        auto f_neg = f->substitute("x", neg_x);
+        auto f_neg = LMCAS::substitute(f, "x", neg_x).value();
         if (!f_neg) {
             continue;
         }
-        f_neg = f_neg->simplify();
-        auto f_s = f->simplify();
+        f_neg = LMCAS::simplify(f_neg).value();
+        auto f_s = LMCAS::simplify(f).value();
 
         bool property_holds = matches_expression_parity(f_neg, f_s, expected_parity);
 
@@ -290,7 +290,7 @@ static std::shared_ptr<SymbolicExpr> summation_polynomial(
         }
         body = SymbolicExpr::add(body, term);
     }
-    body = body->simplify();
+    body = LMCAS::simplify(body).value();
     return body;
 }
 
@@ -330,7 +330,7 @@ TEST(PropSeriesEngine, SymbolicSummationClosedForm) {
         bool property_holds = false;
 
         if (direct_result) {
-            direct_result = direct_result->simplify();
+            direct_result = LMCAS::simplify(direct_result).value();
             auto val = test_numeric_eval(direct_result);
             if (val) {
                 property_holds = (std::abs(*val - direct_sum) < 1e-6);

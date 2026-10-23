@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "root_of_utils.hpp"
 #include "solve_polynomial.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -12,8 +13,11 @@ namespace LMCAS {
 
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_closed_form_from_poly(
     const Polynomial<SymbolicPolyCoeff>& poly,
-    const std::string& var)
+    const std::string& var, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     int deg = poly.degree();
     if (deg <= 0) return {};
 
@@ -27,7 +31,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_closed_form_from_poly(
         auto a = get_coeff(1);
         auto b = get_coeff(0);
         auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
-        return { SymbolicExpr::divide(neg_b, a)->simplify() };
+        return { detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(neg_b, a)), transform_budget)) };
     } else if (deg == 2) {
         auto a = get_coeff(2);
         auto b = get_coeff(1);
@@ -40,8 +44,8 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_closed_form_from_poly(
         auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
         auto two_a = SymbolicExpr::multiply(SymbolicExpr::number(2), a);
 
-        auto x1 = SymbolicExpr::divide(SymbolicExpr::add(neg_b, sqrt_delta), two_a)->simplify();
-        auto x2 = SymbolicExpr::divide(SymbolicExpr::add(neg_b, SymbolicExpr::multiply(sqrt_delta, SymbolicExpr::number(-1))), two_a)->simplify();
+        auto x1 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(SymbolicExpr::add(neg_b, sqrt_delta), two_a)), transform_budget));
+        auto x2 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(SymbolicExpr::add(neg_b, SymbolicExpr::multiply(sqrt_delta, SymbolicExpr::number(-1))), two_a)), transform_budget));
         return { x1, x2 };
     } else if (deg == 3) {
         auto a = get_coeff(3);
@@ -67,6 +71,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_closed_form_from_poly(
 std::shared_ptr<SymbolicExpr> rootof_simplify(
     const std::shared_ptr<SymbolicExpr>& rootof_expr)
 {
+    ComputationContext context;
     if (!rootof_expr || !LMCAS::detail::node(rootof_expr)) return rootof_expr;
 
     auto root = std::dynamic_pointer_cast<const RootOfNode>(
@@ -90,11 +95,11 @@ std::shared_ptr<SymbolicExpr> rootof_simplify(
     }
 
     if (degree == 1) {
-        auto roots = solve_closed_form_from_poly(sym_poly, var);
+        auto roots = solve_closed_form_from_poly(sym_poly, var, context);
         return roots.size() == 1 ? roots.front() : rootof_expr;
     }
     if (degree == 2) {
-        auto roots = solve_closed_form_from_poly(sym_poly, var);
+        auto roots = solve_closed_form_from_poly(sym_poly, var, context);
         if (roots.size() != 2) return rootof_expr;
         return roots[static_cast<std::size_t>(1 - k)];
     }

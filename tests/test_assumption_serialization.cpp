@@ -1,4 +1,3 @@
-
 #include "test_common.hpp"
 #include <rapidcheck.h>
 #include "assumption_context.hpp"
@@ -343,7 +342,8 @@ TEST(LmcasAssumptionSerialization, CheckedDeserializationContractsExactAtoms) {
     }
     auto period = restored.value().get_period("f", "x");
     auto third = SymbolicExpr::number(Rational(1, 3));
-    auto canonical_period = period ? period->simplify() : nullptr;
+    auto canonical_period = period
+        ? LMCAS::simplify(std::make_shared<SymbolicExpr>(*period)).value() : nullptr;
     EXPECT_TRUE(canonical_period && detail::node(canonical_period)->equals(*detail::node(third))) << "declared period retains its exact rational value";
     EXPECT_TRUE(restored.value().has_relation(*SymbolicExpr::variable("x"), *third, RelationOp::GT)) << "exact relational fact survives the roundtrip";
     const auto conditionals = restored.value().get_active_conditionals();

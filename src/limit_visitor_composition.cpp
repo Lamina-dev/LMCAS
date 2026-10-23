@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 #include "internal/visitors/limit_visitor.hpp"
 #include "internal/facts_query.hpp"
 #include "internal/assumption_facts.hpp"
@@ -81,7 +82,7 @@ bool LimitVisitor::exponential_power_limit(const PowerNode& node) {
     auto exponential = LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Exp,
         std::vector<std::shared_ptr<const SymbolicNode>>{value});
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     exponential->accept(norm);
     result = norm.get_result();
     return true;
@@ -101,7 +102,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::resolve_exponential_form(
     if (!is_inf(value)) {
         auto exponential = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Exp, std::vector<std::shared_ptr<const SymbolicNode>>{value});
-        NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+        NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
         exponential->accept(norm);
         return norm.get_result();
     }
@@ -173,7 +174,7 @@ void LimitVisitor::visit(const PowerNode& node) {
         result = singular;
         return;
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     LMCAS::detail::make_node<PowerNode>(base, exponent)->accept(norm);
     result = norm.get_result();
 }
@@ -216,7 +217,7 @@ bool LimitVisitor::composed_function_limit(const FunctionNode& node) {
         auto defined = detail::query_definedness(candidate, facts, Domain::Real, *context_);
         if (!defined) { throw defined.error(); }
         if (defined && defined.value() == Tribool::True) {
-            NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+            NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
             candidate->accept(norm);
             result = norm.get_result();
             return true;
@@ -293,7 +294,7 @@ void LimitVisitor::visit(const FunctionNode& node) {
         if (!result) return;
         arguments.push_back(result);
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     LMCAS::detail::make_node<FunctionNode>(node.type(), arguments)->accept(norm);
     result = norm.get_result();
 }

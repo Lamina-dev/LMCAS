@@ -1,4 +1,6 @@
+#include "expr.hpp"
 #include "test_solve_quartic_support.hpp"
+#include "numeric_evaluation.hpp"
 
 TEST(SolveQuarticDegenerate, SolveBiquadraticDegenerateLeadingCoefficient) {
     auto roots = LMCAS::solve_biquadratic(
@@ -81,19 +83,45 @@ TEST(SolveQuarticDegenerate, SolveBiquadraticExactHugeCoefficientAvoidsUnsafeNum
         SymbolicExpr::number(-1),
         "x");
 
-    EXPECT_TRUE((roots.size() == 4)) << "huge exact biquadratic should return symbolic square-root roots";
-
-    int zero_roots = 0;
+    ASSERT_EQ(roots.size(), 4U);
+    const double expected[][2] = {{1.0, 0.0}, {-1.0, 0.0}, {0.0, 1.0}, {0.0, -1.0}};
+    bool matched[4] = {};
     for (const auto &root : roots) {
-        std::string text = root ? root->to_string() : "";
-        EXPECT_TRUE((text.find("inf") == std::string::npos &&
-                     text.find("nan") == std::string::npos))
-            << "huge exact biquadratic roots should not contain fabricated inf/nan";
-        if (root && root->simplify()->is_zero()) {
-            ++zero_roots;
+        ASSERT_TRUE(root);
+        auto evaluated = LMCAS::eval_complex(*root);
+        ASSERT_TRUE(evaluated) << evaluated.error().message;
+        const double real = evaluated.value().real.value / 1e-100;
+        const double imag = evaluated.value().imag.value / 1e-100;
+        ASSERT_TRUE(std::isfinite(real));
+        ASSERT_TRUE(std::isfinite(imag));
+        int phase = -1;
+        for (int i = 0; i < 4; ++i) {
+            if (!matched[i] && std::abs(real - expected[i][0]) < 1e-12 &&
+                std::abs(imag - expected[i][1]) < 1e-12) {
+                phase = i;
+                break;
+            }
         }
+        ASSERT_GE(phase, 0) << "unexpected or repeated scaled root: " << real << ", " << imag;
+        matched[phase] = true;
     }
-    EXPECT_TRUE((zero_roots < 4)) << "huge exact biquadratic must not collapse nonzero roots to zero";
+}
+
+TEST(SolveQuarticDegenerate, BiquadraticNumericOverflowPreservesOriginalError) {
+    auto coefficient = SymbolicExpr::exp(SymbolicExpr::number(1000));
+    auto evaluated = evaluate_numeric(*coefficient);
+    ASSERT_FALSE(evaluated);
+    ASSERT_EQ(evaluated.error().code, CasErrc::NumericFailure);
+
+    try {
+        (void)LMCAS::solve_biquadratic(
+            coefficient, SymbolicExpr::number(0), SymbolicExpr::number(-1), "x");
+        FAIL() << "numeric overflow must not select the symbolic fallback";
+    } catch (const CasError &error) {
+        EXPECT_EQ(error.code, evaluated.error().code);
+        EXPECT_EQ(error.message, evaluated.error().message);
+        EXPECT_EQ(error.operation, evaluated.error().operation);
+    }
 }
 
 TEST(SolveQuarticDegenerate, SolveQuarticQ0AfterDepressionNonBiquadratic) {

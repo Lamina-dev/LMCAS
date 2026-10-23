@@ -1,8 +1,8 @@
 #include "internal/equivalence_support.hpp"
 
 #include "quantity.hpp"
-#include "internal/visitors/expand_visitor.hpp"
-#include "internal/visitors/normalization_visitor.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/expression_analysis.hpp"
 
 #include <exception>
 #include <limits>
@@ -18,16 +18,14 @@ ExprPtr normalize_equivalence(const ExprPtr& expression, detail::RewriteBudget& 
         throw CasError{CasErrc::InternalInvariant,
                        "equivalence normalization returned null", kEquivalentOperation};
     }
-    budget.measure(detail::node(expression));
-    NormalizationVisitor visitor(&budget);
-    detail::node(expression)->accept(visitor);
-    auto result = visitor.get_result();
-    if (!result) {
-        throw CasError{CasErrc::InternalInvariant,
-                       "equivalence normalization returned null", kEquivalentOperation};
+    auto result = detail::make_expression_ptr(
+        detail::normalize_node(detail::node(expression), budget));
+    if (contains_inexact_number(detail::node(result))) {
+        throw CasError{CasErrc::Inconclusive,
+                       "equivalence normalization produced an inexact value",
+                       kEquivalentOperation};
     }
-    budget.measure(result);
-    return detail::make_expression_ptr(std::move(result));
+    return result;
 }
 
 ExprPtr expand_equivalence(const ExprPtr& expression, detail::RewriteBudget& budget) {
@@ -35,15 +33,14 @@ ExprPtr expand_equivalence(const ExprPtr& expression, detail::RewriteBudget& bud
         throw CasError{CasErrc::InternalInvariant,
                        "equivalence expansion returned null", kEquivalentOperation};
     }
-    budget.measure(detail::node(expression));
-    ExpandVisitor visitor(&budget);
-    detail::node(expression)->accept(visitor);
-    auto result = visitor.get_result();
-    if (!result) {
-        throw CasError{CasErrc::InternalInvariant,
-                       "equivalence expansion returned null", kEquivalentOperation};
+    auto result = detail::make_expression_ptr(
+        detail::expand_node(detail::node(expression), budget));
+    if (contains_inexact_number(detail::node(result))) {
+        throw CasError{CasErrc::Inconclusive,
+                       "equivalence expansion produced an inexact value",
+                       kEquivalentOperation};
     }
-    return normalize_equivalence(detail::make_expression_ptr(std::move(result)), budget);
+    return result;
 }
 
 }
@@ -113,6 +110,12 @@ Result<bool> prove_operands(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
         *operands.value().first, budget);
     auto right = equivalence_detail::canonicalize_complex_product(
         *operands.value().second, budget);
+    if (contains_inexact_number(detail::node(left)) ||
+        contains_inexact_number(detail::node(right))) {
+        return Result<bool>::failure(CasErrc::Inconclusive,
+            "equivalence canonicalization produced an inexact value",
+            kEquivalentOperation);
+    }
     if (structurally_equal(*left, *right)) {
         return Result<bool>::success(true);
     }
@@ -126,7 +129,8 @@ Result<bool> prove_operands(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
                                      kEquivalentOperation);
     }
     difference = equivalence_detail::normalize_equivalence(difference, budget);
-    if (difference->is_zero()) {
+    const auto value = detail::exact_rational_value(detail::node(difference));
+    if (value && value->is_zero()) {
         return Result<bool>::success(true);
     }
     auto polynomial = equivalence_detail::prove_rational_polynomial_equivalence(
@@ -138,6 +142,32 @@ Result<bool> prove_operands(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
                                  kEquivalentOperation);
 }
 
+Result<bool> prove_checked_operands(
+    const SymbolicExpr& lhs, const SymbolicExpr& rhs,
+    ComputationContext& context, const EqvOptions& options,
+    detail::RewriteBudget& budget) {
+    budget.consume();
+    budget.measure(detail::node(lhs));
+    budget.measure(detail::node(rhs));
+    if (structurally_equal(lhs, rhs)) { return true; }
+    if (contains_inexact_number(detail::node(lhs)) ||
+        contains_inexact_number(detail::node(rhs))) {
+        return Result<bool>::failure(CasErrc::Inconclusive,
+            "inexact operands cannot establish exact equivalence",
+            kEquivalentOperation);
+    }
+    auto lhs_dimension = dimension_of(lhs);
+    if (!lhs_dimension) { return Result<bool>::failure(lhs_dimension.error()); }
+    auto rhs_dimension = dimension_of(rhs);
+    if (!rhs_dimension) { return Result<bool>::failure(rhs_dimension.error()); }
+    if (lhs_dimension.value() != rhs_dimension.value()) {
+        return Result<bool>::success(false);
+    }
+    return options.profile == EqvProfile::Core
+        ? prove_operands(lhs, rhs, context, options, budget)
+        : apply_profile(lhs, rhs, context, options, budget);
+}
+
 Result<bool> equivalent_with_budget(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
                                     ComputationContext& context, const EqvOptions& options,
                                     detail::RewriteBudget* budget) {
@@ -146,39 +176,32 @@ Result<bool> equivalent_with_budget(const SymbolicExpr& lhs, const SymbolicExpr&
         if (!valid) { return Result<bool>::failure(valid.error()); }
         auto step = context.consume_steps(1, kEquivalentOperation);
         if (!step) { return Result<bool>::failure(step.error()); }
-        auto lhs_dimension = dimension_of(lhs);
-        if (!lhs_dimension) { return Result<bool>::failure(lhs_dimension.error()); }
-        auto rhs_dimension = dimension_of(rhs);
-        if (!rhs_dimension) { return Result<bool>::failure(rhs_dimension.error()); }
-        if (lhs_dimension.value() != rhs_dimension.value()) {
-            return Result<bool>::success(false);
-        }
         if (budget) {
-            return options.profile == EqvProfile::Core
-                ? prove_operands(lhs, rhs, context, options, *budget)
-                : apply_profile(lhs, rhs, context, options, *budget);
+            return prove_checked_operands(lhs, rhs, context, options, *budget);
         }
         const auto input_nodes = detail::RewriteBudget::input_nodes(
             detail::node(lhs), detail::node(rhs), context,
             options.budget.max_rewrite_depth, kEquivalentOperation);
         const auto maximum = std::numeric_limits<std::size_t>::max();
         const auto factor = options.budget.max_node_growth_factor;
-        const auto max_nodes = input_nodes > maximum / factor
+        const auto growth_nodes = input_nodes > maximum / factor
             ? maximum : input_nodes * factor;
+        const auto max_nodes = std::min(context.limits().max_ast_nodes, growth_nodes);
         detail::RewriteBudget initial_budget(
             context, options.budget.max_rewrite_steps,
             options.budget.max_rewrite_depth, max_nodes, kEquivalentOperation);
-        return options.profile == EqvProfile::Core
-            ? prove_operands(lhs, rhs, context, options, initial_budget)
-            : apply_profile(lhs, rhs, context, options, initial_budget);
+        return prove_checked_operands(lhs, rhs, context, options, initial_budget);
     } catch (const CasError& error) {
         return Result<bool>::failure(error);
+    } catch (const std::length_error& error) {
+        return Result<bool>::failure(CasErrc::ResourceLimit, error.what(),
+                                     kEquivalentOperation);
     } catch (const std::bad_alloc&) {
         return Result<bool>::failure(CasErrc::ResourceLimit,
                                      "equivalence check allocation failed",
                                      kEquivalentOperation);
     } catch (const std::exception& error) {
-        return Result<bool>::failure(CasErrc::Inconclusive, error.what(),
+        return Result<bool>::failure(CasErrc::InternalInvariant, error.what(),
                                      kEquivalentOperation);
     }
 }
@@ -192,17 +215,12 @@ bool structurally_equal(const SymbolicExpr& lhs, const SymbolicExpr& rhs) {
     return left->equals(*right);
 }
 
-Result<bool> equivalent_core(const SymbolicExpr& lhs,
+Result<bool> detail::equivalent_impl(const SymbolicExpr& lhs,
                              const SymbolicExpr& rhs,
                              ComputationContext& context,
                              const EqvOptions& options) {
     return equivalent_with_budget(lhs, rhs, context, options, nullptr);
 }
 
-Result<bool> equivalent_core(const SymbolicExpr& lhs,
-                             const SymbolicExpr& rhs,
-                             ComputationContext& context) {
-    return equivalent_core(lhs, rhs, context, EqvOptions{});
-}
 
 }

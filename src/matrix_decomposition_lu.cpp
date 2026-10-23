@@ -74,7 +74,7 @@ LUDecompositionResult lu_decomposition_checked(
     auto budget = context.consume_steps(matrix.value()->rows() * matrix.value()->cols() * 8 + 8,
                                         operation);
     if (!budget) return LUDecompositionResult::failure(budget.error());
-    auto values = exact_rational_matrix(matrix.value());
+    auto values = exact_rational_matrix(matrix.value(), context);
     if (!values) {
         return LUDecompositionResult::failure(
             CasErrc::Inconclusive,

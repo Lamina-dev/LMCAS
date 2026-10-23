@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_solve_quartic_support.hpp"
 
 TEST(SolveQuartic, SolveQuarticBiquadratic) {
@@ -171,7 +172,7 @@ TEST(SolveQuartic, SolveQuarticTinyNegativeQuadraticResolventRoot) {
     int nonreal_roots = 0;
     std::ostringstream root_details;
     for (const auto &root : roots) {
-        const std::string text = root->simplify()->to_string();
+        const std::string text = LMCAS::simplify(root).value()->to_string();
         root_details << " [" << text << "]";
         if (text == "-1") {
             ++repeated_real_roots;
@@ -195,7 +196,7 @@ TEST(SolveQuartic, SolveQuarticComplexQuadraticResolventRoots) {
 
     bool fabricated_real_root = false;
     for (const auto &root : roots) {
-        const std::string text = root->simplify()->to_string();
+        const std::string text = LMCAS::simplify(root).value()->to_string();
         if (text == "0" || text == "-2") {
             fabricated_real_root = true;
         }
@@ -218,7 +219,7 @@ TEST(SolveQuartic, SolveQuarticTinyComplexPairIsNotClampedReal) {
     int nonreal_roots = 0;
     std::ostringstream root_details;
     for (const auto &root : roots) {
-        root_details << " [" << root->simplify()->to_string();
+        root_details << " [" << LMCAS::simplify(root).value()->to_string();
         try {
             root_details << " -> " << root->to_numeric();
         } catch (const std::exception &) {

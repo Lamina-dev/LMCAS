@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/matrix_decomposition_support.hpp"
 
 #include "internal/symbolic_matrix_support.hpp"
@@ -77,7 +78,7 @@ JordanDecompositionResult diagonalization_checked(const ExprPtr& A,
     ComputationContext& context) {
     auto matrix = validate_decomposition_matrix(A, true, context, "matrix.diagonalize");
     if (!matrix) { return JordanDecompositionResult::failure(matrix.error()); }
-    if (auto diagonal = exact_diagonal_entries(matrix.value())) {
+    if (auto diagonal = exact_diagonal_entries(matrix.value(), context)) {
         return certified_jordan(A, {rectangular_diagonal_expr(matrix.value()->rows(),
             matrix.value()->cols(), *diagonal), identity_matrix_expr(matrix.value()->rows())}, context);
     }
@@ -144,8 +145,10 @@ std::optional<int> symbolic_quadratic_sign(const ExprPtr& value,
 
 std::optional<int> quadratic_eigenvalue_sign(const ExprPtr& eigenvalue,
     const detail::AssumptionFacts& facts, ComputationContext& context) {
-    auto value = eigenvalue->simplify();
-    if (auto rational = exact_rational_expr(value)) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto value = detail::make_expression_ptr(detail::normalize_node(detail::node(eigenvalue), transform_budget));
+    if (auto rational = exact_rational_expr(value, context)) {
         return *rational > Rational(0) ? 1 : (*rational < Rational(0) ? -1 : 0);
     }
     if (const auto* number = dynamic_cast<const NumberNode*>(detail::node(value).get())) {
@@ -174,12 +177,12 @@ JordanDecompositionResult jordan_form_checked(const ExprPtr& A,
         operation);
     if (!budget) { return JordanDecompositionResult::failure(budget.error()); }
     try {
-        if (auto diagonal = exact_diagonal_entries(matrix.value())) {
+        if (auto diagonal = exact_diagonal_entries(matrix.value(), context)) {
             return certified_jordan(A, {rectangular_diagonal_expr(
                 matrix.value()->rows(), matrix.value()->cols(), *diagonal),
                 identity_matrix_expr(matrix.value()->rows())}, context);
         }
-        auto exact = exact_rational_matrix(matrix.value());
+        auto exact = exact_rational_matrix(matrix.value(), context);
         if (exact && is_defective_upper_pair(*exact)) {
             auto zero = SymbolicExpr::number(0);
             auto one = SymbolicExpr::number(1);
@@ -204,6 +207,9 @@ JordanDecompositionResult jordan_form_checked(const ExprPtr& A) {
 
 ExprPtr matrix_exp(const ExprPtr& A) {
     ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+
     auto decomposition = diagonalization_checked(A, context);
     if (!decomposition) return SymbolicExpr::exp(A);
     auto inverse = matrix_inverse_checked(decomposition.value().P, context);
@@ -213,12 +219,15 @@ ExprPtr matrix_exp(const ExprPtr& A) {
     std::vector<std::vector<ExprPtr>> values(n, std::vector<ExprPtr>(n, SymbolicExpr::number(0)));
     for (std::size_t i = 0; i < n; ++i)
         values[i][i] = SymbolicExpr::exp(detail::make_expression_ptr(diagonal->get(i, i)));
-    return SymbolicExpr::multiply(decomposition.value().P,
-        SymbolicExpr::multiply(SymbolicExpr::matrix(values), inverse.value()))->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(decomposition.value().P,
+        SymbolicExpr::multiply(SymbolicExpr::matrix(values), inverse.value()))), transform_budget));
 }
 
 ExprPtr matrix_log(const ExprPtr& A) {
     ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+
     auto decomposition = diagonalization_checked(A, context);
     if (!decomposition) return nullptr;
     auto inverse = matrix_inverse_checked(decomposition.value().P, context);
@@ -233,8 +242,8 @@ ExprPtr matrix_log(const ExprPtr& A) {
         if (!positive || positive.value() != Tribool::True) return nullptr;
         values[i][i] = SymbolicExpr::ln(detail::make_expression_ptr(diagonal->get(i, i)));
     }
-    return SymbolicExpr::multiply(decomposition.value().P,
-        SymbolicExpr::multiply(SymbolicExpr::matrix(values), inverse.value()))->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(decomposition.value().P,
+        SymbolicExpr::multiply(SymbolicExpr::matrix(values), inverse.value()))), transform_budget));
 }
 
 std::string classify_quadratic_form(const ExprPtr& A) {

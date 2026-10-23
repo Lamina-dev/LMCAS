@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/transform_support.hpp"
 #include "internal/normalization_utils.hpp"
 #include <exception>
@@ -152,6 +153,8 @@ static std::shared_ptr<SymbolicExpr> te_laplace_sum(
 std::shared_ptr<SymbolicExpr> transform_detail::laplace_transform_core(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& t,
     const std::string& s, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto step = context.consume_steps(1, "laplace_transform.recursive");
     if (!step) {
         return nullptr;
@@ -181,7 +184,7 @@ std::shared_ptr<SymbolicExpr> transform_detail::laplace_transform_core(
         if (te_depends_on(remainder, t)) {
             auto lt_rem = laplace_transform_core(remainder, t, s, context);
             if (lt_rem) {
-                return lt_rem->substitute(s, SymbolicExpr::add(SymbolicExpr::variable(s), SymbolicExpr::multiply(SymbolicExpr::number(-1), a_shift)));
+                return detail::make_expression_ptr(detail::substitute_node(detail::node(lt_rem), s, detail::node(SymbolicExpr::add(SymbolicExpr::variable(s), SymbolicExpr::multiply(SymbolicExpr::number(-1), a_shift))), transform_budget));
             }
         } else {
             return SymbolicExpr::divide(remainder, SymbolicExpr::add(SymbolicExpr::variable(s), SymbolicExpr::multiply(SymbolicExpr::number(-1), a_shift)));

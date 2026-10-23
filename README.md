@@ -42,6 +42,13 @@ ctest --preset strict-debug
 该配置启用 LMCAS 与 LMMC 测试、严格警告和 `-Werror`。Linux 另提供
 `linux-asan-ubsan` 与 `linux-tsan` 预设。
 
+全部预设串行复用 `build/strict-debug`，默认构建与测试并发为 2。
+相同配置下直接运行增量构建，使用 `--target lmcas` 或具体测试目标缩小编译范围。
+切换开发、消毒器和安装配置时重新配置同一目录；预设显式更新测试、消毒器和
+汇编选项。嵌入 Lamina 时优先使用根工程的 Ninja 构建树，复用已有 CAS/MC 产物。
+CAS 顶层使用 `LMCAS_LMMP_ASM` 控制内嵌数学栈；每次重新配置会向下同步当前选择，
+更新 LMMP 的有效缓存值。
+
 macOS 使用原生 AppleClang + Ninja。arm64 构建使用 `LMCAS_LMMP_ASM=AUTO`，
 x86_64 构建使用 `LMCAS_LMMP_ASM=GENERIC`。编译级架构证据仅接受单一
 `CMAKE_OSX_ARCHITECTURES=arm64` 或 `x86_64`；启用
@@ -49,7 +56,7 @@ x86_64 构建使用 `LMCAS_LMMP_ASM=GENERIC`。编译级架构证据仅接受单
 `llvm-nm-<版本>` 名称）：
 
 ```bash
-cmake -S . -B build/macos-quality -G Ninja \
+cmake --preset strict-debug \
   -DCMAKE_OSX_ARCHITECTURES=arm64 \
   -DCMAKE_NM="$(brew --prefix llvm)/bin/llvm-nm" \
   -DLMCAS_ENABLE_QUALITY_GATES=ON
@@ -82,7 +89,7 @@ LMCAS、LMMC、LMMP 与工具链标准运行库。
 
 CTest 自动发现 GoogleTest 用例，使用 `-L gtest` 筛选；LMMC 测试使用
 `-L lmmc` 筛选，由 cmocka 报告组内用例。三个开发测试预设自动生成
-`build/<preset>/junit.xml`，在报告内保留完整用例名。普通 CTest 调用可通过
+`build/strict-debug/junit.xml`，在报告内保留完整用例名。普通 CTest 调用可通过
 `--output-junit <path>` 指定统一 JUnit 报告。编译级架构反例使用标准库 `unittest`。
 
 开发测试预设和 CI 设置 `RC_PARAMS=seed=42`，固定性质测试的随机序列。
@@ -103,7 +110,7 @@ CMake targets、公共头文件隔离以及 C++/LMMC/LMMP 消费路径。
 C++17、LMMC 的 C11 要求及 LMMP 链接依赖由 targets 传递。无需添加源码、
 私有头或构建目录到 include 路径。
 
-Windows 运行动态链接的测试或消费程序时，需让 `build/<preset>/bin`
+Windows 运行动态链接的测试或消费程序时，需让 `build/strict-debug/bin`
 （或安装目录的 `bin`）位于 `PATH`。
 macOS 安装库使用 `@rpath` install name。安装消费检查会移动整个安装前缀，
 并在不注入 `DYLD_LIBRARY_PATH` 或 `DYLD_FALLBACK_LIBRARY_PATH` 的情况下
@@ -123,13 +130,48 @@ LMCAS::SymbolicExpr 是 LMCAS 的核心类，表示一个不可变的符号表�
 - **不可变性**: 所有对表达式的操作（如相加、求导）都会返回一个新的 LMCAS::SymbolicExpr 对象，原对象保持不变。
 
 ### 计算机代数算法
-核心算法作为 LMCAS::SymbolicExpr 的成员函数或静态方法提供：
-*   **求导**: expr->differentiate("x") - 对变量 x 求导。
-*   **积分**: expr->integrate("x") - 对变量 x 进行符号积分。
-*   **化简**: expr->simplify() - 调用化简引擎对表达式进行代数化简。
-*   **展开**: expr->expand() - 展开多项式或乘积。
-*   **代入**: expr->substitute("y", val) - 将变量 y 替换为表达式 val。
+表达式变换通过 `include/expr.hpp` 的自由函数返回 `ExprResult`。
+多步计算传入同一个 `ComputationContext`，共享取消状态与累计工作预算：
+*   **求导**: `LMCAS::differentiate(expr, "x", context)`。
+*   **积分**: `integrator.integrate_checked(*expr, "x", context)`；定积分使用 `integrate_def_checked`。
+*   **化简**: `LMCAS::simplify(expr, context)`。
+*   **展开**: `LMCAS::expand(expr, context)`。
+*   **代入**: `LMCAS::substitute(expr, "y", val, context)`；Binding 列表按顺序替换。
 *   **四次方程**: 封闭式根的候选式含近似数时，默认的 `SolveOptions::return_rootof` 使用精确 `RootOf` 表示保留全部根。
+
+每次访问 `value()` 前检查结果；失败时传播完整的 `CasError`。
+变换的默认重载在最外层创建一次 context。`max_ast_nodes` 限制单个受检输入、
+候选 AST 或输出森林的按引用展开节点数，共享子树的每条引用分别计数。
+`max_steps` 限制跨步骤的累计工作量。形状缓存使用弱引用，生命周期限定于一次变换预算。
+
+`equivalent(*lhs, *rhs, context, options)` 提供公开等价证明入口。
+结构相等先通过取消和规模检查；不同结构且含 binary64 来源的输入返回
+`Inconclusive`，残差检查返回 `UnprovedResidual`。精确零证书保留
+BigInt/Rational 来源信息，`is_zero/is_one` 按字面数值严格比较。
+
+积分器以 `derivative(candidate) - original_integrand` 的精确零残差证书接受闭式，
+常数、线性拆分、分段表达式、内建/自定义策略和用户表项共享此条件。
+候选未获证书时继续回退，同模式表项和仿射换元也按优先级继续匹配。
+循环积分先消去私有占位符，再认证闭合结果；尚未解决的义务保留原始积分。
+`SymbolicExpr::make_integral` 专门构造未求值积分，执行计算使用 checked 积分入口。
+`abs(x)` 等实变量积分族通过 context 中的实数域声明获得所需事实；
+先以 `assume_domain_checked("x", Domain::Real)` 声明，再用
+`context.set_assumptions(...)` 关联假设。域条件待定时保留原始积分义务。
+
+### 求积估计与变换条件
+
+`quadrature_simpson_numeric`、`quadrature_gaussian_numeric` 与
+`adaptive_simpson_numeric` 返回 `Result<QuadratureEstimate>`。
+其中 `value` 是求积值，`estimated_error` 是由网格加密或相邻阶规则差异得到的
+绝对误差估计；数值求值的 `ApproxReal::absolute_error` 继续表示认证界。
+原 `numerical_integrate_numeric` 调用迁移到 `quadrature_simpson_numeric`。
+
+Lamina 的三种 `std.cas.integrate_*` 返回 `(value, estimated_error)`，
+分别通过 `.1`、`.2` 读取。Laplace、逆 Laplace、Fourier、逆 Fourier、
+Z 变换与卷积返回 `(expression, conditions, roc)`；后两项是表达式数组，
+保留结果成立所需的参数条件和收敛域约束。`std.cas.raw` 及相应子模块使用
+同样的 tuple，并由 `Result` 承载失败。只消费变换表达式时显式取 `.1`，
+同时保留其条件供后续计算使用。
 
 ### 矩阵运算
 符号矩阵操作通过 `include/symbolic_matrix.hpp` 的 checked 自由函数提供：
@@ -169,6 +211,11 @@ LMMC 提供固定 `double` 实数类型的 C ABI。LMCAS 的 C++ API 暴露
 | `SymbolicExpr::get_operands` | 公开变换与 matching API |
 | `SymbolicExpr::get_number_value` | `is_number` + `get_number`，或 `evaluate_numeric` |
 | `SymbolicExpr::get_identifier` | `symbol_name(expr)` 返回的借用 `optional<string_view>` |
+| `SymbolicExpr::simplify/expand/differentiate/substitute` | `expr.hpp` 中对应的自由函数，检查 `ExprResult` |
+| `AssumptionContext::simplify` | 通过 `context.set_assumptions(...)` 提供假设，再调用 `LMCAS::simplify(expr, context)` |
+| `SymbolicExpr::integrate/integral`、`Integrator::integrate/integrate_def` | `Integrator::integrate_checked/integrate_def_checked`，显式传入 context |
+| `equivalent_core` | `equivalent(lhs, rhs, context, options)` |
+| `BuiltInIntegrationStrategy`、`PartialFractionStrategy` | 统一的 `IntegrationStrategy` 认证；有理分解由 `RationalDecompositionStrategy` 提供 |
 
 数学整数与无理根的 radicand 使用 LMMP-backed `BigInt`；无理根的系数和
 常数使用 `Rational`。窄化使用 `try_to_int64` / `try_to_uint64`，失败不饱和。

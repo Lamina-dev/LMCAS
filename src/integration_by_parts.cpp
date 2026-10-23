@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 
 namespace LMCAS {
@@ -63,7 +65,9 @@ std::shared_ptr<SymbolicExpr> integration_differential_factor(
 
 Result<std::shared_ptr<SymbolicExpr>> IBPStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int depth) {
+    ComputationContext& computation, int depth) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
 
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
@@ -85,16 +89,16 @@ Result<std::shared_ptr<SymbolicExpr>> IBPStrategy::try_integrate_raw(
         return nullptr;
     }
 
-    auto du_ptr = u.differentiate(var);
+    auto du_ptr = detail::make_expression_ptr(detail::differentiate_node(detail::node(u), var, transform_budget));
     if (!du_ptr) { return nullptr; }
-    auto simplified_du = du_ptr->simplify();
+    auto simplified_du = detail::make_expression_ptr(detail::normalize_node(detail::node(du_ptr), transform_budget));
     if (!simplified_du || !LMCAS::detail::node(simplified_du)) { return nullptr; }
     auto du = detail::make_expression_ptr(*simplified_du);
 
     auto uv = SymbolicExpr::multiply(detail::make_expression_ptr(u), v);
     auto vdu = SymbolicExpr::multiply(v, du);
     if (!uv || !vdu) { return nullptr; }
-    vdu = vdu->cancel()->simplify();
+    vdu = detail::make_expression_ptr(detail::normalize_node(detail::node(vdu->cancel()), transform_budget));
     auto integrated_vdu =
         ctx.integrate_recursive(*vdu, var, computation, depth + 1);
     if (!integrated_vdu) { return integrated_vdu; }
@@ -104,6 +108,14 @@ Result<std::shared_ptr<SymbolicExpr>> IBPStrategy::try_integrate_raw(
     }
 
     return sym_sub(*uv, *int_vdu);
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 }

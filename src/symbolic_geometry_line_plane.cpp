@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "symbolic_geometry_line_plane.hpp"
 #include "internal/symbolic_geometry_support.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -143,12 +144,14 @@ VectorExprListResult symbolic_line_plane_intersection(
     const std::vector<std::shared_ptr<SymbolicExpr>>& point,
     const std::shared_ptr<SymbolicExpr>& offset,
     ComputationContext& context, const std::string& operation
-) {
+) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto n_dot_a = vector_dot_checked(normal, point, context);
     if (!n_dot_a) return VectorExprListResult::failure(n_dot_a.error());
     auto n_dot_b = vector_dot_checked(normal, direction, context);
     if (!n_dot_b) return VectorExprListResult::failure(n_dot_b.error());
-    auto denom = n_dot_b.value()->simplify();
+    auto denom = detail::make_expression_ptr(detail::normalize_node(detail::node(n_dot_b.value()), transform_budget));
     auto nonzero = checked_nonzero_numeric_or_exact(
         denom, context, operation,
         "line is parallel to plane, so no unique intersection exists",
@@ -167,13 +170,21 @@ VectorExprListResult symbolic_line_plane_intersection(
             point[i], SymbolicExpr::multiply(t, direction[i]));
         auto simplified = simplify_checked(
             coord, operation,
-            "line-plane intersection coordinate is outside the supported domain");
+            "line-plane intersection coordinate is outside the supported domain", context);
         if (!simplified) {
             return VectorExprListResult::failure(simplified.error());
         }
         intersection.push_back(std::move(simplified.value()));
     }
     return VectorExprListResult::success(std::move(intersection));
+} catch (const CasError& error) {
+    return VectorExprListResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return VectorExprListResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return VectorExprListResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return VectorExprListResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 ExpressionResult symbolic_point_plane_distance(
@@ -199,7 +210,7 @@ ExpressionResult symbolic_point_plane_distance(
     return simplify_checked(
         SymbolicExpr::divide(abs_diff, norm_n),
         operation,
-        "point-plane distance is outside the supported domain");
+        "point-plane distance is outside the supported domain", context);
 }
 
 }

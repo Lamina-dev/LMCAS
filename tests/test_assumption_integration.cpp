@@ -1,10 +1,7 @@
 
 #include "test_common.hpp"
 #include "assumption_context.hpp"
-#include "integration.hpp"
-#include "internal/visitors/differentiation_visitor.hpp"
 #include "internal/visitors/limit_visitor.hpp"
-#include "symbolic_ode.hpp"
 #include "matcher.hpp"
 #include "symbolic.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -24,103 +21,6 @@ static std::string node_to_string(const std::shared_ptr<const SymbolicNode> &nod
     return pv.get_result();
 }
 
-TEST(AssumptionIntegration, IntegratorCompatibilityEntrypoint) {
-    for (int a = 1; a <= 5; ++a) {
-        for (int n = 0; n <= 4; ++n) {
-
-            // Build expression: a * x^n
-            auto x_node = test_variable_node("x");
-            auto coeff_node = test_integer_node(a);
-            auto exp_node = test_integer_node(n);
-            auto power_node = LMCAS::detail::make_node<PowerNode>(x_node, exp_node);
-            std::vector<std::shared_ptr<const SymbolicNode>> mul_ops = {coeff_node, power_node};
-            auto mul_node = LMCAS::detail::make_node<MultiplyNode>(mul_ops);
-            auto integrand = LMCAS::detail::expression_from_node(mul_node);
-            /// 使用默认空上下文的 Integrator.
-            Integrator integrator_default;
-            auto result_default = integrator_default.integrate(integrand, "x");
-            ASSERT_TRUE((result_default.has_value())) << "default polynomial integration succeeds";
-            if (!result_default)
-                continue;
-
-            // Integrator with explicit computation context and no assumptions
-            Integrator integrator_nullptr;
-            ComputationContext context;
-            auto checked = integrator_nullptr.integrate_checked(integrand, "x", context);
-            ASSERT_TRUE((checked.has_value())) << "checked polynomial integration succeeds";
-            if (!checked)
-                continue;
-            auto result_nullptr = checked.value();
-
-            // Results must be identical
-            EXPECT_EQ((result_default.value().to_string()), (result_nullptr.to_string())) << "default and explicit-context polynomial integration agree";
-        }
-    }
-}
-
-TEST(AssumptionIntegration, IntegratorTrigNullptr) {
-    // Test sin(x), cos(x), exp(x) - known integrals
-    {
-        auto x = SymbolicExpr::variable("x");
-        auto sin_x = SymbolicExpr::sin(x);
-
-        Integrator integrator_default;
-        auto result_default = integrator_default.integrate(*sin_x, "x");
-        ASSERT_TRUE((result_default.has_value())) << "default sin integration succeeds";
-        if (!result_default)
-            return;
-
-        Integrator integrator_nullptr;
-        ComputationContext context;
-        auto checked = integrator_nullptr.integrate_checked(*sin_x, "x", context);
-        ASSERT_TRUE((checked.has_value())) << "checked sin integration succeeds";
-        if (!checked)
-            return;
-        auto result_nullptr = checked.value();
-
-        EXPECT_EQ((result_default.value().to_string()), (result_nullptr.to_string())) << "sin(x) integral: default == explicit context";
-    }
-    {
-        auto x = SymbolicExpr::variable("x");
-        auto cos_x = SymbolicExpr::cos(x);
-
-        Integrator integrator_default;
-        auto result_default = integrator_default.integrate(*cos_x, "x");
-        ASSERT_TRUE((result_default.has_value())) << "default cos integration succeeds";
-        if (!result_default)
-            return;
-
-        Integrator integrator_nullptr;
-        ComputationContext context;
-        auto checked = integrator_nullptr.integrate_checked(*cos_x, "x", context);
-        ASSERT_TRUE((checked.has_value())) << "checked cos integration succeeds";
-        if (!checked)
-            return;
-        auto result_nullptr = checked.value();
-
-        EXPECT_EQ((result_default.value().to_string()), (result_nullptr.to_string())) << "cos(x) integral: default == explicit context";
-    }
-    {
-        auto x = SymbolicExpr::variable("x");
-        auto exp_x = SymbolicExpr::exp(x);
-
-        Integrator integrator_default;
-        auto result_default = integrator_default.integrate(*exp_x, "x");
-        ASSERT_TRUE((result_default.has_value())) << "default exp integration succeeds";
-        if (!result_default)
-            return;
-
-        Integrator integrator_nullptr;
-        ComputationContext context;
-        auto checked = integrator_nullptr.integrate_checked(*exp_x, "x", context);
-        ASSERT_TRUE((checked.has_value())) << "checked exp integration succeeds";
-        if (!checked)
-            return;
-        auto result_nullptr = checked.value();
-
-        EXPECT_EQ((result_default.value().to_string()), (result_nullptr.to_string())) << "exp(x) integral: default == explicit context";
-    }
-}
 
 TEST(AssumptionIntegration, LimitNullptrBackwardCompat) {
     for (int a = 1; a <= 5; ++a) {
@@ -247,67 +147,6 @@ TEST(AssumptionIntegration, SeriesSinCosNullptr) {
         std::string str_nullptr = result_nullptr ? result_nullptr->to_string() : "null";
 
         EXPECT_EQ((str_default), (str_nullptr)) << "cos(x) series order 4: default == nullptr context";
-    }
-}
-
-TEST(AssumptionIntegration, OdeNullptrBackwardCompat) {
-    // Test solve_separable_ode: dy/dx = x/y
-    {
-        auto x = SymbolicExpr::variable("x");
-        auto y = SymbolicExpr::variable("y");
-        auto rhs = SymbolicExpr::divide(x, y);
-
-        auto result_default = solve_separable_ode(rhs, "x", "y");
-        auto result_nullptr = solve_separable_ode(rhs, "x", "y", nullptr);
-
-        std::string str_default = result_default ? result_default->to_string() : "null";
-        std::string str_nullptr = result_nullptr ? result_nullptr->to_string() : "null";
-
-        EXPECT_EQ((str_default), (str_nullptr)) << "separable ODE dy/dx=x/y: default == nullptr context";
-    }
-
-    // Test solve_separable_ode: dy/dx = x*y
-    {
-        auto x = SymbolicExpr::variable("x");
-        auto y = SymbolicExpr::variable("y");
-        auto rhs = SymbolicExpr::multiply(x, y);
-
-        auto result_default = solve_separable_ode(rhs, "x", "y");
-        auto result_nullptr = solve_separable_ode(rhs, "x", "y", nullptr);
-
-        std::string str_default = result_default ? result_default->to_string() : "null";
-        std::string str_nullptr = result_nullptr ? result_nullptr->to_string() : "null";
-
-        EXPECT_EQ((str_default), (str_nullptr)) << "separable ODE dy/dx=x*y: default == nullptr context";
-    }
-}
-
-TEST(AssumptionIntegration, OdeLinearNullptr) {
-    // Test solve_linear1_ode: dy/dx + 2*y = 0
-    {
-        auto Px = SymbolicExpr::number(2);
-        auto Qx = SymbolicExpr::number(0);
-
-        auto result_default = solve_linear1_ode(Px, Qx, "x", "y");
-        auto result_nullptr = solve_linear1_ode(Px, Qx, "x", "y", nullptr);
-
-        std::string str_default = result_default ? result_default->to_string() : "null";
-        std::string str_nullptr = result_nullptr ? result_nullptr->to_string() : "null";
-
-        EXPECT_EQ((str_default), (str_nullptr)) << "linear1 ODE P=2 Q=0: default == nullptr context";
-    }
-
-    // Test solve_linear2_ode: y'' + y = 0 (a=1, b=0, c=1, f=0)
-    {
-        auto fx = SymbolicExpr::number(0);
-
-        auto result_default = solve_linear2_ode(1.0, 0.0, 1.0, fx, "x", "y");
-        auto result_nullptr = solve_linear2_ode(1.0, 0.0, 1.0, fx, "x", "y", nullptr);
-
-        std::string str_default = result_default ? result_default->to_string() : "null";
-        std::string str_nullptr = result_nullptr ? result_nullptr->to_string() : "null";
-
-        EXPECT_EQ((str_default), (str_nullptr)) << "linear2 ODE y''+y=0: default == nullptr context";
     }
 }
 

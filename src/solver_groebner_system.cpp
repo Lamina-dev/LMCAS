@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "solver.hpp"
 #include "solve_strategies.hpp"
 #include "fglm.hpp"
@@ -19,7 +21,10 @@ using PolynomialSolutions = std::vector<PolynomialSolution>;
 using Expressions = std::vector<std::shared_ptr<SymbolicExpr>>;
 
 std::shared_ptr<SymbolicExpr> clear_denominators(
-    const SymbolicExpr& equation, Expressions& constraints) {
+    const SymbolicExpr& equation, Expressions& constraints, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!detail::node(equation)) return nullptr;
     std::vector<std::shared_ptr<const SymbolicNode>> factors;
     Expressions local_constraints;
@@ -28,7 +33,7 @@ std::shared_ptr<SymbolicExpr> clear_denominators(
     }
     auto cleared = to_ptr(equation);
     if (factors.empty()) {
-        cleared = cleared->simplify();
+        cleared = detail::make_expression_ptr(detail::normalize_node(detail::node(cleared), transform_budget));
     } else if (auto sum = std::dynamic_pointer_cast<const AddNode>(detail::node(cleared))) {
         std::vector<std::shared_ptr<const SymbolicNode>> terms;
         terms.reserve(sum->operands().size());
@@ -48,13 +53,16 @@ std::shared_ptr<SymbolicExpr> clear_denominators(
 }
 
 std::shared_ptr<SymbolicExpr> substitute_solution(
-    const std::shared_ptr<SymbolicExpr>& expression, const PolynomialSolution& solution) {
+    const std::shared_ptr<SymbolicExpr>& expression, const PolynomialSolution& solution, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto result = expression;
     for (const auto& [name, value] : solution) {
-        result = result->substitute(name, detail::make_expression_ptr(value));
+        result = detail::make_expression_ptr(detail::substitute_node(detail::node(result), name, detail::node(value), transform_budget));
         if (!result) return nullptr;
     }
-    return result->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
 }
 
 PolynomialSystemResult filter_denominators(PolynomialSolutions candidates,
@@ -67,7 +75,7 @@ PolynomialSystemResult filter_denominators(PolynomialSolutions candidates,
     for (auto& solution : candidates) {
         bool valid = true;
         for (const auto& denominator : constraints) {
-            auto bound = substitute_solution(denominator, solution);
+            auto bound = substitute_solution(denominator, solution, context);
             if (!bound) return PolynomialSystemResult::failure(CasErrc::InternalInvariant,
                 "denominator substitution failed", "solve_polynomial_system");
             auto nonzero = detail::query_nonzero_value(detail::node(bound), facts, Domain::Complex, context);
@@ -112,11 +120,13 @@ Result<void> validate_basis_input(const std::vector<SymbolicExpr>& equations,
 Result<groebner_detail::Poly> convert_basis_polynomial(
     const SymbolicExpr& polynomial, const std::vector<std::string>& variables,
     groebner_detail::PolyContext& conversion, ComputationContext& context,
-    std::shared_ptr<SymbolicExpr>& simplified) {
+    std::shared_ptr<SymbolicExpr>& simplified) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "solve_polynomial_system";
     auto budget = context.consume_steps(1, operation);
     if (!budget) return Result<groebner_detail::Poly>::failure(budget.error());
-    simplified = detail::make_expression_ptr(polynomial)->simplify();
+    simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(polynomial), transform_budget));
     if (!simplified) return Result<groebner_detail::Poly>::failure(
         CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
     groebner_detail::PolyBuilder builder(variables, conversion, true);
@@ -124,16 +134,24 @@ Result<groebner_detail::Poly> convert_basis_polynomial(
     if (builder.failed) return Result<groebner_detail::Poly>::failure(
         CasErrc::Inconclusive, "basis polynomial cannot be converted", operation);
     return builder.get_result();
+} catch (const CasError& error) {
+    return Result<groebner_detail::Poly>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<groebner_detail::Poly>::failure(CasErrc::ResourceLimit, "allocation failed", "solve_polynomial_system");
+} catch (const std::length_error& error) {
+    return Result<groebner_detail::Poly>::failure(CasErrc::ResourceLimit, error.what(), "solve_polynomial_system");
+} catch (const std::exception& error) {
+    return Result<groebner_detail::Poly>::failure(CasErrc::InternalInvariant, error.what(), "solve_polynomial_system");
 }
 
 Result<Expressions> simplified_basis(const std::vector<SymbolicExpr>& equations,
                                      const std::vector<std::string>& variables,
                                      ComputationContext& context) {
     constexpr const char* operation = "solve_polynomial_system";
-    groebner_detail::PolyContext conversion(variables);
+    groebner_detail::PolyContext conversion(variables, context);
     auto validated = validate_basis_input(equations, variables, conversion, context);
     if (!validated) return Result<Expressions>::failure(validated.error());
-    auto groebner = Solver::reduced_groebner_basis(equations, variables);
+    auto groebner = groebner_detail::reduced_groebner_basis_impl(equations, variables, context);
     Expressions basis;
     std::vector<FGLMPoly> leading;
     basis.reserve(groebner.size());
@@ -189,7 +207,7 @@ Result<std::optional<Expressions>> PolynomialSystemSearch::substitute_basis(
     Expressions reduced;
     reduced.reserve(basis_.size());
     for (const auto& polynomial : basis_) {
-        auto substituted = substitute_solution(polynomial, partial);
+        auto substituted = substitute_solution(polynomial, partial, context_);
         if (!substituted) { return Result<std::optional<Expressions>>::failure(
             CasErrc::InternalInvariant, "basis substitution failed", "solve_polynomial_system"); }
         if (substituted->is_zero()) { continue; }
@@ -276,7 +294,7 @@ PolynomialSystemResult solve_polynomial_system_impl(
     Expressions constraints;
     cleared_equations.reserve(equations.size());
     for (const auto& equation : equations) {
-        auto cleared = clear_denominators(equation, constraints);
+        auto cleared = clear_denominators(equation, constraints, context);
         if (!cleared) return PolynomialSystemResult::failure(CasErrc::Inconclusive,
             "equation cannot be converted to a polynomial without losing its domain", "solve_polynomial_system");
         cleared_equations.push_back(*cleared);
@@ -310,10 +328,14 @@ PolynomialSystemResult Solver::solve_polynomial_system_checked(
     if (!budget) return PolynomialSystemResult::failure(budget.error());
     try {
         return solve_polynomial_system_impl(equations, variables, context);
+    } catch (const CasError& error) {
+        return PolynomialSystemResult::failure(error);
     } catch (const std::bad_alloc&) {
         return PolynomialSystemResult::failure(
             CasErrc::ResourceLimit,
             "allocation failed while solving polynomial system", operation);
+    } catch (const std::length_error& error) {
+        return PolynomialSystemResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& error) {
         return PolynomialSystemResult::failure(CasErrc::InternalInvariant, error.what(), operation);
     }

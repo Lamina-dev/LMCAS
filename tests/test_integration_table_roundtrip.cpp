@@ -1,7 +1,9 @@
-
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "integration.hpp"
 #include "matcher.hpp"
+#include "assumption_context.hpp"
+#include "residual_verification.hpp"
 
 #include <vector>
 #include <string>
@@ -54,9 +56,8 @@ const std::vector<double> &sample_points() {
 }
 
 struct EntryReport {
-    bool checked = false; // at least one (pattern, derivative) pair was evaluated
-    bool failed = false;  // a numeric mismatch was observed
-    int matches = 0;
+    bool checked = false;
+    bool failed = false;
     std::string failure_detail;
 };
 
@@ -65,13 +66,13 @@ bool evaluate_roundtrip_point(
     const std::shared_ptr<SymbolicExpr> &derivative,
     double point, double &pattern_value, double &derivative_value) {
     auto x_value = SymbolicExpr::number(point);
-    auto pattern_at = pattern->substitute(kVarName, x_value);
-    auto derivative_at = derivative->substitute(kVarName, x_value);
+    auto pattern_at = LMCAS::substitute(pattern, kVarName, x_value).value();
+    auto derivative_at = LMCAS::substitute(derivative, kVarName, x_value).value();
     if (!pattern_at || !derivative_at) {
         return false;
     }
-    pattern_at = pattern_at->simplify();
-    derivative_at = derivative_at->simplify();
+    pattern_at = LMCAS::simplify(pattern_at).value();
+    derivative_at = LMCAS::simplify(derivative_at).value();
     auto pv = test_numeric_eval(pattern_at);
     auto dv = test_numeric_eval(derivative_at);
     if (!pv || !dv || !std::isfinite(*pv) || !std::isfinite(*dv)) {
@@ -88,27 +89,63 @@ EntryReport verify_entry(const IntegrationEntry &entry) {
     MatchMap bindings = make_bindings(entry);
 
     SymbolicExpr pat_inst = Matcher::replace(entry.pattern, bindings, false);
-    SymbolicExpr res_inst = Matcher::replace(entry.result, bindings, false);
-
     auto pattern = LMCAS::detail::make_expression_ptr(pat_inst);
-    auto result = LMCAS::detail::make_expression_ptr(res_inst);
-
-    auto pattern_simp = pattern->simplify();
-    auto result_simp = result->simplify();
-    if (!pattern_simp || !result_simp) {
-        rep.failure_detail = "instantiation/simplification returned null";
+    Integrator integrator;
+    ComputationContext context;
+    auto assumptions = std::make_shared<AssumptionContext>();
+    auto real_variable = assumptions->assume_domain_checked(kVarName, Domain::Real);
+    if (!real_variable) {
+        rep.failed = true;
+        rep.failure_detail = real_variable.error().message;
         return rep;
     }
-
-    auto deriv = result_simp->differentiate(kVarName);
-    if (!deriv) {
-        rep.failure_detail = "differentiation returned null";
+    auto attached = context.set_assumptions(assumptions);
+    if (!attached) {
+        rep.failed = true;
+        rep.failure_detail = attached.error().message;
         return rep;
     }
-    auto deriv_simp = deriv->simplify();
-    if (!deriv_simp) {
-        deriv_simp = deriv;
+    auto entry_result = detail::make_expression_ptr(
+        Matcher::replace(entry.result, bindings, false));
+    auto entry_derivative = LMCAS::differentiate(entry_result, kVarName, context);
+    if (!entry_derivative) {
+        rep.failed = true;
+        rep.failure_detail = entry_derivative.error().message;
+        return rep;
     }
+    auto entry_proof = check_equivalent(entry_derivative.value(), pattern, context);
+    if (!entry_proof || !std::holds_alternative<ProvedZeroResidual>(entry_proof.value())) {
+        rep.failed = true;
+        rep.failure_detail = entry_proof ? "table entry residual was not proved zero" : entry_proof.error().message;
+        return rep;
+    }
+    auto integrated = integrator.integrate_checked(*pattern, kVarName, context);
+    if (!integrated) {
+        rep.failed = true;
+        rep.failure_detail = integrated.error().message;
+        return rep;
+    }
+    auto result_simp = detail::make_expression_ptr(integrated.value());
+    if (detail::contains_node_type<IntegralNode>(detail::node(result_simp))) {
+        rep.failed = true;
+        rep.failure_detail = "integrator left an unevaluated integral: " + result_simp->to_string();
+        return rep;
+    }
+    auto differentiated = LMCAS::differentiate(result_simp, kVarName, context);
+    if (!differentiated) {
+        rep.failed = true;
+        rep.failure_detail = differentiated.error().message;
+        return rep;
+    }
+    auto deriv_simp = differentiated.value();
+    auto proof = check_equivalent(deriv_simp, pattern, context);
+    if (!proof || !std::holds_alternative<ProvedZeroResidual>(proof.value())) {
+        rep.failed = true;
+        rep.failure_detail = proof ? "derivative residual was not proved zero" : proof.error().message;
+        return rep;
+    }
+    rep.checked = true;
+    auto pattern_simp = pattern;
 
     for (double xv : sample_points()) {
         double pattern_value = 0.0;
@@ -118,11 +155,8 @@ EntryReport verify_entry(const IntegrationEntry &entry) {
             continue;
         }
 
-        rep.checked = true;
         double delta = std::abs(pattern_value - derivative_value);
-        if (delta <= kTolerance) {
-            ++rep.matches;
-        } else {
+        if (delta > kTolerance) {
             rep.failed = true;
             std::ostringstream oss;
             oss << "x=" << xv
@@ -170,11 +204,10 @@ TEST(IntegrationTableRoundtrip, EntriesDifferentiateToTheirPatterns) {
             const EntryReport rep = verify_entry(entry);
             EXPECT_FALSE(rep.failed) << rep.failure_detail;
             if (!rep.failed && rep.checked) {
-                EXPECT_GT(rep.matches, 0);
                 ++verified_entries;
             }
         }
     }
     EXPECT_GT(verified_entries, 0)
-        << "at least one entry verified by numeric round-trip";
+        << "at least one entry verified by exact derivative residual";
 }

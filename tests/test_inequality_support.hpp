@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #pragma once
 
 #include "test_common.hpp"
@@ -44,7 +45,7 @@ inline std::shared_ptr<SymbolicExpr> build_poly(const std::vector<int>& coeffs) 
 }
 
 inline double eval_poly(const std::shared_ptr<SymbolicExpr>& poly, double point) {
-    auto substituted = poly->substitute("x", SymbolicExpr::number(point));
+    auto substituted = LMCAS::substitute(poly, "x", SymbolicExpr::number(point)).value();
     return substituted->to_numeric();
 }
 

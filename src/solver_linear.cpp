@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "solver.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "poly_utils.hpp"
@@ -291,10 +292,13 @@ bool solver_detail::collect_denominator_factors(
     return false;
 }
 
-static std::pair<SymbolicExpr, SymbolicExpr> isolate_linear_coeff(const SymbolicExpr& expr, const std::string& var) {
+static std::pair<SymbolicExpr, SymbolicExpr> isolate_linear_coeff(const SymbolicExpr& expr, const std::string& var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     auto expr_ptr = to_ptr(expr);
-    auto A_ptr = expr_ptr->differentiate(var);
+    auto A_ptr = detail::make_expression_ptr(detail::differentiate_node(detail::node(expr_ptr), var, transform_budget));
 
     std::vector<std::shared_ptr<const SymbolicNode>> mops;
     mops.push_back(LMCAS::detail::node(A_ptr));
@@ -312,10 +316,10 @@ static std::pair<SymbolicExpr, SymbolicExpr> isolate_linear_coeff(const Symbolic
     auto B_node = SymbolicFactory::create_add(aops);
 
     auto B_expr = LMCAS::detail::expression_from_node(B_node);
-    auto B_simp = to_ptr(B_expr)->simplify();
+    auto B_simp = detail::make_expression_ptr(detail::normalize_node(detail::node(to_ptr(B_expr)), transform_budget));
 
     auto A_expr = LMCAS::detail::expression_from_node(LMCAS::detail::node(A_ptr));
-    auto A_simp = to_ptr(A_expr)->simplify();
+    auto A_simp = detail::make_expression_ptr(detail::normalize_node(detail::node(to_ptr(A_expr)), transform_budget));
 
     return {LMCAS::detail::expression_from_node(LMCAS::detail::node(A_simp)),
             LMCAS::detail::expression_from_node(LMCAS::detail::node(B_simp))};
@@ -325,6 +329,30 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
     const std::vector<SymbolicExpr>& equations_in,
     const std::vector<std::string>& variables)
 {
+    ComputationContext context;
+    return solver_detail::project_unconditional_linear_system(equations_in, variables, context);
+}
+
+std::map<std::string, SymbolicExpr> solver_detail::project_unconditional_linear_system(
+    const std::vector<SymbolicExpr>& equations,
+    const std::vector<std::string>& variables, ComputationContext& context) {
+    try {
+        return solve_linear_system_impl(equations, variables, context);
+    } catch (const CasError& error) {
+        // 容器接口以空映射表示求解未决；受检算法保留内部错误分类。
+        if (error.code == CasErrc::Inconclusive ||
+            error.code == CasErrc::UnsupportedExpression) {
+            return {};
+        }
+        throw;
+    }
+}
+
+std::map<std::string, SymbolicExpr> solver_detail::solve_linear_system_impl(
+    const std::vector<SymbolicExpr>& equations_in,
+    const std::vector<std::string>& variables, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                            context.limits().max_ast_nodes, "solve_linear_system");
 
     size_t num_vars = variables.size();
     size_t num_eqs = equations_in.size();
@@ -337,7 +365,7 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
         SymbolicExpr constant_part = current_eq;
 
         for (size_t j = 0; j < num_vars; ++j) {
-            auto [coeff, remainder] = isolate_linear_coeff(constant_part, variables[j]);
+            auto [coeff, remainder] = isolate_linear_coeff(constant_part, variables[j], context);
             matrix[i][j] = LMCAS::detail::make_expression_ptr(coeff);
 
             constant_part = remainder;
@@ -357,13 +385,12 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
         augmented.entries.insert(
             augmented.entries.end(), row.begin(), row.end());
     }
-    ComputationContext context;
+
     auto solved = detail::solve_linear_exact(
         std::move(augmented), num_vars, context,
         "solve_linear_system");
-    if (!solved ||
-        std::holds_alternative<detail::InconsistentLinearSolution>(
-            solved.value())) {
+    if (!solved) throw solved.error();
+    if (std::holds_alternative<detail::InconsistentLinearSolution>(solved.value())) {
         return {};
     }
 
@@ -383,8 +410,8 @@ std::map<std::string, SymbolicExpr> Solver::solve_linear_system(
                 auto term = SymbolicExpr::multiply(
                     parametric.nullspace_basis[parameter][column],
                     free_variable);
-                values[column] = SymbolicExpr::add(
-                    values[column], term)->simplify();
+                values[column] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
+                    values[column], term)), transform_budget));
             }
         }
     }

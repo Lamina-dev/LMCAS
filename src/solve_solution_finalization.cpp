@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/transcendental_solver_support.hpp"
 #include "assumption_context.hpp"
 #include "root_of_utils.hpp"
@@ -92,23 +94,33 @@ Result<Tribool> equality_condition_truth(const ExprPtr& difference, Tribool nonz
 }
 
 Result<Tribool> relational_condition_truth(const ExprPtr& expression,
-    const RelationalNode& relation, const FactsQuery& facts, ComputationContext& context) {
+    const RelationalNode& relation, const FactsQuery& facts, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto defined = detail::query_definedness(detail::node(expression), facts, Domain::Complex, context);
     if (!defined) { return Result<Tribool>::failure(defined.error()); }
     if (defined.value() != Tribool::True) { return Tribool::Unknown; }
-    auto difference = equation_residual(expression)->simplify();
+    auto difference = detail::make_expression_ptr(detail::normalize_node(detail::node(equation_residual(expression)), transform_budget));
     auto nz = detail::query_nonzero_value(detail::node(difference), facts, Domain::Complex, context);
     if (!nz) { return nz; }
     if (relation.op() == RelationOp::EQ || relation.op() == RelationOp::NEQ) {
         return equality_condition_truth(difference, nz.value(), relation.op(), context);
     }
     if (relation.op() == RelationOp::LT || relation.op() == RelationOp::LEQ) {
-        difference = SymbolicExpr::multiply(SymbolicExpr::number(-1), difference)->simplify();
+        difference = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(SymbolicExpr::number(-1), difference)), transform_budget));
     }
     if (relation.op() == RelationOp::GEQ || relation.op() == RelationOp::LEQ) {
         return detail::query_nonnegative_value(detail::node(difference), facts, context);
     }
     return detail::query_positive_value(detail::node(difference), facts, context);
+} catch (const CasError& error) {
+    return Result<Tribool>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<Tribool>::failure(CasErrc::ResourceLimit, "allocation failed", "relational_condition_truth");
+} catch (const std::length_error& error) {
+    return Result<Tribool>::failure(CasErrc::ResourceLimit, error.what(), "relational_condition_truth");
+} catch (const std::exception& error) {
+    return Result<Tribool>::failure(CasErrc::InternalInvariant, error.what(), "relational_condition_truth");
 }
 Result<Tribool> solve_condition_truth(const ExprPtr& expression,
     const FactsQuery& facts, ComputationContext& context) {
@@ -143,7 +155,9 @@ class SolutionFinalizer {
         return true;
     }
 
-    Result<bool> finalize_value(const ExprPtr& value, std::vector<ExprPtr>& conditions) const {
+    Result<bool> finalize_value(const ExprPtr& value, std::vector<ExprPtr>& conditions) const try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
         for (auto& condition : conditions) {
             condition = substitute_raw(condition, variable, value);
         }
@@ -163,7 +177,7 @@ class SolutionFinalizer {
         auto residual = check_zero_residual(equation_residual(bound), context);
         if (!residual) { return Result<bool>::failure(residual.error()); }
         if (!std::holds_alternative<ProvedZeroResidual>(residual.value())) {
-            auto pointwise_nonzero = detail::query_nonzero_value(detail::node(equation_residual(bound)->simplify()), facts, domain, context);
+            auto pointwise_nonzero = detail::query_nonzero_value(detail::normalize_node(detail::node(equation_residual(bound)), transform_budget), facts, domain, context);
             if (!pointwise_nonzero) { return Result<bool>::failure(pointwise_nonzero.error()); }
             if (pointwise_nonzero.value() == Tribool::True) { return false; }
             if (pointwise_nonzero.value() == Tribool::Unknown) {
@@ -171,7 +185,15 @@ class SolutionFinalizer {
             }
         }
         return true;
-    }
+    } catch (const CasError& error) {
+    return Result<bool>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, "allocation failed", "finalize_value");
+} catch (const std::length_error& error) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, error.what(), "finalize_value");
+} catch (const std::exception& error) {
+    return Result<bool>::failure(CasErrc::InternalInvariant, error.what(), "finalize_value");
+}
 
     template<class Solutions>
     SolveResult filter_values(Solutions& solutions) const {

@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "integration.hpp"
 #include "internal/calculus_utils_support.hpp"
 #include "internal/integration_support.hpp"
@@ -12,7 +14,9 @@ static ExpressionResult calculus_utils_try_symbolic_definite(
     const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     Integrator integrator;
     auto integrated = integrator.integrate_def_checked(
         *integrand, var, *a, *b, context);
@@ -25,18 +29,28 @@ static ExpressionResult calculus_utils_try_symbolic_definite(
         return std::shared_ptr<SymbolicExpr>{};
     }
     auto res = LMCAS::detail::make_expression_ptr(result);
-    auto simplified = res->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(res), transform_budget));
     if (simplified &&
         contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
         return std::shared_ptr<SymbolicExpr>{};
     }
     return simplified ? simplified : res;
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "calculus_utils_try_symbolic_definite");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "calculus_utils_try_symbolic_definite");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "calculus_utils_try_symbolic_definite");
 }
 ExpressionResult surface_area_revolution_x_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "surface_area_revolution_x";
     auto input = calculus_utils_validate_expr_bounds(f, var, a, b, context, operation);
     if (!input) {
@@ -48,7 +62,7 @@ ExpressionResult surface_area_revolution_x_checked(
     }
 
     try {
-        auto f_prime = f->differentiate(var);
+        auto f_prime = detail::make_expression_ptr(detail::differentiate_node(detail::node(f), var, transform_budget));
         if (!f_prime || !LMCAS::detail::node(f_prime)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -86,16 +100,24 @@ ExpressionResult surface_area_revolution_x_checked(
                 LMCAS::detail::make_node<VariableNode>("pi", true)));
         auto result = SymbolicExpr::multiply(
             two_pi, std::move(integral.value()));
-        auto simplified = result->simplify();
+        auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
         return ExpressionResult::success(simplified ? simplified : result);
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",
                                            operation);
-    } catch (const std::exception& e) {
+    } catch (const std::length_error& error) { return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "surface_area_revolution_x"); } catch (const std::exception& e) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            e.what(), operation);
     }
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "surface_area_revolution_x");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "surface_area_revolution_x");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "surface_area_revolution_x");
 }
 
 ExpressionResult surface_area_revolution_x_checked(
@@ -111,7 +133,9 @@ ExpressionResult surface_area_revolution_y_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "surface_area_revolution_y";
     auto input = calculus_utils_validate_expr_bounds(f, var, a, b, context, operation);
     if (!input) {
@@ -123,7 +147,7 @@ ExpressionResult surface_area_revolution_y_checked(
     }
 
     try {
-        auto f_prime = f->differentiate(var);
+        auto f_prime = detail::make_expression_ptr(detail::differentiate_node(detail::node(f), var, transform_budget));
         if (!f_prime || !LMCAS::detail::node(f_prime)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -162,16 +186,24 @@ ExpressionResult surface_area_revolution_y_checked(
                 LMCAS::detail::make_node<VariableNode>("pi", true)));
         auto result = SymbolicExpr::multiply(
             two_pi, std::move(integral.value()));
-        auto simplified = result->simplify();
+        auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
         return ExpressionResult::success(simplified ? simplified : result);
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "surface area allocation failed",
                                            operation);
-    } catch (const std::exception& e) {
+    } catch (const std::length_error& error) { return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "surface_area_revolution_y"); } catch (const std::exception& e) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                            e.what(), operation);
     }
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "surface_area_revolution_y");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "surface_area_revolution_y");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "surface_area_revolution_y");
 }
 
 ExpressionResult surface_area_revolution_y_checked(

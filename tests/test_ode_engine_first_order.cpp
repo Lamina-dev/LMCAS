@@ -14,10 +14,9 @@ static void expect_numeric_zero(
     for (const auto& bindings : samples) {
         auto specialized = expression;
         for (const auto& [name, value] : bindings) {
-            specialized = specialized->substitute(
-                name, SymbolicExpr::number(value));
+            specialized = LMCAS::substitute(specialized, name, SymbolicExpr::number(value)).value();
         }
-        auto numeric = test_numeric_eval(specialized->simplify());
+        auto numeric = test_numeric_eval(LMCAS::simplify(specialized).value());
         ASSERT_TRUE(numeric.has_value()) << specialized->to_string();
         EXPECT_NEAR(numeric.value(), 0.0, 1e-9)
             << specialized->to_string();
@@ -28,11 +27,11 @@ static void expect_implicit_solution(
     const ODESolution& solution, const ExprPtr& rhs)
 {
     ASSERT_TRUE(solution.general_solution);
-    auto dx = solution.general_solution->differentiate("x");
-    auto dy = solution.general_solution->differentiate("y");
+    auto dx = LMCAS::differentiate(solution.general_solution, "x").value();
+    auto dy = LMCAS::differentiate(solution.general_solution, "y").value();
     ASSERT_TRUE(dx && dy);
-    auto residual = SymbolicExpr::add(
-        dx, SymbolicExpr::multiply(dy, rhs))->simplify();
+    auto residual = LMCAS::simplify(SymbolicExpr::add(
+        dx, SymbolicExpr::multiply(dy, rhs))).value();
     expect_numeric_zero(
         residual,
         {{{"x", 0.5}, {"y", 0.75}},
@@ -45,7 +44,7 @@ static void expect_bernoulli_solution(
     const ExprPtr& q, int exponent)
 {
     ASSERT_TRUE(solution.general_solution);
-    auto derivative = solution.general_solution->differentiate("x");
+    auto derivative = LMCAS::differentiate(solution.general_solution, "x").value();
     ASSERT_TRUE(derivative);
     auto lhs = SymbolicExpr::add(
         derivative,
@@ -53,9 +52,8 @@ static void expect_bernoulli_solution(
     auto rhs = SymbolicExpr::multiply(
         q, SymbolicExpr::power(
                solution.general_solution, SymbolicExpr::number(exponent)));
-    auto residual = SymbolicExpr::add(
-        lhs, SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs))
-        ->simplify();
+    auto residual = LMCAS::simplify(SymbolicExpr::add(
+        lhs, SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs))).value();
     expect_numeric_zero(
         residual,
         {{{"x", 0.5}, {"C", 2.0}},
@@ -66,11 +64,14 @@ static void expect_exact_potential(
     const ODESolution& solution, const ExprPtr& m, const ExprPtr& n)
 {
     ASSERT_TRUE(solution.general_solution);
-    auto dx = solution.general_solution->differentiate("x");
-    auto dy = solution.general_solution->differentiate("y");
-    ASSERT_TRUE(dx && dy);
-    EXPECT_TRUE(test_proved_equivalent(dx->simplify(), m->simplify()));
-    EXPECT_TRUE(test_proved_equivalent(dy->simplify(), n->simplify()));
+    auto dx = LMCAS::differentiate(solution.general_solution, "x");
+    ASSERT_TRUE(dx.has_value())
+        << dx.error().operation << ": " << dx.error().message;
+    auto dy = LMCAS::differentiate(solution.general_solution, "y");
+    ASSERT_TRUE(dy.has_value())
+        << dy.error().operation << ": " << dy.error().message;
+    EXPECT_TRUE(test_proved_equivalent(dx.value(), m));
+    EXPECT_TRUE(test_proved_equivalent(dy.value(), n));
 }
 
 
@@ -190,8 +191,17 @@ TEST(OdeEngineFirstOrder, ExactTranscendental) {
     EXPECT_TRUE((is_exact_ode(M, N, "x", "y"))) << "trig+exp exact equation";
 
     auto result = solve_exact_ode_checked(M, N, "x", "y");
-    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(result.has_value())
+        << static_cast<int>(result.error().code) << " "
+        << result.error().operation << ": " << result.error().message;
     expect_exact_potential(result.value(), M, N);
+    auto potential = SymbolicExpr::add(
+        SymbolicExpr::multiply(y, SymbolicExpr::sin(x)),
+        SymbolicExpr::multiply(
+            SymbolicExpr::power(x, SymbolicExpr::number(2)),
+            SymbolicExpr::exp(y)));
+    EXPECT_TRUE(test_proved_equivalent(
+        result.value().general_solution, potential));
 }
 
 TEST(OdeEngineFirstOrder, ExactProduct) {
@@ -317,14 +327,13 @@ TEST(OdeEngineFirstOrder, IntegratingFactorExactness) {
     EXPECT_TRUE((mu != nullptr)) << "integrating factor found for (2y, x)";
 
     if (mu) {
-        auto M_new = SymbolicExpr::multiply(mu, M)->simplify();
-        auto N_new = SymbolicExpr::multiply(mu, N)->simplify();
-        auto dM_dy = M_new->differentiate("y");
-        auto dN_dx = N_new->differentiate("x");
+        auto M_new = LMCAS::simplify(SymbolicExpr::multiply(mu, M)).value();
+        auto N_new = LMCAS::simplify(SymbolicExpr::multiply(mu, N)).value();
+        auto dM_dy = LMCAS::differentiate(M_new, "y").value();
+        auto dN_dx = LMCAS::differentiate(N_new, "x").value();
         if (dM_dy && dN_dx) {
-            auto diff = SymbolicExpr::add(dM_dy,
-                                          SymbolicExpr::multiply(SymbolicExpr::number(-1), dN_dx))
-                            ->simplify();
+            auto diff = LMCAS::simplify(SymbolicExpr::add(dM_dy,
+                                          SymbolicExpr::multiply(SymbolicExpr::number(-1), dN_dx))).value();
             EXPECT_TRUE((diff->is_zero() || is_exact_ode(M_new, N_new, "x", "y"))) << "after multiplying by μ, equation becomes exact";
         }
     }
@@ -336,6 +345,15 @@ TEST(OdeEngineFirstOrder, IntegratingFactorSolution) {
     auto M = SymbolicExpr::multiply(SymbolicExpr::number(2), y);
     auto N = x;
 
-    auto sol = solve_exact_ode_checked(M, N, "x", "y").value();
-    EXPECT_TRUE((sol.general_solution != nullptr)) << "solve_exact_ode handles non-exact with integrating factor";
+    auto result = solve_exact_ode_checked(M, N, "x", "y");
+    ASSERT_TRUE(result.has_value())
+        << static_cast<int>(result.error().code) << " "
+        << result.error().operation << ": " << result.error().message;
+    const auto& sol = result.value();
+    auto potential = SymbolicExpr::multiply(
+        SymbolicExpr::power(x, SymbolicExpr::number(2)), y);
+    ASSERT_TRUE(sol.general_solution);
+    EXPECT_TRUE(test_proved_equivalent(sol.general_solution, potential));
+    expect_exact_potential(
+        sol, SymbolicExpr::multiply(x, M), SymbolicExpr::multiply(x, N));
 }

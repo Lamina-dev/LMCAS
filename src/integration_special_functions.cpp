@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 
 namespace LMCAS {
@@ -31,21 +33,8 @@ bool sf_is_inv_var(const std::shared_ptr<const SymbolicNode>& node,
     if (!pw) { return false; }
     auto b = std::dynamic_pointer_cast<const VariableNode>(pw->base());
     if (!b || b->is_constant() || b->name() != var) { return false; }
-    auto en = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
-    if (!en) { return false; }
-    if (std::holds_alternative<BigInt>(en->value())) {
-        return std::get<BigInt>(en->value()) == BigInt(-1);
-    }
-    if (std::holds_alternative<Rational>(en->value())) {
-        return std::get<Rational>(en->value()) == Rational(-1);
-    }
-    if (std::holds_alternative<lmmc_real_t>(en->value())) {
-        lmmc_real_t d = std::get<lmmc_real_t>(en->value());
-        int eq = 0;
-        lmmc_double_nearly_equal_tol(d, -1.0, 1e-12, 1e-12, &eq);
-        return eq != 0;
-    }
-    return false;
+    const auto exponent = detail::exact_rational_value(pw->exponent());
+    return exponent && *exponent == Rational(-1);
 }
 
 // Detect a 1/ln(var) factor, i.e. PowerNode(ln(var), -1).
@@ -54,21 +43,8 @@ bool sf_is_inv_ln_var(const std::shared_ptr<const SymbolicNode>& node,
     auto pw = std::dynamic_pointer_cast<const PowerNode>(node);
     if (!pw) { return false; }
     if (!sf_is_fn_of_var(pw->base(), FunctionNode::FuncType::Ln, var)) { return false; }
-    auto en = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
-    if (!en) { return false; }
-    if (std::holds_alternative<BigInt>(en->value())) {
-        return std::get<BigInt>(en->value()) == BigInt(-1);
-    }
-    if (std::holds_alternative<Rational>(en->value())) {
-        return std::get<Rational>(en->value()) == Rational(-1);
-    }
-    if (std::holds_alternative<lmmc_real_t>(en->value())) {
-        lmmc_real_t d = std::get<lmmc_real_t>(en->value());
-        int eq = 0;
-        lmmc_double_nearly_equal_tol(d, -1.0, 1e-12, 1e-12, &eq);
-        return eq != 0;
-    }
-    return false;
+    const auto exponent = detail::exact_rational_value(pw->exponent());
+    return exponent && *exponent == Rational(-1);
 }
 
 // Split a node into (factors, has_inv_var) where the inv-var factor is removed
@@ -105,17 +81,15 @@ bool sf_split_inv_var(const std::shared_ptr<const SymbolicNode>& node,
 // is strictly negative. (We then return its absolute value as c.)
 Result<bool> sf_match_exp_neg_quad(const std::shared_ptr<const SymbolicNode>& node,
                            const std::string& var,
-                           Rational& c_out) {
+                           Rational& c_out, ComputationContext& context) {
     auto fn = std::dynamic_pointer_cast<const FunctionNode>(node);
     if (!fn || fn->type() != FunctionNode::FuncType::Exp) { return false; }
     if (fn->arguments().size() != 1) { return false; }
     auto arg = LMCAS::detail::expression_from_node(fn->arguments()[0]);
-    auto converted = symbolic_to_poly<Rational>(LMCAS::detail::make_expression_ptr(arg), var);
-    if (!converted) {
-        if (converted.error().code == CasErrc::UnsupportedExpression) { return false; }
-        return Result<bool>::failure(converted.error());
-    }
-    auto poly = std::move(converted.value());
+    auto converted = recognize_rational_polynomial(arg, var, context);
+    if (!converted) { return Result<bool>::failure(converted.error()); }
+    if (!converted.value()) { return false; }
+    const auto& poly = *converted.value();
     if (poly.degree() != 2) { return false; }
     if (poly.coeffs.size() < 3) { return false; }
     // Constant and linear terms must be zero.
@@ -132,7 +106,10 @@ Result<bool> sf_match_exp_neg_quad(const std::shared_ptr<const SymbolicNode>& no
 
 Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext&, int depth) {
+    ComputationContext& context, int depth) try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     (void)ctx;
     (void)depth;
 
@@ -142,13 +119,13 @@ Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw
 
     if (sf_is_inv_ln_var(LMCAS::detail::node(expr), var)) {
         auto li = make_unary_function(FT::Li, v);
-        auto simp = li->simplify();
+        auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(li), transform_budget));
         return simp ? simp : li;
     }
 
     {
         Rational c_rat;
-        auto matched = sf_match_exp_neg_quad(LMCAS::detail::node(expr), var, c_rat);
+        auto matched = sf_match_exp_neg_quad(LMCAS::detail::node(expr), var, c_rat, context);
         if (!matched) {
             return Result<std::shared_ptr<SymbolicExpr>>::failure(matched.error());
         }
@@ -165,7 +142,7 @@ Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw
                 sqrt_pi,
                 SymbolicExpr::power(two_sqrt_c, SymbolicExpr::number(-1)));
             auto result = SymbolicExpr::multiply(coeff, erf_node);
-            auto simp = result->simplify();
+            auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
             return simp ? simp : result;
         }
     }
@@ -180,23 +157,31 @@ Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw
             const auto& other = others[0];
             if (sf_is_fn_of_var(other, FT::Exp, var)) {
                 auto ei = make_unary_function(FT::Ei, v);
-                auto simp = ei->simplify();
+                auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(ei), transform_budget));
                 return simp ? simp : ei;
             }
             if (sf_is_fn_of_var(other, FT::Sin, var)) {
                 auto si = make_unary_function(FT::Si, v);
-                auto simp = si->simplify();
+                auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(si), transform_budget));
                 return simp ? simp : si;
             }
             if (sf_is_fn_of_var(other, FT::Cos, var)) {
                 auto ci = make_unary_function(FT::Ci, v);
-                auto simp = ci->simplify();
+                auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(ci), transform_budget));
                 return simp ? simp : ci;
             }
         }
     }
 
     return nullptr;
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_matrix.hpp"
 #include "numeric_evaluation.hpp"
@@ -126,9 +127,8 @@ static void check_scaled_rectangular_products(const ExprPtr &a, ComputationConte
     for (int coefficient : {0, -2}) {
         for (bool scalar_first : {false, true}) {
             auto scalar = SymbolicExpr::number(coefficient);
-            auto scaled = (scalar_first ? SymbolicExpr::multiply(scalar, a)
-                                        : SymbolicExpr::multiply(a, scalar))
-                              ->simplify();
+            auto scaled = LMCAS::simplify((scalar_first ? SymbolicExpr::multiply(scalar, a)
+                                        : SymbolicExpr::multiply(a, scalar))).value();
             auto result = std::dynamic_pointer_cast<const MatrixNode>(detail::node(scaled));
             EXPECT_TRUE((result && result->rows() == 2 && result->cols() == 3)) << "scalar matrix multiplication preserves rectangular shape";
             if (!result) {
@@ -173,7 +173,7 @@ TEST(SymbolicMatrixAdvanced, MatrixDeterminant) {
         auto m = SymbolicExpr::matrix(m_data);
         auto det = LMCAS::matrix_determinant_checked(m).value();
         // det = 3*6 - 8*4 = 18 - 32 = -14
-        auto simplified = det ? det->simplify() : nullptr;
+        auto simplified = det ? LMCAS::simplify(det).value() : nullptr;
         EXPECT_TRUE(test_same_expression(simplified, SymbolicExpr::number(-14))) << "Det 2x2: 3*6 - 8*4 = -14";
     }
 
@@ -189,7 +189,7 @@ TEST(SymbolicMatrixAdvanced, MatrixDeterminant) {
         //     = 6*(-14-40) - 1*(28-10) + 1*(32+4)
         //     = 6*(-54) - 18 + 36
         //     = -324 - 18 + 36 = -306
-        auto simplified = det ? det->simplify() : nullptr;
+        auto simplified = det ? LMCAS::simplify(det).value() : nullptr;
         EXPECT_TRUE(test_same_expression(simplified, SymbolicExpr::number(-306))) << "Det 3x3: known determinant = -306";
     }
 }
@@ -206,7 +206,7 @@ TEST(SymbolicMatrixAdvanced, MatrixInverse) {
 
         // Verify A * A_inv = I
         auto product = LMCAS::matrix_multiply_checked(A, A_inv).value();
-        auto simplified = product ? product->simplify() : nullptr;
+        auto simplified = product ? LMCAS::simplify(product).value() : nullptr;
 
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> id_data = {
             {SymbolicExpr::number(1), SymbolicExpr::number(0)},
@@ -229,7 +229,7 @@ static void expect_numeric_matrix(const ExpressionResult &result,
         return;
     }
     auto matrix = std::dynamic_pointer_cast<const MatrixNode>(
-        detail::node(result.value()->simplify()));
+        detail::node(LMCAS::simplify(result.value()).value()));
     EXPECT_TRUE((matrix && matrix->rows() == 2 && matrix->cols() == 2)) << message + " has the required dimensions";
     if (!matrix || matrix->rows() != 2 || matrix->cols() != 2) {
         return;
@@ -297,7 +297,7 @@ TEST(SymbolicMatrixAdvanced, MatrixReflection) {
             continue;
         }
         auto matrix = std::dynamic_pointer_cast<const MatrixNode>(
-            LMCAS::detail::node(reflected.value()->simplify()));
+            LMCAS::detail::node(LMCAS::simplify(reflected.value()).value()));
         EXPECT_TRUE((matrix && matrix->rows() == 2 && matrix->cols() == 1)) << "reflection preserves vector dimensions";
         if (!matrix || matrix->rows() != 2 || matrix->cols() != 1) {
             continue;
@@ -311,7 +311,7 @@ TEST(SymbolicMatrixAdvanced, MatrixReflectionLargeFiniteAngle) {
     auto reflection = matrix_reflection_checked(angle);
     ASSERT_TRUE(reflection.has_value());
     auto matrix = std::dynamic_pointer_cast<const MatrixNode>(
-        detail::node(reflection.value()->simplify()));
+        detail::node(LMCAS::simplify(reflection.value()).value()));
     ASSERT_TRUE(matrix);
     ASSERT_EQ(matrix->rows(), 2u);
     ASSERT_EQ(matrix->cols(), 2u);

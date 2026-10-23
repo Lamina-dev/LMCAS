@@ -8,7 +8,6 @@
 #include "internal/facts_query.hpp"
 
 #include <memory>
-#include <optional>
 
 namespace LMCAS {
 
@@ -19,25 +18,11 @@ namespace LMCAS {
  */
 class LMCAS_API NormalizationVisitor final : public LMCAS::detail::SymbolicVisitor {
 public:
-    NormalizationVisitor() : NormalizationVisitor(nullptr) {}
-    explicit NormalizationVisitor(detail::RewriteBudget* budget)
-        : SymbolicVisitor(budget), local_context_(budget ? std::nullopt
-              : std::optional<ComputationContext>(std::in_place)),
-          context_(budget ? budget->context() : *local_context_) {}
-    explicit NormalizationVisitor(ComputationContext& context,
-                                  const FactsQuery& facts = detail::no_facts(),
-                                  Domain domain = Domain::Real,
-                                  detail::RewriteBudget* budget = nullptr)
-        : SymbolicVisitor(budget), context_(context), facts_(facts), domain_(domain) {}
-    explicit NormalizationVisitor(const FactsQuery& facts, Domain domain = Domain::Real,
-                                  detail::RewriteBudget* budget = nullptr)
-        : SymbolicVisitor(budget), local_context_(budget ? std::nullopt
-              : std::optional<ComputationContext>(std::in_place)),
-          context_(budget ? budget->context() : *local_context_), facts_(facts), domain_(domain) {}
-    NormalizationVisitor(ComputationContext&, FactsQuery&&, Domain = Domain::Real,
-                         detail::RewriteBudget* = nullptr) = delete;
-    NormalizationVisitor(FactsQuery&&, Domain = Domain::Real,
-                         detail::RewriteBudget* = nullptr) = delete;
+    NormalizationVisitor(detail::RewriteBudget& budget, const FactsQuery& facts,
+                         Domain domain)
+        : SymbolicVisitor(&budget), context_(budget.context()), facts_(facts),
+          domain_(domain) {}
+    NormalizationVisitor(detail::RewriteBudget&, FactsQuery&&, Domain) = delete;
 
     [[nodiscard]] std::shared_ptr<const SymbolicNode> get_result() const;
 
@@ -71,7 +56,6 @@ public:
     void visit(const RootOfNode& node) override;
 
 private:
-    std::optional<ComputationContext> local_context_;
     ComputationContext& context_;
     std::shared_ptr<const SymbolicNode> result;
     const FactsQuery& facts_ = detail::no_facts();

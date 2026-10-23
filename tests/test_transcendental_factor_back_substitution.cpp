@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "transcendental_factor.hpp"
 #include "poly_utils.hpp"
@@ -39,9 +40,7 @@ TEST(TranscendentalFactorBackSubstitution, BackSubstituteU0PlusXToSinXPlusX) {
     auto sub_result = detect_trans_substitutions(original, "x");
     ASSERT_EQ(sub_result.mappings.size(), 1U);
 
-    auto back = sub_result.poly_expr->substitute(
-        sub_result.mappings[0].indeterminate,
-        sub_result.mappings[0].trans_expr);
+    auto back = LMCAS::substitute(sub_result.poly_expr, sub_result.mappings[0].indeterminate, sub_result.mappings[0].trans_expr).value();
 
     ASSERT_NE(back, nullptr);
     EXPECT_TRUE(test_proved_equivalent(back, original));
@@ -59,9 +58,7 @@ TEST(TranscendentalFactorBackSubstitution, BackSubstituteU0SquaredMinusXSquared)
     auto sub_result = detect_trans_substitutions(original, "x");
     ASSERT_EQ(sub_result.mappings.size(), 1U);
 
-    auto back = sub_result.poly_expr->substitute(
-        sub_result.mappings[0].indeterminate,
-        sub_result.mappings[0].trans_expr);
+    auto back = LMCAS::substitute(sub_result.poly_expr, sub_result.mappings[0].indeterminate, sub_result.mappings[0].trans_expr).value();
 
     ASSERT_NE(back, nullptr);
     EXPECT_TRUE(test_proved_equivalent(back, original));
@@ -79,8 +76,7 @@ TEST(TranscendentalFactorBackSubstitution, BackSubstituteMultipleMappings) {
 
     auto back = sub_result.poly_expr;
     for (const auto &mapping : sub_result.mappings) {
-        back = back->substitute(
-            mapping.indeterminate, mapping.trans_expr);
+        back = LMCAS::substitute(back, mapping.indeterminate, mapping.trans_expr).value();
     }
 
     ASSERT_NE(back, nullptr);
@@ -101,9 +97,7 @@ TEST(TranscendentalFactorBackSubstitution, BackSubstitutePolynomialFactor) {
     Polynomial<Rational> factor_poly(
         {Rational(1), Rational(1)}, "u0");
     auto factor_expr = poly_to_symbolic(factor_poly);
-    auto back = factor_expr->substitute(
-        sub_result.mappings[0].indeterminate,
-        sub_result.mappings[0].trans_expr);
+    auto back = LMCAS::substitute(factor_expr, sub_result.mappings[0].indeterminate, sub_result.mappings[0].trans_expr).value();
     auto expected = SymbolicExpr::add(
         SymbolicExpr::sin(x), SymbolicExpr::number(1));
 
@@ -122,7 +116,7 @@ TEST(TranscendentalFactorBackSubstitution, BackSubstituteNoMappings) {
 
     auto back = sub_result.poly_expr;
     for (const auto &m : sub_result.mappings) {
-        back = back->substitute(m.indeterminate, m.trans_expr);
+        back = LMCAS::substitute(back, m.indeterminate, m.trans_expr).value();
     }
 
     ASSERT_NE(back, nullptr);
@@ -142,7 +136,7 @@ TEST(TranscendentalFactorBackSubstitution, BackSubstituteRoundtrip) {
 
     auto back = sub_result.poly_expr;
     for (const auto &m : sub_result.mappings) {
-        back = back->substitute(m.indeterminate, m.trans_expr);
+        back = LMCAS::substitute(back, m.indeterminate, m.trans_expr).value();
     }
 
     ASSERT_NE(back, nullptr);

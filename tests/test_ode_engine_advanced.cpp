@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_ode_engine.hpp"
 #include "poly_utils.hpp"
@@ -38,9 +39,9 @@ TEST(OdeEngineAdvanced, VariationSecant) {
     EXPECT_TRUE(sol.constants.empty())
         << "variation of parameters returns a particular solution";
 
-    auto first_derivative = sol.general_solution->differentiate("x");
+    auto first_derivative = LMCAS::differentiate(sol.general_solution, "x").value();
     ASSERT_TRUE(first_derivative);
-    auto second_derivative = first_derivative->differentiate("x");
+    auto second_derivative = LMCAS::differentiate(first_derivative, "x").value();
     ASSERT_TRUE(second_derivative);
     auto lhs = SymbolicExpr::add(second_derivative, sol.general_solution);
     for (double point : {-1.0, -0.5, 0.5, 1.0}) {
@@ -72,9 +73,9 @@ TEST(OdeEngineAdvanced, VariationExponential) {
     ASSERT_TRUE(checked);
     auto solution = checked.value().general_solution;
     ASSERT_TRUE(solution);
-    auto first_derivative = solution->differentiate("x");
+    auto first_derivative = LMCAS::differentiate(solution, "x").value();
     ASSERT_TRUE(first_derivative);
-    auto second_derivative = first_derivative->differentiate("x");
+    auto second_derivative = LMCAS::differentiate(first_derivative, "x").value();
     ASSERT_TRUE(second_derivative);
     auto lhs = SymbolicExpr::add(
         second_derivative,
@@ -145,7 +146,7 @@ TEST(OdeEngineAdvanced, OrdinarySeries) {
     double factorial = 1.0;
     for (std::size_t order = 0; order < expected_coefficients.size(); ++order) {
         if (order != 0) {
-            derivative = derivative->differentiate("x");
+            derivative = LMCAS::differentiate(derivative, "x").value();
             ASSERT_TRUE(derivative);
             factorial *= static_cast<double>(order);
         }
@@ -157,9 +158,9 @@ TEST(OdeEngineAdvanced, OrdinarySeries) {
             << "coefficient of x^" << order;
     }
 
-    auto first_derivative = sol.series_solution->differentiate("x");
+    auto first_derivative = LMCAS::differentiate(sol.series_solution, "x").value();
     ASSERT_TRUE(first_derivative);
-    auto second_derivative = first_derivative->differentiate("x");
+    auto second_derivative = LMCAS::differentiate(first_derivative, "x").value();
     ASSERT_TRUE(second_derivative);
     auto residual = SymbolicExpr::add(second_derivative, sol.series_solution);
     for (double point : {-1.0, -0.5, 0.5, 1.0}) {

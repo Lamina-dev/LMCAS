@@ -184,7 +184,7 @@ TEST(SolveCubic, CubicSymbolicCoefficientsX3AX2X10) {
 
         bool found_a = false;
         for (const auto &root : roots) {
-            if (root->compare(root->substitute("a", num(0))) != 0) {
+            if (root->compare(LMCAS::substitute(root, "a", num(0)).value()) != 0) {
                 found_a = true;
                 break;
             }

@@ -1,8 +1,10 @@
+#include "internal/rewrite_budget.hpp"
 #include <string>
 #include <limits>
 #include "symbolic.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "internal/expression_analysis.hpp"
+#include "internal/expression_transform.hpp"
 #include "internal/visitors/print_visitor.hpp"
 #include "internal/visitors/normalization_visitor.hpp"
 #include "internal/visitors/differentiation_visitor.hpp"
@@ -125,31 +127,6 @@ int SymbolicExpr::compare(const std::shared_ptr<SymbolicExpr>& other) const {
     return impl_->root->compare(*LMCAS::detail::node(other));
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::substitute(
-    const std::string& var_name,
-    const std::shared_ptr<SymbolicExpr>& value) const {
-    if (!value) return nullptr;
-    auto substituted = LMCAS::substitute_free(
-        impl_->root, var_name, LMCAS::detail::node(value));
-    NormalizationVisitor normalization;
-    substituted->accept(normalization);
-    return LMCAS::detail::make_expression_ptr(normalization.get_result());
-}
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::expand() const {
-    if (!impl_->root) return nullptr;
-
-    ComputationContext context;
-    ExpandVisitor v(context);
-    impl_->root->accept(v);
-
-    auto result_node = v.get_result();
-    if (!result_node) return nullptr;
-
-    NormalizationVisitor normalization(context);
-    result_node->accept(normalization);
-    return LMCAS::detail::make_expression_ptr(normalization.get_result());
-}
 
 std::string SymbolicExpr::to_string() const {
     PrintVisitor printer;
@@ -172,10 +149,7 @@ bool SymbolicExpr::is_zero() const {
     if (!impl_->root) return false;
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(impl_->root)) {
         if (std::holds_alternative<lmmc_real_t>(num->value())) {
-            lmmc_real_t v = std::get<lmmc_real_t>(num->value());
-            int eq;
-            lmmc_double_nearly_equal(v, 0.0, &eq);
-            return eq != 0;
+            return std::get<lmmc_real_t>(num->value()) == 0.0;
         }
         if (const auto* integer = std::get_if<BigInt>(&num->value())) {
             return integer->is_zero();
@@ -191,10 +165,7 @@ bool SymbolicExpr::is_one() const {
     if (!impl_->root) return false;
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(impl_->root)) {
         if (std::holds_alternative<lmmc_real_t>(num->value())) {
-            lmmc_real_t v = std::get<lmmc_real_t>(num->value());
-            int eq;
-            lmmc_double_nearly_equal(v, 1.0, &eq);
-            return eq != 0;
+            return std::get<lmmc_real_t>(num->value()) == 1.0;
         }
         if (const auto* integer = std::get_if<BigInt>(&num->value())) {
             return *integer == BigInt(1);
@@ -206,15 +177,12 @@ bool SymbolicExpr::is_one() const {
     return false;
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify() const {
-    if (!impl_->root) return nullptr;
-    NormalizationVisitor v;
-    impl_->root->accept(v);
-    return LMCAS::detail::make_expression_ptr(v.get_result());
-}
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_trig() const {
-    auto res = simplify();
+    ComputationContext context;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "simplify_trig");
+    auto res = detail::make_expression_ptr(detail::normalize_node(impl_->root, budget));
     if (!LMCAS::detail::node(res)) return nullptr;
 
     static const LMCAS::RewriteEngine engine = [] {
@@ -248,23 +216,76 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::simplify_trig() const {
         return configured;
     }();
 
-    LMCAS::ComputationContext context;
     auto rewritten = engine.apply_checked(*res, context);
     if (!rewritten) return res;
     auto simplified = std::move(rewritten.value());
     auto result_ptr = LMCAS::detail::make_expression_ptr(simplified);
-    return result_ptr->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result_ptr), budget));
 }
 
-std::shared_ptr<SymbolicExpr> SymbolicExpr::differentiate(const std::string& var_name) const {
-    if (!impl_->root) return nullptr;
-    DifferentiationVisitor v(var_name);
-    impl_->root->accept(v);
+namespace detail {
 
-    NormalizationVisitor norm;
-    v.get_result()->accept(norm);
+SymbolicNodePtr normalize_node(const SymbolicNodePtr& node, RewriteBudget& budget,
+                               const FactsQuery& facts, Domain domain) {
+    budget.consume();
+    if (!node) {
+        throw CasError{CasErrc::InvalidArgument, "simplify argument cannot be null",
+                       "LMCAS.simplify"};
+    }
+    budget.measure(node);
+    NormalizationVisitor visitor(budget, facts, domain);
+    node->accept(visitor);
+    auto result = visitor.get_result();
+    if (!result) {
+        throw CasError{CasErrc::InternalInvariant, "simplify returned null",
+                       "LMCAS.simplify"};
+    }
+    budget.measure(result);
+    return result;
+}
 
-    return LMCAS::detail::make_expression_ptr(norm.get_result());
+SymbolicNodePtr expand_node(const SymbolicNodePtr& node, RewriteBudget& budget,
+                            const FactsQuery& facts, Domain domain) {
+    budget.consume();
+    if (!node) {
+        throw CasError{CasErrc::InvalidArgument, "expand argument cannot be null",
+                       "LMCAS.expand"};
+    }
+    budget.measure(node);
+    ExpandVisitor visitor(budget);
+    node->accept(visitor);
+    return normalize_node(visitor.get_result(), budget, facts, domain);
+}
+
+SymbolicNodePtr differentiate_node(const SymbolicNodePtr& node,
+                                   const std::string& variable, RewriteBudget& budget,
+                                   const FactsQuery& facts, Domain domain) {
+    budget.consume();
+    if (!node || variable.empty()) {
+        throw CasError{CasErrc::InvalidArgument, "invalid differentiation argument",
+                       "LMCAS.differentiate"};
+    }
+    budget.measure(node);
+    DifferentiationVisitor visitor(variable, budget);
+    node->accept(visitor);
+    return normalize_node(visitor.get_result(), budget, facts, domain);
+}
+
+SymbolicNodePtr substitute_node(const SymbolicNodePtr& node, const std::string& variable,
+                                const SymbolicNodePtr& replacement, RewriteBudget& budget,
+                                const FactsQuery& facts, Domain domain) {
+    budget.consume();
+    if (!node || !replacement || variable.empty()) {
+        throw CasError{CasErrc::InvalidArgument, "invalid substitution argument",
+                       "LMCAS.substitute"};
+    }
+    budget.measure(node);
+    budget.measure(replacement);
+    auto result = substitute_free(node, variable, replacement, &budget);
+    budget.measure(result);
+    return normalize_node(result, budget, facts, domain);
+}
+
 }
 
 

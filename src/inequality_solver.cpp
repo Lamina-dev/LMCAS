@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "inequality_solver.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "numeric_evaluation.hpp"
@@ -72,10 +73,15 @@ Result<IntervalUnion> InequalitySolver::solve_inequality_checked(
         }
         return solve_exact_polynomial_inequality(
             *recognized.value(), type, context);
+    } catch (const CasError& error) {
+        return Result<IntervalUnion>::failure(error);
     } catch (const std::bad_alloc&) {
         return Result<IntervalUnion>::failure(
             CasErrc::ResourceLimit, "inequality allocation failed",
             kCheckedInequalityOperation);
+    } catch (const std::length_error& error) {
+        return Result<IntervalUnion>::failure(
+            CasErrc::ResourceLimit, error.what(), kCheckedInequalityOperation);
     } catch (const std::exception& error) {
         return Result<IntervalUnion>::failure(
             CasErrc::InternalInvariant, error.what(), kCheckedInequalityOperation);
@@ -94,7 +100,7 @@ Result<IntervalUnion> InequalitySolver::solve_inequalities_checked(
     const std::vector<std::pair<std::shared_ptr<SymbolicExpr>,
                                  InequalityType>>& inequalities,
     const std::string& variable,
-    ComputationContext& context) {
+    ComputationContext& context) try {
     if (variable.empty()) {
         return Result<IntervalUnion>::failure(
             CasErrc::InvalidArgument, "inequality variable cannot be empty",
@@ -131,6 +137,18 @@ Result<IntervalUnion> InequalitySolver::solve_inequalities_checked(
     }
     return Result<IntervalUnion>::success(std::move(*aggregate));
 }
+catch (const CasError& error) {
+    return Result<IntervalUnion>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<IntervalUnion>::failure(CasErrc::ResourceLimit,
+        "inequality intersection allocation failed", "solve_inequalities_checked");
+} catch (const std::length_error& error) {
+    return Result<IntervalUnion>::failure(
+        CasErrc::ResourceLimit, error.what(), "solve_inequalities_checked");
+} catch (const std::exception& error) {
+    return Result<IntervalUnion>::failure(
+        CasErrc::InternalInvariant, error.what(), "solve_inequalities_checked");
+}
 
 Result<IntervalUnion> InequalitySolver::solve_inequalities_checked(
     const std::vector<std::pair<std::shared_ptr<SymbolicExpr>,
@@ -143,14 +161,17 @@ Result<IntervalUnion> InequalitySolver::solve_inequalities_checked(
 
 
 static IntervalUnion solve_constant_inequality(
-    const Polynomial<SymbolicPolyCoeff>& poly, InequalityType type) {
+    const Polynomial<SymbolicPolyCoeff>& poly, InequalityType type,
+    ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto lc = poly.lead_coeff().val;
     if (!lc) {
         return IntervalUnion::empty();
     }
-    int sign = exact_numeric_sign(lc);
+    int sign = exact_numeric_sign(lc, context);
     if (sign == 0 && !lc->is_zero()) {
-        auto simplified = lc->simplify();
+        auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(lc), transform_budget));
         if (!simplified || !simplified->is_zero()) {
             return IntervalUnion::empty();
         }
@@ -168,10 +189,10 @@ static IntervalUnion solve_constant_inequality(
     return satisfies ? IntervalUnion::entire_line() : IntervalUnion::empty();
 }
 
-IntervalUnion InequalitySolver::solve_inequality(
+IntervalUnion InequalitySolver::solve_inequality_impl(
     const std::shared_ptr<SymbolicExpr>& expr,
     InequalityType type,
-    const std::string& variable) {
+    const std::string& variable, ComputationContext& context) {
 
     if (!expr) {
         return IntervalUnion::empty();
@@ -188,7 +209,7 @@ IntervalUnion InequalitySolver::solve_inequality(
     }
 
     if (poly.degree() <= 0) {
-        return solve_constant_inequality(poly, type);
+        return solve_constant_inequality(poly, type, context);
     }
 
     {
@@ -197,16 +218,16 @@ IntervalUnion InequalitySolver::solve_inequality(
 
     }
 
-    auto roots_with_mult = find_roots_with_multiplicity(expr, variable);
+    auto roots_with_mult = find_roots_with_multiplicity(expr, variable, context);
 
     std::sort(roots_with_mult.begin(), roots_with_mult.end(),
-        [](const auto& a, const auto& b) {
-            return root_less_than(a.first, b.first);
+        [&context](const auto& a, const auto& b) {
+            return root_less_than(a.first, b.first, context);
         });
 
     std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> unique_roots;
     for (const auto& [root, mult] : roots_with_mult) {
-        if (!unique_roots.empty() && roots_equal(unique_roots.back().first, root)) {
+        if (!unique_roots.empty() && roots_equal(unique_roots.back().first, root, context)) {
 
             unique_roots.back().second = std::max(unique_roots.back().second, mult);
         } else {
@@ -221,25 +242,35 @@ IntervalUnion InequalitySolver::solve_inequality(
         multiplicities.push_back(mult);
     }
 
-    auto chart = build_sign_chart(expr, variable, roots, multiplicities);
+    auto chart = build_sign_chart(expr, variable, roots, multiplicities, context);
 
-    return select_intervals(chart, type, roots, multiplicities);
+    return select_intervals(chart, type, roots, multiplicities, context);
 }
 
+
+IntervalUnion InequalitySolver::solve_inequality(
+    const std::shared_ptr<SymbolicExpr>& expr, InequalityType type,
+    const std::string& variable) {
+    ComputationContext context;
+    return solve_inequality_impl(expr, type, variable, context);
+}
 
 IntervalUnion InequalitySolver::solve_inequalities(
     const std::vector<std::pair<std::shared_ptr<SymbolicExpr>,
                                  InequalityType>>& inequalities,
     const std::string& variable) {
+    ComputationContext context;
 
     if (inequalities.empty()) {
         return IntervalUnion::entire_line();
     }
 
-    IntervalUnion result = solve_inequality(inequalities[0].first, inequalities[0].second, variable);
+    IntervalUnion result = solve_inequality_impl(
+        inequalities[0].first, inequalities[0].second, variable, context);
 
     for (size_t i = 1; i < inequalities.size(); ++i) {
-        auto solution = solve_inequality(inequalities[i].first, inequalities[i].second, variable);
+        auto solution = solve_inequality_impl(
+            inequalities[i].first, inequalities[i].second, variable, context);
         result = result.intersect(solution);
         if (result.is_empty()) {
             break;

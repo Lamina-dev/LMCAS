@@ -27,6 +27,7 @@ public:
     }
 
 private:
+    std::size_t nodes_ = 0;
     [[noreturn]] void invalid(const char* message) const {
         throw CasError{CasErrc::ParseError, message, kDecode};
     }
@@ -205,7 +206,10 @@ private:
     }
     NodePtr node() {
         Recursion depth(context_, kDecode);
-        check(context_.reserve_nodes(1, kDecode));
+        if (nodes_ == std::numeric_limits<std::size_t>::max()) {
+            throw CasError{CasErrc::ResourceLimit, "AST node count overflow", kDecode};
+        }
+        check(context_.require_ast_nodes(++nodes_, kDecode));
         auto kind = field();
         if (kind == "integer") return detail::make_node<NumberNode>(integer());
         if (kind == "rational") return detail::make_node<NumberNode>(rational());

@@ -14,7 +14,7 @@ namespace LMCAS {
 static std::vector<std::shared_ptr<SymbolicExpr>> tf_restore_factors(
     const std::vector<Polynomial<Rational>>& true_factors,
     const TransSubstitutionResult& sub_result,
-    const std::shared_ptr<SymbolicExpr>& pyth_simplified) {
+    const std::shared_ptr<SymbolicExpr>& pyth_simplified, ComputationContext& context) {
     /// --- Phase 6: 逆换元 ---
     std::vector<std::shared_ptr<SymbolicExpr>> symbolic_factors;
     symbolic_factors.reserve(true_factors.size());
@@ -25,7 +25,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_restore_factors(
         if (!sym_factor) continue;
 
         /// 逆换元:将不定元替换回原始超越表达式
-        auto back_sub = tf_back_substitute(sym_factor, sub_result.mappings);
+        auto back_sub = tf_back_substitute(sym_factor, sub_result.mappings, context);
         if (back_sub) {
             symbolic_factors.push_back(back_sub);
         }
@@ -37,7 +37,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> tf_restore_factors(
     }
 
     /// --- Phase 6.2: 化简与常数提取 ---
-    auto final_factors = tf_simplify_factors(symbolic_factors);
+    auto final_factors = tf_simplify_factors_impl(symbolic_factors, context);
 
     /// 若化简后仅剩一个非常数因子,分解无效
     size_t non_const_count = 0;
@@ -61,8 +61,8 @@ static Result<std::vector<std::shared_ptr<SymbolicExpr>>> tf_factor_substitution
     for (const auto& m : sub_result.mappings) {
         indeterminates.push_back(m.indeterminate);
     }
-    auto built = tf_build_polynomial(
-        sub_result.poly_expr, indeterminates, var);
+    auto built = tf_build_polynomial_impl(
+        sub_result.poly_expr, indeterminates, var, context);
     if (!built) { return FactorsResult::failure(built.error()); }
     const auto& poly_result = built.value();
     if (!poly_result.success) {
@@ -82,7 +82,7 @@ static Result<std::vector<std::shared_ptr<SymbolicExpr>>> tf_factor_substitution
         return FactorsResult::success({pyth_simplified});
     }
     return tf_restore_factors(
-        factorization.value, sub_result, pyth_simplified);
+        factorization.value, sub_result, pyth_simplified, context);
 }
 
 Result<std::vector<std::shared_ptr<SymbolicExpr>>> factor_transcendental(
@@ -104,7 +104,7 @@ Result<std::vector<std::shared_ptr<SymbolicExpr>>> factor_transcendental(
     if (!mult_factors.empty()) {
         return mult_factors;
     }
-    auto exp_factors = tf_detect_exponential_separation(pyth_simplified, var);
+    auto exp_factors = tf_detect_exponential_separation(pyth_simplified, var, context);
     if (!exp_factors.empty()) {
         return exp_factors;
     }

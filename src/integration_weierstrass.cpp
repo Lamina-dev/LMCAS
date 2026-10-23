@@ -1,4 +1,7 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
+#include "internal/assumption_facts.hpp"
 
 namespace LMCAS {
 
@@ -159,31 +162,37 @@ std::shared_ptr<const SymbolicNode> weier_replace(const std::shared_ptr<const Sy
 /// nullopt 表示当前节点位于有理函数支持域之外.
 typedef std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>> RatPair;
 std::optional<RatPair> weier_to_rational(
-    const std::shared_ptr<const SymbolicNode>& node, const std::string& tvar);
+    const std::shared_ptr<const SymbolicNode>& node, const std::string& tvar, ComputationContext& context);
 
 std::optional<RatPair> weier_rational_power(const PowerNode& pw, const std::string& tvar,
-    const std::shared_ptr<SymbolicExpr>& one) {
+    const std::shared_ptr<SymbolicExpr>& one, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
         auto en = std::dynamic_pointer_cast<const NumberNode>(pw.exponent());
         if (!en) { return std::nullopt; }
         const auto bounded_exponent = integration_bounded_exponent(*en, -32, 32);
         if (!bounded_exponent) { return std::nullopt; }
 
-        auto base = weier_to_rational(pw.base(), tvar);
+        auto base = weier_to_rational(pw.base(), tvar, context);
         if (!base) { return std::nullopt; }
         auto [bn, bd] = *base;
         const bool neg = *bounded_exponent < 0;
         const int power_count = neg ? -*bounded_exponent : *bounded_exponent;
         std::shared_ptr<SymbolicExpr> num = one, den = one;
         for (int i = 0; i < power_count; ++i) {
-            num = SymbolicExpr::multiply(num, bn)->simplify();
-            den = SymbolicExpr::multiply(den, bd)->simplify();
+            num = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(num, bn)), transform_budget));
+            den = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(den, bd)), transform_budget));
         }
         if (neg) std::swap(num, den);
         return RatPair{num, den};
 }
 
 std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNode>& node,
-                                         const std::string& tvar) {
+                                         const std::string& tvar, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto one = SymbolicExpr::number(1);
     if (!node) { return RatPair{SymbolicExpr::number(0), one}; }
 
@@ -196,13 +205,13 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
         std::shared_ptr<SymbolicExpr> num = SymbolicExpr::number(0);
         std::shared_ptr<SymbolicExpr> den = one;
         for (auto& op : add->operands()) {
-            auto r = weier_to_rational(op, tvar);
+            auto r = weier_to_rational(op, tvar, context);
             if (!r) { return std::nullopt; }
             auto [n2, d2] = *r;
             auto new_num = SymbolicExpr::add(
                 SymbolicExpr::multiply(num, d2), SymbolicExpr::multiply(n2, den));
-            den = SymbolicExpr::multiply(den, d2)->simplify();
-            num = new_num->simplify();
+            den = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(den, d2)), transform_budget));
+            num = detail::make_expression_ptr(detail::normalize_node(detail::node(new_num), transform_budget));
         }
         return RatPair{num, den};
     }
@@ -210,16 +219,16 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
         std::shared_ptr<SymbolicExpr> num = one;
         std::shared_ptr<SymbolicExpr> den = one;
         for (auto& op : mul->operands()) {
-            auto r = weier_to_rational(op, tvar);
+            auto r = weier_to_rational(op, tvar, context);
             if (!r) { return std::nullopt; }
             auto [n2, d2] = *r;
-            num = SymbolicExpr::multiply(num, n2)->simplify();
-            den = SymbolicExpr::multiply(den, d2)->simplify();
+            num = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(num, n2)), transform_budget));
+            den = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(den, d2)), transform_budget));
         }
         return RatPair{num, den};
     }
     if (auto pw = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return weier_rational_power(*pw, tvar, one);
+        return weier_rational_power(*pw, tvar, one, context);
     }
     /// 其他节点结构由 nullopt 标记为 t 有理函数域之外.
     return std::nullopt;
@@ -227,12 +236,15 @@ std::optional<RatPair> weier_to_rational(const std::shared_ptr<const SymbolicNod
 
 Result<std::shared_ptr<SymbolicExpr>> weier_reduce_rational(
     const std::shared_ptr<SymbolicExpr>& num_poly,
-    const std::shared_ptr<SymbolicExpr>& den_poly, const std::string& tvar) {
-    auto numerator = symbolic_to_poly<Rational>(num_poly->expand(), tvar);
+    const std::shared_ptr<SymbolicExpr>& den_poly, const std::string& tvar, ComputationContext& context) try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto numerator = symbolic_to_poly<Rational>(detail::make_expression_ptr(detail::expand_node(detail::node(num_poly), transform_budget)), tvar);
     if (!numerator && numerator.error().code != CasErrc::UnsupportedExpression) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(numerator.error());
     }
-    auto denominator = symbolic_to_poly<Rational>(den_poly->expand(), tvar);
+    auto denominator = symbolic_to_poly<Rational>(detail::make_expression_ptr(detail::expand_node(detail::node(den_poly), transform_budget)), tvar);
     if (!denominator && denominator.error().code != CasErrc::UnsupportedExpression) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(denominator.error());
     }
@@ -249,39 +261,24 @@ Result<std::shared_ptr<SymbolicExpr>> weier_reduce_rational(
     auto np_expr = poly_to_symbolic(Np);
     auto dp_expr = poly_to_symbolic(Dp);
     return SymbolicExpr::divide(np_expr, dp_expr);
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "weier_reduce_rational");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "weier_reduce_rational");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "weier_reduce_rational");
 }
 
-Result<std::shared_ptr<SymbolicExpr>> weier_integrate_reduced(
-    const std::shared_ptr<SymbolicExpr>& integrand_t, const std::string& tvar,
-    ComputationContext& computation, int depth) {
-    /// 独立 Integrator 承载有理分解策略,使其循环检测状态与外层积分器隔离.
-    Integrator inner;
-    RationalDecompositionStrategy rds;
-    auto rational_attempt = rds.try_integrate(
-        *integrand_t, tvar, inner, computation, depth + 1);
-    if (!rational_attempt) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(
-            rational_attempt.error());
-    }
-    std::shared_ptr<SymbolicExpr> integrated;
-    if (auto* candidate =
-            std::get_if<IntegrationCandidate>(&rational_attempt.value())) {
-        integrated = candidate->expression;
-    }
-    if (!integrated) {
-        auto recursive =
-            inner.integrate_recursive(*integrand_t, tvar, computation, 0);
-        if (!recursive) { return recursive; }
-        integrated = std::move(recursive.value());
-    }
-    return integrated;
-}
 
 }
 
 Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
-    ComputationContext& computation, int depth) {
+    ComputationContext& computation, int depth) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
     if (!LMCAS::detail::node(expr)) { return nullptr; }
 
     /// 必须确实含有 sin/cos(var) 且整体为其有理函数
@@ -300,18 +297,42 @@ Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
 
     /// sin/cos 有理函数经代换后仍为 t 的有理函数.
     /// 通过多项式对递归求值整棵表达式树,直接得到 N(t)/D(t).
-    auto rat = weier_to_rational(LMCAS::detail::node(integrand_raw), tvar);
+    auto rat = weier_to_rational(LMCAS::detail::node(integrand_raw), tvar, computation);
     if (!rat) { return nullptr; }  /**< 节点超出多项式支持域。 */
     auto [num_poly, den_poly] = *rat;
     if (!den_poly || LMCAS::detail::node(den_poly)->is_zero()) { return nullptr; }
 
     /// 使用多项式 GCD 将 num/den 化为最简有理函数,并保持单一分式结构.
-    auto reduced = weier_reduce_rational(num_poly, den_poly, tvar);
+    auto reduced = weier_reduce_rational(num_poly, den_poly, tvar, computation);
     if (!reduced) { return reduced; }
     auto integrand_t = std::move(reduced.value());
-    auto attempted = weier_integrate_reduced(integrand_t, tvar, computation, depth);
-    if (!attempted) { return attempted; }
-    auto integrated = std::move(attempted.value());
+    // Keep rational recursion isolated from the outer cycle obligations.
+    Integrator inner;
+    inner.cycle_state_.occupied_names = detail::all_variable_names(
+        detail::node(integrand_t), &transform_budget);
+    inner.cycle_state_.occupied_names.insert(tvar);
+    if (computation.assumptions()) {
+        detail::AssumptionFacts::collect_names(
+            *computation.assumptions(), inner.cycle_state_.occupied_names, transform_budget);
+    }
+    RationalDecompositionStrategy rational;
+    auto attempted = rational.try_integrate(
+        *integrand_t, tvar, inner, computation, depth + 1);
+    if (!attempted) {
+        return Result<std::shared_ptr<SymbolicExpr>>::failure(attempted.error());
+    }
+    std::shared_ptr<SymbolicExpr> integrated;
+    if (auto* candidate = std::get_if<IntegrationCandidate>(&attempted.value())) {
+        if (candidate->expression && certify_integral(
+                *candidate->expression, *integrand_t, tvar, transform_budget)) {
+            integrated = candidate->expression;
+        }
+    }
+    if (!integrated) {
+        auto recursive = inner.integrate_recursive(*integrand_t, tvar, computation, 0);
+        if (!recursive) { return recursive; }
+        integrated = std::move(recursive.value());
+    }
     if (!integrated) { return nullptr; }
 
     /// 若结果仍含未求值积分节点,视为失败
@@ -326,9 +347,17 @@ Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
                                          SymbolicExpr::variable(var));
     auto tan_half = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Tan, std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(half_x)}));
-    auto result = integrated->substitute(tvar, tan_half);
+    auto result = detail::make_expression_ptr(detail::substitute_node(detail::node(integrated), tvar, detail::node(tan_half), transform_budget));
     if (!result) { return nullptr; }
-    return result->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 }

@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/vector_calculus_support.hpp"
 #include "numeric_evaluation.hpp"
 #include "internal/numeric_probe.hpp"
@@ -18,9 +19,10 @@ namespace LMCAS::vector_calculus_detail {
 bool vector_calculus_checked_finite_numeric(
     const std::shared_ptr<SymbolicExpr>& expr,
     double& value,
-    ComputationContext* context)
+    ComputationContext& context)
 {
-    auto numeric = detail::try_finite_numeric(expr, context);
+    if (!expr) return false;
+    auto numeric = detail::try_finite_numeric(*expr, context);
     if (!numeric) return false;
     value = *numeric;
     return true;
@@ -373,7 +375,9 @@ Result<void> vector_calculus_validate_distinct_vars(
 
 bool vector_calculus_expr_zero_after_substitution(
     const std::shared_ptr<SymbolicExpr>& expr,
-    const std::map<std::string, std::shared_ptr<SymbolicExpr>>& point)
+    const std::map<std::string, std::shared_ptr<SymbolicExpr>>& point,
+    ComputationContext& context,
+    detail::RewriteBudget& transform_budget)
 {
     if (!expr || !LMCAS::detail::node(expr)) {
         return false;
@@ -383,12 +387,12 @@ bool vector_calculus_expr_zero_after_substitution(
         if (!value || !LMCAS::detail::node(value)) {
             return false;
         }
-        substituted = substituted->substitute(var, value);
+        substituted = detail::make_expression_ptr(detail::substitute_node(detail::node(substituted), var, detail::node(value), transform_budget));
         if (!substituted || !LMCAS::detail::node(substituted)) {
             return false;
         }
     }
-    substituted = substituted->simplify();
+    substituted = detail::make_expression_ptr(detail::normalize_node(detail::node(substituted), transform_budget));
     if (!substituted || !LMCAS::detail::node(substituted)) {
         return false;
     }
@@ -396,7 +400,7 @@ bool vector_calculus_expr_zero_after_substitution(
         return true;
     }
     double value = 0.0;
-    return vector_calculus_checked_finite_numeric(substituted, value) &&
+    return vector_calculus_checked_finite_numeric(substituted, value, context) &&
            std::abs(value) < 1e-8;
 }
 

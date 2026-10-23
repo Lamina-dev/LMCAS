@@ -53,7 +53,7 @@ void expect_allocation_failures_surface(
     const LMCAS::EqvOptions& options = {}) {
     {
         LMCAS::ComputationContext context;
-        const auto warmup = LMCAS::equivalent_core(
+        const auto warmup = LMCAS::equivalent(
             *lhs, *rhs, context, options);
         ASSERT_TRUE(warmup);
     }
@@ -63,7 +63,7 @@ void expect_allocation_failures_surface(
     {
         LMCAS::ComputationContext context;
         AllocationProbeScope probe(std::numeric_limits<std::size_t>::max());
-        counted.emplace(LMCAS::equivalent_core(
+        counted.emplace(LMCAS::equivalent(
             *lhs, *rhs, context, options));
         allocation_count = probe.count();
     }
@@ -77,11 +77,11 @@ void expect_allocation_failures_surface(
         {
             AllocationProbeScope probe(ordinal);
             try {
-                outcome.emplace(LMCAS::equivalent_core(
+                outcome.emplace(LMCAS::equivalent(
                     *lhs, *rhs, context, options));
             } catch (const std::bad_alloc&) {
                 FAIL() << "allocation ordinal " << ordinal
-                       << " escaped equivalent_core";
+                       << " escaped equivalent";
             }
         }
 
@@ -90,7 +90,7 @@ void expect_allocation_failures_surface(
             << "allocation ordinal " << ordinal << " produced boolean success";
         EXPECT_EQ(outcome->error().code, LMCAS::CasErrc::ResourceLimit)
             << "allocation ordinal " << ordinal;
-        EXPECT_EQ(outcome->error().operation, "LMCAS.equivalent_core")
+        EXPECT_EQ(outcome->error().operation, "LMCAS.equivalent")
             << "allocation ordinal " << ordinal;
     }
 }
@@ -158,12 +158,12 @@ TEST(EquivalenceComplexAllocation, InvalidBudgetReturnsResourceLimit) {
     LMCAS::EqvOptions invalid_options;
     invalid_options.budget.max_rewrite_steps = 0;
     LMCAS::ComputationContext context;
-    const auto outcome = LMCAS::equivalent_core(
+    const auto outcome = LMCAS::equivalent(
         *x, *x, context, invalid_options);
 
     ASSERT_FALSE(outcome);
     EXPECT_EQ(outcome.error().code, LMCAS::CasErrc::ResourceLimit);
-    EXPECT_EQ(outcome.error().operation, "LMCAS.equivalent_core");
+    EXPECT_EQ(outcome.error().operation, "LMCAS.equivalent");
 }
 
 TEST(EquivalenceComplexAllocation, ProofProfileFailuresSurface) {

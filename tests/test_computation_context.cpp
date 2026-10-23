@@ -16,18 +16,25 @@ TEST(ComputationContext, CounterOverflow) {
     EXPECT_TRUE((all_steps.has_value())) << "maximum step reservation is representable";
     auto step_overflow = maximum_context.consume_steps(1, "test_steps");
     EXPECT_TRUE((!step_overflow && step_overflow.error().code == CasErrc::ResourceLimit)) << "step counter cannot wrap past size_t maximum";
-    auto all_nodes = maximum_context.reserve_nodes(maximum_limits.max_ast_nodes, "test_nodes");
-    EXPECT_TRUE((all_nodes.has_value())) << "maximum node reservation is representable";
-    auto node_overflow = maximum_context.reserve_nodes(1, "test_nodes");
-    EXPECT_TRUE((!node_overflow && node_overflow.error().code == CasErrc::ResourceLimit)) << "node counter cannot wrap past size_t maximum";
+}
+
+TEST(ComputationContext, AstLimitPerCandidate) {
+    ResourceLimits limits;
+    limits.max_ast_nodes = 3;
+    ComputationContext context(limits);
+    EXPECT_TRUE(context.require_ast_nodes(3, "test_nodes"));
+    EXPECT_TRUE(context.require_ast_nodes(3, "test_nodes"));
+    auto oversized = context.require_ast_nodes(4, "test_nodes");
+    ASSERT_FALSE(oversized);
+    EXPECT_EQ(oversized.error().code, CasErrc::ResourceLimit);
 }
 
 TEST(ComputationContext, Cancellation) {
     CancellationToken cancellation;
     cancellation.cancel();
     ComputationContext cancelled_context({}, cancellation);
-    auto cancelled_nodes = cancelled_context.reserve_nodes(0, "test_cancel");
-    EXPECT_TRUE((!cancelled_nodes && cancelled_nodes.error().code == CasErrc::Cancelled)) << "node reservation observes cancellation";
+    auto cancelled_nodes = cancelled_context.require_ast_nodes(0, "test_cancel");
+    EXPECT_TRUE((!cancelled_nodes && cancelled_nodes.error().code == CasErrc::Cancelled)) << "AST size checks observe cancellation";
     auto cancelled_diagnostic = cancelled_context.add_diagnostic(
         {DiagnosticSeverity::Info, "test_cancel", "unused"});
     EXPECT_TRUE((!cancelled_diagnostic &&

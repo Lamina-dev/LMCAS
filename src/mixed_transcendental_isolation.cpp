@@ -20,21 +20,21 @@ class RootIsolation {
 public:
     RootIsolation(const std::shared_ptr<SymbolicExpr>& expr,
                   const std::shared_ptr<SymbolicExpr>& derivative,
-                  const std::string& var)
-        : expr_(expr), derivative_(derivative), var_(var) {}
+                  const std::string& var, RewriteBudget& budget)
+        : expr_(expr), derivative_(derivative), var_(var), budget_(budget) {}
 
-    bool initialize(const SearchInterval& interval, ComputationContext* context,
+    bool initialize(const SearchInterval& interval,
                     std::optional<CasError>* failure, bool* complete) {
         const auto step = (interval.hi - interval.lo) / initial_divisions;
         std::vector<lmmc_real_t> samples(initial_divisions + 1);
         for (int i = 0; i <= initial_divisions; ++i) {
-            if (!consume_mixed_step(context, failure, complete)) {
+            if (!consume_mixed_step(budget_.context(), failure, complete)) {
                 return false;
             }
             samples[i] = sample(interval.lo + i * step, step * 0.5);
             if (samples[i] == 0.0) {
                 const auto x = interval.lo + i * step;
-                if (mixed_evaluate_at(expr_, var_, x) == 0.0)
+                if (mixed_evaluate_at(expr_, var_, x, budget_) == 0.0)
                     result_.push_back({x, x, true});
             }
         }
@@ -52,10 +52,10 @@ public:
         return true;
     }
 
-    void run(const SolveOptions& opts, ComputationContext* context,
+    void run(const SolveOptions& opts,
              std::optional<CasError>* failure, bool* complete) {
         while (!work_.empty()) {
-            if (!consume_mixed_step(context, failure, complete)) {
+            if (!consume_mixed_step(budget_.context(), failure, complete)) {
                 break;
             }
             if (opts.max_roots > 0 &&
@@ -87,7 +87,7 @@ public:
 
 private:
     lmmc_real_t sample(lmmc_real_t x, lmmc_real_t offset) const {
-        return mixed_evaluate_with_retry(expr_, var_, x, offset);
+        return mixed_evaluate_with_retry(expr_, var_, x, offset, budget_);
     }
 
     void accept(const SampledInterval& interval, bool confirmed) {
@@ -128,7 +128,7 @@ private:
             accept(interval, false);
             return;
         }
-        if (fm == 0.0 && mixed_evaluate_at(expr_, var_, mid) == 0.0) {
+        if (fm == 0.0 && mixed_evaluate_at(expr_, var_, mid, budget_) == 0.0) {
             result_.push_back({mid, mid, true});
         }
         if (interval.f_lo * fm < 0.0) {
@@ -156,8 +156,8 @@ private:
             }
             return;
         }
-        const auto da = mixed_evaluate_at(derivative_, var_, interval.lo);
-        const auto db = mixed_evaluate_at(derivative_, var_, interval.hi);
+        const auto da = mixed_evaluate_at(derivative_, var_, interval.lo, budget_);
+        const auto db = mixed_evaluate_at(derivative_, var_, interval.hi, budget_);
         const bool finite = !std::isnan(da) && !std::isnan(db);
         const bool monotone = finite && da * db > 0.0;
         if (width <= minimum_width || monotone) {
@@ -174,6 +174,7 @@ private:
     const std::shared_ptr<SymbolicExpr>& expr_;
     const std::shared_ptr<SymbolicExpr>& derivative_;
     const std::string& var_;
+    RewriteBudget& budget_;
     std::vector<SampledInterval> work_;
     std::vector<IsolatedInterval> result_;
 };
@@ -184,16 +185,16 @@ std::vector<IsolatedInterval> isolate_roots_with_context(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var, const SearchInterval& interval,
-    const SolveOptions& opts, ComputationContext* context,
+    const SolveOptions& opts, RewriteBudget& budget,
     std::optional<CasError>* failure, bool* complete) {
     if (interval.lo >= interval.hi) {
         return {};
     }
-    RootIsolation isolation(expr, derivative, var);
-    if (!isolation.initialize(interval, context, failure, complete)) {
+    RootIsolation isolation(expr, derivative, var, budget);
+    if (!isolation.initialize(interval, failure, complete)) {
         return {};
     }
-    isolation.run(opts, context, failure, complete);
+    isolation.run(opts, failure, complete);
     return isolation.finish(opts.max_roots, complete);
 }
 
@@ -206,8 +207,14 @@ std::vector<IsolatedInterval> isolate_roots(
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var, const SearchInterval& interval,
     const SolveOptions& opts) {
-    return detail::isolate_roots_with_context(
-        expr, derivative, var, interval, opts, nullptr, nullptr, nullptr);
+    ComputationContext context;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                context.limits().max_ast_nodes, "isolate_roots");
+    std::optional<CasError> failure;
+    auto result = detail::isolate_roots_with_context(
+        expr, derivative, var, interval, opts, budget, &failure, nullptr);
+    if (failure) throw *failure;
+    return result;
 }
 
 }

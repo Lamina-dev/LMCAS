@@ -1,6 +1,7 @@
 #include "internal/equivalence_support.hpp"
 
 #include "poly_utils.hpp"
+#include "internal/expression_analysis.hpp"
 
 #include <set>
 
@@ -76,12 +77,10 @@ Result<std::optional<bool>> prove_rational_polynomial_equivalence(
         return Result<std::optional<bool>>::success(std::nullopt);
     }
     if (variables.size() > 1) {
-        detail::RewriteBudget growth_budget(
-            context, options.budget.max_rewrite_depth, budget.max_nodes(),
-            kEquivalentOperation);
-        auto expanded = expand_equivalence(difference, growth_budget);
+        auto expanded = expand_equivalence(difference, budget);
+        const auto value = detail::exact_rational_value(detail::node(expanded));
         return Result<std::optional<bool>>::success(
-            expanded->is_zero() ? std::optional<bool>{true} : std::nullopt);
+            value && value->is_zero() ? std::optional<bool>{true} : std::nullopt);
     }
     const std::string variable = variables.empty() ? "x" : *variables.begin();
     auto recognized = recognize_rational_polynomial(*difference, variable, context);

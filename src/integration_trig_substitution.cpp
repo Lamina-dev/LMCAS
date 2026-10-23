@@ -1,57 +1,41 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
+#include "polynomial_conversion.hpp"
 
 namespace LMCAS {
 
 namespace {
 
-/// 检测形如 (c0 + c2*x²)^p 的二次根式幂，其中 p = ±1/2。
-/// 返回 a²=|c0/c2| 信息与符号模式。pattern:
-///   1 => a²-x²  (c2<0, c0>0, 归一化后 a²-x²)
-///   2 => a²+x²  (c2>0, c0>0)
-///   3 => x²-a²  (c2>0, c0<0)
-/// 同时输出 a_sq=|c0|/|c2| 以及 c2 的绝对值（要求 c2=±1 以保持简单）。
+// 标准二次根式使用精确有理系数，保留原被积式的指数和尺度。
 struct QuadRadical {
-    int pattern = 0;       // 1,2,3
-    double exponent = 0;   // +0.5 or -0.5
-    double a_sq = 0;       // a²
+    int pattern = 0;       // 1: a²-x², 2: a²+x², 3: x²-a²
+    Rational exponent{0};
+    Rational a_sq{0};
 };
 
-bool trigsub_half_exponent(const NumberNode& en, double& e) {
-    if (std::holds_alternative<lmmc_real_t>(en.value())) e = std::get<lmmc_real_t>(en.value());
-    else if (std::holds_alternative<Rational>(en.value())) e = std::get<Rational>(en.value()).to_double();
-    else if (std::holds_alternative<BigInt>(en.value())) e = std::get<BigInt>(en.value()).to_double();
-    else return false;
-    if (std::abs(e - 0.5) > 1e-9 && std::abs(e + 0.5) > 1e-9) { return false; }
+bool trigsub_half_exponent(const NumberNode& number, Rational& exponent) {
+    const auto exact = detail::exact_rational_value(number);
+    if (!exact || (*exact != Rational(1, 2) && *exact != Rational(-1, 2))) {
+        return false;
+    }
+    exponent = *exact;
     return true;
 }
 
-bool trigsub_quadratic_coefficients(const PowerNode& pw, const std::string& var,
-    ComputationContext& context, double& c0, double& c2) {
-    /// base 必须是 c0 + c2*x²（关于 var 的二次、无一次项）
-    auto base = LMCAS::detail::expression_from_node(pw.base());
-    auto b = base.expand();
-    if (!b) b = LMCAS::detail::make_expression_ptr(pw.base());
-    /// 提取关于 var 的系数：c0（常数）、c1（一次）、c2（二次）
-    /// 用求导法：c2 = (1/2) d²/dx² ; c1 = d/dx |_{x=0} ; c0 = base|_{x=0}
-    auto d1 = b->differentiate(var);
-    auto d2 = d1->differentiate(var);
-    auto zero = SymbolicExpr::number(0);
-    auto c0e = b->substitute(var, zero)->simplify();
-    auto c1e = d1->substitute(var, zero)->simplify();
-    auto c2e = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1,2)), d2)->simplify();
-    /// 必须 c1=0，且 c2 为非零常数，c0 常数，且 d2 不依赖 var（纯二次）
-    if (!LMCAS::detail::node(c1e) || !LMCAS::detail::node(c1e)->is_zero()) { return false; }
-    if (expression_depends_on_variable(LMCAS::detail::node(c2e), var)) { return false; }
-    if (expression_depends_on_variable(LMCAS::detail::node(c0e), var)) { return false; }
-    if (!LMCAS::detail::node(c2e)->is_number() || !LMCAS::detail::node(c0e)->is_number()) { return false; }
-    auto c0_checked = try_checked_numeric_constant(*c0e, context);
-    auto c2_checked = try_checked_numeric_constant(*c2e, context);
-    if (!c0_checked || !c2_checked) { return false; }
-    c0 = *c0_checked;
-    c2 = *c2_checked;
-    if (std::abs(c2) < 1e-12) { return false; }
-    /// 仅支持 c2 = ±1（标准型 a²±x² / x²-a²）
-    if (std::abs(std::abs(c2) - 1.0) > 1e-9) { return false; }
+bool trigsub_quadratic_coefficients(const detail::SymbolicNodePtr& radicand,
+    const std::string& var, ComputationContext& context, Rational& c0, Rational& c2) {
+    auto polynomial = recognize_rational_polynomial(
+        detail::expression_from_node(radicand), var, context);
+    if (!polynomial) { throw polynomial.error(); }
+    if (!polynomial.value() || polynomial.value()->degree() != 2) { return false; }
+    const auto& coefficients = polynomial.value()->coeffs;
+    if (coefficients[1] != Rational(0) ||
+        (coefficients[2] != Rational(1) && coefficients[2] != Rational(-1))) {
+        return false;
+    }
+    c0 = coefficients[0];
+    c2 = coefficients[2];
     return true;
 }
 
@@ -63,14 +47,31 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
     if (!pw) { return false; }
     auto en = std::dynamic_pointer_cast<const NumberNode>(pw->exponent());
     if (!en) { return false; }
-    double e;
-    if (!trigsub_half_exponent(*en, e)) { return false; }
-    double c0, c2;
-    if (!trigsub_quadratic_coefficients(*pw, var, context, c0, c2)) { return false; }
-    out.exponent = e;
-    if (c2 < 0 && c0 > 0) { out.pattern = 1; out.a_sq = c0; }          // a² - x²
-    else if (c2 > 0 && c0 > 0) { out.pattern = 2; out.a_sq = c0; }     // a² + x²
-    else if (c2 > 0 && c0 < 0) { out.pattern = 3; out.a_sq = -c0; }    // x² - a²
+    Rational exponent;
+    auto radicand = pw->base();
+    const auto outer = detail::exact_rational_value(*en);
+    if (outer && *outer == Rational(-1)) {
+        if (const auto* root = dynamic_cast<const PowerNode*>(radicand.get())) {
+            const auto inner = detail::exact_rational_value(root->exponent());
+            if (!inner || *inner != Rational(1, 2)) { return false; }
+            radicand = root->base();
+        } else if (const auto* root = dynamic_cast<const FunctionNode*>(radicand.get());
+                   root && root->type() == FunctionNode::FuncType::Sqrt &&
+                   root->arguments().size() == 1) {
+            radicand = root->arguments()[0];
+        } else {
+            return false;
+        }
+        exponent = Rational(-1, 2);
+    } else if (!trigsub_half_exponent(*en, exponent)) {
+        return false;
+    }
+    Rational c0, c2;
+    if (!trigsub_quadratic_coefficients(radicand, var, context, c0, c2)) { return false; }
+    out.exponent = exponent;
+    if (c2 < Rational(0) && c0 > Rational(0)) { out.pattern = 1; out.a_sq = c0; }
+    else if (c2 > Rational(0) && c0 > Rational(0)) { out.pattern = 2; out.a_sq = c0; }
+    else if (c2 > Rational(0) && c0 < Rational(0)) { out.pattern = 3; out.a_sq = Rational(0) - c0; }
     else return false;
     return true;
 }
@@ -79,7 +80,9 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
 
 Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator&,
-    ComputationContext& context, int) {
+    ComputationContext& context, int) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!LMCAS::detail::node(expr)) { return nullptr; }
 
     auto x = SymbolicExpr::variable(var);
@@ -95,8 +98,7 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
         return nullptr;
     }
 
-    double a_sq = qr.a_sq;
-    auto a_sq_expr = SymbolicExpr::number(a_sq);
+    auto a_sq_expr = SymbolicExpr::number(qr.a_sq);
     auto a_expr = SymbolicExpr::sqrt(a_sq_expr); // a = √(a²)
 
     /// 构造 √(模式) 表达式
@@ -116,21 +118,21 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
     };
     auto ln = [&](const std::shared_ptr<SymbolicExpr>& u) { return SymbolicExpr::ln(u); };
 
-    if (qr.exponent < 0) {
+    if (qr.exponent < Rational(0)) {
         /// (...)^(-1/2)
         if (qr.pattern == 1) {
             /// arcsin(x/a)
-            return arcsin(x_over_a)->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(detail::node(arcsin(x_over_a)), transform_budget));
         }
         if (qr.pattern == 2) {
             /// ln(x + √(x²+a²))
             auto rad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq, a_sq_expr));
-            return ln(SymbolicExpr::add(x, rad))->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(detail::node(ln(SymbolicExpr::add(x, rad))), transform_budget));
         }
         /// pattern 3: ln(x + √(x²-a²))
         auto rad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq,
             SymbolicExpr::multiply(SymbolicExpr::number(-1), a_sq_expr)));
-        return ln(SymbolicExpr::add(x, rad))->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(ln(SymbolicExpr::add(x, rad))), transform_budget));
     } else {
         /// (...)^(+1/2)
         auto rad = SymbolicExpr::sqrt(make_radicand());
@@ -139,7 +141,7 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
             /// (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
             auto term1 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, x), rad);
             auto term2 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, a_sq_expr), arcsin(x_over_a));
-            return SymbolicExpr::add(term1, term2)->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget));
         }
         if (qr.pattern == 2) {
             /// (x/2)√(a²+x²) + (a²/2)ln(x+√(x²+a²))
@@ -147,7 +149,7 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
             auto term1 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, x), rad);
             auto term2 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, a_sq_expr),
                 ln(SymbolicExpr::add(x, lrad)));
-            return SymbolicExpr::add(term1, term2)->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget));
         }
         /// pattern 3: (x/2)√(x²-a²) - (a²/2)ln(x+√(x²-a²))
         auto lrad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq,
@@ -156,8 +158,16 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
         auto term2 = SymbolicExpr::multiply(
             SymbolicExpr::multiply(SymbolicExpr::multiply(SymbolicExpr::number(-1), half), a_sq_expr),
             ln(SymbolicExpr::add(x, lrad)));
-        return SymbolicExpr::add(term1, term2)->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget));
     }
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 }

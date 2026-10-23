@@ -234,14 +234,14 @@ TEST(ExprSetsSolutions, ComplexQuadraticConsumerContracts) {
     }
     for (const auto &root : solved.value().elements()) {
         auto operand = std::make_shared<SymbolicExpr>(*root);
-        auto residual = polynomial.value()->substitute("x", operand)->simplify();
+        auto residual = LMCAS::simplify(LMCAS::substitute(polynomial.value(), "x", operand).value()).value();
         auto residual_value = LMCAS::eval_complex(*residual);
         EXPECT_TRUE((residual_value && residual_value.value().is_finite() &&
                      residual_value.value().real.value == 0.0 &&
                      residual_value.value().imag.value == 0.0))
             << "complex evaluation verifies each finite root's polynomial residual";
         auto modulus = abs(operand);
-        EXPECT_TRUE((modulus && modulus.value()->simplify()->is_one())) << "finite quadratic root has exact modulus one";
+        EXPECT_TRUE((modulus && LMCAS::simplify(modulus.value()).value()->is_one())) << "finite quadratic root has exact modulus one";
         auto conjugate = conj(operand);
         EXPECT_TRUE((conjugate && solved.value().contains(*conjugate.value()))) << "finite quadratic root set is closed under conjugation";
     }
@@ -297,14 +297,14 @@ void parameter_denominator_conditions() {
         AssumptionContext facts;
         bool rejects_pole = false;
         for (const auto &condition : values->values[0].conditions) {
-            auto bound = condition->substitute("a", SymbolicExpr::number(1));
+            auto bound = LMCAS::substitute(condition, "a", SymbolicExpr::number(1)).value();
             rejects_pole = rejects_pole || facts.evaluate_condition(*bound) == Tribool::False;
         }
         EXPECT_TRUE((rejects_pole)) << "the retained condition excludes a=1";
     }
     auto projection = solve_expr_set(parameter.value(), "x");
     EXPECT_TRUE((!projection && projection.error().code == CasErrc::Inconclusive)) << "conditional finite roots are not unconditional finite sets";
-    auto at_pole = solve_set(parameter.value()->substitute("a", SymbolicExpr::number(1)), "x");
+    auto at_pole = solve_set(LMCAS::substitute(parameter.value(), "a", SymbolicExpr::number(1)).value(), "x");
     EXPECT_TRUE((at_pole && std::holds_alternative<EmptySolutions>(at_pole.value()))) << "specializing the pole yields mathematical Empty";
 }
 
@@ -327,7 +327,7 @@ void periodic_denominator_exclusions(const ExprPtr &sine_ratio) {
             AssumptionContext facts;
             bool rejects_zero = false;
             for (const auto &condition : family.conditions) {
-                auto bound = condition->substitute(family.integer_parameters[0], SymbolicExpr::number(0));
+                auto bound = LMCAS::substitute(condition, family.integer_parameters[0], SymbolicExpr::number(0)).value();
                 rejects_zero = rejects_zero || facts.evaluate_condition(*bound) == Tribool::False;
             }
             EXPECT_TRUE((rejects_zero)) << "the denominator excludes the zero integer index";
@@ -433,14 +433,14 @@ TEST(ExprSetsSolutions, SymbolicCoefficientDegeneracy) {
         EXPECT_TRUE((!projected && projected.error().code == CasErrc::Inconclusive)) << "generic parameter solutions cannot be projected unconditionally";
     }
     auto ax = parse_expr("a*x");
-    auto zero = solve_set(ax.value()->substitute("a", SymbolicExpr::number(0)), "x");
+    auto zero = solve_set(LMCAS::substitute(ax.value(), "a", SymbolicExpr::number(0)).value(), "x");
     EXPECT_TRUE((zero && std::holds_alternative<UniversalSolutions>(zero.value()))) << "a=0 leaves every x";
     auto ax_minus_one = parse_expr("a*x-1");
-    auto empty = solve_set(ax_minus_one.value()->substitute("a", SymbolicExpr::number(0)), "x");
+    auto empty = solve_set(LMCAS::substitute(ax_minus_one.value(), "a", SymbolicExpr::number(0)).value(), "x");
     EXPECT_TRUE((empty && std::holds_alternative<EmptySolutions>(empty.value()))) << "zero times x cannot equal one";
     {
         auto quadratic = parse_expr("a*x^2+x-1");
-        auto specialized = solve_expr_set(quadratic.value()->substitute("a", SymbolicExpr::number(0)), "x");
+        auto specialized = solve_expr_set(LMCAS::substitute(quadratic.value(), "a", SymbolicExpr::number(0)).value(), "x");
         EXPECT_TRUE((specialized && specialized.value().size() == 1 &&
                      specialized.value().contains(*SymbolicExpr::number(1))))
             << "a vanished quadratic leading term reduces to the complete linear solution";

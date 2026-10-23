@@ -21,7 +21,8 @@ Expr inverse(const Expr &value) { return power(value, -1); }
 void expect_finite(const Expr &expression, const Expr &lower, const Expr &upper,
                    double expected, const char *message) {
     Integrator integrator;
-    auto result = integrator.integrate_def(*expression, "x", *lower, *upper);
+    ComputationContext context;
+    auto result = integrator.integrate_def_checked(*expression, "x", *lower, *upper, context);
     ASSERT_TRUE((result.has_value())) << (message);
     if (!result)
         return;
@@ -40,7 +41,8 @@ void expect_finite(const Expr &expression, const Expr &lower, const Expr &upper,
 void expect_infinity(const Expr &expression, const Expr &lower, const Expr &upper,
                      int sign, const char *message) {
     Integrator integrator;
-    auto result = integrator.integrate_def(*expression, "x", *lower, *upper);
+    ComputationContext context;
+    auto result = integrator.integrate_def_checked(*expression, "x", *lower, *upper, context);
     ASSERT_TRUE((result.has_value())) << (message);
     if (!result)
         return;
@@ -51,7 +53,8 @@ void expect_infinity(const Expr &expression, const Expr &lower, const Expr &uppe
 void expect_error(const Expr &expression, const Expr &lower, const Expr &upper,
                   CasErrc code, const char *message) {
     Integrator integrator;
-    auto result = integrator.integrate_def(*expression, "x", *lower, *upper);
+    ComputationContext context;
+    auto result = integrator.integrate_def_checked(*expression, "x", *lower, *upper, context);
     EXPECT_FALSE((result.has_value())) << (message);
     if (!result) {
         EXPECT_TRUE((result.error().code == code)) << (message);
@@ -71,17 +74,19 @@ void expect_integral_node(const SymbolicExpr &actual, const Expr &expression,
 void expect_unresolved(const Expr &expression, const Expr &lower, const Expr &upper,
                        const char *message) {
     Integrator integrator;
-    auto result = integrator.integrate_def(*expression, "x", *lower, *upper);
+    ComputationContext context;
+    auto result = integrator.integrate_def_checked(*expression, "x", *lower, *upper, context);
     ASSERT_TRUE((result.has_value())) << (message);
     if (!result)
         return;
     expect_integral_node(result.value(), expression, lower, upper, message);
 }
 
-class SuppliedPrimitive final : public BuiltInIntegrationStrategy {
+class SuppliedPrimitive final : public IntegrationStrategy {
   public:
     explicit SuppliedPrimitive(Expr expression) : expression_(std::move(expression)) {}
     std::string name() const override { return "SuppliedPrimitive"; }
+  protected:
     Result<Expr> try_integrate_raw(const SymbolicExpr &, const std::string &,
                                    Integrator &, ComputationContext &, int) override { return expression_; }
 
@@ -89,7 +94,7 @@ class SuppliedPrimitive final : public BuiltInIntegrationStrategy {
     Expr expression_;
 };
 
-TEST(LmcasDefiniteIntegration, PrimitiveCertificates) {
+TEST(LmcasDefiniteIntegration, RejectedPrimitivesContinueFallback) {
     const auto x = SymbolicExpr::variable("x");
     const auto expression = power(x, 2);
     const auto nested_integral = SymbolicExpr::make_integral(SymbolicExpr::sin(power(x, 2)), "x");
@@ -99,12 +104,11 @@ TEST(LmcasDefiniteIntegration, PrimitiveCertificates) {
         ASSERT_TRUE((installed.has_value())) << ("install a primitive candidate through the strategy API");
         if (!installed)
             continue;
-        auto result = integrator.integrate_def(*expression, "x", *integer(0), *integer(1));
-        ASSERT_TRUE((result.has_value())) << ("uncertified primitive leaves an unresolved integral");
-        if (!result)
-            continue;
-        expect_integral_node(result.value(), expression, integer(0), integer(1),
-                             "uncertified primitive preserves the entire original integral and bounds");
+        ComputationContext context;
+        auto result = integrator.integrate_def_checked(
+            *expression, "x", *integer(0), *integer(1), context);
+        ASSERT_TRUE(result) << "a certified polynomial primitive follows rejected candidates";
+        EXPECT_EQ(result.value().compare(SymbolicExpr::number(Rational(1, 3))), 0);
     }
 }
 
@@ -161,7 +165,8 @@ TEST(LmcasDefiniteIntegration, RegularIntegrals) {
     const auto a = SymbolicExpr::variable("a");
     const auto b = SymbolicExpr::variable("b");
     Integrator integrator;
-    auto result = integrator.integrate_def(*x, "x", *a, *b);
+    ComputationContext context;
+    auto result = integrator.integrate_def_checked(*x, "x", *a, *b, context);
     ASSERT_TRUE((result.has_value())) << ("polynomial symbolic bounds remain supported");
     if (result) {
         auto value = evaluate_numeric(result.value(), {{"a", 2.0}, {"b", 4.0}});

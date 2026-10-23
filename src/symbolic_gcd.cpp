@@ -4,6 +4,7 @@
 #include "internal/symbolic_ast.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/multivariate_conversion.hpp"
+#include "internal/rewrite_budget.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -222,18 +223,19 @@ Result<MultiPoly> power_to_polynomial(
 
 Result<std::shared_ptr<SymbolicExpr>> polynomial_term_to_expression(
     const Monomial& monomial, const Rational& coefficient,
-    const MultiPoly& polynomial, ComputationContext& context) {
-    auto step = context.consume_steps(1, kOperation);
+    const MultiPoly& polynomial, detail::RewriteBudget& budget) {
+    auto step = budget.context().consume_steps(1, kOperation);
     if (!step) { return Result<std::shared_ptr<SymbolicExpr>>::failure(step.error()); }
 
     auto factors = detail::multipoly_term_factors(
         monomial, coefficient, polynomial.variables());
-    auto reserve = context.reserve_nodes(factors.size() * 2 + 1, kOperation);
-    if (!reserve) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(reserve.error());
+    std::size_t nodes = 0;
+    for (const auto& factor : factors) {
+        nodes = budget.append_size(nodes, budget.measure(detail::node(factor)));
     }
-    return Result<std::shared_ptr<SymbolicExpr>>::success(
-        detail::multiply_expression_factors(factors));
+    auto result = detail::multiply_expression_factors(factors);
+    budget.measure(detail::node(result));
+    return Result<std::shared_ptr<SymbolicExpr>>::success(std::move(result));
 }
 
 Result<MultiPoly> node_to_multivariate_polynomial(
@@ -300,30 +302,28 @@ MultiPoly make_monic(const MultiPoly& polynomial) {
 
 Result<std::shared_ptr<SymbolicExpr>> multivariate_polynomial_to_expression(
     const MultiPoly& polynomial,
-    ComputationContext& context) {
+    detail::RewriteBudget& budget) {
     if (polynomial.is_zero()) {
-        auto nodes = context.reserve_nodes(1, kOperation);
-        if (!nodes) { return Result<std::shared_ptr<SymbolicExpr>>::failure(nodes.error()); }
+        budget.require_nodes(1);
         return Result<std::shared_ptr<SymbolicExpr>>::success(
             SymbolicExpr::number(0));
     }
 
     std::vector<std::shared_ptr<SymbolicExpr>> terms;
     terms.reserve(polynomial.terms().size());
+    std::size_t nodes = 0;
     for (const auto& [monomial, coefficient] : polynomial.terms()) {
         auto term = polynomial_term_to_expression(
-            monomial, coefficient, polynomial, context);
+            monomial, coefficient, polynomial, budget);
         if (!term) { return term; }
+        nodes = budget.append_size(nodes, budget.measure(detail::node(term.value())));
         terms.push_back(std::move(term.value()));
     }
 
-    auto reserve = context.reserve_nodes(terms.size(), kOperation);
-    if (!reserve) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(reserve.error());
-    }
     auto expression = terms.front();
     for (std::size_t index = 1; index < terms.size(); ++index) {
         expression = SymbolicExpr::add(expression, terms[index]);
+        budget.measure(detail::node(expression));
     }
     return Result<std::shared_ptr<SymbolicExpr>>::success(std::move(expression));
 }
@@ -365,6 +365,10 @@ SymbolicGcdResult symbolic_polynomial_gcd(
     const SymbolicExpr& rhs,
     ComputationContext& context) {
     try {
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                     context.limits().max_ast_nodes, kOperation);
+        budget.measure(detail::node(lhs));
+        budget.measure(detail::node(rhs));
         std::set<std::string> variable_set;
         auto lhs_variables = collect_polynomial_variables(
             detail::node(lhs), variable_set, context);
@@ -392,7 +396,11 @@ SymbolicGcdResult symbolic_polynomial_gcd(
         auto verified = verify_gcd_candidate(
             lhs_polynomial.value(), rhs_polynomial.value(), gcd);
         if (!verified) { return SymbolicGcdResult::failure(verified.error()); }
-        return multivariate_polynomial_to_expression(gcd, context);
+        return multivariate_polynomial_to_expression(gcd, budget);
+    } catch (const CasError& error) {
+        return SymbolicGcdResult::failure(error);
+    } catch (const std::length_error& error) {
+        return SymbolicGcdResult::failure(CasErrc::ResourceLimit, error.what(), kOperation);
     } catch (const std::bad_alloc&) {
         return SymbolicGcdResult::failure(
             CasErrc::ResourceLimit, "symbolic GCD allocation failed", kOperation);
@@ -406,6 +414,9 @@ Result<Rational> symbolic_polynomial_content(
     const SymbolicExpr& expression,
     ComputationContext& context) {
     try {
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                     context.limits().max_ast_nodes, kOperation);
+        budget.measure(detail::node(expression));
         std::set<std::string> variable_set;
         auto variables_result = collect_polynomial_variables(
             detail::node(expression), variable_set, context);
@@ -420,6 +431,10 @@ Result<Rational> symbolic_polynomial_content(
             return Result<Rational>::failure(polynomial.error());
         }
         return Result<Rational>::success(polynomial.value().numeric_content());
+    } catch (const CasError& error) {
+        return Result<Rational>::failure(error);
+    } catch (const std::length_error& error) {
+        return Result<Rational>::failure(CasErrc::ResourceLimit, error.what(), kOperation);
     } catch (const std::bad_alloc&) {
         return Result<Rational>::failure(
             CasErrc::ResourceLimit, "polynomial content allocation failed",

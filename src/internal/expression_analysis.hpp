@@ -30,6 +30,9 @@ constexpr RelationOp reversed_relation(RelationOp op) noexcept {
 Result<Polynomial<SymbolicPolyCoeff>> symbolic_to_poly_checked(
     const SymbolicExpr& expression, const std::string& variable,
     ComputationContext& context);
+std::vector<std::shared_ptr<SymbolicExpr>> make_rootof_solutions_impl(
+    const Polynomial<SymbolicPolyCoeff>& polynomial,
+    const std::string& variable, ComputationContext& context);
 
 struct AffineForm {
     std::shared_ptr<SymbolicExpr> slope;
@@ -40,7 +43,8 @@ Result<std::optional<AffineForm>> recognize_affine(
     ComputationContext& context);
 
 bool is_imaginary_unit_name(const std::string& name);
-std::set<std::string> all_variable_names(const SymbolicNodePtr& expression);
+std::set<std::string> all_variable_names(
+    const SymbolicNodePtr& expression, RewriteBudget* budget = nullptr);
 }
 LMCAS_API std::set<std::string> free_variables(
     const detail::SymbolicNodePtr& expression,

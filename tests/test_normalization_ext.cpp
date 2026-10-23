@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 /**
  * @file test_normalization_ext.cpp
  * @brief 测试 NormalizationVisitor 对新节点类型的规范化功能。
@@ -16,7 +17,10 @@
 using namespace LMCAS;
 
 static std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const SymbolicNode> &node) {
-    NormalizationVisitor v;
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    NormalizationVisitor v(transform_budget, detail::no_facts(), Domain::Real);
     node->accept(v);
     return v.get_result();
 }
@@ -65,9 +69,8 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
             }
         }
     }
-    auto exact_reciprocal = SymbolicExpr::power(
-                                SymbolicExpr::number(10), SymbolicExpr::number(-3))
-                                ->simplify();
+    auto exact_reciprocal = LMCAS::simplify(SymbolicExpr::power(
+                                SymbolicExpr::number(10), SymbolicExpr::number(-3))).value();
     EXPECT_TRUE((LMCAS::structurally_equal(
         *exact_reciprocal, *SymbolicExpr::number(Rational(1, 1000)))))
         << "exact negative powers retain exact rational results";
@@ -75,7 +78,7 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
         SymbolicExpr::number(-1.0 - 1e-13), SymbolicExpr::number(Rational(1, 2)));
     auto perturbed_square = SymbolicExpr::power(perturbed_root, SymbolicExpr::number(2));
     EXPECT_TRUE((LMCAS::structurally_equal(
-        *perturbed_square->simplify(), *perturbed_square)))
+        *LMCAS::simplify(perturbed_square).value(), *perturbed_square)))
         << "a nearby negative base is not classified as the imaginary unit";
 }
 
@@ -107,7 +110,12 @@ TEST(NormalizationExt, NonnegativeAssumptionsPreserveNearbyNonSquareExponents) {
         FunctionNode::FuncType::Sqrt,
         std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(near_square)});
     auto root_expression = LMCAS::detail::expression_from_node(root_function);
-    auto assumed_root = assumptions.simplify(root_expression);
+    ComputationContext context;
+    ASSERT_TRUE(context.set_assumptions(std::make_shared<AssumptionContext>(assumptions)));
+    auto assumed = LMCAS::simplify(
+        std::make_shared<SymbolicExpr>(root_expression), context);
+    ASSERT_TRUE(assumed);
+    auto assumed_root = assumed.value();
     auto assumed_value = LMCAS::evaluate_numeric(*assumed_root, {{"root_base", 1e100}});
     EXPECT_TRUE((assumed_value &&
                  assumed_value.value().value == std::sqrt(std::pow(1e100, near_two))))

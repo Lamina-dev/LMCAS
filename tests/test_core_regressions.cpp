@@ -1,3 +1,4 @@
+#include "expr.hpp"
 // Cross-component regression contracts for previously corrected defects.
 // Each section exercises an observable boundary or invariant.
 
@@ -239,7 +240,7 @@ TEST(CoreRegressions, FactorConversionErrorsPropagate) {
     const auto unchanged = unsupported->factor_checked();
     ASSERT_TRUE(unchanged.has_value()) << "unsupported rational coefficients remain a strategy miss";
     const auto actual_expr = unchanged.value();
-    const auto expected_expr = unsupported->simplify();
+    const auto expected_expr = LMCAS::simplify(unsupported).value();
     ASSERT_TRUE(actual_expr);
     ASSERT_TRUE(expected_expr);
     EXPECT_EQ(actual_expr->to_string(), expected_expr->to_string())

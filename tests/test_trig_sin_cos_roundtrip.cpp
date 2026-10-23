@@ -1,6 +1,7 @@
-
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "integration.hpp"
+#include "residual_verification.hpp"
 #include "bigint.hpp"
 
 #include <cmath>
@@ -66,8 +67,8 @@ void compare_roundtrip_samples(
     const std::shared_ptr<SymbolicExpr> &result, PairReport &rep) {
     for (double xv : sample_points()) {
         auto x_val = SymbolicExpr::number(xv);
-        auto integrand_at = integrand_simp->substitute(kVarName, x_val);
-        auto deriv_at = deriv_simp->substitute(kVarName, x_val);
+        auto integrand_at = LMCAS::substitute(integrand_simp, kVarName, x_val).value();
+        auto deriv_at = LMCAS::substitute(deriv_simp, kVarName, x_val).value();
         if (!integrand_at || !deriv_at) {
             rep.failed = true;
             std::ostringstream oss;
@@ -76,8 +77,8 @@ void compare_roundtrip_samples(
             rep.detail = oss.str();
             return;
         }
-        integrand_at = integrand_at->simplify();
-        deriv_at = deriv_at->simplify();
+        integrand_at = LMCAS::simplify(integrand_at).value();
+        deriv_at = LMCAS::simplify(deriv_at).value();
 
         auto pv = test_numeric_eval(integrand_at);
         auto dv = test_numeric_eval(deriv_at);
@@ -117,7 +118,8 @@ PairReport verify_pair(const BigInt &m, const BigInt &n) {
     }
 
     Integrator integ;
-    auto integrated = integ.integrate(*integrand, kVarName);
+    ComputationContext context;
+    auto integrated = integ.integrate_checked(*integrand, kVarName, context);
     if (!integrated) {
         rep.failed = true;
         rep.detail = std::string("integration failed: ") + integrated.error().message;
@@ -132,18 +134,24 @@ PairReport verify_pair(const BigInt &m, const BigInt &n) {
         return rep;
     }
 
-    auto deriv = result->differentiate(kVarName);
+    auto deriv = LMCAS::differentiate(result, kVarName).value();
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
         return rep;
     }
-    auto deriv_simp = deriv->simplify();
+    auto proof = check_equivalent(deriv, integrand, context);
+    if (!proof || !std::holds_alternative<ProvedZeroResidual>(proof.value())) {
+        rep.failed = true;
+        rep.detail = proof ? "derivative residual was not proved zero" : proof.error().message;
+        return rep;
+    }
+    auto deriv_simp = LMCAS::simplify(deriv).value();
     if (!deriv_simp) {
         deriv_simp = deriv;
     }
 
-    auto integrand_simp = integrand->simplify();
+    auto integrand_simp = LMCAS::simplify(integrand).value();
     if (!integrand_simp) {
         integrand_simp = integrand;
     }

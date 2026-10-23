@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 /**
  * @file complex_analysis.cpp
@@ -196,7 +198,7 @@ static ExpressionResult cauchy_integral_impl(
     int, ComputationContext&);
 static bool is_analytic_impl(
     const std::shared_ptr<SymbolicExpr>&,
-    const std::string&);
+    const std::string&, ComputationContext& context);
 
 ExpressionResult calculate_residue_checked(
     const std::shared_ptr<SymbolicExpr>& f,
@@ -250,7 +252,9 @@ static ExpressionResult calculate_residue_impl(
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
     int order,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (order < 1) return SymbolicExpr::number(0);
     
     auto var_z = SymbolicExpr::variable(z);
@@ -260,7 +264,7 @@ static ExpressionResult calculate_residue_impl(
     auto F = SymbolicExpr::multiply(pow_term, f);
     
     for (int i = 0; i < order - 1; i++) {
-        F = F->differentiate(z);
+        F = detail::make_expression_ptr(detail::differentiate_node(detail::node(F), z, transform_budget));
     }
     
     auto fact = BigInt::factorial_checked(BigInt(order - 1), context);
@@ -270,6 +274,14 @@ static ExpressionResult calculate_residue_impl(
     
     return limit_expression_checked(
         F, z, z0, LimitDirection::Both, context, Domain::Complex);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "calculate_residue_impl");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "calculate_residue_impl");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "calculate_residue_impl");
 }
 
 ExpressionResult cauchy_integral_checked(
@@ -322,17 +334,19 @@ static ExpressionResult cauchy_integral_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& z,
     const std::shared_ptr<SymbolicExpr>& z0,
-    int n, ComputationContext& context) {
+    int n, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     
     /// n is the power in the denominator: \oint f(z)/(z-z0)^n dz
     if (n < 1) return SymbolicExpr::number(0);
     
     auto deriv = f;
     for (int i = 0; i < n - 1; i++) {
-        deriv = deriv->differentiate(z);
+        deriv = detail::make_expression_ptr(detail::differentiate_node(detail::node(deriv), z, transform_budget));
     }
     
-    auto f_n_minus_1_z0 = deriv->substitute(z, z0);
+    auto f_n_minus_1_z0 = detail::make_expression_ptr(detail::substitute_node(detail::node(deriv), z, detail::node(z0), transform_budget));
     
     auto fact = BigInt::factorial_checked(BigInt(n - 1), context);
     if (!fact) return ExpressionResult::failure(fact.error());
@@ -349,17 +363,28 @@ static ExpressionResult cauchy_integral_impl(
     
     auto two_pi_i = SymbolicExpr::multiply(SymbolicExpr::number(2), SymbolicExpr::multiply(pi_expr, i_expr));
     
-    return SymbolicExpr::multiply(two_pi_i, term)->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(two_pi_i, term)), transform_budget));
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "cauchy_integral_impl");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "cauchy_integral_impl");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "cauchy_integral_impl");
 }
 
 std::shared_ptr<SymbolicExpr> analytic_continuation(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string&) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     /// Basic analytic continuation via symbolic simplification
     /// Simplification often reduces locally defined series (if represented)
     /// to their global analytic forms (e.g. geometric series).
     if (!f) return f;
-    return f->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(f), transform_budget));
 }
 
 namespace {
@@ -388,7 +413,10 @@ std::optional<int> bounded_complex_power(
 /// 仅处理加法、乘法、数值与 ComplexNode 组合；其余子表达式视为实值。
 void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
                      std::shared_ptr<SymbolicExpr>& re,
-                     std::shared_ptr<SymbolicExpr>& im) {
+                     std::shared_ptr<SymbolicExpr>& im, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     re = SymbolicExpr::number(0);
     im = SymbolicExpr::number(0);
     if (!node) return;
@@ -402,12 +430,12 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
         for (const auto& op : add->operands()) {
             std::shared_ptr<SymbolicExpr> r2, i2;
-            split_real_imag(op, r2, i2);
+            split_real_imag(op, r2, i2, context);
             re = SymbolicExpr::add(re, r2);
             im = SymbolicExpr::add(im, i2);
         }
-        re = re->simplify();
-        im = im->simplify();
+        re = detail::make_expression_ptr(detail::normalize_node(detail::node(re), transform_budget));
+        im = detail::make_expression_ptr(detail::normalize_node(detail::node(im), transform_budget));
         return;
     }
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
@@ -416,13 +444,13 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
         std::shared_ptr<SymbolicExpr> accI = SymbolicExpr::number(0);
         for (const auto& op : mul->operands()) {
             std::shared_ptr<SymbolicExpr> r2, i2;
-            split_real_imag(op, r2, i2);
+            split_real_imag(op, r2, i2, context);
             auto ac = SymbolicExpr::multiply(accR, r2);
             auto bd = SymbolicExpr::multiply(accI, i2);
             auto ad = SymbolicExpr::multiply(accR, i2);
             auto bc = SymbolicExpr::multiply(accI, r2);
-            accR = SymbolicExpr::add(ac, SymbolicExpr::multiply(SymbolicExpr::number(-1), bd))->simplify();
-            accI = SymbolicExpr::add(ad, bc)->simplify();
+            accR = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(ac, SymbolicExpr::multiply(SymbolicExpr::number(-1), bd))), transform_budget));
+            accI = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(ad, bc)), transform_budget));
         }
         re = accR;
         im = accI;
@@ -432,7 +460,7 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
         /// 对整数次幂，展开为重复乘法以分离实/虚部。
         auto exponent = bounded_complex_power(pw->exponent());
         std::shared_ptr<SymbolicExpr> baseR, baseI;
-        split_real_imag(pw->base(), baseR, baseI);
+        split_real_imag(pw->base(), baseR, baseI, context);
         bool base_real = LMCAS::detail::node(baseI) && LMCAS::detail::node(baseI)->is_zero();
         if (exponent && !base_real) {
             /// (a+bi)^e via repeated complex multiplication
@@ -443,8 +471,8 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
                 auto bd = SymbolicExpr::multiply(accI, baseI);
                 auto ad = SymbolicExpr::multiply(accR, baseI);
                 auto bc = SymbolicExpr::multiply(accI, baseR);
-                accR = SymbolicExpr::add(ac, SymbolicExpr::multiply(SymbolicExpr::number(-1), bd))->simplify();
-                accI = SymbolicExpr::add(ad, bc)->simplify();
+                accR = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(ac, SymbolicExpr::multiply(SymbolicExpr::number(-1), bd))), transform_budget));
+                accI = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(ad, bc)), transform_budget));
             }
             re = accR; im = accI;
             return;
@@ -468,7 +496,9 @@ void split_real_imag(const std::shared_ptr<const SymbolicNode>& node,
 } // namespace
 
 ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
-                                    ComputationContext& context) {
+                                    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "real_part";
     auto input = validate_complex_expr_input(expr, context, operation);
     if (!input) return ExpressionResult::failure(input.error());
@@ -480,14 +510,22 @@ ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     }
 
     std::shared_ptr<SymbolicExpr> re, im;
-    split_real_imag(LMCAS::detail::node(expr), re, im);
-    auto simplified = re ? re->simplify() : nullptr;
+    split_real_imag(LMCAS::detail::node(expr), re, im, context);
+    auto simplified = re ? detail::make_expression_ptr(detail::normalize_node(detail::node(re), transform_budget)) : nullptr;
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "real part construction failed",
                                           operation);
     }
     return ExpressionResult::success(simplified);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "real_part");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "real_part");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "real_part");
 }
 
 ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
@@ -497,7 +535,9 @@ ExpressionResult real_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
 
 
 ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
-                                    ComputationContext& context) {
+                                    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "imag_part";
     auto input = validate_complex_expr_input(expr, context, operation);
     if (!input) return ExpressionResult::failure(input.error());
@@ -509,14 +549,22 @@ ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr,
     }
 
     std::shared_ptr<SymbolicExpr> re, im;
-    split_real_imag(LMCAS::detail::node(expr), re, im);
-    auto simplified = im ? im->simplify() : nullptr;
+    split_real_imag(LMCAS::detail::node(expr), re, im, context);
+    auto simplified = im ? detail::make_expression_ptr(detail::normalize_node(detail::node(im), transform_budget)) : nullptr;
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "imaginary part construction failed",
                                           operation);
     }
     return ExpressionResult::success(simplified);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "imag_part");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "imag_part");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "imag_part");
 }
 
 ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
@@ -526,7 +574,9 @@ ExpressionResult imag_part_checked(const std::shared_ptr<SymbolicExpr>& expr) {
 
 
 ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
-                                    ComputationContext& context) {
+                                    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "conjugate";
     auto input = validate_complex_expr_input(expr, context, operation);
     if (!input) return ExpressionResult::failure(input.error());
@@ -538,16 +588,16 @@ ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
     }
 
     std::shared_ptr<SymbolicExpr> re, im;
-    split_real_imag(LMCAS::detail::node(expr), re, im);
+    split_real_imag(LMCAS::detail::node(expr), re, im, context);
     /// conj(a+bi) = a - bi
-    auto neg_im = SymbolicExpr::multiply(SymbolicExpr::number(-1), im)->simplify();
+    auto neg_im = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(SymbolicExpr::number(-1), im)), transform_budget));
     if (!re || !LMCAS::detail::node(re) || !neg_im || !LMCAS::detail::node(neg_im)) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "conjugate construction failed",
                                           operation);
     }
     if (LMCAS::detail::node(neg_im) && LMCAS::detail::node(neg_im)->is_zero()) {
-        auto simplified_re = re->simplify();
+        auto simplified_re = detail::make_expression_ptr(detail::normalize_node(detail::node(re), transform_budget));
         if (!simplified_re || !LMCAS::detail::node(simplified_re)) {
             return ExpressionResult::failure(CasErrc::InternalInvariant,
                                               "conjugate construction failed",
@@ -556,13 +606,21 @@ ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr,
         return ExpressionResult::success(simplified_re);
     }
     auto cn = SymbolicFactory::create_complex(
-        LMCAS::detail::node(re->simplify()), LMCAS::detail::node(neg_im));
+        detail::normalize_node(detail::node(re), transform_budget), LMCAS::detail::node(neg_im));
     if (!cn) {
         return ExpressionResult::failure(CasErrc::InternalInvariant,
                                           "conjugate construction failed",
                                           operation);
     }
     return ExpressionResult::success(LMCAS::detail::make_expression_ptr(cn));
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "conjugate");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "conjugate");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "conjugate");
 }
 
 ExpressionResult conjugate_checked(const std::shared_ptr<SymbolicExpr>& expr) {
@@ -591,15 +649,15 @@ ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
         }
         auto budget = context.consume_steps(24, operation);
         if (!budget) return ComplexBoolResult::failure(budget.error());
-        return ComplexBoolResult::success(is_analytic_impl(f, z));
-    } catch (const detail::UnsupportedDifferentiation& ex) {
-        return ComplexBoolResult::failure(CasErrc::Inconclusive,
-                                          ex.what(),
-                                          operation);
+        return ComplexBoolResult::success(is_analytic_impl(f, z, context));
+    } catch (const CasError& error) {
+        return ComplexBoolResult::failure(error);
     } catch (const std::bad_alloc&) {
         return ComplexBoolResult::failure(CasErrc::ResourceLimit,
                                           "allocation failed while checking analyticity",
                                           operation);
+    } catch (const std::length_error& error) {
+        return ComplexBoolResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& ex) {
         return ComplexBoolResult::failure(CasErrc::InternalInvariant,
                                           ex.what(),
@@ -615,14 +673,20 @@ ComplexBoolResult is_analytic_checked(const std::shared_ptr<SymbolicExpr>& f,
 
 static std::shared_ptr<SymbolicExpr> differentiate_if_dependent(
     const std::shared_ptr<SymbolicExpr>& expression,
-    const std::string& variable) {
+    const std::string& variable, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!expression_depends_on_variable(detail::node(expression), variable)) {
         return SymbolicExpr::number(0);
     }
-    return expression->differentiate(variable);
+    return detail::make_expression_ptr(detail::differentiate_node(detail::node(expression), variable, transform_budget));
 }
 
-static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::string& z) {
+static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::string& z, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!f) return false;
     /// 将 z 替换为 (z_re + i·z_im)，分离 u、v，检验 Cauchy-Riemann。
     std::string xr = z + "_re";
@@ -635,21 +699,21 @@ static bool is_analytic_impl(const std::shared_ptr<SymbolicExpr>& f, const std::
             LMCAS::detail::node(SymbolicExpr::number(1))));
     auto z_sub = SymbolicExpr::add(zr, SymbolicExpr::multiply(i_unit, zi));
 
-    auto fz = f->substitute(z, z_sub);
+    auto fz = detail::make_expression_ptr(detail::substitute_node(detail::node(f), z, detail::node(z_sub), transform_budget));
     if (!fz) return false;
-    fz = fz->simplify();
+    fz = detail::make_expression_ptr(detail::normalize_node(detail::node(fz), transform_budget));
 
     std::shared_ptr<SymbolicExpr> u, v;
-    split_real_imag(LMCAS::detail::node(fz), u, v);
+    split_real_imag(LMCAS::detail::node(fz), u, v, context);
 
-    auto ux = differentiate_if_dependent(u, xr);
-    auto uy = differentiate_if_dependent(u, xi);
-    auto vx = differentiate_if_dependent(v, xr);
-    auto vy = differentiate_if_dependent(v, xi);
+    auto ux = differentiate_if_dependent(u, xr, context);
+    auto uy = differentiate_if_dependent(u, xi, context);
+    auto vx = differentiate_if_dependent(v, xr, context);
+    auto vy = differentiate_if_dependent(v, xi, context);
 
     /// CR1: ux - vy == 0 ; CR2: uy + vx == 0
-    auto cr1 = SymbolicExpr::add(ux, SymbolicExpr::multiply(SymbolicExpr::number(-1), vy))->simplify();
-    auto cr2 = SymbolicExpr::add(uy, vx)->simplify();
+    auto cr1 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(ux, SymbolicExpr::multiply(SymbolicExpr::number(-1), vy))), transform_budget));
+    auto cr2 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(uy, vx)), transform_budget));
 
     return LMCAS::detail::node(cr1) && LMCAS::detail::node(cr1)->is_zero() && LMCAS::detail::node(cr2) && LMCAS::detail::node(cr2)->is_zero();
 }

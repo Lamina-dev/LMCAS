@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/transform_support.hpp"
 #include "internal/normalization_utils.hpp"
 #include <exception>
@@ -125,38 +126,47 @@ static std::vector<std::shared_ptr<SymbolicExpr>> zt_roc(
 
 static std::shared_ptr<SymbolicExpr> zt_polynomial(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& n,
-    const std::shared_ptr<SymbolicExpr>& z, const std::string& z_var) {
+    const std::shared_ptr<SymbolicExpr>& z, const std::string& z_var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto pattern = zt_polynomial_pattern(f, n);
     if (pattern == ZPolynomialPattern::None) return nullptr;
     if (pattern == ZPolynomialPattern::Cubic) {
         auto square = SymbolicExpr::power(SymbolicExpr::variable(n), SymbolicExpr::number(2));
-        auto quadratic = zt_polynomial(square, n, z, z_var);
-        return SymbolicExpr::multiply(
+        auto quadratic = zt_polynomial(square, n, z, z_var, context);
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
             SymbolicExpr::multiply(SymbolicExpr::number(-1), z),
-            quadratic->differentiate(z_var))->simplify();
+            detail::make_expression_ptr(detail::differentiate_node(detail::node(quadratic), z_var, transform_budget)))), transform_budget));
     }
     auto denominator = SymbolicExpr::power(SymbolicExpr::add(z, SymbolicExpr::number(-1)),
         SymbolicExpr::number(pattern == ZPolynomialPattern::Linear ? 2 : 3));
     auto numerator = pattern == ZPolynomialPattern::Linear ? z : SymbolicExpr::multiply(z,
         SymbolicExpr::add(z, SymbolicExpr::number(1)));
-    return SymbolicExpr::divide(numerator, denominator)->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(numerator, denominator)), transform_budget));
 }
 
 static std::shared_ptr<SymbolicExpr> zt_exponential(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& n,
-    const std::shared_ptr<SymbolicExpr>& z) {
+    const std::shared_ptr<SymbolicExpr>& z, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::shared_ptr<SymbolicExpr> base;
     const bool plain = zt_is_exp_seq(f, n, base);
     if (!plain && !zt_is_weighted_exp(f, n, base)) return nullptr;
     auto difference = SymbolicExpr::add(z, SymbolicExpr::multiply(SymbolicExpr::number(-1), base));
-    if (plain) return SymbolicExpr::divide(z, difference)->simplify();
+    if (plain) return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(z, difference)), transform_budget));
     auto denominator = SymbolicExpr::power(difference, SymbolicExpr::number(2));
-    return SymbolicExpr::divide(SymbolicExpr::multiply(base, z), denominator)->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(SymbolicExpr::multiply(base, z), denominator)), transform_budget));
 }
 
 static std::shared_ptr<SymbolicExpr> zt_trigonometric(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& n,
-    const std::shared_ptr<SymbolicExpr>& z) {
+    const std::shared_ptr<SymbolicExpr>& z, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     bool is_sin = false;
     std::shared_ptr<SymbolicExpr> frequency;
     if (!te_is_trig(f, n, is_sin, frequency)) return nullptr;
@@ -166,7 +176,7 @@ static std::shared_ptr<SymbolicExpr> zt_trigonometric(
         SymbolicExpr::power(z, SymbolicExpr::number(2)), cross), SymbolicExpr::number(1));
     auto factor = is_sin ? SymbolicExpr::sin(frequency) : SymbolicExpr::add(z,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), cosine));
-    return SymbolicExpr::divide(SymbolicExpr::multiply(z, factor), denominator)->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(SymbolicExpr::multiply(z, factor), denominator)), transform_budget));
 }
 
 static std::shared_ptr<SymbolicExpr> zt_unevaluated(
@@ -195,6 +205,8 @@ static std::shared_ptr<SymbolicExpr> zt_sum(
 static std::shared_ptr<SymbolicExpr> z_transform_core(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& n,
     const std::string& z, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto step = context.consume_steps(1, "z_transform.recursive");
     if (!step) {
         return nullptr;
@@ -211,22 +223,22 @@ static std::shared_ptr<SymbolicExpr> z_transform_core(
     if (!coefficient->is_one()) {
         auto transformed = z_transform_core(body, n, z, context);
         if (transformed) {
-            return SymbolicExpr::multiply(coefficient, transformed)->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(coefficient, transformed)), transform_budget));
         }
     }
     if (!te_depends_on(f, n)) {
         auto denominator = SymbolicExpr::add(zv, SymbolicExpr::number(-1));
-        return SymbolicExpr::multiply(f, SymbolicExpr::divide(zv, denominator))->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(f, SymbolicExpr::divide(zv, denominator))), transform_budget));
     }
-    auto polynomial = zt_polynomial(f, n, zv, z);
+    auto polynomial = zt_polynomial(f, n, zv, z, context);
     if (polynomial) {
         return polynomial;
     }
-    auto exponential = zt_exponential(f, n, zv);
+    auto exponential = zt_exponential(f, n, zv, context);
     if (exponential) {
         return exponential;
     }
-    auto trig = zt_trigonometric(f, n, zv);
+    auto trig = zt_trigonometric(f, n, zv, context);
     return trig ? trig : zt_unevaluated(f, n, z);
 }
 

@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/polynomial_solver_support.hpp"
 #include <algorithm>
 #include <cmath>
@@ -31,13 +32,13 @@ static bool quartic_coefficients_are_numeric(
 std::optional<NumericQuarticDepression> numeric_quartic_depression(
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
     const std::shared_ptr<SymbolicExpr>& c, const std::shared_ptr<SymbolicExpr>& d,
-    const std::shared_ptr<SymbolicExpr>& e) {
+    const std::shared_ptr<SymbolicExpr>& e, ComputationContext& context) {
     const bool all_numeric = quartic_coefficients_are_numeric(a, b, c, d, e);
-    auto av = finite_numeric_value(a);
-    auto bv = finite_numeric_value(b);
-    auto cv = finite_numeric_value(c);
-    auto dv = finite_numeric_value(d);
-    auto ev = finite_numeric_value(e);
+    auto av = finite_numeric_value(a, context);
+    auto bv = finite_numeric_value(b, context);
+    auto cv = finite_numeric_value(c, context);
+    auto dv = finite_numeric_value(d, context);
+    auto ev = finite_numeric_value(e, context);
     if (!all_numeric || !av || !bv || !cv || !dv || !ev || *av == 0.0) {
         return std::nullopt;
     }
@@ -45,11 +46,12 @@ std::optional<NumericQuarticDepression> numeric_quartic_depression(
 }
 
 static std::optional<double> select_numeric_resolvent(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& cubic_roots) {
+    const std::vector<std::shared_ptr<SymbolicExpr>>& cubic_roots,
+    ComputationContext& context) {
     double m_val = 0.0;
     bool found_m = false;
     for (const auto& root : cubic_roots) {
-        auto maybe_val = finite_numeric_value(root);
+        auto maybe_val = finite_numeric_value(root, context);
         if (maybe_val && *maybe_val > 0.0 &&
             (!found_m || *maybe_val > m_val)) {
             m_val = *maybe_val;
@@ -58,7 +60,7 @@ static std::optional<double> select_numeric_resolvent(
     }
     if (!found_m) {
         for (const auto& root : cubic_roots) {
-            auto maybe_val = finite_numeric_value(root);
+            auto maybe_val = finite_numeric_value(root, context);
             if (maybe_val && *maybe_val != 0.0 &&
                 (!found_m ||
                  std::abs(*maybe_val) > std::abs(m_val))) {
@@ -74,11 +76,11 @@ static std::optional<double> select_numeric_resolvent(
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> shifted_biquadratic_roots(
-    double p_val, double r_val, double shift_val) {
+    double p_val, double r_val, double shift_val, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto u_roots = solve_quadratic_internal(
-        num(1),
-        SymbolicExpr::number(p_val),
-        SymbolicExpr::number(r_val));
+        num(1), SymbolicExpr::number(p_val), SymbolicExpr::number(r_val), context);
     if (u_roots.size() == 1) {
         u_roots.push_back(u_roots.front());
     }
@@ -87,16 +89,18 @@ static std::vector<std::shared_ptr<SymbolicExpr>> shifted_biquadratic_roots(
     auto shift_expr = SymbolicExpr::number(shift_val);
     for (const auto& u_root : u_roots) {
         auto square_root = SymbolicExpr::sqrt(u_root);
-        results.push_back(sub(square_root, shift_expr)->simplify());
+        results.push_back(detail::make_expression_ptr(detail::normalize_node(detail::node(sub(square_root, shift_expr)), transform_budget)));
         results.push_back(
-            sub(negate(square_root), shift_expr)->simplify());
+            detail::make_expression_ptr(detail::normalize_node(detail::node(sub(negate(square_root), shift_expr)), transform_budget)));
     }
     return results;
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> negative_resolvent_roots(
     double m_val, double p_normalized, double q_normalized,
-    double root_scale, double shift_val) {
+    double root_scale, double shift_val, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto shift_expr = SymbolicExpr::number(shift_val);
     auto scale_expr = SymbolicExpr::number(root_scale);
     auto p_expr = SymbolicExpr::number(p_normalized);
@@ -108,34 +112,35 @@ static std::vector<std::shared_ptr<SymbolicExpr>> negative_resolvent_roots(
     auto q_over_2s = SymbolicExpr::divide(
         q_expr, SymbolicExpr::multiply(num(2), s_expr));
     auto quad1_c_expr =
-        sub(m_plus_p_half, q_over_2s)->simplify();
+        detail::make_expression_ptr(detail::normalize_node(detail::node(sub(m_plus_p_half, q_over_2s)), transform_budget));
     auto quad2_c_expr =
-        SymbolicExpr::add(
-            m_plus_p_half, q_over_2s)->simplify();
-    auto y_roots1 = solve_quadratic_internal(
-        num(1), s_expr, quad1_c_expr);
-    auto y_roots2 = solve_quadratic_internal(
-        num(1), negate(s_expr), quad2_c_expr);
+        detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
+            m_plus_p_half, q_over_2s)), transform_budget));
+    auto y_roots1 = solve_quadratic_internal(num(1), s_expr, quad1_c_expr, context);
+    auto y_roots2 = solve_quadratic_internal(num(1), negate(s_expr), quad2_c_expr, context);
 
     std::vector<std::shared_ptr<SymbolicExpr>> results;
     for (const auto& y : y_roots1) {
         auto scaled_y =
-            SymbolicExpr::multiply(scale_expr, y)->simplify();
+            detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(scale_expr, y)), transform_budget));
         results.push_back(
-            sub(scaled_y, shift_expr)->simplify());
+            detail::make_expression_ptr(detail::normalize_node(detail::node(sub(scaled_y, shift_expr)), transform_budget)));
     }
     for (const auto& y : y_roots2) {
         auto scaled_y =
-            SymbolicExpr::multiply(scale_expr, y)->simplify();
+            detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(scale_expr, y)), transform_budget));
         results.push_back(
-            sub(scaled_y, shift_expr)->simplify());
+            detail::make_expression_ptr(detail::normalize_node(detail::node(sub(scaled_y, shift_expr)), transform_budget)));
     }
     return results;
 }
 
 static void append_resolvent_quadratic(
     std::vector<std::shared_ptr<SymbolicExpr>>& results,
-    double linear, double constant, double root_scale, double shift_val) {
+    double linear, double constant, double root_scale, double shift_val, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const double discriminant = linear * linear - 4.0 * constant;
     if (discriminant >= 0.0) {
         const double square_root = std::sqrt(discriminant);
@@ -147,16 +152,16 @@ static void append_resolvent_quadratic(
         const double real = -linear * root_scale / 2.0 - shift_val;
         const double imaginary = std::sqrt(-discriminant) * root_scale / 2.0;
         auto unit = SymbolicExpr::sqrt(num(-1));
-        results.push_back(SymbolicExpr::add(SymbolicExpr::number(real),
-            SymbolicExpr::multiply(SymbolicExpr::number(imaginary), unit))->simplify());
-        results.push_back(sub(SymbolicExpr::number(real),
-            SymbolicExpr::multiply(SymbolicExpr::number(imaginary), unit))->simplify());
+        results.push_back(detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(SymbolicExpr::number(real),
+            SymbolicExpr::multiply(SymbolicExpr::number(imaginary), unit))), transform_budget)));
+        results.push_back(detail::make_expression_ptr(detail::normalize_node(detail::node(sub(SymbolicExpr::number(real),
+            SymbolicExpr::multiply(SymbolicExpr::number(imaginary), unit))), transform_budget)));
     }
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> positive_resolvent_roots(
     double m_val, double p_normalized, double q_normalized,
-    double root_scale, double shift_val) {
+    double root_scale, double shift_val, ComputationContext& context) {
     const double s_val = std::sqrt(2.0 * m_val);
     const double quad1_c_val =
         m_val + p_normalized / 2.0 -
@@ -165,16 +170,17 @@ static std::vector<std::shared_ptr<SymbolicExpr>> positive_resolvent_roots(
         m_val + p_normalized / 2.0 +
         q_normalized / (2.0 * s_val);
     std::vector<std::shared_ptr<SymbolicExpr>> results;
-    append_resolvent_quadratic(results, s_val, quad1_c_val, root_scale, shift_val);
-    append_resolvent_quadratic(results, -s_val, quad2_c_val, root_scale, shift_val);
+    append_resolvent_quadratic(results, s_val, quad1_c_val, root_scale, shift_val, context);
+    append_resolvent_quadratic(results, -s_val, quad2_c_val, root_scale, shift_val, context);
     return results;
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> numeric_quartic_roots(
-    const NumericQuarticDepression& depression, const std::string& var) {
+    const NumericQuarticDepression& depression, const std::string& var,
+    ComputationContext& context) {
     const auto& [p_val, q_val, r_val, shift_val] = depression;
     if (q_val == 0.0) {
-        return shifted_biquadratic_roots(p_val, r_val, shift_val);
+        return shifted_biquadratic_roots(p_val, r_val, shift_val, context);
     }
     const double root_scale = std::max({
         std::sqrt(std::abs(p_val)),
@@ -190,24 +196,24 @@ std::vector<std::shared_ptr<SymbolicExpr>> numeric_quartic_roots(
     if (q_normalized == 0.0) {
         return {};
     }
-    auto cubic_roots = solve_cubic(
+    auto cubic_roots = solve_cubic_impl(
         SymbolicExpr::number(8.0),
         SymbolicExpr::number(8.0 * p_normalized),
         SymbolicExpr::number(
             2.0 * p_normalized * p_normalized -
             8.0 * r_normalized),
         SymbolicExpr::number(-(q_normalized * q_normalized)),
-        var);
-    auto selected = select_numeric_resolvent(cubic_roots);
+        var, context);
+    auto selected = select_numeric_resolvent(cubic_roots, context);
     if (!selected || *selected == 0.0) {
         return {};
     }
     if (*selected < 0.0) {
         return negative_resolvent_roots(
-            *selected, p_normalized, q_normalized, root_scale, shift_val);
+            *selected, p_normalized, q_normalized, root_scale, shift_val, context);
     }
     return positive_resolvent_roots(
-        *selected, p_normalized, q_normalized, root_scale, shift_val);
+        *selected, p_normalized, q_normalized, root_scale, shift_val, context);
 }
 
 }

@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_definite_support.hpp"
 #include "internal/assumption_facts.hpp"
 
@@ -25,16 +27,26 @@ Result<SymbolicExpr> unresolved_integral(const SymbolicExpr& expr,
 
 Result<SymbolicExpr> equal_endpoint_integral(const SymbolicExpr& expr,
     const std::string& var_name, const SymbolicExpr& lower, const SymbolicExpr& upper,
-    const DefiniteInterval& interval, ComputationContext& context) {
+    const DefiniteInterval& interval, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (interval.a.value().infinity) { return unresolved_integral(expr, var_name, lower, upper); }
     auto assumptions = real_assumptions(var_name, context);
     if (!assumptions) { return Result<SymbolicExpr>::failure(assumptions.error()); }
     detail::AssumptionFacts facts(assumptions.value());
-    auto value = expr.substitute(var_name, detail::make_expression_ptr(interval.lo));
+    auto value = detail::make_expression_ptr(detail::substitute_node(detail::node(expr), var_name, detail::node(interval.lo), transform_budget));
     auto defined = detail::query_definedness(detail::node(value), facts, Domain::Real, context);
     if (!defined) { return Result<SymbolicExpr>::failure(defined.error()); }
     if (defined.value() == Tribool::False) { return divergent<SymbolicExpr>(); }
     return defined.value() == Tribool::True ? Result<SymbolicExpr>(*SymbolicExpr::number(0)) : unresolved_integral(expr, var_name, lower, upper);
+} catch (const CasError& error) {
+    return Result<SymbolicExpr>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, "allocation failed", "equal_endpoint_integral");
+} catch (const std::length_error& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, error.what(), "equal_endpoint_integral");
+} catch (const std::exception& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::InternalInvariant, error.what(), "equal_endpoint_integral");
 }
 
 Result<Tribool> certify_partition(const SymbolicExpr& expr, const std::string& var_name,
@@ -83,7 +95,9 @@ Result<SymbolicExpr> integrate_segment_primitive(Integrator& integrator,
 Result<SymbolicExpr> accumulate_segments(Integrator& integrator, const SymbolicExpr& expr,
     const SymbolicExpr& value_expression, const std::string& var_name,
     const std::vector<SymbolicExpr>& partition, const std::optional<SymbolicExpr>& primitive,
-    bool reversed, ComputationContext& context) {
+    bool reversed, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     SymbolicExpr sum = *SymbolicExpr::number(0);
     int infinity = 0;
     for (std::size_t i = 1; i < partition.size(); ++i) {
@@ -105,7 +119,15 @@ Result<SymbolicExpr> accumulate_segments(Integrator& integrator, const SymbolicE
     }
     if (infinity) { return *SymbolicExpr::infinity(infinity * (reversed ? -1 : 1)); }
     if (reversed) { sum = *SymbolicExpr::multiply(SymbolicExpr::number(-1), detail::make_expression_ptr(sum)); }
-    return *sum.simplify();
+    return *detail::make_expression_ptr(detail::normalize_node(detail::node(sum), transform_budget));
+} catch (const CasError& error) {
+    return Result<SymbolicExpr>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, "allocation failed", "accumulate_segments");
+} catch (const std::length_error& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, error.what(), "accumulate_segments");
+} catch (const std::exception& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::InternalInvariant, error.what(), "accumulate_segments");
 }
 
 Result<SymbolicExpr> integrate_ordered_interval(Integrator& integrator, const SymbolicExpr& expr,
@@ -170,17 +192,16 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(const SymbolicExpr& expr,
             "integration endpoints must be independent of the integration variable", operation); }
     try {
         return integrate_interval_checked(*this, expr, var_name, lower, upper, context);
+    } catch (const CasError& error) {
+        return Result<SymbolicExpr>::failure(error);
     } catch (const std::bad_alloc&) {
         return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit,
             "definite integration allocation failed", operation);
+    } catch (const std::length_error& error) {
+        return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& error) {
         return Result<SymbolicExpr>::failure(CasErrc::InternalInvariant, error.what(), operation);
     }
 }
 
-Result<SymbolicExpr> Integrator::integrate_def(const SymbolicExpr& expr,
-    const std::string& var_name, const SymbolicExpr& lower, const SymbolicExpr& upper) {
-    ComputationContext context;
-    return integrate_def_checked(expr, var_name, lower, upper, context);
-}
 }

@@ -8,6 +8,10 @@
 #include "irrational.hpp"
 #include "multivariate_poly.hpp"
 #include "internal/normalization_utils.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/rewrite_budget.hpp"
+#include "internal/assumption_facts.hpp"
+#include "internal/facts_query.hpp"
 
 #include <algorithm>
 #include <exception>
@@ -41,12 +45,21 @@ class FormalResidual {
     struct Fraction { MultiPoly numerator; MultiPoly denominator; };
     using Node = detail::SymbolicNodePtr;
     ComputationContext& context_;
+    detail::RewriteBudget& budget_;
+    std::size_t canonical_nodes_ = 0;
     std::vector<Node> atoms_;
     std::vector<std::string> variables_;
     std::vector<std::optional<Rational>> radical_squares_;
     std::vector<Node> radical_radicands_;
-    std::vector<std::pair<Node, Node>> canonical_radicals_;
+    std::vector<std::pair<Node, Node>> canonical_atoms_;
     std::optional<CasError> failure_;
+    bool inexact_ = false;
+    struct Angle {
+        Node base;
+        Rational scale;
+        bool hyperbolic;
+    };
+    std::vector<Angle> angles_;
 
     bool checked(Result<void> result) {
         if (result) return true;
@@ -120,8 +133,7 @@ class FormalResidual {
                 return function->arguments()[0];
             }
         } else if (auto power = dynamic_cast<const PowerNode*>(node.get())) {
-            auto exponent = detail::matrix_kernel::exact_rational(
-                detail::make_expression_ptr(power->exponent()));
+            auto exponent = detail::exact_rational_value(power->exponent());
             if (exponent && *exponent == Rational(1, 2)) {
                 return power->base();
             }
@@ -130,10 +142,213 @@ class FormalResidual {
     }
     std::optional<Rational> radical_square(const Node& node) {
         const auto radicand = radical_radicand(node);
-        return radicand
-            ? detail::matrix_kernel::exact_rational(
-                  detail::make_expression_ptr(radicand))
-            : std::nullopt;
+        return radicand ? detail::exact_rational_value(radicand) : std::nullopt;
+    }
+    Node number(int value) {
+        budget_.require_nodes(1);
+        return SymbolicFactory::create_number(BigInt(value));
+    }
+    Node power(const Node& base, int exponent) {
+        auto degree = number(exponent);
+        normalization_check_children(&budget_, 1, base, degree);
+        return detail::make_node<PowerNode>(base, std::move(degree));
+    }
+    Node function(FunctionNode::FuncType type, const Node& argument) {
+        normalization_check_children(&budget_, 1, argument);
+        return detail::make_node<FunctionNode>(type, std::vector<Node>{argument});
+    }
+    Node product(std::vector<Node> operands) {
+        return SymbolicFactory::create_multiply(std::move(operands), &budget_);
+    }
+    Node sum(std::vector<Node> operands) {
+        return SymbolicFactory::create_add(std::move(operands), &budget_);
+    }
+    Node square_relation(const Node& node) {
+        if (auto radicand = radical_radicand(node)) { return radicand; }
+        const auto* fn = dynamic_cast<const FunctionNode*>(node.get());
+        if (!fn || fn->arguments().size() != 1) { return nullptr; }
+        using FT = FunctionNode::FuncType;
+        const auto& argument = fn->arguments()[0];
+        if (fn->type() == FT::Cos) {
+            return sum({number(1), product({
+                number(-1), power(function(FT::Sin, argument), 2)})});
+        }
+        if (fn->type() == FT::Cosh) {
+            return sum({number(1), power(function(FT::Sinh, argument), 2)});
+        }
+        if (fn->type() == FT::Abs) {
+            std::optional<detail::AssumptionFacts> assumed;
+            if (context_.assumptions()) { assumed.emplace(*context_.assumptions()); }
+            const auto& facts = assumed
+                ? static_cast<const FactsQuery&>(*assumed) : detail::no_facts();
+            auto real = detail::query_real_value(argument, facts, context_);
+            if (!real) { failure_ = real.error(); return nullptr; }
+            if (real.value() == Tribool::True) { return power(argument, 2); }
+        }
+        return nullptr;
+    }
+    bool register_replacement(const Node& node, Node replacement) {
+        budget_.measure(replacement);
+        if (contains_inexact_number(replacement) || !collect(replacement)) { return false; }
+        if (!checked(context_.require_expansion_terms(
+                atoms_.size() + canonical_atoms_.size() + 1, "residual.formal"))) {
+            return false;
+        }
+        canonical_nodes_ = budget_.append_size(canonical_nodes_, budget_.measure(replacement));
+        canonical_atoms_.emplace_back(node, std::move(replacement));
+        return true;
+    }
+    std::pair<Rational, Node> coefficient(const Node& argument) {
+        auto value = Rational(1);
+        const auto* mul = dynamic_cast<const MultiplyNode*>(argument.get());
+        if (!mul) { return {value, argument}; }
+        std::vector<Node> factors;
+        for (const auto& child : mul->operands()) {
+            if (auto exact = detail::exact_rational_value(child)) { value = value * *exact; }
+            else { factors.push_back(child); }
+        }
+        return {value, product(std::move(factors))};
+    }
+    void remember_angle(const FunctionNode& fn) {
+        using FT = FunctionNode::FuncType;
+        const bool hyperbolic = fn.type() == FT::Sinh || fn.type() == FT::Cosh ||
+            fn.type() == FT::Tanh;
+        if (fn.arguments().size() != 1 ||
+            (!hyperbolic && fn.type() != FT::Sin && fn.type() != FT::Cos &&
+             fn.type() != FT::Tan && fn.type() != FT::Cot &&
+             fn.type() != FT::Sec && fn.type() != FT::Csc)) { return; }
+        auto argument = detail::normalize_node(fn.arguments()[0], budget_);
+        if (contains_inexact_number(argument)) { inexact_ = true; return; }
+        auto [scale, base] = coefficient(argument);
+        if (scale < Rational(0)) { scale = -scale; }
+        if (scale.is_zero()) { return; }
+        for (const auto& angle : angles_) {
+            budget_.consume();
+            if (angle.hyperbolic == hyperbolic && angle.scale == scale &&
+                angle.base->equals(*base)) { return; }
+        }
+        if (!checked(context_.require_expansion_terms(angles_.size() + 1,
+                                                     "residual.formal"))) { return; }
+        canonical_nodes_ = budget_.append_size(canonical_nodes_, budget_.measure(base));
+        angles_.push_back({std::move(base), std::move(scale), hyperbolic});
+    }
+    class AngleCollector final : public detail::RecursiveSymbolicVisitor {
+        FormalResidual& owner_;
+    public:
+        explicit AngleCollector(FormalResidual& owner)
+            : RecursiveSymbolicVisitor(&owner.budget_), owner_(owner) {}
+        void visit(const FunctionNode& fn) override {
+            owner_.remember_angle(fn);
+            RecursiveSymbolicVisitor::visit(fn);
+        }
+    };
+    std::int64_t double_angle_multiple(
+        const Rational& scale, const Node& base, bool hyperbolic) {
+        std::int64_t multiple = 1;
+        for (const auto& angle : angles_) {
+            budget_.consume();
+            if (angle.hyperbolic != hyperbolic || !angle.base->equals(*base)) { continue; }
+            auto ratio = scale / angle.scale;
+            if (ratio.get_denominator() != BigInt(1)) { continue; }
+            auto integer = ratio.get_numerator().try_to_int64();
+            if (integer && *integer > multiple && *integer <= 1000 &&
+                (*integer & (*integer - 1)) == 0) { multiple = *integer; }
+        }
+        return multiple;
+    }
+    Node rewrite_radical(const Node& node) {
+        auto radicand = radical_radicand(node);
+        if (!radicand || detail::exact_rational_value(radicand)) { return nullptr; }
+        auto canonical = detail::expand_node(radicand, budget_);
+        if (contains_inexact_number(canonical)) { inexact_ = true; return nullptr; }
+        Node term = canonical;
+        if (const auto* add = dynamic_cast<const AddNode*>(canonical.get())) {
+            for (const auto& child : add->operands()) {
+                if (!dynamic_cast<const NumberNode*>(child.get())) { term = child; break; }
+            }
+        }
+        auto scale = coefficient(term).first;
+        if (scale < Rational(0)) { scale = -scale; }
+        if (scale.is_zero()) { return nullptr; }
+        if (scale != Rational(1)) {
+            canonical = detail::expand_node(product({
+                SymbolicFactory::create_number(Rational(1) / scale), canonical}), budget_);
+        }
+        if (scale == Rational(1) && canonical->equals(*radicand)) { return nullptr; }
+        auto half = SymbolicFactory::create_number(Rational(1, 2));
+        normalization_check_children(&budget_, 1, canonical, half);
+        auto radical = detail::make_node<PowerNode>(canonical, half);
+        if (scale == Rational(1)) { return radical; }
+        auto scalar = SymbolicFactory::create_number(scale);
+        normalization_check_children(&budget_, 1, scalar, half);
+        return product({detail::make_node<PowerNode>(scalar, half), radical});
+    }
+    Node rewrite_function(const FunctionNode& fn) {
+        if (fn.arguments().size() != 1) { return nullptr; }
+        using FT = FunctionNode::FuncType;
+        const auto& argument = fn.arguments()[0];
+        if (fn.type() == FT::Sqrt) {
+            auto half = SymbolicFactory::create_number(Rational(1, 2));
+            normalization_check_children(&budget_, 1, argument, half);
+            return detail::make_node<PowerNode>(argument, std::move(half));
+        }
+        if (fn.type() == FT::Tan || fn.type() == FT::Cot ||
+            fn.type() == FT::Sec || fn.type() == FT::Csc) {
+            auto sine = function(FT::Sin, argument);
+            auto cosine = function(FT::Cos, argument);
+            if (fn.type() == FT::Tan) { return product({sine, power(cosine, -1)}); }
+            if (fn.type() == FT::Cot) { return product({cosine, power(sine, -1)}); }
+            return power(fn.type() == FT::Sec ? cosine : sine, -1);
+        }
+        if (fn.type() == FT::Tanh) {
+            return product({function(FT::Sinh, argument),
+                            power(function(FT::Cosh, argument), -1)});
+        }
+        if (fn.type() != FT::Sin && fn.type() != FT::Cos &&
+            fn.type() != FT::Sinh && fn.type() != FT::Cosh &&
+            fn.type() != FT::Exp) { return nullptr; }
+        auto canonical = detail::normalize_node(argument, budget_);
+        if (contains_inexact_number(canonical)) { inexact_ = true; return nullptr; }
+        if (!canonical->equals(*argument)) { return function(fn.type(), canonical); }
+        if (fn.type() == FT::Exp) {
+            if (auto exact = detail::exact_rational_value(argument);
+                exact && exact->is_zero()) { return number(1); }
+            if (const auto* add = dynamic_cast<const AddNode*>(argument.get())) {
+                std::vector<Node> factors;
+                for (const auto& child : add->operands()) {
+                    factors.push_back(function(FT::Exp, child));
+                }
+                return product(std::move(factors));
+            }
+        }
+        auto [scale, base] = coefficient(argument);
+        auto integer = scale.get_denominator() == BigInt(1)
+            ? scale.get_numerator().try_to_int64() : std::optional<std::int64_t>{};
+        if (fn.type() == FT::Exp) {
+            if (integer && *integer != 1 && *integer >= -1000 && *integer <= 1000) {
+                return power(function(FT::Exp, base), static_cast<int>(*integer));
+            }
+            if (scale < Rational(0)) {
+                auto positive = product({SymbolicFactory::create_number(-scale), base});
+                return power(function(FT::Exp, positive), -1);
+            }
+            return nullptr;
+        }
+        const bool odd = fn.type() == FT::Sin || fn.type() == FT::Sinh;
+        if (scale < Rational(0)) {
+            auto positive = product({SymbolicFactory::create_number(-scale), base});
+            auto value = function(fn.type(), positive);
+            return odd ? product({number(-1), value}) : value;
+        }
+        const bool hyperbolic = fn.type() == FT::Sinh || fn.type() == FT::Cosh;
+        if (double_angle_multiple(scale, base, hyperbolic) == 1) { return nullptr; }
+        auto half = product({SymbolicFactory::create_number(scale / Rational(2)), base});
+        auto sine = function(hyperbolic ? FT::Sinh : FT::Sin, half);
+        auto cosine = function(hyperbolic ? FT::Cosh : FT::Cos, half);
+        if (odd) { return product({number(2), sine, cosine}); }
+        return hyperbolic
+            ? sum({power(cosine, 2), power(sine, 2)})
+            : sum({power(cosine, 2), product({number(-1), power(sine, 2)})});
     }
 
     bool register_atom(const Node& node, bool canonicalize_radicals) {
@@ -142,8 +357,8 @@ class FormalResidual {
             !dynamic_cast<const PowerNode*>(node.get()) &&
             !dynamic_cast<const RootOfNode*>(node.get())) { return false; }
         for (const auto& atom : atoms_) { if (atom->equals(*node)) { return true; } }
-        for (const auto& radical : canonical_radicals_)
-            { if (radical.first->equals(*node)) { return true; } }
+        for (const auto& atom : canonical_atoms_)
+            { if (atom.first->equals(*node)) { return true; } }
         return register_new_atom(node, canonicalize_radicals);
     }
     std::optional<bool> register_canonical_radical(
@@ -161,9 +376,6 @@ class FormalResidual {
             failure_ = root.error();
             return false;
         }
-        if (!checked(context_.reserve_nodes(5, "residual.formal"))) {
-            return false;
-        }
         auto canonical = detail::node(denominator == BigInt(1)
             ? root.value().to_symbolic()
             : (root.value() * Rational(BigInt(1), denominator)).to_symbolic());
@@ -172,22 +384,27 @@ class FormalResidual {
         }
         if (!collect(canonical, false) ||
             !checked(context_.require_expansion_terms(
-                atoms_.size() + canonical_radicals_.size() + 1,
+                atoms_.size() + canonical_atoms_.size() + 1,
                 "residual.formal"))) {
             return false;
         }
-        canonical_radicals_.emplace_back(node, std::move(canonical));
+        canonical_nodes_ = budget_.append_size(canonical_nodes_, budget_.measure(canonical));
+        canonical_atoms_.emplace_back(node, std::move(canonical));
         return true;
     }
 
     bool register_regular_atom(
         const Node& node, std::optional<Rational> square) {
-        const auto radicand = radical_radicand(node);
+        const auto radicand = square_relation(node);
         if (radicand && !square && !collect(radicand)) {
             return false;
         }
+        if (failure_) { return false; }
+        if (radicand && !square) {
+            canonical_nodes_ = budget_.append_size(canonical_nodes_, budget_.measure(radicand));
+        }
         if (!checked(context_.require_expansion_terms(
-                atoms_.size() + canonical_radicals_.size() + 1,
+                atoms_.size() + canonical_atoms_.size() + 1,
                 "residual.formal"))) {
             return false;
         }
@@ -201,6 +418,29 @@ class FormalResidual {
     }
 
     bool register_new_atom(const Node& node, bool canonicalize_radicals) {
+        if (const auto* fn = dynamic_cast<const FunctionNode*>(node.get())) {
+            if (auto replacement = rewrite_function(*fn)) {
+                return register_replacement(node, std::move(replacement));
+            }
+            if (inexact_) { return false; }
+        }
+        if (const auto* exponentiation = dynamic_cast<const PowerNode*>(node.get())) {
+            auto exponent = detail::exact_rational_value(exponentiation->exponent());
+            if (exponent && exponent->get_denominator() == BigInt(2) &&
+                *exponent != Rational(1, 2)) {
+                auto degree = exponent->get_numerator().try_to_int64();
+                if (degree && *degree >= -1000 && *degree <= 1000) {
+                    auto half = SymbolicFactory::create_number(Rational(1, 2));
+                    normalization_check_children(&budget_, 1, exponentiation->base(), half);
+                    auto radical = detail::make_node<PowerNode>(exponentiation->base(), half);
+                    return register_replacement(node, power(radical, static_cast<int>(*degree)));
+                }
+            }
+        }
+        if (auto replacement = rewrite_radical(node)) {
+            return register_replacement(node, std::move(replacement));
+        }
+        if (inexact_) { return false; }
         auto square = radical_square(node);
         if (canonicalize_radicals && square &&
             !square->get_numerator().is_negative()) {
@@ -286,7 +526,7 @@ class FormalResidual {
         return result;
     }
     std::optional<Fraction> convert_number(const Node& node) {
-        auto value = detail::matrix_kernel::exact_rational(detail::make_expression_ptr(node));
+        auto value = detail::exact_rational_value(node);
         if (!value) { return std::nullopt; }
         if (!checked(context_.require_integer_bits(
                 value->get_numerator().bit_length() + value->get_denominator().bit_length(),
@@ -310,9 +550,9 @@ class FormalResidual {
         if (dynamic_cast<const NumberNode*>(node.get())) {
             return convert_number(node);
         }
-        for (const auto& radical : canonical_radicals_) {
-            if (radical.first->equals(*node)) {
-                return convert(radical.second);
+        for (const auto& atom : canonical_atoms_) {
+            if (atom.first->equals(*node)) {
+                return convert(atom.second);
             }
         }
         for (std::size_t i = 0; i < atoms_.size(); ++i) {
@@ -337,6 +577,8 @@ class FormalResidual {
         return std::nullopt;
     }
     std::optional<MultiPoly> reduce_radicals(const MultiPoly& polynomial) {
+        if (!checked(context_.enter_recursion("residual.formal"))) { return std::nullopt; }
+        ResidualRecursionScope scope(context_);
         MultiPoly reduced(Rational(0), variables_);
         for (auto term : polynomial.terms()) {
             std::vector<std::pair<Node, int>> symbolic_squares;
@@ -393,8 +635,13 @@ class FormalResidual {
         return reduced;
     }
 public:
-    explicit FormalResidual(ComputationContext& context) : context_(context) {}
+    explicit FormalResidual(detail::RewriteBudget& budget)
+        : context_(budget.context()), budget_(budget) {}
     Result<bool> prove(const Node& expression) {
+        AngleCollector angles(*this);
+        expression->accept(angles);
+        if (failure_) { return Result<bool>::failure(*failure_); }
+        if (inexact_) { return false; }
         if (!collect(expression))
             { return failure_ ? Result<bool>::failure(*failure_) : Result<bool>::success(false); }
         auto fraction = convert(expression);
@@ -420,19 +667,19 @@ public:
 
 RootReplacementResult replace_exact_root(
     const detail::SymbolicNodePtr& node, const detail::ExactRootId*& identity,
-    ComputationContext& context, const std::string& operation);
+    detail::RewriteBudget& budget, const std::string& operation);
 
 RootReplacementResult replace_root_operands(const detail::SymbolicNodePtr& node,
     const std::vector<detail::SymbolicNodePtr>& operands, bool sum,
-    const detail::ExactRootId*& identity, ComputationContext& context, const std::string& operation) {
+    const detail::ExactRootId*& identity, detail::RewriteBudget& budget, const std::string& operation) {
     bool changed = false;
     std::vector<detail::SymbolicNodePtr> replaced;
+    std::size_t nodes = 1;
     for (auto operand = operands.begin(); operand != operands.end(); ++operand) {
-        auto child = replace_exact_root(*operand, identity, context, operation);
+        auto child = replace_exact_root(*operand, identity, budget, operation);
         if (!child || !child.value()) { return child; }
+        nodes = budget.append_size(nodes, budget.measure(*child.value()));
         if (!changed && *child.value() != *operand) {
-            auto reserved = context.reserve_nodes(1, operation);
-            if (!reserved) { return RootReplacementResult::failure(reserved.error()); }
             replaced.reserve(operands.size());
             replaced.insert(replaced.end(), operands.begin(), operand);
             changed = true;
@@ -441,22 +688,22 @@ RootReplacementResult replace_root_operands(const detail::SymbolicNodePtr& node,
     }
     if (!changed) { return RootReplacementResult::success(node); }
     return RootReplacementResult::success(sum
-        ? SymbolicFactory::create_add(std::move(replaced))
-        : SymbolicFactory::create_multiply(std::move(replaced)));
+        ? SymbolicFactory::create_add(std::move(replaced), &budget)
+        : SymbolicFactory::create_multiply(std::move(replaced), &budget));
 }
 
 RootReplacementResult replace_root_power(const detail::SymbolicNodePtr& node,
     const PowerNode& power, const detail::ExactRootId*& identity,
-    ComputationContext& context, const std::string& operation) {
-    auto base = replace_exact_root(power.base(), identity, context, operation);
+    detail::RewriteBudget& budget, const std::string& operation) {
+    auto base = replace_exact_root(power.base(), identity, budget, operation);
     if (!base || !base.value()) { return base; }
-    auto exponent = replace_exact_root(power.exponent(), identity, context, operation);
+    auto exponent = replace_exact_root(power.exponent(), identity, budget, operation);
     if (!exponent || !exponent.value()) { return exponent; }
     if (*base.value() == power.base() && *exponent.value() == power.exponent()) {
         return RootReplacementResult::success(node);
     }
-    auto reserved = context.reserve_nodes(1, operation);
-    if (!reserved) { return RootReplacementResult::failure(reserved.error()); }
+    budget.append_size(budget.append_size(1, budget.measure(*base.value())),
+                       budget.measure(*exponent.value()));
     return RootReplacementResult::success(
         SymbolicFactory::create_power(*base.value(), *exponent.value()));
 }
@@ -464,8 +711,9 @@ RootReplacementResult replace_root_power(const detail::SymbolicNodePtr& node,
 RootReplacementResult replace_exact_root(
     const detail::SymbolicNodePtr& node,
     const detail::ExactRootId*& identity,
-    ComputationContext& context,
+    detail::RewriteBudget& budget,
     const std::string& operation) {
+    auto& context = budget.context();
     auto entered = context.enter_recursion(operation);
     if (!entered) { return RootReplacementResult::failure(entered.error()); }
     ResidualRecursionScope scope(context);
@@ -474,8 +722,7 @@ RootReplacementResult replace_exact_root(
             return RootReplacementResult::success(std::nullopt);
         }
         identity = &root->exact_id();
-        auto reserved = context.reserve_nodes(1, operation);
-        if (!reserved) { return RootReplacementResult::failure(reserved.error()); }
+        budget.require_nodes(1);
         return RootReplacementResult::success(
             SymbolicFactory::create_variable("_residual_root"));
     }
@@ -486,10 +733,10 @@ RootReplacementResult replace_exact_root(
     const auto* product = dynamic_cast<const MultiplyNode*>(node.get());
     if (sum || product) {
         const auto& operands = sum ? sum->operands() : product->operands();
-        return replace_root_operands(node, operands, sum != nullptr, identity, context, operation);
+        return replace_root_operands(node, operands, sum != nullptr, identity, budget, operation);
     }
     if (const auto* power = dynamic_cast<const PowerNode*>(node.get())) {
-        return replace_root_power(node, *power, identity, context, operation);
+        return replace_root_power(node, *power, identity, budget, operation);
     }
     return RootReplacementResult::success(std::nullopt);
 }
@@ -539,11 +786,12 @@ Result<bool> has_zero_root_remainder(
 }
 
 ResidualCheckResult prove_exact_root_residual(
-    const ExprPtr& expression, ComputationContext& context,
+    const ExprPtr& expression, detail::RewriteBudget& budget,
     const std::string& operation) {
+    auto& context = budget.context();
     const detail::ExactRootId* identity = nullptr;
     auto replaced = replace_exact_root(
-        detail::node(expression), identity, context, operation);
+        detail::node(expression), identity, budget, operation);
     if (!replaced) return ResidualCheckResult::failure(replaced.error());
     if (!replaced.value() || !identity) {
         return ResidualCheckResult::success(UnprovedResidual{expression});
@@ -564,17 +812,13 @@ ResidualCheckResult prove_exact_root_residual(
     return ResidualCheckResult::success(UnprovedResidual{expression});
 }
 
-ExprPtr normalized(ExprPtr expression) {
-    if (!expression) { return expression; }
-    auto simplified = expression->simplify();
-    return simplified ? simplified : expression;
-}
 
 ResidualCheckResult classify_residual(
     const ExprPtr& expression,
-    ComputationContext& context,
+    detail::RewriteBudget& budget,
     const std::string& operation) {
-    auto root_proof = prove_exact_root_residual(expression, context, operation);
+    auto& context = budget.context();
+    auto root_proof = prove_exact_root_residual(expression, budget, operation);
     if (!root_proof ||
         std::holds_alternative<ProvedZeroResidual>(root_proof.value())) {
         return root_proof;
@@ -586,7 +830,7 @@ ResidualCheckResult classify_residual(
         return ResidualCheckResult::success(ProvedZeroResidual{
             ExactNormalizationProof{expression}});
     }
-    const auto variables = free_variables(detail::node(expression));
+    const auto variables = free_variables(detail::node(expression), &budget);
     if (variables.size() == 1) {
         auto polynomial = recognize_rational_polynomial(
             *expression, *variables.begin(), context);
@@ -681,7 +925,7 @@ ResidualCheckResult prove_with_profiles(
         }
         auto profile_options = options;
         profile_options.profile = profile;
-        auto equivalent = equivalent_core(*current, *zero, context, profile_options);
+        auto equivalent = detail::equivalent_impl(*current, *zero, context, profile_options);
         if (!equivalent) {
             if (equivalent.error().code == CasErrc::UnsupportedExpression ||
                 equivalent.error().code == CasErrc::Inconclusive) {
@@ -698,23 +942,106 @@ ResidualCheckResult prove_with_profiles(
 }
 
 ResidualCheckResult prove_normalized_residual(const ExprPtr& residual,
-    ComputationContext& context, const EqvOptions& options, const std::string& operation) {
-    auto current = normalized(residual);
-    auto first = classify_residual(current, context, operation);
+    detail::RewriteBudget& budget, const EqvOptions& options, const std::string& operation) {
+    auto& context = budget.context();
+    std::optional<detail::AssumptionFacts> assumed;
+    if (context.assumptions()) { assumed.emplace(*context.assumptions()); }
+    const auto& facts = assumed
+        ? static_cast<const FactsQuery&>(*assumed) : detail::no_facts();
+    auto current = detail::make_expression_ptr(
+        detail::normalize_node(detail::node(residual), budget, facts));
+    if (contains_inexact_number(detail::node(current))) {
+        return ResidualCheckResult::success(UnprovedResidual{current});
+    }
+    auto first = classify_residual(current, budget, operation);
     if (!first || is_decided(first.value())) { return first; }
-    current = normalized(current->expand());
-    auto expanded = classify_residual(current, context, operation);
+    current = detail::make_expression_ptr(
+        detail::expand_node(detail::node(current), budget, facts));
+    if (contains_inexact_number(detail::node(current))) {
+        return ResidualCheckResult::success(UnprovedResidual{current});
+    }
+    auto expanded = classify_residual(current, budget, operation);
     if (!expanded || is_decided(expanded.value())) { return expanded; }
     /**
      * @brief 通分证明受计算预算约束，替代符号系数的 Euclid 及因子搜索。
      * 支持绑定整数名同时出现在参数分母中的解族。
      */
-    auto formal = FormalResidual(context).prove(detail::node(current));
+    auto formal = FormalResidual(budget).prove(detail::node(current));
     if (!formal) { return ResidualCheckResult::failure(formal.error()); }
     if (formal.value()) {
         return ResidualCheckResult::success(ProvedZeroResidual{ExactResidualProof{current}});
     }
     return prove_with_profiles(current, context, options);
+}
+
+const PiecewiseNode* residual_piecewise(
+    const detail::SymbolicNodePtr& node, detail::RewriteBudget& budget) {
+    detail::RewriteScope scope(&budget);
+    if (const auto* piecewise = dynamic_cast<const PiecewiseNode*>(node.get())) {
+        return piecewise;
+    }
+    const auto* add = dynamic_cast<const AddNode*>(node.get());
+    const auto* mul = dynamic_cast<const MultiplyNode*>(node.get());
+    if (add || mul) {
+        for (const auto& child : add ? add->operands() : mul->operands()) {
+            if (auto piecewise = residual_piecewise(child, budget)) { return piecewise; }
+        }
+    }
+    if (const auto* power = dynamic_cast<const PowerNode*>(node.get())) {
+        return residual_piecewise(power->base(), budget);
+    }
+    return nullptr;
+}
+
+class ResidualBranch final : public detail::SymbolicRewriter {
+    const PiecewiseNode& selected_;
+    std::size_t branch_;
+public:
+    ResidualBranch(const PiecewiseNode& selected, std::size_t branch,
+                   detail::RewriteBudget& budget)
+        : SymbolicRewriter(&budget), selected_(selected), branch_(branch) {}
+    void visit(const PiecewiseNode& node) override {
+        if (node.branches().size() != selected_.branches().size() ||
+            static_cast<bool>(node.default_expr()) !=
+                static_cast<bool>(selected_.default_expr())) {
+            set_result(current());
+            return;
+        }
+        for (std::size_t index = 0; index < node.branches().size(); ++index) {
+            if (!node.branches()[index].condition->equals(
+                    *selected_.branches()[index].condition)) {
+                set_result(current());
+                return;
+            }
+        }
+        set_result(branch_ == node.branches().size()
+            ? node.default_expr() : node.branches()[branch_].expression);
+    }
+};
+
+std::optional<ResidualCheckResult> prove_piecewise_residual(
+    const ExprPtr& residual, detail::RewriteBudget& budget,
+    const EqvOptions& options) {
+    const auto* piecewise = residual_piecewise(detail::node(residual), budget);
+    if (!piecewise) { return std::nullopt; }
+    auto& context = budget.context();
+    auto entered = context.enter_recursion("residual.piecewise");
+    if (!entered) { return ResidualCheckResult::failure(entered.error()); }
+    ResidualRecursionScope scope(context);
+    const auto count = piecewise->branches().size() +
+        static_cast<std::size_t>(piecewise->default_expr() != nullptr);
+    for (std::size_t index = 0; index < count; ++index) {
+        ResidualBranch select(*piecewise, index, budget);
+        auto branch = select.rewrite(detail::node(residual));
+        budget.measure(branch);
+        auto proof = check_zero_residual(detail::make_expression_ptr(branch), context, options);
+        if (!proof) { return proof; }
+        if (!std::holds_alternative<ProvedZeroResidual>(proof.value())) {
+            return ResidualCheckResult::success(UnprovedResidual{residual});
+        }
+    }
+    return ResidualCheckResult::success(
+        ProvedZeroResidual{ExactResidualProof{residual}});
 }
 
 }
@@ -733,18 +1060,29 @@ ResidualCheckResult check_zero_residual(
     if (!access) { return ResidualCheckResult::failure(access.error()); }
 
     try {
-        auto root_proof = prove_exact_root_residual(residual, context, operation);
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                     context.limits().max_ast_nodes, operation);
+        budget.measure(detail::node(residual));
+        if (contains_inexact_number(detail::node(residual))) {
+            return ResidualCheckResult::success(UnprovedResidual{residual});
+        }
+        if (auto piecewise = prove_piecewise_residual(residual, budget, options)) {
+            return std::move(*piecewise);
+        }
+        auto root_proof = prove_exact_root_residual(residual, budget, operation);
         if (!root_proof ||
             std::holds_alternative<ProvedZeroResidual>(root_proof.value())) {
             return root_proof;
         }
-        auto formal = FormalResidual(context).prove(detail::node(residual));
+        auto formal = FormalResidual(budget).prove(detail::node(residual));
         if (!formal) { return ResidualCheckResult::failure(formal.error()); }
         if (formal.value())
             { return ResidualCheckResult::success(ProvedZeroResidual{ExactResidualProof{residual}}); }
-        return prove_normalized_residual(residual, context, options, operation);
+        return prove_normalized_residual(residual, budget, options, operation);
     } catch (const CasError& error) {
         return ResidualCheckResult::failure(error);
+    } catch (const std::length_error& error) {
+        return ResidualCheckResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::bad_alloc&) {
         return ResidualCheckResult::failure(
             CasErrc::ResourceLimit,

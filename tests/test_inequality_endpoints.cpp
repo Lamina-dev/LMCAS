@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_inequality_support.hpp"
 
 TEST(InequalityEndpoints, SmallQuadraticRoot) {
@@ -205,7 +206,7 @@ std::shared_ptr<SymbolicExpr> polynomial_from_roots(const std::vector<int> &root
         auto factor = SymbolicExpr::add(x, SymbolicExpr::number(-roots[i]));
         poly = SymbolicExpr::multiply(poly, factor);
     }
-    return poly->expand();
+    return LMCAS::expand(poly).value();
 }
 
 bool check_root_membership(
@@ -260,7 +261,7 @@ std::shared_ptr<SymbolicExpr> repeated_root_polynomial(int root, int multiplicit
     for (int i = 1; i < multiplicity; ++i) {
         poly = SymbolicExpr::multiply(poly, factor);
     }
-    return poly->expand();
+    return LMCAS::expand(poly).value();
 }
 
 int numeric_sign(double value) {
@@ -275,12 +276,10 @@ int numeric_sign(double value) {
 bool check_multiplicity_signs(int root, int multiplicity, bool use_even, int iter) {
     auto poly = repeated_root_polynomial(root, multiplicity);
     const double epsilon = 0.5;
-    auto sub_left = poly->substitute(
-        "x", SymbolicExpr::number(static_cast<double>(root) - epsilon));
-    double left_val = sub_left->simplify()->to_numeric();
-    auto sub_right = poly->substitute(
-        "x", SymbolicExpr::number(static_cast<double>(root) + epsilon));
-    double right_val = sub_right->simplify()->to_numeric();
+    auto sub_left = LMCAS::substitute(poly, "x", SymbolicExpr::number(static_cast<double>(root) - epsilon)).value();
+    double left_val = LMCAS::simplify(sub_left).value()->to_numeric();
+    auto sub_right = LMCAS::substitute(poly, "x", SymbolicExpr::number(static_cast<double>(root) + epsilon)).value();
+    double right_val = LMCAS::simplify(sub_right).value()->to_numeric();
     int left_sign = numeric_sign(left_val);
     int right_sign = numeric_sign(right_val);
     if (left_sign == 0 || right_sign == 0)

@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/matrix_decomposition_support.hpp"
 #include "internal/expression_analysis.hpp"
 
@@ -91,20 +92,23 @@ std::optional<Rational> exact_rational_expr(const std::shared_ptr<const Symbolic
 
 namespace {
 std::optional<Rational> simplify_exact_rational_expr(
-    const std::shared_ptr<const SymbolicNode>& node) {
+    const std::shared_ptr<const SymbolicNode>& node, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto expression = LMCAS::detail::make_expression_ptr(node);
-    auto simplified = expression->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(expression), transform_budget));
     return simplified
         ? exact_rational_expr(LMCAS::detail::node(simplified))
         : std::nullopt;
 }
 }
 
-std::optional<Rational> exact_rational_expr(const std::shared_ptr<SymbolicExpr>& expr) {
+std::optional<Rational> exact_rational_expr(const std::shared_ptr<SymbolicExpr>& expr, ComputationContext& context) {
     if (!expr || !LMCAS::detail::node(expr)) return std::nullopt;
     const auto& node = LMCAS::detail::node(expr);
     if (auto direct = exact_rational_expr(node)) return direct;
-    return simplify_exact_rational_expr(node);
+    return simplify_exact_rational_expr(node, context);
 }
 
 std::shared_ptr<SymbolicExpr> exact_number_expr(const Rational& value) {
@@ -121,7 +125,7 @@ std::shared_ptr<SymbolicExpr> exact_number_expr(const Rational& value) {
 }
 
 std::optional<std::vector<std::vector<Rational>>> exact_rational_matrix(
-    const std::shared_ptr<const MatrixNode>& matrix) {
+    const std::shared_ptr<const MatrixNode>& matrix, ComputationContext& context) {
     if (!matrix) return std::nullopt;
     std::vector<std::vector<Rational>> values(
         matrix->rows(), std::vector<Rational>(matrix->cols(), Rational(0)));
@@ -130,7 +134,7 @@ std::optional<std::vector<std::vector<Rational>>> exact_rational_matrix(
             const auto& node = matrix->get(row, col);
             auto value = exact_rational_expr(node);
             if (!value) {
-                value = simplify_exact_rational_expr(node);
+                value = simplify_exact_rational_expr(node, context);
             }
             if (!value) return std::nullopt;
             values[row][col] = *value;
@@ -148,8 +152,8 @@ std::shared_ptr<SymbolicExpr> identity_matrix_expr(size_t n) {
 }
 
 std::optional<std::vector<Rational>> exact_rectangular_diagonal_entries(
-    const std::shared_ptr<const MatrixNode>& matrix) {
-    auto values = exact_rational_matrix(matrix);
+    const std::shared_ptr<const MatrixNode>& matrix, ComputationContext& context) {
+    auto values = exact_rational_matrix(matrix, context);
     if (!values) return std::nullopt;
     const size_t rows = values->size();
     const size_t cols = rows == 0 ? 0 : (*values)[0].size();
@@ -170,8 +174,8 @@ std::optional<std::vector<Rational>> exact_rectangular_diagonal_entries(
 }
 
 std::optional<std::vector<Rational>> exact_diagonal_entries(
-    const std::shared_ptr<const MatrixNode>& matrix) {
-    auto values = exact_rational_matrix(matrix);
+    const std::shared_ptr<const MatrixNode>& matrix, ComputationContext& context) {
+    auto values = exact_rational_matrix(matrix, context);
     if (!values) return std::nullopt;
     const size_t rows = values->size();
     const size_t cols = rows == 0 ? 0 : (*values)[0].size();

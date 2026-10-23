@@ -1,6 +1,8 @@
+#include "expr.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <variant>
+#include <vector>
 #include <memory>
 #include <string>
 #include "symbolic.hpp"
@@ -12,13 +14,14 @@ using namespace LMCAS;
 
 static void expect_primitive_identity(const SymbolicExpr &expression, const std::string &variable) {
     Integrator integrator;
-    auto result = integrator.integrate(expression, variable);
+    ComputationContext context;
+    auto result = integrator.integrate_checked(expression, variable, context);
     ASSERT_TRUE(result.has_value()) << result.error().message;
+    ASSERT_FALSE(detail::contains_node_type<IntegralNode>(detail::node(result.value())));
 
-    auto derivative = result.value().differentiate(variable);
+    auto derivative = LMCAS::differentiate(std::make_shared<SymbolicExpr>(result.value()), variable).value();
     ASSERT_NE(derivative, nullptr) << "failed to differentiate integral";
 
-    ComputationContext context;
     auto proof = check_equivalent(derivative, detail::make_expression_ptr(expression), context);
     ASSERT_TRUE(proof.has_value()) << "primitive identity proof completes";
     EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()))
@@ -41,7 +44,7 @@ class WrongIntegrationStrategy final : public IntegrationStrategy {
 
 class ThrowingIntegrationStrategy final : public IntegrationStrategy {
   public:
-    enum class Failure { Runtime, Allocation };
+    enum class Failure { Runtime, Allocation, Length, Cas };
 
     explicit ThrowingIntegrationStrategy(Failure failure)
         : failure_(failure) {}
@@ -55,6 +58,13 @@ class ThrowingIntegrationStrategy final : public IntegrationStrategy {
         if (failure_ == Failure::Allocation) {
             throw std::bad_alloc{};
         }
+        if (failure_ == Failure::Length) {
+            throw std::length_error("injected integration size failure");
+        }
+        if (failure_ == Failure::Cas) {
+            throw CasError{CasErrc::NumericFailure,
+                           "injected numeric failure", "numeric.original"};
+        }
         throw std::runtime_error("injected integration failure");
     }
 
@@ -63,6 +73,97 @@ class ThrowingIntegrationStrategy final : public IntegrationStrategy {
   private:
     Failure failure_;
 };
+
+class IntegralIntegrationStrategy final : public IntegrationStrategy {
+  protected:
+    Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
+        const SymbolicExpr &expression, const std::string &variable,
+        Integrator &, ComputationContext &, int) override {
+        return SymbolicExpr::make_integral(detail::make_expression_ptr(expression), variable);
+    }
+
+  public:
+    std::string name() const override { return "UnevaluatedCandidate"; }
+};
+
+class ThrowingNameIntegrationStrategy final : public IntegrationStrategy {
+  protected:
+    Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
+        const SymbolicExpr &, const std::string &, Integrator &,
+        ComputationContext &, int) override {
+        return nullptr;
+    }
+
+  public:
+    std::string name() const override { throw std::bad_alloc{}; }
+};
+
+TEST(IntegrationStrategies, NameAllocationRemainsInsideCheckedBoundary) {
+    auto x = SymbolicExpr::variable("x");
+    Integrator integrator;
+    ComputationContext context;
+    ThrowingNameIntegrationStrategy strategy;
+    auto direct = strategy.try_integrate(*x, "x", integrator, context);
+    ASSERT_FALSE(direct);
+    EXPECT_EQ(direct.error().code, CasErrc::ResourceLimit);
+    EXPECT_EQ(direct.error().operation, "integrate.strategy");
+    ASSERT_TRUE(integrator.add_strategy(
+        std::make_unique<ThrowingNameIntegrationStrategy>(), 0));
+    auto integrated = integrator.integrate_checked(*x, "x", context);
+    ASSERT_FALSE(integrated);
+    EXPECT_EQ(integrated.error().code, CasErrc::ResourceLimit);
+    EXPECT_EQ(integrated.error().operation, "integrate.strategy");
+}
+
+TEST(IntegrationStrategies, RecursiveWrongCandidateContinuesFallback) {
+    auto x = SymbolicExpr::variable("x");
+    auto integrand = SymbolicExpr::multiply(SymbolicExpr::number(2), x);
+    Integrator integrator;
+    ASSERT_TRUE(integrator.add_strategy(
+        std::make_unique<WrongIntegrationStrategy>(), 0));
+    ComputationContext context;
+    auto result = integrator.integrate_checked(*integrand, "x", context);
+    ASSERT_TRUE(result) << result.error().message;
+    EXPECT_FALSE(detail::contains_node_type<IntegralNode>(detail::node(result.value())));
+    auto derivative = LMCAS::differentiate(
+        detail::make_expression_ptr(result.value()), "x", context);
+    ASSERT_TRUE(derivative);
+    auto proof = check_equivalent(derivative.value(), integrand, context);
+    ASSERT_TRUE(proof);
+    EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
+}
+
+TEST(IntegrationStrategies, IntegralCandidateCannotCertifyClosedForm) {
+    auto x = SymbolicExpr::variable("x");
+    Integrator integrator;
+    ASSERT_TRUE(integrator.add_strategy(
+        std::make_unique<IntegralIntegrationStrategy>(), 0));
+    ComputationContext context;
+    auto result = integrator.integrate_checked(*x, "x", context);
+    ASSERT_TRUE(result) << result.error().message;
+    EXPECT_FALSE(detail::contains_node_type<IntegralNode>(detail::node(result.value())));
+    auto derivative = LMCAS::differentiate(
+        detail::make_expression_ptr(result.value()), "x", context);
+    ASSERT_TRUE(derivative);
+    auto proof = check_equivalent(derivative.value(), x, context);
+    ASSERT_TRUE(proof);
+    EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
+}
+
+TEST(IntegrationStrategies, InexactCancellationRetainsOriginalObligation) {
+    auto x = SymbolicExpr::variable("x");
+    auto positive = SymbolicExpr::number(1e-13);
+    auto negative = SymbolicExpr::number(-1e-13);
+    auto integrand = detail::make_expression_ptr(detail::make_node<AddNode>(
+        std::vector<std::shared_ptr<const SymbolicNode>>{
+            detail::node(x), detail::node(positive), detail::node(negative)}));
+    Integrator integrator;
+    ComputationContext context;
+    auto result = integrator.integrate_checked(*integrand, "x", context);
+    ASSERT_TRUE(result) << result.error().message;
+    auto obligation = SymbolicExpr::make_integral(integrand, "x");
+    EXPECT_TRUE(structurally_equal(result.value(), *obligation));
+}
 
 TEST(IntegrationStrategies, GeneratedCandidatesRequireExactResidualProof) {
     auto x = detail::make_expression_ptr(*SymbolicExpr::variable("x"));
@@ -118,16 +219,16 @@ TEST(IntegrationStrategies, PositiveDiscriminantQuadraticUsesRealLogBranch) {
     ASSERT_TRUE(primitive.has_value()) << primitive.error().message;
     ASSERT_FALSE(detail::contains_node_type<IntegralNode>(
         detail::node(primitive.value())));
-    auto derivative = primitive.value().differentiate("x");
+    auto derivative = LMCAS::differentiate(std::make_shared<SymbolicExpr>(primitive.value()), "x").value();
     ASSERT_NE(derivative, nullptr);
 
     for (double sample : {-3.0, -2.0, 2.0, 3.0}) {
         SCOPED_TRACE("x=" + std::to_string(sample));
         auto value = SymbolicExpr::number(sample);
         auto expected = test_numeric_eval(
-            integrand->substitute("x", value)->simplify());
+            LMCAS::simplify(LMCAS::substitute(integrand, "x", value).value()).value());
         auto actual = test_numeric_eval(
-            derivative->substitute("x", value)->simplify());
+            LMCAS::simplify(LMCAS::substitute(derivative, "x", value).value()).value());
         ASSERT_TRUE(expected.has_value());
         ASSERT_TRUE(actual.has_value());
         ASSERT_TRUE(std::isfinite(*expected));
@@ -141,8 +242,8 @@ TEST(IntegrationStrategies, StrategyBoundaryPreservesFallbackAndTypedErrors) {
     Integrator integrator;
     ComputationContext context;
 
-    PartialFractionStrategy partial_fraction;
-    auto not_applicable = partial_fraction.try_integrate(
+    RationalDecompositionStrategy rational;
+    auto not_applicable = rational.try_integrate(
         *SymbolicExpr::sin(x), "x", integrator, context);
     ASSERT_TRUE(not_applicable.has_value());
     EXPECT_TRUE(std::holds_alternative<IntegrationNotApplicable>(
@@ -170,4 +271,32 @@ TEST(IntegrationStrategies, LogarithmicIntegrationByParts) {
     auto x = detail::make_expression_ptr(*SymbolicExpr::variable("x"));
     auto expression = SymbolicExpr::ln(x);
     expect_primitive_identity(*expression, "x");
+}
+
+TEST(IntegrationStrategies, OriginalErrorsSurviveCheckedBoundaries) {
+    auto x = SymbolicExpr::variable("x");
+    Integrator integrator;
+    ComputationContext context;
+    ThrowingIntegrationStrategy strategy(ThrowingIntegrationStrategy::Failure::Cas);
+    auto direct = strategy.try_integrate(*x, "x", integrator, context);
+    ASSERT_FALSE(direct);
+    EXPECT_EQ(direct.error().code, CasErrc::NumericFailure);
+    EXPECT_EQ(direct.error().message, "injected numeric failure");
+    EXPECT_EQ(direct.error().operation, "numeric.original");
+
+    auto added = integrator.add_strategy(std::make_unique<ThrowingIntegrationStrategy>(
+        ThrowingIntegrationStrategy::Failure::Cas), 0);
+    ASSERT_TRUE(added);
+    auto integrated = integrator.integrate_checked(*x, "x", context);
+    ASSERT_FALSE(integrated);
+    EXPECT_EQ(integrated.error().code, CasErrc::NumericFailure);
+    EXPECT_EQ(integrated.error().message, "injected numeric failure");
+    EXPECT_EQ(integrated.error().operation, "numeric.original");
+
+    ThrowingIntegrationStrategy length(ThrowingIntegrationStrategy::Failure::Length);
+    auto oversized = length.try_integrate(*x, "x", integrator, context);
+    ASSERT_FALSE(oversized);
+    EXPECT_EQ(oversized.error().code, CasErrc::ResourceLimit);
+    EXPECT_EQ(oversized.error().message, "injected integration size failure");
+    EXPECT_EQ(oversized.error().operation, "integrate.strategy.Throwing");
 }

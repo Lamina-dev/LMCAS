@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "solve_transcendental.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "poly_utils.hpp"
@@ -321,7 +323,10 @@ static Result<bool> is_substitution_polynomial(
 
 Result<std::optional<SubstitutionResult>> detect_substitution(
     const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& var) {
+    const std::string& var) try {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     if (!expr || !LMCAS::detail::node(expr)) {
         return std::optional<SubstitutionResult>{};
@@ -355,7 +360,7 @@ Result<std::optional<SubstitutionResult>> detect_substitution(
 
         auto substituted_node = visitor.replace(LMCAS::detail::node(expr));
         auto substituted_expr = LMCAS::detail::make_expression_ptr(substituted_node);
-        substituted_expr = substituted_expr->simplify();
+        substituted_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(substituted_expr), transform_budget));
 
         auto polynomial = is_substitution_polynomial(substituted_expr, var, u_var);
         if (!polynomial) {
@@ -369,7 +374,7 @@ Result<std::optional<SubstitutionResult>> detect_substitution(
     if (has_exp_k_var_terms(LMCAS::detail::node(expr), var)) {
         auto rewritten_node = rewrite_exp_as_u_power(LMCAS::detail::node(expr), var, u_var);
         auto rewritten_expr = LMCAS::detail::make_expression_ptr(rewritten_node);
-        rewritten_expr = rewritten_expr->simplify();
+        rewritten_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(rewritten_expr), transform_budget));
 
         auto polynomial = is_substitution_polynomial(rewritten_expr, var, u_var);
         if (!polynomial) {
@@ -382,6 +387,14 @@ Result<std::optional<SubstitutionResult>> detect_substitution(
     }
 
     return std::optional<SubstitutionResult>{};
+} catch (const CasError& error) {
+    return Result<std::optional<SubstitutionResult>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::optional<SubstitutionResult>>::failure(CasErrc::ResourceLimit, "allocation failed", "detect_substitution");
+} catch (const std::length_error& error) {
+    return Result<std::optional<SubstitutionResult>>::failure(CasErrc::ResourceLimit, error.what(), "detect_substitution");
+} catch (const std::exception& error) {
+    return Result<std::optional<SubstitutionResult>>::failure(CasErrc::InternalInvariant, error.what(), "detect_substitution");
 }
 
 }

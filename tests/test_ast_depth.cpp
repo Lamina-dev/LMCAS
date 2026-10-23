@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "internal/equivalence_engine.hpp"
 #include "internal/rewrite_budget.hpp"
@@ -11,14 +12,9 @@ TEST(AstDepth, FixedAstDepthLimit) {
         expr = SymbolicExpr::sin(expr);
     }
 
-    bool caught = false;
-    try {
-        expr->simplify();
-    } catch (const std::runtime_error &) {
-        caught = true;
-    }
-
-    EXPECT_TRUE((caught)) << "AST depth limit should trigger an exception on deep trees";
+    auto result = LMCAS::simplify(expr);
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, CasErrc::ResourceLimit);
 }
 
 TEST(AstDepth, RuntimeNormalizationDepth) {
@@ -27,7 +23,7 @@ TEST(AstDepth, RuntimeNormalizationDepth) {
     auto implication = detail::make_node<LogicalNode>(x, y, LogicalNode::Op::Implies);
     ComputationContext context;
     detail::RewriteBudget budget(context, 3, 100, kEquivalentOperation);
-    NormalizationVisitor limited(&budget);
+    NormalizationVisitor limited(budget, detail::no_facts(), Domain::Real);
     bool exhausted = false;
     try {
         implication->accept(limited);
@@ -39,7 +35,7 @@ TEST(AstDepth, RuntimeNormalizationDepth) {
     EXPECT_TRUE((limited.get_result() && limited.get_result()->equals(*x))) << "the same visitor, budget and context accept x after exception unwinding";
 
     detail::RewriteBudget sufficient_budget(context, 4, 100, kEquivalentOperation);
-    NormalizationVisitor sufficient(&sufficient_budget);
+    NormalizationVisitor sufficient(sufficient_budget, detail::no_facts(), Domain::Real);
     implication->accept(sufficient);
     auto not_x = detail::make_node<LogicalNode>(x, nullptr, LogicalNode::Op::Not);
     auto expected = detail::make_node<LogicalNode>(not_x, y, LogicalNode::Op::Or);

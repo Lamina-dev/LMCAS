@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 #include "internal/symbolic_matrix_support.hpp"
 #include "internal/normalization_utils.hpp"
 #include "internal/visitors/normalization_visitor.hpp"
@@ -30,7 +31,7 @@ ExpressionResult matrix_multiply_checked(const std::shared_ptr<SymbolicExpr>& A,
         normalization_check_arithmetic<MultiplyNode>(&budget, 0, left.value(), right.value());
         auto product = detail::make_node<MultiplyNode>(
             std::vector<std::shared_ptr<const SymbolicNode>>{left.value(), right.value()});
-        NormalizationVisitor visitor(context, detail::no_facts(), Domain::Real, &budget);
+        NormalizationVisitor visitor(budget, detail::no_facts(), Domain::Real);
         product->accept(visitor);
         auto result = visitor.get_result();
         budget.measure(result);

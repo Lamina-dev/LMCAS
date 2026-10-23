@@ -195,7 +195,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::expand_complex_product
         real = expand_product(lhs, right->real());
         imag = expand_product(lhs, right->imag());
     }
-    NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+    NormalizationVisitor visitor(*rewrite_budget(), facts_, domain_);
     real->accept(visitor);
     auto normalized_real = visitor.get_result();
     imag->accept(visitor);

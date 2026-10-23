@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 /**
  * @file limit_visitor_taylor.cpp
  * @brief LimitVisitor 的 Taylor 展开回退实现.
@@ -19,7 +20,10 @@ namespace {
 std::string substitute_infinity_series(
     const std::shared_ptr<const SymbolicNode>& num,
     const std::shared_ptr<const SymbolicNode>& den, const std::string& var,
-    std::shared_ptr<SymbolicExpr>& num_expr, std::shared_ptr<SymbolicExpr>& den_expr) {
+    std::shared_ptr<SymbolicExpr>& num_expr, std::shared_ptr<SymbolicExpr>& den_expr, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     /// x -> infinity: 代换 x = 1/t,在 t -> 0 处展开
     std::string t_var = "__lim_t__";
     auto names = detail::all_variable_names(num);
@@ -29,11 +33,11 @@ std::string substitute_infinity_series(
     auto t_expr = SymbolicExpr::variable(t_var);
     auto one_over_t = SymbolicExpr::power(t_expr, SymbolicExpr::number(-1));
 
-    num_expr = num_expr->substitute(var, one_over_t);
-    den_expr = den_expr->substitute(var, one_over_t);
+    num_expr = detail::make_expression_ptr(detail::substitute_node(detail::node(num_expr), var, detail::node(one_over_t), transform_budget));
+    den_expr = detail::make_expression_ptr(detail::substitute_node(detail::node(den_expr), var, detail::node(one_over_t), transform_budget));
 
-    if (num_expr) { num_expr = num_expr->simplify(); }
-    if (den_expr) { den_expr = den_expr->simplify(); }
+    if (num_expr) { num_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(num_expr), transform_budget)); }
+    if (den_expr) { den_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(den_expr), transform_budget)); }
 
     return t_var;
 }
@@ -68,7 +72,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::simplify_and_eval_ratio(
     }
 
     auto ratio_expr = LMCAS::detail::make_expression_ptr(ratio_node->clone());
-    auto simplified = ratio_expr->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(ratio_expr), *rewrite_budget()));
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return nullptr;
     }
@@ -119,7 +123,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_fallback(
     std::shared_ptr<SymbolicExpr> expand_point;
 
     if (at_infinity) {
-        expand_var = substitute_infinity_series(num, den, var, num_expr, den_expr);
+        expand_var = substitute_infinity_series(num, den, var, num_expr, den_expr, rewrite_budget()->context());
         expand_point = SymbolicExpr::number(0);
     } else {
         expand_point = point_expr;
@@ -155,8 +159,8 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::taylor_series_limit(
     if (!numerator_series || !denominator_series) {
         return nullptr;
     }
-    numerator_series = numerator_series->simplify();
-    denominator_series = denominator_series->simplify();
+    numerator_series = detail::make_expression_ptr(detail::normalize_node(detail::node(numerator_series), *rewrite_budget()));
+    denominator_series = detail::make_expression_ptr(detail::normalize_node(detail::node(denominator_series), *rewrite_budget()));
     auto numerator_leading = find_leading_term(numerator_series, expand_var, expand_point, order);
     auto denominator_leading = find_leading_term(denominator_series, expand_var, expand_point, order);
     return leading_terms_limit(numerator_leading, denominator_leading);
@@ -178,7 +182,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::leading_terms_limit(
         LMCAS::detail::make_expression_ptr(numerator.first),
         SymbolicExpr::power(LMCAS::detail::make_expression_ptr(denominator.first),
                             SymbolicExpr::number(-1)));
-    ratio = ratio->simplify();
+    ratio = detail::make_expression_ptr(detail::normalize_node(detail::node(ratio), *rewrite_budget()));
     if (numerator.second < denominator.second) {
         return divergent_leading_ratio(ratio, denominator.second - numerator.second);
     }
@@ -211,22 +215,22 @@ std::pair<std::shared_ptr<const SymbolicNode>, int> LimitVisitor::find_leading_t
 
     for (int n = 0; n <= max_order; ++n) {
         /// 在展开点求值得到第 n 阶系数(乘以 n!)
-        auto val = current->substitute(expand_var, expand_point);
+        auto val = detail::make_expression_ptr(detail::substitute_node(detail::node(current), expand_var, detail::node(expand_point), *rewrite_budget()));
         if (!val) {
             return {nullptr, 0};
         }
-        val = val->simplify();
+        val = detail::make_expression_ptr(detail::normalize_node(detail::node(val), *rewrite_budget()));
 
         auto sign = val ? get_node_sign(LMCAS::detail::node(val)) : std::nullopt;
         if (!sign) return {nullptr, 0};
         if (*sign) return {LMCAS::detail::node(val), n};
 
         /// 对当前表达式求导以获取下一阶系数
-        current = current->differentiate(expand_var);
+        current = detail::make_expression_ptr(detail::differentiate_node(detail::node(current), expand_var, *rewrite_budget()));
         if (!current) {
             return {nullptr, 0};
         }
-        current = current->simplify();
+        current = detail::make_expression_ptr(detail::normalize_node(detail::node(current), *rewrite_budget()));
     }
 
     return {nullptr, max_order + 1};

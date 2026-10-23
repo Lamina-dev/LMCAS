@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/solver_groebner_builder.hpp"
 #include "internal/expression_analysis.hpp"
 
@@ -48,7 +49,7 @@ bool PolyBuilder::function_depends_on_variables(const FunctionNode& node) const 
 bool PolyBuilder::use_numeric_function(const FunctionNode& node) {
     auto expression = LMCAS::detail::expression_from_node(
         LMCAS::detail::make_node<FunctionNode>(node.type(), node.arguments()));
-    auto simplified = expression.simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(expression), *rewrite_budget()));
     if (!simplified || !simplified->is_number()) return false;
     auto number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(simplified));
     if (!number) return false;

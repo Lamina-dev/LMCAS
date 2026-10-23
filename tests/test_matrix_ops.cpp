@@ -39,7 +39,7 @@ TEST(LmcasMatrixOps, InverseIdentity) {
     auto m2 = SymbolicExpr::matrix(m2_data);
     auto inv2 = LMCAS::matrix_inverse_checked(m2).value();
 
-    auto prod = SymbolicExpr::multiply(m2, inv2)->simplify();
+    auto prod = LMCAS::simplify(SymbolicExpr::multiply(m2, inv2)).value();
 
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> id_data = {
         {SymbolicExpr::number(1), SymbolicExpr::number(0)},
@@ -73,7 +73,7 @@ TEST_F(LmcasMatrixInputs, RationalInverse) {
         auto identity = SymbolicExpr::matrix({{SymbolicExpr::number(1), SymbolicExpr::number(0)},
                                               {SymbolicExpr::number(0), SymbolicExpr::number(1)}});
         auto simplified_reconstruction = reconstruction
-                                             ? reconstruction.value()->simplify()
+                                             ? LMCAS::simplify(reconstruction.value()).value()
                                              : nullptr;
         EXPECT_TRUE(test_expression_text(simplified_reconstruction, identity)) << "A times exact inverse reconstructs identity";
     }
@@ -172,8 +172,8 @@ TEST(LmcasMatrixOps, ApproximateProducts) {
 }
 
 TEST_F(LmcasMatrixInputs, NoncommutativeProducts) {
-    auto ab = LMCAS::matrix_multiply_checked(shear_a, shear_b).value()->simplify();
-    auto ba = LMCAS::matrix_multiply_checked(shear_b, shear_a).value()->simplify();
+    auto ab = LMCAS::simplify(LMCAS::matrix_multiply_checked(shear_a, shear_b).value()).value();
+    auto ba = LMCAS::simplify(LMCAS::matrix_multiply_checked(shear_b, shear_a).value()).value();
     EXPECT_TRUE((LMCAS::structurally_equal(*ab, *SymbolicExpr::matrix({{SymbolicExpr::number(7), SymbolicExpr::number(2)},
                                                                        {SymbolicExpr::number(3), SymbolicExpr::number(1)}}))))
         << "A times B preserves matrix factor order";
@@ -186,7 +186,7 @@ TEST_F(LmcasMatrixInputs, MatrixSumProducts) {
     auto identity_two = SymbolicExpr::matrix({{SymbolicExpr::number(1), SymbolicExpr::number(0)},
                                               {SymbolicExpr::number(0), SymbolicExpr::number(1)}});
     auto matrix_sum = SymbolicExpr::add(shear_a, identity_two);
-    auto composite_product = SymbolicExpr::multiply(shear_b, matrix_sum)->simplify();
+    auto composite_product = LMCAS::simplify(SymbolicExpr::multiply(shear_b, matrix_sum)).value();
     EXPECT_TRUE((LMCAS::structurally_equal(*composite_product, *SymbolicExpr::matrix({{SymbolicExpr::number(2), SymbolicExpr::number(2)},
                                                                                       {SymbolicExpr::number(6), SymbolicExpr::number(8)}}))))
         << "matrix-valued sums retain their factor position";
@@ -198,7 +198,7 @@ TEST(LmcasMatrixOps, RectangularProducts) {
                                       {SymbolicExpr::number(5), SymbolicExpr::number(6)}});
     auto wide = SymbolicExpr::matrix({{SymbolicExpr::number(7), SymbolicExpr::number(8), SymbolicExpr::number(9)},
                                       {SymbolicExpr::number(10), SymbolicExpr::number(11), SymbolicExpr::number(12)}});
-    auto rectangular_product = LMCAS::matrix_multiply_checked(tall, wide).value()->simplify();
+    auto rectangular_product = LMCAS::simplify(LMCAS::matrix_multiply_checked(tall, wide).value()).value();
     EXPECT_TRUE((LMCAS::structurally_equal(*rectangular_product, *SymbolicExpr::matrix({{SymbolicExpr::number(27), SymbolicExpr::number(30), SymbolicExpr::number(33)},
                                                                                         {SymbolicExpr::number(61), SymbolicExpr::number(68), SymbolicExpr::number(75)},
                                                                                         {SymbolicExpr::number(95), SymbolicExpr::number(106), SymbolicExpr::number(117)}}))))

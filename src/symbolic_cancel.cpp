@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "symbolic.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "internal/expression_analysis.hpp"
@@ -71,13 +72,16 @@ struct CancellationFraction {
 };
 
 static bool collect_fraction_terms(const AddNode& addition,
-                                   std::vector<CancellationFraction>& terms) {
+                                   std::vector<CancellationFraction>& terms, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     bool has_denominator = false;
     for (const auto& term : addition.operands()) {
         std::vector<CancellationNode> numerator, denominator;
         separate_num_den(term, numerator, denominator);
-        auto num_expr = build_product(numerator)->simplify();
-        auto den_expr = build_product(denominator)->simplify();
+        auto num_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(build_product(numerator)), transform_budget));
+        auto den_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(build_product(denominator)), transform_budget));
         if (!den_expr->is_one()) { has_denominator = true; }
         terms.push_back({num_expr, den_expr});
     }
@@ -93,7 +97,10 @@ static bool same_denominators(const std::vector<CancellationFraction>& terms) {
 }
 
 static CancellationExpr distinct_denominator_product(
-    const std::vector<CancellationFraction>& terms) {
+    const std::vector<CancellationFraction>& terms, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto total_den = SymbolicExpr::number(1);
     std::vector<CancellationExpr> unique_dens;
     for (const auto& term : terms) {
@@ -108,15 +115,18 @@ static CancellationExpr distinct_denominator_product(
         if (!found) { unique_dens.push_back(term.denominator); }
     }
     for (const auto& denominator : unique_dens) {
-        total_den = SymbolicExpr::multiply(total_den, denominator)->simplify();
+        total_den = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(total_den, denominator)), transform_budget));
     }
     return total_den;
 }
 
 static CancellationFraction combine_fraction_terms(
-    const std::vector<CancellationFraction>& terms) {
+    const std::vector<CancellationFraction>& terms, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const bool same = same_denominators(terms);
-    auto denominator = same ? terms[0].denominator : distinct_denominator_product(terms);
+    auto denominator = same ? terms[0].denominator : distinct_denominator_product(terms, context);
     std::vector<CancellationNode> operands;
     for (const auto& term : terms) {
         auto numerator = term.numerator;
@@ -126,10 +136,10 @@ static CancellationFraction combine_fraction_terms(
             auto factor = total_node && term_node &&
                     total_node->compare(*term_node) == 0
                 ? SymbolicExpr::number(1)
-                : SymbolicExpr::divide(
-                      denominator, term.denominator)->simplify();
-            numerator = SymbolicExpr::multiply(
-                term.numerator, factor)->simplify();
+                : detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
+                      denominator, term.denominator)), transform_budget));
+            numerator = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+                term.numerator, factor)), transform_budget));
         }
         if (numerator && detail::node(numerator)) {
             operands.push_back(detail::node(numerator));
@@ -138,7 +148,7 @@ static CancellationFraction combine_fraction_terms(
     if (operands.empty()) { return {SymbolicExpr::number(0), nullptr}; }
     auto numerator = operands.size() == 1 ? detail::make_expression_ptr(operands[0])
         : detail::make_expression_ptr(detail::make_node<AddNode>(operands));
-    numerator = same ? numerator->simplify() : numerator->expand()->simplify();
+    numerator = same ? detail::make_expression_ptr(detail::normalize_node(detail::node(numerator), transform_budget)) : detail::make_expression_ptr(detail::expand_node(detail::node(numerator), transform_budget));
     return {numerator, denominator};
 }
 
@@ -146,28 +156,34 @@ static CancellationFraction combine_fraction_terms(
 template <typename Coefficient>
 static void cancel_polynomial_gcd(const Polynomial<Coefficient>& numerator,
     const Polynomial<Coefficient>& denominator, CancellationExpr& cur_num,
-    CancellationExpr& cur_den) {
+    CancellationExpr& cur_den, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (denominator.is_zero()) return;
     auto gcd = Polynomial<Coefficient>::gcd(numerator, denominator);
     if (gcd.degree() >= 1) {
         auto [q_num, r_num] = numerator.div_mod(gcd);
         auto [q_den, r_den] = denominator.div_mod(gcd);
         if (!r_num.is_zero() || !r_den.is_zero()) return;
-        cur_num = poly_to_symbolic(q_num)->simplify();
-        cur_den = poly_to_symbolic(q_den)->simplify();
+        cur_num = detail::make_expression_ptr(detail::normalize_node(detail::node(poly_to_symbolic(q_num)), transform_budget));
+        cur_den = detail::make_expression_ptr(detail::normalize_node(detail::node(poly_to_symbolic(q_den)), transform_budget));
     }
 }
 
 static CancellationExpr cancel_variable(CancellationExpr& cur_num,
-    CancellationExpr& cur_den, const std::string& var, const CancellationExpr& simp) {
-    auto num_expanded = cur_num->expand()->simplify();
-    auto den_expanded = cur_den->expand()->simplify();
+    CancellationExpr& cur_den, const std::string& var, const CancellationExpr& simp, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto num_expanded = detail::make_expression_ptr(detail::expand_node(detail::node(cur_num), transform_budget));
+    auto den_expanded = detail::make_expression_ptr(detail::expand_node(detail::node(cur_den), transform_budget));
     auto rational_num = symbolic_to_poly<Rational>(num_expanded, var);
     auto rational_den = symbolic_to_poly<Rational>(den_expanded, var);
     if (rational_num && rational_den) {
         if (rational_den.value().is_zero()) { return simp; }
         if (rational_num.value().is_zero()) { return SymbolicExpr::number(0); }
-        cancel_polynomial_gcd(rational_num.value(), rational_den.value(), cur_num, cur_den);
+        cancel_polynomial_gcd(rational_num.value(), rational_den.value(), cur_num, cur_den, context);
         return nullptr;
     }
     auto symbolic_num = symbolic_to_poly<SymbolicPolyCoeff>(num_expanded, var);
@@ -175,35 +191,41 @@ static CancellationExpr cancel_variable(CancellationExpr& cur_num,
     if (!symbolic_num || !symbolic_den) { return nullptr; }
     if (symbolic_den.value().is_zero()) { return simp; }
     if (symbolic_num.value().is_zero()) { return SymbolicExpr::number(0); }
-    cancel_polynomial_gcd(symbolic_num.value(), symbolic_den.value(), cur_num, cur_den);
+    cancel_polynomial_gcd(symbolic_num.value(), symbolic_den.value(), cur_num, cur_den, context);
     return nullptr;
 }
 
 static CancellationExpr finish_cancellation(const CancellationExpr& cur_num,
-                                             const CancellationExpr& cur_den) {
+                                             const CancellationExpr& cur_den, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (cur_den->is_one()) { return cur_num; }
     if (detail::node(cur_den)) {
-        auto diff = SymbolicExpr::add(detail::make_expression_ptr(detail::node(cur_den)),
-            SymbolicExpr::number(-1))->simplify();
+        auto diff = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(detail::make_expression_ptr(detail::node(cur_den)),
+            SymbolicExpr::number(-1))), transform_budget));
         if (diff->is_zero()) {
-            return SymbolicExpr::multiply(SymbolicExpr::number(-1), cur_num)->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(SymbolicExpr::number(-1), cur_num)), transform_budget));
         }
     }
-    return SymbolicExpr::divide(cur_num, cur_den)->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(cur_num, cur_den)), transform_budget));
 }
 
 static CancellationExpr reduce_fraction(CancellationFraction fraction,
-    const CancellationExpr& simp, bool from_sum) {
+    const CancellationExpr& simp, bool from_sum, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto rational_variables = free_variables(detail::node(fraction.numerator));
     const auto denominator_variables = free_variables(detail::node(fraction.denominator));
     rational_variables.insert(denominator_variables.begin(), denominator_variables.end());
     if (!from_sum && rational_variables.empty()) {
-        return SymbolicExpr::divide(fraction.numerator, fraction.denominator)->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(fraction.numerator, fraction.denominator)), transform_budget));
     }
     for (const auto& var : rational_variables) {
         try {
             auto terminal = cancel_variable(
-                fraction.numerator, fraction.denominator, var, simp);
+                fraction.numerator, fraction.denominator, var, simp, context);
             if (terminal) { return terminal; }
         } catch (const std::invalid_argument&) {
             continue;
@@ -213,31 +235,34 @@ static CancellationExpr reduce_fraction(CancellationFraction fraction,
             continue;
         }
     }
-    return finish_cancellation(fraction.numerator, fraction.denominator);
+    return finish_cancellation(fraction.numerator, fraction.denominator, context);
 }
 
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::cancel() const {
-    auto simp = simplify();
-    if (!simp || !detail::node(simp)) { return simp; }
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto simp = detail::make_expression_ptr(
+        detail::normalize_node(detail::node(*this), transform_budget));
     if (auto addition = std::dynamic_pointer_cast<const AddNode>(detail::node(simp))) {
         std::vector<CancellationFraction> terms;
-        if (collect_fraction_terms(*addition, terms)) {
-            auto combined = combine_fraction_terms(terms);
+        if (collect_fraction_terms(*addition, terms, context)) {
+            auto combined = combine_fraction_terms(terms, context);
             if (!combined.denominator) { return combined.numerator; }
-            combined.denominator = combined.denominator->expand()->simplify();
-            return reduce_fraction(std::move(combined), simp, true);
+            combined.denominator = detail::make_expression_ptr(detail::expand_node(detail::node(combined.denominator), transform_budget));
+            return reduce_fraction(std::move(combined), simp, true, context);
         }
     }
     std::vector<CancellationNode> num_factors;
     std::vector<CancellationNode> den_factors;
     separate_num_den(detail::node(simp), num_factors, den_factors);
     if (den_factors.empty()) { return simp; }
-    auto numerator = build_product(num_factors)->simplify();
-    auto denominator = build_product(den_factors)->simplify();
+    auto numerator = detail::make_expression_ptr(detail::normalize_node(detail::node(build_product(num_factors)), transform_budget));
+    auto denominator = detail::make_expression_ptr(detail::normalize_node(detail::node(build_product(den_factors)), transform_budget));
     if (denominator->is_one()) { return numerator; }
-    return reduce_fraction({numerator, denominator}, simp, false);
+    return reduce_fraction({numerator, denominator}, simp, false, context);
 }
 
 }

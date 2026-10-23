@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "numeric_evaluation.hpp"
 #include "residual_verification.hpp"
@@ -17,7 +18,7 @@ TEST(Cancel, CancelX21X1X1) {
     auto result = expr->cancel();
 
     // 验证：代入 x=5 应得 6
-    auto val = result->substitute("x", SymbolicExpr::number(5))->simplify();
+    auto val = LMCAS::simplify(LMCAS::substitute(result, "x", SymbolicExpr::number(5)).value()).value();
     EXPECT_TRUE(test_expression_text((val), ("6"))) << "(x^2-1)/(x-1) at x=5 = 6";
 
     // 验证结果不含分母（无负指数）
@@ -41,7 +42,7 @@ TEST(Cancel, CancelX22x1X1X1) {
     auto result = expr->cancel();
 
     // 代入 x=3 应得 4
-    auto val = result->substitute("x", SymbolicExpr::number(3))->simplify();
+    auto val = LMCAS::simplify(LMCAS::substitute(result, "x", SymbolicExpr::number(3)).value()).value();
     EXPECT_TRUE(test_expression_text((val), ("4"))) << "(x^2+2x+1)/(x+1) at x=3 = 4";
 }
 
@@ -59,7 +60,7 @@ TEST(Cancel, CancelX3XX21X) {
     auto result = expr->cancel();
 
     // 代入 x=7 应得 7
-    auto val = result->substitute("x", SymbolicExpr::number(7))->simplify();
+    auto val = LMCAS::simplify(LMCAS::substitute(result, "x", SymbolicExpr::number(7)).value()).value();
     EXPECT_TRUE(test_expression_text((val), ("7"))) << "(x^3-x)/(x^2-1) at x=7 = 7";
 }
 
@@ -76,10 +77,10 @@ TEST(Cancel, CancelWithNoCommonFactorX1X2) {
 
     // 代入 x=3 应得 4/5 = 0.8，验证数值正确性
     // 由于无公因式，结果仍为分式形式
-    auto val_num = result->substitute("x", SymbolicExpr::number(3))->simplify();
+    auto val_num = LMCAS::simplify(LMCAS::substitute(result, "x", SymbolicExpr::number(3)).value()).value();
     // (3+1)/(3+2) = 4/5
-    auto expected = SymbolicExpr::divide(SymbolicExpr::number(4), SymbolicExpr::number(5))->simplify();
-    auto diff = SymbolicExpr::add(val_num, SymbolicExpr::multiply(SymbolicExpr::number(-1), expected))->simplify();
+    auto expected = LMCAS::simplify(SymbolicExpr::divide(SymbolicExpr::number(4), SymbolicExpr::number(5))).value();
+    auto diff = LMCAS::simplify(SymbolicExpr::add(val_num, SymbolicExpr::multiply(SymbolicExpr::number(-1), expected))).value();
     EXPECT_TRUE((diff->is_zero())) << "(x+1)/(x+2) at x=3 = 4/5";
 }
 
@@ -104,9 +105,7 @@ TEST(Cancel, CancelMultivariateXYYX1Y) {
     auto result = expr->cancel();
 
     // 代入 x=3, y=5 应得 5
-    auto val = result->substitute("x", SymbolicExpr::number(3))
-                   ->substitute("y", SymbolicExpr::number(5))
-                   ->simplify();
+    auto val = LMCAS::simplify(LMCAS::substitute(LMCAS::substitute(result, "x", SymbolicExpr::number(3)).value(), "y", SymbolicExpr::number(5)).value()).value();
     EXPECT_TRUE(test_expression_text((val), ("5"))) << "(xy-y)/(x-1) at x=3,y=5 = 5";
 }
 
@@ -132,7 +131,7 @@ TEST(Cancel, Cancel2x22x2xX1) {
     auto result = expr->cancel();
 
     // 代入 x=4 应得 5
-    auto val = result->substitute("x", SymbolicExpr::number(4))->simplify();
+    auto val = LMCAS::simplify(LMCAS::substitute(result, "x", SymbolicExpr::number(4)).value()).value();
     EXPECT_TRUE(test_expression_text((val), ("5"))) << "(2x^2+2x)/(2x) at x=4 = 5";
 }
 
@@ -152,9 +151,9 @@ TEST(Cancel, FactorCubicX36x211x6X1X2X3) {
     auto factored = expr->factor_checked().value();
 
     // 验证：代入 x=1, x=2, x=3 应得 0
-    auto v1 = factored->substitute("x", SymbolicExpr::number(1))->simplify();
-    auto v2 = factored->substitute("x", SymbolicExpr::number(2))->simplify();
-    auto v3 = factored->substitute("x", SymbolicExpr::number(3))->simplify();
+    auto v1 = LMCAS::simplify(LMCAS::substitute(factored, "x", SymbolicExpr::number(1)).value()).value();
+    auto v2 = LMCAS::simplify(LMCAS::substitute(factored, "x", SymbolicExpr::number(2)).value()).value();
+    auto v3 = LMCAS::simplify(LMCAS::substitute(factored, "x", SymbolicExpr::number(3)).value()).value();
     EXPECT_TRUE((v1->is_zero())) << "x^3-6x^2+11x-6 at x=1 = 0";
     EXPECT_TRUE((v2->is_zero())) << "x^3-6x^2+11x-6 at x=2 = 0";
     EXPECT_TRUE((v3->is_zero())) << "x^3-6x^2+11x-6 at x=3 = 0";
@@ -180,7 +179,7 @@ TEST(Cancel, CancelHigherDegreeX3XX2XX1) {
     auto result = expr->cancel();
 
     // 代入 x=5 应得 4
-    auto val = result->substitute("x", SymbolicExpr::number(5))->simplify();
+    auto val = LMCAS::simplify(LMCAS::substitute(result, "x", SymbolicExpr::number(5)).value()).value();
     EXPECT_TRUE(test_expression_text((val), ("4"))) << "(x^3-x)/(x^2+x) at x=5 = 4";
 }
 
@@ -229,5 +228,5 @@ TEST(Cancel, CombinesTermsAlreadyUsingTheCommonDenominator) {
     auto cancelled = expression->cancel();
 
     ASSERT_TRUE(cancelled);
-    EXPECT_TRUE(test_same_expression(cancelled, reciprocal->simplify()));
+    EXPECT_TRUE(test_same_expression(cancelled, LMCAS::simplify(reciprocal).value()));
 }

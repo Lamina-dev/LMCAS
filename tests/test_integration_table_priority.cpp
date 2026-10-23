@@ -1,6 +1,8 @@
 
 #include "test_common.hpp"
 #include "integration.hpp"
+#include "expr.hpp"
+#include "residual_verification.hpp"
 
 #include <string>
 #include <vector>
@@ -84,5 +86,52 @@ TEST(LmcasIntegrationTablePriority, InsertedPriorityOrdering) {
             table.add_entry(spec.cat, e);
             check_priority_order(table, spec, "after add_entry #" + std::to_string(i));
         }
+    }
+}
+
+TEST(LmcasIntegrationTablePriority, IncorrectSamePatternFallsBack) {
+    for (bool affine : {false, true}) {
+        SCOPED_TRACE(affine ? "affine substitution" : "direct lookup");
+        Integrator integrator;
+        for (const auto &spec : all_categories()) {
+            integrator.table().clear_category(spec.cat);
+        }
+        auto u = SymbolicExpr::variable("_u");
+        auto pattern = SymbolicExpr::sin(u);
+        auto correct = SymbolicExpr::multiply(
+            SymbolicExpr::number(-1), SymbolicExpr::cos(u));
+        integrator.table().add_entry(IntegrationTable::Category::UserDefined,
+            IntegrationEntry("wrong sine", *pattern, *u, {"_u"}, nullptr, -100));
+        integrator.table().add_entry(IntegrationTable::Category::UserDefined,
+            IntegrationEntry("correct sine", *pattern, *correct, {"_u"}, nullptr, -99));
+        auto x = SymbolicExpr::variable("x");
+        auto argument = affine
+            ? SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), x),
+                                SymbolicExpr::number(1))
+            : x;
+        auto integrand = SymbolicExpr::sin(argument);
+        ComputationContext context;
+        TableLookupStrategy direct;
+        LinearSubstitutionStrategy substitution;
+        auto attempted = affine
+            ? substitution.try_integrate(*integrand, "x", integrator, context)
+            : direct.try_integrate(*integrand, "x", integrator, context);
+        ASSERT_TRUE(attempted);
+        auto *candidate = std::get_if<IntegrationCandidate>(&attempted.value());
+        ASSERT_NE(candidate, nullptr);
+        auto candidate_derivative = LMCAS::differentiate(candidate->expression, "x", context);
+        ASSERT_TRUE(candidate_derivative);
+        auto candidate_proof = check_equivalent(candidate_derivative.value(), integrand, context);
+        ASSERT_TRUE(candidate_proof);
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(candidate_proof.value()));
+        auto result = integrator.integrate_checked(*integrand, "x", context);
+        ASSERT_TRUE(result) << result.error().message;
+        ASSERT_FALSE(detail::contains_node_type<IntegralNode>(detail::node(result.value())));
+        auto derivative = LMCAS::differentiate(
+            detail::make_expression_ptr(result.value()), "x", context);
+        ASSERT_TRUE(derivative);
+        auto proof = check_equivalent(derivative.value(), integrand, context);
+        ASSERT_TRUE(proof);
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
     }
 }

@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/inequality_solver_support.hpp"
 #include "internal/symbolic_ast.hpp"
 #include <algorithm>
@@ -8,16 +9,17 @@ using namespace detail::inequality_support;
 namespace detail::inequality_support {
 
 void include_numeric_root(std::vector<Interval>& intervals,
-                          const std::shared_ptr<SymbolicExpr>& root) {
+                          const std::shared_ptr<SymbolicExpr>& root,
+                          ComputationContext& context) {
     bool merged = false;
     for (auto& interval : intervals) {
         if (!interval.upper.is_pos_infinity && interval.upper.value &&
-            roots_equal(interval.upper.value, root)) {
+            roots_equal(interval.upper.value, root, context)) {
             interval.upper.is_open = false;
             merged = true;
         }
         if (!interval.lower.is_neg_infinity && interval.lower.value &&
-            roots_equal(interval.lower.value, root)) {
+            roots_equal(interval.lower.value, root, context)) {
             interval.lower.is_open = false;
             merged = true;
         }
@@ -28,14 +30,17 @@ void include_numeric_root(std::vector<Interval>& intervals,
 }
 
 static bool close_symbolic_endpoint(Endpoint& endpoint,
-                                   const std::shared_ptr<SymbolicExpr>& root) {
+                                   const std::shared_ptr<SymbolicExpr>& root, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (detail::node(endpoint.value)->equals(*detail::node(root))) {
         endpoint.is_open = false;
         return true;
     }
     auto diff = SymbolicExpr::add(endpoint.value,
         SymbolicExpr::multiply(root, SymbolicExpr::number(-1)));
-    if (!diff->simplify()->is_zero()) {
+    if (!detail::make_expression_ptr(detail::normalize_node(detail::node(diff), transform_budget))->is_zero()) {
         return false;
     }
     endpoint.is_open = false;
@@ -43,16 +48,16 @@ static bool close_symbolic_endpoint(Endpoint& endpoint,
 }
 
 static void include_symbolic_root(std::vector<Interval>& intervals,
-                                 const std::shared_ptr<SymbolicExpr>& root) {
+                                 const std::shared_ptr<SymbolicExpr>& root, ComputationContext& context) {
     bool merged = false;
     for (auto& interval : intervals) {
         if (!interval.upper.is_pos_infinity && interval.upper.value) {
-            if (close_symbolic_endpoint(interval.upper, root)) {
+            if (close_symbolic_endpoint(interval.upper, root, context)) {
                 merged = true;
             }
         }
         if (!interval.lower.is_neg_infinity && interval.lower.value) {
-            if (close_symbolic_endpoint(interval.lower, root)) {
+            if (close_symbolic_endpoint(interval.lower, root, context)) {
                 merged = true;
             }
         }
@@ -82,7 +87,7 @@ IntervalUnion build_parametric_intervals(
     const std::vector<std::shared_ptr<SymbolicExpr>>& symbolic_roots,
     const std::vector<int>& multiplicities,
     int leading_sign,
-    InequalityType type) {
+    InequalityType type, ComputationContext& context) {
 
     if (symbolic_roots.empty()) {
 
@@ -113,7 +118,7 @@ IntervalUnion build_parametric_intervals(
     auto result_intervals = select_open_intervals(symbolic_roots, interval_signs, target_sign);
 
     if (!is_strict) {
-        for (const auto& root : symbolic_roots) include_symbolic_root(result_intervals, root);
+        for (const auto& root : symbolic_roots) include_symbolic_root(result_intervals, root, context);
     }
     return IntervalUnion(result_intervals);
 }
@@ -124,7 +129,7 @@ std::vector<SignChartEntry> InequalitySolver::build_sign_chart(
     const std::shared_ptr<SymbolicExpr>& poly,
     const std::string& variable,
     const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
-    const std::vector<int>& multiplicities) {
+    const std::vector<int>& multiplicities, ComputationContext& context) {
 
     std::vector<SignChartEntry> chart;
     auto converted = symbolic_to_poly<SymbolicPolyCoeff>(poly, variable);
@@ -133,12 +138,12 @@ std::vector<SignChartEntry> InequalitySolver::build_sign_chart(
 
     if (roots.empty()) {
 
-        int sign = determine_leading_sign(p);
+        int sign = determine_leading_sign(p, context);
         chart.push_back({Interval::entire_line(), sign});
         return chart;
     }
 
-    int leading_sign = determine_leading_sign(p);
+    int leading_sign = determine_leading_sign(p, context);
 
     size_t n = roots.size();
     std::vector<int> interval_signs(n + 1);
@@ -180,7 +185,7 @@ IntervalUnion InequalitySolver::select_intervals(
     const std::vector<SignChartEntry>& chart,
     InequalityType type,
     const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
-    const std::vector<int>&) {
+    const std::vector<int>&, ComputationContext& context) {
 
     std::vector<Interval> result_intervals;
 
@@ -195,7 +200,7 @@ IntervalUnion InequalitySolver::select_intervals(
     }
 
     if (!is_strict) {
-        for (const auto& root : roots) include_numeric_root(result_intervals, root);
+        for (const auto& root : roots) include_numeric_root(result_intervals, root, context);
     }
     return IntervalUnion(result_intervals);
 }
@@ -205,7 +210,8 @@ IntervalUnion InequalitySolver::build_parametric_solution(
     const std::vector<int>& multiplicities,
     int leading_sign,
     InequalityType type) {
-    return build_parametric_intervals(symbolic_roots, multiplicities, leading_sign, type);
+    ComputationContext context;
+    return build_parametric_intervals(symbolic_roots, multiplicities, leading_sign, type, context);
 }
 
 }

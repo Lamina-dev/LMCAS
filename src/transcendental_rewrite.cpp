@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 /**
  * @file transcendental_rewrite.cpp
  * @brief 超越因子的逆换元、常数提取与乘法结构识别。
@@ -18,7 +19,7 @@ namespace LMCAS {
  *
  * 对换元后的因子执行逆操作:遍历映射列表,将每个不定元(u0, u1, ...)
  * 替换为其对应的原始超越表达式(如 sin(x),cos(x) 等).
- * 利用 SymbolicExpr::substitute() 逐一执行变量替换.
+ * 逐一执行自由变量代入，复用调用者的变换预算。
  *
  * @param[in] factor_expr 以不定元表示的因子表达式
  * @param[in] mappings    换元映射列表(indeterminate -> trans_expr)
@@ -27,7 +28,10 @@ namespace LMCAS {
  */
 std::shared_ptr<SymbolicExpr> tf_back_substitute(
     const std::shared_ptr<SymbolicExpr>& factor_expr,
-    const std::vector<TransSubstitution>& mappings) {
+    const std::vector<TransSubstitution>& mappings, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     if (!factor_expr || !LMCAS::detail::node(factor_expr)) {
         return factor_expr;
@@ -45,7 +49,7 @@ std::shared_ptr<SymbolicExpr> tf_back_substitute(
 
         /// 仅当表达式依赖该不定元时才执行替换
         if (expression_depends_on_variable(LMCAS::detail::node(result), m.indeterminate)) {
-            result = result->substitute(m.indeterminate, m.trans_expr);
+            result = detail::make_expression_ptr(detail::substitute_node(detail::node(result), m.indeterminate, detail::node(m.trans_expr), transform_budget));
         }
     }
 
@@ -94,12 +98,14 @@ namespace {
 class FactorSimplification {
 public:
     std::vector<std::shared_ptr<SymbolicExpr>> run(
-        const std::vector<std::shared_ptr<SymbolicExpr>>& factors) {
+        const std::vector<std::shared_ptr<SymbolicExpr>>& factors,
+        detail::RewriteBudget& budget) {
         for (const auto& factor : factors) {
             if (!factor || !LMCAS::detail::node(factor)) {
                 continue;
             }
-            auto simplified = factor->simplify();
+            auto simplified = detail::make_expression_ptr(
+                detail::normalize_node(detail::node(factor), budget));
             if (!simplified || !LMCAS::detail::node(simplified)) {
                 simplified = factor;
             }
@@ -210,8 +216,16 @@ private:
  */
 std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors(
     std::vector<std::shared_ptr<SymbolicExpr>>& factors) {
+    ComputationContext context;
+    return tf_simplify_factors_impl(factors, context);
+}
+
+std::vector<std::shared_ptr<SymbolicExpr>> tf_simplify_factors_impl(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& factors, ComputationContext& context) {
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "factor_transcendental");
     FactorSimplification simplification;
-    return simplification.run(factors);
+    return simplification.run(factors, budget);
 }
 
 
@@ -444,7 +458,10 @@ static std::shared_ptr<const SymbolicNode> tf_remove_exp_factor(
  */
 std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separation(
     const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& var) {
+    const std::string& var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     if (!expr || !LMCAS::detail::node(expr)) {
         return {};
@@ -491,7 +508,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> tf_detect_exponential_separation(
     }
 
     /// 化简剩余和
-    auto simplified_sum = sum_expr->simplify();
+    auto simplified_sum = detail::make_expression_ptr(detail::normalize_node(detail::node(sum_expr), transform_budget));
     if (simplified_sum && LMCAS::detail::node(simplified_sum)) {
         sum_expr = simplified_sum;
     }

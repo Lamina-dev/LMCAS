@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 /**
  * @file ode_classification.cpp
  * @brief ODE 方程类型检测与分类。
@@ -95,6 +96,9 @@ bool is_linear_first_order(
     std::shared_ptr<SymbolicExpr>& P,
     std::shared_ptr<SymbolicExpr>& Q)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     P.reset();
     Q.reset();
     if (!rhs || !LMCAS::detail::node(rhs) ||
@@ -114,14 +118,14 @@ bool is_linear_first_order(
     }
 
     /// 对 rhs 关于 y 求导，若结果不依赖 y，则 rhs 关于 y 是线性的
-    auto drhs_dy = rhs->differentiate(y);
+    auto drhs_dy = detail::make_expression_ptr(detail::differentiate_node(detail::node(rhs), y, transform_budget));
     if (!drhs_dy || expression_depends_on_variable(LMCAS::detail::node(drhs_dy), y)) {
         return false;
     }
 
     /// rhs = A(x) + B(x)*y，其中 B(x) = ∂rhs/∂y
     /// 计算 A(x) = rhs|_{y=0}
-    auto A = rhs->substitute(y, SymbolicExpr::number(0));
+    auto A = detail::make_expression_ptr(detail::substitute_node(detail::node(rhs), y, detail::node(SymbolicExpr::number(0)), transform_budget));
     if (!A) {
         return false;
     }
@@ -134,8 +138,8 @@ bool is_linear_first_order(
     /// B(x) = drhs_dy（已验证不依赖 y）
     /// 线性形式: y' = A(x) + B(x)*y  →  y' - B(x)*y = A(x)  →  y' + (-B(x))*y = A(x)
     /// 所以 P = -B(x), Q = A(x)
-    P = SymbolicExpr::multiply(SymbolicExpr::number(-1), drhs_dy)->simplify();
-    Q = A->simplify();
+    P = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(SymbolicExpr::number(-1), drhs_dy)), transform_budget));
+    Q = detail::make_expression_ptr(detail::normalize_node(detail::node(A), transform_budget));
     return true;
 }
 
@@ -145,6 +149,9 @@ bool is_homogeneous_ode(
     const std::string& x,
     const std::string& y)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!rhs || !LMCAS::detail::node(rhs)) {
         return false;
     }
@@ -158,20 +165,20 @@ bool is_homogeneous_ode(
     auto tx = SymbolicExpr::multiply(t_val, SymbolicExpr::variable(x));
     auto ty = SymbolicExpr::multiply(t_val, SymbolicExpr::variable(y));
 
-    auto f_scaled = rhs->substitute(x, tx);
-    f_scaled = f_scaled->substitute(y, ty);
-    f_scaled = f_scaled->simplify();
+    auto f_scaled = detail::make_expression_ptr(detail::substitute_node(detail::node(rhs), x, detail::node(tx), transform_budget));
+    f_scaled = detail::make_expression_ptr(detail::substitute_node(detail::node(f_scaled), y, detail::node(ty), transform_budget));
+    f_scaled = detail::make_expression_ptr(detail::normalize_node(detail::node(f_scaled), transform_budget));
 
     /// 计算 f_scaled - rhs，若化简为零则齐次
     auto diff = SymbolicExpr::add(f_scaled,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs));
-    diff = diff->simplify();
+    diff = detail::make_expression_ptr(detail::normalize_node(detail::node(diff), transform_budget));
 
     if (diff->is_zero()) {
         return true;
     }
 
-    ComputationContext context;
+
     auto verified = check_zero_residual(diff, context);
     return verified &&
         std::holds_alternative<ProvedZeroResidual>(verified.value());
@@ -220,7 +227,10 @@ static bool accumulate_bernoulli_exponent(int value, int& exponent) {
 
 static bool extract_bernoulli_factor(
     const std::shared_ptr<const SymbolicNode>& factor, const std::string& y,
-    int& exponent, std::shared_ptr<SymbolicExpr>& coefficient) {
+    int& exponent, std::shared_ptr<SymbolicExpr>& coefficient, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
         if (auto variable =
                 std::dynamic_pointer_cast<const VariableNode>(factor);
             variable && !variable->is_constant() && variable->name() == y) {
@@ -247,8 +257,8 @@ static bool extract_bernoulli_factor(
         if (expression_depends_on_variable(factor, y)) {
             return false;
         }
-        coefficient = SymbolicExpr::multiply(
-            coefficient, LMCAS::detail::make_expression_ptr(factor))->simplify();
+        coefficient = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+            coefficient, LMCAS::detail::make_expression_ptr(factor))), transform_budget));
     return true;
 }
 
@@ -256,7 +266,7 @@ static bool extract_bernoulli_monomial(
     const std::shared_ptr<const SymbolicNode>& term,
     const std::string& y,
     int& exponent,
-    std::shared_ptr<SymbolicExpr>& coefficient)
+    std::shared_ptr<SymbolicExpr>& coefficient, ComputationContext& context)
 {
     exponent = 0;
     coefficient = SymbolicExpr::number(1);
@@ -268,7 +278,7 @@ static bool extract_bernoulli_monomial(
     }
 
     for (const auto& factor : factors) {
-        if (!extract_bernoulli_factor(factor, y, exponent, coefficient)) {
+        if (!extract_bernoulli_factor(factor, y, exponent, coefficient, context)) {
             return false;
         }
     }
@@ -278,18 +288,21 @@ static bool extract_bernoulli_monomial(
 static bool collect_bernoulli_coefficients(
     const std::vector<std::shared_ptr<const SymbolicNode>>& terms,
     const std::string& y,
-    std::map<int, std::shared_ptr<SymbolicExpr>>& coefficients) {
+    std::map<int, std::shared_ptr<SymbolicExpr>>& coefficients, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     for (const auto& term : terms) {
         int exponent = 0;
         std::shared_ptr<SymbolicExpr> coefficient;
         if (!extract_bernoulli_monomial(
-                term, y, exponent, coefficient)) {
+                term, y, exponent, coefficient, context)) {
             return false;
         }
         auto& combined = coefficients[exponent];
         combined = combined
-            ? SymbolicExpr::add(combined, coefficient)->simplify()
-            : coefficient->simplify();
+            ? detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(combined, coefficient)), transform_budget))
+            : detail::make_expression_ptr(detail::normalize_node(detail::node(coefficient), transform_budget));
     }
     return true;
 }
@@ -302,6 +315,9 @@ bool is_bernoulli_ode(
     std::shared_ptr<SymbolicExpr>& Q,
     int& n)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     P.reset();
     Q.reset();
     n = 0;
@@ -322,14 +338,14 @@ bool is_bernoulli_ode(
     }
 
     std::map<int, std::shared_ptr<SymbolicExpr>> coefficients;
-    if (!collect_bernoulli_coefficients(terms, y, coefficients)) {
+    if (!collect_bernoulli_coefficients(terms, y, coefficients, context)) {
         return false;
     }
     auto linear_coefficient = SymbolicExpr::number(0);
     std::shared_ptr<SymbolicExpr> nonlinear_coefficient;
     int nonlinear_exponent = 0;
     for (auto& [exponent, coefficient] : coefficients) {
-        coefficient = coefficient->simplify();
+        coefficient = detail::make_expression_ptr(detail::normalize_node(detail::node(coefficient), transform_budget));
         if (coefficient->is_zero()) {
             continue;
         }
@@ -349,9 +365,9 @@ bool is_bernoulli_ode(
         return false;
     }
 
-    P = SymbolicExpr::multiply(
-        SymbolicExpr::number(-1), linear_coefficient)->simplify();
-    Q = nonlinear_coefficient->simplify();
+    P = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+        SymbolicExpr::number(-1), linear_coefficient)), transform_budget));
+    Q = detail::make_expression_ptr(detail::normalize_node(detail::node(nonlinear_coefficient), transform_budget));
     n = nonlinear_exponent;
     return true;
 }
@@ -363,6 +379,9 @@ bool is_exact_ode(
     const std::string& x,
     const std::string& y)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!M || !LMCAS::detail::node(M) ||
         !N || !LMCAS::detail::node(N) ||
         !valid_classifier_variables(x, y)) {
@@ -370,15 +389,15 @@ bool is_exact_ode(
     }
 
     /// 恰当条件: ∂M/∂y = ∂N/∂x
-    auto dM_dy = M->differentiate(y);
-    auto dN_dx = N->differentiate(x);
+    auto dM_dy = detail::make_expression_ptr(detail::differentiate_node(detail::node(M), y, transform_budget));
+    auto dN_dx = detail::make_expression_ptr(detail::differentiate_node(detail::node(N), x, transform_budget));
 
     if (!dM_dy || !dN_dx) {
         return false;
     }
 
-    dM_dy = dM_dy->simplify();
-    dN_dx = dN_dx->simplify();
+    dM_dy = detail::make_expression_ptr(detail::normalize_node(detail::node(dM_dy), transform_budget));
+    dN_dx = detail::make_expression_ptr(detail::normalize_node(detail::node(dN_dx), transform_budget));
     if (dM_dy->compare(dN_dx) == 0) {
         return true;
     }
@@ -386,13 +405,13 @@ bool is_exact_ode(
     /// 计算差值并化简
     auto diff = SymbolicExpr::add(dM_dy,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), dN_dx));
-    diff = diff->simplify();
+    diff = detail::make_expression_ptr(detail::normalize_node(detail::node(diff), transform_budget));
 
     if (diff->is_zero()) {
         return true;
     }
 
-    ComputationContext context;
+
     auto verified = check_zero_residual(diff, context);
     return verified &&
         std::holds_alternative<ProvedZeroResidual>(verified.value());
@@ -424,6 +443,9 @@ bool is_euler_equation(
     const std::string& x,
     std::vector<double>& euler_consts)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     euler_consts.clear();
     if (coeffs.empty() || x.empty()) {
         return false;
@@ -446,13 +468,13 @@ bool is_euler_equation(
 
         std::shared_ptr<SymbolicExpr> ratio;
         if (derivative_order == 0) {
-            ratio = coeffs[index]->simplify();
+            ratio = detail::make_expression_ptr(detail::normalize_node(detail::node(coeffs[index]), transform_budget));
         } else {
             auto x_power = SymbolicExpr::power(
                 SymbolicExpr::variable(x),
                 SymbolicExpr::number(derivative_order));
-            ratio = SymbolicExpr::divide(
-                coeffs[index], x_power)->simplify();
+            ratio = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
+                coeffs[index], x_power)), transform_budget));
         }
         if (!ratio || !LMCAS::detail::node(ratio)) {
             return false;
@@ -480,6 +502,9 @@ ODEClassification classify_first_order_ode(
     const std::string& x,
     const std::string& y)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     ODEClassification result;
     result.order = 1;
 
@@ -525,7 +550,7 @@ ODEClassification classify_first_order_ode(
     /// 即 M = -rhs, N = 1（标准形式 M*dx + N*dy = 0 → M + N*dy/dx = 0）
     /// 更一般地: 若 rhs = f(x,y)，则 -f(x,y)*dx + dy = 0
     /// M = -f(x,y), N = 1
-    auto neg_rhs = SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs)->simplify();
+    auto neg_rhs = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(SymbolicExpr::number(-1), rhs)), transform_budget));
     auto one = SymbolicExpr::number(1);
     if (is_exact_ode(neg_rhs, one, x, y)) {
         result.type = ODEType::Exact;

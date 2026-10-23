@@ -1,9 +1,12 @@
 #include "internal/inequality_solver_support.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/symbolic_ast.hpp"
-#include "internal/assumption_simplification.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/assumption_facts.hpp"
+#include "internal/rewrite_budget.hpp"
 #include <algorithm>
 #include <limits>
+#include <optional>
 
 namespace LMCAS {
 namespace {
@@ -11,6 +14,20 @@ namespace {
 constexpr const char* kParametricOperation = "solve_parametric_inequality_checked";
 
 using PiecewiseResult = Result<PiecewiseIntervalResult>;
+
+PiecewiseResult checked_piecewise(PiecewiseResult result, detail::RewriteBudget& budget) {
+    if (!result) { return result; }
+    budget.consume();
+    std::size_t nodes = 0;
+    for (const auto& branch : result.value().cases) {
+        nodes = budget.append_size(nodes, budget.measure(detail::node(branch.condition)));
+        for (const auto& interval : branch.solution.intervals()) {
+            nodes = budget.append_size(nodes, budget.measure(detail::node(interval.lower.value)));
+            nodes = budget.append_size(nodes, budget.measure(detail::node(interval.upper.value)));
+        }
+    }
+    return result;
+}
 
 PiecewiseResult inconclusive() {
     return PiecewiseResult::failure(
@@ -95,7 +112,7 @@ Result<void> exact_operands(const Node& node, const std::string& variable,
 
 Result<Interval> linear_interval(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
-    InequalityType type, ComputationContext& context) {
+    InequalityType type, detail::RewriteBudget& budget) {
     const auto slope = detail::exact_rational_value(detail::node(coeffs[1]));
     if (!slope) {
         return Result<Interval>::failure(inconclusive().error());
@@ -103,19 +120,19 @@ Result<Interval> linear_interval(
     if (*slope == Rational(0)) {
         return Result<Interval>::failure(inconclusive().error());
     }
-    auto root = detail::simplify_expression(SymbolicExpr::divide(
-        SymbolicExpr::multiply(SymbolicExpr::number(-1), coeffs[0]),
-        coeffs[1]), context);
-    if (!root) {
-        return Result<Interval>::failure(root.error());
-    }
+    std::optional<detail::AssumptionFacts> facts;
+    if (budget.context().assumptions()) { facts.emplace(*budget.context().assumptions()); }
+    auto root = detail::make_expression_ptr(detail::normalize_node(
+        detail::node(SymbolicExpr::divide(
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), coeffs[0]), coeffs[1])),
+        budget, facts ? *facts : detail::no_facts()));
 
     const bool greater = satisfies(1, type);
     const bool strict = type == InequalityType::GreaterThan ||
                         type == InequalityType::LessThan;
     const bool above = greater != slope->get_numerator().is_negative();
-    const auto endpoint = strict ? Endpoint::open(root.value())
-                                 : Endpoint::closed(root.value());
+    const auto endpoint = strict ? Endpoint::open(root)
+                                 : Endpoint::closed(root);
     return above ? Interval{endpoint, Endpoint::pos_inf()}
                  : Interval{Endpoint::neg_inf(), endpoint};
 }
@@ -143,22 +160,22 @@ PiecewiseResult constant_solution(const std::shared_ptr<SymbolicExpr>& coefficie
 }
 
 PiecewiseResult quadratic_solution(const std::shared_ptr<SymbolicExpr>& coefficient,
-                                   InequalityType type) {
+                                   InequalityType type, ComputationContext& context) {
     PiecewiseIntervalResult result;
     for (int sign : {1, 0, -1}) {
         auto solution = sign == 0 ? zero_polynomial_solution(type)
             : detail::inequality_support::build_parametric_intervals(
-                {SymbolicExpr::number(0)}, {2}, sign, type);
+                {SymbolicExpr::number(0)}, {2}, sign, type, context);
         result.cases.push_back({sign_condition(coefficient, sign), std::move(solution)});
     }
     return result;
 }
 PiecewiseResult nonlinear_solution(
     const std::vector<std::shared_ptr<SymbolicExpr>>& coeffs,
-    int degree, InequalityType type) {
+    int degree, InequalityType type, ComputationContext& context) {
     if (degree == 0) return constant_solution(coeffs[0], type);
     if (!coeffs[0]->is_zero() || !coeffs[1]->is_zero()) return inconclusive();
-    return quadratic_solution(coeffs[2], type);
+    return quadratic_solution(coeffs[2], type, context);
 }
 
 Result<void> check_arguments(
@@ -180,14 +197,16 @@ Result<void> check_arguments(
 
 Result<std::vector<std::shared_ptr<SymbolicExpr>>> simplify_coefficients(
     const Polynomial<SymbolicPolyCoeff>& poly, bool& symbolic,
-    ComputationContext& context) {
+    detail::RewriteBudget& budget) {
     std::vector<std::shared_ptr<SymbolicExpr>> coeffs;
     coeffs.reserve(poly.coeffs.size());
+    std::optional<detail::AssumptionFacts> facts;
+    if (budget.context().assumptions()) { facts.emplace(*budget.context().assumptions()); }
+    std::size_t nodes = 0;
     for (const auto& coefficient : poly.coeffs) {
-        auto simplified = detail::simplify_expression(coefficient.val, context);
-        if (!simplified)
-            return Result<std::vector<std::shared_ptr<SymbolicExpr>>>::failure(simplified.error());
-        auto value = std::move(simplified.value());
+        auto value = detail::make_expression_ptr(detail::normalize_node(
+            detail::node(coefficient.val), budget, facts ? *facts : detail::no_facts()));
+        nodes = budget.append_size(nodes, budget.measure(detail::node(value)));
         if (!detail::exact_rational_value(detail::node(value))) symbolic = true;
         coeffs.push_back(std::move(value));
     }
@@ -207,8 +226,11 @@ Result<PiecewiseIntervalResult> InequalitySolver::solve_parametric_inequality_ch
     }
 
     try {
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                     context.limits().max_ast_nodes, kParametricOperation);
+        budget.measure(detail::node(expr));
         if (parameters.empty()) {
-            return solved_inequality(expr, type, variable, context);
+            return checked_piecewise(solved_inequality(expr, type, variable, context), budget);
         }
         auto converted = detail::symbolic_to_poly_checked(*expr, variable, context);
         if (!converted) {
@@ -228,37 +250,35 @@ Result<PiecewiseIntervalResult> InequalitySolver::solve_parametric_inequality_ch
         if (poly.is_zero()) {
             PiecewiseIntervalResult result;
             result.cases.push_back({nullptr, zero_polynomial_solution(type)});
-            return result;
+            return checked_piecewise(std::move(result), budget);
         }
 
         bool symbolic = false;
-        auto simplified = simplify_coefficients(poly, symbolic, context);
+        auto simplified = simplify_coefficients(poly, symbolic, budget);
         if (!simplified) {
             return PiecewiseResult::failure(simplified.error());
         }
         const auto& coeffs = simplified.value();
 
         if (!symbolic) {
-            return solved_inequality(expr, type, variable, context);
+            return checked_piecewise(solved_inequality(expr, type, variable, context), budget);
         }
 
-        auto nodes = context.reserve_nodes(16, kParametricOperation);
-        if (!nodes) {
-            return PiecewiseResult::failure(nodes.error());
-        }
         if (poly.degree() != 1) {
-            return nonlinear_solution(coeffs, poly.degree(), type);
+            return checked_piecewise(nonlinear_solution(coeffs, poly.degree(), type, context), budget);
         }
-        auto interval = linear_interval(coeffs, type, context);
+        auto interval = linear_interval(coeffs, type, budget);
         if (!interval) {
             return PiecewiseResult::failure(interval.error());
         }
         PiecewiseIntervalResult result;
         result.cases.push_back({nullptr, IntervalUnion::from_checked_normalized(
             {std::move(interval.value())})});
-        return result;
+        return checked_piecewise(std::move(result), budget);
     } catch (const CasError& error) {
         return PiecewiseResult::failure(error);
+    } catch (const std::length_error& error) {
+        return PiecewiseResult::failure(CasErrc::ResourceLimit, error.what(), kParametricOperation);
     } catch (const std::bad_alloc&) {
         return PiecewiseResult::failure(
             CasErrc::ResourceLimit, "parametric inequality allocation failed",

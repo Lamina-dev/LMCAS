@@ -21,7 +21,7 @@ TEST(ExprValues, ResolvedUnitConversion) {
     EXPECT_TRUE((converted.has_value())) << "convert resolved unit";
     auto display = LMCAS::strip_to_display_value(
         converted.value(), unit_context);
-    EXPECT_TRUE((display && display.value()->simplify()->to_string() == "300")) << "preserve target magnitude";
+    EXPECT_TRUE((display && LMCAS::simplify(display.value()).value()->to_string() == "300")) << "preserve target magnitude";
 }
 
 TEST(ExprValues, PiConstant) {

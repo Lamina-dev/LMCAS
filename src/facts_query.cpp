@@ -3,6 +3,7 @@
 #include "internal/exact_root.hpp"
 #include "internal/normalization_utils.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/rewrite_budget.hpp"
 
 #include <new>
 #include <utility>
@@ -39,7 +40,9 @@ class DomainTraversal {
 public:
     DomainTraversal(const FactsQuery& facts, Domain domain,
                     ComputationContext& context, bool project = false)
-        : facts_(facts), domain_(domain), context_(context), project_(project) {}
+        : facts_(facts), domain_(domain), context_(context), project_(project),
+          budget_(context, context.limits().max_recursion_depth,
+                  context.limits().max_ast_nodes, "facts.domain_condition") {}
 
     std::optional<CasError> error;
     bool expressible = true;
@@ -52,6 +55,7 @@ public:
             error = CasError{CasErrc::InvalidArgument, "null expression", "facts.domain"};
             return {};
         }
+        budget_.measure(node);
         auto entered = context_.enter_recursion("facts.domain");
         if (!entered) {
             error = entered.error();
@@ -78,6 +82,8 @@ private:
     Domain domain_;
     ComputationContext& context_;
     bool project_;
+    RewriteBudget budget_;
+    std::size_t condition_nodes_ = 0;
 
     T checked(Result<T> result) {
         if (!result) {
@@ -90,12 +96,9 @@ private:
     template<class N, class... Args>
     Node make(Args&&... args) {
         if (error) return {};
-        auto reserved = context_.reserve_nodes(1, "facts.domain_condition");
-        if (!reserved) {
-            error = reserved.error();
-            return {};
-        }
-        return make_node<N>(std::forward<Args>(args)...);
+        auto result = make_node<N>(std::forward<Args>(args)...);
+        budget_.measure(result);
+        return result;
     }
 
     Node number(int n) { return make<NumberNode>(BigInt(n)); }
@@ -124,7 +127,11 @@ private:
             { violated_real_restriction = true; }
         if (project_ && truth == T::Unknown && !error) {
             auto condition = predicate();
-            if (!error && condition) conditions.push_back(make_expression_ptr(std::move(condition)));
+            if (!error && condition) {
+                condition_nodes_ = budget_.append_size(
+                    condition_nodes_, budget_.measure(condition));
+                conditions.push_back(make_expression_ptr(std::move(condition)));
+            }
         }
     }
 

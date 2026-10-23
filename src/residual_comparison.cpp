@@ -1,9 +1,12 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "residual_verification.hpp"
 
 #include "internal/assumption_facts.hpp"
 #include "internal/facts_query.hpp"
 #include "internal/pointwise_comparison.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/normalization_utils.hpp"
 
 #include <exception>
 #include <new>
@@ -24,16 +27,25 @@ ResidualCheckResult check_equivalent(
     }
     auto access = context.consume_steps(1, "residual.check_equivalent");
     if (!access) return ResidualCheckResult::failure(access.error());
-    if (detail::node(left)->equals(*detail::node(right)))
-        return ResidualCheckResult::success(ProvedZeroResidual{
-            ExactNormalizationProof{left}});
     try {
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                     context.limits().max_ast_nodes,
+                                     "residual.check_equivalent");
+        budget.measure(detail::node(left));
+        budget.measure(detail::node(right));
+        if (detail::node(left)->equals(*detail::node(right))) {
+            return ResidualCheckResult::success(ProvedZeroResidual{
+                ExactNormalizationProof{left}});
+        }
         auto residual = SymbolicExpr::add(
             left,
             SymbolicExpr::multiply(SymbolicExpr::number(-1), right));
         return check_zero_residual(residual, context, options);
     } catch (const CasError& error) {
         return ResidualCheckResult::failure(error);
+    } catch (const std::length_error& error) {
+        return ResidualCheckResult::failure(
+            CasErrc::ResourceLimit, error.what(), "residual.check_equivalent");
     } catch (const std::bad_alloc&) {
         return ResidualCheckResult::failure(
             CasErrc::ResourceLimit,
@@ -67,13 +79,15 @@ Result<bool> pointwise_values_defined(
 
 Result<Tribool> compare_defined_values(
     const ExprPtr& left, const ExprPtr& right, const FactsQuery& facts,
-    ComputationContext& context, Domain domain) {
+    ComputationContext& context, Domain domain) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (detail::node(left)->equals(*detail::node(right))) {
         return Tribool::True;
     }
-    auto residual = SymbolicExpr::add(
+    auto residual = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
         left,
-        SymbolicExpr::multiply(SymbolicExpr::number(-1), right))->simplify();
+        SymbolicExpr::multiply(SymbolicExpr::number(-1), right))), transform_budget));
     if (!residual) {
         return Result<Tribool>::failure(
             CasErrc::InternalInvariant,
@@ -97,6 +111,14 @@ Result<Tribool> compare_defined_values(
     }
     return std::holds_alternative<ProvedZeroResidual>(identity.value())
         ? Tribool::True : Tribool::Unknown;
+} catch (const CasError& error) {
+    return Result<Tribool>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<Tribool>::failure(CasErrc::ResourceLimit, "allocation failed", "compare_defined_values");
+} catch (const std::length_error& error) {
+    return Result<Tribool>::failure(CasErrc::ResourceLimit, error.what(), "compare_defined_values");
+} catch (const std::exception& error) {
+    return Result<Tribool>::failure(CasErrc::InternalInvariant, error.what(), "compare_defined_values");
 }
 
 }

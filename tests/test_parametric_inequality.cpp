@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "inequality_solver.hpp"
 #include "interval.hpp"
@@ -25,8 +26,7 @@ TEST(ParametricInequality, UnitSlopeKeepsSymbolicRoot) {
     EXPECT_TRUE(test_proved_equivalent(
         intervals.front().lower.value,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), a)));
-    auto root = intervals.front().lower.value->substitute(
-        "a", SymbolicExpr::number(3));
+    auto root = LMCAS::substitute(intervals.front().lower.value, "a", SymbolicExpr::number(3)).value();
     EXPECT_TRUE(test_proved_equivalent(root, SymbolicExpr::number(-3)));
 }
 

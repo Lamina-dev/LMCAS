@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "solve_transcendental.hpp"
 #include "internal/assumption_simplification.hpp"
 #include "internal/transcendental_solver_support.hpp"
@@ -26,7 +28,9 @@ SolveResult solve_transcendental_impl(
 SolveResult solve_inner_equation(
     const ExprPtr& original, const ExprPtr& inner, const ExprPtr& value,
     const std::string& var, ComputationContext& context,
-    const SolveOptions& options, int depth) {
+    const SolveOptions& options, int depth) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto variable = std::dynamic_pointer_cast<const VariableNode>(detail::node(inner));
     if (variable && !variable->is_constant() && variable->name() == var) {
         return SolutionSet{FiniteSolutions{{FiniteSolution{value, 1, {}}}}};
@@ -43,8 +47,8 @@ SolveResult solve_inner_equation(
         if (coefficient && coefficient->is_negative_one() &&
             product_variable && !product_variable->is_constant() &&
             product_variable->name() == var) {
-            auto inverted = SymbolicExpr::multiply(
-                SymbolicExpr::number(-1), value)->simplify();
+            auto inverted = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+                SymbolicExpr::number(-1), value)), transform_budget));
             return SolutionSet{FiniteSolutions{{
                 FiniteSolution{std::move(inverted), 1, {}}}}};
         }
@@ -57,6 +61,14 @@ SolveResult solve_inner_equation(
         return SolveResult::failure(polynomial.error());
     }
     return solve_transcendental_impl(original, equation, var, context, options, depth + 1);
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_inner_equation");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "solve_inner_equation");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "solve_inner_equation");
 }
 
 void append_finite_union(FiniteSolutions& finite, FiniteSolutions& prior) {
@@ -243,16 +255,26 @@ SolveResult solve_substitution(
 }
 
 SolveResult solve_transcendental_constant(const ExprPtr& original, const ExprPtr& expr,
-    const std::string& var, ComputationContext& context) {
+    const std::string& var, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::optional<detail::AssumptionFacts> assumptions;
     if (context.assumptions()) { assumptions.emplace(*context.assumptions()); }
     const LMCAS::FactsQuery& facts = assumptions ?
         static_cast<const LMCAS::FactsQuery&>(*assumptions) : detail::no_facts();
-    auto nonzero = detail::query_nonzero_value(detail::node(expr->simplify()), facts, Domain::Real, context);
+    auto nonzero = detail::query_nonzero_value(detail::normalize_node(detail::node(expr), transform_budget), facts, Domain::Real, context);
     if (!nonzero) { return SolveResult::failure(nonzero.error()); }
     if (nonzero.value() == Tribool::True) { return SolutionSet{EmptySolutions{}}; }
     if (nonzero.value() == Tribool::False) { return SolutionSet{UniversalSolutions{}}; }
     return conditional_preimage(original, var);
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_transcendental_constant");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "solve_transcendental_constant");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "solve_transcendental_constant");
 }
 
 SolveResult solve_function_pattern(const InversePattern& pattern, const ExprPtr& original,
@@ -281,13 +303,13 @@ SolveResult solve_transcendental_impl(
     if (!expression_depends_on_variable(detail::node(expr), var)) {
         return solve_transcendental_constant(original, expr, var, context);
     }
-    if (auto pattern = decompose_lambert_w_pattern(expr, var)) {
-        return solve_inverted_values(original, pattern->inner, invert_lambert_w(pattern->rhs),
+    if (auto pattern = decompose_lambert_w_pattern(expr, var, context)) {
+        return solve_inverted_values(original, pattern->inner, invert_lambert_w(pattern->rhs, context),
             var, context, options, depth);
     }
-    if (auto pattern = decompose_exp_base_pattern(expr, var)) {
+    if (auto pattern = decompose_exp_base_pattern(expr, var, context)) {
         return solve_inverted_values(original, pattern->inner,
-            invert_exp_base(pattern->base, pattern->rhs), var, context, options, depth);
+            invert_exp_base(pattern->base, pattern->rhs, context), var, context, options, depth);
     }
     if (auto pattern = decompose_trig_exp_pattern(expr, var)) {
         return solve_function_pattern(*pattern, original, var, context, options, depth);
@@ -306,11 +328,14 @@ SolveResult solve_transcendental_impl(
 
 SolveResult solve_transcendental(
     const ExprPtr& expr, const std::string& var,
-    ComputationContext& context, const SolveOptions& options) {
+    ComputationContext& context, const SolveOptions& options) try {
     if (!expr || !detail::node(expr) || var.empty()) {
         return SolveResult::failure(CasErrc::InvalidArgument,
             "Expression and variable must not be empty", "solve.transcendental");
     }
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                            context.limits().max_ast_nodes,
+                                            "solve.transcendental");
     auto equation = expr;
     if (auto relation = std::dynamic_pointer_cast<const RelationalNode>(detail::node(expr))) {
         if (relation->op() != RelationalNode::Op::EQ) {
@@ -321,7 +346,7 @@ SolveResult solve_transcendental(
             SymbolicExpr::multiply(SymbolicExpr::number(-1),
                 detail::make_expression_ptr(relation->right())));
     }
-    equation = equation->simplify();
+    equation = detail::make_expression_ptr(detail::normalize_node(detail::node(equation), transform_budget));
     auto solved = std::dynamic_pointer_cast<const MultiplyNode>(detail::node(equation)) ?
         solve_equation(equation, var, context, options) :
         solve_transcendental_impl(expr, equation, var, context, options, 0);
@@ -329,6 +354,16 @@ SolveResult solve_transcendental(
     auto coalesced = coalesce_periodic_families(solved.value(), context);
     if (!coalesced) return SolveResult::failure(coalesced.error());
     return detail::finalize_solution_set(expr, var, std::move(solved).value(), context, Domain::Real, options);
+}
+catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit,
+        "transcendental solve allocation failed", "solve.transcendental");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "solve.transcendental");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "solve.transcendental");
 }
 
 SolveResult solve_transcendental(

@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/transform_support.hpp"
 #include "internal/normalization_utils.hpp"
 #include <cmath>
@@ -33,7 +35,9 @@ static TransformEngineResult te_convolve_core(
 
 static TransformEngineResult te_convolve_sum(
     const AddNode& addition, const std::shared_ptr<SymbolicExpr>& other,
-    bool sum_is_left, const std::string& variable, ComputationContext& context) {
+    bool sum_is_left, const std::string& variable, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::shared_ptr<SymbolicExpr> accumulated;
     for (const auto& operand : addition.operands()) {
         auto term = detail::make_expression_ptr(operand);
@@ -45,7 +49,15 @@ static TransformEngineResult te_convolve_sum(
         accumulated = accumulated ? SymbolicExpr::add(accumulated, expression) : expression;
     }
     return te_wrap_transform_result(
-        accumulated ? accumulated->simplify() : SymbolicExpr::number(0), "convolve");
+        accumulated ? detail::make_expression_ptr(detail::normalize_node(detail::node(accumulated), transform_budget)) : SymbolicExpr::number(0), "convolve");
+} catch (const CasError& error) {
+    return TransformEngineResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return TransformEngineResult::failure(CasErrc::ResourceLimit, "allocation failed", "te_convolve_sum");
+} catch (const std::length_error& error) {
+    return TransformEngineResult::failure(CasErrc::ResourceLimit, error.what(), "te_convolve_sum");
+} catch (const std::exception& error) {
+    return TransformEngineResult::failure(CasErrc::InternalInvariant, error.what(), "te_convolve_sum");
 }
 
 static TransformEngineResult te_convolve_core(
@@ -53,7 +65,9 @@ static TransformEngineResult te_convolve_core(
     const std::shared_ptr<SymbolicExpr>& g,
     const std::string& variable,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "convolve";
     auto step = context.consume_steps(1, operation);
     if (!step) return TransformEngineResult::failure(step.error());
@@ -77,8 +91,8 @@ static TransformEngineResult te_convolve_core(
         auto inner =
             te_convolve_core(left_parts.second, g, variable, context);
         if (!inner) return inner;
-        auto scaled = SymbolicExpr::multiply(
-            left_parts.first, inner.value().value.expression)->simplify();
+        auto scaled = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+            left_parts.first, inner.value().value.expression)), transform_budget));
         return te_wrap_transform_result(scaled, operation);
     }
     auto right_parts = te_split_coeff(g, variable);
@@ -87,8 +101,8 @@ static TransformEngineResult te_convolve_core(
         auto inner =
             te_convolve_core(f, right_parts.second, variable, context);
         if (!inner) return inner;
-        auto scaled = SymbolicExpr::multiply(
-            right_parts.first, inner.value().value.expression)->simplify();
+        auto scaled = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+            right_parts.first, inner.value().value.expression)), transform_budget));
         return te_wrap_transform_result(scaled, operation);
     }
 
@@ -114,7 +128,15 @@ static TransformEngineResult te_convolve_core(
         SymbolicExpr::number(-output_rate), square);
     auto gaussian = SymbolicExpr::exp(exponent);
     return te_wrap_transform_result(
-        SymbolicExpr::multiply(scale, gaussian)->simplify(), operation);
+        detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(scale, gaussian)), transform_budget)), operation);
+} catch (const CasError& error) {
+    return TransformEngineResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return TransformEngineResult::failure(CasErrc::ResourceLimit, "allocation failed", "convolve");
+} catch (const std::length_error& error) {
+    return TransformEngineResult::failure(CasErrc::ResourceLimit, error.what(), "convolve");
+} catch (const std::exception& error) {
+    return TransformEngineResult::failure(CasErrc::InternalInvariant, error.what(), "convolve");
 }
 
 TransformEngineResult convolve_checked(

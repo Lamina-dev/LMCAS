@@ -28,6 +28,7 @@ class LMCAS_API IntegrationStrategy {
 public:
     virtual ~IntegrationStrategy() = default;
 
+    /** @brief 生成候选并返回受检错误；闭式认证由 Integrator 执行。 */
     IntegrationStrategyResult try_integrate(
         const SymbolicExpr& expr,
         const std::string& var,
@@ -57,42 +58,36 @@ public:
      * @return 策略名称字符串
      */
     virtual std::string name() const = 0;
-    virtual bool requires_residual_verification() const noexcept {
-        return true;
-    }
 };
 
-class BuiltInIntegrationStrategy : public IntegrationStrategy {
-public:
-    bool requires_residual_verification() const noexcept override {
-        return false;
-    }
-};
 
 /** @brief 查表积分策略 */
-class LMCAS_API TableLookupStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API TableLookupStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "TableLookup"; }
 };
 
 /** @brief 幂律积分策略 */
-class LMCAS_API PowerRuleStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API PowerRuleStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "PowerRule"; }
 };
 
 /** @brief 换元积分策略 */
-class LMCAS_API SubstitutionStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API SubstitutionStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "Substitution"; }
 };
 
@@ -104,11 +99,12 @@ public:
  * 再代回 a*var + b 并乘以 1/a 得到结果.该策略直接调用积分表
  * (TableLookupStrategy),使递归边界保持在线性换元层.
  */
-class LMCAS_API LinearSubstitutionStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API LinearSubstitutionStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "LinearSubstitution"; }
 
     /**
@@ -142,11 +138,12 @@ public:
  * sin/cos/tan/sec 的内部参数必须恰为积分变量本身(如 sin(2x) 由 LinearSubstitutionStrategy 处理).
  * 若指数为非整数,负数或超出 m+n > 8 的总度数限制,则返回 nullptr 让链上后续策略尝试.
  */
-class LMCAS_API TrigCombinationStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API TrigCombinationStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "TrigCombination"; }
 
     /**
@@ -241,11 +238,12 @@ private:
  * 零分母、因式分解未决或线性系统未决保留为未求值积分；
  * 其他表达式返回 nullptr，由策略链继续匹配。
  */
-class LMCAS_API RationalDecompositionStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API RationalDecompositionStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "RationalDecomposition"; }
 
     /**
@@ -338,29 +336,23 @@ public:
  *
  * 当前规则集之外的输入返回 nullptr,由策略链继续匹配.
  */
-class LMCAS_API SpecialFunctionStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API SpecialFunctionStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "SpecialFunction"; }
 };
 
-/** @brief 部分分式积分策略 */
-class LMCAS_API PartialFractionStrategy : public BuiltInIntegrationStrategy {
-public:
-    Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
-        const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-        ComputationContext& computation, int depth = 0) override;
-    std::string name() const override { return "PartialFraction"; }
-};
 
 /** @brief 分部积分策略 */
 class LMCAS_API IBPStrategy : public IntegrationStrategy {
-public:
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "IntegrationByParts"; }
 };
 
@@ -375,11 +367,12 @@ public:
  * 换元后积分,再用反函数与直角三角关系回代为原变量.
  * 在策略链中位于 SubstitutionStrategy 之后,IBPStrategy 之前.
  */
-class LMCAS_API TrigSubstitutionStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API TrigSubstitutionStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "TrigSubstitution"; }
 };
 
@@ -391,11 +384,12 @@ public:
  * 将被积函数转化为 t 的有理函数后递归积分,再回代 t = tan(x/2).
  * 在策略链中位于 TrigCombinationStrategy 之后.
  */
-class LMCAS_API WeierstrassStrategy : public BuiltInIntegrationStrategy {
-public:
+class LMCAS_API WeierstrassStrategy : public IntegrationStrategy {
+protected:
     Result<std::shared_ptr<SymbolicExpr>> try_integrate_raw(
         const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
         ComputationContext& computation, int depth = 0) override;
+public:
     std::string name() const override { return "Weierstrass"; }
 };
 

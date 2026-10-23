@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "inequality_solver.hpp"
 #include "numeric_evaluation.hpp"
 #include "poly_utils.hpp"
@@ -7,6 +8,7 @@
 #include "internal/expression_analysis.hpp"
 #include "internal/numeric_probe.hpp"
 #include "internal/inequality_solver_support.hpp"
+#include "internal/polynomial_solver_support.hpp"
 #include <algorithm>
 #include <cmath>
 #include <memory>
@@ -16,15 +18,19 @@
 
 namespace LMCAS::detail::inequality_support {
 
-std::optional<double> try_checked_numeric_constant(const SymbolicExpr& expr) {
-    return LMCAS::detail::try_finite_numeric(expr);
+std::optional<double> try_checked_numeric_constant(
+    const SymbolicExpr& expr, ComputationContext& context) {
+    return LMCAS::detail::try_finite_numeric(expr, context);
 }
 
-int exact_numeric_sign(const std::shared_ptr<SymbolicExpr>& expr) {
+int exact_numeric_sign(const std::shared_ptr<SymbolicExpr>& expr,
+                       ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!expr || !LMCAS::detail::node(expr)) {
         return 0;
     }
-    auto simplified = expr->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(expr), transform_budget));
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return 0;
     }
@@ -53,7 +59,10 @@ int exact_numeric_sign(const std::shared_ptr<SymbolicExpr>& expr) {
     return value < 0 ? -1 : 1;
 }
 
-int determine_leading_sign(const Polynomial<SymbolicPolyCoeff>& poly) {
+int determine_leading_sign(const Polynomial<SymbolicPolyCoeff>& poly,
+                           ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (poly.is_zero()) {
         return 0;
     }
@@ -61,12 +70,12 @@ int determine_leading_sign(const Polynomial<SymbolicPolyCoeff>& poly) {
     if (!lc) {
         return 1;
     }
-    auto simplified = lc->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(lc), transform_budget));
     if (!simplified) {
         return 1;
     }
 
-    if (auto val = try_checked_numeric_constant(*simplified)) {
+    if (auto val = try_checked_numeric_constant(*simplified, context)) {
         if (*val > 0) {
             return 1;
         }
@@ -91,11 +100,11 @@ int determine_leading_sign(const Polynomial<SymbolicPolyCoeff>& poly) {
 
 static std::shared_ptr<SymbolicExpr> snap_verified_integer_root(
     const Polynomial<Rational>& poly,
-    const std::shared_ptr<SymbolicExpr>& root) {
+    const std::shared_ptr<SymbolicExpr>& root, ComputationContext& context) {
     if (!root || poly.is_zero()) {
         return root;
     }
-    auto numeric = try_checked_numeric_constant(*root);
+    auto numeric = try_checked_numeric_constant(*root, context);
     if (!numeric) {
         return root;
     }
@@ -116,33 +125,35 @@ static void append_verified_roots(
     RootMultiplicityList& result,
     const Polynomial<Rational>& polynomial,
     const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
-    int multiplicity) {
+    int multiplicity, ComputationContext& context) {
     for (const auto& root : roots) {
         if (!root) {
             continue;
         }
-        auto verified = snap_verified_integer_root(polynomial, root);
-        if (try_checked_numeric_constant(*verified)) {
+        auto verified = snap_verified_integer_root(polynomial, root, context);
+        if (try_checked_numeric_constant(*verified, context)) {
             result.push_back({verified, multiplicity});
         }
     }
 }
 
 static void append_affine_root(RootMultiplicityList& result,
-                               const Polynomial<Rational>& factor, int mult) {
+                               const Polynomial<Rational>& factor, int mult,
+                               ComputationContext& context) {
     Rational a = factor.coeffs[1];
     Rational b = factor.coeffs[0];
     if (a != Rational(0)) {
         Rational root_val = Rational(0) - b / a;
         auto root_expr = SymbolicExpr::number(root_val);
-        if (try_checked_numeric_constant(*root_expr)) {
+        if (try_checked_numeric_constant(*root_expr, context)) {
             result.push_back({root_expr, mult});
         }
     }
 }
 
 static void append_quadratic_roots(RootMultiplicityList& result,
-                                  const Polynomial<Rational>& factor, int mult) {
+                                  const Polynomial<Rational>& factor, int mult,
+                                  ComputationContext& context) {
     Rational a = factor.coeffs[2];
     Rational b = factor.coeffs[1];
     Rational c = factor.coeffs[0];
@@ -170,31 +181,32 @@ static void append_quadratic_roots(RootMultiplicityList& result,
     }
 
     if (std::isfinite(r1)) {
-        auto root = snap_verified_integer_root(factor, SymbolicExpr::number(r1));
+        auto root = snap_verified_integer_root(factor, SymbolicExpr::number(r1), context);
         result.push_back({root, mult});
     }
     if (std::isfinite(r2) && r2 != r1) {
-        auto root = snap_verified_integer_root(factor, SymbolicExpr::number(r2));
+        auto root = snap_verified_integer_root(factor, SymbolicExpr::number(r2), context);
         result.push_back({root, mult});
     }
 }
 
 static void append_factor_roots(RootMultiplicityList& result,
                                 const Polynomial<Rational>& factor, int mult,
-                                const std::string& variable) {
+                                const std::string& variable, ComputationContext& context) {
     std::vector<SymbolicPolyCoeff> spc_coeffs;
     for (int i = 0; i <= factor.degree(); ++i) {
         spc_coeffs.push_back(SymbolicPolyCoeff(SymbolicExpr::number(factor.coeffs[i])));
     }
     Polynomial<SymbolicPolyCoeff> factor_spc(spc_coeffs, variable);
 
-    auto factor_roots = solve_by_factoring(factor_spc, variable);
-    append_verified_roots(result, factor, factor_roots, mult);
+    auto factor_roots = polynomial_solver_detail::solve_by_factoring_impl(
+        factor_spc, variable, context);
+    append_verified_roots(result, factor, factor_roots, mult, context);
 }
 
 std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> find_roots_with_multiplicity(
     const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& variable) {
+    const std::string& variable, ComputationContext& context) {
 
     std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> result;
 
@@ -211,8 +223,9 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> find_roots_with_multi
         if (!symbolic) throw std::invalid_argument(symbolic.error().message);
         const auto& poly_spc = symbolic.value();
         if (!poly_spc.is_zero() && poly_spc.degree() >= 1) {
-            auto roots = solve_by_factoring(poly_spc, variable);
-            append_verified_roots(result, poly_rat, roots, 1);
+            auto roots = polynomial_solver_detail::solve_by_factoring_impl(
+                poly_spc, variable, context);
+            append_verified_roots(result, poly_rat, roots, 1, context);
         }
         return result;
     }
@@ -221,11 +234,11 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, int>> find_roots_with_multi
             continue;
         }
         if (factor.degree() == 1) {
-            append_affine_root(result, factor, mult);
+            append_affine_root(result, factor, mult, context);
         } else if (factor.degree() == 2) {
-            append_quadratic_roots(result, factor, mult);
+            append_quadratic_roots(result, factor, mult, context);
         } else {
-            append_factor_roots(result, factor, mult, variable);
+            append_factor_roots(result, factor, mult, variable, context);
         }
     }
     return result;
@@ -246,7 +259,9 @@ bool depends_on_any_param(const std::shared_ptr<SymbolicExpr>& expr,
 
 std::vector<std::shared_ptr<SymbolicExpr>> solve_symbolic_poly(
     const Polynomial<SymbolicPolyCoeff>& poly,
-    const std::string& variable) {
+    const std::string& variable, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     if (poly.is_zero() || poly.degree() < 1) {
         return {};
@@ -265,11 +280,11 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_symbolic_poly(
         auto a = get_coeff(1);
         auto b = get_coeff(0);
         auto neg_b = SymbolicExpr::multiply(b, SymbolicExpr::number(-1));
-        auto root = SymbolicExpr::divide(neg_b, a)->simplify();
+        auto root = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(neg_b, a)), transform_budget));
         return { root };
     }
 
-    auto results = solve_by_factoring(poly, variable);
+    auto results = polynomial_solver_detail::solve_by_factoring_impl(poly, variable, context);
     return results;
 }
 }

@@ -19,7 +19,7 @@ TEST(LmcasSeries, MaclaurinSin) {
     ASSERT_NE(series_5, nullptr);
     EXPECT_TRUE(test_proved_equivalent(series_5, parse_expr("x-x^3/6+x^5/120").value()));
 
-    auto expanded = series_5->expand();
+    auto expanded = LMCAS::expand(series_5).value();
 
     EXPECT_TRUE(test_proved_equivalent(expanded, parse_expr("x-x^3/6+x^5/120").value()));
 }
@@ -52,7 +52,7 @@ TEST(LmcasSeries, PolySeries) {
 
     ASSERT_NE(series, nullptr);
     EXPECT_TRUE(test_proved_equivalent(series, expr));
-    auto expanded = series->expand();
+    auto expanded = LMCAS::expand(series).value();
 
     EXPECT_TRUE(test_proved_equivalent(expanded, expr));
 }

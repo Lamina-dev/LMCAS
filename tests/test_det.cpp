@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_matrix.hpp"
 
@@ -27,7 +28,7 @@ TEST(LmcasDet, SymbolicTwoByTwo) {
     auto ad = SymbolicExpr::multiply(a, d);
     auto bc = SymbolicExpr::multiply(b, c);
     auto neg_bc = SymbolicExpr::multiply(bc, SymbolicExpr::number(-1));
-    auto expected2 = SymbolicExpr::add(ad, neg_bc)->simplify();
+    auto expected2 = LMCAS::simplify(SymbolicExpr::add(ad, neg_bc)).value();
 
     EXPECT_TRUE(test_expression_text(det2, expected2)) << "Det(Symbolic 2x2)";
 }

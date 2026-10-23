@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "calculus_utils.hpp"
 
@@ -15,8 +16,8 @@ TEST(Curvature, ParabolicCurvature) {
     EXPECT_TRUE((kappa != nullptr)) << "curvature(x^2) should not be null";
 
     if (kappa) {
-        auto at_zero = kappa->substitute("x", SymbolicExpr::number(0));
-        auto simplified = at_zero->simplify();
+        auto at_zero = LMCAS::substitute(kappa, "x", SymbolicExpr::number(0)).value();
+        auto simplified = LMCAS::simplify(at_zero).value();
         auto val = simplified ? simplified : at_zero;
         double num_val = val->to_numeric();
         EXPECT_NEAR(num_val, 2.0, 1e-9) << "curvature of x^2 at x=0 is 2";
@@ -31,8 +32,8 @@ TEST(Curvature, LineCurvature) {
     EXPECT_TRUE((kappa != nullptr)) << "curvature(x) should not be null";
 
     if (kappa) {
-        auto at_one = kappa->substitute("x", SymbolicExpr::number(1));
-        auto simplified = at_one->simplify();
+        auto at_one = LMCAS::substitute(kappa, "x", SymbolicExpr::number(1)).value();
+        auto simplified = LMCAS::simplify(at_one).value();
         auto val = simplified ? simplified : at_one;
         double num_val = val->to_numeric();
         EXPECT_NEAR(num_val, 0.0, 1e-9) << "curvature of straight line is 0";
@@ -54,8 +55,8 @@ TEST(Curvature, UnitCircleCurvature) {
     EXPECT_TRUE((kappa != nullptr)) << "curvature_parametric(cos,sin) should not be null";
 
     if (kappa) {
-        auto at_zero = kappa->substitute("t", SymbolicExpr::number(0));
-        auto simplified = at_zero->simplify();
+        auto at_zero = LMCAS::substitute(kappa, "t", SymbolicExpr::number(0)).value();
+        auto simplified = LMCAS::simplify(at_zero).value();
         auto val = simplified ? simplified : at_zero;
         double num_val = val->to_numeric();
         EXPECT_NEAR(num_val, 1.0, 1e-9) << "curvature of unit circle is 1";
@@ -71,8 +72,8 @@ TEST(Curvature, ScaledCircleCurvature) {
     EXPECT_TRUE((kappa != nullptr)) << "curvature_parametric(2cos,2sin) should not be null";
 
     if (kappa) {
-        auto at_zero = kappa->substitute("t", SymbolicExpr::number(0));
-        auto simplified = at_zero->simplify();
+        auto at_zero = LMCAS::substitute(kappa, "t", SymbolicExpr::number(0)).value();
+        auto simplified = LMCAS::simplify(at_zero).value();
         auto val = simplified ? simplified : at_zero;
         double num_val = val->to_numeric();
         EXPECT_NEAR(num_val, 0.5, 1e-9) << "curvature of circle radius 2 is 1/2";

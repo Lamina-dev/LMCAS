@@ -153,3 +153,13 @@ TEST(SymbolicGeometry, SymbolicGeometryCheckedContracts) {
         EXPECT_TRUE((limited.error().code == LMCAS::CasErrc::ResourceLimit)) << "checked arc_length_y reports ResourceLimit";
     }
 }
+
+TEST(SymbolicGeometry, RevolutionPreservesInteriorPole) {
+    auto x = SymbolicExpr::variable("x");
+    auto profile = SymbolicExpr::divide(SymbolicExpr::number(1), x);
+    ComputationContext context;
+    auto volume = volume_of_revolution_x_checked(
+        profile, SymbolicExpr::number(-1), SymbolicExpr::number(1), context);
+    ASSERT_TRUE(volume);
+    EXPECT_EQ(volume.value()->compare(SymbolicExpr::infinity(1)), 0);
+}

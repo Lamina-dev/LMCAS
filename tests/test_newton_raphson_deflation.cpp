@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_newton_raphson_support.hpp"
 
 static void test_polynomial_numeric_root_endpoints(
@@ -47,7 +48,7 @@ TEST(NewtonRaphsonDeflation, NewtonRaphsonDeflationCorrectlyContinuesToRemaining
     EXPECT_TRUE((intervals.size() == 2)) << "Sturm should isolate 2 roots for (x-1)(x-2)";
 
     auto expr = LMCAS::poly_to_symbolic(poly);
-    auto df_expr = expr->differentiate("x");
+    auto df_expr = LMCAS::differentiate(expr, "x").value();
 
     LMCAS::SolveOptions opts;
     opts.tolerance = 1e-10;
@@ -80,7 +81,7 @@ TEST(NewtonRaphsonDeflation, NewtonRaphsonDeflationWithCubicPolynomial) {
     EXPECT_TRUE((intervals.size() == 3)) << "Sturm should isolate 3 roots for (x-1)(x-2)(x-3)";
 
     auto expr = LMCAS::poly_to_symbolic(poly);
-    auto df_expr = expr->differentiate("x");
+    auto df_expr = LMCAS::differentiate(expr, "x").value();
 
     LMCAS::SolveOptions opts;
     opts.tolerance = 1e-10;

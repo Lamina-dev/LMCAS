@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 #include "internal/visitors/limit_visitor.hpp"
 
 namespace LMCAS {
@@ -25,7 +26,7 @@ bool LimitVisitor::tends_to_zero(const std::shared_ptr<const SymbolicNode>& node
     if (!val) {
         return false;
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget()); val->accept(norm); val = norm.get_result();
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real); val->accept(norm); val = norm.get_result();
     return val && val->is_zero();
 }
 
@@ -38,7 +39,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::eval_limit(const std::shared_p
     sub.lhopital_depth_ = this->lhopital_depth_;
     expr->accept(sub);
     auto r = sub.get_result();
-    if (r) { NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget()); r->accept(norm); return norm.get_result(); }
+    if (r) { NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real); r->accept(norm); return norm.get_result(); }
     return r;
 }
 
@@ -51,7 +52,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::derivative_limit(
     if (!value || !normalize) {
         return value;
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     value->accept(norm);
     return norm.get_result();
 }
@@ -78,7 +79,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::derivative_ratio_limit(
                 std::vector<std::shared_ptr<const SymbolicNode>>{
                     num_value, LMCAS::detail::make_node<PowerNode>(
                         den_value, LMCAS::detail::make_node<NumberNode>(BigInt(-1)))});
-            NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+            NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
             ratio->accept(norm);
             return norm.get_result();
         }
@@ -111,7 +112,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(
     if (lhopital_depth_ >= max_lhopital_depth) {
         return taylor_fallback(num, den);
     }
-    DifferentiationVisitor differentiation(var);
+    DifferentiationVisitor differentiation(var, *rewrite_budget());
     num->accept(differentiation);
     auto numerator = differentiation.get_result();
     den->accept(differentiation);
@@ -119,7 +120,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::apply_lhopital(
     if (!numerator || !denominator) {
         return taylor_fallback(num, den);
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     numerator->accept(norm);
     numerator = norm.get_result();
     denominator->accept(norm);

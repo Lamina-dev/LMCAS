@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 
 #include "value.hpp"
@@ -12,7 +13,7 @@ Value cas_simplify(const std::vector<Value> &args) {
     auto checked = args[0].as_symbolic_checked();
     if (!checked) throw checked.error();
     auto expr = checked.value();
-    return Value(expr->simplify());
+    return Value(LMCAS::simplify(expr).value());
 }
 
 Value cas_differentiate(const std::vector<Value> &args) {
@@ -23,7 +24,7 @@ Value cas_differentiate(const std::vector<Value> &args) {
     if (!checked) throw checked.error();
     auto expr = checked.value();
     std::string var = args[1].to_string();
-    return Value(expr->differentiate(var));
+    return Value(LMCAS::differentiate(expr, var).value());
 }
 
 Value cas_solve(const std::vector<Value> &args) {
@@ -70,10 +71,9 @@ TEST(Main, Sqrt8) {
     ASSERT_TRUE(actual);
     ASSERT_TRUE(detail::node(actual.value()));
     auto two = SymbolicExpr::number(2);
-    auto expected = SymbolicExpr::multiply(two, SymbolicExpr::power(
-                                                    two, SymbolicExpr::number(Rational(1, 2))))
-                        ->simplify();
-    EXPECT_TRUE((actual.value()->simplify()->compare(expected) == 0)) << "sqrt(8) = 2*sqrt(2)";
+    auto expected = LMCAS::simplify(SymbolicExpr::multiply(two, SymbolicExpr::power(
+                                                    two, SymbolicExpr::number(Rational(1, 2))))).value();
+    EXPECT_TRUE((LMCAS::simplify(actual.value()).value()->compare(expected) == 0)) << "sqrt(8) = 2*sqrt(2)";
     auto numeric = test_numeric_eval(actual.value());
     ASSERT_TRUE((numeric.has_value())) << "sqrt(8) can be evaluated numerically";
     if (numeric) {
@@ -151,7 +151,7 @@ TEST(Main, Logarithm) {
 
     auto x_squared = SymbolicExpr::power(x, SymbolicExpr::number(2));
     auto log_expr = SymbolicExpr::log(x_squared, x);
-    auto simplified = log_expr->simplify();
+    auto simplified = LMCAS::simplify(log_expr).value();
     auto legal = evaluate_numeric(*simplified, {{"x", 2}});
     ASSERT_TRUE((legal.has_value())) << "positive nonunit log base is legal";
     if (legal) {

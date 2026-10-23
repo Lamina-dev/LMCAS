@@ -1,3 +1,6 @@
+#include <stdexcept>
+#include "internal/rewrite_budget.hpp"
+#include "internal/expression_transform.hpp"
 #include "polynomial_conversion.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/facts_query.hpp"
@@ -14,6 +17,18 @@
 
 namespace LMCAS {
 
+bool SymbolicPolyCoeff::operator==(const SymbolicPolyCoeff& other) const {
+    if (!val || !other.val) return false;
+    if (val == other.val) return true;
+    ComputationContext context;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "polynomial.coefficient");
+    auto difference = SymbolicExpr::add(
+        val, SymbolicExpr::multiply(other.val, SymbolicExpr::number(-1)));
+    return detail::normalize_node(detail::node(difference), budget)->is_zero();
+}
+
+
 template <>
 Result<SymbolicPolyCoeff> extract_coeff_value<SymbolicPolyCoeff>(
     const std::shared_ptr<SymbolicExpr>& coefficient) {
@@ -26,12 +41,15 @@ Result<SymbolicPolyCoeff> extract_coeff_value<SymbolicPolyCoeff>(
 
 template <>
 Result<BigInt> extract_coeff_value<BigInt>(
-    const std::shared_ptr<SymbolicExpr>& coefficient) {
+    const std::shared_ptr<SymbolicExpr>& coefficient) try {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!coefficient || !detail::node(coefficient)) {
         return Result<BigInt>::failure(CasErrc::InvalidArgument,
             "Coefficient must have an expression", "polynomial.coefficient");
     }
-    auto simplified = coefficient->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(coefficient), transform_budget));
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(
             LMCAS::detail::node(simplified))) {
         if (std::holds_alternative<BigInt>(number->value())) {
@@ -51,15 +69,27 @@ Result<BigInt> extract_coeff_value<BigInt>(
     return Result<BigInt>::failure(CasErrc::UnsupportedExpression,
         "Coefficient is not an integer", "polynomial.coefficient");
 }
+catch (const CasError& error) {
+    return Result<BigInt>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<BigInt>::failure(CasErrc::ResourceLimit, "allocation failed", "extract_coeff_value");
+} catch (const std::length_error& error) {
+    return Result<BigInt>::failure(CasErrc::ResourceLimit, error.what(), "extract_coeff_value");
+} catch (const std::exception& error) {
+    return Result<BigInt>::failure(CasErrc::InternalInvariant, error.what(), "extract_coeff_value");
+}
 
 template <>
 Result<Rational> extract_coeff_value<Rational>(
-    const std::shared_ptr<SymbolicExpr>& coefficient) {
+    const std::shared_ptr<SymbolicExpr>& coefficient) try {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!coefficient || !detail::node(coefficient)) {
         return Result<Rational>::failure(CasErrc::InvalidArgument,
             "Coefficient must have an expression", "polynomial.coefficient");
     }
-    auto simplified = coefficient->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(coefficient), transform_budget));
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(
             LMCAS::detail::node(simplified))) {
         if (std::holds_alternative<Rational>(number->value())) {
@@ -76,6 +106,15 @@ Result<Rational> extract_coeff_value<Rational>(
     if (simplified->is_one()) return Rational(1);
     return Result<Rational>::failure(CasErrc::UnsupportedExpression,
         "Coefficient is not representable as a rational", "polynomial.coefficient");
+}
+catch (const CasError& error) {
+    return Result<Rational>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<Rational>::failure(CasErrc::ResourceLimit, "allocation failed", "extract_coeff_value");
+} catch (const std::length_error& error) {
+    return Result<Rational>::failure(CasErrc::ResourceLimit, error.what(), "extract_coeff_value");
+} catch (const std::exception& error) {
+    return Result<Rational>::failure(CasErrc::InternalInvariant, error.what(), "extract_coeff_value");
 }
 
 bool contains(const SymbolicExpr& expression, const std::string& variable) {
@@ -120,9 +159,7 @@ detail::SymbolicNodePtr normalize_coefficient(
     const detail::SymbolicNodePtr& node, detail::RewriteBudget& budget) {
     auto step = budget.context().consume_steps(1, "polynomial.coefficient");
     if (!step) { throw step.error(); }
-    NormalizationVisitor visitor(budget.context(), detail::no_facts(), Domain::Real, &budget);
-    node->accept(visitor);
-    return visitor.get_result();
+    return detail::normalize_node(node, budget);
 }
 
 template <typename Node>

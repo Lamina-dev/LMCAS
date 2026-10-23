@@ -1,3 +1,6 @@
+#include "internal/expression_analysis.hpp"
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 
 namespace LMCAS {
@@ -15,10 +18,13 @@ std::optional<SymbolicExpr> substitution_argument(const SymbolicExpr& term) {
 }
 
 std::shared_ptr<SymbolicExpr> substitution_primitive(
-    const SymbolicExpr& candidate_term, const SymbolicExpr& u) {
+    const SymbolicExpr& candidate_term, const SymbolicExpr& u, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
                 if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(candidate_term))) {
                     auto n = LMCAS::detail::expression_from_node(pow->exponent());
-                    auto np1 = SymbolicExpr::add(detail::make_expression_ptr(n), SymbolicExpr::number(1))->simplify();
+                    auto np1 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(detail::make_expression_ptr(n), SymbolicExpr::number(1))), transform_budget));
                     if (np1->is_zero()) {
                         return SymbolicExpr::ln(detail::make_expression_ptr(u));
                     } else {
@@ -39,17 +45,19 @@ std::shared_ptr<SymbolicExpr> substitution_primitive(
 
 Result<std::shared_ptr<SymbolicExpr>> substitute_candidate(
     const SymbolicExpr& expr, const SymbolicExpr& candidate_term,
-    const std::string& var, ComputationContext& computation) {
+    const std::string& var, ComputationContext& computation) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
     auto u = substitution_argument(candidate_term);
     if (!u || !depends_on_integration_variable(*u, var)) { return nullptr; }
-            auto d_ptr = u->differentiate(var);
+            auto d_ptr = detail::make_expression_ptr(detail::differentiate_node(detail::node(*u), var, transform_budget));
             if (!d_ptr) { return nullptr; }
-            auto du = d_ptr->simplify();
+            auto du = detail::make_expression_ptr(detail::normalize_node(detail::node(d_ptr), transform_budget));
             if (du->is_zero()) { return nullptr; }
 
             auto f_u = candidate_term;
             auto term_times_du = SymbolicExpr::multiply(detail::make_expression_ptr(f_u), detail::make_expression_ptr(*du));
-            auto ratio = SymbolicExpr::divide(detail::make_expression_ptr(expr), term_times_du)->simplify();
+            auto ratio = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(detail::make_expression_ptr(expr), term_times_du)), transform_budget));
             bool ratio_independent = !depends_on_integration_variable(*ratio, var);
             if (!ratio_independent && computation.assumptions()) {
                 auto nonzero =
@@ -63,9 +71,17 @@ Result<std::shared_ptr<SymbolicExpr>> substitute_candidate(
                 }
             }
     if (!ratio_independent) { return nullptr; }
-    auto primitive = substitution_primitive(candidate_term, *u);
+    auto primitive = substitution_primitive(candidate_term, *u, computation);
     if (!primitive) { return nullptr; }
     return SymbolicExpr::multiply(ratio, primitive);
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "substitute_candidate");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "substitute_candidate");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "substitute_candidate");
 }
 }
 
@@ -81,7 +97,12 @@ Result<std::shared_ptr<SymbolicExpr>> SubstitutionStrategy::try_integrate_raw(
     for (const auto& operand : ops) {
         auto candidate = detail::expression_from_node(operand);
         auto result = substitute_candidate(expr, candidate, var, computation);
-        if (!result || result.value()) { return result; }
+        if (!result) { return result; }
+        if (result.value()) {
+            detail::RewriteBudget budget(computation, computation.limits().max_recursion_depth,
+                                        computation.limits().max_ast_nodes, "integrate.substitution");
+            if (certify_integral(*result.value(), expr, var, budget)) { return result; }
+        }
     }
     return nullptr;
 }
@@ -145,14 +166,16 @@ std::shared_ptr<SymbolicExpr> linear_dummy_expression(
 }
 }
 
-Result<bool> LinearSubstitutionStrategy::extract_linear_arg(
+static Result<bool> extract_linear_arg_with_context(
     const SymbolicExpr& arg,
     const std::string& var,
     std::shared_ptr<SymbolicExpr>& a_out,
-    std::shared_ptr<SymbolicExpr>& b_out) {
+    std::shared_ptr<SymbolicExpr>& b_out, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                            context.limits().max_ast_nodes, "integrate.linear_substitution");
     if (!expression_depends_on_variable(LMCAS::detail::node(arg), var)) { return false; }
 
-    auto converted = symbolic_to_poly<SymbolicPolyCoeff>(detail::make_expression_ptr(arg), var);
+    auto converted = detail::symbolic_to_poly_checked(arg, var, context);
     if (!converted) {
         if (converted.error().code == CasErrc::UnsupportedExpression) { return false; }
         return Result<bool>::failure(converted.error());
@@ -167,8 +190,8 @@ Result<bool> LinearSubstitutionStrategy::extract_linear_arg(
     if (expression_depends_on_variable(LMCAS::detail::node(a_expr), var)) { return false; }
     if (expression_depends_on_variable(LMCAS::detail::node(b_expr), var)) { return false; }
 
-    auto a_simp = a_expr->simplify();
-    auto b_simp = b_expr->simplify();
+    auto a_simp = detail::make_expression_ptr(detail::normalize_node(detail::node(a_expr), transform_budget));
+    auto b_simp = detail::make_expression_ptr(detail::normalize_node(detail::node(b_expr), transform_budget));
     if (!a_simp) a_simp = a_expr;
     if (!b_simp) b_simp = b_expr;
     if (a_simp->is_zero()) { return false; }
@@ -176,16 +199,34 @@ Result<bool> LinearSubstitutionStrategy::extract_linear_arg(
     a_out = a_simp;
     b_out = b_simp;
     return true;
+} catch (const CasError& error) {
+    return Result<bool>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, "allocation failed", "extract_linear_arg");
+} catch (const std::length_error& error) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, error.what(), "extract_linear_arg");
+} catch (const std::exception& error) {
+    return Result<bool>::failure(CasErrc::InternalInvariant, error.what(), "extract_linear_arg");
+}
+
+Result<bool> LinearSubstitutionStrategy::extract_linear_arg(
+    const SymbolicExpr& arg, const std::string& var,
+    std::shared_ptr<SymbolicExpr>& a_out, std::shared_ptr<SymbolicExpr>& b_out) {
+    ComputationContext context;
+    return extract_linear_arg_with_context(arg, var, a_out, b_out, context);
 }
 
 Result<std::shared_ptr<SymbolicExpr>> LinearSubstitutionStrategy::try_integrate_raw(
     const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int depth) {
+    ComputationContext& computation, int) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
     auto wrapper = classify_linear_wrapper(expr, var);
     auto& arg_expr = wrapper.argument;
     std::shared_ptr<SymbolicExpr> a_coeff, b_coeff;
     if (!arg_expr) { return nullptr; }
-    auto extracted = extract_linear_arg(*arg_expr, var, a_coeff, b_coeff);
+    auto extracted = extract_linear_arg_with_context(
+        *arg_expr, var, a_coeff, b_coeff, computation);
     if (!extracted) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(extracted.error());
     }
@@ -204,28 +245,21 @@ Result<std::shared_ptr<SymbolicExpr>> LinearSubstitutionStrategy::try_integrate_
     auto test_expr = linear_dummy_expression(wrapper, dummy_var);
     if (!test_expr) { return nullptr; }
 
-    TableLookupStrategy table_only;
-    auto table_attempt = table_only.try_integrate(
-        *test_expr, dummy_name, ctx, computation, depth);
-    if (!table_attempt) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(
-            table_attempt.error());
-    }
-    auto* table_candidate =
-        std::get_if<IntegrationCandidate>(&table_attempt.value());
-    if (!table_candidate || !table_candidate->expression) { return nullptr; }
-    auto F_substituted = table_candidate->expression->substitute(
-        dummy_name, detail::make_expression_ptr(*arg_expr));
-    if (!F_substituted) { return nullptr; }
-
     auto inv_a = SymbolicExpr::power(a_coeff, SymbolicExpr::number(-1));
-    auto result = SymbolicExpr::multiply(inv_a, F_substituted);
-
-    auto simplified = result->simplify();
-    if (simplified && !contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
-        return simplified;
-    }
-    return result;
+    return lookup_integral(ctx.table(), *test_expr, dummy_name, ctx.original_integrand(expr), var, transform_budget,
+        [&](std::shared_ptr<SymbolicExpr> candidate) {
+            auto substituted = detail::make_expression_ptr(detail::substitute_node(
+                detail::node(candidate), dummy_name, detail::node(*arg_expr), transform_budget));
+            return SymbolicExpr::multiply(inv_a, substituted);
+        });
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
 }
 
 }

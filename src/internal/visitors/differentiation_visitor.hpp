@@ -9,18 +9,13 @@
 
 namespace LMCAS {
 
-namespace detail {
-class UnsupportedDifferentiation : public std::runtime_error {
-public:
-    using std::runtime_error::runtime_error;
-};
-}
 class DifferentiationVisitor : public LMCAS::detail::SymbolicVisitor {
     std::string var;
 
     [[noreturn]] void unsupported(const char* node_type) const {
-        throw detail::UnsupportedDifferentiation(std::string(node_type) +
-                                 " differentiation is outside the current supported domain");
+        throw CasError{CasErrc::UnsupportedExpression, std::string(node_type) +
+            " differentiation is outside the current supported domain",
+            "LMCAS.differentiate"};
     }
 
 public:
@@ -31,7 +26,8 @@ public:
      * @brief 构造普通求导访问器。
      * @param v 求导变量名
      */
-    DifferentiationVisitor(const std::string& v) : var(v), result(nullptr) {}
+    DifferentiationVisitor(const std::string& v, detail::RewriteBudget& budget)
+        : SymbolicVisitor(&budget), var(v), result(nullptr) {}
 
 
     /**
@@ -67,6 +63,16 @@ public:
     void visit(const RootOfNode&) override;
 
 private:
+    void set_result(std::shared_ptr<const SymbolicNode> candidate) {
+        rewrite_budget()->measure_result(candidate);
+        result = std::move(candidate);
+    }
+    void append_result(std::vector<std::shared_ptr<const SymbolicNode>>& nodes,
+                       std::size_t& size, std::shared_ptr<const SymbolicNode> candidate) {
+        size = rewrite_budget()->append_size(size, rewrite_budget()->measure(candidate));
+        nodes.push_back(std::move(candidate));
+    }
+
     void differentiate_atan2(const FunctionNode& node);
 };
 

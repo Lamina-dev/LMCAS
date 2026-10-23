@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "solve_mixed_transcendental.hpp"
 #include "internal/mixed_transcendental_support.hpp"
 #include "internal/expression_analysis.hpp"
@@ -6,6 +7,7 @@
 #include "solve_polynomial.hpp"
 #include "solve_transcendental.hpp"
 #include "internal/assumption_facts.hpp"
+#include "internal/normalization_utils.hpp"
 #include "newton_raphson.hpp"
 #include "numeric_evaluation.hpp"
 #include "residual_verification.hpp"
@@ -45,6 +47,13 @@ std::optional<CasError> validate_mixed_input(
     return std::nullopt;
 }
 
+bool is_mixed_terminal_error(CasErrc code) {
+    return code != CasErrc::DomainError &&
+        code != CasErrc::UnboundSymbol &&
+        code != CasErrc::UnsupportedExpression &&
+        code != CasErrc::Inconclusive;
+}
+
 MixedTranscendentalResult classify_constant_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     bool unresolved_parameters, const SolveOptions& opts, ComputationContext& context) {
@@ -55,10 +64,7 @@ MixedTranscendentalResult classify_constant_equation(
             "equation depends on unresolved parameters but not the solve variable"});
     }
     auto evaluated = evaluate_numeric(*expr, {}, context);
-    if (!evaluated &&
-        (evaluated.error().code == CasErrc::ResourceLimit ||
-         evaluated.error().code == CasErrc::Cancelled ||
-         evaluated.error().code == CasErrc::InternalInvariant)) {
+    if (!evaluated && is_mixed_terminal_error(evaluated.error().code)) {
         return MixedTranscendentalResult::failure(evaluated.error());
     }
     if (!evaluated || !std::isfinite(evaluated.value().value)) {
@@ -74,20 +80,53 @@ MixedTranscendentalResult classify_constant_equation(
     return MixedTranscendentalResult::success(Roots{{}, Completeness::Complete, {}});
 }
 
-bool is_mixed_terminal_error(CasErrc code) {
-    return code == CasErrc::ResourceLimit ||
-        code == CasErrc::Cancelled ||
-        code == CasErrc::InternalInvariant;
-}
-
 class MixedRootCollection {
 public:
     MixedRootCollection(const std::shared_ptr<SymbolicExpr>& expr,
                         const std::string& var, const SearchInterval& interval,
                         const SolveOptions& opts, ComputationContext& context)
-        : expr_(expr), var_(var), interval_(interval), opts_(opts), context_(context) {}
+        : expr_(expr), var_(var), interval_(interval), opts_(opts), context_(context),
+          budget_(context, context.limits().max_recursion_depth,
+                  context.limits().max_ast_nodes, mixed_operation) {}
 
     std::optional<CasError> solve(ComputationContext& context) {
+        auto sum = std::dynamic_pointer_cast<const AddNode>(detail::node(expr_));
+        const bool literal_offset = sum && sum->operands().size() == 2 &&
+            std::any_of(sum->operands().begin(), sum->operands().end(),
+                [](const auto& operand) {
+                    return dynamic_cast<const NumberNode*>(operand.get()) != nullptr;
+                });
+        auto pattern = literal_offset
+            ? detail::transcendental::decompose_trig_exp_pattern(expr_, var_)
+            : std::nullopt;
+        auto variable = pattern
+            ? std::dynamic_pointer_cast<const VariableNode>(detail::node(pattern->inner))
+            : nullptr;
+        auto coefficient = pattern && pattern->coefficient
+            ? detail::exact_rational_value(detail::node(pattern->coefficient))
+            : std::nullopt;
+        if (pattern && pattern->func_type == FunctionNode::FuncType::Exp &&
+            variable && !variable->is_constant() && variable->name() == var_ &&
+            coefficient && (*coefficient == Rational(1) || *coefficient == Rational(-1))) {
+            auto inverted = detail::transcendental::invert_function(
+                *pattern, expr_, var_, context, opts_);
+            if (!inverted) return inverted.error();
+            auto finite = std::get_if<FiniteSolutions>(&inverted.value());
+            if (finite && finite->values.size() == 1 &&
+                finite->values.front().conditions.empty()) {
+                const auto& target = finite->values.front().value;
+                auto logarithm = std::dynamic_pointer_cast<const FunctionNode>(detail::node(target));
+                if (logarithm && logarithm->type() == FunctionNode::FuncType::Ln) {
+                    // Keep the symbolic real preimage instead of rounding it and
+                    // testing cancellation between exponentially large values.
+                    exponential_inner_ = pattern->inner;
+                    exponential_target_ = target;
+                    if (contains_inexact_number(detail::node(expr_))) complete_ = false;
+                    if (accept_symbolic(target)) return failure_;
+                    if (failure_) return failure_;
+                }
+            }
+        }
         auto factored = factor_transcendental(expr_, var_, context);
         if (!factored) return factored.error();
         auto factors = std::move(factored.value());
@@ -175,7 +214,7 @@ private:
         for (const auto& candidate : refined.value()) {
             if (candidate.value < interval_.lo || candidate.value > interval_.hi) { continue; }
             const auto candidate_residual = std::fabs(
-                detail::mixed_evaluate_at(expr_, var_, candidate.value));
+                detail::mixed_evaluate_at(expr_, var_, candidate.value, budget_));
             if (std::isfinite(candidate_residual) && candidate_residual < residual) {
                 value = candidate.value;
                 residual = candidate_residual;
@@ -187,7 +226,7 @@ private:
     bool accept_value(lmmc_real_t value, int iterations) {
         if (!std::isfinite(value)) { complete_ = false; return false; }
         if (value < interval_.lo || value > interval_.hi) return true;
-        auto residual = std::fabs(detail::mixed_evaluate_at(expr_, var_, value));
+        auto residual = std::fabs(detail::mixed_evaluate_at(expr_, var_, value, budget_));
         if (std::isfinite(residual) && residual > opts_.tolerance) {
             polish_value(value, residual, iterations);
         }
@@ -210,9 +249,9 @@ private:
         return false;
     }
 
-    std::optional<bool> accept_proved_symbolic(
+    std::optional<bool> accept_symbolic_witness(
         std::shared_ptr<SymbolicExpr> simplified,
-        lmmc_real_t value) {
+        lmmc_real_t value, bool inverse_identity) {
         auto bound = detail::substitute_raw(expr_, var_, simplified);
         std::optional<detail::AssumptionFacts> assumptions;
         if (context_.assumptions()) {
@@ -247,7 +286,7 @@ private:
         }
         if (!std::holds_alternative<ProvedZeroResidual>(
                 residual.value())) {
-            return std::nullopt;
+            if (!inverse_identity) return std::nullopt;
         }
         symbolic_roots_.push_back(
             SymbolicRoot{value, std::move(simplified)});
@@ -259,7 +298,16 @@ private:
             complete_ = false;
             return false;
         }
-        auto simplified = root->simplify();
+        bool inverse_identity = false;
+        if (exponential_inner_) {
+            auto argument = substitute_free(detail::node(exponential_inner_),
+                var_, detail::node(root), &budget_);
+            budget_.measure(argument);
+            budget_.measure(detail::node(exponential_target_));
+            inverse_identity = argument->equals(*detail::node(exponential_target_));
+        }
+        auto simplified = inverse_identity ? root : detail::make_expression_ptr(
+            detail::normalize_node(detail::node(root), budget_));
         if (!simplified || !detail::node(simplified)) {
             complete_ = false;
             return false;
@@ -277,7 +325,7 @@ private:
             return true;
         }
         auto accepted =
-            accept_proved_symbolic(std::move(simplified), value);
+            accept_symbolic_witness(std::move(simplified), value, inverse_identity);
         if (accepted) {
             return *accepted;
         }
@@ -384,7 +432,7 @@ private:
         }
 
         auto numeric = detail::mixed_numerical_path(
-            factor, var_, interval_, opts_, context, complete_);
+            factor, var_, interval_, opts_, budget_, complete_);
         if (!numeric) {
             return std::move(numeric.error());
         }
@@ -400,10 +448,13 @@ private:
     };
 
     const std::shared_ptr<SymbolicExpr>& expr_;
+    std::shared_ptr<SymbolicExpr> exponential_inner_;
+    std::shared_ptr<SymbolicExpr> exponential_target_;
     const std::string& var_;
     const SearchInterval& interval_;
     const SolveOptions& opts_;
     ComputationContext& context_;
+    detail::RewriteBudget budget_;
     std::optional<CasError> failure_;
     std::vector<NumericRoot> roots_;
     std::vector<SymbolicRoot> symbolic_roots_;
@@ -450,12 +501,15 @@ MixedTranscendentalResult solve_mixed_transcendental_checked(
     }
     try {
         return solve_mixed_equation(expr, var, opts, context);
+    } catch (const CasError& error) {
+        return MixedTranscendentalResult::failure(error);
     } catch (const std::bad_alloc&) {
         return MixedTranscendentalResult::failure(
             CasErrc::ResourceLimit, "混合求解分配失败", mixed_operation);
+    } catch (const std::length_error& error) {
+        return MixedTranscendentalResult::failure(CasErrc::ResourceLimit, error.what(), mixed_operation);
     } catch (const std::exception& error) {
-        return MixedTranscendentalResult::failure(
-            CasErrc::InternalInvariant, error.what(), mixed_operation);
+        return MixedTranscendentalResult::failure(CasErrc::InternalInvariant, error.what(), mixed_operation);
     }
 }
 

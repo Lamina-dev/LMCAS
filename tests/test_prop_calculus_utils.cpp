@@ -1,4 +1,4 @@
-
+#include "expr.hpp"
 #include "test_common.hpp"
 #include <rapidcheck.h>
 #include "calculus_utils.hpp"
@@ -95,7 +95,7 @@ TEST(LmcasPropCalculusUtils, LogDifferentiationEquivalence) {
         auto f = SE::add(SE::multiply(num(lead), SE::power(x, num(2))), num(c));
 
         auto log_diff = LMCAS::log_differentiate(f, "x");
-        auto std_diff = f->differentiate("x");
+        auto std_diff = LMCAS::differentiate(f, "x").value();
         RC_ASSERT(log_diff != nullptr);
         RC_ASSERT(std_diff != nullptr);
 
@@ -103,8 +103,8 @@ TEST(LmcasPropCalculusUtils, LogDifferentiationEquivalence) {
             auto pt_expr = SE::number(pt);
             const double expected = 2.0 * lead * pt;
             const double tolerance = 1e-6 * std::max(1.0, std::abs(expected));
-            RC_ASSERT(static_cast<bool>(numeric_matches(log_diff->substitute("x", pt_expr), expected, tolerance)));
-            RC_ASSERT(static_cast<bool>(numeric_matches(std_diff->substitute("x", pt_expr), expected, tolerance)));
+            RC_ASSERT(static_cast<bool>(numeric_matches(LMCAS::substitute(log_diff, "x", pt_expr).value(), expected, tolerance)));
+            RC_ASSERT(static_cast<bool>(numeric_matches(LMCAS::substitute(std_diff, "x", pt_expr).value(), expected, tolerance)));
         }
     }));
 }
@@ -116,7 +116,7 @@ static bool has_zero_horizontal_asymptote(
         if (!ha) {
             continue;
         }
-        auto simplified = ha->simplify();
+        auto simplified = LMCAS::simplify(ha).value();
         if (!simplified) {
             continue;
         }
@@ -154,7 +154,7 @@ TEST(LmcasPropCalculusUtils, VerticalAsymptotesRational) {
             if (!va) {
                 continue;
             }
-            auto simplified = va->simplify();
+            auto simplified = LMCAS::simplify(va).value();
             if (!simplified) {
                 continue;
             }
@@ -209,7 +209,7 @@ static ::testing::AssertionResult circle_curvature_matches(int radius) {
         return ::testing::AssertionFailure() << "Curvature requires an expression";
     }
     for (double pt : {0.0, 0.5}) {
-        auto matches = numeric_matches(kappa->substitute("t", SE::number(pt)), 1.0 / radius, 1e-6);
+        auto matches = numeric_matches(LMCAS::substitute(kappa, "t", SE::number(pt)).value(), 1.0 / radius, 1e-6);
         if (!matches) {
             return ::testing::AssertionFailure()
                 << "radius=" << radius << ", t=" << pt << ": " << matches.message();
@@ -241,7 +241,7 @@ static void check_polynomial_curvature() {
         }
     }
     const double expected = std::abs(second) / std::pow(1.0 + first * first, 1.5);
-    RC_ASSERT(static_cast<bool>(numeric_matches(kappa->substitute("x", SE::number(pt)), expected,
+    RC_ASSERT(static_cast<bool>(numeric_matches(LMCAS::substitute(kappa, "x", SE::number(pt)).value(), expected,
                                               1e-4 * std::max(1.0, std::abs(expected)))));
 }
 
@@ -257,7 +257,7 @@ TEST(LmcasPropCalculusUtils, PolynomialCurvatureZeroSecondDerivative) {
     auto result = LMCAS::curvature_checked(polynomial, "x");
     ASSERT_TRUE(result);
     ASSERT_NE(result.value(), nullptr);
-    ASSERT_TRUE(numeric_matches(result.value()->substitute("x", num(1)), 0.0, 0.0));
+    ASSERT_TRUE(numeric_matches(LMCAS::substitute(result.value(), "x", num(1)).value(), 0.0, 0.0));
 }
 
 TEST(LmcasPropCalculusUtils, CircleCurvature) {

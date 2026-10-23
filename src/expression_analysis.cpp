@@ -113,7 +113,7 @@ std::set<std::string> all_names(const detail::SymbolicNodePtr& expression,
                                 detail::RewriteBudget* budget = nullptr) {
     AllNameCollector collector(budget);
     if (expression) expression->accept(collector);
-    return collector.names;
+    return std::move(collector.names);
 }
 
 std::string fresh_name(const std::string& base, std::set<std::string>& occupied) {
@@ -297,15 +297,17 @@ bool detail::is_imaginary_unit_name(const std::string& name) {
     return name == "I";
 }
 
-std::set<std::string> detail::all_variable_names(const detail::SymbolicNodePtr& expression) {
-    return all_names(expression);
+std::set<std::string> detail::all_variable_names(
+    const detail::SymbolicNodePtr& expression, detail::RewriteBudget* budget) {
+    if (budget) { budget->measure(expression); }
+    return all_names(expression, budget);
 }
 
 std::set<std::string> free_variables(const detail::SymbolicNodePtr& expression,
                                      detail::RewriteBudget* budget) {
     FreeVariableCollector collector(budget);
     if (expression) expression->accept(collector);
-    return collector.variables;
+    return std::move(collector.variables);
 }
 
 bool expression_depends_on_variable(

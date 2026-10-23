@@ -154,6 +154,12 @@ public:
         const std::vector<std::string>& parameters);
 
 private:
+    static IntervalUnion solve_inequality_impl(
+        const std::shared_ptr<SymbolicExpr>& expr,
+        InequalityType type,
+        const std::string& variable,
+        ComputationContext& context);
+
 
     static Result<IntervalUnion> solve_exact_quadratic_inequality(
         const Polynomial<Rational>& polynomial,
@@ -164,13 +170,15 @@ private:
         const std::shared_ptr<SymbolicExpr>& poly,
         const std::string& variable,
         const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
-        const std::vector<int>& multiplicities);
+        const std::vector<int>& multiplicities,
+        ComputationContext& context);
 
     static IntervalUnion select_intervals(
         const std::vector<SignChartEntry>& chart,
         InequalityType type,
         const std::vector<std::shared_ptr<SymbolicExpr>>& roots,
-        const std::vector<int>& multiplicities);
+        const std::vector<int>& multiplicities,
+        ComputationContext& context);
 
     static IntervalUnion build_parametric_solution(
         const std::vector<std::shared_ptr<SymbolicExpr>>& symbolic_roots,

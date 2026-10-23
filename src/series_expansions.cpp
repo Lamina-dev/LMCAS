@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 #include "series_engine.hpp"
 #include "symbolic.hpp"
@@ -18,23 +20,26 @@
 
 namespace LMCAS {
 
-static int detect_parity(const std::shared_ptr<SymbolicExpr>& f, const std::string& var) {
+static int detect_parity(const std::shared_ptr<SymbolicExpr>& f, const std::string& var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!f) {
         return 0;
     }
     auto neg_x = SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::variable(var));
-    auto f_neg = f->substitute(var, neg_x);
+    auto f_neg = detail::make_expression_ptr(detail::substitute_node(detail::node(f), var, detail::node(neg_x), transform_budget));
     if (!f_neg) {
         return 0;
     }
-    f_neg = f_neg->simplify();
-    auto f_s = f->simplify();
+    f_neg = detail::make_expression_ptr(detail::normalize_node(detail::node(f_neg), transform_budget));
+    auto f_s = detail::make_expression_ptr(detail::normalize_node(detail::node(f), transform_budget));
     auto diff_even = SymbolicExpr::add(f_neg, SymbolicExpr::multiply(SymbolicExpr::number(-1), f_s));
-    if (diff_even) { diff_even = diff_even->simplify(); if (diff_even->is_zero()) {
+    if (diff_even) { diff_even = detail::make_expression_ptr(detail::normalize_node(detail::node(diff_even), transform_budget)); if (diff_even->is_zero()) {
         return 1;
     } }
     auto diff_odd = SymbolicExpr::add(f_neg, f_s);
-    if (diff_odd) { diff_odd = diff_odd->simplify(); if (diff_odd->is_zero()) {
+    if (diff_odd) { diff_odd = detail::make_expression_ptr(detail::normalize_node(detail::node(diff_odd), transform_budget)); if (diff_odd->is_zero()) {
         return -1;
     } }
     return 0;
@@ -79,13 +84,16 @@ Result<void> validate_laurent_orders(int order_neg,
 
 static std::optional<int> essential_exponent(
     const std::shared_ptr<SymbolicExpr>& f,
-    const std::shared_ptr<SymbolicExpr>& shift) {
+    const std::shared_ptr<SymbolicExpr>& shift, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto fn = std::dynamic_pointer_cast<const FunctionNode>(detail::node(f));
     if (!fn || fn->type() != FunctionNode::FuncType::Exp ||
         fn->arguments().size() != 1) {
         return std::nullopt;
     }
-    auto argument = detail::make_expression_ptr(fn->arguments()[0])->simplify();
+    auto argument = detail::make_expression_ptr(detail::normalize_node(fn->arguments()[0], transform_budget));
     auto power = std::dynamic_pointer_cast<const PowerNode>(detail::node(argument));
     if (!power) {
         return std::nullopt;
@@ -95,8 +103,8 @@ static std::optional<int> essential_exponent(
     if (!exponent) {
         return std::nullopt;
     }
-    auto base = detail::make_expression_ptr(power->base())->simplify();
-    auto delta = shift->simplify();
+    auto base = detail::make_expression_ptr(detail::normalize_node(power->base(), transform_budget));
+    auto delta = detail::make_expression_ptr(detail::normalize_node(detail::node(shift), transform_budget));
     if (base->compare(delta) == 0 && *exponent < 0) {
         return -*exponent;
     }
@@ -104,7 +112,7 @@ static std::optional<int> essential_exponent(
     if (nested && *exponent == -1) {
         auto m = exact_small_integer_node(
             nested->exponent(), 1, std::numeric_limits<int>::max());
-        auto nested_base = detail::make_expression_ptr(nested->base())->simplify();
+        auto nested_base = detail::make_expression_ptr(detail::normalize_node(nested->base(), transform_budget));
         if (m && nested_base->compare(delta) == 0) {
             return m;
         }
@@ -114,7 +122,9 @@ static std::optional<int> essential_exponent(
 
 static LaurentSeriesResult essential_laurent(
     const std::shared_ptr<SymbolicExpr>& shift, int m, int order_neg,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "laurent_series_full";
     auto series = SymbolicExpr::number(1);
     BigInt factorial(1);
@@ -132,8 +142,16 @@ static LaurentSeriesResult essential_laurent(
         series = SymbolicExpr::add(series, term);
     }
     return LaurentResult{
-        series->simplify(), SingularityType::Essential, 0,
+        detail::make_expression_ptr(detail::normalize_node(detail::node(series), transform_budget)), SingularityType::Essential, 0,
         SymbolicExpr::number(m == 1 ? 1 : 0)};
+} catch (const CasError& error) {
+    return LaurentSeriesResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LaurentSeriesResult::failure(CasErrc::ResourceLimit, "allocation failed", "laurent_series_full");
+} catch (const std::length_error& error) {
+    return LaurentSeriesResult::failure(CasErrc::ResourceLimit, error.what(), "laurent_series_full");
+} catch (const std::exception& error) {
+    return LaurentSeriesResult::failure(CasErrc::InternalInvariant, error.what(), "laurent_series_full");
 }
 static LaurentSeriesResult laurent_series_full_impl(
     const std::shared_ptr<SymbolicExpr>&,
@@ -146,7 +164,9 @@ static Result<void> add_fourier_harmonic(
     const std::shared_ptr<SymbolicExpr>& half_hi,
     const std::shared_ptr<SymbolicExpr>& L,
     const std::shared_ptr<SymbolicExpr>& arg, bool cosine,
-    std::shared_ptr<SymbolicExpr>& result, ComputationContext& context) {
+    std::shared_ptr<SymbolicExpr>& result, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto integrand = SymbolicExpr::multiply(
         f, cosine ? SymbolicExpr::cos(arg) : SymbolicExpr::sin(arg));
     auto integrated = integrator.integrate_def_checked(
@@ -154,14 +174,22 @@ static Result<void> add_fourier_harmonic(
     if (!integrated) {
         return Result<void>::failure(integrated.error());
     }
-    auto coefficient = SymbolicExpr::divide(
-        detail::make_expression_ptr(integrated.value()), L)->simplify();
+    auto coefficient = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
+        detail::make_expression_ptr(integrated.value()), L)), transform_budget));
     if (!(detail::node(coefficient) && detail::node(coefficient)->is_zero())) {
         result = SymbolicExpr::add(
             result, SymbolicExpr::multiply(
                 coefficient, cosine ? SymbolicExpr::cos(arg) : SymbolicExpr::sin(arg)));
     }
     return Result<void>::success();
+} catch (const CasError& error) {
+    return Result<void>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<void>::failure(CasErrc::ResourceLimit, "allocation failed", "add_fourier_harmonic");
+} catch (const std::length_error& error) {
+    return Result<void>::failure(CasErrc::ResourceLimit, error.what(), "add_fourier_harmonic");
+} catch (const std::exception& error) {
+    return Result<void>::failure(CasErrc::InternalInvariant, error.what(), "add_fourier_harmonic");
 }
 
 struct FourierPeriod {
@@ -212,13 +240,23 @@ static Result<FourierPeriod> prepare_fourier_period(
 
 static ExpressionResult fourier_constant_coefficient(Integrator& integrator,
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
-    const FourierPeriod& period, ComputationContext& context) {
+    const FourierPeriod& period, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto a0_integral = integrator.integrate_def_checked(
         *f, var, *period.lower, *period.upper, context);
     if (!a0_integral) { return ExpressionResult::failure(a0_integral.error()); }
-    auto a0 = SymbolicExpr::divide(
-        LMCAS::detail::make_expression_ptr(a0_integral.value()), period.half_length)->simplify();
+    auto a0 = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
+        LMCAS::detail::make_expression_ptr(a0_integral.value()), period.half_length)), transform_budget));
     return SymbolicExpr::divide(a0, period.two);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "fourier_constant_coefficient");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "fourier_constant_coefficient");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "fourier_constant_coefficient");
 }
 
 static Result<void> fourier_harmonics(Integrator& integrator,
@@ -245,7 +283,9 @@ static Result<void> fourier_harmonics(Integrator& integrator,
 ExpressionResult fourier_series_checked(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& period, int n_terms,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "fourier_series";
     if (!f || !period || var.empty() || n_terms < 0) {
         return ExpressionResult::failure(
@@ -270,7 +310,7 @@ ExpressionResult fourier_series_checked(
         auto prepared = prepare_fourier_period(period, var, context);
         if (!prepared) { return ExpressionResult::failure(prepared.error()); }
 
-        int parity = detect_parity(f, var);
+        int parity = detect_parity(f, var, context);
         Integrator integrator;
         auto x = SymbolicExpr::variable(var);
 
@@ -280,15 +320,23 @@ ExpressionResult fourier_series_checked(
         auto harmonics = fourier_harmonics(
             integrator, f, var, prepared.value(), x, n_terms, parity, result, context);
         if (!harmonics) { return ExpressionResult::failure(harmonics.error()); }
-        return ExpressionResult::success(result->simplify());
+        return ExpressionResult::success(detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget)));
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(
             CasErrc::ResourceLimit,
             "Fourier expansion allocation failed", operation);
-    } catch (const std::exception& error) {
+    } catch (const std::length_error& error) { return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "fourier_series"); } catch (const std::exception& error) {
         return ExpressionResult::failure(
             CasErrc::InternalInvariant, error.what(), operation);
     }
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "fourier_series");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "fourier_series");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "fourier_series");
 }
 
 ExpressionResult fourier_series_checked(
@@ -306,13 +354,15 @@ ExpressionResult laurent_series_checked(
     int order_neg,
     int order_pos,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto full = laurent_series_full_checked(
         f, var, center, order_neg, order_pos, context);
     if (!full) {
         return ExpressionResult::failure(full.error());
     }
-    auto simplified = f->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(f), transform_budget));
     auto supported_power = simplified
         ? supported_laurent_integer_power(
               LMCAS::detail::node(simplified), var)
@@ -321,6 +371,14 @@ ExpressionResult laurent_series_checked(
         return ExpressionResult::success(std::move(simplified));
     }
     return ExpressionResult::success(std::move(full.value().series));
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "laurent_series_checked");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "laurent_series_checked");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "laurent_series_checked");
 }
 
 ExpressionResult laurent_series_checked(
@@ -369,7 +427,9 @@ LaurentSeriesResult laurent_series_full_checked(
     int order_neg,
     int order_pos,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "laurent_series_full";
     auto input = validate_series_expr_point(f, center, var, context, operation);
     if (!input) {
@@ -385,7 +445,7 @@ LaurentSeriesResult laurent_series_full_checked(
         return LaurentSeriesResult::failure(budget.error());
     }
     try {
-        auto simplified_input = f->simplify();
+        auto simplified_input = detail::make_expression_ptr(detail::normalize_node(detail::node(f), transform_budget));
         if (!simplified_input || !LMCAS::detail::node(simplified_input)) {
             return LaurentSeriesResult::failure(
                 CasErrc::Inconclusive,
@@ -411,11 +471,19 @@ LaurentSeriesResult laurent_series_full_checked(
         return LaurentSeriesResult::failure(CasErrc::ResourceLimit,
                                             "allocation failed while calculating Laurent series",
                                             operation);
-    } catch (const std::exception& ex) {
+    } catch (const std::length_error& error) { return LaurentSeriesResult::failure(CasErrc::ResourceLimit, error.what(), "laurent_series_full"); } catch (const std::exception& ex) {
         return LaurentSeriesResult::failure(CasErrc::InternalInvariant,
                                             ex.what(),
                                             operation);
     }
+} catch (const CasError& error) {
+    return LaurentSeriesResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LaurentSeriesResult::failure(CasErrc::ResourceLimit, "allocation failed", "laurent_series_full");
+} catch (const std::length_error& error) {
+    return LaurentSeriesResult::failure(CasErrc::ResourceLimit, error.what(), "laurent_series_full");
+} catch (const std::exception& error) {
+    return LaurentSeriesResult::failure(CasErrc::InternalInvariant, error.what(), "laurent_series_full");
 }
 
 LaurentSeriesResult laurent_series_full_checked(
@@ -458,7 +526,9 @@ static Result<int> extract_laurent_regular_part(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center,
     const std::shared_ptr<SymbolicExpr>& shift,
-    std::shared_ptr<SymbolicExpr>& regular, ComputationContext& context) {
+    std::shared_ptr<SymbolicExpr>& regular, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "laurent_series_full";
     auto center_number = std::dynamic_pointer_cast<const NumberNode>(detail::node(center));
     if (!center_number || std::holds_alternative<lmmc_real_t>(center_number->value())) {
@@ -495,16 +565,26 @@ static Result<int> extract_laurent_regular_part(
         ++pole_order;
     }
     if (pole_order > 0) {
-        regular = SymbolicExpr::multiply(
-            SymbolicExpr::power(shift, SymbolicExpr::number(pole_order)), f)->cancel()->simplify();
+        regular = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+            SymbolicExpr::power(shift, SymbolicExpr::number(pole_order)), f)->cancel()), transform_budget));
     }
     return pole_order;
+} catch (const CasError& error) {
+    return Result<int>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<int>::failure(CasErrc::ResourceLimit, "allocation failed", "laurent_series_full");
+} catch (const std::length_error& error) {
+    return Result<int>::failure(CasErrc::ResourceLimit, error.what(), "laurent_series_full");
+} catch (const std::exception& error) {
+    return Result<int>::failure(CasErrc::InternalInvariant, error.what(), "laurent_series_full");
 }
 
 static LaurentSeriesResult laurent_series_full_impl(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::shared_ptr<SymbolicExpr>& center, int order_neg, int order_pos,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     LaurentResult res{nullptr, SingularityType::Removable, 0, SymbolicExpr::number(0)};
     if (!f || !center) {
         return res;
@@ -513,7 +593,7 @@ static LaurentSeriesResult laurent_series_full_impl(
     auto x = SymbolicExpr::variable(var);
     auto shift = SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), center));
     if (!expression_depends_on_variable(detail::node(center), var)) {
-        if (auto m = essential_exponent(f, shift)) {
+        if (auto m = essential_exponent(f, shift, context)) {
             return essential_laurent(shift, *m, order_neg, context);
         }
     }
@@ -540,10 +620,10 @@ static LaurentSeriesResult laurent_series_full_impl(
     std::shared_ptr<SymbolicExpr> laurent = taylor;
     if (pole_order > 0) {
         auto powm = SymbolicExpr::power(shift, SymbolicExpr::number(pole_order));
-        laurent = SymbolicExpr::divide(taylor, powm)->simplify();
+        laurent = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(taylor, powm)), transform_budget));
     }
 
-    res.series = laurent->simplify();
+    res.series = detail::make_expression_ptr(detail::normalize_node(detail::node(laurent), transform_budget));
     res.pole_order = pole_order;
     if (pole_order == 0) {
         res.singularity = SingularityType::Removable;
@@ -555,7 +635,7 @@ static LaurentSeriesResult laurent_series_full_impl(
     if (pole_order >= 1) {
         /// a_{m-1} = (1/(m-1)!) lim_{x->c} d^{m-1}/dx^{m-1} [regular]
         auto deriv = regular;
-        for (int i = 0; i < pole_order - 1; ++i) deriv = deriv->differentiate(var);
+        for (int i = 0; i < pole_order - 1; ++i) deriv = detail::make_expression_ptr(detail::differentiate_node(detail::node(deriv), var, transform_budget));
         /// 用极限求值,稳健处理 0/0 形式(如 z/(z(z+1)) 在 z=0).
         auto limited = limit_expression_checked(
             deriv, var, center, LimitDirection::Both, context);
@@ -564,20 +644,31 @@ static LaurentSeriesResult laurent_series_full_impl(
         }
         auto val = std::move(limited.value());
         if (!val) {
-            val = deriv->substitute(var, center);
+            val = detail::make_expression_ptr(detail::substitute_node(detail::node(deriv), var, detail::node(center), transform_budget));
         }
         auto fact = BigInt::factorial_checked(BigInt(pole_order - 1), context);
         if (!fact) {
             return LaurentSeriesResult::failure(fact.error());
         }
-        res.residue = SymbolicExpr::divide(val, SymbolicExpr::number(fact.value()))->simplify();
+        res.residue = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(val, SymbolicExpr::number(fact.value()))), transform_budget));
     }
 
     return res;
+} catch (const CasError& error) {
+    return LaurentSeriesResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LaurentSeriesResult::failure(CasErrc::ResourceLimit, "allocation failed", "laurent_series_full_impl");
+} catch (const std::length_error& error) {
+    return LaurentSeriesResult::failure(CasErrc::ResourceLimit, error.what(), "laurent_series_full_impl");
+} catch (const std::exception& error) {
+    return LaurentSeriesResult::failure(CasErrc::InternalInvariant, error.what(), "laurent_series_full_impl");
 }
 
 std::shared_ptr<SymbolicExpr> asymptotic_expand(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var, int order) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!f || order < 0) {
         return nullptr;
     }
@@ -587,21 +678,21 @@ std::shared_ptr<SymbolicExpr> asymptotic_expand(
     std::string tname = var + "__asym_t";
     auto t = SymbolicExpr::variable(tname);
     auto inv_t = SymbolicExpr::divide(SymbolicExpr::number(1), t);
-    auto g = f->substitute(var, inv_t);
+    auto g = detail::make_expression_ptr(detail::substitute_node(detail::node(f), var, detail::node(inv_t), transform_budget));
     if (!g) {
         return nullptr;
     }
-    g = g->simplify();
+    g = detail::make_expression_ptr(detail::normalize_node(detail::node(g), transform_budget));
     auto taylor_t = g->series(tname, SymbolicExpr::number(0), order + 1);
     if (!taylor_t) {
         return nullptr;
     }
     /// 回代 t = 1/x
     auto inv_x = SymbolicExpr::divide(SymbolicExpr::number(1), x);
-    auto back = taylor_t->substitute(tname, inv_x);
+    auto back = detail::make_expression_ptr(detail::substitute_node(detail::node(taylor_t), tname, detail::node(inv_x), transform_budget));
     if (!back) {
         return nullptr;
     }
-    return back->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(back), transform_budget));
 }
 }

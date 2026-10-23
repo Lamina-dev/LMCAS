@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
@@ -191,8 +192,7 @@ static void check_symbolic_coefficient_conversion(const ExprPtr &x, const ExprPt
     EXPECT_EQ(symbolic.value().degree(), 2);
     const auto reconstructed = poly_to_symbolic(symbolic.value());
     const auto evaluated = test_numeric_eval(
-        reconstructed->substitute("a", SymbolicExpr::number(7))
-            ->substitute("x", SymbolicExpr::number(3)));
+        LMCAS::substitute(LMCAS::substitute(reconstructed, "a", SymbolicExpr::number(7)).value(), "x", SymbolicExpr::number(3)).value());
     ASSERT_TRUE(evaluated.has_value());
     EXPECT_TRUE(std::isfinite(*evaluated));
     EXPECT_EQ(*evaluated, 16.0);
@@ -293,8 +293,8 @@ TEST(PolyUtils, AffineRecognition) {
         auto affine = detail::recognize_affine(*sample.expression, "x", context);
         EXPECT_TRUE((affine && affine.value())) << "affine expression matches";
         if (affine && affine.value()) {
-            EXPECT_TRUE((detail::node(affine.value()->slope->simplify())->equals(*detail::node(sample.slope)))) << "affine slope is preserved";
-            EXPECT_TRUE((detail::node(affine.value()->offset->simplify())->equals(*detail::node(sample.offset)))) << "affine offset is preserved";
+            EXPECT_TRUE((detail::node(LMCAS::simplify(affine.value()->slope).value())->equals(*detail::node(sample.slope)))) << "affine slope is preserved";
+            EXPECT_TRUE((detail::node(LMCAS::simplify(affine.value()->offset).value())->equals(*detail::node(sample.offset)))) << "affine offset is preserved";
         }
     }
     for (const auto &expression : {SymbolicExpr::multiply(x, x), SymbolicExpr::sin(x)}) {

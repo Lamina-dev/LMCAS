@@ -22,8 +22,7 @@ void expect_periodic_family_values(const ParametricSolution &family,
         }
         bool equal = true;
         for (int k : {-2, 0, 1}) {
-            auto actual = family.value->substitute(
-                family.integer_parameters.front(), SymbolicExpr::number(k));
+            auto actual = LMCAS::substitute(family.value, family.integer_parameters.front(), SymbolicExpr::number(k)).value();
             auto expected = SymbolicExpr::multiply(pi_constant.value(),
                                                    SymbolicExpr::add(SymbolicExpr::number(offsets[index]),
                                                                      SymbolicExpr::multiply(SymbolicExpr::number(period), SymbolicExpr::number(k))));
@@ -176,8 +175,7 @@ void test_capture_free_integer_parameter(const ExprPtr &twice_x) {
     const auto &family = families.front();
     ASSERT_EQ(family.integer_parameters.size(), 1u);
     EXPECT_TRUE(family.integer_parameters.front() != "_k") << "input _k remains free";
-    auto value = family.value->substitute(family.integer_parameters.front(), SymbolicExpr::number(0))
-                     ->substitute("_k", SymbolicExpr::number(3));
+    auto value = LMCAS::substitute(LMCAS::substitute(family.value, family.integer_parameters.front(), SymbolicExpr::number(0)).value(), "_k", SymbolicExpr::number(3)).value();
     EXPECT_TRUE(test_expr_equivalent(value, SymbolicExpr::number(Rational(-3, 2)))) << "affine offset is not captured by the integer binder";
 }
 
@@ -223,7 +221,7 @@ void test_assumption_proved_slope(const ExprPtr &x, const ExprPtr &a) {
     ASSERT_EQ(families.size(), 1u) << "proved slope retains the zero-target family";
     const auto &family = families.front();
     ASSERT_EQ(family.integer_parameters.size(), 1u);
-    auto point = family.value->substitute("a", SymbolicExpr::number(2))->substitute(family.integer_parameters.front(), SymbolicExpr::number(1));
+    auto point = LMCAS::substitute(LMCAS::substitute(family.value, "a", SymbolicExpr::number(2)).value(), family.integer_parameters.front(), SymbolicExpr::number(1)).value();
     auto pi_constant = LMCAS::pi();
     ASSERT_TRUE(pi_constant);
     EXPECT_TRUE(test_expr_equivalent(point, SymbolicExpr::multiply(
@@ -259,8 +257,8 @@ void test_numeric_expression_rhs(const ExprPtr &x) {
         const auto &values = std::get<FiniteSolutions>(exp_roots.value()).values;
         EXPECT_TRUE(values.size() == 1) << "real exponential inversion is unique";
         if (values.size() == 1) {
-            auto expected = SymbolicExpr::ln(SymbolicExpr::number(2))->simplify();
-            const auto actual = values.front().value->simplify();
+            auto expected = LMCAS::simplify(SymbolicExpr::ln(SymbolicExpr::number(2))).value();
+            const auto actual = LMCAS::simplify(values.front().value).value();
             EXPECT_EQ(actual ? actual->to_string() : "null",
                       expected ? expected->to_string() : "null")
                 << "exp(x)=1+1 gives ln(2)";
