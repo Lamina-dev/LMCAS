@@ -123,7 +123,7 @@ function(lmcas_add_architecture_gate)
         COMMAND ${_command} --report "${CMAKE_CURRENT_BINARY_DIR}/lmcas_architecture.json"
         DEPENDS ${LMCAS_COMPONENT_TARGETS} ${_public_tests} ${_test_internal_target}
         VERBATIM)
-    if(BUILD_TESTING)
+    if(BUILD_TESTING OR LMCAS_BUILD_TESTS)
         add_test(NAME lmcas_architecture COMMAND ${_command})
         add_test(NAME lmcas_architecture_negative_fixtures
             COMMAND "${Python3_EXECUTABLE}"
