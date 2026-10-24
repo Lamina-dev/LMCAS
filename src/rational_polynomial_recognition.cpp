@@ -78,7 +78,7 @@ Result<OptionalRationalPolynomial> recognize_product(
 Result<OptionalRationalPolynomial> recognize_power(
     const PowerNode& power, const std::string& variable, ComputationContext& context) {
         auto exponent_node = std::dynamic_pointer_cast<const NumberNode>(power.exponent());
-        if (!exponent_node || std::holds_alternative<lmmc_real_t>(exponent_node->value())) {
+        if (!exponent_node) {
             return Result<OptionalRationalPolynomial>::success(std::nullopt);
         }
 

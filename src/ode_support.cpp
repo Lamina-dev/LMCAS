@@ -33,10 +33,7 @@ double try_eval_double(const std::shared_ptr<SymbolicExpr>& expr) {
         if (std::holds_alternative<BigInt>(node->value())) {
             return std::get<BigInt>(node->value()).to_double();
         }
-        if (std::holds_alternative<Rational>(node->value())) {
-            return std::get<Rational>(node->value()).to_double();
-        }
-        return static_cast<double>(std::get<lmmc_real_t>(node->value()));
+        return std::get<Rational>(node->value()).to_double();
     }
     return std::numeric_limits<double>::quiet_NaN();
 }

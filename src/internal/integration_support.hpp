@@ -6,7 +6,7 @@
 #include "internal/expression_analysis.hpp"
 #include "internal/expression_transform.hpp"
 #include "internal/normalization_utils.hpp"
-#include "residual_verification.hpp"
+#include "matcher.hpp"
 #include "polynomial.hpp"
 #include "solve_polynomial.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -20,13 +20,43 @@
 #include <iostream>
 #include <optional>
 #include <variant>
+#include <unordered_set>
+
+namespace LMCAS::detail {
+struct IntegralParts {
+    SymbolicExpr primitive;
+    SymbolicExpr remainder;
+};
+
+struct IntegrationEntry {
+    std::string name;
+    SymbolicExpr pattern;
+    SymbolicExpr result;
+    std::unordered_set<std::string> wildcards;
+    std::function<bool(const MatchMap&, const std::string&, ComputationContext&)> condition;
+    int priority = 100;
+
+    IntegrationEntry(std::string name, SymbolicExpr pattern, SymbolicExpr result,
+        std::unordered_set<std::string> wildcards,
+        std::function<bool(const MatchMap&, const std::string&, ComputationContext&)> condition = nullptr,
+        int priority = 100)
+        : name(std::move(name)), pattern(std::move(pattern)), result(std::move(result)),
+          wildcards(std::move(wildcards)), condition(std::move(condition)), priority(priority) {}
+};
+
+std::vector<IntegrationEntry> make_integration_entries();
+Result<std::optional<SymbolicExpr>> integrate_power_primitive(
+    const SymbolicExpr& base, const SymbolicExpr& exponent,
+    const std::string& variable, ComputationContext&);
+SymbolicExpr materialize_integral(const IntegralParts&, const std::string&, RewriteBudget&);
+}
 
 namespace LMCAS {
 
 inline bool depends_on_integration_variable(
     const SymbolicExpr& expression,
     const std::string& variable) {
-    return expression_depends_on_variable(detail::node(expression), variable);
+    return detail::integration_depends_on_variable(detail::node(expression), variable);
 }
 
 inline std::shared_ptr<SymbolicExpr> sym_sub(
@@ -58,12 +88,6 @@ inline std::optional<int> integration_bounded_exponent(
         if (!exponent->is_integer()) { return std::nullopt; }
         return narrow(exponent->to_bigint());
     }
-    if (const auto* exponent = std::get_if<lmmc_real_t>(&value)) {
-        if (!std::isfinite(*exponent)) { return std::nullopt; }
-        const Rational exact_exponent = Rational::from_double(*exponent);
-        if (!exact_exponent.is_integer()) { return std::nullopt; }
-        return narrow(exact_exponent.to_bigint());
-    }
     return std::nullopt;
 }
 
@@ -87,57 +111,33 @@ inline bool contains_unevaluated_integral(
     return detail::contains_node_type<IntegralNode>(node);
 }
 
-inline bool certify_integral(
-    const SymbolicExpr& candidate, const SymbolicExpr& integrand,
-    const std::string& variable, detail::RewriteBudget& budget) {
-    budget.measure(detail::node(integrand));
-    budget.measure(detail::node(candidate));
-    if (contains_unevaluated_integral(detail::node(candidate)) ||
-        contains_inexact_number(detail::node(integrand)) ||
-        contains_inexact_number(detail::node(candidate))) {
-        return false;
-    }
-    try {
-        auto derivative = detail::make_expression_ptr(detail::differentiate_node(
-            detail::node(candidate), variable, budget));
-        auto residual = sym_sub(*derivative, integrand);
-        auto proof = check_zero_residual(residual, budget.context());
-        if (!proof) { throw proof.error(); }
-        return std::holds_alternative<ProvedZeroResidual>(proof.value());
-    } catch (const CasError& error) {
-        if (error.code == CasErrc::UnsupportedExpression) { return false; }
-        throw;
-    }
-}
 
 template <typename Transform>
 std::shared_ptr<SymbolicExpr> lookup_integral(
-    const IntegrationTable& table, const SymbolicExpr& matched,
-    const std::string& matched_variable, const SymbolicExpr& integrand,
-    const std::string& variable, detail::RewriteBudget& budget, Transform&& transform) {
-    for (const auto* entry : table.get_all_sorted()) {
+    const std::vector<detail::IntegrationEntry>& table, const SymbolicExpr& matched,
+    const std::string& matched_variable, detail::RewriteBudget& budget, Transform&& transform) {
+    for (const auto& rule : table) {
+        const auto* entry = &rule;
         budget.consume();
         MatchMap bindings;
         if (!Matcher::match(entry->pattern, matched, entry->wildcards, bindings)) { continue; }
-        // Rewrite-rule partial matches must not discard integration operands.
         if (bindings.find("__Add_REST__") != bindings.end() ||
             bindings.find("__Mul_REST__") != bindings.end()) {
             continue;
         }
         const bool complete = std::all_of(entry->wildcards.begin(), entry->wildcards.end(),
             [&](const std::string& name) { return bindings.find(name) != bindings.end(); });
-        if (!complete || (entry->condition && !entry->condition(bindings, matched_variable))) {
+        if (!complete || (entry->condition && !entry->condition(bindings, matched_variable, budget.context()))) {
             continue;
         }
         auto instantiated = detail::make_expression_ptr(
             Matcher::replace(entry->result, bindings, false));
         budget.measure(detail::node(instantiated));
-        if (contains_inexact_number(detail::node(instantiated)) ||
-            contains_unevaluated_integral(detail::node(instantiated))) {
+        if (contains_unevaluated_integral(detail::node(instantiated))) {
             continue;
         }
         auto candidate = transform(std::move(instantiated));
-        if (!candidate || !certify_integral(*candidate, integrand, variable, budget)) { continue; }
+        if (!candidate) { continue; }
         return detail::make_expression_ptr(detail::normalize_node(detail::node(candidate), budget));
     }
     return nullptr;

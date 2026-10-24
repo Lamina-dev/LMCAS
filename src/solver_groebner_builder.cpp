@@ -24,12 +24,6 @@ std::optional<BigInt> integer_exponent(const PowerNode& node) {
             return rational.to_bigint();
         }
     }
-    if (std::holds_alternative<lmmc_real_t>(value)) {
-        lmmc_real_t real = std::get<lmmc_real_t>(value);
-        if (std::isfinite(real) && real == std::floor(real)) {
-            return Rational::from_double(real).to_bigint();
-        }
-    }
     return std::nullopt;
 }
 
@@ -56,9 +50,6 @@ bool power_degrees_fit(const Poly& base, int exponent) {
                 result.add_term(std::vector<int>(ext_vars.size(), 0), std::get<Rational>(node.value()));
             } else if (std::holds_alternative<BigInt>(node.value())) {
                 result.add_term(std::vector<int>(ext_vars.size(), 0), Rational(std::get<BigInt>(node.value())));
-            } else if (std::holds_alternative<lmmc_real_t>(node.value())) {
-                result.add_term(std::vector<int>(ext_vars.size(), 0),
-                    Rational::from_double(std::get<lmmc_real_t>(node.value())));
             }
         }
 

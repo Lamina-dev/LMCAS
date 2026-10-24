@@ -1,8 +1,4 @@
 #include "internal/visitors/print_visitor.hpp"
-#include <cmath>
-#include <charconv>
-#include <limits>
-#include <stdexcept>
 #include <array>
 
 namespace LMCAS {
@@ -42,24 +38,8 @@ void PrintVisitor::print_operand(const SymbolicNode& node, Precedence parent,
 void PrintVisitor::visit(const NumberNode& node) {
     if (std::holds_alternative<BigInt>(node.value())) {
         buffer << std::get<BigInt>(node.value()).to_string();
-    } else if (std::holds_alternative<Rational>(node.value())) {
-        buffer << std::get<Rational>(node.value()).to_string();
     } else {
-        const double value = std::get<double>(node.value());
-        if (!std::isfinite(value)) {
-            buffer << value;
-            return;
-        }
-        char token[64];
-        const auto result = std::to_chars(token, token + sizeof(token), value,
-            std::chars_format::general, std::numeric_limits<double>::max_digits10);
-        if (result.ec != std::errc{}) {
-            throw std::logic_error("finite double formatting failed");
-        }
-        buffer << "approx(";
-        if (value == 0 && std::signbit(value)) buffer << "-0";
-        else buffer.write(token, result.ptr - token);
-        buffer << ")";
+        buffer << std::get<Rational>(node.value()).to_string();
     }
 }
 

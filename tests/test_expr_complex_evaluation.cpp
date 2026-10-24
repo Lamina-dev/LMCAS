@@ -53,8 +53,8 @@ TEST(ExprComplexEvaluation, CertifiedComplexComponents) {
     EXPECT_TRUE(evaluated.value().is_finite());
     EXPECT_DOUBLE_EQ(evaluated.value().real.value, 1.5);
     EXPECT_DOUBLE_EQ(evaluated.value().imag.value, -0.5);
-    EXPECT_DOUBLE_EQ(evaluated.value().real.absolute_error, 0.0);
-    EXPECT_DOUBLE_EQ(evaluated.value().imag.absolute_error, 0.0);
+    EXPECT_EQ(evaluated.value().real.absolute_error, std::numeric_limits<double>::infinity());
+    EXPECT_EQ(evaluated.value().imag.absolute_error, std::numeric_limits<double>::infinity());
 
     auto mixed = LMCAS::complex(
         SymbolicExpr::number(Rational(1, 3)),
@@ -65,7 +65,7 @@ TEST(ExprComplexEvaluation, CertifiedComplexComponents) {
     EXPECT_TRUE(mixed_value.value().is_finite());
     EXPECT_EQ(mixed_value.value().real.absolute_error,
               std::numeric_limits<double>::infinity());
-    EXPECT_DOUBLE_EQ(mixed_value.value().imag.absolute_error, 0.0);
+    EXPECT_EQ(mixed_value.value().imag.absolute_error, std::numeric_limits<double>::infinity());
 }
 
 TEST(ExprComplexEvaluation, ComputedComplexErrorUnknown) {

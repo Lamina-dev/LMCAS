@@ -1,4 +1,5 @@
 #include "internal/exact_root.hpp"
+#include "internal/exact_sturm.hpp"
 
 
 #include <cmath>
@@ -38,8 +39,23 @@ Result<ApproxReal> approximate_real_isolation(
     const NumericEvaluationOptions& options,
     ComputationContext& context,
     const std::string& operation) {
+    while (isolation.lower != isolation.upper) {
+        const bool positive = isolation.lower > Rational(0) &&
+            isolation.upper <= Rational(2) * isolation.lower;
+        const bool negative = isolation.upper < Rational(0) &&
+            isolation.lower >= Rational(2) * isolation.upper;
+        if (positive || negative) break;
+        auto narrowed = refine_exact_real_algebraic(isolation, context, operation);
+        if (!narrowed) return Result<ApproxReal>::failure(narrowed.error());
+    }
+    const double scale = std::min(
+        std::abs(isolation.lower.to_double()), std::abs(isolation.upper.to_double()));
+    const double absolute_tolerance = std::min(
+        options.absolute_tolerance,
+        std::max(std::numeric_limits<double>::denorm_min(),
+                 options.relative_tolerance * scale));
     auto refined = refine_exact_real_algebraic_to_tolerance(
-        isolation, options.absolute_tolerance, options.relative_tolerance,
+        isolation, absolute_tolerance, options.relative_tolerance,
         context, operation);
     if (!refined) return Result<ApproxReal>::failure(refined.error());
     const double lower = isolation.lower.to_double();
@@ -48,7 +64,9 @@ Result<ApproxReal> approximate_real_isolation(
     const double error = std::abs(upper - lower) * 0.5 +
         conversion_ulp(lower) + conversion_ulp(upper) +
         conversion_ulp(value);
-    if (!std::isfinite(value) || !std::isfinite(error)) {
+    if (!std::isfinite(value) || !std::isfinite(error) ||
+        (value == 0.0 &&
+         (isolation.lower > Rational(0) || isolation.upper < Rational(0)))) {
         return Result<ApproxReal>::failure(
             CasErrc::NumericFailure,
             "certified root enclosure could not be represented as finite double",
@@ -121,17 +139,24 @@ Result<ApproxReal> evaluate_root_real(
             "root evaluation tolerances must be finite and positive",
             operation);
     }
-    auto isolated = isolate_exact_root(root, context, operation);
-    if (!isolated) return Result<ApproxReal>::failure(isolated.error());
-    auto* real = std::get_if<RealIsolation>(&isolated.value());
-    if (!real) {
+    if (root.index >= static_cast<std::size_t>(root.polynomial.degree())) {
+        return Result<ApproxReal>::failure(
+            CasErrc::InvalidArgument,
+            "RootOf index exceeds the number of distinct roots",
+            operation);
+    }
+    auto real_roots = isolate_real_roots_exact(root.polynomial, context, operation);
+    if (!real_roots) return Result<ApproxReal>::failure(real_roots.error());
+    if (root.index >= real_roots.value().size()) {
         return Result<ApproxReal>::failure(
             CasErrc::DomainError,
             "selected RootOf is not real",
             operation);
     }
+    const auto& interval = real_roots.value()[root.index];
     return approximate_real_isolation(
-        std::move(real->value), options, context, operation);
+        ExactRealAlgebraic{root.polynomial, interval.first, interval.second, root.index, 1},
+        options, context, operation);
 }
 
 Result<ApproxComplex> evaluate_root_complex(

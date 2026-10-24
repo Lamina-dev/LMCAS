@@ -399,11 +399,6 @@ std::optional<int> bounded_complex_power(
     } else if (const auto* rational = std::get_if<Rational>(&number->value())) {
         if (!rational->is_integer()) return std::nullopt;
         exponent = rational->get_numerator();
-    } else {
-        const double value = std::get<lmmc_real_t>(number->value());
-        if (!std::isfinite(value) || value != std::floor(value) ||
-            value < 0 || value > 16) return std::nullopt;
-        return static_cast<int>(value);
     }
     if (exponent < BigInt(0) || exponent > BigInt(16)) return std::nullopt;
     return static_cast<int>(*exponent.try_to_int64());

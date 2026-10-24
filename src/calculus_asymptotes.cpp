@@ -22,21 +22,16 @@ static std::shared_ptr<const SymbolicNode> denominator_factor(
     if (!number) {
         return nullptr;
     }
-    double exponent = 0;
-    if (std::holds_alternative<lmmc_real_t>(number->value())) {
-        exponent = std::get<lmmc_real_t>(number->value());
-    } else if (std::holds_alternative<BigInt>(number->value())) {
-        exponent = std::get<BigInt>(number->value()).to_double();
-    } else if (std::holds_alternative<Rational>(number->value())) {
-        exponent = std::get<Rational>(number->value()).to_double();
-    }
-    if (!(exponent < 0)) {
+    const Rational exponent = std::holds_alternative<BigInt>(number->value())
+        ? Rational(std::get<BigInt>(number->value()))
+        : std::get<Rational>(number->value());
+    if (!(exponent < Rational(0))) {
         return nullptr;
     }
-    if (exponent == -1.0) {
+    if (exponent == Rational(-1)) {
         return power->base();
     }
-    auto positive = LMCAS::detail::make_node<NumberNode>(BigInt(static_cast<int>(-exponent)));
+    auto positive = LMCAS::detail::make_node<NumberNode>(-exponent);
     return LMCAS::detail::make_node<PowerNode>(power->base(), positive);
 }
 
@@ -92,10 +87,7 @@ static bool calculus_utils_is_minus_one(const std::shared_ptr<const NumberNode>&
     if (std::holds_alternative<BigInt>(number->value())) {
         return std::get<BigInt>(number->value()) == BigInt(-1);
     }
-    if (std::holds_alternative<Rational>(number->value())) {
-        return std::get<Rational>(number->value()) == Rational(-1);
-    }
-    return std::get<lmmc_real_t>(number->value()) == -1.0;
+    return std::get<Rational>(number->value()) == Rational(-1);
 }
 
 static bool calculus_utils_split_rational(

@@ -123,13 +123,6 @@ Result<ExprPtr> determinant_exact(
             CasErrc::InvalidArgument,
             "determinant requires a square matrix", operation);
     }
-    for (const auto& entry : input.entries) {
-        if (contains_approximate_number(entry)) {
-            return Result<ExprPtr>::failure(
-                CasErrc::Inconclusive,
-                "exact determinant rejects approximate entries", operation);
-        }
-    }
     bool all_rational = true;
     for (const auto& entry : input.entries) {
         all_rational = all_rational && exact_rational(entry).has_value();

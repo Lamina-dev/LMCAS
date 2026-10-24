@@ -5,10 +5,10 @@
  */
 
 #include "internal/expression_analysis.hpp"
+#include "internal/normalization_utils.hpp"
 
 #include <string>
 #include <vector>
-#include <cmath>
 
 #include "internal/transcendental_support.hpp"
 
@@ -56,43 +56,6 @@ std::shared_ptr<SymbolicExpr> tf_back_substitute(
     return result;
 }
 
-
-/**
- * @brief 从 NumberNode 中提取有理数值.
- *
- * 将 BigInt,Rational,lmmc_real_t 统一转换为 Rational 表示.
- * 对于浮点数,仅当其为精确整数时才转换;否则返回失败.
- *
- * @param[in]  num_node 数值节点
- * @param[out] out      输出的有理数值
- * @return 提取成功返回 true
- * @internal
- */
-static bool tf_extract_rational(const std::shared_ptr<const NumberNode>& num_node, Rational& out) {
-    if (!num_node) {
-        return false;
-    }
-
-    if (std::holds_alternative<BigInt>(num_node->value())) {
-        out = Rational(std::get<BigInt>(num_node->value()));
-        return true;
-    }
-    if (std::holds_alternative<Rational>(num_node->value())) {
-        out = std::get<Rational>(num_node->value());
-        return true;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num_node->value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num_node->value());
-        /// 仅处理精确整数浮点值
-        if (std::isfinite(v) && v == std::floor(v) && std::abs(v) < 1e15) {
-            out = Rational::from_double(v);
-            return true;
-        }
-        return false;
-    }
-    return false;
-}
-
 namespace {
 
 class FactorSimplification {
@@ -123,7 +86,7 @@ private:
     bool append(const std::shared_ptr<SymbolicExpr>& factor) {
         const auto& node = LMCAS::detail::node(factor);
         if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
-            return append_number(number, factor);
+            return append_number(*number);
         }
         if (auto product = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
             append_product(*product, factor);
@@ -133,13 +96,8 @@ private:
         return true;
     }
 
-    bool append_number(const std::shared_ptr<const NumberNode>& number,
-                       const std::shared_ptr<SymbolicExpr>& factor) {
-        Rational value;
-        if (!tf_extract_rational(number, value)) {
-            result_.push_back(factor);
-            return true;
-        }
+    bool append_number(const NumberNode& number) {
+        const auto value = exact_number_as_rational(number);
         if (value == Rational(0)) {
             result_.clear();
             result_.push_back(SymbolicExpr::number(0));
@@ -154,12 +112,7 @@ private:
         std::vector<std::shared_ptr<const SymbolicNode>>& symbolic) {
         for (const auto& operand : numeric) {
             auto number = std::dynamic_pointer_cast<const NumberNode>(operand);
-            Rational value;
-            if (tf_extract_rational(number, value)) {
-                constant_ = constant_ * value;
-            } else {
-                symbolic.push_back(operand);
-            }
+            constant_ = constant_ * exact_number_as_rational(*number);
         }
         if (symbolic.size() == 1) {
             result_.push_back(LMCAS::detail::make_expression_ptr(symbolic[0]));
@@ -174,10 +127,7 @@ private:
         Rational product(1);
         for (const auto& operand : numeric) {
             auto number = std::dynamic_pointer_cast<const NumberNode>(operand);
-            Rational value;
-            if (tf_extract_rational(number, value)) {
-                product = product * value;
-            }
+            product = product * exact_number_as_rational(*number);
         }
         constant_ = constant_ * product;
     }

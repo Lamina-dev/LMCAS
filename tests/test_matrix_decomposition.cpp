@@ -15,7 +15,7 @@ static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n)
 static std::shared_ptr<SymbolicExpr> bigint_num(const BigInt &n) {
     return LMCAS::detail::make_expression_ptr(
         LMCAS::detail::make_node<NumberNode>(
-            std::variant<BigInt, Rational, lmmc_real_t>{std::in_place_type<BigInt>, n}));
+            std::variant<BigInt, Rational>{std::in_place_type<BigInt>, n}));
 }
 
 static std::shared_ptr<SymbolicExpr> exact_dense_matrix(

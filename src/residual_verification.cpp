@@ -53,7 +53,6 @@ class FormalResidual {
     std::vector<Node> radical_radicands_;
     std::vector<std::pair<Node, Node>> canonical_atoms_;
     std::optional<CasError> failure_;
-    bool inexact_ = false;
     struct Angle {
         Node base;
         Rational scale;
@@ -106,8 +105,8 @@ class FormalResidual {
                 return true;
             }
         }
-        if (auto number = dynamic_cast<const NumberNode*>(node.get())) {
-            return !std::holds_alternative<lmmc_real_t>(number->value());
+        if (dynamic_cast<const NumberNode*>(node.get())) {
+            return true;
         }
         if (auto sum = dynamic_cast<const AddNode*>(node.get())) {
             return collect_operands(
@@ -189,7 +188,7 @@ class FormalResidual {
     }
     bool register_replacement(const Node& node, Node replacement) {
         budget_.measure(replacement);
-        if (contains_inexact_number(replacement) || !collect(replacement)) { return false; }
+        if (!collect(replacement)) { return false; }
         if (!checked(context_.require_expansion_terms(
                 atoms_.size() + canonical_atoms_.size() + 1, "residual.formal"))) {
             return false;
@@ -218,7 +217,6 @@ class FormalResidual {
              fn.type() != FT::Tan && fn.type() != FT::Cot &&
              fn.type() != FT::Sec && fn.type() != FT::Csc)) { return; }
         auto argument = detail::normalize_node(fn.arguments()[0], budget_);
-        if (contains_inexact_number(argument)) { inexact_ = true; return; }
         auto [scale, base] = coefficient(argument);
         if (scale < Rational(0)) { scale = -scale; }
         if (scale.is_zero()) { return; }
@@ -260,7 +258,6 @@ class FormalResidual {
         auto radicand = radical_radicand(node);
         if (!radicand || detail::exact_rational_value(radicand)) { return nullptr; }
         auto canonical = detail::expand_node(radicand, budget_);
-        if (contains_inexact_number(canonical)) { inexact_ = true; return nullptr; }
         Node term = canonical;
         if (const auto* add = dynamic_cast<const AddNode*>(canonical.get())) {
             for (const auto& child : add->operands()) {
@@ -308,7 +305,6 @@ class FormalResidual {
             fn.type() != FT::Sinh && fn.type() != FT::Cosh &&
             fn.type() != FT::Exp) { return nullptr; }
         auto canonical = detail::normalize_node(argument, budget_);
-        if (contains_inexact_number(canonical)) { inexact_ = true; return nullptr; }
         if (!canonical->equals(*argument)) { return function(fn.type(), canonical); }
         if (fn.type() == FT::Exp) {
             if (auto exact = detail::exact_rational_value(argument);
@@ -422,7 +418,6 @@ class FormalResidual {
             if (auto replacement = rewrite_function(*fn)) {
                 return register_replacement(node, std::move(replacement));
             }
-            if (inexact_) { return false; }
         }
         if (const auto* exponentiation = dynamic_cast<const PowerNode*>(node.get())) {
             auto exponent = detail::exact_rational_value(exponentiation->exponent());
@@ -440,7 +435,6 @@ class FormalResidual {
         if (auto replacement = rewrite_radical(node)) {
             return register_replacement(node, std::move(replacement));
         }
-        if (inexact_) { return false; }
         auto square = radical_square(node);
         if (canonicalize_radicals && square &&
             !square->get_numerator().is_negative()) {
@@ -641,7 +635,6 @@ public:
         AngleCollector angles(*this);
         expression->accept(angles);
         if (failure_) { return Result<bool>::failure(*failure_); }
-        if (inexact_) { return false; }
         if (!collect(expression))
             { return failure_ ? Result<bool>::failure(*failure_) : Result<bool>::success(false); }
         auto fraction = convert(expression);
@@ -950,16 +943,10 @@ ResidualCheckResult prove_normalized_residual(const ExprPtr& residual,
         ? static_cast<const FactsQuery&>(*assumed) : detail::no_facts();
     auto current = detail::make_expression_ptr(
         detail::normalize_node(detail::node(residual), budget, facts));
-    if (contains_inexact_number(detail::node(current))) {
-        return ResidualCheckResult::success(UnprovedResidual{current});
-    }
     auto first = classify_residual(current, budget, operation);
     if (!first || is_decided(first.value())) { return first; }
     current = detail::make_expression_ptr(
         detail::expand_node(detail::node(current), budget, facts));
-    if (contains_inexact_number(detail::node(current))) {
-        return ResidualCheckResult::success(UnprovedResidual{current});
-    }
     auto expanded = classify_residual(current, budget, operation);
     if (!expanded || is_decided(expanded.value())) { return expanded; }
     /**
@@ -1063,9 +1050,6 @@ ResidualCheckResult check_zero_residual(
         detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
                                      context.limits().max_ast_nodes, operation);
         budget.measure(detail::node(residual));
-        if (contains_inexact_number(detail::node(residual))) {
-            return ResidualCheckResult::success(UnprovedResidual{residual});
-        }
         if (auto piecewise = prove_piecewise_residual(residual, budget, options)) {
             return std::move(*piecewise);
         }

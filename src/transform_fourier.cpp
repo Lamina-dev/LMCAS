@@ -102,9 +102,11 @@ static std::shared_ptr<SymbolicExpr> te_abs_fourier(
 }
 
 static std::shared_ptr<SymbolicExpr> te_gaussian_fourier(
-    double rate, const std::string& omega) {
-    auto coefficient = SymbolicExpr::number(std::sqrt(3.14159265358979323846 / rate));
-    auto exponent = SymbolicExpr::multiply(SymbolicExpr::number(-1.0 / (4.0 * rate)),
+    const Rational& rate, const std::string& omega) {
+    auto pi = detail::make_expression_ptr(detail::make_node<VariableNode>("pi", true));
+    auto coefficient = SymbolicExpr::sqrt(
+        SymbolicExpr::divide(pi, SymbolicExpr::number(rate)));
+    auto exponent = SymbolicExpr::multiply(SymbolicExpr::number(-Rational(1) / (Rational(4) * rate)),
         SymbolicExpr::power(SymbolicExpr::variable(omega), SymbolicExpr::number(2)));
     return SymbolicExpr::multiply(coefficient, SymbolicExpr::exp(exponent));
 }
@@ -241,25 +243,25 @@ static std::shared_ptr<SymbolicExpr> inverse_fourier_transform_core(
         return result;
     }
 
-    if (!contains_inexact_number(detail::node(F))) {
-        auto canonical = te_abs_fourier(SymbolicExpr::number(1), omega, context);
-        if (detail::normalize_node(detail::node(F), transform_budget)->equals(*detail::node(canonical))) {
-            auto abs_t = detail::make_expression_ptr(detail::make_node<FunctionNode>(
-                FunctionNode::FuncType::Abs,
-                std::vector<std::shared_ptr<const SymbolicNode>>{detail::node(tv)}));
-            return SymbolicExpr::exp(SymbolicExpr::multiply(
-                SymbolicExpr::number(-1), abs_t));
-        }
+    auto canonical = te_abs_fourier(SymbolicExpr::number(1), omega, context);
+    if (detail::normalize_node(detail::node(F), transform_budget)->equals(*detail::node(canonical))) {
+        auto abs_t = detail::make_expression_ptr(detail::make_node<FunctionNode>(
+            FunctionNode::FuncType::Abs,
+            std::vector<std::shared_ptr<const SymbolicNode>>{detail::node(tv)}));
+        return SymbolicExpr::exp(SymbolicExpr::multiply(
+            SymbolicExpr::number(-1), abs_t));
     }
 
     if (const auto rate = te_match_pure_gaussian(F, omega)) {
-        const double coefficient =
-            1.0 / std::sqrt(4.0 * 3.14159265358979323846 * *rate);
+        auto pi = detail::make_expression_ptr(detail::make_node<VariableNode>("pi", true));
+        auto coefficient = SymbolicExpr::divide(SymbolicExpr::number(1),
+            SymbolicExpr::sqrt(SymbolicExpr::multiply(
+                SymbolicExpr::number(Rational(4) * *rate), pi)));
         auto exponent = SymbolicExpr::multiply(
-            SymbolicExpr::number(-1.0 / (4.0 * *rate)),
+            SymbolicExpr::number(-Rational(1) / (Rational(4) * *rate)),
             SymbolicExpr::power(tv, SymbolicExpr::number(2)));
         return SymbolicExpr::multiply(
-            SymbolicExpr::number(coefficient), SymbolicExpr::exp(exponent));
+            coefficient, SymbolicExpr::exp(exponent));
     }
     return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<TransformNode>(
         TransformNode::TransformType::InverseFourier, LMCAS::detail::node(F)->clone(), omega,
@@ -282,12 +284,6 @@ TransformEngineResult inverse_fourier_transform_checked(
         auto final_access = context.consume_steps(0, operation);
         if (!final_access) {
             return TransformEngineResult::failure(final_access.error());
-        }
-        if (contains_inexact_number(detail::node(expression))) {
-            return TransformEngineResult::failure(
-                CasErrc::Inconclusive,
-                "inverse Fourier round trip requires an exact candidate",
-                operation);
         }
         auto result = te_wrap_transform_result(expression, operation);
         if (!result) return result;

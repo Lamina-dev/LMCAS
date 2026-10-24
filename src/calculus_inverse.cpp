@@ -58,10 +58,7 @@ static bool calculus_utils_is_negative_number(const std::shared_ptr<const Number
     if (std::holds_alternative<BigInt>(number->value())) {
         return std::get<BigInt>(number->value()) < BigInt(0);
     }
-    if (std::holds_alternative<Rational>(number->value())) {
-        return std::get<Rational>(number->value()) < Rational(0);
-    }
-    return std::get<lmmc_real_t>(number->value()) < 0.0;
+    return std::get<Rational>(number->value()) < Rational(0);
 }
 
 static bool is_nonreal_sqrt(const FunctionNode& function, ComputationContext& context)

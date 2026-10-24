@@ -1,163 +1,29 @@
-#define _USE_MATH_DEFINES
 #include "internal/inference_engine_impl.hpp"
 
 namespace LMCAS {
 
 Tribool InferenceEngine::Impl::number_positive(const NumberNode& num) {
-    if (num.is_positive()) {
-        return Tribool::True;
-    }
-    if (num.is_zero()) {
-        return Tribool::False;
-    }
-    if (std::holds_alternative<BigInt>(num.value())) {
-        return std::get<BigInt>(num.value()).is_negative() ? Tribool::False : Tribool::True;
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        return std::get<Rational>(num.value()) < Rational(0) ? Tribool::False : Tribool::True;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num.value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num.value());
-        if (!std::isfinite(v)) {
-            return Tribool::Unknown;
-        }
-        if (v > 0.0) {
-            return Tribool::True;
-        }
-        if (v < 0.0) {
-            return Tribool::False;
-        }
-        return Tribool::False;
-    }
-    return Tribool::Unknown;
+    return num.is_positive() ? Tribool::True : Tribool::False;
 }
 
 Tribool InferenceEngine::Impl::number_negative(const NumberNode& num) {
-    if (num.is_zero()) {
-        return Tribool::False;
-    }
-    if (std::holds_alternative<BigInt>(num.value())) {
-        return std::get<BigInt>(num.value()).is_negative() ? Tribool::True : Tribool::False;
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        const auto& r = std::get<Rational>(num.value());
-        if (r < Rational(0)) {
-            return Tribool::True;
-        }
-        return Tribool::False;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num.value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num.value());
-        if (!std::isfinite(v)) {
-            return Tribool::Unknown;
-        }
-        if (v < 0.0) {
-            return Tribool::True;
-        }
-        return Tribool::False;
-    }
-    return Tribool::Unknown;
+    return !num.is_positive() && !num.is_zero() ? Tribool::True : Tribool::False;
 }
 
 Tribool InferenceEngine::Impl::number_nonnegative(const NumberNode& num) {
-    if (num.is_zero()) {
-        return Tribool::True;
-    }
-    if (num.is_positive()) {
-        return Tribool::True;
-    }
-    if (std::holds_alternative<BigInt>(num.value())) {
-        return std::get<BigInt>(num.value()).is_negative() ? Tribool::False : Tribool::True;
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        return std::get<Rational>(num.value()) < Rational(0) ? Tribool::False : Tribool::True;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num.value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num.value());
-        if (!std::isfinite(v)) {
-            return Tribool::Unknown;
-        }
-        return v >= 0.0 ? Tribool::True : Tribool::False;
-    }
-    return Tribool::Unknown;
+    return num.is_positive() || num.is_zero() ? Tribool::True : Tribool::False;
 }
 
 Tribool InferenceEngine::Impl::number_nonpositive(const NumberNode& num) {
-    if (num.is_zero()) {
-        return Tribool::True;
-    }
-    if (num.is_positive()) {
-        return Tribool::False;
-    }
-    if (std::holds_alternative<BigInt>(num.value())) {
-        return std::get<BigInt>(num.value()).is_negative() ? Tribool::True : Tribool::False;
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        return std::get<Rational>(num.value()) > Rational(0) ? Tribool::False : Tribool::True;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num.value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num.value());
-        if (!std::isfinite(v)) {
-            return Tribool::Unknown;
-        }
-        return v <= 0.0 ? Tribool::True : Tribool::False;
-    }
-    return Tribool::Unknown;
-}
-
-Tribool InferenceEngine::Impl::number_real(const NumberNode& num) {
-    if (std::holds_alternative<BigInt>(num.value())) {
-        return Tribool::True;
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        return Tribool::True;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num.value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num.value());
-        return std::isfinite(v) ? Tribool::True : Tribool::Unknown;
-    }
-    return Tribool::Unknown;
+    return num.is_positive() ? Tribool::False : Tribool::True;
 }
 
 Tribool InferenceEngine::Impl::number_integer(const NumberNode& num) {
-    if (std::holds_alternative<BigInt>(num.value())) {
-        return Tribool::True;
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        const auto& r = std::get<Rational>(num.value());
-        return r.is_integer() ? Tribool::True : Tribool::False;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num.value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num.value());
-        if (!std::isfinite(v)) {
-            return Tribool::False;
-        }
-        return (v == std::floor(v)) ? Tribool::True : Tribool::False;
-    }
-    return Tribool::Unknown;
+    return is_integer_number(num) ? Tribool::True : Tribool::False;
 }
 
 Tribool InferenceEngine::Impl::number_nonzero(const NumberNode& num) {
-    if (num.is_zero()) {
-        return Tribool::False;
-    }
-    if (num.is_positive()) {
-        return Tribool::True;
-    }
-    if (std::holds_alternative<BigInt>(num.value())) {
-        return (std::get<BigInt>(num.value()) == BigInt(0)) ? Tribool::False : Tribool::True;
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        return (std::get<Rational>(num.value()) == Rational(0)) ? Tribool::False : Tribool::True;
-    }
-    if (std::holds_alternative<lmmc_real_t>(num.value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(num.value());
-        if (!std::isfinite(v)) {
-            return Tribool::Unknown;
-        }
-        return (v != 0.0) ? Tribool::True : Tribool::False;
-    }
-    return Tribool::Unknown;
+    return num.is_zero() ? Tribool::False : Tribool::True;
 }
 
 InferenceTriboolResult InferenceEngine::Impl::query_rational(
@@ -223,25 +89,8 @@ InferenceTriboolResult InferenceEngine::Impl::query_natural(const SymbolicExpr& 
 }
 
 Tribool InferenceEngine::Impl::natural_number(const NumberNode& num) {
-    if (is_integer_number(num)) {
-        if (std::holds_alternative<BigInt>(num.value())) {
-            const auto& b = std::get<BigInt>(num.value());
-            if (!b.is_negative()) {
-                return Tribool::True;
-            }
-        } else if (std::holds_alternative<Rational>(num.value())) {
-            BigInt n = std::get<Rational>(num.value()).get_numerator();
-            if (!n.is_negative()) {
-                return Tribool::True;
-            }
-        } else {
-            double v = std::get<lmmc_real_t>(num.value());
-            if (std::isfinite(v) && v >= 0.0 && v == std::floor(v)) {
-                return Tribool::True;
-            }
-        }
-    }
-    return Tribool::False;
+    return is_integer_number(num) && (num.is_positive() || num.is_zero())
+        ? Tribool::True : Tribool::False;
 }
 
 
@@ -257,8 +106,8 @@ InferenceTriboolResult InferenceEngine::query_real_checked(const SymbolicExpr& e
             if (guard.should_abort()) {
                 return Tribool::Unknown;
             }
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
-                return Impl::number_real(*num);
+            if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
+                return Tribool::True;
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
@@ -402,18 +251,8 @@ InferenceTriboolResult InferenceEngine::query_finite_checked(const SymbolicExpr&
             if (guard.should_abort()) {
                 return Tribool::Unknown;
             }
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
-                if (std::holds_alternative<BigInt>(num->value())) {
-                    return Tribool::True;
-                }
-                if (std::holds_alternative<Rational>(num->value())) {
-                    return Tribool::True;
-                }
-                if (std::holds_alternative<lmmc_real_t>(num->value())) {
-                    lmmc_real_t v = std::get<lmmc_real_t>(num->value());
-                    return std::isfinite(v) ? Tribool::True : Tribool::False;
-                }
-                return Tribool::Unknown;
+            if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
+                return Tribool::True;
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
@@ -445,18 +284,8 @@ InferenceTriboolResult InferenceEngine::query_divergent_checked(const SymbolicEx
             if (guard.should_abort()) {
                 return Tribool::Unknown;
             }
-            if (auto num = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
-                if (std::holds_alternative<BigInt>(num->value())) {
-                    return Tribool::False;
-                }
-                if (std::holds_alternative<Rational>(num->value())) {
-                    return Tribool::False;
-                }
-                if (std::holds_alternative<lmmc_real_t>(num->value())) {
-                    lmmc_real_t v = std::get<lmmc_real_t>(num->value());
-                    return std::isfinite(v) ? Tribool::False : Tribool::Unknown;
-                }
-                return Tribool::Unknown;
+            if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr))) {
+                return Tribool::False;
             }
 
             if (auto var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
@@ -475,19 +304,11 @@ InferenceTriboolResult InferenceEngine::query_divergent_checked(const SymbolicEx
         });
 }
 
-/**
- * @brief 判断 NumberNode 是否为整数。
- * BigInt 总是整数；Rational 要求分母为 1；double 要求有限且等于其向下取整值。
- */
 bool is_integer_number(const NumberNode& num) {
     if (std::holds_alternative<BigInt>(num.value())) {
         return true;
     }
-    if (std::holds_alternative<Rational>(num.value())) {
-        return std::get<Rational>(num.value()).is_integer();
-    }
-    double v = std::get<lmmc_real_t>(num.value());
-    return std::isfinite(v) && v == std::floor(v);
+    return std::get<Rational>(num.value()).is_integer();
 }
 bool is_even_integer_number(const NumberNode& num) {
     if (!is_integer_number(num)) {
@@ -497,28 +318,10 @@ bool is_even_integer_number(const NumberNode& num) {
     if (std::holds_alternative<BigInt>(num.value())) {
         return std::get<BigInt>(num.value()).is_even();
     }
-    if (std::holds_alternative<Rational>(num.value())) {
-        BigInt n = std::get<Rational>(num.value()).get_numerator();
-        return n.is_even();
-    }
-    const double v = std::get<lmmc_real_t>(num.value());
-    return std::fmod(v, 2.0) == 0.0;
+    return std::get<Rational>(num.value()).get_numerator().is_even();
 }
 bool is_positive_integer_number(const NumberNode& num) {
-    if (!is_integer_number(num)) {
-        return false;
-    }
-
-    if (std::holds_alternative<BigInt>(num.value())) {
-        const auto& b = std::get<BigInt>(num.value());
-        return !b.is_negative() && !(b == BigInt(0));
-    }
-    if (std::holds_alternative<Rational>(num.value())) {
-        BigInt n = std::get<Rational>(num.value()).get_numerator();
-        return !n.is_negative() && !(n == BigInt(0));
-    }
-    double v = std::get<lmmc_real_t>(num.value());
-    return v > 0.0;
+    return is_integer_number(num) && num.is_positive();
 }
 bool is_zero_number(const NumberNode& num) {
     return num.is_zero();

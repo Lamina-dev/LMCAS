@@ -33,19 +33,8 @@ std::shared_ptr<const NumberNode> small_exact_power(const NumberNode& base,
 }
 
 std::shared_ptr<const SymbolicNode> integer_numeric_power(
-    const std::shared_ptr<const NumberNode>& base,
-    const std::shared_ptr<const NumberNode>& exponent_node, const BigInt& exponent,
-    detail::RewriteBudget* budget) {
+    const std::shared_ptr<const NumberNode>& base, const BigInt& exponent) {
     const bool small = exponent > BigInt(-64) && exponent < BigInt(64);
-    const auto* real = std::get_if<lmmc_real_t>(&base->value());
-    if (real && small) {
-        const double value = std::pow(*real, exponent.to_double());
-        if (std::isfinite(value)) {
-            return detail::make_node<NumberNode>(value);
-        }
-        normalization_check_children(budget, 1, base, exponent_node);
-        return detail::make_node<PowerNode>(base, exponent_node);
-    }
     if (exponent == BigInt(-1)) {
         return reciprocal_exact_number(*base);
     }
@@ -66,9 +55,6 @@ std::shared_ptr<const SymbolicNode> integer_numeric_power(
 }
 
 bool is_half_exponent(const NumberNode& exponent) {
-    if (const auto* real = std::get_if<lmmc_real_t>(&exponent.value())) {
-        return *real == 0.5;
-    }
     if (const auto* rational = std::get_if<Rational>(&exponent.value())) {
         return *rational == Rational(1, 2);
     }
@@ -109,11 +95,6 @@ std::shared_ptr<const SymbolicNode> half_numeric_power(
     }
     if (auto root = normalization_exact_square_root(base)) {
         return root;
-    }
-    if (const auto* real = std::get_if<lmmc_real_t>(&base.value())) {
-        if (*real >= 0) {
-            return detail::make_node<NumberNode>(std::sqrt(*real));
-        }
     }
     return nullptr;
 }
@@ -172,7 +153,7 @@ std::shared_ptr<const SymbolicNode> normalization_numeric_power(
     if (budget) { budget->require_nodes(1); }
     BigInt integer;
     if (try_get_integer_value(exponent, integer)) {
-        if (auto value = integer_numeric_power(base, exponent, integer, budget)) {
+        if (auto value = integer_numeric_power(base, integer)) {
             return value;
         }
     } else if (is_half_exponent(*exponent)) {

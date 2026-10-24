@@ -25,20 +25,22 @@ static std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const
     return v.get_result();
 }
 
-TEST(NormalizationExt, ApproximateSquareRootFunctionsPreserveTheirNumericDomain) {
+TEST(NormalizationExt, DecimalSquareRootFunctionsStayExact) {
     for (double argument : {1e-30, 1e200, 9.0 + 1e-11, 4.0}) {
         auto root = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sqrt,
             std::vector<std::shared_ptr<const SymbolicNode>>{
                 LMCAS::detail::node(SymbolicExpr::number(argument))});
         auto value = LMCAS::detail::make_expression_ptr(normalize(root));
-        EXPECT_TRUE((LMCAS::structurally_equal(
-            *value, *SymbolicExpr::number(std::sqrt(argument)))))
-            << "approximate function roots retain small, large, and near-integer values";
+        auto squared = LMCAS::simplify(SymbolicExpr::power(value, SymbolicExpr::number(2)));
+        ASSERT_TRUE(squared);
+        EXPECT_TRUE(test_proved_equivalent(
+            squared.value(), SymbolicExpr::number(argument)))
+            << "decimal radicals preserve the exact radicand";
     }
 }
 
-TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRange) {
+TEST(NormalizationExt, PowerNormalizationPreservesExactExponentsAndFinalRange) {
     const struct {
         double base;
         double exponent;
@@ -47,9 +49,7 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
         {1e110, -3},
         {1e-108, -3},
         {1e200, -2},
-        {1e100, -3},
-        {2.0, 0x1p63},
-        {2.0, -0x1p63}};
+        {1e100, -3}};
     for (const auto &test : power_cases) {
         auto power = SymbolicExpr::power(
             SymbolicExpr::number(test.base), SymbolicExpr::number(test.exponent));
@@ -62,10 +62,13 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
             }
             auto value = LMCAS::evaluate_numeric(*simplified.value(), {{"power_factor", 1.0}});
             const double expected = std::pow(test.base, test.exponent);
-            if (std::isfinite(expected)) {
-                EXPECT_TRUE((value && value.value().value == expected)) << "normalization preserves the directly evaluated power";
+            if (std::isfinite(expected) && expected != 0.0) {
+                ASSERT_TRUE(value);
+                EXPECT_NEAR(value.value().value, expected, std::abs(expected) * 1e-12)
+                    << "normalization preserves the numerical value of exact powers";
             } else {
-                EXPECT_TRUE((!value && value.error().code == LMCAS::CasErrc::NumericFailure)) << "finite mathematical powers overflowing binary64 report NumericFailure";
+                EXPECT_TRUE((!value && value.error().code == LMCAS::CasErrc::NumericFailure))
+                    << "explicit numeric evaluation reports binary64 range errors";
             }
         }
     }

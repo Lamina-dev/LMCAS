@@ -252,9 +252,6 @@ private:
     /// Returns true if the node is null, MatrixNode, RelationalNode, or LogicalNode.
     bool is_unhandled_type(const SymbolicExpr& expression) const;
 
-    /// Check if a NumberNode holds NaN.
-    bool is_nan_number(const SymbolicExpr& expression) const;
-
     /// Check if a FunctionNode represents infinity (FuncType::Infinity).
     bool is_infinity_node(const SymbolicExpr& expression) const;
 

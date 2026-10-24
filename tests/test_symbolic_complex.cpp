@@ -167,21 +167,24 @@ static void test_complex_zero_division(const std::shared_ptr<SymbolicExpr> &zero
         << "checked complex_div rejects exact zero denominator";
 }
 
-static void test_nth_root_domains(const std::shared_ptr<SymbolicExpr> &approx_four) {
-    {
-        auto roots = LMCAS::solve_complex_nth_root_checked(approx_four, 2);
-        EXPECT_TRUE((roots.has_value() && roots.value().size() == 2)) << "checked complex nth root accepts explicit approximate real input";
+static void test_nth_root_domains(const std::shared_ptr<SymbolicExpr> &four) {
+    for (const auto& value : {four, SymbolicExpr::number(4),
+                              SymbolicExpr::number(2), SymbolicExpr::number(-4)}) {
+        auto roots = LMCAS::solve_complex_nth_root_checked(value, 2);
+        ASSERT_TRUE(roots);
+        ASSERT_EQ(roots.value().size(), 2u);
+        for (const auto& root : roots.value()) {
+            auto squared = LMCAS::complex_mul_checked(root, root);
+            ASSERT_TRUE(squared);
+            EXPECT_TRUE(test_proved_equivalent(squared.value().real, value));
+            EXPECT_TRUE(test_proved_equivalent(squared.value().imag, SymbolicExpr::number(0)));
+        }
     }
+    auto symbolic = LMCAS::solve_complex_nth_root_checked(SymbolicExpr::variable("a"), 2);
+    EXPECT_TRUE(!symbolic && symbolic.error().code == LMCAS::CasErrc::Inconclusive);
 
     {
-        auto exact = LMCAS::solve_complex_nth_root_checked(SymbolicExpr::number(4), 2);
-        EXPECT_TRUE((!exact.has_value() &&
-                     exact.error().code == LMCAS::CasErrc::Inconclusive))
-            << "checked complex nth root does not implicitly float exact integers";
-    }
-
-    {
-        auto bad_order = LMCAS::solve_complex_nth_root_checked(approx_four, 0);
+        auto bad_order = LMCAS::solve_complex_nth_root_checked(four, 0);
         EXPECT_TRUE((!bad_order.has_value() &&
                      bad_order.error().code == LMCAS::CasErrc::InvalidArgument))
             << "checked complex nth root rejects non-positive degree";
@@ -214,7 +217,7 @@ TEST(SymbolicComplex, CheckedComplexContracts) {
     auto zero = SymbolicExpr::number(0);
     auto one = SymbolicExpr::number(1);
     auto two = SymbolicExpr::number(2);
-    auto approx_four = SymbolicExpr::number(4.0);
+    auto four = SymbolicExpr::number(4.0);
 
     auto a = LMCAS::make_complex(one, two);
     auto b = LMCAS::make_complex(two, one);
@@ -226,7 +229,7 @@ TEST(SymbolicComplex, CheckedComplexContracts) {
     }
     test_complex_invalid_components(one, b);
     test_complex_zero_division(zero, a);
-    test_nth_root_domains(approx_four);
+    test_nth_root_domains(four);
     test_complex_context_errors(a);
 }
 

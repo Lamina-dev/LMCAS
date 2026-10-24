@@ -45,6 +45,9 @@ Result<std::optional<AffineForm>> recognize_affine(
 bool is_imaginary_unit_name(const std::string& name);
 std::set<std::string> all_variable_names(
     const SymbolicNodePtr& expression, RewriteBudget* budget = nullptr);
+bool integration_depends_on_variable(
+    const SymbolicNodePtr& expression, const std::string& variable,
+    RewriteBudget* budget = nullptr);
 }
 LMCAS_API std::set<std::string> free_variables(
     const detail::SymbolicNodePtr& expression,

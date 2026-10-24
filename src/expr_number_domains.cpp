@@ -65,23 +65,6 @@ Result<bool> domain_contains_number(NumberDomain domain, const NumberNode& numbe
             return Result<bool>::success(true);
         }
     }
-    const lmmc_real_t real = std::get<lmmc_real_t>(value);
-    if (!std::isfinite(static_cast<double>(real))) {
-        return bool_failure(CasErrc::NumericFailure,
-                            "domain membership requires finite numeric literals",
-                            kNumberDomainOperation);
-    }
-    switch (domain) {
-    case NumberDomain::Integers:
-    case NumberDomain::Rationals: {
-        return Result<bool>::success(false);
-    }
-    case NumberDomain::Reals:
-    case NumberDomain::Complexes:
-    case NumberDomain::Expressions: {
-        return Result<bool>::success(true);
-    }
-    }
     return inconclusive_domain();
 }
 

@@ -3,12 +3,15 @@
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
 #include <cmath>
+#include <utility>
 
 using namespace LMCAS;
 
 TEST(PolyUtils, IntegerCoefficientsRequireExactValues) {
-    for (double value : {std::nextafter(1.0, 2.0), std::nextafter(1.0, 0.0)}) {
-        auto expression = SymbolicExpr::number(value);
+    for (const auto& test : {
+             std::make_pair(std::nextafter(1.0, 2.0), Rational("1.0000000000000002")),
+             std::make_pair(std::nextafter(1.0, 0.0), Rational("0.9999999999999999"))}) {
+        auto expression = SymbolicExpr::number(test.first);
         auto integer = extract_coeff_value<BigInt>(expression);
         ASSERT_FALSE(integer);
         EXPECT_EQ(
@@ -20,7 +23,7 @@ TEST(PolyUtils, IntegerCoefficientsRequireExactValues) {
             CasErrc::UnsupportedExpression);
         auto rational = extract_coeff_value<Rational>(expression);
         ASSERT_TRUE(rational);
-        EXPECT_EQ(rational.value(), Rational::from_double(value));
+        EXPECT_EQ(rational.value(), test.second);
     }
     auto one = extract_coeff_value<BigInt>(SymbolicExpr::number(1.0));
     ASSERT_TRUE(one);
@@ -209,11 +212,10 @@ static void check_unsupported_rational_coefficients(const ExprPtr &a) {
 }
 
 static void check_exact_coefficient_and_power_conversion(const ExprPtr &x) {
-    auto binary =
+    auto decimal =
         extract_coeff_value<Rational>(SymbolicExpr::number(0.1));
-    ASSERT_TRUE(binary) << binary.error().message;
-    EXPECT_EQ(binary.value(), Rational::from_double(0.1));
-    EXPECT_NE(binary.value(), Rational(1, 10));
+    ASSERT_TRUE(decimal) << decimal.error().message;
+    EXPECT_EQ(decimal.value(), Rational(1, 10));
     auto accepted = symbolic_to_poly<Rational>(
         SymbolicExpr::power(x, SymbolicExpr::number(999)), "x");
     ASSERT_TRUE(accepted) << accepted.error().message;

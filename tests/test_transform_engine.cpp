@@ -143,9 +143,17 @@ TEST(TransformEngine, InverseFourierGaussian) {
             num(-1), SymbolicExpr::power(w, num(2))));
     auto result = LMCAS::inverse_fourier_transform_checked(
         F, "omega", "t");
-    EXPECT_TRUE((!result &&
-                 result.error().code == LMCAS::CasErrc::Inconclusive))
-        << "approximate Gaussian inverse requires a round-trip proof";
+    ASSERT_TRUE(result) << result.error().message;
+    auto expression = result.value().value.expression;
+    ASSERT_TRUE(expression);
+    auto constant = pi();
+    ASSERT_TRUE(constant);
+    auto expected = SymbolicExpr::multiply(
+        SymbolicExpr::power(SymbolicExpr::multiply(num(2),
+            SymbolicExpr::sqrt(constant.value())), num(-1)),
+        SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(Rational(-1, 4)),
+            SymbolicExpr::power(var("t"), num(2)))));
+    EXPECT_TRUE(test_proved_equivalent(expression, expected));
 }
 
 TEST(TransformEngine, InverseFourierConstantReturnsUnevaluated) {

@@ -20,12 +20,6 @@ int root_number_sign(const NumberNode& number) {
         }
         return rational->get_numerator().is_negative() ? -1 : 1;
     }
-    if (const auto* real = std::get_if<lmmc_real_t>(&value)) {
-        if (*real == 0.0) {
-            return 0;
-        }
-        return *real < 0 ? -1 : 1;
-    }
     return 0;
 }
 

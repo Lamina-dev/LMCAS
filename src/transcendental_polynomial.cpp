@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
-#include <cmath>
 #include <limits>
 #include <cstdint>
 
@@ -22,14 +21,9 @@ static int tf_power_degree(const PowerNode& power, const std::string& var) {
     BigInt exponent(-1);
     if (std::holds_alternative<BigInt>(exp_num->value())) {
         exponent = std::get<BigInt>(exp_num->value());
-    } else if (std::holds_alternative<Rational>(exp_num->value())) {
+    } else {
         const auto& r = std::get<Rational>(exp_num->value());
         if (r.is_integer()) exponent = r.to_bigint();
-    } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-        lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value());
-        if (std::isfinite(d) && d >= 0 && d == std::floor(d) && d < 1000.0) {
-            exponent = Rational::from_double(d).to_bigint();
-        }
     }
 
     if (exponent.is_negative() || exponent > BigInt(std::numeric_limits<int>::max())) {

@@ -9,7 +9,6 @@ namespace LMCAS::detail::matrix_kernel {
 
 Result<void> validate_matrix(const ExactMatrixData& matrix,
                              const std::string& operation);
-bool contains_approximate_number(const ExprPtr& expression);
 std::optional<Rational> exact_rational(const ExprPtr& expression);
 ExprPtr simplify_expr(ExprPtr expression, ComputationContext& context);
 ExprPtr exact_add(const ExprPtr& left, const ExprPtr& right, ComputationContext& context);

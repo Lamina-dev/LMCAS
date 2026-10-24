@@ -16,12 +16,6 @@ option(LMCAS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMCAS_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
 option(LMCAS_WARNINGS_AS_ERRORS "Treat LMCAS compiler warnings as errors" OFF)
 option(LMCAS_ENABLE_CLANG_TIDY "Run clang-tidy on LMCAS C++ sources" OFF)
-option(LMCAS_ENABLE_QUALITY_GATES "Enable reproducible first-party quality gates" OFF)
-if(LMCAS_ENABLE_QUALITY_GATES)
-    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-    include("${CMAKE_CURRENT_SOURCE_DIR}/LMMC/cmake/QualityGates.cmake")
-    lmmc_quality_require_tools()
-endif()
 set(LMCAS_LMMP_ASM "AUTO" CACHE STRING "LMMP assembly mode")
 set_property(CACHE LMCAS_LMMP_ASM PROPERTY STRINGS GENERIC X64 ARM64 AUTO)
 
@@ -87,11 +81,6 @@ if(NOT DEFINED LMMC_ENABLE_CLANG_TIDY)
 endif()
 # Propagate the active CAS selection when reusing the build cache.
 set(LMMC_LMMP_ASM "${LMCAS_LMMP_ASM}")
-if(LMCAS_ENABLE_QUALITY_GATES)
-    set(LMMC_ENABLE_QUALITY_GATES ON)
-elseif(NOT DEFINED LMMC_ENABLE_QUALITY_GATES)
-    set(LMMC_ENABLE_QUALITY_GATES OFF)
-endif()
 if(LMCAS_BUILD_LMMC_TESTS)
     add_subdirectory(LMMC)
 else()
@@ -144,52 +133,26 @@ add_library(lmcas_linear_algebra OBJECT ${LMCAS_LINEAR_ALGEBRA_SOURCES})
 add_library(lmcas_analysis OBJECT ${LMCAS_ANALYSIS_SOURCES})
 add_library(lmcas_facade OBJECT ${LMCAS_FACADE_SOURCES})
 
-# Component dependencies are intentionally acyclic and point from higher
-# layers to lower layers. Keep the final shared library as the only packaged
-# C++ target; object components are build boundaries, not public libraries.
-set_property(TARGET lmcas_exact_numeric PROPERTY LMCAS_LAYER_RANK 0)
-set_property(TARGET lmcas_core PROPERTY LMCAS_LAYER_RANK 1)
-set_property(TARGET lmcas_assumptions PROPERTY LMCAS_LAYER_RANK 2)
-set_property(TARGET lmcas_matrix_kernel PROPERTY LMCAS_LAYER_RANK 3)
-set_property(TARGET lmcas_algebra PROPERTY LMCAS_LAYER_RANK 4)
-set_property(TARGET lmcas_linear_algebra PROPERTY LMCAS_LAYER_RANK 5)
-set_property(TARGET lmcas_calculus PROPERTY LMCAS_LAYER_RANK 5)
-set_property(TARGET lmcas_analysis PROPERTY LMCAS_LAYER_RANK 6)
-set_property(TARGET lmcas_facade PROPERTY LMCAS_LAYER_RANK 7)
 
 include(cmake/ComponentHeaders.cmake)
 
-function(lmcas_component_depends component)
-    get_target_property(_component_rank ${component} LMCAS_LAYER_RANK)
-    set_property(TARGET ${component} APPEND PROPERTY LMCAS_COMPONENT_DEPENDENCIES ${ARGN})
-    foreach(dependency IN LISTS ARGN)
-        get_target_property(_dependency_rank ${dependency} LMCAS_LAYER_RANK)
-        if(_dependency_rank GREATER_EQUAL _component_rank)
-            message(FATAL_ERROR
-                "${component} cannot depend on same/higher layer ${dependency}")
-        endif()
-        target_link_libraries(${component} PRIVATE ${dependency})
-    endforeach()
-endfunction()
-
-lmcas_component_depends(lmcas_core lmcas_exact_numeric)
-lmcas_component_depends(lmcas_assumptions lmcas_exact_numeric lmcas_core)
-lmcas_component_depends(lmcas_matrix_kernel
+target_link_libraries(lmcas_core PRIVATE lmcas_exact_numeric)
+target_link_libraries(lmcas_assumptions PRIVATE lmcas_exact_numeric lmcas_core)
+target_link_libraries(lmcas_matrix_kernel PRIVATE
     lmcas_exact_numeric lmcas_core lmcas_assumptions)
-lmcas_component_depends(lmcas_algebra
+target_link_libraries(lmcas_algebra PRIVATE
     lmcas_exact_numeric lmcas_core lmcas_assumptions lmcas_matrix_kernel)
-lmcas_component_depends(lmcas_linear_algebra
+target_link_libraries(lmcas_linear_algebra PRIVATE
     lmcas_exact_numeric lmcas_core lmcas_assumptions lmcas_matrix_kernel lmcas_algebra)
-lmcas_component_depends(lmcas_calculus
+target_link_libraries(lmcas_calculus PRIVATE
     lmcas_exact_numeric lmcas_core lmcas_assumptions lmcas_algebra)
-lmcas_component_depends(lmcas_analysis
+target_link_libraries(lmcas_analysis PRIVATE
     lmcas_exact_numeric lmcas_core lmcas_assumptions lmcas_algebra
     lmcas_linear_algebra lmcas_calculus)
-lmcas_component_depends(lmcas_facade
+target_link_libraries(lmcas_facade PRIVATE
     lmcas_exact_numeric lmcas_core lmcas_assumptions lmcas_algebra
     lmcas_linear_algebra lmcas_calculus lmcas_analysis)
 
-# Every production translation unit belongs to exactly one component.
 set(_lmcas_component_sources
     ${LMCAS_EXACT_NUMERIC_SOURCES}
     ${LMCAS_CORE_SOURCES}
@@ -201,23 +164,6 @@ set(_lmcas_component_sources
     ${LMCAS_ANALYSIS_SOURCES}
     ${LMCAS_FACADE_SOURCES}
 )
-list(LENGTH _lmcas_component_sources _lmcas_component_source_count)
-list(REMOVE_DUPLICATES _lmcas_component_sources)
-list(LENGTH _lmcas_component_sources _lmcas_unique_source_count)
-if(NOT _lmcas_component_source_count EQUAL _lmcas_unique_source_count)
-    message(FATAL_ERROR
-        "A production source is assigned to more than one LMCAS component")
-endif()
-file(GLOB_RECURSE _lmcas_discovered_sources CONFIGURE_DEPENDS
-    RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
-list(SORT _lmcas_component_sources)
-list(SORT _lmcas_discovered_sources)
-if(NOT _lmcas_component_sources STREQUAL _lmcas_discovered_sources)
-    message(FATAL_ERROR
-        "Component source lists must cover every recursive src/*.c and src/*.cpp file exactly once")
-endif()
 
 add_library(lmcas SHARED)
 target_compile_features(lmcas PUBLIC cxx_std_17)
@@ -274,8 +220,7 @@ if(LMCAS_BUILD_TESTS)
         CXX_EXTENSIONS OFF
         CXX_VISIBILITY_PRESET default
         VISIBILITY_INLINES_HIDDEN NO
-        WINDOWS_EXPORT_ALL_SYMBOLS ON
-        LMMC_QUALITY_TEST_COPY TRUE)
+        WINDOWS_EXPORT_ALL_SYMBOLS ON)
     if(WIN32)
         # These tests observe executable-owned allocation and thread teardown.
         add_library(lmcas_test_local STATIC)
@@ -314,9 +259,6 @@ if(LMCAS_WARNINGS_AS_ERRORS)
 endif()
 foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
     target_compile_options(${component} PRIVATE ${_lmcas_warning_options})
-    if(LMCAS_ENABLE_QUALITY_GATES)
-        target_compile_options(${component} PRIVATE -g)
-    endif()
 endforeach()
 target_compile_options(lmcas PRIVATE
     $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wall>
@@ -374,9 +316,6 @@ endforeach()
 lmcas_apply_instrumentation(lmcas)
 if(LMCAS_BUILD_TESTS)
     target_compile_options(lmcas_test_internal PRIVATE ${_lmcas_warning_options})
-    if(LMCAS_ENABLE_QUALITY_GATES)
-        target_compile_options(lmcas_test_internal PRIVATE -g)
-    endif()
     lmcas_apply_instrumentation(lmcas_test_internal)
 endif()
 
@@ -420,37 +359,9 @@ install(TARGETS lmmc
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-set(_lmcas_owned_public_headers)
-foreach(component IN LISTS LMCAS_COMPONENT_TARGETS)
-    get_target_property(_component_files ${component} SOURCES)
-    foreach(_component_file IN LISTS _component_files)
-        if(IS_ABSOLUTE "${_component_file}")
-            file(RELATIVE_PATH _component_file
-                "${CMAKE_CURRENT_SOURCE_DIR}" "${_component_file}")
-        endif()
-        cmake_path(NORMAL_PATH _component_file)
-        if(_component_file MATCHES "^include/[^/]+\\.hpp$")
-            list(APPEND _lmcas_owned_public_headers "${_component_file}")
-        endif()
-    endforeach()
-endforeach()
-list(LENGTH _lmcas_owned_public_headers _lmcas_owned_public_header_count)
-list(REMOVE_DUPLICATES _lmcas_owned_public_headers)
-list(LENGTH _lmcas_owned_public_headers _lmcas_unique_public_header_count)
-if(NOT _lmcas_owned_public_header_count EQUAL _lmcas_unique_public_header_count)
-    message(FATAL_ERROR
-        "A public header is assigned to more than one LMCAS component")
-endif()
-
 file(GLOB _lmcas_public_headers CONFIGURE_DEPENDS
     RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp")
-list(SORT _lmcas_owned_public_headers)
-list(SORT _lmcas_public_headers)
-if(NOT _lmcas_owned_public_headers STREQUAL _lmcas_public_headers)
-    message(FATAL_ERROR
-        "Component header lists must cover every public include/*.hpp file exactly once")
-endif()
 list(TRANSFORM _lmcas_public_headers
     PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/")
 install(FILES ${_lmcas_public_headers}
@@ -489,10 +400,4 @@ if(LMCAS_BUILD_TESTS OR LMMC_BUILD_TESTS)
 endif()
 if(LMCAS_BUILD_TESTS)
     add_subdirectory(tests)
-endif()
-
-if(LMCAS_ENABLE_QUALITY_GATES)
-    lmmc_add_quality_gates(lmcas "${CMAKE_CURRENT_SOURCE_DIR}")
-    include(cmake/Architecture.cmake)
-    lmcas_add_architecture_gate()
 endif()

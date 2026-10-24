@@ -54,13 +54,16 @@ TEST(LmcasNumberCompare, ExactNegativeOnePredicate) {
     }
 }
 
-TEST(LmcasNumberCompare, ApproximateNumberConversion) {
-    auto approximate = SymbolicExpr::number(1.5);
-    auto approximate_value = approximate->get_number();
-    EXPECT_TRUE((std::holds_alternative<Rational>(approximate_value) &&
-                 std::get<Rational>(approximate_value) ==
-                     Rational::from_double(1.5)))
-        << ("get_number preserves a non-integral approximate value");
+TEST(LmcasNumberCompare, DecimalNumberConversion) {
+    auto decimal = SymbolicExpr::number(0.1);
+    auto value = decimal->get_number();
+    ASSERT_TRUE(std::holds_alternative<Rational>(value));
+    EXPECT_EQ(std::get<Rational>(value), Rational(1, 10));
+    EXPECT_NE(std::get<Rational>(value), Rational::from_double(0.1));
+    auto node = std::dynamic_pointer_cast<const NumberNode>(detail::node(decimal));
+    ASSERT_NE(node, nullptr);
+    ASSERT_TRUE(std::holds_alternative<Rational>(node->value()));
+    EXPECT_EQ(std::get<Rational>(node->value()), Rational(1, 10));
 }
 
 TEST(LmcasNumberCompare, BigIntegerConversionOverflow) {
@@ -69,4 +72,13 @@ TEST(LmcasNumberCompare, BigIntegerConversionOverflow) {
 
 TEST(LmcasNumberCompare, ApproximateConversionOverflow) {
     EXPECT_THROW((void)SymbolicExpr::number(static_cast<double>(std::numeric_limits<int>::max()) * 2.0)->get_int(), std::out_of_range);
+}
+
+TEST(LmcasNumberCompare, FloatingInputsRejectNonfiniteValues) {
+    for (double value : {std::numeric_limits<double>::quiet_NaN(),
+                         std::numeric_limits<double>::infinity(),
+                         -std::numeric_limits<double>::infinity()}) {
+        EXPECT_THROW((void)SymbolicExpr::number(value), std::invalid_argument);
+        EXPECT_THROW((void)detail::make_node<NumberNode>(value), std::invalid_argument);
+    }
 }

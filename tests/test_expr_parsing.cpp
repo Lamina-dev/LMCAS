@@ -1,10 +1,9 @@
 #include "expr.hpp"
+#include "computation_context.hpp"
 #include <gtest/gtest.h>
 #include "numeric_evaluation.hpp"
 #include <limits>
 #include <cmath>
-#include <cstdint>
-#include <cstring>
 #include <utility>
 
 using namespace LMCAS;
@@ -214,7 +213,7 @@ TEST(ExprParsing, DivisionRetainsDomain) {
     }
 }
 
-void expect_binary64_decimal_roundtrips() {
+void expect_float_decimal_roundtrips() {
     const double values[] = {
         1.2345678901234567, std::nextafter(1.0, 0.0), std::nextafter(1.0, 2.0),
         1.2345678901234567e-200, std::numeric_limits<double>::denorm_min(),
@@ -228,7 +227,7 @@ void expect_binary64_decimal_roundtrips() {
             continue;
         }
         auto parsed = parse_expr(original.value()->to_string());
-        ASSERT_TRUE((parsed.has_value())) << "canonical approximate literal parses";
+        ASSERT_TRUE((parsed.has_value())) << "canonical exact numeric literal parses";
         if (!parsed) {
             continue;
         }
@@ -237,13 +236,11 @@ void expect_binary64_decimal_roundtrips() {
         if (!actual) {
             continue;
         }
-        std::uint64_t expected_bits, actual_bits;
-        std::memcpy(&expected_bits, &expected, sizeof expected_bits);
-        std::memcpy(&actual_bits, &actual.value().value, sizeof actual_bits);
-        EXPECT_TRUE((expected_bits == actual_bits)) << "roundtrip retains every binary64 bit";
-        EXPECT_TRUE((structurally_equal(*original.value(), *parsed.value()))) << "roundtrip retains approximate number identity";
-        auto exact = rational(Rational::from_double(expected));
-        EXPECT_TRUE((exact && !structurally_equal(*exact.value(), *parsed.value()))) << "approximate literal does not become an exact rational";
+        EXPECT_DOUBLE_EQ(actual.value().value, expected);
+        ComputationContext context;
+        auto same = equivalent(*original.value(), *parsed.value(), context);
+        EXPECT_TRUE(same && same.value()) << "roundtrip retains the exact decimal value";
+        EXPECT_EQ(parsed.value()->to_string().find("approx("), std::string::npos);
     }
 }
 
@@ -254,8 +251,9 @@ void expect_approximate_decimal_syntax() {
         if (!parsed) {
             continue;
         }
-        auto actual = evalf(*parsed.value());
-        EXPECT_TRUE((actual && actual.value().value == 0.5)) << "valid decimals retain value";
+        auto exact = rational(Rational(1, 2));
+        EXPECT_TRUE((exact && structurally_equal(*parsed.value(), *exact.value())))
+            << "finite float syntax enters the exact AST as a decimal rational";
     }
     for (const auto &test : {std::make_pair("1.25", Rational(5, 4)),
                              std::make_pair("1e-3", Rational(1, 1000))}) {
@@ -263,24 +261,54 @@ void expect_approximate_decimal_syntax() {
         auto exact = rational(test.second);
         EXPECT_TRUE((parsed && exact && structurally_equal(*parsed.value(), *exact.value()))) << "ordinary decimals remain exact";
     }
+    for (const char *text : {"1e400", "1e-4000", "-1e-4000", "2e-324",
+                             "0.1000000000000000000000000000000000000001"}) {
+        auto parsed = parse_expr(text);
+        ASSERT_TRUE(parsed) << text;
+        auto exact = rational(Rational(text));
+        ASSERT_TRUE(exact);
+        ComputationContext context;
+        auto same = equivalent(*parsed.value(), *exact.value(), context);
+        EXPECT_TRUE(same && same.value()) << "ordinary decimal text remains exact";
+    }
+    for (const char *text : {"approx(1e400)", "approx(1e-4000)",
+                             "approx(-1e-4000)", "approx(2e-324)"}) {
+        auto parsed = parse_expr(text);
+        EXPECT_TRUE(!parsed && parsed.error().code == CasErrc::ParseError) << text;
+    }
+    auto rounded = parse_expr("approx(0.1000000000000000000000000000000000000001)");
+    auto tenth = rational(Rational(1, 10));
+    ASSERT_TRUE(rounded && tenth);
+    ComputationContext context;
+    auto same = equivalent(*rounded.value(), *tenth.value(), context);
+    EXPECT_TRUE(same && same.value()) << "float entrance uses the shortest decimal value";
     auto identifier = parse_expr("approx");
     auto symbol = sym("approx");
     EXPECT_TRUE((identifier && symbol && structurally_equal(*identifier.value(), *symbol.value()))) << "bare approx remains an ordinary symbol";
 }
 
 TEST(ExprParsing, ApproximateDecimalRoundtrip) {
-    expect_binary64_decimal_roundtrips();
+    expect_float_decimal_roundtrips();
     expect_approximate_decimal_syntax();
-    for (const char *source : {"x + approx(1.2345678901234567)",
+    for (const char *source : {"1/3", "-7/11", "1e400", "2.5e-324",
+                               "x + approx(1.2345678901234567)",
                                "x * approx(1.2345678901234567)",
                                "x^approx(1.2345678901234567)"}) {
+        SCOPED_TRACE(source);
         auto original = parse_expr(source);
-        ASSERT_TRUE((original.has_value())) << "nested approximate expression parses";
+        ASSERT_TRUE((original.has_value())) << "nested decimal expression parses";
         if (!original) {
             continue;
         }
         auto parsed = parse_expr(original.value()->to_string());
-        EXPECT_TRUE((parsed && structurally_equal(*original.value(), *parsed.value()))) << "nested arithmetic retains approximate atoms and their full value";
+        ASSERT_TRUE(parsed);
+        auto left = simplify(original.value());
+        auto right = simplify(parsed.value());
+        ASSERT_TRUE(left);
+        ASSERT_TRUE(right);
+        ComputationContext context;
+        auto same = equivalent(*left.value(), *right.value(), context);
+        EXPECT_TRUE(same && same.value()) << "printed arithmetic retains its exact value";
     }
 }
 
@@ -288,8 +316,7 @@ TEST(ExprParsing, ApproximateDecimalRejections) {
     for (const char *text : {
              "approx()", "approx(x)", "approx(1/2)", "approx(1,2)", "approx(1e)",
              "approx(nan)", "approx(inf)", "approx(-inf)", "approx(0x1p0)",
-             "approx(1e400)", "approx(-1e400)", "approx(1e-4000)",
-             "approx(-1e-4000)", "approx(2e-324)", "approx(1 2)",
+             "approx(1 2)",
              "approx(1e +2)", "approx(1)junk",
              "approx((1))", "approx(1+2)", "approx(--1)", "approx(1"}) {
         auto parsed = parse_expr(text);

@@ -81,9 +81,7 @@ bool trig_extract_factor(const std::shared_ptr<const SymbolicNode>& node,
     return true;
 }
 
-} // anonymous namespace
-
-static bool extract_sin_cos_powers_with_context(
+bool extract_sin_cos_powers(
     const SymbolicExpr& expr, const std::string& var, int& m_out, int& n_out, ComputationContext& context) {
 
     int m = 0, n = 0;
@@ -114,7 +112,7 @@ static bool extract_sin_cos_powers_with_context(
     return true;
 }
 
-static bool extract_tan_power_with_context(
+bool extract_tan_power(
     const SymbolicExpr& expr, const std::string& var, int& n_out, ComputationContext& context) {
     int kind = -1, p = 0;
     if (!trig_extract_factor(LMCAS::detail::node(expr), var, kind, p, context)) { return false; }
@@ -123,7 +121,7 @@ static bool extract_tan_power_with_context(
     return true;
 }
 
-static bool extract_sec_power_with_context(
+bool extract_sec_power(
     const SymbolicExpr& expr, const std::string& var, int& n_out, ComputationContext& context) {
     int kind = -1, p = 0;
     if (!trig_extract_factor(LMCAS::detail::node(expr), var, kind, p, context)) { return false; }
@@ -132,57 +130,14 @@ static bool extract_sec_power_with_context(
     return true;
 }
 
-bool TrigCombinationStrategy::extract_sin_cos_powers(
-    const SymbolicExpr& expr, const std::string& var, int& m_out, int& n_out) {
-    ComputationContext context;
-    return extract_sin_cos_powers_with_context(expr, var, m_out, n_out, context);
-}
 
-bool TrigCombinationStrategy::extract_tan_power(
-    const SymbolicExpr& expr, const std::string& var, int& n_out) {
-    ComputationContext context;
-    return extract_tan_power_with_context(expr, var, n_out, context);
-}
+std::shared_ptr<SymbolicExpr> integrate_odd_case(
+    int m, int n, const BigInt& scale, const std::string& var);
+std::shared_ptr<SymbolicExpr> integrate_even_case(
+    int m, int n, const BigInt& scale, const std::string& var);
 
-bool TrigCombinationStrategy::extract_sec_power(
-    const SymbolicExpr& expr, const std::string& var, int& n_out) {
-    ComputationContext context;
-    return extract_sec_power_with_context(expr, var, n_out, context);
-}
-
-Result<std::shared_ptr<SymbolicExpr>> TrigCombinationStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int depth) {
-
-    // sin^m(x) * cos^n(x)
-    int m = 0, n = 0;
-    if (extract_sin_cos_powers_with_context(expr, var, m, n, computation)) {
-        if (m < 0 || n < 0) { return nullptr; }
-        if (n > 8 || m > 8 - n) { return nullptr; }
-        return integrate_sin_m_cos_n(m, n, BigInt(1), var, ctx, depth);
-    }
-
-    // tan^n(x)
-    int tn = 0;
-    if (extract_tan_power_with_context(expr, var, tn, computation)) {
-        if (tn < 2 || tn > 8) { return nullptr; }
-        return integrate_tan_power(tn, var, ctx, depth);
-    }
-
-    // sec^n(x) -- only even powers per design.
-    int sn = 0;
-    if (extract_sec_power_with_context(expr, var, sn, computation)) {
-        if (sn < 2 || sn > 8) { return nullptr; }
-        if (sn % 2 != 0) { return nullptr; }
-        return integrate_sec_power(sn, var, ctx, depth);
-    }
-
-    return nullptr;
-}
-
-std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_sin_m_cos_n(
-    int m, int n, const BigInt& scale,
-    const std::string& var, Integrator& ctx, int depth) {
+std::shared_ptr<SymbolicExpr> integrate_sin_m_cos_n(
+    int m, int n, const BigInt& scale, const std::string& var) {
 
     if (m < 0 || n < 0) { return nullptr; }
 
@@ -191,14 +146,13 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_sin_m_cos_n(
         return SymbolicExpr::variable(var);
     }
     if ((m % 2 == 1) || (n % 2 == 1)) {
-        return integrate_odd_case(m, n, scale, var, ctx, depth);
+        return integrate_odd_case(m, n, scale, var);
     }
-    return integrate_even_case(m, n, scale, var, ctx, depth);
+    return integrate_even_case(m, n, scale, var);
 }
 
-std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_odd_case(
-    int m, int n, const BigInt& scale,
-    const std::string& var, Integrator&, int) {
+std::shared_ptr<SymbolicExpr> integrate_odd_case(
+    int m, int n, const BigInt& scale, const std::string& var) {
 
     if (scale == BigInt(0)) { return nullptr; }
 
@@ -260,9 +214,8 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_odd_case(
     return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(add_terms));
 }
 
-std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_even_case(
-    int m, int n, const BigInt& scale,
-    const std::string& var, Integrator& ctx, int depth) {
+std::shared_ptr<SymbolicExpr> integrate_even_case(
+    int m, int n, const BigInt& scale, const std::string& var) {
 
     if ((m % 2 != 0) || (n % 2 != 0)) { return nullptr; }
     int p = m / 2;
@@ -289,7 +242,7 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_even_case(
     for (int k = 0; k <= K; ++k) {
         if (a[k] == 0) { continue; }
         // Recurse: integrate cos^k(2c*x) at the new scale 2c.
-        auto inner = integrate_sin_m_cos_n(0, k, scale * BigInt(2), var, ctx, depth + 1);
+        auto inner = integrate_sin_m_cos_n(0, k, scale * BigInt(2), var);
         if (!inner) { return nullptr; }
         auto coeff = SymbolicExpr::number(Rational(a[k], denominator));
         auto term = SymbolicExpr::multiply(coeff, inner);
@@ -303,8 +256,7 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_even_case(
     return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(add_terms));
 }
 
-std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_tan_power(
-    int n, const std::string& var, Integrator& ctx, int depth) {
+std::shared_ptr<SymbolicExpr> integrate_tan_power(int n, const std::string& var) {
 
     if (n < 0) { return nullptr; }
     auto v = SymbolicExpr::variable(var);
@@ -331,14 +283,13 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_tan_power(
     }
     auto first = SymbolicExpr::multiply(sym_rational(1, n - 1), tan_pow_term);
 
-    auto rest = integrate_tan_power(n - 2, var, ctx, depth + 1);
+    auto rest = integrate_tan_power(n - 2, var);
     if (!rest) { return nullptr; }
     auto neg_rest = SymbolicExpr::multiply(SymbolicExpr::number(-1), rest);
     return SymbolicExpr::add(first, neg_rest);
 }
 
-std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_sec_power(
-    int n, const std::string& var, Integrator& ctx, int depth) {
+std::shared_ptr<SymbolicExpr> integrate_sec_power(int n, const std::string& var) {
 
     if (n < 2 || (n % 2) != 0) { return nullptr; }
 
@@ -368,12 +319,41 @@ std::shared_ptr<SymbolicExpr> TrigCombinationStrategy::integrate_sec_power(
     auto first = SymbolicExpr::multiply(sym_rational(1, n - 1), inner);
 
     // Second term: ((n-2)/(n-1)) * int sec^(n-2)
-    auto rest = integrate_sec_power(n - 2, var, ctx, depth + 1);
+    auto rest = integrate_sec_power(n - 2, var);
     if (!rest) { return nullptr; }
     auto coeff = SymbolicExpr::number(Rational(BigInt(n - 2), BigInt(n - 1)));
     auto second = SymbolicExpr::multiply(coeff, rest);
 
     return SymbolicExpr::add(first, second);
 }
+
+}
+
+Result<std::optional<detail::IntegralParts>> Integrator::try_trig_combination(
+    const SymbolicExpr& expr, const std::string& var,
+    ComputationContext& computation, int) {
+    std::shared_ptr<SymbolicExpr> primitive;
+    int m = 0, n = 0;
+    if (extract_sin_cos_powers(expr, var, m, n, computation)) {
+        if (m < 0 || n < 0 || n > 8 || m > 8 - n) {
+            return std::optional<detail::IntegralParts>{};
+        }
+        primitive = integrate_sin_m_cos_n(m, n, BigInt(1), var);
+    } else {
+        int power = 0;
+        if (extract_tan_power(expr, var, power, computation)) {
+            if (power < 2 || power > 8) { return std::optional<detail::IntegralParts>{}; }
+            primitive = integrate_tan_power(power, var);
+        } else if (extract_sec_power(expr, var, power, computation)) {
+            if (power < 2 || power > 8 || power % 2 != 0) {
+                return std::optional<detail::IntegralParts>{};
+            }
+            primitive = integrate_sec_power(power, var);
+        }
+    }
+    if (!primitive) { return std::optional<detail::IntegralParts>{}; }
+    return std::optional<detail::IntegralParts>{{*primitive, zero_}};
+}
+
 
 } // namespace LMCAS

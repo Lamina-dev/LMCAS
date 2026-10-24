@@ -1,4 +1,3 @@
-#include <stdexcept>
 #include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 
@@ -104,14 +103,12 @@ Result<bool> sf_match_exp_neg_quad(const std::shared_ptr<const SymbolicNode>& no
 
 } // anonymous namespace
 
-Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& context, int depth) try {
+Result<std::optional<detail::IntegralParts>> Integrator::try_special_function(
+    const SymbolicExpr& expr, const std::string& var,
+    ComputationContext& context, int) try {
 
     detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
                                             (context).limits().max_ast_nodes, "transform");
-    (void)ctx;
-    (void)depth;
 
     using FT = FunctionNode::FuncType;
 
@@ -120,14 +117,14 @@ Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw
     if (sf_is_inv_ln_var(LMCAS::detail::node(expr), var)) {
         auto li = make_unary_function(FT::Li, v);
         auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(li), transform_budget));
-        return simp ? simp : li;
+        return std::optional<detail::IntegralParts>{{*(simp ? simp : li), zero_}};
     }
 
     {
         Rational c_rat;
         auto matched = sf_match_exp_neg_quad(LMCAS::detail::node(expr), var, c_rat, context);
         if (!matched) {
-            return Result<std::shared_ptr<SymbolicExpr>>::failure(matched.error());
+            return Result<std::optional<detail::IntegralParts>>::failure(matched.error());
         }
         if (matched.value()) {
             // Result: (sqrt(pi) / (2 * sqrt(c))) * erf(sqrt(c) * x)
@@ -143,7 +140,7 @@ Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw
                 SymbolicExpr::power(two_sqrt_c, SymbolicExpr::number(-1)));
             auto result = SymbolicExpr::multiply(coeff, erf_node);
             auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
-            return simp ? simp : result;
+            return std::optional<detail::IntegralParts>{{*(simp ? simp : result), zero_}};
         }
     }
 
@@ -158,30 +155,24 @@ Result<std::shared_ptr<SymbolicExpr>> SpecialFunctionStrategy::try_integrate_raw
             if (sf_is_fn_of_var(other, FT::Exp, var)) {
                 auto ei = make_unary_function(FT::Ei, v);
                 auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(ei), transform_budget));
-                return simp ? simp : ei;
+                return std::optional<detail::IntegralParts>{{*(simp ? simp : ei), zero_}};
             }
             if (sf_is_fn_of_var(other, FT::Sin, var)) {
                 auto si = make_unary_function(FT::Si, v);
                 auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(si), transform_budget));
-                return simp ? simp : si;
+                return std::optional<detail::IntegralParts>{{*(simp ? simp : si), zero_}};
             }
             if (sf_is_fn_of_var(other, FT::Cos, var)) {
                 auto ci = make_unary_function(FT::Ci, v);
                 auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(ci), transform_budget));
-                return simp ? simp : ci;
+                return std::optional<detail::IntegralParts>{{*(simp ? simp : ci), zero_}};
             }
         }
     }
 
-    return nullptr;
+    return std::optional<detail::IntegralParts>{};
 } catch (const CasError& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
-} catch (const std::bad_alloc&) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
-} catch (const std::length_error& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
-} catch (const std::exception& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
+    return Result<std::optional<detail::IntegralParts>>::failure(error);
 }
 
 

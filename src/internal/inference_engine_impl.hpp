@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <climits>
 #include <cstdint>
-#include <cmath>
 #include <functional>
 #include <optional>
 #include <unordered_set>
@@ -28,13 +27,7 @@ inline bool is_negative_infinity_coefficient(const NumberNode& number) {
     if (std::holds_alternative<BigInt>(number.value())) {
         return std::get<BigInt>(number.value()) < BigInt(0);
     }
-    if (std::holds_alternative<Rational>(number.value())) {
-        return std::get<Rational>(number.value()) < Rational(0);
-    }
-    if (std::holds_alternative<lmmc_real_t>(number.value())) {
-        return std::get<lmmc_real_t>(number.value()) < 0;
-    }
-    return false;
+    return std::get<Rational>(number.value()) < Rational(0);
 }
 
 inline int infinity_sign(const SymbolicExpr& expression, ComputationContext& context) {
@@ -108,7 +101,6 @@ struct InferenceEngine::Impl {
     static Tribool number_negative(const NumberNode& num);
     static Tribool number_nonnegative(const NumberNode& num);
     static Tribool number_nonpositive(const NumberNode& num);
-    static Tribool number_real(const NumberNode& num);
     static Tribool number_integer(const NumberNode& num);
     static Tribool number_nonzero(const NumberNode& num);
     static Tribool natural_number(const NumberNode& num);

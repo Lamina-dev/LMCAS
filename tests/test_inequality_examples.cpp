@@ -79,9 +79,9 @@ TEST(InequalityExamples, CheckedApproximateCoefficients) {
         SymbolicExpr::number(1));
     auto approximate_result = InequalitySolver::solve_inequality_checked(
         approximate, InequalityType::GreaterThan, "x");
-    EXPECT_TRUE((!approximate_result &&
-                 approximate_result.error().code == CasErrc::Inconclusive))
-        << "checked affine solving does not relabel approximate coefficients as exact";
+    ASSERT_TRUE(approximate_result);
+    EXPECT_FALSE(approximate_result.value().contains(-2.0));
+    EXPECT_TRUE(approximate_result.value().contains(-1.0));
 }
 
 TEST(InequalityExamples, CheckedSymbolicCoefficients) {

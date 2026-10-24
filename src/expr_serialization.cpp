@@ -3,9 +3,6 @@
 
 #include <array>
 #include <charconv>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
 #include <limits>
 #include <new>
 #include <stdexcept>
@@ -31,22 +28,9 @@ public:
         if (const auto* integer = std::get_if<BigInt>(&value)) {
             put("integer");
             put_integer(*integer);
-        } else if (const auto* fraction = std::get_if<Rational>(&value)) {
-            put("rational");
-            put_rational(*fraction);
         } else {
-            put("binary64");
-            static_assert(sizeof(lmmc_real_t) == sizeof(std::uint64_t), "binary64 required");
-            std::uint64_t bits;
-            auto number = std::get<lmmc_real_t>(value);
-            std::memcpy(&bits, &number, sizeof(bits));
-            char hex[16];
-            constexpr char digits[] = "0123456789abcdef";
-            for (int i = 15; i >= 0; --i) {
-                hex[i] = digits[bits & 15];
-                bits >>= 4;
-            }
-            put(std::string_view(hex, sizeof(hex)));
+            put("rational");
+            put_rational(std::get<Rational>(value));
         }
     }
     void visit(const VariableNode& n) override {
@@ -153,7 +137,7 @@ private:
         bool exact_factor = false;
         for (const auto& factor : factors) {
             const auto* number = dynamic_cast<const NumberNode*>(factor.get());
-            if (!number || std::holds_alternative<lmmc_real_t>(number->value())) {
+            if (!number) {
                 remaining.push_back(factor);
                 continue;
             }

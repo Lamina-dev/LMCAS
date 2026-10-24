@@ -71,7 +71,7 @@ TEST(ExprValues, UnicodePiVariableIsNotConstant) {
 
 TEST(ExprValues, ApproximateRealValues) {
     auto approximate_half = LMCAS::approx_real(0.5);
-    EXPECT_TRUE((approximate_half.has_value())) << "approx_real constructs an explicit approximate Expr";
+    ASSERT_TRUE((approximate_half.has_value())) << "approx_real accepts finite floating input";
     auto approximate_half_value =
         approximate_half ? LMCAS::evalf(*approximate_half.value())
                          : LMCAS::Result<LMCAS::ApproxReal>::failure(
@@ -79,8 +79,10 @@ TEST(ExprValues, ApproximateRealValues) {
                                "approx_real construction failed", "test");
     EXPECT_TRUE((approximate_half_value &&
                  approximate_half_value.value().is_finite()))
-        << "explicit approximate Expr can be evaluated with evalf";
-    EXPECT_NEAR(approximate_half_value.value().value, 0.5, 0.0) << "approx_real preserves the requested finite value";
+        << "explicit numeric evaluation returns ApproxReal";
+    EXPECT_DOUBLE_EQ(approximate_half_value.value().value, 0.5);
+    EXPECT_TRUE(structurally_equal(*approximate_half.value(),
+                                  *SymbolicExpr::number(Rational(1, 2))));
 
     auto nan_approx = LMCAS::approx_real(NAN);
     auto inf_approx = LMCAS::approx_real(INFINITY);

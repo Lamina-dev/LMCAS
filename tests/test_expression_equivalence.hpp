@@ -18,9 +18,6 @@ inline bool test_is_minus_one_number(const std::shared_ptr<const SymbolicNode> &
     if (std::holds_alternative<Rational>(num->value())) {
         return std::get<Rational>(num->value()) == Rational(-1);
     }
-    if (std::holds_alternative<lmmc_real_t>(num->value())) {
-        return std::get<lmmc_real_t>(num->value()) == -1.0;
-    }
     return false;
 }
 

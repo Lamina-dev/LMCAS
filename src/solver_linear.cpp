@@ -44,33 +44,10 @@ static bool get_integer_value(const std::shared_ptr<const SymbolicNode>& node, B
         value = r.to_bigint();
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(num->value())) {
-        lmmc_real_t d = std::get<lmmc_real_t>(num->value());
-        if (!std::isfinite(d) || d != std::floor(d)) {
-            return false;
-        }
-        value = Rational::from_double(d).to_bigint();
-        return true;
-    }
     return false;
 }
 
 static std::shared_ptr<const NumberNode> add_number_nodes(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
-    if (std::holds_alternative<lmmc_real_t>(a->value()) || std::holds_alternative<lmmc_real_t>(b->value())) {
-        auto to_real = [](const auto& v) {
-            if (std::holds_alternative<lmmc_real_t>(v)) {
-                return std::get<lmmc_real_t>(v);
-            }
-            if (std::holds_alternative<Rational>(v)) {
-                return (lmmc_real_t)std::get<Rational>(v).to_double();
-            }
-            return (lmmc_real_t)std::get<BigInt>(v).to_double();
-        };
-        lmmc_real_t r1 = to_real(a->value());
-        lmmc_real_t r2 = to_real(b->value());
-        return LMCAS::detail::make_node<NumberNode>(r1 + r2);
-    }
-
     if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
         Rational r1 = std::holds_alternative<Rational>(a->value()) ? std::get<Rational>(a->value()) : Rational(std::get<BigInt>(a->value()));
         Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) : Rational(std::get<BigInt>(b->value()));
@@ -81,21 +58,6 @@ static std::shared_ptr<const NumberNode> add_number_nodes(const std::shared_ptr<
 }
 
 static std::shared_ptr<const NumberNode> multiply_number_nodes(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
-    if (std::holds_alternative<lmmc_real_t>(a->value()) || std::holds_alternative<lmmc_real_t>(b->value())) {
-        auto to_real = [](const auto& v) {
-            if (std::holds_alternative<lmmc_real_t>(v)) {
-                return std::get<lmmc_real_t>(v);
-            }
-            if (std::holds_alternative<Rational>(v)) {
-                return (lmmc_real_t)std::get<Rational>(v).to_double();
-            }
-            return (lmmc_real_t)std::get<BigInt>(v).to_double();
-        };
-        lmmc_real_t r1 = to_real(a->value());
-        lmmc_real_t r2 = to_real(b->value());
-        return LMCAS::detail::make_node<NumberNode>(r1 * r2);
-    }
-
     if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
         Rational r1 = std::holds_alternative<Rational>(a->value()) ? std::get<Rational>(a->value()) : Rational(std::get<BigInt>(a->value()));
         Rational r2 = std::holds_alternative<Rational>(b->value()) ? std::get<Rational>(b->value()) : Rational(std::get<BigInt>(b->value()));

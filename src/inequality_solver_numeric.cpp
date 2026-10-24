@@ -45,18 +45,11 @@ int exact_numeric_sign(const std::shared_ptr<SymbolicExpr>& expr,
         }
         return value.is_negative() ? -1 : 1;
     }
-    if (std::holds_alternative<Rational>(num->value())) {
-        const auto& value = std::get<Rational>(num->value());
-        if (value.get_numerator().is_zero()) {
-            return 0;
-        }
-        return value.get_numerator().is_negative() ? -1 : 1;
-    }
-    const auto value = std::get<lmmc_real_t>(num->value());
-    if (!std::isfinite(value) || value == 0.0) {
+    const auto& value = std::get<Rational>(num->value());
+    if (value.get_numerator().is_zero()) {
         return 0;
     }
-    return value < 0 ? -1 : 1;
+    return value.get_numerator().is_negative() ? -1 : 1;
 }
 
 int determine_leading_sign(const Polynomial<SymbolicPolyCoeff>& poly,
@@ -90,9 +83,6 @@ int determine_leading_sign(const Polynomial<SymbolicPolyCoeff>& poly,
         }
         if (std::holds_alternative<Rational>(num->value())) {
             return std::get<Rational>(num->value()).get_numerator().is_negative() ? -1 : 1;
-        }
-        if (std::holds_alternative<lmmc_real_t>(num->value())) {
-            return std::get<lmmc_real_t>(num->value()) < 0 ? -1 : 1;
         }
     }
     return 1;

@@ -190,15 +190,27 @@ TEST(SpecialFunctionAst, IntegrationProducesExpectedFunctionNodes) {
     }
 }
 
-TEST(SpecialFunctionAst, ApproximateReciprocalRetainsObligation) {
+TEST(SpecialFunctionAst, NearReciprocalExponentDoesNotSnap) {
     auto x = SymbolicExpr::variable("x");
-    auto integrand = SymbolicExpr::multiply(SymbolicExpr::exp(x),
-        SymbolicExpr::power(x, SymbolicExpr::number(-1.0 + 1e-13)));
-    Integrator integrator;
-    ComputationContext context;
-    auto result = integrator.integrate_checked(*integrand, "x", context);
-    ASSERT_TRUE(result);
-    auto integral = std::dynamic_pointer_cast<const IntegralNode>(detail::node(result.value()));
-    ASSERT_NE(integral, nullptr);
-    EXPECT_TRUE(integral->body()->equals(*detail::node(integrand)));
+    for (double exponent : {-1.0 + 1e-13, -1.0 - 1e-13}) {
+        auto power = SymbolicExpr::number(exponent);
+        auto exact = detail::exact_rational_value(detail::node(power));
+        ASSERT_TRUE(exact);
+        EXPECT_NE(*exact, Rational(-1));
+        auto integrand = SymbolicExpr::multiply(SymbolicExpr::exp(x),
+            SymbolicExpr::power(x, power));
+        Integrator integrator;
+        ComputationContext context;
+        auto result = integrator.integrate_checked(*integrand, "x", context);
+        ASSERT_TRUE(result) << result.error().message;
+        if (auto integral = std::dynamic_pointer_cast<const IntegralNode>(detail::node(result.value()))) {
+            EXPECT_TRUE(integral->body()->equals(*detail::node(integrand)));
+        } else {
+            auto derivative = differentiate(detail::make_expression_ptr(result.value()), "x", context);
+            ASSERT_TRUE(derivative) << derivative.error().message;
+            auto proof = check_equivalent(derivative.value(), integrand, context);
+            ASSERT_TRUE(proof) << proof.error().message;
+            EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
+        }
+    }
 }

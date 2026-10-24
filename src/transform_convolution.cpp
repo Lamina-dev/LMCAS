@@ -114,8 +114,8 @@ try {
             "当前双边卷积规则不支持该表达式对", operation);
     }
 
-    const double rate_sum = left->rate + right->rate;
-    const double output_rate = left->rate * right->rate / rate_sum;
+    const Rational rate_sum = left->rate + right->rate;
+    const Rational output_rate = left->rate * right->rate / rate_sum;
     auto scale = SymbolicExpr::multiply(
         SymbolicExpr::multiply(left->coefficient, right->coefficient),
         SymbolicExpr::sqrt(SymbolicExpr::divide(

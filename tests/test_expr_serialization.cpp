@@ -46,25 +46,26 @@ TEST(ExprSerialization, ExactNumbers) {
     EXPECT_EQ(rational_value->get_rational(), fraction);
 }
 
-TEST(ExprSerialization, Binary64NegativeZero) {
-    auto negative = approx_real(-0.0);
-    ASSERT_TRUE(negative);
-    auto encoded = serialize_expr(negative.value());
+TEST(ExprSerialization, FloatingInputsSerializeAsExactNumbers) {
+    auto decimal = approx_real(0.1);
+    ASSERT_TRUE(decimal);
+    auto encoded = serialize_expr(decimal.value());
+    auto exact = serialize_expr(SymbolicExpr::number(Rational(1, 10)));
     ASSERT_TRUE(encoded);
-    EXPECT_NE(encoded.value().find("8000000000000000"), std::string::npos);
-
-    auto positive = approx_real(0.0);
-    ASSERT_TRUE(positive);
-    auto positive_bytes = serialize_expr(positive.value());
-    ASSERT_TRUE(positive_bytes);
-    EXPECT_NE(encoded.value(), positive_bytes.value());
-
+    ASSERT_TRUE(exact);
+    EXPECT_EQ(encoded.value(), exact.value());
     auto decoded = parse_serialized_expr(encoded.value());
     ASSERT_TRUE(decoded);
+    EXPECT_TRUE(structurally_equal(*decoded.value(), *SymbolicExpr::number(Rational(1, 10))));
     auto value = evalf(*decoded.value());
     ASSERT_TRUE(value);
-    EXPECT_EQ(value.value().value, 0.0);
-    EXPECT_TRUE(std::signbit(value.value().value));
+    EXPECT_DOUBLE_EQ(value.value().value, 0.1);
+
+    auto negative = serialize_expr(SymbolicExpr::number(-0.0));
+    auto positive = serialize_expr(SymbolicExpr::number(0.0));
+    ASSERT_TRUE(negative);
+    ASSERT_TRUE(positive);
+    EXPECT_EQ(negative.value(), positive.value());
 }
 
 TEST(ExprSerialization, SymbolNamesAndConstants) {

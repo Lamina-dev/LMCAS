@@ -415,8 +415,11 @@ TEST(ExprSetsSolutions, CompleteRootRepresentationPolicy) {
     auto approximate = SymbolicExpr::add(
         SymbolicExpr::power(SymbolicExpr::variable("x"), SymbolicExpr::number(3)),
         SymbolicExpr::number(-2.0));
-    auto disallowed = solve_set(approximate, "x");
-    EXPECT_TRUE((!disallowed && disallowed.error().code == CasErrc::Inconclusive)) << "an explicitly approximate cubic cannot silently claim exact default roots";
+    auto roots = solve_set(approximate, "x");
+    ASSERT_TRUE(roots);
+    const auto *finite = std::get_if<FiniteSolutions>(&roots.value());
+    ASSERT_NE(finite, nullptr);
+    EXPECT_EQ(finite->values.size(), 3u);
 }
 
 TEST(ExprSetsSolutions, SymbolicCoefficientDegeneracy) {

@@ -34,6 +34,16 @@ public:
 
     Shape shape{1, 1};
 
+    void visit(const NumberNode& number) override {
+        if (const auto* integer = std::get_if<BigInt>(&number.value())) {
+            require_bits(*integer);
+        } else {
+            const auto& rational = std::get<Rational>(number.value());
+            require_bits(rational.get_numerator());
+            require_bits(rational.get_denominator());
+        }
+    }
+
 protected:
     void visit_child(const SymbolicNodePtr& child) override {
         const auto measured = budget_.measure_shape(child, path_depth_ + 1, active_depth_);
@@ -45,6 +55,12 @@ protected:
     }
 
 private:
+    void require_bits(const BigInt& integer) {
+        auto checked = budget_.context_.require_integer_bits(
+            integer.bit_length(), budget_.operation_);
+        if (!checked) { throw checked.error(); }
+    }
+
     RewriteBudget& budget_;
     const std::size_t path_depth_;
     const std::size_t active_depth_;

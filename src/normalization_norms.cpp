@@ -4,23 +4,9 @@
 
 namespace LMCAS {
 namespace {
-bool approximate_norm_operand(const NumberNode* number) {
-    return number && std::holds_alternative<lmmc_real_t>(number->value());
-}
-
 bool numeric_norm_operands(const NumberNode* first, const NumberNode* second,
                            const std::shared_ptr<const SymbolicNode>& second_node) {
     return first && (!second_node || second);
-}
-
-std::shared_ptr<const NumberNode> approximate_magnitude(const NumberNode& first,
-                                                       const NumberNode* second) {
-    const double a = normalization_number_value(first);
-    const double value = second ? std::hypot(a, normalization_number_value(*second)) : std::abs(a);
-    if (!std::isfinite(value)) {
-        return nullptr;
-    }
-    return detail::make_node<NumberNode>(value);
 }
 
 bool retain_first_square(const std::shared_ptr<const SymbolicNode>& first,
@@ -81,15 +67,19 @@ bool NormalizationVisitor::try_normalize_squared_norm(
     const auto* a = dynamic_cast<const NumberNode*>(first.get());
     const auto* b = dynamic_cast<const NumberNode*>(second.get());
     const bool numeric = numeric_norm_operands(a, b, second);
-    const bool approximate = numeric && (approximate_norm_operand(a) || approximate_norm_operand(b));
-    if (approximate) {
-        if (auto magnitude = approximate_magnitude(*a, b)) {
-            set_result(std::move(magnitude));
-            return true;
-        }
-    }
     argument = normalized_norm_argument(first, second, squares, rewrite_budget());
-    return finish_squared_norm(node, argument, (numeric && !approximate) || complex_norm_operand(first, second));
+    if (numeric) {
+        argument->accept(*this);
+        const auto* number = dynamic_cast<const NumberNode*>(result.get());
+        if (number) {
+            if (auto root = normalization_exact_square_root(*number)) {
+                set_result(std::move(root));
+                return true;
+            }
+        }
+        return finish_squared_norm(node, argument, false);
+    }
+    return finish_squared_norm(node, argument, complex_norm_operand(first, second));
 }
 
 bool NormalizationVisitor::finish_squared_norm(

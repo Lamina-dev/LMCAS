@@ -1,13 +1,26 @@
 #pragma once
 #include "internal/integration_support.hpp"
 
-namespace LMCAS {
-inline std::shared_ptr<SymbolicExpr> rd_var_minus(const std::string& var, const Rational& r) {
-    auto v = SymbolicExpr::variable(var);
-    if (r == Rational(0)) { return v; }
-    auto neg_r = SymbolicExpr::number(Rational(0) - r);
-    return SymbolicExpr::add(v, neg_r);
-}
+namespace LMCAS::detail {
 
+Result<bool> extract_rational(
+    const SymbolicExpr& expr, const std::string& var,
+    Polynomial<Rational>& numerator, Polynomial<Rational>& denominator);
+
+bool factor_denominator(
+    const Polynomial<Rational>& denominator,
+    std::vector<std::pair<Polynomial<Rational>, int>>& factors);
+
+Result<bool> solve_coefficients(
+    const Polynomial<Rational>& numerator,
+    const Polynomial<Rational>& denominator,
+    const std::vector<std::pair<Polynomial<Rational>, int>>& factors,
+    std::vector<Polynomial<Rational>>& numerators,
+    ComputationContext& context);
+
+IntegralParts integrate_rational_term(
+    const Polynomial<Rational>& numerator,
+    const Polynomial<Rational>& factor,
+    int power, const std::string& var);
 
 }

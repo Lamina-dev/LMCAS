@@ -96,8 +96,6 @@ static bool is_negation_of_var(const std::shared_ptr<const SymbolicNode> &node, 
     bool is_neg_one = false;
     if (std::holds_alternative<BigInt>(n->value())) {
         is_neg_one = (std::get<BigInt>(n->value()) == BigInt(-1));
-    } else if (std::holds_alternative<lmmc_real_t>(n->value())) {
-        is_neg_one = (std::get<lmmc_real_t>(n->value()) == -1.0);
     } else if (std::holds_alternative<Rational>(n->value())) {
         is_neg_one = (std::get<Rational>(n->value()) == Rational(-1));
     }

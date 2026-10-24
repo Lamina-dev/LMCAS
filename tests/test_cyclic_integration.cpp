@@ -55,13 +55,17 @@ TEST(CyclicIntegration, IntegerExponentialProduct) {
 TEST(CyclicIntegration, PrivatePlaceholdersAreEliminated) {
     auto x = SymbolicExpr::variable("x");
     auto occupied = SymbolicExpr::variable("INT_CYCLE_0");
-    auto oscillation = SymbolicExpr::multiply(SymbolicExpr::exp(x), SymbolicExpr::sin(x));
-    auto integrand = SymbolicExpr::multiply(occupied, oscillation);
+    auto exponential = SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(2), x));
+    auto sin3x = SymbolicExpr::sin(SymbolicExpr::multiply(SymbolicExpr::number(3), x));
+    auto cos3x = SymbolicExpr::cos(SymbolicExpr::multiply(SymbolicExpr::number(3), x));
+    auto integrand = SymbolicExpr::add(SymbolicExpr::multiply(exponential, sin3x), occupied);
+    auto expected = SymbolicExpr::add(
+        SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 13)),
+            SymbolicExpr::multiply(exponential,
+                SymbolicExpr::add(SymbolicExpr::multiply(SymbolicExpr::number(2), sin3x),
+                    SymbolicExpr::multiply(SymbolicExpr::number(-3), cos3x)))),
+        SymbolicExpr::multiply(occupied, x));
     Integrator integrator;
-    integrator.table().clear_category(IntegrationTable::Category::Exponential);
-    auto exponential = SymbolicExpr::exp(x);
-    integrator.table().add_entry(IntegrationTable::Category::Exponential,
-        IntegrationEntry("basic exp(x)", *exponential, *exponential, {}, nullptr, 0));
     ComputationContext context;
     auto assumptions = std::make_shared<AssumptionContext>();
     ASSERT_TRUE(assumptions->assume_sign("INT_CYCLE_1", Sign::Zero));
@@ -73,6 +77,7 @@ TEST(CyclicIntegration, PrivatePlaceholdersAreEliminated) {
     ASSERT_FALSE(detail::contains_node_type<IntegralNode>(detail::node(result.value())));
     auto names = detail::all_variable_names(detail::node(result.value()));
     EXPECT_EQ(names, (std::set<std::string>{"x", "INT_CYCLE_0"}));
+    EXPECT_TRUE(test_proved_equivalent(detail::make_expression_ptr(result.value()), expected));
     auto derivative = LMCAS::differentiate(detail::make_expression_ptr(result.value()), "x", context);
     ASSERT_TRUE(derivative);
     auto proof = check_equivalent(derivative.value(), integrand, context);

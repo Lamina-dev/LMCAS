@@ -6,6 +6,7 @@
 #include "solver.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "residual_verification.hpp"
+#include "internal/expression_analysis.hpp"
 
 #include <cmath>
 #include <exception>
@@ -489,7 +490,7 @@ static VectorCalculusExprResult vector_calculus_constant_integrand(
     detail::RewriteBudget& transform_budget) {
     auto candidate = detail::make_expression_ptr(detail::substitute_node(detail::node(integrand), variable, detail::node(SymbolicExpr::number(0)), transform_budget));
     candidate = candidate ? detail::make_expression_ptr(detail::normalize_node(detail::node(candidate), transform_budget)) : nullptr;
-    if (!candidate || Integrator::depends_on(*candidate, variable)) {
+    if (!candidate || expression_depends_on_variable(detail::node(candidate), variable)) {
         return VectorCalculusExprResult::success(integrand);
     }
 

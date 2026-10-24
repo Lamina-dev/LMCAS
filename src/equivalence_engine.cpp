@@ -20,11 +20,6 @@ ExprPtr normalize_equivalence(const ExprPtr& expression, detail::RewriteBudget& 
     }
     auto result = detail::make_expression_ptr(
         detail::normalize_node(detail::node(expression), budget));
-    if (contains_inexact_number(detail::node(result))) {
-        throw CasError{CasErrc::Inconclusive,
-                       "equivalence normalization produced an inexact value",
-                       kEquivalentOperation};
-    }
     return result;
 }
 
@@ -35,11 +30,6 @@ ExprPtr expand_equivalence(const ExprPtr& expression, detail::RewriteBudget& bud
     }
     auto result = detail::make_expression_ptr(
         detail::expand_node(detail::node(expression), budget));
-    if (contains_inexact_number(detail::node(result))) {
-        throw CasError{CasErrc::Inconclusive,
-                       "equivalence expansion produced an inexact value",
-                       kEquivalentOperation};
-    }
     return result;
 }
 
@@ -110,12 +100,6 @@ Result<bool> prove_operands(const SymbolicExpr& lhs, const SymbolicExpr& rhs,
         *operands.value().first, budget);
     auto right = equivalence_detail::canonicalize_complex_product(
         *operands.value().second, budget);
-    if (contains_inexact_number(detail::node(left)) ||
-        contains_inexact_number(detail::node(right))) {
-        return Result<bool>::failure(CasErrc::Inconclusive,
-            "equivalence canonicalization produced an inexact value",
-            kEquivalentOperation);
-    }
     if (structurally_equal(*left, *right)) {
         return Result<bool>::success(true);
     }
@@ -150,12 +134,6 @@ Result<bool> prove_checked_operands(
     budget.measure(detail::node(lhs));
     budget.measure(detail::node(rhs));
     if (structurally_equal(lhs, rhs)) { return true; }
-    if (contains_inexact_number(detail::node(lhs)) ||
-        contains_inexact_number(detail::node(rhs))) {
-        return Result<bool>::failure(CasErrc::Inconclusive,
-            "inexact operands cannot establish exact equivalence",
-            kEquivalentOperation);
-    }
     auto lhs_dimension = dimension_of(lhs);
     if (!lhs_dimension) { return Result<bool>::failure(lhs_dimension.error()); }
     auto rhs_dimension = dimension_of(rhs);

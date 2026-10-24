@@ -196,11 +196,6 @@ public:
                                !std::is_same_v<Integer, int>, int> = 0>
     static std::shared_ptr<SymbolicExpr> number(Integer) = delete;
 
-    /**
-     * @brief 创建浮点数值表达式.
-     * @param n 浮点值
-     * @return 数值表达式
-     */
     static std::shared_ptr<SymbolicExpr> number(double n);
 
     /**

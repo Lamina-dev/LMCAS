@@ -30,17 +30,8 @@ std::vector<std::shared_ptr<SymbolicExpr>> polynomial_solver_detail::solve_quart
              SymbolicPolyCoeff(b), SymbolicPolyCoeff(a)},
             var);
         Polynomial<Rational> rational_poly;
-        if (convert_to_rational_poly(symbolic_poly, rational_poly, context) &&
-            rational_poly.degree() == 4 && bounded_rational_root_search(rational_poly)) {
-            auto rational_roots = find_rational_roots(rational_poly);
-            if (rational_roots.size() == 4) {
-                std::vector<std::shared_ptr<SymbolicExpr>> proven_roots;
-                proven_roots.reserve(rational_roots.size());
-                for (const auto& root : rational_roots) {
-                    proven_roots.push_back(SymbolicExpr::number(root));
-                }
-                return proven_roots;
-            }
+        if (convert_to_rational_poly(symbolic_poly, rational_poly, context)) {
+            return exact_polynomial_roots(rational_poly, context);
         }
     }
 
@@ -50,11 +41,6 @@ std::vector<std::shared_ptr<SymbolicExpr>> polynomial_solver_detail::solve_quart
         return solve_biquadratic_impl(a, c, e, var, context);
     }
 
-    auto depression = numeric_quartic_depression(a, b, c, d, e, context);
-    if (depression) {
-        auto numeric_roots = numeric_quartic_roots(*depression, var, context);
-        if (!numeric_roots.empty()) return numeric_roots;
-    }
     return symbolic_quartic_roots(
         symbolic_quartic_depression(a, b, c, d, e, context), var, context);
 }

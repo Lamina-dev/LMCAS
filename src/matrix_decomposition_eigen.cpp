@@ -151,12 +151,6 @@ std::optional<int> quadratic_eigenvalue_sign(const ExprPtr& eigenvalue,
     if (auto rational = exact_rational_expr(value, context)) {
         return *rational > Rational(0) ? 1 : (*rational < Rational(0) ? -1 : 0);
     }
-    if (const auto* number = dynamic_cast<const NumberNode*>(detail::node(value).get())) {
-        if (const auto* approximate = std::get_if<lmmc_real_t>(&number->value())) {
-            if (!std::isfinite(*approximate)) { return std::nullopt; }
-            return *approximate > 0 ? 1 : (*approximate < 0 ? -1 : 0);
-        }
-    }
     return symbolic_quadratic_sign(value, facts, context);
 }
 

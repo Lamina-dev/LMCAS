@@ -111,6 +111,11 @@ Result<ApproxReal> NumericEvaluator::function(const FunctionNode& node) {
         return numeric_failure(CasErrc::UnsupportedExpression,
                                "function is not supported by real numeric evaluation");
     }
+    if (node.type() == FunctionNode::FuncType::Sqrt) {
+        if (const auto* value = dynamic_cast<const NumberNode*>(node.arguments()[0].get())) {
+            return square_root(*value);
+        }
+    }
     auto argument = evaluate(node.arguments()[0]);
     if (!argument) {
         return argument;

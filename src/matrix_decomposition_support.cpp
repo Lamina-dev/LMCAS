@@ -114,14 +114,10 @@ std::optional<Rational> exact_rational_expr(const std::shared_ptr<SymbolicExpr>&
 std::shared_ptr<SymbolicExpr> exact_number_expr(const Rational& value) {
     if (value.get_denominator() == BigInt(1)) {
         return LMCAS::detail::make_expression_ptr(
-            LMCAS::detail::make_node<NumberNode>(
-                std::variant<BigInt, Rational, lmmc_real_t>{
-                    std::in_place_type<BigInt>, value.get_numerator()}));
+            LMCAS::detail::make_node<NumberNode>(value.get_numerator()));
     }
     return LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<NumberNode>(
-        std::variant<BigInt, Rational, lmmc_real_t>{
-            std::in_place_type<Rational>, value}));
+        LMCAS::detail::make_node<NumberNode>(value));
 }
 
 std::optional<std::vector<std::vector<Rational>>> exact_rational_matrix(

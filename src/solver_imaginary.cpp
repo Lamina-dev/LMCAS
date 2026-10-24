@@ -12,10 +12,6 @@ bool solver_number_value(const NumberNode& number, double& out_value) {
         out_value = std::get<Rational>(number.value()).to_double();
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(number.value())) {
-        out_value = std::get<lmmc_real_t>(number.value());
-        return true;
-    }
     return false;
 }
 
@@ -36,11 +32,6 @@ bool square_root_is_imaginary(const FunctionNode& function) {
     if (const auto* rational = std::get_if<Rational>(&value)) {
         return *rational == Rational(-1) || *rational < Rational(0);
     }
-    if (const auto* real = std::get_if<lmmc_real_t>(&value)) {
-        int equal;
-        lmmc_double_nearly_equal(*real, -1.0, &equal);
-        return equal || (std::isfinite(*real) && *real < 0.0);
-    }
     return false;
 }
 
@@ -50,14 +41,11 @@ bool power_is_imaginary(const PowerNode& power) {
     if (!base || !exponent) {
         return false;
     }
-    double base_value = 0.0;
-    bool base_numeric = solver_number_value(*base, base_value);
-    double exponent_value = 0.0;
-    bool exponent_numeric = solver_number_value(*exponent, exponent_value);
-    if (!base_numeric || !exponent_numeric || base_value >= 0.0) {
-        return false;
-    }
-    return base_value < 0.0 && std::abs(exponent_value - std::round(exponent_value)) > 1e-12;
+    const bool negative = std::holds_alternative<BigInt>(base->value())
+        ? std::get<BigInt>(base->value()).is_negative()
+        : std::get<Rational>(base->value()) < Rational(0);
+    return negative && std::holds_alternative<Rational>(exponent->value()) &&
+        !std::get<Rational>(exponent->value()).is_integer();
 }
 
 /**

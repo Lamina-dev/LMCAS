@@ -12,8 +12,6 @@
 #include "matcher.hpp"
 #include "numeric_evaluation.hpp"
 #include "root_of_identity.hpp"
-#include "lmmc/config.h"
-#include "lmmc/numeric.h"
 
 namespace LMCAS {
 
@@ -42,15 +40,7 @@ bool SymbolicExpr::is_int() const {
     auto number_node = std::dynamic_pointer_cast<const NumberNode>(impl_->root);
     if (!number_node) return false;
     if (std::holds_alternative<BigInt>(number_node->value())) return true;
-    if (std::holds_alternative<Rational>(number_node->value())) {
-        return std::get<Rational>(number_node->value()).is_integer();
-    }
-
-    const lmmc_real_t value = std::get<lmmc_real_t>(number_node->value());
-    const lmmc_real_t rounded = std::round(value);
-    int equal = 0;
-    lmmc_double_nearly_equal_tol(value, rounded, 1e-12, 1e-12, &equal);
-    return equal != 0;
+    return std::get<Rational>(number_node->value()).is_integer();
 }
 
 std::variant<int, BigInt, Rational> SymbolicExpr::get_number() const {
@@ -61,10 +51,7 @@ std::variant<int, BigInt, Rational> SymbolicExpr::get_number() const {
     if (std::holds_alternative<BigInt>(number_node->value())) {
         return std::get<BigInt>(number_node->value());
     }
-    if (std::holds_alternative<Rational>(number_node->value())) {
-        return std::get<Rational>(number_node->value());
-    }
-    return Rational::from_double(std::get<lmmc_real_t>(number_node->value()));
+    return std::get<Rational>(number_node->value());
 }
 
 int SymbolicExpr::get_int() const {
@@ -80,20 +67,12 @@ int SymbolicExpr::get_int() const {
         }
         return static_cast<int>(*value);
     }
-    if (std::holds_alternative<Rational>(number_node->value())) {
-        auto value = std::get<Rational>(number_node->value()).to_bigint().try_to_int64();
-        if (!value || *value < std::numeric_limits<int>::min() ||
-            *value > std::numeric_limits<int>::max()) {
-            throw std::out_of_range("integer value does not fit in int");
-        }
-        return static_cast<int>(*value);
-    }
-    const auto value = std::get<lmmc_real_t>(number_node->value());
-    if (value < static_cast<lmmc_real_t>(std::numeric_limits<int>::min()) ||
-        value > static_cast<lmmc_real_t>(std::numeric_limits<int>::max())) {
+    auto value = std::get<Rational>(number_node->value()).to_bigint().try_to_int64();
+    if (!value || *value < std::numeric_limits<int>::min() ||
+        *value > std::numeric_limits<int>::max()) {
         throw std::out_of_range("integer value does not fit in int");
     }
-    return static_cast<int>(value);
+    return static_cast<int>(*value);
 }
 
 BigInt SymbolicExpr::get_big_int() const {
@@ -148,9 +127,6 @@ lmmc_real_t SymbolicExpr::to_numeric() const {
 bool SymbolicExpr::is_zero() const {
     if (!impl_->root) return false;
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(impl_->root)) {
-        if (std::holds_alternative<lmmc_real_t>(num->value())) {
-            return std::get<lmmc_real_t>(num->value()) == 0.0;
-        }
         if (const auto* integer = std::get_if<BigInt>(&num->value())) {
             return integer->is_zero();
         }
@@ -164,9 +140,6 @@ bool SymbolicExpr::is_zero() const {
 bool SymbolicExpr::is_one() const {
     if (!impl_->root) return false;
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(impl_->root)) {
-        if (std::holds_alternative<lmmc_real_t>(num->value())) {
-            return std::get<lmmc_real_t>(num->value()) == 1.0;
-        }
         if (const auto* integer = std::get_if<BigInt>(&num->value())) {
             return *integer == BigInt(1);
         }

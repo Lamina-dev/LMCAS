@@ -1,4 +1,3 @@
-#include <stdexcept>
 #include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 #include "internal/assumption_facts.hpp"
@@ -263,29 +262,33 @@ Result<std::shared_ptr<SymbolicExpr>> weier_reduce_rational(
     return SymbolicExpr::divide(np_expr, dp_expr);
 } catch (const CasError& error) {
     return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
-} catch (const std::bad_alloc&) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "weier_reduce_rational");
-} catch (const std::length_error& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "weier_reduce_rational");
-} catch (const std::exception& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "weier_reduce_rational");
 }
 
 
 }
 
-Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator&,
+Result<std::optional<detail::IntegralParts>> Integrator::try_weierstrass(
+    const SymbolicExpr& expr, const std::string& var,
     ComputationContext& computation, int depth) try {
     detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
                                             (computation).limits().max_ast_nodes, "transform");
-    if (!LMCAS::detail::node(expr)) { return nullptr; }
+    if (!LMCAS::detail::node(expr)) { return std::optional<detail::IntegralParts>{}; }
 
     /// 必须确实含有 sin/cos(var) 且整体为其有理函数
-    if (!weier_has_trig_of_var(LMCAS::detail::node(expr), var)) { return nullptr; }
-    if (!weier_is_rational_trig(LMCAS::detail::node(expr), var)) { return nullptr; }
+    if (!weier_has_trig_of_var(LMCAS::detail::node(expr), var)) {
+        return std::optional<detail::IntegralParts>{};
+    }
+    if (!weier_is_rational_trig(LMCAS::detail::node(expr), var)) {
+        return std::optional<detail::IntegralParts>{};
+    }
 
-    const std::string tvar = "__weier_t";
+    std::string tvar = "__weier_t";
+    std::size_t suffix = 0;
+    while (cycle_state_.occupied_names.count(tvar)) {
+        transform_budget.consume();
+        tvar = "__weier_t_" + std::to_string(suffix++);
+    }
+    cycle_state_.occupied_names.insert(tvar);
 
     /// 替换 sin/cos -> t 的有理式,并乘以 dx = 2/(1+t^2) dt
     auto replaced = LMCAS::detail::make_expression_ptr(weier_replace(LMCAS::detail::node(expr), var, tvar));
@@ -298,15 +301,18 @@ Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
     /// sin/cos 有理函数经代换后仍为 t 的有理函数.
     /// 通过多项式对递归求值整棵表达式树,直接得到 N(t)/D(t).
     auto rat = weier_to_rational(LMCAS::detail::node(integrand_raw), tvar, computation);
-    if (!rat) { return nullptr; }  /**< 节点超出多项式支持域。 */
+    if (!rat) { return std::optional<detail::IntegralParts>{}; }
     auto [num_poly, den_poly] = *rat;
-    if (!den_poly || LMCAS::detail::node(den_poly)->is_zero()) { return nullptr; }
+    if (!den_poly || LMCAS::detail::node(den_poly)->is_zero()) {
+        return std::optional<detail::IntegralParts>{};
+    }
 
     /// 使用多项式 GCD 将 num/den 化为最简有理函数,并保持单一分式结构.
     auto reduced = weier_reduce_rational(num_poly, den_poly, tvar, computation);
-    if (!reduced) { return reduced; }
+    if (!reduced) {
+        return Result<std::optional<detail::IntegralParts>>::failure(reduced.error());
+    }
     auto integrand_t = std::move(reduced.value());
-    // Keep rational recursion isolated from the outer cycle obligations.
     Integrator inner;
     inner.cycle_state_.occupied_names = detail::all_variable_names(
         detail::node(integrand_t), &transform_budget);
@@ -315,31 +321,29 @@ Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
         detail::AssumptionFacts::collect_names(
             *computation.assumptions(), inner.cycle_state_.occupied_names, transform_budget);
     }
-    RationalDecompositionStrategy rational;
-    auto attempted = rational.try_integrate(
-        *integrand_t, tvar, inner, computation, depth + 1);
+    auto attempted = inner.try_rational_decomposition(
+        *integrand_t, tvar, computation, depth + 1);
     if (!attempted) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(attempted.error());
+        return Result<std::optional<detail::IntegralParts>>::failure(attempted.error());
     }
-    std::shared_ptr<SymbolicExpr> integrated;
-    if (auto* candidate = std::get_if<IntegrationCandidate>(&attempted.value())) {
-        if (candidate->expression && certify_integral(
-                *candidate->expression, *integrand_t, tvar, transform_budget)) {
-            integrated = candidate->expression;
-        }
+    std::optional<detail::IntegralParts> integrated;
+    if (attempted.value() && detail::node(attempted.value()->remainder)->is_zero() &&
+        !inner.has_cycle_placeholder(attempted.value()->primitive) &&
+        !inner.has_cycle_placeholder(attempted.value()->remainder)) {
+        integrated = std::move(*attempted.value());
     }
     if (!integrated) {
         auto recursive = inner.integrate_recursive(*integrand_t, tvar, computation, 0);
-        if (!recursive) { return recursive; }
+        if (!recursive) {
+            return Result<std::optional<detail::IntegralParts>>::failure(recursive.error());
+        }
         integrated = std::move(recursive.value());
     }
-    if (!integrated) { return nullptr; }
-
-    /// 若结果仍含未求值积分节点,视为失败
-    if (expression_depends_on_variable(LMCAS::detail::node(integrated), tvar) &&
-        LMCAS::detail::contains_node_type<IntegralNode>(
-            LMCAS::detail::node(integrated))) {
-        return nullptr;
+    if (!detail::node(integrated->remainder)->is_zero() ||
+        inner.has_cycle_placeholder(integrated->primitive) ||
+        inner.has_cycle_placeholder(integrated->remainder) ||
+        contains_unevaluated_integral(detail::node(integrated->primitive))) {
+        return std::optional<detail::IntegralParts>{};
     }
 
     /// 回代 t = tan(x/2)
@@ -347,17 +351,15 @@ Result<std::shared_ptr<SymbolicExpr>> WeierstrassStrategy::try_integrate_raw(
                                          SymbolicExpr::variable(var));
     auto tan_half = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<FunctionNode>(
         FunctionNode::FuncType::Tan, std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(half_x)}));
-    auto result = detail::make_expression_ptr(detail::substitute_node(detail::node(integrated), tvar, detail::node(tan_half), transform_budget));
-    if (!result) { return nullptr; }
-    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
+    auto result = detail::substitute_node(
+        detail::node(integrated->primitive), tvar, detail::node(tan_half), transform_budget);
+    auto primitive = detail::expression_from_node(detail::normalize_node(result, transform_budget));
+    if (depends_on_integration_variable(primitive, tvar)) {
+        return std::optional<detail::IntegralParts>{};
+    }
+    return std::optional<detail::IntegralParts>{{std::move(primitive), zero_}};
 } catch (const CasError& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
-} catch (const std::bad_alloc&) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
-} catch (const std::length_error& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
-} catch (const std::exception& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
+    return Result<std::optional<detail::IntegralParts>>::failure(error);
 }
 
 }

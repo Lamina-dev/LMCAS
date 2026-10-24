@@ -157,7 +157,7 @@ void rd_normalize_fraction(Polynomial<Rational>& P, Polynomial<Rational>& Q,
 
 }
 
-Result<bool> RationalDecompositionStrategy::extract_rational(
+Result<bool> detail::extract_rational(
     const SymbolicExpr& expr, const std::string& var,
     Polynomial<Rational>& P_out, Polynomial<Rational>& Q_out) {
 
@@ -177,15 +177,6 @@ Result<bool> RationalDecompositionStrategy::extract_rational(
     P_out = P;
     Q_out = Q;
     return true;
-}
-
-void RationalDecompositionStrategy::poly_divide(
-    const Polynomial<Rational>& P, const Polynomial<Rational>& Q,
-    Polynomial<Rational>& quotient_out,
-    Polynomial<Rational>& remainder_out) {
-    auto qr = P.div_mod(Q);
-    quotient_out = qr.first;
-    remainder_out = qr.second;
 }
 
 }

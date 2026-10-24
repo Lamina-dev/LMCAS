@@ -17,28 +17,31 @@ TEST(ExprEquivalence, LiteralZeroAndOneAreStrict) {
     EXPECT_TRUE(SymbolicExpr::number(Rational(1))->is_one());
 }
 
-TEST(ExprEquivalence, InexactSourcesCannotProveEquality) {
+TEST(ExprEquivalence, DecimalInputsProveExactEquality) {
     auto zero = SymbolicExpr::number(0);
     auto one = SymbolicExpr::number(1);
-    auto approximate_one = SymbolicExpr::number(1.0);
     auto cancelled = SymbolicExpr::add(
-        approximate_one, SymbolicExpr::number(-1.0));
+        SymbolicExpr::number(0.1), SymbolicExpr::number(-0.1));
     auto rounded = SymbolicExpr::add(
         SymbolicExpr::add(SymbolicExpr::number(1e16), one),
         SymbolicExpr::number(-1e16));
     for (const auto& pair : {
-             std::make_pair(SymbolicExpr::number(1e-13), zero),
-             std::make_pair(approximate_one, one),
+             std::make_pair(SymbolicExpr::number(0.1), SymbolicExpr::number(Rational(1, 10))),
+             std::make_pair(SymbolicExpr::number(1.0), one),
              std::make_pair(cancelled, zero),
-             std::make_pair(rounded, zero)}) {
+             std::make_pair(rounded, one)}) {
         ComputationContext context;
         auto result = equivalent(*pair.first, *pair.second, context);
-        ASSERT_FALSE(result);
-        EXPECT_EQ(result.error().code, CasErrc::Inconclusive);
+        ASSERT_TRUE(result);
+        EXPECT_TRUE(result.value());
     }
+    ComputationContext context;
+    auto nonzero = equivalent(*SymbolicExpr::number(1e-13), *zero, context);
+    ASSERT_TRUE(nonzero);
+    EXPECT_FALSE(nonzero.value());
 }
 
-TEST(ExprEquivalence, InexactStructuralEqualityChecksLimits) {
+TEST(ExprEquivalence, StructuralEqualityChecksLimits) {
     auto expression = SymbolicExpr::sin(SymbolicExpr::number(0.25));
     ComputationContext context;
     auto same = equivalent(*expression, *expression, context);

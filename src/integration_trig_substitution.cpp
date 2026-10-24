@@ -1,4 +1,3 @@
-#include <stdexcept>
 #include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 #include "polynomial_conversion.hpp"
@@ -78,12 +77,12 @@ bool trigsub_match_radical(const std::shared_ptr<const SymbolicNode>& node,
 
 } // anonymous namespace
 
-Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator&,
+Result<std::optional<detail::IntegralParts>> Integrator::try_trig_substitution(
+    const SymbolicExpr& expr, const std::string& var,
     ComputationContext& context, int) try {
     detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
                                             (context).limits().max_ast_nodes, "transform");
-    if (!LMCAS::detail::node(expr)) { return nullptr; }
+    if (!LMCAS::detail::node(expr)) { return std::optional<detail::IntegralParts>{}; }
 
     auto x = SymbolicExpr::variable(var);
 
@@ -95,7 +94,7 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
     QuadRadical qr;
     if (!trigsub_match_radical(
             LMCAS::detail::node(expr), var, context, qr)) {
-        return nullptr;
+        return std::optional<detail::IntegralParts>{};
     }
 
     auto a_sq_expr = SymbolicExpr::number(qr.a_sq);
@@ -122,17 +121,20 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
         /// (...)^(-1/2)
         if (qr.pattern == 1) {
             /// arcsin(x/a)
-            return detail::make_expression_ptr(detail::normalize_node(detail::node(arcsin(x_over_a)), transform_budget));
+            return std::optional<detail::IntegralParts>{{detail::expression_from_node(
+                detail::normalize_node(detail::node(arcsin(x_over_a)), transform_budget)), zero_}};
         }
         if (qr.pattern == 2) {
             /// ln(x + √(x²+a²))
             auto rad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq, a_sq_expr));
-            return detail::make_expression_ptr(detail::normalize_node(detail::node(ln(SymbolicExpr::add(x, rad))), transform_budget));
+            return std::optional<detail::IntegralParts>{{detail::expression_from_node(
+                detail::normalize_node(detail::node(ln(SymbolicExpr::add(x, rad))), transform_budget)), zero_}};
         }
         /// pattern 3: ln(x + √(x²-a²))
         auto rad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq,
             SymbolicExpr::multiply(SymbolicExpr::number(-1), a_sq_expr)));
-        return detail::make_expression_ptr(detail::normalize_node(detail::node(ln(SymbolicExpr::add(x, rad))), transform_budget));
+        return std::optional<detail::IntegralParts>{{detail::expression_from_node(
+            detail::normalize_node(detail::node(ln(SymbolicExpr::add(x, rad))), transform_budget)), zero_}};
     } else {
         /// (...)^(+1/2)
         auto rad = SymbolicExpr::sqrt(make_radicand());
@@ -141,7 +143,8 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
             /// (x/2)√(a²-x²) + (a²/2)arcsin(x/a)
             auto term1 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, x), rad);
             auto term2 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, a_sq_expr), arcsin(x_over_a));
-            return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget));
+            return std::optional<detail::IntegralParts>{{detail::expression_from_node(
+                detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget)), zero_}};
         }
         if (qr.pattern == 2) {
             /// (x/2)√(a²+x²) + (a²/2)ln(x+√(x²+a²))
@@ -149,7 +152,8 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
             auto term1 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, x), rad);
             auto term2 = SymbolicExpr::multiply(SymbolicExpr::multiply(half, a_sq_expr),
                 ln(SymbolicExpr::add(x, lrad)));
-            return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget));
+            return std::optional<detail::IntegralParts>{{detail::expression_from_node(
+                detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget)), zero_}};
         }
         /// pattern 3: (x/2)√(x²-a²) - (a²/2)ln(x+√(x²-a²))
         auto lrad = SymbolicExpr::sqrt(SymbolicExpr::add(x_sq,
@@ -158,16 +162,11 @@ Result<std::shared_ptr<SymbolicExpr>> TrigSubstitutionStrategy::try_integrate_ra
         auto term2 = SymbolicExpr::multiply(
             SymbolicExpr::multiply(SymbolicExpr::multiply(SymbolicExpr::number(-1), half), a_sq_expr),
             ln(SymbolicExpr::add(x, lrad)));
-        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget));
+        return std::optional<detail::IntegralParts>{{detail::expression_from_node(
+            detail::normalize_node(detail::node(SymbolicExpr::add(term1, term2)), transform_budget)), zero_}};
     }
 } catch (const CasError& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
-} catch (const std::bad_alloc&) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "try_integrate_raw");
-} catch (const std::length_error& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "try_integrate_raw");
-} catch (const std::exception& error) {
-    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "try_integrate_raw");
+    return Result<std::optional<detail::IntegralParts>>::failure(error);
 }
 
 }

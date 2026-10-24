@@ -4,7 +4,7 @@
 #include "series_engine.hpp"
 #include "symbolic.hpp"
 #include "internal/symbolic_ast.hpp"
-#include "integration.hpp"
+#include "internal/integration_rational_support.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/series_support.hpp"
 #include "internal/assumption_facts.hpp"
@@ -203,19 +203,7 @@ struct FourierPeriod {
 static Result<FourierPeriod> prepare_fourier_period(
     const std::shared_ptr<SymbolicExpr>& period, const std::string& var,
     ComputationContext& context) {
-    /**
-     * @brief 系数恒等式按输入 binary64 值精确运算，倒数与乘积也保持精确。
-     * pi 的 binary64 近似值仍按该数值处理。
-     */
-    class ExactPeriod final : public detail::SymbolicRewriter {
-    public:
-        void visit(const NumberNode& node) override {
-            const auto* value = std::get_if<lmmc_real_t>(&node.value());
-            set_result(value && std::isfinite(*value)
-                ? detail::make_node<NumberNode>(Rational::from_double(*value)) : current());
-        }
-    } exact_period;
-    auto T = detail::make_expression_ptr(exact_period.rewrite(detail::node(period)));
+    auto T = period;
     std::optional<detail::AssumptionFacts> assumed;
     if (context.assumptions()) { assumed.emplace(*context.assumptions()); }
     const auto& facts = assumed ? static_cast<const FactsQuery&>(*assumed) : detail::no_facts();
@@ -531,16 +519,15 @@ static Result<int> extract_laurent_regular_part(
                                             (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "laurent_series_full";
     auto center_number = std::dynamic_pointer_cast<const NumberNode>(detail::node(center));
-    if (!center_number || std::holds_alternative<lmmc_real_t>(center_number->value())) {
+    if (!center_number) {
         return Result<int>::failure(CasErrc::Inconclusive,
                                     "Laurent center must be an exact number", operation);
     }
     Rational point = std::holds_alternative<BigInt>(center_number->value())
         ? Rational(std::get<BigInt>(center_number->value()))
         : std::get<Rational>(center_number->value());
-    RationalDecompositionStrategy rational;
     Polynomial<Rational> numerator(var), denominator(var);
-    auto recognized = rational.extract_rational(*f, var, numerator, denominator);
+    auto recognized = detail::extract_rational(*f, var, numerator, denominator);
     if (!recognized) {
         return Result<int>::failure(recognized.error());
     }

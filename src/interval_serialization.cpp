@@ -104,17 +104,12 @@ static std::shared_ptr<SymbolicExpr> parse_fraction(
 }
 
 static std::shared_ptr<SymbolicExpr> numeric_token_value(
-    const std::string& str, size_t start, size_t& pos, bool approximate) {
+    const std::string& str, size_t start, size_t& pos, bool decimal) {
     const std::string token = str.substr(start, pos - start);
-    if (!approximate) {
+    if (!decimal) {
         return SymbolicExpr::number(BigInt(token));
     }
-    auto value = detail::parse_finite_decimal(token);
-    if (!value) {
-        pos = start;
-        return nullptr;
-    }
-    return SymbolicExpr::number(value.value());
+    return SymbolicExpr::number(Rational(token));
 }
 
 static std::shared_ptr<SymbolicExpr> parse_approximate_atom(
@@ -150,9 +145,9 @@ static std::shared_ptr<SymbolicExpr> parse_numeric_value(
     if (has_digit && pos < str.size() && str[pos] == '/') {
         return parse_fraction(str, start, pos);
     }
-    bool approximate = false;
+    bool decimal = false;
     if (pos < str.size() && str[pos] == '.') {
-        approximate = true;
+        decimal = true;
         ++pos;
         has_digit = consume_digits(str, pos) || has_digit;
     }
@@ -161,7 +156,7 @@ static std::shared_ptr<SymbolicExpr> parse_numeric_value(
         return nullptr;
     }
     if (pos < str.size() && (str[pos] == 'e' || str[pos] == 'E')) {
-        approximate = true;
+        decimal = true;
         ++pos;
         consume_sign(str, pos);
         if (!consume_digits(str, pos)) {
@@ -169,7 +164,7 @@ static std::shared_ptr<SymbolicExpr> parse_numeric_value(
             return nullptr;
         }
     }
-    return numeric_token_value(str, start, pos, approximate);
+    return numeric_token_value(str, start, pos, decimal);
 }
 
 static bool parse_endpoint_value(const std::string& str, size_t& pos, Endpoint& ep) {

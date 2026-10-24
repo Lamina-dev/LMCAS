@@ -10,6 +10,7 @@
 #include "poly_utils.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/multivariate_conversion.hpp"
+#include "internal/normalization_utils.hpp"
 #include "transcendental_factor.hpp"
 #include "solve_polynomial.hpp"
 #include "solve_strategies.hpp"
@@ -29,14 +30,10 @@ static std::optional<int> polynomial_exponent(
     BigInt exponent;
     if (std::holds_alternative<BigInt>(number->value())) {
         exponent = std::get<BigInt>(number->value());
-    } else if (std::holds_alternative<Rational>(number->value())) {
+    } else {
         const auto& rational = std::get<Rational>(number->value());
         if (!rational.is_integer()) { return std::nullopt; }
         exponent = rational.to_bigint();
-    } else {
-        const auto value = std::get<lmmc_real_t>(number->value());
-        if (!std::isfinite(value) || value != std::floor(value)) { return std::nullopt; }
-        exponent = Rational::from_double(value).to_bigint();
     }
     if (exponent.is_negative() || exponent > BigInt(100)) { return std::nullopt; }
     return static_cast<int>(exponent.try_to_int64().value());
@@ -73,14 +70,6 @@ static bool is_poly_expr_node(const std::shared_ptr<const SymbolicNode>& node) {
 
 }
 
-static Rational factor_number_coefficient(const NumberNode& number) {
-    if (const auto exact = detail::exact_rational_value(number)) {
-        return *exact;
-    }
-    return Rational::from_double(std::get<lmmc_real_t>(number.value()));
-}
-
-
 static LMCAS::MultiPoly symbolic_node_to_multipoly(
     const std::shared_ptr<const SymbolicNode>& node,
     const std::vector<std::string>& vars)
@@ -88,7 +77,7 @@ static LMCAS::MultiPoly symbolic_node_to_multipoly(
     if (!node) { return LMCAS::MultiPoly(Rational(0), vars); }
 
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        return LMCAS::MultiPoly(factor_number_coefficient(*num), vars);
+        return LMCAS::MultiPoly(exact_number_as_rational(*num), vars);
     }
 
     if (auto var_node = std::dynamic_pointer_cast<const VariableNode>(node)) {

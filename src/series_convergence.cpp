@@ -20,10 +20,7 @@ double series_number_value(const NumberNode& number) {
     if (std::holds_alternative<BigInt>(number.value())) {
         return std::get<BigInt>(number.value()).to_double();
     }
-    if (std::holds_alternative<Rational>(number.value())) {
-        return std::get<Rational>(number.value()).to_double();
-    }
-    return static_cast<double>(std::get<lmmc_real_t>(number.value()));
+    return std::get<Rational>(number.value()).to_double();
 }
 
 bool series_is_number(const std::shared_ptr<SymbolicExpr>& expr) {
@@ -276,12 +273,6 @@ static std::optional<ConvergenceInfo> geometric_term_convergence(
         inside_unit_circle = *integer > BigInt(-1) && *integer < BigInt(1);
     } else if (const auto* rational = std::get_if<Rational>(&base->value())) {
         inside_unit_circle = *rational > Rational(-1) && *rational < Rational(1);
-    } else {
-        const auto approximate = std::get<lmmc_real_t>(base->value());
-        if (!std::isfinite(approximate)) {
-            return std::nullopt;
-        }
-        inside_unit_circle = std::abs(approximate) < 1.0;
     }
     return ConvergenceInfo{
         inside_unit_circle ? ConvergenceResult::Convergent
@@ -310,12 +301,6 @@ static std::optional<ConvergenceInfo> power_term_convergence(
     } else if (const auto* rational = std::get_if<Rational>(&exponent->value())) {
         below_negative_one = *rational < Rational(-1);
         at_or_above_negative_one = !below_negative_one;
-    } else {
-        const auto approximate = std::get<lmmc_real_t>(exponent->value());
-        if (std::isfinite(approximate)) {
-            below_negative_one = approximate < -1.0;
-            at_or_above_negative_one = !below_negative_one;
-        }
     }
     if (below_negative_one) {
         return ConvergenceInfo{

@@ -10,16 +10,10 @@ static int sign(const Rational& value) {
     return value < Rational(0) ? -1 : value > Rational(0) ? 1 : 0;
 }
 
-std::optional<Rational> exact_number(const Node& node, bool allow_binary) {
+std::optional<Rational> exact_number(const Node& node) {
     const auto* number = dynamic_cast<const NumberNode*>(node.get());
     if (!number) return std::nullopt;
-    if (const auto* n = std::get_if<BigInt>(&number->value())) return Rational(*n);
-    if (const auto* n = std::get_if<Rational>(&number->value())) return *n;
-    if (allow_binary) {
-        const auto n = std::get<lmmc_real_t>(number->value());
-        if (std::isfinite(n)) return Rational::from_double(n);
-    }
-    return std::nullopt;
+    return exact_number_as_rational(*number);
 }
 
 /**
@@ -34,13 +28,13 @@ Node absolute_argument(const SymbolicNode& node) {
         if (function->type() != FunctionNode::FuncType::Sqrt) return nullptr;
         radicand = function->arguments()[0];
     } else if (const auto* power = dynamic_cast<const PowerNode*>(&node)) {
-        auto exponent = exact_number(power->exponent(), true);
+        auto exponent = exact_number(power->exponent());
         if (!exponent || *exponent != Rational(1, 2)) return nullptr;
         radicand = power->base();
     } else return nullptr;
     const auto* square = dynamic_cast<const PowerNode*>(radicand.get());
     if (!square) return nullptr;
-    auto exponent = exact_number(square->exponent(), true);
+    auto exponent = exact_number(square->exponent());
     return exponent && *exponent == Rational(2) ? square->base() : nullptr;
 }
 
@@ -57,7 +51,7 @@ int infinity_sign(const Node& node) {
                 infinity = true;
                 result *= infinity_sign(factor);
             } else {
-                auto value = exact_number(factor, true);
+                auto value = exact_number(factor);
                 if (!value || sign(*value) == 0) return 0;
                 result *= sign(*value);
             }
@@ -71,7 +65,7 @@ Result<Boundary> boundary_checked(const SymbolicExpr& expression,
     ComputationContext& context) {
     if (int infinity = infinity_sign(detail::node(expression)))
         return Boundary{infinity, {}};
-    if (auto rational = exact_number(detail::node(expression), true))
+    if (auto rational = exact_number(detail::node(expression)))
         return Boundary{0, {Poly({-*rational, Rational(1)}), *rational, *rational, 0, 1}};
     if (dynamic_cast<const NumberNode*>(detail::node(expression).get()))
         return Result<Boundary>::failure(CasErrc::DomainError,

@@ -82,34 +82,26 @@ void expect_unresolved(const Expr &expression, const Expr &lower, const Expr &up
     expect_integral_node(result.value(), expression, lower, upper, message);
 }
 
-class SuppliedPrimitive final : public IntegrationStrategy {
-  public:
-    explicit SuppliedPrimitive(Expr expression) : expression_(std::move(expression)) {}
-    std::string name() const override { return "SuppliedPrimitive"; }
-  protected:
-    Result<Expr> try_integrate_raw(const SymbolicExpr &, const std::string &,
-                                   Integrator &, ComputationContext &, int) override { return expression_; }
-
-  private:
-    Expr expression_;
-};
-
-TEST(LmcasDefiniteIntegration, RejectedPrimitivesContinueFallback) {
+TEST(LmcasDefiniteIntegration, PartialPrimitiveRetainsCompleteDefiniteIntegral) {
     const auto x = SymbolicExpr::variable("x");
-    const auto expression = power(x, 2);
-    const auto nested_integral = SymbolicExpr::make_integral(SymbolicExpr::sin(power(x, 2)), "x");
-    for (const auto &candidate : {integer(0), add_expr(x, nested_integral)}) {
-        Integrator integrator;
-        auto installed = integrator.add_strategy(std::make_unique<SuppliedPrimitive>(candidate), 0);
-        ASSERT_TRUE((installed.has_value())) << ("install a primitive candidate through the strategy API");
-        if (!installed)
-            continue;
-        ComputationContext context;
-        auto result = integrator.integrate_def_checked(
-            *expression, "x", *integer(0), *integer(1), context);
-        ASSERT_TRUE(result) << "a certified polynomial primitive follows rejected candidates";
-        EXPECT_EQ(result.value().compare(SymbolicExpr::number(Rational(1, 3))), 0);
-    }
+    const auto source = add_expr(x, SymbolicExpr::sin(power(x, 3)));
+    expect_unresolved(source, integer(0), integer(1),
+                      "a partial primitive cannot replace the complete definite integral");
+}
+
+TEST(LmcasDefiniteIntegration, DecimalCoefficient) {
+    const auto x = SymbolicExpr::variable("x");
+    const auto source = multiply(SymbolicExpr::number(0.1), x);
+    Integrator integrator;
+    ComputationContext context;
+    auto result = integrator.integrate_def_checked(
+        *source, "x", *integer(0), *integer(2), context);
+    ASSERT_TRUE(result) << result.error().message;
+    EXPECT_TRUE(test_proved_equivalent(detail::make_expression_ptr(result.value()),
+                                      SymbolicExpr::number(Rational(1, 5))));
+    auto value = evaluate_numeric(result.value());
+    ASSERT_TRUE(value);
+    EXPECT_DOUBLE_EQ(value.value().value, 0.2);
 }
 
 TEST(LmcasDefiniteIntegration, AbsoluteValueSegments) {

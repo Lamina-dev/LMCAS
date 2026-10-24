@@ -93,10 +93,6 @@ static bool try_numeric(const std::shared_ptr<SymbolicExpr> &expr, double &out) 
         out = std::get<Rational>(n->value()).to_double();
         return true;
     }
-    if (std::holds_alternative<lmmc_real_t>(n->value())) {
-        out = std::get<lmmc_real_t>(n->value());
-        return true;
-    }
     return false;
 }
 

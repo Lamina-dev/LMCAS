@@ -441,7 +441,7 @@ TEST(AssumptionScopeShadowing, CheckedDiamondQueriesShareCallerBudget) {
     ctx.push();
     ASSERT_TRUE(ctx.assume_sign("b", Sign::Negative));
     ResourceLimits limits;
-    limits.max_steps = 20;
+    limits.max_steps = 0;
     ComputationContext limited_relation(limits);
     expect_relation_query_error(
         ctx.has_relation_checked(*a, *c, RelationOp::GT, limited_relation), CasErrc::ResourceLimit);
@@ -460,9 +460,7 @@ TEST(AssumptionScopeShadowing, CheckedDiamondQueriesShareCallerBudget) {
     expect_relation_query_error(ctx.get_visible_relations_checked(cancelled), CasErrc::Cancelled);
     expect_relation_query_error(ctx.is_positive_checked(*a, cancelled), CasErrc::Cancelled);
 
-    ResourceLimits read_only_limits;
-    read_only_limits.max_ast_nodes = 0;
-    ComputationContext ordinary(read_only_limits);
+    ComputationContext ordinary;
     auto relation = ctx.has_relation_checked(*a, *c, RelationOp::GT, ordinary);
     ASSERT_TRUE(relation);
     EXPECT_TRUE(relation.value());

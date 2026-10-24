@@ -4,7 +4,6 @@
 #include "internal/visitors/normalization_visitor.hpp"
 #include "internal/complex_quadratic.hpp"
 #include <cmath>
-#include <complex>
 #include <stdexcept>
 #include <variant>
 #include <type_traits>
@@ -58,13 +57,6 @@ Result<void> validate_expr(const std::shared_ptr<SymbolicExpr>& expr,
     return Result<void>::success();
 }
 
-bool is_explicit_approx_real(const std::shared_ptr<SymbolicExpr>& expr, double& out) {
-    if (!expr || !LMCAS::detail::node(expr)) return false;
-    auto number = std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr));
-    if (!number || !std::holds_alternative<lmmc_real_t>(number->value())) return false;
-    out = static_cast<double>(std::get<lmmc_real_t>(number->value()));
-    return std::isfinite(out);
-}
 
 template <typename T, typename F>
 Result<T> checked_construct(F&& f, const std::string& operation) {
@@ -261,27 +253,33 @@ ComplexRootsResult solve_complex_nth_root_checked(std::shared_ptr<SymbolicExpr> 
                                         kComplexNthRootOperation);
     if (!budget) return ComplexRootsResult::failure(budget.error());
 
-    double val = 0.0;
-    if (!is_explicit_approx_real(c, val)) {
+    const auto number = std::dynamic_pointer_cast<const NumberNode>(detail::node(c));
+    if (!number) {
         return ComplexRootsResult::failure(
             CasErrc::Inconclusive,
-            "checked complex nth roots currently require an explicit approximate real input",
+            "checked complex nth roots require a real numeric input",
             kComplexNthRootOperation);
     }
 
     return checked_construct<std::vector<ComplexSymbolic>>(
         [&]() -> ComplexRootsResult {
-            double r = std::abs(val);
-            double theta = std::arg(std::complex<double>(val, 0.0));
+            const Rational value = std::holds_alternative<BigInt>(number->value())
+                ? Rational(std::get<BigInt>(number->value()))
+                : std::get<Rational>(number->value());
+            auto radius = SymbolicExpr::power(
+                SymbolicExpr::number(value < Rational(0) ? -value : value),
+                SymbolicExpr::number(Rational(1, n)));
+            auto pi = detail::make_expression_ptr(
+                detail::make_node<VariableNode>("pi", true));
             std::vector<ComplexSymbolic> roots;
             roots.reserve(static_cast<std::size_t>(n));
             for (int k = 0; k < n; ++k) {
-                double root_r = std::pow(r, 1.0 / n);
-                double root_theta =
-                    (theta + 2 * LMMC_CONST_PI * k) / n;
-                auto root = complex_exp_form_checked(
-                    SymbolicExpr::number(root_r),
-                    SymbolicExpr::number(root_theta), context);
+                auto angle = SymbolicExpr::multiply(
+                    SymbolicExpr::number(
+                        Rational(BigInt(2) * BigInt(k) +
+                            BigInt(value < Rational(0) ? 1 : 0), BigInt(n))),
+                    pi);
+                auto root = complex_exp_form_checked(radius, angle, context);
                 if (!root) {
                     return ComplexRootsResult::failure(root.error());
                 }

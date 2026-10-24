@@ -121,7 +121,6 @@ public:
                     // testing cancellation between exponentially large values.
                     exponential_inner_ = pattern->inner;
                     exponential_target_ = target;
-                    if (contains_inexact_number(detail::node(expr_))) complete_ = false;
                     if (accept_symbolic(target)) return failure_;
                     if (failure_) return failure_;
                 }

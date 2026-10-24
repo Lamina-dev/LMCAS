@@ -2,11 +2,30 @@
 #include "internal/symbolic_ast.hpp"
 #include "internal/expression_construction.hpp"
 #include "root_of_identity.hpp"
+#include <charconv>
+#include <cmath>
 #include <exception>
 #include <new>
 #include <utility>
 
 namespace LMCAS {
+
+namespace {
+Rational decimal_rational(lmmc_real_t value) {
+    if (!std::isfinite(value)) {
+        throw std::invalid_argument("approximate number must be finite");
+    }
+    char token[64];
+    const auto formatted = std::to_chars(
+        token, token + sizeof(token), value, std::chars_format::general);
+    if (formatted.ec != std::errc{}) {
+        throw std::logic_error("finite double formatting failed");
+    }
+    return Rational(std::string(token, formatted.ptr));
+}
+}
+
+NumberNode::NumberNode(lmmc_real_t value) : value_(decimal_rational(value)) {}
 
 ExpressionResult detail::constant_expression(const char* name) {
     constexpr const char* operation = "LMCAS.constant";

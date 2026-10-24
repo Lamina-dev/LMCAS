@@ -24,8 +24,6 @@ std::shared_ptr<SymbolicExpr> num_int(const BigInt &n) {
     return SymbolicExpr::number(n);
 }
 
-// Build f(x)^k, but if k == 1 return f(x) unwrapped so the integrand stays
-// in the exact shape the TrigCombinationStrategy detects.
 std::shared_ptr<SymbolicExpr> pow_or_self(std::shared_ptr<SymbolicExpr> base, const BigInt &k) {
     if (k == 1) {
         return base;

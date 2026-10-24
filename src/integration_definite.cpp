@@ -131,7 +131,8 @@ Result<SymbolicExpr> accumulate_segments(Integrator& integrator, const SymbolicE
 }
 
 Result<SymbolicExpr> integrate_ordered_interval(Integrator& integrator, const SymbolicExpr& expr,
-    const std::string& var_name, const SymbolicExpr& lower, const SymbolicExpr& upper,
+    const std::string& var_name,
+    const SymbolicExpr& lower, const SymbolicExpr& upper,
     const DefiniteInterval& interval, ComputationContext& context) {
     const auto unresolved = [&]() { return unresolved_integral(expr, var_name, lower, upper); };
     auto partition = definite_partition_checked(expr, var_name, interval.lo, interval.hi, context);
@@ -160,8 +161,8 @@ Result<SymbolicExpr> integrate_ordered_interval(Integrator& integrator, const Sy
 }
 
 Result<SymbolicExpr> integrate_interval_checked(Integrator& integrator, const SymbolicExpr& expr,
-    const std::string& var_name, const SymbolicExpr& lower, const SymbolicExpr& upper,
-    ComputationContext& context) {
+    const std::string& var_name,
+    const SymbolicExpr& lower, const SymbolicExpr& upper, ComputationContext& context) {
     DefiniteInterval interval(lower, upper, context);
     if (!interval.a && !is_undecided(interval.a.error())) { return Result<SymbolicExpr>::failure(interval.a.error()); }
     if (!interval.b && !is_undecided(interval.b.error())) { return Result<SymbolicExpr>::failure(interval.b.error()); }
@@ -191,7 +192,13 @@ Result<SymbolicExpr> Integrator::integrate_def_checked(const SymbolicExpr& expr,
         { return Result<SymbolicExpr>::failure(CasErrc::InvalidArgument,
             "integration endpoints must be independent of the integration variable", operation); }
     try {
-        return integrate_interval_checked(*this, expr, var_name, lower, upper, context);
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+            context.limits().max_ast_nodes, operation);
+        budget.measure(detail::node(expr));
+        auto result = integrate_interval_checked(*this, expr, var_name, lower, upper, context);
+        if (!result) { return result; }
+        budget.measure(detail::node(result.value()));
+        return result;
     } catch (const CasError& error) {
         return Result<SymbolicExpr>::failure(error);
     } catch (const std::bad_alloc&) {

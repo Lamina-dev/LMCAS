@@ -58,7 +58,9 @@ static int check_approximate_boundary() {
                          "approx_real construction failed", "consumer");
     auto lsr_nan_approx = LMCAS::approx_real(NAN);
     auto lsr_inf_approx = LMCAS::approx_real(INFINITY);
+    auto exact_half = LMCAS::rational(Rational(1, 2));
     if (!lsr_approx_value || lsr_approx_value.value().value != 0.5 ||
+        !exact_half || !LMCAS::structurally_equal(*lsr_approx.value(), *exact_half.value()) ||
         lsr_nan_approx || lsr_inf_approx ||
         std::string(LMCAS::error_name(lsr_nan_approx.error())) !=
             "InvalidArgument" ||

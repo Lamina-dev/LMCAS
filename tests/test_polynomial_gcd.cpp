@@ -126,10 +126,8 @@ TEST(PolynomialGcd, SymbolicPolynomialGcd) {
     ComputationContext approximate_context;
     auto approximate_result = symbolic_polynomial_gcd(
         *approximate, *lhs, approximate_context);
-    ASSERT_FALSE(approximate_result);
-    EXPECT_EQ(
-        approximate_result.error().code,
-        CasErrc::UnsupportedExpression);
+    ASSERT_TRUE(approximate_result) << approximate_result.error().message;
+    EXPECT_TRUE(test_proved_equivalent(approximate_result.value(), one));
 
     ResourceLimits limits;
     limits.max_steps = 0;

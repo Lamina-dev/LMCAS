@@ -146,10 +146,8 @@ set(LMCAS_ALGEBRA_SOURCES
     src/solve_polynomial_normalization.cpp
     src/solve_polynomial_quadratic.cpp
     src/solve_polynomial_cubic.cpp
-    src/solve_polynomial_cubic_numeric.cpp
     src/solve_polynomial_quartic.cpp
     src/solve_polynomial_quartic_symbolic.cpp
-    src/solve_polynomial_resolvent.cpp
     src/solve_transcendental.cpp
     src/solve_mixed_transcendental.cpp
     src/solve_visitor.cpp

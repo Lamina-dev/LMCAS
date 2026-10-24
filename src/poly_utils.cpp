@@ -59,12 +59,6 @@ Result<BigInt> extract_coeff_value<BigInt>(
             const Rational& value = std::get<Rational>(number->value());
             if (value.is_integer()) return value.to_bigint();
         }
-        if (std::holds_alternative<lmmc_real_t>(number->value())) {
-            const lmmc_real_t value = std::get<lmmc_real_t>(number->value());
-            if (std::isfinite(value) && value == std::floor(value)) {
-                return Rational::from_double(value).to_bigint();
-            }
-        }
     }
     return Result<BigInt>::failure(CasErrc::UnsupportedExpression,
         "Coefficient is not an integer", "polynomial.coefficient");
@@ -97,10 +91,6 @@ Result<Rational> extract_coeff_value<Rational>(
         }
         if (std::holds_alternative<BigInt>(number->value())) {
             return Rational(std::get<BigInt>(number->value()));
-        }
-        if (std::holds_alternative<lmmc_real_t>(number->value())) {
-            const auto value = std::get<lmmc_real_t>(number->value());
-            if (std::isfinite(value)) return Rational::from_double(value);
         }
     }
     if (simplified->is_one()) return Rational(1);

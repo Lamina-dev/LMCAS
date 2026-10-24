@@ -33,12 +33,6 @@ Result<void> validate_matrix(
     return Result<void>::success();
 }
 
-
-bool contains_approximate_number(const ExprPtr& expression) {
-    return expression &&
-        contains_inexact_number(node(expression));
-}
-
 std::optional<Rational> exact_rational(const ExprPtr& expression) {
     if (!expression || !node(expression)) {
         return std::nullopt;
@@ -185,13 +179,7 @@ Result<ZeroProof> classify_exact_zero(
             "zero classification requires an expression", operation);
     }
     try {
-        if (contains_approximate_number(expression)) {
-            return Result<ZeroProof>::success(ZeroProof::Unknown);
-        }
         auto simplified = simplify_expr(expression, context);
-        if (contains_approximate_number(simplified)) {
-            return Result<ZeroProof>::success(ZeroProof::Unknown);
-        }
         if (auto proof = classify_numeric_value(simplified)) {
             return Result<ZeroProof>::success(*proof);
         }

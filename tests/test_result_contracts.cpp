@@ -12,6 +12,7 @@
 #include "internal/assumption_facts.hpp"
 #include "internal/assumption_simplification.hpp"
 #include "numeric_evaluation.hpp"
+#include "internal/expression_analysis.hpp"
 
 using namespace LMCAS;
 
@@ -67,40 +68,34 @@ TEST(ResultContracts, ResidualCertification) {
         << "unsupported transcendental residual remains unproved";
 }
 
-TEST(ResultContracts, InexactResidualsRemainUnproved) {
-    auto approximate = SymbolicExpr::number(1.0);
+TEST(ResultContracts, DecimalResidualsAreExact) {
     auto cancelled = SymbolicExpr::add(
-        approximate, SymbolicExpr::number(-1.0));
+        SymbolicExpr::number(0.1), SymbolicExpr::number(-0.1));
     for (const auto& expression : {
-             SymbolicExpr::number(1e-13), SymbolicExpr::number(0.0),
-             cancelled, SymbolicExpr::multiply(
-                 SymbolicExpr::number(0.0), SymbolicExpr::variable("x"))}) {
+             SymbolicExpr::number(0.0), cancelled,
+             SymbolicExpr::multiply(SymbolicExpr::number(0.0),
+                                    SymbolicExpr::variable("x"))}) {
         ComputationContext context;
         auto result = check_zero_residual(expression, context);
         ASSERT_TRUE(result);
-        EXPECT_TRUE(std::holds_alternative<UnprovedResidual>(result.value()));
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(result.value()));
     }
     ComputationContext context;
-    auto same = check_equivalent(approximate, approximate, context);
+    auto same = check_equivalent(
+        SymbolicExpr::number(0.1), SymbolicExpr::number(Rational(1, 10)), context);
     ASSERT_TRUE(same);
     EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(same.value()));
-    auto different = check_equivalent(
-        approximate, SymbolicExpr::number(1), context);
-    ASSERT_TRUE(different);
-    EXPECT_TRUE(std::holds_alternative<UnprovedResidual>(different.value()));
+    auto nonzero = check_zero_residual(SymbolicExpr::number(1e-13), context);
+    ASSERT_TRUE(nonzero);
+    EXPECT_TRUE(std::holds_alternative<ProvedNonIdentityResidual>(nonzero.value()));
 }
 
-TEST(ResultContracts, InexactComparisonRetainsBothOperands) {
+TEST(ResultContracts, DecimalComparisonProvesNonidentity) {
     ComputationContext context;
     auto compared = check_equivalent(
         SymbolicExpr::number(1.0), SymbolicExpr::number(2), context);
     ASSERT_TRUE(compared);
-    const auto* residual = std::get_if<UnprovedResidual>(&compared.value());
-    ASSERT_NE(residual, nullptr);
-    auto value = evaluate_numeric(*residual->normalized_residual, {}, context);
-    ASSERT_TRUE(value);
-    ASSERT_TRUE(value.value().is_finite());
-    EXPECT_DOUBLE_EQ(value.value().value, -1.0);
+    EXPECT_TRUE(std::holds_alternative<ProvedNonIdentityResidual>(compared.value()));
 }
 
 TEST(ResultContracts, FormalTrigonometricRelations) {
@@ -425,17 +420,15 @@ TEST(ResultContracts, DimensionedPowerDomains) {
     auto dimensionless_power = LMCAS::quantity_power(
         SymbolicExpr::number(2), SymbolicExpr::number(0.5),
         quantity_context);
-    EXPECT_TRUE((dimensionless_power.has_value())) << "dimensionless quantities accept approximate real exponents";
+    EXPECT_TRUE((dimensionless_power.has_value())) << "dimensionless quantities accept rational exponents";
     auto metre = LMCAS::attach_unit(
         SymbolicExpr::number(1), "m", quantity_context);
     ASSERT_TRUE((metre.has_value())) << "metre quantity construction succeeds";
     if (metre) {
         auto approximate_dimensioned = LMCAS::quantity_power(
             metre.value(), SymbolicExpr::number(2.0), quantity_context);
-        EXPECT_TRUE((!approximate_dimensioned &&
-                     approximate_dimensioned.error().code ==
-                         LMCAS::CasErrc::UnitInvalid))
-            << "dimensioned quantities require exact rational exponents";
+        EXPECT_TRUE(approximate_dimensioned.has_value())
+            << "floating input becomes an exact exponent for dimensioned quantities";
     }
 }
 
@@ -475,11 +468,11 @@ TEST(ResultContracts, IntegralBindingAndCalculus) {
     EXPECT_TRUE((parsed_integral.has_value() &&
                  LMCAS::detail::node(parsed_integral.value())->equals(*LMCAS::detail::node(integral_expression))))
         << "integral print/parse round-trip preserves binder structure";
-    EXPECT_TRUE((!LMCAS::Integrator::depends_on(*integral_expression, "x") &&
-                 LMCAS::Integrator::depends_on(*integral_expression, "y")))
+    EXPECT_TRUE((!expression_depends_on_variable(detail::node(integral_expression), "x") &&
+                 expression_depends_on_variable(detail::node(integral_expression), "y")))
         << "integral variable is bound in free-variable analysis";
     auto capture_avoiding = LMCAS::substitute(integral_expression, "y", x).value();
-    EXPECT_TRUE((LMCAS::Integrator::depends_on(*capture_avoiding, "x"))) << "substitution does not capture a replacement variable";
+    EXPECT_TRUE((expression_depends_on_variable(detail::node(capture_avoiding), "x"))) << "substitution does not capture a replacement variable";
     auto primitive = LMCAS::detail::make_expression_ptr(
         LMCAS::detail::make_node<IntegralNode>(
             LMCAS::detail::node(x), "x"));

@@ -76,7 +76,7 @@ TEST(NumericEvaluation, NumericBindingAndBudgets) {
 TEST(NumericEvaluation, CertifiedAbsoluteError) {
     auto atom = evaluate_numeric(*SymbolicExpr::number(0.5));
     ASSERT_TRUE(atom);
-    EXPECT_DOUBLE_EQ(atom.value().absolute_error, 0.0);
+    EXPECT_EQ(atom.value().absolute_error, std::numeric_limits<double>::infinity());
 
     auto bound = evaluate_numeric(*SymbolicExpr::variable("x"), {{"x", 0.5}});
     ASSERT_TRUE(bound);
@@ -125,6 +125,51 @@ TEST(NumericEvaluation, CertifiedAbsoluteError) {
     ComputationContext cancelled({}, cancellation);
     auto stopped = evaluate_numeric(*expression, {{"x", 1.0}, {"y", 2.0}, {"z", 3.0}}, cancelled);
     EXPECT_TRUE((!stopped && stopped.error().code == CasErrc::Cancelled));
+}
+
+TEST(NumericEvaluation, ExactConstantsAvoidIntermediateRangeFailures) {
+    for (const char* text : {"1e400", "1e-400"}) {
+        auto value = SymbolicExpr::number(Rational(std::string(text)));
+        auto root = evaluate_numeric(*SymbolicExpr::sqrt(value));
+        ASSERT_TRUE(root) << root.error().message;
+        const double expected = text[2] == '-' ? 1e-200 : 1e200;
+        EXPECT_NEAR(root.value().value / expected, 1.0, 1e-14);
+
+        auto power = evaluate_numeric(*SymbolicExpr::power(
+            value, SymbolicExpr::number(Rational(1, 2))));
+        ASSERT_TRUE(power) << power.error().message;
+        EXPECT_NEAR(power.value().value / expected, 1.0, 1e-14);
+    }
+    const Rational tiny_decimal("2.2250738585072014e-308");
+    auto fraction = SymbolicExpr::multiply(
+        SymbolicExpr::number(tiny_decimal.get_numerator()),
+        SymbolicExpr::power(SymbolicExpr::number(tiny_decimal.get_denominator()),
+                            SymbolicExpr::number(-1)));
+    auto tiny = evaluate_numeric(*fraction);
+    ASSERT_TRUE(tiny) << tiny.error().message;
+    EXPECT_DOUBLE_EQ(tiny.value().value, std::numeric_limits<double>::min());
+
+    auto reciprocal = evaluate_numeric(*SymbolicExpr::power(
+        SymbolicExpr::number(Rational("2e323")), SymbolicExpr::number(-1)));
+    ASSERT_TRUE(reciprocal) << reciprocal.error().message;
+    EXPECT_DOUBLE_EQ(reciprocal.value().value, std::numeric_limits<double>::denorm_min());
+}
+
+TEST(NumericEvaluation, NonzeroArithmeticUnderflow) {
+    auto x = SymbolicExpr::variable("x");
+    auto product = SymbolicExpr::multiply(x, SymbolicExpr::number(Rational(1, 3)));
+    auto tiny_product = evaluate_numeric(
+        *product, {{"x", std::numeric_limits<double>::denorm_min()}});
+    ASSERT_FALSE(tiny_product);
+    EXPECT_EQ(tiny_product.error().code, CasErrc::NumericFailure);
+    auto zero_product = evaluate_numeric(*product, {{"x", 0.0}});
+    ASSERT_TRUE(zero_product);
+    EXPECT_DOUBLE_EQ(zero_product.value().value, 0.0);
+
+    auto power = SymbolicExpr::power(x, SymbolicExpr::number(2));
+    auto tiny_power = evaluate_numeric(*power, {{"x", 1e-200}});
+    ASSERT_FALSE(tiny_power);
+    EXPECT_EQ(tiny_power.error().code, CasErrc::NumericFailure);
 }
 
 TEST(NumericEvaluation, NumericConstantsAndRoots) {

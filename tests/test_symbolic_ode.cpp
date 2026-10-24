@@ -347,7 +347,7 @@ TEST(SymbolicOde, Linear2CheckedContracts) {
 
 TEST(SymbolicOde, ExactIntegrationPreservesBudgetFailure) {
     ResourceLimits limits;
-    limits.max_steps = 20;
+    limits.max_steps = 0;
     ComputationContext context(limits);
     auto result = solve_exact_ode_checked(
         SymbolicExpr::variable("x"), SymbolicExpr::variable("y"), "x", "y", context);

@@ -115,7 +115,7 @@ void rd_unpack_numerators(const RationalFactors& factors,
 }
 }
 
-Result<bool> RationalDecompositionStrategy::solve_coefficients(
+Result<bool> detail::solve_coefficients(
     const Polynomial<Rational>& P,
     const Polynomial<Rational>& Q,
     const std::vector<std::pair<Polynomial<Rational>, int>>& factors,

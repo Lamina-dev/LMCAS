@@ -6,7 +6,6 @@
 #include "internal/symbolic_ast.hpp"
 #include "expr.hpp"
 
-#include <cstring>
 #include <limits>
 #include <memory>
 #include <string>
@@ -18,12 +17,13 @@ using namespace LMCAS;
 static void expect_approximate_atom(const SymbolicExpr &expression, double expected) {
     auto value = evalf(expression);
     auto approximate = approx_real(expected);
-    auto exact = SymbolicExpr::number(Rational::from_double(expected));
-    EXPECT_TRUE(value && std::memcmp(&value.value().value, &expected, sizeof(expected)) == 0) << "serialized numeric atom preserves all binary64 bits including signed zero";
+    auto exact = SymbolicExpr::number(expected);
+    ASSERT_TRUE(value);
+    EXPECT_DOUBLE_EQ(value.value().value, expected);
     EXPECT_TRUE(approximate &&
-                detail::node(expression)->equals(*detail::node(*approximate.value())) &&
-                !detail::node(expression)->equals(*detail::node(*exact)))
-        << "serialized approximate atom does not silently become exact";
+                structurally_equal(expression, *approximate.value()) &&
+                structurally_equal(expression, *exact))
+        << "serialized numeric atoms retain exact decimal identity";
 }
 
 static void expect_approximate_assumption_values(AssumptionContext &restored, double value) {
@@ -165,10 +165,10 @@ static void expect_approximate_bounds(const AssumptionContext &context) {
         detail::node(*bounds->upper.value).get());
     ASSERT_NE(lower, nullptr);
     ASSERT_NE(upper, nullptr);
-    ASSERT_TRUE(std::holds_alternative<lmmc_real_t>(lower->value()));
-    ASSERT_TRUE(std::holds_alternative<lmmc_real_t>(upper->value()));
-    EXPECT_DOUBLE_EQ(std::get<lmmc_real_t>(lower->value()), 0.125);
-    EXPECT_DOUBLE_EQ(std::get<lmmc_real_t>(upper->value()), 0.875);
+    ASSERT_TRUE(std::holds_alternative<Rational>(lower->value()));
+    ASSERT_TRUE(std::holds_alternative<Rational>(upper->value()));
+    EXPECT_EQ(std::get<Rational>(lower->value()), Rational(1, 8));
+    EXPECT_EQ(std::get<Rational>(upper->value()), Rational(7, 8));
 }
 
 static void expect_symbolic_bounds(const AssumptionContext &context) {

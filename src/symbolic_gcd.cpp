@@ -5,6 +5,7 @@
 #include "internal/expression_analysis.hpp"
 #include "internal/multivariate_conversion.hpp"
 #include "internal/rewrite_budget.hpp"
+#include "internal/normalization_utils.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -62,13 +63,7 @@ Result<void> collect_polynomial_variables(
             CasErrc::InternalInvariant, "polynomial contains a null node",
             kOperation);
     }
-    if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        if (std::holds_alternative<lmmc_real_t>(number->value())) {
-            return Result<void>::failure(
-                CasErrc::UnsupportedExpression,
-                "approximate coefficients are not supported by exact GCD",
-                kOperation);
-        }
+    if (std::dynamic_pointer_cast<const NumberNode>(node)) {
         return Result<void>::success();
     }
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
@@ -88,7 +83,7 @@ Result<void> collect_polynomial_variables(
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
         auto exponent = std::dynamic_pointer_cast<const NumberNode>(power->exponent());
-        if (!exponent || std::holds_alternative<lmmc_real_t>(exponent->value())) {
+        if (!exponent) {
             return Result<void>::failure(
                 CasErrc::UnsupportedExpression,
                 "polynomial exponents must be exact nonnegative integers",
@@ -105,7 +100,7 @@ Result<void> collect_polynomial_variables(
 Result<std::size_t> polynomial_exponent(
     const std::shared_ptr<const SymbolicNode>& node) {
     auto number = std::dynamic_pointer_cast<const NumberNode>(node);
-    if (!number || std::holds_alternative<lmmc_real_t>(number->value())) {
+    if (!number) {
         return Result<std::size_t>::failure(
             CasErrc::UnsupportedExpression,
             "polynomial exponents must be exact nonnegative integers",
@@ -247,15 +242,8 @@ Result<MultiPoly> node_to_multivariate_polynomial(
     RecursionFrame frame(context);
 
     if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        const auto coefficient = detail::exact_rational_value(*number);
-        if (coefficient) {
-            return Result<MultiPoly>::success(
-                MultiPoly(*coefficient, variables));
-        }
-        return Result<MultiPoly>::failure(
-            CasErrc::UnsupportedExpression,
-            "approximate coefficients are not supported by exact GCD",
-            kOperation);
+        return Result<MultiPoly>::success(
+            MultiPoly(exact_number_as_rational(*number), variables));
     }
     if (auto variable = std::dynamic_pointer_cast<const VariableNode>(node)) {
         Monomial monomial(variables.size(), 0);

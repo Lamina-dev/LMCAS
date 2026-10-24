@@ -87,10 +87,10 @@ TEST(MixedTranscendentalPipelineContracts, ExtremeExponentialRootRemainsFinite) 
     auto result = solve_mixed_transcendental_checked(expr, "x", opts);
     ASSERT_TRUE(result) << result.error().message;
     ASSERT_FALSE(result.value().value.empty());
-    EXPECT_EQ(result.value().completeness, Completeness::Inconclusive);
+    EXPECT_EQ(result.value().completeness, Completeness::Complete);
     bool found = false;
     const double expected = std::log(1e300);
-    auto payload = SymbolicExpr::number(Rational::from_double(1e300));
+    auto payload = SymbolicExpr::number(Rational("1e300"));
     EqvOptions proof_options;
     proof_options.profile = EqvProfile::ExpLogBasic;
     ComputationContext proof_context;
@@ -122,8 +122,8 @@ TEST(MixedTranscendentalPipelineContracts, NegativeExponentialRetainsSymbolicPre
     auto result = solve_mixed_transcendental_checked(expression, "x", opts);
     ASSERT_TRUE(result) << result.error().message;
     ASSERT_EQ(result.value().value.size(), 1U);
-    EXPECT_EQ(result.value().completeness, Completeness::Inconclusive);
-    auto payload = SymbolicExpr::number(Rational::from_double(1e300));
+    EXPECT_EQ(result.value().completeness, Completeness::Complete);
+    auto payload = SymbolicExpr::number(Rational("1e300"));
     EqvOptions proof_options;
     proof_options.profile = EqvProfile::ExpLogBasic;
     ComputationContext proof_context;

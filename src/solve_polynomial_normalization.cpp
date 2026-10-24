@@ -1,12 +1,7 @@
 #include "internal/expression_transform.hpp"
 #include "internal/symbolic_ast.hpp"
-#include "internal/numeric_probe.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/polynomial_solver_support.hpp"
-#include <algorithm>
-#include <cmath>
-#include <limits>
-#include <stdexcept>
 
 namespace LMCAS::polynomial_solver_detail {
 
@@ -24,24 +19,6 @@ std::shared_ptr<SymbolicExpr> sub(const std::shared_ptr<SymbolicExpr>& a, const 
 
 std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
-std::optional<double> finite_numeric_value(
-    const std::shared_ptr<SymbolicExpr>& expr, ComputationContext& context) {
-    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
-                                            (context).limits().max_ast_nodes, "transform");
-    if (!expr) return std::nullopt;
-    auto simplified = detail::normalize_node(detail::node(expr), transform_budget);
-    if (auto exact = detail::exact_rational_value(simplified)) {
-        // Exact coefficients outside binary64 belong to the symbolic path.
-        try {
-            return exact->to_double();
-        } catch (const std::overflow_error&) {
-            return std::nullopt;
-        } catch (const std::underflow_error&) {
-            return std::nullopt;
-        }
-    }
-    return detail::try_finite_numeric(*expr, context);
-}
 
 bool convert_to_rational_poly(
     const Polynomial<SymbolicPolyCoeff>& sym_poly,
@@ -68,11 +45,9 @@ bool convert_to_rational_poly(
         }
         if (std::holds_alternative<Rational>(num_node->value())) {
             out_poly.coeffs[i] = std::get<Rational>(num_node->value());
-        } else if (std::holds_alternative<BigInt>(num_node->value())) {
+        } else {
             out_poly.coeffs[i] =
                 Rational(std::get<BigInt>(num_node->value()));
-        } else {
-            return false;
         }
     }
 

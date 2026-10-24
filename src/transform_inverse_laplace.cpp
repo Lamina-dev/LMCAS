@@ -84,7 +84,7 @@ static bool te_is_denominator_factor(
     const auto power = std::dynamic_pointer_cast<const PowerNode>(expression);
     if (!power) return false;
     const auto exponent = te_number_value(power->exponent());
-    return exponent && *exponent < 0 &&
+    return exponent && *exponent < Rational(0) &&
         expression_depends_on_variable(power->base(), variable);
 }
 

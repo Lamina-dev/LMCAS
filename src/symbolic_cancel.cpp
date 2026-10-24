@@ -19,11 +19,6 @@ static CancellationNode positive_denominator_exponent(const NumberNode& exponent
         if (!integer.is_negative()) { return nullptr; }
         return detail::make_node<NumberNode>(BigInt(0) - integer);
     }
-    if (std::holds_alternative<lmmc_real_t>(value)) {
-        const auto real = std::get<lmmc_real_t>(value);
-        if (!(real < 0)) { return nullptr; }
-        return detail::make_node<NumberNode>(-real);
-    }
     const auto& rational = std::get<Rational>(value);
     if (!rational.get_numerator().is_negative()) { return nullptr; }
     return detail::make_node<NumberNode>(Rational(

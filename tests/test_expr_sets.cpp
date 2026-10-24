@@ -94,7 +94,7 @@ TEST(ExprSets, CanonicalDefaultEmpty) {
     expect_integer_set(empty.symmetric_difference(populated.value()), {1});
 }
 
-TEST(ExprSets, ExactApproximateDistinction) {
+TEST(ExprSets, DecimalInputsDeduplicateExactValues) {
     auto exact = rational(Rational(BigInt(1), BigInt(2)));
     auto approximate = approx_real(0.5);
     EXPECT_TRUE((exact && approximate)) << "exact and approximate literals construct";
@@ -102,19 +102,16 @@ TEST(ExprSets, ExactApproximateDistinction) {
         return;
     }
     auto set = expr_set({exact.value(), approximate.value(), exact.value()});
-    EXPECT_TRUE((set && set.value().size() == 2 &&
+    EXPECT_TRUE((set && set.value().size() == 1 &&
                  set.value().contains(*exact.value()) &&
                  set.value().contains(*approximate.value())))
-        << "structural deduplication keeps distinct exact and approximate values";
+        << "floating input and rational literals have the same exact identity";
     if (!set) {
         return;
     }
     auto exact_set = expr_set({exact.value()});
     auto remainder = set.value().difference(exact_set.value());
-    EXPECT_TRUE((remainder.size() == 1 &&
-                 remainder.contains(*approximate.value()) &&
-                 !remainder.contains(*exact.value())))
-        << "set difference removes only the exact representation";
+    EXPECT_EQ(remainder.size(), 0u);
 }
 
 TEST(ExprSets, FiniteCollectionMembership) {

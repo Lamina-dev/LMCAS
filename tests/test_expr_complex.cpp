@@ -122,7 +122,7 @@ TEST(ExprComplex, ExactComplexModulus) {
 }
 
 TEST(ExprComplex, ExtremeConstantModulus) {
-    for (double component : {1e200, 1e-200}) {
+    for (double component : {1e200, -1e200, 1e-200, -1e-200}) {
         auto z = LMCAS::complex(
             SymbolicExpr::number(component), SymbolicExpr::number(component));
         auto magnitude = LMCAS::abs(z.value());

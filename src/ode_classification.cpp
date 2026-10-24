@@ -196,16 +196,6 @@ static std::optional<int> bernoulli_integer_exponent(const NumberNode& number)
             return std::nullopt;
         }
         value = rational.to_bigint().try_to_int64();
-    } else {
-        const lmmc_real_t approximate =
-            std::get<lmmc_real_t>(number.value());
-        if (!std::isfinite(approximate) ||
-            approximate != std::floor(approximate) ||
-            approximate < std::numeric_limits<int>::min() ||
-            approximate > std::numeric_limits<int>::max()) {
-            return std::nullopt;
-        }
-        return static_cast<int>(approximate);
     }
     if (!value || *value < std::numeric_limits<int>::min() ||
         *value > std::numeric_limits<int>::max()) {

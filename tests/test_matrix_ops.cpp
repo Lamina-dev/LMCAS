@@ -141,10 +141,8 @@ TEST(LmcasMatrixOps, PivotProofBoundaries) {
 
     auto approximate = SymbolicExpr::matrix({{SymbolicExpr::number(1.0)}});
     auto approximate_rank = LMCAS::matrix_rank_checked(approximate);
-    EXPECT_TRUE((!approximate_rank &&
-                 approximate_rank.error().code ==
-                     LMCAS::CasErrc::Inconclusive))
-        << "approximate pivot is never exact proof";
+    EXPECT_TRUE(approximate_rank && approximate_rank.value() == 1)
+        << "floating input supplies an exact nonzero pivot";
 }
 
 TEST(LmcasMatrixOps, ApproximateProducts) {
@@ -165,9 +163,8 @@ TEST(LmcasMatrixOps, ApproximateProducts) {
         auto trace = LMCAS::evalf(*LMCAS::matrix_trace(normalized.value()));
         EXPECT_TRUE((trace && trace.value().value == entry)) << "multiplication by identity preserves small and near-unit elements";
         auto product_rank = LMCAS::matrix_rank_checked(normalized.value());
-        EXPECT_TRUE((!product_rank &&
-                     product_rank.error().code == LMCAS::CasErrc::Inconclusive))
-            << "approximate products do not become exact pivot evidence";
+        EXPECT_TRUE(product_rank && product_rank.value() == 1)
+            << "nonzero decimal products remain exact pivot evidence";
     }
 }
 

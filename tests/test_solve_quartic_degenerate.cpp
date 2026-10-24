@@ -107,20 +107,21 @@ TEST(SolveQuarticDegenerate, SolveBiquadraticExactHugeCoefficientAvoidsUnsafeNum
     }
 }
 
-TEST(SolveQuarticDegenerate, BiquadraticNumericOverflowPreservesOriginalError) {
+TEST(SolveQuarticDegenerate, BiquadraticClosedCoefficientStaysSymbolic) {
     auto coefficient = SymbolicExpr::exp(SymbolicExpr::number(1000));
     auto evaluated = evaluate_numeric(*coefficient);
     ASSERT_FALSE(evaluated);
     ASSERT_EQ(evaluated.error().code, CasErrc::NumericFailure);
 
-    try {
-        (void)LMCAS::solve_biquadratic(
-            coefficient, SymbolicExpr::number(0), SymbolicExpr::number(-1), "x");
-        FAIL() << "numeric overflow must not select the symbolic fallback";
-    } catch (const CasError &error) {
-        EXPECT_EQ(error.code, evaluated.error().code);
-        EXPECT_EQ(error.message, evaluated.error().message);
-        EXPECT_EQ(error.operation, evaluated.error().operation);
+    std::vector<std::shared_ptr<SymbolicExpr>> roots;
+    EXPECT_NO_THROW(roots = LMCAS::solve_biquadratic(
+        coefficient, SymbolicExpr::number(0), SymbolicExpr::number(-1), "x"));
+    ASSERT_EQ(roots.size(), 4u);
+    for (const auto &root : roots) {
+        ASSERT_NE(root, nullptr);
+        EXPECT_FALSE(root->is_zero());
+        EXPECT_FALSE(root->is_number())
+            << "closed transcendental coefficients do not become decimal rational roots";
     }
 }
 

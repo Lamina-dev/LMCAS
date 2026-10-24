@@ -247,16 +247,6 @@ int LimitVisitor::get_sign(const std::shared_ptr<const SymbolicNode>& node) {
         return 0;
     }
     if (auto num = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        if (std::holds_alternative<double>(num->value())) {
-            double v = std::get<double>(num->value());
-            if (v > 0) {
-                return 1;
-            }
-            if (v < 0) {
-                return -1;
-            }
-            return 0;
-        }
         if (std::holds_alternative<BigInt>(num->value())) {
             BigInt v = std::get<BigInt>(num->value());
             if (v > BigInt(0)) {

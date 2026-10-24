@@ -52,16 +52,21 @@ static void test_numeric_polynomial_recognition_limits(
                  exact_expansion.error().code == LMCAS::CasErrc::ResourceLimit))
         << "exact polynomial recognition enforces expansion limits";
 
-    auto approximate_linear = SymbolicExpr::add(
+    auto fractional_linear = SymbolicExpr::add(
         SymbolicExpr::multiply(SymbolicExpr::number(0.5), x),
         SymbolicExpr::number(-1));
-    LMCAS::ComputationContext approximate_context(expansion_limits);
-    auto approximate = LMCAS::solve_numeric_checked(
-        approximate_linear, "x", approximate_context, opts);
-    EXPECT_TRUE((approximate && approximate.value().size() == 1)) << "ApproxReal coefficients stay on the explicit numeric path";
-    if (approximate && approximate.value().size() == 1) {
-        EXPECT_TRUE((std::abs(approximate.value()[0].value - 2.0) < opts.tolerance)) << "approximate linear root is numerically verified";
-    }
+    LMCAS::ComputationContext fractional_limited_context(expansion_limits);
+    auto fractional_limited = LMCAS::solve_numeric_checked(
+        fractional_linear, "x", fractional_limited_context, opts);
+    EXPECT_TRUE((!fractional_limited &&
+                 fractional_limited.error().code == LMCAS::CasErrc::ResourceLimit))
+        << "decimal coefficients use exact polynomial recognition and its limits";
+    LMCAS::ComputationContext fractional_context;
+    auto fractional = LMCAS::solve_numeric_checked(
+        fractional_linear, "x", fractional_context, opts);
+    ASSERT_TRUE(fractional) << fractional.error().message;
+    ASSERT_EQ(fractional.value().size(), 1u);
+    EXPECT_NEAR(fractional.value()[0].value, 2.0, opts.tolerance);
 
     LMCAS::ResourceLimits exponent_limits;
     exponent_limits.max_expansion_terms = 10;

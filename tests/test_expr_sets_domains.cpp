@@ -66,8 +66,8 @@ TEST(ExprSetsDomains, ExactAndApproximateMembership) {
     EXPECT_TRUE((z_contains_two && z_contains_two.value())) << "Z contains exact integer literals";
     EXPECT_TRUE((z_contains_half && !z_contains_half.value())) << "Z rejects non-integer rationals";
     EXPECT_TRUE((q_contains_half && q_contains_half.value())) << "Q contains exact rational literals";
-    EXPECT_TRUE((q_contains_approx && !q_contains_approx.value())) << "Q does not claim approximate reals as exact rationals";
-    EXPECT_TRUE((r_contains_approx && r_contains_approx.value())) << "R contains finite approximate real literals";
+    EXPECT_TRUE((q_contains_approx && q_contains_approx.value())) << "floating input denotes an exact rational";
+    EXPECT_TRUE((r_contains_approx && r_contains_approx.value())) << "rational inputs are real";
 }
 
 TEST(ExprSetsDomains, ArithmeticMembershipUsesTheExactNormalizedValue) {
@@ -127,7 +127,7 @@ TEST(ExprSetsDomains, ImmutableMemberDomains) {
     ASSERT_TRUE((set.has_value())) << "finite rational singleton constructs";
     if (!set)
         return;
-    *source = *approx_real(0.5).value();
+    *source = *SymbolicExpr::sqrt(SymbolicExpr::number(2));
     const auto &member = set.value().elements()[0];
     auto exact_membership = rationals().contains(member);
     auto integer_membership = integers().contains(member);
@@ -135,7 +135,7 @@ TEST(ExprSetsDomains, ImmutableMemberDomains) {
     EXPECT_TRUE((exact_membership && exact_membership.value() &&
                  integer_membership && !integer_membership.value()))
         << "read-only member retains its original exact rational domain";
-    EXPECT_TRUE((changed_membership && !changed_membership.value())) << "mutable source independently changes to an approximate value";
+    EXPECT_TRUE((changed_membership && !changed_membership.value())) << "mutable source independently changes to an irrational value";
     auto subset = expr_set_subset_domain(set.value(), rationals());
     EXPECT_TRUE((subset && subset.value())) << "domain subset consumes the same immutable member projection";
     ConstExprPtr null_member;

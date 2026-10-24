@@ -173,25 +173,15 @@ std::optional<ComparableEndpoint> parse_quadratic_surd(
 }
 
 Result<ComparableEndpoint> comparable_number(
-    const NumberNode& number, ComputationContext& context,
-    const std::string& operation) {
+    const NumberNode& number, ComputationContext&,
+    const std::string&) {
         if (std::holds_alternative<BigInt>(number.value())) {
             return Result<ComparableEndpoint>::success(ComparableEndpoint{
                 0, Rational(std::get<BigInt>(number.value())),
                 Rational(0), Rational(0)});
         }
-        if (std::holds_alternative<Rational>(number.value())) {
-            return Result<ComparableEndpoint>::success(ComparableEndpoint{
-                0, std::get<Rational>(number.value()), Rational(0), Rational(0)});
-        }
-        auto rational = exact_double_rational(
-            std::get<lmmc_real_t>(number.value()), context, operation);
-        if (!rational) {
-            return Result<ComparableEndpoint>::failure(rational.error());
-        }
-        return Result<ComparableEndpoint>::success(
-            ComparableEndpoint{0, std::move(rational.value()),
-                               Rational(0), Rational(0)});
+        return Result<ComparableEndpoint>::success(ComparableEndpoint{
+            0, std::get<Rational>(number.value()), Rational(0), Rational(0)});
 }
 
 Result<ComparableEndpoint> comparable_surd(
